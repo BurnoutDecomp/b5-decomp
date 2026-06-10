@@ -1,3 +1,9 @@
 [submodule "vendor/EAThread"]
 	path = vendor/EAThread
 	url = https://github.com/ProjectReversio/EAThread
+[submodule "b5-decomp/vendor/EABase"]
+	path = b5-decomp/vendor/EABase
+	url = https://github.com/electronicarts/EABase.git
+[submodule "b5-decomp/vendor/EASTL"]
+	path = b5-decomp/vendor/EASTL
+	url = https://github.com/electronicarts/EASTL.git
