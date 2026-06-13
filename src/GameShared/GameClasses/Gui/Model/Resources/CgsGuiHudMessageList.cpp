@@ -11,26 +11,29 @@
 //   for i in [0, count):
 //       *(base + i) += delta         (relocate each 32-bit entry pointer)
 //   return this
+//
+// Member names/types per burnout.wiki (HUD Message List ->
+// CgsGui::GuiHudMessageListResource).
 
 namespace CgsGui
 {
     struct GuiHudMessageListResource
     {
-        u32  muPad0;     // [0] untouched
-        s32  miCount;    // [1] number of pointer entries
-        u32  muBase;     // [2] base pointer (rebased in place)
+        s32  miResourceSize; // 0x00 length of the resource
+        s32  miMessageCount; // 0x04 number of messages
+        u32  mppcResources;  // 0x08 char** message names (rebased in place)
 
         GuiHudMessageListResource* FixUp(int liDelta);
     };
 
     GuiHudMessageListResource* GuiHudMessageListResource::FixUp(int liDelta)
     {
-        const s32 liCount = miCount;
-        muBase += static_cast<u32>(liDelta);
+        const s32 liCount = miMessageCount;
+        mppcResources += static_cast<u32>(liDelta);
 
         if (liCount > 0)
         {
-            u32* lpaEntries = reinterpret_cast<u32*>(muBase);
+            u32* lpaEntries = reinterpret_cast<u32*>(mppcResources);
             for (s32 liEntry = 0; liEntry < liCount; ++liEntry)
                 lpaEntries[liEntry] += static_cast<u32>(liDelta);
         }
