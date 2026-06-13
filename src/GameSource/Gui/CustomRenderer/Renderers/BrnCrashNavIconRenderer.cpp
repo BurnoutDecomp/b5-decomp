@@ -1,48 +1,59 @@
-#include "types.hpp"
+#include "BrnCrashNavIconRenderer.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x827E0CA0
-//   (BrnGui::CrashNavIconRenderer::SetRenderEnabled)
+// Reconstructed from BURNOUT_X360_ARTIST.XEX
+//   BrnGui::CrashNavIconRenderer::CrashNavIconRenderer @ 0x827E0B28
+//   BrnGui::CrashNavIconRenderer::SetRenderEnabled     @ 0x827E0CA0
 //
-// Behaviour-faithful to the X360 pseudocode:
-//     *(result + 4)    = a2;             // byte: render-enabled flag
-//     *(result + 336)  = 0x400000000LL;  // 64-bit field
-//     *(result + 344)  = 0x400000000LL;  // 64-bit field
-//     *(result + 356)  = 0;
-//     *(result + 352)  = 0;
-//     *(result + 456)  = 0;
-//     *(result + 452)  = 0;
-//     *(result + 5444) = 0;
-//     *(result + 436)  = 4;
-//     return result;
-//
-// Stores the enabled flag, then resets the icon's animation/placement state: two
-// 64-bit fields to 0x4_00000000, several counters/handles to 0, and a mode word to
-// 4. The renderer object is large and opaque, so the touched members are addressed
-// by their original byte offsets through a raw view of `this`. The 0x400000000
-// stores are kept as 64-bit writes (the logical value), not byte-matched.
+// The constructor clears six 5-word state groups (two of them written by a
+// stride-5 loop the compiler partially unrolled), sets a state flag to -1, and
+// installs the shared icon dispatch tables into all ten icon render states.
+// SetRenderEnabled stores the enabled flag and resets the icon animation state.
 
 namespace BrnGui
 {
-    struct CrashNavIconRenderer
+namespace
+{
+    // Shared icon dispatch tables recovered from the data segment.
+    void* const KP_IconVtable = reinterpret_cast<void*>(0x820CEB64);
+    void* const KP_IconIface  = reinterpret_cast<void*>(0x820CEB40);
+    void* const KP_IconData   = reinterpret_cast<void*>(0x82072F8C);
+}
+
+CrashNavIconRenderer::CrashNavIconRenderer()
+{
+    for (int i = 0; i < 5; ++i)
     {
-        CrashNavIconRenderer* SetRenderEnabled(bool lbEnabled);
-    };
-
-    CrashNavIconRenderer* CrashNavIconRenderer::SetRenderEnabled(bool lbEnabled)
-    {
-        u8* lpThis = reinterpret_cast<u8*>(this);
-
-        lpThis[4] = static_cast<u8>(lbEnabled);
-
-        *reinterpret_cast<u64*>(lpThis + 336) = 0x400000000ull;
-        *reinterpret_cast<u64*>(lpThis + 344) = 0x400000000ull;
-        *reinterpret_cast<u32*>(lpThis + 352) = 0;
-        *reinterpret_cast<u32*>(lpThis + 356) = 0;
-        *reinterpret_cast<u32*>(lpThis + 452) = 0;
-        *reinterpret_cast<u32*>(lpThis + 456) = 0;
-        *reinterpret_cast<u32*>(lpThis + 5444) = 0;
-        *reinterpret_cast<u32*>(lpThis + 436) = 4;
-
-        return this;
+        mGroupA[i] = 0;
+        mGroupB[i] = 0;
+        mLoopGroups[0][i] = 0;
+        mLoopGroups[1][i] = 0;
+        mGroupC[i] = 0;
+        mGroupD[i] = 0;
     }
+
+    mState81 = -1;
+
+    for (int i = 0; i < 10; ++i)
+    {
+        mIcons[i].mpVtable = KP_IconVtable;
+        mIcons[i].mpIface  = KP_IconIface;
+        mIcons[i].mpData   = KP_IconData;
+    }
+}
+
+CrashNavIconRenderer* CrashNavIconRenderer::SetRenderEnabled(bool lbEnabled)
+{
+    mbRenderEnabled = lbEnabled;
+
+    mAnimField0 = 0x400000000ull;
+    mAnimField1 = 0x400000000ull;
+    mField352   = 0;
+    mField356   = 0;
+    mField452   = 0;
+    mField456   = 0;
+    mField5444  = 0;
+    mMode436    = 4;
+
+    return this;
+}
 }
