@@ -32,31 +32,32 @@ namespace
 
 void ScatteringData::Construct()
 {
-    CopyVec4(mVec0,  KAF_ScatteringDefault0);
-    CopyVec4(mVec16, KAF_ScatteringDefault1);
-    CopyVec4(mVec32, KAF_ScatteringDefault2);
+    CopyVec4(mv3SkyTopColour, KAF_ScatteringDefault0);
+    CopyVec4(mv3SkyHorColour, KAF_ScatteringDefault1);
+    CopyVec4(mv3SkySunColour, KAF_ScatteringDefault2);
 
-    mField30[0] = 0.5f;  // field_30
-    mField30[1] = 9.0f;  // field_34
-    mField30[2] = 0.0f;  // field_38
-    mField30[3] = 13.0f; // field_3C
-    mField30[4] = 9.0f;  // field_40
-    mField30[5] = 7.0f;  // field_44
+    mfSkyHorPow      = 0.5f;
+    mfSkySunPow      = 9.0f;
+    mfSkyDrk         = 0.0f;
+    mfSkyHorBleedScl = 13.0f;
+    mfSkyHorBleedPow = 9.0f;
+    mfSkySunBleedPow = 7.0f;
 
-    CopyVec4(mVec80,  KAF_ScatteringDefault3);
-    CopyVec4(mVec96,  KAF_ScatteringDefault4);
-    CopyVec4(mVec112, KAF_ScatteringDefault5);
+    CopyVec4(mv3ScattTopColour, KAF_ScatteringDefault3);
+    CopyVec4(mv3ScattHorColour, KAF_ScatteringDefault4);
+    CopyVec4(mv3ScattSunColour, KAF_ScatteringDefault5);
 
-    mField80[0] = 0.5f;  // field_80
-    mField80[1] = 9.0f;  // field_84
-    mField80[2] = 0.0f;  // field_88
-    mField80[3] = 13.0f; // field_8C
-    mField80[4] = 9.0f;  // field_90
-    mField80[5] = 14.0f; // field_94
+    mfScattHorPow      = 0.5f;
+    mfScattSunPow      = 9.0f;
+    mfScattDrk         = 0.0f;
+    mfScattHorBleedScl = 13.0f;
+    mfScattHorBleedPow = 9.0f;
+    mfScattSunBleedPow = 14.0f;
 
-    mField98 = 0x42C8000045BB8000ull; // {6000.0f, 100.0f}
-    mfFieldA0 = 0.31f;
-    mfFieldA4 = 0.89999998f;
+    mafScattDist[0] = 100.0f;   // 0x98: high word of the guest's 0x42C8...0000 store
+    mafScattDist[1] = 6000.0f;  // 0x9C: low word (0x...45BB8000)
+    mfScattPow = 0.31f;
+    mfScattCap = 0.89999998f;
 }
 }
 }

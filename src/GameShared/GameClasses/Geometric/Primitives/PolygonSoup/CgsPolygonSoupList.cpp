@@ -3,41 +3,44 @@
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x... (CgsGeometric::PolygonSoupList::FixUp)
 // First-pass reconstruction: behaviour-faithful to the X360 pseudocode. FixUp is a
-// load-time relocation: it rebases the entry table and each entry by `delta`, then
-// rebases two pointer fields inside every entry object. Field offsets named below
-// are from the 32-bit source and are not byte-matched on a 64-bit host.
+// load-time relocation: it rebases the PolySoup pointer table and each PolySoup by
+// `delta`, then rebases two pointer fields inside every PolySoup object. Member
+// names/types per burnout.wiki (Polygon Soup List -> CgsGeometric::PolygonSoupList);
+// offsets are from the 32-bit source and are not byte-matched on a 64-bit host, so
+// the relocation arithmetic keeps the pointer fields as uintptr_t.
 
 namespace CgsGeometric
 {
-    struct PolygonSoupEntry
+    struct PolygonSoupEntry // a PolygonSoup
     {
-        u32       _0[4];   // bytes 0..15
-        uintptr_t f16;     // [16]: relocated pointer
-        uintptr_t f20;     // [20]: relocated pointer
+        u32       _0[4];     // 0x00 leading data
+        uintptr_t mpField16; // 0x10 relocated pointer
+        uintptr_t mpField20; // 0x14 relocated pointer
     };
 
     struct PolygonSoupList
     {
-        u32       _0[8];   // dwords 0..7
-        uintptr_t entries; // [8]: base of the entry-pointer table
-        uintptr_t field9;  // [9]: a second relocated pointer
-        u32       count;   // [10]: number of entries
+        float     mOverallAabb[8];  // 0x00 AxisAlignedBox
+        uintptr_t mpapPolySoups;    // 0x20 PolygonSoup** (base of the pointer table)
+        uintptr_t mpaPolySoupBoxes; // 0x24 AxisAlignedBox4*
+        s32       miNumPolySoups;   // 0x28
+        s32       miDataSize;       // 0x2C
 
         PolygonSoupList* FixUp(int delta);
     };
 
     PolygonSoupList* PolygonSoupList::FixUp(int delta)
     {
-        field9  += delta;
-        entries += delta;
+        mpaPolySoupBoxes += delta;
+        mpapPolySoups    += delta;
 
-        uintptr_t* table = reinterpret_cast<uintptr_t*>(entries);
-        for (u32 i = 0; i < count; ++i)
+        uintptr_t* lpaTable = reinterpret_cast<uintptr_t*>(mpapPolySoups);
+        for (s32 i = 0; i < miNumPolySoups; ++i)
         {
-            table[i] += delta;  // rebase the entry pointer
-            PolygonSoupEntry* e = reinterpret_cast<PolygonSoupEntry*>(table[i]);
-            e->f16 += delta;
-            e->f20 += delta;
+            lpaTable[i] += delta;  // rebase the PolySoup pointer
+            PolygonSoupEntry* lpEntry = reinterpret_cast<PolygonSoupEntry*>(lpaTable[i]);
+            lpEntry->mpField16 += delta;
+            lpEntry->mpField20 += delta;
         }
         return this;
     }

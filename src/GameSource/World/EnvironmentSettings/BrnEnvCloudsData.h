@@ -7,22 +7,26 @@ namespace BrnWorld
 {
 namespace EnvironmentSettings
 {
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x????????.
-// Default clouds keyframe: a header block copied from the module's static
-// default template, followed by explicit float-pair parameters.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX.
+// Default clouds keyframe: two per-layer colour arrays copied from the module's
+// static default template, followed by explicit per-layer float-pair parameters.
+// Field names/types per burnout.wiki (Environment Keyframe ->
+// BrnWorld::EnvironmentSettings::CloudsData); offsets verified against the X360
+// pseudocode.
 class CloudsData
 {
 public:
     void Construct();
 
 private:
-    u64   mHead[8];     // guest 0..64, seeded from the static template
-    float mDensity[2];  // guest +64  {0.6, 0.6}
-    float mField72[2];  // guest +72  {0.2, 0.2}
-    float mField80[2];  // guest +80  {1.0, 1.0}
-    float mField88[2];  // guest +88  {30.0, 30.0}
-    float mField96[2];  // guest +96  {7000.0, 7000.0}
-    float mfField104;   // guest +104 {0.0}
+    float mav3LayerLiteColour[2][4]; // 0x00 (Vector3[2])
+    float mav3LayerDarkColour[2][4]; // 0x20 (Vector3[2])
+    float mafLayerDensity[2];        // 0x40
+    float mafLayerFeathering[2];     // 0x48
+    float mafLayerOpacity[2];        // 0x50
+    float mafLayerSpeed[2];          // 0x58
+    float mafLayerScale[2];          // 0x60
+    float mfDirectionAngle;          // 0x68
 };
 }
 }

@@ -17,25 +17,27 @@
 // (The pseudocode re-reads this[2] as the loop bound each iteration; count is not
 // mutated, so a fixed bound is equivalent.)
 
+// Member names/types per burnout.wiki (HUD Message -> GuiHudMessageResource,
+// spelled "GuiHudMessageRessource" on the wiki page).
 namespace CgsGui
 {
     struct GuiHudMessageResource
     {
-        u32  muBase;     // [0] base pointer (rebased in place)
-        u32  muPad1;     // [1] untouched
-        s32  miCount;    // [2] number of pointer entries at *muBase
+        u32  mppHudMessageData;            // 0x00 GuiHudMessageData** (rebased in place)
+        s32  miSizeOfHudMessageResource;   // 0x04 size of file
+        s32  miHudMessageCount;            // 0x08 number of HUD messages at *mppHudMessageData
 
         GuiHudMessageResource* FixUp(int liDelta);
     };
 
     GuiHudMessageResource* GuiHudMessageResource::FixUp(int liDelta)
     {
-        const s32 liCount = miCount;
-        muBase += static_cast<u32>(liDelta);
+        const s32 liCount = miHudMessageCount;
+        mppHudMessageData += static_cast<u32>(liDelta);
 
         if (liCount > 0)
         {
-            u32* lpaEntries = reinterpret_cast<u32*>(muBase);
+            u32* lpaEntries = reinterpret_cast<u32*>(mppHudMessageData);
             for (s32 liEntry = 0; liEntry < liCount; ++liEntry)
                 lpaEntries[liEntry] += static_cast<u32>(liDelta);
         }

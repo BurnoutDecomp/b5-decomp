@@ -24,20 +24,24 @@
 
 namespace CgsGui
 {
+    // Member names per burnout.wiki (GUI Popup -> GuiPopupResource). The wiki
+    // documents offset 4 as two int16s (miPopupCount + miSizeOfPopupResource); the
+    // recovered FixUp/FixDown pseudocode reads the count here, so its storage width
+    // is left as the source dictates and only the name is adopted.
     struct GuiPopupResource
     {
-        u32  muBase;     // [0] base pointer (rebased down in place)
-        s32  miCount;    // [1] number of entry pointers at *muBase
+        u32  mppPopupData;  // 0x00 GuiPopup** (rebased down in place)
+        s32  miPopupCount;  // 0x04 number of popup entry pointers at *mppPopupData
 
         GuiPopupResource* FixDown(int liDelta, bool lbDeep);
     };
 
     GuiPopupResource* GuiPopupResource::FixDown(int liDelta, bool lbDeep)
     {
-        if (miCount > 0)
+        if (miPopupCount > 0)
         {
-            u32* lpaEntries = reinterpret_cast<u32*>(muBase);
-            for (s32 liEntry = 0; liEntry < miCount; ++liEntry)
+            u32* lpaEntries = reinterpret_cast<u32*>(mppPopupData);
+            for (s32 liEntry = 0; liEntry < miPopupCount; ++liEntry)
             {
                 if (lbDeep)
                 {
@@ -53,7 +57,7 @@ namespace CgsGui
                 lpaEntries[liEntry] -= static_cast<u32>(liDelta);
             }
         }
-        muBase -= static_cast<u32>(liDelta);
+        mppPopupData -= static_cast<u32>(liDelta);
         return this;
     }
 }

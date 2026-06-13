@@ -13,10 +13,17 @@
 
 namespace renderengine
 {
+    // Member names/types per burnout.wiki (Vertex Descriptor / Xbox 360 ->
+    // renderengine::VertexDescriptor); the flag at 0x0A is unnamed there and kept
+    // descriptive. Layout matches the X360 spine FixUp pseudocode (sets *+0x0A).
     struct VertexDescriptor
     {
-        u8   mPad[10];          // [0x00] opaque
-        u8   mbNeedsCreate;     // [0x0A] flag set before CreateD3DObject
+        s32  m_refCount;        // 0x00
+        u32  m_typesFlags;      // 0x04 type flags
+        u16  m_numElements;     // 0x08 number of elements
+        u8   mbNeedsCreate;     // 0x0A flag set before CreateD3DObject
+        u8   m_pad0B;           // 0x0B padding
+        u32  m_pad0C;           // 0x0C padding (Element[] begins at 0x10)
 
         int CreateD3DObject();
     };

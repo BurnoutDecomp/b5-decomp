@@ -36,17 +36,17 @@ namespace
 
 void LightingData::Construct()
 {
-    CopyVec4(mVec[0], KAF_LightingDefault0);
-    CopyVec4(mVec[1], KAF_LightingDefault1);
-    CopyVec4(mVec[2], KAF_LightingDefault2);
-    CopyVec4(mVec[3], KAF_LightingDefault3);
-    CopyVec4(mVec[4], KAF_LightingDefault4);
-    CopyVec4(mVec[5], KAF_LightingDefault5);
-    CopyVec4(mVec[6], KAF_LightingDefault6);
+    CopyVec4(mv3KeyLightColour,   KAF_LightingDefault0);
+    CopyVec4(mv3SpecularColour,   KAF_LightingDefault1);
+    CopyVec4(mv3KeyFillColour,    KAF_LightingDefault2);
+    CopyVec4(mv3ShadowFillColour, KAF_LightingDefault3);
+    CopyVec4(mv3RightFillColour,  KAF_LightingDefault4);
+    CopyVec4(mv3LeftFillColour,   KAF_LightingDefault5);
+    CopyVec4(mv3UpFillColour,     KAF_LightingDefault6);
 
-    mfField80 = 0.2f;
+    mfAmbientIrradianceScale = 0.2f;
 
-    CopyVec4(mVec[7], KAF_LightingDefault7);
+    CopyVec4(mv3DownFillColour,   KAF_LightingDefault7);
 }
 }
 }
