@@ -11,7 +11,10 @@ namespace CgsContainers
         T muFlags;
 
     public:
-        // TODO: All function implementations are guessed as they were inlined in the decompile
+        // The bodies are recovered from inlined uses (every call site was inlined in
+        // the X360 build); verified against CgsModule::DataBuffer's flag usage, where
+        // the write bit is value 1 and the read bit is value 2 (matching the
+        // `|= 2u` / `&= ~1u` pseudocode).
         void Clear() { muFlags = 0; }
 
         const bool IsBitSet(u32 num) const { return (muFlags & num) != 0; }
