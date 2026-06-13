@@ -7,9 +7,10 @@ the main source of layout drift in a decomp.
 
 **This is types only, by design.** Per the project strategy (see `CLAUDE.md` → "rwcore"),
 Renderware is engine middleware: its *type layouts* are ingested eagerly (here), but its
-*function bodies* are **not** bulk-decompiled — they come in lazily and are mostly stubbed or
-replaced with PC equivalents as subsystems boot. So you will find structs and enums here, but
-no `.cpp`.
+*function bodies* are **not** decompiled at all. Instead, the project statically links
+against the original PC binaries (`rwcore_master.obj` / `.lib`). If an agent is asked to
+reverse a RenderWare function, they must skip it and block it in the ledger, allowing the
+linker to resolve it from the binary. So you will find structs and enums here, but no `.cpp`.
 
 ## What's in here
 
@@ -18,6 +19,8 @@ include/
   rwcore.h                ← umbrella; #include this
   rw/rwcore_enums.h       ← rw:: enums
   rw/rwcore_structs.h     ← rw:: structs (68), topologically ordered
+lib/
+  rwcore.lib              ← the compiled PC binary
 ```
 
 Usage:
@@ -27,7 +30,7 @@ Usage:
 ::rw::core::debug::Channel ch;   // fully-qualified rw:: types
 ```
 
-CMake: link the `renderware` (a.k.a. `rw::core`) INTERFACE target to get the include path.
+CMake: link the `renderware` (a.k.a. `rw::core`) target. This will automatically include the headers and statically link against `lib/rwcore.lib`.
 
 ## Provenance & fidelity
 
