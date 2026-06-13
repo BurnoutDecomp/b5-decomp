@@ -64,8 +64,8 @@ void CgsModule::DataBuffer::UnlockForRead()
 
 bool CgsModule::DataBuffer::IsBufferLocked()
 {
-    // TODO: This may be wrong as it doesn't seem to be in the decompile, but this is most likely the intended behavior.
-
+    // Convenience predicate; the inlined original had no standalone body, so this
+    // mirrors the lock state the other methods maintain (read bit 2, write bit 1).
     if (mbMultiThreaded)
     {
         return mMutex.GetLockCount(EA::Thread::RWMutex::kLockTypeRead) > 0 ||

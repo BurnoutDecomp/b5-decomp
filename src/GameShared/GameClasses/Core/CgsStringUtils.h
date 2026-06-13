@@ -1,6 +1,10 @@
 #pragma once
 #include "types.hpp"
 
+// Global legacy helper (all-caps symbol preserved for cross-build identity):
+// in-place lower-cases up to uMaxLen chars and returns the buffer.
+extern char* CGSSTRNLOWER(char* pcString, u32 uMaxLen);
+
 namespace CgsCore
 {
 
