@@ -1,35 +1,34 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListResourceType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the body
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::PolygonSoupListResourceType::FixUp     @ 0x82845EB0
 //   CgsResource::PolygonSoupListResourceType::GetTypeID @ 0x82839FA0
 //
-// FixUp simply forwards to CgsGeometric::PolygonSoupList::FixUp (reconstructed in
-// CgsPolygonSoupList.cpp), passing the list (a2) and the relocation delta loaded
-// from a3. The resource-type `this` is unused. PolygonSoupList is forward-declared
-// here (it lives in another TU and has no shared header yet).
+// FixUp forwards to CgsGeometric::PolygonSoupList::FixUp (own TU), passing the list
+// (the resource) and the relocation delta (the rw::Resource's load base).
 
 namespace CgsGeometric
 {
     struct PolygonSoupList
     {
-        PolygonSoupList* FixUp(int delta);
+        PolygonSoupList* FixUp(int liDelta);
     };
 }
 
 namespace CgsResource
 {
-    class PolygonSoupListResourceType
+    static const uint32_t KU_POLYGON_SOUP_LIST_RESOURCE_TYPE_ID = 67;
+
+    uint32_t PolygonSoupListResourceType::GetTypeID() const
     {
-    public:
-        CgsGeometric::PolygonSoupList* FixUp(CgsGeometric::PolygonSoupList* pList, u32* pDelta)
-        {
-            return pList->FixUp(static_cast<int>(*pDelta));
-        }
+        return KU_POLYGON_SOUP_LIST_RESOURCE_TYPE_ID;
+    }
 
-        int GetTypeID() { return KI_TYPE_ID; }
-
-    private:
-        static const int KI_TYPE_ID = 67;
-    };
+    void PolygonSoupListResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        static_cast<CgsGeometric::PolygonSoupList*>(lpResource)->FixUp(
+            static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+    }
 }

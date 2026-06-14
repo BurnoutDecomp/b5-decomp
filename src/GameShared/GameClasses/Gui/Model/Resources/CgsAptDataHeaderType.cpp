@@ -1,4 +1,6 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsAptDataHeaderType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::AptDataHeaderType::FixDown          @ 0x8285D980
@@ -7,12 +9,11 @@
 //   CgsResource::AptDataHeaderType::GetImportPointer @ 0x8284BB80
 //   CgsResource::AptDataHeaderType::GetTypeID        @ 0x8284BB10
 //
-// Resource-type handler for a serialised APT (gui movie) data header. FixDown/FixUp
-// (un)relocate the four leading block pointers and forward to the embedded
-// GuiGeometryObject relocation. GetImportCount / GetImportPointer walk the
-// movie -> character -> import table hierarchy counting / locating non-null
-// imports. The APT blob is an external serialised format, so its nested tables are
-// accessed by offset.
+// FixDown/FixUp (un)relocate the four leading block pointers (delta = the
+// rw::Resource's load base) and forward to the embedded GuiGeometryObject
+// relocation. GetImportCount / GetImportPointer walk the movie -> character ->
+// import table hierarchy. The APT blob is an external serialised format, so its
+// nested tables are accessed by offset.
 
 namespace CgsResource
 {
@@ -25,41 +26,34 @@ namespace CgsResource
     void* GuiGeometryObject::FixDown(void*, int, int) { __debugbreak(); return nullptr; }
     void* GuiGeometryObject::FixUp()                  { __debugbreak(); return nullptr; }
 
-    class AptDataHeaderType
+    static const uint32_t KU_APT_DATA_HEADER_RESOURCE_TYPE_ID = 30;
+
+    uint32_t AptDataHeaderType::GetTypeID() const
     {
-    public:
-        void* FixDown(void* pResource, const int* pDelta);
-        void* FixUp(void* pResource, const int* pDelta);
-        int   GetImportCount(const void* pResource);
-        void  GetImportPointer(const void* pResource, int liIndex, u32* pOutOffset, u32* pOutValue);
-        int   GetTypeID() { return KI_TYPE_ID; }
+        return KU_APT_DATA_HEADER_RESOURCE_TYPE_ID;
+    }
 
-    private:
-        static const int KI_TYPE_ID = 30;
-    };
-
-    void* AptDataHeaderType::FixDown(void* pResource, const int* pDelta)
+    void AptDataHeaderType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
-        const u32 luDelta = static_cast<u32>(*pDelta);
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
+        const u32 luDelta = CgsResource::GetLoadBase(lrResource);
 
-        void* lResult = GuiGeometryObject::FixDown(
-            reinterpret_cast<void*>(*reinterpret_cast<u32*>(lRes + 12)), *pDelta, 1);
+        GuiGeometryObject::FixDown(
+            reinterpret_cast<void*>(*reinterpret_cast<u32*>(lRes + 12)), static_cast<int>(luDelta), 1);
 
-        u32 lu4 = *reinterpret_cast<u32*>(lRes + 4)  - luDelta;
-        u32 lu8 = *reinterpret_cast<u32*>(lRes + 8)  - luDelta;
+        u32 lu4  = *reinterpret_cast<u32*>(lRes + 4)  - luDelta;
+        u32 lu8  = *reinterpret_cast<u32*>(lRes + 8)  - luDelta;
         u32 lu12 = *reinterpret_cast<u32*>(lRes + 12) - luDelta;
         *reinterpret_cast<u32*>(lRes + 0)  -= luDelta;
         *reinterpret_cast<u32*>(lRes + 4)  = lu4;
         *reinterpret_cast<u32*>(lRes + 8)  = lu8;
         *reinterpret_cast<u32*>(lRes + 12) = lu12;
-        return lResult;
     }
 
-    void* AptDataHeaderType::FixUp(void* pResource, const int* pDelta)
+    void AptDataHeaderType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
-        const u32 luDelta = static_cast<u32>(*pDelta);
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
+        const u32 luDelta = CgsResource::GetLoadBase(lrResource);
 
         u32 lu8 = *reinterpret_cast<u32*>(lRes + 8) + luDelta;
         u32 lu4 = *reinterpret_cast<u32*>(lRes + 4) + luDelta;
@@ -68,15 +62,15 @@ namespace CgsResource
         *reinterpret_cast<u32*>(lRes + 8) = lu8;
         *reinterpret_cast<u32*>(lRes + 4) = lu4;
         *reinterpret_cast<u32*>(lRes + 0) = lu0;
-        return GuiGeometryObject::FixUp();
+        GuiGeometryObject::FixUp();
     }
 
-    int AptDataHeaderType::GetImportCount(const void* pResource)
+    uint32_t AptDataHeaderType::GetImportCount(const void* lpResource) const
     {
-        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
         u32* lpRoot = *reinterpret_cast<u32**>(lRes + 12);
 
-        int liCount = 0;
+        uint32_t luCount = 0;
         u32 luMovies = lpRoot[0];
         if (luMovies)
         {
@@ -91,7 +85,7 @@ namespace CgsResource
                     do
                     {
                         if (reinterpret_cast<u32*>(*lpImport)[1])
-                            ++liCount;
+                            ++luCount;
                         --luImports;
                         lpImport += 4;
                     } while (luImports);
@@ -100,21 +94,22 @@ namespace CgsResource
                 lpMovie += 4;
             } while (luMovies);
         }
-        return liCount;
+        return luCount;
     }
 
-    void AptDataHeaderType::GetImportPointer(const void* pResource, int liIndex, u32* pOutOffset, u32* pOutValue)
+    void AptDataHeaderType::GetImportPointer(const void* lpResource, uint32_t luIndex,
+                                             uint32_t* lpuOffset, const void** lppValue) const
     {
-        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
-        *pOutValue = 0;
-        *pOutOffset = 0;
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
+        *lppValue = nullptr;
+        *lpuOffset = 0;
 
         u32* lpRoot = *reinterpret_cast<u32**>(lRes + 12);
         u32 luMovies = lpRoot[0];
         if (!luMovies)
             return;
 
-        int liSeen = 0;
+        uint32_t luSeen = 0;
         u32* lpMovie = reinterpret_cast<u32*>(lpRoot[2]);
         u32 luMovie = 0;
         do
@@ -129,14 +124,14 @@ namespace CgsResource
                     u32* lpImportTable = reinterpret_cast<u32*>(luChar + 8);
                     if (reinterpret_cast<u32*>(*reinterpret_cast<u32*>(lpImportTable))[1])
                     {
-                        if (liSeen == liIndex)
+                        if (luSeen == luIndex)
                         {
                             u32 luEntry = *reinterpret_cast<u32*>(4 * luImport + *reinterpret_cast<u32*>(luChar + 8));
-                            *pOutValue = reinterpret_cast<u32*>(luEntry)[3];
-                            *pOutOffset = 4 * luImport + *reinterpret_cast<u32*>(luChar + 8) - static_cast<u32>(lRes) + 12;
+                            *lppValue = reinterpret_cast<const void*>(reinterpret_cast<u32*>(luEntry)[3]);
+                            *lpuOffset = 4 * luImport + *reinterpret_cast<u32*>(luChar + 8) - static_cast<u32>(lRes) + 12;
                             return;
                         }
-                        ++liSeen;
+                        ++luSeen;
                     }
                     ++luImport;
                 } while (luImport < luImports);

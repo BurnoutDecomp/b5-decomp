@@ -1,11 +1,16 @@
-#include "types.hpp"
-
+#include "SharedClasses/Physics/Deformation/Resources/StreamedDeformationSpecResourceType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnResource::StreamedDeformationSpecResourceType::Serialise @ 0x82677680
 //   BrnResource::StreamedDeformationSpecResourceType::FixUp     @ 0x826776F0
 //   BrnResource::StreamedDeformationSpecResourceType::GetTypeID @ 0x82675608
+//
+// FixUp forwards to the spec's own relocation (base = the rw::Resource's load base).
+// Serialise un-relocates the source, copies the computed resource span to the
+// destination buffer, then re-relocates both. The spec's own FixDown/FixUp take the
+// object's base address.
 
 namespace BrnPhysics
 {
@@ -32,66 +37,42 @@ namespace Deformation
 
 namespace BrnResource
 {
-    static const u32 KI_STREAMED_DEFORMATION_SPEC_RESOURCE_TYPE_ID = 65564;
+    using BrnPhysics::Deformation::StreamedDeformationSpec;
+
+    static const uint32_t KU_STREAMED_DEFORMATION_SPEC_RESOURCE_TYPE_ID = 65564;
     static const u32 KU_LOCATOR_POINT_SPEC_SIZE = 80;
 
-    static void* PointerFromU32(u32 luAddress)
-    {
-        return reinterpret_cast<void*>(static_cast<uintptr_t>(luAddress));
-    }
-
-    class StreamedDeformationSpecResourceType
-    {
-    public:
-        void* Serialise(const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec, void** lppDestination) const;
-        u32 GetTypeID() const;
-        BrnPhysics::Deformation::StreamedDeformationSpec* FixUp(
-            BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec,
-            const u32* lpuBaseAddress) const;
-
-    private:
-        u32 CalculateSizeOfResource(const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec) const;
-    };
-
-    u32 StreamedDeformationSpecResourceType::CalculateSizeOfResource(
-        const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec) const
+    static u32 CalculateSizeOfResource(const StreamedDeformationSpec* lpSpec)
     {
         const u32 luEndAddress =
-            lpSpec->mLightTags.mpaLocatorPoints +
-            (lpSpec->mLightTags.muNumLocators * KU_LOCATOR_POINT_SPEC_SIZE);
+            lpSpec->mLightTags.mpaLocatorPoints + (lpSpec->mLightTags.muNumLocators * KU_LOCATOR_POINT_SPEC_SIZE);
         return luEndAddress - static_cast<u32>(reinterpret_cast<uintptr_t>(lpSpec));
     }
 
-    void* StreamedDeformationSpecResourceType::Serialise(
-        const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec,
-        void** lppDestination) const
+    uint32_t StreamedDeformationSpecResourceType::GetTypeID() const
     {
-        void* lpDestination = *lppDestination;
+        return KU_STREAMED_DEFORMATION_SPEC_RESOURCE_TYPE_ID;
+    }
+
+    void StreamedDeformationSpecResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        void* lpBaseAddress = lrResource.m_baseResources[0];
+        static_cast<StreamedDeformationSpec*>(lpResource)->FixUp(lpBaseAddress);
+    }
+
+    void* StreamedDeformationSpecResourceType::Serialise(const void* lpResource, const rw::Resource& lrDest) const
+    {
+        StreamedDeformationSpec* lpSpec = const_cast<StreamedDeformationSpec*>(
+            static_cast<const StreamedDeformationSpec*>(lpResource));
+        void* lpDest = lrDest.m_baseResources[0];
         const u32 luResourceSize = CalculateSizeOfResource(lpSpec);
-        BrnPhysics::Deformation::StreamedDeformationSpec* lpMutableSpec =
-            const_cast<BrnPhysics::Deformation::StreamedDeformationSpec*>(lpSpec);
 
-        lpMutableSpec->FixDown(lpMutableSpec);
-        std::memcpy(lpDestination, lpSpec, luResourceSize);
+        lpSpec->FixDown(lpSpec);
+        std::memcpy(lpDest, lpSpec, luResourceSize);
 
-        BrnPhysics::Deformation::StreamedDeformationSpec* lpCopiedSpec =
-            static_cast<BrnPhysics::Deformation::StreamedDeformationSpec*>(lpDestination);
-        lpCopiedSpec->FixUp(lpDestination);
-        lpMutableSpec->FixUp(lpMutableSpec);
+        static_cast<StreamedDeformationSpec*>(lpDest)->FixUp(lpDest);
+        lpSpec->FixUp(lpSpec);
 
-        return lpDestination;
-    }
-
-    u32 StreamedDeformationSpecResourceType::GetTypeID() const
-    {
-        return KI_STREAMED_DEFORMATION_SPEC_RESOURCE_TYPE_ID;
-    }
-
-    BrnPhysics::Deformation::StreamedDeformationSpec* StreamedDeformationSpecResourceType::FixUp(
-        BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec,
-        const u32* lpuBaseAddress) const
-    {
-        lpSpec->FixUp(PointerFromU32(*lpuBaseAddress));
-        return lpSpec;
+        return lpDest;
     }
 }

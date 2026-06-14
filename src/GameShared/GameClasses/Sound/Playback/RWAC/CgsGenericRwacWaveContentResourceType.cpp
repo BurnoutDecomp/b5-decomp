@@ -1,20 +1,15 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacWaveContentResourceType.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82665968
 //   (CgsResource::GenericRwacWaveContentResourceType::GetTypeID)  ->  return 40992;
+// Virtual override of CgsResource::Type::GetTypeID (via BinaryFileResourceType).
 
 namespace CgsResource
 {
-    class GenericRwacWaveContentResourceType
-    {
-    public:
-        int GetTypeID();
-    };
+    static const uint32_t KU_GENERIC_RWAC_WAVE_CONTENT_RESOURCE_TYPE_ID = 40992;
 
-    static const int KI_GENERIC_RWAC_WAVE_CONTENT_RESOURCE_TYPE_ID = 40992;
-
-    int GenericRwacWaveContentResourceType::GetTypeID()
+    uint32_t GenericRwacWaveContentResourceType::GetTypeID() const
     {
-        return KI_GENERIC_RWAC_WAVE_CONTENT_RESOURCE_TYPE_ID;
+        return KU_GENERIC_RWAC_WAVE_CONTENT_RESOURCE_TYPE_ID;
     }
 }

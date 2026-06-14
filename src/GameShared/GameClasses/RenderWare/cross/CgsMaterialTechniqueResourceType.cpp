@@ -1,5 +1,7 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/RenderWare/cross/CgsMaterialTechniqueResourceType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::MaterialTechniqueResourceType::FixDown          @ 0x828A8740
@@ -9,10 +11,11 @@
 //   CgsResource::MaterialTechniqueResourceType::PostFixUp        @ 0x828A7EC8
 //
 // FixDown/FixUp (un)relocate the three serialised pointers at +24/+28/+36 of the
-// material-technique blob. PostFixUp resolves a loaded material: it queries the
-// blend-state parameters, sets the technique's render flags (alpha-blend,
-// alpha-test, hardware instancing when an InstancingMatrixArray shader constant is
-// present), and caches three content hashes plus the shader's parameter count.
+// material-technique blob (delta = the rw::Resource's load base). PostFixUp resolves
+// a loaded material: it queries the blend-state parameters, sets the technique's
+// render flags (alpha-blend, alpha-test, hardware instancing when an
+// InstancingMatrixArray shader constant is present), and caches three content hashes
+// plus the shader's parameter count.
 
 namespace renderengine
 {
@@ -40,53 +43,44 @@ namespace CgsContainers
 
 namespace CgsResource
 {
-    // The technique blob's three relocatable pointers (vertex/pixel shader and
-    // the material-state block) live at +24/+28/+36.
-    class MaterialTechniqueResourceType
-    {
-    public:
-        void* FixDown(void* pResource, const int* pDelta);
-        void* FixUp(void* pResource, const int* pDelta);
-        void* GetImportPointer();
-        int   GetTypeID() { return KI_TYPE_ID; }
-        u32   PostFixUp(void** pMaterial);
+    static const uint32_t KU_MATERIAL_TECHNIQUE_RESOURCE_TYPE_ID = 13;
 
-    private:
-        static const int KI_TYPE_ID = 13;
-    };
-
-    void* MaterialTechniqueResourceType::FixDown(void* pResource, const int* pDelta)
+    uint32_t MaterialTechniqueResourceType::GetTypeID() const
     {
-        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
-        const u32 luDelta = static_cast<u32>(*pDelta);
+        return KU_MATERIAL_TECHNIQUE_RESOURCE_TYPE_ID;
+    }
+
+    // The relocation delta is the leading word of the rw::Resource (the load base).
+    void MaterialTechniqueResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
+    {
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
+        const u32 luDelta = CgsResource::GetLoadBase(lrResource);
         u32 lu28 = *reinterpret_cast<u32*>(lRes + 28) - luDelta;
         u32 lu36 = *reinterpret_cast<u32*>(lRes + 36) - luDelta;
         *reinterpret_cast<u32*>(lRes + 24) -= luDelta;
         *reinterpret_cast<u32*>(lRes + 28) = lu28;
         *reinterpret_cast<u32*>(lRes + 36) = lu36;
-        return pResource;
     }
 
-    void* MaterialTechniqueResourceType::FixUp(void* pResource, const int* pDelta)
+    void MaterialTechniqueResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
-        const u32 luDelta = static_cast<u32>(*pDelta);
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
+        const u32 luDelta = CgsResource::GetLoadBase(lrResource);
         u32 lu28 = *reinterpret_cast<u32*>(lRes + 28) + luDelta;
         u32 lu36 = *reinterpret_cast<u32*>(lRes + 36) + luDelta;
         *reinterpret_cast<u32*>(lRes + 24) += luDelta;
         *reinterpret_cast<u32*>(lRes + 28) = lu28;
         *reinterpret_cast<u32*>(lRes + 36) = lu36;
-        return pResource;
     }
 
-    void* MaterialTechniqueResourceType::GetImportPointer()
+    void MaterialTechniqueResourceType::GetImportPointer(const void*, uint32_t, uint32_t*, const void**) const
     {
         CGS_ASSERT(false, "This function should not be called at runtime");
-        return nullptr;
     }
 
-    u32 MaterialTechniqueResourceType::PostFixUp(void** pMaterial)
+    void MaterialTechniqueResourceType::PostFixUp(void* lpResource, const rw::Resource&) const
     {
+        void** pMaterial = static_cast<void**>(lpResource);
         CGS_ASSERT(pMaterial[1] != nullptr, "lpMaterial->mpMaterialState");
         void** lpMaterialState = reinterpret_cast<void**>(pMaterial[1]);
         CGS_ASSERT(lpMaterialState[0] != nullptr, "lpMaterial->mpMaterialState->mpBlendState");
@@ -137,6 +131,5 @@ namespace CgsResource
         u32 luResult = CgsContainers::CgsHash12::CalculateHash(&luPixShader, 4);
         lpuOut[6] = luResult;
         lpuOut[8] = reinterpret_cast<u32*>(lpShader)[37] - 48;
-        return luResult;
     }
 }

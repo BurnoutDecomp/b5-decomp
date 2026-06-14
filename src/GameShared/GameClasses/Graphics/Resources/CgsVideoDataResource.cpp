@@ -1,38 +1,34 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Graphics/Resources/CgsVideoDataResource.h"
+#include "rw/rwcore_structs.h"   // rw::Resource (unused here, kept for the base type)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::VideoDataResourceType::FixUp     @ 0x827FB340
 //   CgsResource::VideoDataResourceType::GetTypeID @ 0x827EB0E8
 //
-// FixUp relocates six self-relative pointer fields (stride 12 bytes, offsets
-// 0,12,24,36,48,60) from load-relative offsets into absolute addresses: each
-// stored value gets the address of its own slot added to it (`*p += p`), the
-// standard post-load pointer fixup for a serialised resource. `this` is unused.
+// FixUp relocates six self-relative pointer fields (stride 12, offsets 0/12/.../60):
+// each stored value gets the address of its own slot added to it (`*p += p`), the
+// standard post-load pointer fixup. It uses no external delta, so the rw::Resource
+// argument is unused.
 
 namespace CgsResource
 {
-    class VideoDataResourceType
-    {
-    public:
-        void* FixUp(void* pResource);
-        int   GetTypeID() { return KI_TYPE_ID; }
+    static const uint32_t KU_VIDEO_DATA_RESOURCE_TYPE_ID = 66;
+    static const u32 KU_FIELD_COUNT  = 6;
+    static const u32 KU_FIELD_STRIDE = 12;
 
-    private:
-        static const int KI_TYPE_ID = 66;
-        static const u32 KU_FIELD_COUNT = 6;
-        static const u32 KU_FIELD_STRIDE = 12;
-    };
-
-    void* VideoDataResourceType::FixUp(void* pResource)
+    uint32_t VideoDataResourceType::GetTypeID() const
     {
-        uintptr_t base = reinterpret_cast<uintptr_t>(pResource);
-        for (u32 i = 0; i < KU_FIELD_COUNT; ++i)
+        return KU_VIDEO_DATA_RESOURCE_TYPE_ID;
+    }
+
+    void VideoDataResourceType::FixUp(void* lpResource, const rw::Resource&) const
+    {
+        uintptr_t lBase = reinterpret_cast<uintptr_t>(lpResource);
+        for (u32 li = 0; li < KU_FIELD_COUNT; ++li)
         {
-            uintptr_t fieldAddr = base + i * KU_FIELD_STRIDE;
-            char*& rpField = *reinterpret_cast<char**>(fieldAddr);
-            rpField += fieldAddr;   // load-relative offset -> absolute pointer
+            uintptr_t lFieldAddr = lBase + li * KU_FIELD_STRIDE;
+            char*& lrpField = *reinterpret_cast<char**>(lFieldAddr);
+            lrpField += lFieldAddr;   // load-relative offset -> absolute pointer
         }
-
-        return pResource;
     }
 }

@@ -1,20 +1,15 @@
 #ifndef CGS_LUA_CODE_RESOURCE_H
 #define CGS_LUA_CODE_RESOURCE_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
 
 namespace CgsResource
 {
-class LuaCodeResourceType
+class LuaCodeResourceType : public BinaryFileResourceType
 {
 public:
-    int GetTypeID();
+    uint32_t GetTypeID() const override;
 };
-
-inline int LuaCodeResourceType::GetTypeID()
-{
-    return 34;
-}
 }
 
 #endif

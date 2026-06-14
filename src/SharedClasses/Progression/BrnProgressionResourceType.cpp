@@ -1,29 +1,31 @@
-#include "types.hpp"
+#include "SharedClasses/Progression/BrnProgressionResourceType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnProgression::ProgressionResourceType::FixDown   @ 0x8267F480
 //   BrnProgression::ProgressionResourceType::FixUp     @ 0x8267F490
 //   BrnProgression::ProgressionResourceType::GetTypeID @ 0x82676B88
 //
-// FixUp/FixDown forward to BrnProgression::ProgressionData (forward-declared,
-// separate TU).
+// FixUp/FixDown forward to BrnProgression::ProgressionData (own TU), passing the
+// delta (the rw::Resource's load base).
 
 namespace BrnProgression
 {
-    struct ProgressionData
-    {
-        int FixUp(int delta);
-        int FixDown(int delta);
-    };
+    static const uint32_t KU_PROGRESSION_RESOURCE_TYPE_ID = 65550;
 
-    class ProgressionResourceType
+    uint32_t ProgressionResourceType::GetTypeID() const
     {
-    public:
-        int FixDown(ProgressionData* pData, int* pDelta) { return pData->FixDown(*pDelta); }
-        int FixUp(ProgressionData* pData, int* pDelta)   { return pData->FixUp(*pDelta); }
-        int GetTypeID() { return KI_TYPE_ID; }
+        return KU_PROGRESSION_RESOURCE_TYPE_ID;
+    }
 
-    private:
-        static const int KI_TYPE_ID = 65550;
-    };
+    void ProgressionResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
+    {
+        static_cast<ProgressionData*>(lpResource)->FixDown(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+    }
+
+    void ProgressionResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        static_cast<ProgressionData*>(lpResource)->FixUp(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+    }
 }

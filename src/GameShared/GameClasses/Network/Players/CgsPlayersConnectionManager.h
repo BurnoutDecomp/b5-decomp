@@ -8,6 +8,7 @@ class PlayersConnectionManager
 {
 public:
     PlayersConnectionManager();
+    s32 GetConnectionStatus(s32 liPlayerID);
 
 private:
     struct ConnectionRecord

@@ -1,20 +1,15 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Sound/Playback/CSIS/CgsCsisResourceType.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82665998
 //   (CgsResource::CsisResourceType::GetTypeID)  ->  return 40995;
+// Virtual override of CgsResource::Type::GetTypeID (via BinaryFileResourceType).
 
 namespace CgsResource
 {
-    class CsisResourceType
-    {
-    public:
-        int GetTypeID();
-    };
+    static const uint32_t KU_CSIS_RESOURCE_TYPE_ID = 40995;
 
-    static const int KI_CSIS_RESOURCE_TYPE_ID = 40995;
-
-    int CsisResourceType::GetTypeID()
+    uint32_t CsisResourceType::GetTypeID() const
     {
-        return KI_CSIS_RESOURCE_TYPE_ID;
+        return KU_CSIS_RESOURCE_TYPE_ID;
     }
 }

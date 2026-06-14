@@ -1,39 +1,36 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessageListType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the body
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::HudMessageListResourceType::FixDown   @ 0x82846648
 //   CgsResource::HudMessageListResourceType::GetTypeID @ 0x828465D0
 //
-// FixDown is the inverse (save-time) relocation: it un-rebases the entry table by
-// subtracting the delta from every one of the `count` (offset 4) entry pointers,
-// then un-rebases the table base pointer (offset 8) itself.
+// FixDown is the inverse (save-time) relocation: it subtracts the delta (the
+// rw::Resource's load base) from every one of the `count` (offset 4) entry pointers,
+// then from the table base pointer (offset 8) itself.
 
 namespace CgsResource
 {
-    class HudMessageListResourceType
+    static const uint32_t KU_HUD_MESSAGE_LIST_RESOURCE_TYPE_ID = 45;
+
+    uint32_t HudMessageListResourceType::GetTypeID() const
     {
-    public:
-        void* FixDown(void* pList, int* pDelta);
-        int   GetTypeID() { return KI_TYPE_ID; }
+        return KU_HUD_MESSAGE_LIST_RESOURCE_TYPE_ID;
+    }
 
-    private:
-        static const int KI_TYPE_ID = 45;
-    };
-
-    void* HudMessageListResourceType::FixDown(void* pList, int* pDelta)
+    void HudMessageListResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        int delta = *pDelta;
-        uintptr_t base = reinterpret_cast<uintptr_t>(pList);
+        int       liDelta = static_cast<int>(CgsResource::GetLoadBase(lrResource));
+        uintptr_t lBase   = reinterpret_cast<uintptr_t>(lpResource);
 
-        int count = *reinterpret_cast<int*>(base + 4);
-        if (count > 0)
+        int liCount = *reinterpret_cast<int*>(lBase + 4);
+        if (liCount > 0)
         {
-            uintptr_t* table = *reinterpret_cast<uintptr_t**>(base + 8);
-            for (int i = 0; i < count; ++i)
-                table[i] -= delta;
+            uintptr_t* lpTable = *reinterpret_cast<uintptr_t**>(lBase + 8);
+            for (int li = 0; li < liCount; ++li)
+                lpTable[li] -= liDelta;
         }
-
-        *reinterpret_cast<uintptr_t*>(base + 8) -= delta;
-        return pList;
+        *reinterpret_cast<uintptr_t*>(lBase + 8) -= liDelta;
     }
 }

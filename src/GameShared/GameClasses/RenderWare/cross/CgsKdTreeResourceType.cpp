@@ -1,6 +1,6 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/RenderWare/cross/CgsKdTreeResourceType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include <cstring>
+#include "rw/rwcore_structs.h"   // rw::Resource complete
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::KdTreeResourceType::FixDown                       @ 0x828A9020
@@ -9,11 +9,10 @@
 //   CgsResource::KdTreeResourceType::GetSerialisedResourceDescriptor @ 0x828A8F68
 //   CgsResource::KdTreeResourceType::GetTypeID                     @ 0x828A7758
 //
-// Resource-type handler for a serialised rw::collision::TriangleKDTreeProcedural.
-// FixDown/FixUp (un)relocate the embedded pointers and re-run the RenderWare
-// KD-tree fix-up; GetSerialisedResourceDescriptor copies the rw descriptor and
-// pads it to a five-entry block. The KD-tree blob layout is an external/platform
-// (RenderWare) format, so its fields are accessed by serialised offset.
+// FixDown/FixUp (un)relocate the embedded pointers (delta = the rw::Resource's load
+// base) and re-run the RenderWare KD-tree fix-up. GetSerialisedResourceDescriptor
+// copies the rw descriptor and returns it padded to a five-entry block. The KD-tree
+// blob is an external/platform (RenderWare) format, accessed by serialised offset.
 
 namespace rw { namespace collision
 {
@@ -29,26 +28,21 @@ namespace rw { namespace collision
 
 namespace CgsResource
 {
-    class KdTreeResourceType
-    {
-    public:
-        void* FixDown(void* pResource, const int* pDelta);
-        int   FixUp(void* pResource, const int* pDelta);
-        void* GetImportPointer();
-        void* GetSerialisedResourceDescriptor(void* pOut, const void* pResource);
-        int   GetTypeID() { return KI_TYPE_ID; }
+    static const uint32_t KU_KD_TREE_RESOURCE_TYPE_ID = 23;
 
-    private:
-        static const int KI_TYPE_ID = 23;
-    };
-
-    void* KdTreeResourceType::FixDown(void* pResource, const int* pDelta)
+    uint32_t KdTreeResourceType::GetTypeID() const
     {
-        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        return KU_KD_TREE_RESOURCE_TYPE_ID;
+    }
+
+    void KdTreeResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
+    {
+        uintptr_t lRes    = reinterpret_cast<uintptr_t>(lpResource);
         u32       luTree  = *reinterpret_cast<u32*>(lRes + 68);
         u32       luFirst = *reinterpret_cast<u32*>(*reinterpret_cast<u32*>(lRes + 64));
+        const u32 luDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]));
 
-        *reinterpret_cast<u32*>(lRes + 68) = luTree - static_cast<u32>(*pDelta);
+        *reinterpret_cast<u32*>(lRes + 68) = luTree - luDelta;
         *reinterpret_cast<u32*>(lRes + 64) = luFirst;
 
         *reinterpret_cast<u32*>(*reinterpret_cast<u32*>(luTree + 60)) -= *reinterpret_cast<u32*>(luTree + 60);
@@ -59,33 +53,30 @@ namespace CgsResource
         *reinterpret_cast<u32*>(luTree + 56) = luN1;
         *reinterpret_cast<u32*>(luTree + 60) = luN2;
         *reinterpret_cast<u32*>(luTree + 64) = luN3;
-        return pResource;
     }
 
-    int KdTreeResourceType::FixUp(void* pResource, const int* pDelta)
+    void KdTreeResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
-        *reinterpret_cast<u32*>(lRes + 68) += static_cast<u32>(*pDelta);
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
+        *reinterpret_cast<u32*>(lRes + 68) += static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]));
         *reinterpret_cast<u32*>(lRes + 64) = 0; // patched to the rw KD-tree vtable on fix-up
         u8 laParams[348] = {};
-        return rw::collision::TriangleKDTreeProcedural::Fixup(
+        rw::collision::TriangleKDTreeProcedural::Fixup(
             reinterpret_cast<void*>(*reinterpret_cast<u32*>(lRes + 68)), laParams);
     }
 
-    void* KdTreeResourceType::GetImportPointer()
+    void KdTreeResourceType::GetImportPointer(const void*, uint32_t, uint32_t*, const void**) const
     {
         CGS_ASSERT(false, "KdTrees have no import pointers");
-        return nullptr;
     }
 
-    void* KdTreeResourceType::GetSerialisedResourceDescriptor(void* pOut, const void* pResource)
+    ResourceDescriptor KdTreeResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
-        u32*      lpOut = reinterpret_cast<u32*>(pOut);
-        uintptr_t lTree = *reinterpret_cast<const u32*>(reinterpret_cast<uintptr_t>(pResource) + 68);
+        uintptr_t lTree = *reinterpret_cast<const u32*>(reinterpret_cast<uintptr_t>(lpResource) + 68);
 
         u8  laScratch[48] = {};
         u32 lauDesc[12] = {};
-        u32* lpDesc = reinterpret_cast<u32*>(rw::collision::TriangleKDTreeProcedural::GetResourceDescriptor(
+        u32* lpRwDesc = reinterpret_cast<u32*>(rw::collision::TriangleKDTreeProcedural::GetResourceDescriptor(
             laScratch,
             *reinterpret_cast<u32*>(lTree + 48),
             *reinterpret_cast<u32*>(lTree + 40),
@@ -94,17 +85,18 @@ namespace CgsResource
             *reinterpret_cast<u32*>(lTree + 32),
             80));
         for (int li = 0; li < 10; ++li)
-            lauDesc[li] = lpDesc[li];
+            lauDesc[li] = lpRwDesc[li];
 
-        lpOut[2] = 0; lpOut[3] = 1;
-        lpOut[4] = 0; lpOut[5] = 1;
-        lpOut[6] = 0; lpOut[7] = 1;
-        lpOut[8] = 0; lpOut[9] = 1;
-        // First entry is a 64-bit (size, alignment) pair: the X360 stores the
-        // descriptor size + 96 in the high word, which on its big-endian layout is
-        // the first word, followed by the descriptor's reported alignment.
-        lpOut[0] = lauDesc[0] + 96;
-        lpOut[1] = lauDesc[1];
-        return lpOut;
+        // First entry: descriptor size + 96 with the descriptor's reported alignment;
+        // the remaining four entries are empty.
+        ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = lauDesc[0] + 96;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = lauDesc[1];
+        for (int li = 1; li < 5; ++li)
+        {
+            lDescriptor.m_baseResourceDescriptors[li].m_size      = 0;
+            lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1;
+        }
+        return lDescriptor;
     }
 }

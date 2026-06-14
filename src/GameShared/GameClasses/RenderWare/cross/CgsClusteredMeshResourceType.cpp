@@ -1,17 +1,19 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/RenderWare/cross/CgsClusteredMeshResourceType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::ClusteredMeshResourceType::FixDown          @ 0x828A9148
 //   CgsResource::ClusteredMeshResourceType::FixUp            @ 0x828A91A8
 //   CgsResource::ClusteredMeshResourceType::GetImportPointer @ 0x828A77A8
 //   CgsResource::ClusteredMeshResourceType::GetTypeID        @ 0x828A77A0
+//   (ReBase @ 0x828A8278 is defined in CgsResourceType.cpp)
 //
-// Resource-type handler for a serialised collision ClusteredMesh. FixDown/FixUp
-// (un)relocate the embedded rw::collision::ClusteredMesh pointers around the base
-// CollisionMeshData relocation, and on fix-up re-run the RenderWare clustered-mesh
-// fix-up with a scratch parameter block. Pointer arithmetic operates on the
-// serialised blob (file-format offsets), as in the sibling resource types.
+// FixDown/FixUp (un)relocate the embedded rw::collision::ClusteredMesh pointers
+// around the base CollisionMeshData relocation; the delta is the leading word of
+// the rw::Resource (its load base). On fix-up the RenderWare clustered-mesh fix-up
+// re-runs with a scratch parameter block. Pointer arithmetic operates on the
+// serialised blob (an external/platform format), accessed by serialised offset.
 
 namespace CgsPhysics
 {
@@ -37,29 +39,18 @@ namespace rw { namespace collision
 
 namespace CgsResource
 {
-    // These routines walk RenderWare's serialised rw::collision::ClusteredMesh
-    // blob, whose internal field layout is an external/platform format we do not
-    // own; field access is therefore by serialised offset (the platform-API
-    // exception to member-by-name recovery). The object at offset 0 of the
-    // resource is the CollisionMeshData; the clustered mesh pointer is at +64 with
-    // a paired offset at +68.
-    class ClusteredMeshResourceType
-    {
-    public:
-        void* FixDown(void* pCollisionData, const int* pDelta);
-        int   FixUp(void* pCollisionData, const int* pDelta);
-        void* GetImportPointer();
-        int   GetTypeID() { return KI_TYPE_ID; }
+    static const uint32_t KU_CLUSTERED_MESH_RESOURCE_TYPE_ID = 36;
 
-    private:
-        static const int KI_TYPE_ID = 36;
-    };
-
-    void* ClusteredMeshResourceType::FixDown(void* pCollisionData, const int* pDelta)
+    uint32_t ClusteredMeshResourceType::GetTypeID() const
     {
-        uintptr_t lData = reinterpret_cast<uintptr_t>(pCollisionData);
-        u32       luMesh = *reinterpret_cast<u32*>(lData);
-        const u32 luDelta = static_cast<u32>(*pDelta);
+        return KU_CLUSTERED_MESH_RESOURCE_TYPE_ID;
+    }
+
+    void ClusteredMeshResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
+    {
+        uintptr_t lData   = reinterpret_cast<uintptr_t>(lpResource);
+        u32       luMesh  = *reinterpret_cast<u32*>(lData);
+        const u32 luDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]));
 
         if (luMesh)
         {
@@ -71,29 +62,27 @@ namespace CgsResource
             *reinterpret_cast<u32*>(luClusters + 48) -= luClusters;
             *reinterpret_cast<u32*>(luClusters + 52) = luUnit;
         }
-        return CgsPhysics::CollisionMeshData::FixDown(pCollisionData, luDelta);
+        CgsPhysics::CollisionMeshData::FixDown(lpResource, static_cast<int>(luDelta));
     }
 
-    int ClusteredMeshResourceType::FixUp(void* pCollisionData, const int* pDelta)
+    void ClusteredMeshResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        uintptr_t lData = reinterpret_cast<uintptr_t>(pCollisionData);
-        const u32 luDelta = static_cast<u32>(*pDelta);
+        uintptr_t lData   = reinterpret_cast<uintptr_t>(lpResource);
+        const u32 luDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]));
 
-        void* lResult = CgsPhysics::CollisionMeshData::FixUp(pCollisionData, luDelta);
+        CgsPhysics::CollisionMeshData::FixUp(lpResource, static_cast<int>(luDelta));
         u32 luMesh = *reinterpret_cast<u32*>(lData);
         if (luMesh)
         {
             *reinterpret_cast<u32*>(luMesh + 68) += luDelta;
             *reinterpret_cast<u32*>(luMesh + 64) = 0; // patched to the rw clustered-mesh vtable on fix-up
             u8 laParams[348] = {};
-            return rw::collision::ClusteredMesh::Fixup(reinterpret_cast<void*>(*reinterpret_cast<u32*>(luMesh + 68)), laParams);
+            rw::collision::ClusteredMesh::Fixup(reinterpret_cast<void*>(*reinterpret_cast<u32*>(luMesh + 68)), laParams);
         }
-        return reinterpret_cast<int>(lResult);
     }
 
-    void* ClusteredMeshResourceType::GetImportPointer()
+    void ClusteredMeshResourceType::GetImportPointer(const void*, uint32_t, uint32_t*, const void**) const
     {
         CGS_ASSERT(false, "ClusteredMeshs have no import pointers");
-        return nullptr;
     }
 }

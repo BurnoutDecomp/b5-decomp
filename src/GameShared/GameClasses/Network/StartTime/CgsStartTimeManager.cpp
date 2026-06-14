@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Network/Players/CgsPlayersConnectionManager.h"
 
 namespace CgsNetwork
 {
@@ -34,15 +35,9 @@ struct NetworkPlayer
     bool mbHasConnectionFailed;
 };
 
-class PlayersConnectionManager
-{
-public:
-    s32 GetConnectionStatus(s32 liPlayerID);
-
-private:
-    u8 mPad0[3864];
-};
-
+// PlayersConnectionManager is the real reconstructed type (#included above), not a
+// local fork. PlayerManager has no reconstructed header yet, so it stays local until
+// CgsPlayerManager is reconstructed (then this derives from that header too).
 class PlayerManager : public PlayersConnectionManager
 {
 public:

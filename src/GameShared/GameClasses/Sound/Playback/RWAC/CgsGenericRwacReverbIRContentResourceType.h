@@ -1,20 +1,15 @@
 #ifndef CGS_GENERIC_RWAC_REVERB_IR_CONTENT_RESOURCE_TYPE_H
 #define CGS_GENERIC_RWAC_REVERB_IR_CONTENT_RESOURCE_TYPE_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsAlignedBinaryFileResource.h"
 
 namespace CgsResource
 {
-class GenericRwacReverbIRContentResourceType
+class GenericRwacReverbIRContentResourceType : public AlignedBinaryFileResourceType
 {
 public:
-    int GetTypeID();
+    uint32_t GetTypeID() const override;
 };
-
-inline int GenericRwacReverbIRContentResourceType::GetTypeID()
-{
-    return 41000;
-}
 }
 
 #endif

@@ -1,20 +1,15 @@
 #ifndef CGS_SPLICER_RESOURCE_TYPE_H
 #define CGS_SPLICER_RESOURCE_TYPE_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
 
 namespace CgsResource
 {
-class SplicerResourceType
+class SplicerResourceType : public BinaryFileResourceType
 {
 public:
-    int GetTypeID();
+    uint32_t GetTypeID() const override;
 };
-
-inline int SplicerResourceType::GetTypeID()
-{
-    return 40997;
-}
 }
 
 #endif

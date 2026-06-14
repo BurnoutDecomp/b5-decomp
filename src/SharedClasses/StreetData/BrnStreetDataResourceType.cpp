@@ -1,29 +1,31 @@
-#include "types.hpp"
+#include "SharedClasses/StreetData/BrnStreetDataResourceType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnStreetData::StreetDataResourceType::FixDown   @ 0x8267F0B8
 //   BrnStreetData::StreetDataResourceType::FixUp     @ 0x8267F0C8
 //   BrnStreetData::StreetDataResourceType::GetTypeID @ 0x82676798
 //
-// FixUp/FixDown forward to BrnStreetData::StreetData (relocate by the delta read
-// through the third argument). StreetData is forward-declared (separate TU).
+// FixUp/FixDown forward to BrnStreetData::StreetData (own TU), passing the delta
+// (the rw::Resource's load base).
 
 namespace BrnStreetData
 {
-    struct StreetData
-    {
-        int FixUp(int delta);
-        int FixDown(int delta);
-    };
+    static const uint32_t KU_STREET_DATA_RESOURCE_TYPE_ID = 65560;
 
-    class StreetDataResourceType
+    uint32_t StreetDataResourceType::GetTypeID() const
     {
-    public:
-        int FixDown(StreetData* pData, int* pDelta) { return pData->FixDown(*pDelta); }
-        int FixUp(StreetData* pData, int* pDelta)   { return pData->FixUp(*pDelta); }
-        int GetTypeID() { return KI_TYPE_ID; }
+        return KU_STREET_DATA_RESOURCE_TYPE_ID;
+    }
 
-    private:
-        static const int KI_TYPE_ID = 65560;
-    };
+    void StreetDataResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
+    {
+        static_cast<StreetData*>(lpResource)->FixDown(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+    }
+
+    void StreetDataResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        static_cast<StreetData*>(lpResource)->FixUp(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+    }
 }

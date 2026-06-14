@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "SharedClasses/Graphics/BrnEffectsData.h"
 
 #include <cstring>
 
@@ -16,17 +17,8 @@ namespace Camera
         return lfStart + ((lfEnd - lfStart) * lfT);
     }
 
-    struct MotionBlurData
-    {
-        void Construct();
-        static MotionBlurData Interpolate(const MotionBlurData& lLhs, const MotionBlurData& lRhs, f32 lfT);
-
-        f32 mfCarsBlurAmount;
-        f32 mfWorldBlurAmount;
-        bool mbIsActive;
-        bool mbIsExpensiveMotionBlur;
-        u8 maPad10[2];
-    };
+    // MotionBlurData is the shared type from SharedClasses/Graphics/BrnEffectsData.h
+    // (#included above), not a local fork.
 
     struct HookNameStringWrapper
     {
@@ -76,8 +68,8 @@ namespace Camera
         mfWorldBlurAmount = 0.0f;
         mbIsActive = false;
         mbIsExpensiveMotionBlur = false;
-        maPad10[0] = 0;
-        maPad10[1] = 0;
+        mPadA[0] = 0;
+        mPadA[1] = 0;
     }
 
     MotionBlurData MotionBlurData::Interpolate(const MotionBlurData& lLhs, const MotionBlurData& lRhs, f32 lfT)

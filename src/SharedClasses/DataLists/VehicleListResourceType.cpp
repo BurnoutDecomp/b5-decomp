@@ -1,27 +1,26 @@
-#include "types.hpp"
+#include "SharedClasses/DataLists/VehicleListResourceType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnResource::VehicleListResourceType::FixDown   @ 0x8267DF10
 //   BrnResource::VehicleListResourceType::FixUp     @ 0x8267DD60
 //   BrnResource::VehicleListResourceType::GetTypeID @ 0x82675798
+//
+// FixDown/FixUp rebase the entry-array pointer by the delta (the rw::Resource's load
+// base); FixUp then destructs the embedded attrib/voice-over keys of each entry.
 
-namespace CgsSceneManager
-{
-namespace CgsCollision
+namespace CgsSceneManager { namespace CgsCollision
 {
     struct BaseCollisionGenerator
     {
         void Destruct();
-
-        u8 maStorage[8];
+        u8   maStorage[8];
     };
-}
-}
+}}
 
 namespace BrnResource
 {
-    static const u32 KI_VEHICLE_LIST_RESOURCE_TYPE_ID = 65541;
-
     template <typename T>
     static T* PointerFromU32(u32 luAddress)
     {
@@ -45,19 +44,11 @@ namespace BrnResource
 
     struct VehicleListResource
     {
-        VehicleListEntry* GetEntries() const;
+        VehicleListEntry* GetEntries() const { return PointerFromU32<VehicleListEntry>(mpEntries); }
 
         u32 muNumVehicles;
         u32 mpEntries;
         u64 mu16BytePad;
-    };
-
-    class VehicleListResourceType
-    {
-    public:
-        VehicleListResource* FixDown(VehicleListResource* lpResource, const s32* lpiDelta) const;
-        VehicleListResource* FixUp(void* lpResourceTypeData, VehicleListResource* lpResource, const s32* lpiDelta) const;
-        u32 GetTypeID() const;
     };
 
     void VehicleListEntry::FixUp()
@@ -69,35 +60,25 @@ namespace BrnResource
         mAttribCollectionKey.Destruct();
     }
 
-    VehicleListEntry* VehicleListResource::GetEntries() const
+    static const uint32_t KU_VEHICLE_LIST_RESOURCE_TYPE_ID = 65541;
+
+    uint32_t VehicleListResourceType::GetTypeID() const
     {
-        return PointerFromU32<VehicleListEntry>(mpEntries);
+        return KU_VEHICLE_LIST_RESOURCE_TYPE_ID;
     }
 
-    VehicleListResource* VehicleListResourceType::FixDown(VehicleListResource* lpResource, const s32* lpiDelta) const
+    void VehicleListResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        lpResource->mpEntries -= static_cast<u32>(*lpiDelta);
-        return lpResource;
+        static_cast<VehicleListResource*>(lpResource)->mpEntries -= CgsResource::GetLoadBase(lrResource);
     }
 
-    VehicleListResource* VehicleListResourceType::FixUp(
-        void*,
-        VehicleListResource* lpResource,
-        const s32* lpiDelta) const
+    void VehicleListResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        lpResource->mpEntries += static_cast<u32>(*lpiDelta);
-        VehicleListEntry* lpEntries = lpResource->GetEntries();
+        VehicleListResource* lpVehicleList = static_cast<VehicleListResource*>(lpResource);
+        lpVehicleList->mpEntries += CgsResource::GetLoadBase(lrResource);
 
-        for (u32 luVehicle = 0; luVehicle < lpResource->muNumVehicles; ++luVehicle)
-        {
+        VehicleListEntry* lpEntries = lpVehicleList->GetEntries();
+        for (u32 luVehicle = 0; luVehicle < lpVehicleList->muNumVehicles; ++luVehicle)
             lpEntries[luVehicle].FixUp();
-        }
-
-        return lpResource;
-    }
-
-    u32 VehicleListResourceType::GetTypeID() const
-    {
-        return KI_VEHICLE_LIST_RESOURCE_TYPE_ID;
     }
 }
