@@ -4,140 +4,188 @@
 //   CgsNetwork::StartTimeManager::StartTimeManager     @ 0x827E1428  (constructor)
 //   CgsNetwork::StartTimeManager::AreAllPlayersReadyTo @ 0x82891ED0
 //
-// The manager holds an array of 7 per-player "ready" sub-records (256-byte stride from
-// offset 0) plus a trailing block of 8 {int, float} time pairs. The constructor installs
-// the two sub-record vtables (off_820CF48C / off_820CF4B4) and zeroes the counters/timers.
+// The manager owns an array of 7 per-player "ready" sub-records (256-byte stride) plus a
+// trailing set of {frame, time} pairs. Each sub-record embeds two ack sub-objects and two
+// timer sub-objects whose vtables the constructor installs (0x820CF48C / 0x820CF4B4); the
+// player id / ready flag live at the tail of the record (+248 / +252).
 //
-// AreAllPlayersReadyTo returns 2 if the candidate start time (pTime) is already past the
-// target, otherwise walks every connected player: if any connected player has not yet
-// acknowledged (its slot in the sub-record array is missing or not flagged ready) it
-// returns 0; if all are ready it returns 1. Ported faithfully from the X360 control flow
-// (PPC save/restore-GPR thunks dropped).
+// AreAllPlayersReadyTo returns 2 when the candidate start point is already past the target,
+// otherwise walks every connected player via the PlayerManager: any connected, in-game
+// player that has not acknowledged ready yields 0; all-ready yields 1. Member access is by
+// name; the PlayerManager connection table layout (offsets owned by CgsPlayerManager) is
+// modelled as a typed view here purely to read it without raw-offset casts. PPC
+// save/restore-GPR thunks dropped.
 
 namespace CgsNetwork
 {
-    // Other TUs; declared for the compile-only gate.
-    struct PlayerManager
+namespace
+{
+const u32 KU_READY_SUBRECORD_VTABLE = 0x820CF48C;   // off_820CF48C
+const u32 KU_TIMER_SUBRECORD_VTABLE = 0x820CF4B4;   // off_820CF4B4
+
+const int KI_MAX_READY_RECORDS    = 7;
+const int KI_CONNECTION_READY     = 3;   // GetConnectionStatus() value for "fully connected"
+const int KI_INVALID_PLAYER_ID    = -1;
+}
+
+// ---- Foreign types reached into by this TU (real layouts owned by their own TUs) ----
+
+// One slot of the PlayerManager connection table (12-byte stride, base +9076).
+struct PlayerConnectionEntry
+{
+    void* mpPlayer;       // +0  (PlayerManager + 9076 + 12*i)
+    int   miPlayerId;     // +4  (PlayerManager + 9080 + 12*i)
+    int   miReserved;     // +8
+};
+
+// The connected player record carries two "left / not-in-game" flags near +2984.
+struct ConnectedPlayer
+{
+    u8  mPad[2984];
+    u8  mbHasLeft;        // +2984
+    u8  mbNotInGame;      // +2985
+};
+
+struct PlayerManager
+{
+    int  GetNextPlayerID(int* pPlayerId, int liStep);
+    int  GetConnectionStatus(int liPlayerId);
+
+    // Connection table (recovered offsets; declared here only to read by name).
+    PlayerConnectionEntry* ConnectionEntries() { return reinterpret_cast<PlayerConnectionEntry*>(reinterpret_cast<u8*>(this) + 9076); }
+    int  ConnectionCount() { return *reinterpret_cast<int*>(reinterpret_cast<u8*>(this) + 9184); }
+};
+
+// Start-sync time stamps compared by AreAllPlayersReadyTo (external param types).
+struct StartTimeStamp
+{
+    u8  mPad[16];
+    int miFrame;          // +16
+    int miTime;           // +20
+};
+struct StartTimeTarget
+{
+    int miFrame;          // +0
+    int miTime;           // +4
+};
+
+// ---- StartTimeManager own layout (recovered) ----
+
+struct StartTimeReadyRecord                 // 256-byte stride
+{
+    u32 muAckVTableA;     // +0
+    u8  mPad0[40];
+    int miAckCounterA;    // +44
+    f32 mfAckTimerA;      // +48
+    u8  mPad1[32];
+    u32 muAckVTableB;     // +84
+    u8  mPad2[40];
+    int miAckCounterB;    // +128
+    f32 mfAckTimerB;      // +132
+    u8  mPad3[32];
+    u32 muTimerVTableA;   // +168
+    u8  mPad4[36];
+    u32 muTimerVTableB;   // +208
+    u8  mPad5[36];
+    int miPlayerId;       // +248
+    int miReadyFlag;      // +252
+};
+
+struct StartTimePair
+{
+    int miFrame;
+    f32 mfTime;
+};
+
+class StartTimeManager
+{
+public:
+    void* Construct();
+    int   AreAllPlayersReadyTo(const StartTimeStamp* pNow, const void* pUnused, const StartTimeTarget* pTarget);
+
+private:
+    bool IsPlayerAcknowledged(int liPlayerId) const;
+
+    StartTimeReadyRecord maRecords[KI_MAX_READY_RECORDS];   // +0..+1791
+    u8             mPad0[12];                                // +1792
+    StartTimePair  mLeadPair;                               // +1804
+    PlayerManager* mpPlayerManager;                         // +1812
+    u8             mPad1[20];
+    StartTimePair  maPairs[7];                              // +1836
+};
+
+void* StartTimeManager::Construct()
+{
+    for (StartTimeReadyRecord& lRecord : maRecords)
     {
-        int GetNextPlayerID(int* pPlayerId, int liStep);
-    };
-    struct PlayersConnectionManager
-    {
-        int GetConnectionStatus(int liPlayerId);
-    };
-
-    // Sub-record vtables (off_820CF48C / off_820CF4B4), defined with their classes.
-    extern const u8 gStartTimeReadyVTable;     // off_820CF48C
-    extern const u8 gStartTimeTimerVTable;     // off_820CF4B4
-
-    class StartTimeManager
-    {
-    public:
-        void* Construct();
-        int   AreAllPlayersReadyTo(const void* pTime, const void* pUnused, const void* pTarget);
-    };
-
-    void* StartTimeManager::Construct()
-    {
-        uintptr_t lBase = reinterpret_cast<uintptr_t>(this);
-        const u32 luReadyVT = static_cast<u32>(reinterpret_cast<uintptr_t>(&gStartTimeReadyVTable));
-        const u32 luTimerVT = static_cast<u32>(reinterpret_cast<uintptr_t>(&gStartTimeTimerVTable));
-
-        auto Word  = [lBase](int liOff) -> u32& { return *reinterpret_cast<u32*>(lBase + liOff); };
-        auto Float = [lBase](int liOff) -> f32& { return *reinterpret_cast<f32*>(lBase + liOff); };
-
-        // 7 per-player ready sub-records, 256-byte stride.
-        for (int liRec = 0; liRec < 7; ++liRec)
-        {
-            int liB = liRec * 256;
-            Word(liB + 0)   = luReadyVT;
-            Word(liB + 44)  = 0;
-            Float(liB + 48) = 0.0f;
-            Word(liB + 84)  = luReadyVT;
-            Word(liB + 128) = 0;
-            Float(liB + 132) = 0.0f;
-            Word(liB + 168) = luTimerVT;
-            Word(liB + 208) = luTimerVT;
-        }
-
-        // Trailing time pairs: one at 1804, then seven at 1836 (8-byte stride).
-        Word(1804) = 0;
-        Float(1808) = 0.0f;
-        for (int liPair = 0; liPair < 7; ++liPair)
-        {
-            int liO = 1836 + liPair * 8;
-            Word(liO) = 0;
-            Float(liO + 4) = 0.0f;
-        }
-        return this;
+        lRecord.muAckVTableA   = KU_READY_SUBRECORD_VTABLE;
+        lRecord.miAckCounterA  = 0;
+        lRecord.mfAckTimerA    = 0.0f;
+        lRecord.muAckVTableB   = KU_READY_SUBRECORD_VTABLE;
+        lRecord.miAckCounterB  = 0;
+        lRecord.mfAckTimerB    = 0.0f;
+        lRecord.muTimerVTableA = KU_TIMER_SUBRECORD_VTABLE;
+        lRecord.muTimerVTableB = KU_TIMER_SUBRECORD_VTABLE;
     }
 
-    int StartTimeManager::AreAllPlayersReadyTo(const void* pTime, const void* /*pUnused*/, const void* pTarget)
+    mLeadPair.miFrame = 0;
+    mLeadPair.mfTime  = 0.0f;
+    for (StartTimePair& lPair : maPairs)
     {
-        uintptr_t lThis   = reinterpret_cast<uintptr_t>(this);
-        uintptr_t lTime   = reinterpret_cast<uintptr_t>(pTime);
-        uintptr_t lTarget = reinterpret_cast<uintptr_t>(pTarget);
-
-        int liTime = *reinterpret_cast<const int*>(lTime + 16);
-        if (liTime > *reinterpret_cast<const int*>(lTarget)
-            || (liTime >= *reinterpret_cast<const int*>(lTarget)
-                && *reinterpret_cast<const int*>(lTime + 20) >= *reinterpret_cast<const int*>(lTarget + 4)))
-        {
-            return 2;
-        }
-
-        int liPlayerId = -1;
-        PlayerManager* lpPlayers = *reinterpret_cast<PlayerManager**>(lThis + 1812);
-
-        while (lpPlayers->GetNextPlayerID(&liPlayerId, 1))
-        {
-            uintptr_t lMgr = *reinterpret_cast<uintptr_t*>(lThis + 1812);
-            char lbReady = 0;
-            int liSlot = 0;
-            int liCount = *reinterpret_cast<int*>(lMgr + 9184);
-            if (liCount > 0)
-            {
-                int liTargetId = liPlayerId;
-                uintptr_t lEntry = lMgr + 9080;
-                while (*reinterpret_cast<int*>(lEntry) != liPlayerId)
-                {
-                    ++liSlot;
-                    lEntry += 12;
-                    if (liSlot >= liCount)
-                        goto NEXT_PLAYER;
-                }
-
-                uintptr_t lPlayer = *reinterpret_cast<uintptr_t*>(12 * liSlot + lMgr + 9076);
-                if (lPlayer)
-                {
-                    PlayersConnectionManager* lpConn =
-                        reinterpret_cast<PlayersConnectionManager*>(lMgr);
-                    if (lpConn->GetConnectionStatus(liPlayerId) != 3)
-                        return 0;
-
-                    if (!*reinterpret_cast<char*>(lPlayer + 2985)
-                        && !*reinterpret_cast<char*>(lPlayer + 2984))
-                    {
-                        int liSub = 0;
-                        uintptr_t lRec = lThis + 248;
-                        while (*reinterpret_cast<int*>(lRec) == -1
-                               || *reinterpret_cast<int*>(lRec) != liTargetId
-                               || !*reinterpret_cast<int*>(lRec + 4))
-                        {
-                            ++liSub;
-                            lRec += 256;
-                            if (liSub >= 7)
-                                goto CHECK_READY;
-                        }
-                        lbReady = 1;
-                    CHECK_READY:
-                        if (!lbReady)
-                            return 0;
-                    }
-                }
-            }
-        NEXT_PLAYER:;
-        }
-        return 1;
+        lPair.miFrame = 0;
+        lPair.mfTime  = 0.0f;
     }
+    return this;
+}
+
+// True if one of the ready records names this player and is flagged ready.
+bool StartTimeManager::IsPlayerAcknowledged(int liPlayerId) const
+{
+    for (const StartTimeReadyRecord& lRecord : maRecords)
+    {
+        if (lRecord.miPlayerId != KI_INVALID_PLAYER_ID
+            && lRecord.miPlayerId == liPlayerId
+            && lRecord.miReadyFlag)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+int StartTimeManager::AreAllPlayersReadyTo(const StartTimeStamp* pNow, const void* /*pUnused*/, const StartTimeTarget* pTarget)
+{
+    if (pNow->miFrame > pTarget->miFrame
+        || (pNow->miFrame >= pTarget->miFrame && pNow->miTime >= pTarget->miTime))
+    {
+        return 2;
+    }
+
+    int liPlayerId = KI_INVALID_PLAYER_ID;
+    while (mpPlayerManager->GetNextPlayerID(&liPlayerId, 1))
+    {
+        const int liCount = mpPlayerManager->ConnectionCount();
+        if (liCount <= 0)
+            continue;
+
+        PlayerConnectionEntry* lpEntries = mpPlayerManager->ConnectionEntries();
+        int liSlot = 0;
+        while (liSlot < liCount && lpEntries[liSlot].miPlayerId != liPlayerId)
+            ++liSlot;
+        if (liSlot >= liCount)
+            continue;
+
+        ConnectedPlayer* lpPlayer = static_cast<ConnectedPlayer*>(lpEntries[liSlot].mpPlayer);
+        if (!lpPlayer)
+            continue;
+
+        if (mpPlayerManager->GetConnectionStatus(liPlayerId) != KI_CONNECTION_READY)
+            return 0;
+
+        // A player that is still present and in-game must have acknowledged the start.
+        if (!lpPlayer->mbNotInGame && !lpPlayer->mbHasLeft && !IsPlayerAcknowledged(liPlayerId))
+            return 0;
+    }
+    return 1;
+}
 }
