@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"
 #include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -12,10 +13,9 @@
 
 namespace BrnNetwork
 {
-    enum EActiveRaceCarIndex : s32 { E_ACTIVE_RACE_CAR_NONE = -1 };
-    enum ECameraStatus       : s32 { E_CAMERA_STATUS_NONE = 0 };
-
-    typedef s32 NetworkPlayerID;
+    // EActiveRaceCarIndex, NetworkPlayerID, and PlayerName come from the shared
+    // BrnNetworkSharedIO.h (#included above) rather than being re-forked here.
+    enum ECameraStatus : s32 { E_CAMERA_STATUS_NONE = 0 };
 
     // Sub-objects (own TUs); reset helpers are trap stubs until they land.
     struct NetworkPlayerStats
@@ -35,8 +35,6 @@ namespace BrnNetwork
         void Construct();
     };
     void LiveRevengeRelationship::Construct() { __debugbreak(); }
-
-    struct PlayerName { char macName[20]; };
 
     namespace BrnNetworkModuleIO
     {

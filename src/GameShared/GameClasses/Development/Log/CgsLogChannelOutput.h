@@ -2,27 +2,18 @@
 #define CGS_LOG_CHANNEL_OUTPUT_H
 
 #include "types.hpp"
-#include <stdio.h>
 
 namespace CgsDev
 {
 namespace Log
 {
-class LogChannelOutput
+struct LogChannelOutput
 {
-public:
-    int Append(int a1, const char *a2);
+    u8  mPad[8];     // [0x00] opaque
+    s32 miChannel;   // [0x08] channel id, -1 == unchannelled
+
+    int Append(const char* lpcText);
 };
-
-inline int LogChannelOutput::Append(int a1, const char *a2)
-{
-    int v3 = *(int*)(a1 + 8);
-    if ( v3 == -1 )
-        return printf("%s", a2);
-    else
-        return printf("CHANNEL %d: %s", v3, a2);
-}
-
 }
 }
 #endif

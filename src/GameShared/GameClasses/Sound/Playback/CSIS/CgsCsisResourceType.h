@@ -1,20 +1,15 @@
 #ifndef CGS_CSIS_RESOURCE_TYPE_H
 #define CGS_CSIS_RESOURCE_TYPE_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
 
 namespace CgsResource
 {
-class CsisResourceType
+class CsisResourceType : public BinaryFileResourceType
 {
 public:
-    int GetTypeID();
+    uint32_t GetTypeID() const override;
 };
-
-inline int CsisResourceType::GetTypeID()
-{
-    return 40995;
-}
 }
 
 #endif

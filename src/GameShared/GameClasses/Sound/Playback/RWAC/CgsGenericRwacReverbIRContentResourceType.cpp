@@ -1,20 +1,15 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacReverbIRContentResourceType.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82665978
 //   (CgsResource::GenericRwacReverbIRContentResourceType::GetTypeID)  ->  return 41000;
+// Virtual override of CgsResource::Type::GetTypeID (via AlignedBinaryFileResourceType).
 
 namespace CgsResource
 {
-    class GenericRwacReverbIRContentResourceType
-    {
-    public:
-        int GetTypeID();
-    };
+    static const uint32_t KU_GENERIC_RWAC_REVERB_IR_CONTENT_RESOURCE_TYPE_ID = 41000;
 
-    static const int KI_GENERIC_RWAC_REVERB_IR_CONTENT_RESOURCE_TYPE_ID = 41000;
-
-    int GenericRwacReverbIRContentResourceType::GetTypeID()
+    uint32_t GenericRwacReverbIRContentResourceType::GetTypeID() const
     {
-        return KI_GENERIC_RWAC_REVERB_IR_CONTENT_RESOURCE_TYPE_ID;
+        return KU_GENERIC_RWAC_REVERB_IR_CONTENT_RESOURCE_TYPE_ID;
     }
 }

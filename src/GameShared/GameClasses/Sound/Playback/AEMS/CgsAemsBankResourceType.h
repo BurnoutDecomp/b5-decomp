@@ -1,20 +1,15 @@
 #ifndef CGS_AEMS_BANK_RESOURCE_TYPE_H
 #define CGS_AEMS_BANK_RESOURCE_TYPE_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
 
 namespace CgsResource
 {
-class AemsBankResourceType
+class AemsBankResourceType : public BinaryFileResourceType
 {
 public:
-    int GetTypeID();
+    uint32_t GetTypeID() const override;
 };
-
-inline int AemsBankResourceType::GetTypeID()
-{
-    return 40994;
-}
 }
 
 #endif

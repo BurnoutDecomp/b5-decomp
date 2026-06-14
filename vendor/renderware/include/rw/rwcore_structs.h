@@ -17,11 +17,58 @@
 
 namespace rw {
 
+// --- Resource family (hand-maintained; see gen_rwcore_headers.py) ----------
+// The PDB exposes these as template instantiations the data-driven emitter
+// cannot name. Layout-faithful to rwcore.pdb (x64):
+//   rw::BaseResourceDescriptor        sizeof =  8  { uint m_size; uint m_alignment; }
+//   rw::BaseResources<4>              sizeof = 32  { void* m_baseResources[4]; }
+//   rw::BaseResourceDescriptors<4>    sizeof = 32  { BaseResourceDescriptor[4]; }
+//   rw::Resource           : BaseResources<4>
+//   rw::ResourceDescriptor : BaseResourceDescriptors<4>
+// CROSS-BUILD DRIFT: the X360 game build instantiates the *serialised* resource
+// descriptor with FIVE entries (rw::BaseResourceDescriptors<5>, 40B); PC rwcore
+// uses <4> (32B). The X360 form is spelled rw::BaseResourceDescriptors<5> (see
+// CgsResource::ResourceDescriptor in CgsResourceType.h).
 struct BaseResourceDescriptor {  // sizeof = 8 (rwcore.pdb, x64)
-    uint32_t m_size;  // +0
+    uint32_t m_size;       // +0
     uint32_t m_alignment;  // +4
 };
 RW_SIZE_ASSERT(rw::BaseResourceDescriptor, 8);
+
+template <uint32_t Count>
+struct BaseResources {
+    void* m_baseResources[Count];
+};
+
+template <uint32_t Count>
+struct BaseResourceDescriptors {
+    BaseResourceDescriptor m_baseResourceDescriptors[Count];
+
+    // RenderWare accumulates each sub-allocation's requirement: round this entry's
+    // running size up to the other's alignment, widen to the larger alignment, then
+    // add the other's size. (Real caller lives in rwcore.lib's allocators.)
+    BaseResourceDescriptors& operator+=(const BaseResourceDescriptors& lOther)
+    {
+        for (uint32_t luIndex = 0; luIndex < Count; ++luIndex)
+        {
+            BaseResourceDescriptor& lDescriptor = m_baseResourceDescriptors[luIndex];
+            const BaseResourceDescriptor& lOtherDescriptor = lOther.m_baseResourceDescriptors[luIndex];
+            if (lOtherDescriptor.m_alignment > 1)
+                lDescriptor.m_size = (lOtherDescriptor.m_alignment - 1 + lDescriptor.m_size) & ~(lOtherDescriptor.m_alignment - 1);
+            if (lDescriptor.m_alignment < lOtherDescriptor.m_alignment)
+                lDescriptor.m_alignment = lOtherDescriptor.m_alignment;
+            lDescriptor.m_size += lOtherDescriptor.m_size;
+        }
+        return *this;
+    }
+};
+
+struct Resource : public BaseResources<4> {};
+RW_SIZE_ASSERT(rw::Resource, 32);
+
+struct ResourceDescriptor : public BaseResourceDescriptors<4> {};
+RW_SIZE_ASSERT(rw::ResourceDescriptor, 32);
+// --------------------------------------------------------------------------
 
 struct DefaultSystemAllocatorInitializer {  // sizeof = 1 (rwcore.pdb, x64)
     uint8_t _pad0[1];  // +0
@@ -117,16 +164,6 @@ struct IResourceAllocator_vtbl {  // sizeof = 72 (rwcore.pdb, x64)
     void* DoFreeDisposable;  // +64
 };
 RW_SIZE_ASSERT(rw::IResourceAllocator_vtbl, 72);
-
-struct Resource {  // sizeof = 32 (rwcore.pdb, x64)
-    uint8_t field_0x0[32];  // +0  was: rw::BaseResources<4>
-};
-RW_SIZE_ASSERT(rw::Resource, 32);
-
-struct ResourceDescriptor {  // sizeof = 32 (rwcore.pdb, x64)
-    uint8_t field_0x0[32];  // +0  was: rw::BaseResourceDescriptors<4>
-};
-RW_SIZE_ASSERT(rw::ResourceDescriptor, 32);
 
 // vtable ??_7LinearResourceAllocator@rw@@6B@ @ 00013038 (8 entries):
 //   [ 1] +8   ?Alloc@IResourceAllocator@rw@@UEAAPEAX_KPEBDIII@Z

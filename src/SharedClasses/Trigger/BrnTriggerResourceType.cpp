@@ -1,29 +1,31 @@
-#include "types.hpp"
+#include "SharedClasses/Trigger/BrnTriggerResourceType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnTrigger::TriggerResourceType::FixDown   @ 0x826800C8
 //   BrnTrigger::TriggerResourceType::FixUp     @ 0x826800D8
-//   BrnTrigger::TriggerResourceType::GetTypeID @ 0x...
+//   BrnTrigger::TriggerResourceType::GetTypeID @ 0x826765D0
 //
-// FixUp/FixDown forward to BrnTrigger::TriggerData (relocate the data by the delta
-// read through the third argument). TriggerData is forward-declared (separate TU).
+// FixUp/FixDown forward to BrnTrigger::TriggerData (own TU), passing the delta (the
+// rw::Resource's load base).
 
 namespace BrnTrigger
 {
-    struct TriggerData
-    {
-        int FixUp(int delta);
-        int FixDown(int delta);
-    };
+    static const uint32_t KU_TRIGGER_RESOURCE_TYPE_ID = 65539;
 
-    class TriggerResourceType
+    uint32_t TriggerResourceType::GetTypeID() const
     {
-    public:
-        int FixDown(TriggerData* pData, int* pDelta) { return pData->FixDown(*pDelta); }
-        int FixUp(TriggerData* pData, int* pDelta)   { return pData->FixUp(*pDelta); }
-        int GetTypeID() { return KI_TYPE_ID; }
+        return KU_TRIGGER_RESOURCE_TYPE_ID;
+    }
 
-    private:
-        static const int KI_TYPE_ID = 65539;
-    };
+    void TriggerResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
+    {
+        static_cast<TriggerData*>(lpResource)->FixDown(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+    }
+
+    void TriggerResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        static_cast<TriggerData*>(lpResource)->FixUp(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+    }
 }

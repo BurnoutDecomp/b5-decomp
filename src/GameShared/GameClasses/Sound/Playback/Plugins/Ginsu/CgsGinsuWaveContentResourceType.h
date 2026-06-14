@@ -1,20 +1,15 @@
 #ifndef CGS_GINSU_WAVE_CONTENT_RESOURCE_TYPE_H
 #define CGS_GINSU_WAVE_CONTENT_RESOURCE_TYPE_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
 
 namespace CgsResource
 {
-class GinsuWaveContentResourceType
+class GinsuWaveContentResourceType : public BinaryFileResourceType
 {
 public:
-    int GetTypeID();
+    uint32_t GetTypeID() const override;
 };
-
-inline int GinsuWaveContentResourceType::GetTypeID()
-{
-    return 40993;
-}
 }
 
 #endif

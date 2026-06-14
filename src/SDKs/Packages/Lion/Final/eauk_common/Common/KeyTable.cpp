@@ -1,12 +1,6 @@
-#include "types.hpp"
+#include "SDKs/Packages/Lion/Final/eauk_common/Common/ElfHash.h"
 
 #include <cstdio>
-
-class ELFHASH
-{
-public:
-    static s32 BuildHash(const char* lpcText, char lcTerminator);
-};
 
 class cKeyStringTable
 {

@@ -1,20 +1,15 @@
 #ifndef CGS_GENERIC_RWAC_WAVE_CONTENT_RESOURCE_TYPE_H
 #define CGS_GENERIC_RWAC_WAVE_CONTENT_RESOURCE_TYPE_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
 
 namespace CgsResource
 {
-class GenericRwacWaveContentResourceType
+class GenericRwacWaveContentResourceType : public BinaryFileResourceType
 {
 public:
-    int GetTypeID();
+    uint32_t GetTypeID() const override;
 };
-
-inline int GenericRwacWaveContentResourceType::GetTypeID()
-{
-    return 40992;
-}
 }
 
 #endif

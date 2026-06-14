@@ -1,4 +1,6 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Physics/CgsInstanceCollisionListResourceType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsPhysics::InstanceCollisionListResourceType::FixDown   @ 0x828A7380
@@ -6,10 +8,8 @@
 //   CgsPhysics::InstanceCollisionListResourceType::GetTypeID @ 0x8289D568
 //
 // FixUp/FixDown rebase the leading pointer of the resource (when non-null) by the
-// delta, then (re)construct/destruct the BaseCollisionGenerator sub-object embedded
-// at dword offset 2. The X360 FixUp pseudocode elides the Destruct operand; it is
-// structurally the same embedded generator FixDown operates on. BaseCollisionGenerator
-// is forward-declared (separate TU).
+// delta (the rw::Resource's load base), then (re)construct/destruct the embedded
+// BaseCollisionGenerator at dword offset 2. BaseCollisionGenerator is its own TU.
 
 namespace CgsSceneManager
 {
@@ -24,28 +24,32 @@ namespace CgsSceneManager
 
 namespace CgsPhysics
 {
-    class InstanceCollisionListResourceType
+    typedef CgsSceneManager::CgsCollision::BaseCollisionGenerator Generator;
+
+    static const uint32_t KU_INSTANCE_COLLISION_LIST_RESOURCE_TYPE_ID = 38;
+
+    uint32_t InstanceCollisionListResourceType::GetTypeID() const
     {
-        typedef CgsSceneManager::CgsCollision::BaseCollisionGenerator Generator;
+        return KU_INSTANCE_COLLISION_LIST_RESOURCE_TYPE_ID;
+    }
 
-    public:
-        Generator* FixDown(u32* pData, int* pDelta)
-        {
-            if (*pData)
-                *pData -= *pDelta;
-            return reinterpret_cast<Generator*>(pData + 2)->Destruct();
-        }
+    void InstanceCollisionListResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
+    {
+        u32* lpData  = static_cast<u32*>(lpResource);
+        int  liDelta = static_cast<int>(CgsResource::GetLoadBase(lrResource));
 
-        void FixUp(u32* pData, int* pDelta)
-        {
-            if (*pData)
-                *pData += *pDelta;
-            reinterpret_cast<Generator*>(pData + 2)->Destruct();
-        }
+        if (*lpData)
+            *lpData -= liDelta;
+        reinterpret_cast<Generator*>(lpData + 2)->Destruct();
+    }
 
-        int GetTypeID() { return KI_TYPE_ID; }
+    void InstanceCollisionListResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        u32* lpData  = static_cast<u32*>(lpResource);
+        int  liDelta = static_cast<int>(CgsResource::GetLoadBase(lrResource));
 
-    private:
-        static const int KI_TYPE_ID = 38;
-    };
+        if (*lpData)
+            *lpData += liDelta;
+        reinterpret_cast<Generator*>(lpData + 2)->Destruct();
+    }
 }

@@ -1,0 +1,22 @@
+#ifndef CGS_APT_DATA_HEADER_TYPE_H
+#define CGS_APT_DATA_HEADER_TYPE_H
+
+#include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
+
+namespace CgsResource
+{
+// Resource-type handler for a serialised APT (gui movie) data header. Derives from
+// CgsResource::Type; the listed methods are virtual overrides. Base/signatures
+// recovered from the DecFIGS DWARF (CgsAptDataHeaderType.h).
+class AptDataHeaderType : public Type
+{
+public:
+    uint32_t GetTypeID() const override;
+    void     FixDown(void* lpResource, const rw::Resource& lrResource) const override;
+    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t GetImportCount(const void* lpResource) const override;
+    void     GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
+};
+}
+
+#endif

@@ -1,4 +1,4 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Development/Log/CgsLogChannelOutput.h"
 
 #include <cstdio>
 
@@ -10,21 +10,13 @@
 //     if (v3 == -1) return printf("%s", text);
 //     else          return printf("CHANNEL %d: %s", v3, text);
 //
-// The channel id lives at byte offset 8 of the output object; -1 means
+// The channel id lives at byte offset 8 of the output object (miChannel); -1 means
 // "unchannelled" and the line is printed without the CHANNEL prefix.
 
 namespace CgsDev
 {
     namespace Log
     {
-        struct LogChannelOutput
-        {
-            u8   mPad[8];        // [0x00] opaque
-            s32  miChannel;      // [0x08] channel id, -1 == unchannelled
-
-            int Append(const char* lpcText);
-        };
-
         int LogChannelOutput::Append(const char* lpcText)
         {
             if (miChannel == -1)

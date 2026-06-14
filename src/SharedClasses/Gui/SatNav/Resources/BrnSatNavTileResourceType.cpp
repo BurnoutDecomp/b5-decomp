@@ -1,99 +1,80 @@
-#include "types.hpp"
+#include "SharedClasses/Gui/SatNav/Resources/BrnSatNavTileResourceType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsResource::SatNavTileDirectoryResourceType::FixDown   @ 0x8245F4A8
-//   CgsResource::SatNavTileDirectoryResourceType::FixUp     @ 0x8245F4C0
-//   CgsResource::SatNavTileDirectoryResourceType::GetTypeID @ 0x824481A0
-//   CgsResource::SatNavTileResourceType::FixDown            @ 0x8244F550
-//   CgsResource::SatNavTileResourceType::FixUp              @ 0x8244F590
-//   CgsResource::SatNavTileResourceType::GetImportCount     @ 0x82448160
-//   CgsResource::SatNavTileResourceType::GetImportPointer   @ 0x82448168
-//   CgsResource::SatNavTileResourceType::GetTypeID          @ 0x82448158
+//   CgsResource::SatNavTileDirectoryResourceType::FixDown/FixUp/GetTypeID  @ 0x8245F4A8 / 0x8245F4C0 / 0x824481A0
+//   CgsResource::SatNavTileResourceType::FixDown/FixUp                     @ 0x8244F550 / 0x8244F590
+//   CgsResource::SatNavTileResourceType::GetImportCount/GetImportPointer   @ 0x82448160 / 0x82448168
+//   CgsResource::SatNavTileResourceType::GetTypeID                         @ 0x82448158
 //
-// The directory resource relocates a single pointer at offset 20. The tile resource
-// holds an import table: a count at offset 104 and `count` import pointers packed
-// from offset 108 (== 4*27). FixUp/FixDown rebase each import pointer by the delta;
-// GetImportPointer returns the value/offset of one entry.
+// The directory relocates a single pointer at +20. The tile holds an import table:
+// count at +104, `count` pointers packed from +108 (4*27). FixUp/FixDown rebase each
+// by the delta (the rw::Resource's load base); GetImportPointer returns one entry.
 
 namespace CgsResource
 {
-    class SatNavTileDirectoryResourceType
-    {
-    public:
-        void* FixDown(void* pResource, const int* pDelta)
-        {
-            *reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(pResource) + 20) -= static_cast<u32>(*pDelta);
-            return pResource;
-        }
-        void* FixUp(void* pResource, const int* pDelta)
-        {
-            *reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(pResource) + 20) += static_cast<u32>(*pDelta);
-            return pResource;
-        }
-        int GetTypeID() { return 41; }
-    };
+    static const uint32_t KU_SAT_NAV_TILE_DIRECTORY_RESOURCE_TYPE_ID = 41;
+    static const uint32_t KU_SAT_NAV_TILE_RESOURCE_TYPE_ID = 40;
 
-    class SatNavTileResourceType
+    uint32_t SatNavTileDirectoryResourceType::GetTypeID() const
     {
-    public:
-        void* FixDown(void* pResource, const int* pDelta);
-        void* FixUp(void* pResource, const int* pDelta);
-        int   GetImportCount(const void* pResource) { return *reinterpret_cast<const int*>(reinterpret_cast<uintptr_t>(pResource) + 104); }
-        void* GetImportPointer(void* pResource, u32 luIndex, u32* pOutOffset, u32* pOutValue);
-        int   GetTypeID() { return 40; }
-    };
-
-    void* SatNavTileResourceType::FixDown(void* pResource, const int* pDelta)
-    {
-        uintptr_t lBase = reinterpret_cast<uintptr_t>(pResource);
-        const int liDelta = *pDelta;
-        u32 luCount = *reinterpret_cast<u32*>(lBase + 104);
-        if (luCount)
-        {
-            u32* lpEntry = reinterpret_cast<u32*>(lBase + 108);
-            u32 luIndex = 0;
-            do
-            {
-                ++luIndex;
-                *lpEntry++ -= static_cast<u32>(liDelta);
-            } while (luIndex < luCount);
-        }
-        return pResource;
+        return KU_SAT_NAV_TILE_DIRECTORY_RESOURCE_TYPE_ID;
     }
 
-    void* SatNavTileResourceType::FixUp(void* pResource, const int* pDelta)
+    void SatNavTileDirectoryResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        uintptr_t lBase = reinterpret_cast<uintptr_t>(pResource);
-        const int liDelta = *pDelta;
-        u32 luCount = *reinterpret_cast<u32*>(lBase + 104);
-        if (luCount)
-        {
-            u32* lpEntry = reinterpret_cast<u32*>(lBase + 108);
-            u32 luIndex = 0;
-            do
-            {
-                ++luIndex;
-                *lpEntry++ += static_cast<u32>(liDelta);
-            } while (luIndex < luCount);
-        }
-        return pResource;
+        *reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(lpResource) + 20) -= CgsResource::GetLoadBase(lrResource);
     }
 
-    void* SatNavTileResourceType::GetImportPointer(void* pResource, u32 luIndex, u32* pOutOffset, u32* pOutValue)
+    void SatNavTileDirectoryResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        uintptr_t lBase = reinterpret_cast<uintptr_t>(pResource);
+        *reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(lpResource) + 20) += CgsResource::GetLoadBase(lrResource);
+    }
+
+    uint32_t SatNavTileResourceType::GetTypeID() const
+    {
+        return KU_SAT_NAV_TILE_RESOURCE_TYPE_ID;
+    }
+
+    void SatNavTileResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
+    {
+        uintptr_t lBase = reinterpret_cast<uintptr_t>(lpResource);
+        const u32 luDelta = CgsResource::GetLoadBase(lrResource);
         u32 luCount = *reinterpret_cast<u32*>(lBase + 104);
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            *reinterpret_cast<u32*>(lBase + 108 + 4 * luIndex) -= luDelta;
+    }
+
+    void SatNavTileResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        uintptr_t lBase = reinterpret_cast<uintptr_t>(lpResource);
+        const u32 luDelta = CgsResource::GetLoadBase(lrResource);
+        u32 luCount = *reinterpret_cast<u32*>(lBase + 104);
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            *reinterpret_cast<u32*>(lBase + 108 + 4 * luIndex) += luDelta;
+    }
+
+    uint32_t SatNavTileResourceType::GetImportCount(const void* lpResource) const
+    {
+        return *reinterpret_cast<const u32*>(reinterpret_cast<uintptr_t>(lpResource) + 104);
+    }
+
+    void SatNavTileResourceType::GetImportPointer(const void* lpResource, uint32_t luIndex,
+                                                  uint32_t* lpuOffset, const void** lppValue) const
+    {
+        uintptr_t lBase = reinterpret_cast<uintptr_t>(lpResource);
+        u32 luCount = *reinterpret_cast<const u32*>(lBase + 104);
         if (luIndex >= luCount)
         {
-            *pOutValue = 0;
-            *pOutOffset = 0;
+            *lppValue = nullptr;
+            *lpuOffset = 0;
         }
         else
         {
             u32 luOffset = 4 * (luIndex + 27);
-            *pOutValue = *reinterpret_cast<u32*>(lBase + luOffset);
-            *pOutOffset = luOffset;
+            *lppValue = reinterpret_cast<const void*>(*reinterpret_cast<const u32*>(lBase + luOffset));
+            *lpuOffset = luOffset;
         }
-        return pResource;
     }
 }

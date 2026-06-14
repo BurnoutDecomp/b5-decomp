@@ -1,20 +1,15 @@
 #ifndef CGS_NICOTINE_RESOURCE_TYPE_H
 #define CGS_NICOTINE_RESOURCE_TYPE_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
 
 namespace CgsResource
 {
-class NicotineResourceType
+class NicotineResourceType : public BinaryFileResourceType
 {
 public:
-    int GetTypeID();
+    uint32_t GetTypeID() const override;
 };
-
-inline int NicotineResourceType::GetTypeID()
-{
-    return 40996;
-}
 }
 
 #endif

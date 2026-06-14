@@ -1,4 +1,6 @@
-#include "types.hpp"
+#include "SharedClasses/AI/AISectionsResourceType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnAI::AISectionsResourceType::FixDown                       @ 0x8267F4A0
@@ -6,51 +8,41 @@
 //   BrnAI::AISectionsResourceType::GetSerialisedResourceDescriptor @ 0x8267AE88
 //   BrnAI::AISectionsResourceType::GetTypeID                     @ 0x82674D50
 //
-// FixUp/FixDown forward to BrnAI::AISectionsData (forward-declared, separate TU).
-// GetSerialisedResourceDescriptor fills a five-entry rw resource descriptor table:
-// the first entry is {size=16, count=N}, the remaining four are {size=N, align=1},
-// where N is the section count read from the resource (offset 60).
+// FixUp/FixDown forward to BrnAI::AISectionsData (own TU), passing the delta (the
+// rw::Resource's load base). GetSerialisedResourceDescriptor returns a five-entry
+// descriptor: entry 0 = {16, count}, entries 1..4 = {count, 1}, count read at +60.
 
 namespace BrnAI
 {
-    struct AISectionsData
+    static const uint32_t KU_AI_SECTIONS_RESOURCE_TYPE_ID = 65537;
+
+    uint32_t AISectionsResourceType::GetTypeID() const
     {
-        int FixUp(int delta);
-        int FixDown(int delta);
-    };
+        return KU_AI_SECTIONS_RESOURCE_TYPE_ID;
+    }
 
-    class AISectionsResourceType
+    void AISectionsResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-    public:
-        int FixDown(AISectionsData* pData, int* pDelta) { return pData->FixDown(*pDelta); }
-        int FixUp(AISectionsData* pData, int delta)     { return pData->FixUp(delta); }
+        static_cast<AISectionsData*>(lpResource)->FixDown(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+    }
 
-        void* GetSerialisedResourceDescriptor(void* pOut, const void* pResource);
-
-        int GetTypeID() { return KI_TYPE_ID; }
-
-    private:
-        static const int KI_TYPE_ID = 65537;
-    };
-
-    void* AISectionsResourceType::GetSerialisedResourceDescriptor(void* pOut, const void* pResource)
+    void AISectionsResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        uintptr_t out = reinterpret_cast<uintptr_t>(pOut);
-        int liCount = *reinterpret_cast<const int*>(reinterpret_cast<uintptr_t>(pResource) + 60);
+        static_cast<AISectionsData*>(lpResource)->FixUp(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+    }
 
-        *reinterpret_cast<int*>(out + 12) = 1;
-        *reinterpret_cast<int*>(out + 20) = 1;
-        *reinterpret_cast<int*>(out + 28) = 1;
-        *reinterpret_cast<int*>(out + 36) = 1;
+    CgsResource::ResourceDescriptor AISectionsResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        u32 luCount = *reinterpret_cast<const u32*>(reinterpret_cast<uintptr_t>(lpResource) + 60);
 
-        *reinterpret_cast<int*>(out + 8)  = liCount;
-        *reinterpret_cast<int*>(out + 16) = liCount;
-        *reinterpret_cast<int*>(out + 24) = liCount;
-        *reinterpret_cast<int*>(out + 32) = liCount;
-
-        *reinterpret_cast<int*>(out + 0) = 16;
-        *reinterpret_cast<int*>(out + 4) = liCount;
-
-        return pOut;
+        CgsResource::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = 16;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luCount;
+        for (int li = 1; li < 5; ++li)
+        {
+            lDescriptor.m_baseResourceDescriptors[li].m_size      = luCount;
+            lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1;
+        }
+        return lDescriptor;
     }
 }

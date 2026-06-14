@@ -1,20 +1,15 @@
 #ifndef CGS_WORLD_PAINTER_2D_RESOURCE_TYPE_H
 #define CGS_WORLD_PAINTER_2D_RESOURCE_TYPE_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
 
 namespace CgsResource
 {
-class WorldPainter2DResourceType
+class WorldPainter2DResourceType : public BinaryFileResourceType
 {
 public:
-    int GetTypeID();
+    uint32_t GetTypeID() const override;
 };
-
-inline int WorldPainter2DResourceType::GetTypeID()
-{
-    return 48;
-}
 }
 
 #endif

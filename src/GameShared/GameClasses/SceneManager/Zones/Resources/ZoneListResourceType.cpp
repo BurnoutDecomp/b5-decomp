@@ -1,5 +1,7 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/SceneManager/Zones/Resources/ZoneListResourceType.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete
 #include <cstring>
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::ZoneListResourceType::FixDown                       @ 0x828D1E80
@@ -8,16 +10,15 @@
 //   CgsResource::ZoneListResourceType::GetTypeID                     @ 0x828AC420
 //   CgsResource::ZoneListResourceType::Serialise                     @ 0x828D1E08
 //
-// A resource-type handler for a serialised CgsSceneManager::ZoneList blob.
-// FixDown/FixUp just forward to the ZoneList's own pointer (un)relocation.
-// Serialise relocates the source to file-relative pointers, copies the whole
-// blob to the destination, then re-relocates both. GetSerialisedResourceDescriptor
-// builds the five-entry rw descriptor whose payload size spans the blob.
+// FixDown/FixUp forward to the ZoneList's own (un)relocation, passing the load base
+// (the leading word of the rw::Resource) as the delta. Serialise relocates the
+// source to file-relative pointers, copies the blob to the destination resource's
+// buffer, then re-relocates both. GetSerialisedResourceDescriptor returns the
+// five-entry descriptor whose first entry's size spans the blob.
 
 namespace CgsSceneManager
 {
-    // Forward references to the ZoneList relocation helpers (own TUs); trap stubs
-    // until those land. The blob pointer is returned for chaining.
+    // ZoneList relocation helpers (own TUs); trap stubs until they land.
     class ZoneList
     {
     public:
@@ -31,68 +32,54 @@ namespace CgsSceneManager
 
 namespace CgsResource
 {
-    // The serialised ZoneList header: a leading block pointer at +12 and a zone
-    // count at +16 (the blob payload runs to base + 2*count + headerPtr).
-    struct ZoneListResource
-    {
-        u8  mPad0[12];
-        u32 muBlockEnd;   // +12
-        u32 muZoneCount;  // +16
-    };
+    static const uint32_t KU_ZONE_LIST_RESOURCE_TYPE_ID = 45056;
 
-    class ZoneListResourceType
+    uint32_t ZoneListResourceType::GetTypeID() const
     {
-    public:
-        void* FixDown(void* pResource, const int* pDelta);
-        void* FixUp(void* pResource, const int* pDelta);
-        void* GetSerialisedResourceDescriptor(void* pOut, const void* pResource);
-        int   GetTypeID() { return KI_TYPE_ID; }
-        void* Serialise(void* pResource, void** ppDest);
-
-    private:
-        static const int KI_TYPE_ID = 45056;
-    };
-
-    void* ZoneListResourceType::FixDown(void* pResource, const int* pDelta)
-    {
-        return CgsSceneManager::ZoneList::FixDown(pResource, *pDelta);
+        return KU_ZONE_LIST_RESOURCE_TYPE_ID;
     }
 
-    void* ZoneListResourceType::FixUp(void* pResource, const int* pDelta)
+    void ZoneListResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        return CgsSceneManager::ZoneList::FixUp(pResource, *pDelta);
+        CgsSceneManager::ZoneList::FixDown(lpResource, static_cast<s32>(CgsResource::GetLoadBase(lrResource)));
     }
 
-    void* ZoneListResourceType::GetSerialisedResourceDescriptor(void* pOut, const void* pResource)
+    void ZoneListResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        u32*      lpOut = reinterpret_cast<u32*>(pOut);
-        uintptr_t lRes  = reinterpret_cast<uintptr_t>(pResource);
+        CgsSceneManager::ZoneList::FixUp(lpResource, static_cast<s32>(CgsResource::GetLoadBase(lrResource)));
+    }
 
+    ResourceDescriptor ZoneListResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
         u32 luZoneCount = *reinterpret_cast<const u32*>(lRes + 16);
         u32 luBlockEnd  = *reinterpret_cast<const u32*>(lRes + 12);
 
-        lpOut[2] = 0; lpOut[3] = 1;
-        lpOut[4] = 0; lpOut[5] = 1;
-        lpOut[6] = 0; lpOut[7] = 1;
-        lpOut[8] = 0; lpOut[9] = 1;
-
-        // 64-bit first entry: high word = payload size, low word = alignment (16).
-        lpOut[0] = static_cast<u32>(2 * luZoneCount + luBlockEnd - lRes);
-        lpOut[1] = 16;
-        return lpOut;
+        // First entry holds the payload size (alignment 16); the remaining four are
+        // empty (size 0, alignment 1).
+        ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(2 * luZoneCount + luBlockEnd - lRes);
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        for (int li = 1; li < 5; ++li)
+        {
+            lDescriptor.m_baseResourceDescriptors[li].m_size      = 0;
+            lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1;
+        }
+        return lDescriptor;
     }
 
-    void* ZoneListResourceType::Serialise(void* pResource, void** ppDest)
+    void* ZoneListResourceType::Serialise(const void* lpResource, const rw::Resource& lrDest) const
     {
-        uintptr_t lSrc  = reinterpret_cast<uintptr_t>(pResource);
-        void*     lpDst = *ppDest;
+        void*     lpRes = const_cast<void*>(lpResource);
+        uintptr_t lSrc  = reinterpret_cast<uintptr_t>(lpResource);
+        void*     lpDst = lrDest.m_baseResources[0];
         usize     luSize = (2 * *reinterpret_cast<const u32*>(lSrc + 16)
                             + *reinterpret_cast<const u32*>(lSrc + 12)) - lSrc;
 
-        CgsSceneManager::ZoneList::FixDown(pResource, 0);
-        std::memcpy(lpDst, pResource, luSize);
+        CgsSceneManager::ZoneList::FixDown(lpRes, 0);
+        std::memcpy(lpDst, lpResource, luSize);
         CgsSceneManager::ZoneList::FixUp(lpDst, reinterpret_cast<int>(lpDst));
-        CgsSceneManager::ZoneList::FixUp(pResource, static_cast<int>(lSrc));
-        return *ppDest;
+        CgsSceneManager::ZoneList::FixUp(lpRes, static_cast<int>(lSrc));
+        return lpDst;
     }
 }

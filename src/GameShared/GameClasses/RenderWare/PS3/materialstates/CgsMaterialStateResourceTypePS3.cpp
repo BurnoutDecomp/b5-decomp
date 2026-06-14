@@ -1,51 +1,45 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/RenderWare/PS3/materialstates/CgsMaterialStateResourceTypePS3.h"
+#include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::MaterialStateResourceType::FixDown   @ 0x828A8A80
 //   CgsResource::MaterialStateResourceType::FixUp     @ 0x828A8AB8
 //   CgsResource::MaterialStateResourceType::GetTypeID @ 0x828A8108
 //
-// FixUp rebases three pointer fields (offsets 0, 4, 8) by the delta. FixDown
-// reverses that and additionally flags the pointed-to material-state object (read
-// from offset 8 *before* it is un-rebased) as needing a rebuild (its byte at +40).
+// FixUp rebases three pointer fields (offsets 0/4/8) by the delta (the rw::Resource's
+// load base). FixDown reverses that and flags the pointed-to material-state object
+// (read from +8 before it is un-rebased) as needing a rebuild (byte at +40).
 
 namespace CgsResource
 {
-    class MaterialStateResourceType
+    static const uint32_t KU_MATERIAL_STATE_RESOURCE_TYPE_ID = 15;
+
+    uint32_t MaterialStateResourceType::GetTypeID() const
     {
-    public:
-        void* FixDown(void* pResource, int* pDelta);
-        void* FixUp(void* pResource, int* pDelta);
-        int   GetTypeID() { return KI_TYPE_ID; }
-
-    private:
-        static const int KI_TYPE_ID = 15;
-    };
-
-    void* MaterialStateResourceType::FixDown(void* pResource, int* pDelta)
-    {
-        int delta = *pDelta;
-        uintptr_t base = reinterpret_cast<uintptr_t>(pResource);
-
-        uintptr_t pMaterialState = *reinterpret_cast<uintptr_t*>(base + 8);
-
-        *reinterpret_cast<uintptr_t*>(base + 0) -= delta;
-        *reinterpret_cast<uintptr_t*>(base + 4) -= delta;
-        *reinterpret_cast<u8*>(pMaterialState + 40) = 1;
-        *reinterpret_cast<uintptr_t*>(base + 8) -= delta;
-
-        return pResource;
+        return KU_MATERIAL_STATE_RESOURCE_TYPE_ID;
     }
 
-    void* MaterialStateResourceType::FixUp(void* pResource, int* pDelta)
+    void MaterialStateResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        int delta = *pDelta;
-        uintptr_t base = reinterpret_cast<uintptr_t>(pResource);
+        int       liDelta = static_cast<int>(CgsResource::GetLoadBase(lrResource));
+        uintptr_t lBase   = reinterpret_cast<uintptr_t>(lpResource);
 
-        *reinterpret_cast<uintptr_t*>(base + 0) += delta;
-        *reinterpret_cast<uintptr_t*>(base + 4) += delta;
-        *reinterpret_cast<uintptr_t*>(base + 8) += delta;
+        uintptr_t lMaterialState = *reinterpret_cast<uintptr_t*>(lBase + 8);
 
-        return pResource;
+        *reinterpret_cast<uintptr_t*>(lBase + 0) -= liDelta;
+        *reinterpret_cast<uintptr_t*>(lBase + 4) -= liDelta;
+        *reinterpret_cast<u8*>(lMaterialState + 40) = 1;
+        *reinterpret_cast<uintptr_t*>(lBase + 8) -= liDelta;
+    }
+
+    void MaterialStateResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        int       liDelta = static_cast<int>(CgsResource::GetLoadBase(lrResource));
+        uintptr_t lBase   = reinterpret_cast<uintptr_t>(lpResource);
+
+        *reinterpret_cast<uintptr_t*>(lBase + 0) += liDelta;
+        *reinterpret_cast<uintptr_t*>(lBase + 4) += liDelta;
+        *reinterpret_cast<uintptr_t*>(lBase + 8) += liDelta;
     }
 }

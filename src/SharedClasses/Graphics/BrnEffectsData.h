@@ -185,6 +185,7 @@ struct MotionBlurData
     u8   mPadA[2];
 
     void Construct();
+    static MotionBlurData Interpolate(const MotionBlurData& lLhs, const MotionBlurData& lRhs, f32 lfT);
 };
 }
 }
