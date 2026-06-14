@@ -23,96 +23,115 @@ namespace renderengine
         const u32 KU_DEFAULT_BLEND_FACTOR = 65537;   // 0x00010001
     }
 
+    struct ResourceDescriptorEntry
+    {
+        u32 muSize;
+        u32 muAlignment;
+    };
+
+    struct BlendMaterialState
+    {
+        u32 maState[19];
+    };
+
+    struct BlendStateParameters
+    {
+        u32 maBlendFactor[4];
+        u32 muState15;
+        u32 muState4;
+        u32 muState5;
+        u32 muState6;
+        u32 muState7;
+        u32 muState8;
+        u32 muState17;
+        u32 muState9;
+        u8  mbHasCustomBlendFactors;
+        u8  mbState10;
+        u8  mbState11;
+        u8  mbState12;
+        u8  mbState13;
+        u8  mbState14;
+        u8  mbState16;
+    };
+
     class BlendState
     {
     public:
-        void* GetParameters(const u32* pMaterial, void* pParams);
+        void* GetParameters(const BlendMaterialState* pMaterial, BlendStateParameters* pParams);
         void* GetResourceDescriptor(void* pOut);
-        void* Initialize(void** ppMaterial, const void* pParams);
+        void* Initialize(BlendMaterialState** ppMaterial, const BlendStateParameters* pParams);
     };
 
-    void* BlendState::GetParameters(const u32* pMaterial, void* pParams)
+    void* BlendState::GetParameters(const BlendMaterialState* pMaterial, BlendStateParameters* pParams)
     {
-        uintptr_t lOut = reinterpret_cast<uintptr_t>(pParams);
-        auto Word = [lOut](int liOff) -> u32&  { return *reinterpret_cast<u32*>(lOut + liOff); };
-        auto Byte = [lOut](int liOff) -> u8&   { return *reinterpret_cast<u8*>(lOut + liOff); };
-
-        Byte(48) = 0;
-        // Per-channel blend factors: copy and flag if any differs from the default.
+        pParams->mbHasCustomBlendFactors = 0;
         for (int liChannel = 0; liChannel < 4; ++liChannel)
         {
-            Word(liChannel * 4) = pMaterial[liChannel];
-            if (pMaterial[liChannel] != KU_DEFAULT_BLEND_FACTOR)
-                Byte(48) = 1;
+            pParams->maBlendFactor[liChannel] = pMaterial->maState[liChannel];
+            if (pMaterial->maState[liChannel] != KU_DEFAULT_BLEND_FACTOR)
+                pParams->mbHasCustomBlendFactors = 1;
         }
 
-        Word(20) = pMaterial[4];
-        Word(24) = pMaterial[5];
-        Word(28) = pMaterial[6];
-        Word(32) = pMaterial[7];
-        Word(36) = pMaterial[8];
-        Word(44) = pMaterial[9];
-        Byte(49) = pMaterial[10] != 0;
-        Byte(50) = pMaterial[11] != 0;
-        Byte(51) = pMaterial[12] != 0;
-        Byte(52) = pMaterial[13] != 0;
-        Byte(53) = pMaterial[14] != 0;
-        Word(16) = pMaterial[15];
-        Word(40) = pMaterial[17];
-        Byte(54) = pMaterial[16] != 0;
-        return const_cast<u32*>(pMaterial);
+        pParams->muState4 = pMaterial->maState[4];
+        pParams->muState5 = pMaterial->maState[5];
+        pParams->muState6 = pMaterial->maState[6];
+        pParams->muState7 = pMaterial->maState[7];
+        pParams->muState8 = pMaterial->maState[8];
+        pParams->muState9 = pMaterial->maState[9];
+        pParams->mbState10 = pMaterial->maState[10] != 0;
+        pParams->mbState11 = pMaterial->maState[11] != 0;
+        pParams->mbState12 = pMaterial->maState[12] != 0;
+        pParams->mbState13 = pMaterial->maState[13] != 0;
+        pParams->mbState14 = pMaterial->maState[14] != 0;
+        pParams->muState15 = pMaterial->maState[15];
+        pParams->muState17 = pMaterial->maState[17];
+        pParams->mbState16 = pMaterial->maState[16] != 0;
+        return const_cast<BlendMaterialState*>(pMaterial);
     }
 
     void* BlendState::GetResourceDescriptor(void* pOut)
     {
-        u32* lpOut = reinterpret_cast<u32*>(pOut);
-        for (int liEntry = 0; liEntry < 5; ++liEntry)
+        ResourceDescriptorEntry* lpOut = static_cast<ResourceDescriptorEntry*>(pOut);
+        for (ResourceDescriptorEntry* lpEntry = lpOut; lpEntry != lpOut + 5; ++lpEntry)
         {
-            lpOut[0] = 0;
-            lpOut[1] = 1;
-            lpOut += 2;
+            lpEntry->muSize = 0;
+            lpEntry->muAlignment = 1;
         }
-        u32* lpBase = reinterpret_cast<u32*>(pOut);
-        lpBase[0] = 0x4C;   // 64-bit store {high=0x4C, low=4}
-        lpBase[1] = 4;
+        lpOut[0].muSize = 0x4C;
+        lpOut[0].muAlignment = 4;
         return pOut;
     }
 
-    void* BlendState::Initialize(void** ppMaterial, const void* pParams)
+    void* BlendState::Initialize(BlendMaterialState** ppMaterial, const BlendStateParameters* pParams)
     {
-        u32* lpMat = reinterpret_cast<u32*>(*ppMaterial);
-        uintptr_t lIn = reinterpret_cast<uintptr_t>(pParams);
-        auto Word = [lIn](int liOff) -> u32 { return *reinterpret_cast<const u32*>(lIn + liOff); };
-        auto Byte = [lIn](int liOff) -> u8  { return *reinterpret_cast<const u8*>(lIn + liOff); };
+        BlendMaterialState* lpMat = *ppMaterial;
 
-        if (Byte(48))
+        if (pParams->mbHasCustomBlendFactors)
         {
             for (int liChannel = 0; liChannel < 4; ++liChannel)
-                lpMat[liChannel] = Word(liChannel * 4);
+                lpMat->maState[liChannel] = pParams->maBlendFactor[liChannel];
         }
         else
         {
-            lpMat[0] = KU_DEFAULT_BLEND_FACTOR;
-            lpMat[1] = KU_DEFAULT_BLEND_FACTOR;
-            lpMat[2] = KU_DEFAULT_BLEND_FACTOR;
-            lpMat[3] = KU_DEFAULT_BLEND_FACTOR;
+            for (int liChannel = 0; liChannel < 4; ++liChannel)
+                lpMat->maState[liChannel] = KU_DEFAULT_BLEND_FACTOR;
         }
 
-        lpMat[4]  = Word(20);
-        lpMat[5]  = Word(24);
-        lpMat[6]  = Word(28);
-        lpMat[7]  = Word(32);
-        lpMat[8]  = Word(36);
-        lpMat[9]  = Word(44);
-        lpMat[10] = Byte(49);
-        lpMat[11] = Byte(50);
-        lpMat[12] = Byte(51);
-        lpMat[13] = Byte(52);
-        lpMat[14] = Byte(53);
-        lpMat[15] = Word(16);
-        lpMat[17] = Word(40);
-        lpMat[18] = 1;
-        lpMat[16] = Byte(54);
+        lpMat->maState[4]  = pParams->muState4;
+        lpMat->maState[5]  = pParams->muState5;
+        lpMat->maState[6]  = pParams->muState6;
+        lpMat->maState[7]  = pParams->muState7;
+        lpMat->maState[8]  = pParams->muState8;
+        lpMat->maState[9]  = pParams->muState9;
+        lpMat->maState[10] = pParams->mbState10;
+        lpMat->maState[11] = pParams->mbState11;
+        lpMat->maState[12] = pParams->mbState12;
+        lpMat->maState[13] = pParams->mbState13;
+        lpMat->maState[14] = pParams->mbState14;
+        lpMat->maState[15] = pParams->muState15;
+        lpMat->maState[17] = pParams->muState17;
+        lpMat->maState[18] = 1;
+        lpMat->maState[16] = pParams->mbState16;
         return lpMat;
     }
 }

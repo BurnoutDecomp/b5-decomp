@@ -18,8 +18,30 @@ namespace rw
         {
         public:
             int  GetDataBufSizes(int liWidth, int liHeight, u32 luFormat, int liPacked, u32* pOutSizes);
-            void* Construct();
-            void* Destruct();
+            VideoRenderable();
+            ~VideoRenderable();
+
+        private:
+            u32 muVTable;
+            u32 muUnknown4;
+            u32 muUnknown8;
+            u32 muUnknown12;
+            u32 muUnknown16;
+            u32 muUnknown20;
+            u32 muUnknown24;
+            u8  mPad28[12];
+            u32 muUnknown40;
+            u32 muUnknown44;
+            u32 muPlaneCount;
+            u32 muUnknown52;
+            u32 muUnknown56;
+            u32 muUnknown60;
+            u32 muUnknown64;
+            u32 muUnknown68;
+            u32 muUnknown72;
+            u32 muUnknown76;
+            u8  mbUnknown80;
+            u8  mbUnknown81;
         };
 
         int VideoRenderable::GetDataBufSizes(int liWidth, int liHeight, u32 luFormat, int liPacked, u32* pOutSizes)
@@ -57,37 +79,32 @@ namespace rw
             return liWidth;
         }
 
-        void* VideoRenderable::Construct()
+        VideoRenderable::VideoRenderable()
         {
-            uintptr_t lBase = reinterpret_cast<uintptr_t>(this);
-            auto Word = [lBase](int liOff) -> u32& { return *reinterpret_cast<u32*>(lBase + liOff); };
-
-            Word(48) = 4;
-            Word(4)  = 0;
-            Word(8)  = 0;
-            Word(12) = 0;
-            Word(16) = 0;
-            Word(20) = 0;
-            Word(24) = 0;
-            Word(40) = 0;
-            Word(44) = 0;
-            Word(52) = 0;
-            Word(56) = 0;
-            Word(60) = 0;
-            Word(68) = 0;
-            Word(72) = 0;
-            Word(76) = 0;
-            Word(0)  = 923039540;   // vtable word (0x37060034)
-            Word(64) = 0;
-            *reinterpret_cast<u8*>(lBase + 80) = 0;
-            *reinterpret_cast<u8*>(lBase + 81) = 0;
-            return this;
+            muPlaneCount = 4;
+            muUnknown4 = 0;
+            muUnknown8 = 0;
+            muUnknown12 = 0;
+            muUnknown16 = 0;
+            muUnknown20 = 0;
+            muUnknown24 = 0;
+            muUnknown40 = 0;
+            muUnknown44 = 0;
+            muUnknown52 = 0;
+            muUnknown56 = 0;
+            muUnknown60 = 0;
+            muUnknown68 = 0;
+            muUnknown72 = 0;
+            muUnknown76 = 0;
+            muVTable = 923039540;
+            muUnknown64 = 0;
+            mbUnknown80 = 0;
+            mbUnknown81 = 0;
         }
 
-        void* VideoRenderable::Destruct()
+        VideoRenderable::~VideoRenderable()
         {
-            *reinterpret_cast<u32*>(this) = 0;
-            return this;
+            muVTable = 0;
         }
     }
 }

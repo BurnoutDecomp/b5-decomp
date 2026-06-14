@@ -17,17 +17,21 @@ namespace EA
         public:
             void* SetAffinity(int liAffinity);
             char* SetName(const char* pName);
+
+        private:
+            char macName[16];
+            u8   mPad16[4];
+            int  miAffinity;
         };
 
         void* EntryPoint::SetAffinity(int liAffinity)
         {
-            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(this) + 20) = liAffinity;
+            miAffinity = liAffinity;
             return this;
         }
 
         char* EntryPoint::SetName(const char* pName)
         {
-            char* lpDest = reinterpret_cast<char*>(this);
             if (pName)
             {
                 int liLen = 0;
@@ -35,17 +39,17 @@ namespace EA
                 {
                     if (!pName[liLen])
                         break;
-                    lpDest[liLen] = pName[liLen];
+                    macName[liLen] = pName[liLen];
                 }
                 if (liLen >= 16)
                     liLen = 15;
-                lpDest[liLen] = 0;
+                macName[liLen] = 0;
             }
             else
             {
-                lpDest[0] = 0;
+                macName[0] = 0;
             }
-            return lpDest;
+            return macName;
         }
     }
 }
