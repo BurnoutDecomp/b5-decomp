@@ -3,18 +3,20 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnGui::ViewModule::ViewModule  @ 0x827E3D18
 //
-// Constructor for the Burnout view module. It chains to the shared
-// CgsGui::ViewModule base, then initialises its own state: an empty intrusive
-// view list (the head's next/prev/tail all point back at the head) and two
-// "uninitialised" sentinel indices set to INT_MAX. The base class and the members
-// between the list and the sentinels are large and not yet individually recovered,
-// so they are held as explicit padding (their real fields are separate TUs); every
-// field this constructor touches is accessed by name.
+// Default constructor for the Burnout view module. It chains to the shared
+// CgsGui::ViewModule base, zeroes its prepare/release stage enums, and brings up
+// its FlaptManager — whose empty view list links back to its own head and whose
+// focus/selection indices start "unset" (INT_MAX). Member names recovered from the
+// DecFIGS DWARF (BrnGuiViewModule.h): meBrnPrepareStage, meBrnReleaseStage,
+// mFlaptManager, mpGuiModule. The CgsGui::ViewModule base and the bulk of
+// FlaptManager are large and recovered by their own TUs, so they are held as
+// explicit padding; every field this constructor writes is named.
+
+namespace BrnGui { class GuiModule; }
 
 namespace CgsGui
 {
-    // Shared view-module base (own TU). Polymorphic: its vtable pointer sits at
-    // offset 0. Body is a trap stub until the base TU lands.
+    // Shared view-module base (own TU). Polymorphic: vtable pointer at offset 0.
     class ViewModule
     {
     public:
@@ -26,43 +28,62 @@ namespace CgsGui
     ViewModule::ViewModule() { __debugbreak(); }
 }
 
-namespace BrnGui
+namespace BrnFlapt
 {
-    // Empty intrusive list head: the three link pointers all reference the head
-    // itself, the canonical "empty circular list" state.
-    struct ViewListHead
+    // The Flash/APT manager embedded in the view module. Only the pieces the view
+    // constructor initialises are modelled: the head of an intrusive, initially
+    // empty circular view list, and the focus/selection index sentinels deeper in.
+    class FlaptManager
     {
-        s32   maiHeader[3];
+    public:
+        FlaptManager();
+    private:
+        s32   miListHead;        // list-head sentinel payload
         void* mpNext;
         void* mpPrev;
         void* mpTail;
         s32   miCount;
+        u8    mPad0[2184];
+        s32   miFocusIndex;      // "no focus" == INT_MAX
+        u8    mPad1[16];
+        s32   miSelectionIndex;  // "no selection" == INT_MAX
     };
 
+    FlaptManager::FlaptManager()
+    {
+        miListHead = 0;
+        mpNext = this;   // empty circular list: links point back at the head
+        mpPrev = this;
+        mpTail = this;
+        miCount = 0;
+        miFocusIndex = 0x7FFFFFFF;
+        miSelectionIndex = 0x7FFFFFFF;
+    }
+}
+
+namespace BrnGui
+{
     class ViewModule : public CgsGui::ViewModule
     {
     public:
         ViewModule();
         ~ViewModule() override {}
     private:
-        ViewListHead mViewList;            // @ object +167116
-        u8           mPad1[2184];          // intervening members (separate TUs)
-        s32          miFocusIndex;         // @ +169328, INT_MAX sentinel
-        u8           mPad2[16];
-        s32          miSelectionIndex;     // @ +169348, INT_MAX sentinel
+        enum BrnPrepareStage : s32 { E_BRN_PREPARESTAGE_START = 0 };
+        enum BrnReleaseStage : s32 { E_BRN_RELEASESTAGE_START = 0 };
+
+        BrnPrepareStage      meBrnPrepareStage;
+        BrnReleaseStage      meBrnReleaseStage;
+        BrnFlapt::FlaptManager mFlaptManager;
+        BrnGui::GuiModule*   mpGuiModule;
     };
 
     ViewModule::ViewModule()
+        : meBrnPrepareStage(E_BRN_PREPARESTAGE_START),
+          meBrnReleaseStage(E_BRN_RELEASESTAGE_START),
+          mpGuiModule(nullptr)
     {
-        mViewList.maiHeader[0] = 0;
-        mViewList.maiHeader[1] = 0;
-        mViewList.maiHeader[2] = 0;
-        mViewList.mpNext = &mViewList;
-        mViewList.mpPrev = &mViewList;
-        mViewList.mpTail = &mViewList;
-        mViewList.miCount = 0;
-
-        miFocusIndex = 0x7FFFFFFF;
-        miSelectionIndex = 0x7FFFFFFF;
+        // mFlaptManager brings up the empty view list and index sentinels in its
+        // own constructor (above).
     }
 }

@@ -25,11 +25,16 @@ namespace BrnNetwork
     };
     void NetworkPlayerStats::Clear() { __debugbreak(); }
 
+    // 116 bytes (CommonRelationship + DateAndTime + UniquePlayerID + two ints),
+    // sized so mNetworkPlayerID lands at object +272, matching the X360 stores.
+    // Its own Construct() resets the relationship (incl. the embedded list head the
+    // X360 build sets at +240); body is a trap stub until that TU lands.
     struct LiveRevengeRelationship
     {
-        // Sized so mNetworkPlayerID lands at object +272, matching the X360 stores.
         u8 mPad0[116];
+        void Construct();
     };
+    void LiveRevengeRelationship::Construct() { __debugbreak(); }
 
     struct PlayerName { char macName[20]; };
 
@@ -73,7 +78,7 @@ namespace BrnNetwork
             mbIsInLocalGameWorld         = false;
 
             mPlayerStats.Clear();
-            std::memset(&mLiveRevengeRelationship, 0, sizeof(mLiveRevengeRelationship));
+            mLiveRevengeRelationship.Construct();
             std::memset(&mPlayerName, 0, sizeof(mPlayerName));
         }
     }
