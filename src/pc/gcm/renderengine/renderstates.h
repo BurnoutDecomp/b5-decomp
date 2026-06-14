@@ -39,6 +39,8 @@ public:
         u8  mu8PaddingMode;
     };
 
+    static ResourceDescriptor5* GetResourceDescriptor(ResourceDescriptor5* lpDescriptor, const Parameters* lpParameters);
+    static RasterizerState* Initialize(RasterizerState** ppState, const Parameters* lpParameters);
     RasterizerState* Initialize(const Parameters* lpParameters);
 
 private:

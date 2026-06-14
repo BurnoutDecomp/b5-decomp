@@ -33,7 +33,10 @@ namespace rw
         {
         public:
             int   InitializeVTable();
-            void* Assign(const void* pSource);
+            Volume& operator=(const Volume& rSource);
+
+        private:
+            u8 maPayload[96];
         };
 
         int Volume::InitializeVTable()
@@ -48,10 +51,10 @@ namespace rw
             return 1;
         }
 
-        void* Volume::Assign(const void* pSource)
+        Volume& Volume::operator=(const Volume& rSource)
         {
-            memcpy(this, pSource, 96);
-            return this;
+            memcpy(maPayload, rSource.maPayload, sizeof(maPayload));
+            return *this;
         }
     }
 }

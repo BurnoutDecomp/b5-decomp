@@ -22,15 +22,18 @@ namespace rw
             class DeviceDriver
             {
             public:
-                void* Construct(const char* pName);
+                DeviceDriver(const char* pName);
+
+            private:
+                void* mpVTable;
+                char  macName[1];
             };
 
-            void* DeviceDriver::Construct(const char* pName)
+            DeviceDriver::DeviceDriver(const char* pName)
             {
-                u32* lpThis = reinterpret_cast<u32*>(this);
-                lpThis[0] = static_cast<u32>(reinterpret_cast<uintptr_t>(&gDeviceDriverVTable));
+                mpVTable = const_cast<void*>(reinterpret_cast<const void*>(&gDeviceDriverVTable));
 
-                char* lpDest = reinterpret_cast<char*>(this) + 4;
+                char* lpDest = macName;
                 const char* lpSrc = pName;
                 char lcCh;
                 do
@@ -39,8 +42,6 @@ namespace rw
                     *lpDest++ = lcCh;
                     ++lpSrc;
                 } while (lcCh);
-
-                return lpThis;
             }
         }
     }

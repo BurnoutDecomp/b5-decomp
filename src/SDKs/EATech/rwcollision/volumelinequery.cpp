@@ -22,123 +22,161 @@ namespace rw
 {
     namespace collision
     {
+        struct ResourceDescriptorEntry
+        {
+            u32 muSize;
+            u32 muAlignment;
+        };
+
+        struct QueryRefEntry
+        {
+            int   miVolume;
+            u32   muTransformPtr;
+            u8    mPad8[8];
+            u8    maTransform[64];
+            u8    mPad80[32];
+            int   miTag;
+            char  mcFlag;
+            u8    mPad117[11];
+        };
+
+        static_assert(sizeof(QueryRefEntry) == 128, "QueryRefEntry must match X360 stride");
+
+        struct VolumeHeader
+        {
+            u8   mPad0[64];
+            int* mpType;
+        };
+
         class VolumeLineQuery
         {
         public:
-            int   AddPrimitiveRef(int liVolume, const void* pTransform, int liTag, char lcFlag);
-            int   AddVolumeRef(int liVolume, const void* pTransform, int liTag, char lcFlag);
+            int   AddPrimitiveRef(VolumeHeader* pVolume, const void* pTransform, int liTag, char lcFlag);
+            int   AddVolumeRef(VolumeHeader* pVolume, const void* pTransform, int liTag, char lcFlag);
             int   GetAllIntersections();
             void* GetResourceDescriptor(void* pOut, int liVolumes, int liResults);
             void* Initialize(void** ppBuffer, int liVolumes, int liResults);
 
             // Defined in another TU.
             int   GetIntersections();
+
+        private:
+            u8  mPad0[16];
+            void* mpResultList;
+            u8  mPad20[4];
+            u32 muActiveIntersectionCount;
+            u32 muTotalIntersectionCount;
+            u8  mPad32[36];
+            QueryRefEntry* mpVolumeRefs;
+            u8  mPad72[136];
+            u32 muVolumeRefCount;
+            u32 muVolumeRefCapacity;
+            QueryRefEntry* mpPrimitiveRefs;
+            u32 muPrimitiveRefCount;
+            u32 muPrimitiveRefCapacity;
+            void* mpScratchBase;
+            u8  mPad232[4];
+            u32 muResultCapacity;
+            u8  mPad240[4];
+            void* mpTailBuffer;
+            u8  mPad248[8];
+            u32 muIntersectionWriteCount;
         };
 
-        int VolumeLineQuery::AddPrimitiveRef(int liVolume, const void* pTransform, int liTag, char lcFlag)
+        int VolumeLineQuery::AddPrimitiveRef(VolumeHeader* pVolume, const void* pTransform, int liTag, char lcFlag)
         {
-            u32* lpThis = reinterpret_cast<u32*>(this);
-            u32 luIndex = lpThis[55];
-            if (luIndex >= lpThis[56])
+            if (muPrimitiveRefCount >= muPrimitiveRefCapacity)
                 return 0;
 
-            uintptr_t lEntry = (luIndex << 7) + lpThis[54];
-            *reinterpret_cast<int*>(lEntry) = liVolume;
+            QueryRefEntry* lpEntry = &mpPrimitiveRefs[muPrimitiveRefCount];
+            lpEntry->miVolume = static_cast<int>(reinterpret_cast<uintptr_t>(pVolume));
 
             if (pTransform)
             {
-                memcpy(reinterpret_cast<void*>(lEntry + 16), pTransform, 64);
-                *reinterpret_cast<u32*>(lEntry + 4) = static_cast<u32>(lEntry + 16);
+                memcpy(lpEntry->maTransform, pTransform, sizeof(lpEntry->maTransform));
+                lpEntry->muTransformPtr = static_cast<u32>(reinterpret_cast<uintptr_t>(lpEntry->maTransform));
             }
             else
             {
-                *reinterpret_cast<u32*>(lEntry + 4) = 0;
+                lpEntry->muTransformPtr = 0;
             }
 
-            *reinterpret_cast<int*>(lEntry + 112) = liTag;
-            *reinterpret_cast<char*>(lEntry + 116) = lcFlag;
-            ++lpThis[55];
+            lpEntry->miTag = liTag;
+            lpEntry->mcFlag = lcFlag;
+            ++muPrimitiveRefCount;
             return 1;
         }
 
-        int VolumeLineQuery::AddVolumeRef(int liVolume, const void* pTransform, int liTag, char lcFlag)
+        int VolumeLineQuery::AddVolumeRef(VolumeHeader* pVolume, const void* pTransform, int liTag, char lcFlag)
         {
-            // Volumes whose type word is not 6 are stored as primitive refs.
-            uintptr_t lVolAddr = static_cast<uintptr_t>(static_cast<u32>(liVolume));
-            int* lpType = *reinterpret_cast<int**>(lVolAddr + 64);
-            if (*lpType != 6)
-                return AddPrimitiveRef(liVolume, pTransform, liTag, lcFlag);
+            if (*pVolume->mpType != 6)
+                return AddPrimitiveRef(pVolume, pTransform, liTag, lcFlag);
 
-            u32* lpThis = reinterpret_cast<u32*>(this);
-            u32 luIndex = lpThis[52];
-            if (luIndex >= lpThis[53])
+            if (muVolumeRefCount >= muVolumeRefCapacity)
                 return 0;
 
-            uintptr_t lEntry = (luIndex << 7) + lpThis[17];
-            *reinterpret_cast<int*>(lEntry) = liVolume;
+            QueryRefEntry* lpEntry = &mpVolumeRefs[muVolumeRefCount];
+            lpEntry->miVolume = static_cast<int>(reinterpret_cast<uintptr_t>(pVolume));
 
             if (pTransform)
             {
-                memcpy(reinterpret_cast<void*>(lEntry + 16), pTransform, 64);
-                *reinterpret_cast<u32*>(lEntry + 4) = static_cast<u32>(lEntry + 16);
+                memcpy(lpEntry->maTransform, pTransform, sizeof(lpEntry->maTransform));
+                lpEntry->muTransformPtr = static_cast<u32>(reinterpret_cast<uintptr_t>(lpEntry->maTransform));
             }
             else
             {
-                *reinterpret_cast<u32*>(lEntry + 4) = 0;
+                lpEntry->muTransformPtr = 0;
             }
 
-            *reinterpret_cast<int*>(lEntry + 112) = liTag;
-            *reinterpret_cast<char*>(lEntry + 116) = lcFlag;
-            ++lpThis[52];
+            lpEntry->miTag = liTag;
+            lpEntry->mcFlag = lcFlag;
+            ++muVolumeRefCount;
             return 1;
         }
 
         int VolumeLineQuery::GetAllIntersections()
         {
-            u32* lpThis = reinterpret_cast<u32*>(this);
-            u32 luTotal = lpThis[7];
-            lpThis[64] = 0;
-            lpThis[6] = luTotal;
+            muIntersectionWriteCount = 0;
+            muActiveIntersectionCount = muTotalIntersectionCount;
             return GetIntersections();
         }
 
         void* VolumeLineQuery::GetResourceDescriptor(void* pOut, int liVolumes, int liResults)
         {
-            u32* lpOut = reinterpret_cast<u32*>(pOut);
-            for (int liEntry = 0; liEntry < 5; ++liEntry)
+            ResourceDescriptorEntry* lpOut = static_cast<ResourceDescriptorEntry*>(pOut);
+            for (ResourceDescriptorEntry* lpEntry = lpOut; lpEntry != lpOut + 5; ++lpEntry)
             {
-                lpOut[0] = 0;
-                lpOut[1] = 1;
-                lpOut += 2;
+                lpEntry->muSize = 0;
+                lpEntry->muAlignment = 1;
             }
-            u32* lpBase = reinterpret_cast<u32*>(pOut);
-            // 64-bit store {high = total backing size, low = 16}.
-            lpBase[0] = static_cast<u32>(432 * liResults + (liVolumes << 7) + 10640);
-            lpBase[1] = 16;
+            lpOut[0].muSize = static_cast<u32>(432 * liResults + (liVolumes << 7) + 10640);
+            lpOut[0].muAlignment = 16;
             return pOut;
         }
 
         void* VolumeLineQuery::Initialize(void** ppBuffer, int liVolumes, int liResults)
         {
-            u32* lpQuery = reinterpret_cast<u32*>(*ppBuffer);
+            VolumeLineQuery* lpQuery = static_cast<VolumeLineQuery*>(*ppBuffer);
             if (!lpQuery)
                 return nullptr;
 
-            lpQuery[53] = static_cast<u32>(liVolumes);
-            lpQuery[56] = static_cast<u32>(liResults);
-            lpQuery[7]  = static_cast<u32>(liResults);
-            lpQuery[59] = static_cast<u32>(liResults);
+            lpQuery->muVolumeRefCapacity = static_cast<u32>(liVolumes);
+            lpQuery->muPrimitiveRefCapacity = static_cast<u32>(liResults);
+            lpQuery->muTotalIntersectionCount = static_cast<u32>(liResults);
+            lpQuery->muResultCapacity = static_cast<u32>(liResults);
 
-            uintptr_t lVolumeBase = reinterpret_cast<uintptr_t>(&lpQuery[32 * liVolumes + 68]);
-            lpQuery[17] = static_cast<u32>(reinterpret_cast<uintptr_t>(&lpQuery[68]));
-            lpQuery[54] = static_cast<u32>(lVolumeBase);
+            u8* lpBacking = reinterpret_cast<u8*>(lpQuery);
+            QueryRefEntry* lpVolumeBase = reinterpret_cast<QueryRefEntry*>(lpBacking + 272);
+            QueryRefEntry* lpPrimitiveBase = lpVolumeBase + liVolumes;
+            lpQuery->mpVolumeRefs = lpVolumeBase;
+            lpQuery->mpPrimitiveRefs = lpPrimitiveBase;
 
-            uintptr_t lAfterEntries = (static_cast<uintptr_t>(liResults) << 7) + lVolumeBase;
-            lpQuery[57] = static_cast<u32>(lAfterEntries);
+            u8* lpScratchBase = reinterpret_cast<u8*>(lpPrimitiveBase + liResults);
+            lpQuery->mpScratchBase = lpScratchBase;
 
-            uintptr_t lResultList = 96 * liResults + lAfterEntries;
-            lpQuery[4] = static_cast<u32>(lResultList);
-            lpQuery[61] = static_cast<u32>(208 * liResults + lResultList);
+            u8* lpResultList = lpScratchBase + 96 * liResults;
+            lpQuery->mpResultList = lpResultList;
+            lpQuery->mpTailBuffer = lpResultList + 208 * liResults;
             return lpQuery;
         }
     }

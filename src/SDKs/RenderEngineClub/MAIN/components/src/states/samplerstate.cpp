@@ -12,59 +12,88 @@
 
 namespace renderengine
 {
+    struct ResourceDescriptorEntry
+    {
+        u32 muSize;
+        u32 muAlignment;
+    };
+
+    struct SamplerStateData
+    {
+        u32 maState[29];
+    };
+
+    struct SamplerStateParameters
+    {
+        u32 muState8;
+        u32 muState9;
+        u32 muState10;
+        u32 muState20;
+        u32 muState18;
+        u32 muState12;
+        u32 muState21;
+        u32 muState19;
+        u32 muState25;
+        u32 muState24;
+        u32 muState23;
+        u32 muState0;
+        u32 muState4;
+        u32 muState13;
+        u32 muState14;
+        u32 muState17;
+        u8  mbState15;
+        u8  mbState22;
+        u8  mbState16;
+        u8  mbState11Zero;
+        u8  mbState26;
+    };
+
     class SamplerState
     {
     public:
         void* GetResourceDescriptor(void* pOut);
-        void* Initialize(void** ppState, const void* pParams);
+        void* Initialize(SamplerStateData** ppState, const SamplerStateParameters* pParams);
     };
 
     void* SamplerState::GetResourceDescriptor(void* pOut)
     {
-        u32* lpOut = reinterpret_cast<u32*>(pOut);
-        for (int liEntry = 0; liEntry < 5; ++liEntry)
+        ResourceDescriptorEntry* lpOut = static_cast<ResourceDescriptorEntry*>(pOut);
+        for (ResourceDescriptorEntry* lpEntry = lpOut; lpEntry != lpOut + 5; ++lpEntry)
         {
-            lpOut[0] = 0;
-            lpOut[1] = 1;
-            lpOut += 2;
+            lpEntry->muSize = 0;
+            lpEntry->muAlignment = 1;
         }
-        u32* lpBase = reinterpret_cast<u32*>(pOut);
-        lpBase[0] = 0x20;   // 64-bit store {high=0x20, low=4}
-        lpBase[1] = 4;
+        lpOut[0].muSize = 0x20;
+        lpOut[0].muAlignment = 4;
         return pOut;
     }
 
-    void* SamplerState::Initialize(void** ppState, const void* pParams)
+    void* SamplerState::Initialize(SamplerStateData** ppState, const SamplerStateParameters* pParams)
     {
-        u32* lpState = reinterpret_cast<u32*>(*ppState);
-        uintptr_t lParams = reinterpret_cast<uintptr_t>(pParams);
+        SamplerStateData* lpState = *ppState;
 
-        auto Word = [lParams](int liOff) -> u32 { return *reinterpret_cast<const u32*>(lParams + liOff); };
-        auto Bool = [lParams](int liOff) -> u32 { return *reinterpret_cast<const u8*>(lParams + liOff) != 0 ? 1u : 0u; };
-        auto BoolZ = [lParams](int liOff) -> u32 { return *reinterpret_cast<const u8*>(lParams + liOff) == 0 ? 1u : 0u; };
-
-        lpState[8]  = Word(0);
-        lpState[9]  = Word(4);
-        lpState[10] = Word(8);
-        lpState[11] = BoolZ(67);    // (cntlzw(x) & 0x20) != 0  -> x == 0
-        lpState[12] = Word(20);
-        lpState[13] = Word(52);
-        lpState[14] = Word(56);
-        lpState[15] = Bool(64);     // (cntlzw(x) & 0x20) == 0  -> x != 0
-        lpState[16] = Bool(66);
-        lpState[17] = Word(60);
-        lpState[20] = Word(12);
-        lpState[18] = Word(16);
-        lpState[21] = Word(24);
-        lpState[19] = Word(28);
-        lpState[25] = Word(32);
-        lpState[24] = Word(36);
-        lpState[23] = Word(40);
-        lpState[0]  = Word(44);
-        lpState[4]  = Word(48);
-        lpState[22] = Bool(65);
-        lpState[26] = Bool(68);
-        lpState[28] = 1;
+        lpState->maState[8]  = pParams->muState8;
+        lpState->maState[9]  = pParams->muState9;
+        lpState->maState[10] = pParams->muState10;
+        lpState->maState[11] = pParams->mbState11Zero == 0 ? 1u : 0u;
+        lpState->maState[12] = pParams->muState12;
+        lpState->maState[13] = pParams->muState13;
+        lpState->maState[14] = pParams->muState14;
+        lpState->maState[15] = pParams->mbState15 != 0 ? 1u : 0u;
+        lpState->maState[16] = pParams->mbState16 != 0 ? 1u : 0u;
+        lpState->maState[17] = pParams->muState17;
+        lpState->maState[20] = pParams->muState20;
+        lpState->maState[18] = pParams->muState18;
+        lpState->maState[21] = pParams->muState21;
+        lpState->maState[19] = pParams->muState19;
+        lpState->maState[25] = pParams->muState25;
+        lpState->maState[24] = pParams->muState24;
+        lpState->maState[23] = pParams->muState23;
+        lpState->maState[0]  = pParams->muState0;
+        lpState->maState[4]  = pParams->muState4;
+        lpState->maState[22] = pParams->mbState22 != 0 ? 1u : 0u;
+        lpState->maState[26] = pParams->mbState26 != 0 ? 1u : 0u;
+        lpState->maState[28] = 1;
         return lpState;
     }
 }
