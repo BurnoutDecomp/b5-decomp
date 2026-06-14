@@ -8,22 +8,42 @@
 //   BrnStreetData::ChallengePlayerScoreEntry::Construct @ 0x8267D7E8
 //   BrnStreetData::ChallengePlayerScoreEntry::Copy      @ 0x82676668
 //
-// Score-record initialisation and copy. A ChallengeData holds two dirty/valid bit
-// pairs and a two-entry ScoreList (member layout recovered from the DecFIGS DWARF,
-// BrnChallengeData.h). Construct resets every score slot to its "invalid" marker
-// (score = -1, owner = 0); ParScores / PlayerScore add further CgsID + time slots.
-// Copy duplicates the record word-for-word, matching the X360's 64-bit field moves.
+// Score-record initialisation and copy. Member layout recovered from the DecFIGS
+// DWARF (BrnChallengeData.h / CgsBitArray.h / CgsID.h): a ChallengeData holds two
+// 2-bit dirty/valid bit arrays (each backed by one u64 word) and a two-entry
+// ScoreList; the player/par entries add a two-entry CgsID array. Construct fills
+// every slot with its "invalid" pattern; Copy is a plain member-wise duplicate
+// (the X360 build emits it as 64-bit field moves).
+
+namespace CgsContainers
+{
+    // CgsContainers::BitArray<N>: N bits packed into 64-bit words (one word for N<=64).
+    template <u32 N>
+    struct BitArray
+    {
+        u64 maxBits[(N + 63) / 64];
+    };
+}
 
 namespace BrnStreetData
 {
-    // Two parallel scores plus their owning car IDs; the trailing slots hold the
-    // invalid/owner markers seen in the constructors. Sizes mirror the X360 stores.
+    typedef u64 CgsID;
+
+    struct ScoreList
+    {
+        s32 maScores[2];
+    };
+
+    // The X360 initialises a fresh record's bit words to this pattern and its
+    // scores / ids to the all-ones "no score / no owner" sentinel.
+    static const u64 KU_EMPTY_BITWORD = 0xFFFFFFFF00000000ULL;
+    static const u64 KU_INVALID_ID    = 0xFFFFFFFF00000000ULL;
+
     struct ChallengeData
     {
-        s32 maiScores[2];   // +0  : per-type score (init -1)
-        s32 maiOwners[2];   // +8  : owner marker    (init 0)
-        s32 miScoreA;       // +16 : invalid marker  (init -1)
-        s32 miScoreB;       // +20 : invalid marker  (init -1)
+        CgsContainers::BitArray<2u> mDirty;        // +0
+        CgsContainers::BitArray<2u> mValidScores;  // +8
+        ScoreList                   mScoreList;     // +16
 
         void Construct();
         void Copy(const ChallengeData* lpSource);
@@ -31,27 +51,22 @@ namespace BrnStreetData
 
     void ChallengeData::Construct()
     {
-        maiScores[0] = -1;
-        maiOwners[0] = 0;
-        maiScores[1] = -1;
-        maiOwners[1] = 0;
-        miScoreA = -1;
-        miScoreB = -1;
+        mDirty.maxBits[0] = KU_EMPTY_BITWORD;
+        mValidScores.maxBits[0] = KU_EMPTY_BITWORD;
+        mScoreList.maScores[0] = -1;
+        mScoreList.maScores[1] = -1;
     }
 
     void ChallengeData::Copy(const ChallengeData* lpSource)
     {
-        maiScores[0] = lpSource->maiScores[0];
-        maiOwners[0] = lpSource->maiOwners[0];
-        maiScores[1] = lpSource->maiScores[1];
-        maiOwners[1] = lpSource->maiOwners[1];
-        miScoreA = lpSource->miScoreA;
-        miScoreB = lpSource->miScoreB;
+        mDirty = lpSource->mDirty;
+        mValidScores = lpSource->mValidScores;
+        mScoreList = lpSource->mScoreList;
     }
 
     struct ChallengePlayerScoreEntry : public ChallengeData
     {
-        s32 maiExtra[4];    // +24 : two more invalid/owner marker pairs
+        CgsID maCarIDs[2];   // +24
 
         void Construct();
         void Copy(const ChallengePlayerScoreEntry* lpSource);
@@ -60,25 +75,21 @@ namespace BrnStreetData
     void ChallengePlayerScoreEntry::Construct()
     {
         ChallengeData::Construct();
-        maiExtra[0] = -1;
-        maiExtra[1] = 0;
-        maiExtra[2] = -1;
-        maiExtra[3] = 0;
+        maCarIDs[0] = KU_INVALID_ID;
+        maCarIDs[1] = KU_INVALID_ID;
     }
 
     void ChallengePlayerScoreEntry::Copy(const ChallengePlayerScoreEntry* lpSource)
     {
         CGS_ASSERT(lpSource != nullptr, "lpPlayerScoreEntry");
         ChallengeData::Copy(lpSource);
-        maiExtra[0] = lpSource->maiExtra[0];
-        maiExtra[1] = lpSource->maiExtra[1];
-        maiExtra[2] = lpSource->maiExtra[2];
-        maiExtra[3] = lpSource->maiExtra[3];
+        maCarIDs[0] = lpSource->maCarIDs[0];
+        maCarIDs[1] = lpSource->maCarIDs[1];
     }
 
     struct ChallengeParScoresEntry : public ChallengeData
     {
-        s32 maiExtra[2];    // +24 : par-score time + owner
+        CgsID mRivals[2];    // +24
 
         void Copy(const ChallengeParScoresEntry* lpSource);
     };
@@ -87,7 +98,7 @@ namespace BrnStreetData
     {
         CGS_ASSERT(lpSource != nullptr, "lpData");
         ChallengeData::Copy(lpSource);
-        maiExtra[0] = lpSource->maiExtra[0];
-        maiExtra[1] = lpSource->maiExtra[1];
+        mRivals[0] = lpSource->mRivals[0];
+        mRivals[1] = lpSource->mRivals[1];
     }
 }
