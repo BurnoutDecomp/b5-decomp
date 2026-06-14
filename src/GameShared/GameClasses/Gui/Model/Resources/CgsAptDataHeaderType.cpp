@@ -1,162 +1,148 @@
 #include "types.hpp"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsResource::AptDataHeaderType::FixDown         @ 0x8285D980
-//   CgsResource::AptDataHeaderType::FixUp           @ 0x828559D8
-//   CgsResource::AptDataHeaderType::GetImportCount  @ 0x8284BB18
-//   CgsResource::AptDataHeaderType::GetImportPointer@ 0x8284BB80
-//   CgsResource::AptDataHeaderType::GetTypeID       @ 0x8284BB10
+//   CgsResource::AptDataHeaderType::FixDown          @ 0x8285D980
+//   CgsResource::AptDataHeaderType::FixUp            @ 0x828559D8
+//   CgsResource::AptDataHeaderType::GetImportCount   @ 0x8284BB18
+//   CgsResource::AptDataHeaderType::GetImportPointer @ 0x8284BB80
+//   CgsResource::AptDataHeaderType::GetTypeID        @ 0x8284BB10
 //
-// The APT data header holds four serialised pointers (+0/+4/+8/+12); the last points at a
-// GuiGeometryObject. FixUp/FixDown rebase those four and delegate the geometry object's own
-// relocation. The import table is the set of geometry sub-elements that carry an import
-// (field +4 set), enumerated over the geometry's two-level group/element arrays. The view
-// structs here describe only the fields this TU reads; full layouts live in their own TUs.
+// Resource-type handler for a serialised APT (gui movie) data header. FixDown/FixUp
+// (un)relocate the four leading block pointers and forward to the embedded
+// GuiGeometryObject relocation. GetImportCount / GetImportPointer walk the
+// movie -> character -> import table hierarchy counting / locating non-null
+// imports. The APT blob is an external serialised format, so its nested tables are
+// accessed by offset.
 
 namespace CgsResource
 {
-    struct GuiGeometryObject
+    class GuiGeometryObject
     {
-        static u32* FixDown(u32* pObject, int liDelta, int liFlag);
-        static int  FixUp();
+    public:
+        static void* FixDown(void* pGeom, int liDelta, int liFlag);
+        static void* FixUp();
     };
-}
+    void* GuiGeometryObject::FixDown(void*, int, int) { __debugbreak(); return nullptr; }
+    void* GuiGeometryObject::FixUp()                  { __debugbreak(); return nullptr; }
 
-namespace CgsResource
-{
-namespace
-{
-    struct AptDataHeader
+    class AptDataHeaderType
     {
-        u32 muField0;     // +0  relocatable
-        u32 muField4;     // +4  relocatable
-        u32 muField8;     // +8  relocatable
-        u32 muGeometry;   // +12 relocatable -> GuiGeometryObject
-    };
+    public:
+        void* FixDown(void* pResource, const int* pDelta);
+        void* FixUp(void* pResource, const int* pDelta);
+        int   GetImportCount(const void* pResource);
+        void  GetImportPointer(const void* pResource, int liIndex, u32* pOutOffset, u32* pOutValue);
+        int   GetTypeID() { return KI_TYPE_ID; }
 
-    struct GeometryObjectView   // *(header.muGeometry)
-    {
-        u32 muGroupCount;   // +0
-        u32 muField4;
-        u32 muGroupArray;   // +8  -> array of group pointers (4-byte stride)
+    private:
+        static const int KI_TYPE_ID = 30;
     };
 
-    struct GeometryGroup        // *groupArray[i]
+    void* AptDataHeaderType::FixDown(void* pResource, const int* pDelta)
     {
-        u32 muField0;
-        u32 muElementCount; // +4
-        u32 muElementArray; // +8  -> array of element pointers (4-byte stride)
-    };
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        const u32 luDelta = static_cast<u32>(*pDelta);
 
-    struct GeometryElement      // *elementArray[j]
-    {
-        u32 muField0;
-        u32 muImport;       // +4  non-zero when the element carries an import
-        u32 muField8;
-        u32 muImportValue;  // +12
-    };
+        void* lResult = GuiGeometryObject::FixDown(
+            reinterpret_cast<void*>(*reinterpret_cast<u32*>(lRes + 12)), *pDelta, 1);
 
-    inline GeometryObjectView* GeometryOf(const AptDataHeader* pHeader)
-    {
-        return reinterpret_cast<GeometryObjectView*>(static_cast<uintptr_t>(pHeader->muGeometry));
+        u32 lu4 = *reinterpret_cast<u32*>(lRes + 4)  - luDelta;
+        u32 lu8 = *reinterpret_cast<u32*>(lRes + 8)  - luDelta;
+        u32 lu12 = *reinterpret_cast<u32*>(lRes + 12) - luDelta;
+        *reinterpret_cast<u32*>(lRes + 0)  -= luDelta;
+        *reinterpret_cast<u32*>(lRes + 4)  = lu4;
+        *reinterpret_cast<u32*>(lRes + 8)  = lu8;
+        *reinterpret_cast<u32*>(lRes + 12) = lu12;
+        return lResult;
     }
-}
 
-class AptDataHeaderType
-{
-public:
-    u32*  FixDown(void* pResource, const int* pDelta);
-    int   FixUp(void* pResource, const int* pDelta);
-    int   GetImportCount(void* pResource);
-    void  GetImportPointer(void* pResource, int liIndex, u32* pOutOffset, u32* pOutValue);
-    int   GetTypeID() { return KI_TYPE_ID; }
-
-private:
-    static const int KI_TYPE_ID = 30;
-};
-
-u32* AptDataHeaderType::FixDown(void* pResource, const int* pDelta)
-{
-    AptDataHeader* lpHeader = static_cast<AptDataHeader*>(pResource);
-    const u32 luDelta = static_cast<u32>(*pDelta);
-
-    u32* lpResult = GuiGeometryObject::FixDown(
-        reinterpret_cast<u32*>(static_cast<uintptr_t>(lpHeader->muGeometry)), static_cast<int>(luDelta), 1);
-
-    const u32 lu4  = lpHeader->muField4   - luDelta;
-    const u32 lu8  = lpHeader->muField8   - luDelta;
-    const u32 lu12 = lpHeader->muGeometry - luDelta;
-    lpHeader->muField0  -= luDelta;
-    lpHeader->muField4   = lu4;
-    lpHeader->muField8   = lu8;
-    lpHeader->muGeometry = lu12;
-    return lpResult;
-}
-
-int AptDataHeaderType::FixUp(void* pResource, const int* pDelta)
-{
-    AptDataHeader* lpHeader = static_cast<AptDataHeader*>(pResource);
-    const u32 luDelta = static_cast<u32>(*pDelta);
-
-    const u32 lu8 = lpHeader->muField8 + luDelta;
-    const u32 lu4 = lpHeader->muField4 + luDelta;
-    const u32 lu0 = lpHeader->muField0 + luDelta;
-    lpHeader->muGeometry += luDelta;
-    lpHeader->muField8 = lu8;
-    lpHeader->muField4 = lu4;
-    lpHeader->muField0 = lu0;
-    return GuiGeometryObject::FixUp();
-}
-
-int AptDataHeaderType::GetImportCount(void* pResource)
-{
-    const AptDataHeader* lpHeader = static_cast<const AptDataHeader*>(pResource);
-    const GeometryObjectView* lpGeo = GeometryOf(lpHeader);
-
-    int liCount = 0;
-    const u32* lpGroups = reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpGeo->muGroupArray));
-    for (u32 luGroup = 0; luGroup < lpGeo->muGroupCount; ++luGroup)
+    void* AptDataHeaderType::FixUp(void* pResource, const int* pDelta)
     {
-        const GeometryGroup* lpGroup = reinterpret_cast<const GeometryGroup*>(static_cast<uintptr_t>(lpGroups[luGroup]));
-        const u32* lpElements = reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpGroup->muElementArray));
-        for (u32 luElem = 0; luElem < lpGroup->muElementCount; ++luElem)
-        {
-            const GeometryElement* lpElem = reinterpret_cast<const GeometryElement*>(static_cast<uintptr_t>(lpElements[luElem]));
-            if (lpElem->muImport)
-                ++liCount;
-        }
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        const u32 luDelta = static_cast<u32>(*pDelta);
+
+        u32 lu8 = *reinterpret_cast<u32*>(lRes + 8) + luDelta;
+        u32 lu4 = *reinterpret_cast<u32*>(lRes + 4) + luDelta;
+        u32 lu0 = *reinterpret_cast<u32*>(lRes + 0) + luDelta;
+        *reinterpret_cast<u32*>(lRes + 12) += luDelta;
+        *reinterpret_cast<u32*>(lRes + 8) = lu8;
+        *reinterpret_cast<u32*>(lRes + 4) = lu4;
+        *reinterpret_cast<u32*>(lRes + 0) = lu0;
+        return GuiGeometryObject::FixUp();
     }
-    return liCount;
-}
 
-void AptDataHeaderType::GetImportPointer(void* pResource, int liIndex, u32* pOutOffset, u32* pOutValue)
-{
-    const AptDataHeader* lpHeader = static_cast<const AptDataHeader*>(pResource);
-    *pOutValue  = 0;
-    *pOutOffset = 0;
-
-    const GeometryObjectView* lpGeo = GeometryOf(lpHeader);
-    int liMatch = 0;
-    const u32* lpGroups = reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpGeo->muGroupArray));
-    for (u32 luGroup = 0; luGroup < lpGeo->muGroupCount; ++luGroup)
+    int AptDataHeaderType::GetImportCount(const void* pResource)
     {
-        const GeometryGroup* lpGroup = reinterpret_cast<const GeometryGroup*>(static_cast<uintptr_t>(lpGroups[luGroup]));
-        const u32* lpElements = reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpGroup->muElementArray));
-        for (u32 luElem = 0; luElem < lpGroup->muElementCount; ++luElem)
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        u32* lpRoot = *reinterpret_cast<u32**>(lRes + 12);
+
+        int liCount = 0;
+        u32 luMovies = lpRoot[0];
+        if (luMovies)
         {
-            const GeometryElement* lpElem = reinterpret_cast<const GeometryElement*>(static_cast<uintptr_t>(lpElements[luElem]));
-            if (lpElem->muImport)
+            u32* lpMovie = reinterpret_cast<u32*>(lpRoot[2]);
+            do
             {
-                if (liMatch == liIndex)
+                u32* lpChar = reinterpret_cast<u32*>(*lpMovie);
+                u32 luImports = lpChar[1];
+                if (luImports)
                 {
-                    *pOutValue  = lpElem->muImportValue;
-                    *pOutOffset = static_cast<u32>(reinterpret_cast<uintptr_t>(lpElem)
-                                  - reinterpret_cast<uintptr_t>(lpHeader)) + 12;
-                    return;
+                    u32* lpImport = reinterpret_cast<u32*>(lpChar[2]);
+                    do
+                    {
+                        if (reinterpret_cast<u32*>(*lpImport)[1])
+                            ++liCount;
+                        --luImports;
+                        lpImport += 4;
+                    } while (luImports);
                 }
-                ++liMatch;
-            }
+                --luMovies;
+                lpMovie += 4;
+            } while (luMovies);
         }
+        return liCount;
     }
-}
+
+    void AptDataHeaderType::GetImportPointer(const void* pResource, int liIndex, u32* pOutOffset, u32* pOutValue)
+    {
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        *pOutValue = 0;
+        *pOutOffset = 0;
+
+        u32* lpRoot = *reinterpret_cast<u32**>(lRes + 12);
+        u32 luMovies = lpRoot[0];
+        if (!luMovies)
+            return;
+
+        int liSeen = 0;
+        u32* lpMovie = reinterpret_cast<u32*>(lpRoot[2]);
+        u32 luMovie = 0;
+        do
+        {
+            u32 luChar = *lpMovie;
+            u32 luImports = reinterpret_cast<u32*>(*lpMovie)[1];
+            if (luImports)
+            {
+                u32 luImport = 0;
+                do
+                {
+                    u32* lpImportTable = reinterpret_cast<u32*>(luChar + 8);
+                    if (reinterpret_cast<u32*>(*reinterpret_cast<u32*>(lpImportTable))[1])
+                    {
+                        if (liSeen == liIndex)
+                        {
+                            u32 luEntry = *reinterpret_cast<u32*>(4 * luImport + *reinterpret_cast<u32*>(luChar + 8));
+                            *pOutValue = reinterpret_cast<u32*>(luEntry)[3];
+                            *pOutOffset = 4 * luImport + *reinterpret_cast<u32*>(luChar + 8) - static_cast<u32>(lRes) + 12;
+                            return;
+                        }
+                        ++liSeen;
+                    }
+                    ++luImport;
+                } while (luImport < luImports);
+            }
+            ++luMovie;
+            ++lpMovie;
+        } while (luMovie < luMovies);
+    }
 }

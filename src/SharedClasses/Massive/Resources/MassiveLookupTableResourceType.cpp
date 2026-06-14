@@ -7,62 +7,56 @@
 //   CgsResource::MassiveLookupTableResourceType::GetTypeID @ 0x826767A8
 //   CgsResource::MassiveLookupTableResourceType::Serialise @ 0x8267F198
 //
-// Thin resource-type wrapper forwarding relocation to BrnMassive::MassiveLookupTable.
-// Serialise relativises the source (FixDown), copies the whole block to the destination,
-// rebases the copy to its new address, then rebases the source back. Block size is the
-// header's {count<<6} entries plus the trailing data end. MassiveLookupTable is a separate
-// TU (forward-declared).
+// Resource-type handler for a serialised BrnMassive::MassiveLookupTable blob.
+// FixDown/FixUp forward to the table's own relocation. Serialise relocates the
+// source to file-relative pointers, copies the whole blob, then re-relocates both
+// the destination and the source. The blob spans base + field0*64 + field4.
 
 namespace BrnMassive
 {
-    struct MassiveLookupTable
+    // Own TU; trap stubs until it lands.
+    class MassiveLookupTable
     {
-        void* FixDown(int liDelta = 0);
-        void* FixUp(int liDelta);
-
-        u32 muCount;     // +0
-        u32 muDataEnd;   // +4  absolute end address of the block
+    public:
+        static void* FixDown(void* pTable, int liDelta);
+        static void* FixUp(void* pTable, int liDelta);
     };
+
+    void* MassiveLookupTable::FixDown(void*, int) { __debugbreak(); return nullptr; }
+    void* MassiveLookupTable::FixUp(void*, int)   { __debugbreak(); return nullptr; }
 }
 
 namespace CgsResource
 {
     class MassiveLookupTableResourceType
     {
-        typedef BrnMassive::MassiveLookupTable Table;
-
     public:
         void* FixDown(void* pResource, const int* pDelta)
         {
-            return static_cast<Table*>(pResource)->FixDown(*pDelta);
+            return BrnMassive::MassiveLookupTable::FixDown(pResource, *pDelta);
         }
-
         void* FixUp(void* pResource, const int* pDelta)
         {
-            return static_cast<Table*>(pResource)->FixUp(*pDelta);
+            return BrnMassive::MassiveLookupTable::FixUp(pResource, *pDelta);
         }
-
-        int GetTypeID() { return KI_TYPE_ID; }
-
-        void* Serialise(void* pResource, int* pDestination);
+        int   GetTypeID() { return KI_TYPE_ID; }
+        void* Serialise(void* pResource, void** ppDest);
 
     private:
         static const int KI_TYPE_ID = 65562;
     };
 
-    void* MassiveLookupTableResourceType::Serialise(void* pResource, int* pDestination)
+    void* MassiveLookupTableResourceType::Serialise(void* pResource, void** ppDest)
     {
-        Table*    lpSource = static_cast<Table*>(pResource);
-        uintptr_t lDest    = static_cast<uintptr_t>(*pDestination);
+        uintptr_t lSrc  = reinterpret_cast<uintptr_t>(pResource);
+        void*     lpDst = *ppDest;
+        usize     luSize = ((*reinterpret_cast<const u32*>(lSrc) << 6)
+                            + *reinterpret_cast<const u32*>(lSrc + 4)) - lSrc;
 
-        uintptr_t lEnd  = (static_cast<uintptr_t>(lpSource->muCount) << 6) + lpSource->muDataEnd;
-        size_t    luLen = lEnd - reinterpret_cast<uintptr_t>(lpSource);
-
-        lpSource->FixDown();
-        memcpy(reinterpret_cast<void*>(lDest), lpSource, luLen);
-        reinterpret_cast<Table*>(lDest)->FixUp(static_cast<int>(lDest));
-        lpSource->FixUp(static_cast<int>(reinterpret_cast<uintptr_t>(lpSource)));
-
-        return reinterpret_cast<void*>(lDest);
+        BrnMassive::MassiveLookupTable::FixDown(pResource, 0);
+        std::memcpy(lpDst, pResource, luSize);
+        BrnMassive::MassiveLookupTable::FixUp(lpDst, reinterpret_cast<int>(lpDst));
+        BrnMassive::MassiveLookupTable::FixUp(pResource, static_cast<int>(lSrc));
+        return *ppDest;
     }
 }

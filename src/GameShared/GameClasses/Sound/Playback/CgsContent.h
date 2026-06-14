@@ -1,0 +1,146 @@
+#ifndef CGS_SOUND_PLAYBACK_CONTENT_H
+#define CGS_SOUND_PLAYBACK_CONTENT_H
+
+#include "types.hpp"
+
+namespace CgsDev
+{
+    class Assert
+    {
+    public:
+        static void BeginAssert();
+        static void FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
+        static void EndAssert();
+    };
+}
+
+namespace CgsSound
+{
+namespace Playback
+{
+    enum EContentState
+    {
+        E_CONTENT_STATE_INVALID = 0,
+        E_CONTENT_STATE_UNLOADED = 1,
+        E_CONTENT_STATE_LOADING = 2,
+        E_CONTENT_STATE_LOADED = 3,
+        E_CONTENT_STATE_UNLOADING = 4,
+        E_CONTENT_STATE_COUNT = 5,
+        E_CONTENT_STATE_CHANGED = 128
+    };
+
+    enum EContentRemoveState
+    {
+        E_CONTENT_REMOVE_INVALID = 0,
+        E_CONTENT_REMOVE_ALIVE = 1,
+        E_CONTENT_REMOVE_REMOVING = 2,
+        E_CONTENT_REMOVE_REMOVED = 3
+    };
+
+    struct Content;
+
+    struct ContentDisposeRequest
+    {
+        Content* mpContent;
+        u32 mauReserved[4];
+    };
+
+    class ContentDisposer
+    {
+    public:
+        virtual int DisposeContent(ContentDisposeRequest* lpRequest);
+    };
+
+    class Factory
+    {
+    public:
+        ContentDisposer* GetContentDisposer();
+    };
+
+    struct ContentSpec
+    {
+    };
+
+    class Object
+    {
+    public:
+        Object() : mu32RefCount(0) {}
+        virtual ~Object() {}
+        virtual void DoDispose() {}
+
+    protected:
+        u32 mu32RefCount;
+    };
+
+    struct Content : public Object
+    {
+        Content(Factory& lFactory, const ContentSpec& lContentSpec, u32 lu32DataSize);
+        virtual ~Content();
+
+        virtual int DoDispose();
+        virtual bool DoOnPostLoad();
+
+        Factory& mFactory;
+        const ContentSpec& mContentSpec;
+        u32 mIdent;
+        void* mpLoadService;
+        u32 mu32DataSize;
+        u16 mu16LoadCount;
+        u8 mu8ContentState;
+        u8 mu8RemoveState;
+    };
+
+    inline Content::Content(Factory& lFactory, const ContentSpec& lContentSpec, u32 lu32DataSize)
+        : Object(),
+          mFactory(lFactory),
+          mContentSpec(lContentSpec),
+          mIdent(0),
+          mpLoadService(0),
+          mu32DataSize(lu32DataSize),
+          mu16LoadCount(1),
+          mu8ContentState(E_CONTENT_STATE_UNLOADED),
+          mu8RemoveState(E_CONTENT_REMOVE_ALIVE)
+    {
+    }
+
+    inline Content::~Content()
+    {
+        if (mu16LoadCount != 1)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "Destroying content while it's still loaded. This is a Bad thing.",
+                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsContent.h",
+                360);
+            CgsDev::Assert::EndAssert();
+        }
+
+        if (mu32RefCount != 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "0 == mu32RefCount",
+                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.h",
+                104);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    inline int Content::DoDispose()
+    {
+        Factory& lFactory = mFactory;
+        this->~Content();
+
+        ContentDisposeRequest lRequest = {};
+        lRequest.mpContent = this;
+        return lFactory.GetContentDisposer()->DisposeContent(&lRequest);
+    }
+
+    inline bool Content::DoOnPostLoad()
+    {
+        return true;
+    }
+}
+}
+
+#endif

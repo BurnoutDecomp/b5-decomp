@@ -9,124 +9,103 @@
 //   BrnParticle::ParticleDescriptionResourceType::GetTypeID                  @ 0x82675858
 //   BrnParticle::ParticleDescriptionResourceType::Serialise                  @ 0x8267C220
 //
-// The collection resource is a {entry-array pointer, count} header; FixUp rebases the entry
-// pointer self-relative, GetImportPointer reports an entry, and Serialise packs the entry
-// array after an 8-byte header. The single-description resource wraps a cLionFX binary blob:
-// DeSerialise reloads it and runs the sound-content post-load; Serialise writes it back out
-// through cLionFX::BinSave. Foreign helpers (cLionFX, sound Content) are in other TUs.
+// Resource-type handlers for particle descriptions. The collection is a serialised
+// table of per-description pointers (count at +4, table at +0); single descriptions
+// wrap a LionFX binary payload. Serialised tables are accessed by offset.
 
 namespace cLionFX
 {
-    u32 BinLoad(u32 luData);
-    int BinSave(u32 luData, int liMode, void* pDescriptor);
+    void* BinLoad(void* pData);
+    int   BinSave(void* pData, int liFlag, void* pStream);
+    void* BinLoad(void*) { __debugbreak(); return nullptr; }
+    int   BinSave(void*, int, void*) { __debugbreak(); return 0; }
 }
 
-namespace CgsSound
+namespace CgsSound { namespace Playback { namespace Content
 {
-namespace Playback
-{
-    struct Content
-    {
-        static int DoOnPostLoad(void* pContent);
-    };
-}
-}
-
-// Particle-description save callback table (off_820A7F30).
-extern u8 off_820A7F30;
+    int DoOnPostLoad(void* pContent);
+    int DoOnPostLoad(void*) { __debugbreak(); return 0; }
+}}}
 
 namespace BrnParticle
 {
-namespace
-{
-    struct ParticleDescriptionCollection
+    class ParticleDescriptionCollectionResourceType
     {
-        u32 muEntries;   // +0  relocatable pointer to the entry array
-        u32 muCount;     // +4
+    public:
+        void* FixUp(void* pResource);
+        void  GetImportPointer(const void* pResource, int liIndex, u32* pOutOffset, u32* pOutValue);
+        int   GetTypeID() { return 65544; }
+        void* Serialise(void* pResource, void** ppDest);
     };
 
-    struct ParticleDescription
+    void* ParticleDescriptionCollectionResourceType::FixUp(void* pResource)
     {
-        u32 muField0;    // +0
-        u32 muLionFX;    // +4  cLionFX binary blob pointer
-    };
-}
-
-class ParticleDescriptionCollectionResourceType
-{
-public:
-    void* FixUp(void* pResource)
-    {
-        ParticleDescriptionCollection* lpCollection = static_cast<ParticleDescriptionCollection*>(pResource);
-        lpCollection->muEntries += static_cast<u32>(reinterpret_cast<uintptr_t>(pResource));
+        // The leading table pointer is stored file-relative; rebase it to the
+        // loaded address.
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        *reinterpret_cast<u32*>(lRes) += static_cast<u32>(lRes);
         return pResource;
     }
 
-    void* GetImportPointer(void* pResource, int liIndex, u32* pOutOffset, u32* pOutValue)
+    void ParticleDescriptionCollectionResourceType::GetImportPointer(const void* pResource, int liIndex,
+                                                                     u32* pOutOffset, u32* pOutValue)
     {
-        const ParticleDescriptionCollection* lpCollection = static_cast<const ParticleDescriptionCollection*>(pResource);
-        const u32* lpEntries = reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpCollection->muEntries));
-        *pOutValue  = lpEntries[liIndex];
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        u32 luTable = *reinterpret_cast<const u32*>(lRes);
+        *pOutValue = *reinterpret_cast<const u32*>(luTable + 4 * liIndex);
         *pOutOffset = 4 * (liIndex + 2);
-        return pResource;
     }
 
-    int   GetTypeID() { return KI_TYPE_ID; }
-    void* Serialise(void* pResource, void* pSource, void** ppDestination);
+    void* ParticleDescriptionCollectionResourceType::Serialise(void* pResource, void** ppDest)
+    {
+        u32* lpDst = reinterpret_cast<u32*>(*ppDest);
+        u32* lpSrc = reinterpret_cast<u32*>(pResource);
 
-private:
-    static const int KI_TYPE_ID = 65544;
-};
+        u32 luCount = lpSrc[1];
+        lpDst[1] = luCount;
+        lpDst[0] = reinterpret_cast<u32>(lpDst + 2);
+        if (luCount)
+        {
+            u32* lpEntries = reinterpret_cast<u32*>(lpDst[0]);
+            u32* lpSrcEntries = reinterpret_cast<u32*>(lpSrc[0]);
+            for (u32 lu = 0; lu < luCount; ++lu)
+                lpEntries[lu] = lpSrcEntries[lu];
+        }
+        return *ppDest;
+    }
 
-void* ParticleDescriptionCollectionResourceType::Serialise(void* /*pResource*/, void* pSource, void** ppDestination)
-{
-    const ParticleDescriptionCollection* lpSrc = static_cast<const ParticleDescriptionCollection*>(pSource);
-    ParticleDescriptionCollection* lpDest = static_cast<ParticleDescriptionCollection*>(*ppDestination);
+    class ParticleDescriptionResourceType
+    {
+    public:
+        int   DeSerialise(void* pContent, void* pResource);
+        int   GetTypeID() { return 65565; }
+        void* Serialise(void* pResource, void** ppDest);
+    };
 
-    const u32 luCount = lpSrc->muCount;
-    u32* lpDestEntries = reinterpret_cast<u32*>(reinterpret_cast<u8*>(lpDest) + 8);
-    lpDest->muCount   = luCount;
-    lpDest->muEntries = static_cast<u32>(reinterpret_cast<uintptr_t>(lpDestEntries));
+    int ParticleDescriptionResourceType::DeSerialise(void* pContent, void* pResource)
+    {
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        *reinterpret_cast<u32*>(lRes + 4) =
+            reinterpret_cast<u32>(cLionFX::BinLoad(reinterpret_cast<void*>(*reinterpret_cast<u32*>(lRes + 4))));
+        return CgsSound::Playback::Content::DoOnPostLoad(pContent);
+    }
 
-    const u32* lpSrcEntries = reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpSrc->muEntries));
-    for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
-        lpDestEntries[luIndex] = lpSrcEntries[luIndex];
+    void* ParticleDescriptionResourceType::Serialise(void* pResource, void** ppDest)
+    {
+        u32* lpDst = reinterpret_cast<u32*>(*ppDest);
+        u32* lpSrc = reinterpret_cast<u32*>(pResource);
 
-    return *ppDestination;
+        u32 luPayload = reinterpret_cast<u32>(lpDst) + 16;
+        lpDst[0] = lpSrc[0];
+        // Two-entry LionFX save stream descriptor: vtable + payload pointer.
+        extern void* off_820A7F30;
+        u32 laStream[4] = {};
+        laStream[0] = reinterpret_cast<u32>(&off_820A7F30);
+        laStream[1] = luPayload;
+        lpDst[1] = luPayload;
+        cLionFX::BinSave(reinterpret_cast<void*>(lpSrc[1]), 1, laStream);
+        return *ppDest;
+    }
 }
 
-class ParticleDescriptionResourceType
-{
-public:
-    int   DeSerialise(void* pResource);
-    int   GetTypeID() { return KI_TYPE_ID; }
-    void* Serialise(void* pResource, void* pSource, void** ppDestination);
-
-private:
-    static const int KI_TYPE_ID = 65565;
-};
-
-int ParticleDescriptionResourceType::DeSerialise(void* pResource)
-{
-    ParticleDescription* lpDesc = static_cast<ParticleDescription*>(pResource);
-    lpDesc->muLionFX = cLionFX::BinLoad(lpDesc->muLionFX);
-    return CgsSound::Playback::Content::DoOnPostLoad(this);
-}
-
-void* ParticleDescriptionResourceType::Serialise(void* /*pResource*/, void* pSource, void** ppDestination)
-{
-    const ParticleDescription* lpSrc = static_cast<const ParticleDescription*>(pSource);
-    u32* lpDest = static_cast<u32*>(*ppDestination);
-    u8*  lpBody = reinterpret_cast<u8*>(lpDest) + 16;
-
-    lpDest[0] = lpSrc->muField0;
-    lpDest[1] = static_cast<u32>(reinterpret_cast<uintptr_t>(lpBody));
-
-    void* laDescriptor[4];
-    laDescriptor[0] = &off_820A7F30;
-    laDescriptor[1] = lpBody;
-    cLionFX::BinSave(lpSrc->muLionFX, 1, laDescriptor);
-
-    return *ppDestination;
-}
-}
+void* off_820A7F30 = nullptr;
