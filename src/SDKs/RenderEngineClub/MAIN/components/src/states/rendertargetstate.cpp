@@ -14,38 +14,49 @@
 
 namespace renderengine
 {
+    struct ResourceDescriptorEntry
+    {
+        u32 muSize;
+        u32 muAlignment;
+    };
+
+    struct RenderTargetStateData
+    {
+        u32 muFormat;
+        u32 maTarget[4];
+        u32 muInitialized;
+    };
+
     class RenderTargetState
     {
     public:
-        void* GetResourceDescriptor(void* pOut);
-        void* Initialize(void** ppState, const u32* pParams);
+        static ResourceDescriptorEntry* GetResourceDescriptor(ResourceDescriptorEntry* lpDescriptor);
+        static RenderTargetStateData* Initialize(RenderTargetStateData** lppState, const u32* lpaParams);
     };
 
-    void* RenderTargetState::GetResourceDescriptor(void* pOut)
+    ResourceDescriptorEntry* RenderTargetState::GetResourceDescriptor(ResourceDescriptorEntry* lpDescriptor)
     {
-        u32* lpOut = reinterpret_cast<u32*>(pOut);
-        for (int liEntry = 0; liEntry < 5; ++liEntry)
+        for (ResourceDescriptorEntry* lpEntry = lpDescriptor; lpEntry != lpDescriptor + 5; ++lpEntry)
         {
-            lpOut[0] = 0;
-            lpOut[1] = 1;
-            lpOut += 2;
+            lpEntry->muSize = 0;
+            lpEntry->muAlignment = 1;
         }
-        u32* lpBase = reinterpret_cast<u32*>(pOut);
-        lpBase[0] = 0x18;   // 64-bit store {high=0x18, low=4}
-        lpBase[1] = 4;
-        return pOut;
+
+        lpDescriptor[0].muSize = 0x18;
+        lpDescriptor[0].muAlignment = 4;
+        return lpDescriptor;
     }
 
-    void* RenderTargetState::Initialize(void** ppState, const u32* pParams)
+    RenderTargetStateData* RenderTargetState::Initialize(RenderTargetStateData** lppState, const u32* lpaParams)
     {
-        u32* lpState = reinterpret_cast<u32*>(*ppState);
+        RenderTargetStateData* lpState = *lppState;
 
         memset(lpState, 0, 24);
         for (int liWord = 0; liWord < 4; ++liWord)
-            lpState[1 + liWord] = pParams[liWord];
+            lpState->maTarget[liWord] = lpaParams[liWord];
 
-        lpState[0] = pParams[4];
-        lpState[5] = 1;
+        lpState->muFormat = lpaParams[4];
+        lpState->muInitialized = 1;
         return lpState;
     }
 }
