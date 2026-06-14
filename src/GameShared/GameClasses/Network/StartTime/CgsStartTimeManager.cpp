@@ -1,143 +1,246 @@
 #include "types.hpp"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsNetwork::StartTimeManager::StartTimeManager     @ 0x827E1428  (constructor)
-//   CgsNetwork::StartTimeManager::AreAllPlayersReadyTo @ 0x82891ED0
-//
-// The manager holds an array of 7 per-player "ready" sub-records (256-byte stride from
-// offset 0) plus a trailing block of 8 {int, float} time pairs. The constructor installs
-// the two sub-record vtables (off_820CF48C / off_820CF4B4) and zeroes the counters/timers.
-//
-// AreAllPlayersReadyTo returns 2 if the candidate start time (pTime) is already past the
-// target, otherwise walks every connected player: if any connected player has not yet
-// acknowledged (its slot in the sub-record array is missing or not flagged ready) it
-// returns 0; if all are ready it returns 1. Ported faithfully from the X360 control flow
-// (PPC save/restore-GPR thunks dropped).
-
 namespace CgsNetwork
 {
-    // Other TUs; declared for the compile-only gate.
-    struct PlayerManager
+namespace
+{
+const u32 KU_START_TIME_MESSAGE_VTABLE = 0x820CF48C;
+const u32 KU_READY_MESSAGE_VTABLE = 0x820CF4B4;
+const s32 KI_MAX_START_TIME_PLAYERS = 7;
+const s32 KI_CONNECTED_STATUS = 3;
+
+struct Time
+{
+    s32 miSeconds;
+    f32 mfFraction;
+
+    bool operator>=(const Time& lOther) const
     {
-        int GetNextPlayerID(int* pPlayerId, int liStep);
-    };
-    struct PlayersConnectionManager
+        return miSeconds > lOther.miSeconds
+            || (miSeconds == lOther.miSeconds && mfFraction >= lOther.mfFraction);
+    }
+};
+
+struct TimerStatus
+{
+    u8   mPad0[16];
+    Time mTime;
+};
+
+struct NetworkPlayer
+{
+    u8   mPad0[0xBA8];
+    bool mbNetworkPlayerPaused;
+    bool mbHasConnectionFailed;
+};
+
+class PlayersConnectionManager
+{
+public:
+    s32 GetConnectionStatus(s32 liPlayerID);
+
+private:
+    u8 mPad0[3864];
+};
+
+class PlayerManager : public PlayersConnectionManager
+{
+public:
+    bool GetNextPlayerID(s32* pPlayerID, s32 lePlayersToConsider) const;
+
+    struct PlayerData
     {
-        int GetConnectionStatus(int liPlayerId);
-    };
+        u32 muPlayer;
+        s32 miPlayerID;
+        u32 muPad0;
 
-    // Sub-record vtables (off_820CF48C / off_820CF4B4), defined with their classes.
-    extern const u8 gStartTimeReadyVTable;     // off_820CF48C
-    extern const u8 gStartTimeTimerVTable;     // off_820CF4B4
-
-    class StartTimeManager
-    {
-    public:
-        void* Construct();
-        int   AreAllPlayersReadyTo(const void* pTime, const void* pUnused, const void* pTarget);
-    };
-
-    void* StartTimeManager::Construct()
-    {
-        uintptr_t lBase = reinterpret_cast<uintptr_t>(this);
-        const u32 luReadyVT = static_cast<u32>(reinterpret_cast<uintptr_t>(&gStartTimeReadyVTable));
-        const u32 luTimerVT = static_cast<u32>(reinterpret_cast<uintptr_t>(&gStartTimeTimerVTable));
-
-        auto Word  = [lBase](int liOff) -> u32& { return *reinterpret_cast<u32*>(lBase + liOff); };
-        auto Float = [lBase](int liOff) -> f32& { return *reinterpret_cast<f32*>(lBase + liOff); };
-
-        // 7 per-player ready sub-records, 256-byte stride.
-        for (int liRec = 0; liRec < 7; ++liRec)
+        NetworkPlayer* GetPlayer() const
         {
-            int liB = liRec * 256;
-            Word(liB + 0)   = luReadyVT;
-            Word(liB + 44)  = 0;
-            Float(liB + 48) = 0.0f;
-            Word(liB + 84)  = luReadyVT;
-            Word(liB + 128) = 0;
-            Float(liB + 132) = 0.0f;
-            Word(liB + 168) = luTimerVT;
-            Word(liB + 208) = luTimerVT;
+            return reinterpret_cast<NetworkPlayer*>(static_cast<usize>(muPlayer));
+        }
+    };
+
+private:
+    u8         mPadAfterConnectionManager[5212];
+    PlayerData maActivePlayers[8];
+    u8         mPadAfterActivePlayers[12];
+    s32        miNumActivePlayers;
+
+public:
+    const PlayerData* FindActivePlayer(s32 liPlayerID) const
+    {
+        for (s32 liIndex = 0; liIndex < miNumActivePlayers; ++liIndex)
+        {
+            if (maActivePlayers[liIndex].miPlayerID == liPlayerID)
+                return &maActivePlayers[liIndex];
         }
 
-        // Trailing time pairs: one at 1804, then seven at 1836 (8-byte stride).
-        Word(1804) = 0;
-        Float(1808) = 0.0f;
-        for (int liPair = 0; liPair < 7; ++liPair)
-        {
-            int liO = 1836 + liPair * 8;
-            Word(liO) = 0;
-            Float(liO + 4) = 0.0f;
-        }
-        return this;
+        return 0;
+    }
+};
+
+static_assert(sizeof(PlayersConnectionManager) == 3864, "PlayersConnectionManager layout drift");
+static_assert(sizeof(PlayerManager::PlayerData) == 12, "PlayerData layout drift");
+}
+
+class StartTimeManager
+{
+public:
+    enum EPlayerReadiness
+    {
+        E_NOT_READY = 0,
+        E_READY = 1,
+        E_TIMEOUT = 2
+    };
+
+    StartTimeManager();
+    EPlayerReadiness AreAllPlayersReadyTo(const TimerStatus* lpTimerStatus, const void* lpUnused, const Time* lpTimeout);
+
+    struct StartTimeMessage
+    {
+        u32 muVTable;
+        u8  mPad4[40];
+        Time mTime;
+        u8  mPad52[32];
+    };
+
+    struct ReadyMessage
+    {
+        u32 muVTable;
+        u8  mPad4[36];
+    };
+
+    struct MessageData
+    {
+        StartTimeMessage mStartTimeMessageSend;
+        StartTimeMessage mStartTimeMessageRecv;
+        ReadyMessage     mReadyMessageSend;
+        ReadyMessage     mReadyMessageRecv;
+        s32              miPlayerID;
+        bool             mbPlayerReady;
+        bool             mbSentStartTime;
+        u8               mPadFE[2];
+    };
+
+    struct StartTime
+    {
+        u8   mPad0[4];
+        Time mTime;
+    };
+
+private:
+    MessageData maMsgData[KI_MAX_START_TIME_PLAYERS];
+    u32         muHostMigrationManager;
+    u32         muTimeManager;
+    StartTime   mStartTime;
+    u32         muPlayerManager;
+    u32         muStartMessageArrivedLateCallback;
+    u32         muClientReadyCallback;
+    u32         muClientReadyData;
+    bool        mbStartTimeIsValid;
+    u8          mPad725[3];
+    s32         meStatus;
+    Time        mStatusEnterTime;
+    Time        mMinTimeToSyncTime;
+    Time        mMaxTimeToSyncTime;
+    Time        mTimeToWaitForStartTime;
+    Time        mTimeToWaitForSilentClientReady;
+    Time        mTimeToWaitForCommunicatingClientReady;
+    Time        mGapToLeaveBeforeStartTime;
+    bool        mbKeepSyncingAfterStart;
+
+    PlayerManager* GetPlayerManager() const
+    {
+        return reinterpret_cast<PlayerManager*>(static_cast<usize>(muPlayerManager));
     }
 
-    int StartTimeManager::AreAllPlayersReadyTo(const void* pTime, const void* /*pUnused*/, const void* pTarget)
+    bool IsPlayerReady(s32 liPlayerID) const
     {
-        uintptr_t lThis   = reinterpret_cast<uintptr_t>(this);
-        uintptr_t lTime   = reinterpret_cast<uintptr_t>(pTime);
-        uintptr_t lTarget = reinterpret_cast<uintptr_t>(pTarget);
-
-        int liTime = *reinterpret_cast<const int*>(lTime + 16);
-        if (liTime > *reinterpret_cast<const int*>(lTarget)
-            || (liTime >= *reinterpret_cast<const int*>(lTarget)
-                && *reinterpret_cast<const int*>(lTime + 20) >= *reinterpret_cast<const int*>(lTarget + 4)))
+        for (s32 liIndex = 0; liIndex < KI_MAX_START_TIME_PLAYERS; ++liIndex)
         {
-            return 2;
-        }
-
-        int liPlayerId = -1;
-        PlayerManager* lpPlayers = *reinterpret_cast<PlayerManager**>(lThis + 1812);
-
-        while (lpPlayers->GetNextPlayerID(&liPlayerId, 1))
-        {
-            uintptr_t lMgr = *reinterpret_cast<uintptr_t*>(lThis + 1812);
-            char lbReady = 0;
-            int liSlot = 0;
-            int liCount = *reinterpret_cast<int*>(lMgr + 9184);
-            if (liCount > 0)
+            const MessageData& lMessageData = maMsgData[liIndex];
+            if (lMessageData.miPlayerID != -1
+                && lMessageData.miPlayerID == liPlayerID
+                && lMessageData.mbPlayerReady)
             {
-                int liTargetId = liPlayerId;
-                uintptr_t lEntry = lMgr + 9080;
-                while (*reinterpret_cast<int*>(lEntry) != liPlayerId)
-                {
-                    ++liSlot;
-                    lEntry += 12;
-                    if (liSlot >= liCount)
-                        goto NEXT_PLAYER;
-                }
-
-                uintptr_t lPlayer = *reinterpret_cast<uintptr_t*>(12 * liSlot + lMgr + 9076);
-                if (lPlayer)
-                {
-                    PlayersConnectionManager* lpConn =
-                        reinterpret_cast<PlayersConnectionManager*>(lMgr);
-                    if (lpConn->GetConnectionStatus(liPlayerId) != 3)
-                        return 0;
-
-                    if (!*reinterpret_cast<char*>(lPlayer + 2985)
-                        && !*reinterpret_cast<char*>(lPlayer + 2984))
-                    {
-                        int liSub = 0;
-                        uintptr_t lRec = lThis + 248;
-                        while (*reinterpret_cast<int*>(lRec) == -1
-                               || *reinterpret_cast<int*>(lRec) != liTargetId
-                               || !*reinterpret_cast<int*>(lRec + 4))
-                        {
-                            ++liSub;
-                            lRec += 256;
-                            if (liSub >= 7)
-                                goto CHECK_READY;
-                        }
-                        lbReady = 1;
-                    CHECK_READY:
-                        if (!lbReady)
-                            return 0;
-                    }
-                }
+                return true;
             }
-        NEXT_PLAYER:;
         }
-        return 1;
+
+        return false;
     }
+};
+
+static_assert(sizeof(StartTimeManager::StartTimeMessage) == 84, "StartTimeMessage layout drift");
+static_assert(sizeof(StartTimeManager::ReadyMessage) == 40, "ReadyMessage layout drift");
+static_assert(sizeof(StartTimeManager::MessageData) == 0x100, "MessageData layout drift");
+static_assert(sizeof(StartTimeManager::StartTime) == 12, "StartTime layout drift");
+
+StartTimeManager::StartTimeManager()
+{
+    for (s32 liIndex = 0; liIndex < KI_MAX_START_TIME_PLAYERS; ++liIndex)
+    {
+        MessageData& lMessageData = maMsgData[liIndex];
+
+        lMessageData.mStartTimeMessageSend.muVTable = KU_START_TIME_MESSAGE_VTABLE;
+        lMessageData.mStartTimeMessageSend.mTime.miSeconds = 0;
+        lMessageData.mStartTimeMessageSend.mTime.mfFraction = 0.0f;
+
+        lMessageData.mStartTimeMessageRecv.muVTable = KU_START_TIME_MESSAGE_VTABLE;
+        lMessageData.mStartTimeMessageRecv.mTime.miSeconds = 0;
+        lMessageData.mStartTimeMessageRecv.mTime.mfFraction = 0.0f;
+
+        lMessageData.mReadyMessageSend.muVTable = KU_READY_MESSAGE_VTABLE;
+        lMessageData.mReadyMessageRecv.muVTable = KU_READY_MESSAGE_VTABLE;
+    }
+
+    mStartTime.mTime.miSeconds = 0;
+    mStartTime.mTime.mfFraction = 0.0f;
+
+    mStatusEnterTime.miSeconds = 0;
+    mStatusEnterTime.mfFraction = 0.0f;
+    mMinTimeToSyncTime.miSeconds = 0;
+    mMinTimeToSyncTime.mfFraction = 0.0f;
+    mMaxTimeToSyncTime.miSeconds = 0;
+    mMaxTimeToSyncTime.mfFraction = 0.0f;
+    mTimeToWaitForStartTime.miSeconds = 0;
+    mTimeToWaitForStartTime.mfFraction = 0.0f;
+    mTimeToWaitForSilentClientReady.miSeconds = 0;
+    mTimeToWaitForSilentClientReady.mfFraction = 0.0f;
+    mTimeToWaitForCommunicatingClientReady.miSeconds = 0;
+    mTimeToWaitForCommunicatingClientReady.mfFraction = 0.0f;
+    mGapToLeaveBeforeStartTime.miSeconds = 0;
+    mGapToLeaveBeforeStartTime.mfFraction = 0.0f;
+}
+
+StartTimeManager::EPlayerReadiness StartTimeManager::AreAllPlayersReadyTo(
+    const TimerStatus* lpTimerStatus,
+    const void*,
+    const Time* lpTimeout)
+{
+    if (lpTimerStatus->mTime >= *lpTimeout)
+        return E_TIMEOUT;
+
+    s32 liPlayerID = -1;
+    PlayerManager* lpPlayerManager = GetPlayerManager();
+
+    while (lpPlayerManager->GetNextPlayerID(&liPlayerID, 1))
+    {
+        const PlayerManager::PlayerData* lpPlayerData = lpPlayerManager->FindActivePlayer(liPlayerID);
+        if (!lpPlayerData)
+            continue;
+
+        NetworkPlayer* lpPlayer = lpPlayerData->GetPlayer();
+        if (!lpPlayer)
+            continue;
+
+        if (lpPlayerManager->GetConnectionStatus(liPlayerID) != KI_CONNECTED_STATUS)
+            return E_NOT_READY;
+
+        if (!lpPlayer->mbHasConnectionFailed && !lpPlayer->mbNetworkPlayerPaused && !IsPlayerReady(liPlayerID))
+            return E_NOT_READY;
+    }
+
+    return E_READY;
+}
 }

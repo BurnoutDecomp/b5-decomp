@@ -6,9 +6,9 @@
 //
 // GetResourceDescriptor builds the standard five-entry rw resource descriptor: the
 // loop fills five {size=0, align=1} pairs, then the first pair is overwritten by a
-// 64-bit store with {size=0x20, align=4}. Initialize unpacks a packed sampler-params
-// block (a2) into the 29-word runtime sampler state (*a1), converting the packed
-// boolean bytes (via the count-leading-zeros idiom: non-zero -> 1) into word flags.
+// 64-bit store with {size=0x20, align=4}. Initialize unpacks a sampler parameters
+// block into the 32-byte runtime state. Parameter names follow DecFIGS DWARF; the
+// state layout follows the X360 byte stores.
 
 namespace renderengine
 {
@@ -20,26 +20,48 @@ namespace renderengine
 
     struct SamplerStateData
     {
-        u32 maState[29];
+        u32 muColor;
+        u32 muRemap;
+        u8  mu8AddressU;
+        u8  mu8AddressV;
+        u8  mu8AddressW;
+        u8  mbState11Zero;
+        u8  mu8MinLevel;
+        u8  mu8DepthTextureFunction;
+        u8  mu8Gamma;
+        u8  mbState15;
+        u8  mbState16;
+        u8  mu8State17;
+        u8  mu8MaxLevel;
+        u8  mu8MagFilter;
+        u8  mu8Bias;
+        u8  mu8MaxAnisotropy;
+        u8  mbState22;
+        u8  mu8Convolution;
+        u8  mu8MipFilter;
+        u8  mu8MinFilter;
+        u8  mbState26;
+        u8  mu8Pad27;
+        u32 muInitialized;
     };
 
     struct SamplerStateParameters
     {
-        u32 muState8;
-        u32 muState9;
-        u32 muState10;
-        u32 muState20;
-        u32 muState18;
-        u32 muState12;
-        u32 muState21;
-        u32 muState19;
-        u32 muState25;
-        u32 muState24;
-        u32 muState23;
-        u32 muState0;
-        u32 muState4;
-        u32 muState13;
-        u32 muState14;
+        u32 muAddressU;
+        u32 muAddressV;
+        u32 muAddressW;
+        u32 muBias;
+        u32 muMaxLevel;
+        u32 muMinLevel;
+        u32 muMaxAnisotropy;
+        u32 muMagFilter;
+        u32 muMinFilter;
+        u32 muMipFilter;
+        u32 muConvolution;
+        u32 muColor;
+        u32 muRemap;
+        u32 muDepthTextureFunction;
+        u32 muGamma;
         u32 muState17;
         u8  mbState15;
         u8  mbState22;
@@ -51,49 +73,51 @@ namespace renderengine
     class SamplerState
     {
     public:
-        void* GetResourceDescriptor(void* pOut);
-        void* Initialize(SamplerStateData** ppState, const SamplerStateParameters* pParams);
+        static ResourceDescriptorEntry* GetResourceDescriptor(ResourceDescriptorEntry* lpDescriptor);
+        static SamplerStateData* Initialize(SamplerStateData** lppState, const SamplerStateParameters* lpParams);
     };
 
-    void* SamplerState::GetResourceDescriptor(void* pOut)
+    static_assert(sizeof(SamplerStateData) == 0x20, "SamplerStateData must match the X360 resource descriptor size");
+
+    ResourceDescriptorEntry* SamplerState::GetResourceDescriptor(ResourceDescriptorEntry* lpDescriptor)
     {
-        ResourceDescriptorEntry* lpOut = static_cast<ResourceDescriptorEntry*>(pOut);
-        for (ResourceDescriptorEntry* lpEntry = lpOut; lpEntry != lpOut + 5; ++lpEntry)
+        for (ResourceDescriptorEntry* lpEntry = lpDescriptor; lpEntry != lpDescriptor + 5; ++lpEntry)
         {
             lpEntry->muSize = 0;
             lpEntry->muAlignment = 1;
         }
-        lpOut[0].muSize = 0x20;
-        lpOut[0].muAlignment = 4;
-        return pOut;
+
+        lpDescriptor[0].muSize = 0x20;
+        lpDescriptor[0].muAlignment = 4;
+        return lpDescriptor;
     }
 
-    void* SamplerState::Initialize(SamplerStateData** ppState, const SamplerStateParameters* pParams)
+    SamplerStateData* SamplerState::Initialize(SamplerStateData** lppState, const SamplerStateParameters* lpParams)
     {
-        SamplerStateData* lpState = *ppState;
+        SamplerStateData* lpState = *lppState;
 
-        lpState->maState[8]  = pParams->muState8;
-        lpState->maState[9]  = pParams->muState9;
-        lpState->maState[10] = pParams->muState10;
-        lpState->maState[11] = pParams->mbState11Zero == 0 ? 1u : 0u;
-        lpState->maState[12] = pParams->muState12;
-        lpState->maState[13] = pParams->muState13;
-        lpState->maState[14] = pParams->muState14;
-        lpState->maState[15] = pParams->mbState15 != 0 ? 1u : 0u;
-        lpState->maState[16] = pParams->mbState16 != 0 ? 1u : 0u;
-        lpState->maState[17] = pParams->muState17;
-        lpState->maState[20] = pParams->muState20;
-        lpState->maState[18] = pParams->muState18;
-        lpState->maState[21] = pParams->muState21;
-        lpState->maState[19] = pParams->muState19;
-        lpState->maState[25] = pParams->muState25;
-        lpState->maState[24] = pParams->muState24;
-        lpState->maState[23] = pParams->muState23;
-        lpState->maState[0]  = pParams->muState0;
-        lpState->maState[4]  = pParams->muState4;
-        lpState->maState[22] = pParams->mbState22 != 0 ? 1u : 0u;
-        lpState->maState[26] = pParams->mbState26 != 0 ? 1u : 0u;
-        lpState->maState[28] = 1;
+        lpState->mu8AddressU = static_cast<u8>(lpParams->muAddressU);
+        lpState->mu8AddressV = static_cast<u8>(lpParams->muAddressV);
+        lpState->mu8AddressW = static_cast<u8>(lpParams->muAddressW);
+        lpState->mbState11Zero = static_cast<u8>(lpParams->mbState11Zero == 0);
+        lpState->mu8MinLevel = static_cast<u8>(lpParams->muMinLevel);
+        lpState->mu8DepthTextureFunction = static_cast<u8>(lpParams->muDepthTextureFunction);
+        lpState->mu8Gamma = static_cast<u8>(lpParams->muGamma);
+        lpState->mbState15 = static_cast<u8>(lpParams->mbState15 != 0);
+        lpState->mbState16 = static_cast<u8>(lpParams->mbState16 != 0);
+        lpState->mu8State17 = static_cast<u8>(lpParams->muState17);
+        lpState->mu8Bias = static_cast<u8>(lpParams->muBias);
+        lpState->mu8MaxLevel = static_cast<u8>(lpParams->muMaxLevel);
+        lpState->mu8MaxAnisotropy = static_cast<u8>(lpParams->muMaxAnisotropy);
+        lpState->mu8MagFilter = static_cast<u8>(lpParams->muMagFilter);
+        lpState->mu8MinFilter = static_cast<u8>(lpParams->muMinFilter);
+        lpState->mu8MipFilter = static_cast<u8>(lpParams->muMipFilter);
+        lpState->mu8Convolution = static_cast<u8>(lpParams->muConvolution);
+        lpState->muColor = lpParams->muColor;
+        lpState->muRemap = lpParams->muRemap;
+        lpState->mbState22 = static_cast<u8>(lpParams->mbState22 != 0);
+        lpState->muInitialized = 1;
+        lpState->mbState26 = static_cast<u8>(lpParams->mbState26 != 0);
         return lpState;
     }
 }
