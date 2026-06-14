@@ -1,88 +1,163 @@
 #include "types.hpp"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnDirector::MomentParameterBank::Construct      @ 0x82209E38
-//   BrnDirector::MomentParameterBank::GetParameters  @ 0x821F7428
-//
-// The bank holds a min/max moment duration followed by a table of per-moment-type parameter
-// records (a leading pair of 3-byte records, then seven 8-byte {type, flagA, flagB} records).
-// Construct installs the default table; GetParameters maps a parameter-type id to the address
-// of its record (id 0 -> none, id 1 -> the whole bank, ids 2..10 -> the individual records).
-
 namespace CgsDev
 {
-namespace Assert
+class Assert
 {
-    void  BeginAssert();
-    void  FireAssert(const char* pacMessage, const char* pacFile, int liLine);
-    void* EndAssert();
-}
+public:
+    static void BeginAssert();
+    static void FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
+    static void EndAssert();
+};
 }
 
 namespace BrnDirector
 {
-struct MomentRecord
+struct Moment
 {
-    u32 muType;     // +0
-    u8  mbFlagA;    // +4
-    u8  mbFlagB;    // +5
-    u8  mPad[2];
+    struct Parameters
+    {
+    };
+};
+
+struct MomentHardStop
+{
+    struct Parameters : Moment::Parameters
+    {
+        f32 mfDistance;
+        f32 mfTime;
+    };
+};
+
+struct MomentBystanderSeesAction
+{
+    struct Parameters : Moment::Parameters
+    {
+        bool mbClose;
+        bool mbTakedown;
+        bool mbCrash;
+    };
+};
+
+struct MomentTumbling
+{
+    struct Parameters : Moment::Parameters
+    {
+        s32  meCameraType;
+        bool mbTakedown;
+        bool mbCrash;
+        u8   mPad6[2];
+    };
 };
 
 class MomentParameterBank
 {
 public:
-    void* Construct();
-    void* GetParameters(int liType);
+    enum EMomentParamID
+    {
+        E_PARAM_NONE = 0,
+        E_PARAM_HARD_STOP_DEFAULT = 1,
+        E_PARAM_BYSTANDER_CLOSE_TAKEDOWN_ONLY = 2,
+        E_PARAM_BYSTANDER_FAR_CRASH_ONLY = 3,
+        E_PARAM_TUMBLING_TRUCKING_SIDE_CRASH_ONLY = 4,
+        E_PARAM_TUMBLING_TRUCKING_SIDE_TAKEDOWN_ONLY = 5,
+        E_PARAM_TUMBLING_TRUCKING_FRONT_CRASH_ONLY = 6,
+        E_PARAM_TUMBLING_FOLLOW_CRASH_ONLY = 7,
+        E_PARAM_TUMBLING_LEAD_CRASH_ONLY = 8,
+        E_PARAM_TUMBLING_LEAD_TAKEDOWN_ONLY = 9,
+        E_PARAM_TUMBLING_SIDE_CRASH_ONLY = 10
+    };
+
+    void Construct();
+    Moment::Parameters* GetParameters(EMomentParamID leMomentParams);
 
 private:
-    f32          mfMinDuration;     // +0
-    f32          mfMaxDuration;     // +4
-    u8           maLeadA[3];        // +8
-    u8           maLeadB[3];        // +11
-    u8           mPad[2];           // +14
-    MomentRecord maRecords[7];      // +16
+    MomentHardStop::Parameters             mParamsHardStopDefault;
+    MomentBystanderSeesAction::Parameters mParamsBystanderCloseTakedownOnly;
+    MomentBystanderSeesAction::Parameters mParamsBystanderFarCrashOnly;
+    u8                                     mPadE[2];
+    MomentTumbling::Parameters            mParamsTumblingTruckingSideCrashOnly;
+    MomentTumbling::Parameters            mParamsTumblingTruckingSideTakedownOnly;
+    MomentTumbling::Parameters            mParamsTumblingTruckingFrontCrashOnly;
+    MomentTumbling::Parameters            mParamsTumblingFollowCrashOnly;
+    MomentTumbling::Parameters            mParamsTumblingLeadCrashOnly;
+    MomentTumbling::Parameters            mParamsTumblingLeadTakedownOnly;
+    MomentTumbling::Parameters            mParamsTumblingSideCrashOnly;
 };
 
-void* MomentParameterBank::Construct()
+static_assert(sizeof(MomentHardStop::Parameters) == 8, "MomentHardStop::Parameters layout drift");
+static_assert(sizeof(MomentBystanderSeesAction::Parameters) == 3, "MomentBystanderSeesAction::Parameters layout drift");
+static_assert(sizeof(MomentTumbling::Parameters) == 8, "MomentTumbling::Parameters layout drift");
+static_assert(sizeof(MomentParameterBank) == 72, "MomentParameterBank layout drift");
+
+void MomentParameterBank::Construct()
 {
-    mfMinDuration = 3.0f;
-    mfMaxDuration = 5.0f;
+    mParamsHardStopDefault.mfDistance = 3.0f;
+    mParamsHardStopDefault.mfTime = 5.0f;
 
-    maLeadA[0] = 1; maLeadA[1] = 0; maLeadA[2] = 1;
-    maLeadB[0] = 1; maLeadB[1] = 1; maLeadB[2] = 0;
+    mParamsBystanderCloseTakedownOnly.mbClose = true;
+    mParamsBystanderCloseTakedownOnly.mbTakedown = false;
+    mParamsBystanderCloseTakedownOnly.mbCrash = true;
 
-    static const MomentRecord KA_DEFAULTS[7] =
-    {
-        { 0, 1, 0, {0, 0} },
-        { 0, 1, 1, {0, 0} },
-        { 1, 1, 0, {0, 0} },
-        { 2, 1, 0, {0, 0} },
-        { 3, 1, 0, {0, 0} },
-        { 3, 1, 1, {0, 0} },
-        { 4, 1, 0, {0, 0} },
-    };
-    for (int liIndex = 0; liIndex < 7; ++liIndex)
-        maRecords[liIndex] = KA_DEFAULTS[liIndex];
+    mParamsBystanderFarCrashOnly.mbClose = true;
+    mParamsBystanderFarCrashOnly.mbTakedown = true;
+    mParamsBystanderFarCrashOnly.mbCrash = false;
 
-    return this;
+    mParamsTumblingTruckingSideCrashOnly.meCameraType = 0;
+    mParamsTumblingTruckingSideCrashOnly.mbTakedown = true;
+    mParamsTumblingTruckingSideCrashOnly.mbCrash = false;
+
+    mParamsTumblingTruckingSideTakedownOnly.meCameraType = 0;
+    mParamsTumblingTruckingSideTakedownOnly.mbTakedown = true;
+    mParamsTumblingTruckingSideTakedownOnly.mbCrash = true;
+
+    mParamsTumblingTruckingFrontCrashOnly.meCameraType = 1;
+    mParamsTumblingTruckingFrontCrashOnly.mbTakedown = true;
+    mParamsTumblingTruckingFrontCrashOnly.mbCrash = false;
+
+    mParamsTumblingFollowCrashOnly.meCameraType = 2;
+    mParamsTumblingFollowCrashOnly.mbTakedown = true;
+    mParamsTumblingFollowCrashOnly.mbCrash = false;
+
+    mParamsTumblingLeadCrashOnly.meCameraType = 3;
+    mParamsTumblingLeadCrashOnly.mbTakedown = true;
+    mParamsTumblingLeadCrashOnly.mbCrash = false;
+
+    mParamsTumblingLeadTakedownOnly.meCameraType = 3;
+    mParamsTumblingLeadTakedownOnly.mbTakedown = false;
+    mParamsTumblingLeadTakedownOnly.mbCrash = true;
+
+    mParamsTumblingSideCrashOnly.meCameraType = 4;
+    mParamsTumblingSideCrashOnly.mbTakedown = true;
+    mParamsTumblingSideCrashOnly.mbCrash = false;
 }
 
-void* MomentParameterBank::GetParameters(int liType)
+Moment::Parameters* MomentParameterBank::GetParameters(EMomentParamID leMomentParams)
 {
-    switch (liType)
+    switch (leMomentParams)
     {
-        case 0:  return 0;
-        case 1:  return this;
-        case 2:  return maLeadA;
-        case 3:  return maLeadB;
-        case 4:  return &maRecords[0];
-        case 5:  return &maRecords[1];
-        case 6:  return &maRecords[2];
-        case 7:  return &maRecords[3];
-        case 8:  return &maRecords[4];
-        case 9:  return &maRecords[5];
-        case 10: return &maRecords[6];
+        case E_PARAM_NONE:
+            return 0;
+        case E_PARAM_HARD_STOP_DEFAULT:
+            return &mParamsHardStopDefault;
+        case E_PARAM_BYSTANDER_CLOSE_TAKEDOWN_ONLY:
+            return &mParamsBystanderCloseTakedownOnly;
+        case E_PARAM_BYSTANDER_FAR_CRASH_ONLY:
+            return &mParamsBystanderFarCrashOnly;
+        case E_PARAM_TUMBLING_TRUCKING_SIDE_CRASH_ONLY:
+            return &mParamsTumblingTruckingSideCrashOnly;
+        case E_PARAM_TUMBLING_TRUCKING_SIDE_TAKEDOWN_ONLY:
+            return &mParamsTumblingTruckingSideTakedownOnly;
+        case E_PARAM_TUMBLING_TRUCKING_FRONT_CRASH_ONLY:
+            return &mParamsTumblingTruckingFrontCrashOnly;
+        case E_PARAM_TUMBLING_FOLLOW_CRASH_ONLY:
+            return &mParamsTumblingFollowCrashOnly;
+        case E_PARAM_TUMBLING_LEAD_CRASH_ONLY:
+            return &mParamsTumblingLeadCrashOnly;
+        case E_PARAM_TUMBLING_LEAD_TAKEDOWN_ONLY:
+            return &mParamsTumblingLeadTakedownOnly;
+        case E_PARAM_TUMBLING_SIDE_CRASH_ONLY:
+            return &mParamsTumblingSideCrashOnly;
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(

@@ -1,46 +1,35 @@
 #include "types.hpp"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsSystem::HardwareSku::FindLanguage @ 0x828D7128
-//
-// Picks the game language for the current hardware: starts from the detected hardware
-// language and constrains it to the set valid for the console's SKU/region, falling back
-// to language 7 (the default) when the detected language is not offered in that region.
-// SKU and language values are kept as raw ints to match the sibling CgsHardwareLanguagePS3
-// reconstruction (no ESku/ELanguage enum is recovered in the X360 ledger).
+namespace CgsDev
+{
+class Assert
+{
+public:
+    static void BeginAssert();
+    static void FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
+    static void EndAssert();
+};
+}
 
 namespace CgsSystem
 {
 class HardwareLanguage
 {
 public:
-    static int GetHardwareLanguage();
+    static s32 GetHardwareLanguage();
 };
 
 class HardwareSku
 {
 public:
-    static int GetSku();        // other TU; declared for the compile gate
-    static int FindLanguage();
+    static s32 GetSku();
+    static s32 FindLanguage();
 };
-}
 
-namespace CgsDev
+s32 HardwareSku::FindLanguage()
 {
-namespace Assert
-{
-    void BeginAssert();
-    void FireAssert(const char* pacMessage, const char* pacFile, int liLine);
-    void EndAssert();
-}
-}
-
-namespace CgsSystem
-{
-int HardwareSku::FindLanguage()
-{
-    const int liSku      = GetSku();
-    const int liLanguage = HardwareLanguage::GetHardwareLanguage();
+    const s32 liSku = HardwareSku::GetSku();
+    s32 liLanguage = HardwareLanguage::GetHardwareLanguage();
 
     switch (liSku)
     {

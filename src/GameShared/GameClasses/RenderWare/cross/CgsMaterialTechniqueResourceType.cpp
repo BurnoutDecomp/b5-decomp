@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::MaterialTechniqueResourceType::FixDown          @ 0x828A8740
@@ -7,200 +8,135 @@
 //   CgsResource::MaterialTechniqueResourceType::GetTypeID        @ 0x828A7EC0
 //   CgsResource::MaterialTechniqueResourceType::PostFixUp        @ 0x828A7EC8
 //
-// FixUp/FixDown rebase the three serialised pointers in the technique header (+24/+28/+36).
-// PostFixUp performs runtime setup: it queries the material's blend state for the alpha-blend
-// / alpha-test flags, sets the instancing flag when either shader-constant table declares an
-// InstancingMatrixArray, and computes the technique's sort/lookup hashes. Foreign helpers
-// (renderengine::BlendState, ShaderConstantsExternal, CgsHash) live in other TUs.
+// FixDown/FixUp (un)relocate the three serialised pointers at +24/+28/+36 of the
+// material-technique blob. PostFixUp resolves a loaded material: it queries the
+// blend-state parameters, sets the technique's render flags (alpha-blend,
+// alpha-test, hardware instancing when an InstancingMatrixArray shader constant is
+// present), and caches three content hashes plus the shader's parameter count.
 
 namespace renderengine
 {
-    struct BlendState
+    class BlendState
     {
-        static void GetParameters(void* pBlendState, void* pQuery);
+    public:
+        // Fills the caller's parameter block (a 48-byte descriptor followed by the
+        // per-channel enable flags) for the given blend state.
+        static void* GetParameters(void* pBlendState, void* pParams);
     };
+    void* BlendState::GetParameters(void*, void*) { __debugbreak(); return nullptr; }
 }
 
 namespace ShaderConstantsExternal
 {
-    bool HasShaderConstant(const void* pTable, const char* pacName);
+    bool HasShaderConstant(const void* pShader, const char* pName);
+    bool HasShaderConstant(const void*, const char*) { __debugbreak(); return false; }
 }
 
 namespace CgsContainers
 {
-    struct CgsHash16 { static u32 CalculateHash(const void* pData, int liLen); };
-    struct CgsHash12 { static u32 CalculateHash(const void* pData, int liLen); };
-}
-
-namespace CgsDev
-{
-namespace Assert
-{
-    void  BeginAssert();
-    void  FireAssert(const char* pacMessage, const char* pacFile, int liLine);
-    void* EndAssert();
-}
+    namespace CgsHash16 { u32 CalculateHash(const void* pData, int liLen); u32 CalculateHash(const void*, int) { __debugbreak(); return 0; } }
+    namespace CgsHash12 { u32 CalculateHash(const void* pData, int liLen); u32 CalculateHash(const void*, int) { __debugbreak(); return 0; } }
 }
 
 namespace CgsResource
 {
-namespace
-{
-    struct Material
+    // The technique blob's three relocatable pointers (vertex/pixel shader and
+    // the material-state block) live at +24/+28/+36.
+    class MaterialTechniqueResourceType
     {
-        u32 muField0;            // [0]
-        u32 muField1;            // [1]
-        u8  mPad0[20];           // [2..6]
-        u8  maShaderConstantsA[16]; // [7..10] shader constant table A
-        u8  maShaderConstantsB[104]; // [11..36] shader constant table B (+ rest of material)
-        u32 muStateField;        // [37] pointer; runtime state value lives at *muStateField
+    public:
+        void* FixDown(void* pResource, const int* pDelta);
+        void* FixUp(void* pResource, const int* pDelta);
+        void* GetImportPointer();
+        int   GetTypeID() { return KI_TYPE_ID; }
+        u32   PostFixUp(void** pMaterial);
+
+    private:
+        static const int KI_TYPE_ID = 13;
     };
 
-    struct MaterialState
+    void* MaterialTechniqueResourceType::FixDown(void* pResource, const int* pDelta)
     {
-        void** mppBlendState;    // [0] -> mpBlendState
-    };
-
-    struct MaterialTechnique
-    {
-        Material*      mpMaterial;        // [0]
-        MaterialState* mpMaterialState;   // [1]
-        u32 muField2;                     // [2]
-        u32 muField3;                     // [3]
-        u32 muFlags;                      // [4]
-        u32 muLookupHash;                 // [5]
-        u32 muSortHash;                   // [6]
-        u32 muStateHash;                  // [7]
-        u32 muStateValue;                 // [8]
-    };
-
-    // Blend-state query descriptor (matches the on-stack buffer passed to GetParameters).
-    struct BlendStateQuery
-    {
-        u32 maIn[12];
-        u8  mbAlphaBlend;        // out (v13) -> flag 0x1
-        u8  maPad[5];            // out (v14..v18)
-        u8  mbAlphaTest;         // out (v19) -> flag 0x8
-    };
-
-    const u32 KU_FLAG_ALPHA_BLEND = 0x1;
-    const u32 KU_FLAG_ALPHA_TEST  = 0x8;
-    const u32 KU_FLAG_INSTANCING  = 0x10;
-}
-
-class MaterialTechniqueResourceType
-{
-public:
-    void* FixDown(void* pResource, const int* pDelta);
-    void* FixUp(void* pResource, const int* pDelta);
-    void* GetImportPointer();
-    int   GetTypeID() { return KI_TYPE_ID; }
-    u32   PostFixUp(void* pResource, MaterialTechnique* pTechnique);
-
-private:
-    static const int KI_TYPE_ID = 13;
-};
-
-void* MaterialTechniqueResourceType::FixDown(void* pResource, const int* pDelta)
-{
-    u32* lpHeader = static_cast<u32*>(pResource);
-    const u32 luDelta = static_cast<u32>(*pDelta);
-
-    const u32 lu28 = lpHeader[7] - luDelta;   // +28
-    const u32 lu36 = lpHeader[9] - luDelta;   // +36
-    lpHeader[6] -= luDelta;                    // +24
-    lpHeader[7] = lu28;
-    lpHeader[9] = lu36;
-    return pResource;
-}
-
-void* MaterialTechniqueResourceType::FixUp(void* pResource, const int* pDelta)
-{
-    u32* lpHeader = static_cast<u32*>(pResource);
-    const u32 luDelta = static_cast<u32>(*pDelta);
-
-    const u32 lu28 = lpHeader[7] + luDelta;
-    const u32 lu36 = lpHeader[9] + luDelta;
-    lpHeader[6] += luDelta;
-    lpHeader[7] = lu28;
-    lpHeader[9] = lu36;
-    return pResource;
-}
-
-void* MaterialTechniqueResourceType::GetImportPointer()
-{
-    CgsDev::Assert::BeginAssert();
-    CgsDev::Assert::FireAssert(
-        "This function should not be called at runtime",
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsMaterialTechniqueResourceType.cpp",
-        371);
-    return CgsDev::Assert::EndAssert();
-}
-
-u32 MaterialTechniqueResourceType::PostFixUp(void* /*pResource*/, MaterialTechnique* pTechnique)
-{
-    if (!pTechnique->mpMaterialState)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpMaterial->mpMaterialState",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsMaterialTechniqueResourceType.cpp",
-            266);
-        CgsDev::Assert::EndAssert();
-    }
-    if (!*pTechnique->mpMaterialState->mppBlendState)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpMaterial->mpMaterialState->mpBlendState",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsMaterialTechniqueResourceType.cpp",
-            267);
-        CgsDev::Assert::EndAssert();
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        const u32 luDelta = static_cast<u32>(*pDelta);
+        u32 lu28 = *reinterpret_cast<u32*>(lRes + 28) - luDelta;
+        u32 lu36 = *reinterpret_cast<u32*>(lRes + 36) - luDelta;
+        *reinterpret_cast<u32*>(lRes + 24) -= luDelta;
+        *reinterpret_cast<u32*>(lRes + 28) = lu28;
+        *reinterpret_cast<u32*>(lRes + 36) = lu36;
+        return pResource;
     }
 
-    BlendStateQuery lQuery;
-    lQuery.maIn[0] = 117835526;
-    lQuery.maIn[1] = 117835526;
-    lQuery.maIn[2] = 117835526;
-    lQuery.maIn[3] = 117835526;
-    lQuery.maIn[4] = 7;
-    lQuery.maIn[5] = 15;
-    lQuery.maIn[6] = 15;
-    lQuery.maIn[7] = 15;
-    lQuery.maIn[8] = 15;
-    lQuery.maIn[9] = 135;
-    lQuery.maIn[10] = 0;
-    lQuery.maIn[11] = static_cast<u32>(-1);
-    lQuery.mbAlphaBlend = 0;
-    lQuery.maPad[0] = lQuery.maPad[1] = lQuery.maPad[2] = lQuery.maPad[3] = lQuery.maPad[4] = 0;
-    lQuery.mbAlphaTest = 0;
-
-    renderengine::BlendState::GetParameters(*pTechnique->mpMaterialState->mppBlendState, &lQuery);
-    if (lQuery.mbAlphaBlend)
-        pTechnique->muFlags |= KU_FLAG_ALPHA_BLEND;
-    if (lQuery.mbAlphaTest)
-        pTechnique->muFlags |= KU_FLAG_ALPHA_TEST;
-
-    Material* lpMaterial = pTechnique->mpMaterial;
-    const u32 luField0 = lpMaterial->muField0;
-    const u32 luField1 = lpMaterial->muField1;
-    if (luField0
-        && (ShaderConstantsExternal::HasShaderConstant(lpMaterial->maShaderConstantsA, "InstancingMatrixArray")
-            || ShaderConstantsExternal::HasShaderConstant(lpMaterial->maShaderConstantsB, "InstancingMatrixArray")))
+    void* MaterialTechniqueResourceType::FixUp(void* pResource, const int* pDelta)
     {
-        pTechnique->muFlags |= KU_FLAG_INSTANCING;
+        uintptr_t lRes = reinterpret_cast<uintptr_t>(pResource);
+        const u32 luDelta = static_cast<u32>(*pDelta);
+        u32 lu28 = *reinterpret_cast<u32*>(lRes + 28) + luDelta;
+        u32 lu36 = *reinterpret_cast<u32*>(lRes + 36) + luDelta;
+        *reinterpret_cast<u32*>(lRes + 24) += luDelta;
+        *reinterpret_cast<u32*>(lRes + 28) = lu28;
+        *reinterpret_cast<u32*>(lRes + 36) = lu36;
+        return pResource;
     }
 
-    u32 luPrevLookup = pTechnique->muLookupHash;
-    u32 luStateHashIn = luPrevLookup;
-    u32 luLookupIn    = luField0;
-    u32 luSortIn      = luField1;
-    pTechnique->muStateHash  = CgsContainers::CgsHash16::CalculateHash(&luStateHashIn, 4);
-    pTechnique->muLookupHash = CgsContainers::CgsHash12::CalculateHash(&luLookupIn, 4);
-    u32 luSortHash           = CgsContainers::CgsHash12::CalculateHash(&luSortIn, 4);
-    pTechnique->muSortHash   = luSortHash;
+    void* MaterialTechniqueResourceType::GetImportPointer()
+    {
+        CGS_ASSERT(false, "This function should not be called at runtime");
+        return nullptr;
+    }
 
-    pTechnique->muStateValue = *reinterpret_cast<u32*>(static_cast<uintptr_t>(lpMaterial->muStateField)) - 48;
-    return luSortHash;
-}
+    u32 MaterialTechniqueResourceType::PostFixUp(void** pMaterial)
+    {
+        CGS_ASSERT(pMaterial[1] != nullptr, "lpMaterial->mpMaterialState");
+        void** lpMaterialState = reinterpret_cast<void**>(pMaterial[1]);
+        CGS_ASSERT(lpMaterialState[0] != nullptr, "lpMaterial->mpMaterialState->mpBlendState");
+
+        // Blend-state default parameter block (0x07070706 RGBA write masks etc.),
+        // populated in place by GetParameters; the trailing bytes are the per-stage
+        // enable flags read back below.
+        struct BlendParams
+        {
+            u32 mauDword[12];
+            u8  mabEnable[8];
+        } lParams = {};
+        lParams.mauDword[0] = 0x07060706u; // 117835526
+        lParams.mauDword[1] = 0x07060706u;
+        lParams.mauDword[2] = 0x07060706u;
+        lParams.mauDword[3] = 0x07060706u;
+        lParams.mauDword[4] = 7;
+        lParams.mauDword[5] = 15;
+        lParams.mauDword[6] = 15;
+        lParams.mauDword[7] = 15;
+        lParams.mauDword[8] = 15;
+        lParams.mauDword[9] = 135;
+        lParams.mauDword[10] = 0;
+        lParams.mauDword[11] = static_cast<u32>(-1);
+
+        renderengine::BlendState::GetParameters(lpMaterialState[0], &lParams);
+
+        u32* lpuFlags = reinterpret_cast<u32*>(pMaterial) + 4;
+        if (lParams.mabEnable[0])
+            *lpuFlags |= 1u;       // alpha blend
+        if (lParams.mabEnable[6])
+            *lpuFlags |= 8u;       // alpha test
+
+        void*  lpShader = pMaterial[0];
+        u32    luVtxShader = reinterpret_cast<u32*>(lpShader)[0];
+        u32    luPixShader = reinterpret_cast<u32*>(lpShader)[1];
+        if (luVtxShader
+            && (ShaderConstantsExternal::HasShaderConstant(reinterpret_cast<u32*>(lpShader) + 7, "InstancingMatrixArray")
+             || ShaderConstantsExternal::HasShaderConstant(reinterpret_cast<u32*>(lpShader) + 11, "InstancingMatrixArray")))
+        {
+            *lpuFlags |= 0x10u;    // hardware instancing
+        }
+
+        u32 luContextHash = reinterpret_cast<u32>(pMaterial[5]);
+        u32* lpuOut = reinterpret_cast<u32*>(pMaterial);
+        lpuOut[7] = CgsContainers::CgsHash16::CalculateHash(&luContextHash, 4);
+        lpuOut[5] = CgsContainers::CgsHash12::CalculateHash(&luVtxShader, 4);
+        u32 luResult = CgsContainers::CgsHash12::CalculateHash(&luPixShader, 4);
+        lpuOut[6] = luResult;
+        lpuOut[8] = reinterpret_cast<u32*>(lpShader)[37] - 48;
+        return luResult;
+    }
 }

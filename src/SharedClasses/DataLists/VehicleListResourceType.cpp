@@ -4,62 +4,100 @@
 //   BrnResource::VehicleListResourceType::FixDown   @ 0x8267DF10
 //   BrnResource::VehicleListResourceType::FixUp     @ 0x8267DD60
 //   BrnResource::VehicleListResourceType::GetTypeID @ 0x82675798
-//
-// The serialised vehicle-list resource is a {count, vehicle-array pointer} header. FixUp/
-// FixDown rebase that array pointer by the load delta; FixUp then walks the vehicle entries
-// (240-byte stride) and runs the embedded BaseCollisionGenerator sub-objects through their
-// fix-up entry point (resolved as Destruct in the symbolised build) at entry offsets
-// 160/176/184/208/216. BaseCollisionGenerator is forward-declared (separate TU).
 
 namespace CgsSceneManager
 {
-    namespace CgsCollision
+namespace CgsCollision
+{
+    struct BaseCollisionGenerator
     {
-        struct BaseCollisionGenerator
-        {
-            BaseCollisionGenerator* Destruct();
-        };
-    }
+        void Destruct();
+
+        u8 maStorage[8];
+    };
+}
 }
 
 namespace BrnResource
 {
-    class VehicleListResourceType
+    static const u32 KI_VEHICLE_LIST_RESOURCE_TYPE_ID = 65541;
+
+    template <typename T>
+    static T* PointerFromU32(u32 luAddress)
     {
-        typedef CgsSceneManager::CgsCollision::BaseCollisionGenerator Generator;
-
-    public:
-        u32*  FixDown(u32* pResource, const int* pDelta);
-        void* FixUp(u32* pResource, const int* pDelta);
-        int   GetTypeID() { return KI_TYPE_ID; }
-
-    private:
-        static const int KI_TYPE_ID = 65541;
-
-        static const int KI_ENTRY_STRIDE = 240;
-    };
-
-    u32* VehicleListResourceType::FixDown(u32* pResource, const int* pDelta)
-    {
-        pResource[1] -= *pDelta;
-        return pResource;
+        return reinterpret_cast<T*>(static_cast<uintptr_t>(luAddress));
     }
 
-    void* VehicleListResourceType::FixUp(u32* pResource, const int* pDelta)
+    struct VehicleListEntry
     {
-        const u32 luCount = pResource[0];
-        pResource[1] += *pDelta;
+        void FixUp();
 
-        Generator* lpLast = nullptr;
-        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+        u8 maPad0[160];
+        CgsSceneManager::CgsCollision::BaseCollisionGenerator mAttribCollectionKey;
+        u8 maPad168[8];
+        CgsSceneManager::CgsCollision::BaseCollisionGenerator mExhaustEntityKey;
+        CgsSceneManager::CgsCollision::BaseCollisionGenerator mEngineEntityKey;
+        u8 maPad192[16];
+        CgsSceneManager::CgsCollision::BaseCollisionGenerator mWonCarVoiceOverKey;
+        CgsSceneManager::CgsCollision::BaseCollisionGenerator mRivalReleasedVoiceOverKey;
+        u8 maPad224[16];
+    };
+
+    struct VehicleListResource
+    {
+        VehicleListEntry* GetEntries() const;
+
+        u32 muNumVehicles;
+        u32 mpEntries;
+        u64 mu16BytePad;
+    };
+
+    class VehicleListResourceType
+    {
+    public:
+        VehicleListResource* FixDown(VehicleListResource* lpResource, const s32* lpiDelta) const;
+        VehicleListResource* FixUp(void* lpResourceTypeData, VehicleListResource* lpResource, const s32* lpiDelta) const;
+        u32 GetTypeID() const;
+    };
+
+    void VehicleListEntry::FixUp()
+    {
+        mExhaustEntityKey.Destruct();
+        mEngineEntityKey.Destruct();
+        mWonCarVoiceOverKey.Destruct();
+        mRivalReleasedVoiceOverKey.Destruct();
+        mAttribCollectionKey.Destruct();
+    }
+
+    VehicleListEntry* VehicleListResource::GetEntries() const
+    {
+        return PointerFromU32<VehicleListEntry>(mpEntries);
+    }
+
+    VehicleListResource* VehicleListResourceType::FixDown(VehicleListResource* lpResource, const s32* lpiDelta) const
+    {
+        lpResource->mpEntries -= static_cast<u32>(*lpiDelta);
+        return lpResource;
+    }
+
+    VehicleListResource* VehicleListResourceType::FixUp(
+        void*,
+        VehicleListResource* lpResource,
+        const s32* lpiDelta) const
+    {
+        lpResource->mpEntries += static_cast<u32>(*lpiDelta);
+        VehicleListEntry* lpEntries = lpResource->GetEntries();
+
+        for (u32 luVehicle = 0; luVehicle < lpResource->muNumVehicles; ++luVehicle)
         {
-            uintptr_t lEntry = pResource[1] + luIndex * KI_ENTRY_STRIDE;
-            reinterpret_cast<Generator*>(lEntry + 176)->Destruct();
-            reinterpret_cast<Generator*>(lEntry + 184)->Destruct();
-            reinterpret_cast<Generator*>(lEntry + 208)->Destruct();
-            reinterpret_cast<Generator*>(lEntry + 216)->Destruct();
-            lpLast = reinterpret_cast<Generator*>(lEntry + 160)->Destruct();
+            lpEntries[luVehicle].FixUp();
         }
-        return lpLast;
+
+        return lpResource;
+    }
+
+    u32 VehicleListResourceType::GetTypeID() const
+    {
+        return KI_VEHICLE_LIST_RESOURCE_TYPE_ID;
     }
 }
