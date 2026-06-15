@@ -29,8 +29,17 @@ namespace Assert
 }
 }
 
-// Both arms of the original macro evaluated the failed condition through the
-// Begin/Fire/End assert sequence; the message text was streamed into the assert
-// expression buffer. Kept as a no-op until the StrStream front-end is wired up,
-// matching the prior placeholder behaviour so call sites are unaffected.
-#define CGS_ASSERT(condition, msg)
+// Evaluate the condition; on failure run the Begin/Fire/End assert sequence (FireAssert
+// forwards to CgsDev::Assert::Manager::HandleAssert, which logs the failure). The original
+// streamed the message into the assert buffer via StrStream; the call sites all pass a plain
+// string, so the message is forwarded directly.
+#define CGS_ASSERT(condition, msg)                              \
+    do                                                          \
+    {                                                           \
+        if (!(condition))                                       \
+        {                                                       \
+            CgsDev::Assert::BeginAssert();                      \
+            CgsDev::Assert::FireAssert((msg), __FILE__, __LINE__); \
+            CgsDev::Assert::EndAssert();                        \
+        }                                                       \
+    } while (0)

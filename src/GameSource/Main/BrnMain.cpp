@@ -6,6 +6,7 @@
 
 #include "pc/gcm/renderengine/device.h"
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 // The top-level game module. In the full engine this is owned by the game's module/heap
 // system; here it is the single instance the boot path constructs and drives.
@@ -23,6 +24,9 @@ void SaveConfig()
 
 void EnginePrepare()
 {
+    // First log line of the run (also guarantees the log file is created on every boot).
+    *CgsDev::Log::gpDebugPrint << "==== Burnout Paradise starting ====\n";
+
     // Create the D3D9 device on the window opened by InitializeHardware, then construct
     // the game's modules (the renderer module builds the loading-screen renderer).
     renderengine::Device::Start();

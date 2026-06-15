@@ -14,7 +14,7 @@
 
 namespace CgsDev
 {
-    namespace Message { u32 gxMessageFilterFlags = 0; }
+    namespace Message { extern u32 gxMessageFilterFlags; }   // defined in Development/Log/CgsLog.cpp
     namespace Log { void DebugPrint(const char* pcText, int liArg); void DebugPrint(const char*, int) { __debugbreak(); } }
 }
 
