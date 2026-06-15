@@ -46,6 +46,12 @@ public:
     {
     }
 
+    // Releases the read lock taken on the module's input buffer for the frame. The real
+    // ModuleSingleBuffered body is reconstructed in CgsModuleSingleBuffered.cpp; declared
+    // here on the lightweight base used by the renderer/game modules so callers (e.g.
+    // BrnGameModule::GameMain) resolve it. Placeholder body until that base is unified.
+    void UnlockInputForRead() {}
+
 private:
     EA::Thread::RWMutex mInputRWMutex;
     EA::Thread::RWMutex mOutputRWMutex;
@@ -348,6 +354,9 @@ public:
     // the gameplay-render path (shadows/world/cars/particles/post-fx) is data-gated off
     // during boot and reconstructed incrementally.
     void Render();
+
+    // Renders the on-screen assert overlay (forwarded from BrnGameModule::RenderAssert).
+    void RenderAssert(const struct AssertData* lpAssertData);
 
 private:
     enum

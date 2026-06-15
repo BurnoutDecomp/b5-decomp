@@ -65,3 +65,10 @@ void BrnRendererModule::Render()
 
     renderengine::Device::ShowPixelBuffer();
 }
+
+// Renders the on-screen assert overlay (forwarded from BrnGameModule::RenderAssert). The real
+// body draws the assert text via the immediate-mode renderer; minimal until the assert overlay
+// path is reconstructed (asserts are inert on the boot/loading path).
+void BrnRendererModule::RenderAssert(const AssertData* /*lpAssertData*/)
+{
+}

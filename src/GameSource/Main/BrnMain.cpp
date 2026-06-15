@@ -32,10 +32,12 @@ void EnginePrepare()
 
 void EngineUpdate()
 {
-    // Main loop: pump the window messages and, when idle, render a frame through the game
-    // module's dispatch (which renders the loading screen). Runs until the window closes.
-    // The full engine runs the module update set + a separate dispatch thread here; the
-    // threaded module loop is reconstructed with the threading core.
+    // Main loop: pump the window messages and, when idle, drive the real per-frame spine -
+    // OnCompletionOfVsyncWait (decide this frame's sim-step count) -> UpdateThread (GamePrepare
+    // once, then GameMain, which runs the active flow state's per-substep Update -> the loading
+    // FSM advances its scripted load) -> DispatchThread (render the loading screen). The full
+    // engine splits update + dispatch across threads with vsync sync; this runs them inline for
+    // the single-threaded boot. Runs until the window closes.
     MSG lMsg;
     ZeroMemory(&lMsg, sizeof(lMsg));
     while (lMsg.message != WM_QUIT)
@@ -47,6 +49,10 @@ void EngineUpdate()
         }
         else
         {
+            gGameModule.OnStartOfUpdateFrame();
+            gGameModule.OnCompletionOfVsyncWait();
+            gGameModule.UpdateThread();
+            gGameModule.OnEndOfUpdateFrame();
             gGameModule.DispatchThread();
         }
     }
