@@ -13,7 +13,7 @@
 // spinning arrow, each as a (rotated) textured quad, with a separate black-overlay fade.
 // The X360/PS3 emit this as hand-VMX immediate-mode batches; this is the equivalent
 // clean logical C++. Layout/animation constants are the real .rdata values recovered
-// from the XEX. Textures are baked into the build and loaded from external .bin files.
+// from the XEX. Textures are baked into the build and loaded from external .dds files.
 
 namespace CgsSystem
 {
@@ -141,21 +141,42 @@ namespace BrnGame
         return lpTexture;
     }
 
-    // Load a baked loading-screen texture from an external .bin (u32 width, u32 height,
-    // then width*height RGBA8 pixels) - the PC stand-in for the X360 .rdata blobs.
-    static renderengine::Texture2D* LoadFromBin(LoadingScreenRenderer& lRenderer,
+    // Load a baked loading-screen texture from an external .dds. The 128-byte DDS header
+    // (4-byte 'DDS ' magic + DDS_HEADER) carries the dimensions and pixel format, so the
+    // size/format come from the file rather than a hand-rolled prefix. Only uncompressed
+    // 32-bit A8R8G8B8 is handled here (the pixel bytes are B,G,R,A, which is exactly the
+    // texture upload format); the header is read as 32 little-endian u32 words:
+    //   [0]='DDS ' [3]=dwHeight [4]=dwWidth [21]=ddspf.dwFourCC [22]=ddspf.dwRGBBitCount
+    static renderengine::Texture2D* LoadFromDDS(LoadingScreenRenderer& lRenderer,
                                                 renderengine::Texture2D* (LoadingScreenRenderer::*lpSetup)(f32, f32, void*, s32),
                                                 const char* lpacPath)
     {
         std::FILE* lpFile = std::fopen(lpacPath, "rb");
         if (lpFile == nullptr) { return nullptr; }
-        u32 luW = 0, luH = 0;
-        std::fread(&luW, sizeof(u32), 1, lpFile);
-        std::fread(&luH, sizeof(u32), 1, lpFile);
+
+        u32 luHeader[32] = {};   // 'DDS ' magic + the 124-byte DDS_HEADER
+        if (std::fread(luHeader, sizeof(u32), 32, lpFile) != 32 || luHeader[0] != 0x20534444u)
+        {
+            std::fclose(lpFile);
+            return nullptr;
+        }
+
+        const u32 luH = luHeader[3];   // dwHeight
+        const u32 luW = luHeader[4];   // dwWidth
+        const u32 luFourCC = luHeader[21];
+        const u32 luBitCount = luHeader[22];
+        if (luFourCC != 0u || luBitCount != 32u)   // not uncompressed 32-bit RGBA
+        {
+            std::fclose(lpFile);
+            return nullptr;
+        }
+
         const s32 liBytes = static_cast<s32>(luW * luH * 4u);
         void* lpData = std::malloc(static_cast<size_t>(liBytes));
         if (lpData != nullptr) { std::fread(lpData, 1u, static_cast<size_t>(liBytes), lpFile); }
         std::fclose(lpFile);
+        if (lpData == nullptr) { return nullptr; }
+
         renderengine::Texture2D* lpTex = (lRenderer.*lpSetup)(static_cast<f32>(luW), static_cast<f32>(luH), lpData, liBytes);
         std::free(lpData);
         return lpTex;
@@ -164,10 +185,10 @@ namespace BrnGame
     // @ 0x823CE208 - create the textures, the re-usable scratch buffer, pick the language.
     void LoadingScreenRenderer::Construct()
     {
-        mpArrowTexture = LoadFromBin(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/arrow.bin");
-        mpCarTexture   = LoadFromBin(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/car.bin");
-        mpTextTexture  = LoadFromBin(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/text.bin");
-        mpBoxTexture   = LoadFromBin(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/box.bin");
+        mpArrowTexture = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/arrow.dds");
+        mpCarTexture   = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/car.dds");
+        mpTextTexture  = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/text.dds");
+        mpBoxTexture   = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/box.dds");
         mpDiskErrorTexture = nullptr;
 
         static u8 saReusableData[0x200000];   // 2 MB scratch (X360 reused the car staging region)
