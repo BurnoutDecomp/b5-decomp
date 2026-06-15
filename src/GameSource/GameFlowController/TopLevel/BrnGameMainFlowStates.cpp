@@ -1,4 +1,5 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -43,6 +44,9 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
     meLoadingScreenStage = E_LOADINGSTAGE_START;
     mbGuiPreloadDone     = false;
     gBrnLoadingScreenShouldShow = true;
+
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: OnEnter - loading screen shown\n";
 }
 
 // @ 0x823AA9E8 - clear the loading-screen signal on exit.
@@ -72,6 +76,18 @@ void MainGameFlowStateInitialLoadingScreen::Update()
     if (luFreq != 0 && (luNow - s_uStageStartTick) < (luFreq * 4u / 10u))
         return;
     s_uStageStartTick = luNow;
+
+    static const char* const kapcStageNames[] = {
+        "START", "ControllerModule", "GUIModule", "DirectorModule", "SoundModule",
+        "Network", "Juice", "Massive", "Replays", "DONE",
+    };
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) &&
+        meLoadingScreenStage >= E_LOADINGSTAGE_START && meLoadingScreenStage < E_LOADINGSTAGE_DONE)
+    {
+        *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading stage "
+                                   << (s32)meLoadingScreenStage << " ("
+                                   << kapcStageNames[meLoadingScreenStage] << ")\n";
+    }
 
     switch (meLoadingScreenStage)
     {
@@ -104,11 +120,17 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         break;
     case E_LOADINGSTAGE_DONE:
     default:
-        // Load complete: drop the renderer's loading-screen signal so it fades out (E_LSC_HIDE).
-        // The full game here issues SendEvent(E_MGE_STATEEND) -> the next flow state (start
-        // screen) takes over; that transition lands when those states are reconstructed.
-        FinishLoading();
-        gBrnLoadingScreenShouldShow = false;
+        // Load complete (once): drop the renderer's loading-screen signal so it fades out
+        // (E_LSC_HIDE). The full game here issues SendEvent(E_MGE_STATEEND) -> the next flow
+        // state (start screen) takes over; that transition lands when those states are
+        // reconstructed. Guarded so the held DONE stage doesn't re-log every frame.
+        if (gBrnLoadingScreenShouldShow)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading complete\n";
+            FinishLoading();
+            gBrnLoadingScreenShouldShow = false;
+        }
         break;
     }
 }
