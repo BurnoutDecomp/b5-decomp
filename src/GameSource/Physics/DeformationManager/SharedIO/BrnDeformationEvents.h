@@ -86,5 +86,13 @@ namespace BrnPhysics
             f32        mfCurrentOrientation;
             f32        mfHingeVelocity;
         };
+
+        // Input event: set a deformation model's scene culling group.
+        struct alignas(16) SetModelCullingGroupEvent
+        {
+            RigidBodyId  mHandlingBodyID;
+            typedef u32  CullingGroup;   // InEventAddForCollision::CullingGroup (CgsSceneManagerTypes.h)
+            CullingGroup mCullGroup;
+        };
     }
 }
