@@ -1,19 +1,6 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultAllocator.h"
 
-namespace CgsDev
-{
-// CgsAssert.h is still a placeholder ("TODO: Uncomment when asserts are
-// implemented"), so — matching every other reconstructed caller (e.g.
-// CgsAttribSysVaultArray, BrnWorldRegion) — the minimal Assert API is declared
-// locally here until the real assert system is reconstructed.
-class Assert
-{
-public:
-    static void BeginAssert();
-    static void FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
-    static void EndAssert();
-};
-}
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace CgsAttribSys
 {

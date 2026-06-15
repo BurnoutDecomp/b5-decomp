@@ -1,18 +1,6 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"
 
-// CgsAssert.h is a placeholder in this tree, so the assert API is declared locally to
-// match the established pattern (see SharedClasses/World/BrnWorldRegion.cpp). It lives
-// in its real home (CgsDev) once that header is reconstructed.
-namespace CgsDev
-{
-class Assert
-{
-public:
-    static void BeginAssert();
-    static void FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
-    static void EndAssert();
-};
-}
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace BrnGameState
 {
