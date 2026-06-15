@@ -53,5 +53,38 @@ namespace BrnPhysics
             f32                  mfInitialDamageAmount;
             DeformationResetType meDeformationResetType;
         };
+
+        // Input event: remove a deformation model from simulation.
+        struct alignas(16) RemoveDeformationModelEvent
+        {
+            RigidBodyId mHandlingBodyID;
+        };
+
+        // Input event: toggle a deformation model's collision.
+        struct alignas(16) SetModelCollisionEvent
+        {
+            RigidBodyId mHandlingBodyID;
+            bool        mbCollide;
+        };
+
+        // Output event: a part has detached from a vehicle.
+        struct alignas(16) DetachedPartNotificationEvent
+        {
+            Vector3    mPointOnA;
+            EntityId   mVehicleId;
+            EBodyParts meType;
+        };
+
+        // Output event: current orientation/velocity of a hinged (jointed) part.
+        // NOT 16-byte aligned (no SIMD members): DeformationOutputInterface places its
+        // queue at byte +116, which is only 4-aligned — proof it is a plain 4-aligned
+        // struct, so the queue's inline buffer starts at +12 (not +16).
+        struct JointedPartStateEvent
+        {
+            EntityId   mVehicleId;
+            EBodyParts meType;
+            f32        mfCurrentOrientation;
+            f32        mfHingeVelocity;
+        };
     }
 }
