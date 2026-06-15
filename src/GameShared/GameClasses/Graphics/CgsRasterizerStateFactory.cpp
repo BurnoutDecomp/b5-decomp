@@ -1,15 +1,6 @@
 #include "pc/gcm/renderengine/renderstates.h"
 
-namespace CgsDev
-{
-class Assert
-{
-public:
-    static void BeginAssert();
-    static void FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
-    static renderengine::RasterizerState* EndAssert();
-};
-}
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 class CgsRasterizerStateFactory
 {
@@ -135,12 +126,16 @@ renderengine::RasterizerState* CgsRasterizerStateFactory::Construct(void* pResou
         gapRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE];
     if (!lpResult)
     {
+        // The assert sequence only reports the failure; it does not produce the
+        // returned state. EndAssert() yields the mutex's internal pointer, so its
+        // result is discarded (the prior local fork mis-typed it as a
+        // RasterizerState* and assigned it here).
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeNone ]",
             "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsRasterizerStateFactory.cpp",
             77);
-        lpResult = CgsDev::Assert::EndAssert();
+        CgsDev::Assert::EndAssert();
     }
 
     return lpResult;

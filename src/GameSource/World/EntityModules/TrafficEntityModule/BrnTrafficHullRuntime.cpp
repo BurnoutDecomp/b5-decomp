@@ -5,16 +5,7 @@
 //   BrnTraffic::HullRuntime::Prepare   @ 0x82751438
 //   BrnTraffic::HullRuntime::Release   @ 0x82751578
 
-namespace CgsDev
-{
-    class Assert
-    {
-    public:
-        static void BeginAssert();
-        static void FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
-        static void EndAssert();
-    };
-}
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace BrnTraffic
 {
