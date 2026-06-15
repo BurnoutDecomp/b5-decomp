@@ -150,5 +150,26 @@ namespace Vehicle
         VolumeInstanceId mRaceCarVolumeInstanceId;
         bool             mbAdded;
     };
+
+    // Spawn an articulated (cab + trailer) traffic vehicle. The cab/trailer halves
+    // are split into two CreatePhysicalTrafficEvents downstream.
+    struct alignas(16) CreateArticulatedTrafficEvent
+    {
+        Matrix44Affine mInitialTransform_Cab;
+        Matrix44Affine mInitialTransform_Trailer;
+        Vector3        mInitialVelocity_Cab;
+        Vector3        mInitialVelocity_Trailer;
+        Vector3        mAngularVelocity_Cab;
+        Vector3        mAngularVelocity_Trailer;
+        VolumeInstanceId mVolumeInstanceID_Cab;
+        VolumeInstanceId mVolumeInstanceID_Trailer;
+        Attribute::Key mAssetAttribKey_Cab;
+        Attribute::Key mAssetAttribKey_Trailer;
+        ResourceHandle mModelHandle_Cab;
+        ResourceHandle mModelHandle_Trailer;
+        CgsID          mCgsId_Cab;
+        CgsID          mCgsId_Trailer;
+        ETrafficType   meTrafficType;
+    };
 }
 }
