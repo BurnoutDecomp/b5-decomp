@@ -17,14 +17,35 @@ namespace vpu
 {
     // One SIMD register: 4 lanes, 16-byte aligned. The SDK wraps this as a
     // `VectorIntrinsic mV` member; here the lanes are named directly for PC access.
-    struct alignas(16) Vector2 { float x, y, z, w; };
-    struct alignas(16) Vector3 { float x, y, z, w; };   // w: unused 4th lane
-    struct alignas(16) Vector4 { float x, y, z, w; };
-    struct alignas(16) Vector3Plus { float x, y, z, w; }; // w: the "plus" lane
+    // The complex SIMD math (add/mul/transform) stays in the *_operation headers; only
+    // the trivial initialisers the SDK exposes as type methods (SetZero/SetIdentity,
+    // spelled `v.SetZero()` / `m.SetIdentity()` at the call sites) are provided here.
+    struct alignas(16) Vector2 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };
+    struct alignas(16) Vector3 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };   // w: unused 4th lane
+    struct alignas(16) Vector4 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };
+    struct alignas(16) Vector3Plus { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } }; // w: the "plus" lane
 
     // Row-major; the last row of an affine is implicit (0,0,0,1) but still stored.
-    struct alignas(16) Matrix44       { Vector4 xAxis, yAxis, zAxis, wAxis; };
-    struct alignas(16) Matrix44Affine { Vector3 xAxis, yAxis, zAxis, wAxis; };
+    struct alignas(16) Matrix44
+    {
+        Vector4 xAxis, yAxis, zAxis, wAxis;
+        void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
+        void SetIdentity()
+        {
+            xAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; yAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
+            zAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; wAxis = { 0.0f, 0.0f, 0.0f, 1.0f };
+        }
+    };
+    struct alignas(16) Matrix44Affine
+    {
+        Vector3 xAxis, yAxis, zAxis, wAxis;
+        void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
+        void SetIdentity()
+        {
+            xAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; yAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
+            zAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; wAxis = { 0.0f, 0.0f, 0.0f, 0.0f };
+        }
+    };
 }
 }
 }
