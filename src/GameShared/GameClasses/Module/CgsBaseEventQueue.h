@@ -21,6 +21,11 @@ namespace CgsModule
             miLength = 0;
         }
 
+        // Appends a copy of lEvent (asserting on overflow) and bumps miLength.
+        // Declared here; each instantiation's body is emitted out-of-line by the
+        // X360 build, so it is its own ledger TU resolved at link time.
+        bool AddEvent(const T& lEvent);
+
         s32 GetMaxLength() const { return miMaxLength; }
         s32 GetLength() const { return miLength; }
 
