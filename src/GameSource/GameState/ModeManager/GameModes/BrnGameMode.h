@@ -40,10 +40,21 @@ enum EGameModeEvent
 // contained state objects that precede them in the real layout (maGameModeStates,
 // CountdownState mCountdownState, IntroState, InProgressState, OutroState, ResultsState,
 // QuitState, OnlineLoadingState, OnlineSplashState) are NOT reconstructed here: doing so
-// would cascade ~10 further headers well past the 2-3 bound. They are stood in for by a
-// single named padding buffer (maStatesAndManagerBlob) so the named members below keep
+// would cascade ~10 further headers well past the 2-3 bound. They are stood in for by
+// named padding buffers (maStatesBlob / maManagerBlob) so the named members below keep
 // their relative placement. Those contained types should be reconstructed when their own
-// TUs are worked; this header is then extended to replace the blob with the real members.
+// TUs are worked; this header is then extended to replace the blobs with the real members.
+//
+// The named state members below (meCurrentState, mpModeManager, mbConstructed,
+// mbFinalStandingsShown) are GameMode's own protected data, X360-attested by the base
+// GameMode::Construct body (0x8232F9D8: it writes *(this+40)=-1 [state], *(this+160)=arg
+// [the ModeManager*], and zeroes *(this+172)/*(this+175)) and read/written by derived
+// modes via direct base-member access (e.g. OnlineGameMode::SendEvent reads the state and
+// sets mbFinalStandingsShown; OnlineGameMode::Construct sets mbConstructed). They are
+// modelled as named protected members here -- the base's real home -- rather than being
+// re-forked into each derived class. Byte offsets are not X360-faithful on the x64 PC gate
+// (pointers are 8 bytes, and the leading state objects are still opaque), so this preserves
+// relative ordering and named access for semantic parity, not exact placement.
 class GameMode
 {
 public:
@@ -63,10 +74,20 @@ public:
     bool    HasCountdownDisplayChanged(s32* lpiNewCountdownDisplay);
 
 protected:
-    // Stand-in for the leading contained state objects + ModeManager pointer + the
-    // earlier per-frame flags. Modelled as opaque padding (see header note above):
-    // these are deferred contained types, not raw-offset access of named data.
-    u8        maStatesAndManagerBlob[168];
+    // Stand-in for the leading contained state objects that precede the current-state
+    // field. Modelled as opaque padding (see header note above): deferred contained
+    // types, not raw-offset access of named data.
+    u8        maStatesBlob[32];
+
+    s32       meCurrentState;           // current state-machine state (-1 == none yet)
+
+    // Stand-in for the remaining contained state objects between the state field and the
+    // ModeManager back-pointer. Opaque padding, same rationale as maStatesBlob.
+    u8        maManagerBlob[112];
+
+    ModeManager* mpModeManager;         // owning ModeManager, set by GameMode::Construct
+    bool      mbConstructed;            // set true once Construct has run
+    bool      mbFinalStandingsShown;    // online: results screen has been requested
 
     s32       miCountdownDisplay;       // current countdown value handed back to the GUI
     bool      mbVisibleCars;            // (DWARF order: precedes the countdown flag)

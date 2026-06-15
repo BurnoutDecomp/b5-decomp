@@ -1,94 +1,93 @@
-#include "types.hpp"
+#include "GameSource/GameState/ModeManager/GameModes/BrnOnlineGameMode.h"
+
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"
 
 namespace BrnGameState
 {
-class GameMode
+// X360: BrnGameState::OnlineGameMode::Construct (0x8232FE98). Forwards to the GameMode
+// base (which stores the ModeManager* and zero-inits the mode flags) and then marks this
+// mode constructed. The base Construct takes the ModeManager* (DWARF-attested shape
+// virtual void Construct(ModeManager*)); the Hex-Rays pseudocode renders the forwarded
+// call with no visible argument and a leftover `int result`, both artifacts of a void
+// function -- the reconstructed body forwards the argument and returns nothing.
+void OnlineGameMode::Construct(ModeManager* lpModeManager)
 {
-public:
-    int Construct();
-    int SetCurrentState(int liState);
-};
-
-class ModeManager
-{
-public:
-    static int TellGuiToShowOnlineFinalStandings(void* pModeManager);
-};
-
-class OnlineGameMode : public GameMode
-{
-public:
-    int Construct();
-    int SendEvent(int liEvent);
-
-private:
-    u8    mPad0[40];
-    int   miCurrentState;
-    u8    mPad44[116];
-    void* mpModeManager;
-    u8    mPad164[8];
-    bool  mbConstructed;
-    u8    mPad173[2];
-    bool  mbFinalStandingsShown;
-};
-
-int OnlineGameMode::Construct()
-{
-    int liResult = GameMode::Construct();
+    GameMode::Construct(lpModeManager);
     mbConstructed = true;
-    return liResult;
 }
 
-int OnlineGameMode::SendEvent(int liEvent)
+// X360: BrnGameState::OnlineGameMode::SendEvent (0x8232FED0). Drives the online mode's
+// state machine in response to a game-mode event. SetCurrentState and SendEvent both
+// return void in the DWARF-attested base API; the pseudocode's `result = ...` / `return
+// result` / `return (int)this` are register-reuse artifacts of a void function and are
+// dropped. State ids (0..7) are GameStateModuleIO::EGameModeState values; that enum is not
+// yet reconstructed (out of scope for this de-fork), so they are passed as raw s32 to the
+// base SetCurrentState, matching the X360 body.
+void OnlineGameMode::SendEvent(EGameModeEvent leEvent)
 {
-    if (liEvent == 2)
-        return SetCurrentState(5);
-    if (liEvent == 0)
-        return SetCurrentState(6);
+    if (leEvent == E_GME_ABORT)
+    {
+        SetCurrentState(5);
+        return;
+    }
+    if (leEvent == E_GME_RESTART)
+    {
+        SetCurrentState(6);
+        return;
+    }
 
-    switch (miCurrentState)
+    switch (meCurrentState)
     {
         case 0:
-            if (liEvent == 1)
-                return SetCurrentState(2);
+            if (leEvent == E_GME_NEXT)
+            {
+                SetCurrentState(2);
+            }
             break;
         case 1:
-            if (liEvent == 1)
-                return SetCurrentState(7);
-            if (liEvent == 3)
-                return SetCurrentState(0);
+            if (leEvent == E_GME_NEXT)
+            {
+                SetCurrentState(7);
+            }
+            else if (leEvent == E_GME_USER_ACCEPT)
+            {
+                SetCurrentState(0);
+            }
             break;
         case 2:
-            if (liEvent == 1)
+            if (leEvent == E_GME_NEXT)
             {
-                int liResult = SetCurrentState(3);
+                SetCurrentState(3);
                 mbFinalStandingsShown = true;
-                return liResult;
             }
             break;
         case 3:
-            if (liEvent == 1)
+            if (leEvent == E_GME_NEXT)
             {
                 SetCurrentState(4);
-                return ModeManager::TellGuiToShowOnlineFinalStandings(mpModeManager);
+                mpModeManager->TellGuiToShowOnlineFinalStandings();
             }
             break;
         case 4:
-            if (liEvent == 3)
-                return SetCurrentState(5);
+            if (leEvent == E_GME_USER_ACCEPT)
+            {
+                SetCurrentState(5);
+            }
             break;
         case 6:
-            if (liEvent == 1)
-                return SetCurrentState(liEvent);
+            if (leEvent == E_GME_NEXT)
+            {
+                SetCurrentState(leEvent);
+            }
             break;
         case 7:
-            if (liEvent == 1)
-                return SetCurrentState(0);
+            if (leEvent == E_GME_NEXT)
+            {
+                SetCurrentState(0);
+            }
             break;
         default:
             break;
     }
-
-    return reinterpret_cast<int>(this);
 }
 }
