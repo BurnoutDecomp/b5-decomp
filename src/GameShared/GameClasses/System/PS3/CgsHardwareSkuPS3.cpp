@@ -1,15 +1,6 @@
 #include "types.hpp"
 
-namespace CgsDev
-{
-class Assert
-{
-public:
-    static void BeginAssert();
-    static void FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
-    static void EndAssert();
-};
-}
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace CgsSystem
 {
