@@ -1,4 +1,4 @@
-#include "types.hpp"
+#include "attribinstance.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstring>
 
@@ -20,54 +20,15 @@
 
 namespace Attrib
 {
-    // Partial Attrib::Collection layout (the fields the Instance touches).
-    struct Collection
-    {
-        u8     mPad0[8];
-        u16    muRefCount;     // +8
-        u8     mPad1[6];       // +10
-        void*  mpSubCollection;// +16
-        u8     mPad2[4];       // +20
-        int*   mpClass;        // +24
-        void*  mpData;         // +28
-        u32    muHasNoDefault; // +32
-    };
-
-    // An "attribute" value is the 16-byte record copied out by Get.
-    struct AttributeValue { u32 mauWords[4]; };
-
-    // Collection helpers (own TUs); trap stubs until they land.
-    Collection* Collection_AddRef(Collection* lpCollection, int liFlags);
-    int         Collection_Release(Collection* lpCollection, int liFlags);
-    void*       Collection_Get(void* lpOut, int liKey, int* lpName, int liArg);
-    void*       Collection_GetData(Collection* lpCollection);
-    int         RefSpec_GetCollectionWithDefault(int* lpRefSpec);
+    // Collection helpers (own TUs); trap stubs until they land. Types are declared
+    // in attribinstance.h (reconstructed header), not forked locally here.
     Collection* Collection_AddRef(Collection*, int) { __debugbreak(); return nullptr; }
     int         Collection_Release(Collection*, int) { __debugbreak(); return 0; }
     void*       Collection_Get(void*, int, int*, int) { __debugbreak(); return nullptr; }
     void*       Collection_GetData(Collection*) { __debugbreak(); return nullptr; }
     int         RefSpec_GetCollectionWithDefault(int*) { __debugbreak(); return 0; }
 
-    class Instance
-    {
-    public:
-        Instance(Collection* lpCollection, void* lpOwner);
-        ~Instance();
-        Collection* Change(Collection* lpNewCollection);
-        Collection* ChangeWithDefault(int* lpRefSpec);
-        void*       Get(AttributeValue* pOut, int* lpName, int liArg);
-        void*       GetAttributePointer();
-        int         GetClass() const;
-        void*       GetCollection() const;
-
-    private:
-        void Unmodify();
-
-        Collection* mpCollection;     // +0
-        void*       mpAttributeData;  // +4
-        void*       mpOwner;          // +8
-        u32         muFlags;          // +12
-    };
+    // Attrib::Instance (and Collection / AttributeValue) are declared in attribinstance.h.
 
     void Instance::Unmodify() { __debugbreak(); }
 
