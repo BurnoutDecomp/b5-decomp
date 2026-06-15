@@ -14,6 +14,11 @@ public:
     T&       operator[](u32 luIndex)       { return maElements[luIndex]; }
     const T& operator[](u32 luIndex) const { return maElements[luIndex]; }
 
+    // GetItem - the DWARF spells the indexed accessor as Array<T,N>::GetItem (e.g.
+    // GameMainFlowController dispatches its active state via maStates.GetItem(index)).
+    T&       GetItem(u32 luIndex)       { return maElements[luIndex]; }
+    const T& GetItem(u32 luIndex) const { return maElements[luIndex]; }
+
     u32 GetSize() const { return N; }
 
 private:

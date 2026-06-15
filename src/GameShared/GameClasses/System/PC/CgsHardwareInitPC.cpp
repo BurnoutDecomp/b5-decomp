@@ -92,8 +92,20 @@ static bool RegisterDeviceNotif(HDEVNOTIFY* notify)
 
 static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    // TODO: Implement windowProc
-    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    switch (uMsg)
+    {
+    case WM_CLOSE:
+        // User closed the window: tear it down (-> WM_DESTROY).
+        DestroyWindow(hwnd);
+        return 0;
+    case WM_DESTROY:
+        // Post WM_QUIT so EngineUpdate's message loop exits and WinMain returns (otherwise the
+        // loop spins forever on the destroyed window and the process lingers).
+        PostQuitMessage(0);
+        return 0;
+    default:
+        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
 }
 
 static HWND CreateGameWindow(const s32 width, const s32 height, bool fullscreen)
