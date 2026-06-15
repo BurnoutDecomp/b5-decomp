@@ -1,0 +1,34 @@
+#pragma once
+
+#include "types.hpp"
+#include <cstddef>
+
+// CgsMemory::LinearMalloc - a bump allocator over a caller-supplied region: Create()
+// adopts [buffer, buffer+size); allocations advance mnNextAddress. Layout/method set
+// from the DecFIGS DWARF (CgsLinearMalloc.h).
+namespace CgsMemory
+{
+    class LinearMalloc
+    {
+    public:
+        static const s32 KI_DEFAULT_ALIGNMENT = 4;
+
+        void Construct();
+        void Create(void* lpAlloc, size_t lnSize);
+        void Destruct();
+        void StartRWAllocation();
+        void StopRWAllocation();
+        void SetAlignment(size_t lnAlignment);
+        size_t GetFreeMemory() const;
+        void* GetStartAddress() const;
+
+    private:
+        bool   mbCreated;
+        void*  mpAlloc;
+        size_t mnStartAddress;
+        size_t mnEndAddress;
+        size_t mnNextAddress;
+        size_t mnAlignment;
+        void*  mpLastAlloc;
+    };
+}

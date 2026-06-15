@@ -1,27 +1,6 @@
 #pragma once
 
-#include "types.hpp"
-
-namespace rw
-{
-namespace math
-{
-struct alignas(16) Vector2
-{
-    f32 mafLane[4];
-};
-
-struct alignas(16) Vector4
-{
-    f32 mafLane[4];
-};
-}
-}
-
-struct Matrix44Affine
-{
-    rw::math::Vector4 mRows[4];
-};
+#include "BrnCommonTypes.h"   // Vector2, Vector4, Matrix44Affine (shared rw::math::vpu types)
 
 namespace BrnEffects
 {
@@ -47,11 +26,11 @@ struct BloomData
 {
     static const f32 kfDefLuminance;
     static const f32 kfDefThreshold;
-    static const rw::math::Vector4 kv4DefScale;
+    static const Vector4 kv4DefScale;
 
     f32 mfLuminance;
     f32 mfThreshold;
-    rw::math::Vector4 mv4Scale;
+    Vector4 mv4Scale;
 
     void Construct()
     {
@@ -65,17 +44,17 @@ struct VignetteData
 {
     static const f32 kfDefAngle;
     static const f32 kfDefSharpness;
-    static const rw::math::Vector2 kv2DefAmount;
-    static const rw::math::Vector2 kv2DefCentre;
-    static const rw::math::Vector4 kv4DefInnerColour;
-    static const rw::math::Vector4 kv4DefOuterColour;
+    static const Vector2 kv2DefAmount;
+    static const Vector2 kv2DefCentre;
+    static const Vector4 kv4DefInnerColour;
+    static const Vector4 kv4DefOuterColour;
 
     f32 mfAngle;
     f32 mfSharpness;
-    rw::math::Vector2 mv2Amount;
-    rw::math::Vector2 mv2Centre;
-    rw::math::Vector4 mv4InnerColour;
-    rw::math::Vector4 mv4OuterColour;
+    Vector2 mv2Amount;
+    Vector2 mv2Centre;
+    Vector4 mv4InnerColour;
+    Vector4 mv4OuterColour;
 
     void Construct()
     {
@@ -119,10 +98,10 @@ struct BlurData
     static const f32 kfDefSharpness;
     static const f32 kfDefNoise;
     static const f32 kfDefAngle;
-    static const rw::math::Vector2 kv2DefBlendAmount;
-    static const rw::math::Vector2 kv2DefBlurAmount;
-    static const rw::math::Vector2 kv2DefBlendCentre;
-    static const rw::math::Vector2 kv2DefBlurCentre;
+    static const Vector2 kv2DefBlendAmount;
+    static const Vector2 kv2DefBlurAmount;
+    static const Vector2 kv2DefBlendCentre;
+    static const Vector2 kv2DefBlurCentre;
 
     f32 mfOpacity;
     f32 mfVelocity;
@@ -130,10 +109,10 @@ struct BlurData
     f32 mfNoise;
     f32 mfAngle;
     u8  mPad14[12];
-    rw::math::Vector2 mv2BlendAmount;
-    rw::math::Vector2 mv2BlurAmount;
-    rw::math::Vector2 mv2BlendCentre;
-    rw::math::Vector2 mv2BlurCentre;
+    Vector2 mv2BlendAmount;
+    Vector2 mv2BlurAmount;
+    Vector2 mv2BlendCentre;
+    Vector2 mv2BlurCentre;
 
     void Construct()
     {
@@ -161,9 +140,9 @@ struct TintData
 
 struct TintData2d
 {
-    static const rw::math::Vector4 kv4DefaultColour;
+    static const Vector4 kv4DefaultColour;
 
-    rw::math::Vector4 mv4Colour;
+    Vector4 mv4Colour;
 
     void Construct()
     {
@@ -220,16 +199,16 @@ private:
     BrnEffects::TintData2d       mTintData2d;
     Matrix44Affine               mCarTransform;
     Matrix44Affine               mCameraTransform;
-    rw::math::Vector4            mLinearVelocity;
-    rw::math::Vector4            mAngularVelocity;
+    Vector4            mLinearVelocity;
+    Vector4            mAngularVelocity;
     f32                          mfSpeedMPH;
     f32                          mfSteering;
     BrnDirector::Camera::MotionBlurData mMotionBlurData;
     bool                         mbIsGameCamera;
 };
 
-static_assert(sizeof(rw::math::Vector2) == 16, "Vector2 layout drift");
-static_assert(sizeof(rw::math::Vector4) == 16, "Vector4 layout drift");
+static_assert(sizeof(Vector2) == 16, "Vector2 layout drift");
+static_assert(sizeof(Vector4) == 16, "Vector4 layout drift");
 static_assert(sizeof(Matrix44Affine) == 64, "Matrix44Affine layout drift");
 static_assert(sizeof(BrnEffects::BloomData) == 32, "BloomData layout drift");
 static_assert(sizeof(BrnEffects::VignetteData) == 80, "VignetteData layout drift");
@@ -239,7 +218,7 @@ static_assert(sizeof(BrnEffects::TintData) == 4, "TintData layout drift");
 static_assert(sizeof(BrnEffects::TintData2d) == 16, "TintData2d layout drift");
 static_assert(sizeof(BrnDirector::Camera::MotionBlurData) == 12, "MotionBlurData layout drift");
 
-void BrnEffectsFrame::Construct()
+inline void BrnEffectsFrame::Construct()
 {
     mbUseBloom = false;
     mbUseVignette = false;

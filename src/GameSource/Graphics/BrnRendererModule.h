@@ -2,6 +2,13 @@
 
 #include "types.hpp"
 
+// Real loading-screen-path member types (Option B: these are reconstructed for real; the
+// off-path gameplay-render subsystems below remain opaque storage until reached).
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"   // CgsGraphics::Im2d
+#include "GameSource/Game/BrnLoadingScreenRenderer.h"                // BrnGame::LoadingScreenRenderer
+#include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
+#include "GameSource/Graphics/BrnEffectsArbitrator.h"                // BrnGraphics::EffectsArbitrator
+
 namespace EA
 {
 namespace Thread
@@ -68,9 +75,7 @@ class Im2dRenderBuffer
 {
 };
 
-class Im2d
-{
-};
+// CgsGraphics::Im2d is the real type (CgsIm2d.h) - the loading screen renders through it.
 
 class Im2dUntex
 {
@@ -103,9 +108,7 @@ class OcclusionCullManager
 
 namespace BrnGraphics
 {
-class EffectsArbitrator
-{
-};
+// EffectsArbitrator is the real type (BrnEffectsArbitrator.h).
 
 class Im3dSkyDome
 {
@@ -140,9 +143,7 @@ struct BrnRendererMemory
 {
 };
 
-struct BrnShaderConstantsFrame
-{
-};
+// BrnShaderConstantsFrame is the real type (BrnShaderConstantsFrame.h).
 
 struct TextureStateParameters
 {
@@ -196,9 +197,7 @@ struct BrnSunCorona
 {
 };
 
-struct LoadingScreenRenderer
-{
-};
+// LoadingScreenRenderer is the real type (BrnGame::LoadingScreenRenderer).
 
 struct ResourceHandle
 {
@@ -212,37 +211,7 @@ struct DebugComponent
 {
 };
 
-struct Vector3
-{
-    f32 mfX;
-    f32 mfY;
-    f32 mfZ;
-    f32 mfW;
-
-    void SetZero()
-    {
-        mfX = 0.0f;
-        mfY = 0.0f;
-        mfZ = 0.0f;
-        mfW = 0.0f;
-    }
-};
-
-struct Vector4
-{
-    f32 mfX;
-    f32 mfY;
-    f32 mfZ;
-    f32 mfW;
-
-    void SetZero()
-    {
-        mfX = 0.0f;
-        mfY = 0.0f;
-        mfZ = 0.0f;
-        mfW = 0.0f;
-    }
-};
+// Vector3 / Vector4 are the real rw::math types (BrnCommonTypes.h, pulled in above).
 
 class BrnRendererModule : public CgsModule::ModuleSingleBuffered
 {
@@ -371,6 +340,14 @@ public:
     };
 
     BrnRendererModule();
+
+    // @ 0x8240A778 - one-time construction of the renderer's subsystems.
+    void Construct();
+
+    // @ 0x8240BFA8 - render one frame. The loading-screen overlay path is reconstructed;
+    // the gameplay-render path (shadows/world/cars/particles/post-fx) is data-gated off
+    // during boot and reconstructed incrementally.
+    void Render();
 
 private:
     enum
@@ -512,7 +489,7 @@ private:
     EFrameStallStage                    meFrameStallStage;
     s32                                 miFrameStallCountdown;
     CgsGraphics::OcclusionCullManager   mOcclusionCullManager;
-    LoadingScreenRenderer               mLoadingScreenRenderer;
+    BrnGame::LoadingScreenRenderer      mLoadingScreenRenderer;
     ResourceHandle                      mCalibrationTextureHandle;
     BrnCpuMonitors                      mCpuMonitors;
     BrnGpuMonitors                      mGpuMonitors;
@@ -524,7 +501,7 @@ private:
     DebugComponent                      mDebugComponent;
 };
 
-void BrnRendererModule::ClearDispatchCounters()
+inline void BrnRendererModule::ClearDispatchCounters()
 {
     mu32NumWorldOpaqueObjectTotals = 0;
     mu32NumCarOpaqueObjectTotals = 0;
@@ -539,7 +516,7 @@ void BrnRendererModule::ClearDispatchCounters()
     mu32NumShadowObjects = 0;
 }
 
-void BrnRendererModule::ClearScreenshotState()
+inline void BrnRendererModule::ClearScreenshotState()
 {
     mbUpdateThreadTakeScreenshot = false;
     mbDispatchThreadTakeScreenshot = false;
@@ -550,7 +527,7 @@ void BrnRendererModule::ClearScreenshotState()
         macScreenShotText[luIndex] = 0;
 }
 
-void BrnRendererModule::ConstructRenderSwitches()
+inline void BrnRendererModule::ConstructRenderSwitches()
 {
     mRenderSwitches.mbRenderShadows = true;
     mRenderSwitches.mbRenderEnvmap = true;
@@ -573,7 +550,7 @@ void BrnRendererModule::ConstructRenderSwitches()
     mbRenderHudImmediateMode = true;
 }
 
-BrnRendererModule::BrnRendererModule()
+inline BrnRendererModule::BrnRendererModule()
 {
     mePrepareStage = eRendererPrepareStart;
     meReleaseStage = eRendererReleaseStart;

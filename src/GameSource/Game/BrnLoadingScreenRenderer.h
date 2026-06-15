@@ -2,23 +2,27 @@
 
 #include "types.hpp"
 #include "pc/gcm/renderengine/texture.h"
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"
 
 namespace CgsGraphics { struct Im2d; }
 
 // BrnGame::LoadingScreenRenderer - draws the boot/loading screen (animated arrow over
 // a background, plus a fading black overlay) on its own render path so it can animate
-// while the main thread streams. Layout/enum from the DecFIGS DWARF
-// (BrnLoadingScreenRenderer.h); the LinearMalloc scratch buffer is reconstructed as a
-// minimal stand-in (it is not touched by the functions in this TU).
+// while the main thread streams. Layout/enum/signatures from the DecFIGS DWARF
+// (BrnLoadingScreenRenderer.h/.cpp); the loading screen uses the engine's standard
+// Im2d + renderengine::Texture2D, with the textures baked into the build.
 namespace BrnGame
 {
-    // Minimal stand-in for the X360 LinearMalloc scratch allocator member (unused by
-    // this TU's functions; full layout not recovered).
-    struct LinearMalloc
+    enum ELoadingScreenCommand
     {
-        void* mpBase;
-        u32   muSize;
-        u32   muOffset;
+        E_LSC_NONE           = 0,
+        E_LSC_SHOW           = 1,
+        E_LSC_HIDE           = 2,
+        E_LSC_SHOWSAVELOADBG = 3,
+        E_LSC_BLACKFADEIN    = 4,
+        E_LSC_BLACKFADEOUT   = 5,
+        E_LSC_COUNT          = 6,
     };
 
     struct LoadingScreenRenderer
@@ -34,16 +38,22 @@ namespace BrnGame
             E_LOADINGLANGUAGE_COUNT    = 6,
         };
 
-        void AddCommand(s32 liCommand);
-        void RenderBackground();
-        void RenderForeground(CgsGraphics::Im2d* lpIm2d);
-        void RenderBlackOverlay(CgsGraphics::Im2d* lpIm2d);
-        renderengine::Texture* SetupLoadingScreenTexture(f32 lfWidth, f32 lfHeight, s32 liUnused0,
-                                                         s32 liUnused1, s32 liUnused2,
-                                                         const void* lpPixelData, u32 luDataSize);
-        void Render();   // (separate TU; declared so the in-flow renderers can call it)
+        void Construct();
+        void AddCommand(ELoadingScreenCommand leCommand);
+        void RenderDiskErrorMessage(CgsGraphics::Im2d* lpIm2dRenderBuffer);
+        CgsMemory::LinearMalloc* GetReusableDataAllocator() { return &mReusableDataBuffer; }
+        void RenderForeground(CgsGraphics::Im2d* lpIm2dRenderBuffer);
+        void RenderBackground(CgsGraphics::Im2d* lpIm2dRenderBuffer);
+        bool IsRenderingLoadingScreen() { return mbVisible; }
 
     private:
+        renderengine::Texture2D* SetupLoadingScreenTexture(f32 lfWidth, f32 lfHeight,
+                                                           void* lpcData, s32 liDataSize);
+        CgsGraphics::Vector2 RotatePointAroundAngle(const CgsGraphics::Vector2& lPoint,
+                                                    f32 lfSin, f32 lfCos);
+        void Render(CgsGraphics::Im2d* lpIm2dRenderBuffer);
+        void RenderBlackOverlay(CgsGraphics::Im2d* lpIm2dRenderBuffer);
+
         renderengine::Texture2D* mpArrowTexture;
         renderengine::Texture2D* mpCarTexture;
         renderengine::Texture2D* mpTextTexture;
@@ -62,7 +72,7 @@ namespace BrnGame
         bool                     mbRenderInBackground;
         f32                      mfBlackOverlayFade;
         bool                     mbKillBlackOverlayWhenDone;
-        LinearMalloc             mReusableDataBuffer;
+        CgsMemory::LinearMalloc  mReusableDataBuffer;
         f32                      mfTimeStep;
         f32                      mfRotateSpeedInterp;
     };
