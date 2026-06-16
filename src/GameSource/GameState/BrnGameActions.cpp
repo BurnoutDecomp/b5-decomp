@@ -20,6 +20,23 @@ namespace CgsNetwork
 static const BrnNetwork::NetworkPlayerID K_INVALID_PLAYER_ID = -1;
 }
 
+// File-local debug-print plumbing for RankInfoResponseAction::SetProgressionRankEventWins (the
+// X360 filter-gated rank-win spew), modelled as in the committed BrnRaceMode.cpp / BrnGuiModule.cpp:
+// gpDebugPrint is a chained line-writer (vtable slot 1 writes a C-string); WriteInt writes an int and
+// returns the stream. extern -> resolved at link, not needed for the compile gate.
+namespace CgsDev
+{
+    namespace Message { extern u32 gxMessageFilterFlags; }
+    namespace Log
+    {
+        struct DebugPrint;
+        typedef DebugPrint* (*DebugPrintFn)(DebugPrint*, const char*);
+        struct DebugPrint { DebugPrintFn* mpVTable; };
+        extern DebugPrint* gpDebugPrint;
+        extern DebugPrint* WriteInt(DebugPrint* lpStream, int liValue);
+    }
+}
+
 namespace BrnGameState
 {
 namespace GameStateModuleIO
@@ -141,6 +158,77 @@ void OnlinePlayerAddedAction::SetPlayerScoringIndex(EPlayerScoringIndex lePlayer
         "(lePlayerScoringIndex >= E_PLAYER_SCORING_INDEX_0) && (lePlayerScoringIndex < E_PLAYER_SCORING_INDEX_COUNT)");
 
     mePlayerScoringIndex = lePlayerScoringIndex;
+}
+
+// X360 0x82355258. Range-checked setter for the removed online player's active-race-car slot.
+// (The X360 streamed a dynamic "invalid race car index" message via StrStream; reduced here to a
+// static CGS_ASSERT-style expression, matching the committed RemotePlayerDisconnectedAction.)
+void OnlinePlayerRemovedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    if (!((leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+          (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "We have an invalid race car index here",
+            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
+            6497);
+        CgsDev::Assert::EndAssert();
+    }
+
+    meActiveRaceCarIndex = leActiveRaceCarIndex;
+}
+
+// X360 0x823554B0. Store the player's overall progression rank + the four per-mode ranks. The two
+// asserts bound the rank below the rank count and reject the "finished last rank" sentinel
+// (verbatim file/line). liRankCount is assert-only (not stored). Void; return-result dropped.
+void RankInfoResponseAction::SetProgressionRanks(s32 liPlayerRank, s32 liRankCount, s32 liOfflineRace,
+                                                 s32 liRoadRage, s32 liStuntAttack, s32 liMarkedMan)
+{
+    if (liPlayerRank >= liRankCount)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("liPlayerRank < liRankCount",
+                                   "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6879);
+        CgsDev::Assert::EndAssert();
+    }
+    if (liPlayerRank == KI_PLAYER_HAS_FINISHED_LAST_RANK)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK",
+                                   "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6880);
+        CgsDev::Assert::EndAssert();
+    }
+
+    miPlayerRank  = liPlayerRank;
+    miOfflineRace = liOfflineRace;
+    miRoadRage    = liRoadRage;
+    miStuntAttack = liStuntAttack;
+    miMarkedMan   = liMarkedMan;
+}
+
+// X360 0x82355328. Store the four per-mode rank-win counts, after optionally echoing each through
+// the global debug stream when the message filter's bit 0 is set. Void; return-result dropped.
+void RankInfoResponseAction::SetProgressionRankEventWins(s32 liOfflineRaceRankWins, s32 liRoadRageRankWins,
+                                                         s32 liStuntAttackRankWins, s32 liMarkedManRankWins)
+{
+    using namespace CgsDev;
+    if ((Message::gxMessageFilterFlags & 1) != 0)
+    {
+        Log::DebugPrint* lp = Log::gpDebugPrint->mpVTable[1](Log::gpDebugPrint, "liOfflineRaceRankWins : ");
+        lp = Log::WriteInt(Log::gpDebugPrint, liOfflineRaceRankWins); lp->mpVTable[1](lp, "\n");
+        lp = Log::gpDebugPrint->mpVTable[1](Log::gpDebugPrint, "liRoadRageRankWins : ");
+        lp = Log::WriteInt(Log::gpDebugPrint, liRoadRageRankWins);    lp->mpVTable[1](lp, "\n");
+        lp = Log::gpDebugPrint->mpVTable[1](Log::gpDebugPrint, "liStuntAttackRankWins : ");
+        lp = Log::WriteInt(Log::gpDebugPrint, liStuntAttackRankWins); lp->mpVTable[1](lp, "\n");
+        lp = Log::gpDebugPrint->mpVTable[1](Log::gpDebugPrint, "liMarkedManRankWins : ");
+        lp = Log::WriteInt(Log::gpDebugPrint, liMarkedManRankWins);   lp->mpVTable[1](lp, "\n");
+    }
+
+    miOfflineRaceRankWins = liOfflineRaceRankWins;
+    miRoadRageRankWins    = liRoadRageRankWins;
+    miStuntAttackRankWins = liStuntAttackRankWins;
+    miMarkedManRankWins   = liMarkedManRankWins;
 }
 }
 }

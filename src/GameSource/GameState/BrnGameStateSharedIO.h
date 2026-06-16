@@ -1,7 +1,8 @@
 #pragma once
 
 #include "BrnCommonTypes.h"
-#include "GameSource/GameState/BrnGameStateTypes.h"   // BrnGameState::LandmarkIndex
+#include "GameSource/GameState/BrnGameStateTypes.h"             // BrnGameState::LandmarkIndex
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"     // BrnNetwork::NetworkPlayerID
 
 namespace BrnGameState
 {
@@ -137,6 +138,37 @@ namespace BrnGameState
                 s32           miNumLandmarks;                              // 0x24
                 s32           miEventID;                                   // 0x28
             };
+        };
+
+        // Per-player freeburn-challenge completion bit storage == CgsContainers::FastBitArray<2000>
+        // (DWARF CgsFastBitArray.h: u64 maxBits[32] == 256 bytes). The full FastBitArray type has its
+        // own un-reconstructed home; only the raw word storage these bodies fill is modelled here.
+        // (Distinct from the EventQueue-element CompletedFburnChallengesData above.)
+        struct CompletedFburnChallenges
+        {
+            static const u32 KU_NUM_BIT_WORDS = 32;
+            u64 maxBits[KU_NUM_BIT_WORDS];
+        };
+
+        // DWARF BrnGameStateSharedIO.h:936. The "every player" freeburn completion-status block:
+        // 7 per-player slots {bit-array, player id} + the local player's bit array. Minimal slice:
+        // only Construct (0x82326360) + AddCompletionStatus (0x823263C8) are owned here.
+        class FburnChallengeEveryPlayerStatusData
+        {
+        public:
+            void Construct();
+            void AddCompletionStatus(const CompletedFburnChallenges* lpCompletedChallenges,
+                                     BrnNetwork::NetworkPlayerID lPlayerID);
+
+        private:
+            static const s32 KI_NUM_PLAYER_SLOTS = 7;
+            struct CompletedChallenges
+            {
+                CompletedFburnChallenges    mCompletedChallenges; // slot+0   (256 bytes)
+                BrnNetwork::NetworkPlayerID mPlayerID;            // slot+256 (sentinel -1)
+            };
+            CompletedChallenges      maCompletedChallenges[KI_NUM_PLAYER_SLOTS];
+            CompletedFburnChallenges mLocalChallengeCompletionData;
         };
     }
 }

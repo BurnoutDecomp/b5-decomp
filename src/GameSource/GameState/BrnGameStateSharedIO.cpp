@@ -2,6 +2,12 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+// CgsNetwork::K_INVALID_PLAYER_ID has no committed home; file-local -1 (the FlybyManager precedent).
+namespace CgsNetwork
+{
+static const BrnNetwork::NetworkPlayerID K_INVALID_PLAYER_ID = -1;
+}
+
 namespace BrnGameState
 {
 namespace GameStateModuleIO
@@ -56,6 +62,54 @@ void SpecificGameModeEventInterface::Event::Construct(
     {
         maLandmarkIndices[liIndex] = lpaLandmarkIndices[liIndex];
     }
+}
+
+// X360 0x82326360. Initialise the freeburn "every player" completion block: zero each of the 7
+// per-player slots' completion bits + invalidate its player id, then zero the local-player bits.
+void FburnChallengeEveryPlayerStatusData::Construct()
+{
+    for (s32 liSlot = 0; liSlot < KI_NUM_PLAYER_SLOTS; ++liSlot)
+    {
+        CompletedChallenges& lSlot = maCompletedChallenges[liSlot];
+        for (u32 luWord = 0; luWord < CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luWord)
+        {
+            lSlot.mCompletedChallenges.maxBits[luWord] = 0;
+        }
+        lSlot.mPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
+    }
+
+    for (u32 luWord = 0; luWord < CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luWord)
+    {
+        mLocalChallengeCompletionData.maxBits[luWord] = 0;
+    }
+}
+
+// X360 0x823263C8. Record one remote player's completion entry in the first free slot (free ==
+// mPlayerID sentinel). All 7 full -> fire the "No room" assert (verbatim file/line) and bail.
+// FAITHFUL QUIRK: the X360 body zeroes the slot's bit-array rather than copying lpCompletedChallenges
+// (the source param is dead); only the player id is stored. Void; return-result dropped.
+void FburnChallengeEveryPlayerStatusData::AddCompletionStatus(
+    const CompletedFburnChallenges* /*lpCompletedChallenges*/, BrnNetwork::NetworkPlayerID lPlayerID)
+{
+    s32 liIndex = 0;
+    while (maCompletedChallenges[liIndex].mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID)
+    {
+        ++liIndex;
+        if (liIndex >= KI_NUM_PLAYER_SLOTS)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("No room for completion status data\n",
+                                       "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 2063);
+            CgsDev::Assert::EndAssert();
+            return;
+        }
+    }
+
+    for (u32 luWord = 0; luWord < CompletedFburnChallenges::KU_NUM_BIT_WORDS; ++luWord)
+    {
+        maCompletedChallenges[liIndex].mCompletedChallenges.maxBits[luWord] = 0;
+    }
+    maCompletedChallenges[liIndex].mPlayerID = lPlayerID;
 }
 }
 }
