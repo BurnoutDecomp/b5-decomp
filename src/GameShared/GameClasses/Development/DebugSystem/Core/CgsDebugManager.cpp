@@ -1,8 +1,9 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
 
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // DebugComponent (mbActive/OnRegister/DebugUISectionCallback)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // DebugComponent (mbActive/OnRegister/DebugUISectionCallback/RenderHUD)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"      // GetUI().GetVariableManager()/GetFunctionManager()
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"        // Variant
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mp2dRender Begin/End/SetRenderBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 
 // CgsDev::DebugManager - the in-game debug systems owner.
@@ -26,6 +27,8 @@ namespace CgsDev
 
     DebugManager::DebugManager()
         : mpUI(nullptr)
+        , mp2dRender(nullptr)
+        , mp3dRender(nullptr)
     {
         mComponentList.Clear();
     }
@@ -87,5 +90,34 @@ namespace CgsDev
         GetUI().GetVariableManager().RegisterVariable(DebugUI::Variant(&lpComponent->mbActive), lpcPath, lpcName);
 
         lpComponent->OnRegister();
+    }
+
+    // X360 RenderHUD 0x8282E108 (2D screen-space pass - the debug squares): open the 2D renderer,
+    // let each active component draw its HUD, close. The X360 also flushes the buffered debug prims
+    // (DebugRender::Dispatch2D over mBufferedRenderer) and renders the DebugUI menus between Begin and
+    // the component loop; those two paths are the buffered-render / menu-render follow-on.
+    void DebugManager::RenderHUD()
+    {
+        mp2dRender->Begin();
+
+        for (DebugComponent* lpComponent = mComponentList.GetFirst();
+             lpComponent;
+             lpComponent = mComponentList.GetNext(lpComponent))
+        {
+            if (lpComponent->IsActive())
+                lpComponent->RenderHUD(mp2dRender);
+        }
+
+        mp2dRender->End();
+    }
+
+    // X360 Render 0x8282F770: point the renderers at this frame's buffers, then RenderWorld + RenderHUD.
+    // The 3D path (mp3dRender setup + RenderWorld) is the Debug3D follow-on; the 2D path drives the
+    // squares into lp2dRenderBuffer.
+    void DebugManager::Render(const Matrix44& /*lViewProjection*/, const Vector3& /*lCameraPosition*/,
+                             CgsGraphics::Im2d* /*lp3dRenderBuffer*/, CgsGraphics::Im2d* lp2dRenderBuffer)
+    {
+        mp2dRender->SetRenderBuffer(lp2dRenderBuffer);
+        RenderHUD();
     }
 }

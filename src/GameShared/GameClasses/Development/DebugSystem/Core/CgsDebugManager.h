@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                                            // Matrix44, Vector3 (render entry)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugCollections.h"  // DebugLinkedList<DebugComponent>
 
 // CgsDev::DebugManager - the process-wide owner of the in-game debug systems (perfmon overlays,
@@ -21,8 +22,14 @@ namespace CgsDev
 {
     class DebugComponent;
     struct DebugManagerConstructParameters;
+    class Debug2DImmediateRender;   // the 2D debug renderer (HUD squares/lines/text)
+    class Debug3DImmediateRender;   // the 3D (world-space) debug renderer - render follow-on
 
     namespace DebugUI { struct DebugUI; }
+}
+namespace CgsGraphics { struct Im2d; }
+namespace CgsDev
+{
 
     class DebugManager
     {
@@ -55,12 +62,32 @@ namespace CgsDev
         DebugComponent*   FindComponentByName(const char* lpcName);
         DebugUI::DebugUI& GetUI();
 
+        // Per-frame debug render spine (X360 Render 0x8282F770 -> RenderWorld + RenderHUD 0x8282E108).
+        // RenderHUD is the 2D screen-space pass that draws the debug overlay (the "debug squares"):
+        // Debug2DImmediateRender::Begin -> flush queued debug prims + each active component's RenderHUD
+        // + the DebugUI -> Debug2DImmediateRender::End. The bodies + the renderers (mp2dRender/mp3dRender)
+        // + the full Render(viewproj, cameraPos, buffers) entry are the render-spine follow-on; this
+        // declares the HUD pass the loading-screen render path will drive into mIm2dDebugRenderBuffer.
+        void RenderHUD();
+
+        // X360 Render 0x8282F770: point the renderers at this frame's buffers, then RenderWorld (3D)
+        // + RenderHUD (2D). The 3D path (RenderWorld + mp3dRender setup) is the Debug3D follow-on;
+        // the 2D path drives the squares.
+        void Render(const Matrix44& lViewProjection, const Vector3& lCameraPosition,
+                    CgsGraphics::Im2d* lp3dRenderBuffer, CgsGraphics::Im2d* lp2dRenderBuffer);
+        void RenderWorld(const Matrix44& lViewProjection, const Vector3& lCameraPosition);
+
     private:
         // INCREMENTAL: the registered-component list (X360 this+33132) + the UI the manager owns
         // (reached at a fixed offset on X360; modelled as a pointer here) are the members the
         // registration path touches; the rest of the ~33KB layout is the manager follow-on.
         DebugUI::DebugUI*                          mpUI;
         Internal::DebugLinkedList<DebugComponent>  mComponentList;
+
+        // The debug renderers the render spine drives (set up by ConstructRenderer; the renderer
+        // types themselves are the next brick - Debug2DImmediateRender draws the HUD squares).
+        Debug2DImmediateRender*                    mp2dRender;
+        Debug3DImmediateRender*                    mp3dRender;
 
         static DebugManager* mpInstance;
     };

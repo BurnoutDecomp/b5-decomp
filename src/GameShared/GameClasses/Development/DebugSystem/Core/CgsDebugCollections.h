@@ -35,6 +35,17 @@
 
 namespace rw { class IResourceAllocator; }
 
+namespace CgsDev { namespace Internal {
+    // Allocation tag for the debug pools' backing blocks (DWARF CgsDebugCollections.h:30).
+    enum AllocationType { E_ALLOCATION_NORMAL = 0 };
+} }
+
+// Custom array-new the debug pools allocate their backing blocks through (DWARF
+// CgsDebugCollections.h:45) - raw storage from the rw resource allocator. The body (the actual
+// allocator call - X360 AllocateMemoryResource / PC-SDK rw::IResourceAllocator::Alloc) is the
+// bring-up follow-on; declared here so the pool Construct bodies resolve it.
+void* operator new[](size_t size, rw::IResourceAllocator* lpAllocator, CgsDev::Internal::AllocationType leAllocation);
+
 namespace CgsDev
 {
     namespace Internal
@@ -47,8 +58,18 @@ namespace CgsDev
             s16 miCount;
             T** mppItems;
 
-            void Construct(int liMaxSize, rw::IResourceAllocator* lpAllocator);
-            void Clear();
+            // X360 (DebugStaticArray<T>::Construct): allocate the T* slot array from the allocator,
+            // set capacity, start empty, null the slots.
+            void Construct(int liMaxSize, rw::IResourceAllocator* lpAllocator)
+            {
+                mppItems  = static_cast<T**>(::operator new[](static_cast<size_t>(liMaxSize) * sizeof(T*), lpAllocator, E_ALLOCATION_NORMAL));
+                miMaxSize = static_cast<s16>(liMaxSize);
+                miCount   = 0;
+                for (s32 liIndex = 0; liIndex < liMaxSize; ++liIndex)
+                    mppItems[liIndex] = nullptr;
+            }
+
+            void Clear() { miCount = 0; }
 
             void Add(T* lpItem)
             {
@@ -88,8 +109,25 @@ namespace CgsDev
             DebugStaticArray<T> mFree;
             T*                  mpItemsArray;
 
-            void Construct(int liMaxSize, rw::IResourceAllocator* lpAllocator);
-            void Clear();
+            // X360 (DebugStaticPool<T>::Construct, sub_8281B1C0): allocate the backing T[] block from
+            // the allocator, then build the active + free index arrays over it.
+            void Construct(int liMaxSize, rw::IResourceAllocator* lpAllocator)
+            {
+                mpItemsArray = static_cast<T*>(::operator new[](static_cast<size_t>(liMaxSize) * sizeof(T), lpAllocator, E_ALLOCATION_NORMAL));
+                mActive.Construct(liMaxSize, lpAllocator);
+                mFree.Construct(liMaxSize, lpAllocator);
+            }
+
+            // Reset to all-free: empty the active list and push every backing item onto free (the X360
+            // manager Construct calls Construct then Clear; Construct leaves free empty, Clear fills it).
+            void Clear()
+            {
+                mActive.Clear();
+                mFree.Clear();
+                const s32 liMaxSize = mActive.GetMaxSize();
+                for (s32 liIndex = 0; liIndex < liMaxSize; ++liIndex)
+                    mFree.Add(&mpItemsArray[liIndex]);
+            }
 
             s32 GetMaxSize() const { return mActive.GetMaxSize(); }
 
