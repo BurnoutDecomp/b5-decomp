@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BrnCommonTypes.h"
+#include "GameSource/GameState/BrnGameStateTypes.h"   // BrnGameState::LandmarkIndex
 
 namespace BrnGameState
 {
@@ -60,6 +61,82 @@ namespace BrnGameState
         {
             s32 mNetworkPlayerID;
             u32 mCompletedFreeburnChallenges[63]; // FastBitArray<2000>
+        };
+
+        // ===== Added by the GameMode/ModeManager leaf batch (Group B IO family) =====
+
+        // Per-player scoring slot (online). Minimal home; enumerators mirror the
+        // EActiveRaceCarIndex pattern (8 players + invalid). DWARF: BrnGameStateSharedIO.h.
+        enum EPlayerScoringIndex : s32
+        {
+            E_PLAYER_SCORING_INDEX_INVALID = -1,
+            E_PLAYER_SCORING_INDEX_0       = 0,
+            E_PLAYER_SCORING_INDEX_1       = 1,
+            E_PLAYER_SCORING_INDEX_2       = 2,
+            E_PLAYER_SCORING_INDEX_3       = 3,
+            E_PLAYER_SCORING_INDEX_4       = 4,
+            E_PLAYER_SCORING_INDEX_5       = 5,
+            E_PLAYER_SCORING_INDEX_6       = 6,
+            E_PLAYER_SCORING_INDEX_7       = 7,
+            E_PLAYER_SCORING_INDEX_COUNT   = 8
+        };
+
+        // Online team selector. DWARF: BrnGameStateSharedIO.h:32.
+        enum EPlayerTeam : s32
+        {
+            E_PLAYER_TEAM_NONE      = 0,
+            E_PLAYER_TEAM_RED_TEAM  = 1,
+            E_PLAYER_TEAM_BLUE_TEAM = 2,
+            E_PLAYER_TEAM_COUNT     = 3
+        };
+
+        // Per-event assert ceiling on landmarks (DWARF BrnGameStateSharedIO.h:1850).
+        const s32 KI_MAX_LANDMARKS_IN_MODE = 16;
+
+        // X360-only stunt-score scratch record. No DWARF/leak shape exists; the layout is
+        // recovered purely from StuntScoreInfo::Clear (0x82356EA0), which zeroes a fixed set of
+        // u32 words and leaves the muReservedNN gaps intact. Field semantics are unknown -- words
+        // are named storage slots at their exact offsets (rename when a populating TU reveals
+        // them). Single owner: grow in place, do not fork.
+        struct StuntScoreInfo
+        {
+            u32 muWord00, muWord01, muWord02, muWord03, muWord04, muWord05, muWord06;
+            u32 muReserved07;
+            u32 muWord08;
+            u32 muReserved09;
+            u32 muWord10;
+            u32 muReserved11;
+            u32 muWord12;
+            u32 muReserved13;
+            u32 muWord14, muWord15, muWord16, muWord17, muWord18;
+            u32 muReserved19;
+            u32 muWord20;
+            u32 muReserved21, muReserved22, muReserved23;
+            u32 muWord24;
+
+            void Clear();   // X360 0x82356EA0
+        };
+
+        // DWARF BrnGameStateSharedIO.h:872. The nested per-event record of the game-mode event
+        // interface. Minimal slice: only Event + its Construct are owned here; the parent
+        // SpecificGameModeEventInterface (Array<Event,175>) lands with its own TU.
+        class SpecificGameModeEventInterface
+        {
+        public:
+            class Event
+            {
+            public:
+                // luTrafficLightTriggerId is a LightTriggerId (== u32); spelled u32 here to avoid
+                // a BrnGameModeParams.h include cycle (that header depends on this one).
+                void Construct(s32 liEventID, u32 luTrafficLightTriggerId,
+                               LandmarkIndex* lpaLandmarkIndices, s32 liNumLandmarks); // X360 0x82354340
+
+            private:
+                LandmarkIndex maLandmarkIndices[KI_MAX_LANDMARKS_IN_MODE]; // 0x00
+                u32           mTrafficLightTriggerId;                      // 0x20 (LightTriggerId)
+                s32           miNumLandmarks;                              // 0x24
+                s32           miEventID;                                   // 0x28
+            };
         };
     }
 }
