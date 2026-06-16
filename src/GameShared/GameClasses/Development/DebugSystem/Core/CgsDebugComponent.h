@@ -19,6 +19,8 @@ namespace CgsDev
     class Debug2DImmediateRender;
     class Debug3DImmediateRender;
 
+    namespace Internal { template <class T> struct DebugLinkedList; }
+
     namespace DebugUI
     {
         struct MenuItem;
@@ -27,6 +29,11 @@ namespace CgsDev
 
     class DebugComponent : public Internal::DebugInternal
     {
+        // DebugManager threads registered components through mpDebugLinkedListNext, and registers
+        // each component's active flag / section callback (it reaches mbActive + OnRegister).
+        friend struct CgsDev::Internal::DebugLinkedList<DebugComponent>;
+        friend class CgsDev::DebugManager;
+
     public:
         DebugComponent();
 
@@ -89,7 +96,9 @@ namespace CgsDev
         void MakeFullPath(char* lpcBuffer, s32 liBufferLen, const char* lpcLeaf);
 
     private:
-        void DebugUISectionCallback(void* lpUserData);
+        // Static so it can be registered as a DebugUI::Function callback (X360 RegisterComponent
+        // passes &DebugUISectionCallback with the component as the user-data).
+        static void DebugUISectionCallback(void* lpUserData);
 
         bool            mbActive;
         DebugComponent* mpDebugLinkedListNext;
