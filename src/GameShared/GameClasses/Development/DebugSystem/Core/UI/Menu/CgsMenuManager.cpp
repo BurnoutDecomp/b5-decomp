@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenuManager.h"
 
-#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenu.h"  // Menu (Prepare/AddMenuItem/GetParent/GetCaption)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"      // DebugManagerConstructParameters (pool sizes + allocator)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenu.h"      // Menu (Prepare/AddMenuItem/GetParent/GetCaption)
 
 #include <string.h>  // _stricmp
 
@@ -19,6 +20,30 @@ namespace CgsDev
 {
     namespace DebugUI
     {
+        // X360 CgsMenuManager.cpp:59 (bounded). Size the menu pool from the construct parameters and
+        // Clear it to fill the free list. The root menu (mpMainMenu) is NOT allocated here - the X360
+        // Construct shows no pool Allocate; it is created in the deferred menu-tree bring-up. Until then
+        // mpMainMenu stays null, which CreateMenuPath tolerates (a null root resolves new segments as
+        // top-level menus with a null parent - no dereference of the root).
+        //
+        // mWindowPool serves the menu-DISPLAY path (Open/CreateMenuWindow), which the bounded build
+        // defers: MenuWindow has no reconstructed body yet (CgsMenuWindow.cpp), and the perfmon HUD
+        // opens no menu window. Constructing it here would placement-construct MenuWindow() and pull in
+        // the deferred Window/MenuWindow ctors + vtables. It is left zero-initialised (the global UI
+        // instance zero-inits it to a valid empty pool) until that path is reconstructed.
+        void MenuManager::Construct(const DebugManagerConstructParameters* lpParameters)
+        {
+            rw::IResourceAllocator* lpAllocator = lpParameters->mpRwAllocator;
+
+            mMenuPool.Construct(lpParameters->miMenuPoolSize, lpAllocator);
+            mMenuPool.Clear();
+
+            mpMainMenu = nullptr;
+        }
+
+        // X360 CgsMenuManager.cpp:86 is empty (the debug allocator owns the pool backing).
+        void MenuManager::Destruct() {}
+
         Menu* MenuManager::CreateMenuPath(const char* lpcPath, Menu* lpParent)
         {
             if (!lpcPath)

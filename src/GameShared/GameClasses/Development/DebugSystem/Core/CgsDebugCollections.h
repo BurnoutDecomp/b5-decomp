@@ -3,6 +3,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (DebugLinkedList guards)
 
+#include <new>   // placement-new (the pools default-construct their backing elements)
+
 // CgsDev::Internal debug collection templates - the three container shapes the whole debug-UI
 // runtime is built from. Recovered from the DecFIGS DWARF
 // (Development/DebugSystem/Core/CgsDebugCollections.h), which lists them per-instantiation
@@ -114,6 +116,14 @@ namespace CgsDev
             void Construct(int liMaxSize, rw::IResourceAllocator* lpAllocator)
             {
                 mpItemsArray = static_cast<T*>(::operator new[](static_cast<size_t>(liMaxSize) * sizeof(T), lpAllocator, E_ALLOCATION_NORMAL));
+                // The X360 allocates the backing block with array-new, which default-constructs every
+                // element (CgsVariableManager.cpp:60 / CgsMenuManager.cpp:59 list the element ctor -
+                // Variable()/Menu()/MenuItemVariable()/MenuWindow()/... - inside Construct). The
+                // menu-item element types carry a vtable and the managers invoke their virtual Prepare
+                // on a freshly pooled element, so the elements MUST be constructed here, not merely
+                // allocated.
+                for (s32 liIndex = 0; liIndex < liMaxSize; ++liIndex)
+                    ::new (static_cast<void*>(&mpItemsArray[liIndex])) T();
                 mActive.Construct(liMaxSize, lpAllocator);
                 mFree.Construct(liMaxSize, lpAllocator);
             }

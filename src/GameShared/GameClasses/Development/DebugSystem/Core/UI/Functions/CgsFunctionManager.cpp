@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunctionManager.h"
 
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"           // DebugManagerConstructParameters (pool sizes + allocator)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"             // GetUI().GetMenuManager()
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenu.h"           // Menu::AddMenuItem
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsMenuItemFunction.h"  // MenuItemFunction::Prepare
@@ -15,6 +16,23 @@ namespace CgsDev
 {
     namespace DebugUI
     {
+        // X360 CgsFunctionManager.cpp:61. Size the function + menu-item pools from the construct
+        // parameters (1:1 - each registered function gets one menu row), then Clear each to fill the
+        // free lists.
+        void FunctionManager::Construct(const DebugManagerConstructParameters* lpParameters)
+        {
+            rw::IResourceAllocator* lpAllocator = lpParameters->mpRwAllocator;
+
+            mFunctionPool.Construct(lpParameters->miFunctionPoolSize, lpAllocator);
+            mMenuItemPool.Construct(lpParameters->miFunctionPoolSize, lpAllocator);
+
+            mFunctionPool.Clear();
+            mMenuItemPool.Clear();
+        }
+
+        // X360 CgsFunctionManager.cpp:83 is empty (the debug allocator owns the pool backing).
+        void FunctionManager::Destruct() {}
+
         void FunctionManager::RegisterFunction(Function::DebugCallbackFunction lpfCallback, void* lpUserData, const char* lpcPath, const char* lpcName)
         {
             Menu* lpMenu = GetUI().GetMenuManager().CreateMenuPath(lpcPath, nullptr);

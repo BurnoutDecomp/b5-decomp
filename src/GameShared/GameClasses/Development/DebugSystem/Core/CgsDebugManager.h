@@ -21,11 +21,31 @@
 namespace CgsDev
 {
     class DebugComponent;
-    struct DebugManagerConstructParameters;
-    class Debug2DImmediateRender;   // the 2D debug renderer (HUD squares/lines/text)
-    class Debug3DImmediateRender;   // the 3D (world-space) debug renderer - render follow-on
+    struct Debug2DImmediateRender;   // the 2D debug renderer (HUD squares/lines/text)
+    struct Debug3DImmediateRender;   // the 3D (world-space) debug renderer - render follow-on
 
     namespace DebugUI { struct DebugUI; }
+
+    // X360 CgsDebugManager.h:95. The pool sizes + perfmon/console configuration the whole debug
+    // system is sized from: DebugManager::Construct forwards this to DebugUI::Construct, which hands
+    // it to the three managers - each sizes its DebugStaticPools from the matching field (menu pool
+    // <- miMenuPoolSize, menu-item pool <- the owning element's pool size, etc.). DEFAULT is the
+    // built-in configuration the engine boots with when no explicit parameters are supplied; its
+    // values are defined in CgsDebugManager.cpp. Field order/types mirror the DWARF.
+    struct DebugManagerConstructParameters
+    {
+        s16 miPerfMonCpuCount;
+        s32 miPerfMonLogBufferSize;
+        s16 miMenuWindowPoolSize;
+        s16 miMenuPoolSize;
+        s16 miFunctionPoolSize;
+        s16 miVariablePoolSize;
+        s16 miVariableMetadataPoolSize;
+        s8  miConsoleLineCount;
+        rw::IResourceAllocator* mpRwAllocator;
+
+        static const DebugManagerConstructParameters DEFAULT;
+    };
 }
 namespace CgsGraphics { struct Im2d; }
 namespace CgsDev

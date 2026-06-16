@@ -10,7 +10,7 @@
 
 namespace CgsDev
 {
-    class Debug2DImmediateRender;
+    struct Debug2DImmediateRender;
 
     namespace DebugUI
     {

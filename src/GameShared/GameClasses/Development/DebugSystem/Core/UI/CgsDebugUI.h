@@ -26,7 +26,7 @@
 namespace CgsDev
 {
     class DebugManager;
-    class Debug2DImmediateRender;
+    struct Debug2DImmediateRender;
     struct DebugManagerConstructParameters;
 
     namespace DebugUI

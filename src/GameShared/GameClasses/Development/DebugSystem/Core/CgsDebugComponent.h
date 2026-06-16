@@ -16,8 +16,8 @@
 
 namespace CgsDev
 {
-    class Debug2DImmediateRender;
-    class Debug3DImmediateRender;
+    struct Debug2DImmediateRender;
+    struct Debug3DImmediateRender;
 
     namespace Internal { template <class T> struct DebugLinkedList; }
 
