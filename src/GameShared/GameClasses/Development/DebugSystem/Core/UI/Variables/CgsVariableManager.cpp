@@ -45,5 +45,21 @@ namespace CgsDev
             lpVariable->Prepare(lrVariant, lpcName);
             lpMenuItem->Prepare(lpVariable);
         }
+
+        // --- attribute/metadata setters: the metadata path (FindVariable + SetMetadata over
+        // mMetadataPool, SetRange X360 0x8282ECB8) is the next faithful brick. Stubbed here so the
+        // subsystem links into the exe; this code is dead in the loading build (no variable is
+        // registered or edited during loading). ---
+        void VariableManager::SetReadOnly(void*, bool) {}
+        void VariableManager::SetSaveEnabled(void*, bool) {}
+        void VariableManager::SetVisible(void*, bool) {}
+        void VariableManager::SetCustomMenuItem(void*, MenuItemVariable*) {}
+        void VariableManager::SetOptions(s32*, const StringList*) {}
+        void VariableManager::SetChangeCallback(void*, Variant::UValue::VariableCallbackFunction, void*) {}
+        void VariableManager::SetSelectCallback(void*, Variant::UValue::VariableCallbackFunction, void*) {}
+        void VariableManager::SetVariableName(void*, const char*) {}
+        void VariableManager::UnregisterVariable(void*) {}
+        void VariableManager::SetRange(void*, const Variant&, const Variant&) {}
+        void VariableManager::SetStep(void*, const Variant&) {}
     }
 }

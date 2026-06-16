@@ -311,4 +311,13 @@ namespace CgsDev
     bool        DebugComponent::IsSimple() const                     { return false; }
     void        DebugComponent::OnActivate()                          {}
     void        DebugComponent::OnRegister()                          {}
+
+    // X360: ActivateComponent(this) -> GetComponentPath -> MenuManager::GetMenuFromPath -> Open. The
+    // menu-open path (DebugManager::ActivateComponent / MenuManager::GetMenuFromPath / Open) is the
+    // menu-navigation follow-on; stubbed here - this fires only when a debug section is selected,
+    // never during loading.
+    void DebugComponent::DebugUISectionCallback(void* lpUserData)
+    {
+        (void)lpUserData;
+    }
 }

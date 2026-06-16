@@ -26,5 +26,14 @@ namespace CgsDev
         {
             return mpVariable;
         }
+
+        // --- render/size virtuals: variable-row render follow-on (stubbed for link) ---
+        void MenuItemVariable::Update(f32, InputEvent) {}
+        void MenuItemVariable::Render(Debug2DImmediateRender*, f32, f32, bool, f32) {}
+        void MenuItemVariable::ComputeSize() {}
+        bool MenuItemVariable::IsUseful() const  { return true; }
+        bool MenuItemVariable::IsVisible() const { return true; }
+        void MenuItemVariable::GetDisplayName(char* lpcBuffer, s32 liBufferLen) const { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
+        void MenuItemVariable::GetItemString(char* lpcBuffer, s32 liBufferLen) const  { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
     }
 }
