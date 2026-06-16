@@ -3,6 +3,7 @@
 #include "BrnCommonTypes.h"
 #include "GameSource/GameState/BrnGameStateTypes.h"             // BrnGameState::LandmarkIndex
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"     // BrnNetwork::NetworkPlayerID
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"      // CgsContainers::BitArray<N> (CarCheckpointData)
 
 namespace BrnGameState
 {
@@ -169,6 +170,84 @@ namespace BrnGameState
             };
             CompletedChallenges      maCompletedChallenges[KI_NUM_PLAYER_SLOTS];
             CompletedFburnChallenges mLocalChallengeCompletionData;
+        };
+
+        // ===== Added by the CarCheckpointData TU (checkpoint bit-set IO) =====
+        //
+        // X360-only per-car checkpoint tracker. Absent from the PS3 DecFIGS DWARF; the layout
+        // is recovered from the X360 Hex-Rays of its four methods (0x8231BDF8 / 0x8231BF90 /
+        // 0x823261D0 / 0x823C4D50). Every method's inlined bit math is byte-for-byte the
+        // CgsContainers::BitArray<16> template instantiation (one u64 field, 16 valid bits). So
+        // the class is a thin semantic wrapper: a "checkpoints still remaining" bit set where a
+        // set bit == checkpoint not yet reached. KI_MAX_LANDMARKS_IN_MODE (==16) is the committed
+        // capacity and equals BitArray<16>::GetCapacity(), so it is the NUMBITS.
+        //
+        // MINIMAL SLICE: the only data member the four bodies touch is the embedded BitArray<16>
+        // (its single u64 sits at offset 0).
+        class CarCheckpointData
+        {
+        public:
+            // X360 0x8231BDF8. Initialise the tracker for an event with liNumCheckpoints checkpoints:
+            // clear all bits, then mark checkpoints [0, liNumCheckpoints) as remaining (bit set).
+            void SetupCheckpoints(s32 liNumCheckpoints);
+
+            // X360 0x8231BF90. Mark checkpoint liCheckpointIndex as reached by clearing its remaining
+            // bit. Asserts the index is in range and the bit was still set (not already hit).
+            void MarkCheckpointAsHit(s32 liCheckpointIndex);
+
+            // X360 0x823261D0. Index of the next (lowest-indexed) checkpoint still to be reached,
+            // or -1 if none. Asserts at least one checkpoint is set.
+            s32 GetNextCheckpointIndex() const;
+
+            // X360 0x823C4D50. Write the indices of every remaining checkpoint, in ascending order,
+            // into lpaiCheckpointIndexes; returns how many were written.
+            s32 GetAllRemainingCheckpointIndexes(s32* lpaiCheckpointIndexes) const;
+
+        private:
+            // Sole data member (offset 0x00, 8 bytes). NUMBITS == KI_MAX_LANDMARKS_IN_MODE (16).
+            CgsContainers::BitArray<KI_MAX_LANDMARKS_IN_MODE> mCheckpointsRemaining;
+        };
+
+        // ===== Forked slices from the GameStateModuleIO TU (FlybyData / OnlineGameResults) =====
+        // TODO(conductor-review): reuse committed home / DWARF member names. The verifier notes
+        // FlybyData's DWARF-attested array member is mRivalsToShow, the accessor is
+        // GetCarFlybyData(int32_t) const, and a miNumberOfCars int32 header precedes the array;
+        // and OnlineGameResults has a committed home (BrnGameActions.h:2960, base
+        // GameAction<E_ACTION_ONLINE_GAME_RESULT> with named members). Kept here as standalone
+        // slices for now -- they compile, but should be re-homed at consolidation.
+
+        // X360 FlybyData / FlybyRivalData minimal slice. The 196-byte per-rival record is opaque
+        // storage; only the bounds constant + the array are modelled (per-rival fields land with
+        // the FlybyManager's own TU). FlybyData = {u8 header[4]; FlybyRivalData maFlybyRivalData[3]}.
+        struct FlybyRivalData
+        {
+            static const s32 KI_MAX_CARS_IN_FLYBY = 3;
+            u8 maOpaque[196];   // per-rival fields (un-reconstructed)
+        };
+
+        struct FlybyData
+        {
+            // X360 0x821F2A90. Indexed accessor for one of the (KI_MAX_CARS_IN_FLYBY == 3)
+            // per-rival records. Bounds asserts at BrnGameStateSharedIO.h:1110/1111.
+            FlybyRivalData* GetFlybyRivalData(s32 liRivalIndex);
+
+        private:
+            u8             mHeader[4];                                       // this+0
+            FlybyRivalData maFlybyRivalData[FlybyRivalData::KI_MAX_CARS_IN_FLYBY]; // this+4, 196-byte stride
+        };
+
+        // X360 0x821F2B08. Free predicate over EGameModeType: true for exactly
+        // E_MODE_ONLINE_FREE_BURN_LOBBY (15) and E_MODE_ONLINE_SHOWTIME (16).
+        bool IsOnlineFreeBurnLobby(EGameModeType leGameMode);
+
+        // X360 OnlineGameResults minimal slice (260-byte payload == 65 u32 words). The copy-assign
+        // skips word index 1 (offset 0x04) faithfully. TODO(conductor-review): re-home onto the
+        // committed BrnGameActions.h GameAction<E_ACTION_ONLINE_GAME_RESULT> with typed members.
+        struct OnlineGameResults
+        {
+            static const u32 KU_NUM_WORDS = 65;
+            u32 mauWords[KU_NUM_WORDS];
+            OnlineGameResults& operator=(const OnlineGameResults& lOther);
         };
     }
 }
