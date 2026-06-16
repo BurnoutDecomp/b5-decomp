@@ -8,18 +8,14 @@
 #include "GameSource/Game/BrnLoadingScreenRenderer.h"                // BrnGame::LoadingScreenRenderer
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"                // BrnGraphics::EffectsArbitrator
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (real base)
 
+// EA::Jobs::Job is still an off-path placeholder (the renderer's sort/dispatch jobs do not run
+// during the loading screen); reconstructed with the job system. The real EA::Thread::RWMutex
+// now comes in via CgsDataBuffer.h (pulled by the real ModuleSingleBuffered base) - the former
+// stub RWMutex was removed so the renderer/game modules share one real module base + mutex type.
 namespace EA
 {
-namespace Thread
-{
-class RWMutex
-{
-public:
-    RWMutex(const char* lpcName, bool lbIntraProcess);
-};
-}
-
 namespace Jobs
 {
 class Job
@@ -28,39 +24,6 @@ public:
     Job(s32 liPriority = 0);
 };
 }
-}
-
-namespace CgsModule
-{
-class ModuleSingleBuffered
-{
-public:
-    ModuleSingleBuffered()
-        : mInputRWMutex(0, true)
-        , mOutputRWMutex(0, true)
-        , meBufferState(0)
-        , miInputBufferIndex(0)
-        , miOutputBufferIndex(0)
-        , miPendingInputBufferIndex(0)
-        , miPendingOutputBufferIndex(0)
-    {
-    }
-
-    // Releases the read lock taken on the module's input buffer for the frame. The real
-    // ModuleSingleBuffered body is reconstructed in CgsModuleSingleBuffered.cpp; declared
-    // here on the lightweight base used by the renderer/game modules so callers (e.g.
-    // BrnGameModule::GameMain) resolve it. Placeholder body until that base is unified.
-    void UnlockInputForRead() {}
-
-private:
-    EA::Thread::RWMutex mInputRWMutex;
-    EA::Thread::RWMutex mOutputRWMutex;
-    s32                 meBufferState;
-    s32                 miInputBufferIndex;
-    s32                 miOutputBufferIndex;
-    s32                 miPendingInputBufferIndex;
-    s32                 miPendingOutputBufferIndex;
-};
 }
 
 namespace CgsGraphics

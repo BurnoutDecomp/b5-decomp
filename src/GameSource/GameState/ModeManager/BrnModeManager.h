@@ -27,5 +27,14 @@ class ModeManager
 {
 public:
     void TellGuiToShowOnlineFinalStandings();
+
+    // Debug-tunable mode flags driven by the mode-manager debug menu (ModeManagerDebugComponent).
+    // Declared as named members here (the real home) so the debug component accesses them by name
+    // rather than by raw offset; the full ModeManager layout (the X360 places these deep in the
+    // ~38KB object) is reconstructed by the ModeManager TU and these settle into their real slots.
+    bool mbEndlessStuntRun;
+    bool mbWinIfSecond;
+    bool mbFinishCurrentEvent;
+    s32  miFinishPosition;
 };
 }

@@ -1,6 +1,8 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 
+#include <cstring>   // memset
+
 namespace BrnGame
 {
     // File-scope globals the X360 GameMain references:
@@ -52,6 +54,11 @@ namespace BrnGame
     // + worker threads) is reconstructed incrementally.
     void BrnGameModule::Construct()
     {
+        // The X360 Construct (0x823C9EA8) calls the module base's Construct first (then
+        // CheckClassSizes + field init). The base Construct just resets the prepare/release
+        // stages + constructs the two DataBuffers (flag/pointer init only - boot-safe).
+        CgsModule::ModuleSingleBuffered::Construct();
+
         // Per-frame IO buffer stacks the update spine pushes/pops GUI+director buffers on. The
         // full Construct owns these via the module IO system + the hardware memory arena; for
         // the boot/loading path they are backed by fixed scratch blocks here.
@@ -73,6 +80,94 @@ namespace BrnGame
         mRenderModule.Construct();
         mMainFlowStateMachine.Construct();
         mMainFlowStateMachine.SetState(BrnGameMainFlowController::E_MGS_INITIAL_LOADING_SCREEN);
+    }
+
+    // @ BrnGameModule.cpp:1047 (X360 0x823BC868) - tear down the owned modules + the module base.
+    // The X360 first clears a terminated flag (off +10094134) and destructs an off-path collision
+    // generator (off +10095440) - both fall in the omitted member ranges of this incremental
+    // layout - then calls Destruct() on all 11 engine modules in the order below, the module base,
+    // and finally the network module. Reconstructed faithfully (the two off-path subsystem touches
+    // are noted, not declared here). Not on the boot/loading path.
+    void BrnGameModule::Destruct()
+    {
+        // [+10094134 terminated flag = 0; +10095440 CgsCollision::BaseCollisionGenerator::Destruct
+        //  - both off-path in this incremental layout, omitted]
+        mEffectsModule.Destruct();
+        mSoundModule.Destruct();
+        mDirectorModule.Destruct();
+        mRenderModule.Destruct();
+        mGameStateModule.Destruct();
+        mGuiModule.Destruct();
+        mInputModule.Destruct();
+        mWorldModule.Destruct();
+        mReplayModule.Destruct();
+        mGameDataModule.Destruct();
+        CgsModule::ModuleSingleBuffered::Destruct();
+        mNetworkModule.Destruct();
+    }
+
+    // @ BrnGameModule.cpp:925 (X360 0x823CB2A8) - resumable staged release (counterpart of
+    // Prepare). meReleaseStage is the resume point; a failed sub-release returns false so the
+    // caller re-drives from the same stage. The release SEQUENCE is GUI -> sound -> hardware
+    // (+input) -> game-data -> module base -> network -> done; the cases are written in that
+    // execution order with fallthrough (the same resumable-switch shape as the module base's
+    // ModuleSingleBuffered::Release), so entering at any stage runs the rest. Note the enum
+    // values along that path are not monotonic (HARDWARE = 5 sits between SOUND = 2 and
+    // GAMEDATAMODULE = 3); C++ fallthrough follows source order, not case value, so this is
+    // exact - the Hex-Rays output only used gotos because its jump table sorts by case value.
+    // Off-path touches (the System360HW release + two terminated-flag fields) are in this
+    // layout's omitted ranges and noted. Not on the boot/loading path.
+    bool BrnGameModule::Release()
+    {
+        switch (meReleaseStage)
+        {
+            case E_RELEASESTAGE_START:
+            case E_RELEASESTAGE_GUI:
+                meReleaseStage = E_RELEASESTAGE_GUI;
+                if (!mGuiModule.Release())
+                    return false;
+                // fall through
+            case E_RELEASESTAGE_SOUND:
+                meReleaseStage = E_RELEASESTAGE_SOUND;
+                if (!mSoundModule.Release())
+                    return false;
+                // fall through
+            case E_RELEASESTAGE_HARDWARE:
+                meReleaseStage = E_RELEASESTAGE_HARDWARE;
+                // [+10097088 BrnHW::System360HW::Release(&mHardware): off-path hardware, omitted;
+                //  the X360 also returns false here if the hardware release fails]
+                if (!mInputModule.Release())
+                    return false;
+                // fall through
+            case E_RELEASESTAGE_GAMEDATAMODULE:
+                meReleaseStage = E_RELEASESTAGE_GAMEDATAMODULE;
+                if (!mGameDataModule.Release())
+                    return false;
+                // fall through
+            case E_RELEASESTAGE_MANAGER:
+                meReleaseStage = E_RELEASESTAGE_MANAGER;
+                if (!CgsModule::ModuleSingleBuffered::Release())
+                    return false;
+                // fall through
+            case E_RELEASESTAGE_NETWORK:
+                meReleaseStage = E_RELEASESTAGE_NETWORK;
+                if (!mNetworkModule.Release())
+                    return false;
+                // fall through
+            case E_RELEASESTAGE_DONE:
+                // [+10094134 terminated flag = 0: off-path, omitted]
+                meReleaseStage = E_RELEASESTAGE_DONE;
+                // [+10094156 = 0: off-path, omitted]
+                return true;
+            default:
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp",
+                    1033);
+                CgsDev::Assert::EndAssert();
+                return false;
+        }
     }
 
     // @ BrnGameModule.cpp:1580 - one-time per-game-instance prepare (the full body loads the
@@ -115,6 +210,20 @@ namespace BrnGame
     void BrnGameModule::DispatchThread()
     {
         mRenderModule.Render();
+    }
+
+    // @ BrnGameModule.cpp:3916 - clear the whole game-module object, then stamp each owned
+    // module's memory region with 0x7FFFFFFF so any read of un-prepared module memory is caught.
+    // NOTE: the memset uses the FULL X360 object size (0x9A1300); it overflows this
+    // incrementally-populated layout, so it's only safe once the layout is complete - debug-only,
+    // not called on the boot/loading path.
+    void BrnGameModule::DebugMemoryInit(BrnGameModule* lpData)
+    {
+        std::memset(lpData, 0, 0x9A1300);
+        DebugSetMemoryToInt(&lpData->mGameStateModule, 292368, 0x7FFFFFFF);
+        DebugSetMemoryToInt(&lpData->mGuiModule, 1629392, 0x7FFFFFFF);
+        DebugSetMemoryToInt(&lpData->mNetworkModule, 866560, 0x7FFFFFFF);
+        DebugSetMemoryToInt(&lpData->mInputModule, 5096, 0x7FFFFFFF);
     }
 
     // @ BrnGameModule.cpp:1845 - the per-frame update spine.

@@ -2,11 +2,11 @@
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 
 // Minimal constructors for the off-path placeholder types embedded in BrnRendererModule
-// (Option B). The real EAThread RWMutex, the job system, and the buffered dispatch frame
-// are reconstructed with the threading / dispatch core; on the single-threaded loading-
-// screen boot they carry no behaviour, so these definitions keep the link closed without
-// faking functionality. They move to their real homes when those subsystems come online.
-EA::Thread::RWMutex::RWMutex(const char* /*lpcName*/, bool /*lbIntraProcess*/) {}
+// (Option B). The job system and the buffered dispatch frame are reconstructed with the
+// threading / dispatch core; on the single-threaded loading-screen boot they carry no
+// behaviour, so these definitions keep the link closed without faking functionality. They
+// move to their real homes when those subsystems come online. (The EAThread RWMutex is now
+// the real type, embedded in the module base's DataBuffers - no stub ctor needed.)
 EA::Jobs::Job::Job(s32 /*liPriority*/) {}
 CgsGraphics::BufferedDispatchFrame::BufferedDispatchFrame() {}
 
