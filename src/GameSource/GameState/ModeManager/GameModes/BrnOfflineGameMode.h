@@ -2,14 +2,17 @@
 
 #include "types.hpp"
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"
-// Brings in the real Vector3 typedef (rw::math::vpu::Vector3, via BrnCommonTypes.h) and the
-// BrnGameState::LandmarkIndex handle typedef, both used in SelectRandomDestinations' signature.
-// INTEGRATION NOTE (consolidated): the worker's original standalone OfflineGameMode.h
-// forward-declared `struct Vector3;` and `struct LandmarkIndex;`. Those collide with the real
-// `typedef ... Vector3` / `typedef u32 LandmarkIndex` once this header shares a TU with
-// BrnGameModeParams.h (e.g. through RaceMode), so the forward decls are replaced with the real
-// definitions from BrnGameModeParams.h here.
+// Brings in the real Vector3 typedef (rw::math::vpu::Vector3, via BrnCommonTypes.h), used in
+// SelectRandomDestinations' signature, plus the GameMode base.
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"
+// The real BrnGameState::LandmarkIndex wrapper class (the SelectRandomDestinations output type).
+// INTEGRATION NOTE (consolidated): the worker's original standalone OfflineGameMode.h
+// forward-declared `struct Vector3;` and `struct LandmarkIndex;`. The real Vector3 is the
+// rw::math::vpu typedef pulled in transitively above; LandmarkIndex is a real wrapper CLASS
+// owned by BrnGameStateTypes.h (it used to be a `typedef u32 LandmarkIndex` stub in
+// BrnGameModeParams.h — that stub is now removed, and this is the single owner). Include the
+// owning header so the class is complete at this declaration site.
+#include "GameSource/GameState/BrnGameStateTypes.h"
 
 namespace BrnTrigger
 {
