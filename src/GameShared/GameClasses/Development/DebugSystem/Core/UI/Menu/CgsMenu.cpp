@@ -40,5 +40,12 @@ namespace CgsDev
 
         const char* Menu::GetCaption() const { return macCaption; }
         Menu*       Menu::GetParent() const  { return mpParent; }
+
+        // --- render/size virtuals: menu-render follow-on (stubbed for link; dead in the loading build) ---
+        void    Menu::Update(f32, InputEvent) {}
+        void    Menu::Render(Debug2DImmediateRender*, f32, f32, bool, f32) {}
+        void    Menu::ComputeSize() {}
+        void    Menu::GetDisplayName(char* lpcBuffer, s32 liBufferLen) const { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
+        Window* Menu::OpenAsWindow() { return nullptr; }
     }
 }

@@ -32,5 +32,11 @@ namespace CgsDev
             lpFunction->Prepare(lpfCallback, lpUserData, lpcName);
             lpMenuItem->Prepare(lpFunction);
         }
+
+        // --- function-edit setters: FindFunction + edit is the function-edit follow-on. Stubbed so
+        // the subsystem links; dead in the loading build (no function is unregistered/renamed during
+        // loading). ---
+        void FunctionManager::UnregisterFunction(Function::DebugCallbackFunction, void*) {}
+        void FunctionManager::SetFunctionName(Function::DebugCallbackFunction, void*, const char*) {}
     }
 }

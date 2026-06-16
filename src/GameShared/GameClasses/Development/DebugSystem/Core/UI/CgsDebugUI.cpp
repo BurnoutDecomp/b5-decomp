@@ -12,5 +12,30 @@ namespace CgsDev
         MenuManager&     DebugUI::GetMenuManager()     { return mMenuManager; }
         VariableManager& DebugUI::GetVariableManager() { return mVariableManager; }
         FunctionManager& DebugUI::GetFunctionManager() { return mFunctionManager; }
+
+        // Bounded string helpers (MakeFullPath/menu-path building use these). Always null-terminate
+        // within the buffer.
+        void DebugUI::SafeStringCopy(char* lpcBuffer, const char* lpcSource, s32 liBufferLen)
+        {
+            if (liBufferLen <= 0)
+                return;
+            s32 liIndex = 0;
+            for (; liIndex < liBufferLen - 1 && lpcSource[liIndex]; ++liIndex)
+                lpcBuffer[liIndex] = lpcSource[liIndex];
+            lpcBuffer[liIndex] = '\0';
+        }
+
+        void DebugUI::SafeStringCat(char* lpcBuffer, const char* lpcSource, s32 liBufferLen)
+        {
+            if (liBufferLen <= 0)
+                return;
+            s32 liEnd = 0;
+            while (liEnd < liBufferLen - 1 && lpcBuffer[liEnd])
+                ++liEnd;
+            s32 liSource = 0;
+            for (; liEnd < liBufferLen - 1 && lpcSource[liSource]; ++liEnd, ++liSource)
+                lpcBuffer[liEnd] = lpcSource[liSource];
+            lpcBuffer[liEnd] = '\0';
+        }
     }
 }

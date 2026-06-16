@@ -25,5 +25,13 @@ namespace CgsDev
         {
             return mpFunction;
         }
+
+        // --- render/size virtuals: function-row render follow-on (stubbed for link) ---
+        void MenuItemFunction::Update(f32, InputEvent) {}
+        void MenuItemFunction::Render(Debug2DImmediateRender*, f32, f32, bool, f32) {}
+        void MenuItemFunction::ComputeSize() {}
+        bool MenuItemFunction::IsUseful() const { return true; }
+        void MenuItemFunction::GetDisplayName(char* lpcBuffer, s32 liBufferLen) const { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
+        void MenuItemFunction::GetItemString(char* lpcBuffer, s32 liBufferLen) const  { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
     }
 }
