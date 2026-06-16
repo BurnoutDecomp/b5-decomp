@@ -60,24 +60,8 @@ namespace BrnStreetData
         int32_t*                lpiScore,
         CgsNetwork::PlayerName*  lpPlayerName ) const
     {
-        if ( !lpiScore )
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "lpiScore != NULL",
-                "..\\..\\..\\GameSource\\GameState/StreetData/BrnChallengeHighScoreEntry.h",
-                133 );
-            CgsDev::Assert::EndAssert();
-        }
-        if ( !lpPlayerName )
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "lpPlayerName != NULL",
-                "..\\..\\..\\GameSource\\GameState/StreetData/BrnChallengeHighScoreEntry.h",
-                134 );
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(lpiScore, "lpiScore != NULL");
+        CGS_ASSERT(lpPlayerName, "lpPlayerName != NULL");
 
         *lpiScore = ChallengeData::GetScore( leScoreType );
         *lpPlayerName = maPlayerNames[ leScoreType ];

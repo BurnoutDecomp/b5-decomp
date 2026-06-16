@@ -58,19 +58,6 @@ namespace BrnTraffic
         u8 muNumStoplinesInHull;
     };
 
-    static void AssertCondition(bool lbCondition, const char* lpcExpression, int liLine)
-    {
-        if (!lbCondition)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                lpcExpression,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/TrafficEntityModule/BrnTrafficHullRuntime.cpp",
-                liLine);
-            CgsDev::Assert::EndAssert();
-        }
-    }
-
     void HullRuntime::Construct()
     {
         mbPrepared = false;
@@ -78,8 +65,8 @@ namespace BrnTraffic
 
     void HullRuntime::Prepare(const Hull* lpHull, u16 luHull)
     {
-        AssertCondition(lpHull != 0, "lpHull", 71);
-        AssertCondition(mbPrepared == false, "mbPrepared == false", 72);
+        CGS_ASSERT(lpHull != 0, "lpHull");
+        CGS_ASSERT(mbPrepared == false, "mbPrepared == false");
 
         for (u32 luStopline = 0; luStopline < lpHull->muNumStoplines; ++luStopline)
         {
@@ -106,7 +93,7 @@ namespace BrnTraffic
 
     void HullRuntime::Release()
     {
-        AssertCondition(mbPrepared == true, "mbPrepared == true", 110);
+        CGS_ASSERT(mbPrepared == true, "mbPrepared == true");
         mbPrepared = false;
     }
 }

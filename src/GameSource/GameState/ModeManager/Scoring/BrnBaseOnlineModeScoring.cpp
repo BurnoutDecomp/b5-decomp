@@ -17,24 +17,8 @@ namespace BrnGameState
 // then upper-bound), each with its own baked-in message string and source line (343 / 344).
 s32 BaseOnlineModeScoring::GetPlayerPosition(s32 liRaceCarIndex)
 {
-    if (liRaceCarIndex < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liRaceCarIndex >= 0",
-            KPC_SCORING_FILE,
-            343);
-        CgsDev::Assert::EndAssert();
-    }
-    if (liRaceCarIndex >= KI_MAX_ACTIVE_RACE_CARS)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            KPC_SCORING_FILE,
-            344);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(liRaceCarIndex >= 0, "liRaceCarIndex >= 0");
+    CGS_ASSERT(liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
     return maiPlayerPositions[liRaceCarIndex];
 }
 
@@ -44,42 +28,10 @@ s32 BaseOnlineModeScoring::GetPlayerPosition(s32 liRaceCarIndex)
 // so the table write executes unconditionally even on a failed bound.
 void BaseOnlineModeScoring::SetPlayerPosition(s32 liRaceCarIndex, s32 liPlayerPosition)
 {
-    if (liRaceCarIndex < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liRaceCarIndex >= 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\scoring\\BrnBaseOnlineModeScoring.h",
-            356);
-        CgsDev::Assert::EndAssert();
-    }
-    if (liRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\scoring\\BrnBaseOnlineModeScoring.h",
-            357);
-        CgsDev::Assert::EndAssert();
-    }
-    if (liPlayerPosition < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liPlayerPosition >= 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\scoring\\BrnBaseOnlineModeScoring.h",
-            359);
-        CgsDev::Assert::EndAssert();
-    }
-    if (liPlayerPosition >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liPlayerPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\scoring\\BrnBaseOnlineModeScoring.h",
-            360);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(liRaceCarIndex >= 0, "liRaceCarIndex >= 0");
+    CGS_ASSERT(liRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+    CGS_ASSERT(liPlayerPosition >= 0, "liPlayerPosition >= 0");
+    CGS_ASSERT(liPlayerPosition < E_ACTIVE_RACE_CAR_INDEX_COUNT, "liPlayerPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
 
     maiPlayerPositions[liRaceCarIndex] = liPlayerPosition;
 }
@@ -91,24 +43,8 @@ void BaseOnlineModeScoring::SetPlayerPosition(s32 liRaceCarIndex, s32 liPlayerPo
 GameStateModuleIO::EPlayerTeam
 BaseOnlineModeScoring::GetCurrentPlayerTeam(s32 liRaceCarIndex)
 {
-    if (liRaceCarIndex < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liRaceCarIndex >= 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp",
-            1010);
-        CgsDev::Assert::EndAssert();
-    }
-    if (liRaceCarIndex >= KI_MAX_ACTIVE_RACE_CARS)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp",
-            1011);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(liRaceCarIndex >= 0, "liRaceCarIndex >= 0");
+    CGS_ASSERT(liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
     return maePlayerTeams[liRaceCarIndex];
 }
 }

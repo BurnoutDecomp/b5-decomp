@@ -37,15 +37,7 @@ void BasePriorityQueue::RemoveEntry(u32 luEntryIndex)
     }
 
 NotFound:
-    if (luIter >= muNumEntries)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "Entry not found in queue\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsPriorityQueue.cpp",
-            84);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(luIter < muNumEntries, "Entry not found in queue\n");
 
     for (luIter = luIndex + 1; luIter < muNumEntries; ++luIter)
     {

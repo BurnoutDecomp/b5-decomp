@@ -99,10 +99,7 @@ void FburnChallengeEveryPlayerStatusData::AddCompletionStatus(
         ++liIndex;
         if (liIndex >= KI_NUM_PLAYER_SLOTS)
         {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("No room for completion status data\n",
-                                       "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 2063);
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT(false, "No room for completion status data\n");
             return;
         }
     }
@@ -126,15 +123,7 @@ void CarCheckpointData::SetupCheckpoints(s32 liNumCheckpoints)
 
     for (s32 liIndex = 0; liIndex < liNumCheckpoints; ++liIndex)
     {
-        if (!(static_cast<u32>(liIndex) < KI_MAX_LANDMARKS_IN_MODE))
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "luIndex < NUMBITS",
-                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h",
-                222);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(static_cast<u32>(liIndex) < KI_MAX_LANDMARKS_IN_MODE, "luIndex < NUMBITS");
 
         mCheckpointsRemaining.SetBit(static_cast<u32>(liIndex));
     }
@@ -149,54 +138,14 @@ void CarCheckpointData::SetupCheckpoints(s32 liNumCheckpoints)
 // committed convention. (X360 returns `this`; void here.)
 void CarCheckpointData::MarkCheckpointAsHit(s32 liCheckpointIndex)
 {
-    if (liCheckpointIndex < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liCheckpointIndex >= 0",
-            "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h",
-            1210);
-        CgsDev::Assert::EndAssert();
-    }
-    if (liCheckpointIndex >= KI_MAX_LANDMARKS_IN_MODE)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE",
-            "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h",
-            1211);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(liCheckpointIndex >= 0, "liCheckpointIndex >= 0");
+    CGS_ASSERT(liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE, "liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE");
 
-    if (!(static_cast<u32>(liCheckpointIndex) < KI_MAX_LANDMARKS_IN_MODE))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "luIndex < NUMBITS",
-            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h",
-            203);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(static_cast<u32>(liCheckpointIndex) < KI_MAX_LANDMARKS_IN_MODE, "luIndex < NUMBITS");
 
-    if (!mCheckpointsRemaining.IsBitSet(static_cast<u32>(liCheckpointIndex)))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "Checkpoint either out of range or already hit!",
-            "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h",
-            1214);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(mCheckpointsRemaining.IsBitSet(static_cast<u32>(liCheckpointIndex)), "Checkpoint either out of range or already hit!");
 
-    if (!(static_cast<u32>(liCheckpointIndex) < KI_MAX_LANDMARKS_IN_MODE))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "luIndex < NUMBITS",
-            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h",
-            241);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(static_cast<u32>(liCheckpointIndex) < KI_MAX_LANDMARKS_IN_MODE, "luIndex < NUMBITS");
 
     mCheckpointsRemaining.UnSetBit(static_cast<u32>(liCheckpointIndex));
 }
@@ -208,15 +157,7 @@ void CarCheckpointData::MarkCheckpointAsHit(s32 liCheckpointIndex)
 // idiom), clamping an out-of-range result to -1.
 s32 CarCheckpointData::GetNextCheckpointIndex() const
 {
-    if (mCheckpointsRemaining.IsZero())
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "No checkpoints set",
-            "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h",
-            1256);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(!mCheckpointsRemaining.IsZero(), "No checkpoints set");
 
     const s32 liNextCheckpoint = mCheckpointsRemaining.GetFirstNonZeroBit();
     if (liNextCheckpoint >= KI_MAX_LANDMARKS_IN_MODE)
@@ -303,57 +244,12 @@ bool FlybyData::Prepare()
 // PlayerName struct copy. The trailing memcpy `return` is a void-function artifact, dropped.
 void FlybyData::AddCar(EActiveRaceCarIndex leRaceCarIndex, const CgsNetwork::PlayerName* lpPlayerName)
 {
-    if (miNumberOfCars < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miNumberOfCars >= 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-            242);
-        CgsDev::Assert::EndAssert();
-    }
-    if (miNumberOfCars >= FlybyRivalData::KI_MAX_CARS_IN_FLYBY)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miNumberOfCars < FlybyRivalData::KI_MAX_CARS_IN_FLYBY",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-            243);
-        CgsDev::Assert::EndAssert();
-    }
-    if (!lpPlayerName)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpPlayerName",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-            244);
-        CgsDev::Assert::EndAssert();
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpPlayerName->GetPlayerName()",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-            245);
-        CgsDev::Assert::EndAssert();
-    }
-    if (std::strlen(lpPlayerName->GetPlayerName()) == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "strlen( lpPlayerName->GetPlayerName() ) > 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-            246);
-        CgsDev::Assert::EndAssert();
-    }
-    if (std::strlen(lpPlayerName->GetPlayerName()) >= static_cast<u32>(CgsNetwork::PlayerName::KI_USERNAME_LENGTH))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "strlen( lpPlayerName->GetPlayerName() ) < static_cast<uint32_t>(CgsNetwork::KI_USERNAME_LENGTH )",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-            247);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(miNumberOfCars >= 0, "miNumberOfCars >= 0");
+    CGS_ASSERT(miNumberOfCars < FlybyRivalData::KI_MAX_CARS_IN_FLYBY, "miNumberOfCars < FlybyRivalData::KI_MAX_CARS_IN_FLYBY");
+    CGS_ASSERT(lpPlayerName, "lpPlayerName");
+    CGS_ASSERT(lpPlayerName, "lpPlayerName->GetPlayerName()");
+    CGS_ASSERT(std::strlen(lpPlayerName->GetPlayerName()) != 0, "strlen( lpPlayerName->GetPlayerName() ) > 0");
+    CGS_ASSERT(std::strlen(lpPlayerName->GetPlayerName()) < static_cast<u32>(CgsNetwork::PlayerName::KI_USERNAME_LENGTH), "strlen( lpPlayerName->GetPlayerName() ) < static_cast<uint32_t>(CgsNetwork::KI_USERNAME_LENGTH )");
 
     mRivalsToShow[miNumberOfCars].meRaceCarIndex = leRaceCarIndex;
     std::memcpy(&mRivalsToShow[miNumberOfCars].mPlayerName, lpPlayerName,
@@ -372,63 +268,29 @@ void FlybyData::AddCar(EActiveRaceCarIndex leRaceCarIndex, const CgsNetwork::Pla
 // calling-convention artifact).
 void FlybyData::AddMessage(const char* lpcMessage, const char* lpcParameter)
 {
-    if (miNumberOfCars <= 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miNumberOfCars > 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-            267);
-        CgsDev::Assert::EndAssert();
-    }
-    if (miNumberOfCars > FlybyRivalData::KI_MAX_CARS_IN_FLYBY)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-            268);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(miNumberOfCars > 0, "miNumberOfCars > 0");
+    CGS_ASSERT(miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY, "miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY");
     if (std::strlen(lpcMessage) >= static_cast<u32>(FlybyRivalData::KI_MAX_MESSAGE_ID_BUFFER))
     {
-        CgsDev::Assert::BeginAssert();
         char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
         CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStrStream << "String ID " << (lpcMessage ? lpcMessage : "<NULLSTRING>") << " too long\n";
-        CgsDev::Assert::FireAssert(
-            lacMessageBuffer,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-            269);
-        CgsDev::Assert::EndAssert();
+        CGS_ASSERT(false, lacMessageBuffer);
     }
 
     const s32 liFlybyCarIndex = miNumberOfCars - 1;
     FlybyRivalData& lRival = mRivalsToShow[liFlybyCarIndex];
     const s32 liCurrentMessageIndex = lRival.miNumberOfMessages;
 
-    if (liCurrentMessageIndex >= FlybyRivalData::KI_MAX_MESSAGES)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liCurrentMessageIndex < GameStateModuleIO::FlybyRivalData::KI_MAX_MESSAGES",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-            273);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(liCurrentMessageIndex < FlybyRivalData::KI_MAX_MESSAGES, "liCurrentMessageIndex < GameStateModuleIO::FlybyRivalData::KI_MAX_MESSAGES");
 
     // Inlined StrnCpy<KI_MAX_MESSAGE_ID_BUFFER>(maacMessageIDs[idx], lpcMessage) bounds check.
     if (std::strlen(lpcMessage) >= static_cast<u32>(FlybyRivalData::KI_MAX_MESSAGE_ID_BUFFER))
     {
-        CgsDev::Assert::BeginAssert();
         char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
         CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStrStream << "String too long: " << (lpcMessage ? lpcMessage : "<NULLSTRING>");
-        CgsDev::Assert::FireAssert(
-            lacMessageBuffer,
-            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-            55);
-        CgsDev::Assert::EndAssert();
+        CGS_ASSERT(false, lacMessageBuffer);
     }
     std::strncpy(lRival.maacMessageIDs[liCurrentMessageIndex], lpcMessage,
                  FlybyRivalData::KI_MAX_MESSAGE_ID_BUFFER);
@@ -437,42 +299,24 @@ void FlybyData::AddMessage(const char* lpcMessage, const char* lpcParameter)
     {
         if (std::strlen(lpcParameter) >= static_cast<u32>(FlybyRivalData::KI_MAX_PARAMTER_LENGTH))
         {
-            CgsDev::Assert::BeginAssert();
             char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStrStream << "Param " << lpcParameter << " too long \n";
-            CgsDev::Assert::FireAssert(
-                lacMessageBuffer,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-                279);
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT(false, lacMessageBuffer);
         }
         // Inlined StrnCpy<KI_MAX_PARAMTER_LENGTH>(maacMessageParameter[idx], lpcParameter) bounds check.
         if (std::strlen(lpcParameter) >= static_cast<u32>(FlybyRivalData::KI_MAX_PARAMTER_LENGTH))
         {
-            CgsDev::Assert::BeginAssert();
             char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStrStream << "String too long: " << lpcParameter;
-            CgsDev::Assert::FireAssert(
-                lacMessageBuffer,
-                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-                55);
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT(false, lacMessageBuffer);
         }
         std::strncpy(lRival.maacMessageParameter[liCurrentMessageIndex], lpcParameter,
                      FlybyRivalData::KI_MAX_PARAMTER_LENGTH);
 
         ++lRival.maiNumberOfParameters[liCurrentMessageIndex];
-        if (lRival.maiNumberOfParameters[liCurrentMessageIndex] > FlybyRivalData::KI_MAX_PARAMETERS)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "mRivalsToShow[liFlybyCarIndex].maiNumberOfParameters[liCurrentMessageIndex] <= GameStateModuleIO::FlybyRivalData::KI_MAX_PARAMETERS",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
-                287);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(lRival.maiNumberOfParameters[liCurrentMessageIndex] <= FlybyRivalData::KI_MAX_PARAMETERS, "mRivalsToShow[liFlybyCarIndex].maiNumberOfParameters[liCurrentMessageIndex] <= GameStateModuleIO::FlybyRivalData::KI_MAX_PARAMETERS");
     }
 
     ++lRival.miNumberOfMessages;
@@ -483,24 +327,8 @@ void FlybyData::AddMessage(const char* lpcMessage, const char* lpcParameter)
 // :1110/:1111) then returns &mRivalsToShow[liRivalIndex] (this + 4 + 196 * liRivalIndex).
 FlybyRivalData* FlybyData::GetFlybyRivalData(s32 liRivalIndex)
 {
-    if (liRivalIndex < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liRivalIndex >= 0",
-            "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h",
-            1110);
-        CgsDev::Assert::EndAssert();
-    }
-    if (liRivalIndex >= FlybyRivalData::KI_MAX_CARS_IN_FLYBY)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liRivalIndex < FlybyRivalData::KI_MAX_CARS_IN_FLYBY",
-            "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h",
-            1111);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(liRivalIndex >= 0, "liRivalIndex >= 0");
+    CGS_ASSERT(liRivalIndex < FlybyRivalData::KI_MAX_CARS_IN_FLYBY, "liRivalIndex < FlybyRivalData::KI_MAX_CARS_IN_FLYBY");
     return &mRivalsToShow[liRivalIndex];
 }
 

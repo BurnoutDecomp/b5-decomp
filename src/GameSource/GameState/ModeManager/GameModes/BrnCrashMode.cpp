@@ -53,12 +53,7 @@ void CrashMode::SendEvent(EGameModeEvent leEvent)
         case 5:   // Quit -- terminal
             return;
         default:
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "Should not be in this state in Showtime mode!",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnCrashMode.cpp",
-                151);
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT(false, "Should not be in this state in Showtime mode!");
             break;
     }
 }

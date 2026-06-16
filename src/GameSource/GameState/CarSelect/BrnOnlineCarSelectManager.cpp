@@ -15,15 +15,7 @@ namespace BrnGameState
 void OnlineCarSelectManager::Construct(GameStateModule* lpGameStateModule,
                                        BrnProgression::ProgressionManager* lpProgressionManager)
 {
-    if (!lpGameStateModule)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpGameStateModule",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnOnlineCarSelectManager.h",
-            252);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpGameStateModule, "lpGameStateModule");
 
     meInternalState = E_INTERNAL_STATE_NONE;
     mpGameStateModule.Set(lpGameStateModule);
@@ -45,21 +37,12 @@ void OnlineCarSelectManager::Construct(GameStateModule* lpGameStateModule,
 }
 
 // X360 0x8238EEA0. Enter the car-modification flow; only valid from the internal car-select state
-// (asserts otherwise, with the verbatim baked file/line BrnOnlineCarSelectManager.h:340), then
-// delegates to the modification state set-up helper. The X360 builds the assert message into the
-// StrStream buffer; since the text is a plain string literal it is passed straight to FireAssert
-// (the committed BrnCarSelectManager.cpp precedent).
+// (asserts otherwise), then delegates to the modification state set-up helper. The X360 builds the
+// assert message into a StrStream buffer; since the text is a plain string literal it is passed
+// directly as the CGS_ASSERT message.
 void OnlineCarSelectManager::EnterModification(InputBuffer::GameActionQueue* lpActionQueue)
 {
-    if (meInternalState != E_INTERNAL_STATE_CAR_SELECT)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnOnlineCarSelectManager.h",
-            340);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, "OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.");
 
     StartCarModificationState(lpActionQueue);
 }
@@ -70,15 +53,7 @@ void OnlineCarSelectManager::EnterModification(InputBuffer::GameActionQueue* lpA
 // elided it), so it is left unnamed-but-present.
 void OnlineCarSelectManager::EnterWaitForHost(InputBuffer::GameActionQueue* /*lpActionQueue*/)
 {
-    if (meInternalState != E_INTERNAL_STATE_CAR_SELECT)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnOnlineCarSelectManager.h",
-            354);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, "OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.");
 
     meInternalState = E_INTERNAL_STATE_WAIT_FOR_HOST_TO_CHOOSE;
 }

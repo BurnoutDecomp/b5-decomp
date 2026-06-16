@@ -30,19 +30,6 @@ public:
 
 renderengine::RasterizerState* gapRasterizerStates[E_FACTORY_RASTERIZER_STATE_COUNT];
 
-void AssertStateCreated(renderengine::RasterizerState* pState, const char* lpcExpression, int liLine)
-{
-    if (!pState)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            lpcExpression,
-            "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsRasterizerStateFactory.cpp",
-            liLine);
-        CgsDev::Assert::EndAssert();
-    }
-}
-
 renderengine::RasterizerState* CreateRasterizerState(
     ResourceAllocator* pAllocator,
     renderengine::RasterizerState::Parameters* pParameters)
@@ -104,19 +91,15 @@ renderengine::RasterizerState* CgsRasterizerStateFactory::Construct(void* pResou
     lParameters.mu8ConservativeRaster = 0;
     gapRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK] =
         CreateRasterizerState(lpAllocator, &lParameters);
-    AssertStateCreated(
-        gapRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK],
-        "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeBack ]",
-        63);
+    CGS_ASSERT(gapRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK],
+               "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeBack ]");
 
     lParameters.mu8ScissorEnable = 1;
     lParameters.muCullMode = (lParameters.muCullMode & 4) | 1;
     gapRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT] =
         CreateRasterizerState(lpAllocator, &lParameters);
-    AssertStateCreated(
-        gapRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT],
-        "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeFront ]",
-        70);
+    CGS_ASSERT(gapRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT],
+               "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeFront ]");
 
     lParameters.mu8ScissorEnable = 1;
     lParameters.muCullMode &= 4u;
@@ -124,19 +107,7 @@ renderengine::RasterizerState* CgsRasterizerStateFactory::Construct(void* pResou
         CreateRasterizerState(lpAllocator, &lParameters);
     renderengine::RasterizerState* lpResult =
         gapRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE];
-    if (!lpResult)
-    {
-        // The assert sequence only reports the failure; it does not produce the
-        // returned state. EndAssert() yields the mutex's internal pointer, so its
-        // result is discarded (the prior local fork mis-typed it as a
-        // RasterizerState* and assigned it here).
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeNone ]",
-            "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsRasterizerStateFactory.cpp",
-            77);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpResult, "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeNone ]");
 
     return lpResult;
 }

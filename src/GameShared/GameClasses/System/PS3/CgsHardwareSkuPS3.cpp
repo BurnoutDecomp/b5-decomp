@@ -63,12 +63,7 @@ s32 HardwareSku::FindLanguage()
             }
 
         default:
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "Unknown sku or no sku set",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\X360/CgsHardwareSkuX360.cpp",
-                208);
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT(false, "Unknown sku or no sku set");
             return 7;
     }
 }

@@ -96,25 +96,9 @@ namespace Playback
 
     inline Content::~Content()
     {
-        if (mu16LoadCount != 1)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "Destroying content while it's still loaded. This is a Bad thing.",
-                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsContent.h",
-                360);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(mu16LoadCount == 1, "Destroying content while it's still loaded. This is a Bad thing.");
 
-        if (mu32RefCount != 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "0 == mu32RefCount",
-                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.h",
-                104);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(mu32RefCount == 0, "0 == mu32RefCount");
     }
 
     inline int Content::DoDispose()

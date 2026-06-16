@@ -168,15 +168,8 @@ void GameMode::PreWorldUpdate()
 
     if (meCurrentState != -1)
     {
-        if (meCurrentState < 0 || meCurrentState >= KI_GMS_COUNT)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT",
-                KPC_SOURCE_FILE,
-                159);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT,
+                   "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT");
 
         maGameModeStates[meCurrentState]->Update();
     }
@@ -351,29 +344,13 @@ f32 GameMode::GetOutroTimeout() const
 // ===========================================================================
 void GameMode::SetCurrentState(s32 liState)
 {
-    if (liState < 0 || liState >= KI_GMS_COUNT)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "leState >=0 && leState < GameStateModuleIO::E_GMS_COUNT",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnGameMode.h",
-            483);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(liState >= 0 && liState < KI_GMS_COUNT, "leState >=0 && leState < GameStateModuleIO::E_GMS_COUNT");
 
     if (meCurrentState != liState)
     {
         if (meCurrentState != -1)
         {
-            if (meCurrentState < 0 || meCurrentState >= KI_GMS_COUNT)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnGameMode.h",
-                    489);
-                CgsDev::Assert::EndAssert();
-            }
+            CGS_ASSERT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT, "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT");
 
             maGameModeStates[meCurrentState]->OnLeave();
         }
@@ -438,15 +415,7 @@ bool GameMode::HasCountdownDisplayChanged(s32* lpiNewCountdownDisplay)
         return false;
     }
 
-    if (lpiNewCountdownDisplay == nullptr)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpiNewCountdownDisplay != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnGameMode.h",
-            449);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpiNewCountdownDisplay != nullptr, "lpiNewCountdownDisplay != NULL");
 
     *lpiNewCountdownDisplay = miCountdownDisplay;
     mbCountdownDisplayChanged = false;

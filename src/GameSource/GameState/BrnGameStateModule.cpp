@@ -13,15 +13,7 @@ namespace BrnGameState
 // and its mbIsOnline at *(mode + 172); de-inlined to the two logical calls.)
 bool GameStateModule::IsOnlineGameMode()
 {
-    if (!mbIsUpdating)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "Can not use this function unless module is updating\n",
-            "..\\..\\..\\GameSource\\GameState/BrnGameStateModule.h",
-            1004);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
 
     const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
     if (lpCurrentGameMode != nullptr)

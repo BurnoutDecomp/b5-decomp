@@ -13,24 +13,8 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
                                  GameStateModule* lpGameStateModule,
                                  BrnProgression::ProgressionManager* lpProgressionManager)
 {
-    if (!lpTriggerQueryManager)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpTriggerQueryManager",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnCarSelectManager.h",
-            319);
-        CgsDev::Assert::EndAssert();
-    }
-    if (!lpGameStateModule)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpGameStateModule",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnCarSelectManager.h",
-            320);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpTriggerQueryManager, "lpTriggerQueryManager");
+    CGS_ASSERT(lpGameStateModule, "lpGameStateModule");
 
     mpGameStateModule.Set(lpGameStateModule);
     mpTriggerQueryManager.Set(lpTriggerQueryManager);
@@ -72,15 +56,7 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
 // to the state set-up helper.
 void CarSelectManager::EnterModification(InputBuffer::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_CAR_SELECT && meState != E_STATE_REQUEST_CAR_CHANGE)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "CarSelectManager: Need to be in E_STATE_CAR_SELECT or E_STATE_REQUEST_CAR_CHANGE state.",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnCarSelectManager.h",
-            427);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(meState == E_STATE_CAR_SELECT || meState == E_STATE_REQUEST_CAR_CHANGE, "CarSelectManager: Need to be in E_STATE_CAR_SELECT or E_STATE_REQUEST_CAR_CHANGE state.");
 
     StartCarModificationState(lpActionQueue);
 }

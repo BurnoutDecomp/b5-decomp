@@ -68,42 +68,10 @@ void RaceMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // mpEventData are the StartGameModeParams' own stored pointers (the source asserts fire
     // from BrnGameModeParams.h on the StartGameModeParams accessors); the lpGameModeParams /
     // lpProgressionRankData / lpEventData asserts fire from BrnRaceMode.cpp.
-    if (lpProgressionRankData == nullptr)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "mpProgressionRankData != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
-            945);
-        CgsDev::Assert::EndAssert();
-    }
-    if (lpEventData == nullptr)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpEventData != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnRaceMode.cpp",
-            87);
-        CgsDev::Assert::EndAssert();
-    }
-    if (lpGameModeParams == nullptr)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpGameModeParams != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnRaceMode.cpp",
-            88);
-        CgsDev::Assert::EndAssert();
-    }
-    if (lpProgressionRankData == nullptr)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpProgressionRankData != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnRaceMode.cpp",
-            91);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpProgressionRankData != nullptr, "mpProgressionRankData != NULL");
+    CGS_ASSERT(lpEventData != nullptr, "lpEventData != NULL");
+    CGS_ASSERT(lpGameModeParams != nullptr, "lpGameModeParams != NULL");
+    CGS_ASSERT(lpProgressionRankData != nullptr, "lpProgressionRankData != NULL");
 
     // Initialise the run-time param block for this mode type, then thread through the start
     // mechanism / traffic-light trigger straight from the immutable start params.

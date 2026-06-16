@@ -9,12 +9,7 @@ extern const char* gapDistrictNames[19];
 
 const char* CountyToString(u32 luCounty)
 {
-    if (luCounty >= 6)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("leCounty >= 0 && leCounty < E_COUNTY_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/World/BrnWorldRegion.cpp", 171);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(luCounty < 6, "leCounty >= 0 && leCounty < E_COUNTY_COUNT");
 
     return gapCountyNames[luCounty];
 }
@@ -53,12 +48,7 @@ int DistrictToCounty(int liDistrict)
 
 const char* DistrictToString(u32 luDistrict)
 {
-    if (luDistrict >= 19)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("static_cast<size_t>( leDistrict ) < sizeof(KAPC_DISTRICT_NAMES) / sizeof(char*)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/World/BrnWorldRegion.cpp", 188);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(luDistrict < 19, "static_cast<size_t>( leDistrict ) < sizeof(KAPC_DISTRICT_NAMES) / sizeof(char*)");
 
     return gapDistrictNames[luDistrict];
 }

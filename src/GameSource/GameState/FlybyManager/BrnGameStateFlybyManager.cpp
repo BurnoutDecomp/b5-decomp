@@ -127,27 +127,11 @@ static_assert(sizeof(FlybyManager) == 0x2A0, "FlybyManager layout drift");
 
 void FlybyManager::Construct(GameStateModule* lpGameStateModule, ScoringSystem* lpScoringSystem)
 {
-    if (!lpGameStateModule)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpGameStateModule",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateFlybyManager.cpp",
-            123);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpGameStateModule, "lpGameStateModule");
 
     mpGameStateModule.Set(lpGameStateModule);
 
-    if (!lpScoringSystem)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpScoringSystem",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateFlybyManager.cpp",
-            126);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpScoringSystem, "lpScoringSystem");
 
     mpScoringSystem.Set(lpScoringSystem);
     mRandom.Construct();
@@ -156,15 +140,7 @@ void FlybyManager::Construct(GameStateModule* lpGameStateModule, ScoringSystem* 
 // X360. Accessor for the owning GameStateModule; asserts it was set by Construct.
 GameStateModule* FlybyManager::GetGameStateModule()
 {
-    if (!mpGameStateModule.Get())
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "mpGameStateModule",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h",
-            204);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(mpGameStateModule.Get(), "mpGameStateModule");
     return mpGameStateModule.Get();
 }
 
@@ -178,12 +154,8 @@ s32 FlybyManager::RivalRating::SortRivalsCallback(const void* lpData0, const voi
         if (lpRival0->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID
             || lpRival1->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID)
         {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "( lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID ) && ( lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID )",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateFlybyManager.cpp",
-                83);
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT((lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID) && (lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID),
+                       "( lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID ) && ( lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID )");
         }
 
         return 0;

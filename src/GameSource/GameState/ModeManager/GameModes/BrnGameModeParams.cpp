@@ -130,15 +130,7 @@ void GameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType)
 // -----------------------------------------------------------------------------
 s32 GameModeParams::GetCheckpointCount() const
 {
-    if (maCheckpointDataArray.GetCount() == CheckpointDataArray::KI_UNCONSTRUCTED)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "Array used before Construct/Clear was called",
-            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
-            336);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(maCheckpointDataArray.GetCount() != CheckpointDataArray::KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
     return maCheckpointDataArray.GetCount();
 }
 
@@ -147,15 +139,7 @@ s32 GameModeParams::GetCheckpointCount() const
 // -----------------------------------------------------------------------------
 s32 GameModeParams::GetStartLocationCount() const
 {
-    if (maStartLocations.GetCount() == StartLocationArray::KI_UNCONSTRUCTED)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "Array used before Construct/Clear was called",
-            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
-            336);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(maStartLocations.GetCount() != StartLocationArray::KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
     return maStartLocations.GetCount();
 }
 
@@ -172,15 +156,8 @@ bool GameModeParams::GetFlag(u64 luFlag) const
 // -----------------------------------------------------------------------------
 Vector3 GameModeParams::GetStartPosition(s32 liStartLocationIndex) const
 {
-    if (static_cast<u32>(liStartLocationIndex) >= KU_MAX_ACTIVE_RACE_CARS)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            KPC_PARAMS_FILE,
-            1177);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(static_cast<u32>(liStartLocationIndex) < KU_MAX_ACTIVE_RACE_CARS,
+               "liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
     return maStartLocations.Ge(static_cast<u32>(liStartLocationIndex)).mPosition;
 }
 
@@ -189,15 +166,8 @@ Vector3 GameModeParams::GetStartPosition(s32 liStartLocationIndex) const
 // -----------------------------------------------------------------------------
 Vector3 GameModeParams::GetStartDirection(s32 liStartLocationIndex) const
 {
-    if (static_cast<u32>(liStartLocationIndex) >= KU_MAX_ACTIVE_RACE_CARS)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            KPC_PARAMS_FILE,
-            1185);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(static_cast<u32>(liStartLocationIndex) < KU_MAX_ACTIVE_RACE_CARS,
+               "liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
     return maStartLocations.Ge(static_cast<u32>(liStartLocationIndex)).mDirection;
 }
 
@@ -222,15 +192,7 @@ void StartGameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeT
                                     Vector3                          lPlayerPosition,
                                     EGameModeStartMechanism          leStartMechanism)
 {
-    if (!(static_cast<u32>(leStartMechanism) < E_GAMEMODESTARTMECHANISM_COUNT))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "(uint32_t)leStartMechanism < E_GAMEMODESTARTMECHANISM_COUNT",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
-            700);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(static_cast<u32>(leStartMechanism) < E_GAMEMODESTARTMECHANISM_COUNT, "(uint32_t)leStartMechanism < E_GAMEMODESTARTMECHANISM_COUNT");
 
     meGameModeType   = leGameModeType;        // [180] +720
     meStartMechanism = leStartMechanism;      // [196] +784
@@ -266,15 +228,7 @@ LightTriggerId StartGameModeParams::GetTrafficLightTriggerId() const
 {
     const bool lbIsValid = !(((mTrafficLightTriggerId & 0xFFFF00u) == 0xFFFF00u) ||
                              (mTrafficLightTriggerId == 255u));
-    if (!lbIsValid)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "mTrafficLightTriggerId.IsValid()",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
-            854);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lbIsValid, "mTrafficLightTriggerId.IsValid()");
     return mTrafficLightTriggerId;
 }
 
@@ -286,15 +240,7 @@ void StartGameModeParams::SetTrafficLightTriggerId(LightTriggerId lTriggerId)
 {
     const bool lbIsValid = !(((lTriggerId & 0xFFFF00u) == 0xFFFF00u) ||
                              (lTriggerId == 255u));
-    if (!lbIsValid)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lTriggerId.IsValid()",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
-            847);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lbIsValid, "lTriggerId.IsValid()");
     mTrafficLightTriggerId = lTriggerId;
 }
 
@@ -304,15 +250,7 @@ void StartGameModeParams::SetTrafficLightTriggerId(LightTriggerId lTriggerId)
 // -----------------------------------------------------------------------------
 void StartGameModeParams::SetProgressionRankData(const BrnProgression::ProgressionRankData* lpProgressionRankData)
 {
-    if (lpProgressionRankData == NULL)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpProgressionRankData != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
-            953);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpProgressionRankData != NULL, "lpProgressionRankData != NULL");
     mpProgressionRankData = lpProgressionRankData;
 }
 
@@ -338,15 +276,7 @@ void StartGameModeParams::SetProgressionRankAsRatio(f32 lfProgressionRankAsRatio
 // -----------------------------------------------------------------------------
 void StartGameModeParams::SetPlayerVehicleGamePlayData(const BrnResource::VehicleListEntry* lpPlayerCarVehicleListEntry)
 {
-    if (lpPlayerCarVehicleListEntry == NULL)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpPlayerCarVehicleListEntry != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
-            985);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, "lpPlayerCarVehicleListEntry != NULL");
     mpPlayerCarVehicleListEntry = lpPlayerCarVehicleListEntry;
 }
 
