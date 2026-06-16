@@ -17,30 +17,14 @@ namespace GameStateModuleIO
 // X360 0x823A78F0.
 void ChangeNetworkCarEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
-    if (lNetworkPlayerID == CgsNetwork::K_INVALID_PLAYER_ID)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h",
-            3362);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
 // X360 0x823A77D0.
 void OnlinePlayerAddedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
-    if (lNetworkPlayerID == CgsNetwork::K_INVALID_PLAYER_ID)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h",
-            3207);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
@@ -55,30 +39,14 @@ void OnlinePlayerFinalisedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID 
 // X360 0x823A7890.
 void OnlinePlayerRemovedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
-    if (lNetworkPlayerID == CgsNetwork::K_INVALID_PLAYER_ID)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h",
-            3331);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
 // X360 0x823A7770. Store the disconnecting player's network id (must not be the invalid sentinel).
 void RemotePlayerDisconnectedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
-    if (lNetworkPlayerID == CgsNetwork::K_INVALID_PLAYER_ID)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h",
-            3189);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
     mNetworkPlayerID = lNetworkPlayerID;
 }
 

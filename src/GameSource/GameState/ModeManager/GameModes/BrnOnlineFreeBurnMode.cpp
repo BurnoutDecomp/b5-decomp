@@ -29,12 +29,7 @@ void OnlineFreeBurnMode::Start(const StartGameModeParams* /*lpStartGameModeParam
                                GameModeParams* /*lpGameModeParams*/,
                                ScoringSystem* /*lpScoringSystem*/)
 {
-    CgsDev::Assert::BeginAssert();
-    CgsDev::Assert::FireAssert(
-        "Trying to start online freeburn mode when it doesn't exist!\n",
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.cpp",
-        52);
-    CgsDev::Assert::EndAssert();
+    CGS_ASSERT(false, "Trying to start online freeburn mode when it doesn't exist!\n");
 }
 
 // X360: BrnGameState::OnlineFreeBurnMode::SendEvent (0x82331460). The online-freeburn state
@@ -89,12 +84,7 @@ void OnlineFreeBurnMode::SendEvent(EGameModeEvent leEvent)
             }
             break;
         default:
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "Should not be in this state in Showtime mode!",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.cpp",
-                175);
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT(false, "Should not be in this state in Showtime mode!");
             break;
     }
 }

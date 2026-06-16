@@ -18,20 +18,11 @@ class GameStateModule : public CgsModule::ModuleSingleBuffered
 {
 public:
     // X360 @ 0x82311570 (BrnGameStateModule.h:949). Inline accessor for the player's active-race-car
-    // slot index. Asserts the module is mid-update (mbIsUpdating) before handing back the cached index.
-    // The X360 baked the assert file/line (BrnGameStateModule.h:971) into the binary, so the explicit
-    // BeginAssert/FireAssert/EndAssert sequence preserves the strings verbatim.
+    // slot index. Asserts the module is mid-update (mbIsUpdating) via CGS_ASSERT before handing back
+    // the cached index.
     EActiveRaceCarIndex GetPlayerActiveRaceCarIndex()
     {
-        if (!mbIsUpdating)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "Can not use this function unless module is updating\n",
-                "..\\..\\..\\GameSource\\GameState/BrnGameStateModule.h",
-                971);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
         return mePlayerActiveRaceCarIndex;
     }
 

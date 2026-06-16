@@ -81,16 +81,8 @@ bool SoundTriggerAction::IsEmpty()
 // X360 0x8230FE98. Range-checked setter for the disconnected player's active-race-car slot.
 void RemotePlayerDisconnectedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    if (!((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) &&
-          (leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT)))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )",
-            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
-            6360);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+               "( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
 
     meActiveRaceCarIndex = leActiveRaceCarIndex;
 }
@@ -113,33 +105,9 @@ void SetupNetworkCarAction::Construct(EPlayerScoringIndex lePlayerScoringIndex,
                                       CgsID               lModelId,
                                       CgsID               lWheelModelId)
 {
-    if (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
-            783);
-        CgsDev::Assert::EndAssert();
-    }
-    if (leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
-            784);
-        CgsDev::Assert::EndAssert();
-    }
-    if (lModelId == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lModelId != kCGSID_NULL",
-            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
-            785);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(lModelId != 0, "lModelId != kCGSID_NULL");
 
     mWorldSpacePosition  = lPos;
     mAt                  = lAt;
@@ -165,16 +133,8 @@ void OnlinePlayerAddedAction::SetPlayerScoringIndex(EPlayerScoringIndex lePlayer
 // static CGS_ASSERT-style expression, matching the committed RemotePlayerDisconnectedAction.)
 void OnlinePlayerRemovedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    if (!((leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-          (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "We have an invalid race car index here",
-            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
-            6497);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT((leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+               "We have an invalid race car index here");
 
     meActiveRaceCarIndex = leActiveRaceCarIndex;
 }
@@ -185,20 +145,8 @@ void OnlinePlayerRemovedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex leActi
 void RankInfoResponseAction::SetProgressionRanks(s32 liPlayerRank, s32 liRankCount, s32 liOfflineRace,
                                                  s32 liRoadRage, s32 liStuntAttack, s32 liMarkedMan)
 {
-    if (liPlayerRank >= liRankCount)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("liPlayerRank < liRankCount",
-                                   "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6879);
-        CgsDev::Assert::EndAssert();
-    }
-    if (liPlayerRank == KI_PLAYER_HAS_FINISHED_LAST_RANK)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK",
-                                   "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6880);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(liPlayerRank < liRankCount, "liPlayerRank < liRankCount");
+    CGS_ASSERT(liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK, "liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK");
 
     miPlayerRank  = liPlayerRank;
     miOfflineRace = liOfflineRace;
@@ -238,15 +186,7 @@ void PrepareForModeAction::Construct(const GameModeParams* lpGameModeParams,
                                      s32                    liCurrentRound,
                                      bool                   lbComingFromOnlineLobbyMode)
 {
-    if (!lpGameModeParams)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpGameModeParams",
-            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
-            1183);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpGameModeParams, "lpGameModeParams");
 
     mePrepareForModeStage             = E_PFM_STAGE_ALL_IN_ONE;
     mGameModeParams                   = *lpGameModeParams;
@@ -269,24 +209,8 @@ void PrepareForModeAction::Construct(const GameModeParams* lpGameModeParams,
 // of the miNumPlayersDisconnected recorded ids. The two asserts bound the count to [0, 8).
 bool PrepareForModeAction::GetPlayerDisconnected(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const
 {
-    if (miNumPlayersDisconnected < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miNumPlayersDisconnected >= 0",
-            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
-            1136);
-        CgsDev::Assert::EndAssert();
-    }
-    if (miNumPlayersDisconnected >= KI_MAX_DISCONNECTED_NETWORK_PLAYERS)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miNumPlayersDisconnected < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
-            1137);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(miNumPlayersDisconnected >= 0, "miNumPlayersDisconnected >= 0");
+    CGS_ASSERT(miNumPlayersDisconnected < KI_MAX_DISCONNECTED_NETWORK_PLAYERS, "miNumPlayersDisconnected < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
 
     for (s32 liIndex = 0; liIndex < miNumPlayersDisconnected; ++liIndex)
     {
@@ -302,24 +226,8 @@ bool PrepareForModeAction::GetPlayerDisconnected(BrnNetwork::NetworkPlayerID lNe
 // list, then bump the count. The two asserts bound the count (>= 0 and < KI_MAX_ACTIVE_RACE_CARS - 1).
 void PrepareForModeAction::SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lPlayerID)
 {
-    if (miNumPlayersDisconnected < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miNumPlayersDisconnected >= 0",
-            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
-            1160);
-        CgsDev::Assert::EndAssert();
-    }
-    if (miNumPlayersDisconnected >= 7)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miNumPlayersDisconnected < (BrnWorld::KI_MAX_ACTIVE_RACE_CARS - 1)",
-            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
-            1161);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(miNumPlayersDisconnected >= 0, "miNumPlayersDisconnected >= 0");
+    CGS_ASSERT(miNumPlayersDisconnected < 7, "miNumPlayersDisconnected < (BrnWorld::KI_MAX_ACTIVE_RACE_CARS - 1)");
 
     maDisconnectedNetworkPlayerID[miNumPlayersDisconnected] = lPlayerID;
     ++miNumPlayersDisconnected;

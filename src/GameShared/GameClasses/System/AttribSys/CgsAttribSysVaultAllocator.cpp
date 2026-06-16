@@ -9,36 +9,14 @@ namespace CgsAttribSys
 // restored here as the logical guard + container call.
 u8* StreamedVaultAllocator::GetSlotMemory(s32 liSlotIndex)
 {
-    if (liSlotIndex < 0 || liSlotIndex >= KI_MAX_NUM_STREAMED_VAULTS)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultAllocator.cpp",
-            165);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS,
+               "liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS");
 
     // Inlined BitArray<24u>::IsBitSet bounds check (CgsBitArray.h:203).
-    if (static_cast<u32>(liSlotIndex) >= mUsedStreamedVaults.GetCapacity())
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "luIndex < NUMBITS",
-            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h",
-            203);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(static_cast<u32>(liSlotIndex) < mUsedStreamedVaults.GetCapacity(), "luIndex < NUMBITS");
 
-    if (!mUsedStreamedVaults.IsBitSet(liSlotIndex))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "Trying to access memory for a slot that isn't in use",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultAllocator.cpp",
-            166);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(mUsedStreamedVaults.IsBitSet(liSlotIndex),
+               "Trying to access memory for a slot that isn't in use");
 
     return mpau8VaultMemory + liSlotIndex * KI_MAX_STREAMED_VAULT_BIN_SIZE;
 }
@@ -48,47 +26,17 @@ u8* StreamedVaultAllocator::GetSlotMemory(s32 liSlotIndex)
 // restored here as logical container calls.
 void StreamedVaultAllocator::ReleaseSlot(s32 liSlotIndex)
 {
-    if (liSlotIndex < 0 || liSlotIndex >= KI_MAX_NUM_STREAMED_VAULTS)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultAllocator.cpp",
-            137);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS,
+               "liSlotIndex >= 0 && liSlotIndex < KI_MAX_NUM_STREAMED_VAULTS");
 
     // Inlined BitArray<24u>::IsBitSet bounds check (CgsBitArray.h:203).
-    if (static_cast<u32>(liSlotIndex) >= mUsedStreamedVaults.GetCapacity())
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "luIndex < NUMBITS",
-            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h",
-            203);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(static_cast<u32>(liSlotIndex) < mUsedStreamedVaults.GetCapacity(), "luIndex < NUMBITS");
 
-    if (!mUsedStreamedVaults.IsBitSet(liSlotIndex))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "Trying to free a streamed vault slot that isn't in use",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultAllocator.cpp",
-            138);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(mUsedStreamedVaults.IsBitSet(liSlotIndex),
+               "Trying to free a streamed vault slot that isn't in use");
 
     // Inlined BitArray<24u>::UnSetBit bounds check (CgsBitArray.h:241).
-    if (static_cast<u32>(liSlotIndex) >= mUsedStreamedVaults.GetCapacity())
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "luIndex < NUMBITS",
-            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h",
-            241);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(static_cast<u32>(liSlotIndex) < mUsedStreamedVaults.GetCapacity(), "luIndex < NUMBITS");
 
     mUsedStreamedVaults.UnSetBit(liSlotIndex);
 }

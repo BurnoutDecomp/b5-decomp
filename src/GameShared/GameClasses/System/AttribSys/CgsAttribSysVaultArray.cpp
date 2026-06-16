@@ -7,15 +7,7 @@ namespace CgsAttribSys
 {
 void VaultArray::Construct(Attrib::IGarbageCollector* lpGarbageCollector)
 {
-    if (lpGarbageCollector == nullptr)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpGarbageCollector != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultArray.cpp",
-            45);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpGarbageCollector != nullptr, "lpGarbageCollector != NULL");
 
     mpaSlots = nullptr;
     mpGarbageCollector = lpGarbageCollector;

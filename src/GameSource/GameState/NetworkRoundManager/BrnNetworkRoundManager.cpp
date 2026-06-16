@@ -12,15 +12,7 @@ namespace BrnGameState
 // build-baked file/line via raw Begin/Fire/End (CGS_ASSERT would inject __FILE__/__LINE__).
 void NetworkRoundManager::NetworkGameStarted(const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent)
 {
-    if (!lpStartNetworkGameEvent)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpStartNetworkGameEvent",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp",
-            112);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpStartNetworkGameEvent, "lpStartNetworkGameEvent");
 
     mStartNetworkGameEvent = *lpStartNetworkGameEvent;
 
@@ -28,24 +20,8 @@ void NetworkRoundManager::NetworkGameStarted(const GameStateModuleIO::StartNetwo
     miTotalRounds     = lpStartNetworkGameEvent->miNumRounds;
     mbStartingGameDueToPlayerJoin = lpStartNetworkGameEvent->mbIsStartingGameAfterPlayerJoin;
 
-    if (miRoundsRemaining <= 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miRoundsRemaining > 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp",
-            118);
-        CgsDev::Assert::EndAssert();
-    }
-    if (miTotalRounds <= 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miTotalRounds > 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp",
-            119);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(miRoundsRemaining > 0, "miRoundsRemaining > 0");
+    CGS_ASSERT(miTotalRounds > 0, "miTotalRounds > 0");
 }
 
 // X360 0x823589E8. Cache the incoming start-network-round event. The X360 copies 10 dwords (40
@@ -56,15 +32,7 @@ void NetworkRoundManager::NetworkGameStarted(const GameStateModuleIO::StartNetwo
 // the original.
 void NetworkRoundManager::NetworkRoundStarted(const GameStateModuleIO::StartNetworkRoundEvent* lpStartNetworkRoundEvent)
 {
-    if (!lpStartNetworkRoundEvent)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpStartNetworkRoundEvent",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp",
-            134);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpStartNetworkRoundEvent, "lpStartNetworkRoundEvent");
 
     mStartNetworkRoundEvent = *lpStartNetworkRoundEvent;
 }
@@ -74,15 +42,7 @@ void NetworkRoundManager::NetworkRoundStarted(const GameStateModuleIO::StartNetw
 // miRoundsRemaining. Assert uses the build-baked file/line.
 void NetworkRoundManager::OnRoundStart()
 {
-    if (miRoundsRemaining <= 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miRoundsRemaining > 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp",
-            149);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(miRoundsRemaining > 0, "miRoundsRemaining > 0");
 
     --miRoundsRemaining;
 }

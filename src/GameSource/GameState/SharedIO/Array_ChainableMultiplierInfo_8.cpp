@@ -27,22 +27,14 @@ template BrnGameState::GameStateModuleIO::ChainableMultiplierInfo* Array<BrnGame
 // verified X360 single-assert shape. So the inline GetCount() is left untouched and
 // this one instantiation gets its own asserting body via specialization.
 //
-// The assert uses explicit BeginAssert/FireAssert(expr,file,line)/EndAssert with the
-// X360-baked literal file path "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h"
-// and line 336 verbatim -- NOT CGS_ASSERT, which would bake this repo's __FILE__/__LINE__
-// (e.g. CgsArray.h line 48) instead of the X360's 336. This matches the
-// GameModeParams::GetCheckpointCount/GetStartLocationCount precedent 1:1.
+// The assert is written with CGS_ASSERT (the project convention); the macro fills
+// __FILE__/__LINE__ at this reconstruction rather than reproducing the X360's baked-in
+// CgsArray.h:336 - the accepted trade-off, matching the GameModeParams::GetCheckpointCount/
+// GetStartLocationCount precedent.
 template<>
 s32 Array<BrnGameState::GameStateModuleIO::ChainableMultiplierInfo, 8>::GetCount() const
 {
-    if (miCount == KI_UNCONSTRUCTED)            // X360: *(a1 + 128) == -1
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "Array used before Construct/Clear was called",
-            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
-            336);
-        CgsDev::Assert::EndAssert();
-    }
+    // X360: the unconstructed sentinel is *(a1 + 128) == -1.
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
     return miCount;                             // X360: return *(a1 + 128)
 }

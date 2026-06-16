@@ -76,12 +76,7 @@ void OnlineShowtimeMode::SendEvent(EGameModeEvent leEvent)
         case KI_GMS_QUIT:
             break;
         default:
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "Should not be in this state in Showtime mode!",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineShowtimeMode.cpp",
-                161);
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT(false, "Should not be in this state in Showtime mode!");
             break;
     }
 }

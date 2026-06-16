@@ -160,12 +160,7 @@ namespace BrnGame
                 // [+10094156 = 0: off-path, omitted]
                 return true;
             default:
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp",
-                    1033);
-                CgsDev::Assert::EndAssert();
+                CGS_ASSERT(false, "0");
                 return false;
         }
     }
@@ -253,15 +248,7 @@ namespace BrnGame
             mi8ActualFrameRateMaxStepsThisFrame = 1;
         }
 
-        if (_lbForceAssert)
-        {
-            Assert::BeginAssert();
-            Assert::FireAssert(
-                "!_lbForceAssert",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp",
-                1872);
-            Assert::EndAssert();
-        }
+        CGS_ASSERT(!_lbForceAssert, "!_lbForceAssert");
 
         mFrameRateManager.StartUpdateFrame(leFrameRateType, false);
         UnlockInputForRead();
@@ -415,12 +402,7 @@ namespace BrnGame
             return true;
 
         default:
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "Invalid update stage\n",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp",
-                1199);
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT(false, "Invalid update stage\n");
             return true;
         }
     }

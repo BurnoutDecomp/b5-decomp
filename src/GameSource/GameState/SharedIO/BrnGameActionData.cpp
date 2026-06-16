@@ -86,28 +86,12 @@ void GameStats::Construct()
             maaiCurrentStuntElementsPerCounty[liStuntElementType][liCounty] = 0;
 
             ++liCounty;
-            if (liCounty > KI_COUNTY_VALID_COUNT)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "leEnumIndex <= E_COUNTY_VALID_COUNT",
-                    "..\\..\\..\\SharedClasses\\World/BrnWorldRegion.h",
-                    44);
-                CgsDev::Assert::EndAssert();
-            }
+            CGS_ASSERT(liCounty <= KI_COUNTY_VALID_COUNT, "leEnumIndex <= E_COUNTY_VALID_COUNT");
         }
         while (liCounty < KI_COUNTY_VALID_COUNT);
 
         ++liStuntElementType;
-        if (liStuntElementType > KI_STUNT_ELEMENT_TYPE_COUNT)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "leEnumIndex <= E_STUNT_ELEMENT_TYPE_COUNT",
-                "..\\..\\..\\GameSource\\GameState/BrnGameStateTypes.h",
-                98);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(liStuntElementType <= KI_STUNT_ELEMENT_TYPE_COUNT, "leEnumIndex <= E_STUNT_ELEMENT_TYPE_COUNT");
     }
     while (liStuntElementType < KI_STUNT_ELEMENT_TYPE_COUNT);
 
