@@ -37,6 +37,16 @@ public:
         return mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex));
     }
 
+    void FreeObject(TIndex liIndex)
+    {
+        CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_CAPACITY), "Array index out of bounds");
+        CGS_ASSERT(miNumObjectsFree < KI_CAPACITY, "miNumObjectsFree < PoolSize");
+        maiObjectFreeQueue[miNumObjectsFree] = liIndex;
+        ++miNumObjectsFree;
+        CGS_ASSERT(mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex)), "The object isn't allocated");
+        mObjectsAllocated.UnSetBit(static_cast<u32>(liIndex));
+    }
+
 private:
     T                  maObjectPool[N];
     TIndex             maiObjectFreeQueue[N];
