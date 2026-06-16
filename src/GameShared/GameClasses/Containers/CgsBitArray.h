@@ -51,7 +51,81 @@ public:
         return tuNumBits;
     }
 
+    // ===== Added for the CarCheckpointData TU (BitArray<16>) =====
+    // The four generic methods below are the EXACT methods the Feb-2007 reference template
+    // declares (DWARF BitArray<16u> at CgsBitArray.h:4482/:4485/:4496/:4502 attests
+    // UnSetAll/IsZero/GetFirstNonZeroBit/GetNextNonZeroBit) and that CarCheckpointData's four
+    // X360 bodies inline. Header-inline, matching the X360 inlined bit math; zero-risk additive
+    // (no layout change, no behaviour change to existing IsBitSet/SetBit/UnSetBit users).
+
+    // Clear every bit (the X360 `*this = 0` of the single-field BitArray<16>).
+    void UnSetAll()
+    {
+        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
+        {
+            maxBits[luField] = 0;
+        }
+    }
+
+    // True iff no bit is set (the popcount==0 guard).
+    bool IsZero() const
+    {
+        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
+        {
+            if (maxBits[luField] != 0)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Index of the lowest set bit, or KI_INVALID_BITINDEX(-1) if none.
+    s32 GetFirstNonZeroBit() const
+    {
+        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
+        {
+            if (maxBits[luField] != 0)
+            {
+                const s32 liBit = static_cast<s32>(luField) * static_cast<s32>(kuNumberOfBitsInBitField)
+                                + GetZeroBitInInt(maxBits[luField]);
+                if (static_cast<u32>(liBit) >= tuNumBits)
+                {
+                    return KI_INVALID_BITINDEX;
+                }
+                return liBit;
+            }
+        }
+        return KI_INVALID_BITINDEX;
+    }
+
+    // Index of the lowest set bit with index strictly greater than liAfter, or -1 if none.
+    s32 GetNextNonZeroBit(s32 liAfter) const
+    {
+        for (s32 liBit = liAfter + 1; static_cast<u32>(liBit) < tuNumBits; ++liBit)
+        {
+            if (IsBitSet(static_cast<u32>(liBit)))
+            {
+                return liBit;
+            }
+        }
+        return KI_INVALID_BITINDEX;
+    }
+
 private:
+    // Index of the lowest set bit within a single 64-bit field (the X360 (field*64 -
+    // clz64(field & -field) + 63) lowest-set-bit idiom, value-identical to a count-trailing-zeros).
+    static s32 GetZeroBitInInt(u64 lu64Field)
+    {
+        s32 liBit = 0;
+        while ((lu64Field & 1) == 0)
+        {
+            lu64Field >>= 1;
+            ++liBit;
+        }
+        return liBit;
+    }
+
     u64 maxBits[kuNumberOfBitFields];
 };
 }

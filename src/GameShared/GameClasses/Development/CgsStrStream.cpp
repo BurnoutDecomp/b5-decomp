@@ -123,4 +123,34 @@ namespace CgsDev
         }
         return *this;
     }
+
+    // @ 0x827DB6E8-loop init. Resets the inline buffer to the empty string (the X360 `stb 0,8(this)`).
+    // The StrStreamBase() base ctor already set mePrintMode = E_PRINTMODE_DECIMAL.
+    SimpleStrStream::SimpleStrStream()
+    {
+        macCharBuffer[0] = '\0';
+    }
+
+    // Inline-buffer sink: append text into macCharBuffer without overflowing it.
+    StrStreamBase& SimpleStrStream::operator<<(const char* lpcText)
+    {
+        if (lpcText)
+        {
+            const size_t luUsed = std::strlen(macCharBuffer);
+            const size_t luRoom = (size_t)KI_BUFFER_SIZE - 1 - luUsed;
+            if (luRoom > 0)
+                std::strncat(macCharBuffer, lpcText, luRoom);
+        }
+        return *this;
+    }
+
+    StrStreamBase& SimpleStrStream::operator<<(s32 liValue)
+    {
+        return StrStreamBase::operator<<(liValue);
+    }
+
+    StrStreamBase& SimpleStrStream::operator<<(f32 lfValue)
+    {
+        return StrStreamBase::operator<<(lfValue);
+    }
 }

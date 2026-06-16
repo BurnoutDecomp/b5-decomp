@@ -9,6 +9,7 @@ namespace BrnGameState
 {
 CheckpointData::CheckpointData()
 {
-    mCheckpointId = -1;
+    /* X360 0x8231C2C8: block-section list left unconstructed; the +40 count word is the
+       KI_UNCONSTRUCTED(-1) sentinel until Construct(). */
 }
 }
