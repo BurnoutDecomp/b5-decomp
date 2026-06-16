@@ -1,6 +1,6 @@
 #include "SharedClasses/Progression/BrnProgressionData.h"
 #include "SharedClasses/Progression/BrnRaceBalance.h"        // complete OpponentBalanceData (by-value return, accessors, KI_GRAPH_POINTS)
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CgsDev::Assert::Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 #include "GameSource/GameState/BrnGameActions.h"             // complete BrnProgression::TrophyUnlockData (16-byte) for &mpaTrophyUnlocks[i]
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // ProgressionRankData (pointer-return only)
 #include <cstring>                                           // memset
@@ -16,30 +16,14 @@ namespace BrnProgression
 // X360 0x82311790. Bounds-checked accessor into the progression-rank table (112-byte stride).
 const ProgressionRankData* ProgressionData::GetProgressionRankData(u32 luIndex) const
 {
-    if (luIndex >= muProgressionRankCount)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "luIndex < muProgressionRankCount",
-            "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h",
-            330);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(luIndex < muProgressionRankCount, "luIndex < muProgressionRankCount");
     return &mpaProgressionRanks[luIndex];
 }
 
 // X360 0x823569F0. Bounds-checked accessor into the trophy-unlock table (16-byte stride).
 TrophyUnlockData* ProgressionData::GetTrophyUnlock(u32 luIndex) const
 {
-    if (luIndex >= muTrophyUnlockCount)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "luIndex < muTrophyUnlockCount",
-            "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h",
-            302);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(luIndex < muTrophyUnlockCount, "luIndex < muTrophyUnlockCount");
     return &mpaTrophyUnlocks[luIndex];
 }
 
@@ -49,26 +33,10 @@ TrophyUnlockData* ProgressionData::GetTrophyUnlock(u32 luIndex) const
 // 8-point graphs are written).
 OpponentBalanceData ProgressionData::GetInterpolatedAIBalanceGraph(s32 liIndexA, s32 liIndexB, f32 lfBlend) const
 {
-    if (static_cast<u32>(liIndexA) >= muAIBalanceCount)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "luIndex < muAIBalanceCount",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\progression\\BrnProgressionData.h",
-            482);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(static_cast<u32>(liIndexA) < muAIBalanceCount, "luIndex < muAIBalanceCount");
     const OpponentBalanceData& lrBalanceA = mpaAIBalances[liIndexA];
 
-    if (static_cast<u32>(liIndexB) >= muAIBalanceCount)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "luIndex < muAIBalanceCount",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\progression\\BrnProgressionData.h",
-            482);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(static_cast<u32>(liIndexB) < muAIBalanceCount, "luIndex < muAIBalanceCount");
     const OpponentBalanceData& lrBalanceB = mpaAIBalances[liIndexB];
 
     OpponentBalanceData lResult;

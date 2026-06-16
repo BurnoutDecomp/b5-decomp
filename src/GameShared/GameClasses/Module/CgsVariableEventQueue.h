@@ -114,20 +114,9 @@ namespace CgsModule
         const uintptr_t luDataAddr = reinterpret_cast<uintptr_t>(&macData[0]);
         miFirstEventOffset = ALIGN - (s32)(luDataAddr & (ALIGN - 1));
 
-        if (!(miFirstEventOffset >= 0))
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("miFirstEventOffset >= 0", detail::KAC_VEQ_FILE, 226);
-            CgsDev::Assert::EndAssert();
-        }
-        if (((luDataAddr + (uintptr_t)miFirstEventOffset) % ALIGN) != 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "( ( (int32_t)&macData[0] + miFirstEventOffset ) % Alignment ) == 0",
-                detail::KAC_VEQ_FILE, 227);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(miFirstEventOffset >= 0, "miFirstEventOffset >= 0");
+        CGS_ASSERT(((luDataAddr + (uintptr_t)miFirstEventOffset) % ALIGN) == 0,
+                   "( ( (int32_t)&macData[0] + miFirstEventOffset ) % Alignment ) == 0");
 
         Clear();
     }

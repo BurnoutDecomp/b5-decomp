@@ -2,14 +2,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-namespace
-{
-// Assert source path baked verbatim into the X360 build for the GetPlayerPosition bounds checks
-// (note: it is the .h path, not the .cpp -- the X360 build inlined these accessors from the header).
-const char* const KPC_SCORING_FILE =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\scoring\\BrnBaseOnlineModeScoring.h";
-}
-
 namespace BrnGameState
 {
 // X360 @ 0x823106F8. Finishing position recorded for active-race-car slot liRaceCarIndex. The two

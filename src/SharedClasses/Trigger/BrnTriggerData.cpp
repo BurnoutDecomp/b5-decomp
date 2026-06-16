@@ -15,15 +15,7 @@
 const BrnTrigger::TriggerRegion*
 BrnTrigger::TriggerData::GetRegion( int liRegionIndex ) const
 {
-    if ( liRegionIndex >= miRegionCount )
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liRegionIndex < miRegionCount",
-            "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-            624 );
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT( liRegionIndex < miRegionCount, "liRegionIndex < miRegionCount" );
     return mppRegions[liRegionIndex];
 }
 
@@ -32,26 +24,11 @@ BrnTrigger::TriggerData::GetRegion( int liRegionIndex ) const
 const BrnTrigger::Landmark*
 BrnTrigger::TriggerData::GetLandmarkFromRegionIndex( int liRegionIndex ) const
 {
-    if ( liRegionIndex >= miRegionCount )
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liRegionIndex < miRegionCount",
-            "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-            624 );
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT( liRegionIndex < miRegionCount, "liRegionIndex < miRegionCount" );
 
     const TriggerRegion* lpTriggerRegion = mppRegions[liRegionIndex];
-    if ( lpTriggerRegion->GetType() != TriggerRegion::E_TYPE_LANDMARK )
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK",
-            "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-            615 );
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT( lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK,
+                "lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK" );
 
     return static_cast<const Landmark*>( lpTriggerRegion );
 }
@@ -60,15 +37,7 @@ BrnTrigger::TriggerData::GetLandmarkFromRegionIndex( int liRegionIndex ) const
 const BrnTrigger::Killzone*
 BrnTrigger::TriggerData::GetKillzone( int liKillzoneIndex ) const
 {
-    if ( liKillzoneIndex >= miKillzoneCount )
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liKillzoneIndex < miKillzoneCount",
-            "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-            533 );
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT( liKillzoneIndex < miKillzoneCount, "liKillzoneIndex < miKillzoneCount" );
     return &mpKillzones[liKillzoneIndex];
 }
 
@@ -84,24 +53,8 @@ BrnTrigger::TriggerData::GetKillzone( int liKillzoneIndex ) const
 const BrnTrigger::Landmark*
 BrnTrigger::TriggerData::GetOnlineLandmark( int liLandmarkIndex ) const
 {
-    if ( liLandmarkIndex >= miLandmarkCount )
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liLandmarkIndex < miLandmarkCount",
-            "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-            409 );
-        CgsDev::Assert::EndAssert();
-    }
-    if ( liLandmarkIndex >= miOnlineLandmarkCount )
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liLandmarkIndex < miOnlineLandmarkCount",
-            "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-            410 );
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT( liLandmarkIndex < miLandmarkCount, "liLandmarkIndex < miLandmarkCount" );
+    CGS_ASSERT( liLandmarkIndex < miOnlineLandmarkCount, "liLandmarkIndex < miOnlineLandmarkCount" );
 
     int liOnlineIndex = 0;
     for ( int liIndex = 0; liIndex < miLandmarkCount; ++liIndex )
