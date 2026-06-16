@@ -19,15 +19,7 @@ namespace CgsNetwork
 
 void PlayerName::Construct(const char* lpcPlayerName)
 {
-    if (!lpcPlayerName)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "lpcPlayerName",
-            "..\\..\\..\\GameShared\\GameClasses\\Network/Players/CgsPlayerName.h",
-            86);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpcPlayerName, "lpcPlayerName");
     if (std::strlen(lpcPlayerName) >= static_cast<u32>(KI_USERNAME_LENGTH))
     {
         CgsDev::Assert::BeginAssert();

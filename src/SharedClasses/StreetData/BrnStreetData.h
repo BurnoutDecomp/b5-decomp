@@ -28,7 +28,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                              // CgsID (u64)
-#include "GameShared/GameClasses/Core/CgsAssert.h"       // CgsDev::Assert Begin/Fire/End
+#include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
 
 namespace CgsMemory { class LinearMalloc; }
 
@@ -224,52 +224,28 @@ namespace BrnStreetData
 
     // ====================================================================
     // Inline accessor bodies (X360 emitted these out-of-line; the bounds
-    // asserts use the verbatim X360-baked file/line strings via the explicit
-    // BeginAssert/FireAssert/EndAssert sequence).
+    // asserts use the project CGS_ASSERT macro -- the X360-baked file/line
+    // are discarded per project convention).
     // ====================================================================
 
     inline const Road*
     StreetData::GetRoad( RoadIndex liIndex ) const
     {
-        if ( liIndex >= miRoadCount || liIndex < 0 )
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "liIndex < miRoadCount && liIndex >= 0",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\../../SharedClasses/StreetData/BrnStreetData.h",
-                621 );
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0, "liIndex < miRoadCount && liIndex >= 0" );
         return &mpaRoads[ liIndex ];
     }
 
     inline const Street*
     StreetData::GetStreet( SpanIndex liIndex )
     {
-        if ( !IsStreet( liIndex ) )
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "IsStreet( liIndex )",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\../../SharedClasses/StreetData/BrnStreetData.h",
-                651 );
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT( IsStreet( liIndex ), "IsStreet( liIndex )" );
         return &mpaStreets[ liIndex ];
     }
 
     inline const ChallengeParScoresEntry*
     StreetData::GetChallengeParScore( ChallengeIndex liIndex ) const
     {
-        if ( liIndex >= miRoadCount || liIndex < 0 )
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "liIndex < miRoadCount && liIndex >= 0",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\../../SharedClasses/StreetData/BrnStreetData.h",
-                718 );
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0, "liIndex < miRoadCount && liIndex >= 0" );
         return &mpaChallengeParScores[ liIndex ];
     }
 }

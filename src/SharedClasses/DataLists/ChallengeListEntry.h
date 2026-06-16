@@ -14,7 +14,7 @@
 
 #include "types.hpp"                                   // u8/s8/u32/s32/f32 widths
 #include "BrnCommonTypes.h"                             // CgsID (typedef u64)
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CgsDev::Assert::Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 
 namespace BrnResource
 {
@@ -276,30 +276,14 @@ private:
 // ChallengeListEntry::GetAction @ 0x8230F0F8
 // X360 pseudocode: `return 80 * a2 + a1;` with a1==this, a2==liActionIndex. Since
 // sizeof(ChallengeListEntryAction)==0x50 and maAction is at offset 0, this is simply
-// `&maAction[liActionIndex]`. Two range asserts guard the index. The X360-baked file/
-// line strings ('...ChallengeListEntry.h', 941 / 942) are preserved VERBATIM via the
-// explicit BeginAssert/FireAssert/EndAssert sequence. The asserts are non-fatal (binary
-// continues and returns the pointer even on out-of-range index).
+// `&maAction[liActionIndex]`. Two range asserts guard the index via the project
+// CGS_ASSERT macro (the X360-baked file/line are discarded per project convention).
+// The asserts are non-fatal (binary continues and returns the pointer even on an
+// out-of-range index).
 inline ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex )
 {
-    if ( liActionIndex < 0 )
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liActionIndex >= 0",
-            "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h",
-            941 );
-        CgsDev::Assert::EndAssert();
-    }
-    if ( liActionIndex >= KI_MAX_ACTIONS_PER_CHALLENGE )
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE",
-            "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h",
-            942 );
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT( liActionIndex >= 0, "liActionIndex >= 0" );
+    CGS_ASSERT( liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE, "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE" );
 
     return &maAction[ liActionIndex ];
 }

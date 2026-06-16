@@ -3,7 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"   // CgsResource::ResourceHandle
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CgsDev::Assert Begin/Fire/End
+#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 
 // ============================================================================
 // GameShared/GameClasses/System/Resource/CgsResourcePtr.h
@@ -87,9 +87,10 @@ namespace CgsResource
     };
 
     // CgsResourcePtr.h:160 (DWARF). Type-safe wrapper over BaseResourcePtr; adds no
-    // data members. The accessors below carry the X360-baked asserts (verbatim file
-    // path + per-overload line). The ctors / assignment / comparison operators are
-    // declared-only (their own TUs / not attested in this batch).
+    // data members. The accessors below guard the null resource via CGS_ASSERT (the
+    // X360-baked file/line are discarded per project convention). The ctors /
+    // assignment / comparison operators are declared-only (their own TUs / not
+    // attested in this batch).
     template <class Type>
     struct ResourcePtr : public BaseResourcePtr
     {
@@ -106,89 +107,47 @@ namespace CgsResource
         // CgsResourcePtr.h:538 -> baked assert line 544 (non-const).
         Type* operator->()
         {
-            if (!mpResourceMemory)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "Can not instance resource pointer - it has no main memory resource\n",
-                    "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourcePtr.h",
-                    544);
-                CgsDev::Assert::EndAssert();
-            }
+            CGS_ASSERT(mpResourceMemory,
+                "Can not instance resource pointer - it has no main memory resource\n");
             return static_cast<Type*>(mpResourceMemory);
         }
 
         // CgsResourcePtr.h:557 -> baked assert line 563 (const).
         const Type* operator->() const
         {
-            if (!mpResourceMemory)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "Can not instance resource pointer - it has no main memory resource\n",
-                    "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourcePtr.h",
-                    563);
-                CgsDev::Assert::EndAssert();
-            }
+            CGS_ASSERT(mpResourceMemory,
+                "Can not instance resource pointer - it has no main memory resource\n");
             return static_cast<const Type*>(mpResourceMemory);
         }
 
         // CgsResourcePtr.h:612 -> baked assert line 563 (non-const operator*).
         Type& operator*()
         {
-            if (!mpResourceMemory)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "Can not instance resource pointer - it has no main memory resource\n",
-                    "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourcePtr.h",
-                    563);
-                CgsDev::Assert::EndAssert();
-            }
+            CGS_ASSERT(mpResourceMemory,
+                "Can not instance resource pointer - it has no main memory resource\n");
             return *static_cast<Type*>(mpResourceMemory);
         }
 
         const Type& operator*() const
         {
-            if (!mpResourceMemory)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "Can not instance resource pointer - it has no main memory resource\n",
-                    "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourcePtr.h",
-                    563);
-                CgsDev::Assert::EndAssert();
-            }
+            CGS_ASSERT(mpResourceMemory,
+                "Can not instance resource pointer - it has no main memory resource\n");
             return *static_cast<const Type*>(mpResourceMemory);
         }
 
         // CgsResourcePtr.h:575 -> baked assert line 581 (non-const).
         Type* GetMemoryResource()
         {
-            if (!mpResourceMemory)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "Can not instance resource pointer - it has no main memory resource\n",
-                    "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourcePtr.h",
-                    581);
-                CgsDev::Assert::EndAssert();
-            }
+            CGS_ASSERT(mpResourceMemory,
+                "Can not instance resource pointer - it has no main memory resource\n");
             return static_cast<Type*>(mpResourceMemory);
         }
 
         // CgsResourcePtr.h:593 -> baked assert line 599 (const).
         const Type* GetMemoryResource() const
         {
-            if (!mpResourceMemory)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "Can not instance resource pointer - it has no main memory resource\n",
-                    "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourcePtr.h",
-                    599);
-                CgsDev::Assert::EndAssert();
-            }
+            CGS_ASSERT(mpResourceMemory,
+                "Can not instance resource pointer - it has no main memory resource\n");
             return static_cast<const Type*>(mpResourceMemory);
         }
 
