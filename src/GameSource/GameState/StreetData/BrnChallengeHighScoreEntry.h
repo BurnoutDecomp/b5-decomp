@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/GameState/BrnCgsPlayerName.h"   // CgsNetwork::PlayerName (shared 16-byte home)
 
 // ---------------------------------------------------------------------------
 // Minimal owning-type slice for BrnStreetData::ChallengeHighScoreEntry::GetScore
@@ -10,23 +11,11 @@
 // (Construct/UpdateEntry/SetScore/Copy/AreAnyScoresEqual/...) is left for its
 // own TU. Layout is pinned so maPlayerNames lands at the X360 +24 offset
 // (memcpy(a4, 16*a2 + a1 + 24, 16) in the pseudocode).
+//
+// CgsNetwork::PlayerName was formerly defined file-local here; it now lives in the
+// shared home BrnCgsPlayerName.h (16-byte X360 width) so BrnGameStateSharedIO.h and
+// this header share one definition (no ODR redefinition).
 // ---------------------------------------------------------------------------
-
-namespace CgsNetwork
-{
-    // CgsNetwork::PlayerName. PS3 DecFIGS DWARF (CgsPlayerName.h) declares
-    // `char macName[20]`, but the X360 build this function was lifted from
-    // copies / strides 16 bytes (memcpy(...,16) with a 16*index stride), so the
-    // X360 record is 16 bytes wide. Modelled file-local at the X360 width because
-    // CgsNetwork::PlayerName has no committed home yet; replace with the real
-    // header (#include "Network/Players/CgsPlayerName.h") once it is reconstructed.
-    // Plain POD: the X360 emits the maPlayerNames[i] -> *lpPlayerName store as a
-    // 16-byte memcpy, which the implicit copy-assignment reproduces.
-    struct PlayerName
-    {
-        char macName[16];
-    };
-}
 
 namespace BrnStreetData
 {

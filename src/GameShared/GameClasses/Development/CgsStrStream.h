@@ -54,4 +54,26 @@ namespace CgsDev
         char* mpcBuffer;
         s32   miBufferSize;
     };
+
+    // CgsDev::SimpleStrStream - a StrStreamBase that owns an INLINE fixed char buffer (256 bytes),
+    // used to build short debug strings on the stack/in a member without a caller-supplied buffer
+    // (e.g. BrnGameState::StuntManagerDebugComponent::maStrStreams[3], BrnAI::BuzzBy::DrawBuzzTimer).
+    // Distinct vtable from StrStreamBase (X360 off_82014B00) - it overrides the char* sink to append
+    // into macCharBuffer. Object size = 264B (0x108): StrStreamBase (vtable@0 + mePrintMode@4 = 8B) +
+    // macCharBuffer[256]@+0x08, matching the X360 ctor stride. KI_BUFFER_SIZE / accessors + the
+    // scalar overloads (int32_t @969, float32_t @1025) are from DWARF CgsStrStream.h.
+    struct SimpleStrStream : public StrStreamBase
+    {
+        SimpleStrStream();
+
+        StrStreamBase& operator<<(const char* lpcText) override;
+        StrStreamBase& operator<<(s32 liValue);
+        StrStreamBase& operator<<(f32 lfValue);
+
+        char* GetBuffer() { return macCharBuffer; }
+
+    private:
+        static const s32 KI_BUFFER_SIZE = 256;   // DWARF CgsStrStream.h:306
+        char macCharBuffer[KI_BUFFER_SIZE];
+    };
 }
