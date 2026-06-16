@@ -4,6 +4,7 @@
 #include "BrnCommonTypes.h"                                   // Vector3, CgsID
 #include "GameShared/GameClasses/Containers/CgsArray.h"       // Array<T, N>
 #include "GameSource/GameState/BrnGameStateSharedIO.h"        // GameStateModuleIO::EGameModeType
+#include "GameSource/GameState/BrnCheckpointData.h"           // BrnGameState::CheckpointData (real, single owner)
 
 // =============================================================================
 // BrnGameModeParams.h  (MERGED OWNING HEADER)
@@ -61,6 +62,10 @@ public:
 };
 }
 
+// Forward decl for StartGameModeParams::mpPlayerCarVehicleListEntry / SetPlayerVehicleGamePlayData.
+// Real home: BrnResource vehicle-list TU. Used only by-pointer here.
+namespace BrnResource { struct VehicleListEntry; }
+
 namespace BrnGameState
 {
 // ---------------------------------------------------------------------------
@@ -91,7 +96,8 @@ struct NetworkPlayerID_Stub { u32 muValue; };               // stub: RoadRulesRe
 // CheckpointData / OpponentData are reconstructed by their own TUs; only their sizes matter
 // for the array members embedded by value here. Modelled as opaque fixed-size blobs so
 // GameModeParams keeps a complete layout. Replaced at consolidation with the real types.
-struct CheckpointData_Stub { u8 mBlob[44]; }; // stub: BrnGameState::CheckpointData (own TU)
+// CheckpointData stub retired: the real BrnGameState::CheckpointData is now its single owner
+// (BrnCheckpointData.h, included above; 44-byte stride preserved, so GameModeParams' layout is unchanged).
 struct OpponentData_Stub   { u8 mBlob[48]; }; // stub: BrnGameState::OpponentData (own TU)
 
 // Forward-only handle for the third RaceMode::Start parameter (DWARF: ScoringSystem*).
@@ -168,7 +174,7 @@ public:
 
     // The DWARF spells the embedded fixed arrays as Array<T, N>.
     typedef Array<StartLocation, 8u>        StartLocationArray;
-    typedef Array<CheckpointData_Stub, 16u> CheckpointDataArray;
+    typedef Array<CheckpointData, 16u>      CheckpointDataArray;
     typedef Array<OpponentData_Stub, 7u>    OpponentDataArray;
 
     // ---- X360-attested standalone methods (the only six in the ledger) -----------------
@@ -245,19 +251,83 @@ private:
     u64                     muFlags;
 };
 
-// The immutable event/start description handed to a game mode. RaceMode::Start reads its
-// event-data, rank-data, traffic density, start mechanism and traffic-light trigger out of it.
-// Only the accessors Start uses are declared; the full class is reconstructed by its own TU.
+// The immutable event/start description handed to a game mode. DWARF :153 (:303-327). X360 word in
+// [], byte offset in (); offsets NOT x64-faithful -- parity by member. The seven X360-attested
+// methods (Construct/AddCheckpoint/Set+GetTrafficLightTriggerId/SetProgressionRankData/
+// SetProgressionRankAsRatio/SetPlayerVehicleGamePlayData) have bodies in BrnGameModeParams.cpp; the
+// remaining accessors are declared-only (compile gate for committed RaceMode::Start consumers).
 class StartGameModeParams
 {
 public:
-    GameStateModuleIO::EGameModeType           GetGameModeType() const;
-    const BrnProgression::RaceEventData*       GetEventData() const;
-    const BrnProgression::ProgressionRankData* GetProgressionRankData() const;
-    f32                                        GetTrafficDensity() const;
-    f32                                        GetBoostEarning() const;
-    f32                                        GetProgressionRankAsRatio() const;
-    EGameModeStartMechanism                    GetStartMechanism() const;
-    LightTriggerId                             GetTrafficLightTriggerId() const;
+    typedef Array<CheckpointData, 16u> CheckpointDataArray;   // DWARF :99
+
+    // ---- X360-attested standalone methods (this TU) ----
+    void Construct(GameStateModuleIO::EGameModeType leGameModeType,
+                   Vector3 lPlayerPosition, EGameModeStartMechanism leStartMechanism);   // 0x8231C1F8
+    void AddCheckpoint(LandmarkIndex luLandmarkIndex, u16 luAISectionIndex);             // 0x8236AAC0
+    void           SetTrafficLightTriggerId(LightTriggerId lTriggerId);                  // 0x823616E8
+    LightTriggerId GetTrafficLightTriggerId() const;                                     // 0x8231C2D8
+    void SetProgressionRankData(const BrnProgression::ProgressionRankData* lpProgressionRankData); // 0x82354490
+    void SetProgressionRankAsRatio(f32 lfProgressionRankAsRatio);                        // 0x823544F0
+    void SetPlayerVehicleGamePlayData(const BrnResource::VehicleListEntry* lpPlayerCarVehicleListEntry); // 0x82354590
+
+    // ---- Declared-only accessors (consumed by committed RaceMode::Start; compile-only gate) ----
+    GameStateModuleIO::EGameModeType                  GetGameModeType() const;
+    void                                              SetRaceId(CgsID lId);
+    CgsID                                             GetRaceId() const;
+    void                                              SetPlayerPosition(Vector3 lPlayerPosition);
+    void                                              SetStartDirection(Vector3 lStartDirection);
+    Vector3                                           GetPlayerPosition() const;
+    Vector3                                           GetStartDirection() const;
+    EGameModeStartMechanism                           GetStartMechanism() const;
+    void                                              SetTrafficDensity(f32 lfTrafficDensity);
+    f32                                               GetTrafficDensity() const;
+    void                                              SetBoostEarning(f32 lfBoostEarning);
+    f32                                               GetBoostEarning() const;
+    void                                              SetShotGroup(s32 liShotGroup);
+    s32                                               GetShotGroup() const;
+    s32                                               GetCheckpointCount() const;
+    const CheckpointData*                             GetCheckpointData(s32 liIndex) const;
+    const CheckpointDataArray*                        GetCheckpoints() const;
+    s32                                               GetTakedownTarget() const;
+    void                                              SetTakedownTarget(s32 liTakedownTarget);
+    void                                              SetPursuedCarGlobalIndex(EGlobalRaceCarIndex_Stub lePursuedCarIndex);
+    EGlobalRaceCarIndex_Stub                          GetPursuedCarGlobalIndex() const;
+    void                                              SetPursuedCarID(CgsID lId);
+    CgsID                                             GetPursuedCarID() const;
+    void                                              SetEventJunctionId(u32 luEventJunctionId);
+    u32                                               GetEventJunctionId() const;
+    void                                              SetEventData(const BrnProgression::RaceEventData* lpEventData);
+    const BrnProgression::RaceEventData*              GetEventData() const;
+    const BrnProgression::ProgressionRankData*        GetProgressionRankData() const;
+    void                                              SetJunctionID(u32 luJunctionID);
+    u32                                               GetJunctionID() const;
+    const BrnResource::VehicleListEntry*              GetPlayerVehicleGamePlayData() const;
+    f32                                               GetProgressionRankAsRatio() const;
+    f32                                               GetPlayerBaseDeformation() const;
+    void                                              SetPlayerBaseDeformation(f32 lfPlayerBaseDeformation);
+
+private:
+    // ---- Data members (DWARF source order :303-327) ----
+    CheckpointDataArray                         maCheckpointDataArray;        // :303  [..176]  count @+704
+    CgsID                                       miRaceId;                     // :304  [177] +708  (NOT reset by Construct)
+    GameStateModuleIO::EGameModeType            meGameModeType;               // :305  [180] +720
+    Vector3                                     mPlayerPosition;              // :306  [184] +736
+    Vector3                                     mStartDirection;              // :307  [188] +752
+    s32                                         miTakedownTarget;             // :308  [192] +768
+    EGlobalRaceCarIndex_Stub                    mePursuedCarGlobalIndex;      // :309  [193] +772  (real EGlobalRaceCarIndex)
+    CgsID                                       mPursuedCarID;                // :310  [194] +776  (NOT reset by Construct)
+    EGameModeStartMechanism                     meStartMechanism;             // :311  [196] +784
+    LightTriggerId                              mTrafficLightTriggerId;       // :312  [197] +788
+    f32                                         mfTrafficDensity;             // :314  [198] +792
+    f32                                         mfBoostEarning;               // :315  [199] +796
+    s32                                         miShotGroup;                  // :317  [200] +800
+    f32                                         mfPlayerBaseDeformation;      // :319  [201] +804
+    u32                                         muEventJunctionId;            // :321  [202] +808  (NOT reset by Construct)
+    const BrnProgression::RaceEventData*        mpEventData;                  // :322  [203] +812
+    u32                                         muJunctionID;                 // :323  [204] +816
+    const BrnProgression::ProgressionRankData*  mpProgressionRankData;        // :324  [205] +820
+    f32                                         mfProgressionRankAsRatio;     // :325  [206] +824
+    const BrnResource::VehicleListEntry*        mpPlayerCarVehicleListEntry;  // :327  [207] +828  (NOT reset by Construct)
 };
 }

@@ -2,6 +2,30 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert::Begin/Fire/EndAssert
 
+// Debug-print plumbing for the X360 message-filter logging block (used by
+// StartGameModeParams::SetProgressionRankAsRatio). Modelled exactly as the established
+// reconstruction in BrnRaceMode.cpp: gxMessageFilterFlags is the global filter word and
+// gpDebugPrint is the global line-writer whose vtable slot 1 is a printf-style writer. These are
+// extern declarations only (definitions live in their own TU), so re-declaring here is safe.
+namespace CgsDev
+{
+    namespace Message
+    {
+        extern u32 gxMessageFilterFlags;
+    }
+
+    namespace Log
+    {
+        struct DebugPrint;
+        typedef int (*DebugPrintFn)(DebugPrint*, const char*);
+        struct DebugPrint
+        {
+            DebugPrintFn* mpVTable;
+        };
+        extern DebugPrint* gpDebugPrint;
+    }
+}
+
 // =============================================================================
 // BrnGameState::GameModeParams - the six X360-attested members.
 //
@@ -175,5 +199,166 @@ Vector3 GameModeParams::GetStartDirection(s32 liStartLocationIndex) const
         CgsDev::Assert::EndAssert();
     }
     return maStartLocations.Ge(static_cast<u32>(liStartLocationIndex)).mDirection;
+}
+
+// =============================================================================
+// BrnGameState::StartGameModeParams - the seven X360-attested standalone methods.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// StartGameModeParams::Construct (X360 @ 0x8231C1F8) - reset to "no event configured".
+//
+// Validates the start mechanism, stashes game-mode type / mechanism / player position, zeroes the
+// start direction, writes the traffic-light trigger / takedown target / pursued-car index / shot
+// group to their all-FF/-1 invalid sentinels, the boost earning to 1.0 and the traffic density to
+// 0.0 (the binary has exactly ONE 1.0 store, [199]=mfBoostEarning), the rank ratio / base
+// deformation / event+rank pointers / junction id to 0, and Construct()s the checkpoint array.
+// The player position arrives in a vector register (Hex-Rays vmr128 v127,v1). Offsets not x64-
+// faithful (AGENTS.md); X360 word index per member is in the class declaration. miRaceId /
+// mPursuedCarID / muEventJunctionId / mpPlayerCarVehicleListEntry are NOT written here (absent
+// from the X360 store cluster -- set by their own setters before use).
+// -----------------------------------------------------------------------------
+void StartGameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType,
+                                    Vector3                          lPlayerPosition,
+                                    EGameModeStartMechanism          leStartMechanism)
+{
+    if (!(static_cast<u32>(leStartMechanism) < E_GAMEMODESTARTMECHANISM_COUNT))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "(uint32_t)leStartMechanism < E_GAMEMODESTARTMECHANISM_COUNT",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
+            700);
+        CgsDev::Assert::EndAssert();
+    }
+
+    meGameModeType   = leGameModeType;        // [180] +720
+    meStartMechanism = leStartMechanism;      // [196] +784
+    mPlayerPosition  = lPlayerPosition;       // [184] +736 (vmr128 v127,v1)
+    mStartDirection.SetZero();                // [188] +752 (vspltisw v0,0)
+
+    // Four all-FF / NaN invalid sentinels ([192],[193],[197],[200]).
+    miTakedownTarget        = -1;                                        // [192] +768
+    mePursuedCarGlobalIndex = static_cast<EGlobalRaceCarIndex_Stub>(-1); // [193] +772 (invalid index)
+    mTrafficLightTriggerId  = static_cast<LightTriggerId>(0xFFFFFFFFu);  // [197] +788 (IsValid()==false)
+    miShotGroup             = -1;                                        // [200] +800
+
+    // The single 1.0 store is the boost-earning default; traffic density defaults to 0.0.
+    mfBoostEarning           = 1.0f;          // [199] +796
+    mfTrafficDensity         = 0.0f;          // [198] +792
+    mfPlayerBaseDeformation  = 0.0f;          // [201] +804
+    mfProgressionRankAsRatio = 0.0f;          // [206] +824
+
+    // Per-event handles / ids cleared.
+    mpEventData           = NULL;             // [203] +812
+    muJunctionID          = 0;                // [204] +816
+    mpProgressionRankData = NULL;             // [205] +820
+
+    // Empty-but-usable checkpoint list (X360: trailing count word -> 0, off the -1 sentinel).
+    maCheckpointDataArray.Construct();        // count @ +704
+}
+
+// -----------------------------------------------------------------------------
+// StartGameModeParams::GetTrafficLightTriggerId (X360 @ 0x8231C2D8). Return the stored trigger
+// handle, asserting it is valid first (IsValid() inlined).
+// -----------------------------------------------------------------------------
+LightTriggerId StartGameModeParams::GetTrafficLightTriggerId() const
+{
+    const bool lbIsValid = !(((mTrafficLightTriggerId & 0xFFFF00u) == 0xFFFF00u) ||
+                             (mTrafficLightTriggerId == 255u));
+    if (!lbIsValid)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "mTrafficLightTriggerId.IsValid()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
+            854);
+        CgsDev::Assert::EndAssert();
+    }
+    return mTrafficLightTriggerId;
+}
+
+// -----------------------------------------------------------------------------
+// StartGameModeParams::SetTrafficLightTriggerId (X360 @ 0x823616E8). Store the trigger handle
+// after asserting it is valid (same IsValid() test as the getter).
+// -----------------------------------------------------------------------------
+void StartGameModeParams::SetTrafficLightTriggerId(LightTriggerId lTriggerId)
+{
+    const bool lbIsValid = !(((lTriggerId & 0xFFFF00u) == 0xFFFF00u) ||
+                             (lTriggerId == 255u));
+    if (!lbIsValid)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lTriggerId.IsValid()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
+            847);
+        CgsDev::Assert::EndAssert();
+    }
+    mTrafficLightTriggerId = lTriggerId;
+}
+
+// -----------------------------------------------------------------------------
+// StartGameModeParams::SetProgressionRankData (X360 @ 0x82354490). Store the rank-data pointer
+// (asserts non-null). X360 word [205] (+820) -> mpProgressionRankData.
+// -----------------------------------------------------------------------------
+void StartGameModeParams::SetProgressionRankData(const BrnProgression::ProgressionRankData* lpProgressionRankData)
+{
+    if (lpProgressionRankData == NULL)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpProgressionRankData != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
+            953);
+        CgsDev::Assert::EndAssert();
+    }
+    mpProgressionRankData = lpProgressionRankData;
+}
+
+// -----------------------------------------------------------------------------
+// StartGameModeParams::SetProgressionRankAsRatio (X360 @ 0x823544F0). Store the 0..1 rank ratio
+// (X360 byte +824 -> mfProgressionRankAsRatio). When the AI message-filter bit is set the X360
+// logs "<AI> Setting progression rank to <value>\n" through the debug-print stream.
+// -----------------------------------------------------------------------------
+void StartGameModeParams::SetProgressionRankAsRatio(f32 lfProgressionRankAsRatio)
+{
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        CgsDev::Log::DebugPrint* lpPrint = CgsDev::Log::gpDebugPrint;
+        lpPrint->mpVTable[1](lpPrint, "<AI> Setting progression rank to ");
+        lpPrint->mpVTable[1](lpPrint, "\n");
+    }
+    mfProgressionRankAsRatio = lfProgressionRankAsRatio;
+}
+
+// -----------------------------------------------------------------------------
+// StartGameModeParams::SetPlayerVehicleGamePlayData (X360 @ 0x82354590). Store the player car's
+// vehicle-list entry pointer (asserts non-null). X360 word [207] (+828) -> mpPlayerCarVehicleListEntry.
+// -----------------------------------------------------------------------------
+void StartGameModeParams::SetPlayerVehicleGamePlayData(const BrnResource::VehicleListEntry* lpPlayerCarVehicleListEntry)
+{
+    if (lpPlayerCarVehicleListEntry == NULL)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpPlayerCarVehicleListEntry != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h",
+            985);
+        CgsDev::Assert::EndAssert();
+    }
+    mpPlayerCarVehicleListEntry = lpPlayerCarVehicleListEntry;
+}
+
+// -----------------------------------------------------------------------------
+// StartGameModeParams::AddCheckpoint (X360 @ 0x8236AAC0). Append one checkpoint (landmark +
+// AI-section) to the event's checkpoint list. Element setup is CheckpointData::Construct inlined
+// (district = E_DISTRICT_INVALID (18), empty block-section list).
+// -----------------------------------------------------------------------------
+void StartGameModeParams::AddCheckpoint(LandmarkIndex luLandmarkIndex, u16 luAISectionIndex)
+{
+    CheckpointData lCheckpointData;
+    lCheckpointData.Construct(luLandmarkIndex, luAISectionIndex);
+    maCheckpointDataArray.Append(lCheckpointData);
 }
 }
