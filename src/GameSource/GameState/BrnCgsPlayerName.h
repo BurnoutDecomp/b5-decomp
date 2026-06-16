@@ -25,6 +25,11 @@ namespace CgsNetwork
 
         char macName[16];
 
+        // X360 0x8230E9C0 (Network/Players/CgsPlayerName.h). Validate + copy lpcPlayerName
+        // into macName. Defined out-of-line in BrnCgsPlayerName.cpp so the heavy
+        // CgsAssert/CgsStrStream includes do not leak into this widely-included header.
+        void Construct(const char* lpcPlayerName);
+
         const char* GetPlayerName() const { return macName; }
     };
 }
