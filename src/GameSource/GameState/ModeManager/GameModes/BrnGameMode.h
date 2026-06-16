@@ -104,6 +104,11 @@ public:
     void         SetFinished(bool lbFinished)     { mbFinished = lbFinished; }
     void         SetIntroJustFinished(bool lbFin) { mbIntroJustFinished = lbFin; }
     void         SetVisibleCars(bool lbVisible)   { mbVisibleCars = lbVisible; }
+    // Inlined in the X360 build at the state-machine call sites (InProgressState::OnEnter sets
+    // the timer-start request; ResultsState::OnEnter requests the results screen). De-inlined to
+    // their named-accessor form; both back the latch bytes GameMode::Initialise clears.
+    void         SetTimerStartRequest(bool lbReq)  { mbTimerStartRequested = lbReq; }
+    void         SetShowResultsRequest(bool lbReq) { mbShowResultsRequested = lbReq; }
 
     // Sets the displayed countdown value and flags it as changed iff it differs from the
     // previous value (a one-shot the GUI polls via HasCountdownDisplayChanged). This is the
