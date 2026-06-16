@@ -91,6 +91,7 @@ class FlybyManager
 {
 public:
     void Construct(GameStateModule* lpGameStateModule, ScoringSystem* lpScoringSystem);
+    GameStateModule* GetGameStateModule();   // X360 (asserts non-null, returns mpGameStateModule)
 
     struct RivalRating
     {
@@ -142,6 +143,21 @@ void FlybyManager::Construct(GameStateModule* lpGameStateModule, ScoringSystem* 
 
     mpScoringSystem.Set(lpScoringSystem);
     mRandom.Construct();
+}
+
+// X360. Accessor for the owning GameStateModule; asserts it was set by Construct.
+GameStateModule* FlybyManager::GetGameStateModule()
+{
+    if (!mpGameStateModule.Get())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "mpGameStateModule",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h",
+            204);
+        CgsDev::Assert::EndAssert();
+    }
+    return mpGameStateModule.Get();
 }
 
 s32 FlybyManager::RivalRating::SortRivalsCallback(const void* lpData0, const void* lpData1)

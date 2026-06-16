@@ -25,6 +25,8 @@ enum EGameActionType
     E_ACTION_SOUND_TRIGGER              = 210,
     E_ACTION_ONLINE_PLAYER_ADDED        = 220,   // value unconfirmed (template tag only)
     E_ACTION_SETUP_NETWORK_CAR          = 221,   // value unconfirmed (template tag only)
+    E_ACTION_ONLINE_PLAYER_REMOVED      = 222,   // value unconfirmed (template tag only)
+    E_ACTION_RANK_INFO_RESPONSE         = 173,   // DWARF BrnGameActions.h:183
 };
 
 template <EGameActionType T>
@@ -89,6 +91,38 @@ struct OnlinePlayerAddedAction : public GameAction<E_ACTION_ONLINE_PLAYER_ADDED>
     EPlayerTeam         meTeam;               // 0x14
 
     void SetPlayerScoringIndex(EPlayerScoringIndex lePlayerScoringIndex);
+};
+
+// X360 0x82355258 (SetActiveRaceCarIndex). Minimal slice: only the member the body touches.
+struct OnlinePlayerRemovedAction : public GameAction<E_ACTION_ONLINE_PLAYER_REMOVED>
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // 0x00
+    bool                mbIsLocalPlayerInGame;  // 0x04 (DWARF BrnGameActions.h:4161; untouched by SetActiveRaceCarIndex)
+
+    void SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex);
+};
+
+// X360 0x823554B0 (SetProgressionRanks) / 0x82355328 (SetProgressionRankEventWins). The rank-info
+// response action: the player's overall rank + per-mode ranks (0x00-0x10), then the per-mode
+// rank-win counts (0x14-0x20).
+struct RankInfoResponseAction : public GameAction<E_ACTION_RANK_INFO_RESPONSE>
+{
+    static const s32 KI_PLAYER_HAS_FINISHED_LAST_RANK = -1;
+
+    s32 miPlayerRank;            // 0x00
+    s32 miOfflineRace;           // 0x04
+    s32 miRoadRage;              // 0x08
+    s32 miStuntAttack;           // 0x0C
+    s32 miMarkedMan;             // 0x10
+    s32 miOfflineRaceRankWins;   // 0x14
+    s32 miRoadRageRankWins;      // 0x18
+    s32 miStuntAttackRankWins;   // 0x1C
+    s32 miMarkedManRankWins;     // 0x20
+
+    void SetProgressionRanks(s32 liPlayerRank, s32 liRankCount, s32 liOfflineRace,
+                             s32 liRoadRage, s32 liStuntAttack, s32 liMarkedMan);
+    void SetProgressionRankEventWins(s32 liOfflineRaceRankWins, s32 liRoadRageRankWins,
+                                     s32 liStuntAttackRankWins, s32 liMarkedManRankWins);
 };
 }
 }
