@@ -66,6 +66,37 @@ public:
     // Capacity of the inline buffer.
     u32 GetSize() const { return N; }
 
+    // ===== Added for the Array<LandmarkIndex,16> TU =====
+    // Linear search for the first element equal to lrElement. Returns the index, or the
+    // KI_UNCONSTRUCTED(-1) sentinel when absent/empty (X360 0x8231AB70 returns -1 literally;
+    // DWARF spells the return uint32_t with KU_INVALID==0xffffffff -- same bit pattern, X360
+    // signed -1 authoritative). Asserts the array was Construct/Clear'd.
+    s32 FindFirstInstanceOf(const T& lrElement) const
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        const u32 luCount = static_cast<u32>(miCount);
+        if (luCount == 0)
+        {
+            return KI_UNCONSTRUCTED;
+        }
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+        {
+            if (maElements[luIndex] == lrElement)
+            {
+                return static_cast<s32>(luIndex);
+            }
+        }
+        return KI_UNCONSTRUCTED;
+    }
+
+    // True when lrElement is present (X360 0x82325220: FindFirstInstanceOf(..) != -1). The double
+    // constructed-assert (Contains then FindFirstInstanceOf) is faithful to the X360.
+    bool Contains(const T& lrElement) const
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        return FindFirstInstanceOf(lrElement) != KI_UNCONSTRUCTED;
+    }
+
     // Checked element accessor (the X360 build's Array<>::Ge).
     T&       Ge(u32 luIndex)       { return maElements[luIndex]; }
     const T& Ge(u32 luIndex) const { return maElements[luIndex]; }
