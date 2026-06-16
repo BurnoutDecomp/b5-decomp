@@ -47,6 +47,22 @@ public:
     // Number of live elements (-1 until Construct/Clear initialises it).
     s32 GetCount() const { return miCount; }
 
+    bool IsFull() const
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        return static_cast<u32>(miCount) == N;
+    }
+
+    // Checked live-element count (the X360 build's Array<T,N>::GetLength; the DWARF spells it
+    // GetLength returning u32). Asserts the array was Construct/Clear'd (count != the -1 sentinel)
+    // then returns it; the unsigned return matches the DWARF. (X360 0x823AC200 = the DriveThruInfo,46
+    // instantiation of this body.)
+    u32 GetLength() const
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        return static_cast<u32>(miCount);
+    }
+
     // Capacity of the inline buffer.
     u32 GetSize() const { return N; }
 
