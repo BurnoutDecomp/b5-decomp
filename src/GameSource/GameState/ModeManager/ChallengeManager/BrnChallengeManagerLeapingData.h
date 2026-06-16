@@ -11,5 +11,6 @@ class ChallengeManager
 {
 public:
     struct CarLeapingData { u8 maBlob[32]; };
+    struct StoredLeapingData { u8 maBlob[32]; };   // 32-byte X360 element stride (EActiveRaceCarIndex + Vector3); blob-style to match CarLeapingData
 };
 }
