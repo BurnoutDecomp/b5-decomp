@@ -70,7 +70,12 @@ namespace BrnGameState
 // listed in deps_stubbed. (EGameModeType is NOT stubbed -- the real GameStateModuleIO enum
 // from BrnGameStateSharedIO.h is wired in below.)
 // ---------------------------------------------------------------------------
-typedef u32 LandmarkIndex;                  // stub: BrnWorld landmark handle
+// NOTE: LandmarkIndex is NOT defined here. It used to be a `typedef u32 LandmarkIndex`
+// stub at this spot, but it is a real wrapper class now owned by
+// GameSource/GameState/BrnGameStateTypes.h (the GameStateTypes reconstruction). This
+// header never uses LandmarkIndex in any member, so the stub is simply removed rather
+// than re-pointed; consumers that need the handle (e.g. BrnOfflineGameMode) include the
+// owning header directly. Do not re-add a stub here — there is one owner.
 typedef u32 LightTriggerId;                 // stub: traffic-light trigger handle
 
 enum EDistrict_Stub          { E_DISTRICT_STUB = 0 };           // stub: BrnWorld::EDistrict
