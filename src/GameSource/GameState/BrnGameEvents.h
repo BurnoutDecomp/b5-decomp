@@ -27,10 +27,28 @@ enum EGameEventType
     E_EVENT_ONLINE_PLAYER_REMOVED   = 129,   // value unconfirmed (template tag only)
     E_EVENT_START_NETWORK_GAME      = 130,   // value unconfirmed (template tag only)
     E_EVENT_REMOTE_PLAYER_DISCONNECTED = 131, // value unconfirmed (template tag only)
+    E_EVENT_RECORD_PROP_HIT         = 111,   // DWARF BrnGameEvents.h:121
+    E_EVENT_OVERHEAD_SIGN_HIT       = 118,   // DWARF BrnGameEvents.h:76
 };
 
 template <EGameEventType T>
 struct GameEvent { };
+
+// X360 element of EventQueue<HitOverheadSignEvent,100> (DWARF BrnGameEvents.h:429). Single byte.
+struct HitOverheadSignEvent : public GameEvent<E_EVENT_OVERHEAD_SIGN_HIT>
+{
+    u8 muRaceCarId;   // 0x00
+};
+
+// X360 element of EventQueue<RecordPropHitEvent,50> (DWARF BrnGameEvents.h:413). 16-byte aligned
+// via the leading Vector3.
+struct RecordPropHitEvent : public GameEvent<E_EVENT_RECORD_PROP_HIT>
+{
+    Vector3 mPosition;   // 0x00 (rw::math::vpu, 16-byte SIMD)
+    u16     muZoneId;    // 0x10
+    u16     muPropId;    // 0x12
+    bool    mbHitBefore; // 0x14
+};
 
 // X360 0x823A78F0. mNetworkPlayerID at offset 0.
 struct ChangeNetworkCarEvent : public GameEvent<E_EVENT_CHANGE_NETWORK_CAR>
