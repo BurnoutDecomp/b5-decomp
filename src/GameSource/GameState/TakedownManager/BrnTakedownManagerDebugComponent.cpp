@@ -25,10 +25,7 @@ namespace BrnGameState
     // @ 0x823597F8 - clear the player's active-car takedown state then arm a standard takedown
     // (aggressor car 0 -> victim car 1). The X360 reaches the car via the takedown manager (whose
     // first member is maRaceCarData[]), then writes the fields below; reconstructed as named
-    // member access. The takedown-index/type values are written as casts because the local
-    // EActiveRaceCarIndex / ETakedownType enums are still minimal (see BrnTakedownManagerTypes.h
-    // - it duplicates BurnoutConstants' enums and lacks the _0/_1/_STANDARD names; that drift is a
-    // separate cleanup). The named meaning is in the trailing comments.
+    // member access with named enumerators (the takedown enums are now full/deduped).
     void TakedownManagerDebugComponent::ForceTakedownCallback(void* lpContext)
     {
         TakedownManagerDebugComponent* lpThis = static_cast<TakedownManagerDebugComponent*>(lpContext);
@@ -37,8 +34,8 @@ namespace BrnGameState
         lrRaceCar.Clear();
         lrRaceCar.mfTimeSinceVictimCrashed = 0.0f;
         lrRaceCar.mbWaitingOnTakedown = true;
-        lrRaceCar.mPendingTakedownEvent.meAggressorIndex = static_cast<EActiveRaceCarIndex>(0);  // E_ACTIVE_RACE_CAR_INDEX_0
-        lrRaceCar.mPendingTakedownEvent.meVictimIndex    = static_cast<EActiveRaceCarIndex>(1);  // E_ACTIVE_RACE_CAR_INDEX_1
-        lrRaceCar.mPendingTakedownEvent.meType           = static_cast<ETakedownType>(0);        // E_TAKEDOWN_STANDARD
+        lrRaceCar.mPendingTakedownEvent.meAggressorIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+        lrRaceCar.mPendingTakedownEvent.meVictimIndex    = E_ACTIVE_RACE_CAR_INDEX_1;
+        lrRaceCar.mPendingTakedownEvent.meType           = E_TAKEDOWN_STANDARD;
     }
 }
