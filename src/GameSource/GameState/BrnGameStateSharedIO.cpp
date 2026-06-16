@@ -1,6 +1,8 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (AddMessage dynamic assert text)
+#include <cstring>  // memcpy, memset, strncpy, strlen
 
 // CgsNetwork::K_INVALID_PLAYER_ID has no committed home; file-local -1 (the FlybyManager precedent).
 namespace CgsNetwork
@@ -244,13 +246,241 @@ s32 CarCheckpointData::GetAllRemainingCheckpointIndexes(s32* lpaiCheckpointIndex
     return liCount;
 }
 
-// ===== Forked slices from the GameStateModuleIO TU =====
-// TODO(conductor-review): reuse committed home / DWARF member names (FlybyData -> mRivalsToShow /
-// GetCarFlybyData; OnlineGameResults -> BrnGameActions.h GameAction<E_ACTION_ONLINE_GAME_RESULT>).
+// X360 0x82357470. Reset the per-car race-distance interface: zero the 8 distance-to-finish
+// floats and the active-car count, and set the total race distance to 0.0f. (The X360 zeroes the
+// 8 words in a loop, then stores miNumActiveRaceCars=0 and mfTotalRaceDistance=0.0f from a baked
+// 0.0f literal. The trailing `return this` is a void-function calling-convention artifact, dropped.)
+void RaceCarRaceDistanceInterface::Clear()
+{
+    for (s32 liRaceCarIndex = 0; liRaceCarIndex < 8; ++liRaceCarIndex)
+    {
+        mafRaceCarDistanceToFinish[liRaceCarIndex] = 0.0f;
+    }
+
+    miNumActiveRaceCars = 0;
+    mfTotalRaceDistance = 0.0f;
+}
+
+// X360 cpp:267 -- per-rival reset, inlined by the X360 build into FlybyData::Prepare
+// (no standalone symbol). Invalidate the race-car slot, clear both message-ID buffers and both
+// parameter buffers, zero the per-message parameter counts, default the style to NEUTRAL and the
+// message count to 0. NOTE: mPlayerName is intentionally NOT reset (the X360 leaves it untouched).
+void FlybyRivalData::Prepare()
+{
+    meRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+
+    std::memset(maacMessageIDs, 0, sizeof(maacMessageIDs));
+    std::memset(maacMessageParameter, 0, sizeof(maacMessageParameter));
+
+    maiNumberOfParameters[0] = 0;
+    maiNumberOfParameters[1] = 0;
+
+    meMessageStyle     = E_MESSAGE_STYLE_NEUTRAL;
+    miNumberOfMessages = 0;
+}
+
+// X360 0x82363A08. Reset the whole flyby set: clear the car count, then Prepare() each of the
+// (KI_MAX_CARS_IN_FLYBY == 3) rival slots. Returns true (the X360 returns 1). The per-slot reset
+// is FlybyRivalData::Prepare, which the X360 build inlined here.
+bool FlybyData::Prepare()
+{
+    miNumberOfCars = 0;
+
+    for (s32 liFlybyCarIndex = 0;
+         liFlybyCarIndex < FlybyRivalData::KI_MAX_CARS_IN_FLYBY;
+         ++liFlybyCarIndex)
+    {
+        mRivalsToShow[liFlybyCarIndex].Prepare();
+    }
+
+    return true;
+}
+
+// X360 0x82356EF0. Append a rival to the flyby set: store its active-race-car index and copy its
+// player name into the next free slot, then bump the count. Guards (verbatim baked file/line):
+// count in [0, KI_MAX_CARS_IN_FLYBY), non-null name with a non-empty, < KI_USERNAME_LENGTH string.
+// The X360 inlines lpPlayerName->GetPlayerName() to the name buffer; the 16-byte memcpy is the
+// PlayerName struct copy. The trailing memcpy `return` is a void-function artifact, dropped.
+void FlybyData::AddCar(EActiveRaceCarIndex leRaceCarIndex, const CgsNetwork::PlayerName* lpPlayerName)
+{
+    if (miNumberOfCars < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "miNumberOfCars >= 0",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+            242);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miNumberOfCars >= FlybyRivalData::KI_MAX_CARS_IN_FLYBY)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "miNumberOfCars < FlybyRivalData::KI_MAX_CARS_IN_FLYBY",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+            243);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!lpPlayerName)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpPlayerName",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+            244);
+        CgsDev::Assert::EndAssert();
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpPlayerName->GetPlayerName()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+            245);
+        CgsDev::Assert::EndAssert();
+    }
+    if (std::strlen(lpPlayerName->GetPlayerName()) == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "strlen( lpPlayerName->GetPlayerName() ) > 0",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+            246);
+        CgsDev::Assert::EndAssert();
+    }
+    if (std::strlen(lpPlayerName->GetPlayerName()) >= static_cast<u32>(CgsNetwork::PlayerName::KI_USERNAME_LENGTH))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "strlen( lpPlayerName->GetPlayerName() ) < static_cast<uint32_t>(CgsNetwork::KI_USERNAME_LENGTH )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+            247);
+        CgsDev::Assert::EndAssert();
+    }
+
+    mRivalsToShow[miNumberOfCars].meRaceCarIndex = leRaceCarIndex;
+    std::memcpy(&mRivalsToShow[miNumberOfCars].mPlayerName, lpPlayerName,
+                CgsNetwork::PlayerName::KI_USERNAME_LENGTH);
+    ++miNumberOfCars;
+}
+
+// X360 0x82357070. Attach a localised string-id message (+ optional parameter) to the most recently
+// added rival (index miNumberOfCars-1). Guards (verbatim baked file/line): at least one car added,
+// not over capacity, the message id fits KI_MAX_MESSAGE_ID_BUFFER, the per-rival message slot is
+// free (< KI_MAX_MESSAGES), and -- when a parameter is supplied -- it fits KI_USERNAME_LENGTH and
+// the per-message parameter count stays <= KI_MAX_PARAMETERS. The over-length asserts build their
+// text through the committed CgsDev::StrStream (the X360 streams into the global assert buffer; a
+// local buffer is used here since that global has no committed home). The two CgsStringUtils.h:55
+// asserts are the inlined StrnCpy bounds check. Returns void (the X360 `return result` is a
+// calling-convention artifact).
+void FlybyData::AddMessage(const char* lpcMessage, const char* lpcParameter)
+{
+    if (miNumberOfCars <= 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "miNumberOfCars > 0",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+            267);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miNumberOfCars > FlybyRivalData::KI_MAX_CARS_IN_FLYBY)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+            268);
+        CgsDev::Assert::EndAssert();
+    }
+    if (std::strlen(lpcMessage) >= static_cast<u32>(FlybyRivalData::KI_MAX_MESSAGE_ID_BUFFER))
+    {
+        CgsDev::Assert::BeginAssert();
+        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        lStrStream << "String ID " << (lpcMessage ? lpcMessage : "<NULLSTRING>") << " too long\n";
+        CgsDev::Assert::FireAssert(
+            lacMessageBuffer,
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+            269);
+        CgsDev::Assert::EndAssert();
+    }
+
+    const s32 liFlybyCarIndex = miNumberOfCars - 1;
+    FlybyRivalData& lRival = mRivalsToShow[liFlybyCarIndex];
+    const s32 liCurrentMessageIndex = lRival.miNumberOfMessages;
+
+    if (liCurrentMessageIndex >= FlybyRivalData::KI_MAX_MESSAGES)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "liCurrentMessageIndex < GameStateModuleIO::FlybyRivalData::KI_MAX_MESSAGES",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+            273);
+        CgsDev::Assert::EndAssert();
+    }
+
+    // Inlined StrnCpy<KI_MAX_MESSAGE_ID_BUFFER>(maacMessageIDs[idx], lpcMessage) bounds check.
+    if (std::strlen(lpcMessage) >= static_cast<u32>(FlybyRivalData::KI_MAX_MESSAGE_ID_BUFFER))
+    {
+        CgsDev::Assert::BeginAssert();
+        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        lStrStream << "String too long: " << (lpcMessage ? lpcMessage : "<NULLSTRING>");
+        CgsDev::Assert::FireAssert(
+            lacMessageBuffer,
+            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+            55);
+        CgsDev::Assert::EndAssert();
+    }
+    std::strncpy(lRival.maacMessageIDs[liCurrentMessageIndex], lpcMessage,
+                 FlybyRivalData::KI_MAX_MESSAGE_ID_BUFFER);
+
+    if (lpcParameter)
+    {
+        if (std::strlen(lpcParameter) >= static_cast<u32>(FlybyRivalData::KI_MAX_PARAMTER_LENGTH))
+        {
+            CgsDev::Assert::BeginAssert();
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Param " << lpcParameter << " too long \n";
+            CgsDev::Assert::FireAssert(
+                lacMessageBuffer,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+                279);
+            CgsDev::Assert::EndAssert();
+        }
+        // Inlined StrnCpy<KI_MAX_PARAMTER_LENGTH>(maacMessageParameter[idx], lpcParameter) bounds check.
+        if (std::strlen(lpcParameter) >= static_cast<u32>(FlybyRivalData::KI_MAX_PARAMTER_LENGTH))
+        {
+            CgsDev::Assert::BeginAssert();
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "String too long: " << lpcParameter;
+            CgsDev::Assert::FireAssert(
+                lacMessageBuffer,
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+                55);
+            CgsDev::Assert::EndAssert();
+        }
+        std::strncpy(lRival.maacMessageParameter[liCurrentMessageIndex], lpcParameter,
+                     FlybyRivalData::KI_MAX_PARAMTER_LENGTH);
+
+        ++lRival.maiNumberOfParameters[liCurrentMessageIndex];
+        if (lRival.maiNumberOfParameters[liCurrentMessageIndex] > FlybyRivalData::KI_MAX_PARAMETERS)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "mRivalsToShow[liFlybyCarIndex].maiNumberOfParameters[liCurrentMessageIndex] <= GameStateModuleIO::FlybyRivalData::KI_MAX_PARAMETERS",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp",
+                287);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    ++lRival.miNumberOfMessages;
+}
 
 // X360 0x821F2A90. Indexed accessor for one of the (KI_MAX_CARS_IN_FLYBY == 3) per-rival records.
 // The X360 body bounds-checks liRivalIndex with two verbatim asserts (BrnGameStateSharedIO.h
-// :1110/:1111) then returns &maFlybyRivalData[liRivalIndex] (this + 4 + 196 * liRivalIndex).
+// :1110/:1111) then returns &mRivalsToShow[liRivalIndex] (this + 4 + 196 * liRivalIndex).
 FlybyRivalData* FlybyData::GetFlybyRivalData(s32 liRivalIndex)
 {
     if (liRivalIndex < 0)
@@ -271,7 +501,7 @@ FlybyRivalData* FlybyData::GetFlybyRivalData(s32 liRivalIndex)
             1111);
         CgsDev::Assert::EndAssert();
     }
-    return &maFlybyRivalData[liRivalIndex];
+    return &mRivalsToShow[liRivalIndex];
 }
 
 // X360 0x821F2B08. Free predicate over EGameModeType. Returns true for exactly two mode values --

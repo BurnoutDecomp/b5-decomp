@@ -4,6 +4,8 @@
 #include "GameSource/GameState/BrnGameStateTypes.h"             // BrnGameState::LandmarkIndex
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"     // BrnNetwork::NetworkPlayerID
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"      // CgsContainers::BitArray<N> (CarCheckpointData)
+#include "GameSource/BurnoutConstants.h"                        // EActiveRaceCarIndex (FlybyRivalData)
+#include "GameSource/GameState/BrnCgsPlayerName.h"              // CgsNetwork::PlayerName (shared 16-byte home)
 
 namespace BrnGameState
 {
@@ -56,13 +58,25 @@ namespace BrnGameState
             E_GMS_COUNT          = 8,
         };
 
-        // Recovered from BrnGameStateSharedIO.h / CgsBitArray.h (DecFIGS DWARF).
-        // FastBitArray<2000> stores 2000 bits in 63 32-bit words. The X360 queue
-        // aligns its inline buffer to 16, so the element is 16-byte aligned.
-        struct alignas(16) CompletedFburnChallengesData
+        // Per-player freeburn-challenge completion bit storage == CgsContainers::FastBitArray<2000>
+        // (DWARF CgsFastBitArray.h:51/155: uint64_t maxBits[32] == 256 bytes, KU_NUMBEROFBITFIELDS=32).
+        // Relocated above CompletedFburnChallengesData so the element struct can embed it; this is the
+        // SAME struct previously defined further down (do not double-define -- delete the later copy).
+        struct CompletedFburnChallenges
         {
-            s32 mNetworkPlayerID;
-            u32 mCompletedFreeburnChallenges[63]; // FastBitArray<2000>
+            static const u32 KU_NUM_BIT_WORDS = 32;
+            u64 maxBits[KU_NUM_BIT_WORDS]; // 256 bytes (FastBitArray<2000>)
+        };
+
+        // EventQueue element type. DWARF BrnGameStateSharedIO.h:288-291: an s32 network player id
+        // followed by a FastBitArray<2000> bit store. The X360 build bakes a 264-byte element stride
+        // into BaseEventQueue<...>::AddEvent (0x8258C160) and ::Append (0x823C46A8): s32@0x00 (4B) +
+        // 4B implicit pad (u64 alignment) + 256B bit array == 264B, align 8. alignas(16) is DROPPED:
+        // with it sizeof would round up to 272 != 264.
+        struct CompletedFburnChallengesData
+        {
+            s32                      mNetworkPlayerID;             // 0x00 (BrnNetwork::NetworkPlayerID == s32)
+            CompletedFburnChallenges mCompletedFreeburnChallenges; // 0x08 (FastBitArray<2000>, 256B)
         };
 
         // ===== Added by the GameMode/ModeManager leaf batch (Group B IO family) =====
@@ -141,16 +155,6 @@ namespace BrnGameState
             };
         };
 
-        // Per-player freeburn-challenge completion bit storage == CgsContainers::FastBitArray<2000>
-        // (DWARF CgsFastBitArray.h: u64 maxBits[32] == 256 bytes). The full FastBitArray type has its
-        // own un-reconstructed home; only the raw word storage these bodies fill is modelled here.
-        // (Distinct from the EventQueue-element CompletedFburnChallengesData above.)
-        struct CompletedFburnChallenges
-        {
-            static const u32 KU_NUM_BIT_WORDS = 32;
-            u64 maxBits[KU_NUM_BIT_WORDS];
-        };
-
         // DWARF BrnGameStateSharedIO.h:936. The "every player" freeburn completion-status block:
         // 7 per-player slots {bit-array, player id} + the local player's bit array. Minimal slice:
         // only Construct (0x82326360) + AddCompletionStatus (0x823263C8) are owned here.
@@ -208,33 +212,73 @@ namespace BrnGameState
             CgsContainers::BitArray<KI_MAX_LANDMARKS_IN_MODE> mCheckpointsRemaining;
         };
 
-        // ===== Forked slices from the GameStateModuleIO TU (FlybyData / OnlineGameResults) =====
-        // TODO(conductor-review): reuse committed home / DWARF member names. The verifier notes
-        // FlybyData's DWARF-attested array member is mRivalsToShow, the accessor is
-        // GetCarFlybyData(int32_t) const, and a miNumberOfCars int32 header precedes the array;
-        // and OnlineGameResults has a committed home (BrnGameActions.h:2960, base
-        // GameAction<E_ACTION_ONLINE_GAME_RESULT> with named members). Kept here as standalone
-        // slices for now -- they compile, but should be re-homed at consolidation.
-
-        // X360 FlybyData / FlybyRivalData minimal slice. The 196-byte per-rival record is opaque
-        // storage; only the bounds constant + the array are modelled (per-rival fields land with
-        // the FlybyManager's own TU). FlybyData = {u8 header[4]; FlybyRivalData maFlybyRivalData[3]}.
-        struct FlybyRivalData
+        // Per-car race-distance interface (DWARF BrnGameStateSharedIO.h:706-708, 40 bytes): the
+        // eight cars' distance-to-finish + total race distance + active-car count. RaceCarRaceDistanceInterface::Clear
+        // (X360 0x82357470) zeroes them all.
+        class RaceCarRaceDistanceInterface
         {
-            static const s32 KI_MAX_CARS_IN_FLYBY = 3;
-            u8 maOpaque[196];   // per-rival fields (un-reconstructed)
-        };
-
-        struct FlybyData
-        {
-            // X360 0x821F2A90. Indexed accessor for one of the (KI_MAX_CARS_IN_FLYBY == 3)
-            // per-rival records. Bounds asserts at BrnGameStateSharedIO.h:1110/1111.
-            FlybyRivalData* GetFlybyRivalData(s32 liRivalIndex);
+        public:
+            void Clear();
 
         private:
-            u8             mHeader[4];                                       // this+0
-            FlybyRivalData maFlybyRivalData[FlybyRivalData::KI_MAX_CARS_IN_FLYBY]; // this+4, 196-byte stride
-        };
+            f32 mafRaceCarDistanceToFinish[8]; // +0x00 (8 floats)
+            f32 mfTotalRaceDistance;           // +0x20
+            s32 miNumActiveRaceCars;           // +0x24
+        }; // sizeof == 40
+
+        // ===== FlybyData / FlybyRivalData (full reconstruction; OnlineGameResults still a slice) =====
+        //
+        // X360-authoritative layout (proven from AddCar/AddMessage/Prepare displacements + the
+        // 196-byte per-rival stride 0xC4): the PS3 DecFIGS DWARF's KI_MAX_PARAMTER_LENGTH==20 /
+        // maacMessageParameter[2][20] is drift -- the X360 strides/copies 16 (slwi r22,4; strncpy
+        // count 0x10), which is the only width that closes the record at 196 bytes. So
+        // KI_MAX_PARAMTER_LENGTH==16 and maacMessageParameter is char[2][16]. (CgsNetwork::PlayerName
+        // is the shared 16-byte home; not the 20-byte BrnNetwork::PlayerName.)
+        struct FlybyRivalData
+        {
+            static const s32 KI_MAX_CARS_IN_FLYBY     = 3;   // flyby capacity (lives on the rival type, X360 spelling)
+            static const s32 KI_MAX_MESSAGES          = 2;   // per-rival message slots
+            static const s32 KI_MAX_MESSAGE_ID_BUFFER = 64;  // string-id buffer width (no drift)
+            static const s32 KI_MAX_PARAMTER_LENGTH   = 16;  // X360-authoritative (NOT the DWARF 20)
+            static const s32 KI_MAX_PARAMETERS        = 1;   // per-message parameter ceiling
+
+            // Style applied to the flyby message (X360 Prepare defaults to NEUTRAL == 1).
+            enum EMessageStyle
+            {
+                E_MESSAGE_STYLE_INVALID = 0,
+                E_MESSAGE_STYLE_NEUTRAL = 1,
+            };
+
+            void Prepare();   // X360 cpp:267 (inlined into FlybyData::Prepare): per-slot reset.
+
+            EActiveRaceCarIndex    meRaceCarIndex;                                   // +0x00 (4)
+            char                   maacMessageIDs[KI_MAX_MESSAGES][KI_MAX_MESSAGE_ID_BUFFER]; // +0x04 (128)
+            char                   maacMessageParameter[KI_MAX_MESSAGES][KI_MAX_PARAMTER_LENGTH]; // +0x84 (132) (32)
+            s32                    maiNumberOfParameters[KI_MAX_MESSAGES];           // +0xA4 (164) (8)
+            EMessageStyle          meMessageStyle;                                   // +0xAC (172) (4)
+            s32                    miNumberOfMessages;                               // +0xB0 (176) (4)
+            CgsNetwork::PlayerName mPlayerName;                                      // +0xB4 (180) (16)
+        }; // sizeof == 196
+
+        // X360 GameStateModuleIO::FlybyData. miNumberOfCars header + KI_MAX_CARS_IN_FLYBY rival slots.
+        // sizeof == 592 (4 + 3*196), matching FlybyManager+0x10..+0x260.
+        struct FlybyData
+        {
+            bool Prepare();                                              // X360 0x82363A08
+            void AddCar(EActiveRaceCarIndex leRaceCarIndex,
+                        const CgsNetwork::PlayerName* lpPlayerName);     // X360 0x82356EF0
+            void AddMessage(const char* lpcMessage, const char* lpcParameter); // X360 0x82357070
+
+            // X360 0x821F2A90. Indexed accessor for one of the rival records. Bounds asserts at
+            // BrnGameStateSharedIO.h:1110/1111.
+            FlybyRivalData* GetFlybyRivalData(s32 liRivalIndex);
+
+            s32            miNumberOfCars;                               // +0x00
+            FlybyRivalData mRivalsToShow[FlybyRivalData::KI_MAX_CARS_IN_FLYBY]; // +0x04, 196-byte stride
+        }; // sizeof == 592
+
+        static_assert(sizeof(FlybyRivalData) == 196, "FlybyRivalData layout drift");
+        static_assert(sizeof(FlybyData)      == 592, "FlybyData layout drift");
 
         // X360 0x821F2B08. Free predicate over EGameModeType: true for exactly
         // E_MODE_ONLINE_FREE_BURN_LOBBY (15) and E_MODE_ONLINE_SHOWTIME (16).
