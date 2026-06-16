@@ -1,90 +1,44 @@
-#include "types.hpp"
+#include "GameSource/GameState/ModeManager/Debug/BrnModeManagerDebugComponent.h"
 
-namespace CgsDev
-{
-class DebugComponent
-{
-public:
-    static int RegisterVariable(void* pComponent, void* pVariable, const char* lpcGroup, const char* lpcName);
-};
-}
-
-extern int sub_8282D800(void* pComponent, void* pVariable, const char* lpcName);
-extern int sub_8282D560(void* pComponent, void* pVariable, const char* lpcGroup, const char* lpcName);
-extern int sub_8282D720(void* pComponent, void* pVariable, const char* lpcName);
-extern int sub_8282F598(void* pComponent, void* pVariable, int liMin, int liMax);
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. The mode-manager debug menu registers a handful of
+// mode tunables (its own + the mode manager's + some global marked-man tweaks) and an "end event"
+// action with the real CgsDev::DebugComponent debug-menu API (RegisterVariable / SetRange /
+// RegisterFunction). The X360 issues these through the (unnamed) DebugComponent registration
+// helpers; they are the base-class methods reconstructed in CgsDebugComponent.h, called by name.
 
 namespace BrnGameState
 {
-class ModeManagerDebugComponent;
-}
+    // Global marked-man tweakables exposed by this menu (defined in their own TUs).
+    extern s32 giMarkedManMinOpponentCount;
+    extern s32 giMarkedManMaxOpponentCount;
+    extern f32 gfMarkedManMinRampTime;
+    extern f32 gfMarkedManMaxRampTime;
 
-extern int sub_8282F720(
-    void* pComponent,
-    int (BrnGameState::ModeManagerDebugComponent::*pCallback)(),
-    void* pContext,
-    const char* lpcName);
-
-namespace BrnGameState
-{
-extern int giMarkedManMinOpponentCount;
-extern int giMarkedManMaxOpponentCount;
-extern float gfMarkedManMinRampTime;
-extern float gfMarkedManMaxRampTime;
-
-class ModeManagerDebugComponent
-{
-public:
-    int FinshMode();
-    const char* GetName();
-    int OnActivate();
-
-private:
-    struct ModeManager
+    const char* ModeManagerDebugComponent::GetName() const
     {
-        u8   mPad0[13244];
-        bool mbEndlessStuntRun;
-        u8   mPad13245[24890];
-        bool mbFinishCurrentEvent;
-        u8   mPad38136;
-        bool mbWinIfSecond;
-        u8   mPad38138[30];
-        int  miFinishPosition;
-    };
+        return "Mode Manager";
+    }
 
-    u8    mPad0[12];
-    ModeManager* mpModeManager;
-    bool  mbShowModeInfo;
-    bool  mbInfiniteLives;
-    bool  mbPad18;
-    u8    mPad19;
-    int   miFinishPosition;
-};
+    void ModeManagerDebugComponent::OnActivate()
+    {
+        RegisterVariable(&mpModeManager->mbEndlessStuntRun, "Endless Stunt Run");
+        RegisterVariable(&mbInfiniteLives, "Infinite lives");
+        RegisterVariable(&mbShowModeInfo, "Show mode info");
+        RegisterVariable(&mpModeManager->mbWinIfSecond, "Win if second");
+        RegisterVariable(&giMarkedManMinOpponentCount, "Marked man tweaks", "Min opponent count");
+        RegisterVariable(&giMarkedManMaxOpponentCount, "Marked man tweaks", "Max opponent count");
+        RegisterVariable(&gfMarkedManMinRampTime, "Marked man tweaks", "Min ramp time");
+        RegisterVariable(&gfMarkedManMaxRampTime, "Marked man tweaks", "Max ramp time");
+        RegisterVariable(&miFinishPosition, "Finish Position");
+        SetRange(&miFinishPosition, 1, 8);
+        RegisterFunction(&ModeManagerDebugComponent::FinshMode, this, "End Current Event");
+    }
 
-int ModeManagerDebugComponent::FinshMode()
-{
-    mpModeManager->mbFinishCurrentEvent = true;
-    mpModeManager->miFinishPosition = miFinishPosition;
-    return static_cast<int>(reinterpret_cast<intptr_t>(this));
-}
-
-const char* ModeManagerDebugComponent::GetName()
-{
-    return "Mode Manager";
-}
-
-int ModeManagerDebugComponent::OnActivate()
-{
-    sub_8282D800(this, &mpModeManager->mbEndlessStuntRun, "Endless Stunt Run");
-    sub_8282D800(this, &mbInfiniteLives, "Infinite lives");
-    sub_8282D800(this, &mbShowModeInfo, "Show mode info");
-    sub_8282D800(this, &mpModeManager->mbWinIfSecond, "Win if second");
-    sub_8282D560(this, &giMarkedManMinOpponentCount, "Marked man tweaks", "Min opponent count");
-    sub_8282D560(this, &giMarkedManMaxOpponentCount, "Marked man tweaks", "Max opponent count");
-    CgsDev::DebugComponent::RegisterVariable(this, &gfMarkedManMinRampTime, "Marked man tweaks", "Min ramp time");
-    CgsDev::DebugComponent::RegisterVariable(this, &gfMarkedManMaxRampTime, "Marked man tweaks", "Max ramp time");
-    sub_8282D720(this, &miFinishPosition, "Finish Position");
-    sub_8282F598(this, &miFinishPosition, 1, 8);
-    return sub_8282F720(this, &ModeManagerDebugComponent::FinshMode, this, "End Current Event");
-}
+    // Force the current event to finish at the menu-selected finishing position.
+    void ModeManagerDebugComponent::FinshMode(void* lpContext)
+    {
+        ModeManagerDebugComponent* lpThis = static_cast<ModeManagerDebugComponent*>(lpContext);
+        lpThis->mpModeManager->mbFinishCurrentEvent = true;
+        lpThis->mpModeManager->miFinishPosition = lpThis->miFinishPosition;
+    }
 }

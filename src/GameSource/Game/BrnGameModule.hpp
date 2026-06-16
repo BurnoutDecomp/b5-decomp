@@ -4,7 +4,8 @@
 
 // Real member types (reconstructed). The renderer module owns the loading-screen renderer;
 // the remaining subsystems below are the ones the per-frame update spine (GameMain) drives.
-#include "GameSource/Graphics/BrnRendererModule.h"                       // BrnGraphics::BrnRendererModule (+ stub CgsModule::ModuleSingleBuffered)
+#include "GameSource/Graphics/BrnRendererModule.h"                       // BrnGraphics::BrnRendererModule
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"        // CgsModule::ModuleSingleBuffered (real base)
 #include "GameShared/GameClasses/System/Threads/CgsThreadLayout.h"       // CgsSystem::IThreadClass
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"              // CgsModule::IOBufferStack
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"// CgsDev::PerfMonCpu
@@ -21,6 +22,25 @@ namespace CgsGui { namespace CgsGuiModuleIO { struct InputBuffer {}; struct Outp
                    namespace ViewIO         { struct InputBuffer {}; }
                    namespace ModelIO        { struct OutputBuffer {}; } }
 namespace BrnDirector { namespace DirectorIO { struct OutputBuffer {}; } }
+
+// Engine module member types - placeholders that derive from the REAL module base
+// (CgsModule::ModuleSingleBuffered), so the game module addresses + drives them through the
+// real polymorphic module lifecycle (Construct/Prepare/Release/Destruct/Update). The bodies
+// of each module are large subsystems reconstructed separately; deriving from the real base
+// is the contract that the BrnGameModule cascade funcs depend on. The former stub RWMutex
+// clash is resolved (the renderer/game-module now share the one real base + EA::Thread::RWMutex).
+// Names/namespaces/order are the real ones (DWARF BrnGameModule.h h:356-368). WorldModule is in
+// the global namespace (DWARF BrnWorldModule.h: struct WorldModule : CgsModule::ModuleSingleBuffered).
+class WorldModule : public CgsModule::ModuleSingleBuffered {};
+namespace BrnResource  { class GameDataModule : public CgsModule::ModuleSingleBuffered {}; }
+namespace BrnGameState { class GameStateModule : public CgsModule::ModuleSingleBuffered {}; }
+namespace BrnDirector  { class DirectorModule  : public CgsModule::ModuleSingleBuffered {}; }
+namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleBuffered {}; }
+namespace BrnGui       { class GuiModule       : public CgsModule::ModuleSingleBuffered {}; }
+namespace BrnEffects   { class EffectsModule   : public CgsModule::ModuleSingleBuffered {}; }
+namespace BrnSound { namespace Module { class RootSoundModule : public CgsModule::ModuleSingleBuffered {}; } }
+namespace BrnReplays   { class ReplayModule    : public CgsModule::ModuleSingleBuffered {}; }
+namespace BrnNetwork   { class BrnNetworkModule : public CgsModule::ModuleSingleBuffered {}; }
 
 namespace BrnGame
 {
@@ -43,13 +63,40 @@ namespace BrnGame
             E_GAMEUPDATESTAGE_RELEASE = 2,
         };
 
+        enum EReleaseStage   // h:210 - the resumable Release() stage machine
+        {
+            E_RELEASESTAGE_START = 0,
+            E_RELEASESTAGE_GUI = 1,
+            E_RELEASESTAGE_SOUND = 2,
+            E_RELEASESTAGE_GAMEDATAMODULE = 3,
+            E_RELEASESTAGE_MANAGER = 4,
+            E_RELEASESTAGE_HARDWARE = 5,
+            E_RELEASESTAGE_NETWORK = 6,
+            E_RELEASESTAGE_DONE = 7,
+        };
+
         BrnGameModule();
         ~BrnGameModule();
 
-        void Construct();   // @ BrnGameModule.cpp:155 - construct the owned modules
+        void Construct() override;   // @ BrnGameModule.cpp:155 - construct the owned modules
+
+        // @ BrnGameModule.cpp:1047 - tear down the owned modules + the module base. Overrides
+        // CgsModule::Module::Destruct. Destructs all 11 engine modules (in the X360's destruct
+        // order) then the module base. Not on the boot/loading path (the game doesn't shut down
+        // during the loading screen).
+        void Destruct() override;
+
+        // @ BrnGameModule.cpp:925 - resumable staged release (counterpart of Prepare). Each call
+        // advances meReleaseStage, releasing GUI -> sound -> hardware(+input) -> game-data ->
+        // module base -> network; returns false to be re-driven, true at DONE. Not on the
+        // boot/loading path.
+        bool Release() override;
 
         // Debug helper: fill liNumBytes at lpDest with the repeating 32-bit pattern luValue.
         void DebugSetMemoryToInt(void* lpDest, s32 liNumBytes, u32 luValue);  // @ BrnGameModule.cpp:3872
+        // Debug: clear the whole game-module object then stamp the per-module memory regions
+        // with a marker so unwritten reads are caught.
+        void DebugMemoryInit(BrnGameModule* lpData);  // @ BrnGameModule.cpp:3916
 
         // IThreadClass implementation (the engine drives these on their threads).
         bool UpdateThread() override;
@@ -84,10 +131,19 @@ namespace BrnGame
         bool GameRelease();  // @ BrnGameModule.cpp:2650
 
         // ---- members (real order; off-path ranges omitted; see LAYOUT NOTE) -------------
+        // ---- the 11 engine modules (real names/types/order; all derive from the module base) --
         BrnRendererModule mRenderModule;                             // h:356
-        // [h:357-368: mWorldModule, mGameDataModule, mGameStateModule, mDirectorModule,
-        //  mInputModule, mGuiModule, mEffectsModule, mSoundModule, mReplayModule,
-        //  mNetworkModule - omitted]
+        WorldModule mWorldModule;                                    // h:357
+        BrnResource::GameDataModule mGameDataModule;                 // h:358
+        BrnGameState::GameStateModule mGameStateModule;              // h:359
+        BrnDirector::DirectorModule mDirectorModule;                 // h:360
+        CgsInput::InputModule         mInputModule;                  // h:361
+        BrnGui::GuiModule             mGuiModule;                    // h:362
+        BrnEffects::EffectsModule     mEffectsModule;                // h:363
+        BrnSound::Module::RootSoundModule mSoundModule;              // h:364
+        BrnReplays::ReplayModule      mReplayModule;                 // h:365
+        // [h:366-367: omitted]
+        BrnNetwork::BrnNetworkModule  mNetworkModule;                // h:368
         CgsModule::IOBufferStack* mpUpdateInputBufferStack;          // h:373
         CgsModule::IOBufferStack* mpUpdateOutputBufferStack;         // h:374
         // [h:375-379: resource buffer stacks + gamedata module buffers - omitted]
@@ -100,7 +156,9 @@ namespace BrnGame
         bool mbStalled;                                              // h:412
         bool mbRequestDoStepFrame;                                   // h:413
         bool mbRequestDoPlayFrame;                                   // h:414
-        // [h:415-457: streaming flags, input-bind state, prepare/release stages - omitted]
+        // [h:415-453: streaming flags, input-bind state, gui-flow, prepare stages - omitted]
+        EReleaseStage    meReleaseStage;                             // h:455 (Release() stage machine)
+        // [h:456-457: meGamePrepareStage, meGameReleaseStage - omitted]
         EGameUpdateStage meGameUpdateStage;                          // h:458
         s32 miNumSimFramesRequired;                                  // h:459
         BrnGameMainFlowController::GameMainFlowController mMainFlowStateMachine; // h:462

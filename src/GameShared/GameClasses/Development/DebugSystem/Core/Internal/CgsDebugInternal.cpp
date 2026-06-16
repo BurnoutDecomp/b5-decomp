@@ -1,38 +1,39 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/Internal/CgsDebugInternal.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82815F08
-//   (CgsDev::Internal::DebugInternal::GetUI)
+// CgsDev::Internal::DebugInternal accessor bodies (X360 GetUI @ 0x82815F08).
 //
-// Behaviour-faithful to the X360 pseudocode:
-//     return *(mpInstance + 80);
-//
-// `mpInstance` is the class-owned static singleton pointer (no `this` is taken).
-// The UI pointer lives at byte offset 80 (0x50) inside the singleton instance.
-// Hex-Rays renders the return via `__return_ptr`; the value returned is simply a
-// DebugUI* (pointer-sized), so we return it directly.
+// DebugInternal is an empty mixin (see header); its accessors expose the process-wide debug
+// singletons - the debug manager, the debug UI, and the debug resource allocator - to every
+// debug class that derives from it. The singletons are wired up by the debug system at
+// construction (CgsDebugManager's TU). The X360 GetUI read the UI pointer out of the debug-
+// system singleton (a raw singleton+0x50 fetch); it is modelled here as the cached UI singleton
+// so the access is by name rather than by offset.
+
+namespace
+{
+    CgsDev::DebugManager*     gpDebugManager   = nullptr;
+    CgsDev::DebugUI::DebugUI* gpDebugUI        = nullptr;
+    rw::IResourceAllocator*   gpDebugAllocator = nullptr;
+}
 
 namespace CgsDev
 {
-    namespace DebugUI
-    {
-        struct DebugUI;
-    }
-
     namespace Internal
     {
-        struct DebugInternal
+        CgsDev::DebugManager& DebugInternal::GetDebugManager()
         {
-            u8                  mPad[80];     // [0x00] opaque
-            DebugUI::DebugUI*   mpUI;         // [0x50] the debug UI
+            return *gpDebugManager;
+        }
 
-            static DebugInternal* mpInstance; // class-owned singleton
-
-            static DebugUI::DebugUI* GetUI();
-        };
-
-        DebugUI::DebugUI* DebugInternal::GetUI()
+        CgsDev::DebugUI::DebugUI& DebugInternal::GetUI()
         {
-            return mpInstance->mpUI;
+            return *gpDebugUI;
+        }
+
+        rw::IResourceAllocator* DebugInternal::GetAllocator()
+        {
+            return gpDebugAllocator;
         }
     }
 }
