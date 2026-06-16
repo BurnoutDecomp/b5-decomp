@@ -21,10 +21,20 @@ namespace CgsModule
             miLength = 0;
         }
 
-        // Appends a copy of lEvent (asserting on overflow) and bumps miLength.
-        // Declared here; each instantiation's body is emitted out-of-line by the
-        // X360 build, so it is its own ledger TU resolved at link time.
-        bool AddEvent(const T& lEvent);
+        // Appends a copy of lEvent (asserting on overflow) and bumps miLength. The X360 build
+        // emits a per-instantiation out-of-line body; modelled here as the generic inline
+        // template body (each instantiation's ledger TU is an explicit-instantiation .cpp).
+        // Returns false (without appending) when the queue is already full.
+        bool AddEvent(const T& lEvent)
+        {
+            // X360 AddEvent appends UNCONDITIONALLY -- the two asserts are non-gating tripwires
+            // (the bounds-gated "return false on full" variant is the separate AddEventSafe).
+            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
+            CGS_ASSERT(miLength < miMaxLength, "EventQueue::AddEvent - Reached Max length");
+            mpEvents[miLength] = lEvent;
+            ++miLength;
+            return true;
+        }
 
         s32 GetMaxLength() const { return miMaxLength; }
         s32 GetLength() const { return miLength; }

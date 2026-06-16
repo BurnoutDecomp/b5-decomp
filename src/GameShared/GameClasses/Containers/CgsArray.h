@@ -1,6 +1,9 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Append/Erase/EraseFast bounds)
+
+#include <cstdlib>   // std::qsort (Array<T,N>::QSort)
 
 // Array<T, N> - a thin fixed-size array wrapper used across the Cgs containers
 // (e.g. StateLoadingHelper's request dirty list). Recovered from the DecFIGS DWARF,
@@ -50,6 +53,53 @@ public:
     // Checked element accessor (the X360 build's Array<>::Ge).
     T&       Ge(u32 luIndex)       { return maElements[luIndex]; }
     const T& Ge(u32 luIndex) const { return maElements[luIndex]; }
+
+    // Push one element onto the inline buffer (X360 Array<T,N>::Append, generic template body
+    // shared by every instantiation). Asserts the array was Construct/Clear'd and has room; the
+    // X360 streamed the dynamic "Array container out of space, Length/Capacity" message, kept
+    // here as a static CGS_ASSERT string. Unsigned count compare keeps the -1 sentinel failing.
+    void Append(const T& lrElement)
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
+        maElements[miCount] = lrElement;
+        ++miCount;
+    }
+
+    // Remove the element at luIndex, shifting the tail down one slot (order-preserving).
+    void Erase(u32 luIndex)
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Trying to erase an unused element");
+        --miCount;
+        for (u32 luShift = luIndex; luShift < static_cast<u32>(miCount); ++luShift)
+        {
+            maElements[luShift] = maElements[luShift + 1];
+        }
+    }
+
+    // Unordered erase: overwrite luIndex with the current last live element, then drop the count
+    // (self-copy when luIndex is already last is intentional/harmless, matching the X360).
+    void EraseFast(u32 luIndex)
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Trying to erase an unused element");
+        maElements[luIndex] = maElements[miCount - 1];
+        --miCount;
+    }
+
+    // In-place sort of the live elements via a caller-supplied C-style comparator (X360 used the
+    // C library qsort). Returns the buffer base (the X360 void return is the this-register artifact).
+    T* QSort(int (*lpfComparator)(const void* lpA, const void* lpB))
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        const u32 luCount = static_cast<u32>(miCount);
+        if (luCount > 1)
+        {
+            std::qsort(maElements, luCount, sizeof(T), lpfComparator);
+        }
+        return maElements;
+    }
 
 private:
     T   maElements[N];
