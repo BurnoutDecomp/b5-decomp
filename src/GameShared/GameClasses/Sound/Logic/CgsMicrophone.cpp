@@ -1,77 +1,14 @@
 #include "types.hpp"
 
-#include <cmath>
-
-namespace rw
-{
-namespace math
-{
-namespace vpu
-{
-struct alignas(16) Vector3
-{
-    f32 mfX;
-    f32 mfY;
-    f32 mfZ;
-    f32 mfW;
-
-    Vector3()
-        : mfX(0.0f)
-        , mfY(0.0f)
-        , mfZ(0.0f)
-        , mfW(0.0f)
-    {
-    }
-
-    Vector3(f32 lfX, f32 lfY, f32 lfZ, f32 lfW = 0.0f)
-        : mfX(lfX)
-        , mfY(lfY)
-        , mfZ(lfZ)
-        , mfW(lfW)
-    {
-    }
-
-    f32 MagnitudeSquared3() const
-    {
-        return mfX * mfX + mfY * mfY + mfZ * mfZ;
-    }
-};
-
-struct alignas(16) Matrix44Affine
-{
-    Vector3 maRows[4];
-
-    void SetIdentity()
-    {
-        maRows[0] = Vector3(1.0f, 0.0f, 0.0f, 0.0f);
-        maRows[1] = Vector3(0.0f, 1.0f, 0.0f, 0.0f);
-        maRows[2] = Vector3(0.0f, 0.0f, 1.0f, 0.0f);
-        maRows[3] = Vector3(0.0f, 0.0f, 0.0f, 0.0f);
-    }
-};
-
-inline Vector3 operator-(const Vector3& lLeft, const Vector3& lRight)
-{
-    return Vector3(lLeft.mfX - lRight.mfX, lLeft.mfY - lRight.mfY, lLeft.mfZ - lRight.mfZ, 0.0f);
-}
-
-inline Vector3 operator/(const Vector3& lVector, f32 lfScalar)
-{
-    return Vector3(lVector.mfX / lfScalar, lVector.mfY / lfScalar, lVector.mfZ / lfScalar, 0.0f);
-}
-
-inline Vector3 Normalize(const Vector3& lVector)
-{
-    const f32 lfMagnitudeSquared = lVector.MagnitudeSquared3();
-    if (lfMagnitudeSquared <= 0.0f)
-        return Vector3();
-
-    const f32 lfInverseMagnitude = 1.0f / std::sqrt(lfMagnitudeSquared);
-    return Vector3(lVector.mfX * lfInverseMagnitude, lVector.mfY * lfInverseMagnitude, lVector.mfZ * lfInverseMagnitude, 0.0f);
-}
-}
-}
-}
+// rw::math::vpu Vector3/Matrix44Affine TYPES and the canonical Vector3 operation
+// vocabulary (operator- / operator/(scalar) / Normalize) live in the RenderWare SDK home.
+// Previously this TU carried a file-local redeclaration of Vector3/Matrix44Affine plus its
+// own divergent inline operator- / operator/ / Normalize; those are retired here so there
+// is exactly ONE program-wide definition (ODR-clean). The local Matrix44Affine spelled its
+// rows maRows[0..3]; the canonical type names them xAxis/yAxis/zAxis/wAxis -- row 2 (forward)
+// is zAxis, row 3 (translation) is wAxis.
+#include "rw/math/vpu/types.h"               // rw::math::vpu::Vector3, Matrix44Affine
+#include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::operator- / operator/ / Normalize
 
 namespace Utils
 {
@@ -141,10 +78,10 @@ public:
             const rw::math::vpu::Matrix44Affine& lCurrent = mMicrophoneMatrix.GetCurrent();
             const rw::math::vpu::Matrix44Affine& lPrevious = mMicrophoneMatrix.GetPrevious();
 
-            mDirection = rw::math::vpu::Normalize(lCurrent.maRows[2]);
+            mDirection = rw::math::vpu::Normalize(lCurrent.zAxis);
 
             if (lfFrameTime != 0.0f)
-                mVelocity = (lCurrent.maRows[3] - lPrevious.maRows[3]) / lfFrameTime;
+                mVelocity = (lCurrent.wAxis - lPrevious.wAxis) / lfFrameTime;
             else
                 mVelocity = rw::math::vpu::Vector3();
         }
