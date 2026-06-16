@@ -1,18 +1,6 @@
 #include "SharedClasses/Traffic/BrnTrafficLightTrigger.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert Begin/Fire/End
-
-// RwMath::IsValid(Vector3): the RenderWare per-lane NaN test the X360 inlined as a vspltw+vcmpeqfp
-// cascade over lanes x/y/z (a NaN fails self-equality). The vendor RenderWare tree here is partial
-// and has no RwMath home yet, so it is modelled file-local over the 16-byte SIMD quadword's three
-// lanes; it only feeds the validity asserts below. Replace with the real RwMath::IsValid once homed.
-namespace RwMath
-{
-    static bool IsValid(const Vector3& lrVector)
-    {
-        const float* lpfLanes = reinterpret_cast<const float*>(&lrVector);
-        return lpfLanes[0] == lpfLanes[0] && lpfLanes[1] == lpfLanes[1] && lpfLanes[2] == lpfLanes[2];
-    }
-}
+#include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::IsValid (per-lane NaN test) -- canonical home
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnTraffic::LightTriggerStartData::GetStartPosition  @ 0x8231BB50
@@ -49,7 +37,7 @@ Vector3 LightTriggerStartData::GetStartPosition(u32 luIndex) const
             281);
         CgsDev::Assert::EndAssert();
     }
-    if (!RwMath::IsValid(maStartingPositions[luIndex]))
+    if (!rw::math::vpu::IsValid(maStartingPositions[luIndex]))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
@@ -84,7 +72,7 @@ Vector3 LightTriggerStartData::GetStartDirection(u32 luIndex) const
             290);
         CgsDev::Assert::EndAssert();
     }
-    if (!RwMath::IsValid(maStartingDirections[luIndex]))
+    if (!rw::math::vpu::IsValid(maStartingDirections[luIndex]))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
