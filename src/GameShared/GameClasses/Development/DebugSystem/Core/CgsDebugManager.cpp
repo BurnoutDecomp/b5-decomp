@@ -3,7 +3,8 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // DebugComponent (mbActive/OnRegister/DebugUISectionCallback/RenderHUD)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"      // GetUI().GetVariableManager()/GetFunctionManager()
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"        // Variant
-#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mp2dRender Begin/End/SetRenderBuffer
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mp2dRender Begin/End/SetRenderBuffer/Construct
+#include "GameShared/GameClasses/Development/DebugSystem/Core/Internal/CgsDebugInternal.h"     // Internal::SetDebugSingletons
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 
 // CgsDev::DebugManager - the in-game debug systems owner.
@@ -23,6 +24,31 @@
 
 namespace CgsDev
 {
+    // The debug system's process-wide instances (X360 CgsDebugManager.cpp:85/90): the UI and the
+    // renderers are single global objects the manager wires itself to - not heap-allocated. (The 3D
+    // renderer g3dInternalDebugRender + the perfmon globals are the render/perfmon follow-on.)
+    DebugUI::DebugUI       gInternalDebugUI;
+    Debug2DImmediateRender g2dInternalDebugRender;
+
+    // X360 CgsDebugManager.cpp:113 DebugManagerConstructParameters::DEFAULT - the built-in debug
+    // configuration the engine boots with. The pool sizes are reconstructed generously (the exact
+    // X360 data-section values are TBD; they affect only capacity, not behaviour - the bounded
+    // loading build registers only the perfmon). mpRwAllocator is null: the debug pools' backing
+    // currently comes from the global heap (CgsDebugCollections.cpp), which ignores the allocator;
+    // the real GetDefaultAllocator wiring is the allocator follow-on.
+    const DebugManagerConstructParameters DebugManagerConstructParameters::DEFAULT =
+    {
+        /* miPerfMonCpuCount          */ 64,
+        /* miPerfMonLogBufferSize     */ 8192,
+        /* miMenuWindowPoolSize       */ 16,
+        /* miMenuPoolSize             */ 64,
+        /* miFunctionPoolSize         */ 128,
+        /* miVariablePoolSize         */ 256,
+        /* miVariableMetadataPoolSize */ 256,
+        /* miConsoleLineCount         */ 64,
+        /* mpRwAllocator              */ nullptr,
+    };
+
     DebugManager* DebugManager::mpInstance = nullptr;
 
     DebugManager::DebugManager()
@@ -34,6 +60,45 @@ namespace CgsDev
     }
 
     DebugManager::~DebugManager() {}
+
+    // X360 Construct 0x828332C0 (bounded). Claim the singleton, wire the debug-internal accessors,
+    // reset the component list + renderer pointers, then construct the UI (-> the three managers ->
+    // their pools). The full X360 bring-up also creates the rw debug Manager instance + default
+    // allocator, the debug critical section, the two VariableEventQueues, and the perfmon log buffer;
+    // those are the bring-up follow-on (none is needed to construct + render the perfmon HUD - the
+    // pools take their backing from the global heap, so the allocator is threaded through but unused).
+    void DebugManager::Construct(const DebugManagerConstructParameters* lpParameters)
+    {
+        mpInstance = this;
+        mp2dRender = nullptr;
+        mp3dRender = nullptr;
+        mComponentList.Clear();
+
+        mpUI = &gInternalDebugUI;
+
+        // Wire the singletons every DebugInternal-derived class reaches through GetUI()/
+        // GetDebugManager()/GetAllocator(); must precede the manager Constructs + any registration.
+        Internal::SetDebugSingletons(this, mpUI, lpParameters->mpRwAllocator);
+
+        mpUI->Construct(lpParameters);
+    }
+
+    // X360 ConstructRenderer (CgsDebugManager.cpp:248, bounded). Construct the 2D debug renderer at
+    // the screen's virtual resolution and hand it to the UI. The X360 reads that size from the UI
+    // Metrics (a deferred heavy member), so the bounded path uses the loading screen's render
+    // resolution directly - the Im2d space the squares are drawn in (pixel coords, 1280x720). The 3D
+    // renderer + the assert-overlay renderer hookup (Assert::Manager::SetRenderer) are the render
+    // follow-on. The renderer's backing/allocator is unused (the box path batches into a fixed array).
+    void DebugManager::ConstructRenderer()
+    {
+        const f32 lfVirtualScreenWidth  = 1280.0f;
+        const f32 lfVirtualScreenHeight = 720.0f;
+
+        mp2dRender = &g2dInternalDebugRender;
+        mp2dRender->Construct(nullptr, lfVirtualScreenWidth, lfVirtualScreenHeight);
+
+        mpUI->Set2DRenderer(mp2dRender);
+    }
 
     void DebugManager::Update(f32) {}
 

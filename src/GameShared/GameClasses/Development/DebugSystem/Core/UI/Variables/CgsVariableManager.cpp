@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariableManager.h"
 
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"           // DebugManagerConstructParameters (pool sizes + allocator)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"             // GetUI().GetMenuManager()
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenu.h"           // Menu::AddMenuItem
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariable.h"  // Variable::Prepare
@@ -20,6 +21,27 @@ namespace CgsDev
 {
     namespace DebugUI
     {
+        // X360 CgsVariableManager.cpp:60. Size the three pools from the construct parameters, then
+        // Clear each (Construct allocates + element-constructs the backing block; Clear fills the free
+        // list). The MenuItemVariable pool is sized 1:1 with the variable pool (each registered
+        // variable gets one menu row); the metadata pool has its own size field.
+        void VariableManager::Construct(const DebugManagerConstructParameters* lpParameters)
+        {
+            rw::IResourceAllocator* lpAllocator = lpParameters->mpRwAllocator;
+
+            mVariablePool.Construct(lpParameters->miVariablePoolSize, lpAllocator);
+            mMenuItemPool.Construct(lpParameters->miVariablePoolSize, lpAllocator);
+            mMetadataPool.Construct(lpParameters->miVariableMetadataPoolSize, lpAllocator);
+
+            mVariablePool.Clear();
+            mMenuItemPool.Clear();
+            mMetadataPool.Clear();
+        }
+
+        // X360 CgsVariableManager.cpp:86 is empty: the debug allocator owns the pool backing and is
+        // torn down wholesale, so the manager has nothing to release per-pool.
+        void VariableManager::Destruct() {}
+
         void VariableManager::RegisterVariable(const Variant& lrVariant, const char* lpcPath, const char* lpcName)
         {
             Menu* lpMenu = GetUI().GetMenuManager().CreateMenuPath(lpcPath, nullptr);

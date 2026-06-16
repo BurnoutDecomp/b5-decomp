@@ -31,5 +31,10 @@ namespace CgsDev
             CgsDev::DebugUI::DebugUI& GetUI();
             rw::IResourceAllocator*   GetAllocator();
         };
+
+        // Wire the process-wide debug singletons the accessors above hand out. Called once by
+        // DebugManager::Construct, before any RegisterVariable/RegisterFunction (X360: the accessors
+        // read these out of the debug-system singleton; modelled here as cached pointers).
+        void SetDebugSingletons(CgsDev::DebugManager* lpManager, CgsDev::DebugUI::DebugUI* lpUI, rw::IResourceAllocator* lpAllocator);
     }
 }

@@ -78,6 +78,14 @@ namespace BrnGame
         // loading-screen signal). The full Construct also builds the 11 engine modules + worker
         // threads; reconstructed incrementally.
         mRenderModule.Construct();
+
+        // Bring up the in-game debug systems (the perfmon HUD + its 2D renderer) so the debug overlay
+        // draws over the loading screen. Construct wires the debug singleton + UI + the manager pools;
+        // ConstructRenderer builds the 2D debug renderer (mp2dRender). BrnRendererModule::Render then
+        // drives DebugManager::Render each frame through the singleton (mpInstance set here).
+        mDebugManager.Construct(&CgsDev::DebugManagerConstructParameters::DEFAULT);
+        mDebugManager.ConstructRenderer();
+
         mMainFlowStateMachine.Construct();
         mMainFlowStateMachine.SetState(BrnGameMainFlowController::E_MGS_INITIAL_LOADING_SCREEN);
     }

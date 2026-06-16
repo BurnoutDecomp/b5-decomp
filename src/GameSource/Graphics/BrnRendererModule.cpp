@@ -1,5 +1,6 @@
 #include "GameSource/Graphics/BrnRendererModule.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
 
 // Minimal constructors for the off-path placeholder types embedded in BrnRendererModule
 // (Option B). The job system and the buffered dispatch frame are reconstructed with the
@@ -62,6 +63,21 @@ void BrnRendererModule::Render()
     }
 
     mLoadingScreenRenderer.RenderForeground(&mIm2dRenderer);
+
+    // Debug HUD overlay (the on-screen perf squares) - drawn on top of the loading screen, before the
+    // present. The debug manager is the BrnGameModule-owned singleton (constructed at boot); the X360
+    // Render path issues this each frame between the foreground overlay and ShowPixelBuffer. RenderWorld
+    // (3D) is deferred, so the view/camera args are unused; the 2D buffer is the real Im2d the loading
+    // screen renders through (mIm2dRenderer).
+    if (CgsDev::DebugManager* lpDebugManager = CgsDev::DebugManager::ThreadSafeAquire())
+    {
+        Matrix44 lViewProjection;
+        lViewProjection.SetIdentity();
+        Vector3 lCameraPosition;
+        lCameraPosition.SetZero();
+        lpDebugManager->Render(lViewProjection, lCameraPosition, nullptr, &mIm2dRenderer);
+        CgsDev::DebugManager::ThreadSafeRelease(lpDebugManager);
+    }
 
     renderengine::Device::ShowPixelBuffer();
 }

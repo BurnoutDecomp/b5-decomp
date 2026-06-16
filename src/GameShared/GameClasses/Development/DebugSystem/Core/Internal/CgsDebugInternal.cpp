@@ -35,5 +35,12 @@ namespace CgsDev
         {
             return gpDebugAllocator;
         }
+
+        void SetDebugSingletons(CgsDev::DebugManager* lpManager, CgsDev::DebugUI::DebugUI* lpUI, rw::IResourceAllocator* lpAllocator)
+        {
+            gpDebugManager   = lpManager;
+            gpDebugUI        = lpUI;
+            gpDebugAllocator = lpAllocator;
+        }
     }
 }

@@ -16,7 +16,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"        // CgsDev::SimpleStrStream (committed home)
 #include "BrnCommonTypes.h"                                         // Vector3
 
-namespace CgsDev { class Debug2DImmediateRender; class Debug3DImmediateRender; }
+namespace CgsDev { struct Debug2DImmediateRender; struct Debug3DImmediateRender; }
 
 namespace BrnGameState
 {

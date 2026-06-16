@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // DebugManagerConstructParameters
+
 // CgsDev::DebugUI::DebugUI - the manager accessors every DebugComponent / manager reaches through
 // GetUI(). The X360 reads them as fixed sub-objects of the UI singleton (MenuManager@+228,
 // VariableManager@+272, FunctionManager@+332); here they are the named by-value members. The rest of
@@ -12,6 +14,33 @@ namespace CgsDev
         MenuManager&     DebugUI::GetMenuManager()     { return mMenuManager; }
         VariableManager& DebugUI::GetVariableManager() { return mVariableManager; }
         FunctionManager& DebugUI::GetFunctionManager() { return mFunctionManager; }
+
+        // X360 CgsDebugUI.cpp:101 (bounded). Construct the three managers (each sizes its pools from
+        // the construct parameters), reset the window stack + cascade/visibility scalars, and clear the
+        // 2D renderer pointer (DebugManager::ConstructRenderer wires it via Set2DRenderer). The X360
+        // also lays out the palette/metrics defaults, builds the console / error-window / script /
+        // command sub-windows, and registers a built-in UI-visibility variable; those ride on the
+        // deferred heavy members and are the UI follow-on (none is needed for the perfmon HUD to draw).
+        void DebugUI::Construct(const DebugManagerConstructParameters* lpParameters)
+        {
+            mMenuManager.Construct(lpParameters);
+            mVariableManager.Construct(lpParameters);
+            mFunctionManager.Construct(lpParameters);
+
+            mWindowList.Clear();
+            mpActiveWindow = nullptr;
+            mfCascadeX     = 0.0f;
+            mfCascadeY     = 0.0f;
+            mbVisible      = false;
+            mbRunAutoExec  = false;
+            mp2dRender     = nullptr;
+        }
+
+        // X360 CgsDebugUI.cpp:345 is empty (the debug allocator owns the managers' pool backing).
+        void DebugUI::Destruct() {}
+
+        Debug2DImmediateRender* const DebugUI::Get2DRenderer() const   { return mp2dRender; }
+        void DebugUI::Set2DRenderer(Debug2DImmediateRender* lpRender)  { mp2dRender = lpRender; }
 
         // Bounded string helpers (MakeFullPath/menu-path building use these). Always null-terminate
         // within the buffer.
