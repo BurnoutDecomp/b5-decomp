@@ -1,0 +1,307 @@
+// ChallengeListEntry.h
+// Header-only data-list slice. Two POD resource structs live in this TU:
+// BrnResource::ChallengeListEntryAction (the per-action record, 0x50 bytes) and
+// BrnResource::ChallengeListEntry (the challenge record whose first member is
+// maAction[KI_MAX_ACTIONS_PER_CHALLENGE]). Only ChallengeListEntry::GetAction is
+// reconstructed from the X360 binary in this batch; every other method is
+// declared-only. Member layout (names + offsets) is taken from the DECFIGS DWARF.
+//
+// IMPORTANT layout note: GetAction @ 0x8230F0F8 computes `this + 80 * index`, which
+// PROVES sizeof(ChallengeListEntryAction) == 80 (0x50) and maAction @ offset 0 in
+// ChallengeListEntry.
+
+#pragma once
+
+#include "types.hpp"                                   // u8/s8/u32/s32/f32 widths
+#include "BrnCommonTypes.h"                             // CgsID (typedef u64)
+#include "GameShared/GameClasses/Core/CgsAssert.h"      // CgsDev::Assert::Begin/Fire/EndAssert
+
+namespace BrnResource
+{
+
+// --- ChallengeListEntryAction ------------------------------------------------
+// Per-action descriptor. sizeof == 0x50 (80), align 8 (CgsID is u64). Declared in
+// full so ChallengeListEntry::maAction has the correct 80-byte element stride.
+struct ChallengeListEntryAction
+{
+    // -- ChallengeListEntry.h:47/48 --
+    static const int32_t KI_MAX_TARGETS_PER_CHALLENGE_ACTION = 2;
+    static const uint8_t KU_MAX_LOCATIONS_PER_ACTION         = 4;
+
+    // -- modifier bit flags (ChallengeListEntry.h:127-132) --
+    static const uint8_t KX_MODIFIER_NONE             = 0;
+    static const uint8_t KX_MODIFIER_WITHOUT_CRASHING = 1;
+    static const uint8_t KX_MODIFIER_PRISTINE         = 2;
+    static const uint8_t KX_MODIFIER_HEAD_ON          = 4;
+    static const uint8_t KX_MODIFIER_IN_AIR           = 8;
+    static const uint8_t KX_MODIFIER_BANK_FOR_SUCCESS = 16;
+
+    // -- ChallengeListEntry.h:50 --
+    enum ELocationType
+    {
+        E_LOCATION_TYPE_ANYWHERE       = 0,
+        E_LOCATION_TYPE_DISTRICT       = 1,
+        E_LOCATION_TYPE_TRIGGER        = 2,
+        E_LOCATION_TYPE_ROAD           = 3,
+        E_LOCATION_TYPE_ROAD_NO_MARKER = 4,
+        E_LOCATION_TYPE_COUNT          = 5,
+    };
+
+    // -- ChallengeListEntry.h:61 --
+    enum EChallengeActionType
+    {
+        E_CHALLENGE_ACTION_MINIMUM_SPEED         = 0,
+        E_CHALLENGE_ACTION_IN_AIR                = 1,
+        E_CHALLENGE_ACTION_AIR_DISTANCE          = 2,
+        E_CHALLENGE_ACTION_LEAP_CARS             = 3,
+        E_CHALLENGE_ACTION_DRIFT                 = 4,
+        E_CHALLENGE_ACTION_NEAR_MISS             = 5,
+        E_CHALLENGE_ACTION_BARREL_ROLLS          = 6,
+        E_CHALLENGE_ACTION_ONCOMING              = 7,
+        E_CHALLENGE_ACTION_FLATSPIN              = 8,
+        E_CHALLENGE_ACTION_LAND_SUCCESSFUL       = 9,
+        E_CHALLENGE_ACTION_ROAD_RULE_TIME        = 10,
+        E_CHALLENGE_ACTION_ROAD_RULE_CRASH       = 11,
+        E_CHALLENGE_ACTION_PLAYER_POWER_PARKING  = 12,
+        E_CHALLENGE_ACTION_TRAFFIC_POWER_PARKING = 13,
+        E_CHALLENGE_ACTION_CRASH_INTO_PLAYER     = 14,
+        E_CHALLENGE_ACTION_BURNOUTS              = 15,
+        E_CHALLENGE_ACTION_MEET_UP               = 16,
+        E_CHALLENGE_ACTION_BILLBOARD             = 17,
+        E_CHALLENGE_ACTION_BOOST_TIME            = 18,
+        E_CHALLENGE_ACTION_BARREL_ROLLS_REVERSE  = 19,
+        E_CHALLENGE_ACTION_FLATSPIN_REVERSE      = 20,
+        E_CHALLENGE_ACTION_LAND_SUCCESSFUL_REVERSE = 21,
+        E_ACTION_COUNT                           = 22,
+    };
+
+    // -- ChallengeListEntry.h:90 --
+    enum EChallengeDataType
+    {
+        E_CHALLENGE_DATA_TYPE_CRASHES             = 0,
+        E_CHALLENGE_DATA_TYPE_NEAR_MISS           = 1,
+        E_CHALLENGE_DATA_TYPE_ONCOMING            = 2,
+        E_CHALLENGE_DATA_TYPE_DRIFT               = 3,
+        E_CHALLENGE_DATA_TYPE_AIR                 = 4,
+        E_CHALLENGE_DATA_TYPE_AIR_DISTANCE        = 5,
+        E_CHALLENGE_DATA_TYPE_BARREL_ROLLS        = 6,
+        E_CHALLENGE_DATA_TYPE_FLAT_SPINS          = 7,
+        E_CHALLENGE_DATA_TYPE_CARS_LEAPT          = 8,
+        E_CHALLENGE_DATA_TYPE_SPEED_ROAD_RULE     = 9,
+        E_CHALLENGE_DATA_TYPE_CRASH_ROAD_RULE     = 10,
+        E_CHALLENGE_DATA_TYPE_SUCCESSFUL_LANDINGS = 11,
+        E_CHALLENGE_DATA_TYPE_BURNOUTS            = 12,
+        E_CHALLENGE_DATA_TYPE_POWER_PARKS         = 13,
+        E_CHALLENGE_DATA_TYPE_PERCENTAGE          = 14,
+        E_CHALLENGE_DATA_TYPE_MEET_UP             = 15,
+        E_CHALLENGE_DATA_TYPE_BILLBOARDS          = 16,
+        E_CHALLENGE_DATA_TYPE_BOOST_TIME          = 17,
+        E_CHALLENGE_DATA_TYPE_COUNT               = 18,
+    };
+
+    // -- ChallengeListEntry.h:114 --
+    enum EChallengeCoopType
+    {
+        E_CHALLENGE_COOP_TYPE_ONCE                    = 0,
+        E_CHALLENGE_COOP_TYPE_INDIVIDUAL              = 1,
+        E_CHALLENGE_COOP_TYPE_INDIVIDUAL_ACCUMULATION = 2,
+        E_CHALLENGE_COOP_TYPE_SIMULTANEOUS            = 3,
+        E_CHALLENGE_COOP_TYPE_CUMULATIVE              = 4,
+        E_CHALLENGE_COOP_TYPE_AVERAGE                 = 5,
+        E_CHALLENGE_COOP_TYPE_COUNT                   = 6,
+    };
+
+    // -- ChallengeListEntry.h:134 --
+    enum ECombineActionType
+    {
+        E_COMBINE_ACTION_CHAIN                   = 0,
+        E_COMBINE_ACTION_FAILURE_RESETS_CHAIN    = 1,
+        E_COMBINE_ACTION_FAILURE_RESETS_EVERYONE = 2,
+        E_COMBINE_ACTION_SIMULTANEOUS            = 3,
+        E_COMBINE_ACTION_INDEPENDENT             = 4,
+        E_COMBINE_ACTION_COUNT                   = 5,
+    };
+
+    // -- ChallengeListEntry.h:146: per-location payload (8 bytes, union over the id) --
+    union LocationData
+    {
+        int32_t meDistrict;     // real type BrnWorld::EDistrict; modeled as s32 to avoid
+                                // forking an uncommitted enum (matches BrnCheckpointData.h)
+        CgsID   mTriggerID;     // ChallengeListEntry.h:148
+        CgsID   mRoadID;        // ChallengeListEntry.h:149
+    };
+
+    // ---- methods (all declared-only; not reconstructed in this batch) ----
+    void                  Construct();                            // :153
+    void                  FixUp(void* lpBase);                    // :156
+    void                  FixDown(void* lpBase);                  // :159
+    EChallengeActionType  GetActionType() const;                  // :162
+    bool                  HasTimeLimit() const;                   // :165
+    f32                   GetTimeLimit() const;                   // :169
+    bool                  HasConvoyTime() const;                  // :172
+    f32                   GetConvoyTime() const;                  // :175
+    int32_t               GetTargetValue(int32_t liIndex) const;  // :179
+    EChallengeDataType    GetTargetDataType(int32_t liIndex) const; // :183
+    CgsID                 GetCgsIDTarget(int32_t liIndex) const;  // :187
+    int32_t               GetNumTargets() const;                  // :190
+    ECombineActionType    GetCombineAction() const;               // :193
+    EChallengeCoopType    GetCoopType() const;                    // :196
+    uint8_t               GetModifier() const;                    // :199
+    uint8_t               GetNumLocations() const;                // :202
+    ELocationType         GetLocationType(uint8_t lu8Index) const; // :206
+    int32_t               GetDistrict(uint8_t lu8Index) const;    // :210 (real ret BrnWorld::EDistrict)
+    CgsID                 GetTriggerID(uint8_t lu8Index) const;   // :214
+    CgsID                 GetRoadID(uint8_t lu8Index) const;      // :218
+    void                  SetActionType(EChallengeActionType leType);          // :223
+    void                  SetTimeLimit(f32 lfTime);                            // :226
+    void                  SetConvoyTime(f32 lfTime);                           // :230
+    void                  SetNumTargets(int32_t liNum);                        // :234
+    void                  SetTargetValue(int32_t liIndex, int32_t liValue);    // :239
+    void                  SetTargetDataType(int32_t liIndex, EChallengeDataType leType); // :244
+    void                  SetCgsIDTarget(int32_t liIndex, CgsID lID);          // :249
+    void                  SetCombineAction(ECombineActionType leType);         // :253
+    void                  SetCoopType(EChallengeCoopType leType);              // :257
+    void                  SetModifier(uint8_t lu8Modifier);                    // :261
+    void                  SetNumLocations(uint8_t lu8Num);                     // :270
+    void                  SetLocationType(uint8_t lu8Index, ELocationType leType); // :275
+    void                  SetDistrict(uint8_t lu8Index, int32_t leDistrict);   // :280 (real BrnWorld::EDistrict)
+    void                  SetTriggerID(uint8_t lu8Index, CgsID lID);           // :285
+    void                  SetRoadID(uint8_t lu8Index, CgsID lID, bool lbAddMarker); // :291
+
+private:
+    // ---- on-disk layout (DWARF offsets); total sizeof == 0x50 (80) ----
+    uint8_t      muActionType;          // :294  @0x00
+    uint8_t      muCoopType;            // :295  @0x01
+    uint8_t      mxModifier;            // :296  @0x02
+    uint8_t      muCombineActionType;   // :297  @0x03
+    uint8_t      muNumLocations;        // :299  @0x04
+    uint8_t      mauLocationType[4];    // :300  @0x05..0x08
+    // (7 bytes pad to align LocationData[] @0x10 -- CgsID/u64 forces 8-byte align)
+    LocationData maLocationData[4];     // :301  @0x10..0x2F
+    uint8_t      muNumTargets;          // :303  @0x30
+    // (3 bytes pad to align maiTargetValue @0x34)
+    int32_t      maiTargetValue[2];     // :304  @0x34..0x3B
+    uint8_t      mau8TargetDataType[2]; // :305  @0x3C..0x3D
+    // (2 bytes pad to align mfTimeLimit @0x40)
+    f32          mfTimeLimit;           // :307  @0x40
+    f32          mfConvoyTime;          // :308  @0x44
+    uint32_t     muPropType;            // :310  @0x48
+    // (4 bytes tail pad to round sizeof to 0x50 / 8-byte align)
+};
+
+// --- ChallengeListEntry ------------------------------------------------------
+// The challenge record. maAction is the FIRST member (offset 0): GetAction returns
+// `this + 80*index`, confirming maAction @ +0 with 80-byte stride.
+struct ChallengeListEntry
+{
+    static const int32_t KI_CHALLENGE_VERSION              = 1;   // :327
+    static const int32_t KI_MAX_ACTIONS_PER_CHALLENGE      = 2;   // :328
+    static const int32_t KI_MAX_CHALLENGE_STRING_ID_LENGTH = 16;  // :329
+
+    // -- ChallengeListEntry.h:331 --
+    enum ECarRestrictionType
+    {
+        E_CAR_TYPE_NONE       = 0,
+        E_CAR_TYPE_DANGER     = 1,
+        E_CAR_TYPE_AGGRESSION = 2,
+        E_CAR_TYPE_STUNT      = 3,
+        E_CAR_TYPE_COUNT      = 4,
+    };
+
+    // -- ChallengeListEntry.h:341 --
+    enum EFreeburnChallengeStyle
+    {
+        E_FREEBURN_STYLE_NONE             = 0,
+        E_FREEBURN_STYLE_NORMAL           = 1,
+        E_FREEBURN_STYLE_ROAD_RULES_TIME  = 2,
+        E_FREEBURN_STYLE_ROAD_RULES_CRASH = 3,
+        E_FREEBURN_STYLE_COUNT            = 4,
+    };
+
+    // -- ChallengeListEntry.h:351 --
+    enum EChallengeDifficulty
+    {
+        E_CHALLENGE_DIFFICULTY_EASY      = 0,
+        E_CHALLENGE_DIFFICULTY_MEDIUM    = 1,
+        E_CHALLENGE_DIFFICULTY_HARD      = 2,
+        E_CHALLENGE_DIFFICULTY_VERY_HARD = 3,
+        E_CHALLENGE_DIFFICULTY_COUNT     = 4,
+    };
+
+    // ---- methods ----
+    void                          Construct();                       // :362  declared-only
+    void                          FixUp(void* lpBase);               // :365  declared-only
+    void                          FixDown(void* lpBase);             // :368  declared-only
+    CgsID                         GetChallengeID() const;            // :372  declared-only
+    int32_t                       GetNumPlayers() const;             // :375  declared-only
+    int32_t                       GetOriginalNumPlayers() const;     // :378  declared-only
+    int32_t                       GetNumActions() const;             // :381  declared-only
+    const ChallengeListEntryAction* GetAction(int32_t liActionIndex) const; // :384  declared-only (const twin)
+    EChallengeDifficulty          GetDifficulty() const;             // :387  declared-only
+    const char*                   GetDescriptionStringID() const;    // :390  declared-only
+    const char*                   GetTitleStringID() const;          // :393  declared-only
+    EFreeburnChallengeStyle       GetChallengeStyle() const;         // :396  declared-only
+    ECarRestrictionType           GetCarType() const;                // :399  declared-only
+    CgsID                         GetCarID() const;                  // :402  declared-only
+    void                          SetChallengeID(CgsID lID);         // :409  declared-only
+    void                          SetNumPlayers(int32_t liNum);      // :412  declared-only
+    void                          SetNewNumPlayers(int32_t liNum);   // :415  declared-only
+    void                          ResetNumPlayers();                 // :418  declared-only
+    void                          SetNumActions(int32_t liNum);      // :421  declared-only
+    ChallengeListEntryAction*     GetAction(int32_t liActionIndex);  // :424  RECONSTRUCTED (inline below)
+    void                          SetDifficulty(EChallengeDifficulty leDifficulty); // :427 declared-only
+    void                          SetDescriptionStringID(const char* lpcID);        // :431 declared-only
+    void                          SetTitleStringID(const char* lpcID);              // :435 declared-only
+    void                          SetCarType(ECarRestrictionType leType);           // :438 declared-only
+    void                          SetCarID(CgsID lID);                              // :441 declared-only
+    void                          SetCarColours(int32_t liColour, int32_t liPalette); // :444 declared-only
+    int32_t                       GetCarColourIndex();               // :447  declared-only
+    int32_t                       GetCarColourPaletteIndex();        // :450  declared-only
+
+private:
+    // ---- on-disk layout (DWARF offsets) ----
+    ChallengeListEntryAction maAction[KI_MAX_ACTIONS_PER_CHALLENGE]; // :453  @0x00 (2 * 0x50 = 0xA0)
+    char                     macDescriptionStringID[KI_MAX_CHALLENGE_STRING_ID_LENGTH]; // :455 @0xA0
+    char                     macTitleStringID[KI_MAX_CHALLENGE_STRING_ID_LENGTH];       // :456 @0xB0
+    CgsID                    mChallengeID;       // :458  @0xC0
+    CgsID                    mCarID;             // :459  @0xC8
+    uint8_t                  muCarType;          // :460  @0xD0
+    int8_t                   miCarColourIndex;   // :461  @0xD1
+    int8_t                   miCarColourPaletteIndex; // :462 @0xD2
+    uint8_t                  muNumPlayers;       // :463  @0xD3
+    uint8_t                  muNumActions;       // :464  @0xD4
+    uint8_t                  muDifficulty;       // :465  @0xD5
+};
+
+// ChallengeListEntry::GetAction @ 0x8230F0F8
+// X360 pseudocode: `return 80 * a2 + a1;` with a1==this, a2==liActionIndex. Since
+// sizeof(ChallengeListEntryAction)==0x50 and maAction is at offset 0, this is simply
+// `&maAction[liActionIndex]`. Two range asserts guard the index. The X360-baked file/
+// line strings ('...ChallengeListEntry.h', 941 / 942) are preserved VERBATIM via the
+// explicit BeginAssert/FireAssert/EndAssert sequence. The asserts are non-fatal (binary
+// continues and returns the pointer even on out-of-range index).
+inline ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex )
+{
+    if ( liActionIndex < 0 )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "liActionIndex >= 0",
+            "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h",
+            941 );
+        CgsDev::Assert::EndAssert();
+    }
+    if ( liActionIndex >= KI_MAX_ACTIONS_PER_CHALLENGE )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE",
+            "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h",
+            942 );
+        CgsDev::Assert::EndAssert();
+    }
+
+    return &maAction[ liActionIndex ];
+}
+
+} // namespace BrnResource
