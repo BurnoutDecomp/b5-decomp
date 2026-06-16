@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3 (rw::math::vpu::Vector3), CgsID
+#include "SharedClasses/Trigger/BrnKillzone.h"   // complete BrnTrigger::Killzone (GetKillzone 16B stride)
 
 // Owning header for BrnTrigger::TriggerData — the track-trigger resource payload.
 //
@@ -37,40 +38,97 @@ namespace BrnTrigger
 // Forward declaration: GetLandmark returns a Landmark* and the count accessors return ints, so
 // the complete Landmark layout is not needed at this declaration site. The owning header
 // (SharedClasses/Trigger/BrnLandmark.h) is #included by the .cpp that dereferences the result.
-struct Landmark;
+struct Landmark;          // committed: SharedClasses/Trigger/BrnLandmark.h
+struct TriggerRegion;     // committed: SharedClasses/Trigger/BrnTriggerBase.h
+// Remaining region-table element types are not yet committed; forward-declared so the extended
+// struct's declared-only accessors compile (their bodies live in their own future TUs).
+struct SignatureStunt;
+struct GenericRegion;
+struct Blackspot;
+struct VFXBoxRegion;
+struct RoamingLocation;
+struct SpawnLocation;
 
 struct TriggerData
 {
-    // --- Accessors used by OfflineGameMode::SelectRandomDestinations -------------------------
+    static const int32_t KI_VERSION_NUMBER = 34;   // DWARF BrnTriggerData.h:60
+    static const int32_t KI_ALIGNMENT      = 16;   // DWARF BrnTriggerData.h:233
+
+    // --- Landmark accessors used by OfflineGameMode::SelectRandomDestinations ----------------
 
     // Number of landmarks in this track's trigger data (X360 offset 0x34). GetNumLandmarks is
     // the spelling the SelectRandomDestinations body uses for its loop bound; GetLandmarkCount
     // is the DWARF-attested name. Both alias the same member.
     int GetLandmarkCount() const { return miLandmarkCount; }
     int GetNumLandmarks()  const { return miLandmarkCount; }
+    int GetOnlineLandmarkCount() const { return miOnlineLandmarkCount; }
 
-    // The liIndex'th landmark (const). DWARF: `const Landmark* GetLandmark(int32_t) const`.
-    // Declaration only — the body (&mpLandmarks[liIndex]) needs the complete Landmark layout and
-    // is provided by the BrnTriggerData TU; a declaration is all the cl /c gate needs for callers
-    // that include this header.
+    // The liIndex'th landmark (const). Declaration only -- the body (&mpLandmarks[liIndex]) needs
+    // the complete Landmark layout and is provided by a sibling TU.
     const Landmark* GetLandmark(int liIndex) const;
+          Landmark* GetLandmark(int liIndex);
 
-    // --- Other X360-attested member this header owns (body in the BrnTriggerData TU) ----------
-    // X360 0x8231B648. Maps a region-table index back to its owning Landmark.
+    // X360 0x824EAA00. Returns the liLandmarkIndex'th ONLINE landmark. Body in the BrnTriggerData TU.
+    const Landmark* GetOnlineLandmark(int liLandmarkIndex) const;
+
+    // --- Region table accessors owned by the BrnTriggerData TU -------------------------------
+    int GetRegionCount() const { return miRegionCount; }
+
+    // X360 0x8230E490. The liRegionIndex'th entry of the region table. Body in the BrnTriggerData TU.
+    const TriggerRegion* GetRegion(int liRegionIndex) const;
+
+    // X360 0x8231B648. Maps a region-table index back to its owning Landmark (asserts the type).
     const Landmark* GetLandmarkFromRegionIndex(int liRegionIndex) const;
 
+    // --- Killzone accessor owned by the BrnTriggerData TU ------------------------------------
+    int GetKillzoneCount() const { return miKillzoneCount; }
+
+    // X360 0x82354820. &mpKillzones[liKillzoneIndex]. Body in the BrnTriggerData TU.
+    const Killzone* GetKillzone(int liKillzoneIndex) const;
+
+    // Remaining DWARF-attested accessors (declared-only; bodies in their own TUs / not yet
+    // reconstructed). Kept so the one coherent struct matches the DWARF interface.
+    const SignatureStunt*  GetSignatureStunt(int liIndex) const;
+    int  GetSignatureStuntCount() const { return miSignatureStuntCount; }
+    const GenericRegion*   GetGenericRegion(int liIndex) const;
+    int  GetGenericRegionCount() const { return miGenericRegionCount; }
+    const Blackspot*       GetBlackspot(int liIndex) const;
+    int  GetBlackspotCount() const { return miBlackspotCount; }
+    const RoamingLocation* GetRoamingLocation(int liIndex) const;
+    int  GetRoamingLocationCount() const { return miRoamingLocationCount; }
+    const SpawnLocation*   GetSpawnLocation(int liIndex) const;
+    int  GetSpawnLocationCount() const { return miSpawnLocationCount; }
+    const Landmark*        FindLandmark(CgsID lId) const;
+    const Landmark*        FindLandmarkByDesignIndex(uint8_t luDesignIndex) const;
+    uint32_t GetSize() const { return muSize; }
+
 private:
-    // Layout to the last field OfflineGameMode reads. Members beyond miLandmarkCount exist in the
-    // DWARF (online landmark count, signature stunts, regions, ...) but are out of this minimal
-    // header's scope; if a caller needs them, extend this struct in offset order rather than
-    // forking a second definition.
-    int     miVersionNumber;        // 0x00
-    u32     muSize;                 // 0x04
+    // Full X360 layout (DWARF order). Trailing members past miLandmarkCount were absent from the
+    // former minimal slice and are added here in offset order (same struct, extended, NOT forked).
+    int32_t          miVersionNumber;        // 0x00
+    u32              muSize;                  // 0x04
     // 8 bytes implicit padding to the 16-byte Vector3 alignment boundary (0x08..0x0F)
-    Vector3 mPlayerStartPosition;   // 0x10 (16-byte SIMD)
-    Vector3 mPlayerStartDirection;  // 0x20 (16-byte SIMD)
-    Landmark* mpLandmarks;          // 0x30
-    int     miLandmarkCount;        // 0x34
+    Vector3          mPlayerStartPosition;    // 0x10 (16-byte SIMD)
+    Vector3          mPlayerStartDirection;   // 0x20 (16-byte SIMD)
+    Landmark*        mpLandmarks;             // 0x30
+    int32_t          miLandmarkCount;         // 0x34
+    int32_t          miOnlineLandmarkCount;   // 0x38
+    SignatureStunt*  mpSignatureStunts;       // 0x3C
+    int32_t          miSignatureStuntCount;   // 0x40
+    GenericRegion*   mpGenericRegions;        // 0x44
+    int32_t          miGenericRegionCount;    // 0x48
+    Killzone*        mpKillzones;             // 0x4C
+    int32_t          miKillzoneCount;         // 0x50
+    Blackspot*       mpBlackspots;            // 0x54
+    int32_t          miBlackspotCount;        // 0x58
+    VFXBoxRegion*    mpVFXBoxRegions;         // 0x5C
+    int32_t          miVFXBoxRegionCount;     // 0x60
+    RoamingLocation* mpRoamingLocations;      // 0x64
+    int32_t          miRoamingLocationCount;  // 0x68
+    SpawnLocation*   mpSpawnLocations;        // 0x6C
+    int32_t          miSpawnLocationCount;    // 0x70
+    TriggerRegion**  mppRegions;              // 0x74
+    int32_t          miRegionCount;           // 0x78
 };
 }
 

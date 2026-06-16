@@ -2,14 +2,13 @@
 #define BRN_PROGRESSION_RESOURCE_TYPE_H
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
+#include "SharedClasses/Progression/BrnProgressionData.h"   // BrnProgression::ProgressionData (full owning home)
 
 namespace BrnProgression
 {
-struct ProgressionData
-{
-    int FixUp(int liDelta);
-    int FixDown(int liDelta);
-};
+// ProgressionData's single definition now lives in BrnProgressionData.h (included above);
+// the former 2-method stub here was consolidated into that owning header. FixUp/FixDown(int)
+// keep the same caller contract (see BrnProgressionResourceType.cpp).
 
 class ProgressionResourceType : public CgsResource::Type
 {
