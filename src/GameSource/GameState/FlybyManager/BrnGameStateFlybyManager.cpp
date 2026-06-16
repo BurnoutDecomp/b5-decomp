@@ -195,4 +195,32 @@ s32 FlybyManager::RivalRating::SortRivalsCallback(const void* lpData0, const voi
 
     return 0;
 }
+
+// Minimal slice of the owning module: only the trivial getter OnlineFlybyManager::GetLocalPlayerNetworkID
+// reaches through. The full GameStateModule layout/members live in the BrnGameStateModule TU; here it is
+// declared-only (the real getter returns mLocalPlayerNetworkID at +232296). FlybyManager above only needs
+// the forward declaration (it holds a Pointer32<GameStateModule>), so this definition is introduced here
+// purely so the inlined accessor below has a complete type to call through.
+class GameStateModule
+{
+public:
+    BrnNetwork::RoadRulesRecvData::NetworkPlayerID GetLocalPlayerNetworkID();
+};
+
+// BrnGameStateOnlineFlybyManager.h:45 -- OnlineFlybyManager : public FlybyManager. Minimal slice: only
+// the one method owned by this TU is declared.
+class OnlineFlybyManager : public FlybyManager
+{
+public:
+    BrnNetwork::RoadRulesRecvData::NetworkPlayerID GetLocalPlayerNetworkID();
+};
+
+// X360 @ 0x82358720. Header-inlined accessor: returns the local player's network id by reaching through
+// the owning GameStateModule. The X360 null check + verbatim assert ("mpGameStateModule",
+// BrnGameStateFlybyManager.h:204) is exactly FlybyManager::GetGameStateModule()'s body, which the
+// compiler inlined here; *(mpGameStateModule + 232296) is GameStateModule::mLocalPlayerNetworkID.
+BrnNetwork::RoadRulesRecvData::NetworkPlayerID BrnGameState::OnlineFlybyManager::GetLocalPlayerNetworkID()
+{
+    return GetGameStateModule()->GetLocalPlayerNetworkID();
+}
 }
