@@ -230,5 +230,99 @@ void RankInfoResponseAction::SetProgressionRankEventWins(s32 liOfflineRaceRankWi
     miStuntAttackRankWins = liStuntAttackRankWins;
     miMarkedManRankWins   = liMarkedManRankWins;
 }
+
+// X360 0x8230FDF0. Initialise a prepare-for-mode action payload: stamp the stage to "all in one",
+// copy in the per-event GameModeParams, store the current round + "coming from online lobby" flag,
+// and reset the per-player scoring slots + the disconnected-player table to their empty markers.
+void PrepareForModeAction::Construct(const GameModeParams* lpGameModeParams,
+                                     s32                    liCurrentRound,
+                                     bool                   lbComingFromOnlineLobbyMode)
+{
+    if (!lpGameModeParams)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpGameModeParams",
+            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
+            1183);
+        CgsDev::Assert::EndAssert();
+    }
+
+    mePrepareForModeStage             = E_PFM_STAGE_ALL_IN_ONE;
+    mGameModeParams                   = *lpGameModeParams;
+    miCurrentRound                    = liCurrentRound;
+    mbComingFromOnlineLobbyMode       = lbComingFromOnlineLobbyMode;
+    mbFinishedOnlineEvent             = false;
+    mbStartingFreeburnDueToPlayerJoin = false;
+    miShotGroup                       = -1;
+
+    for (s32 liIndex = 0; liIndex < KI_MAX_PLAYERS; ++liIndex)
+    {
+        maePlayerScoringIndex[liIndex]         = E_PLAYER_SCORING_INDEX_COUNT;
+        maDisconnectedNetworkPlayerID[liIndex] = CgsNetwork::K_INVALID_PLAYER_ID;
+    }
+
+    miNumPlayersDisconnected = 0;
+}
+
+// X360 0x822A0198. Linear search of the disconnected-player table: true iff lNetworkPlayerID is one
+// of the miNumPlayersDisconnected recorded ids. The two asserts bound the count to [0, 8).
+bool PrepareForModeAction::GetPlayerDisconnected(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const
+{
+    if (miNumPlayersDisconnected < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "miNumPlayersDisconnected >= 0",
+            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
+            1136);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miNumPlayersDisconnected >= KI_MAX_DISCONNECTED_NETWORK_PLAYERS)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "miNumPlayersDisconnected < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
+            1137);
+        CgsDev::Assert::EndAssert();
+    }
+
+    for (s32 liIndex = 0; liIndex < miNumPlayersDisconnected; ++liIndex)
+    {
+        if (maDisconnectedNetworkPlayerID[liIndex] == lNetworkPlayerID)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// X360 0x8230FD60. Append a disconnected player's network id to the fixed-capacity disconnected-player
+// list, then bump the count. The two asserts bound the count (>= 0 and < KI_MAX_ACTIVE_RACE_CARS - 1).
+void PrepareForModeAction::SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lPlayerID)
+{
+    if (miNumPlayersDisconnected < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "miNumPlayersDisconnected >= 0",
+            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
+            1160);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miNumPlayersDisconnected >= 7)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "miNumPlayersDisconnected < (BrnWorld::KI_MAX_ACTIVE_RACE_CARS - 1)",
+            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h",
+            1161);
+        CgsDev::Assert::EndAssert();
+    }
+
+    maDisconnectedNetworkPlayerID[miNumPlayersDisconnected] = lPlayerID;
+    ++miNumPlayersDisconnected;
+}
 }
 }
