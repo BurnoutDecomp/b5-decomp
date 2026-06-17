@@ -14,3 +14,5 @@ template void CgsModule::EventQueue<CgsInput::InputIO::BindResult, 8>::Construct
 template bool CgsModule::BaseEventQueue<CgsInput::InputIO::BindResult>::AddEvent(const CgsInput::InputIO::BindResult&);
 template bool CgsModule::BaseEventQueue<CgsInput::InputIO::BindResult>::Append(const CgsModule::BaseEventQueue<CgsInput::InputIO::BindResult>&);
 template CgsInput::InputIO::BindResult& CgsModule::BaseEventQueue<CgsInput::InputIO::BindResult>::GetEvent(s32);
+//   GetEvent  @ 0x823ABD78 (CONST overload; ledger "BindResu"; caller BrnGameModule::BridgeInputToGame)
+template const CgsInput::InputIO::BindResult& CgsModule::BaseEventQueue<CgsInput::InputIO::BindResult>::GetEvent(s32) const;
