@@ -30,11 +30,16 @@
 //   - StopModeTimer (0x8231F590): invokes a BaseOnlineModeScoring virtual (vtable slot 6,
 //       not in that type's committed minimal slice), the uncommitted BrnNetwork::NetworkRounder
 //       statics, and CarScoreData private fields with no committed accessor.
-//   - ClearHighestPositions (0x82326690): copies CarScoreData's +0x08 -> +0x0C words
-//       (miField08/miField0C) which are private with no committed accessor.
-//   - HasStuntAttackModeEnded (0x82326708): writes a private CarScoreData byte (+0xD9) with no
-//       committed accessor, and its X360 body's parameter shape (force flag + race-car index)
-//       does not match the keystone's CgsSystem::Time-by-value signature.
+//   - HasStuntAttackModeEnded (0x82326708): the X360 body dispatches through a VIRTUAL at
+//       vtable slot +0x14 of two polymorphic embedded sub-scorers (this+0x350 and this+0x2620,
+//       both constructed via virtual ctors in ScoringSystem::Construct); the committed
+//       StuntModeScoring slice is a plain non-polymorphic struct with no vtable, so that virtual
+//       cannot be named. Its parameter shape (this, unused a2, race-car index a3, char force-flag
+//       a4) also does not match the keystone's single CgsSystem::Time-by-value decl, and the
+//       HasModeTimeExpired() it calls itself needs a CgsSystem::Time& the body does not carry.
+//       FLAGGED rather than mis-implemented. (The +0xD9 mbEliminated write IS now reachable via
+//       the Foundation-added GetEliminated/SetEliminated accessor -- the vtable + param-shape
+//       mismatch is the real blocker.)
 //   - StartOnlineGameModeScoring (0x823126C8): the Fugitive/FreeBurn/ModeEnd case targets a
 //       fourth embedded online-mode scorer that the keystone (3 online scorers) does not model
 //       by name.
@@ -221,6 +226,28 @@ s32 ScoringSystem::GetPlayerCrashesRemaining()
 bool ScoringSystem::AcheivedGold()
 {
     return meCurrentMedalAchieved == E_CURRENT_MEDAL_TARGET_TIME_GOLD;
+}
+
+// ----------------------------------------------------------------------------
+// race-position snapshot.
+// ----------------------------------------------------------------------------
+
+// X360 0x82326690. For every active-race-car slot, copy the car's current race position
+// (CarScoreData +0x08) into its highest-race-position slot (CarScoreData +0x0C). The X360
+// body walks all E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8) indices via GetCarData (sub_8231DCD0)
+// and skips any slot with no matching CarData (NULL). The per-index <= COUNT assert the
+// pseudocode shows lives inside GetCarData's own body, not here.
+void ScoringSystem::ClearHighestPositions()
+{
+    for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
+    {
+        CarData* lpCarData = GetCarData(static_cast<EActiveRaceCarIndex>(liIndex));
+        if (lpCarData != NULL)
+        {
+            GameStateModuleIO::CarScoreData* lpScoreData = lpCarData->GetScoreData();
+            lpScoreData->SetHighestRacePosition(lpScoreData->GetRacePosition());
+        }
+    }
 }
 
 }

@@ -347,6 +347,7 @@ namespace BrnGameState
             // X360 binary they read CarData fields at +0x144 / +0x148 (past sizeof(CarScoreData)),
             // so they live on CarData (see BrnScoringSystem.h), not on this record.
             CgsSystem::Time GetFinishTime() const          { return mTotalTime; }              // +0x00
+            void            SetFinishTime(CgsSystem::Time lTime) { mTotalTime = lTime; }         // +0x00 (RegisterFinishForCar writes the accumulated total race time)
             f32             GetDistanceToFinish() const     { return mfDistanceToFinish; }      // +0x48
             s32             GetTakedowns() const            { return miTakedowns; }             // +0x4C
             bool            GetTimedOut() const             { return mbTimedOut; }              // +0x68
@@ -364,6 +365,85 @@ namespace BrnGameState
             // second slot (+0x5C, ClearData = -1) is the standings rank.
             void SetOnlineRacePoints(s32 liPoints)          { miOnlineFinishPositionScore = liPoints; } // +0x58
             void SetOnlineFinishPosition(s32 liPosition)    { miOnlineStandingsPosition = liPosition; } // +0x5C
+
+            // ===== Race / team-stat scoring accessors (grown for ScoringSystem query/update) =====
+            //
+            // The ScoringSystem query/update methods read and write these named per-car fields.
+            // Inline so the ScoringSystem TU needs no out-of-line body. Offsets are the X360-proven
+            // field offsets documented on each member in the private section below.
+            s32             GetRacePosition() const                { return miRacePosition; }            // +0x08
+            void            SetRacePosition(s32 liPosition)        { miRacePosition = liPosition; }       // +0x08
+
+            s32             GetHighestRacePosition() const         { return miHighestRacePosition; }      // +0x0C
+            void            SetHighestRacePosition(s32 liPosition) { miHighestRacePosition = liPosition; } // +0x0C
+
+            s32             GetCompletedLaps() const               { return miCompletedLaps; }            // +0x10
+            void            SetCompletedLaps(s32 liLaps)           { miCompletedLaps = liLaps; }          // +0x10
+
+            s32             GetFinishPosition() const              { return miFinishPosition; }           // +0x14
+            void            SetFinishPosition(s32 liPosition)      { miFinishPosition = liPosition; }     // +0x14
+
+            f32             GetDistanceToFinishLive() const        { return mfDistanceToFinishLive; }     // +0x18
+            void            SetDistanceToFinishLive(f32 lfDistance) { mfDistanceToFinishLive = lfDistance; } // +0x18
+
+            // Per-lap times, KU_MAX_LAPS == 4 (8-byte Time stride at +0x24).
+            CgsSystem::Time GetLapTime(u32 luLap) const
+            {
+                CGS_ASSERT(luLap < 4, "luLap < 4");
+                return maaLapTimes[luLap];
+            }
+            void SetLapTime(u32 luLap, CgsSystem::Time lTime)
+            {
+                CGS_ASSERT(luLap < 4, "luLap < 4");
+                maaLapTimes[luLap] = lTime;
+            }
+
+            bool            GetHasFinished() const                 { return mbHasFinished; }              // +0x45
+            void            SetHasFinished(bool lbHasFinished)     { mbHasFinished = lbHasFinished; }     // +0x45
+
+            // Getter for mfDistanceToFinish already exists above (GetDistanceToFinish, +0x48);
+            // add the matching setter (SetPlayerEliminated captures the live distance into this slot).
+            void            SetDistanceToFinish(f32 lfDistance)    { mfDistanceToFinish = lfDistance; }   // +0x48
+
+            s32             GetTakedownsAgainst() const            { return miTakedownsAgainst; }         // +0x50
+            void            SetTakedownsAgainst(s32 liTakedowns)   { miTakedownsAgainst = liTakedowns; }  // +0x50
+
+            // Setter for +0x58 already exists above (SetOnlineRacePoints); add the matching getter
+            // (UpdateCumulativeResults reads this slot).
+            s32             GetOnlineFinishPositionScore() const   { return miOnlineFinishPositionScore; } // +0x58
+
+            EActiveRaceCarIndex GetEliminatorRaceCarIndex() const  { return meEliminatorRaceCarIndex; }   // +0x60
+            void            SetEliminatorRaceCarIndex(EActiveRaceCarIndex leIndex) { meEliminatorRaceCarIndex = leIndex; } // +0x60
+
+            s32             GetNumEliminations() const             { return miNumEliminations; }          // +0x64
+            void            SetNumEliminations(s32 liEliminations) { miNumEliminations = liEliminations; } // +0x64
+
+            CgsSystem::Time GetTimeInCurrentTeam() const           { return mTimeInCurrentTeam; }         // +0x6C
+            void            SetTimeInCurrentTeam(CgsSystem::Time lTime) { mTimeInCurrentTeam = lTime; }   // +0x6C
+
+            // Per-team accumulated time, indexed by team (8-byte Time stride at +0x74, 2 teams).
+            CgsSystem::Time GetTimeInTeam(u32 luTeam) const
+            {
+                CGS_ASSERT(luTeam < 2, "luTeam < 2");
+                return maTimeInTeam[luTeam];
+            }
+            void SetTimeInTeam(u32 luTeam, CgsSystem::Time lTime)
+            {
+                CGS_ASSERT(luTeam < 2, "luTeam < 2");
+                maTimeInTeam[luTeam] = lTime;
+            }
+
+            bool            GetEliminated() const                  { return mbEliminated; }               // +0xD9
+            void            SetEliminated(bool lbEliminated)       { mbEliminated = lbEliminated; }       // +0xD9
+
+            CgsSystem::Time GetTimeInFirstPlace() const            { return mTimeInFirstPlace; }          // +0xE0
+            void            SetTimeInFirstPlace(CgsSystem::Time lTime) { mTimeInFirstPlace = lTime; }     // +0xE0
+
+            CgsSystem::Time GetTimeInLastPlace() const             { return mTimeInLastPlace; }           // +0xE8
+            void            SetTimeInLastPlace(CgsSystem::Time lTime) { mTimeInLastPlace = lTime; }       // +0xE8
+
+            CgsSystem::Time GetTimeBoosting() const                { return mTimeBoosting; }              // +0xF0
+            void            SetTimeBoosting(CgsSystem::Time lTime) { mTimeBoosting = lTime; }             // +0xF0
 
         private:
             CgsSystem::Time mTotalTime;            // +0x00 (8)  Time(0) in ClearData; the finish time
