@@ -38,6 +38,20 @@ namespace CgsModule
             return true;
         }
 
+        // Checked element accessor, const overload (X360 BaseEventQueue<T>::GetEvent(int) const,
+        // CgsBaseEventQueue.h:270). The X360 build emits a per-instantiation out-of-line body
+        // (e.g. 0x823ABCD0 for BaseInputEvent stride 8, 0x823ABD78 for BindResult stride 12);
+        // modelled here as the generic inline template body. Hex-Rays renders the asserts at
+        // source lines 272/274/275 and the return as `8*a2 + *a1` (mpEvents + liIndex*sizeof(T)),
+        // i.e. &mpEvents[liIndex]. The DWARF gives the real `const T&` return.
+        const T& GetEvent(s32 liIndex) const
+        {
+            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
+            CGS_ASSERT(liIndex < GetLength(), "liIndex < GetLength()");
+            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            return mpEvents[liIndex];
+        }
+
         // Checked element accessor (X360 BaseEventQueue<T>::GetEvent(int), non-const overload,
         // CgsBaseEventQueue.h:290). The X360 build emits a per-instantiation out-of-line body;
         // modelled here as the generic inline template body. Hex-Rays renders the return as int
