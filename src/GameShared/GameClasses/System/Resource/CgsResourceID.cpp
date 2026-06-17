@@ -1,13 +1,7 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
 
 namespace CgsResource
 {
-class ID
-{
-public:
-    static s32 HashString(const u8* lpString);
-};
-
 extern const u32 gauCrcTable[256];
 
 s32 ID::HashString(const u8* lpString)
