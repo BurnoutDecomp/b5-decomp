@@ -11,15 +11,13 @@
 // their bodies land with the keystone's own TU) and the embedded maCarData[] array, which
 // is a private ScoringSystem member visible to these member functions.
 //
-// Methods in the assigned range whose bodies need a type with no committed definition are
+// The eliminator/team/time-spent group below is now unblocked: the CarScoreData layout was
+// grown by its own TU, so eliminator(+0x60), eliminations(+0x64), eliminated-flag(+0xD9),
+// time-in-current-team(+0x6C) and the time-spent Time fields (+0xE0/+0xE8/+0xF0) all carry
+// named members + Get/Set accessors now, reached through CarData::GetScoreData().
+//
+// Methods in the assigned range whose bodies still need a type with no committed definition are
 // FLAGGED BLOCKED and intentionally omitted here (see the report), per the dependency rule:
-//   - SetPlayerEliminated / IsBlueTeamEliminated  -> CarScoreData eliminator(+0x60),
-//       eliminations(+0x64) and eliminated-flag(+0xD9) fields are unnamed blob bytes with
-//       no accessors (that record's full layout is grown by its own TU).
-//   - SetPlayerTeam                               -> resets the per-car "time in current
-//       team" Time field (CarScoreData +0x6C), an unnamed blob byte with no accessor.
-//   - GetTimeSpentInFirstPlace/InLastPlace/Boosting -> read CarScoreData Time fields
-//       (+0xE0/+0xE8/+0xF0), unnamed blob bytes with no accessors.
 //   - StoreCarIds                                 -> dereferences ActiveRaceCarOutputInterface
 //       (forward-declared only) to gather per-car model ids.
 
@@ -172,5 +170,142 @@ namespace BrnGameState
             }
         }
         return liCount;
+    }
+
+    // ------------------------------------------------------------------------
+    // SetPlayerEliminated -- X360 0x823267A0
+    // Record that car leRaceCarIndex was eliminated by car leEliminator. On the
+    // eliminated car's score record: stamp the eliminator's race-car index (+0x60),
+    // raise the eliminated flag (+0xD9), and capture the live distance-to-finish
+    // (+0x18) into the frozen distance-to-finish (+0x48). On the eliminator's record,
+    // bump its elimination tally (+0x64). A missing slot is left untouched (the X360
+    // null-checks each GetCarData result independently).
+    // ------------------------------------------------------------------------
+    void ScoringSystem::SetPlayerEliminated(EActiveRaceCarIndex leRaceCarIndex, EActiveRaceCarIndex leEliminator)
+    {
+        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "(leRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT((leEliminator > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                   (leEliminator < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "(leEliminatorIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leEliminatorIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+        CarData* lpEliminatedCar = GetCarData(leRaceCarIndex);
+        if (lpEliminatedCar)
+        {
+            GameStateModuleIO::CarScoreData* lpScore = lpEliminatedCar->GetScoreData();
+            lpScore->SetEliminatorRaceCarIndex(leEliminator);
+            lpScore->SetEliminated(true);
+            lpScore->SetDistanceToFinish(lpScore->GetDistanceToFinishLive());
+        }
+
+        CarData* lpEliminatorCar = GetCarData(leEliminator);
+        if (lpEliminatorCar)
+        {
+            GameStateModuleIO::CarScoreData* lpEliminatorScore = lpEliminatorCar->GetScoreData();
+            lpEliminatorScore->SetNumEliminations(lpEliminatorScore->GetNumEliminations() + 1);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // IsBlueTeamEliminated -- X360 0x8231FEE8
+    // True once every blue-team car is eliminated: the search returns false the moment
+    // it finds a blue car (team == E_PLAYER_TEAM_BLUE_TEAM) whose score record is not
+    // flagged eliminated; if no such live blue car exists it returns true.
+    // ------------------------------------------------------------------------
+    bool ScoringSystem::IsBlueTeamEliminated() const
+    {
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            const CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpCar &&
+                lpCar->GetTeam() == GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM &&
+                !lpCar->GetScoreData()->GetEliminated())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // SetPlayerTeam -- X360 0x8231FE38
+    // Move a car to a new team. Only acts on an actual change: when the new team
+    // differs from the car's current team, the team is written and the per-car
+    // "time in current team" timer (CarScoreData +0x6C) is reset to zero.
+    // ------------------------------------------------------------------------
+    void ScoringSystem::SetPlayerTeam(EActiveRaceCarIndex leRaceCarIndex, GameStateModuleIO::EPlayerTeam leTeam)
+    {
+        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+        CarData* lpCar = GetCarData(leRaceCarIndex);
+        CGS_ASSERT(lpCar != 0, "lpCarData");
+        if (lpCar)
+        {
+            if (lpCar->GetTeam() != leTeam)
+            {
+                lpCar->SetTeam(leTeam);
+                lpCar->GetScoreData()->SetTimeInCurrentTeam(CgsSystem::Time(0.0f));
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // GetTimeSpentInFirstPlace -- X360 0x82326F28
+    // The car's accumulated time-in-first-place (CarScoreData +0xE0), or a zeroed
+    // Time when the car has no record.
+    // ------------------------------------------------------------------------
+    CgsSystem::Time ScoringSystem::GetTimeSpentInFirstPlace(EActiveRaceCarIndex leRaceCarIndex) const
+    {
+        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+        const CarData* lpCar = GetCarData(leRaceCarIndex);
+        if (lpCar)
+        {
+            return lpCar->GetScoreData()->GetTimeInFirstPlace();
+        }
+        return CgsSystem::Time(0.0f);
+    }
+
+    // ------------------------------------------------------------------------
+    // GetTimeSpentInLastPlace -- X360 0x82326FC0
+    // The car's accumulated time-in-last-place (CarScoreData +0xE8), or a zeroed
+    // Time when the car has no record.
+    // ------------------------------------------------------------------------
+    CgsSystem::Time ScoringSystem::GetTimeSpentInLastPlace(EActiveRaceCarIndex leRaceCarIndex) const
+    {
+        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+        const CarData* lpCar = GetCarData(leRaceCarIndex);
+        if (lpCar)
+        {
+            return lpCar->GetScoreData()->GetTimeInLastPlace();
+        }
+        return CgsSystem::Time(0.0f);
+    }
+
+    // ------------------------------------------------------------------------
+    // GetTimeSpentBoosting -- X360 0x82327058
+    // The car's accumulated time-boosting (CarScoreData +0xF0), or a zeroed Time
+    // when the car has no record.
+    // ------------------------------------------------------------------------
+    CgsSystem::Time ScoringSystem::GetTimeSpentBoosting(EActiveRaceCarIndex leRaceCarIndex) const
+    {
+        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+        const CarData* lpCar = GetCarData(leRaceCarIndex);
+        if (lpCar)
+        {
+            return lpCar->GetScoreData()->GetTimeBoosting();
+        }
+        return CgsSystem::Time(0.0f);
     }
 }

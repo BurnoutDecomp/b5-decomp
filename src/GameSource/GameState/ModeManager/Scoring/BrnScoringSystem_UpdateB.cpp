@@ -29,15 +29,18 @@
 //       MISSING: named BrnNetwork::...::PlayerResultsData fields (+ accessor)
 //                and the BaseOnlineModeScoring vtable+0x18 virtual.
 //
-//   UpdateCumulativeResults    (0x8231FCA0)
+//   UpdateCumulativeResults    (0x8231FCA0)  [LANDED -- CarScoreData/CarData part]
 //       Per car, accumulates the round's online points into miCumulativePoints
 //       (miCumulativePoints += CarScoreData[+0x58]) and, when final, stamps the
-//       disconnect round + fires a virtual on mpCurrentOnlineModeScoring
-//       (vtable+0x1C). The +0x58 slot (miOnlineFinishPositionScore) on the
-//       committed CarScoreData has only setters (no getter), and the
-//       BaseOnlineModeScoring slice declares no vtable+0x1C virtual.
-//       MISSING: CarScoreData getter for miOnlineFinishPositionScore (+0x58)
-//                and the BaseOnlineModeScoring vtable+0x1C virtual.
+//       disconnect round. The CarScoreData getter for the +0x58 slot now exists
+//       (GetOnlineFinishPositionScore), so the per-car accumulation + disconnect
+//       stamping are reconstructed below. The trailing vtable+0x1C call on
+//       mpCurrentOnlineModeScoring is STILL FLAGGED -- the minimal
+//       BaseOnlineModeScoring slice declares only one virtual and growing it with
+//       a slot-7 virtual is a keystone/vtable-layout change out of scope for a
+//       body agent; that call is omitted (see the in-body FLAG comment).
+//       REMAINING DEPENDENCY: BaseOnlineModeScoring vtable+0x1C virtual
+//       (called as `(*(**(this+19912)+28))(mpCurrentOnlineModeScoring, this, luRound)`).
 //
 //   UpdateDistanceToPlayer     (0x8232B408)
 //   DetectPlayerDrivingWrongWay(0x8232B6B8)
@@ -149,6 +152,66 @@ namespace BrnGameState
                 }
                 mRoadRageModeScoring.SetTakeDownTarget(static_cast<s32>(mauiMedalScores[meCurrentMedalTarget]));
             }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // UpdateCumulativeResults  --  X360 0x8231FCA0  (BrnScoringSystem.cpp:~1271)
+    // ------------------------------------------------------------------------
+    // End-of-round cumulative roll-up. For every active-race-car slot that has a
+    // CarData record:
+    //   * fold this round's online finish-position score (CarScoreData +0x58,
+    //     GetOnlineFinishPositionScore) into the car's running cumulative points
+    //     (CarData +0x130, IncrementCumulativePoints);
+    //   * on the FINAL roll-up (lbFinal), if the car has not yet had a disconnect
+    //     round stamped (miRoundDisconnectedIn == -1) AND the player is flagged
+    //     disconnected, stamp the round number passed in (the X360 stores a3 ==
+    //     liNumCars into +0x134; param name is DWARF-authoritative).
+    //
+    // The X360 body then, when lbFinal, fires a virtual on mpCurrentOnlineModeScoring
+    // (vtable+0x1C, args (this, luRound)) to let the active online-mode scorer post
+    // its own per-round results. That virtual is NOT declared on the committed
+    // minimal BaseOnlineModeScoring slice (which exposes only one virtual,
+    // GetCurrentPlayerTeam); declaring a slot-7 virtual there is a vtable-layout
+    // change to a shared keystone, out of scope for this body agent. The call is
+    // therefore OMITTED and FLAGGED below -- everything that touches CarScoreData /
+    // CarData (the part this agent owns) is reconstructed faithfully.
+    void ScoringSystem::UpdateCumulativeResults(u32 luRound, s32 liNumCars, bool lbFinal)
+    {
+        (void)luRound;   // consumed only by the still-flagged vtable+0x1C call (see below)
+
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpCar)
+            {
+                // miCumulativePoints (+0x130) += miOnlineFinishPositionScore (+0x58)
+                lpCar->IncrementCumulativePoints(lpCar->GetScoreData()->GetOnlineFinishPositionScore());
+
+                if (lbFinal)
+                {
+                    if (lpCar->GetRoundDisconnected() == -1)
+                    {
+                        if (GetPlayerDisconnected(lpCar->GetNetworkPlayerID()))
+                        {
+                            lpCar->SetRoundDisconnected(liNumCars);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (lbFinal)
+        {
+            CGS_ASSERT(mpCurrentOnlineModeScoring, "mpCurrentOnlineModeScoring");
+
+            // FLAGGED REMAINING DEPENDENCY -- BaseOnlineModeScoring vtable+0x1C virtual.
+            // X360: result = (*(**(this+19912)+28))(mpCurrentOnlineModeScoring, this, luRound);
+            // i.e. a virtual call on mpCurrentOnlineModeScoring passing (this ScoringSystem*,
+            // luRound) so the live online-mode scorer can record this round's standings/results.
+            // The committed BrnBaseOnlineModeScoring slice declares no virtual at slot 7; wiring
+            // it in requires growing that keystone's vtable (slot ordering not yet committed) and
+            // is out of scope for a body agent. Reinstate once that virtual is declared.
         }
     }
 }

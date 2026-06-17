@@ -43,16 +43,13 @@
 //       MISSING: BrnGameState::ActiveRaceCarOutputInterface / AICarOutputInterface
 //                / ModeManager (definitions).
 //
-//   UpdateTeamStats               (0x8231F308)
+//   UpdateTeamStats               (0x8231F308)  [NOW LANDED -- see body below]
 //       Per car, accumulates the frame delta-time into two CgsSystem::Time slots
-//       inside the embedded CarScoreData (X360 +0x6C unconditional, +0x74 indexed
-//       by a per-car field). Those two Time slots are NOT named members of the
-//       committed CarScoreData (BrnGameStateSharedIO.h) -- they fall inside the
-//       unnamed maStorage6A[26] padding blob. Reaching them requires either offset
-//       arithmetic into a blob (forbidden) or growing CarScoreData with named Time
-//       fields (CarScoreData TU's job, and its byte accounting is load-bearing).
-//       MISSING: named per-team CgsSystem::Time fields on
-//                GameStateModuleIO::CarScoreData (currently unnamed maStorage6A blob).
+//       inside the embedded CarScoreData (X360 +0x6C mTimeInCurrentTeam, +0x74
+//       maTimeInTeam[] indexed by the CarData team field @+0x13C). The Foundation
+//       phase grew CarScoreData with NAMED accessors for both slots
+//       (Get/SetTimeInCurrentTeam @+0x6C, Get/SetTimeInTeam(team) @+0x74), so the
+//       body now reaches them BY NAME with no blob arithmetic. Body lands below.
 //
 //   UpdateTakedowns               (0x8232AC88)
 //       Iterates lpQueue (TakedownEvent records) and tallies takedowns/marks onto
@@ -85,7 +82,54 @@
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
-// No compiling out-of-line bodies land in this TU yet -- see the BLOCKED ledger
-// above. The translation unit is intentionally body-free so it compiles clean
-// (cl /c) and the seven blocked methods stay cleanly deferred to the round that
-// reconstructs their blocking keystones.
+namespace BrnGameState
+{
+    // ------------------------------------------------------------------------
+    // ScoringSystem::UpdateTeamStats  (X360 0x8231F308)
+    // ------------------------------------------------------------------------
+    // Per-frame team-time accumulator. For every active-race-car slot that owns a
+    // CarData record, fold the frame delta-time into that car's per-team time
+    // tallies inside the embedded CarScoreData:
+    //   * maTimeInTeam[team] += lDeltaTime   (X360 +0x74, team = CarData @+0x13C)
+    //   * mTimeInCurrentTeam += lDeltaTime   (X360 +0x6C)
+    //
+    // X360 detail (asm at 0x8231F308): the frame delta arrives as the f32 argument
+    // (passed in the FPR, reused for both Time(f32) constructions). muCarsInCurrentMode
+    // is asserted <= KI_MAX_ACTIVE_RACE_CARS (== E_ACTIVE_RACE_CAR_INDEX_COUNT, 8)
+    // before the walk. The walk runs GetCarData(slot) for slots 0..7 (sub_8231DCD0 ==
+    // the const EActiveRaceCarIndex GetCarData); NULL slots are skipped. For each live
+    // car the team-indexed slot (+0x74 + (team<<3)) is bumped first, then the
+    // current-team slot (+0x6C) -- both by the SAME delta. The team index is the raw
+    // CarData team field (GetTeam()); reached here BY NAME through the committed
+    // CarScoreData accessors (Get/SetTimeInTeam, Get/SetTimeInCurrentTeam). The
+    // optimizer's per-iteration "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" re-assert
+    // is the EActiveRaceCarIndex post-increment bounds artifact; the clean
+    // `< E_ACTIVE_RACE_CAR_INDEX_COUNT` loop subsumes it (matches the sibling TUs).
+    void ScoringSystem::UpdateTeamStats(f32 lfDeltaTime)
+    {
+        CGS_ASSERT(GetNumberOfActiveCars() <= static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "muCarsInCurrentMode <= uint32_t(BrnWorld::KI_MAX_ACTIVE_RACE_CARS)");
+
+        const CgsSystem::Time lDeltaTime(lfDeltaTime);
+
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            CarData* lpCarData = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpCarData != NULL)
+            {
+                GameStateModuleIO::CarScoreData* lpScoreData = lpCarData->GetScoreData();
+                const u32 luTeam = static_cast<u32>(lpCarData->GetTeam());
+
+                // +0x74: per-team accumulated time, keyed by the car's team field.
+                CgsSystem::Time lTeamTime = lpScoreData->GetTimeInTeam(luTeam);
+                lTeamTime += lDeltaTime;
+                lpScoreData->SetTimeInTeam(luTeam, lTeamTime);
+
+                // +0x6C: time in the car's current team.
+                CgsSystem::Time lCurrentTeamTime = lpScoreData->GetTimeInCurrentTeam();
+                lCurrentTeamTime += lDeltaTime;
+                lpScoreData->SetTimeInCurrentTeam(lCurrentTeamTime);
+            }
+        }
+    }
+}
