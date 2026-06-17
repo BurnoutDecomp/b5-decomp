@@ -29,6 +29,7 @@ namespace CgsResource
 {
     class ScratchPool;          // defrag staging pool (pointer member)
     class DebugResourceTracker; // debug-only resource tracker (pointer member)
+    class BundleLoader;         // PC synchronous bundle loader (drives create + fixup)
 
     // CgsResourcePool.h:60 - a snapshot of a pool's occupancy (for the debug report).
     struct PoolStats
@@ -71,6 +72,8 @@ namespace CgsResource
     // CgsResourcePool.h:124
     class Pool : public BasePool
     {
+        friend class BundleLoader;   // PC loader orchestrates the per-entry fixup/import passes
+
     public:
         // :179
         enum EPrepareStage { E_PREPARESTAGE_START = 0, E_PREPARESTAGE_DONE = 1 };
