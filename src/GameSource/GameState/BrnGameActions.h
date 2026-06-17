@@ -8,6 +8,7 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // BrnGameState::GameModeParams (PrepareForModeAction payload)
 #include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<T, N> (SetUpAllDriveThrusAction::maDriveThrus)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"  // BrnTrigger::GenericRegion::Type (DriveThruInfo::meType)
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"     // CgsSystem::Time (OnlineGameResults::mSecondsInEvent / maRoundTimes)
 
 // Owning header for the BrnGameState::GameStateModuleIO GameAction<> family slices reconstructed
 // by the GameMode/ModeManager leaf batch. Each struct is a minimal slice: only the members the
@@ -44,9 +45,11 @@ enum EGameActionType
     E_ACTION_RESET_PLAYER_CAR           = 0,
     E_ACTION_REMOTE_PLAYER_DISCONNECTED = 11,
     E_ACTION_SOUND_TRIGGER              = 210,
-    E_ACTION_ONLINE_PLAYER_ADDED        = 220,   // value unconfirmed (template tag only)
-    E_ACTION_SETUP_NETWORK_CAR          = 221,   // value unconfirmed (template tag only)
-    E_ACTION_ONLINE_PLAYER_REMOVED      = 222,   // value unconfirmed (template tag only)
+    E_ACTION_ONLINE_PLAYER_ADDED        = 211,   // DWARF BrnGameActions.h (was placeholder 220)
+    E_ACTION_SETUP_NETWORK_CAR          = 5,     // DWARF BrnGameActions.h (was placeholder 221)
+    E_ACTION_ONLINE_PLAYER_REMOVED      = 212,   // DWARF BrnGameActions.h (was placeholder 222)
+    E_ACTION_ONLINE_GAME_RESULT         = 221,   // DWARF BrnGameActions.h
+    E_ACTION_ONLINE_ROUND_RESULT        = 222,   // DWARF BrnGameActions.h
     E_ACTION_RANK_INFO_RESPONSE         = 173,   // DWARF BrnGameActions.h:183
     E_ACTION_TROPHY_UNLOCK              = 196,   // DWARF BrnGameActions.h:206
     E_ACTION_PREPARE_FOR_MODE           = 19,    // DWARF BrnGameActions.h:29
@@ -231,6 +234,69 @@ struct SetUpAllDriveThrusAction : public GameAction<E_ACTION_SET_UP_ALL_DRIVE_TH
     };
 
     Array<DriveThruInfo, 46> maDriveThrus;            // 0x00  (DWARF BrnGameActions.h:1723)
+};
+
+// X360 0x8231CA38 (SetPosition) / 0x82558580 (GetPosition). Per-player online-round result action:
+// a position-indexed table of finishing slots plus a list of mid-round disconnects. DWARF
+// BrnGameActions.h:5227 (true owning home). Minimal slice -- only the members the two reconstructed
+// bodies touch are declared; Construct/GetWinner are declared-only (own ledger entries). GameAction<T>
+// is an empty tag base, so instance data starts at +0x00 (matches the X360 a1[0] / (a1+8) access:
+// maPlayerPosition[8] at +0x00, maDisconnectedPlayers Array<NetworkPlayerID,8> at +0x20 with its count
+// word at +0x40 == a1[16]). NetworkPlayerID == s32 (committed BrnNetwork::NetworkPlayerID).
+struct OnlineRoundResults : public GameAction<E_ACTION_ONLINE_ROUND_RESULT>
+{
+    static const s32 KI_POSITION_DISCONNECTED = -1;   // DWARF :5230 (GetPosition's disconnected sentinel)
+    static const s32 KI_MAX_PLAYERS           = 8;    // == BrnWorld::KI_MAX_ACTIVE_RACE_CARS
+
+    void                        Construct();                                                       // declared-only
+    void                        SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liPosition); // 0x8231CA38
+    s32                         GetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const;           // 0x82558580
+    BrnNetwork::NetworkPlayerID GetWinner() const;                                                 // declared-only
+
+private:
+    BrnNetwork::NetworkPlayerID                        maPlayerPosition[KI_MAX_PLAYERS];   // +0x00 (DWARF :5248)
+    Array<BrnNetwork::NetworkPlayerID, KI_MAX_PLAYERS> maDisconnectedPlayers;              // +0x20 (DWARF :5249)
+};
+
+// X360 online end-of-game results (DWARF home BrnGameActions.h:5153,
+// : public GameAction<E_ACTION_ONLINE_GAME_RESULT>). Re-homed here from the provisional
+// u32 mauWords[65] blob that used to live in BrnGameStateSharedIO.h (kept it there only because
+// GameAction<>/EGameActionType weren't visible -- they are here). sizeof == 260 (65 u32 words),
+// matching the old blob + the X360 operator= word count. LAYOUT IS X360-AUTHORITATIVE (the PS3
+// DecFIGS DWARF lists a different/leaner field set past +0x24); the X360 anchors force round-count
+// @0x28 and the EGameModeType discriminant @0x34. Methods Clear/Set*/Get*/operator= are defined in
+// BrnGameActions.cpp.
+struct OnlineGameResults : public GameAction<E_ACTION_ONLINE_GAME_RESULT>
+{
+    static const s32 KI_MAX_ROUNDS = 10;   // per-round array capacity (Clear loops 10; bounds use miNumberOfRounds)
+
+    void Clear();                                                                          // 0x8230F178
+    void SetRaceResults(s32 liRoundIndex, const f32* lpfRoundTime, f32 lfRoundDistance);    // 0x8230F220
+    void GetRaceResults(s32 liRoundIndex, f32* lpfRoundTime, f32* lpfRoundDistance) const;  // 0x82580C60
+    void SetStuntResults(s32 liRoundIndex, s32 liScore, s32 liMultiplier);                  // 0x8230F370
+    void GetStuntResults(s32 liRoundIndex, s32* lpiScore, s32* lpiMultiplier) const;        // 0x82580DA8
+    OnlineGameResults& operator=(const OnlineGameResults& lOther);                          // 0x82311C30
+
+    // ---- DWARF-confirmed scalar header (0x00..0x24, BrnGameActions.h:5157-5167) ----
+    CgsID           mCarUsed;                     // +0x00 (8)  DWARF:5157
+    CgsSystem::Time mSecondsInEvent;              // +0x08 (8)  DWARF:5159 ({s32 seconds; f32 fraction})
+    f32             mfMetersDriven;               // +0x10      DWARF:5160
+    s32             miTakedownsFor;               // +0x14      DWARF:5162
+    s32             miTakedownsAgainst;           // +0x18      DWARF:5163
+    s32             miTraitorousTakedownsFor;     // +0x1C      DWARF:5164
+    s32             miTraitorousTakedownsAgainst; // +0x20      DWARF:5165
+    s32             miMarkedManTakedownsFor;      // +0x24      DWARF:5167
+    // ---- X360-only / behaviour-anchored scalars (PS3 DWARF order diverges past +0x24) ----
+    s32             miNumberOfRounds;             // +0x28  round-count (bounds: "... rounds N")
+    s32             miReserved0x2C;               // +0x2C  zeroed by Clear; name not recoverable
+    s32             miReserved0x30;               // +0x30  zeroed by Clear; name not recoverable
+    s32             miEventType;                  // +0x34  EGameModeType discriminant (Clear -> -1)
+    s32             miReserved0x38;               // +0x38  zeroed by Clear; name not recoverable
+    // ---- Per-round arrays (X360 layout; 10 rounds each) ----
+    CgsSystem::Time maRoundTimes[KI_MAX_ROUNDS];            // +0x3C (80) race round time
+    f32             mafRoundDistances[KI_MAX_ROUNDS];       // +0x8C (40) race round distance
+    s32             maiRoundStuntScores[KI_MAX_ROUNDS];     // +0xB4 (40) stunt score
+    s32             maiRoundStuntMultipliers[KI_MAX_ROUNDS];// +0xDC (40) stunt multiplier
 };
 }
 }

@@ -1,15 +1,35 @@
 #pragma once
 
-// Race-car entity-module output interface (boot-path subset). Member names/types
-// and the EMessageType enum are from the DecFIGS DWARF
-// (BrnRaceCarEntityModuleOutputInterface.h), X360-gated. This header currently
-// holds only the AudioCarDataLoadedEvent payload that the boot-path
-// AudioCarLoadedDataQueue (EventQueue<AudioCarDataLoadedEvent, 16>) embeds; extend
-// it with the rest of the output interface as those TUs are reconstructed.
-#include "BrnCommonTypes.h"                                         // CgsID
+// Race-car entity-module output interface. Member names/types and the EMessageType
+// enum are from the DecFIGS DWARF (BrnRaceCarEntityModuleOutputInterface.h), X360-gated.
+// Originally this header held only the AudioCarDataLoadedEvent payload; it now also
+// homes the five output-interface support structs (the active/global race-car output
+// interfaces, the player-reset interface, BoostOutputInfo, CarsInTheRaceData) and the
+// EActiveRaceCarEngineState enum. All by-value members resolve to complete in-tree types:
+//   RaceCarState        -> BrnVehicleEvents.h (complete 1120-byte struct)
+//   RwRGBAReal          -> rw/core/base/ostypes.h (16-byte, 4 floats)
+//   CgsWorld::WorldMap2D-> CgsWorldMap2D.h
+//   BrnWorld::WorldRegion -> SharedClasses/World/BrnWorldRegion.h
+//   EGlobalRaceCarIndex / EActiveRaceCarIndex -> GameSource/BurnoutConstants.h
+//   BrnWorld::EBoostType-> RaceCarEntityModule/Boost/BrnBoostType.h
+#include "types.hpp"                                                // s8/s32/u16/u32/f32
+#include "BrnCommonTypes.h"                                         // CgsID, Vector3, Vector4, EntityId
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // CgsModule::Event
+#include "GameShared/GameClasses/Containers/CgsArray.h"             // Array<T,N>
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"          // CgsContainers::BitArray<N>
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"  // CgsResource::ResourcePtr<T>
+#include "GameShared/GameClasses/World/CgsWorldMap2D.h"             // CgsWorld::WorldMap2D
+#include "SharedClasses/World/BrnWorldRegion.h"                     // BrnWorld::WorldRegion
+#include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex, EGlobalRaceCarIndex
+#include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostType.h" // BrnWorld::EBoostType
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"           // BrnPhysics::Vehicle::RaceCarState (complete)
+#include "rw/core/base/ostypes.h"                                   // RwRGBAReal (complete 16-byte)
 
 namespace BrnResource { struct VehicleListEntry; }
+namespace BrnPhysics { namespace Deformation { struct StreamedDeformationSpec; } }
+namespace BrnGameState { namespace GameStateModuleIO { enum EPlayerScoringIndex : s32; } }
+namespace BrnWorld { struct RaceCar; }
 
 namespace BrnWorld
 {
@@ -34,6 +54,222 @@ namespace RaceCarEntityModuleIO
         CgsID                                mAssetID;
         u8                                   miActiveRaceCarIndex;
         bool                                 mbIsPlayer;
+    };
+
+    // DWARF :71 -- the player car's engine running-state. Full DWARF enumerator names.
+    enum EActiveRaceCarEngineState : s32
+    {
+        E_ACTIVE_RACE_CAR_ENGINE_STATE_OFF      = 0,
+        E_ACTIVE_RACE_CAR_ENGINE_STATE_STARTING = 1,
+        E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING  = 2,
+        E_ACTIVE_RACE_CAR_ENGINE_STATE_STOPPING = 3,
+        E_ACTIVE_RACE_CAR_ENGINE_STATE_COUNT    = 4
+    };
+
+    // DWARF :157 -- per-car boost-bar telemetry published to the HUD/audio. meBoostType
+    // is BrnWorld::EBoostType (authoritative DWARF :177), NOT BrnNetwork::EBoostType.
+    struct BoostOutputInfo
+    {
+        bool               mbIsBoosting;            // :159
+        bool               mbIsInAir;               // :160
+        bool               mbIsOncoming;            // :161
+        bool               mbIsDrifting;            // :162
+        bool               mbNearMiss;              // :163
+        bool               mbIsBlueMode;            // :164
+        bool               mbWasChainJustCompleted; // :165
+        bool               mbHoldingBoostButton;    // :166
+        bool               mbIsTailgating;          // :167
+        bool               mbTrafficCheck;          // :168
+        bool               mbAllowedToBoost;        // :169
+        bool               mbJustLostBoostChunk;    // :170
+        u32                muNumChained;            // :171
+        f32                mfBoostAmount;           // :172
+        f32                mfMaxBoost;              // :173
+        f32                mfCurrentBoostingTime;   // :174
+        bool               mbBoostIsFull;           // :175
+        BrnWorld::EBoostType meBoostType;           // :177
+
+        void Construct();                           // :184 (declared-only; own TU)
+    };
+
+    // DWARF :189 -- minimal per-car snapshot held in the active interface's race list.
+    struct CarsInTheRaceData
+    {
+        Vector3             mPosition;            // :191
+        Vector3             mPreviousPosition;    // :192
+        Vector3             mDirection;           // :193
+        EActiveRaceCarIndex meActiveRaceCarIndex; // :194
+        EGlobalRaceCarIndex meGlobalRaceCarIndex; // :195
+        bool                mbIsPlayer;           // :196
+    };
+
+    // DWARF :208 -- the per-active-race-car output interface (the player + up to 7 rivals).
+    // maRaceCarStates is the real BrnPhysics::Vehicle::RaceCarState[8] (complete 1120-byte
+    // type, by value). maRaceCarMaterialColours is the real RwRGBAReal[8] (by value). All
+    // member accessors are declared-only (their own TUs); only GetRaceCarStateMutable is
+    // routed to this header's .cpp (X360 0x8227D690).
+    struct RCEntityActiveRaceCarOutputInterface
+    {
+        typedef BrnPhysics::Vehicle::RaceCarState RaceCarState;   // :61
+
+        // DWARF :415 -- public live race-car list.
+        Array<CarsInTheRaceData, 8u> maCarsInTheRace;             // :415
+
+        void operator=(const RCEntityActiveRaceCarOutputInterface&);                         // :213 (own TU)
+        void Clear();                                                                        // :216 (own TU)
+        const RaceCarState* GetRaceCarState(EActiveRaceCarIndex) const;                       // :220 (own TU)
+        const RwRGBAReal&   GetRaceCarColour(EActiveRaceCarIndex) const;                      // :224 (own TU)
+        u16  GetRaceCarAISection(EActiveRaceCarIndex) const;                                 // :228 (own TU)
+        CgsID GetRivalId(EActiveRaceCarIndex) const;                                         // :232 (own TU)
+        EGlobalRaceCarIndex GetGlobalRaceCarIndex(EActiveRaceCarIndex) const;                // :236 (own TU)
+        CgsID GetCarModelId(EActiveRaceCarIndex) const;                                      // :240 (own TU)
+        bool IsRaceCarActive(EActiveRaceCarIndex) const;                                     // :244 (own TU)
+        bool IsRaceCarLoaded(EActiveRaceCarIndex) const;                                     // :248 (own TU)
+        bool IsRaceCarRival(EActiveRaceCarIndex) const;                                      // :252 (own TU)
+        bool IsRaceCarPlayer(EActiveRaceCarIndex) const;                                     // :256 (own TU)
+        bool IsRaceCarNetwork(EActiveRaceCarIndex) const;                                    // :260 (own TU)
+        bool IsCarConnecting(EActiveRaceCarIndex) const;                                     // :264 (own TU)
+        bool HaveWeLostContactWithThisCar(EActiveRaceCarIndex) const;                        // :268 (own TU)
+        bool IsCarDisconnected(EActiveRaceCarIndex) const;                                   // :272 (own TU)
+        bool IsCarInShowtime(EActiveRaceCarIndex) const;                                     // :276 (own TU)
+        u32  GetActiveRaceCarColourIndex(EActiveRaceCarIndex) const;                         // :280 (own TU)
+        s32  GetActiveRaceCarPaintFinishIndex(EActiveRaceCarIndex) const;                    // :284 (own TU)
+        bool IsPlayerCarActive() const;                                                      // :287 (own TU)
+        EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const;                             // :290 (own TU)
+        EntityId GetPlayerRaceCarEntityId() const;                                           // :293 (own TU)
+        bool IsPlayerCarCrashing() const;                                                    // :296 (own TU)
+        bool IsPlayerCarDeforming() const;                                                   // :299 (own TU)
+        bool IsThePlayerDrivableFromCrash() const;                                           // :302 (own TU)
+        bool IsPlayerCarFatalyCrashing() const;                                              // :305 (own TU)
+        bool IsPlayerInAir() const;                                                          // :308 (own TU)
+        f32  TimePlayerInAir() const;                                                        // :311 (own TU)
+        bool IsPlayerInReverseGear() const;                                                  // :314 (own TU)
+        bool IsPlayerEngineOn() const;                                                       // :317 (own TU)
+        bool IsPlayerEngineStarting() const;                                                 // :320 (own TU)
+        EActiveRaceCarEngineState GetPlayerEngineState() const;                              // :323 (own TU)
+        bool IsRaceCarEngineOn(EActiveRaceCarIndex) const;                                   // :327 (own TU)
+        bool IsRaceCarEngineStarting(EActiveRaceCarIndex) const;                             // :331 (own TU)
+        const BoostOutputInfo& GetBoostOutputInfo() const;                                   // :337 (own TU)
+        void SetBoostOutputInfoN(EActiveRaceCarIndex, const BoostOutputInfo&);               // :342 (own TU)
+        const BoostOutputInfo* GetBoostOutputInfoN(EActiveRaceCarIndex) const;               // :346 (own TU)
+        void SetRaceCarState(EActiveRaceCarIndex, EGlobalRaceCarIndex, CgsID, CgsID,
+                             const RaceCarState*, u32, u16, u32, s32, Vector4, Vector3,
+                             bool, bool);                                                    // :362 (own TU)
+        void SetPlayerActiveRaceCarData(EActiveRaceCarIndex, EActiveRaceCarEngineState);     // :367 (own TU)
+        bool GetAllActiveCarsRead() const;                                                   // :370 (own TU)
+        void SetAllActiveCarsReady(bool);                                                    // :374 (own TU)
+        CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>
+             GetDeformationModelResourcePtr(EActiveRaceCarIndex) const;                      // :378 (own TU)
+        void SetDeformationModelResourcePtr(EActiveRaceCarIndex,
+             const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>&); // :383 (own TU)
+        const CgsWorld::WorldMap2D* GetWorldMap2D() const;                                   // :386 (own TU)
+        void SetWorldMap2D(const CgsWorld::WorldMap2D*);                                     // :390 (own TU)
+        const RaceCarState* GetPlayerRaceCarState() const;                                   // :393 (own TU)
+        Vector3 GetPlayerPosition() const;                                                   // :396 (own TU)
+        Vector3 GetPlayerDirection() const;                                                  // :399 (own TU)
+        Vector3 GetPlayerLinearVelocity() const;                                             // :402 (own TU)
+        bool GetCanDriveAwayFromCrash() const;                                               // :405 (own TU)
+        void ClearCarsInRace();                                                              // :408 (own TU)
+        void AddCarToRace(BrnWorld::RaceCar*, EGlobalRaceCarIndex);                           // :413 (own TU)
+        void SetActiveRaceCarIndex(BrnGameState::GameStateModuleIO::EPlayerScoringIndex, EActiveRaceCarIndex); // :420 (own TU)
+        EActiveRaceCarIndex GetActiveRaceCarIndex(BrnGameState::GameStateModuleIO::EPlayerScoringIndex) const; // :424 (own TU)
+        void SetPlayerWrecked(bool);                                                         // :428 (own TU)
+        bool IsPlayerWrecked() const;                                                        // :431 (own TU)
+        Vector3 GetCurrentInAirRotations(EActiveRaceCarIndex) const;                         // :435 (own TU)
+        bool HasCrashedIntoWater(EActiveRaceCarIndex) const;                                 // :440 (own TU)
+
+        // X360-only NON-const per-index element getter (X360 0x8227D690). DISTINCT from the
+        // const GetRaceCarState(:220); routed to this header's .cpp. Returns &maRaceCarStates[idx].
+        RaceCarState* GetRaceCarStateMutable(EActiveRaceCarIndex);
+
+    private:
+        BoostOutputInfo           maBoostOutputInfo[8];                  // :443
+        RaceCarState              maRaceCarStates[8];                    // :444 (by value; base +816, stride 1120)
+        CgsID                     maRivalIds[8];                         // :445
+        CgsID                     maCarModelIds[8];                      // :446
+        u32                       mauActiveRaceCarColourIndex[8];        // :447
+        s32                       maiActiveRaceCarPaintFinishIndex[8];   // :448
+        u16                       mau16ActiveRaceCarAISections[8];       // :449
+        RwRGBAReal                maRaceCarMaterialColours[8];           // :450 (by value)
+        u16                       maxRaceCarFlags[8];                    // :451
+        Vector3                   maCurrentInAirRotations[8];            // :452
+        bool                      mbHasCrashedIntoWater[8];              // :453
+        EGlobalRaceCarIndex       maGlobalRaceCarIndices[8];             // :454
+        EActiveRaceCarIndex       maeActiveRaceCarIndex[8];              // :455
+        EActiveRaceCarIndex       mePlayerActiveRaceCarIndex;            // :456
+        EActiveRaceCarEngineState mePlayerEngineState;                   // :457
+        bool                      mbIsPlayerCarActive;                   // :458
+        bool                      mbAllActiveCarsReady;                  // :459
+        CgsResource::ResourceHandle maDeformationModelResourceHandles[8];// :460
+        CgsWorld::WorldMap2D      mWorldMap2D;                           // :461 (by value)
+        bool                      mbPlayerWrecked;                       // :462
+        bool                      mbCanDriveAwayFromCrash;               // :463
+    };
+
+    // DWARF :476 -- the global race-car output interface: a STRUCT OF PARALLEL 35-ELEMENT
+    // ARRAYS (the player + up to 34 rivals/traffic racers). Member accessors are declared-only
+    // (own TUs); only GetActiveCarDataElementAddress is routed to this header's .cpp (0x823101C0).
+    struct RCEntityGlobalRaceCarOutputInterface
+    {
+        void operator=(const RCEntityGlobalRaceCarOutputInterface&);    // :483 (own TU)
+        void Clear();                                                   // :486 (own TU)
+        void SetPlayerGlobalRaceCarIndex(EGlobalRaceCarIndex);          // :490 (own TU)
+        void SetRaceCarData(Vector3, Vector3, BrnWorld::WorldRegion, CgsID, CgsID, f32, u16,
+                            EGlobalRaceCarIndex, s8, EActiveRaceCarIndex,
+                            bool, bool, bool, bool, bool, bool);        // :509 (own TU)
+        EGlobalRaceCarIndex GetPlayerGlobalRaceCarIndex() const;        // :512 (own TU)
+        Vector3 GetRaceCarPosition(EGlobalRaceCarIndex) const;          // :516 (own TU)
+        Vector3 GetRaceCarAt(EGlobalRaceCarIndex) const;                // :520 (own TU)
+        BrnWorld::WorldRegion GetWorldRegion(EGlobalRaceCarIndex) const;// :524 (own TU)
+        CgsID GetRivalId(EGlobalRaceCarIndex) const;                    // :528 (own TU)
+        CgsID GetCarModelId(EGlobalRaceCarIndex) const;                 // :532 (own TU)
+        f32  GetRaceCarSpeed(EGlobalRaceCarIndex) const;                // :536 (own TU)
+        EActiveRaceCarIndex GetActiveRaceCarIndex(EGlobalRaceCarIndex) const; // :540 (own TU)
+        EGlobalRaceCarIndex GetGlobalRaceCarIndex(EActiveRaceCarIndex) const; // :544 (own TU)
+        s16  GetAISectionIndex(EGlobalRaceCarIndex) const;              // :548 (own TU)
+        bool IsPlayer(EGlobalRaceCarIndex) const;                       // :552 (own TU)
+        bool IsRivalAI(EGlobalRaceCarIndex) const;                      // :556 (own TU)
+        s8   GetRivalIndex(EGlobalRaceCarIndex) const;                  // :560 (own TU)
+        bool IsNetwork(EGlobalRaceCarIndex) const;                      // :564 (own TU)
+        bool IsInCurrentMode(EGlobalRaceCarIndex) const;                // :568 (own TU)
+        bool IsDispersing(EGlobalRaceCarIndex) const;                   // :572 (own TU)
+        bool IsInRange(EGlobalRaceCarIndex) const;                      // :576 (own TU)
+        CgsContainers::BitArray<35u> GetGlobalRaceCarBitArray() const;  // :579 (own TU)
+
+        // X360-only element-address accessor (X360 0x823101C0); routed to this header's .cpp.
+        const void* GetActiveCarDataElementAddress(EActiveRaceCarIndex) const;
+
+    private:
+        Vector3               maRaceCarPositions[35];     // :583
+        Vector3               maRaceCarAts[35];           // :584
+        BrnWorld::WorldRegion maRaceCarWorldRegions[35];  // :585
+        CgsID                 maRivalIds[35];             // :586
+        CgsID                 maCarModelIds[35];          // :587
+        f32                   mafRaceCarSpeeds[35];       // :589
+        EActiveRaceCarIndex   maeActiveRaceCarIndices[35];// :590
+        s8                    maiRivalIndices[35];        // :591
+        u16                   mauAISectionIndices[35];    // :592
+        CgsContainers::BitArray<35u> mGlobalRaceCarIndices;   // :593
+        CgsContainers::BitArray<35u> mIsPlayerFlags;         // :594
+        CgsContainers::BitArray<35u> mIsRivalAIFlags;        // :595
+        CgsContainers::BitArray<35u> mIsNetworkFlags;        // :596
+        CgsContainers::BitArray<35u> mIsInCurrentModeFlags;  // :597
+        CgsContainers::BitArray<35u> mIsDispersingFlags;     // :598
+        CgsContainers::BitArray<35u> mIsInRangeFlags;        // :599
+        EGlobalRaceCarIndex   mePlayerGlobalRaceCarIndex; // :600
+    };
+
+    // DWARF :612 -- the player-reset interface (rest position + this-frame reset flag).
+    struct RCEntityPlayerResetInterface
+    {
+        void Clear();                                       // :615 (own TU)
+        void SetPlayerResetPos(Vector3);                    // :619 (own TU)
+        bool PlayerHasRestThisFrame() const;                // :622 (own TU)
+        Vector3 GetPlayerResetPos() const;                  // :625 (own TU)
+
+    private:
+        Vector3 mRestPos;                                   // :629
+        bool    mbPlayerResetThisFrame;                     // :630
     };
 }
 }

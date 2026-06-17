@@ -10,6 +10,7 @@
 
 typedef rw::math::vpu::Vector2        Vector2;
 typedef rw::math::vpu::Vector3        Vector3;
+typedef rw::math::vpu::Vector3Plus    Vector3Plus;   // Vector3 + a scalar packed in the w lane
 typedef rw::math::vpu::Vector4        Vector4;
 typedef rw::math::vpu::Matrix44       Matrix44;
 typedef rw::math::vpu::Matrix44Affine Matrix44Affine;
