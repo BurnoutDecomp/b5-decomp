@@ -15,6 +15,57 @@ CgsGraphics::BufferedDispatchFrame::BufferedDispatchFrame() {}
 // game-module global the X360 reads). True while the loading screen should be shown.
 extern bool gBrnLoadingScreenShouldShow;
 
+// High-res frame timer (CgsTimeUtils.cpp), forward-declared - drives the thread-monitor health.
+namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
+
+namespace
+{
+    u32  gu32LastMonitorTick = 0;
+    bool gbMonitorTickValid  = false;
+
+    // Submit one solid-coloured quad (4-vertex triangle strip) through the Im2d, in 1280x720 logical px.
+    void EmitColouredQuad(CgsGraphics::Im2d* lpIm2d, f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, CgsGraphics::RGBA8 lColour)
+    {
+        CgsGraphics::Basic2dColouredTexturedVertex laVerts[4];
+        const f32 laPos[4][2] = { {lfX0, lfY0}, {lfX1, lfY0}, {lfX0, lfY1}, {lfX1, lfY1} };   // TL,TR,BL,BR
+        for (s32 liVertex = 0; liVertex < 4; ++liVertex)
+        {
+            laVerts[liVertex].mv2Pos    = { laPos[liVertex][0], laPos[liVertex][1] };
+            laVerts[liVertex].mv2Tex0UV = { 0.0f, 0.0f };
+            laVerts[liVertex].mv4Colour = lColour;
+        }
+        lpIm2d->Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
+    }
+}
+
+// @ 0x82405A30 - BrnRendererModule::RenderThreeThreadMonitors. Three squares bottom-centre, one per
+// worker thread: green when the thread is running in real time, red when it has fallen behind. The X360
+// draws them via the untextured Basic2dColouredVertex renderer at normalised coords (x 0.55/0.57/0.59,
+// y 0.91-0.94); reconstructed through mIm2dRenderer untextured (SetTexture(null) -> solid colour), with
+// the normalised coords scaled to the 1280x720 logical space.
+void BrnRendererModule::RenderThreeThreadMonitors(bool lbThread0, bool lbThread1, bool lbThread2)
+{
+    const f32 KF_W = 1280.0f;
+    const f32 KF_H = 720.0f;
+    const CgsGraphics::RGBA8 KC_GREEN = { 0, 255, 0, 255 };
+    const CgsGraphics::RGBA8 KC_RED   = { 255, 0, 0, 255 };
+
+    const f32  laLeftX[3]      = { 0.55f, 0.57f, 0.59f };   // normalised left edge; width 0.015
+    const bool labThreadOk[3]  = { lbThread0, lbThread1, lbThread2 };
+
+    mIm2dRenderer.BeginRendering();
+    mIm2dRenderer.SetState(static_cast<const CgsGraphics::BlendState*>(nullptr));
+    mIm2dRenderer.SetTexture(nullptr);   // untextured -> solid vertex colour
+    for (s32 liThread = 0; liThread < 3; ++liThread)
+    {
+        const CgsGraphics::RGBA8 lColour = labThreadOk[liThread] ? KC_GREEN : KC_RED;
+        EmitColouredQuad(&mIm2dRenderer,
+                         laLeftX[liThread] * KF_W,           0.91f * KF_H,
+                         (laLeftX[liThread] + 0.015f) * KF_W, 0.94f * KF_H, lColour);
+    }
+    mIm2dRenderer.EndRendering();
+}
+
 // @ 0x8240A778 - BrnRendererModule::Construct. Reconstructed from the X360 ARTIST build.
 //
 // Option B (layout-faithful incremental): the loading-screen render path is reconstructed
@@ -77,6 +128,27 @@ void BrnRendererModule::Render()
         lCameraPosition.SetZero();
         lpDebugManager->Render(lViewProjection, lCameraPosition, nullptr, &mIm2dRenderer);
         CgsDev::DebugManager::ThreadSafeRelease(lpDebugManager);
+    }
+
+    // The three per-thread monitor squares (X360 RenderThreeThreadMonitors). The real per-thread
+    // "running in real time" flags need the threading system (deferred), so they are derived here from
+    // the present-to-present frame time - matching the observed behaviour (green at framerate, reddening
+    // as the game/CPU slows). The X360 gates this on a debug-display flag.
+    {
+        const u32 lu32Now  = CgsSystem::GetSystemTimerBaseTime();
+        const u32 lu32Freq = CgsSystem::GetSystemTimerFrequency();
+        f32 lfFrameMs = 0.0f;
+        if (gbMonitorTickValid && lu32Freq != 0u)
+            lfFrameMs = static_cast<f32>(static_cast<double>(lu32Now - gu32LastMonitorTick) * 1000.0 / static_cast<double>(lu32Freq));
+        gu32LastMonitorTick = lu32Now;
+        gbMonitorTickValid  = true;
+
+        const f32 lfBudgetMs = 1000.0f / 60.0f;
+        s32 liBehind = 0;
+        if (lfFrameMs > lfBudgetMs * 1.10f) liBehind = 1;
+        if (lfFrameMs > lfBudgetMs * 1.50f) liBehind = 2;
+        if (lfFrameMs > lfBudgetMs * 2.00f) liBehind = 3;
+        RenderThreeThreadMonitors(liBehind < 3, liBehind < 2, liBehind < 1);
     }
 
     renderengine::Device::ShowPixelBuffer();

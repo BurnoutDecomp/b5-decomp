@@ -14,6 +14,7 @@ namespace CgsDev
         MenuManager&     DebugUI::GetMenuManager()     { return mMenuManager; }
         VariableManager& DebugUI::GetVariableManager() { return mVariableManager; }
         FunctionManager& DebugUI::GetFunctionManager() { return mFunctionManager; }
+        const Metrics&   DebugUI::GetMetrics() const   { return mMetrics; }
 
         // X360 CgsDebugUI.cpp:101 (bounded). Construct the three managers (each sizes its pools from
         // the construct parameters), reset the window stack + cascade/visibility scalars, and clear the
@@ -23,6 +24,8 @@ namespace CgsDev
         // deferred heavy members and are the UI follow-on (none is needed for the perfmon HUD to draw).
         void DebugUI::Construct(const DebugManagerConstructParameters* lpParameters)
         {
+            mMetrics = Metrics::DEFAULT;   // X360 memcpy's the default metrics into the UI here
+
             mMenuManager.Construct(lpParameters);
             mVariableManager.Construct(lpParameters);
             mFunctionManager.Construct(lpParameters);

@@ -58,4 +58,15 @@ namespace CgsSystem
         QueryPerformanceFrequency(&liFreq);
         return liFreq.LowPart;
     }
+
+    // Available physical memory in bytes - the debug RenderMemory readout. The X360 RenderMemory calls
+    // GlobalMemoryStatus and formats dwAvailPhys as MB/KB/B; mirrored here (GlobalMemoryStatus saturates
+    // near 4GB on large systems, which the MB/KB/B split tolerates - it is a debug number).
+    u32 GetAvailablePhysicalMemoryBytes()
+    {
+        MEMORYSTATUS lStatus;
+        lStatus.dwLength = sizeof(lStatus);
+        GlobalMemoryStatus(&lStatus);
+        return static_cast<u32>(lStatus.dwAvailPhys);
+    }
 }

@@ -81,7 +81,11 @@ void renderengine::Device::Start()
     D3DPRESENT_PARAMETERS lPresentParams;
     std::memset(&lPresentParams, 0, sizeof(lPresentParams));
     lPresentParams.Windowed = gFullscreen ? FALSE : TRUE;
-    lPresentParams.SwapEffect = D3DSWAPEFFECT_DISCARD;
+    // COPY (not DISCARD) preserves the back buffer across Present, so an on-screen overlay drawn
+    // outside the normal render loop (the assert dialog: FrameBeginNoClear -> draw -> present) can
+    // composite over the last presented frame instead of garbage. Invisible to normal rendering -
+    // every game frame opens with FrameBegin's Clear anyway.
+    lPresentParams.SwapEffect = D3DSWAPEFFECT_COPY;
     lPresentParams.BackBufferWidth = static_cast<UINT>(gDisplayWidth);
     lPresentParams.BackBufferHeight = static_cast<UINT>(gDisplayHeight);
     lPresentParams.BackBufferFormat = D3DFMT_X8R8G8B8;
@@ -109,6 +113,18 @@ bool renderengine::Device::FrameBegin()
         return false;
     }
     gDevice->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
+    return SUCCEEDED(gDevice->BeginScene());
+}
+
+// Open a scene WITHOUT clearing, so a draw composites over whatever is already in the back buffer
+// (the last presented frame, preserved by D3DSWAPEFFECT_COPY). Used by the assert dialog to overlay
+// the frozen frame. Returns false if the device is not ready or a scene is already open.
+bool renderengine::Device::FrameBeginNoClear()
+{
+    if (gDevice == nullptr)
+    {
+        return false;
+    }
     return SUCCEEDED(gDevice->BeginScene());
 }
 

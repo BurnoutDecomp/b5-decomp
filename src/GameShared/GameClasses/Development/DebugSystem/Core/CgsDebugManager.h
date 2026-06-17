@@ -97,6 +97,19 @@ namespace CgsDev
                     CgsGraphics::Im2d* lp3dRenderBuffer, CgsGraphics::Im2d* lp2dRenderBuffer);
         void RenderWorld(const Matrix44& lViewProjection, const Vector3& lCameraPosition);
 
+        // X360 0x8282D998. Queue the on-screen frame-rate readout ("%d fps") into the buffered renderer,
+        // coloured by framerate (low->mid->high, e.g. red->yellow->green) via _InterpolateColour. Colours
+        // are packed RGBA (u32). Positioned from the screen metrics (bottom debug bar). RenderHUD flushes it.
+        void RenderFrameRateColouredWithAverage(f32 lfFramerate, f32 lfAverageFramerate,
+                                                u32 lHighColour, u32 lLowColour, u32 lMidColour,
+                                                f32 lfHighFramerate, f32 lfLowFramerate,
+                                                const char* lpcAverageText, f32 lfAverageHighlight, bool lbIsRealtime);
+
+        // X360 0x8282D8F8 / 0x8282DD28. The other two bottom-bar debug readouts (queued into the buffered
+        // renderer): the build-info string (left) and the available-memory line (centre-right).
+        void RenderBuildInfo();
+        void RenderMemory();
+
     private:
         // INCREMENTAL: the registered-component list (X360 this+33132) + the UI the manager owns
         // (reached at a fixed offset on X360; modelled as a pointer here) are the members the

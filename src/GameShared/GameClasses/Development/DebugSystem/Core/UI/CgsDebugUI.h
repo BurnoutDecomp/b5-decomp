@@ -59,7 +59,8 @@ namespace CgsDev
             bool                             mbVisible;
             bool                             mbRunAutoExec;
             Debug2DImmediateRender*          mp2dRender;
-            // -- deferred heavy members (see header note): Palette, Metrics, DebugController here --
+            // -- deferred heavy members (see header note): Palette, DebugController here --
+            Metrics                          mMetrics;   // screen metrics the render layout reads (real)
             MenuManager                      mMenuManager;
             VariableManager                  mVariableManager;
             FunctionManager                  mFunctionManager;

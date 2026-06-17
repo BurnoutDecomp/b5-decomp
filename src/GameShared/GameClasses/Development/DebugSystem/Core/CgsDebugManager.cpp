@@ -4,8 +4,17 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"      // GetUI().GetVariableManager()/GetFunctionManager()
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"        // Variant
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mp2dRender Begin/End/SetRenderBuffer/Construct
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"             // mBufferedRenderer (buffered debug prims)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/Internal/CgsDebugInternal.h"     // Internal::SetDebugSingletons
+#include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.h"  // the CPU perfmon overlay component
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
+#include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"       // Assert::gAssertManager (on-screen assert overlay)
+
+#include <cstdio>   // snprintf (debug text formatting; the X360 used CgsCore::SPrintf)
+
+// High-resolution frame timer (defined in CgsTimeUtils.cpp) - forward-declared so the frame-health
+// heartbeat can measure the present-to-present delta without pulling Windows.h into this TU.
+namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); u32 GetAvailablePhysicalMemoryBytes(); }
 
 // CgsDev::DebugManager - the in-game debug systems owner.
 //
@@ -29,6 +38,60 @@ namespace CgsDev
     // renderer g3dInternalDebugRender + the perfmon globals are the render/perfmon follow-on.)
     DebugUI::DebugUI       gInternalDebugUI;
     Debug2DImmediateRender g2dInternalDebugRender;
+
+    // The CPU perfmon overlay component (the on-screen bars). X360 keeps it as a DebugManager member
+    // (mDebugComponentPerfMonCpu); modelled as a file-static here so the manager header stays light.
+    // DebugManager::Construct constructs + registers + activates it.
+    static DebugComponentPerfMonCpu gDebugComponentPerfMonCpu;
+
+    // The buffered debug renderer (X360 DebugManager::mBufferedRenderer). Per-frame debug prims are
+    // QUEUED here and flushed by RenderHUD's Dispatch2D. File-static (X360 has it as a by-value member;
+    // kept out of the widely-included manager header to avoid pulling the event-queue in everywhere).
+    static DebugRender gBufferedRenderer;
+
+    namespace
+    {
+        u32  gu32LastFrameTick = 0;
+        bool gbFrameTickValid  = false;
+        f32  gfSmoothedFps     = 0.0f;
+
+        // X360 CgsDev::_InterpolateColour: per-channel lerp between two packed RGBA colours (t in 0..1;
+        // RGBA8 packed as 0xAABBGGRR, so each byte is one channel).
+        u32 InterpolateColour(u32 luColour0, u32 luColour1, f32 lfT)
+        {
+            if (lfT < 0.0f) lfT = 0.0f;
+            if (lfT > 1.0f) lfT = 1.0f;
+            u32 luResult = 0;
+            for (s32 liByte = 0; liByte < 4; ++liByte)
+            {
+                const s32 liShift = liByte * 8;
+                const f32 lfC0 = static_cast<f32>((luColour0 >> liShift) & 0xFFu);
+                const f32 lfC1 = static_cast<f32>((luColour1 >> liShift) & 0xFFu);
+                const u32 luC  = static_cast<u32>(lfC0 + (lfC1 - lfC0) * lfT + 0.5f) & 0xFFu;
+                luResult |= (luC << liShift);
+            }
+            return luResult;
+        }
+
+        // Update the smoothed frame rate for the FPS readout (the text itself is queued by
+        // RenderFrameRateColouredWithAverage). NOTE: the on-screen squares are NOT a debug-system
+        // element - they are BrnRendererModule::RenderThreeThreadMonitors (a separate per-thread monitor
+        // drawn by the renderer module), so they are no longer drawn here. Frame time = the real
+        // present-to-present delta from the high-res timer.
+        void UpdateFrameStats()
+        {
+            const u32 lu32Now  = CgsSystem::GetSystemTimerBaseTime();
+            const u32 lu32Freq = CgsSystem::GetSystemTimerFrequency();
+            f32 lfFrameMs = 0.0f;
+            if (gbFrameTickValid && lu32Freq != 0u)
+                lfFrameMs = static_cast<f32>(static_cast<double>(lu32Now - gu32LastFrameTick) * 1000.0 / static_cast<double>(lu32Freq));
+            gu32LastFrameTick = lu32Now;
+            gbFrameTickValid  = true;
+
+            const f32 lfCurFps = (lfFrameMs > 0.0f) ? (1000.0f / lfFrameMs) : 0.0f;
+            gfSmoothedFps = (gfSmoothedFps <= 0.0f) ? lfCurFps : (gfSmoothedFps * 0.9f + lfCurFps * 0.1f);
+        }
+    }
 
     // X360 CgsDebugManager.cpp:113 DebugManagerConstructParameters::DEFAULT - the built-in debug
     // configuration the engine boots with. The pool sizes are reconstructed generously (the exact
@@ -73,6 +136,7 @@ namespace CgsDev
         mp2dRender = nullptr;
         mp3dRender = nullptr;
         mComponentList.Clear();
+        gBufferedRenderer.Construct();   // the buffered debug-prim queue (X360: 2x VariableEventQueue)
 
         mpUI = &gInternalDebugUI;
 
@@ -81,6 +145,14 @@ namespace CgsDev
         Internal::SetDebugSingletons(this, mpUI, lpParameters->mpRwAllocator);
 
         mpUI->Construct(lpParameters);
+
+        // Bring up + register the full CPU perfmon overlay component (the detailed per-monitor bar
+        // table). Construct inits its state; Register threads it onto mComponentList + the debug menu
+        // (exercising the function/menu pools). It is left INACTIVE - the detailed table is a
+        // menu-toggled view; the always-on indicator is the 3-square frame-health heartbeat drawn in
+        // RenderHUD. (Activate it via ActivateComponent to show the full bar table.)
+        gDebugComponentPerfMonCpu.Construct(static_cast<s16>(lpParameters->miPerfMonCpuCount), nullptr, 0);
+        gDebugComponentPerfMonCpu.Register();
     }
 
     // X360 ConstructRenderer (CgsDebugManager.cpp:248, bounded). Construct the 2D debug renderer at
@@ -98,6 +170,10 @@ namespace CgsDev
         mp2dRender->Construct(nullptr, lfVirtualScreenWidth, lfVirtualScreenHeight);
 
         mpUI->Set2DRenderer(mp2dRender);
+
+        // Hand the same 2D renderer to the assert manager (X360 ConstructRenderer also calls
+        // Assert::Manager::SetRenderer) so a failed assert can draw its on-screen overlay.
+        Assert::gAssertManager.SetRenderer(mp2dRender);
     }
 
     void DebugManager::Update(f32) {}
@@ -157,6 +233,18 @@ namespace CgsDev
         lpComponent->OnRegister();
     }
 
+    // X360 ActivateComponent(DebugComponent*): make a registered component active so the render spine
+    // draws it. Bounded to flipping the active flag (which puts the component in RenderHUD's draw loop)
+    // + the component's OnActivate hook; the X360 also opens the component's variable page in the menu.
+    void DebugManager::ActivateComponent(DebugComponent* lpComponent)
+    {
+        CGS_ASSERT(lpComponent, "lpComponent");
+        if (!lpComponent)
+            return;
+        lpComponent->mbActive = true;
+        lpComponent->OnActivate();
+    }
+
     // X360 RenderHUD 0x8282E108 (2D screen-space pass - the debug squares): open the 2D renderer,
     // let each active component draw its HUD, close. The X360 also flushes the buffered debug prims
     // (DebugRender::Dispatch2D over mBufferedRenderer) and renders the DebugUI menus between Begin and
@@ -164,6 +252,10 @@ namespace CgsDev
     void DebugManager::RenderHUD()
     {
         mp2dRender->Begin();
+
+        // X360 RenderHUD step: flush the buffered debug prims first (the frame-stats overlay queued in
+        // Render via QueueFrameStats), then the active components' HUDs.
+        gBufferedRenderer.Dispatch2D(mp2dRender, true);
 
         for (DebugComponent* lpComponent = mComponentList.GetFirst();
              lpComponent;
@@ -176,6 +268,77 @@ namespace CgsDev
         mp2dRender->End();
     }
 
+    // X360 0x8282D998. Queue the frame-rate readout ("%d fps") coloured by framerate (low->mid->high
+    // about the midpoint, via InterpolateColour) into the buffered renderer. The X360 reads the position
+    // off the screen-metrics member (DebugManager+320: width@+104, height@+108, lineHeight@+124); that
+    // member is the deferred Metrics follow-on, so the known render resolution is used with the X360
+    // formula - x = width*0.33, y = height-(lineHeight+10), text height 20 - the real bottom-bar spot.
+    // The averaged "%d fps %s" second line is the perfmon-average follow-on.
+    void DebugManager::RenderFrameRateColouredWithAverage(f32 lfFramerate, f32 /*lfAverageFramerate*/,
+            u32 lHighColour, u32 lLowColour, u32 lMidColour,
+            f32 lfHighFramerate, f32 lfLowFramerate,
+            const char* /*lpcAverageText*/, f32 /*lfAverageHighlight*/, bool lbIsRealtime)
+    {
+        CGS_ASSERT(lfLowFramerate < lfHighFramerate, "lfLowFramerate < lfHighFramerate");
+
+        const f32 lfRange    = (lfHighFramerate - lfLowFramerate) * 0.5f;
+        const f32 lfMidpoint = lfLowFramerate + lfRange;
+        u32 luColour;
+        if (lfRange <= 0.0f)
+            luColour = lMidColour;
+        else if (lfFramerate >= lfMidpoint)
+            luColour = InterpolateColour(lMidColour, lHighColour, (lfFramerate - lfMidpoint) / lfRange);
+        else
+            luColour = InterpolateColour(lLowColour, lMidColour, (lfFramerate - lfLowFramerate) / lfRange);
+
+        const DebugUI::Metrics& lrMetrics = mpUI->GetMetrics();
+        const f32 lfX = lrMetrics.mfScreenWidth * 0.33f;
+        const f32 lfY = lrMetrics.mfScreenHeight - (lrMetrics.mfScreenBorderBottom + 10.0f);
+
+        char lacText[48];
+        const s32 liFps = static_cast<s32>(lfFramerate + 0.5f);
+        if (lbIsRealtime)
+            std::snprintf(lacText, sizeof(lacText), "%d fps", liFps);
+        else
+            std::snprintf(lacText, sizeof(lacText), "%d fps & simulation not real time", liFps);
+
+        gBufferedRenderer.Draw2DText(lacText, lfX, lfY, 20.0f, luColour);
+    }
+
+    // X360 0x8282D8F8. Queue the build-info string (bottom-left debug readout). The X360 string is a
+    // member (field_8174) filled by CalculateBuildDate; reconstructed here as the PC compile date/time
+    // (the real CalculateBuildDate is the build-stamp follow-on). Scale 12; x = metrics+112 (a left
+    // value - estimated, Metrics member deferred), y = height - lineHeight.
+    void DebugManager::RenderBuildInfo()
+    {
+        static const char* const KPC_BUILD = "Build Date: " __TIME__ " " __DATE__ ;
+
+        const DebugUI::Metrics& lrMetrics = mpUI->GetMetrics();
+        const f32 lfX = lrMetrics.mfScreenBorderLeft;
+        const f32 lfY = lrMetrics.mfScreenHeight - lrMetrics.mfScreenBorderBottom;
+
+        gBufferedRenderer.Draw2DText(KPC_BUILD, lfX, lfY, 12.0f, 0xFFFFFFFFu);
+    }
+
+    // X360 0x8282DD28. Queue the available-memory readout "%uMB %uKB %uB" (bottom centre-right). Memory
+    // from GlobalMemoryStatus (CgsSystem::GetAvailablePhysicalMemoryBytes); the MB/KB/B split mirrors the
+    // X360. Scale 16; x = width*0.66, y = height - lineHeight (known render res used with the X360 formula).
+    void DebugManager::RenderMemory()
+    {
+        const u32 luAvail = CgsSystem::GetAvailablePhysicalMemoryBytes();
+        const u32 luMB = luAvail >> 20;
+        const u32 luKB = (luAvail - (luMB << 20)) >> 10;
+        const u32 luB  = luAvail - ((luMB << 20) + (luKB << 10));
+
+        const DebugUI::Metrics& lrMetrics = mpUI->GetMetrics();
+        const f32 lfX = lrMetrics.mfScreenWidth * 0.66f;
+        const f32 lfY = lrMetrics.mfScreenHeight - lrMetrics.mfScreenBorderBottom;
+
+        char lacText[64];
+        std::snprintf(lacText, sizeof(lacText), "%uMB %uKB %uB", luMB, luKB, luB);
+        gBufferedRenderer.Draw2DText(lacText, lfX, lfY, 16.0f, 0xFFFFFFFFu);
+    }
+
     // X360 Render 0x8282F770: point the renderers at this frame's buffers, then RenderWorld + RenderHUD.
     // The 3D path (mp3dRender setup + RenderWorld) is the Debug3D follow-on; the 2D path drives the
     // squares into lp2dRenderBuffer.
@@ -183,6 +346,17 @@ namespace CgsDev
                              CgsGraphics::Im2d* /*lp3dRenderBuffer*/, CgsGraphics::Im2d* lp2dRenderBuffer)
     {
         mp2dRender->SetRenderBuffer(lp2dRenderBuffer);
+        // Orchestrator step (X360 BrnGameModule::DebugManagerRender): update the frame health, then
+        // queue the per-frame debug overlay; RenderHUD flushes the buffered renderer (Dispatch2D).
+        UpdateFrameStats();
+        // The bottom-bar debug readouts (X360 BrnGameModule::DebugManagerRender order): build info, the
+        // frame-rate (green high / yellow mid / red low), and available memory. All queue into the
+        // buffered renderer; RenderHUD flushes them.
+        RenderBuildInfo();
+        RenderFrameRateColouredWithAverage(gfSmoothedFps, gfSmoothedFps,
+                                           0xFF00FF00u, 0xFF0000FFu, 0xFF00FFFFu,
+                                           60.0f, 30.0f, "over last minute", 0.0f, true);
+        RenderMemory();
         RenderHUD();
     }
 }
