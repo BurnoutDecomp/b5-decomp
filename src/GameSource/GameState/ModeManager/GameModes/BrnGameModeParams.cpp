@@ -108,7 +108,7 @@ void GameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType)
     //   stw  r6=-1  -> maModelIds[i]               ("no model" sentinel, -1)
     for (u32 luCar = 0; luCar < KU_MAX_ACTIVE_RACE_CARS; ++luCar)
     {
-        maNetworkPlayerID[luCar].muValue   = 0;
+        maNetworkPlayerID[luCar]           = 0;
         mau16CarColourIndex[luCar]         = 0;
         mau16CarPaintFinishIndex[luCar]    = 0;
         mfOvertakingDifficulty[luCar]      = -1.0f;

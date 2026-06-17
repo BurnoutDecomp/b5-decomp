@@ -11,5 +11,10 @@ class OnlineFreeBurnLobbyMode : public OnlineGameMode
 {
 public:
     virtual const char* GetName() const;
+
+    // X360 0x82322338. Builds the online free-burn-lobby GameModeParams + copies the network ids.
+    virtual void Start(const StartGameModeParams* lpStartGameModeParams,
+                       GameModeParams* lpGameModeParams,
+                       ScoringSystem* lpScoringSystem);
 };
 }
