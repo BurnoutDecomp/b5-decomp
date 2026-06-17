@@ -60,5 +60,28 @@ namespace BrnPhysics
             CgsModule::EventQueue<GlassSmashOrCrackEvent, 20>           mGlassSmashOrCrackQueue;           // X360 +6896
             u32 muClearedFlag1;  // X360 a1[2688] — cleared on Construct
         };
+
+        // ====================================================================
+        // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout
+        // reconstructed by DeformationOutputInterfaceForEntityModules's own TU (DWARF home
+        // BrnDeformationOutputInterface.h:233). Size 256 (NOMINAL — not byte-verified, grown
+        // by own TU).
+        //
+        // DWARF (BrnDeformationOutputInterface.h:233) gives the full member list:
+        //   uint32_t muNumEntries; VolumeInstanceId maBaseIDs[28]; WheelPhysicalStates maWheelStates[28];
+        //   int32_t miNumSkinnedModels; SkinData maSkinData[28]; int32_t miNumLocatorOutputs;
+        //   VehicleLocatorOutput maLocatorData[28];
+        //   EventQueue<DetachedPartRenderEvent,50> mDetachedPartRenderQueue;
+        //   DeformationOutputInterface::GlassSmashOrCrackQueue mGlassSmashOrCrackQueue;
+        // WheelPhysicalStates/SkinData/VehicleLocatorOutput/DetachedPartRenderEvent are not yet
+        // in-tree (full reconstruction cascades), so collapsed to an opaque reserved blob here.
+        // alignas(16): carries Matrix44Affine-bearing locator arrays + two EventQueues (SIMD/queue).
+        // Embedded BY VALUE in RaceCarEntityModuleIO::InputBuffer_PostPhysics (IO header :539);
+        // accessed only by-name (Get/SetDeformationOutputInterfaceForEntityModules return &member),
+        // so byte-exact size is not required for the IO-buffer unlock.
+        struct alignas(16) DeformationOutputInterfaceForEntityModules
+        {
+            unsigned char maReserved[256];
+        };
     }
 }
