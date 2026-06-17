@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"       // Array<T, N>
 #include "GameSource/GameState/BrnGameStateSharedIO.h"        // GameStateModuleIO::EGameModeType
 #include "GameSource/GameState/BrnCheckpointData.h"           // BrnGameState::CheckpointData (real, single owner)
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 
 // =============================================================================
 // BrnGameModeParams.h  (MERGED OWNING HEADER)
@@ -50,6 +51,8 @@ public:
     f32 GetTrafficDensityRace() const;
     f32 GetLargeVehicleProbability() const;
     u32 GetRaceRivalsNumber() const;
+    f32  GetTrafficDensityPursuit() const;            // DWARF BrnProgressionRankData.h:124 (reads mfTrafficDensityPursuit, byte +20)
+    void GetOvertakingDifficulty(f32* lpafOut) const; // DWARF BrnProgressionRankData.h:192 (copies maOvertakingDifficulty[8], byte +44)
 };
 
 // Per-event progression record. RaceMode::Start reads the start/add rival counts out of it.
@@ -91,7 +94,6 @@ enum EGlobalRaceCarIndex_Stub { E_GLOBALRACECARINDEX_STUB = 0 };// stub: EGlobal
 enum EBoostType_Stub         { E_BOOSTTYPE_STUB = 0 };          // stub: BrnNetwork::EBoostType
 enum EPlayerTeam_Stub        { E_PLAYERTEAM_STUB = 0 };         // stub: GameStateModuleIO::EPlayerTeam
 
-struct NetworkPlayerID_Stub { u32 muValue; };               // stub: RoadRulesRecvData::NetworkPlayerID
 
 // CheckpointData / OpponentData are reconstructed by their own TUs; only their sizes matter
 // for the array members embedded by value here. Modelled as opaque fixed-size blobs so
@@ -206,7 +208,7 @@ public:
     s8                      miNumRivals;
     s8                      miNumNetworkPlayers;
     f32                     mfProgressionRankAsRatio;
-    NetworkPlayerID_Stub    maNetworkPlayerID[8];
+    BrnNetwork::NetworkPlayerID maNetworkPlayerID[8];
     CgsID                   mSpecialEventCarId;
     f32                     mfTrafficDensityScale;
     f32                     mfLargeVehicleProbability;
@@ -231,7 +233,7 @@ public:
     u16                     mau16CarColourIndex[8];
     u16                     mau16CarPaintFinishIndex[8];
     EPlayerTeam_Stub        maePlayerTeam[8];
-    NetworkPlayerID_Stub    mLocalNetworkPlayerID;
+    BrnNetwork::NetworkPlayerID mLocalNetworkPlayerID;
     bool                    mbInfiniteBoost;
     EBoostType_Stub         meOnlineBoostStrategy;
     u32                     muNumberOfCheckpointsInEvent;

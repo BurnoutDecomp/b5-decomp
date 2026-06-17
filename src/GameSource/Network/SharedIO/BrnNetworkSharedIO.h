@@ -11,7 +11,16 @@ namespace BrnNetwork
 
     // Recovered from BrnNetworkSharedIO.h / CgsNetworkConstants.h (DecFIGS DWARF).
     enum EActiveRaceCarIndex : s32 { E_ACTIVE_RACE_CAR_NONE = -1 };
-    enum EPaybackType        : s32 { E_PAYBACK_NONE = 0 };
+    enum EPaybackType : s32
+    {
+        E_PAYBACK_NONE                                = 0,  // legacy alias retained for existing consumers
+        E_PAYBACK_TYPE_START                          = 0,
+        E_PAYBACK_TYPE_REVERSE_STEERING               = 0,
+        E_PAYBACK_TYPE_BOOST_LOCK                      = 1,
+        E_PAYBACK_TYPE_AGGRESSORS_CONTROLS_AFFECTS_VICTIM = 2,
+        E_PAYBACK_TYPE_SIX_AXIS_STEERING              = 3,
+        E_PAYBACK_TYPE_COUNT                          = 4,
+    };
     enum EDirtyTrickStatus   : s32 { E_DIRTY_TRICK_NONE = 0 };
 
     namespace Road { typedef s32 ChallengeIndex; }
