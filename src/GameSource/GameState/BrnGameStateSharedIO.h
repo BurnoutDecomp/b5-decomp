@@ -351,6 +351,7 @@ namespace BrnGameState
             s32             GetTakedowns() const            { return miTakedowns; }             // +0x4C
             bool            GetTimedOut() const             { return mbTimedOut; }              // +0x68
             bool            GetDisconnected() const         { return mbDisconnected; }          // +0x69
+            void            SetDisconnected(bool lbDisconnected) { mbDisconnected = lbDisconnected; } // +0x69 (Set/Clear-PlayerDisconnected)
             CgsSystem::Time GetTimeAsRunner() const         { return mTimeAsRunner; }           // +0x84
             bool            GetCompletedBurningHomeRun() const { return mbCompletedBurningHomeRun; } // +0xBC
             s32             GetCumulativeCheckpoints() const { return miCumulativeCheckpoints; } // +0xC4
