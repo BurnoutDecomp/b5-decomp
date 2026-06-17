@@ -28,8 +28,11 @@
 //       param (forward-declared only in the keystone) and CgsModule::VariableEventQueue<13312,16>
 //       (no committed home), to push road-rage crash events.
 //   - StopModeTimer (0x8231F590): invokes a BaseOnlineModeScoring virtual (vtable slot 6,
-//       not in that type's committed minimal slice), the uncommitted BrnNetwork::NetworkRounder
-//       statics, and CarScoreData private fields with no committed accessor.
+//       not in that type's committed minimal slice) and the uncommitted BrnNetwork::NetworkRounder
+//       statics. (Its CarScoreData reads -- miRacePosition@+0x08 and miHighestRacePosition@+0x0C --
+//       now have committed accessors (GetRacePosition / GetHighestRacePosition) after the
+//       CarScoreData grow, so the field access is no longer a blocker; the virtual + NetworkRounder
+//       statics are.)
 //   - HasStuntAttackModeEnded (0x82326708): the X360 body dispatches through a VIRTUAL at
 //       vtable slot +0x14 of two polymorphic embedded sub-scorers (this+0x350 and this+0x2620,
 //       both constructed via virtual ctors in ScoringSystem::Construct); the committed

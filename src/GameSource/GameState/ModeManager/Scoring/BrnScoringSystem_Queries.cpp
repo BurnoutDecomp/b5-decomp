@@ -11,15 +11,21 @@
 // where OFFSET indexes into the per-car GameStateModuleIO::CarScoreData embedded
 // at offset 0 of CarData (GetScoreData() yields that same address).
 //
-// SCOPE NOTE -- only the queries whose target field is reachable through a
-// PUBLIC CarScoreData accessor are reconstructed here.  Most of this group reads
-// CarScoreData fields (race position / completed-laps / finish-position /
-// eliminator-index / eliminations / takedowns-against / per-lap Time array) that
-// the committed CarScoreData slice does NOT expose -- it carries an
-// online-scorer-derived packed layout with no getters for those offsets, and at
-// one slot (+0x48) a semantic-label conflict vs the DWARF.  Growing CarScoreData
-// is a separate keystone reconciliation, so those bodies are FLAGGED BLOCKED and
-// omitted (left declare-only) rather than reaching into that shared type here.
+// SCOPE NOTE -- this TU is the home for the implemented per-car query group that
+// reads CarScoreData; every body in the group is reconstructed and present here.
+// Each query reaches its target field through a PUBLIC accessor on the (since-grown)
+// committed CarScoreData slice: completed-laps (+0x10 GetCompletedLaps), race
+// position (+0x08 GetRacePosition), finish-position (+0x14 GetFinishPosition), live
+// distance-to-finish (+0x18 GetDistanceToFinishLive) and round-end distance-to-finish
+// (+0x48 GetDistanceToFinish), eliminator-index (+0x60 GetEliminatorRaceCarIndex),
+// eliminations (+0x64 GetNumEliminations), takedowns (+0x4C GetTakedowns) and
+// takedowns-against (+0x50 GetTakedownsAgainst), finish time (+0x00 GetFinishTime),
+// and the per-lap Time array (GetLapTime).  CarScoreData was subsequently grown to
+// expose these inline getters, so the earlier keystone-reconciliation blocker (the
+// committed slice carried no getters for those offsets, plus a +0x48 semantic-label
+// question vs the DWARF) is RESOLVED: +0x48 is the round-end mfDistanceToFinish
+// (GetDistanceToFinish), distinct from the live mfDistanceToFinishLive at +0x18
+// (GetDistanceToFinishLive).  Nothing in this group is left declare-only.
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 

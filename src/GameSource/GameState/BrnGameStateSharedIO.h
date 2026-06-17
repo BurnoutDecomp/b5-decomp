@@ -9,6 +9,16 @@
 #include "GameSource/GameState/BrnCgsPlayerName.h"              // CgsNetwork::PlayerName (shared 16-byte home)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"        // CgsSystem::Time (CarScoreData)
 #include "GameShared/GameClasses/Containers/CgsArray.h"         // Array<T,N>::AddNew (CarScoreData::GetChainableStuntMultipliers)
+#include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // BrnGameState::StuntToDisplay (ScoringOutputInterface::maStunts[1] by value); clean header (types.hpp + BrnCommonTypes.h + BrnGameStateTypes.h only, no cycle back here)
+
+namespace BrnGameState
+{
+    // Opaque-enum forward declaration with the committed underlying type
+    // (BrnScoringSystem.h:132 `enum ECurrentMedalTargetTime : s32`). Cannot #include
+    // BrnScoringSystem.h here -- it includes THIS header (cycle). A fixed-underlying-type
+    // enum is complete for the by-value ScoringOutputInterface members below.
+    enum ECurrentMedalTargetTime : s32;
+}
 
 namespace BrnGameState
 {
@@ -503,10 +513,31 @@ namespace BrnGameState
             // maStorageBD@0xBD, miCumulativeCheckpoints@0xC4, miChainable*@0xC8, maStorageD4@0xD4,
             // mbChainActive@0xD8. Renamed placeholders: miField08/0C/10/14 -> miRacePosition/
             // miHighestRacePosition/miCompletedLaps/miFinishPosition; miInvalidIndex60 -> meEliminatorRaceCarIndex.
+
+            // Compile-time offset guards on the X360-proven scoring-gather slots. These members are
+            // PRIVATE, so offsetof on them must run from a context that (a) has private access and
+            // (b) sees CarScoreData as a complete type. A member-function body is exactly that: the
+            // class is regarded as complete inside it and private members are accessible. (The same
+            // asserts at file/namespace scope fail MSVC /permissive- with C2248 -- the access error
+            // that used to block every TU including this header.) Never called; the static_asserts
+            // fire at compile time. Do NOT change the offsets -- they pin the on-disk record layout.
+            static void _AssertLayout()
+            {
+                static_assert(offsetof(CarScoreData, mfDistanceToFinish)          == 0x48, "CarScoreData::mfDistanceToFinish offset");
+                static_assert(offsetof(CarScoreData, miTakedowns)                 == 0x4C, "CarScoreData::miTakedowns offset");
+                static_assert(offsetof(CarScoreData, miOnlineFinishPositionScore) == 0x58, "CarScoreData::miOnlineFinishPositionScore offset");
+                static_assert(offsetof(CarScoreData, miOnlineStandingsPosition)   == 0x5C, "CarScoreData::miOnlineStandingsPosition offset");
+                static_assert(offsetof(CarScoreData, mbTimedOut)                  == 0x68, "CarScoreData::mbTimedOut offset");
+                static_assert(offsetof(CarScoreData, mbDisconnected)              == 0x69, "CarScoreData::mbDisconnected offset");
+                static_assert(offsetof(CarScoreData, mTimeAsRunner)               == 0x84, "CarScoreData::mTimeAsRunner offset");
+                static_assert(offsetof(CarScoreData, mbCompletedBurningHomeRun)   == 0xBC, "CarScoreData::mbCompletedBurningHomeRun offset");
+                static_assert(offsetof(CarScoreData, miCumulativeCheckpoints)     == 0xC4, "CarScoreData::miCumulativeCheckpoints offset");
+                static_assert(offsetof(CarScoreData, miChainableScore)            == 0xC8, "CarScoreData::miChainableScore offset");
+            }
         };
-        // offsetof cannot validate the carved private members here (offsetof needs a complete type
-        // and CarScoreData has private members + methods, so it is non-standard-layout); the manual
-        // byte accounting above plus this total-size assert pin the layout.
+        // Per-member offset guards live in CarScoreData::_AssertLayout above (offsetof on the private
+        // members needs the complete-class context a member-function body provides). This file-scope
+        // assert needs no member access, so it stays here to pin the total record size.
         static_assert(sizeof(CarScoreData) == 296, "CarScoreData layout drift (0x128)");
 
         // X360 0x821F2B08. Free predicate over EGameModeType: true for exactly
@@ -519,23 +550,64 @@ namespace BrnGameState
 
         // ===== Added for the RaceCarEntityModuleIO IO-buffer unlock (scoring_director group) =====
 
-        // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout
-        // reconstructed by ScoringOutputInterface's own TU (DWARF home
-        // BrnGameStateSharedIO.h:535). Size 256 (NOMINAL -- not byte-verified, grown by own TU).
+        // Scoring snapshot the ScoringSystem publishes each frame. Embedded BY VALUE in
+        // RaceCarEntityModuleIO::InputBuffer_PrePhysics (mScoringInterface, IO header :445; the
+        // buffer typedefs RaceCarEntityModuleIO::ScoringOutputInterface as ScoringInterface).
         //
-        // Embedded BY VALUE in RaceCarEntityModuleIO::InputBuffer_PrePhysics (mScoringInterface,
-        // IO header :445; the buffer typedefs RaceCarEntityModuleIO::ScoringOutputInterface as
-        // ScoringInterface). Held/passed by const* through Get/SetScoringInterface, so a complete
-        // sized blob suffices. DWARF (BrnGameStateSharedIO.h:538-579) is a large scalar/array
-        // aggregate: CarScoreData maCarScoreData[8]; int32_t maiCumulativeScoreData[8] /
-        // maiNumRoadsRuled[8]; CgsID maCarIds[8]; bool flags[8][...]; per-mode score scalars
-        // (pursuit / road-rage / showtime / combo / timer) + EGameModeType / medal-target enums.
-        // CarScoreData and the GameState enums are GameState-internal cascades, so collapsed to an
-        // opaque reserved blob here; the real members land with this type's own ledger TU.
-        // Natural alignment: no Vector*/Matrix*/SIMD or EventQueue member in the DWARF.
+        // Layout recovered VERBATIM from the DecFIGS DWARF (BrnGameStateSharedIO.h:538-579) -- the
+        // member set + order below is the DWARF order. Cross-checked against what
+        // ScoringSystem::WriteDataToOutput (X360 0x8232AE98) writes: a per-car loop memcpy's
+        // CarScoreData[8] (296B each) into +0, then writes the cumulative score (CarData+76 ==
+        // miFinishPosition), the car id (CarData+37, stored as a QWORD == CgsID), and the
+        // per-car eliminated flag (CarData+217 == CarScoreData::mbEliminated); the online/offline
+        // tails then fill the per-mode scalar/enum members. The X360 build has internal alignment
+        // padding between the array blocks (its dst offsets are not densely packed), but there is
+        // NO sizeof assert on this type -- it is accessed BY NAME, never sized -- so the DWARF
+        // member set/types/order is authoritative and exact byte size is not required.
+        //
+        // maStunts[1] (StuntToDisplay) is embedded by value (see #include above);
+        // ECurrentMedalTargetTime is forward-declared opaquely (cycle with BrnScoringSystem.h).
+        // No Vector*/Matrix*/SIMD/EventQueue member in the DWARF -> natural alignment.
         struct ScoringOutputInterface
         {
-            unsigned char maReserved[256]; // NOMINAL -- full layout grown by own TU
+            CarScoreData            maCarScoreData[8];          // :538  per-car score records (X360: memcpy 296B/car)
+            s32                     maiCumulativeScoreData[8];  // :539  (X360: CarData+76 per car)
+            s32                     maiNumRoadsRuled[8];        // :540
+            CgsID                   maCarIds[8];                // :541  (X360: CarData+37 per car, stored as QWORD)
+            bool                    mabPlayerEliminated[8];     // :542  (X360: CarData+217 per car)
+            bool                    mabValid[8];                // :543
+            EActiveRaceCarIndex     mePlayerRaceCarIndex;       // :544
+            s32                     miNumPlayersInGame;         // :545
+            EGameModeType           meGameModeType;             // :546
+            bool                    mbIsOnlineGameMode;         // :547
+            s32                     miPursuitCarDamageLeft;     // :550
+            f32                     mfPursuitCarDistanceFromPlayer; // :551
+            s32                     miRoadRageNumTakedowns;     // :552
+            s32                     miRoadRageTakedownTarget;   // :553
+            s32                     miShowtimeCarsCrashed;      // :554
+            s32                     miShowtimeScoreMultiplier;  // :555
+            s32                     miShowtimeComboMultiplier;  // :556
+            f32                     mfShowtimeDistanceTravelled;// :557
+            s32                     miCurrentScore;             // :559
+            s32                     miTargetScore;              // :560
+            s32                     miComboScore;               // :561
+            s32                     miComboMultiplier;          // :562
+            u32                     muCurrentStunts;            // :563
+            u32                     muAllStunts;                // :564
+            BrnGameState::StuntToDisplay maStunts[1];           // :565
+            f32                     mfComboWarningTimeActive;   // :566
+            bool                    mbComboWarningActive;       // :567
+            bool                    mbComboInProgress;          // :568
+            s32                     miNumberOfRivals;           // :570
+            f32                     mfModeTimeElapsed;          // :571
+            f32                     mfModeTimeRemaining;        // :572
+            f32                     mfCurrentTargetModeTime;    // :573
+            BrnGameState::ECurrentMedalTargetTime meCurrentMedalTarget;   // :574
+            BrnGameState::ECurrentMedalTargetTime meCurrentMedalAchieved; // :575
+            f32                     mfDistanceDrivenInCurrentCar; // :577
+            bool                    mbTimerActive;              // :579
+
+            void operator=(const ScoringOutputInterface&);      // :583 (declare-only)
         };
 
         // Network output interface for the online-mode scoring results. Embedded BY VALUE in

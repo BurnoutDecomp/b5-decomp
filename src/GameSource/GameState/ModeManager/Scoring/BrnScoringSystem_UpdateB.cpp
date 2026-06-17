@@ -11,8 +11,11 @@
 //
 // ----------------------------------------------------------------------------
 // LANDED (compiling bodies):
-//   CompareRaceCarDistances   (0x823125B8)
-//   CheckRoadRageMedalAwarded (0x82312840)
+//   CompareRaceCarDistances    (0x823125B8)
+//   CheckRoadRageMedalAwarded  (0x82312840)
+//   UpdateCumulativeResults    (0x8231FCA0)  [CarScoreData/CarData part; one vtable call FLAGGED]
+//   DetectPlayerDrivingWrongWay(0x8232B6B8)  [now lpOutput resolves to the real active interface]
+//   DetectPlayerStationary     (0x82320008)  [now lpOutput resolves to the real active interface]
 //
 // BLOCKED (body omitted -- left declare-only; each needs a type/method that has
 // no committed definition reachable from a body agent; the dependency RULE
@@ -43,20 +46,29 @@
 //       (called as `(*(**(this+19912)+28))(mpCurrentOnlineModeScoring, this, luRound)`).
 //
 //   UpdateDistanceToPlayer     (0x8232B408)
-//   DetectPlayerDrivingWrongWay(0x8232B6B8)
-//   DetectPlayerStationary     (0x82320008)
+//       Per car in maCarsInTheRace, computes |GetPlayerPosition() - maCarsInTheRace[i].mPosition|
+//       and stores it onto the car's CarScoreData distance-to-player slot. lpOutput now resolves
+//       (the typedef -> RCEntityActiveRaceCarOutputInterface is complete here), so the interface
+//       side is fine -- BUT the destination is CarScoreData +0x1C (X360 stfs 0x1C(GetCarData)),
+//       which falls inside the unnamed maStorage1C[8] blob of GameStateModuleIO::CarScoreData;
+//       there is no committed named member/accessor for it. Writing it by name needs CarScoreData
+//       (a shared keystone in BrnGameStateSharedIO.h) GROWN with that distance-to-player field --
+//       out of scope for this body agent.
+//       MISSING: GameStateModuleIO::CarScoreData distance-to-player field (+0x1C, named member).
+//
 //   UpdateGeneralStats         (0x8232B8C0)
-//       All four dereference lpOutput (the ActiveRaceCarOutputInterface*): they
-//       read maCarsInTheRace.GetLength() (X360 a2+512), index maCarsInTheRace,
-//       call IsRaceCarActive / GetPlayerActiveRaceCarIndex and read the deep
-//       per-car physics output. lpOutput's declared type is
-//       BrnGameState::ActiveRaceCarOutputInterface, which the keystone only
-//       forward-declares -- the GameState-side interface has no committed
-//       definition (the World-side RCEntityActiveRaceCarOutputInterface is a
-//       DISTINCT C++ type; aliasing the two is a keystone/layout change, out of
-//       scope for a body agent -- same blocker recorded in the sibling
-//       BrnScoringSystem_UpdateA.cpp ledger).
-//       MISSING: BrnGameState::ActiveRaceCarOutputInterface (definition).
+//       Per-frame general per-car stat roll-up (lead/last time-in-place, per-car drift distance,
+//       longest drift, boost time). lpOutput now resolves, and the lead/last/boost Time fields it
+//       touches DO have committed CarScoreData accessors (mTimeInFirstPlace/mTimeInLastPlace/
+//       mTimeBoosting) as does CarData::mfCurrentDriftDistance. HOWEVER it also reads+writes two
+//       CarScoreData fields with no committed name: +0xDC (per-frame distance accumulator; inside
+//       maStorageDA[6]) and +0xF8 (longest-drift target; inside maStorageF8[48]). Both need
+//       CarScoreData grown with named members -- out of scope for this body agent.
+//       MISSING: GameStateModuleIO::CarScoreData fields at +0xDC and +0xF8 (named members).
+//
+// Both blocked methods now hinge solely on GROWING the CarScoreData keystone (the old
+// "ActiveRaceCarOutputInterface has no definition" blocker is RESOLVED -- the keystone typedef
+// now aliases the real RCEntityActiveRaceCarOutputInterface, completed by the include above).
 //
 // (UpdateCrashModeScore / UpdateStuntAttackModeScore / UpdateRoadRageModeScore /
 //  SetRoadRageDetails at header lines 426-431 carry only a ':NNN' DWARF line and
@@ -66,7 +78,16 @@
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
+// Completes BrnGameState::ActiveRaceCarOutputInterface (a typedef for
+// BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface): the player-detector
+// bodies below dereference it BY NAME (maCarsInTheRace / GetPlayerActiveRaceCarIndex /
+// IsPlayerCarActive / IsRaceCarActive / GetRaceCarState). This pulls the complete RaceCarState
+// (BrnVehicleEvents.h) too, so the per-car physics fields (mfMaxSpeedMPH/mfGas/...) are named.
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Bad-case-of-Road-Rage assert)
+
+#include <cmath>   // std::fabs (DetectPlayerStationary's boost-time magnitude test)
 
 namespace BrnGameState
 {
@@ -212,6 +233,108 @@ namespace BrnGameState
             // The committed BrnBaseOnlineModeScoring slice declares no virtual at slot 7; wiring
             // it in requires growing that keystone's vtable (slot ordering not yet committed) and
             // is out of scope for a body agent. Reinstate once that virtual is declared.
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // DetectPlayerDrivingWrongWay  --  X360 0x8232B6B8  (BrnScoringSystem.cpp:1932)
+    // ------------------------------------------------------------------------
+    // Per-frame "is the player heading away from the finish?" detector.
+    // The player car must be set and active (asserts). We snapshot last frame's
+    // distance-to-finish (mfPlayerDistanceToFinishLastFrame), re-evaluate the live
+    // distance via GetRaceCarDistanceToFinish(lePlayerIndex) and store it back. If the
+    // distance did NOT shrink (>= last frame), the player is going the wrong way, so we
+    // accumulate the elapsed time into mfPlayerTimeHeadingTheWrongWay; otherwise we reset
+    // that timer to zero. (lpOutput resolves to the RaceCarEntityModuleIO active interface;
+    // its accessors are read BY NAME.)
+    void ScoringSystem::DetectPlayerDrivingWrongWay(const ActiveRaceCarOutputInterface* lpOutput,
+                                                    f32 lfDeltaTime)
+    {
+        CGS_ASSERT(lpOutput != NULL, "lpActiveRaceCarInterface != NULL");
+
+        const EActiveRaceCarIndex lePlayerIndex = lpOutput->GetPlayerActiveRaceCarIndex();
+        CGS_ASSERT(lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID, "Player car index hasn't been set");
+        CGS_ASSERT(lpOutput->IsRaceCarActive(lePlayerIndex),
+                   "lpActiveRaceCarInterface->IsRaceCarActive( lePlayerActiveRaceCarIndex )");
+
+        const f32 lfDistanceLastFrame = mfPlayerDistanceToFinishLastFrame;
+        const f32 lfDistanceThisFrame = GetRaceCarDistanceToFinish(lePlayerIndex);
+        mfPlayerDistanceToFinishLastFrame = lfDistanceThisFrame;
+
+        if (lfDistanceThisFrame >= lfDistanceLastFrame)
+        {
+            mfPlayerTimeHeadingTheWrongWay += lfDeltaTime;
+        }
+        else
+        {
+            mfPlayerTimeHeadingTheWrongWay = 0.0f;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // DetectPlayerStationary  --  X360 0x82320008  (BrnScoringSystem.cpp:1968)
+    // ------------------------------------------------------------------------
+    // Per-frame "is the player sitting still / not giving input?" detector, maintaining two
+    // timers: mfPlayerTimeStationary and mfPlayerTimeWithoutInput.
+    //
+    // When the player car is NOT active, both timers reset to zero. Otherwise both timers are
+    // first advanced by the frame delta, then selectively cleared from the player's RaceCarState:
+    //   * if the car was reset, or is on the gas (mfGas > 0), or mid barrel-roll
+    //     (mfInProgressBarrelRollAngle > 0), or braking hard (mfHandBrake / mfBrake > 0.1) --
+    //     it is clearly under control, so BOTH timers reset;
+    //   * additionally, if the car is moving (mfMaxSpeedMPH > 2.0) the stationary timer resets;
+    //   * additionally, if there is meaningful boost-time magnitude (|mfTimeBoosting| > 0.1) the
+    //     no-input timer resets.
+    // The X360 returns the result pointer (a this/result-register artifact of the void-returning
+    // C++ method); the reconstruction drops it. RaceCarState fields are read BY NAME.
+    void ScoringSystem::DetectPlayerStationary(const ActiveRaceCarOutputInterface* lpOutput,
+                                               f32 lfDeltaTime)
+    {
+        CGS_ASSERT(lpOutput != NULL, "lpActiveRaceCarInterface != NULL");
+
+        const EActiveRaceCarIndex lePlayerIndex = lpOutput->GetPlayerActiveRaceCarIndex();
+        CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+        bool lbPlayerCarActive = false;
+        if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            lbPlayerCarActive = lpOutput->IsPlayerCarActive();
+        }
+
+        if (lbPlayerCarActive)
+        {
+            CGS_ASSERT(lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID, "Player car index hasn't been set");
+
+            mfPlayerTimeStationary  += lfDeltaTime;
+            mfPlayerTimeWithoutInput += lfDeltaTime;
+
+            const BrnPhysics::Vehicle::RaceCarState* lpState = lpOutput->GetRaceCarState(lePlayerIndex);
+
+            if (lpState->mbResetCarTransform
+                || lpState->mfGas > 0.0f
+                || lpState->mfInProgressBarrelRollAngle > 0.0f
+                || lpState->mfHandBrake > 0.1f
+                || lpState->mfBrake > 0.1f)
+            {
+                mfPlayerTimeStationary  = 0.0f;
+                mfPlayerTimeWithoutInput = 0.0f;
+            }
+
+            if (lpState->mfMaxSpeedMPH > 2.0f)
+            {
+                mfPlayerTimeStationary = 0.0f;
+            }
+
+            if (std::fabs(lpState->mfTimeBoosting) > 0.1f)
+            {
+                mfPlayerTimeWithoutInput = 0.0f;
+            }
+        }
+        else
+        {
+            mfPlayerTimeStationary  = 0.0f;
+            mfPlayerTimeWithoutInput = 0.0f;
         }
     }
 }
