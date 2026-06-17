@@ -11,6 +11,17 @@ namespace BrnNetwork
 
     // Recovered from BrnNetworkSharedIO.h / CgsNetworkConstants.h (DecFIGS DWARF).
     enum EActiveRaceCarIndex : s32 { E_ACTIVE_RACE_CAR_NONE = -1 };
+    // Per-car boost flavour (DWARF BrnNetworkSharedIO.h:14). StartNetworkGameEvent stores
+    // this as a raw s32 field; the race-car output interfaces use the enum directly.
+    enum EBoostType : s32
+    {
+        E_BOOST_TYPE_NORMAL     = 0,
+        E_BOOST_TYPE_DANGER     = 1,
+        E_BOOST_TYPE_AGGRESSION = 2,
+        E_BOOST_TYPE_STUNT      = 3,
+        E_BOOST_TYPE_INFINITE   = 4,
+        E_BOOST_TYPE_COUNT      = 5,
+    };
     enum EPaybackType : s32
     {
         E_PAYBACK_NONE                                = 0,  // legacy alias retained for existing consumers
