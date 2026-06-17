@@ -49,6 +49,41 @@ namespace CgsResource
         return &mpResourceEntries[liIndex];
     }
 
+    // 0x828F5E48 - FindResource here, else across each dependency pool; reports which pool the
+    // resource was found in via lppOutPool.
+    Entry* Pool::FindResourceWithDependencies(ID lID, Pool** lppOutPool, bool lbCheckRefCount, u16 luStatusMask, s32* lpiOutIndex)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :848
+
+        Entry* lpEntry = FindResource(lID, lbCheckRefCount, luStatusMask, lpiOutIndex);
+        if (lpEntry != 0)
+        {
+            *lppOutPool = this;
+            return lpEntry;
+        }
+
+        for (s32 liDep = 0; liDep < miNumDependencies; ++liDep)
+        {
+            lpEntry = mapDependencies[liDep]->FindResource(lID, lbCheckRefCount, luStatusMask, lpiOutIndex);
+            if (lpEntry != 0)
+            {
+                *lppOutPool = mapDependencies[liDep];
+                return lpEntry;
+            }
+        }
+
+        *lppOutPool = 0;
+        return 0;
+    }
+
+    // Index form of the above (this pool, then dependencies).
+    s32 Pool::FindResourceIndexWithDependencies(ID lID, Pool** lppOutPool, bool lbCheckRefCount, u16 luStatusMask)
+    {
+        s32    liIndex = -1;
+        Entry* lpEntry = FindResourceWithDependencies(lID, lppOutPool, lbCheckRefCount, luStatusMask, &liIndex);
+        return lpEntry != 0 ? liIndex : -1;
+    }
+
     // 0x828D8A18 - Entry* by index (bounds-checked), gated on refcount + status as above.
     Entry* Pool::GetResource(s32 liIndex, bool lbCheckRefCount, u16 luStatusMask)
     {
@@ -351,5 +386,71 @@ namespace CgsResource
 
         InitManagementData();
         mbIsValid = true;
+    }
+
+    // ---- fixup / imports ----------------------------------------------------------
+
+    // 0x828EB860 - rebase a freshly-loaded resource's internal pointers (Type::FixUp over the
+    // rw::Resource view of its per-pool memory) then deserialise it (Type::DeSerialise).
+    void Pool::FixUpEntry(Entry* lpEntry)
+    {
+        rw::Resource lrwResource = rw::Resource();
+        lpEntry->mResource.ConvertToRWResource(lrwResource);
+        lpEntry->mpResourceType->FixUp(lpEntry->mResource.m_baseResources[0], lrwResource);
+        lpEntry->mpResourceType->DeSerialise(lpEntry->mResource.m_baseResources[0]);
+    }
+
+    // 0x828EB920 - the post-fixup pass (Type::PostFixUp), run after imports are resolved.
+    void Pool::PostFixUpEntry(Entry* lpEntry)
+    {
+        rw::Resource lrwResource = rw::Resource();
+        lpEntry->mResource.ConvertToRWResource(lrwResource);
+        lpEntry->mpResourceType->PostFixUp(lpEntry->mResource.m_baseResources[0], lrwResource);
+    }
+
+    // 0x828F6068 - resolve one cross-resource import: find the imported resource by id (across
+    // this pool and its dependencies) and write its main-memory pointer into the importing
+    // resource at the import's byte offset. Returns false (and writes null) if unresolved.
+    bool Pool::ResolveImportForEntry(Entry* lpEntry, BundleV2::ImportEntry* lpImport)
+    {
+        CGS_ASSERT(lpImport->muOffset < lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size,
+                   "Import offset out of range\n");   // :1730
+
+        Pool*  lpOutPool = 0;
+        Entry* lpFound   = FindResourceWithDependencies(lpImport->mResourceId, &lpOutPool, true, 3, 0);
+        void** lppDest   = reinterpret_cast<void**>(static_cast<char*>(lpEntry->mResource.m_baseResources[0]) + lpImport->muOffset);
+
+        if (lpFound != 0)
+        {
+            CGS_ASSERT(lpFound->mResource.m_baseResources[0] != 0, "Entry to import is NULL - this is insane!\n");   // :1766
+            *lppDest = lpFound->mResource.m_baseResources[0];
+            return true;
+        }
+
+        *lppDest = 0;
+        CGS_ASSERT(false, "Failed to resolve import for resource\n");   // :1780
+        return false;
+    }
+
+    // 0x828FAEA0 - resolve every import of the resource at liIndex. The import table lives at
+    // (main memory + muImportTableOffset) as a run of 16-byte ImportEntry records.
+    bool Pool::ResolveImportsForEntry(s32 liIndex)
+    {
+        bool lbAllResolved = true;
+
+        const s32 liImportCount = mpiResourceImportCounts[liIndex];
+        if (liImportCount <= 0)
+            return true;
+
+        Entry* lpEntry = &mpResourceEntries[liIndex];
+        BundleV2::ImportEntry* lpImport =
+            reinterpret_cast<BundleV2::ImportEntry*>(static_cast<char*>(lpEntry->mResource.m_baseResources[0]) + lpEntry->muImportTableOffset);
+
+        for (s32 liImport = 0; liImport < liImportCount; ++liImport, ++lpImport)
+        {
+            if (!ResolveImportForEntry(lpEntry, lpImport))
+                lbAllResolved = false;
+        }
+        return lbAllResolved;
     }
 }
