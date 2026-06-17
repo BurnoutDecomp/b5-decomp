@@ -293,5 +293,44 @@ namespace BrnGameState
             u32 mauWords[KU_NUM_WORDS];
             OnlineGameResults& operator=(const OnlineGameResults& lOther);
         };
+
+        // ===== Added for the RaceCarEntityModuleIO IO-buffer unlock (scoring_director group) =====
+
+        // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout
+        // reconstructed by ScoringOutputInterface's own TU (DWARF home
+        // BrnGameStateSharedIO.h:535). Size 256 (NOMINAL -- not byte-verified, grown by own TU).
+        //
+        // Embedded BY VALUE in RaceCarEntityModuleIO::InputBuffer_PrePhysics (mScoringInterface,
+        // IO header :445; the buffer typedefs RaceCarEntityModuleIO::ScoringOutputInterface as
+        // ScoringInterface). Held/passed by const* through Get/SetScoringInterface, so a complete
+        // sized blob suffices. DWARF (BrnGameStateSharedIO.h:538-579) is a large scalar/array
+        // aggregate: CarScoreData maCarScoreData[8]; int32_t maiCumulativeScoreData[8] /
+        // maiNumRoadsRuled[8]; CgsID maCarIds[8]; bool flags[8][...]; per-mode score scalars
+        // (pursuit / road-rage / showtime / combo / timer) + EGameModeType / medal-target enums.
+        // CarScoreData and the GameState enums are GameState-internal cascades, so collapsed to an
+        // opaque reserved blob here; the real members land with this type's own ledger TU.
+        // Natural alignment: no Vector*/Matrix*/SIMD or EventQueue member in the DWARF.
+        struct ScoringOutputInterface
+        {
+            unsigned char maReserved[256]; // NOMINAL -- full layout grown by own TU
+        };
+
+        // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout
+        // reconstructed by OnlineScoringOutputInterface's own TU (DWARF home
+        // BrnGameStateSharedIO.h:653). Size 256 (NOMINAL -- not byte-verified, grown by own TU).
+        //
+        // Embedded BY VALUE in RaceCarEntityModuleIO::InputBuffer_PrePhysics (mOnlineScoringInterface,
+        // IO header :446; the buffer typedefs RaceCarEntityModuleIO::OnlineScoringOutputInterface as
+        // OnlineScoringInterface). Passed by const* through Get/SetOnlineScoringInterface, so a
+        // complete sized blob suffices. DWARF (BrnGameStateSharedIO.h:655-660):
+        //   int32_t maiNumEliminations[8]; BrnGameState::EOnlineAwardID maOnlineAwards[8];
+        //   int32_t maiOnlineAwardVariables[8]; EPlayerTeam maePlayerTeam[8];
+        //   EBlueTeamFinishType maeBlueTeamFinishTypes[8]; bool mbRedTeamWon;
+        // The award/team enums are GameState-internal, so collapsed to an opaque reserved blob
+        // here; the real members land with this type's own ledger TU. Natural alignment.
+        struct OnlineScoringOutputInterface
+        {
+            unsigned char maReserved[256]; // NOMINAL -- full layout grown by own TU
+        };
     }
 }

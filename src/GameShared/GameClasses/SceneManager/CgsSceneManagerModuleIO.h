@@ -26,5 +26,29 @@ namespace SceneManagerIO
         u16              mu16GroupTag;
         bool             mbIntersection;
     };
+
+    // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout
+    // reconstructed by SceneFineLineTestQueue's own TU (DWARF home
+    // CgsSceneManagerModuleIO.h). Size 16400 (DWARF-derived: see below).
+    //
+    // In BrnRaceCarEntityModuleIO.h, OutputBuffer_PostScene declares
+    //   typedef InputBuffer_Query::InFineLineTestQueue SceneFineLineTestQueue;  // :78
+    // and embeds it BY VALUE (mSceneFineLineTestQueue, :388). InFineLineTestQueue is
+    //   typedef EventQueue<CgsSceneManager::SceneManagerIO::InEventLineTestFine,256> ...
+    //   (CgsSceneManagerModuleIO.h:261). EventQueue<T,256> : BaseEventQueue<T> adds
+    //   T maEvents[256]; BaseEventQueue<T> = { T* mpEvents; s32 miMaxLength; s32 miLength; }
+    //   (12 bytes, padded to 16 for the 16-byte-aligned element). InEventLineTestFine
+    //   (CgsSceneManagerIO_FineQuery.h:50) = Vector3 mLineStart(16) + Vector3 mLineEnd(16)
+    //   + SceneQueryId(4) + EntityTypeFlags u32(4) + EntityId(4) + EExclusionMode enum(4)
+    //   + VolumeTypeFlags u8(1) -> 49 bytes, alignas(16) (carries Vector3) -> 64 bytes.
+    //   So sizeof == 16 + 256*64 = 16400 bytes. Carries Vector3, so alignas(16).
+    // Per the stub rules the real EventQueue/BaseEventQueue generic + the
+    // InEventLineTestFine element are intentionally NOT pulled in; a complete sized
+    // blob unlocks the buffer (the IO header only takes &member). Full layout belongs
+    // to this type's own ledger TU.
+    struct alignas(16) SceneFineLineTestQueue
+    {
+        unsigned char maReserved[16400];
+    };
 }
 }
