@@ -360,12 +360,12 @@ CarScoreData::CarScoreData()
 void CarScoreData::ClearData()
 {
     memset(this, 0, sizeof(*this));
-    mTotalTime               = CgsSystem::Time(0.0f);
-    miField08                = 8;
-    miField0C                = 9;
-    miField14                = 9;
-    miOnlineStandingsPosition = -1;
-    miInvalidIndex60         = -1;
+    mTotalTime                = CgsSystem::Time(0.0f);
+    miRacePosition            = 8;   // ClearData: +0x08 = 8 (last-of-8)
+    miHighestRacePosition     = 9;   // ClearData: +0x0C = 9
+    miFinishPosition          = 9;   // ClearData: +0x14 = 9
+    miOnlineStandingsPosition = -1;  // ClearData: +0x5C = -1
+    meEliminatorRaceCarIndex  = E_ACTIVE_RACE_CAR_INDEX_INVALID; // ClearData: +0x60 = -1
 }
 
 // X360 0x821F4740. The X360 emits explicit per-word/per-byte stores through +292; a full memcpy of
