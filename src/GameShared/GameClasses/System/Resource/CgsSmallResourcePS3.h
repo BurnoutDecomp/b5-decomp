@@ -44,6 +44,7 @@ namespace CgsResource
         typedef rw::BaseResourceDescriptor SmallGraphicsSystemDescriptor;
         typedef rw::BaseResourceDescriptor SmallGraphicsLocalDescriptor;
 
+        SmallResourceDescriptor() {}   // PC build: allow field-by-field fill (X360 fills raw)
         SmallResourceDescriptor(const SmallMemoryDescriptor& lrMemoryDescriptor);  // :84
         SmallResourceDescriptor(u32 luSize, u32 luAlignment);                      // :90
         SmallResourceDescriptor(const ResourceDescriptor& lrDescriptor);          // :96
@@ -74,6 +75,7 @@ namespace CgsResource
         typedef void* SmallGraphicsSystemResource;
         typedef void* SmallGraphicsLocalResource;
 
+        SmallResource() {}   // PC build: allow field-by-field fill (X360 fills raw)
         SmallResource(const SmallMemoryResource& lrMemoryResource);          // :220
         SmallResource(const rw::Resource& lrResource);                       // :226
         void CreateFromRWResource(const rw::Resource& lrResource);           // :233
