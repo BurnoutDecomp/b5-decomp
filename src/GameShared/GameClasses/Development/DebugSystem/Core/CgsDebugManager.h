@@ -25,6 +25,7 @@ namespace CgsDev
     struct Debug3DImmediateRender;   // the 3D (world-space) debug renderer - render follow-on
 
     namespace DebugUI { struct DebugUI; }
+    namespace Assert { struct AssertData; }   // RenderAssert's input (the failing assert)
 
     // X360 CgsDebugManager.h:95. The pool sizes + perfmon/console configuration the whole debug
     // system is sized from: DebugManager::Construct forwards this to DebugUI::Construct, which hands
@@ -109,6 +110,14 @@ namespace CgsDev
         // renderer): the build-info string (left) and the available-memory line (centre-right).
         void RenderBuildInfo();
         void RenderMemory();
+
+        // X360 0x8282DE28 DebugManager::RenderAssert - the on-screen assert OVERLAY (what the real ARTIST
+        // build shows): "line:file" + the failed expression + the call-stack (map-resolved names, else
+        // 0x%08X), queued into the buffered renderer at x=50, size 16, 18px line advance. The render path
+        // (BrnRendererModule::RenderAssert, per-thread) drives this; RenderAssertOverlay flushes one frame
+        // of it through the 2D renderer for the single-threaded freeze.
+        void RenderAssert(const Assert::AssertData* lpData);
+        void RenderAssertOverlay();
 
     private:
         // INCREMENTAL: the registered-component list (X360 this+33132) + the UI the manager owns

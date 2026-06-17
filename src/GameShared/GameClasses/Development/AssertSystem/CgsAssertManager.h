@@ -7,7 +7,7 @@
 
 namespace CgsDev
 {
-    namespace MapFile { struct Reader; }   // mpMapReader (symbol resolver - deferred, kept null)
+    namespace MapFile { struct Reader; }   // the function-map call-stack symbol resolver
 
 namespace Assert
 {
@@ -43,7 +43,12 @@ namespace Assert
 
         void RegisterAssertHandler(AssertHandler* lpHandler);
         void SetRenderer(Debug2DImmediateRender* lpRenderer);   // CgsAssertManager.h:117
+        void SetMapFileReader(MapFile::Reader* lpReader, const char* lpcMapFileName);  // CgsAssertManager.h:120
         void HandleAssert(const char* lpcMessage, const char* lpcFile, s32 liLine);
+
+        // The pending assert (for DebugManager::RenderAssert, the on-screen overlay).
+        bool              HasAssert() const     { return mbGotAssert; }
+        const AssertData& GetAssertData() const { return mCurrentAssert; }
 
     private:
         void ExecuteAssertHandlers();        // CgsAssertManager.h:160
@@ -58,6 +63,8 @@ namespace Assert
         void ClearCurrentAssert();           // CgsAssertManager.h:166
 
         Debug2DImmediateRender* mpRender;          // the 2D renderer (X360: static; wired by SetRenderer)
+        MapFile::Reader*        mpMapFileReader;   // the call-stack symbol resolver (X360: static)
+        const char*             mpcMapFileName;    // the map file the reader opens (X360: static)
         AssertHandler*          mpAssertHandlerList;
         AssertData              mCurrentAssert;
         VectorFont              mVectorFont;
