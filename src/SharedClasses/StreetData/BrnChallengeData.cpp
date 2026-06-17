@@ -1,85 +1,58 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SharedClasses/StreetData/BrnChallengeData.h"   // BrnStreetData::ScoreType / ScoreList / ChallengeData (shared home)
+#include "BrnCommonTypes.h"                               // ::CgsID (u64)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnStreetData::ChallengeData::Construct             @ 0x8267D7C0
 //   BrnStreetData::ChallengeData::Copy                  @ 0x82676610
 //   BrnStreetData::ChallengeParScoresEntry::Copy        @ 0x82676700
+//   BrnStreetData::ChallengeParScoresEntry::GetScore    @ 0x8231C7E0
 //   BrnStreetData::ChallengePlayerScoreEntry::Construct @ 0x8267D7E8
 //   BrnStreetData::ChallengePlayerScoreEntry::Copy      @ 0x82676668
 //
-// Score-record initialisation and copy. Member layout recovered from the DecFIGS
-// DWARF (BrnChallengeData.h / CgsBitArray.h / CgsID.h): a ChallengeData holds two
-// 2-bit dirty/valid bit arrays (each backed by one u64 word) and a two-entry
-// ScoreList; the player/par entries add a two-entry CgsID array. Construct fills
-// every slot with its "invalid" pattern; Copy is a plain member-wise duplicate
-// (the X360 build emits it as 64-bit field moves).
-
-namespace CgsContainers
-{
-    // CgsContainers::BitArray<N>: N bits packed into 64-bit words (one word for N<=64).
-    template <u32 N>
-    struct BitArray
-    {
-        u64 maxBits[(N + 63) / 64];
-    };
-}
+// Score-record initialisation, copy, and the par-scores accessor. The score-record types
+// (ScoreType / ScoreList / ChallengeData) now come from the single shared home
+// SharedClasses/StreetData/BrnChallengeData.h (no more file-local fork). The derived
+// ChallengePlayerScoreEntry / ChallengeParScoresEntry are local to this TU.
 
 namespace BrnStreetData
 {
-    typedef u64 CgsID;
+    // The X360 initialises a fresh record's per-entry ids to the all-ones "no owner" sentinel.
+    static const ::CgsID KU_INVALID_ID = 0xFFFFFFFF00000000ULL;
 
-    // BrnChallengeData.h:47 (DWARF) -- the score-type index, true SharedClasses StreetData
-    // home for this enum. (The committed GameSource home BrnChallengeHighScoreEntry.h declares
-    // the same enum/values for its own use; this self-contained .cpp TU never includes that
-    // header, so there is no cross-TU ODR clash.) SetScore bounds-checks against E_SCORE_TYPE_COUNT.
-    enum ScoreType
+    // Per-score-type [min,max] range tables backing the SetScore guard. FLAGGED placeholders --
+    // the real bytes live in X360 .data @ 0x820A764C (min) / 0x820A7654 (max). The {0,0} /
+    // {INT32_MAX,INT32_MAX} pair accepts any non-negative score (the safe over-permissive
+    // direction); pin the literals when a .data dump is available.
+    const int32_t ScoreList::KAI_MIN_SCORES[ E_SCORE_TYPE_COUNT ] = { 0, 0 };
+    const int32_t ScoreList::KAI_MAX_SCORES[ E_SCORE_TYPE_COUNT ] = { 0x7FFFFFFF, 0x7FFFFFFF };
+
+    // The X360 initialises a fresh score list to the all-ones "no score" sentinel (-1 per entry);
+    // ChallengeData::Construct calls this after clearing the dirty/valid bit arrays.
+    void ScoreList::Construct()
     {
-        E_SCORE_TYPE_START = 0,
-        E_SCORE_TYPE_TIME  = 0,
-        E_SCORE_TYPE_CRASH = 1,
-        E_SCORE_TYPE_COUNT = 2,
-    };
-
-    struct ScoreList
-    {
-        s32 maScores[2];                                   // +0 (E_SCORE_TYPE_COUNT entries)
-
-        void SetScore( BrnStreetData::ScoreType leScoreType, int32_t liScore );
-    };
+        maScores[ E_SCORE_TYPE_TIME ]  = -1;
+        maScores[ E_SCORE_TYPE_CRASH ] = -1;
+    }
 
     // X360 SetScore @ 0x8230EC78: maScores[leScoreType] = liScore, guarded by the bounds assert.
-    // The X360 `_DWORD *result`(==this) return is the PPC register artifact for a source-void
-    // setter and is dropped per project convention; the unsigned `a2 >= 2` test is the compiler's
-    // single-compare folding of `leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT`.
-    void ScoreList::SetScore( BrnStreetData::ScoreType leScoreType, int32_t liScore )
+    void ScoreList::SetScore( ScoreType leScoreType, int32_t liScore )
     {
         CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
                     "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT" );
         maScores[ leScoreType ] = liScore;
     }
 
-    // The X360 initialises a fresh record's bit words to this pattern and its
-    // scores / ids to the all-ones "no score / no owner" sentinel.
-    static const u64 KU_EMPTY_BITWORD = 0xFFFFFFFF00000000ULL;
-    static const u64 KU_INVALID_ID    = 0xFFFFFFFF00000000ULL;
-
-    struct ChallengeData
-    {
-        CgsContainers::BitArray<2u> mDirty;        // +0
-        CgsContainers::BitArray<2u> mValidScores;  // +8
-        ScoreList                   mScoreList;     // +16
-
-        void Construct();
-        void Copy(const ChallengeData* lpSource);
-    };
-
+    // The X360 ChallengeData::Construct (DWARF BrnChallengeData.cpp:65) clears both bit arrays
+    // then Constructs the score list. UnSetAll zeroes the words (the prior raw
+    // 0xFFFFFFFF00000000 write was a reconstruction artifact -- bits 0/1 are 0 either way, so
+    // the behaviour is identical and now matches the binary's call sequence).
     void ChallengeData::Construct()
     {
-        mDirty.maxBits[0] = KU_EMPTY_BITWORD;
-        mValidScores.maxBits[0] = KU_EMPTY_BITWORD;
-        mScoreList.maScores[0] = -1;
-        mScoreList.maScores[1] = -1;
+        mDirty.UnSetAll();
+        mValidScores.UnSetAll();
+        mScoreList.Construct();
     }
 
     void ChallengeData::Copy(const ChallengeData* lpSource)
@@ -91,7 +64,7 @@ namespace BrnStreetData
 
     struct ChallengePlayerScoreEntry : public ChallengeData
     {
-        CgsID maCarIDs[2];   // +24
+        ::CgsID maCarIDs[2];   // +24
 
         void Construct();
         void Copy(const ChallengePlayerScoreEntry* lpSource);
@@ -114,8 +87,11 @@ namespace BrnStreetData
 
     struct ChallengeParScoresEntry : public ChallengeData
     {
-        CgsID mRivals[2];    // +24
+        ::CgsID mRivals[2];    // +24
 
+        // BrnChallengeData.h:263 (DWARF). X360 0x8231C7E0. Reads the base score and
+        // the per-score rival id; returns void (X360 r3 return is an ABI artifact).
+        void GetScore( ScoreType leScoreType, int32_t* lpiScore, ::CgsID* lpRivalId ) const;
         void Copy(const ChallengeParScoresEntry* lpSource);
     };
 
@@ -125,5 +101,24 @@ namespace BrnStreetData
         ChallengeData::Copy(lpSource);
         mRivals[0] = lpSource->mRivals[0];
         mRivals[1] = lpSource->mRivals[1];
+    }
+
+    // X360 BrnStreetData::ChallengeParScoresEntry::GetScore @ 0x8231C7E0.
+    // Returns the base score for leScoreType plus the rival id stored in mRivals.
+    // The X360 build baked the assert file/line as
+    // ..\GameSource\GameState\StreetData\BrnChallengeHighScoreEntry.h:204/205 (this
+    // accessor was emitted from that header alongside ChallengeHighScoreEntry); the
+    // baked path/line are discarded per project convention. `*a4 = *(8*(a2+3)+a1)`
+    // resolves to mRivals[leScoreType] (this + 24 + 8*idx). The PPC r3 `return result`
+    // is an ABI artifact of the inlined base call and is dropped (source return is void).
+    void ChallengeParScoresEntry::GetScore( ScoreType leScoreType,
+                                            int32_t*  lpiScore,
+                                            ::CgsID*  lpRivalId ) const
+    {
+        CGS_ASSERT( lpiScore,  "lpiScore != NULL" );
+        CGS_ASSERT( lpRivalId, "lpRivalId != NULL" );
+
+        *lpiScore  = ChallengeData::GetScore( leScoreType );
+        *lpRivalId = mRivals[ leScoreType ];
     }
 }

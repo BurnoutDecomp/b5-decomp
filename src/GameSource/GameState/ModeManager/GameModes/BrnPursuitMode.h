@@ -12,5 +12,10 @@ class PursuitMode : public OfflineGameMode
 {
 public:
     virtual const char* GetName() const;
+
+    // X360 0x823220A0. Builds the pursuit GameModeParams from the StartGameModeParams + rank data.
+    virtual void Start(const StartGameModeParams* lpStartGameModeParams,
+                       GameModeParams* lpGameModeParams,
+                       ScoringSystem* lpScoringSystem);
 };
 }
