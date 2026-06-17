@@ -1,83 +1,69 @@
-#include "types.hpp"
-#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"
 #include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData::Clear  @ 0x823555A8
+//   BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData::Clear      @ 0x823555A8
+//   BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData::operator=  @ 0x823628C8
 //
-// Resets one player's in-game status record to its empty defaults: the player
-// stats sub-object is cleared, the live-revenge relationship and name are zeroed,
-// and every id / active-race-car index is set to "none" (-1) with the status
-// enums returned to their defaults. Member layout recovered from the DecFIGS DWARF
-// (BrnNetworkModuleInGamePlayerStatusInterface.h).
+// The InGamePlayerStatusData full layout is now defined in the promoted header
+// BrnNetworkModuleInGamePlayerStatusInterface.h (included above), which uses the real committed
+// NetworkPlayerStats (BrnNetworkPlayerStats.h) and LiveRevengeRelationship
+// (BrnNetworkLiveRevengeRelationship.h, grown to 120B) types -- NOT local trap stubs. Member
+// layout recovered from the DecFIGS DWARF (BrnNetworkModuleInGamePlayerStatusInterface.h:63).
 
 namespace BrnNetwork
 {
-    // EActiveRaceCarIndex, NetworkPlayerID, and PlayerName come from the shared
-    // BrnNetworkSharedIO.h (#included above) rather than being re-forked here.
-    enum ECameraStatus : s32 { E_CAMERA_STATUS_NONE = 0 };
-
-    // Sub-objects (own TUs); reset helpers are trap stubs until they land.
-    struct NetworkPlayerStats
-    {
-        u8 mPad0[136];
-        void Clear();
-    };
-    void NetworkPlayerStats::Clear() { __debugbreak(); }
-
-    // 116 bytes (CommonRelationship + DateAndTime + UniquePlayerID + two ints),
-    // sized so mNetworkPlayerID lands at object +272, matching the X360 stores.
-    // Its own Construct() resets the relationship (incl. the embedded list head the
-    // X360 build sets at +240); body is a trap stub until that TU lands.
-    struct LiveRevengeRelationship
-    {
-        u8 mPad0[116];
-        void Construct();
-    };
-    void LiveRevengeRelationship::Construct() { __debugbreak(); }
-
     namespace BrnNetworkModuleIO
     {
-        // Default camera status (X360 stores 4 at +284 in the cleared record).
-        static const s32 KI_CAMERA_STATUS_DEFAULT = 4;
-
-        struct InGamePlayerStatusData
-        {
-            NetworkPlayerStats      mPlayerStats;
-            LiveRevengeRelationship mLiveRevengeRelationship;
-            PlayerName              mPlayerName;
-            NetworkPlayerID         mNetworkPlayerID;
-            EActiveRaceCarIndex     meActiveRaceCarIndex;
-            s32                     meVOIPStatus;
-            ECameraStatus           meCameraStatus;
-            NetworkPlayerID         mMarkedManPlayerID;
-            EActiveRaceCarIndex     meMarkedManActiveRaceCarIndex;
-            s32                     meDistrict;
-            bool                    mbMarkedMan;
-            bool                    mbIsHost;
-            bool                    mbIsLocalPlayer;
-            bool                    mbIsInLocalGameWorld;
-
-            void Clear();
-        };
-
+        // Resets one player's in-game status record to its empty defaults: the player
+        // stats sub-object is cleared, the live-revenge relationship and name are zeroed,
+        // and every id / active-race-car index is set to "none" (-1) with the status
+        // enums returned to their defaults.
         void InGamePlayerStatusData::Clear()
         {
-            mNetworkPlayerID             = -1;   // +272
-            meActiveRaceCarIndex         = E_ACTIVE_RACE_CAR_NONE; // +276
-            meVOIPStatus                 = 0;    // +280
-            meCameraStatus               = static_cast<ECameraStatus>(KI_CAMERA_STATUS_DEFAULT); // +284
-            mMarkedManPlayerID           = -1;   // +288
-            meMarkedManActiveRaceCarIndex = E_ACTIVE_RACE_CAR_NONE; // +292
-            meDistrict                   = 0;    // +296
-            mbMarkedMan                  = false;
-            mbIsHost                     = false;
-            mbIsLocalPlayer              = false;
-            mbIsInLocalGameWorld         = false;
+            mNetworkPlayerID              = -1;                                  // +272
+            meActiveRaceCarIndex          = E_ACTIVE_RACE_CAR_NONE;              // +276
+            meVOIPStatus                  = 0;                                   // +280
+            meCameraStatus                = static_cast<ECameraStatus>(KI_CAMERA_STATUS_DEFAULT); // +284
+            mMarkedManPlayerID            = -1;                                  // +288
+            meMarkedManActiveRaceCarIndex = E_ACTIVE_RACE_CAR_NONE;              // +292
+            meDistrict                    = 0;                                   // +296
+            mbMarkedMan                   = false;
+            mbIsHost                      = false;
+            mbIsLocalPlayer               = false;
+            mbIsInLocalGameWorld          = false;
 
             mPlayerStats.Clear();
             mLiveRevengeRelationship.Construct();
             std::memset(&mPlayerName, 0, sizeof(mPlayerName));
         }
-    }
-}
+
+        // X360 0x823628C8 (ledger stub "InGamePl").
+        // Member-wise copy assignment for one player's in-game status record. The X360 body
+        // is the compiler's lowering of a default member-wise operator=: it forwards the stats
+        // sub-object to NetworkPlayerStats::operator= (0x82355C50), block-copies the
+        // LiveRevengeRelationship (+136..+256, 120B) and PlayerName (+256, 16B), then copies the
+        // scalar id/enum/bool tail (+272..+303). Reversed back into named-member assignments;
+        // behaviour is identical to the inlined memcpy/word-store sequence. (The X360 also copies
+        // the +304 trailing pad word of the 312-byte record stride; that is inert alignment with
+        // no named member and is left as default padding.)
+        InGamePlayerStatusData& InGamePlayerStatusData::operator=(const InGamePlayerStatusData& lOther)
+        {
+            mPlayerStats                  = lOther.mPlayerStats;                  // +0   (NetworkPlayerStats::operator= @0x82355C50)
+            mLiveRevengeRelationship      = lOther.mLiveRevengeRelationship;      // +136 (120B block copy, lands PlayerName at +256)
+            mPlayerName                   = lOther.mPlayerName;                   // +256 (16B)
+            mNetworkPlayerID              = lOther.mNetworkPlayerID;              // +272
+            meActiveRaceCarIndex          = lOther.meActiveRaceCarIndex;          // +276
+            meVOIPStatus                  = lOther.meVOIPStatus;                  // +280
+            meCameraStatus                = lOther.meCameraStatus;               // +284
+            mMarkedManPlayerID            = lOther.mMarkedManPlayerID;            // +288
+            meMarkedManActiveRaceCarIndex = lOther.meMarkedManActiveRaceCarIndex; // +292
+            meDistrict                    = lOther.meDistrict;                   // +296
+            mbMarkedMan                   = lOther.mbMarkedMan;                   // +300
+            mbIsHost                      = lOther.mbIsHost;                      // +301
+            mbIsLocalPlayer               = lOther.mbIsLocalPlayer;              // +302
+            mbIsInLocalGameWorld          = lOther.mbIsInLocalGameWorld;         // +303
+            return *this;
+        }
+    } // namespace BrnNetworkModuleIO
+} // namespace BrnNetwork

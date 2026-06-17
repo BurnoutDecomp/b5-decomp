@@ -47,9 +47,16 @@ namespace BrnNetwork
         void Clear();                         // own TU
     };
 
-    // BrnNetworkLiveRevengeRelationship.h:94 (DWARF). Total object size 116 bytes
-    // (proven by InGamePlayerStatusData: NetworkPlayerStats[136] + this[116] places
-    //  PlayerName at +252 and mNetworkPlayerID at +272, matching the X360 stores).
+    // BrnNetworkLiveRevengeRelationship.h:94 (DWARF). Total object size 120 bytes
+    // (X360-AUTHORITATIVE). The X360 InGamePlayerStatusData copy/ctor
+    // (BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData::operator= @ 0x823628C8) block-copies
+    // 120 bytes for mLiveRevengeRelationship spanning object +136..+256, which places
+    //   InGamePlayerStatusData::mPlayerName     at +256  (NetworkPlayerStats[136] + this[120] == 256)
+    //   InGamePlayerStatusData::mNetworkPlayerID at +272  (256 + PlayerName[16])
+    // matching the X360 stores. The PS3 DecFIGS DWARF spells mUniqueID as UniquePlayerIDPS3, whose
+    // combined size with DateAndTime is 4 bytes smaller than the X360 build's (DWARF would imply a
+    // 116-byte object placing PlayerName at +252 -- PS3 drift); the X360 binary wins, so the un-homed
+    // mLastTimeChanged(DateAndTime)+mUniqueID(MugshotInfo::UniquePlayerID) pad is 40 bytes here.
     struct LiveRevengeRelationship
     {
         // BrnNetworkLiveRevengeRelationship.h:98 (DWARF)
@@ -130,12 +137,14 @@ namespace BrnNetwork
         //   BrnNetworkLiveRevengeRelationship.h:329  s32                         miCurrentScoreForPlayersPointOfView;
         //   BrnNetworkLiveRevengeRelationship.h:332  u32                         miTotalEvents;
         // DateAndTime and MugshotInfo::UniquePlayerID are NOT committed yet, so the
-        // first two are modelled as an opaque 36-byte pad to keep the object at the
-        // proven 116-byte size without fabricating their internal layouts. The
-        // owning TUs of those accessors must replace this pad with the real members.
-        u8  mPad_LastTimeChanged_UniqueID[36];     // +72 (DateAndTime + UniquePlayerID)
-        s32 miCurrentScoreForPlayersPointOfView;   // +108
-        u32 miTotalEvents;                         // +112
+        // first two are modelled as an opaque 40-byte pad to keep the object at the
+        // X360-proven 120-byte size (see header comment: the InGamePl copy memcpy's 120B
+        // for this object so PlayerName lands at +256) without fabricating their internal
+        // layouts. The owning TUs of those accessors must replace this pad with the real
+        // members, keeping the combined DateAndTime+UniquePlayerID span at 40 bytes.
+        u8  mPad_LastTimeChanged_UniqueID[40];     // +72 (DateAndTime + UniquePlayerID)
+        s32 miCurrentScoreForPlayersPointOfView;   // +112
+        u32 miTotalEvents;                         // +116
     };
 } // namespace BrnNetwork
-// static_assert(sizeof(BrnNetwork::LiveRevengeRelationship) == 116, "X360 layout");
+// static_assert(sizeof(BrnNetwork::LiveRevengeRelationship) == 120, "X360 layout");
