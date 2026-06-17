@@ -232,5 +232,55 @@ void PrepareForModeAction::SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lPl
     maDisconnectedNetworkPlayerID[miNumPlayersDisconnected] = lPlayerID;
     ++miNumPlayersDisconnected;
 }
+
+// X360 0x8231CA38. Record a player's finishing slot. The valid-id assert rejects the invalid
+// sentinel; position -1 means "disconnected" -> append the id to the disconnected list, else
+// bounds-check the position and store the id at that slot. (X360 return-result artifact dropped.)
+void OnlineRoundResults::SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liPosition)
+{
+    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+               "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+
+    if (liPosition == -1)
+    {
+        maDisconnectedPlayers.Append(lNetworkPlayerID);
+    }
+    else
+    {
+        CGS_ASSERT(liPosition >= 0, "liPosition >= 0");
+        CGS_ASSERT(liPosition < KI_MAX_PLAYERS, "liPosition < KI_MAX_PLAYERS");
+
+        maPlayerPosition[liPosition] = lNetworkPlayerID;
+    }
+}
+
+// X360 0x82558580. Look up a player's finishing position. Disconnected players report
+// KI_POSITION_DISCONNECTED; otherwise linear-scan the position table for the id and return its slot.
+// Reaching the end without a match is a logic error (X360 streamed a runtime CgsStrStream message;
+// reduced to a static CGS_ASSERT, still returning the -1 sentinel).
+s32 OnlineRoundResults::GetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const
+{
+    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+               "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+
+    for (s32 liIndex = 0; liIndex < maDisconnectedPlayers.GetCount(); ++liIndex)
+    {
+        if (maDisconnectedPlayers.GetItem(liIndex) == lNetworkPlayerID)
+        {
+            return KI_POSITION_DISCONNECTED;
+        }
+    }
+
+    for (s32 liPosition = 0; liPosition < KI_MAX_PLAYERS; ++liPosition)
+    {
+        if (maPlayerPosition[liPosition] == lNetworkPlayerID)
+        {
+            return liPosition;
+        }
+    }
+
+    CGS_ASSERT(false, "Player has no result position.");
+    return KI_POSITION_DISCONNECTED;
+}
 }
 }
