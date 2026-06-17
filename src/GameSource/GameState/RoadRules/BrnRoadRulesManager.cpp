@@ -2,27 +2,14 @@
 // GameSource/GameState/RoadRules/BrnRoadRulesManager.cpp
 // ---------------------------------------------------------------------------
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"
+#include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"  // BrnGameState::StreetManager (single home for GetStreetData)
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "SharedClasses/StreetData/BrnStreetData.h"       // BrnStreetData::StreetData / Road
 
-// PROVISIONAL minimal slice of BrnGameState::StreetManager: this TU only calls
-// the GetStreetData() accessor. The real, complete class lives (uncommitted) at
-// GameSource/GameState/StreetData/BrnGameStateStreetManager.h, where it holds
-//   ResourcePtr<BrnStreetData::StreetData> mpStreetData;
-// and exposes (DWARF, BrnGameStateStreetManager.h:355):
-//   const BrnStreetData::StreetData* GetStreetData();   // == mpStreetData.operator->()
-// Replace this forward-shim with that real header once StreetManager is committed.
-// Declared `struct` to match the DWARF home (BrnGameStateStreetManager.h:199) and the
-// forward declaration in the .h, avoiding a future C4099 struct/class tag mismatch.
-namespace BrnGameState
-{
-    struct StreetManager
-    {
-        // X360: BrnStreetData::StreetData_::oper(&mpStreetData) i.e.
-        //       ResourcePtr<StreetData>::operator->()  (out-of-line @ 0x82324E60).
-        const BrnStreetData::StreetData* GetStreetData();
-    };
-}
+// BrnGameState::StreetManager (incl. its GetStreetData() accessor) now lives in its single
+// canonical home GameSource/GameState/StreetData/BrnGameStateStreetManager.h (included above).
+// The former file-local `struct StreetManager` shim was removed from this TU: it ODR-collided
+// with the new header once a second TU (the road-rules debug component) needed the type.
 
 // extern const CgsID K_INVALID_ID == 0 (X360 'return 0' on no-current-road).
 const CgsID BrnGameState::RoadRulesManager::K_INVALID_ID = 0;

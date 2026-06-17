@@ -50,6 +50,10 @@ namespace CgsDev
         StrStreamBase& operator<<(const char* lpcText) override;
         char* GetBuffer() { return mpcBuffer; }
 
+        // Clear the caller-supplied buffer back to the empty string (X360 CgsDev::StrStream::Reset,
+        // called between successive label builds in the debug HUD; the X360 `stb 0,0(buffer)`).
+        void Reset() { if (mpcBuffer && miBufferSize > 0) mpcBuffer[0] = '\0'; }
+
     private:
         char* mpcBuffer;
         s32   miBufferSize;
@@ -71,6 +75,10 @@ namespace CgsDev
         StrStreamBase& operator<<(f32 lfValue);
 
         char* GetBuffer() { return macCharBuffer; }
+
+        // Clear the inline buffer back to the empty string (X360 CgsDev::SimpleStrStream::Reset,
+        // called between the three score cells of each debug-HUD table row).
+        void Reset() { macCharBuffer[0] = '\0'; }
 
     private:
         static const s32 KI_BUFFER_SIZE = 256;   // DWARF CgsStrStream.h:306
