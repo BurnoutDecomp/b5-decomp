@@ -32,7 +32,8 @@ namespace renderengine
         // device; on the PC immediate D3D9 backend FrameBegin clears + BeginScene, and
         // ShowPixelBuffer EndScene + Present. (The shadow::Device layer is reconstructed
         // with the threaded dispatch.)
-        static bool FrameBegin();       // begin a frame; false if the device is not ready
+        static bool FrameBegin();       // begin a frame (clears to black); false if the device is not ready
+        static bool FrameBeginNoClear();// begin a scene WITHOUT clearing (overlay over the last frame)
         static void ShowPixelBuffer();  // end the scene and present the back buffer
     };
 }

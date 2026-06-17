@@ -14,6 +14,31 @@ namespace CgsDev
 {
     namespace DebugUI
     {
+        // X360 Metrics::DEFAULT - the built-in debug-UI screen metrics, carved verbatim from the X360
+        // (unk_820DC138, the source DebugUI::Construct memcpy's into the UI). The render layout reads
+        // mfScreenWidth/Height + the borders from here.
+        const Metrics Metrics::DEFAULT =
+        {
+            16.0f,    // mfTextSize
+            1.0f,     // mfWindowBorderSize
+            400.0f,   // mfWindowMoveSpeed
+            1280.0f,  // mfScreenWidth
+            720.0f,   // mfScreenHeight
+            64.0f,    // mfScreenBorderLeft
+            64.0f,    // mfScreenBorderTop
+            64.0f,    // mfScreenBorderRight
+            64.0f,    // mfScreenBorderBottom
+            20.0f,    // mfCascadeStep
+            0.7f,     // mfBarHeightScale
+            1.5f,     // mfBarHeightScaleBig
+            8.0f,     // mfSubItemIndent
+            2.0f,     // mfMenuGap
+            4.0f,     // mfErrorWindowBorder
+            0.3f,     // mfAutoRepeatDelay
+            0.05f,    // mfAutoRepeatRate
+            0.001f,   // mfAutoRepeatAcceleration
+        };
+
         Variant::Variant()
         {
             Clear();

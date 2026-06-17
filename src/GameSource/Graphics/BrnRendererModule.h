@@ -335,6 +335,12 @@ private:
     void ClearScreenshotState();
     void ConstructRenderSwitches();
 
+    // @ 0x82405A30 - the three per-thread monitor squares (bottom-centre): each is green when its
+    // thread is keeping up (running in real time) and red when it has fallen behind. The X360 draws
+    // them via the untextured Basic2dColouredVertex renderer at normalised coords; reconstructed
+    // through mIm2dRenderer (untextured -> solid colour) at the same screen positions.
+    void RenderThreeThreadMonitors(bool lbThread0, bool lbThread1, bool lbThread2);
+
     ERendererPrepareStage mePrepareStage;
     ERendererReleaseStage meReleaseStage;
     s32                   mDisplayType;

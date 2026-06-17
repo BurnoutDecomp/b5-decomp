@@ -32,6 +32,13 @@ namespace CgsGraphics
         if (renderengine::gDevice != nullptr)
         {
             renderengine::gDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+            // With a texture, modulate it by the vertex colour (the loading-screen path); with NO
+            // texture, drive the stage from the vertex colour alone (SELECTARG2 = DIFFUSE) so untextured
+            // prims - the debug overlay's solid squares - draw their colour regardless of the driver's
+            // unbound-texture default.
+            const DWORD luOp = (lpTexture != nullptr) ? D3DTOP_MODULATE : D3DTOP_SELECTARG2;
+            renderengine::gDevice->SetTextureStageState(0, D3DTSS_COLOROP, luOp);
+            renderengine::gDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, luOp);
         }
     }
 

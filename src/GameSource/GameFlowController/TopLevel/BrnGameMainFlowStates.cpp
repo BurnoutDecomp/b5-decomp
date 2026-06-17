@@ -1,5 +1,6 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -117,6 +118,7 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         break;
     case E_LOADINGSTAGE_REPLAYS:            // LoadReplayModule
         meLoadingScreenStage = E_LOADINGSTAGE_DONE;
+        CGS_ASSERT(false, "Asserts are working!");
         break;
     case E_LOADINGSTAGE_DONE:
     default:

@@ -105,5 +105,34 @@ namespace CgsDev
             bool Dereference(const Variant& lrOther);
             Type GetDereferenceType() const;
         };
+
+        // The debug-UI screen metrics (X360 CgsTypes.h:124). The render methods read the screen size +
+        // borders from here to lay out the on-screen overlay; DEFAULT is the built-in configuration
+        // memcpy'd into the UI at construction (carved from the X360: unk_820DC138). Field order/values
+        // are the real ones - in particular the bottom debug bar uses mfScreenWidth/Height +
+        // mfScreenBorderLeft (build-info x) + mfScreenBorderBottom (the bar's y inset).
+        struct Metrics
+        {
+            f32 mfTextSize;
+            f32 mfWindowBorderSize;
+            f32 mfWindowMoveSpeed;
+            f32 mfScreenWidth;
+            f32 mfScreenHeight;
+            f32 mfScreenBorderLeft;
+            f32 mfScreenBorderTop;
+            f32 mfScreenBorderRight;
+            f32 mfScreenBorderBottom;
+            f32 mfCascadeStep;
+            f32 mfBarHeightScale;
+            f32 mfBarHeightScaleBig;
+            f32 mfSubItemIndent;
+            f32 mfMenuGap;
+            f32 mfErrorWindowBorder;
+            f32 mfAutoRepeatDelay;
+            f32 mfAutoRepeatRate;
+            f32 mfAutoRepeatAcceleration;
+
+            static const Metrics DEFAULT;
+        };
     }
 }

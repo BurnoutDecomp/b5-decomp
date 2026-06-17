@@ -4,6 +4,7 @@
 #include "BrnCommonTypes.h"                                                       // Vector2 (rw::math::vpu::Vector2)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"               // CgsGraphics::Im2d, Basic2dColouredTexturedVertex
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"         // renderengine::PrimitiveType
+#include "GameShared/GameClasses/Development/VectorFont/CgsVectorFont.h"          // mVectorFont (DrawText)
 
 // CgsDev::Debug2DImmediateRender - the screen-space immediate-mode debug renderer. This is what
 // actually draws the on-screen "debug squares" (DrawBox) + lines/text the debug HUD emits each
@@ -65,6 +66,7 @@ namespace CgsDev
         void DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max, f32 lfValue, f32 lfMax, RGBA lBackColour, RGBA lBarColour);
 
         void SetRenderBuffer(CgsGraphics::Im2d* lpRenderBuffer);
+        bool HasRenderBuffer() const { return mpRenderBuffer != nullptr; }   // safe to Begin() only once set
 
     private:
         void DispatchVertices();
@@ -73,8 +75,9 @@ namespace CgsDev
         void AddVertex(f32 lfX, f32 lfY, RGBA lColour);
 
         DrawingMode                              meDrawingMode;
-        // -- deferred text members (see header note): SafeResourceHandle<Font> mpFont; VectorFont
-        //    mVectorFont; (they precede mpRenderBuffer in the X360 layout) --
+        // The debug VECTOR font - DrawText renders through it (the X360 carries it here alongside the
+        // deferred mpFont/mTextRenderer resource-font path; the vector font needs no font resource).
+        VectorFont                               mVectorFont;
         CgsGraphics::Im2d*                       mpRenderBuffer;
         f32                                      mfVirtualScreenWidth;
         f32                                      mfVirtualScreenHeight;
