@@ -25,14 +25,16 @@
 //       methods is the ChallengeData TU's job, not this body's.
 //       MISSING: BrnStreetData::ChallengeData::ContainsData / ::CompareScores.
 //
-//   UpdateNumberOfCarsInMode      (0x8231F3F0)
+//   UpdateNumberOfCarsInMode      (0x8231F3F0)  [NOW LANDED -- see body below]
 //       Body is muCarsInCurrentMode = lpOutput->maCarsInTheRace.GetLength()
-//       (with the <=8 assert). lpOutput is BrnGameState::ActiveRaceCarOutputInterface*,
-//       which the keystone only forward-declares -- the GameState-side interface
-//       has no committed definition (the World-side
-//       RCEntityActiveRaceCarOutputInterface is a DISTINCT C++ type; aliasing the
-//       two is a keystone/layout change, out of scope for a body agent).
-//       MISSING: BrnGameState::ActiveRaceCarOutputInterface (definition).
+//       (with the <=8 assert). The keystone now typedefs
+//       BrnGameState::ActiveRaceCarOutputInterface =
+//       BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface, whose
+//       public maCarsInTheRace (Array<CarsInTheRaceData,8>) is declared in
+//       BrnRaceCarEntityModuleOutputInterface.h (included below). The body reaches
+//       maCarsInTheRace.GetLength() BY NAME; GetLength() itself owns the -1
+//       "Array used before Construct/Clear" sentinel assert (CgsArray.h:62), so the
+//       body carries only the X360 "too many global race cars" bound assert.
 //
 //   UpdateRacePositions           (0x8232A668)
 //       Iterates lpActive->maCarsInTheRace, gathers distances from lpAI, queries
@@ -81,6 +83,12 @@
 // ----------------------------------------------------------------------------
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
+
+// ActiveRaceCarOutputInterface resolves (via the keystone typedef) to
+// BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface; its public
+// maCarsInTheRace (Array<CarsInTheRaceData,8>) is declared here. Needed by
+// UpdateNumberOfCarsInMode to dereference the interface BY NAME.
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 
 namespace BrnGameState
 {
@@ -131,5 +139,28 @@ namespace BrnGameState
                 lpScoreData->SetTimeInCurrentTeam(lCurrentTeamTime);
             }
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // ScoringSystem::UpdateNumberOfCarsInMode  (X360 0x8231F3F0)
+    // ------------------------------------------------------------------------
+    // Snapshot the live race-car count from the active output interface into this
+    // ScoringSystem's muCarsInCurrentMode, then assert it fits the active-race-car
+    // slot budget.
+    //
+    // X360 detail (asm at 0x8231F3F0): reads *(a2 + 512) -- the count field of
+    // lpOutput->maCarsInTheRace -- through Array<>::GetLength (which fires the
+    // "Array used before Construct/Clear was called" assert on the -1/KI_UNCONSTRUCTED
+    // sentinel; reproduced here by simply calling GetLength()). It stores that count
+    // into v3[5050] (== muCarsInCurrentMode) UNCONDITIONALLY, then -- if the stored
+    // count exceeds 8 -- fires "Too many global race cars think they are in the current
+    // mode" (BrnScoringSystem.cpp:601). The bound 8 == E_ACTIVE_RACE_CAR_INDEX_COUNT
+    // (BurnoutConstants.h). The store-before-assert order is preserved verbatim.
+    void ScoringSystem::UpdateNumberOfCarsInMode(const ActiveRaceCarOutputInterface* lpOutput)
+    {
+        muCarsInCurrentMode = lpOutput->maCarsInTheRace.GetLength();
+
+        CGS_ASSERT(muCarsInCurrentMode <= static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "Too many global race cars think they are in the current mode");
     }
 }

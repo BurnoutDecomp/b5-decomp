@@ -71,13 +71,29 @@ namespace BrnGameState
 // The DWARF qualifies the event queues under per-system NAMESPACES (the project models them as
 // `namespace X { struct Queue; }`, matching the BrnCarSelectManager / RoadRageScoring precedents),
 // so each is forward-declared as a namespace + nested struct rather than a class with a nested type.
+
+// The two RaceCarEntityModuleIO output interfaces the ScoringSystem update pass reads are real
+// namespace-scoped types (defined in BrnRaceCarEntityModuleOutputInterface.h, which the .cpp
+// partials include). Forward-declare them so the BrnGameState typedefs below can alias them by
+// pointer without pulling that heavy IO header into the keystone (StuntModeScoring.h precedent).
+namespace BrnWorld { namespace RaceCarEntityModuleIO {
+    struct RCEntityActiveRaceCarOutputInterface;
+    struct RCEntityGlobalRaceCarOutputInterface;
+} }
+
 namespace BrnGameState
 {
     class  GameModeParams;
     class  ModeManager;
     class  PlayerResultsInterface;
-    class  ActiveRaceCarOutputInterface;
-    class  GlobalRaceCarOutputInterface;   // DWARF typedef of RCEntityGlobalRaceCarOutputInterface
+    // DWARF typedefs: ActiveRaceCarOutputInterface / GlobalRaceCarOutputInterface ARE the
+    // RaceCarEntityModuleIO output interfaces (NOT distinct GameState types). The .cpp partials
+    // #include BrnRaceCarEntityModuleOutputInterface.h to complete them for member access.
+    typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface ActiveRaceCarOutputInterface;
+    typedef BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface GlobalRaceCarOutputInterface;
+    // AICarOutputInterface's real home (BrnAI::AIModuleIO::AICarOutputInterface, a 2f TU) is not
+    // reconstructed yet -> forward-declared class. Methods that DEREFERENCE it (UpdateRacePositions)
+    // stay declare-only until it lands.
     class  AICarOutputInterface;
 
     namespace InputBuffer                  { struct GameActionQueue; struct TakedownEventQueue; }

@@ -224,12 +224,26 @@ void ScoringSystem::RemovePlayer(BrnNetwork::NetworkPlayerID lID)
 }
 
 // :374 / X360 0x8232AE98 -- WriteDataToOutput.
-// FLAGGED BLOCKED: the body writes ~20 named members of GameStateModuleIO::ScoringOutputInterface
-// (maCarScoreData[8], maiCumulativeScoreData[8], the per-mode score scalars, the team/medal
-// fields, ...), but the committed ScoringOutputInterface is still an opaque maReserved[256] slice
-// with no usable members (its real layout is reconstructed by its own keystone TU). It also calls
-// ScoringSystem::GetTeamStuntScore / GetLeadingStuntTeam and OnlineStuntRunModeScoring::GetTeamScore,
-// none of which are declared on the keystone. Left declare-only; lands once ScoringOutputInterface
-// and the stunt-team helpers exist.
+// FLAGGED BLOCKED (re-checked 2026-06-17 after ScoringOutputInterface was grown to its real layout).
+// The ScoringOutputInterface blocker is GONE -- it now has the real named member run
+// (maCarScoreData[8], maiCumulativeScoreData[8], maCarIds[8], mabPlayerEliminated[8], the per-mode
+// score/medal scalars, ...). But FOUR independent blockers remain, so the body still cannot be
+// reconstructed compilably or faithfully:
+//   (1) ScoringSystem::GetTeamStuntScore -- not declared on the keystone (the X360 body calls it in
+//       the per-team stunt-score loop and on the LeadingStuntTeam path).
+//   (2) ScoringSystem::GetLeadingStuntTeam -- not declared on the keystone.
+//   (3) OnlineStuntRunModeScoring (a sub-scorer the keystone deliberately OMITS, see the SCOPE NOTE
+//       above) and its ::GetTeamScore -- no committed type/method in the tree.
+//   (4) The online publication is two VIRTUAL calls through mpCurrentOnlineModeScoring
+//       (X360 vtable+20 == WriteData(this, playerRaceCarIndex); vtable+32 == an update(a3)); the
+//       committed BaseOnlineModeScoring declares only GetCurrentPlayerTeam, not those two virtuals.
+// On top of those, several output members' SOURCE values (mePlayerRaceCarIndex, miPursuitCarDamageLeft,
+// mfPursuitCarDistanceFromPlayer, the road-rage / showtime scalars, the per-team stunt-score block)
+// are read in the X360 body from ScoringSystem byte offsets / from the omitted OnlineStuntRunModeScoring
+// + OnlineGameResults sub-objects that the SEMANTIC-SLICE keystone has no named-member home for.
+// Writing only the recoverable per-car loop would compile but silently drop the online block, the
+// player-race-car index and the entire per-mode scalar/stunt/medal tail -- a semantic regression, not
+// a reconstruction. Left declare-only; lands once the stunt-team helpers, OnlineStuntRunModeScoring,
+// the BaseOnlineModeScoring output virtuals, and the missing ScoringSystem source members exist.
 
 }

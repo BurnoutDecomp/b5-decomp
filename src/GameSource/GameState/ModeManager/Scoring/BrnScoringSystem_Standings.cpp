@@ -16,12 +16,12 @@
 // time-in-current-team(+0x6C) and the time-spent Time fields (+0xE0/+0xE8/+0xF0) all carry
 // named members + Get/Set accessors now, reached through CarData::GetScoreData().
 //
-// Methods in the assigned range whose bodies still need a type with no committed definition are
-// FLAGGED BLOCKED and intentionally omitted here (see the report), per the dependency rule:
-//   - StoreCarIds                                 -> dereferences ActiveRaceCarOutputInterface
-//       (forward-declared only) to gather per-car model ids.
+// StoreCarIds is now UNBLOCKED: the keystone's ActiveRaceCarOutputInterface typedef resolves to
+// the fully-declared BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface, so its
+// per-car accessors (maCarsInTheRace / GetCarModelId) are reachable. Its body is appended below.
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 
 namespace BrnGameState
 {
@@ -307,5 +307,46 @@ namespace BrnGameState
             return lpCar->GetScoreData()->GetTimeBoosting();
         }
         return CgsSystem::Time(0.0f);
+    }
+
+    // ------------------------------------------------------------------------
+    // StoreCarIds -- X360 0x8232B7C0
+    // Refresh each per-car record's car-model id from the live active-race-car
+    // output interface. Two passes, mirroring the X360 body:
+    //   1) Clear every slot's car id to 0 (CarData +0x128 == CarData::mCarId,
+    //      written as a full 64-bit zero by the `std r29`/r29==0 store).
+    //   2) For each car currently in the race (maCarsInTheRace[0 .. GetCount()-1]),
+    //      take that entry's active-race-car index, look up its CarData, and -- when
+    //      the slot exists -- stamp lpOutput->GetCarModelId(activeIndex) into mCarId.
+    // The X360 "Array used before Construct/Clear" guard is reproduced implicitly by
+    // going through the Array<> accessors (GetCount()/operator[]).
+    // ------------------------------------------------------------------------
+    void ScoringSystem::StoreCarIds(const ActiveRaceCarOutputInterface* lpOutput)
+    {
+        CGS_ASSERT(lpOutput != 0, "lpOutput");
+
+        // Pass 1: clear the car id on every per-car record that exists.
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpCar)
+            {
+                lpCar->SetCarID(0);
+            }
+        }
+
+        // Pass 2: stamp the live car-model id onto each car currently in the race.
+        const s32 liNumCarsInRace = lpOutput->maCarsInTheRace.GetCount();
+        for (s32 liEntry = 0; liEntry < liNumCarsInRace; ++liEntry)
+        {
+            const EActiveRaceCarIndex leActiveRaceCarIndex =
+                lpOutput->maCarsInTheRace[liEntry].meActiveRaceCarIndex;
+
+            CarData* lpCar = GetCarData(leActiveRaceCarIndex);
+            if (lpCar)
+            {
+                lpCar->SetCarID(lpOutput->GetCarModelId(leActiveRaceCarIndex));
+            }
+        }
     }
 }
