@@ -6,6 +6,8 @@
 // BrnContactSpyEvents.h).
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Input/CgsInputTypes.h"   // CgsInput::EBindResult, EUnbindResult
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"           // CgsModule::IOBuffer (lock state; status byte @ +0)
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"         // CgsModule::EventQueue<T,N>
 
 namespace CgsInput
 {
@@ -71,6 +73,84 @@ namespace InputIO
     struct StopRumbleEffectEvent : public BaseInputEvent
     {
         s32 miRumbleId;
+    };
+
+    // ------------------------------------------------------------------------
+    // IO payload buffers (subset). MINIMAL-SLICE NOTE (follows BrnGameStateModuleIO.h
+    // precedent): only the members the lock-guarded Get* accessors touch are modelled,
+    // each pinned to its exact X360 byte offset. The lock-guarded accessors assert the
+    // IOBuffer lock (read bit4 / write bit3) then return &member-at-offset. Tail/untouched
+    // members (PadOutputInformation[7], the PreWorld rumble queues + Timer/bool flags,
+    // WheelFFSpring) are left to each buffer's own full-reconstruction TU.
+    // ------------------------------------------------------------------------
+
+    // PadMapping is not committed yet (its full layout drags in the un-homed ActionMapping[34]).
+    // PostWorldInputBuffer only returns a pointer to its EventQueue<PadMapping,7>, so an incomplete
+    // forward declaration suffices for the pointer-typed accessor and the member is held as raw
+    // aligned storage of the correct width-anchor (it is the last modelled member, so its exact
+    // size does not move any touched member). Promote to the real type when PadMapping lands.
+    struct PadMapping;
+
+    // ---- PostWorldInputBuffer (DWARF CgsInputModuleIO.h:776) ----------------
+    //   GetBindRequestQueue() const -> X360 0x828E6A88, read-lock, this+4
+    //   GetPadMappingQueue()  const -> X360 0x828E6BD8, read-lock, this+156
+    struct PostWorldInputBuffer : public CgsModule::IOBuffer
+    {
+        typedef CgsModule::EventQueue<BaseInputEvent, 8> BindRequestQueue;    // 76B
+        typedef CgsModule::EventQueue<BaseInputEvent, 8> UnBindRequestQueue;  // 76B
+        typedef CgsModule::EventQueue<PadMapping,     7> PadMappingQueue;
+
+        const BindRequestQueue*   GetBindRequestQueue() const;   // 0x828E6A88
+        const UnBindRequestQueue* GetUnBindRequestQueue() const; // declared-only
+        const PadMappingQueue*    GetPadMappingQueue() const;    // 0x828E6BD8
+
+    private:
+        BindRequestQueue   mBindRequestQueue;    // @ +4   .. +80
+        UnBindRequestQueue mUnBindRequestQueue;  // @ +80  .. +156
+        // PadMappingQueue mPadMappingQueue @ +156 -- raw storage (PadMapping un-homed; last
+        // modelled member, so its exact size does not affect the offsets above).
+        u8                 mPadMappingQueueStorage[12 + 7 * (sizeof(BaseInputEvent) + 4)]; // @ +156
+        // CgsInput::Device::WheelFFSpring mWheelFFSpring; // tail member -- own TU
+    };
+
+    // ---- OutputBuffer (DWARF CgsInputModuleIO.h:844) ------------------------
+    //   GetBindResultQueue()      const -> X360 0x823B1038, read-lock,  this+4
+    //   GetUnbindResultQueue()    const -> X360 0x823B10E0, read-lock,  this+112
+    //   GetPadDisconnectedQueue() const -> X360 0x823B1188, read-lock,  this+220
+    //   GetUnbindResultQueue()          -> X360 0x828E6DD0, write-lock, this+112
+    //   GetPadDisconnectedQueue()       -> X360 0x828E6E78, write-lock, this+220
+    struct OutputBuffer : public CgsModule::IOBuffer
+    {
+        typedef CgsModule::EventQueue<BindResult,     8> BindResultQueue;      // 108B (BindResult=12B)
+        typedef CgsModule::EventQueue<UnBindResult,   8> UnBindResultQueue;    // 108B (UnBindResult=12B)
+        typedef CgsModule::EventQueue<BaseInputEvent, 8> PadDisconnectedQueue; // 76B
+
+        const BindResultQueue*      GetBindResultQueue() const;      // 0x823B1038
+        const UnBindResultQueue*    GetUnbindResultQueue() const;    // 0x823B10E0 (DWARF spells it "Unbind")
+        const PadDisconnectedQueue* GetPadDisconnectedQueue() const; // 0x823B1188
+        BindResultQueue*            GetBindResultQueue();            // declared-only
+        UnBindResultQueue*          GetUnbindResultQueue();          // 0x828E6DD0
+        PadDisconnectedQueue*       GetPadDisconnectedQueue();       // 0x828E6E78
+
+    private:
+        BindResultQueue      mBindResultQueue;       // @ +4   .. +112
+        UnBindResultQueue    mUnBindResultQueue;     // @ +112 .. +220
+        PadDisconnectedQueue mPadDisconnectedQueue;  // @ +220 .. +296
+        // PadOutputInformation maPadOutputInformation[7]; // tail @ +296 -- own TU
+    };
+
+    // ---- PreWorldInputBuffer (DWARF CgsInputModuleIO.h:603) -----------------
+    //   GetPlayJoltEffectEventQueue() const -> X360 0x828E6740, read-lock, this+4
+    struct PreWorldInputBuffer : public CgsModule::IOBuffer
+    {
+        typedef CgsModule::EventQueue<PlayJoltEffectEvent, 4> PlayJoltEffectEventQueue; // PlayJoltEffectEvent=60B
+
+        const PlayJoltEffectEventQueue* GetPlayJoltEffectEventQueue() const; // 0x828E6740
+
+    private:
+        PlayJoltEffectEventQueue mPlayJoltEffectEventQueue; // @ +4
+        // remaining rumble queues (PlayRumble/ChangeVolume/Stop), TimerStatusInterface,
+        // mbPauseRumble, mbEnableRumble, mbForceFeedback -- own TU.
     };
 }
 }
