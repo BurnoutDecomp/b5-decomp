@@ -18,8 +18,10 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"      // CgsModule::IOBuffer (base; lock state)
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"    // CgsModule::EventQueue<T,N> (mTrafficTypeResponseQueue)
 #include "GameSource/BurnoutConstants.h"                    // EActiveRaceCarIndex (enum : s32)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (enum : s32)
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h" // BrnTraffic::BrnTrafficIO::TrafficTypeResponse
 
 namespace BrnGameState
 {
@@ -96,12 +98,22 @@ namespace GameStateModuleIO
         GameEventQueue*               GetGameEventQueue();
         // X360 0x8231D410 (read-lock; "Not locked for reading", line 216)
         const AICarOutputInterface*   GetAICarOutputInterface() const;
+        // X360 0x823B9648 (write-lock; "Not locked for writing", line 217) -- non-const twin
+        AICarOutputInterface*         GetAICarOutputInterface();
+
+        // X360 0x823C9600 (write-lock; "Not locked for writing", line 220) -- forwards to the
+        // traffic-type response queue's BaseEventQueue<T>::Append.
+        bool AppendTrafficTypeResponseQueue(
+                const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>& lSource);
 
     private:
         u8  maPadToVehicleOutput[0x220 - sizeof(CgsModule::IOBuffer)]; // base end -> 0x0220
         u8  mVehicleOutputInterfaceStorage[0xA4B0 - 0x220];           // VehicleOutputInterface @ +0x0220
         u8  mGameEventQueueStorage[0xAAC0 - 0xA4B0];                  // GameEventQueue         @ +0xA4B0
-        u8  mAICarOutputInterfaceStorage[0x40];                       // AICarOutputInterface   @ +0xAAC0 (widen when its own TU lands)
+        u8  mAICarOutputInterfaceStorage[0xBFA8 - 0xAAC0];            // AICarOutputInterface   @ +0xAAC0 (placeholder width: spans to the next pinned member; widen/replace when AICarOutputInterface's own TU lands)
+        // TrafficTypeResponse query-response queue @ +0xBFA8 (49064). Fixed-capacity EventQueue<...,32>;
+        // 16B element stride == sizeof(TrafficTypeResponse). AppendTrafficTypeResponseQueue forwards to it.
+        CgsModule::EventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse, 32> mTrafficTypeResponseQueue; // +0xBFA8
     };
 
     // ========================================================================

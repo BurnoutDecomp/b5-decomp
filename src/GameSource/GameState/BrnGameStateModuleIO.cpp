@@ -92,6 +92,24 @@ const AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface() cons
     return reinterpret_cast<const AICarOutputInterface*>(&mAICarOutputInterfaceStorage);
 }
 
+// X360 0x823B9648 - write-lock (mutable) accessor for the AI-car output interface (this+0xAAC0).
+// Non-const twin of GetAICarOutputInterface() const.
+AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return reinterpret_cast<AICarOutputInterface*>(&mAICarOutputInterfaceStorage);
+}
+
+// X360 0x823C9600 - write-lock-guarded forwarder onto the traffic-type response queue (this+0xBFA8).
+// Asserts the write lock, then merges lSource into the member queue via
+// CgsModule::BaseEventQueue<TrafficTypeResponse>::Append.
+bool PostWorldInputBuffer::AppendTrafficTypeResponseQueue(
+        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>& lSource)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return mTrafficTypeResponseQueue.Append(lSource);
+}
+
 // =====================  OutputBuffer (GameStateModuleIO TU)  =====================
 
 // X360 0x8231D4B8 - write-lock accessor for the game-action queue (this+0x04).
