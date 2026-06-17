@@ -29,10 +29,35 @@ namespace BrnStreetData
 {
     typedef u64 CgsID;
 
+    // BrnChallengeData.h:47 (DWARF) -- the score-type index, true SharedClasses StreetData
+    // home for this enum. (The committed GameSource home BrnChallengeHighScoreEntry.h declares
+    // the same enum/values for its own use; this self-contained .cpp TU never includes that
+    // header, so there is no cross-TU ODR clash.) SetScore bounds-checks against E_SCORE_TYPE_COUNT.
+    enum ScoreType
+    {
+        E_SCORE_TYPE_START = 0,
+        E_SCORE_TYPE_TIME  = 0,
+        E_SCORE_TYPE_CRASH = 1,
+        E_SCORE_TYPE_COUNT = 2,
+    };
+
     struct ScoreList
     {
-        s32 maScores[2];
+        s32 maScores[2];                                   // +0 (E_SCORE_TYPE_COUNT entries)
+
+        void SetScore( BrnStreetData::ScoreType leScoreType, int32_t liScore );
     };
+
+    // X360 SetScore @ 0x8230EC78: maScores[leScoreType] = liScore, guarded by the bounds assert.
+    // The X360 `_DWORD *result`(==this) return is the PPC register artifact for a source-void
+    // setter and is dropped per project convention; the unsigned `a2 >= 2` test is the compiler's
+    // single-compare folding of `leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT`.
+    void ScoreList::SetScore( BrnStreetData::ScoreType leScoreType, int32_t liScore )
+    {
+        CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
+                    "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT" );
+        maScores[ leScoreType ] = liScore;
+    }
 
     // The X360 initialises a fresh record's bit words to this pattern and its
     // scores / ids to the all-ones "no score / no owner" sentinel.

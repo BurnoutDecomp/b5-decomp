@@ -288,4 +288,36 @@ inline ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liAction
     return &maAction[ liActionIndex ];
 }
 
+// ChallengeListEntry::GetChallengeStyle @ 0x823542A0
+// (DWARF: EFreeburnChallengeStyle GetChallengeStyle() const, ChallengeListEntry.h:396)
+// X360 reads the byte at offset 0 of `this` (== maAction[0].muActionType, the first action's
+// type) and maps ROAD_RULE_TIME/ROAD_RULE_CRASH to the matching freeburn styles. Reconstructed
+// via the named accessor maAction[0].GetActionType() rather than a raw byte read. The range
+// guard is the project CGS_ASSERT (non-fatal; binary continues even on out-of-range type).
+//
+// X360/DWARF DRIFT (binary authoritative): the X360 fires the assert when the type byte is
+// >= 0x29 (41), whereas the committed/PS3-DWARF EChallengeActionType has E_ACTION_COUNT == 22.
+// We do NOT redefine the committed enum; the condition is written against the named constant
+// for source fidelity (the byte-exact X360 threshold is 0x29).
+inline ChallengeListEntry::EFreeburnChallengeStyle
+ChallengeListEntry::GetChallengeStyle() const
+{
+    const ChallengeListEntryAction::EChallengeActionType leActionType =
+        maAction[ 0 ].GetActionType();
+
+    CGS_ASSERT(
+        leActionType < ChallengeListEntryAction::E_ACTION_COUNT,
+        "(ChallengeListEntryAction::EChallengeActionType)muActionType < ChallengeListEntryAction::E_ACTION_COUNT" );
+
+    if ( leActionType == ChallengeListEntryAction::E_CHALLENGE_ACTION_ROAD_RULE_TIME )
+    {
+        return E_FREEBURN_STYLE_ROAD_RULES_TIME;
+    }
+    if ( leActionType == ChallengeListEntryAction::E_CHALLENGE_ACTION_ROAD_RULE_CRASH )
+    {
+        return E_FREEBURN_STYLE_ROAD_RULES_CRASH;
+    }
+    return E_FREEBURN_STYLE_NORMAL;
+}
+
 } // namespace BrnResource
