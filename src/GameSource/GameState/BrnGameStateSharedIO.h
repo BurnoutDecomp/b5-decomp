@@ -119,6 +119,17 @@ namespace BrnGameState
             E_BLUE_TEAM_FINISH_TYPE_COUNT      = 3,
         };
 
+        // How the player crashed during an online Road-Rage round (DWARF home
+        // BrnGameStateSharedIO.h:447). Passed by value to ScoringSystem::OnRoadRagePlayerCrashed;
+        // grown here in its committed home so the keystone (BrnScoringSystem.h) can name it.
+        enum ERoadRageCrashType : s32
+        {
+            E_ROADRAGE_CRASHTYPE_NONE      = -1,
+            E_ROADRAGE_CRASHTYPE_TAKENDOWN = 0,
+            E_ROADRAGE_CRASHTYPE_WRECKED   = 1,
+            E_ROADRAGE_CRASHTYPE_COUNT     = 2,
+        };
+
         // Per-event assert ceiling on landmarks (DWARF BrnGameStateSharedIO.h:1850).
         const s32 KI_MAX_LANDMARKS_IN_MODE = 16;
 

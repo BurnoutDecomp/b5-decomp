@@ -14,12 +14,17 @@
 // vtable slots exist in this TU's relative order. Override order matches the base vtable.
 
 #include "types.hpp"
-#include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h" // base + Compare*/UpdatePlayerTeams/SetPlayerPosition
-#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"         // ScoringSystem, CarData
+#include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h" // base + Compare*/UpdatePlayerTeams/SetPlayerPosition + fwd-decl `class ScoringSystem`
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                         // OnlineScoringOutputInterface
 #include "GameSource/BurnoutConstants.h"                                       // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                    // BrnNetwork::NetworkPlayerID (== s32)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                       // CgsSystem::Time
+
+// This header intentionally does NOT include BrnScoringSystem.h. The keystone embeds this scorer BY
+// VALUE, so it must see this full class definition; if this header pulled the keystone back in, the
+// `#pragma once` guard would leave one of the two types incomplete at the embed point (mutual-include
+// cycle). ScoringSystem is named only BY POINTER in the virtuals below (the base header forward-
+// declares it); CarData is touched only in the .cpp, which includes the keystone itself.
 
 namespace BrnGameState
 {
