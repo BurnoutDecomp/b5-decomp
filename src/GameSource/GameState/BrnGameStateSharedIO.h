@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>                                              // offsetof (CarScoreData / OnlineScoringOutputInterface layout asserts)
 #include "BrnCommonTypes.h"
 #include "GameSource/GameState/BrnGameStateTypes.h"             // BrnGameState::LandmarkIndex
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"     // BrnNetwork::NetworkPlayerID
@@ -106,6 +107,16 @@ namespace BrnGameState
             E_PLAYER_TEAM_RED_TEAM  = 1,
             E_PLAYER_TEAM_BLUE_TEAM = 2,
             E_PLAYER_TEAM_COUNT     = 3
+        };
+
+        // How the blue team finished an online team round. DWARF: BrnGameStateSharedIO.h:478.
+        // Stored per-slot in OnlineScoringOutputInterface::maeBlueTeamFinishTypes[].
+        enum EBlueTeamFinishType : s32
+        {
+            E_BLUE_TEAM_FINISH_TYPE_ELIMINATED = 0,
+            E_BLUE_TEAM_FINISH_TYPE_SURVIVED   = 1,
+            E_BLUE_TEAM_FINISH_TYPE_ESCAPED    = 2,
+            E_BLUE_TEAM_FINISH_TYPE_COUNT      = 3,
         };
 
         // Per-event assert ceiling on landmarks (DWARF BrnGameStateSharedIO.h:1850).
@@ -312,23 +323,75 @@ namespace BrnGameState
             void GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppliedValue,
                                               Array<ChainableMultiplierInfo, 8>* lpaMultiplierInfo) const; // 0x8231C170
 
+            // ===== Online-mode scoring accessors (grown for the online-mode scorers) =====
+            //
+            // The two online scorers (OnlineRaceModeScoring / OnlineBurningHomeRunModeScoring)
+            // read these per-car fields when building their finishing-order sort rows, and write
+            // back the awarded points + finishing rank. Every offset below is PROVEN from the X360
+            // scorer pseudocode (UpdatePlayerPoints @ 0x8232EB70 / 0x8232F6C0, which read/write the
+            // CarData record returned by ScoringSystem::GetCarData; CarData embeds CarScoreData at
+            // offset 0, so these reads/writes land inside CarScoreData) cross-checked against this
+            // record's ctor (0x822A45A8) and ClearData (0x821F2B28). Inline so the scorer TUs need
+            // no out-of-line body. NOTE: GetRaceCarIndex / GetNetworkPlayerID are NOT here -- in the
+            // X360 binary they read CarData fields at +0x144 / +0x148 (past sizeof(CarScoreData)),
+            // so they live on CarData (see BrnScoringSystem.h), not on this record.
+            CgsSystem::Time GetFinishTime() const          { return mTotalTime; }              // +0x00
+            f32             GetDistanceToFinish() const     { return mfDistanceToFinish; }      // +0x48
+            s32             GetTakedowns() const            { return miTakedowns; }             // +0x4C
+            bool            GetTimedOut() const             { return mbTimedOut; }              // +0x68
+            bool            GetDisconnected() const         { return mbDisconnected; }          // +0x69
+            CgsSystem::Time GetTimeAsRunner() const         { return mTimeAsRunner; }           // +0x84
+            bool            GetCompletedBurningHomeRun() const { return mbCompletedBurningHomeRun; } // +0xBC
+            s32             GetCumulativeCheckpoints() const { return miCumulativeCheckpoints; } // +0xC4
+
+            // Writeback. Both scorers write the same two physical slots in the same order: first the
+            // descending points/finish-position countdown value at +0x58 (X360 stw ...,0x58), then
+            // the sorted standings rank at +0x5C (X360 stw ...,0x5C). The Race scorer spells the
+            // first call SetOnlineRacePoints, the Burning-Home-Run scorer spells it
+            // SetOnlineFinishPosition; both target +0x58, so they are unified here. Likewise the
+            // second slot (+0x5C, ClearData = -1) is the standings rank.
+            void SetOnlineRacePoints(s32 liPoints)          { miOnlineFinishPositionScore = liPoints; } // +0x58
+            void SetOnlineFinishPosition(s32 liPosition)    { miOnlineStandingsPosition = liPosition; } // +0x5C
+
         private:
-            CgsSystem::Time mTotalTime;            // +0x00 (8)  Time(0) in ClearData
+            CgsSystem::Time mTotalTime;            // +0x00 (8)  Time(0) in ClearData; the finish time
             s32  miField08;                        // +0x08      ClearData = 8
             s32  miField0C;                        // +0x0C      ClearData = 9
             s32  miField10;                        // +0x10      ClearData = 0
             s32  miField14;                        // +0x14      ClearData = 9
-            u8   maStorage18[68];                  // +0x18..+0x5C  scalar/Time words (memset/memcpy)
-            s32  miInvalidIndex5C;                 // +0x5C      ClearData = -1 (slot/index sentinel)
+            u8   maStorage18[48];                  // +0x18..+0x48  scalar/Time words (memset/memcpy)
+            f32  mfDistanceToFinish;               // +0x48      distance-to-finish (Race gather lfs 0x48)
+            s32  miTakedowns;                      // +0x4C      takedown count (BHR gather lwz 0x4C)
+            u8   maStorage50[8];                   // +0x50..+0x58
+            s32  miOnlineFinishPositionScore;      // +0x58      ClearData = 0; online points/finish-position countdown writeback
+            s32  miOnlineStandingsPosition;        // +0x5C      ClearData = -1; online standings rank writeback (was miInvalidIndex5C)
             s32  miInvalidIndex60;                 // +0x60      ClearData = -1 (slot/index sentinel)
-            u8   maStorage64[100];                 // +0x64..+0xC8  the ten chainable Time pairs + more
+            u8   maStorage64[4];                   // +0x64..+0x68  ClearData = 0
+            bool mbTimedOut;                       // +0x68      timed-out flag (both gathers lbz 0x68)
+            bool mbDisconnected;                   // +0x69      disconnected flag (both gathers lbz 0x69)
+            u8   maStorage6A[26];                  // +0x6A..+0x84
+            CgsSystem::Time mTimeAsRunner;         // +0x84 (8)  time-as-runner (BHR gather lwz 0x84 / lfs 0x88)
+            u8   maStorage8C[48];                  // +0x8C..+0xBC  (incl. chainable Time pairs region)
+            bool mbCompletedBurningHomeRun;        // +0xBC      completed-burning-home-run flag (BHR gather lbz 0xBC)
+            u8   maStorageBD[7];                   // +0xBD..+0xC4
+            s32  miCumulativeCheckpoints;          // +0xC4      cumulative checkpoints (BHR gather lwz 0xC4)
             s32  miChainableScore;                 // +0xC8      GetChainableStuntMultipliers source
             s32  miChainableField;                 // +0xCC      GetChainableStuntMultipliers source
             s32  miCurrentChainableMultiplier;     // +0xD0      guard (this[52] < liMaxMultiplier) + source
             u8   maStorageD4[4];                   // +0xD4..+0xD8
             u8   mbChainActive;                    // +0xD8      guard flag (*(this+216))
             u8   maStorageTail[79];                // +0xD9..+0x128  trailing fields (through +292)
+            // Byte accounting (each named field carved at its X360-proven offset, blobs padding the
+            // gaps so total stays 0x128): mTotalTime@0x00, scalars@0x08..0x18, maStorage18[48]@0x18,
+            // mfDistanceToFinish@0x48, miTakedowns@0x4C, maStorage50[8]@0x50,
+            // miOnlineFinishPositionScore@0x58, miOnlineStandingsPosition@0x5C, miInvalidIndex60@0x60,
+            // maStorage64[4]@0x64, mbTimedOut@0x68, mbDisconnected@0x69, maStorage6A[26]@0x6A,
+            // mTimeAsRunner@0x84, maStorage8C[48]@0x8C, mbCompletedBurningHomeRun@0xBC,
+            // maStorageBD[7]@0xBD, miCumulativeCheckpoints@0xC4, miChainable*@0xC8.. through 0x128.
         };
+        // offsetof cannot validate the carved private members here (offsetof needs a complete type
+        // and CarScoreData has private members + methods, so it is non-standard-layout); the manual
+        // byte accounting above plus this total-size assert pin the layout.
         static_assert(sizeof(CarScoreData) == 296, "CarScoreData layout drift (0x128)");
 
         // X360 0x821F2B08. Free predicate over EGameModeType: true for exactly
@@ -360,22 +423,28 @@ namespace BrnGameState
             unsigned char maReserved[256]; // NOMINAL -- full layout grown by own TU
         };
 
-        // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout
-        // reconstructed by OnlineScoringOutputInterface's own TU (DWARF home
-        // BrnGameStateSharedIO.h:653). Size 256 (NOMINAL -- not byte-verified, grown by own TU).
-        //
-        // Embedded BY VALUE in RaceCarEntityModuleIO::InputBuffer_PrePhysics (mOnlineScoringInterface,
-        // IO header :446; the buffer typedefs RaceCarEntityModuleIO::OnlineScoringOutputInterface as
-        // OnlineScoringInterface). Passed by const* through Get/SetOnlineScoringInterface, so a
-        // complete sized blob suffices. DWARF (BrnGameStateSharedIO.h:655-660):
-        //   int32_t maiNumEliminations[8]; BrnGameState::EOnlineAwardID maOnlineAwards[8];
-        //   int32_t maiOnlineAwardVariables[8]; EPlayerTeam maePlayerTeam[8];
-        //   EBlueTeamFinishType maeBlueTeamFinishTypes[8]; bool mbRedTeamWon;
-        // The award/team enums are GameState-internal, so collapsed to an opaque reserved blob
-        // here; the real members land with this type's own ledger TU. Natural alignment.
+        // Network output interface for the online-mode scoring results. Embedded BY VALUE in
+        // RaceCarEntityModuleIO::InputBuffer_PrePhysics (mOnlineScoringInterface, IO header :446)
+        // and written by the online scorers' WriteDataToOutput. Layout is X360-AUTHORITATIVE:
+        // OnlineBurningHomeRunModeScoring::WriteDataToOutput (X360 0x82315650) copies three 8-word
+        // blocks into this struct at dst offsets +0x20 (maOnlineAwards), +0x40
+        // (maiOnlineAwardVariables) and +0x60 (maePlayerTeam) -- which pins maiNumEliminations[8]
+        // at +0x00, maOnlineAwards[8] at +0x20, maiOnlineAwardVariables[8] at +0x40 and
+        // maePlayerTeam[8] at +0x60. The remaining members are from the recorded DWARF layout
+        // (BrnGameStateSharedIO.h:655-660): maeBlueTeamFinishTypes[8] at +0x80 then mbRedTeamWon.
+        // Single owner: grow in place, do not fork.
         struct OnlineScoringOutputInterface
         {
-            unsigned char maReserved[256]; // NOMINAL -- full layout grown by own TU
+            s32                 maiNumEliminations[8];        // +0x00  (base WriteDataToOutput writes this; BHR omits it)
+            EOnlineAwardID      maOnlineAwards[8];            // +0x20
+            s32                 maiOnlineAwardVariables[8];   // +0x40
+            EPlayerTeam         maePlayerTeam[8];             // +0x60
+            EBlueTeamFinishType maeBlueTeamFinishTypes[8];    // +0x80
+            bool                mbRedTeamWon;                 // +0xA0
         };
+        static_assert(offsetof(OnlineScoringOutputInterface, maOnlineAwards)          == 0x20, "OnlineScoringOutputInterface +0x20 drift");
+        static_assert(offsetof(OnlineScoringOutputInterface, maiOnlineAwardVariables) == 0x40, "OnlineScoringOutputInterface +0x40 drift");
+        static_assert(offsetof(OnlineScoringOutputInterface, maePlayerTeam)           == 0x60, "OnlineScoringOutputInterface +0x60 drift");
+        static_assert(offsetof(OnlineScoringOutputInterface, maeBlueTeamFinishTypes)  == 0x80, "OnlineScoringOutputInterface +0x80 drift");
     }
 }

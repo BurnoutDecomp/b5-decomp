@@ -25,6 +25,29 @@
 namespace BrnGameState
 {
 
+// Per-player end-of-event online award id (DWARF BrnGameStateTypes.h:86). The award table on
+// BaseOnlineModeScoring (maOnlineAwards[8]) stores one of these per slot; the online-mode scorers
+// reset every slot to E_ONLINE_AWARD_INVALID in ClearData. Values are X360-authoritative (the
+// award priority/rating tables in BrnBaseOnlineModeScoring.cpp index by these). This is the single
+// owner (DWARF home BrnGameStateTypes.h); grow here, do not fork.
+enum EOnlineAwardID : s32
+{
+    E_ONLINE_AWARD_INVALID                     = -1,
+    E_ONLINE_AWARD_START                       = 0,
+    E_ONLINE_AWARD_RACE_WINNER                 = 0,
+    E_ONLINE_AWARD_TAKEDOWNS_FOR               = 1,
+    E_ONLINE_AWARD_TAKEDOWNS_AGAINST           = 2,
+    E_ONLINE_AWARD_MOST_CRASHES                = 3,
+    E_ONLINE_AWARD_FASTEST_LAP                 = 4,
+    E_ONLINE_AWARD_SHORTEST_DISTANCE           = 5,
+    E_ONLINE_AWARD_LONGEST_DISTANCE            = 6,
+    E_ONLINE_AWARD_LONGEST_TIME_IN_FIRST_PLACE = 7,
+    E_ONLINE_AWARD_LONGEST_TIME_IN_LAST_PLACE  = 8,
+    E_ONLINE_AWARD_TIME_SPENT_BOOSTING         = 9,
+    E_ONLINE_AWARD_LONGEST_DRIFT               = 10,
+    E_ONLINE_AWARD_COUNT                       = 11,
+};
+
 // X360-attested handle type (DWARF BrnGameStateTypes.h:57). A 2-byte signed wrapper over
 // a trigger-region index. SelectRandomDestinations builds one of these from the s32 it
 // gets out of TriggerRegion::GetRegionIndex() and stores it through its output array.
