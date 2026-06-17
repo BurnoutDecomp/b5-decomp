@@ -367,23 +367,31 @@ namespace BrnGameState
 
         private:
             CgsSystem::Time mTotalTime;            // +0x00 (8)  Time(0) in ClearData; the finish time
-            s32  miField08;                        // +0x08      ClearData = 8
-            s32  miField0C;                        // +0x0C      ClearData = 9
-            s32  miField10;                        // +0x10      ClearData = 0
-            s32  miField14;                        // +0x14      ClearData = 9
-            u8   maStorage18[48];                  // +0x18..+0x48  scalar/Time words (memset/memcpy)
-            f32  mfDistanceToFinish;               // +0x48      distance-to-finish (Race gather lfs 0x48)
+            s32  miRacePosition;                   // +0x08      live race position (ClearData=8 == last-of-8). GetCarRacePosition return *(CarData+8); also read by RaceCarHasReachedCheckPointWithinEvent (lwz 8(r28) compared to total-1). The checkpoint COUNTER it increments lives on CarData @+0x154 (lbz/stb 0x154), not here -- so +0x08 is unambiguously the race position. (was miField08)
+            s32  miHighestRacePosition;            // +0x0C      best (lowest) race position seen; ClearData=9. ClearHighestPositions copies +0x08 -> +0x0C (result[3]=result[2]). (was miField0C)
+            s32  miCompletedLaps;                  // +0x10      completed-lap count; ClearData=0. GetRaceCarNumCompletedLaps return *(r3+0x10); RegisterFinishForCar increments it. (was miField10)
+            s32  miFinishPosition;                 // +0x14      race finish position; ClearData=9. GetCarRaceFinishPosition return *(r3+0x14); RegisterFinishForCar writes it. (was miField14)
+            f32  mfDistanceToFinishLive;           // +0x18      live distance-to-finish (f32). GetRaceCarDistanceToFinish: lfs f1,0x18(r3). DISTINCT from mfDistanceToFinish@+0x48 -- SetPlayerEliminated copies +0x18 -> +0x48 (lfs 0x18 / stfs 0x48), i.e. captures the live distance into the +0x48 slot at elimination, proving two separate fields. (carved from old maStorage18)
+            u8   maStorage1C[8];                   // +0x1C..+0x24  two f32 words (ClearData stfs 0x1C / stfs 0x20)
+            CgsSystem::Time maaLapTimes[4];        // +0x24..+0x44  per-lap times, KU_MAX_LAPS==4 (8-byte Time stride). RegisterFinishForCar: base addi r28,r31,0x24; stride +=8; element[laps] write stw 0x24(r11)/stfs 0x28(r11) with r11=laps<<3. GetRaceCarTotalTime sums [0..laps); GetRaceCarFastestLapTime mins [1..laps). ClearData inits 4 elements from +0x24 stride 8.
+            u8   maStorage44[1];                   // +0x44       byte (ClearData stb 0x44 = 0)
+            bool mbHasFinished;                    // +0x45       has-crossed-the-line flag; RegisterFinishForCar stb 1,0x45(r31) at finish; ClearData stb 0,0x45. (carved from old maStorage18)
+            u8   maStorage46[2];                   // +0x46..+0x48  padding to +0x48
+            f32  mfDistanceToFinish;               // +0x48      captured/finish distance-to-finish (Race gather lfs 0x48; written from +0x18 by SetPlayerEliminated)
             s32  miTakedowns;                      // +0x4C      takedown count (BHR gather lwz 0x4C)
-            u8   maStorage50[8];                   // +0x50..+0x58
-            s32  miOnlineFinishPositionScore;      // +0x58      ClearData = 0; online points/finish-position countdown writeback
+            s32  miTakedownsAgainst;               // +0x50      takedowns-against count; ClearData=0. GetNumberOfTakedownsAgainst: lwz r3,0x50(r3). (carved from old maStorage50)
+            u8   maStorage54[4];                   // +0x54..+0x58  word (ClearData stw 0x54 = 0)
+            s32  miOnlineFinishPositionScore;      // +0x58      ClearData = 0; online points/finish-position countdown writeback. UpdateCumulativeResults reads it (lwz 0x58) and adds into CarData cumulative @+0x130.
             s32  miOnlineStandingsPosition;        // +0x5C      ClearData = -1; online standings rank writeback (was miInvalidIndex5C)
-            s32  miInvalidIndex60;                 // +0x60      ClearData = -1 (slot/index sentinel)
-            u8   maStorage64[4];                   // +0x64..+0x68  ClearData = 0
+            EActiveRaceCarIndex meEliminatorRaceCarIndex; // +0x60  race-car index that eliminated this car; ClearData = -1 == E_ACTIVE_RACE_CAR_INDEX_INVALID. GetRaceCarEliminatorIndex return *(r3+0x60); SetPlayerEliminated stw a3,0x60(r31). (was miInvalidIndex60)
+            s32  miNumEliminations;                // +0x64      number of cars this car eliminated; ClearData=0. GetNumberOfEliminations: lwz *(r3+0x64); SetPlayerEliminated increments the ELIMINATOR's +0x64. (carved from old maStorage64)
             bool mbTimedOut;                       // +0x68      timed-out flag (both gathers lbz 0x68)
             bool mbDisconnected;                   // +0x69      disconnected flag (both gathers lbz 0x69)
-            u8   maStorage6A[26];                  // +0x6A..+0x84
+            u8   maStorage6A[2];                   // +0x6A..+0x6C  bytes (ClearData stb 0x6B = 0)
+            CgsSystem::Time mTimeInCurrentTeam;    // +0x6C (8)  time spent in the current team; reset to 0 by SetPlayerTeam on a team change (addi r3,r11,0x6C; SetFloatVal), accumulated by UpdateTeamStats (addi r3,r31,0x6C; Time::operator+=). Ctor zeroes via stw 0x6C/stfs 0x70. (carved from old maStorage6A)
+            CgsSystem::Time maTimeInTeam[2];       // +0x74..+0x84  per-team accumulated time, indexed by team; UpdateTeamStats: base addi r3,r11,0x74 with r11=(team<<3)+r31. Team index itself lives on CarData @+0x13C, outside this record. (carved from old maStorage6A)
             CgsSystem::Time mTimeAsRunner;         // +0x84 (8)  time-as-runner (BHR gather lwz 0x84 / lfs 0x88)
-            u8   maStorage8C[48];                  // +0x8C..+0xBC  (incl. chainable Time pairs region)
+            u8   maStorage8C[48];                  // +0x8C..+0xBC  (incl. chainable-stunt Time pairs region the ctor zeroes)
             bool mbCompletedBurningHomeRun;        // +0xBC      completed-burning-home-run flag (BHR gather lbz 0xBC)
             u8   maStorageBD[7];                   // +0xBD..+0xC4
             s32  miCumulativeCheckpoints;          // +0xC4      cumulative checkpoints (BHR gather lwz 0xC4)
@@ -392,14 +400,29 @@ namespace BrnGameState
             s32  miCurrentChainableMultiplier;     // +0xD0      guard (this[52] < liMaxMultiplier) + source
             u8   maStorageD4[4];                   // +0xD4..+0xD8
             u8   mbChainActive;                    // +0xD8      guard flag (*(this+216))
-            u8   maStorageTail[79];                // +0xD9..+0x128  trailing fields (through +292)
+            bool mbEliminated;                     // +0xD9      eliminated flag; ClearData stb 0,0xD9. SetPlayerEliminated/HasStuntAttackModeEnded stb 1,0xD9(r3); IsBlueTeamEliminated reads lbz 0xD9 (team==2 && !eliminated). (carved from old maStorageTail head)
+            u8   maStorageDA[6];                   // +0xDA..+0xE0
+            CgsSystem::Time mTimeInFirstPlace;     // +0xE0 (8)  time spent in 1st place. GetTimeSpentInFirstPlace: lwz 0xE0(r11)/lfs 0xE4(r11). Ctor/ClearData zero via +0xE0. (carved from old maStorageTail)
+            CgsSystem::Time mTimeInLastPlace;      // +0xE8 (8)  time spent in last place. GetTimeSpentInLastPlace: *(CarData+232)/+236 == +0xE8/+0xEC. (carved from old maStorageTail)
+            CgsSystem::Time mTimeBoosting;         // +0xF0 (8)  time spent boosting. GetTimeSpentBoosting: *(CarData+240)/+244 == +0xF0/+0xF4. (carved from old maStorageTail)
+            u8   maStorageF8[48];                  // +0xF8..+0x128  trailing fields (through +292; ClearData zeroes +0xF8/+0xFC/+0x100..+0x11C)
             // Byte accounting (each named field carved at its X360-proven offset, blobs padding the
-            // gaps so total stays 0x128): mTotalTime@0x00, scalars@0x08..0x18, maStorage18[48]@0x18,
-            // mfDistanceToFinish@0x48, miTakedowns@0x4C, maStorage50[8]@0x50,
-            // miOnlineFinishPositionScore@0x58, miOnlineStandingsPosition@0x5C, miInvalidIndex60@0x60,
-            // maStorage64[4]@0x64, mbTimedOut@0x68, mbDisconnected@0x69, maStorage6A[26]@0x6A,
-            // mTimeAsRunner@0x84, maStorage8C[48]@0x8C, mbCompletedBurningHomeRun@0xBC,
-            // maStorageBD[7]@0xBD, miCumulativeCheckpoints@0xC4, miChainable*@0xC8.. through 0x128.
+            // gaps so total stays 0x128). Region carves (each sums to the old blob it replaced):
+            //   old maStorage18[48]@0x18 -> mfDistanceToFinishLive(4)@0x18 + maStorage1C[8]@0x1C +
+            //       maaLapTimes[4](32)@0x24 + maStorage44[1]@0x44 + mbHasFinished(1)@0x45 + maStorage46[2]@0x46 = 48.
+            //   old maStorage50[8]@0x50 -> miTakedownsAgainst(4)@0x50 + maStorage54[4]@0x54 = 8.
+            //   old maStorage64[4]@0x64 -> miNumEliminations(4)@0x64 = 4.
+            //   old maStorage6A[26]@0x6A -> maStorage6A[2]@0x6A + mTimeInCurrentTeam(8)@0x6C +
+            //       maTimeInTeam[2](16)@0x74 = 26.
+            //   old maStorageTail[79]@0xD9 -> mbEliminated(1)@0xD9 + maStorageDA[6]@0xDA +
+            //       mTimeInFirstPlace(8)@0xE0 + mTimeInLastPlace(8)@0xE8 + mTimeBoosting(8)@0xF0 +
+            //       maStorageF8[48]@0xF8 = 79.
+            // Unchanged named anchors: mTotalTime@0x00, mfDistanceToFinish@0x48, miTakedowns@0x4C,
+            // miOnlineFinishPositionScore@0x58, miOnlineStandingsPosition@0x5C, mbTimedOut@0x68,
+            // mbDisconnected@0x69, mTimeAsRunner@0x84, maStorage8C@0x8C, mbCompletedBurningHomeRun@0xBC,
+            // maStorageBD@0xBD, miCumulativeCheckpoints@0xC4, miChainable*@0xC8, maStorageD4@0xD4,
+            // mbChainActive@0xD8. Renamed placeholders: miField08/0C/10/14 -> miRacePosition/
+            // miHighestRacePosition/miCompletedLaps/miFinishPosition; miInvalidIndex60 -> meEliminatorRaceCarIndex.
         };
         // offsetof cannot validate the carved private members here (offsetof needs a complete type
         // and CarScoreData has private members + methods, so it is non-standard-layout); the manual
