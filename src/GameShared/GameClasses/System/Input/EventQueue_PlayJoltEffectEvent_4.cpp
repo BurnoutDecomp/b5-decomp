@@ -8,5 +8,10 @@
 template void CgsModule::EventQueue<CgsInput::InputIO::PlayJoltEffectEvent, 4>::Construct();
 
 // CgsModule::BaseEventQueue<CgsInput::InputIO::PlayJoltEffectEvent> methods (bodies inline in CgsBaseEventQueue.h).
-//   GetEvent  @ 0x8235CF50 (NON-const overload; ledger "PlayJ"; caller BrnGameState::RumbleManager::BridgeRumbleToInput)
+//   GetEvent      @ 0x8235CF50 (NON-const overload; ledger "PlayJ"; caller BrnGameState::RumbleManager::BridgeRumbleToInput)
+//   AddEvent      @ 0x828EA6E0 (caller CgsInput::InputIO::PreWorldInputBuffer::PostPlayJoltEffectByPlayer)
+//   AddEventSafe  @ 0x82367A20 (callers BrnGameState::RumbleManager::PlayJolt,
+//                               BrnGameState::RumbleManager::OnVehicleAggressorImpact)
 template CgsInput::InputIO::PlayJoltEffectEvent& CgsModule::BaseEventQueue<CgsInput::InputIO::PlayJoltEffectEvent>::GetEvent(s32);
+template bool CgsModule::BaseEventQueue<CgsInput::InputIO::PlayJoltEffectEvent>::AddEvent(const CgsInput::InputIO::PlayJoltEffectEvent&);
+template bool CgsModule::BaseEventQueue<CgsInput::InputIO::PlayJoltEffectEvent>::AddEventSafe(const CgsInput::InputIO::PlayJoltEffectEvent&);
