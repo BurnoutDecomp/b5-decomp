@@ -3,6 +3,7 @@
 #include "types.hpp"
 
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // GameStateModuleIO::EGameModeType
+#include "GameSource/GameState/BrnGameEvents.h"        // GameStateModuleIO::StartNetworkGameEvent (SetOnlineRaceCars signature)
 
 namespace BrnProgression
 {
@@ -19,6 +20,7 @@ namespace BrnGameState
 // forward decls here keep the headers free of an include cycle.
 class GameMode;
 class GameModeParams;
+class NetworkRoundManager;
 
 // MERGED OWNING HEADER for the ModeManager of the game-mode hierarchy (consolidated from the
 // CountdownState / IntroState / RaceMode worker contributions and the existing committed slice).
@@ -68,6 +70,16 @@ public:
     // the DecFIGS DWARF (BrnModeManager.h:486): void SetStartingGrid(GameModeParams*, int32_t,
     // bool) const. The full body/layout is reconstructed by the ModeManager TU.
     void SetStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCount, bool lbPushForwards) const;
+
+    // The owning network round manager (DWARF BrnModeManager.h:482). The online modes' Start()
+    // reach the cached StartNetworkGameEvent through it (NetworkRoundManager::GetNetworkGameEvent).
+    // Returns by pointer; body + member land with the ModeManager TU.
+    const NetworkRoundManager* GetNetworkRoundManager() const;
+
+    // DWARF BrnModeManager.h:483. Places the online race cars on the grid from the start event.
+    // Body + layout land with the ModeManager TU.
+    void SetOnlineRaceCars(GameModeParams* lpGameModeParams,
+                           const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent) const;
 
     // The owning ProgressionManager. Inlined in the X360 build (OfflineGameMode::
     // SelectRandomDestinations reaches it via the magic-multiply ModeManager indirection); the

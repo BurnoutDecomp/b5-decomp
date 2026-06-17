@@ -21,6 +21,12 @@ class ModeManager;
 // which the GameMode .cpp #includes when it dereferences a slot.
 class GameModeState;
 
+// Forward decls for the base GameMode::Start signature (used by-pointer only). Their full
+// types live in BrnGameModeParams.h, which the concrete mode .cpp files #include.
+class StartGameModeParams;
+class GameModeParams;
+class ScoringSystem;
+
 // Events the mode state-machine reacts to. X360-attested via GameMode::SendEvent,
 // matching the DecFIGS DWARF (BrnGameMode.h:46). Kept here because SendEvent takes it.
 enum EGameModeEvent
@@ -88,6 +94,13 @@ public:
     virtual void        SendEvent(EGameModeEvent leEvent);
     virtual bool        ShouldExit() const;
     virtual f32         GetOutroTimeout() const;
+
+    // X360-attested on the base (DWARF BrnGameMode.h:244); every concrete mode overrides it. Builds
+    // the mutable GameModeParams from the immutable StartGameModeParams + rank/event data. Third
+    // param (ScoringSystem*) unused by most bodies. Anchored here so the vtable slot exists once.
+    virtual void        Start(const StartGameModeParams* lpStartGameModeParams,
+                              GameModeParams* lpGameModeParams,
+                              ScoringSystem* lpScoringSystem);
 
     void    SetCurrentState(s32 liState);
     s32     CalculateMaxPlayerWrecks();

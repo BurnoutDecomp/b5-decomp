@@ -15,6 +15,11 @@ public:
     virtual f32         GetIntroDurationSeconds() const;
     virtual void        SendEvent(EGameModeEvent leEvent);
 
+    // X360 0x82322278. Builds the online showtime GameModeParams + copies the per-player network ids.
+    virtual void Start(const StartGameModeParams* lpStartGameModeParams,
+                       GameModeParams* lpGameModeParams,
+                       ScoringSystem* lpScoringSystem);
+
 private:
     // X360 GetIntroDurationSeconds returns 0.0002 (a near-zero timed intro); 0.0002f is the
     // float32 the X360 build returns. Named per the project rule to reverse inlined constants.

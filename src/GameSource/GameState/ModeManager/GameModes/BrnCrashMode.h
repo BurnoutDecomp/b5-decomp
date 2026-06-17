@@ -12,5 +12,10 @@ class CrashMode : public OfflineGameMode
 {
 public:
     virtual void SendEvent(EGameModeEvent leEvent);
+
+    // X360 0x82322210. Builds the offline crash/showtime GameModeParams.
+    virtual void Start(const StartGameModeParams* lpStartGameModeParams,
+                       GameModeParams* lpGameModeParams,
+                       ScoringSystem* lpScoringSystem);
 };
 }
