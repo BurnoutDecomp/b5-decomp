@@ -44,6 +44,37 @@ struct CrashModeScoring
     bool mbInfiniteCrashMode;           // BrnCrashModeScoring.h:227
     f32  mfHighestJump;                 // BrnCrashModeScoring.h:256 (+0x320)
 
+    // --- slice grown so BrnGameState::ScoringSystem can embed CrashModeScoring BY VALUE and compile ---
+    // ScoringSystem holds a CrashModeScoring sub-scorer member; it drives the lifecycle and reads the
+    // remaining live-score accessors through it. Declared-only (bodies + full layout live in the
+    // BrnCrashModeScoring.cpp TU -- grow this home in place when that lands, do NOT fork).
+    //
+    // Only the methods whose signatures use already-available types (primitives + the nested RecentCrash)
+    // are sliced in here so the header stays self-contained / leak-free. The remaining DWARF methods take
+    // not-yet-homed event/traffic types (Update's interface params, DealWith* event ptrs,
+    // DealWithScoreForVehicleClass / GetVehicleScoreData's BrnTraffic::VehicleClass &
+    // VehicleScoreCategory & CgsID, DealWithShowtimeStunt's WorldStuntAction); those land with this
+    // type's own TU rather than dragging their includes into the keystone's by-value embed.
+    void Construct();                       // BrnCrashModeScoring.h:70
+    bool Prepare();                         // BrnCrashModeScoring.h:74
+    bool Release();                         // BrnCrashModeScoring.h:85
+    void Destruct();                        // BrnCrashModeScoring.h:89
+    void ClearData();                       // BrnCrashModeScoring.h:93
+    void DealWithHitOverheadSign();         // BrnCrashModeScoring.h:125
+    void DealWithDetachedWheel();           // BrnCrashModeScoring.h:141
+    bool HasCrashModeEnded(f32 lfTime) const; // BrnCrashModeScoring.h:161
+    s32  GetRawScore() const;               // BrnCrashModeScoring.h:165
+    s32  GetOverallScore() const;           // BrnCrashModeScoring.h:168
+    s32  GetNumCarsCrashed() const;         // BrnCrashModeScoring.h:177
+
+    // NOMINAL reserved storage. The committed home above names only the handful of members the debug
+    // overlay reads by hand; the by-value embed in ScoringSystem needs a non-trivial footprint, so the
+    // remaining ~0x320 bytes of live-scoring state (the CrashScoreDebugComponent sub-object, the
+    // FixedRingBuffer/Array sets, the timers, the per-class crash counters, the air-time accumulators,
+    // ...) are reserved here as opaque bytes. NOT byte-verified -- the real layout/order lands with the
+    // BrnCrashModeScoring.cpp TU (DWARF members run BrnCrashModeScoring.h:215-258).
+    u8 maReserved[0x320]; // NOMINAL -- full layout deferred to this type's own TU
+
     friend class CrashScoreDebugComponent;
 };
 }
