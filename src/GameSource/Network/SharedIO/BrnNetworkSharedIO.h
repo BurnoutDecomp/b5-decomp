@@ -11,6 +11,17 @@ namespace BrnNetwork
 
     // Recovered from BrnNetworkSharedIO.h / CgsNetworkConstants.h (DecFIGS DWARF).
     enum EActiveRaceCarIndex : s32 { E_ACTIVE_RACE_CAR_NONE = -1 };
+    // Per-car boost flavour (DWARF BrnNetworkSharedIO.h:14). StartNetworkGameEvent stores
+    // this as a raw s32 field; the race-car output interfaces use the enum directly.
+    enum EBoostType : s32
+    {
+        E_BOOST_TYPE_NORMAL     = 0,
+        E_BOOST_TYPE_DANGER     = 1,
+        E_BOOST_TYPE_AGGRESSION = 2,
+        E_BOOST_TYPE_STUNT      = 3,
+        E_BOOST_TYPE_INFINITE   = 4,
+        E_BOOST_TYPE_COUNT      = 5,
+    };
     enum EPaybackType : s32
     {
         E_PAYBACK_NONE                                = 0,  // legacy alias retained for existing consumers
@@ -27,8 +38,11 @@ namespace BrnNetwork
 
     typedef s32 NetworkPlayerID;
 
-    // Fixed 20-char player name (CgsNetwork::PlayerName).
-    struct PlayerName { char macName[20]; };
+    // Fixed player name. X360-AUTHORITATIVE width is 16 (KI_USERNAME_LENGTH == 0x10) -- every
+    // X360 build site copies/strides 16 bytes -- NOT the PS3-DWARF char[20]. Mirrors the committed
+    // CgsNetwork::PlayerName (BrnCgsPlayerName.h). 16 is load-bearing for the RoadRules* event
+    // strides (RoadRulesDownloadEvent==56, RoadRulesRecvData==264).
+    struct PlayerName { char macName[16]; };
 
     struct RoadRulesMessageData
     {
@@ -45,14 +59,14 @@ namespace BrnNetwork
         s32                  miNumRoadRulesScoresRecv;
     };
 
-    // No struct body survives in the DecFIGS DWARF (forward-declared only); the
-    // X360 queue aligns its inline buffer to 16 and the element spans the same
-    // 40-slot capacity as the other road-rules events. Full member recovery is a
-    // separate TU; here it only needs to be a complete, correctly-aligned type.
-    struct alignas(16) RoadRulesDownloadEvent
+    // DWARF BrnNetworkSharedIO.h:376 -- RoadRulesDownloadEvent : Event. Two player names
+    // (the winner + the previous holder being notified) followed by the road-rules score
+    // payload. sizeof == 2*16 + 24 == 56, matching the X360 56-byte queue element stride.
+    struct RoadRulesDownloadEvent : public Event
     {
-        RoadRulesMessageData mMessage;
-        u8                   mPad0[8];
+        PlayerName           maPlayerNames[2];   // :378
+        RoadRulesMessageData mRoadRulesData;     // :379
+        void Construct();                        // :376 (declared-only; body is its own TU)
     };
 
     namespace BrnNetworkModuleIO

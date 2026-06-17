@@ -26,13 +26,27 @@ namespace CgsModule
         // Appends a copy of lEvent (asserting on overflow) and bumps miLength. The X360 build
         // emits a per-instantiation out-of-line body; modelled here as the generic inline
         // template body (each instantiation's ledger TU is an explicit-instantiation .cpp).
-        // Returns false (without appending) when the queue is already full.
+        // Appends UNCONDITIONALLY -- the two asserts are non-gating tripwires; the bounds-gated
+        // "return false when already full" variant is the separate AddEventSafe below.
         bool AddEvent(const T& lEvent)
         {
             // X360 AddEvent appends UNCONDITIONALLY -- the two asserts are non-gating tripwires
             // (the bounds-gated "return false on full" variant is the separate AddEventSafe).
             CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
             CGS_ASSERT(miLength < miMaxLength, "EventQueue::AddEvent - Reached Max length");
+            mpEvents[miLength] = lEvent;
+            ++miLength;
+            return true;
+        }
+
+        // Bounds-gated append (X360 BaseEventQueue<T>::AddEventSafe, DWARF CgsBaseEventQueue.h:329):
+        // asserts the queue owns a buffer, then returns false WITHOUT appending when already full,
+        // otherwise appends a copy of lEvent, bumps miLength and returns true. The X360 build emits
+        // a per-instantiation out-of-line body; modelled here as the generic inline template body.
+        bool AddEventSafe(const T& lEvent)
+        {
+            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
+            if (miLength >= miMaxLength) return false;
             mpEvents[miLength] = lEvent;
             ++miLength;
             return true;

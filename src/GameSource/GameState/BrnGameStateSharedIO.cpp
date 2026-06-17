@@ -341,19 +341,53 @@ bool IsOnlineFreeBurnLobby(EGameModeType leGameMode)
         || (leGameMode == E_MODE_ONLINE_SHOWTIME);
 }
 
-// X360 0x82311C30. Copy-assign an OnlineGameResults (260-byte payload == 65 u32 words). The X360
-// body copies word 0, SKIPS the word at offset 4 (index 1), then copies words 2..64 contiguously.
-// FAITHFUL QUIRK: the field at +0x04 is intentionally NOT copied by the X360 build, so the gap is
-// preserved byte-for-byte.
-OnlineGameResults& OnlineGameResults::operator=(const OnlineGameResults& lOther)
+// OnlineGameResults::operator= (X360 0x82311C30) moved to its DWARF home BrnGameActions.cpp
+// (re-homed onto typed members). It is no longer defined here.
+
+// ===== CarScoreData =====
+
+// X360 0x822A45A8. The X360 ctor zeroes a fixed subset of fields; we zero-init the whole 296-byte
+// record (a safe superset -- callers reset via ClearData before use). (return-result artifact dropped.)
+CarScoreData::CarScoreData()
 {
-    mauWords[0] = lOther.mauWords[0];
-    // mauWords[1] (offset 0x04) deliberately NOT copied by the X360 build.
-    for (u32 luWord = 2; luWord < KU_NUM_WORDS; ++luWord)
-    {
-        mauWords[luWord] = lOther.mauWords[luWord];
-    }
+    memset(this, 0, sizeof(*this));
+}
+
+// X360 0x821F2B28. Reset to event-start defaults: zero the record, then seed mTotalTime = Time(0),
+// the count fields (8/9/9) and the two slot-index sentinels (-1). All other fields are 0 (memset).
+void CarScoreData::ClearData()
+{
+    memset(this, 0, sizeof(*this));
+    mTotalTime       = CgsSystem::Time(0.0f);
+    miField08        = 8;
+    miField0C        = 9;
+    miField14        = 9;
+    miInvalidIndex5C = -1;
+    miInvalidIndex60 = -1;
+}
+
+// X360 0x821F4740. The X360 emits explicit per-word/per-byte stores through +292; a full memcpy of
+// the trivially-copyable 296-byte record is equivalent.
+CarScoreData& CarScoreData::operator=(const CarScoreData& lOther)
+{
+    memcpy(this, &lOther, sizeof(*this));
     return *this;
+}
+
+// X360 0x8231C170. While a chain is active and the current multiplier is below the supplied ceiling,
+// reserve a ChainableMultiplierInfo and fill it from the chainable fields + the caller's value.
+void CarScoreData::GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppliedValue,
+                                                Array<ChainableMultiplierInfo, 8>* lpaMultiplierInfo) const
+{
+    if (mbChainActive && miCurrentChainableMultiplier < liMaxMultiplier)
+    {
+        ChainableMultiplierInfo* lpInfo = lpaMultiplierInfo->AddNew();
+        CGS_ASSERT(lpInfo != nullptr, "lpChainableMultiplierInfo");
+        lpInfo->miChainableScore = miChainableScore;
+        lpInfo->miChainableField = miChainableField;
+        lpInfo->miSuppliedValue  = liSuppliedValue;
+        lpInfo->miMultiplier     = miCurrentChainableMultiplier;
+    }
 }
 }
 }

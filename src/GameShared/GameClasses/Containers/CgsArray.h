@@ -113,6 +113,19 @@ public:
         ++miCount;
     }
 
+    // Reserve the next free slot and return a pointer to it WITHOUT writing a value (the caller
+    // fills the returned element in place). X360 Array<T,N>::AddNew (generic body; e.g. the
+    // Array<CarScoreData::ChainableMultiplierInfo,8> instantiation @ 0x823177E8). Same two
+    // guards as Append; returns &maElements[miCount] then post-increments the count.
+    T* AddNew()
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
+        T* lpNewElement = &maElements[miCount];
+        ++miCount;
+        return lpNewElement;
+    }
+
     // Remove the element at luIndex, shifting the tail down one slot (order-preserving).
     void Erase(u32 luIndex)
     {

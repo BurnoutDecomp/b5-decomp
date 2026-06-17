@@ -3,8 +3,15 @@
 // Vehicle-manager event payloads (the subset the boot-path event queues embed).
 // Reconstructed from the DecFIGS DWARF (member names/types). SIMD-bearing events are
 // 16-byte aligned; the rest take their natural alignment. (PhysicalTrafficState is
-// reconstructed separately — it pulls in the Wheel/WheelLite/Vector4 cascade.)
-#include "BrnCommonTypes.h"                                                           // Vector3, Matrix44Affine, EntityId, CgsID
+// reconstructed separately — it pulls in the Wheel/WheelLite/Vector4 cascade, which is
+// now reconstructed below: WheelLite + RaceCarState live here, and their embedded types
+// — Wheel::RoadContact, AboveGroundTestResult, VehiclePhysics::SlamEffect/ShuntEffect,
+// E_DRIVER_TYPE — live in the headers included just below.)
+#include "BrnCommonTypes.h"                                                           // Vector3, Matrix44Affine, EntityId, CgsID, CollisionTag
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"                   // BrnPhysics::Vehicle::Wheel::RoadContact
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h" // BrnPhysics::Vehicle::AboveGroundTestResult
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"          // VehiclePhysics::SlamEffect / ShuntEffect
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"      // BrnPhysics::Vehicle::E_DRIVER_TYPE
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"                  // CgsSceneManager::VolumeInstanceId
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"                 // CgsResource::ResourceHandle
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"    // Attribute::Key
@@ -20,6 +27,112 @@ namespace Vehicle
 {
     using CgsSceneManager::VolumeInstanceId;
     using CgsResource::ResourceHandle;
+
+    // Per-wheel sim state published to consumers (a "lite" projection of Wheel). Embedded
+    // 4x in RaceCarState (and PhysicalTrafficState). Layout/order/types from the DWARF
+    // (BrnVehicleEvents.h:88). 16-byte aligned (carries Vector3 / RoadContact).
+    struct alignas(16) WheelLite
+    {
+        Wheel::RoadContact mRoadContact;
+        Vector3            mVelocity;
+        f32                mfSuspensionHeight;
+        f32                mfRadiansPerSecond;
+        f32                mfRadius;
+        f32                mfRotation;
+        f32                mfSkidFactor;
+        f32                mfWheelLongSpeed;
+        f32                mfRoadLongSpeed;
+        f32                mfRoadLatSpeed;
+        bool               mbAttached;
+        bool               mbHasTraction;
+
+        // Owned by the WheelLite/VehicleManager TU -- declare only (no body).
+        void operator=(const WheelLite&);
+    };
+
+    // Full per-race-car physics snapshot published each frame. Embedded by value as
+    // `RaceCarState maRaceCarStates[8]` in RCEntityActiveRaceCarOutputInterface, so it must
+    // be a COMPLETE, default-constructible, copyable type. Layout/order/types are verbatim
+    // from the DWARF (BrnVehicleEvents.h:144); the reconstructed member offsets sum to
+    // sizeof == 1120, matching the X360 `memset(this, 0, 1120)` in Clear(). 16-byte aligned.
+    struct alignas(16) RaceCarState
+    {
+        WheelLite                   maWheels[4];                     // @0
+        AboveGroundTestResult       mAboveGroundTestResult;          // @448
+        Matrix44Affine              mTransform;                      // @496
+        Matrix44Affine              maWheelTransforms[4];            // @560
+        Vector3                     mLinearVelocity;                 // @816
+        Vector3                     mAngularVelocity;                // @832
+        Vector3                     mHalfExtent;                     // @848
+        Vector3                     mComOffset;                      // @864
+        VehiclePhysics::SlamEffect  mSlamEffect;                     // @880
+        VehiclePhysics::ShuntEffect mShuntEffect;                    // @928
+        Attribute::Key              mCarAssetAttribKey;              // @960
+        EntityId                    mEntityId;                       // @964
+        f32                         mfSpeedMPH;                      // @968
+        f32                         mfMaxSpeedMPH;                   // @972
+        f32                         mfMaxBoostSpeedMPH;              // @976
+        f32                         mfRPM;                           // @980
+        f32                         mfUpShiftRPM;                    // @984
+        f32                         mfDownShiftRPM;                  // @988
+        f32                         mafGearRatios[6];                // @992
+        f32                         mfAbsDriftScale;                 // @1016
+        f32                         mfTimeDrifting;                  // @1020
+        f32                         mfTimeInAir;                     // @1024
+        f32                         mfGas;                           // @1028
+        f32                         mfBrake;                         // @1032
+        f32                         mfHandBrake;                     // @1036
+        f32                         mfSteering;                      // @1040
+        f32                         mfTimeBoosting;                  // @1044
+        f32                         mfInProgressBarrelRollAngle;     // @1048
+        f32                         mfInProgressAirSpinAngle;        // @1052
+        f32                         mfInProgressHandbreakTurnAngle;  // @1056
+        f32                         mfInProgressDriftTime;           // @1060
+        f32                         mfInProgressDriftDistance;       // @1064
+        f32                         mfTimeSinceLastRaceCarContact;   // @1068
+        f32                         mfTimeCrashing;                  // @1072
+        u32                         muStuntActionInProgress;         // @1076
+        s32                         mi8LastAttackersRaceCarIndex;    // @1080 (int32 in DWARF)
+        s32                         miRaceCarID;                     // @1084
+        s8                          mi8Gear;                         // @1088
+        s8                          mi8LastContactedRaceCar;         // @1089
+        bool                        mabWheelExists[4];               // @1090
+        bool                        mbCrashing;                      // @1094
+        bool                        mbIsFatalyCrashing;              // @1095
+        bool                        mbIsDriveable;                   // @1096
+        bool                        mbStartedDeforming;              // @1097
+        bool                        mbResetCarTransform;             // @1098
+        bool                        mbJustBeenSlammed;               // @1099
+        bool                        mbIsFrontRayOccluded;            // @1100
+        bool                        mbIsWedgedInWorld;               // @1101
+        bool                        mbIsHidden;                      // @1102
+        bool                        mbContactingWall;                // @1103
+        bool                        mbForceReset;                    // @1104
+        bool                        mbDeformedThisFrame;             // @1105
+        bool                        mbFullyDrivableFromCrash;        // @1106
+        E_DRIVER_TYPE               meDriverType;                    // @1108
+
+        // The array `RaceCarState maRaceCarStates[8]` is default-constructed, but declaring
+        // a copy ctor below would suppress the implicit default ctor -- so provide one. The
+        // X360 default-constructed each element via Clear() (callers Attach/Construct call
+        // Clear()), so route the default ctor through Clear() to reproduce that init (NOT
+        // `= default`, since the X360 default state is the Clear() state: identity
+        // transforms etc., not all-zero).
+        RaceCarState() { Clear(); }
+
+        // Copy ctor @0x8220A4C0: the X360 body is a pure bitwise copy of the whole object
+        // (memcpy 448 + memcpy 48 + VMX 16-byte matrix copies + word loops). RaceCarState is
+        // trivially copyable, so a defaulted copy ctor reproduces it exactly. Defined in the
+        // .cpp via `= default` (kept out-of-line so this ledger func has a definition site).
+        RaceCarState(const RaceCarState&);
+
+        // Ledger func @0x8229FFC8 -- defined in the .cpp.
+        void Clear();
+
+        // operator= has no X360 address (not a ledger func) -- declare only; another TU /
+        // the implicit definition owns the body. Returns void per the DWARF (:214).
+        void operator=(const RaceCarState&);
+    };
 
     // A vehicle-vs-vehicle impact (aggressor/victim, severity, recovery).
     struct alignas(16) ImpactEvent

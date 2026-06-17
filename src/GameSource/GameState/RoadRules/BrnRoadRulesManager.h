@@ -47,8 +47,16 @@ namespace BrnGameState
     class ModeManager;
     class TrainingManager;
 
+    // The road-rules debug component (embedded as this class's first member) reaches directly into
+    // the private timing/score state below (X360 RoadRulesDebugComponent callbacks + RenderHUD read
+    // mfTime/mfStuntTime/miCrashScore/maiChallengeRoadIndex/miLastRoadIndex/mpStreetManager), exactly
+    // as the binary does -- so it is granted friendship here.
+    class RoadRulesDebugComponent;
+
     class RoadRulesManager
     {
+        friend class RoadRulesDebugComponent;
+
     public:
         // DWARF: extern const CgsID K_INVALID_ID; (class-scope static const).
         // GetCurrentRoadID returns this when there is no current road
@@ -80,25 +88,37 @@ namespace BrnGameState
         // -1 sentinel == "no current road".
         BrnStreetData::RoadIndex miLastRoadIndex;  // +32 (0x20)  <-- read here
 
-        // ---- trailing members: declaration-only, NOT read by this TU -------
-        // Per DecFIGS DWARF (BrnRoadRulesManager.h:244..266), in order:
-        //   BrnStreetData::RoadIndex maiChallengeRoadIndex[2];
-        //   CgsID                    mLastLimitId;
-        //   EActiveRoadRule          meActiveRoadRule;
-        //   EActiveRoadRule          mePreviousActiveRoadRule;
-        //   bool                     mbRoadRulesNotAllowed;
-        //   f32                      mfTime, mfTimeScoreTimeout, mfTimeTarget,
-        //                            mfNextWarningTime;
-        //   int32_t                  miNumWarningsDone;
-        //   f32                      mfStuntTime, mfStuntRuleComboTimeout;
-        //   int32_t                  miCrashScore;
-        //   f32                      mfInRoadTimeout;
-        //   bool                     mbAllowExitRoadRulesAfterTimeout;
-        //   f32                      mfExitRoadRulesTime;
-        //   bool                     mbSwitchingActive;
-        //   bool                     mbIsOnlineMode;
-        // Left out of this minimal slice (they do not affect GetCurrentRoadID
-        // and would drag in EActiveRoadRule); add when building the full class.
+        // ---- trailing members (DecFIGS DWARF BrnRoadRulesManager.h:244..266) ----
+        // Materialised through miCrashScore because the road-rules debug component reads
+        // maiChallengeRoadIndex[0] (+36), mfTime (+68), mfStuntTime (+88) and miCrashScore (+96).
+        // The two enum members (meActiveRoadRule / mePreviousActiveRoadRule) and mbRoadRulesNotAllowed
+        // would drag in the uncommitted BrnGameState::EActiveRoadRule enum, so they are modelled as
+        // offset-preserving raw storage (the X360-pinned 4/4/1-byte slots) rather than the real enum;
+        // this keeps the byte offsets of the materialised members exact. The natural C++ alignment of
+        // the CgsID (8-byte) and the f32 run reproduces the X360 layout:
+        //   maiChallengeRoadIndex[2] +36 | (pad +44..+47) | mLastLimitId +48 |
+        //   meActiveRoadRule +56 | mePreviousActiveRoadRule +60 | mbRoadRulesNotAllowed +64 |
+        //   (pad +65..+67) | mfTime +68 | mfTimeScoreTimeout +72 | mfTimeTarget +76 |
+        //   mfNextWarningTime +80 | miNumWarningsDone +84 | mfStuntTime +88 |
+        //   mfStuntRuleComboTimeout +92 | miCrashScore +96
+        BrnStreetData::RoadIndex maiChallengeRoadIndex[2];  // +36  (read: [0] != -1 gates the TIME line)
+        CgsID                    mLastLimitId;              // +48
+        s32                      meActiveRoadRule;          // +56  (EActiveRoadRule storage; not read here)
+        s32                      mePreviousActiveRoadRule;  // +60  (EActiveRoadRule storage; not read here)
+        bool                     mbRoadRulesNotAllowed;     // +64
+        f32                      mfTime;                    // +68  <-- DecreaseCurrentTime / RenderHUD
+        f32                      mfTimeScoreTimeout;        // +72
+        f32                      mfTimeTarget;              // +76
+        f32                      mfNextWarningTime;         // +80
+        s32                      miNumWarningsDone;         // +84
+        f32                      mfStuntTime;               // +88  <-- DecreaseCurrentStuntTime
+        f32                      mfStuntRuleComboTimeout;   // +92
+        s32                      miCrashScore;              // +96  <-- AddCrashScore
+
+        // ---- further trailing members: declaration-only, NOT read by this slice ----
+        // Per DWARF, after miCrashScore: f32 mfInRoadTimeout; bool mbAllowExitRoadRulesAfterTimeout;
+        // f32 mfExitRoadRulesTime; bool mbSwitchingActive; bool mbIsOnlineMode. Omitted (not touched
+        // by any recovered TU); add when building the full class.
     };
 }
 
