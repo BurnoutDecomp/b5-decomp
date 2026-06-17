@@ -16,9 +16,14 @@
 
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"                                       // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8)
-#include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h" // base class
-#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"         // ScoringSystem, CarData
+#include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h" // base class + fwd-decl `class ScoringSystem`
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                         // OnlineScoringOutputInterface
+
+// This header intentionally does NOT include BrnScoringSystem.h. The keystone embeds this scorer BY
+// VALUE, so it must see this full class definition; if this header pulled the keystone back in, the
+// `#pragma once` guard would leave one of the two types incomplete at the embed point (mutual-include
+// cycle). ScoringSystem is named only BY POINTER in the virtuals below (the base header forward-
+// declares it); CarData is touched only in the .cpp, which includes the keystone itself.
 
 namespace BrnGameState
 {

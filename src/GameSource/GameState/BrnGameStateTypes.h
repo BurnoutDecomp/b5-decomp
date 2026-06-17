@@ -48,6 +48,40 @@ enum EOnlineAwardID : s32
     E_ONLINE_AWARD_COUNT                       = 11,
 };
 
+// Stunt classification id (DWARF BrnGameStateTypes.h:58). Identifies the kind of stunt the
+// stunt-mode scorer is rating/scoring. The first 15 values (E_STUNT_TYPE_SPIN .. _COUNT) are the
+// real per-stunt categories that index StuntModeScoring::mStuntTypeInfo[E_STUNT_TYPE_COUNT]; the
+// values past _COUNT are rating/error sentinels and packed bit-mask aliases the scorer ORs into
+// its muStuntTypesInProgress field. Values are X360-authoritative. This is the single owner
+// (DWARF home BrnGameStateTypes.h); grow here, do not fork.
+enum EStuntType : s32
+{
+    E_STUNT_TYPE_INVALID          = -1,
+    E_STUNT_TYPE_SPIN             = 0,
+    E_STUNT_TYPE_BARREL_ROLL      = 1,
+    E_STUNT_TYPE_AIR              = 2,
+    E_STUNT_TYPE_DRIFT            = 3,
+    E_STUNT_TYPE_SUPER_JUMP       = 4,
+    E_STUNT_TYPE_SUPER_SMASH      = 5,
+    E_STUNT_TYPE_BILLBOARD        = 6,
+    E_STUNT_TYPE_BURNOUT          = 7,
+    E_STUNT_TYPE_BOOST            = 8,
+    E_STUNT_TYPE_REVERSE_DRIVING  = 9,
+    E_STUNT_TYPE_HANDBRAKE_TURN   = 10,
+    E_STUNT_TYPE_POWER_PARK       = 11,
+    E_STUNT_TYPE_CRASH_FINISH     = 12,
+    E_STUNT_TYPE_PROP             = 13,
+    E_STUNT_TYPE_REVERSE_TAKEOFF  = 14,
+    E_STUNT_TYPE_COUNT            = 15,
+    E_STUNT_TYPE_ERROR_REPETITION = 15,
+    E_STUNT_TYPE_ERROR_CRASHED    = 16,
+    E_STUNT_TYPE_RATING_GOOD      = 17,
+    E_STUNT_TYPE_RATING_AWESOME   = 18,
+    E_STUNT_TYPE_NON_REPEATABLE   = 776,
+    E_STUNT_TYPE_MAJOR            = 7927,
+    E_STUNT_TYPE_ERRORS           = 98304,
+};
+
 // X360-attested handle type (DWARF BrnGameStateTypes.h:57). A 2-byte signed wrapper over
 // a trigger-region index. SelectRandomDestinations builds one of these from the s32 it
 // gets out of TriggerRegion::GetRegionIndex() and stores it through its output array.
