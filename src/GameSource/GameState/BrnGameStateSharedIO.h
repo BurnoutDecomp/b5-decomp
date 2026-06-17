@@ -284,15 +284,9 @@ namespace BrnGameState
         // E_MODE_ONLINE_FREE_BURN_LOBBY (15) and E_MODE_ONLINE_SHOWTIME (16).
         bool IsOnlineFreeBurnLobby(EGameModeType leGameMode);
 
-        // X360 OnlineGameResults minimal slice (260-byte payload == 65 u32 words). The copy-assign
-        // skips word index 1 (offset 0x04) faithfully. TODO(conductor-review): re-home onto the
-        // committed BrnGameActions.h GameAction<E_ACTION_ONLINE_GAME_RESULT> with typed members.
-        struct OnlineGameResults
-        {
-            static const u32 KU_NUM_WORDS = 65;
-            u32 mauWords[KU_NUM_WORDS];
-            OnlineGameResults& operator=(const OnlineGameResults& lOther);
-        };
+        // OnlineGameResults re-homed to its DWARF home BrnGameActions.h (typed members +
+        // GameAction<E_ACTION_ONLINE_GAME_RESULT> base, which is visible there). The provisional
+        // u32 mauWords[65] blob + its operator= that used to live here are removed.
 
         // ===== Added for the RaceCarEntityModuleIO IO-buffer unlock (scoring_director group) =====
 
