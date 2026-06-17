@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"      // CgsContainers::BitArray<N> (CarCheckpointData)
 #include "GameSource/BurnoutConstants.h"                        // EActiveRaceCarIndex (FlybyRivalData)
 #include "GameSource/GameState/BrnCgsPlayerName.h"              // CgsNetwork::PlayerName (shared 16-byte home)
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"        // CgsSystem::Time (CarScoreData)
+#include "GameShared/GameClasses/Containers/CgsArray.h"         // Array<T,N>::AddNew (CarScoreData::GetChainableStuntMultipliers)
 
 namespace BrnGameState
 {
@@ -279,6 +281,55 @@ namespace BrnGameState
 
         static_assert(sizeof(FlybyRivalData) == 196, "FlybyRivalData layout drift");
         static_assert(sizeof(FlybyData)      == 592, "FlybyData layout drift");
+
+        // ===== CarScoreData (per-car scoring record) =====
+        //
+        // X360-AUTHORITATIVE 296-byte (0x128) layout, recovered from the four owned methods
+        // (ctor 0x822A45A8, ClearData 0x821F2B28, operator= 0x821F4740 -- a full field-by-field
+        // copy through +292, and GetChainableStuntMultipliers 0x8231C170). The PS3 DecFIGS DWARF +
+        // Feb-2007 leak describe an EARLIER CarScoreData (with LandmarkIndex[16] arrays) that does
+        // NOT match the packed X360 record. Field semantics are mostly unknown, so only the fields
+        // the methods meaningfully name are declared; runs of untouched scalar/Time words (incl. the
+        // ten chainable-stunt CgsSystem::Time pairs the ctor zeroes at +0x6C..+0xBC) are collapsed
+        // into byte-exact storage members (ClearData zeroes them via memset, operator= via memcpy).
+        // Single owner: grow this slice, do not fork. Used by ScoringSystem / the online-mode scorers.
+        class CarScoreData
+        {
+        public:
+            // Element produced by GetChainableStuntMultipliers (X360 stride 16, sub_823177E8).
+            struct ChainableMultiplierInfo
+            {
+                s32 miChainableScore;   // elem +0  (CarScoreData +0xC8)
+                s32 miChainableField;   // elem +4  (CarScoreData +0xCC)
+                s32 miSuppliedValue;    // elem +8  (the caller-supplied a3)
+                s32 miMultiplier;       // elem +12 (CarScoreData +0xD0)
+            };
+            static_assert(sizeof(ChainableMultiplierInfo) == 16, "ChainableMultiplierInfo stride");
+
+            CarScoreData();                                       // 0x822A45A8
+            void ClearData();                                     // 0x821F2B28
+            CarScoreData& operator=(const CarScoreData& lOther);  // 0x821F4740 (ledger "op")
+            void GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppliedValue,
+                                              Array<ChainableMultiplierInfo, 8>* lpaMultiplierInfo) const; // 0x8231C170
+
+        private:
+            CgsSystem::Time mTotalTime;            // +0x00 (8)  Time(0) in ClearData
+            s32  miField08;                        // +0x08      ClearData = 8
+            s32  miField0C;                        // +0x0C      ClearData = 9
+            s32  miField10;                        // +0x10      ClearData = 0
+            s32  miField14;                        // +0x14      ClearData = 9
+            u8   maStorage18[68];                  // +0x18..+0x5C  scalar/Time words (memset/memcpy)
+            s32  miInvalidIndex5C;                 // +0x5C      ClearData = -1 (slot/index sentinel)
+            s32  miInvalidIndex60;                 // +0x60      ClearData = -1 (slot/index sentinel)
+            u8   maStorage64[100];                 // +0x64..+0xC8  the ten chainable Time pairs + more
+            s32  miChainableScore;                 // +0xC8      GetChainableStuntMultipliers source
+            s32  miChainableField;                 // +0xCC      GetChainableStuntMultipliers source
+            s32  miCurrentChainableMultiplier;     // +0xD0      guard (this[52] < liMaxMultiplier) + source
+            u8   maStorageD4[4];                   // +0xD4..+0xD8
+            u8   mbChainActive;                    // +0xD8      guard flag (*(this+216))
+            u8   maStorageTail[79];                // +0xD9..+0x128  trailing fields (through +292)
+        };
+        static_assert(sizeof(CarScoreData) == 296, "CarScoreData layout drift (0x128)");
 
         // X360 0x821F2B08. Free predicate over EGameModeType: true for exactly
         // E_MODE_ONLINE_FREE_BURN_LOBBY (15) and E_MODE_ONLINE_SHOWTIME (16).
