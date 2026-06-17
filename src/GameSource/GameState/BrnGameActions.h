@@ -44,9 +44,10 @@ enum EGameActionType
     E_ACTION_RESET_PLAYER_CAR           = 0,
     E_ACTION_REMOTE_PLAYER_DISCONNECTED = 11,
     E_ACTION_SOUND_TRIGGER              = 210,
-    E_ACTION_ONLINE_PLAYER_ADDED        = 220,   // value unconfirmed (template tag only)
+    E_ACTION_ONLINE_PLAYER_ADDED        = 211,   // DWARF BrnGameActions.h (was placeholder 220)
     E_ACTION_SETUP_NETWORK_CAR          = 221,   // value unconfirmed (template tag only)
-    E_ACTION_ONLINE_PLAYER_REMOVED      = 222,   // value unconfirmed (template tag only)
+    E_ACTION_ONLINE_PLAYER_REMOVED      = 212,   // DWARF BrnGameActions.h (was placeholder 222)
+    E_ACTION_ONLINE_ROUND_RESULT        = 222,   // DWARF BrnGameActions.h
     E_ACTION_RANK_INFO_RESPONSE         = 173,   // DWARF BrnGameActions.h:183
     E_ACTION_TROPHY_UNLOCK              = 196,   // DWARF BrnGameActions.h:206
     E_ACTION_PREPARE_FOR_MODE           = 19,    // DWARF BrnGameActions.h:29
@@ -231,6 +232,28 @@ struct SetUpAllDriveThrusAction : public GameAction<E_ACTION_SET_UP_ALL_DRIVE_TH
     };
 
     Array<DriveThruInfo, 46> maDriveThrus;            // 0x00  (DWARF BrnGameActions.h:1723)
+};
+
+// X360 0x8231CA38 (SetPosition) / 0x82558580 (GetPosition). Per-player online-round result action:
+// a position-indexed table of finishing slots plus a list of mid-round disconnects. DWARF
+// BrnGameActions.h:5227 (true owning home). Minimal slice -- only the members the two reconstructed
+// bodies touch are declared; Construct/GetWinner are declared-only (own ledger entries). GameAction<T>
+// is an empty tag base, so instance data starts at +0x00 (matches the X360 a1[0] / (a1+8) access:
+// maPlayerPosition[8] at +0x00, maDisconnectedPlayers Array<NetworkPlayerID,8> at +0x20 with its count
+// word at +0x40 == a1[16]). NetworkPlayerID == s32 (committed BrnNetwork::NetworkPlayerID).
+struct OnlineRoundResults : public GameAction<E_ACTION_ONLINE_ROUND_RESULT>
+{
+    static const s32 KI_POSITION_DISCONNECTED = -1;   // DWARF :5230 (GetPosition's disconnected sentinel)
+    static const s32 KI_MAX_PLAYERS           = 8;    // == BrnWorld::KI_MAX_ACTIVE_RACE_CARS
+
+    void                        Construct();                                                       // declared-only
+    void                        SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liPosition); // 0x8231CA38
+    s32                         GetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const;           // 0x82558580
+    BrnNetwork::NetworkPlayerID GetWinner() const;                                                 // declared-only
+
+private:
+    BrnNetwork::NetworkPlayerID                        maPlayerPosition[KI_MAX_PLAYERS];   // +0x00 (DWARF :5248)
+    Array<BrnNetwork::NetworkPlayerID, KI_MAX_PLAYERS> maDisconnectedPlayers;              // +0x20 (DWARF :5249)
 };
 }
 }
