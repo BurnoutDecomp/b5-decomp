@@ -341,19 +341,7 @@ bool IsOnlineFreeBurnLobby(EGameModeType leGameMode)
         || (leGameMode == E_MODE_ONLINE_SHOWTIME);
 }
 
-// X360 0x82311C30. Copy-assign an OnlineGameResults (260-byte payload == 65 u32 words). The X360
-// body copies word 0, SKIPS the word at offset 4 (index 1), then copies words 2..64 contiguously.
-// FAITHFUL QUIRK: the field at +0x04 is intentionally NOT copied by the X360 build, so the gap is
-// preserved byte-for-byte.
-OnlineGameResults& OnlineGameResults::operator=(const OnlineGameResults& lOther)
-{
-    mauWords[0] = lOther.mauWords[0];
-    // mauWords[1] (offset 0x04) deliberately NOT copied by the X360 build.
-    for (u32 luWord = 2; luWord < KU_NUM_WORDS; ++luWord)
-    {
-        mauWords[luWord] = lOther.mauWords[luWord];
-    }
-    return *this;
-}
+// OnlineGameResults::operator= (X360 0x82311C30) moved to its DWARF home BrnGameActions.cpp
+// (re-homed onto typed members). It is no longer defined here.
 }
 }
