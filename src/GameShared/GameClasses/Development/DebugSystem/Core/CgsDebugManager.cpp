@@ -8,7 +8,8 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/Internal/CgsDebugInternal.h"     // Internal::SetDebugSingletons
 #include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.h"  // the CPU perfmon overlay component
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
-#include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"       // Assert::gAssertManager (on-screen assert overlay)
+#include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"       // Assert::gAssertManager / AssertData (on-screen assert overlay)
+#include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReader.h"     // MapFile::Reader::GetStackEntryName (call-stack names)
 
 #include <cstdio>   // snprintf (debug text formatting; the X360 used CgsCore::SPrintf)
 
@@ -337,6 +338,57 @@ namespace CgsDev
         char lacText[64];
         std::snprintf(lacText, sizeof(lacText), "%uMB %uKB %uB", luMB, luKB, luB);
         gBufferedRenderer.Draw2DText(lacText, lfX, lfY, 16.0f, 0xFFFFFFFFu);
+    }
+
+    // X360 0x8282DE28 DebugManager::RenderAssert - the on-screen assert OVERLAY (what the real ARTIST
+    // build shows): "line:file", then the failed expression, then one call-stack line per frame - the
+    // map-resolved function name (mpMapReader->GetStackEntryName), falling back to "    0x%08X". Queued
+    // into the buffered renderer at x=50, text size 16, 18px line advance, in the carved assert colour
+    // (dword_82F32268). The X360 reaches the call-stack + map reader through the AssertData record.
+    void DebugManager::RenderAssert(const Assert::AssertData* lpData)
+    {
+        if (!lpData)
+            return;
+
+        const u32 luColour = 0xFF32FFFFu;   // carved (dword_82F32268)
+        char lacBuffer[1024];
+
+        std::snprintf(lacBuffer, sizeof(lacBuffer), "%d:%s",
+                      lpData->miLine, lpData->mpcFile ? lpData->mpcFile : "?");
+        gBufferedRenderer.Draw2DText(lacBuffer, 50.0f, 50.0f, 16.0f, luColour);
+
+        gBufferedRenderer.Draw2DText(lpData->macAssertMessage, 50.0f, 68.0f, 16.0f, luColour);
+
+        f32 lfY = 93.0f;
+        const s32 liCount = lpData->mStack.GetNumStackAddresses();
+        for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+        {
+            const char* lpcName = lpData->mpMapReader ? lpData->mpMapReader->GetStackEntryName(liIndex) : nullptr;
+            char lacAddr[24];
+            if (!lpcName)
+            {
+                std::snprintf(lacAddr, sizeof(lacAddr), "    0x%08X",
+                              static_cast<u32>(lpData->mStack.GetStackAddress(liIndex)));
+                lpcName = lacAddr;
+            }
+            gBufferedRenderer.Draw2DText(lpcName, 50.0f, lfY, 16.0f, luColour);
+            lfY += 18.0f;
+        }
+    }
+
+    // Flush one frame of the assert overlay through the 2D renderer. On the X360 the display-owning
+    // thread paints RenderAssert (driven through BrnRendererModule::RenderAssert) while the asserting
+    // thread parks in DoAssert; on the single-threaded boot the one (frozen) thread paints it here, from
+    // the assert freeze loop. Uses the render buffer the last Render set on mp2dRender.
+    void DebugManager::RenderAssertOverlay()
+    {
+        if (!Assert::gAssertManager.HasAssert() || mp2dRender == nullptr || !mp2dRender->HasRenderBuffer())
+            return;
+
+        mp2dRender->Begin();
+        RenderAssert(&Assert::gAssertManager.GetAssertData());   // queue line:file + message + call-stack
+        gBufferedRenderer.Dispatch2D(mp2dRender, true);          // flush them
+        mp2dRender->End();
     }
 
     // X360 Render 0x8282F770: point the renderers at this frame's buffers, then RenderWorld + RenderHUD.
