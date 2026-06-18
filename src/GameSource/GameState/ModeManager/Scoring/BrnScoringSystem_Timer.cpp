@@ -1,6 +1,11 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+// BrnNetwork::NetworkRounder now has a committed declare-only home; StopModeTimer's force
+// (online) branch snaps the elapsed finish time + the round-end distance to the network grid
+// through it (X360 0x8231F804 / 0x8231F81C). The bodies live in BrnNetworkRounder.cpp; the gate
+// here is `cl /c` (no link).
+#include "GameSource/Network/Utilities/BrnNetworkRounder.h"
 
 // ============================================================================
 // BrnScoringSystem_Timer.cpp
@@ -23,33 +28,38 @@
 // two predicates are themselves declare-only in this range, so they are reconstructed
 // here from the assert conditions the addressed setters fire.
 //
+// LANDED this round (prereqs unblocked them):
+//   - StopModeTimer (0x8231F590): now lands. The BaseOnlineModeScoring virtual the force/online
+//       branch dispatches (X360 vtable slot 6 == UpdatePlayerPoints) is in the committed base
+//       slice, and BrnNetwork::NetworkRounder::Round{Time,Distance}ToNetworkAccuracy now have a
+//       committed declare-only home (BrnNetworkRounder.h). The CarScoreData reads/writes
+//       (mfDistanceToFinishLive@+0x18, mfDistanceToFinish@+0x48, mTotalTime@+0x00,
+//       miCompletedLaps@+0x10) all have NAMED accessors after the CarScoreData grow.
+//   - StartOnlineGameModeScoring (0x823126C8): now lands. The keystone now models the FOURTH
+//       online scorer mOnlineStuntRunModeScoring (ss+0x4D44) by name, so the Fugitive/FreeBurn/
+//       ModeEnd (game-mode 12/14/17) case can target it; mpCurrentOnlineModeScoring (ss+0x4DC8)
+//       is the BaseOnlineModeScoring* the switch assigns.
+//   - HasStuntAttackModeEnded (0x82326708): now lands. The keystone decl was RETYPED to the real
+//       body shape `(const CgsSystem::Time&, EActiveRaceCarIndex, bool)`, the SECOND stunt scorer
+//       mOnlineStuntModeScoring (ss+0x2620) is modelled by name, StuntModeScoring::HasStuntModeEnded
+//       (vtable slot +0x14) is now a named virtual, and CarScoreData::SetEliminated (the +0xD9 write)
+//       exists -- so the online/offline scorer pick + the eliminated-flag write all resolve by name.
+//
 // BLOCKED (omitted -- left declare-only) and why:
 //   - OnRoadRagePlayerCrashed (0x823444B0): dereferences the GameStateModuleIO::OutputBuffer
 //       param (forward-declared only in the keystone) and CgsModule::VariableEventQueue<13312,16>
 //       (no committed home), to push road-rage crash events.
-//   - StopModeTimer (0x8231F590): invokes a BaseOnlineModeScoring virtual (vtable slot 6,
-//       not in that type's committed minimal slice) and the uncommitted BrnNetwork::NetworkRounder
-//       statics. (Its CarScoreData reads -- miRacePosition@+0x08 and miHighestRacePosition@+0x0C --
-//       now have committed accessors (GetRacePosition / GetHighestRacePosition) after the
-//       CarScoreData grow, so the field access is no longer a blocker; the virtual + NetworkRounder
-//       statics are.)
-//   - HasStuntAttackModeEnded (0x82326708): the X360 body dispatches through a VIRTUAL at
-//       vtable slot +0x14 of two polymorphic embedded sub-scorers (this+0x350 and this+0x2620,
-//       both constructed via virtual ctors in ScoringSystem::Construct); the committed
-//       StuntModeScoring slice is a plain non-polymorphic struct with no vtable, so that virtual
-//       cannot be named. Its parameter shape (this, unused a2, race-car index a3, char force-flag
-//       a4) also does not match the keystone's single CgsSystem::Time-by-value decl, and the
-//       HasModeTimeExpired() it calls itself needs a CgsSystem::Time& the body does not carry.
-//       FLAGGED rather than mis-implemented. (The +0xD9 mbEliminated write IS now reachable via
-//       the Foundation-added GetEliminated/SetEliminated accessor -- the vtable + param-shape
-//       mismatch is the real blocker.)
-//   - StartOnlineGameModeScoring (0x823126C8): the Fugitive/FreeBurn/ModeEnd case targets a
-//       fourth embedded online-mode scorer that the keystone (3 online scorers) does not model
-//       by name.
 //
 // DEFERRED (no standalone X360 export -- inlined away on X360, so no authoritative body):
-//   StartModeTimer, SetCheckPointsForCarsWithinRace, UpdateTimerForEliminator,
-//   HasCrashModeEnded. Left declare-only rather than guessed.
+//   StartModeTimer, SetCheckPointsForCarsWithinRace, UpdateTimerForEliminator, HasCrashModeEnded.
+//   None has an exported body and none is confidently inferable from named fields + callers:
+//     * StartModeTimer / SetCheckPointsForCarsWithinRace / UpdateTimerForEliminator: no export, no
+//       inlined fragment recovered.
+//     * HasCrashModeEnded: no ScoringSystem export. The only HasCrashModeEnded export is the
+//       SUB-SCORER BrnGameState::CrashModeScoring::HasCrashModeEnded (0x823129A0), whose signature
+//       takes a `double` time-delta; ScoringSystem::HasCrashModeEnded is declared `() const` (no
+//       params), so the exact forward/argument cannot be proven. Left declare-only rather than
+//       guessed.
 // ============================================================================
 
 namespace BrnGameState
@@ -199,6 +209,34 @@ bool ScoringSystem::HasModeTimeExpired(const CgsSystem::Time& lTime)
     return lRemaining <= lZero;
 }
 
+// X360 0x82326708. Decide whether the stunt-attack mode has ended, for one race car. The lbOnline
+// flag selects which embedded stunt scorer answers: the online scorer (mOnlineStuntModeScoring,
+// ss+0x2620) or the offline scorer (mStuntModeScoring, ss+0x350). Either way the scorer's
+// HasStuntModeEnded(bool) virtual is dispatched with "has the mode timer expired" (HasModeTimeExpired
+// (lTime)) as its time-up argument. On the ONLINE path only, when the scorer reports the mode ended,
+// the looked-up car (GetCarData(leRaceCarIndex)) is flagged eliminated (CarScoreData::SetEliminated,
+// the +0xD9 byte the X360 stores 1 into). The offline path returns the verdict without touching the
+// eliminated flag.
+bool ScoringSystem::HasStuntAttackModeEnded(const CgsSystem::Time& lTime, EActiveRaceCarIndex leRaceCarIndex, bool lbOnline)
+{
+    if (lbOnline)
+    {
+        // Online stunt scorer (ss+0x2620). HasModeTimeExpired(lTime) is the bool time-up arg the
+        // X360 forwards into the HasStuntModeEnded virtual (vtable slot +0x14).
+        const bool lbEnded = mOnlineStuntModeScoring.HasStuntModeEnded(HasModeTimeExpired(lTime));
+        if (lbEnded)
+        {
+            // X360 sub_8231DCD0 == GetCarData; stb 1, 0xD9(r3) == SetEliminated(true) on its score record.
+            CarData* lpCarData = GetCarData(leRaceCarIndex);
+            lpCarData->GetScoreData()->SetEliminated(true);
+        }
+        return lbEnded;
+    }
+
+    // Offline stunt scorer (ss+0x350): just report the verdict (no eliminated-flag write on this path).
+    return mStuntModeScoring.HasStuntModeEnded(HasModeTimeExpired(lTime));
+}
+
 // ----------------------------------------------------------------------------
 // road-rage player-crash counters (semantics fixed by OnRoadRagePlayerCrashed @ 0x823444B0:
 // miMaximumPlayerCrashedNumber is the crash allowance, miCurrentPlayerCrashedNumber the running
@@ -219,6 +257,120 @@ s32 ScoringSystem::GetRoadRagePlayerCrashes()
 s32 ScoringSystem::GetPlayerCrashesRemaining()
 {
     return miMaximumPlayerCrashedNumber - miCurrentPlayerCrashedNumber;
+}
+
+// ----------------------------------------------------------------------------
+// mode-timer stop + online-scorer selection.
+// ----------------------------------------------------------------------------
+
+// X360 0x8231F590. Stop the mode timer for one race car: snapshot the elapsed mode time into the
+// system's mTotalTime, capture the car's live distance-to-finish into its round-end distance slot,
+// then either (online/force path) round both to the network grid and let the current online scorer
+// recompute player points, or (offline path) bank the elapsed time as the car's finish time when it
+// has not yet completed every lap. Finally drives mStartTime's seconds to -1 (timer inactive).
+//
+// The "force" flag (lbForce) selects the online/network path. The CgsSystem::Time the X360 builds
+// as Time(0.0) is the comparison zero used to detect a car with no finish time recorded yet.
+void ScoringSystem::StopModeTimer(const CgsSystem::Time& lTime, EActiveRaceCarIndex leRaceCarIndex, bool lbForce)
+{
+    CGS_ASSERT((leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+               "(leLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+    CarData* lpCarData = GetCarData(leRaceCarIndex);
+    CGS_ASSERT(lpCarData != NULL, "lpCarData");
+
+    // Elapsed mode time = now - mode-start. Cached in the system's mTotalTime slot (X360 a1+0x10).
+    mTotalTime = lTime - mStartTime;
+
+    GameStateModuleIO::CarScoreData* lpScoreData = lpCarData->GetScoreData();
+
+    // Capture the live distance-to-finish into the round-end distance slot.
+    const f32 lfRoundEndDistance = lpScoreData->GetDistanceToFinishLive();   // CarScoreData +0x18
+    lpScoreData->SetDistanceToFinish(lfRoundEndDistance);                    // CarScoreData +0x48
+
+    // X360 sanity asserts on the captured round-end distance (diagnostic only; both fire
+    // CgsDev::Assert and continue). #1: distance must be above the -1.0 floor.
+    CGS_ASSERT(lfRoundEndDistance > -1.0f,
+               "Bad distance in scoring system #1, dist from finish at round end");
+    // #2: a finite distance must not exceed 200000.0 unless it is the round-end-not-reached
+    // sentinel the per-car record is cleared to. FLAG: that sentinel is the X360 rodata float
+    // flt_82CDB7D0 (ScoringSystem::ClearData @ 0x8232A4A8 stores it into the per-car distance slot);
+    // its exact bit pattern is NOT recovered from the available exports, so the magnitude guard is
+    // reproduced but the sentinel-exclusion term is omitted rather than fabricated with a wrong
+    // value (a wrong sentinel would only mis-fire a debug assert, never alter data flow).
+    CGS_ASSERT(lpScoreData->GetDistanceToFinish() <= 200000.0f,
+               "Bad distance in scoring system #2, dist from finish at round end");
+
+    if (lbForce)
+    {
+        // Network/online path. If the car has no finish time banked yet (GetFloatVal() == 0.0),
+        // round the elapsed mode time to the network grid and bank it as the car's finish time.
+        const CgsSystem::Time lFinishTime = lpScoreData->GetFinishTime();
+        if (lFinishTime.GetFloatVal() == 0.0f)
+        {
+            BrnNetwork::NetworkRounder::RoundTimeToNetworkAccuracy(&mTotalTime);   // X360 a1+0x10
+            lpScoreData->SetFinishTime(mTotalTime);
+        }
+
+        // Snap the captured round-end distance to the network grid (in place via a local copy --
+        // the field has no public address-of accessor; RoundDistanceToNetworkAccuracy rounds *lpf).
+        f32 lfRoundedDistance = lpScoreData->GetDistanceToFinish();
+        BrnNetwork::NetworkRounder::RoundDistanceToNetworkAccuracy(&lfRoundedDistance);
+        lpScoreData->SetDistanceToFinish(lfRoundedDistance);
+
+        CGS_ASSERT(mpCurrentOnlineModeScoring != NULL, "mpCurrentOnlineModeScoring");
+        // X360 dispatches BaseOnlineModeScoring vtable slot 6 (== UpdatePlayerPoints) on the current
+        // online scorer, passing this scoring system + the active-car count (ss+0x4EE8).
+        mpCurrentOnlineModeScoring->UpdatePlayerPoints(this, static_cast<s32>(muCarsInCurrentMode));
+    }
+    else
+    {
+        // Offline path. The X360 loops over all E_ACTIVE_RACE_CAR_INDEX_COUNT indices (with the
+        // standard EActiveRaceCarIndex bounds assert), but the loop body touches only the single
+        // looked-up car -- the conditional finish-time store is idempotent, so it is preserved
+        // verbatim. When the car has not completed every lap, bank the elapsed mode time as its
+        // finish time.
+        for (s32 liEnumIndex = 0; liEnumIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liEnumIndex)
+        {
+            if (static_cast<u32>(lpScoreData->GetCompletedLaps()) < muTotalLaps)   // +0x10 < ss+0x4ED8
+            {
+                lpScoreData->SetFinishTime(mTotalTime);
+            }
+            CGS_ASSERT(liEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT, "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        }
+    }
+
+    // Drive the timer back to the inactive (negative second count) state (X360 *a1 = -1).
+    ClearModeTimer();
+}
+
+// X360 0x823126C8. Point mpCurrentOnlineModeScoring (ss+0x4DC8) at the embedded online scorer for
+// the given online game mode. The X360 switches on (leGameMode - E_MODE_ONLINE_MODE_START): online
+// road-rage -> the road-rage scorer; the stunt-run trio (Fugitive/FreeBurn/ModeEnd) -> the
+// stunt-run scorer; burning-home-run -> the burning-home-run scorer; everything else -> the race
+// scorer. Each scorer derives from BaseOnlineModeScoring, so the address-of is a valid upcast.
+void ScoringSystem::StartOnlineGameModeScoring(GameStateModuleIO::EGameModeType leGameMode)
+{
+    switch (leGameMode)
+    {
+        case GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE:        // 11 -> ss+0x4BF8
+            mpCurrentOnlineModeScoring = &mOnlineRoadRageScoring;
+            break;
+
+        case GameStateModuleIO::E_MODE_ONLINE_FUGITIVE:         // 12 -> ss+0x4D44
+        case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN:        // 14 -> ss+0x4D44
+        case GameStateModuleIO::E_MODE_ONLINE_MODE_END:         // 17 -> ss+0x4D44
+            mpCurrentOnlineModeScoring = &mOnlineStuntRunModeScoring;
+            break;
+
+        case GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN: // 13 -> ss+0x4CC0
+            mpCurrentOnlineModeScoring = &mOnlineBurningHomeRunScoring;
+            break;
+
+        default:                                                // 10/15/16/... -> ss+0x4B74
+            mpCurrentOnlineModeScoring = &mOnlineRaceModeScoring;
+            break;
+    }
 }
 
 // ----------------------------------------------------------------------------

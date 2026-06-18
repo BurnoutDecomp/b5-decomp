@@ -22,6 +22,9 @@
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+// KI_MAX_PLAYER_TEAMS (== 9): the stunt-run free-for-all team-index bound shared with
+// OnlineStuntRunModeScoring. This leaf header forward-declares ScoringSystem only (no cycle).
+#include "GameSource/GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.h"
 
 namespace BrnGameState
 {
@@ -348,5 +351,64 @@ namespace BrnGameState
                 lpCar->SetCarID(lpOutput->GetCarModelId(leActiveRaceCarIndex));
             }
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // GetTeamStuntScore -- X360 0x82320650
+    // Sum the per-car online stunt score (CarScoreData +0xD4) over every car slot
+    // whose CarData team matches liTeam. liTeam is a raw team INDEX (free-for-all
+    // stunt-run, so it ranges over the per-player team slots, not the 3-value
+    // EPlayerTeam enum); cars on other teams simply contribute nothing. Walks all
+    // E_ACTIVE_RACE_CAR_INDEX_COUNT (8) slots, null-checking each lookup.
+    // ------------------------------------------------------------------------
+    s32 ScoringSystem::GetTeamStuntScore(s32 liTeam) const
+    {
+        s32 liTeamScore = 0;
+
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            const CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpCar && static_cast<s32>(lpCar->GetTeam()) == liTeam)
+            {
+                liTeamScore += lpCar->GetScoreData()->GetOnlineStuntScore();
+            }
+
+            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        }
+
+        return liTeamScore;
+    }
+
+    // ------------------------------------------------------------------------
+    // GetLeadingStuntTeam -- X360 0x823206E0
+    // Scan the per-team stunt scores and return the team with the strictly-highest
+    // total (ties keep the earliest team, mirroring the `>` test), skipping the
+    // caller-excluded team liTeamToExclude. The seed leader is team 2
+    // (E_PLAYER_TEAM_BLUE_TEAM), returned when no team out-scores it. The team
+    // index ranges over [0, KI_MAX_PLAYER_TEAMS) just like GetWinnerTeam.
+    // ------------------------------------------------------------------------
+    s32 ScoringSystem::GetLeadingStuntTeam(s32 liTeamToExclude) const
+    {
+        s32 liBestScore   = 0;
+        s32 liLeadingTeam = GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM;
+
+        for (s32 liTeam = 0; liTeam < KI_MAX_PLAYER_TEAMS; ++liTeam)
+        {
+            if (liTeam != liTeamToExclude)
+            {
+                const s32 liTeamScore = GetTeamStuntScore(liTeam);
+                if (liTeamScore > liBestScore)
+                {
+                    liBestScore   = liTeamScore;
+                    liLeadingTeam = liTeam;
+                }
+            }
+
+            CGS_ASSERT(liTeam + 1 <= KI_MAX_PLAYER_TEAMS,
+                       "leEnumIndex <= E_PLAYER_TEAM_COUNT");
+        }
+
+        return liLeadingTeam;
     }
 }

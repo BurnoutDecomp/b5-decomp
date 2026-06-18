@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<2u> (canonical generic)
+#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (ContainsData bounds guard)
 
 // =============================================================================
 // BrnChallengeData.h - the SINGLE shared home for the StreetData challenge score-record
@@ -61,6 +62,13 @@ namespace BrnStreetData
     // BrnChallengeData.h:53 (DWARF). Two 2-bit dirty/valid bit arrays + a two-entry ScoreList.
     struct ChallengeData
     {
+        // BrnChallengeData.h:179 (DWARF). Per-score-type comparator dispatch. CompareScores
+        // indexes this table by ScoreType. Declared static here to match the DWARF shape
+        // (BrnChallengeData.h:191 `mapComparisonFunctions`); the table's definition + initial
+        // values live with the CompareScores body in the BrnChallengeData.cpp TU (X360
+        // table region near 0x820A765C) and are NOT emitted here.
+        typedef int32_t (*ComparisonFunction)( int32_t liScore0, int32_t liScore1 );
+
         CgsContainers::BitArray<2u> mDirty;        // +0
         CgsContainers::BitArray<2u> mValidScores;  // +8
         ScoreList                   mScoreList;    // +16
@@ -71,5 +79,31 @@ namespace BrnStreetData
         int32_t GetScore( ScoreType leScoreType ) const;
         void    SetScore( ScoreType leScoreType, int32_t liScore );
         void    Copy( const ChallengeData* lpSource );
+
+        // BrnChallengeData.h:144 (DWARF) -- 0x82325F08. Reports whether mValidScores carries a
+        // recorded score. Passing E_SCORE_TYPE_COUNT is the X360 "any score?" probe: it returns
+        // true iff ANY valid-score bit is set. A specific ScoreType tests just that bit. The
+        // bounds assert the X360 emits (CgsBitArray.h:203) is owned by the BitArray call below.
+        // Header-inline: the X360 build folds this whole body into every caller
+        // (e.g. ScoringSystem::GetHighestLobbyRoadRuleScore 0x8232B280).
+        bool ContainsData( ScoreType leScoreType ) const
+        {
+            if ( leScoreType == E_SCORE_TYPE_COUNT )
+            {
+                return mValidScores.GetFirstNonZeroBit()
+                       != CgsContainers::BitArray<2u>::KI_INVALID_BITINDEX;
+            }
+
+            CGS_ASSERT( leScoreType < E_SCORE_TYPE_COUNT, "leScoreType < E_SCORE_TYPE_COUNT" );
+            return mValidScores.IsBitSet( static_cast<u32>( leScoreType ) );
+        }
+
+        // BrnChallengeData.h:179 (DWARF). Three-way comparator: dispatches through
+        // mapComparisonFunctions[leScoreType] to rank liScore0 vs liScore1 for that score type
+        // (negative => liScore0 is the better score, the result GetHighestLobbyRoadRuleScore
+        // tests with `< 0`). DECLARE-ONLY: its body + the comparator table live in the
+        // BrnChallengeData.cpp TU (it appears only as [external/unknown] from every caller), so
+        // it resolves under cl /c without forcing that TU's reconstruction here.
+        int32_t CompareScores( ScoreType leScoreType, int32_t liScore0, int32_t liScore1 );
     };
 }

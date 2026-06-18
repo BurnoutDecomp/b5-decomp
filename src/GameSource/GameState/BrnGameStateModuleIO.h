@@ -22,6 +22,7 @@
 #include "GameSource/BurnoutConstants.h"                    // EActiveRaceCarIndex (enum : s32)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (enum : s32)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h" // BrnTraffic::BrnTrafficIO::TrafficTypeResponse
+#include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h" // BrnAI::AIModuleIO::AICarOutputInterface (complete; embedded by value @ +0xAAC0)
 
 namespace BrnGameState
 {
@@ -35,7 +36,11 @@ namespace GameStateModuleIO
     class TakedownEventInputQueueType;     // PreWorldInputBuffer +0x660
     class NetworkPlayerResultsInterface;   // PreWorldInputBuffer +0x36B8
     class VehicleOutputInterface;          // PostWorldInputBuffer +0x220
-    class AICarOutputInterface;            // PostWorldInputBuffer +0xAAC0
+    // DWARF (BrnGameStateModuleIO.h:73,181,239): the PostWorldInputBuffer AICarOutputInterface
+    // is a typedef IMPORT of the AI module's BrnAI::AIModuleIO::AICarOutputInterface (mirrors
+    // the ActiveRaceCarOutputInterface == RCEntityActiveRaceCarOutputInterface pattern). It is
+    // embedded by value @ +0xAAC0, so the real (complete) type is included above and aliased here.
+    typedef BrnAI::AIModuleIO::AICarOutputInterface AICarOutputInterface; // PostWorldInputBuffer +0xAAC0
     class GameActionQueue;                 // OutputBuffer +0x04
     class ResourceRequestInterface;        // OutputBuffer +0x3414 (RequestInterface<3072>)
     class TakedownEventOutputQueueType;    // OutputBuffer +0x4040
@@ -110,7 +115,10 @@ namespace GameStateModuleIO
         u8  maPadToVehicleOutput[0x220 - sizeof(CgsModule::IOBuffer)]; // base end -> 0x0220
         u8  mVehicleOutputInterfaceStorage[0xA4B0 - 0x220];           // VehicleOutputInterface @ +0x0220
         u8  mGameEventQueueStorage[0xAAC0 - 0xA4B0];                  // GameEventQueue         @ +0xA4B0
-        u8  mAICarOutputInterfaceStorage[0xBFA8 - 0xAAC0];            // AICarOutputInterface   @ +0xAAC0 (placeholder width: spans to the next pinned member; widen/replace when AICarOutputInterface's own TU lands)
+        // Real, complete AICarOutputInterface (BrnAI::AIModuleIO::AICarOutputInterface). sizeof == 0x14E8
+        // (== 0xBFA8 - 0xAAC0), 4-aligned, so it occupies exactly the former placeholder span and leaves
+        // mTrafficTypeResponseQueue pinned at +0xBFA8.
+        AICarOutputInterface mAICarOutputInterface;                   // AICarOutputInterface   @ +0xAAC0
         // TrafficTypeResponse query-response queue @ +0xBFA8 (49064). Fixed-capacity EventQueue<...,32>;
         // 16B element stride == sizeof(TrafficTypeResponse). AppendTrafficTypeResponseQueue forwards to it.
         CgsModule::EventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse, 32> mTrafficTypeResponseQueue; // +0xBFA8

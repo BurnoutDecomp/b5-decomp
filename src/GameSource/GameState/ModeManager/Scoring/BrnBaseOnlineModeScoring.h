@@ -14,6 +14,11 @@ namespace BrnGameState
 // declaration suffices for this header. Full layout lands with BrnScoringSystem's own TU.
 class ScoringSystem;
 
+// Forward-only: WriteDataToOutput receives it by pointer only and has no reconstructable home
+// in the X360 ledger yet, so an incomplete declaration suffices (documented pointer-only
+// exception). It self-completes when that TU is worked.
+class OnlineScoringOutputInterface;
+
 // Max players in a network game (== BrnWorld::KI_MAX_ACTIVE_RACE_CARS on this build). Modelled as a
 // file-visible constant rather than pulling in the BrnWorld header for a single bound
 // (BrnGameModeParams precedent).
@@ -35,11 +40,27 @@ const s32 KI_MAX_ACTIVE_RACE_CARS = 8;
 class BaseOnlineModeScoring
 {
 public:
+    // ---- polymorphic lifecycle (DWARF vtable slots 0..9, BrnBaseOnlineModeScoring.h:46) --------
+    // DECLARE-ONLY: bodies live in the wider BrnBaseOnlineModeScoring TU (not yet reconstructed).
+    // Declared in exact DWARF vtable order so the slot layout is correct ahead of GetCurrentPlayerTeam
+    // (the previously-declared slot, which DWARF places last). The ScoringSystem dispatches through
+    // mpCurrentOnlineModeScoring into these: its UpdateCumulativeResults tail calls vtable+0x1C
+    // (== AwardNetworkRatings, slot 7) and UpdateNetworkPlayerResults drives Update/UpdatePlayerPoints.
+    virtual void Construct();                                        // slot 0  (.cpp:91)
+    virtual bool Prepare();                                          // slot 1  (.cpp:123)
+    virtual bool Release();                                          // slot 2  (.cpp:145)
+    virtual void Destruct();                                         // slot 3  (.cpp:109)
+    virtual void ClearData();                                       // slot 4  (.cpp:157)
+    virtual void Update(const ScoringSystem* lpScoringSystem, s32 liNumberOfCars);            // slot 5  (.cpp:191)
+    virtual void UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s32 liNumberOfCars);      // slot 6  (.cpp:230)
+    virtual void AwardNetworkRatings(const ScoringSystem* lpScoringSystem, u32 luNumActiveRaceCars); // slot 7  (.cpp:244)
+    virtual void WriteDataToOutput(OnlineScoringOutputInterface* lpOutput);                   // slot 8  (.cpp:171)
+
     // X360 @ 0x823106F8 (BrnBaseOnlineModeScoring.h:341). Finishing position recorded for slot.
     s32 GetPlayerPosition(s32 liRaceCarIndex);
 
-    // X360 @ 0x82314638 (BrnBaseOnlineModeScoring.cpp:1005). Team assigned to the slot. Virtual:
-    // derived online-mode scorers override the team-assignment policy.
+    // X360 @ 0x82314638 (BrnBaseOnlineModeScoring.cpp:1005). Team assigned to the slot. Virtual
+    // (DWARF vtable slot 9, last). Derived online-mode scorers override the team-assignment policy.
     virtual GameStateModuleIO::EPlayerTeam GetCurrentPlayerTeam(s32 liRaceCarIndex);
 
     // X360 @ 0x823219B8 (BrnBaseOnlineModeScoring.cpp:205). Public non-virtual. Assigns/refreshes

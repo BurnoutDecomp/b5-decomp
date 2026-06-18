@@ -203,6 +203,21 @@ public:
     void SetFlag(u64 luFlags)                           { muFlags |= luFlags; }
     s32  GetNumRivals() const                           { return miNumRivals; }
 
+    // ScoringSystem::OnModeStart (X360 @ 0x82338220) road-rage / marked-man case
+    // (jumptable cases 0,5; pseudocode `case 3: case 8:`) does, at 0x823382E4:
+    //     lwz r11, 0x858(r29)   ; r29 = GameModeParams*, raw 4-byte word @ +0x858
+    //     stw r11, 0x4B58(r31)  ; r31 = ScoringSystem*, -> miMaximumPlayerCrashedNumber
+    // i.e. it copies the +0x858 field VERBATIM (no float conversion) into the road-rage
+    // durability / crash-target word. The field at +0x858 is meAStarDistanceFunction, NOT
+    // mfOnlineModeTimeLimit (that is the adjacent word @ +0x854): GameModeParams::Construct
+    // (0x8231C370) writes 0 to +0x854 (`stw r11, 0x854(r3)` @ 0x8231C408) and separately
+    // 0 to +0x858 (`stw r11, 0x858(r3)` @ 0x8231C448), proving they are two distinct dwords;
+    // GetFlag's `ld 0x860` fixes muFlags @ +0x860, so working back the DWARF source order is
+    // ...mfOnlineModeTimeLimit(+0x854), meAStarDistanceFunction(+0x858), miPlayerWreckCount(+0x85C).
+    // Returned as the s32 OnModeStart treats this word as (the value stored into the s32 crash
+    // target). Inlined in the X360 build (no standalone export) -> modelled as an inline accessor.
+    s32  GetAStarDistanceFunctionRaw() const            { return static_cast<s32>(meAStarDistanceFunction); }
+
 public:
     // ---- Data members (DWARF source order, BrnGameModeParams.h:503-573) -----
     s8                      miNumRivals;
