@@ -455,6 +455,23 @@ namespace BrnGameState
             CgsSystem::Time GetTimeBoosting() const                { return mTimeBoosting; }              // +0xF0
             void            SetTimeBoosting(CgsSystem::Time lTime) { mTimeBoosting = lTime; }             // +0xF0
 
+            // Distance-to-player (f32). UpdateDistanceToPlayer (X360 0x8232B408) computes
+            // |GetPlayerPosition() - thisCar.mPosition| each frame and stores it here (X360
+            // stfs 0x1C(GetCarData)). First of the two f32 words ClearData zeroes at +0x1C/+0x20.
+            f32             GetDistanceToPlayer() const            { return mfDistanceToPlayer; }         // +0x1C
+            void            SetDistanceToPlayer(f32 lfDistance)    { mfDistanceToPlayer = lfDistance; }   // +0x1C
+
+            // Per-frame distance accumulator (f32). UpdateGeneralStats (X360 0x8232B8C0) reads it,
+            // adds |currentSpeed| * deltaTime, and writes it back each frame
+            // (X360 v27[55] == byte offset 0xDC on GetCarData == this record).
+            f32             GetDistanceAccumulator() const         { return mfDistanceAccumulator; }      // +0xDC
+            void            SetDistanceAccumulator(f32 lfDistance) { mfDistanceAccumulator = lfDistance; } // +0xDC
+
+            // Per-car online stunt score (+0xD4). Summed per-team by ScoringSystem::GetTeamStuntScore
+            // and read by the online stunt-run scorer's gather loop.
+            s32             GetOnlineStuntScore() const            { return miOnlineStuntScore; }         // +0xD4
+            void            SetOnlineStuntScore(s32 liScore)       { miOnlineStuntScore = liScore; }      // +0xD4
+
         private:
             CgsSystem::Time mTotalTime;            // +0x00 (8)  Time(0) in ClearData; the finish time
             s32  miRacePosition;                   // +0x08      live race position (ClearData=8 == last-of-8). GetCarRacePosition return *(CarData+8); also read by RaceCarHasReachedCheckPointWithinEvent (lwz 8(r28) compared to total-1). The checkpoint COUNTER it increments lives on CarData @+0x154 (lbz/stb 0x154), not here -- so +0x08 is unambiguously the race position. (was miField08)
@@ -462,7 +479,8 @@ namespace BrnGameState
             s32  miCompletedLaps;                  // +0x10      completed-lap count; ClearData=0. GetRaceCarNumCompletedLaps return *(r3+0x10); RegisterFinishForCar increments it. (was miField10)
             s32  miFinishPosition;                 // +0x14      race finish position; ClearData=9. GetCarRaceFinishPosition return *(r3+0x14); RegisterFinishForCar writes it. (was miField14)
             f32  mfDistanceToFinishLive;           // +0x18      live distance-to-finish (f32). GetRaceCarDistanceToFinish: lfs f1,0x18(r3). DISTINCT from mfDistanceToFinish@+0x48 -- SetPlayerEliminated copies +0x18 -> +0x48 (lfs 0x18 / stfs 0x48), i.e. captures the live distance into the +0x48 slot at elimination, proving two separate fields. (carved from old maStorage18)
-            u8   maStorage1C[8];                   // +0x1C..+0x24  two f32 words (ClearData stfs 0x1C / stfs 0x20)
+            f32  mfDistanceToPlayer;               // +0x1C      distance-to-player (f32). UpdateDistanceToPlayer (X360 0x8232B408) stfs 0x1C(GetCarData). First of the two f32 words ClearData zeroes at +0x1C/+0x20. (carved from old maStorage1C[8])
+            u8   maStorage20[4];                   // +0x20..+0x24  remaining f32 word (ClearData stfs 0x20)
             CgsSystem::Time maaLapTimes[4];        // +0x24..+0x44  per-lap times, KU_MAX_LAPS==4 (8-byte Time stride). RegisterFinishForCar: base addi r28,r31,0x24; stride +=8; element[laps] write stw 0x24(r11)/stfs 0x28(r11) with r11=laps<<3. GetRaceCarTotalTime sums [0..laps); GetRaceCarFastestLapTime mins [1..laps). ClearData inits 4 elements from +0x24 stride 8.
             u8   maStorage44[1];                   // +0x44       byte (ClearData stb 0x44 = 0)
             bool mbHasFinished;                    // +0x45       has-crossed-the-line flag; RegisterFinishForCar stb 1,0x45(r31) at finish; ClearData stb 0,0x45. (carved from old maStorage18)
@@ -488,30 +506,33 @@ namespace BrnGameState
             s32  miChainableScore;                 // +0xC8      GetChainableStuntMultipliers source
             s32  miChainableField;                 // +0xCC      GetChainableStuntMultipliers source
             s32  miCurrentChainableMultiplier;     // +0xD0      guard (this[52] < liMaxMultiplier) + source
-            u8   maStorageD4[4];                   // +0xD4..+0xD8
+            s32  miOnlineStuntScore;               // +0xD4      per-car online stunt score. ScoringSystem::GetTeamStuntScore (0x82320650) sums this across cars whose team matches (lwz 0xD4(GetCarData)); also the gather source for OnlineStuntRunModeScoring::GetTeamScore/UpdatePlayerPoints (X360 *(CarData+212)). (carved from old maStorageD4[4])
             u8   mbChainActive;                    // +0xD8      guard flag (*(this+216))
             bool mbEliminated;                     // +0xD9      eliminated flag; ClearData stb 0,0xD9. SetPlayerEliminated/HasStuntAttackModeEnded stb 1,0xD9(r3); IsBlueTeamEliminated reads lbz 0xD9 (team==2 && !eliminated). (carved from old maStorageTail head)
-            u8   maStorageDA[6];                   // +0xDA..+0xE0
+            u8   maStorageDA[2];                   // +0xDA..+0xDC  bytes
+            f32  mfDistanceAccumulator;            // +0xDC      per-frame distance accumulator (f32). UpdateGeneralStats (X360 0x8232B8C0) v27[55] (== byte 0xDC): reads, adds |speed|*dt, writes back. (carved from old maStorageDA[6])
             CgsSystem::Time mTimeInFirstPlace;     // +0xE0 (8)  time spent in 1st place. GetTimeSpentInFirstPlace: lwz 0xE0(r11)/lfs 0xE4(r11). Ctor/ClearData zero via +0xE0. (carved from old maStorageTail)
             CgsSystem::Time mTimeInLastPlace;      // +0xE8 (8)  time spent in last place. GetTimeSpentInLastPlace: *(CarData+232)/+236 == +0xE8/+0xEC. (carved from old maStorageTail)
             CgsSystem::Time mTimeBoosting;         // +0xF0 (8)  time spent boosting. GetTimeSpentBoosting: *(CarData+240)/+244 == +0xF0/+0xF4. (carved from old maStorageTail)
             u8   maStorageF8[48];                  // +0xF8..+0x128  trailing fields (through +292; ClearData zeroes +0xF8/+0xFC/+0x100..+0x11C)
             // Byte accounting (each named field carved at its X360-proven offset, blobs padding the
             // gaps so total stays 0x128). Region carves (each sums to the old blob it replaced):
-            //   old maStorage18[48]@0x18 -> mfDistanceToFinishLive(4)@0x18 + maStorage1C[8]@0x1C +
-            //       maaLapTimes[4](32)@0x24 + maStorage44[1]@0x44 + mbHasFinished(1)@0x45 + maStorage46[2]@0x46 = 48.
+            //   old maStorage18[48]@0x18 -> mfDistanceToFinishLive(4)@0x18 + mfDistanceToPlayer(4)@0x1C +
+            //       maStorage20[4]@0x20 + maaLapTimes[4](32)@0x24 + maStorage44[1]@0x44 + mbHasFinished(1)@0x45 +
+            //       maStorage46[2]@0x46 = 48.
             //   old maStorage50[8]@0x50 -> miTakedownsAgainst(4)@0x50 + maStorage54[4]@0x54 = 8.
             //   old maStorage64[4]@0x64 -> miNumEliminations(4)@0x64 = 4.
             //   old maStorage6A[26]@0x6A -> maStorage6A[2]@0x6A + mTimeInCurrentTeam(8)@0x6C +
             //       maTimeInTeam[2](16)@0x74 = 26.
-            //   old maStorageTail[79]@0xD9 -> mbEliminated(1)@0xD9 + maStorageDA[6]@0xDA +
-            //       mTimeInFirstPlace(8)@0xE0 + mTimeInLastPlace(8)@0xE8 + mTimeBoosting(8)@0xF0 +
-            //       maStorageF8[48]@0xF8 = 79.
+            //   old maStorageTail[79]@0xD9 -> mbEliminated(1)@0xD9 + maStorageDA[2]@0xDA +
+            //       mfDistanceAccumulator(4)@0xDC + mTimeInFirstPlace(8)@0xE0 + mTimeInLastPlace(8)@0xE8 +
+            //       mTimeBoosting(8)@0xF0 + maStorageF8[48]@0xF8 = 79.
             // Unchanged named anchors: mTotalTime@0x00, mfDistanceToFinish@0x48, miTakedowns@0x4C,
             // miOnlineFinishPositionScore@0x58, miOnlineStandingsPosition@0x5C, mbTimedOut@0x68,
             // mbDisconnected@0x69, mTimeAsRunner@0x84, maStorage8C@0x8C, mbCompletedBurningHomeRun@0xBC,
-            // maStorageBD@0xBD, miCumulativeCheckpoints@0xC4, miChainable*@0xC8, maStorageD4@0xD4,
-            // mbChainActive@0xD8. Renamed placeholders: miField08/0C/10/14 -> miRacePosition/
+            // maStorageBD@0xBD, miCumulativeCheckpoints@0xC4, miChainable*@0xC8, mbChainActive@0xD8.
+            // Carved-from-blob: miOnlineStuntScore(4)@0xD4 replaces the old maStorageD4[4]@0xD4.
+            // Renamed placeholders: miField08/0C/10/14 -> miRacePosition/
             // miHighestRacePosition/miCompletedLaps/miFinishPosition; miInvalidIndex60 -> meEliminatorRaceCarIndex.
 
             // Compile-time offset guards on the X360-proven scoring-gather slots. These members are
@@ -523,7 +544,9 @@ namespace BrnGameState
             // fire at compile time. Do NOT change the offsets -- they pin the on-disk record layout.
             static void _AssertLayout()
             {
+                static_assert(offsetof(CarScoreData, mfDistanceToPlayer)          == 0x1C, "CarScoreData::mfDistanceToPlayer offset");
                 static_assert(offsetof(CarScoreData, mfDistanceToFinish)          == 0x48, "CarScoreData::mfDistanceToFinish offset");
+                static_assert(offsetof(CarScoreData, mfDistanceAccumulator)       == 0xDC, "CarScoreData::mfDistanceAccumulator offset");
                 static_assert(offsetof(CarScoreData, miTakedowns)                 == 0x4C, "CarScoreData::miTakedowns offset");
                 static_assert(offsetof(CarScoreData, miOnlineFinishPositionScore) == 0x58, "CarScoreData::miOnlineFinishPositionScore offset");
                 static_assert(offsetof(CarScoreData, miOnlineStandingsPosition)   == 0x5C, "CarScoreData::miOnlineStandingsPosition offset");
@@ -533,6 +556,7 @@ namespace BrnGameState
                 static_assert(offsetof(CarScoreData, mbCompletedBurningHomeRun)   == 0xBC, "CarScoreData::mbCompletedBurningHomeRun offset");
                 static_assert(offsetof(CarScoreData, miCumulativeCheckpoints)     == 0xC4, "CarScoreData::miCumulativeCheckpoints offset");
                 static_assert(offsetof(CarScoreData, miChainableScore)            == 0xC8, "CarScoreData::miChainableScore offset");
+                static_assert(offsetof(CarScoreData, miOnlineStuntScore)          == 0xD4, "CarScoreData::miOnlineStuntScore offset");
             }
         };
         // Per-member offset guards live in CarScoreData::_AssertLayout above (offsetof on the private
