@@ -130,7 +130,26 @@ namespace BrnGameState
         bool       IsComboInProgress() const;                                           // :180
         bool       IsComboWarningActive() const;                                        // :183
         f32        GetTimeSinceComboWarningActivated() const;                           // :187
-        bool       HasStuntModeEnded(bool lbForce);                                     // :191
+
+        // VIRTUAL -- dispatched through the vtable, NOT a direct call. The keystone
+        // ScoringSystem::HasStuntAttackModeEnded (X360 0x82326708) calls this as
+        //   v6 = *(scorer);  (*(v6 + 0x14))(scorer, HasModeTimeExpired())
+        // i.e. through vtable slot +0x14 on the embedded scorer (ScoringSystem this+0x350
+        // for the offline path, this+0x2620 for the online path). The DERIVED online
+        // variant BrnGameState::StuntModeScoringOnline (X360 0x82313680) OVERRIDES this and
+        // forwards to the base StuntModeScoring::HasStuntModeEnded (X360 0x82313518), so the
+        // base must be virtual for the override + the dispatch to bind. DWARF spelt the
+        // method non-virtual (it dropped the virtuality annotation), but the X360 asm proves
+        // the polymorphism; we trust the asm. Signature `bool HasStuntModeEnded(bool)` is
+        // DWARF-authoritative (BrnStuntModeScoring.h:191; .cpp:129 names the param lbTimeUp).
+        //
+        // SLOT NOTE: the StuntModeScoring vtable is larger than this one entry -- other
+        // StuntModeScoring methods are dispatched at slots +0x1C, +0x20 and +0x28 in the asm.
+        // Reconstructing that full vtable ORDER (so HasStuntModeEnded lands at exactly +0x14)
+        // is deferred to this type's own TU; we do NOT fabricate phantom virtual slots here.
+        // Declaring this single virtual is sufficient for the HasStuntAttackModeEnded /
+        // StopModeTimer callers to compile (semantic parity; no vtable-layout assert).
+        virtual bool HasStuntModeEnded(bool lbTimeUp);                                  // :191
 
         void       DealWithStunt(const GameStateModuleIO::WorldStuntAction* lpAction);  // :195
         void       DealWithHitProp(u16 luPropId, u8 luFlags);                           // :199

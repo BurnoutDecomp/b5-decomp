@@ -63,6 +63,8 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                          // CgsModule::IOBuffer (base; 1B status FlagSet8 @ +0)
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"                        // CgsSystem::Time (PlayerResultsData::mFinishTime)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (PlayerResultsInterface::GetPlayerResultsData guard)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                     // PlayerName(16B), NetworkPlayerID, EActiveRaceCarIndex, DirtyTrickEvent
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // FULL InGamePlayerStatusData / InGamePlayerStatusInterface
 
@@ -180,23 +182,74 @@ namespace BrnNetworkModuleIO
     };
 
     // ========================================================================
+    // PlayerResultsData  (DWARF SharedIO/BrnNetworkModulePlayerResultsInterface.h:46)
+    // ========================================================================
+    // Per-player end-of-round result record. SHAPE is the DWARF member set (h:49-54); the on-disk
+    // FIELD ORDER + OFFSETS are X360-AUTHORITATIVE, recovered from the consumer
+    // ScoringSystem::UpdateNetworkPlayerResults (0x8231FA90), whose record cursor walks this array
+    // at a 28-byte (0x1C) stride and reads each field at a fixed offset:
+    //   +0x00 (8) Time mFinishTime    : two words -- miSeconds (stw -0x18(cur)) + mfFraction (stfs -0x14)
+    //   +0x08 (4) meActiveRaceCarIndex: the per-record car slot (lwz -0x10(cur); checked != -1, indexes GetCarData)
+    //   +0x0C (4) meEliminatorIndex   : eliminator car slot   (lwz -0xC(cur) -> CarScoreData +0x60)
+    //   +0x10 (4) mfDistanceToFinish  : captured finish distance (lfs -8(cur) -> CarScoreData +0x48)
+    //   +0x14 (4) miEliminations      : eliminations           (lwz -4(cur) -> CarScoreData +0x64)
+    //   +0x18 (1) mbValid             : record-present guard    (lbz 0(cur); gates the whole write)
+    //   +0x19 (1) mbTimedOut          : timed-out flag          (lbz 1(cur) -> CarScoreData +0x68)
+    //   +0x1A (1) mbEliminated        : eliminated flag         (lbz 2(cur) -> CarScoreData +0xD9)
+    //   +0x1B (1) padding to the 28-byte stride
+    // NOTE on the bool count: the DWARF (h:49) names ONLY one bool (mbTimedOut). The X360 body reads
+    // THREE distinct bytes at +0x18/+0x19/+0x1A, so the on-disk record has three bool slots; the two
+    // not in the DWARF (mbValid @+0x18, mbEliminated @+0x1A) are named from their X360 use. The DWARF
+    // declaration ORDER is NOT the X360 storage order (the X360 packs the 8-byte Time first); members
+    // are placed here at their proven on-disk offsets so the 28-byte stride and every consumer read
+    // land by name. FLAG: the +0x18 validity byte and the +0x1A eliminated byte are inferred from the
+    // ASM (no DWARF name) -- high-confidence from the store targets, but not DWARF-confirmed.
+    struct PlayerResultsData
+    {
+        CgsSystem::Time     mFinishTime;            // +0x00 (8)  (DWARF "Time")
+        EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x08
+        EActiveRaceCarIndex meEliminatorIndex;      // +0x0C
+        f32                 mfDistanceToFinish;     // +0x10  (DWARF float_t -> f32)
+        s32                 miEliminations;         // +0x14  (DWARF int32_t)
+        bool                mbValid;                // +0x18  (X360 record-present guard; not in DWARF)
+        bool                mbTimedOut;             // +0x19  (DWARF h:49)
+        bool                mbEliminated;           // +0x1A  (X360 eliminated flag; not in DWARF)
+        u8                  maPad1B[1];             // +0x1B  pad to 28-byte stride
+
+        // DWARF h:57: PlayerResultsData::Clear() -- declare-only (own TU body, no standalone export found).
+        void Clear();
+    };
+    static_assert(sizeof(PlayerResultsData) == 28, "PlayerResultsData on-disk stride (0x1C)");
+
+    // ========================================================================
     // PlayerResultsInterface  (DWARF SharedIO/BrnNetworkModulePlayerResultsInterface.h:86)
-    //   maPlayerResultsData[8]; operator= @ 0x823B8F68 (8x ~28B memberwise copy).
-    //   PlayerResultsData is modelled opaquely (no fabricated members); DWARF h:46 gives
-    //   {bool mbTimedOut; EActiveRaceCarIndex meActiveRaceCarIndex; EActiveRaceCarIndex meEliminatorIndex;
-    //    f32 mfDistanceToFinish; Time mFinishTime; s32 miEliminations;} (~28B). Replace with the typed
-    //   struct + member-wise assignment when PlayerResultsData is homed (offsets/stride must not move).
-    //   This interface is NOT a committed home elsewhere -- this TU homes it.
+    //   maPlayerResultsData[8]; operator= @ 0x823B8F68 (8x 28B memberwise copy).
+    //   This interface is NOT a committed home elsewhere -- this TU homes it (and PlayerResultsData).
     // ========================================================================
     struct PlayerResultsInterface
     {
         // X360 0x823B8F68: memberwise copy of maPlayerResultsData[8] (28-byte stride).
         PlayerResultsInterface& operator=(const PlayerResultsInterface& lOther);
 
-        // declared-only: Clear / GetPlayerResultsData(const) / GetPlayerResultsDataForWriting.
+        // DWARF h:96 -- const element accessor. The X360 consumer (UpdateNetworkPlayerResults)
+        // indexes the array linearly; the asserted "liIndex >= 0" guard (BrnNetworkModulePlayer-
+        // ResultsInterface.h:141) is reproduced. Inline so the consumer TU needs no out-of-line body.
+        const PlayerResultsData* GetPlayerResultsData(s32 liIndex) const
+        {
+            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            return &maPlayerResultsData[liIndex];
+        }
+        // DWARF h:101 -- mutable element accessor (writer side). Declare-only: no standalone X360
+        // export reached from this slice (inlined at its call sites); body lands with this TU.
+        PlayerResultsData* GetPlayerResultsDataForWriting(s32 liIndex);
+
+        // DWARF h:91: Clear() -- declare-only (own TU body).
+        void Clear();
+
     private:
-        u8 maPlayerResultsData[8 * 28];    // 8 PlayerResultsData records (~28B each, copied by operator=)
+        PlayerResultsData maPlayerResultsData[8];   // 8 records, 28-byte stride (== old u8[8*28])
     };
+    static_assert(sizeof(PlayerResultsInterface) == 8 * 28, "PlayerResultsInterface layout (8 x 0x1C)");
 
     // ========================================================================
     // NetworkOutRecvRoadRulesPBEvent  (DWARF BrnNetworkOutEventTypeDefs.h:11)

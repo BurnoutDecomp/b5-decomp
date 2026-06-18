@@ -360,7 +360,9 @@ namespace BrnGameState
             void            SetFinishTime(CgsSystem::Time lTime) { mTotalTime = lTime; }         // +0x00 (RegisterFinishForCar writes the accumulated total race time)
             f32             GetDistanceToFinish() const     { return mfDistanceToFinish; }      // +0x48
             s32             GetTakedowns() const            { return miTakedowns; }             // +0x4C
+            void            SetTakedowns(s32 liTakedowns)   { miTakedowns = liTakedowns; }      // +0x4C (UpdateTakedowns/UpdatePaybackTakedowns @0x8232AC88/0x82338320 increment the aggressor's takedown count)
             bool            GetTimedOut() const             { return mbTimedOut; }              // +0x68
+            void            SetTimedOut(bool lbTimedOut)    { mbTimedOut = lbTimedOut; }        // +0x68 (UpdateNetworkPlayerResults stb 0x68)
             bool            GetDisconnected() const         { return mbDisconnected; }          // +0x69
             void            SetDisconnected(bool lbDisconnected) { mbDisconnected = lbDisconnected; } // +0x69 (Set/Clear-PlayerDisconnected)
             CgsSystem::Time GetTimeAsRunner() const         { return mTimeAsRunner; }           // +0x84
@@ -417,6 +419,31 @@ namespace BrnGameState
 
             s32             GetTakedownsAgainst() const            { return miTakedownsAgainst; }         // +0x50
             void            SetTakedownsAgainst(s32 liTakedowns)   { miTakedownsAgainst = liTakedowns; }  // +0x50
+            s32             GetMarkedManTakedownsFor() const       { return miMarkedManTakedownsFor; }       // +0x54
+            void            SetMarkedManTakedownsFor(s32 li)       { miMarkedManTakedownsFor = li; }         // +0x54 (UpdateCrashes @0x8231F9B8 increments this per primary crash -- see crash-tally FLAG below)
+            s32             GetTraitorousTakedownsFor() const      { return miTraitorousTakedownsFor; }      // +0x120
+            void            SetTraitorousTakedownsFor(s32 li)      { miTraitorousTakedownsFor = li; }        // +0x120 (UpdateTakedowns @0x8232AC88 increments on a same-team "traitorous" takedown)
+            s32             GetTraitorousTakedownsAgainst() const  { return miTraitorousTakedownsAgainst; }  // +0x124
+            void            SetTraitorousTakedownsAgainst(s32 li)  { miTraitorousTakedownsAgainst = li; }    // +0x124 (UpdateTakedowns @0x8232AC88 increments on a same-team "traitorous" takedown)
+
+            // Marked-man takedown-event tallies (UpdateTakedowns @0x8232AC88 increments the +0x108
+            // aggressor / +0x10C victim slot when TakedownEvent::mbMarkedManTakeDown is set).
+            s32             GetMarkedManTakedownEventsFor() const         { return miMarkedManTakedownEventsFor; }     // +0x108
+            void            SetMarkedManTakedownEventsFor(s32 li)         { miMarkedManTakedownEventsFor = li; }       // +0x108
+            s32             GetMarkedManTakedownEventsAgainst() const     { return miMarkedManTakedownEventsAgainst; } // +0x10C
+            void            SetMarkedManTakedownEventsAgainst(s32 li)     { miMarkedManTakedownEventsAgainst = li; }   // +0x10C
+
+            // Payback / dirty-trick takedown tallies (UpdatePaybackTakedowns @0x82338320 increments
+            // the for/against pair selected by the DirtyTrickEvent status word: status 2 -> +0x110/+0x114,
+            // status 4 -> +0x118/+0x11C).
+            s32             GetPaybackTakedownsType2For() const           { return miPaybackTakedownsType2For; }       // +0x110
+            void            SetPaybackTakedownsType2For(s32 li)           { miPaybackTakedownsType2For = li; }         // +0x110
+            s32             GetPaybackTakedownsType2Against() const       { return miPaybackTakedownsType2Against; }   // +0x114
+            void            SetPaybackTakedownsType2Against(s32 li)       { miPaybackTakedownsType2Against = li; }     // +0x114
+            s32             GetPaybackTakedownsType4For() const           { return miPaybackTakedownsType4For; }       // +0x118
+            void            SetPaybackTakedownsType4For(s32 li)           { miPaybackTakedownsType4For = li; }         // +0x118
+            s32             GetPaybackTakedownsType4Against() const       { return miPaybackTakedownsType4Against; }   // +0x11C
+            void            SetPaybackTakedownsType4Against(s32 li)       { miPaybackTakedownsType4Against = li; }     // +0x11C
 
             // Setter for +0x58 already exists above (SetOnlineRacePoints); add the matching getter
             // (UpdateCumulativeResults reads this slot).
@@ -446,6 +473,14 @@ namespace BrnGameState
             bool            GetEliminated() const                  { return mbEliminated; }               // +0xD9
             void            SetEliminated(bool lbEliminated)       { mbEliminated = lbEliminated; }       // +0xD9
 
+            // +0x6B flag. ClearData (0x821F2B28) zeroes it (stb 0,0x6B); UpdateNetworkPlayerResults
+            // (0x8231FA90) sets it to 1 (stb 1,0x6B) for each car that received a valid per-player
+            // network result this update. FLAG: identity inferred from those two writes only -- no
+            // DWARF name -- so "HasNetworkResults" is a best-guess for the results-applied/valid
+            // semantic; treat as provisional (the byte itself is the X360-proven +0x6B slot).
+            bool            GetHasNetworkResults() const            { return mbHasNetworkResults; }        // +0x6B
+            void            SetHasNetworkResults(bool lbHasResults) { mbHasNetworkResults = lbHasResults; } // +0x6B
+
             CgsSystem::Time GetTimeInFirstPlace() const            { return mTimeInFirstPlace; }          // +0xE0
             void            SetTimeInFirstPlace(CgsSystem::Time lTime) { mTimeInFirstPlace = lTime; }     // +0xE0
 
@@ -455,6 +490,32 @@ namespace BrnGameState
             CgsSystem::Time GetTimeBoosting() const                { return mTimeBoosting; }              // +0xF0
             void            SetTimeBoosting(CgsSystem::Time lTime) { mTimeBoosting = lTime; }             // +0xF0
 
+            // Distance-to-player (f32). UpdateDistanceToPlayer (X360 0x8232B408) computes
+            // |GetPlayerPosition() - thisCar.mPosition| each frame and stores it here (X360
+            // stfs 0x1C(GetCarData)). First of the two f32 words ClearData zeroes at +0x1C/+0x20.
+            f32             GetDistanceToPlayer() const            { return mfDistanceToPlayer; }         // +0x1C
+            void            SetDistanceToPlayer(f32 lfDistance)    { mfDistanceToPlayer = lfDistance; }   // +0x1C
+            f32             GetDistanceToNextCheckpointLive() const { return mfDistanceToNextCheckpointLive; }  // +0x20
+            void            SetDistanceToNextCheckpointLive(f32 lf) { mfDistanceToNextCheckpointLive = lf; }    // +0x20
+            bool            GetRacePositionImproved() const         { return mbRacePositionImproved; }          // +0x44
+            void            SetRacePositionImproved(bool lbImproved) { mbRacePositionImproved = lbImproved; }   // +0x44
+
+            // Per-frame distance accumulator (f32). UpdateGeneralStats (X360 0x8232B8C0) reads it,
+            // adds |currentSpeed| * deltaTime, and writes it back each frame
+            // (X360 v27[55] == byte offset 0xDC on GetCarData == this record).
+            f32             GetDistanceAccumulator() const         { return mfDistanceAccumulator; }      // +0xDC
+            void            SetDistanceAccumulator(f32 lfDistance) { mfDistanceAccumulator = lfDistance; } // +0xDC
+
+            // Longest-drift / longest-continuous-run max distance (f32). UpdateGeneralStats
+            // (X360 0x8232B8C0) writes the recorded maximum here (stfs 0xF8(GetCarData)).
+            f32             GetLongestDrift() const                { return mfLongestDrift; }             // +0xF8
+            void            SetLongestDrift(f32 lfDistance)        { mfLongestDrift = lfDistance; }       // +0xF8
+
+            // Per-car online stunt score (+0xD4). Summed per-team by ScoringSystem::GetTeamStuntScore
+            // and read by the online stunt-run scorer's gather loop.
+            s32             GetOnlineStuntScore() const            { return miOnlineStuntScore; }         // +0xD4
+            void            SetOnlineStuntScore(s32 liScore)       { miOnlineStuntScore = liScore; }      // +0xD4
+
         private:
             CgsSystem::Time mTotalTime;            // +0x00 (8)  Time(0) in ClearData; the finish time
             s32  miRacePosition;                   // +0x08      live race position (ClearData=8 == last-of-8). GetCarRacePosition return *(CarData+8); also read by RaceCarHasReachedCheckPointWithinEvent (lwz 8(r28) compared to total-1). The checkpoint COUNTER it increments lives on CarData @+0x154 (lbz/stb 0x154), not here -- so +0x08 is unambiguously the race position. (was miField08)
@@ -462,22 +523,24 @@ namespace BrnGameState
             s32  miCompletedLaps;                  // +0x10      completed-lap count; ClearData=0. GetRaceCarNumCompletedLaps return *(r3+0x10); RegisterFinishForCar increments it. (was miField10)
             s32  miFinishPosition;                 // +0x14      race finish position; ClearData=9. GetCarRaceFinishPosition return *(r3+0x14); RegisterFinishForCar writes it. (was miField14)
             f32  mfDistanceToFinishLive;           // +0x18      live distance-to-finish (f32). GetRaceCarDistanceToFinish: lfs f1,0x18(r3). DISTINCT from mfDistanceToFinish@+0x48 -- SetPlayerEliminated copies +0x18 -> +0x48 (lfs 0x18 / stfs 0x48), i.e. captures the live distance into the +0x48 slot at elimination, proving two separate fields. (carved from old maStorage18)
-            u8   maStorage1C[8];                   // +0x1C..+0x24  two f32 words (ClearData stfs 0x1C / stfs 0x20)
+            f32  mfDistanceToPlayer;               // +0x1C      distance-to-player (f32). UpdateDistanceToPlayer (X360 0x8232B408) stfs 0x1C(GetCarData). First of the two f32 words ClearData zeroes at +0x1C/+0x20. (carved from old maStorage1C[8])
+            f32  mfDistanceToNextCheckpointLive;   // +0x20      live distance-to-next-checkpoint (f32; name provisional, offset X360-proven from UpdateRacePositions 0x8232A668; ClearData stfs 0x20). (carved from old maStorage20)
             CgsSystem::Time maaLapTimes[4];        // +0x24..+0x44  per-lap times, KU_MAX_LAPS==4 (8-byte Time stride). RegisterFinishForCar: base addi r28,r31,0x24; stride +=8; element[laps] write stw 0x24(r11)/stfs 0x28(r11) with r11=laps<<3. GetRaceCarTotalTime sums [0..laps); GetRaceCarFastestLapTime mins [1..laps). ClearData inits 4 elements from +0x24 stride 8.
-            u8   maStorage44[1];                   // +0x44       byte (ClearData stb 0x44 = 0)
+            bool mbRacePositionImproved;           // +0x44      race-position-improved flag (name provisional, offset X360-proven from UpdateRacePositions; ClearData stb 0x44). (carved from old maStorage44)
             bool mbHasFinished;                    // +0x45       has-crossed-the-line flag; RegisterFinishForCar stb 1,0x45(r31) at finish; ClearData stb 0,0x45. (carved from old maStorage18)
             u8   maStorage46[2];                   // +0x46..+0x48  padding to +0x48
             f32  mfDistanceToFinish;               // +0x48      captured/finish distance-to-finish (Race gather lfs 0x48; written from +0x18 by SetPlayerEliminated)
             s32  miTakedowns;                      // +0x4C      takedown count (BHR gather lwz 0x4C)
             s32  miTakedownsAgainst;               // +0x50      takedowns-against count; ClearData=0. GetNumberOfTakedownsAgainst: lwz r3,0x50(r3). (carved from old maStorage50)
-            u8   maStorage54[4];                   // +0x54..+0x58  word (ClearData stw 0x54 = 0)
+            s32  miMarkedManTakedownsFor;          // +0x54      marked-man takedowns-for; ClearData=0. SaveNetworkRoundData reads lwz 0x54. (carved from old maStorage54)
             s32  miOnlineFinishPositionScore;      // +0x58      ClearData = 0; online points/finish-position countdown writeback. UpdateCumulativeResults reads it (lwz 0x58) and adds into CarData cumulative @+0x130.
             s32  miOnlineStandingsPosition;        // +0x5C      ClearData = -1; online standings rank writeback (was miInvalidIndex5C)
             EActiveRaceCarIndex meEliminatorRaceCarIndex; // +0x60  race-car index that eliminated this car; ClearData = -1 == E_ACTIVE_RACE_CAR_INDEX_INVALID. GetRaceCarEliminatorIndex return *(r3+0x60); SetPlayerEliminated stw a3,0x60(r31). (was miInvalidIndex60)
             s32  miNumEliminations;                // +0x64      number of cars this car eliminated; ClearData=0. GetNumberOfEliminations: lwz *(r3+0x64); SetPlayerEliminated increments the ELIMINATOR's +0x64. (carved from old maStorage64)
             bool mbTimedOut;                       // +0x68      timed-out flag (both gathers lbz 0x68)
             bool mbDisconnected;                   // +0x69      disconnected flag (both gathers lbz 0x69)
-            u8   maStorage6A[2];                   // +0x6A..+0x6C  bytes (ClearData stb 0x6B = 0)
+            u8   maStorage6A[1];                    // +0x6A       byte (carved from old maStorage6A[2])
+            bool mbHasNetworkResults;              // +0x6B       per-car "valid network result applied" flag; ClearData stb 0,0x6B / UpdateNetworkPlayerResults stb 1,0x6B. PROVISIONAL name (no DWARF). (carved from old maStorage6A[2])
             CgsSystem::Time mTimeInCurrentTeam;    // +0x6C (8)  time spent in the current team; reset to 0 by SetPlayerTeam on a team change (addi r3,r11,0x6C; SetFloatVal), accumulated by UpdateTeamStats (addi r3,r31,0x6C; Time::operator+=). Ctor zeroes via stw 0x6C/stfs 0x70. (carved from old maStorage6A)
             CgsSystem::Time maTimeInTeam[2];       // +0x74..+0x84  per-team accumulated time, indexed by team; UpdateTeamStats: base addi r3,r11,0x74 with r11=(team<<3)+r31. Team index itself lives on CarData @+0x13C, outside this record. (carved from old maStorage6A)
             CgsSystem::Time mTimeAsRunner;         // +0x84 (8)  time-as-runner (BHR gather lwz 0x84 / lfs 0x88)
@@ -488,30 +551,66 @@ namespace BrnGameState
             s32  miChainableScore;                 // +0xC8      GetChainableStuntMultipliers source
             s32  miChainableField;                 // +0xCC      GetChainableStuntMultipliers source
             s32  miCurrentChainableMultiplier;     // +0xD0      guard (this[52] < liMaxMultiplier) + source
-            u8   maStorageD4[4];                   // +0xD4..+0xD8
+            s32  miOnlineStuntScore;               // +0xD4      per-car online stunt score. ScoringSystem::GetTeamStuntScore (0x82320650) sums this across cars whose team matches (lwz 0xD4(GetCarData)); also the gather source for OnlineStuntRunModeScoring::GetTeamScore/UpdatePlayerPoints (X360 *(CarData+212)). (carved from old maStorageD4[4])
             u8   mbChainActive;                    // +0xD8      guard flag (*(this+216))
             bool mbEliminated;                     // +0xD9      eliminated flag; ClearData stb 0,0xD9. SetPlayerEliminated/HasStuntAttackModeEnded stb 1,0xD9(r3); IsBlueTeamEliminated reads lbz 0xD9 (team==2 && !eliminated). (carved from old maStorageTail head)
-            u8   maStorageDA[6];                   // +0xDA..+0xE0
+            u8   maStorageDA[2];                   // +0xDA..+0xDC  bytes
+            f32  mfDistanceAccumulator;            // +0xDC      per-frame distance accumulator (f32). UpdateGeneralStats (X360 0x8232B8C0) v27[55] (== byte 0xDC): reads, adds |speed|*dt, writes back. (carved from old maStorageDA[6])
             CgsSystem::Time mTimeInFirstPlace;     // +0xE0 (8)  time spent in 1st place. GetTimeSpentInFirstPlace: lwz 0xE0(r11)/lfs 0xE4(r11). Ctor/ClearData zero via +0xE0. (carved from old maStorageTail)
             CgsSystem::Time mTimeInLastPlace;      // +0xE8 (8)  time spent in last place. GetTimeSpentInLastPlace: *(CarData+232)/+236 == +0xE8/+0xEC. (carved from old maStorageTail)
             CgsSystem::Time mTimeBoosting;         // +0xF0 (8)  time spent boosting. GetTimeSpentBoosting: *(CarData+240)/+244 == +0xF0/+0xF4. (carved from old maStorageTail)
-            u8   maStorageF8[48];                  // +0xF8..+0x128  trailing fields (through +292; ClearData zeroes +0xF8/+0xFC/+0x100..+0x11C)
+            f32  mfLongestDrift;                   // +0xF8      longest-drift / longest-continuous-run max distance (f32). UpdateGeneralStats (X360 0x8232B8C0) keeps a per-frame run accumulator on CarData @+0x138 (lfs/stfs 0x138(r30), fmadds |*(carIO+0x3CC)|*dt while *(carIO+0x400)!=0); when that condition lapses it compares the run length (+0x138) against this max (asm 0x8232BC44 lfs f13,0xF8(r30) / 0x8232BC48 fcmpu) and, if greater, stores it here (0x8232BC50 stfs f0,0xF8(r30)) then resets +0x138 to 0.0 (0x8232BC54 stfs f31,0x138). r30 is GetCarData(==CarData), CarScoreData embedded at 0, so +0xF8 lands inside this record. (carved from old maStorageF8; gameplay identity inferred from the max-of-a-conditional-accumulator pattern -- name is provisional, see FLAG)
+            u8   maStorageFC[12];                  // +0xFC..+0x108  trailing pad (ClearData zeroes +0xFC/+0x100/+0x104)
+            // ===== Marked-man takedown-event tallies (carved from old maStorageFC) =====
+            // UpdateTakedowns (X360 0x8232AC88) increments these ONLY when the current TakedownEvent's
+            // mbMarkedManTakeDown flag is set (lbz 0x24 of the 40-byte event): the aggressor's +0x108
+            // and the victim's +0x10C (asm 0x8232ADD8 lwz/stw 0x108(r31) aggressor; 0x8232ADE4 lwz/stw
+            // 0x10C(r30) victim; r31/r30 == sub_8231DCD0 == CarScoreData*). These are DISTINCT from
+            // miMarkedManTakedownsFor@+0x54 (written by UpdateCrashes, a separate path) -- see FLAG.
+            s32  miMarkedManTakedownEventsFor;     // +0x108     marked-man takedown events made (aggressor)
+            s32  miMarkedManTakedownEventsAgainst; // +0x10C     marked-man takedown events suffered (victim)
+            // ===== Payback / dirty-trick takedown tallies (carved from old maStorageFC) =====
+            // UpdatePaybackTakedowns (X360 0x82338320) switches on the DirtyTrickEvent status word
+            // (meDirtyTrickStatus, the 4th event word). For status==2 it increments aggressor's +0x110
+            // (asm 0x823384BC lwz/stw 0x110(r30)) and victim's +0x114 (0x823384C8 lwz/stw 0x114(r31));
+            // for status==4 it increments aggressor's +0x118 (0x82338438 lwz/stw 0x118(r30)) and
+            // victim's +0x11C (0x82338444 lwz/stw 0x11C(r31)). Names keep the X360-proven status value;
+            // EDirtyTrickStatus only names E_DIRTY_TRICK_NONE==0 so the 2/4 semantics stay provisional.
+            s32  miPaybackTakedownsType2For;       // +0x110     dirty-trick status-2 payback made (aggressor)
+            s32  miPaybackTakedownsType2Against;   // +0x114     dirty-trick status-2 payback suffered (victim)
+            s32  miPaybackTakedownsType4For;       // +0x118     dirty-trick status-4 payback made (aggressor)
+            s32  miPaybackTakedownsType4Against;   // +0x11C     dirty-trick status-4 payback suffered (victim)
+            s32  miTraitorousTakedownsFor;         // +0x120     traitorous takedowns-for; SaveNetworkRoundData reads lwz 0x120. (carved from old maStorageF8)
+            s32  miTraitorousTakedownsAgainst;     // +0x124     traitorous takedowns-against; SaveNetworkRoundData reads lwz 0x124. (carved from old maStorageF8)
             // Byte accounting (each named field carved at its X360-proven offset, blobs padding the
             // gaps so total stays 0x128). Region carves (each sums to the old blob it replaced):
-            //   old maStorage18[48]@0x18 -> mfDistanceToFinishLive(4)@0x18 + maStorage1C[8]@0x1C +
-            //       maaLapTimes[4](32)@0x24 + maStorage44[1]@0x44 + mbHasFinished(1)@0x45 + maStorage46[2]@0x46 = 48.
+            //   old maStorage18[48]@0x18 -> mfDistanceToFinishLive(4)@0x18 + mfDistanceToPlayer(4)@0x1C +
+            //       maStorage20[4]@0x20 + maaLapTimes[4](32)@0x24 + maStorage44[1]@0x44 + mbHasFinished(1)@0x45 +
+            //       maStorage46[2]@0x46 = 48.
             //   old maStorage50[8]@0x50 -> miTakedownsAgainst(4)@0x50 + maStorage54[4]@0x54 = 8.
             //   old maStorage64[4]@0x64 -> miNumEliminations(4)@0x64 = 4.
-            //   old maStorage6A[26]@0x6A -> maStorage6A[2]@0x6A + mTimeInCurrentTeam(8)@0x6C +
-            //       maTimeInTeam[2](16)@0x74 = 26.
-            //   old maStorageTail[79]@0xD9 -> mbEliminated(1)@0xD9 + maStorageDA[6]@0xDA +
-            //       mTimeInFirstPlace(8)@0xE0 + mTimeInLastPlace(8)@0xE8 + mTimeBoosting(8)@0xF0 +
-            //       maStorageF8[48]@0xF8 = 79.
+            //   old maStorage6A[26]@0x6A -> maStorage6A[1]@0x6A + mbHasNetworkResults(1)@0x6B +
+            //       mTimeInCurrentTeam(8)@0x6C + maTimeInTeam[2](16)@0x74 = 26.
+            //   old maStorageTail[79]@0xD9 -> mbEliminated(1)@0xD9 + maStorageDA[2]@0xDA +
+            //       mfDistanceAccumulator(4)@0xDC + mTimeInFirstPlace(8)@0xE0 + mTimeInLastPlace(8)@0xE8 +
+            //       mTimeBoosting(8)@0xF0 + mfLongestDrift(4)@0xF8 + maStorageFC[36]@0xFC +
+            //       miTraitorousTakedownsFor(4)@0x120 + miTraitorousTakedownsAgainst(4)@0x124 = 79.
+            //   (the +0x120/+0x124 traitorous fields and +0xF8 longest-drift are carved from the same
+            //    tail region; the old single maStorageF8[40]@0xF8 -> mfLongestDrift(4)@0xF8 + maStorageFC[36]@0xFC.)
+            //   old maStorageFC[36]@0xFC -> maStorageFC[12]@0xFC + miMarkedManTakedownEventsFor(4)@0x108 +
+            //       miMarkedManTakedownEventsAgainst(4)@0x10C + miPaybackTakedownsType2For(4)@0x110 +
+            //       miPaybackTakedownsType2Against(4)@0x114 + miPaybackTakedownsType4For(4)@0x118 +
+            //       miPaybackTakedownsType4Against(4)@0x11C = 36. (UpdateTakedowns 0x8232AC88 writes
+            //       +0x108/+0x10C; UpdatePaybackTakedowns 0x82338320 writes +0x110/+0x114/+0x118/+0x11C.)
+            //   FLAG: UpdateCrashes (0x8231F9B8) increments +0x54 per crash event (the field this header
+            //   already names miMarkedManTakedownsFor). The "marked-man" label on +0x54 predates this work
+            //   and may be a misnomer for a crash-aggressor tally; left UNCHANGED (committed field, grow-only).
             // Unchanged named anchors: mTotalTime@0x00, mfDistanceToFinish@0x48, miTakedowns@0x4C,
             // miOnlineFinishPositionScore@0x58, miOnlineStandingsPosition@0x5C, mbTimedOut@0x68,
             // mbDisconnected@0x69, mTimeAsRunner@0x84, maStorage8C@0x8C, mbCompletedBurningHomeRun@0xBC,
-            // maStorageBD@0xBD, miCumulativeCheckpoints@0xC4, miChainable*@0xC8, maStorageD4@0xD4,
-            // mbChainActive@0xD8. Renamed placeholders: miField08/0C/10/14 -> miRacePosition/
+            // maStorageBD@0xBD, miCumulativeCheckpoints@0xC4, miChainable*@0xC8, mbChainActive@0xD8.
+            // Carved-from-blob: miOnlineStuntScore(4)@0xD4 replaces the old maStorageD4[4]@0xD4.
+            // Renamed placeholders: miField08/0C/10/14 -> miRacePosition/
             // miHighestRacePosition/miCompletedLaps/miFinishPosition; miInvalidIndex60 -> meEliminatorRaceCarIndex.
 
             // Compile-time offset guards on the X360-proven scoring-gather slots. These members are
@@ -523,7 +622,12 @@ namespace BrnGameState
             // fire at compile time. Do NOT change the offsets -- they pin the on-disk record layout.
             static void _AssertLayout()
             {
+                static_assert(offsetof(CarScoreData, mfDistanceToPlayer)          == 0x1C, "CarScoreData::mfDistanceToPlayer offset");
+                static_assert(offsetof(CarScoreData, mfDistanceToNextCheckpointLive) == 0x20, "CarScoreData::mfDistanceToNextCheckpointLive offset");
+                static_assert(offsetof(CarScoreData, mbRacePositionImproved)      == 0x44, "CarScoreData::mbRacePositionImproved offset");
                 static_assert(offsetof(CarScoreData, mfDistanceToFinish)          == 0x48, "CarScoreData::mfDistanceToFinish offset");
+                static_assert(offsetof(CarScoreData, mfDistanceAccumulator)       == 0xDC, "CarScoreData::mfDistanceAccumulator offset");
+                static_assert(offsetof(CarScoreData, mfLongestDrift)              == 0xF8, "CarScoreData::mfLongestDrift offset");
                 static_assert(offsetof(CarScoreData, miTakedowns)                 == 0x4C, "CarScoreData::miTakedowns offset");
                 static_assert(offsetof(CarScoreData, miOnlineFinishPositionScore) == 0x58, "CarScoreData::miOnlineFinishPositionScore offset");
                 static_assert(offsetof(CarScoreData, miOnlineStandingsPosition)   == 0x5C, "CarScoreData::miOnlineStandingsPosition offset");
@@ -533,6 +637,16 @@ namespace BrnGameState
                 static_assert(offsetof(CarScoreData, mbCompletedBurningHomeRun)   == 0xBC, "CarScoreData::mbCompletedBurningHomeRun offset");
                 static_assert(offsetof(CarScoreData, miCumulativeCheckpoints)     == 0xC4, "CarScoreData::miCumulativeCheckpoints offset");
                 static_assert(offsetof(CarScoreData, miChainableScore)            == 0xC8, "CarScoreData::miChainableScore offset");
+                static_assert(offsetof(CarScoreData, miOnlineStuntScore)          == 0xD4, "CarScoreData::miOnlineStuntScore offset");
+                static_assert(offsetof(CarScoreData, miMarkedManTakedownsFor)     == 0x54,  "CarScoreData::miMarkedManTakedownsFor offset");
+                static_assert(offsetof(CarScoreData, miMarkedManTakedownEventsFor)     == 0x108, "CarScoreData::miMarkedManTakedownEventsFor offset");
+                static_assert(offsetof(CarScoreData, miMarkedManTakedownEventsAgainst) == 0x10C, "CarScoreData::miMarkedManTakedownEventsAgainst offset");
+                static_assert(offsetof(CarScoreData, miPaybackTakedownsType2For)       == 0x110, "CarScoreData::miPaybackTakedownsType2For offset");
+                static_assert(offsetof(CarScoreData, miPaybackTakedownsType2Against)   == 0x114, "CarScoreData::miPaybackTakedownsType2Against offset");
+                static_assert(offsetof(CarScoreData, miPaybackTakedownsType4For)       == 0x118, "CarScoreData::miPaybackTakedownsType4For offset");
+                static_assert(offsetof(CarScoreData, miPaybackTakedownsType4Against)   == 0x11C, "CarScoreData::miPaybackTakedownsType4Against offset");
+                static_assert(offsetof(CarScoreData, miTraitorousTakedownsFor)    == 0x120, "CarScoreData::miTraitorousTakedownsFor offset");
+                static_assert(offsetof(CarScoreData, miTraitorousTakedownsAgainst)== 0x124, "CarScoreData::miTraitorousTakedownsAgainst offset");
             }
         };
         // Per-member offset guards live in CarScoreData::_AssertLayout above (offsetof on the private
@@ -571,12 +685,21 @@ namespace BrnGameState
         struct ScoringOutputInterface
         {
             CarScoreData            maCarScoreData[8];          // :538  per-car score records (X360: memcpy 296B/car)
-            s32                     maiCumulativeScoreData[8];  // :539  (X360: CarData+76 per car)
-            s32                     maiNumRoadsRuled[8];        // :540
-            CgsID                   maCarIds[8];                // :541  (X360: CarData+37 per car, stored as QWORD)
-            bool                    mabPlayerEliminated[8];     // :542  (X360: CarData+217 per car)
-            bool                    mabValid[8];                // :543
-            EActiveRaceCarIndex     mePlayerRaceCarIndex;       // :544
+            s32                     maiCumulativeScoreData[8];  // :539  (X360: CarData+76 per car; dst +0x980)
+            s32                     maiNumRoadsRuled[8];        // :540  (dst +0x9A0 gap; not written by WriteDataToOutput)
+            CgsID                   maCarIds[8];                // :541  (X360: CarData+37 per car, stored as QWORD; dst +0x9C0)
+            bool                    mabPlayerEliminated[8];     // :542  (X360: CarData+217 per car; dst +0xA00)
+            bool                    mabValid[8];                // :543  (dst +0xA08)
+            // Per-team stunt-score output array. X360-AUTHORITATIVE: WriteDataToOutput
+            // (0x8232AE98) sets r28 = out+0xA10 then loops t in [0, E_PLAYER_TEAM_COUNT==9)
+            // writing out[+0xA10 + 4*t] = ScoringSystem::GetTeamStuntScore(t) (asm
+            // 0x8232B050 addi r28,r30,0xA10 / 0x8232B0A4 stw r3,0(r28) / 0x8232B0A8 addi
+            // r28,r28,4 / 0x8232B0AC cmpwi r29,9). It sits between mabValid[8] (dst +0xA08)
+            // and mePlayerRaceCarIndex (dst +0xA38); 9*4==36 bytes (+0xA10..+0xA34) with 4
+            // bytes natural-alignment pad before the +0xA38 enum. (Not in the recorded DWARF
+            // member list -- X360-only output slot.)
+            s32                     maiTeamStuntScores[9];      // dst +0xA10 (per-team stunt score)
+            EActiveRaceCarIndex     mePlayerRaceCarIndex;       // :544  (dst +0xA38)
             s32                     miNumPlayersInGame;         // :545
             EGameModeType           meGameModeType;             // :546
             bool                    mbIsOnlineGameMode;         // :547

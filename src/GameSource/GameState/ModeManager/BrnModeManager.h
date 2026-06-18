@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 
+#include "BrnCommonTypes.h"                             // Vector3 (== rw::math::vpu::Vector3), GetCheckpointPosition return
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // GameStateModuleIO::EGameModeType
 #include "GameSource/GameState/BrnGameEvents.h"        // GameStateModuleIO::StartNetworkGameEvent (SetOnlineRaceCars signature)
 
@@ -80,6 +81,15 @@ public:
     // Body + layout land with the ModeManager TU.
     void SetOnlineRaceCars(GameModeParams* lpGameModeParams,
                            const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent) const;
+
+    // X360: BrnGameState::ModeManager::GetCheckpointPosition (0x82327388); DWARF
+    // BrnModeManager.h:663 -> `Vector3 GetCheckpointPosition(uint32_t) const`. Returns the
+    // world position of the checkpoint with the given id (the body looks the id up through the
+    // mode's checkpoint TriggerData; reconstructed by the ModeManager TU). Called by
+    // ScoringSystem::UpdateRacePositions (0x8232A668) to compute each car's distance-to-finish:
+    // in the X360 pseudocode the Vector3 is returned via the hidden sret pointer
+    // (GetCheckpointPosition(&v69, this, *(v28+12))), matching the by-value DWARF return.
+    Vector3 GetCheckpointPosition(u32 luCheckpointId) const;
 
     // The owning ProgressionManager. Inlined in the X360 build (OfflineGameMode::
     // SelectRandomDestinations reaches it via the magic-multiply ModeManager indirection); the

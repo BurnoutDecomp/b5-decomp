@@ -352,4 +352,208 @@ s32 ScoringSystem::GetOnlineFinishPosition(EActiveRaceCarIndex leRaceCarIndex)
 
     return mpCurrentOnlineModeScoring->GetPlayerPosition(leRaceCarIndex);
 }
+
+// ----------------------------------------------------------------------------
+// network round data -- the per-round save into the online-results aggregate.
+// ----------------------------------------------------------------------------
+
+// X360 0x8232BC78. End-of-round bookkeeping into mOnlineGameResults. Looks up the round's car
+// (by network player id, or by race-car index when lID is the invalid -1), then:
+//   * stamps mCarUsed with the car id,
+//   * accumulates the per-car cumulative stats (meters driven + the five takedown counters),
+//   * advances mSecondsInEvent by the round's elapsed time (the car's recorded finish time when it
+//     has one, else the time since the mode timer started), and
+//   * dispatches by online game mode into SetRaceResults (online race) or SetStuntResults
+//     (online fugitive / free-burn / mode-end) keyed by the post-incremented round-write cursor.
+//
+// The X360 binary takes the game-mode discriminant as a 4th register argument the keystone's
+// 3-parameter signature drops; semantically it is the EGameModeType the results aggregate already
+// records (mOnlineGameResults.miEventType, stamped by OnModeStart -- X360 stw r30,0x4E04), so the
+// switch reads it back from there. The X360 free-build's distinct mNetworkRoundData::SetPosition
+// path (PS3 DWARF) is not present in this 0x8232BC78 body, which writes the results aggregate.
+//
+// The round-time pointer handed to SetRaceResults follows that method's committed convention: a
+// two-float {seconds-as-f32, fraction} pair (SetRaceResults re-narrows word[0] back to s32 seconds).
+void ScoringSystem::SaveNetworkRoundData(BrnNetwork::NetworkPlayerID lID, CgsSystem::Time lTime,
+                                         EActiveRaceCarIndex leRaceCarIndex)
+{
+    CarData* lpCarData = (lID == K_INVALID_PLAYER_ID) ? GetCarData(leRaceCarIndex) : GetCarData(lID);
+    CGS_ASSERT(lpCarData != NULL, "lpCarData");
+
+    if (lpCarData != NULL)
+    {
+        const GameStateModuleIO::CarScoreData* lpScoreData = lpCarData->GetScoreData();
+
+        // ---- car id + cumulative-stat header ----
+        mOnlineGameResults.mCarUsed = lpCarData->GetCarID();
+        mOnlineGameResults.mfMetersDriven += lpScoreData->GetDistanceAccumulator();
+        mOnlineGameResults.miTakedownsFor += lpScoreData->GetTakedowns();
+        mOnlineGameResults.miTakedownsAgainst += lpScoreData->GetTakedownsAgainst();
+        mOnlineGameResults.miTraitorousTakedownsFor += lpScoreData->GetTraitorousTakedownsFor();
+        mOnlineGameResults.miTraitorousTakedownsAgainst += lpScoreData->GetTraitorousTakedownsAgainst();
+        mOnlineGameResults.miMarkedManTakedownsFor += lpScoreData->GetMarkedManTakedownsFor();
+
+        // ---- accumulate this round's time: the car's recorded finish time if it has one,
+        //      else the time elapsed since the mode timer started. ----
+        const CgsSystem::Time lFinishTime = lpScoreData->GetFinishTime();
+        const f32 lfFinishTimeAsScalar = static_cast<f32>(lFinishTime.GetSeconds()) + lFinishTime.GetFraction();
+        const CgsSystem::Time lRoundTime = (lfFinishTimeAsScalar == 0.0f) ? GetElapsedTime(lTime) : lFinishTime;
+        mOnlineGameResults.mSecondsInEvent += lRoundTime;
+
+        const s32 liRoundIndex = mOnlineGameResults.miReserved0x2C;
+
+        // ---- mode dispatch (discriminant == the recorded online event type) ----
+        switch (mOnlineGameResults.miEventType)
+        {
+            case GameStateModuleIO::E_MODE_ONLINE_RACE:
+            {
+                if (lpScoreData->GetTimedOut())
+                {
+                    // Timed out: zero finish time, real distance-to-finish.
+                    const f32 lfDistanceToFinish = GetRaceCarDistanceToFinish(leRaceCarIndex);
+                    const CgsSystem::Time lZeroTime(0.0f);
+                    const f32 lafRoundTime[2] = { static_cast<f32>(lZeroTime.GetSeconds()), lZeroTime.GetFraction() };
+                    mOnlineGameResults.SetRaceResults(liRoundIndex, lafRoundTime, lfDistanceToFinish);
+                }
+                else
+                {
+                    // Finished: real finish time, zero distance.
+                    const CgsSystem::Time lFinish = GetFinishTime(leRaceCarIndex);
+                    const f32 lafRoundTime[2] = { static_cast<f32>(lFinish.GetSeconds()), lFinish.GetFraction() };
+                    mOnlineGameResults.SetRaceResults(liRoundIndex, lafRoundTime, 0.0f);
+                }
+                break;
+            }
+
+            case GameStateModuleIO::E_MODE_ONLINE_FUGITIVE:
+            case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN:
+            case GameStateModuleIO::E_MODE_ONLINE_MODE_END:
+            {
+                const s32 liTeamStuntScore = GetTeamStuntScore(lpCarData->GetTeam());
+                mOnlineGameResults.SetStuntResults(liRoundIndex, lpScoreData->GetOnlineStuntScore(), liTeamStuntScore);
+                break;
+            }
+
+            case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY:
+                // No round results recorded for the free-burn lobby.
+                break;
+
+            default:
+                CGS_ASSERT(false, "No results for this game mode");
+                break;
+        }
+    }
+
+    ++mOnlineGameResults.miReserved0x2C;
+}
+
+// ----------------------------------------------------------------------------
+// full scoring-state reset.
+// ----------------------------------------------------------------------------
+
+namespace
+{
+    // X360 ClearData (0x8232A4A8) seeds the race distance-to-finish scalars (mfTotalRaceDistance
+    // @ss+0x5CE4 and mfPlayerDistanceToFinishLastFrame @ss+0x5CE8) with the rodata float
+    // flt_82CDB7D0 -- a "no valid distance yet" sentinel (the same constant another scoring body
+    // compares against as `v != flt_82CDB7D0` for distances already > 200000.0). The EXACT magnitude
+    // is NOT recoverable from this dossier (no rodata word dump was exported), so it is FLAGGED: the
+    // reset is structurally faithful (both scalars get the large-distance sentinel), but the literal
+    // below is a stand-in pending the rodata value. RaceCarPositioningData's own distances are seeded
+    // with the same sentinel via its Construct() (kept named, not hard-coded here).
+    const f32 KF_INVALID_RACE_DISTANCE = 1.0e9f;   // FLAG: flt_82CDB7D0 magnitude unrecovered
+}
+
+// X360 0x8232A4A8. Full scoring-state reset. NAMED-MEMBER semantic-parity reconstruction (NOT a
+// byte-exact raw-offset rewrite): the X360 build inlines each embedded sub-object's ClearData/
+// Construct and the per-field setters into one flat store block; here those operations are restored
+// to their named-member form, cross-checked store-for-store against the ASM. The bool argument
+// (X360 a2, DWARF lbResetCarData) gates the per-car CarData reset; the per-car positioning data is
+// reset on every slot regardless. Members the semantic slice omits are simply not part of the reset.
+void ScoringSystem::ClearData(bool lbResetCarData)
+{
+    // ---- mode timer / time limit back to the inactive (negative-seconds) state ----
+    ClearModeTimer();   // mStartTime.SetSeconds(-1)  (ASM stw r27,0(r31))
+    ClearTimeLimit();   // mEndTime.SetSeconds(-1)    (ASM stw r27,8(r31))
+
+    // ---- bring every embedded sub-scorer down (ASM: the three online scorers via vtable+0x10
+    //      ClearData @ss+0x4B74/0x4BF8/0x4CC0; the road-rage / crash / stunt scorers below) ----
+    mOnlineRaceModeScoring.ClearData();
+    mOnlineRoadRageScoring.ClearData();
+    mOnlineBurningHomeRunScoring.ClearData();
+
+    // mRoadRageModeScoring @ss+0x4B40: the ASM inlines its ClearData (zeroes the takedown counters /
+    // extension state, miTargetNumTakedowns := -1, clears the four damage/active bools).
+    mRoadRageModeScoring.ClearData();
+    miCurrentPlayerCrashedNumber = 0;                       // ASM stw r30,0x4B5C
+
+    mCrashModeScoring.ClearData();                          // ASM bl CrashModeScoring::ClearData (ss+0x20)
+    mStuntModeScoring.ClearData();                          // ASM vtable+0x10 @ss+0x350 (offline stunt)
+    mOnlineStuntModeScoring.ClearData();                   // ASM vtable+0x10 @ss+0x2620 (online stunt)
+
+    mTotalTime = CgsSystem::Time(0.0f);                    // ASM CgsSystem::Time::operator=(ss+0x10, 0.0)
+
+    muTotalLaps         = 0;                                // ASM stw r30,0x4ED8
+    muNumCarsFinishedRace = 0;                             // ASM stw r30,0x4EDC
+    mbACarHasFinishedTheRace = false;                      // ASM stb r30,0x4EFA
+
+    // ---- per-slot reset: CarData (gated on lbResetCarData) + RaceCarPositioningData (always) ----
+    for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
+    {
+        if (lbResetCarData)
+        {
+            CarData& lCar = maCarData[liSlot];
+            lCar.GetScoreData()->ClearData();                          // ASM bl CarScoreData::ClearData(&maCarData[i])
+            lCar.SetCarID(0);                                          // ASM std r30,-0x2C(r29)  mCarId := 0
+            lCar.SetDriftDistance(0.0f);                               // ASM stfs f31,-0x1C(r29) mfCurrentDriftDistance := 0
+            // NOTE: the X360 ClearData does NOT reset per-car status here (verifier-confirmed); the
+            // earlier SetStatus(E_PLAYER_STATUS_PLAYING) was a fabricated store -- removed.
+            lCar.SetTeam(GameStateModuleIO::E_PLAYER_TEAM_NONE);       // ASM stw r30 (=0)
+            lCar.SetRoundStartTeam(GameStateModuleIO::E_PLAYER_TEAM_NONE);
+            lCar.SetActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_COUNT); // ASM stw r25 (=8)  the COUNT free-slot sentinel
+            lCar.SetNetworkPlayerID(K_INVALID_PLAYER_ID);              // ASM stw r27 (=-1)
+            lCar.SetCurrentCheckPoint(0);                              // ASM stb r30 (=0)
+        }
+
+        // RaceCarPositioningData::Construct() inlined per slot (ASM r28 block @ss+0x59C0+i*0x18):
+        // meActiveRaceCarIndex := -1, distances := large sentinel, miCurrentCheckpoint := -1,
+        // miFinishPosition := 8, mbDisconnected := false. Kept as the named Construct() so the
+        // sentinel-distance init stays owned by RaceCarPositioningData's own TU.
+        maRaceCarPositioningData[liSlot].Construct();
+    }
+
+    // ---- checkpoint distance tables both cleared (ASM 0x5C60 loop: 16 floats at +0x00 and +0x40) ----
+    for (s32 liCheckpoint = 0; liCheckpoint < 16; ++liCheckpoint)
+    {
+        mafCheckpointSeparations[liCheckpoint]       = 0.0f;   // ASM stfs f31,0(r11)
+        mafCheckpointDistancesToFinish[liCheckpoint] = 0.0f;   // ASM stfs f31,0x40(r11)
+    }
+    SetCheckPointDistancesToFinishReady(false);                // ASM stb r30,0x5CE0
+
+    // ---- race / player distance + timing scalars ----
+    mfTotalRaceDistance                = KF_INVALID_RACE_DISTANCE;  // ASM stfs f0(flt_82CDB7D0),0x5CE4
+    mfPlayerDistanceToFinishLastFrame  = KF_INVALID_RACE_DISTANCE;  // ASM stfs f0,0x5CE8
+    mfPlayerTimeHeadingTheWrongWay     = 0.0f;                      // ASM stfs f31,0x5CEC
+    mfPlayerTimeStationary             = 0.0f;                      // ASM stfs f31,0x5CF0
+    mfPlayerTimeWithoutInput           = 0.0f;                      // ASM stfs f31,0x5CF4
+
+    // ---- car-count + lead/last bookkeeping ----
+    muCarsInCurrentMode               = 0;                          // ASM stw r30,0x4EE8
+    muActualNumberOfCarsInCurrentMode = 0;                          // ASM stw r30,0x4EEC
+    meLeadRaceCarIndex                = E_ACTIVE_RACE_CAR_INDEX_INVALID;  // ASM stw r27,0x4EF0
+    meLastRaceCarIndex                = E_ACTIVE_RACE_CAR_INDEX_INVALID;  // ASM stw r27,0x4EF4
+    mbNewLeader                       = false;                      // ASM stb r30,0x4EF8
+    mbNewLastPlace                    = false;                      // ASM stb r30,0x4EF9
+
+    // ASM stb r30,0x5D21 -- a single byte zeroed in the elimination-state region (between
+    // mbEliminationRequired @ss+0x5D20 and muCarsThatHaventBeenEliminated @ss+0x5D24). Its field
+    // identity is NOT confidently recoverable (the semantic slice models mbEliminationRequired at
+    // that anchor but has no named bool at +0x5D21); rather than risk a confidently-wrong member
+    // name (the OnModeStart-revert lesson), this single store is left UNMODELED and FLAGGED.
+
+    // ASM stw r30,0x5D40 -- the eliminated-race-car index list reset (DWARF SHAPE:
+    // CgsContainers::Array<EActiveRaceCarIndex,7u>::Construct), i.e. drive its live count to 0.
+    maEliminatedActiveRaceCarIndexs.Construct();
+}
+
 }
