@@ -90,6 +90,7 @@ namespace BrnWorld { namespace RaceCarEntityModuleIO {
 // pulling the heavy network IO header in -- the body TU (BrnScoringSystem_UpdateB.cpp) includes
 // BrnNetworkModuleIO.h to complete it for the deref.
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct PlayerResultsInterface; } }
+namespace BrnAI { namespace AIModuleIO { struct AICarOutputInterface; } }  // real home BrnAICarOutputInterface.h
 
 namespace BrnGameState
 {
@@ -101,10 +102,9 @@ namespace BrnGameState
     // #include BrnRaceCarEntityModuleOutputInterface.h to complete them for member access.
     typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface ActiveRaceCarOutputInterface;
     typedef BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface GlobalRaceCarOutputInterface;
-    // AICarOutputInterface's real home (BrnAI::AIModuleIO::AICarOutputInterface, a 2f TU) is not
-    // reconstructed yet -> forward-declared class. Methods that DEREFERENCE it (UpdateRacePositions)
-    // stay declare-only until it lands.
-    class  AICarOutputInterface;
+    // DWARF typedef: AICarOutputInterface IS BrnAI::AIModuleIO::AICarOutputInterface (reconstructed,
+    // BrnAICarOutputInterface.h). The .cpp partials #include that header to deref it; pointer use here.
+    typedef BrnAI::AIModuleIO::AICarOutputInterface AICarOutputInterface;
 
     namespace InputBuffer                  { struct GameActionQueue; struct TakedownEventQueue; }
     namespace GameStateToNetworkInterface  { struct DirtyTrickQueue; }
@@ -323,9 +323,12 @@ namespace BrnGameState
         void SetRivalEliminated(EActiveRaceCarIndex leRaceCarIndex);                                         // :362
         void RemovePlayer(BrnNetwork::NetworkPlayerID lID);                                                  // :367
 
+        // X360 0x8232AE98 carries a 4th arg (r7) the PS3 DWARF 3-param sig drops: the player's
+        // active-race-car index, used for out.mePlayerRaceCarIndex + the online GetCarData(idx) path.
         void WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface* lpOutput,
                                GameStateModuleIO::OnlineScoringOutputInterface* lpOnlineOutput,
-                               bool lbOnline);                                                               // :374 / 0x8232AE98
+                               bool lbOnline,
+                               EActiveRaceCarIndex lePlayerRaceCarIndex);                                    // :374 / 0x8232AE98
 
         // ===== mode timer =====
         void StartModeTimer(const CgsSystem::Time& lTime);                          // :381
@@ -358,7 +361,10 @@ namespace BrnGameState
         void SetCheckPointsForCarsWithinRace(s32 liCheckpoints);                    // :490
         bool AcheivedGold();                                                        // :493
         bool HasCrashModeEnded() const;                                             // :497
-        bool HasStuntAttackModeEnded(CgsSystem::Time lTime);                        // :501 / 0x82326708
+        // X360 0x82326708: the PS3 DWARF 1-Time sig is wrong; the body + its caller pass (Time&,
+        // raceCarIndex, online-flag) -- the index picks the looked-up car (SetEliminated @+0xD9) and
+        // the flag selects the online (mOnlineStuntModeScoring) vs offline (mStuntModeScoring) scorer.
+        bool HasStuntAttackModeEnded(const CgsSystem::Time& lTime, EActiveRaceCarIndex leRaceCarIndex, bool lbOnline); // :501 / 0x82326708
 
         // ===== laps / checkpoints / landmarks (trivial scalars inline) =====
         void SetTotalLaps(u32 luTotalLaps)            { muTotalLaps = luTotalLaps; }       // :508
