@@ -63,6 +63,15 @@ namespace CgsGraphics
         mbAutosize    = false;
     }
 
+    // X360 0x827EEF58: shrink the font height so the string fits mv2TopLeft..mv2BottomRight. The full
+    // fit-search is deferred; this keeps the requested height and points the current-height at the
+    // autosized field (as the X360 does). Debug text leaves mbAutosize=false, so this path is inert.
+    void TextObject::CalculateAutosizing()
+    {
+        mfAutosizedFontHeight = mfFontHeight;
+        mpfCurrentFontHeight  = &mfAutosizedFontHeight;
+    }
+
     // Faithful port of X360 0x82801998: render through the Im2d buffer, then clear it.
     void TextRenderer::RenderString(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject)
     {
@@ -111,7 +120,6 @@ namespace CgsGraphics
         mauVertexCount[leType] = 0;
 
         const f32 lfFontHeight = *lrTextObject.mpfCurrentFontHeight;
-        const f32 lfScale      = fabsf((lfFontHeight / lpFont->mScaleUV.mY) * 0.73f);  // X360 flt_820D4C60
         const f32 lfGlyphX     = lpFont->mScaleUV.mX * lfFontHeight;                    // X360 f29
         const f32 lfGlyphY     = lpFont->mScaleUV.mY * lfFontHeight;                    // X360 f28
         const f32 lfWidthInEm  = (lrTextObject.mv2BottomRight.mX - lrTextObject.mv2TopLeft.mX) / lfFontHeight;  // f25
@@ -147,7 +155,8 @@ namespace CgsGraphics
                     ++luGlyphCount;
             }
 
-            Im2dVertex* lpVtx = RenderBufferRenderStart(6u * luGlyphCount, leType);
+            Im2dVertex* const lpVtxBase = RenderBufferRenderStart(6u * luGlyphCount, leType);
+            Im2dVertex* lpVtx = lpVtxBase;
             mauVertexCount[leType] = 0;
             RenderBufferSetTextureState(lpFont->mpTextureState, leType);
 
@@ -210,11 +219,18 @@ namespace CgsGraphics
                     mauVertexCount[leType] += 6;
                 }
 
-                lfPenX += lpFc->mfAdvance * lfScale;
+                // Advance the pen by the glyph's advance, scaled the same way as the glyph WIDTH
+                // (mScaleUV.x * fontHeight = lfGlyphX) and the char-spacing multiplier. X360 0x82800718:
+                // penX += (mfAdvance * mfCharSpacingMultiplier) * f29, where f29 == lfGlyphX. (Using
+                // lfScale here, the 0.73 line metric, made the advance far too small -> glyphs stacked.)
+                lfPenX += lpFc->mfAdvance * lrTextObject.mfCharSpacingMultiplier * lfGlyphX;
                 lpChar = CgsUnicode::IncrementUtf8Pointer(lpChar);
             }
 
-            RenderBufferRenderEnd(KU_PRIMITIVE_TRIANGLE_STRIP, mapaVertices[leType], mauVertexCount[leType], leType);
+            // Submit the buffer the glyphs were written into (the RenderStart return). The X360 2D path
+            // does NOT stash this in mapaVertices (that member is only the 3D temp buffer), so passing
+            // mapaVertices[leType] here submitted a null/empty buffer -> invisible text.
+            RenderBufferRenderEnd(KU_PRIMITIVE_TRIANGLE_STRIP, lpVtxBase, mauVertexCount[leType], leType);
 
             // Advance to the next line (ensure forward progress, then skip a trailing newline).
             lpCursor = (lpLineEnd > lpCursor) ? lpLineEnd : CgsUnicode::IncrementUtf8Pointer(lpCursor);

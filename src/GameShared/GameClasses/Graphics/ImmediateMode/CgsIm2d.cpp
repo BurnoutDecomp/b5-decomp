@@ -61,10 +61,7 @@ namespace CgsGraphics
         lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
     }
 
-    // Bind the bitmap font's atlas (the texture state's bound raster) and modulate it by the vertex
-    // (text) colour - the text path's per-line SetState before RenderEnd. [PC: the X360 sampler block
-    // (mauSamplerState) configures a Xenos sampler; here the atlas is bound with the default D3D
-    // sampler, which is sufficient for the debug font.]
+    // Bind the bitmap and modulate it by the vertex colour
     void ImRendererBase::SetState(const renderengine::TextureState* lpTextureState)
     {
         IDirect3DDevice9* lpDevice = renderengine::gDevice;
@@ -74,6 +71,10 @@ namespace CgsGraphics
         }
         renderengine::Texture* lpTexture = (lpTextureState != nullptr) ? lpTextureState->mpRaster : nullptr;
         lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+        // Use bilinear filtering
+        lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
@@ -97,6 +98,10 @@ namespace CgsGraphics
         lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
         lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        // Bilinear (D3D9 defaults to POINT -> blocky); no mip filtering for the 1:1 2D content.
+        lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
         lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);

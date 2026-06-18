@@ -38,15 +38,17 @@ namespace CgsResource
         return lDescriptor;
     }
 
-    bool RwRasterResourceType::DeSerialise(void* lpResource) const
+    bool RwRasterResourceType::DeSerialise(void* /*lpResource*/) const
     {
         // The X360 body is folded/unnamed; the PS3 has only a variable hint
-        // (CgsRwRasterResourceTypePS3.cpp:185). A raster carries no byte-swappable payload of
-        // its own (the pixel bytes are opaque blobs), so the deserialise step just clears the
-        // runtime D3D handle (it is realised later by FixUp) and reports success.
-        // NOTE: minimal body pending recovery of the exact X360/PS3 source.
-        renderengine::Texture* lpTexture = static_cast<renderengine::Texture*>(lpResource);
-        lpTexture->mpD3DTexture = 0;
+        // (CgsRwRasterResourceTypePS3.cpp:185). A raster carries no byte-swappable payload of its own
+        // (the pixel bytes are opaque blobs and our platform-4 bundle is already native little-endian),
+        // so on PC this is a no-op.
+        //
+        // CRITICAL ORDERING: Pool::FixUpEntry (0x828EB860) runs FixUp *before* DeSerialise, and FixUp
+        // has already realised the runtime D3D texture (renderengine::Texture::Create). DeSerialise must
+        // NOT clear mpD3DTexture here -- doing so discards the just-created texture and leaves the raster
+        // textureless (the font then renders solid-colour quads). Create owns the handle's lifecycle.
         return true;
     }
 

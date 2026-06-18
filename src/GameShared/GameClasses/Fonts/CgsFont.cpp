@@ -176,8 +176,11 @@ namespace CgsResource
             f32 Resolve()
             {
                 const f32 lfScaleX = lpFont->mScaleUV.mX;
-                // 0x828354D8: no wrap candidate and no word-wrap -> the whole remainder is one line.
-                if (lpLastSpace == 0 && !lbWordWrap)
+                // 0x828354D8: word-wrap OFF -> never wrap; the whole remainder is one line. (Asm folds
+                // this with the lpLastSpace==0 case, but with word-wrap off a line must run to the next
+                // newline / end regardless of spaces -- otherwise an exact-width box wraps the last word
+                // off the single-line box -> trailing text clipped. [non-wrapping text must not wrap])
+                if (!lbWordWrap)
                 {
                     *lppLineEnd = lpCursor;                                                   // 0x82835638
                     return (lpGlyph->mDimensionsUV.mX + lpGlyph->mStart.mX + lfWidth) * lfScaleX;

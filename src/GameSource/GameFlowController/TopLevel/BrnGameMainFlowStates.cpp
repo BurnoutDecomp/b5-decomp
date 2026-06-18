@@ -118,7 +118,7 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         break;
     case E_LOADINGSTAGE_REPLAYS:            // LoadReplayModule
         meLoadingScreenStage = E_LOADINGSTAGE_DONE;
-        //CGS_ASSERT(false, "Asserts are working!");
+        CGS_ASSERT(false, "six seven");
         break;
     case E_LOADINGSTAGE_DONE:
     default:
