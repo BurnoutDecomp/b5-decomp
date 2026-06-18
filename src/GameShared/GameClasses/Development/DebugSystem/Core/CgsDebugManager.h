@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                            // Matrix44, Vector3 (render entry)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugCollections.h"  // DebugLinkedList<DebugComponent>
+#include "GameShared/GameClasses/Fonts/CgsFont.h"                                      // SafeResourceHandle<Font> (SetDebugFont)
 
 // CgsDev::DebugManager - the process-wide owner of the in-game debug systems (perfmon overlays,
 // debug menus, console, on-screen variables): it holds the DebugUI, the resource allocator, and
@@ -82,6 +83,12 @@ namespace CgsDev
 
         DebugComponent*   FindComponentByName(const char* lpcName);
         DebugUI::DebugUI& GetUI();
+
+        // Hand a loaded bitmap font to the debug renderers (X360 0x823B14E8). The game calls this from
+        // GamePrepare once the "Default.font" bundle resolves + Font::CreateTextureState has run; it
+        // sets the font on BOTH the 3D and 2D immediate renderers so their DrawText uses the resource
+        // font (instead of the vector-font fallback). Asserts the handle is not NULLResourceHandle.
+        void SetDebugFont(const CgsResource::SafeResourceHandle<CgsResource::Font>& lrFont);
 
         // Per-frame debug render spine (X360 Render 0x8282F770 -> RenderWorld + RenderHUD 0x8282E108).
         // RenderHUD is the 2D screen-space pass that draws the debug overlay (the "debug squares"):

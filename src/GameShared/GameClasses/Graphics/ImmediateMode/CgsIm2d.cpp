@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
-#include "pc/gcm/renderengine/device.h"    // gDevice, gDisplayWidth/Height
-#include "pc/gcm/renderengine/texture.h"   // Texture::mpD3DTexture
+#include "pc/gcm/renderengine/device.h"        // gDevice, gDisplayWidth/Height
+#include "pc/gcm/renderengine/texture.h"       // Texture::mpD3DTexture
+#include "pc/gcm/renderengine/renderstates.h"  // TextureState::mpRaster (SetState(TextureState*))
 
 #include <d3d9.h>
 
@@ -22,6 +23,10 @@ namespace
 
     const f32 KF_LOGICAL_WIDTH  = 1280.0f;
     const f32 KF_LOGICAL_HEIGHT = 720.0f;
+
+    // The text path submits whole-line triangle strips (6 verts/glyph); size the reserve/submit
+    // scratch well above the font's KU_MAX_VERTICES (1536) so a long line never overflows.
+    const u32 KU_RENDER_BUFFER_MAX = 2048;
 }
 
 namespace CgsGraphics
@@ -54,6 +59,27 @@ namespace CgsGraphics
         lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
         lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+    }
+
+    // Bind the bitmap font's atlas (the texture state's bound raster) and modulate it by the vertex
+    // (text) colour - the text path's per-line SetState before RenderEnd. [PC: the X360 sampler block
+    // (mauSamplerState) configures a Xenos sampler; here the atlas is bound with the default D3D
+    // sampler, which is sufficient for the debug font.]
+    void ImRendererBase::SetState(const renderengine::TextureState* lpTextureState)
+    {
+        IDirect3DDevice9* lpDevice = renderengine::gDevice;
+        if (lpDevice == nullptr)
+        {
+            return;
+        }
+        renderengine::Texture* lpTexture = (lpTextureState != nullptr) ? lpTextureState->mpRaster : nullptr;
+        lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+        lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+        lpDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+        lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
     }
 
     // ---- ImRenderer<V> (template) ------------------------------------------------
@@ -117,6 +143,51 @@ namespace CgsGraphics
         lpDevice->SetFVF(KU_SCREEN_FVF);
         // The loading screen submits 4-vertex quads as triangle strips.
         lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, luCount - 2u, laBatch, sizeof(D3DScreenVertex));
+    }
+
+    // The X360 reserve/submit buffer API, folded onto the PC immediate renderer (see CgsImRenderBuffer.h).
+    // RenderStart hands back a CPU scratch run the caller fills; RenderEnd submits it as one strip. The
+    // text path's RenderStart/RenderEnd never nest, so a single static run per vertex type is safe here.
+    template <typename V>
+    V* ImRenderer<V>::RenderStart(u32 luVertexCount)
+    {
+        static V saScratch[KU_RENDER_BUFFER_MAX];
+        (void)luVertexCount;   // (X360 asserts luVertexCount < KU_MAX_VERTICES; the run is pre-sized)
+        return saScratch;
+    }
+
+    template <typename V>
+    void ImRenderer<V>::RenderEnd(renderengine::PrimitiveType /*lePrimitiveType*/, const V* lpVertices, u32 luVertexCount)
+    {
+        IDirect3DDevice9* lpDevice = renderengine::gDevice;
+        if (lpDevice == nullptr || lpVertices == nullptr || luVertexCount < 3u)
+        {
+            return;
+        }
+
+        const f32 lfScaleX = static_cast<f32>(renderengine::gDisplayWidth) / KF_LOGICAL_WIDTH;
+        const f32 lfScaleY = static_cast<f32>(renderengine::gDisplayHeight) / KF_LOGICAL_HEIGHT;
+
+        static D3DScreenVertex saBatch[KU_RENDER_BUFFER_MAX];
+        if (luVertexCount > KU_RENDER_BUFFER_MAX)
+        {
+            luVertexCount = KU_RENDER_BUFFER_MAX;
+        }
+        for (u32 i = 0; i < luVertexCount; ++i)
+        {
+            saBatch[i].x = lpVertices[i].mv2Pos.x * lfScaleX;
+            saBatch[i].y = lpVertices[i].mv2Pos.y * lfScaleY;
+            saBatch[i].z = 0.0f;
+            saBatch[i].rhw = 1.0f;
+            saBatch[i].color = D3DCOLOR_ARGB(lpVertices[i].mv4Colour.a, lpVertices[i].mv4Colour.r,
+                                             lpVertices[i].mv4Colour.g, lpVertices[i].mv4Colour.b);
+            saBatch[i].u = lpVertices[i].mv2Tex0UV.x;
+            saBatch[i].v = lpVertices[i].mv2Tex0UV.y;
+        }
+
+        lpDevice->SetFVF(KU_SCREEN_FVF);
+        // One triangle strip per line: the font's glyph quads are joined by degenerate connectors.
+        lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, luVertexCount - 2u, saBatch, sizeof(D3DScreenVertex));
     }
 
     // ---- Im2dTransform -----------------------------------------------------------

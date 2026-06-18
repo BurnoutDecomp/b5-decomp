@@ -112,6 +112,16 @@ namespace CgsDev
         mpRenderBuffer = lpRenderBuffer;
     }
 
+    // Faithful port of X360 0x823B13A8 -- the debug-font handoff. The game's GamePrepare loads the
+    // "Language\Fonts\Default.font" bundle, calls Font::CreateTextureState on the resolved font, then
+    // DebugManager::SetDebugFont -> here. Storing a non-null handle flips DrawText off the vector-font
+    // fallback onto the resource-font TextRenderer path. (X360 asserts lrFont != NULLResourceHandle.)
+    void Debug2DImmediateRender::SetDebugFont(const CgsResource::SafeResourceHandle<CgsResource::Font>& lrFont)
+    {
+        // (X360 asserts lrFont != CgsResource::NULLResourceHandle, CgsDebug2DImmediateRender.h:263.)
+        mpFont = lrFont;
+    }
+
     // X360 Begin: open the render block, set the debug render states, reset the vertex batch.
     void Debug2DImmediateRender::Begin()
     {
@@ -207,13 +217,56 @@ namespace CgsDev
         DispatchVertices();
     }
 
-    // X360 DrawText renders the debug VECTOR font; reconstructed via mVectorFont (the real glyph strokes
-    // carved from the XEX - CgsVectorFontData.h). lfScale is the text height in px. The resource-font
-    // (CgsResource::Font / TextRenderer) path is the follow-on; the vector font needs no font resource.
+    // Faithful port of X360 0x82823DE0 (the pseudocode is VPU-garbled -- the rect setup is reconstructed
+    // from the asm). DrawText branches on whether a font BUNDLE is loaded: if mpFont is set (via
+    // SetDebugFont), it builds a TextObject and renders the string through the bitmap-font TextRenderer
+    // (CgsResource::Font glyph atlas); otherwise it falls back to the built-in debug VECTOR font
+    // (mVectorFont -- the real glyph strokes from the XEX, needing no font resource). lfScale is the
+    // text height in px.
     void Debug2DImmediateRender::DrawText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour)
     {
         if (!lpcText)
             return;
+
+        if (HasResourceFont())
+        {
+            // X360: flush the box batch + switch the renderer to font mode before emitting glyphs.
+            if (meDrawingMode != E_DRAWING_FONT)
+            {
+                DispatchVertices();
+                meDrawingMode = E_DRAWING_FONT;
+            }
+
+            const CgsResource::CgsUtf8* lpUtf8 = reinterpret_cast<const CgsResource::CgsUtf8*>(lpcText);
+
+            CgsGraphics::TextObject lTextObject;
+            lTextObject.Construct(0, 0);                       // defaults: LEFT, white, spacing 1, etc.
+            lTextObject.mpFont       = mpFont;                 // the loaded bitmap font handle
+            lTextObject.mfFontHeight = lfScale;               // *mpfCurrentFontHeight (set by Construct) -> this
+            lTextObject.mTextColour  = lColour;
+            lTextObject.meAlignment  = CgsGraphics::TextObject::E_ALIGNMENT_LEFT;
+            lTextObject.mpUtf8String = lpUtf8;
+
+            // [PC reconstruction of the X360 VPU rect setup] the box's left/top is the draw position;
+            // its width is the measured string width, and its height spans the text's lines so
+            // RenderStringInternal's per-line loop (penY < mv2BottomRight.y) renders every line.
+            const f32 lfWidth = mpFont->GetStringWidth(lpUtf8) * lfScale;
+            s32 liLines = 1;
+            for (const char* lpc = lpcText; *lpc; ++lpc)
+                if (*lpc == '\n')
+                    ++liLines;
+            lTextObject.mv2TopLeft     = { lfX, lfY };
+            lTextObject.mv2BottomRight = { lfX + lfWidth, lfY + lfScale * static_cast<f32>(liLines) };
+            lTextObject.mfStringWidth  = lfWidth;
+
+            if (lTextObject.mbAutosize)
+                lTextObject.CalculateAutosizing();
+
+            mTextRenderer.RenderString(mpRenderBuffer, lTextObject);
+            return;
+        }
+
+        // No bundle: the built-in vector font.
         mVectorFont.SetSize(Vector2{ lfScale, lfScale, 0.0f, 0.0f });
         mVectorFont.Print(lfX, lfY, lpcText, lColour);
     }

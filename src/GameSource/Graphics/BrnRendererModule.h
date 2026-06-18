@@ -5,6 +5,7 @@
 // Real loading-screen-path member types (Option B: these are reconstructed for real; the
 // off-path gameplay-render subsystems below remain opaque storage until reached).
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"   // CgsGraphics::Im2d
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer (canonical)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h"                // BrnGame::LoadingScreenRenderer
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"                // BrnGraphics::EffectsArbitrator
@@ -40,10 +41,8 @@ class DispatchFrame
 
 class DispatchPacketInterpreter;
 class DispatchCommand;
-class Im2dRenderBuffer
-{
-};
 
+// CgsGraphics::Im2dRenderBuffer is the real type (CgsImRenderBuffer.h, ImRenderBuffer<Basic2dColouredTexturedVertex>).
 // CgsGraphics::Im2d is the real type (CgsIm2d.h) - the loading screen renders through it.
 
 class Im2dUntex

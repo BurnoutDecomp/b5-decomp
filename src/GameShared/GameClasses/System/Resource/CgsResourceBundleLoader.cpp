@@ -46,8 +46,11 @@ namespace CgsResource
         }
 
         // ---- validate the header (ProcessBundleHeader: must be a v2 bundle) ------------
+        // The resource payloads are copied verbatim then pointer-fixed-up in place, so they MUST be
+        // this build's native little-endian x64 images: require muPlatform == KU_PLATFORM (4). Stock
+        // PC/X360/PS3 bundles (platform 1/2/3) have incompatible layouts and are refused here.
         BundleV2* lpHeader = reinterpret_cast<BundleV2*>(lpcBundle);
-        if (lpHeader->muVersion != BundleV2::KU_VERSION)
+        if (lpHeader->muVersion != BundleV2::KU_VERSION || lpHeader->muPlatform != BundleV2::KU_PLATFORM)
         {
             free(lpcBundle);
             return -1;

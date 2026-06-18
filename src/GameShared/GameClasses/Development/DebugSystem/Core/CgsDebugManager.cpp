@@ -3,7 +3,8 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // DebugComponent (mbActive/OnRegister/DebugUISectionCallback/RenderHUD)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"      // GetUI().GetVariableManager()/GetFunctionManager()
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"        // Variant
-#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mp2dRender Begin/End/SetRenderBuffer/Construct
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mp2dRender Begin/End/SetRenderBuffer/Construct/SetDebugFont
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"  // mp3dRender SetDebugFont (font handoff)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"             // mBufferedRenderer (buffered debug prims)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/Internal/CgsDebugInternal.h"     // Internal::SetDebugSingletons
 #include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.h"  // the CPU perfmon overlay component
@@ -195,6 +196,20 @@ namespace CgsDev
     DebugUI::DebugUI& DebugManager::GetUI()
     {
         return *mpUI;
+    }
+
+    // Faithful port of X360 0x823B14E8: hand the loaded font to both debug immediate renderers so
+    // their DrawText switches off the vector-font fallback onto the resource-font path. The game's
+    // GamePrepare drives this once "Default.font" resolves + Font::CreateTextureState has built the
+    // font's texture state. (X360 asserts lrFont != CgsResource::NULLResourceHandle.)
+    void DebugManager::SetDebugFont(const CgsResource::SafeResourceHandle<CgsResource::Font>& lrFont)
+    {
+        // The X360 has both renderers; on the bounded boot only the 2D renderer is constructed
+        // (mp3dRender is the Debug3D follow-on), so guard each before handing the font over.
+        if (mp3dRender != nullptr)
+            mp3dRender->SetDebugFont(lrFont);
+        if (mp2dRender != nullptr)
+            mp2dRender->SetDebugFont(lrFont);
     }
 
     bool DebugManager::IsComponentRegistered(DebugComponent* lpComponent)

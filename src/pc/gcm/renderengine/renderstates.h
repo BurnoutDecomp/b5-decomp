@@ -2,6 +2,8 @@
 
 #include "types.hpp"
 
+namespace rw { struct Resource; }   // TextureState::Initialize backing memory (rwcore_structs.h)
+
 namespace renderengine
 {
 struct ResourceDescriptor5
@@ -35,8 +37,39 @@ public:
     // The unresolved-import sentinel DebugValidate rejects (X360 stores -1 until resolved).
     enum { KU_INVALID_TEXTURE = 0xFFFFFFFFu };
 
+    // Sampler parameters CgsResource::Font::CreateTextureState builds (X360 0x82835658 values).
+    // The exact field meanings are partly inferred from the values; the texture is the atlas page
+    // being sampled. On X360 these are marshalled into a Xenos GPU sampler descriptor (via
+    // renderengine::SamplerState::Initialize); on PC they configure a D3D sampler at draw time.
+    struct Parameters
+    {
+        u32      muAddressU;      // 2
+        u32      muAddressV;      // 2
+        u32      muAddressW;      // 0
+        u32      muMagFilter;     // 1
+        u32      muMinFilter;     // 1
+        u32      muMipFilter;     // 1
+        u32      muField6;        // 0
+        u32      muField7;        // 0
+        u32      muMaxAnisotropy; // 13
+        u32      muField9;        // 0
+        u32      muField10;       // 1
+        f32      mfMipLodBias;    // -0.5
+        f32      mfField12;       // 0.0
+        u32      muField13;       // 0
+        u32      muField14;       // 0
+        u32      muField15;       // 0
+        Texture* mpTexture;       // the raster to sample (atlas page 0)
+    };
+
+    // Size the texture-state resource (X360 0x82B635C8 builds the rw::BaseResourceDescriptors<5>).
+    static void GetResourceDescriptor(u32* lpDescriptorOut);
+    // Create a texture state from the sampler parameters (X360 0x82B62720). [PC DIVERGENCE: stores
+    // the config + raster for draw-time application instead of marshalling a Xenos GPU descriptor.]
+    static TextureState* Initialize(rw::Resource* lpResourceMemory, const Parameters* lpParams);
+
     u8       mauSamplerState[32];  // +0x00 sampler params (filter / address / lod)
-    Texture* mpRaster;             // +0x20 imported RwRaster
+    Texture* mpRaster;             // +0x20 imported / bound RwRaster
 };
 
 // renderengine::MaterialState (a.k.a. BlendState) -- a material's render-state block. FixUp /

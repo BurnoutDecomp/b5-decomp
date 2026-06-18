@@ -39,9 +39,10 @@ namespace CgsResource
         E_RESOURCETYPE_RENDERABLE_ASSEMBLY      = 0x15,
         E_RESOURCETYPE_RW_DEBUG                 = 0x16,
         E_RESOURCETYPE_KDTREE                   = 0x17,
-        E_RESOURCETYPE_VOICE_HIERARCHY          = 0x18
-        // ... higher ids (audio/gui/streaming/etc.) exist in the wiki table; added as their
-        // handlers are brought up. See references/Wiki/types.json for the full list.
+        E_RESOURCETYPE_VOICE_HIERARCHY          = 0x18,
+        E_RESOURCETYPE_FONT                     = 0x21   // wiki "Font"; X360 GetTypeID 0x82834E50 = 33
+        // ... more ids (audio/gui/streaming/etc.) exist in the wiki table; added as their handlers
+        // are brought up. See references/Wiki/types.json for the full list.
     };
 }
 
