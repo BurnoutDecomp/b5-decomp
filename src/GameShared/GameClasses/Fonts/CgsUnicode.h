@@ -1,0 +1,17 @@
+#ifndef CGS_UNICODE_H
+#define CGS_UNICODE_H
+
+#include "types.hpp"
+
+namespace CgsUnicode
+{
+    // Decode one UTF-8 character (1-4 bytes starting at lpUtf8Char) to a UTF-16 code unit.
+    // X360 ARTIST 0x827E6B08. Used by the font glyph lookup + the text renderer.
+    u16 ConvertUtf8CharToUtf16Char(const u8* lpUtf8Char);
+
+    // Advance past one UTF-8 character (lead byte + its trailing bytes). X360 ARTIST 0x827E6A28.
+    // Used to walk a UTF-8 string a character at a time (font measurement + rendering).
+    const u8* IncrementUtf8Pointer(const u8* lpUtf8Char);
+}
+
+#endif

@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"               // CgsGraphics::Im2d, Basic2dColouredTexturedVertex
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"         // renderengine::PrimitiveType
 #include "GameShared/GameClasses/Development/VectorFont/CgsVectorFont.h"          // mVectorFont (DrawText)
+#include "GameShared/GameClasses/Fonts/CgsFont.h"                                 // SafeResourceHandle<Font> (SetDebugFont)
+#include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"                 // CgsGraphics::TextRenderer (resource-font DrawText)
 
 // CgsDev::Debug2DImmediateRender - the screen-space immediate-mode debug renderer. This is what
 // actually draws the on-screen "debug squares" (DrawBox) + lines/text the debug HUD emits each
@@ -68,6 +70,13 @@ namespace CgsDev
         void SetRenderBuffer(CgsGraphics::Im2d* lpRenderBuffer);
         bool HasRenderBuffer() const { return mpRenderBuffer != nullptr; }   // safe to Begin() only once set
 
+        // The debug-font handoff (X360 0x823B13A8): store the loaded bitmap Font's handle so DrawText
+        // switches off the vector-font fallback onto the resource-font path. Driven by
+        // DebugManager::SetDebugFont, which the game calls once the "Default.font" bundle resolves
+        // (see GamePrepare). HasResourceFont mirrors DrawText's "mpFont != NULLResourceHandle" test.
+        void SetDebugFont(const CgsResource::SafeResourceHandle<CgsResource::Font>& lrFont);
+        bool HasResourceFont() const { return !mpFont.IsNull(); }
+
     private:
         void DispatchVertices();
         void SetDebugRenderStates();
@@ -75,15 +84,20 @@ namespace CgsDev
         void AddVertex(f32 lfX, f32 lfY, RGBA lColour);
 
         DrawingMode                              meDrawingMode;
-        // The debug VECTOR font - DrawText renders through it (the X360 carries it here alongside the
-        // deferred mpFont/mTextRenderer resource-font path; the vector font needs no font resource).
+        // The loaded bitmap-font handle (X360 +0x04/+0x08). Null = no bundle loaded -> DrawText uses
+        // the vector font; non-null (set via SetDebugFont) -> the resource-font TextRenderer path.
+        CgsResource::SafeResourceHandle<CgsResource::Font> mpFont;
+        // The debug VECTOR font - DrawText's fallback when mpFont is null (the vector font needs no
+        // font resource). The X360 carries both the resource-font handle (above) and this here.
         VectorFont                               mVectorFont;
         CgsGraphics::Im2d*                       mpRenderBuffer;
         f32                                      mfVirtualScreenWidth;
         f32                                      mfVirtualScreenHeight;
         CgsGraphics::Basic2dColouredTexturedVertex maIm2dVertsArray[KI_VERTEX_BUFFER_SIZE];
         s16                                      miIm2dVertsHead;
-        // -- deferred text member (see header note): TextRenderer mTextRenderer; --
+        // The bitmap-font text renderer (X360 carries this inline). DrawText drives it when a font
+        // bundle is loaded (mpFont set); it batches glyph quads into mpRenderBuffer.
+        CgsGraphics::TextRenderer                mTextRenderer;
         renderengine::PrimitiveType              mePrimitiveType;
     };
 }

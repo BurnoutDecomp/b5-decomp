@@ -21,6 +21,11 @@ namespace CgsResource
     {
         // CgsResourceBundle2.h:153-157
         static const u32 KU_VERSION                          = 2;
+        // Our bundle "platform" tag (muPlatform): the x64 PC reconstruction. Stock Burnout bundles use
+        // 1=PC(x86), 2=X360, 3=PS3 -- all with layouts that DON'T match our x64 structs (pointer widths
+        // differ). 4 marks a bundle whose resource payloads are this build's native little-endian x64
+        // images, so BundleLoader can refuse stock bundles it can't safely fix up. YAP writes this.
+        static const u32 KU_PLATFORM                         = 4;
         static const u32 KU_MAINMEM_OPTIMISATION_ALIGNMENT   = 16;
         static const u32 KU_GRAPHICSMEM_OPTIMISATION_ALIGNMENT = 128;
         static const u32 KU_SIZE_MASK                        = 0x0FFFFFFFu;   // low 28 bits = size

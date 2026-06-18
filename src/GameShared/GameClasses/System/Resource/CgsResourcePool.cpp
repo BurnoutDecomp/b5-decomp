@@ -84,6 +84,28 @@ namespace CgsResource
         return lpEntry != 0 ? liIndex : -1;
     }
 
+    // PC bring-up convenience: scan the in-use entries (status != 0) for the first whose handler
+    // reports luTypeId. Used to pick the Font out of a freshly-loaded single-font bundle without
+    // knowing its resource id. (Not an X360 method; the X360 resolves the font by its known id.)
+    Entry* Pool::FindFirstResourceOfType(u32 luTypeId, s32* lpiOutIndex)
+    {
+        for (u16 luIndex = 0; luIndex < muMaxResources; ++luIndex)
+        {
+            if (mpx8ResourceStatuses[luIndex] == 0)
+                continue;
+            Entry* lpEntry = &mpResourceEntries[luIndex];
+            if (lpEntry->mpResourceType != 0 && lpEntry->mpResourceType->GetTypeID() == luTypeId)
+            {
+                if (lpiOutIndex != 0)
+                    *lpiOutIndex = static_cast<s32>(luIndex);
+                return lpEntry;
+            }
+        }
+        if (lpiOutIndex != 0)
+            *lpiOutIndex = -1;
+        return 0;
+    }
+
     // 0x828D8A18 - Entry* by index (bounds-checked), gated on refcount + status as above.
     Entry* Pool::GetResource(s32 liIndex, bool lbCheckRefCount, u16 luStatusMask)
     {

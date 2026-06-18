@@ -141,6 +141,9 @@ namespace CgsResource
         Entry* GetResource(s32 liIndex, bool lbCheckRefCount, u16 luStatusMask);
         Entry* FindResource(ID lID, bool lbCheckRefCount, u16 luStatusMask, s32* lpiOutIndex);
         s32    FindResourceIndex(ID lID, bool lbCheckRefCount, u16 luStatusMask);
+        // Find the first in-use entry whose handler reports luTypeId (PC bring-up convenience: a
+        // single-resource bundle like the debug font is looked up by type rather than by its id).
+        Entry* FindFirstResourceOfType(u32 luTypeId, s32* lpiOutIndex);
         Entry* FindResourceWithDependencies(ID lID, Pool** lppOutPool, bool lbCheckRefCount, u16 luStatusMask, s32* lpiOutIndex);
         s32    FindResourceIndexWithDependencies(ID lID, Pool** lppOutPool, bool lbCheckRefCount, u16 luStatusMask);
 
