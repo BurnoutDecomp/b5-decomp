@@ -1,5 +1,10 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
+// OnModeStart dereferences GameModeParams (the keystone only forward-declares it): the
+// road-rage / marked-man case reads the per-mode crash target through GetAStarDistanceFunctionRaw()
+// (the +0x858 word) and the online block reads the network-player count (miNumNetworkPlayers).
+#include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // ============================================================================
@@ -23,10 +28,9 @@
 // base, a second StuntModeScoring instance, an OnlineGameResults aggregate and the
 // OnlineStuntRunModeScoring sub-scorer). Construct/Prepare touch some of those; the bodies
 // here reconstruct the operations that map to keystone-named members and delegate the rest to
-// the embedded sub-scorers' own lifecycle calls. OnModeStart (dereferences GameModeParams),
-// WriteDataToOutput (writes the opaque ScoringOutputInterface slice + calls undeclared
-// GetTeamStuntScore/GetLeadingStuntTeam) and SetRivalEliminated (no recoverable body) are
-// FLAGGED BLOCKED and left declare-only.
+// the embedded sub-scorers' own lifecycle calls. OnModeStart and WriteDataToOutput are now
+// RECONSTRUCTED (2026-06-18) -- see their own headers for the precise residual flags. Only
+// SetRivalEliminated stays declare-only (no standalone X360 export -- fully inlined into callers).
 // ============================================================================
 
 namespace BrnGameState
@@ -99,14 +103,21 @@ void ScoringSystem::OnModeEnd(bool /*lbAbort*/)
 {
 }
 
-// X360 0x8231F140. Per-car cumulative-data reset across all eight slots. The DecFIGS dwarfdump
-// SHAPE for this method is exactly the per-car CarData::ClearCumulativeData() sweep.
+// X360 0x8231F140. Per-car cumulative-data reset across all eight slots, then clear the per-event
+// online results aggregate. The PS3 DecFIGS dwarfdump SHAPE shows only the per-car
+// CarData::ClearCumulativeData() sweep (the PS3 layout has no mOnlineGameResults member); the X360
+// body (0x8231F140) additionally ends with OnlineGameResults::Clear(this+0x4DD0) -- now reconstructed
+// here as mOnlineGameResults.Clear() since that member landed by-value on the keystone (the
+// per-car loop emits the inlined `miCumulativePoints := 0; miRoundDisconnectedIn := -1` pair the
+// X360 stores at CarData +0x130/+0x134, which CarData::ClearCumulativeData() performs).
 void ScoringSystem::ClearCumulativeData()
 {
     for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
     {
         maCarData[liSlot].ClearCumulativeData();
     }
+
+    mOnlineGameResults.Clear();   // X360 0x8231F190: OnlineGameResults::Clear(this+0x4DD0)
 }
 
 // ----------------------------------------------------------------------------
@@ -223,48 +234,187 @@ void ScoringSystem::RemovePlayer(BrnNetwork::NetworkPlayerID lID)
     }
 }
 
+// :330 / X360 0x82338220 -- OnModeStart.
+// Per-mode start hook: reset all scoring state (ClearData), seed the per-mode targets, then -- for the
+// online modes -- stamp the online-results aggregate's event header. Reconstructed from the ASM.
+//
+// SCOPE / RESIDUAL FLAGS:
+//   * Road-rage / marked-man case (X360 jumptable cases 0,5 == game modes E_MODE_ROAD_RAGE(3) /
+//     E_MODE_MARKED_MAN(8)): copies GameModeParams +0x858 VERBATIM into miMaximumPlayerCrashedNumber via
+//     the committed GetAStarDistanceFunctionRaw() accessor (the GameModeParamsField prereq) -- the task's
+//     headline deliverable, fully grounded.
+//   * Stunt-attack / online-stunt-run cases (game modes 7 and 12/14/17): Activate the offline
+//     (mStuntModeScoring) resp. the online (mOnlineStuntModeScoring) stunt scorer with the target score
+//     read from GameModeParams +0x68 (ASM `lfs f0, 0x68(r29); fctiwz` -- a float narrowed to s32). +0x68
+//     resolves to mfNeedForSilver by member-offset reconstruction (the DWARF dwarfdump carries no byte
+//     offsets, so this is an alignment-derived identity, MEDIUM confidence -- FLAGGED; if it proves to be
+//     an adjacent threshold the named member swaps but the shape is unchanged). StuntModeScoring::Activate
+//     is declare-only on the slice (fine for `cl /c`).
+//   * Online block (game mode >= 10): miEventType <- leGameMode and miReserved0x30 <- (network-player
+//     count + 1) are reconstructed against named mOnlineGameResults members (the same fields
+//     SaveNetworkRoundData reads back). miNumberOfRounds (ASM `stw r28, 0x4DF8` <- r7) is FLAGGED: r7 is
+//     a 4th register argument the recovered DWARF C++ signature (3 params) -- and therefore the keystone
+//     declaration -- drops; there is no in-signature source for it, so the round count is left unwritten
+//     here rather than fabricated. Growing the keystone signature to carry the 4th arg is a separate
+//     additive change in the keystone home, out of scope for this partial.
+void ScoringSystem::OnModeStart(GameStateModuleIO::EGameModeType leGameMode,
+                                const GameModeParams* lpParams, bool lbRestart)
+{
+    ClearData(lbRestart);
+
+    switch (leGameMode)
+    {
+        case GameStateModuleIO::E_MODE_ROAD_RAGE:
+        case GameStateModuleIO::E_MODE_MARKED_MAN:
+            // X360 jumptable cases 0,5: lwz r11,0x858(params) / stw r11,0x4B58(this). Verbatim copy.
+            miMaximumPlayerCrashedNumber = lpParams->GetAStarDistanceFunctionRaw();
+            break;
+
+        case GameStateModuleIO::E_MODE_STUNT_ATTACK:
+            // X360 case 4: Activate(this+0x350, (s32)*(params+0x68)). Offline stunt scorer.
+            // FLAG: +0x68 == mfNeedForSilver by offset reconstruction (medium confidence).
+            mStuntModeScoring.Activate(static_cast<s32>(lpParams->mfNeedForSilver));
+            break;
+
+        case GameStateModuleIO::E_MODE_ONLINE_FUGITIVE:
+        case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN:
+        case GameStateModuleIO::E_MODE_ONLINE_MODE_END:
+            // X360 cases 9,11,14: Activate(this+0x2620, (s32)*(params+0x68)). Online stunt scorer.
+            mOnlineStuntModeScoring.Activate(static_cast<s32>(lpParams->mfNeedForSilver));
+            break;
+
+        default:
+            break;
+    }
+
+    // Post-switch per-mode resets (ASM stw r11,0x4B5C / stb r11,0x4B70 with r11 == 0).
+    miCurrentPlayerCrashedNumber = 0;
+    mbPlayerTotalled             = false;
+
+    // Online modes (game mode >= 10 == E_MODE_ONLINE_MODE_START): stamp the online-results event header.
+    if (leGameMode >= GameStateModuleIO::E_MODE_ONLINE_MODE_START)
+    {
+        // FLAG: miNumberOfRounds <- r7 (4th register arg absent from the keystone's 3-param signature);
+        //       left unwritten -- see this method's header note.
+        mOnlineGameResults.miEventType    = leGameMode;                       // ASM stw r30,0x4E04
+        mOnlineGameResults.miReserved0x30 = lpParams->miNumNetworkPlayers + 1; // ASM lbz 1(params) / extsb / +1 / stw 0x4E00
+    }
+}
+
 // :374 / X360 0x8232AE98 -- WriteDataToOutput.
-// FLAGGED BLOCKED (re-decoded 2026-06-18 from the X360 ASM @ 0x8232AE98..0x8232B27C, after
-// mOnlineGameResults landed by-value on the keystone).
+// Publishes the per-game scoring snapshot into the (offline) ScoringOutputInterface and, for online
+// modes, drives the current online sub-scorer to fill the OnlineScoringOutputInterface. Reconstructed
+// from the X360 ASM @ 0x8232AE98..0x8232B27C; members + output fields accessed BY NAME.
 //
-// The blockers the previous note listed are now RESOLVED:
-//   - GetTeamStuntScore / GetLeadingStuntTeam are declared on the keystone (BrnScoringSystem.h
-//     :473/:474), so the per-team and LeadingStuntTeam stunt-score calls resolve.
-//   - The two online virtuals dispatched through mpCurrentOnlineModeScoring are now declared on
-//     BaseOnlineModeScoring: X360 vtable+0x14 == slot 5 == Update(const ScoringSystem*, s32) and
-//     vtable+0x20 == slot 8 == WriteDataToOutput(OnlineScoringOutputInterface*) (BrnBaseOnlineModeScoring.h
-//     :54/:57), so mpCurrentOnlineModeScoring->Update(this, idx) / ->WriteDataToOutput(lpOnlineOutput) compile.
-//   - OnlineStuntRunModeScoring::GetTeamScore is still only declare-only, but that is fine for `cl /c`.
-//   - mOnlineGameResults is now a named member -- and the X360 body @ 0x8232AE98 in fact NEVER reads
-//     ss+0x4DC0 (mOnlineGameResults); the keystone-context note that WriteDataToOutput "fills from
-//     mOnlineGameResults" is not borne out by the ASM. So that member is not a source here.
+// All blockers from the prior round are now resolved by the prereq grows:
+//   * SharedIOShapes added ScoringOutputInterface::maiTeamStuntScores[9] (+0xA10) and
+//     mePlayerRaceCarIndex (+0xA38) -- so the per-team stunt-score publication loop and the car-count
+//     store both land on named members.
+//   * KeystoneMembers / online-scorer prereqs declared mpCurrentOnlineModeScoring's BaseOnlineModeScoring
+//     vtable (slot 5 Update(const ScoringSystem*, s32) == X360 vtable+0x14; slot 8
+//     WriteDataToOutput(OnlineScoringOutputInterface*) == X360 vtable+0x20) and the per-team helpers
+//     GetTeamStuntScore / GetLeadingStuntTeam (BrnScoringSystem_Standings.cpp) + OnlineStuntRunModeScoring::GetTeamScore.
+//   * The DWARF dwarfdump for this body (BrnScoringSystem.cpp:799) confirms the SOURCE reads the embedded
+//     sub-scorers through getters (it names CrashModeScoring::GetNumCarsCrashed + StuntModeScoring::GetCurrentStunts);
+//     the X360 free build inlined those getters to raw offsets, so this reconstruction calls the getters
+//     by name rather than replaying the inlined offset math (semantic parity, not byte-exact).
 //
-// TWO genuine blockers remain, BOTH unmodeled members in homes this partial must not grow:
-//   (A) The ScoringSystem "player's active-race-car index" source member (X360 ss+0x4EE8). The body
-//       reads it three times -- it is stored verbatim into out.mePlayerRaceCarIndex (ASM lwz 0x4EE8 /
-//       stw 0xA38(out)), passed as the 2nd arg of the online Update virtual (lwz 0x4EE8 -> r5), and
-//       drives the online GetCarData(idx) path that computes the per-team stunt-run team. The
-//       SEMANTIC-SLICE keystone has NO named member for it (verified: no mePlayerRaceCarIndex / player-
-//       active-race-car field on ScoringSystem). Adding it would mean editing the keystone -- out of scope.
-//   (B) The per-team stunt-score OUTPUT array on ScoringOutputInterface (X360 out+0xA10). The body's
-//       team loop `for t in [0, E_PLAYER_TEAM_COUNT): out[+0xA10 + 4*t] = GetTeamStuntScore(t)` writes
-//       9 s32s (this X360 build's E_PLAYER_TEAM_COUNT == 9, the per-player team slots -- see the assert
-//       "leEnumIndex <= E_PLAYER_TEAM_COUNT" with bound 9, and the GetTeamStuntScore note at
-//       BrnScoringSystem.h :471-472). The committed ScoringOutputInterface (BrnGameStateSharedIO.h) and
-//       its DWARF home BOTH go straight from mabValid[8] (:543) to mePlayerRaceCarIndex (:544) -- there
-//       is no per-team stunt-score array member at all. Publishing this loop would require GROWING
-//       ScoringOutputInterface, a different home -- out of scope for this partial.
-//
-// Everything else in the body DOES map onto named members and was fully decoded from the ASM (the
-// per-car loop: out.maCarScoreData[i] = *GetCarData(i)const->GetScoreData(), out.maiCumulativeScoreData[i]
-// = GetCumulativePoints() [CarData+0x130], out.maCarIds[i] = GetCarID() [CarData+0x128],
-// out.mabPlayerEliminated[i] = GetScoreData()->GetEliminated() [CarData+0xD9]; the road-rage block via
-// mRoadRageModeScoring.IsActive()/GetNumTakedownsAchieved()/GetTargetNumTakedowns(); the showtime/crash
-// scalars; the current/target/combo/stunt + maStunts[0] tail via mStuntModeScoring's named getters +
-// OutputStuntsToDisplay). But blockers (A) and (B) gate the player-race-car index, the entire online
-// half of the function, and the per-team stunt-score publication -- writing the rest while silently
-// dropping those is a semantic regression, not a reconstruction. Left declare-only until ScoringSystem
-// gains a player-active-race-car-index member and ScoringOutputInterface gains the per-team stunt-score
-// array (both additive grows in their own homes, not here).
+// ONE residual FLAG -- the hidden 4th register argument (r7). The X360 body keeps r7 (the player's
+// active-race-car index) and uses it ONLY in the online-stunt sub-branch: when online AND r7 is a valid
+// index it computes out.miCurrentScore = OnlineStuntRunModeScoring::GetTeamScore(GetCarData(r7)->team)
+// and out.miTargetScore = GetTeamStuntScore(GetLeadingStuntTeam(team)). r7 is absent from the recovered
+// DWARF C++ signature (3 params) and therefore from the keystone declaration, so there is no in-signature
+// source for it. The X360 itself takes the r7 == -1 path (LABEL_26) when no valid index is supplied --
+// reading the stunt-display scores directly off the scorer -- so this reconstruction takes exactly that
+// faithful fallback for the online case and FLAGS the per-player-index online team-score sub-branch as
+// needing the keystone signature to grow a 4th EActiveRaceCarIndex parameter (a separate additive change).
+void ScoringSystem::WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface* lpOutput,
+                                      GameStateModuleIO::OnlineScoringOutputInterface* lpOnlineOutput,
+                                      bool lbOnline)
+{
+    GameStateModuleIO::ScoringOutputInterface& lrOut = *lpOutput;
+
+    // Empty stand-in record for slots with no live car (X360 builds a cleared CarScoreData on the stack).
+    GameStateModuleIO::CarScoreData lEmptyScoreData;
+    lEmptyScoreData.ClearData();
+
+    // ---- per-car block: copy each car's score record + the cumulative/id/eliminated scalars ----
+    for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+    {
+        const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>(liSlot);
+        const CarData* lpCarData = GetCarData(leCar);
+
+        lrOut.maCarScoreData[liSlot]        = (lpCarData != NULL) ? *lpCarData->GetScoreData() : lEmptyScoreData;
+        lrOut.maiCumulativeScoreData[liSlot]= (lpCarData != NULL) ? lpCarData->GetCumulativePoints() : 0;
+        // Car id + eliminated flag live on CarData (the id) / its embedded CarScoreData (the flag);
+        // the empty-slot fallbacks are a zero id and the cleared record's eliminated flag.
+        lrOut.maCarIds[liSlot]              = (lpCarData != NULL) ? lpCarData->GetCarID() : CgsID(0);
+        lrOut.mabPlayerEliminated[liSlot]   = (lpCarData != NULL) ? lpCarData->GetScoreData()->GetEliminated()
+                                                                  : lEmptyScoreData.GetEliminated();
+    }
+
+    // ASM lwz 0x4EE8 / stw 0xA38(out): the active-car count published into the output's race-car-index slot.
+    lrOut.mePlayerRaceCarIndex = static_cast<EActiveRaceCarIndex>(muCarsInCurrentMode);
+
+    // ---- online half: drive the current online sub-scorer ----
+    if (lbOnline)
+    {
+        CGS_ASSERT(mpCurrentOnlineModeScoring != NULL, "mpCurrentOnlineModeScoring");
+        mpCurrentOnlineModeScoring->Update(this, static_cast<s32>(muCarsInCurrentMode));
+        // SLICE-IDENTITY NOTE: BaseOnlineModeScoring::WriteDataToOutput (BrnBaseOnlineModeScoring.h:57) is
+        // declared against the header's forward-only placeholder `BrnGameState::OnlineScoringOutputInterface`
+        // (a documented pointer-only stand-in that "self-completes when that TU is worked"), NOT the real
+        // GameStateModuleIO::OnlineScoringOutputInterface that lpOnlineOutput points at. The X360 dispatches
+        // this through the vtable on the same byte address, so the two are the same object; bridge the
+        // slice's placeholder/real type split with a pointer reinterpret_cast (both are incomplete-pointer
+        // compatible). When the online-scorer TU lands and unifies the type, this cast drops out.
+        mpCurrentOnlineModeScoring->WriteDataToOutput(
+            reinterpret_cast<OnlineScoringOutputInterface*>(lpOnlineOutput));
+    }
+
+    // ---- road-rage scalars (gated on the road-rage scorer being active) ----
+    if (mRoadRageModeScoring.IsActive())
+    {
+        lrOut.miRoadRageNumTakedowns  = mRoadRageModeScoring.GetNumTakedownsAchieved();
+        lrOut.miRoadRageTakedownTarget= mRoadRageModeScoring.GetTargetNumTakedowns();
+    }
+    else
+    {
+        lrOut.miRoadRageNumTakedowns   = 0;
+        lrOut.miRoadRageTakedownTarget = 0;
+    }
+
+    // ---- per-team stunt-score publication (X360 loop t in [0, KI_MAX_PLAYER_TEAMS): out[t] = GetTeamStuntScore(t)) ----
+    for (s32 liTeam = 0; liTeam < KI_MAX_PLAYER_TEAMS; ++liTeam)
+    {
+        lrOut.maiTeamStuntScores[liTeam] = GetTeamStuntScore(liTeam);
+    }
+
+    // ---- showtime / crash scalars (DWARF: source reads these through CrashModeScoring getters) ----
+    lrOut.miShowtimeCarsCrashed      = mCrashModeScoring.GetNumCarsCrashed();    // ASM: sum of maiNumCarsCrashed[4]
+    lrOut.miShowtimeScoreMultiplier  = mCrashModeScoring.GetScoreMultiplier();
+    lrOut.miShowtimeComboMultiplier  = mCrashModeScoring.GetCurrentComboCount();
+    lrOut.mfShowtimeDistanceTravelled= mCrashModeScoring.GetDistanceTravelled();
+
+    // ---- stunt block: offline scorer (mStuntModeScoring) vs online scorer (mOnlineStuntModeScoring) ----
+    // The online per-player-index team-score sub-branch needs the hidden r7 arg (see header flag); with no
+    // valid index in-signature, the faithful X360 path is the direct scorer read (LABEL_26) in BOTH cases.
+    StuntModeScoring& lrStunt = lbOnline ? mOnlineStuntModeScoring : mStuntModeScoring;
+
+    lrOut.miCurrentScore    = lrStunt.GetCurrentScore();
+    lrOut.miTargetScore     = lrStunt.GetTargetScore();
+    lrOut.miComboScore      = lrStunt.GetComboScore();
+    lrOut.miComboMultiplier = lrStunt.GetComboMultiplier();
+    lrOut.muCurrentStunts   = lrStunt.GetCurrentStunts();
+    lrOut.muAllStunts       = lrStunt.GetAllStuntTypesForInProgressStunt();
+
+    // Combo-warning tail (X360 inlines IsComboWarningActive / GetTimeSinceComboWarningActivated; the slice
+    // exposes them as getters, so this calls them by name).
+    lrOut.mbComboWarningActive    = lrStunt.IsComboWarningActive();
+    lrOut.mfComboWarningTimeActive= lrStunt.GetTimeSinceComboWarningActivated();
+    lrOut.mbComboInProgress       = lrStunt.IsComboInProgress();
+
+    lrStunt.OutputStuntsToDisplay(1, lrOut.maStunts);
+}
 
 }
