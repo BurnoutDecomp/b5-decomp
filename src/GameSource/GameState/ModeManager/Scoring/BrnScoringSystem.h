@@ -63,6 +63,7 @@ namespace BrnGameState
 #include "GameSource/GameState/ModeManager/Scoring/BrnOnlineRaceModeScoring.h"              // OnlineRaceModeScoring (by value)
 #include "GameSource/GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.h"          // OnlineRoadRageModeScoring (by value)
 #include "GameSource/GameState/ModeManager/Scoring/BrnOnlineBurningHomeRunModeScoring.h"    // OnlineBurningHomeRunModeScoring (by value)
+#include "GameSource/GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.h"          // OnlineStuntRunModeScoring (by value, the X360 ss+0x4D44 online stunt-run scorer)
 #include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h"              // BaseOnlineModeScoring (mpCurrentOnlineModeScoring*)
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h"                  // BurnoutSkillzData (by value)
 #include "GameSource/GameState/BrnGameActions.h"                                            // GameStateModuleIO::OnlineGameResults (by value, the X360 +19920 member)
@@ -82,11 +83,19 @@ namespace BrnWorld { namespace RaceCarEntityModuleIO {
     struct RCEntityGlobalRaceCarOutputInterface;
 } }
 
+// UpdateNetworkPlayerResults' lpResults param is BrnNetwork::BrnNetworkModuleIO::PlayerResultsInterface
+// (proven: the X360 body's per-record assert path is
+// GameSource/Network/SharedIO/BrnNetworkModulePlayerResultsInterface.h; the DWARF type is the network
+// one). Forward-declare it and alias it into BrnGameState so the keystone names it BY POINTER without
+// pulling the heavy network IO header in -- the body TU (BrnScoringSystem_UpdateB.cpp) includes
+// BrnNetworkModuleIO.h to complete it for the deref.
+namespace BrnNetwork { namespace BrnNetworkModuleIO { struct PlayerResultsInterface; } }
+
 namespace BrnGameState
 {
     class  GameModeParams;
     class  ModeManager;
-    class  PlayerResultsInterface;
+    typedef BrnNetwork::BrnNetworkModuleIO::PlayerResultsInterface PlayerResultsInterface;
     // DWARF typedefs: ActiveRaceCarOutputInterface / GlobalRaceCarOutputInterface ARE the
     // RaceCarEntityModuleIO output interfaces (NOT distinct GameState types). The .cpp partials
     // #include BrnRaceCarEntityModuleOutputInterface.h to complete them for member access.
@@ -567,18 +576,38 @@ namespace BrnGameState
         CgsSystem::Time mTimeRemaining;              // :1202
 
         CrashModeScoring    mCrashModeScoring;       // :1206 (by value)
-        StuntModeScoring    mStuntModeScoring;       // :1209 (by value)
+        StuntModeScoring    mStuntModeScoring;       // :1209 (by value)  X360 ss+0x350 (offline stunt scorer)
+        // X360-only SECOND StuntModeScoring at ss+0x2620 -- the ONLINE-path stunt scorer (the PS3
+        // DecFIGS DWARF omits it; X360 carries extra online-stunt machinery). Pinned by:
+        //   * Construct (0x82337FE0) refreshes its vtable right after mStuntModeScoring@0x350 and
+        //     before the online scorers (`addi r3, r31, 0x2620` at 0x823380E0);
+        //   * HasStuntAttackModeEnded (0x82326708): online branch (a4!=0) uses `ss+0x2620`, offline
+        //     branch uses `ss+0x350`;
+        //   * WriteDataToOutput (0x8232AE98): selects `v20 = ss+0x2620` (online) vs `ss+0x350`
+        //     (offline) and reads its stunt-display fields.
+        // Embedded by value -- a big slice (sizeof StuntModeScoring == 0x2620-0x350 == 0x22D0 on X360),
+        // but ScoringSystem reaches it by NAME only (no byte-exact sizeof asserted on the keystone).
+        StuntModeScoring    mOnlineStuntModeScoring; // X360 ss+0x2620 (online stunt scorer)
         RoadRageModeScoring mRoadRageModeScoring;    // :1212 (by value)
         s32  miMaximumPlayerCrashedNumber;           // :1213
         s32  miCurrentPlayerCrashedNumber;           // :1214
         bool mbPlayerTotalled;                       // :1215
         u32  mauiMedalScores[4];                     // :1216
 
-        OnlineRaceModeScoring           mOnlineRaceModeScoring;        // :1219 (by value)
-        OnlineRoadRageModeScoring       mOnlineRoadRageScoring;        // :1220 (by value)
-        OnlineBurningHomeRunModeScoring mOnlineBurningHomeRunScoring;  // :1221 (by value)
+        OnlineRaceModeScoring           mOnlineRaceModeScoring;        // :1219 (by value)  X360 ss+0x4B74
+        OnlineRoadRageModeScoring       mOnlineRoadRageScoring;        // :1220 (by value)  X360 ss+0x4BF8
+        OnlineBurningHomeRunModeScoring mOnlineBurningHomeRunScoring;  // :1221 (by value)  X360 ss+0x4CC0
+        // X360-only FOURTH online sub-scorer at ss+0x4D44 (the PS3 DecFIGS DWARF omits it). Pinned by:
+        //   * StartOnlineGameModeScoring (0x823126C8): the game-mode switch assigns
+        //     mpCurrentOnlineModeScoring (ss+0x4DC8) to ss+0x4D44 for game-mode cases 12/14/17, the
+        //     three online stunt-run modes (`addi r11, r3, 0x4D44; stw r11, 0x4DC8(r3)`);
+        //   * WriteDataToOutput (0x8232AE98): calls OnlineStuntRunModeScoring::GetTeamScore on
+        //     `ss+0x4D44` (`addi r3, r31, 0x4D44; bl ...OnlineStuntRunModeScoring__GetTeamScore`).
+        // It is the LAST online scorer (next member mpCurrentOnlineModeScoring is at 0x4DC8). Embedded
+        // by value -- it derives from BaseOnlineModeScoring and (like its siblings) adds no own data.
+        OnlineStuntRunModeScoring       mOnlineStuntRunModeScoring;    // X360 ss+0x4D44 (online stunt-run scorer)
 
-        BaseOnlineModeScoring* mpCurrentOnlineModeScoring;            // :1224
+        BaseOnlineModeScoring* mpCurrentOnlineModeScoring;            // :1224  X360 ss+0x4DC8
 
         NetworkRoundData mNetworkRoundData;          // :1227
 
@@ -592,10 +621,20 @@ namespace BrnGameState
         u32  muNumCarsFinishedRace;                  // :1231
         s32  miTotalCheckpoints;                     // :1232
         s32  miTotalOnlineLandmarks;                 // :1233
-        u32  muCarsInCurrentMode;                    // :1234
-        u32  muActualNumberOfCarsInCurrentMode;      // :1235
-        EActiveRaceCarIndex meLeadRaceCarIndex;      // :1236
-        EActiveRaceCarIndex meLastRaceCarIndex;      // :1237
+        // NOTE: muCarsInCurrentMode IS the X360 ss+0x4EE8 member -- it is NOT a separate player
+        // active-race-car-index field. Layout-anchored backward from the tail bools:
+        //   ss+0x4EF8 mbNewLeader, +0x4EF9 mbNewLastPlace, +0x4EFA mbACarHasFinishedTheRace
+        //   (ClearData 0x8232A4A8 stb's); +0x4EF0 meLeadRaceCarIndex (GetLead 0x82310DA0),
+        //   +0x4EF4 meLastRaceCarIndex (GetLast 0x82356028); so +0x4EEC = muActualNumberOfCars...
+        //   and +0x4EE8 = muCarsInCurrentMode. UpdateNumberOfCarsInMode (0x8231F3F0) STORES the
+        //   active-car COUNT here (assert "Too many global race cars ... in the current mode", <=8);
+        //   WriteDataToOutput (0x8232AE98) reads ss+0x4EE8 and passes it as the online Update
+        //   virtual's `liNumberOfCars` 2nd arg -- a car count, not a player index. (The work-item
+        //   instruction to add a NEW mePlayerActiveRaceCarIndex@0x4EE8 was a misread of this slot.)
+        u32  muCarsInCurrentMode;                    // :1234  X360 ss+0x4EE8 (active-car count)
+        u32  muActualNumberOfCarsInCurrentMode;      // :1235  X360 ss+0x4EEC
+        EActiveRaceCarIndex meLeadRaceCarIndex;      // :1236  X360 ss+0x4EF0
+        EActiveRaceCarIndex meLastRaceCarIndex;      // :1237  X360 ss+0x4EF4
         bool mbNewLeader;                            // :1238
         bool mbNewLastPlace;                         // :1239
         bool mbACarHasFinishedTheRace;               // :1240
