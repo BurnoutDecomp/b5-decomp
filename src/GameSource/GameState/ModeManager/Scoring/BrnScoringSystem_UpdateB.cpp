@@ -19,39 +19,25 @@
 //   DetectPlayerStationary     (0x82320008)  [lpOutput resolves to the real active interface]
 //   UpdateDistanceToPlayer     (0x8232B408)  [NEW -- CarScoreData grown with mfDistanceToPlayer/
 //                                             SetDistanceToPlayer (+0x1C); Vector3 ops via ADL]
-//
-// BLOCKED (body omitted -- left declare-only; each needs a type/method that has
-// no committed definition reachable from a body agent; the dependency RULE
-// forbids ad-hoc-slicing a shared keystone). Ledger:
-//
-//   UpdateNetworkPlayerResults (0x8231FA90)
-//       Walks the lpResults per-player record stream (X360: a2+24, stride 28) reading
-//       PlayerResultsData fields (per record: finish Time @+0x00/+0x04, race-car index @+0x08,
-//       eliminator index @+0x0C, distance-to-finish @+0x10, eliminations @+0x14, valid flag @+0x18,
-//       timed-out @+0x19, eliminated @+0x1A) and writing them onto each car's CarScoreData
-//       (mTotalTime / mfDistanceToFinish @+0x48 / meEliminatorRaceCarIndex @+0x60 / mbTimedOut @+0x68
-//       / miNumEliminations @+0x64 / mbEliminated @+0xD9, plus the +0x6B flag), then dispatches
-//       mpCurrentOnlineModeScoring->Update(this, muCarsInCurrentMode) (vtable+0x18, slot 5).
-//       The slot-5 Update virtual is NOW DECLARED on the grown BaseOnlineModeScoring vtable, so that
-//       half is resolved -- BUT the per-player record is still an unnamed u8[8*28] blob on the
-//       committed PlayerResultsInterface (BrnNetworkModuleIO.h): PlayerResultsData has no typed
-//       layout and no GetPlayerResultsData accessor. Reading those fields by name requires homing
-//       PlayerResultsData in the NETWORK keystone (BrnNetworkModuleIO.h, "offsets/stride must not
-//       move" -- reserved for that subsystem's own TU). Cross-subsystem keystone grow -> out of scope.
-//       MISSING: typed BrnNetwork::...::PlayerResultsData (named fields) + GetPlayerResultsData
-//                accessor on PlayerResultsInterface.   [vtable+0x18 dependency now RESOLVED]
-//
-//   UpdateGeneralStats         (0x8232B8C0)
-//       Per-frame general per-car stat roll-up (lead/last time-in-place, per-car drift distance,
-//       longest drift, boost time). lpOutput resolves; the lead/last/boost Time fields it touches DO
-//       have committed CarScoreData accessors (Get/SetTimeInFirstPlace / Get/SetTimeInLastPlace /
-//       Get/SetTimeBoosting), the per-frame distance accumulator @+0xDC now has Get/SetDistanceAccumulator,
-//       and the current-drift slot is CarData::mfCurrentDriftDistance (Get/Set/IncrementDriftDistance).
-//       HOWEVER the longest-drift commit reads+writes CarScoreData +0xF8 (the "if currentDrift >
-//       longestDrift: longestDrift = currentDrift; currentDrift = 0" branch), and +0xF8 has NO
-//       committed named member/accessor -- it is still inside maStorageF8[48]. Writing it by name
-//       needs CarScoreData (BrnGameStateSharedIO.h keystone) grown with a longest-drift field.
-//       MISSING: GameStateModuleIO::CarScoreData longest-drift field (+0xF8, named member/accessor).
+//   UpdateNetworkPlayerResults (0x8231FA90)  [NEW -- network keystone grown with the typed
+//                                             PlayerResultsData record + GetPlayerResultsData accessor
+//                                             (BrnNetworkModuleIO.h), CarScoreData grown with the
+//                                             +0x6B SetHasNetworkResults flag; dispatches the slot-5
+//                                             BaseOnlineModeScoring::Update virtual]
+//   UpdateGeneralStats         (0x8232B8C0)  [NEW -- CarScoreData grown with mfLongestDrift/
+//                                             Get/SetLongestDrift (+0xF8) + mfDistanceAccumulator/
+//                                             Get/SetDistanceAccumulator (+0xDC) + the
+//                                             Time-in-first/last/boosting accessors (+0xE0/+0xE8/+0xF0);
+//                                             the per-frame drift run accumulator is CarData::
+//                                             mfCurrentDriftDistance (+0x138, Get/Set/IncrementDriftDistance).
+//                                             RaceCarState fields read BY NAME (mfMaxSpeedMPH +0x3CC,
+//                                             mfTimeInAir +0x400, mfInProgressBarrelRollAngle +0x418).
+//                                             FLAG: the +0xF8/+0x138 pair's gameplay identity is inferred
+//                                             from the max-of-a-conditional-accumulator pattern -- the
+//                                             committed names (mfLongestDrift / mfCurrentDriftDistance)
+//                                             are provisional (the run is gated on mfTimeInAir, which
+//                                             reads more like an air/jump-distance run than a drift);
+//                                             reproduced verbatim against the committed names, not retyped.]
 //
 // (UpdateCrashModeScore / UpdateStuntAttackModeScore / UpdateRoadRageModeScore /
 //  SetRoadRageDetails at header lines 426-431 carry only a ':NNN' DWARF line and
@@ -68,7 +54,17 @@
 // (BrnVehicleEvents.h) too, so the per-car physics fields (mfMaxSpeedMPH/mfGas/...) are named.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 
+// Completes BrnGameState::PlayerResultsInterface (a typedef alias of
+// BrnNetwork::BrnNetworkModuleIO::PlayerResultsInterface): UpdateNetworkPlayerResults dereferences it
+// BY NAME (GetPlayerResultsData -> PlayerResultsData fields). This homes the typed PlayerResultsData
+// record + the GetPlayerResultsData accessor (network keystone grow).
+#include "GameSource/Network/BrnNetworkModuleIO.h"
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Bad-case-of-Road-Rage assert)
+
+// CgsSystem::Time(f32) ctor + Time::operator+= -- UpdateGeneralStats folds the frame delta into the
+// lead/last/boost Time accumulators (the X360 CgsSystem::Time::Time(deltaTime) + operator+_ pair).
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"
 
 // rw::math::vpu Vector3 vocabulary (operator- / Length) used by UpdateDistanceToPlayer to turn the
 // player->car offset into a scalar distance. Found by ADL on Vector3 (== rw::math::vpu::Vector3).
@@ -349,6 +345,202 @@ namespace BrnGameState
         {
             mfPlayerTimeStationary  = 0.0f;
             mfPlayerTimeWithoutInput = 0.0f;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // UpdateNetworkPlayerResults  --  X360 0x8231FA90  (BrnScoringSystem.cpp:797)
+    // ------------------------------------------------------------------------
+    // Folds the network module's per-player result records (lpResults, a
+    // BrnNetwork::BrnNetworkModuleIO::PlayerResultsInterface holding maPlayerResultsData[8]) onto each
+    // car's CarScoreData, then drives the active online-mode scorer's per-frame Update.
+    //
+    // Only runs on the FINAL update (lbFinal). For each of the muCarsInCurrentMode result slots it
+    // reads the record via GetPlayerResultsData(liIndex) and, when the record is valid and names a
+    // real active race-car slot (meActiveRaceCarIndex != INVALID) that maps to a live CarData, copies:
+    //   mFinishTime          -> CarScoreData.SetFinishTime           (+0x00)
+    //   mfDistanceToFinish   -> CarScoreData.SetDistanceToFinish     (+0x48)
+    //   meEliminatorIndex    -> CarScoreData.SetEliminatorRaceCarIndex (+0x60)
+    //   mbTimedOut           -> CarScoreData.mbTimedOut (Set... n/a; written directly) (+0x68)
+    //   miEliminations       -> CarScoreData.SetNumEliminations      (+0x64)
+    //   mbEliminated         -> CarScoreData.SetEliminated           (+0xD9)
+    //   (constant true)      -> CarScoreData.SetHasNetworkResults    (+0x6B)
+    // (The X360 reloads the validity byte once more before the writes -- a redundant reload of the
+    // same +0x18 flag; the single mbValid test reproduces it.) Finally it dispatches the slot-5
+    // BaseOnlineModeScoring::Update virtual on the live online-mode scorer with the active-car count.
+    // The X360 "result pointer" return is the void method's result-register artifact and is dropped.
+    void ScoringSystem::UpdateNetworkPlayerResults(const PlayerResultsInterface* lpResults, bool lbFinal)
+    {
+        CGS_ASSERT(lpResults != NULL, "lpNetworkResultsInterface");
+
+        if (lbFinal)
+        {
+            for (s32 liIndex = 0; liIndex < static_cast<s32>(muCarsInCurrentMode); ++liIndex)
+            {
+                const BrnNetwork::BrnNetworkModuleIO::PlayerResultsData* lpPlayerResultsData =
+                    lpResults->GetPlayerResultsData(liIndex);
+                CGS_ASSERT(lpPlayerResultsData != NULL, "lpPlayerResultsData");
+
+                if (lpPlayerResultsData->mbValid)
+                {
+                    const EActiveRaceCarIndex leActiveRaceCarIndex =
+                        static_cast<EActiveRaceCarIndex>(lpPlayerResultsData->meActiveRaceCarIndex);
+                    if (leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                    {
+                        CarData* lpCar = GetCarData(leActiveRaceCarIndex);
+                        if (lpCar)
+                        {
+                            GameStateModuleIO::CarScoreData* lpScore = lpCar->GetScoreData();
+                            lpScore->SetFinishTime(lpPlayerResultsData->mFinishTime);
+                            lpScore->SetDistanceToFinish(lpPlayerResultsData->mfDistanceToFinish);
+                            lpScore->SetEliminatorRaceCarIndex(
+                                static_cast<EActiveRaceCarIndex>(lpPlayerResultsData->meEliminatorIndex));
+                            lpScore->SetTimedOut(lpPlayerResultsData->mbTimedOut);
+                            lpScore->SetHasNetworkResults(true);
+                            lpScore->SetNumEliminations(lpPlayerResultsData->miEliminations);
+                            lpScore->SetEliminated(lpPlayerResultsData->mbEliminated);
+                        }
+                    }
+                }
+            }
+
+            CGS_ASSERT(mpCurrentOnlineModeScoring, "mpCurrentOnlineModeScoring");
+
+            // X360: (*(*mpCurrentOnlineModeScoring + 24))(mpCurrentOnlineModeScoring, this, muCarsInCurrentMode)
+            // vtable byte +0x18 (==24) == BaseOnlineModeScoring slot 6 == UpdatePlayerPoints (slot 5/+0x14 is Update).
+            mpCurrentOnlineModeScoring->UpdatePlayerPoints(this, static_cast<s32>(muCarsInCurrentMode));
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // UpdateGeneralStats  --  X360 0x8232B8C0  (BrnScoringSystem.cpp:2098)
+    // ------------------------------------------------------------------------
+    // Per-frame general per-car stat roll-up, called from ModeManager::PostWorldUpdate.
+    //
+    // lpOutput is the active-race-car output interface; its maCarsInTheRace list gives the active-car
+    // count (its GetLength()) and, per entry, the EActiveRaceCarIndex this car maps to. The X360 asserts
+    // the count is in [1,8].
+    //
+    // Two phases:
+    //
+    //   (1) lead / last time-in-place (only when lbOnline). With both the lead (meLeadRaceCarIndex)
+    //       and last (meLastRaceCarIndex) cars resolved to a CarData:
+    //         * while NOBODY has finished the race (muNumCarsFinishedRace == 0) the lead car accrues
+    //           the frame delta into its CarScoreData mTimeInFirstPlace (+0xE0);
+    //         * while NOT EVERY active car has finished (muNumCarsFinishedRace < muCarsInCurrentMode)
+    //           the last car accrues the frame delta into its mTimeInLastPlace (+0xE8).
+    //       (X360 reads ss+0x4EF0/+0x4EF4 for the indices, ss+0x4EDC == muNumCarsFinishedRace and
+    //       ss+0x4EE8 == muCarsInCurrentMode for the gates; the lead/last asserts pin the indices in
+    //       [0,8). The Time accrue is CgsSystem::Time::Time(dt) + operator+= on +0xE0 / +0xE8.)
+    //
+    //   (2) per active-race-car loop. For each maCarsInTheRace[i] whose race car IS active
+    //       (IsRaceCarActive) and that maps to a live CarData, and only while that car has NOT yet
+    //       finished (CarScoreData mbHasFinished, +0x45):
+    //         * mfDistanceAccumulator (+0xDC) += |RaceCarState.mfMaxSpeedMPH| * dt;
+    //         * if mid barrel-roll (RaceCarState.mfInProgressBarrelRollAngle > 0) the car accrues the
+    //           frame delta into mTimeBoosting (+0xF0);
+    //         * drift/air run bookkeeping on the mfTimeInAir gate (RaceCarState +0x400):
+    //             - while airborne (mfTimeInAir != 0) the per-car run accumulator CarData::
+    //               mfCurrentDriftDistance (+0x138) += |mfMaxSpeedMPH| * dt;
+    //             - when the run lapses (mfTimeInAir == 0) the run length is compared against the
+    //               recorded maximum CarScoreData mfLongestDrift (+0xF8); if greater it is recorded and
+    //               the run accumulator is reset to 0.
+    //
+    // FLAG: the +0xF8/+0x138 pair is gated on mfTimeInAir, so the committed names mfLongestDrift /
+    // mfCurrentDriftDistance read more like an air/jump-distance run than a true drift -- the gameplay
+    // identity is provisional. The body is reproduced VERBATIM against the committed names/accessors
+    // (no retype, no home grow). The X360 "result pointer" return is the void method's result-register
+    // artifact and is dropped.
+    void ScoringSystem::UpdateGeneralStats(const ActiveRaceCarOutputInterface* lpOutput,
+                                           f32 lfDeltaTime, bool lbOnline)
+    {
+        const u32 luNumberOfActiveRaceCars = lpOutput->maCarsInTheRace.GetLength();
+        CGS_ASSERT(luNumberOfActiveRaceCars >= 1, "liNumberOfActiveRaceCars >= 1");
+        CGS_ASSERT(luNumberOfActiveRaceCars <= 8, "Amount of active race cars is too many");
+
+        // ---- (1) lead / last time-in-place (online only) ----
+        if (lbOnline)
+        {
+            const EActiveRaceCarIndex leLeadIndex = meLeadRaceCarIndex;
+            const EActiveRaceCarIndex leLastIndex = meLastRaceCarIndex;
+
+            // The X360 only enters this block when BOTH indices are set (>= 0); the lead/last asserts
+            // pin them in [E_ACTIVE_RACE_CAR_INDEX_0, E_ACTIVE_RACE_CAR_INDEX_COUNT).
+            if (leLeadIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leLastIndex >= E_ACTIVE_RACE_CAR_INDEX_0)
+            {
+                CGS_ASSERT(leLeadIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "meLeadRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+                CGS_ASSERT(leLastIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "meLastRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+                CGS_ASSERT(leLeadIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "meLeadRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                CGS_ASSERT(leLastIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "meLastRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+                CarData* lpLeadCar = GetCarData(leLeadIndex);
+                CarData* lpLastCar = GetCarData(leLastIndex);
+
+                if (lpLeadCar && muNumCarsFinishedRace == 0)
+                {
+                    GameStateModuleIO::CarScoreData* lpScore = lpLeadCar->GetScoreData();
+                    CgsSystem::Time lTime = lpScore->GetTimeInFirstPlace();
+                    lTime += CgsSystem::Time(lfDeltaTime);
+                    lpScore->SetTimeInFirstPlace(lTime);
+                }
+
+                if (lpLastCar && muNumCarsFinishedRace < muCarsInCurrentMode)
+                {
+                    GameStateModuleIO::CarScoreData* lpScore = lpLastCar->GetScoreData();
+                    CgsSystem::Time lTime = lpScore->GetTimeInLastPlace();
+                    lTime += CgsSystem::Time(lfDeltaTime);
+                    lpScore->SetTimeInLastPlace(lTime);
+                }
+            }
+        }
+
+        // ---- (2) per active-race-car stat loop ----
+        for (u32 i = 0; i < luNumberOfActiveRaceCars; ++i)
+        {
+            const EActiveRaceCarIndex leActiveRaceCarIndex = lpOutput->maCarsInTheRace[i].meActiveRaceCarIndex;
+            CarData* lpCar = GetCarData(leActiveRaceCarIndex);
+
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+            if (lpOutput->IsRaceCarActive(leActiveRaceCarIndex) && lpCar)
+            {
+                const BrnPhysics::Vehicle::RaceCarState* lpState =
+                    lpOutput->GetRaceCarState(leActiveRaceCarIndex);
+
+                GameStateModuleIO::CarScoreData* lpScore = lpCar->GetScoreData();
+                if (!lpScore->GetHasFinished())
+                {
+                    // mfDistanceAccumulator (+0xDC) += |mfMaxSpeedMPH| * dt
+                    lpScore->SetDistanceAccumulator(
+                        std::fabs(lpState->mfMaxSpeedMPH) * lfDeltaTime + lpScore->GetDistanceAccumulator());
+
+                    // mid barrel-roll -> accrue boost time (+0xF0)
+                    if (lpState->mfInProgressBarrelRollAngle > 0.0f)
+                    {
+                        CgsSystem::Time lTime = lpScore->GetTimeBoosting();
+                        lTime += CgsSystem::Time(lfDeltaTime);
+                        lpScore->SetTimeBoosting(lTime);
+                    }
+
+                    // drift/air run accumulator gated on mfTimeInAir (+0x400)
+                    if (lpState->mfTimeInAir == 0.0f)
+                    {
+                        // run lapsed: commit the longest-run maximum, then reset the run accumulator
+                        const f32 lfRun = lpCar->GetDriftDistance();          // CarData +0x138
+                        if (lfRun > lpScore->GetLongestDrift())               // CarScoreData +0xF8
+                        {
+                            lpScore->SetLongestDrift(lfRun);
+                            lpCar->SetDriftDistance(0.0f);
+                        }
+                    }
+                    else
+                    {
+                        // airborne: extend the run by |mfMaxSpeedMPH| * dt
+                        lpCar->IncrementDriftDistance(std::fabs(lpState->mfMaxSpeedMPH) * lfDeltaTime);
+                    }
+                }
+            }
         }
     }
 }
