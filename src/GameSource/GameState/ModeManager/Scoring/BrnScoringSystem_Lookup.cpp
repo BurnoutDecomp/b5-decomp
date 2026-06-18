@@ -354,40 +354,97 @@ s32 ScoringSystem::GetOnlineFinishPosition(EActiveRaceCarIndex leRaceCarIndex)
 }
 
 // ----------------------------------------------------------------------------
-// network round data -- FLAGGED BLOCKED (both methods, re-checked this round).
+// network round data -- the per-round save into the online-results aggregate.
 // ----------------------------------------------------------------------------
+
+// X360 0x8232BC78. End-of-round bookkeeping into mOnlineGameResults. Looks up the round's car
+// (by network player id, or by race-car index when lID is the invalid -1), then:
+//   * stamps mCarUsed with the car id,
+//   * accumulates the per-car cumulative stats (meters driven + the five takedown counters),
+//   * advances mSecondsInEvent by the round's elapsed time (the car's recorded finish time when it
+//     has one, else the time since the mode timer started), and
+//   * dispatches by online game mode into SetRaceResults (online race) or SetStuntResults
+//     (online fugitive / free-burn / mode-end) keyed by the post-incremented round-write cursor.
 //
-// SaveNetworkRoundData (X360 0x8232BC78) and ClearData (X360 0x8232A4A8) both operate on the
-// OnlineGameResults aggregate that the SEMANTIC-SLICE keystone deliberately OMITS (see the SCOPE
-// NOTE in BrnScoringSystem_Lifecycle.cpp and the WriteDataToOutput blocker there). Neither body is
-// landable, for the SAME root cause that blocks WriteDataToOutput: there is no named-member path to
-// the X360 ScoringSystem byte region the bodies read/write, and the keystone is a semantic slice,
-// NOT a byte-exact layout, so the raw offsets cannot be mapped onto named members.
+// The X360 binary takes the game-mode discriminant as a 4th register argument the keystone's
+// 3-parameter signature drops; semantically it is the EGameModeType the results aggregate already
+// records (mOnlineGameResults.miEventType, stamped by OnModeStart -- X360 stw r30,0x4E04), so the
+// switch reads it back from there. The X360 free-build's distinct mNetworkRoundData::SetPosition
+// path (PS3 DWARF) is not present in this 0x8232BC78 body, which writes the results aggregate.
 //
-//   SaveNetworkRoundData -- the X360 body, on the found CarData*, accumulates per-car stats into the
-//   cumulative block at this+0x4DE0..0x4DF4 and advances a CgsSystem::Time at this+0x4DD8, all inside
-//   an embedded OnlineGameResults aggregate based at this+0x4DD0, then dispatches by game mode into
-//   OnlineGameResults::SetRaceResults / SetStuntResults on that aggregate (passing the round-index
-//   counter at this+0x4DFC) and post-increments that counter. OnlineGameResults itself IS a committed
-//   type (BrnGameActions.h, with SetRaceResults/SetStuntResults committed in BrnGameActions.cpp), but
-//   the keystone exposes NO member of it and NO accessor reaching it. The only adjacent named member,
-//   mNetworkRoundData (NetworkRoundData, reached via GetNetworkRoundData()), is a DISTINCT slice object
-//   with no SetRaceResults/SetStuntResults surface -- writing the accumulation into it instead would be
-//   a fabrication, not a reconstruction. Plus GetRaceCarDistanceToFinish / GetFinishTime / GetTeamStuntScore
-//   are themselves keystone declare-only helpers with no committed body to fold.
-//
-//   ClearData -- the X360 body resets the start/end/total/remaining timers and the per-car maCarData[8]
-//   loop (CarData::ClearData) AND the omitted region: virtual ClearData on the three embedded online
-//   sub-scorers, the OnlineGameResults aggregate, the RaceCarPositioningData scratch and the
-//   per-checkpoint distance arrays -- but every write target sits in the X360 byte-offset space that the
-//   semantic slice does not preserve (the omitted OnlineGameResults / second-StuntModeScoring / debug-base
-//   members shift every offset). It also calls GameStateModuleIO::CarScoreData::ClearData inside the
-//   per-car loop, which is fine, but the surrounding offsets cannot be re-expressed as named members
-//   without the omitted aggregate and a byte-exact layout. A partial body that only cleared the
-//   keystone-named scalars would silently drop the online-results / sub-scorer / positioning reset --
-//   a semantic regression.
-//
-// Both remain declare-only. They land once the keystone grows a named OnlineGameResults member (and the
-// surrounding cumulative-stats region) with accessors -- the same growth WriteDataToOutput is waiting on.
+// The round-time pointer handed to SetRaceResults follows that method's committed convention: a
+// two-float {seconds-as-f32, fraction} pair (SetRaceResults re-narrows word[0] back to s32 seconds).
+void ScoringSystem::SaveNetworkRoundData(BrnNetwork::NetworkPlayerID lID, CgsSystem::Time lTime,
+                                         EActiveRaceCarIndex leRaceCarIndex)
+{
+    CarData* lpCarData = (lID == K_INVALID_PLAYER_ID) ? GetCarData(leRaceCarIndex) : GetCarData(lID);
+    CGS_ASSERT(lpCarData != NULL, "lpCarData");
+
+    if (lpCarData != NULL)
+    {
+        const GameStateModuleIO::CarScoreData* lpScoreData = lpCarData->GetScoreData();
+
+        // ---- car id + cumulative-stat header ----
+        mOnlineGameResults.mCarUsed = lpCarData->GetCarID();
+        mOnlineGameResults.mfMetersDriven += lpScoreData->GetDistanceAccumulator();
+        mOnlineGameResults.miTakedownsFor += lpScoreData->GetTakedowns();
+        mOnlineGameResults.miTakedownsAgainst += lpScoreData->GetTakedownsAgainst();
+        mOnlineGameResults.miTraitorousTakedownsFor += lpScoreData->GetTraitorousTakedownsFor();
+        mOnlineGameResults.miTraitorousTakedownsAgainst += lpScoreData->GetTraitorousTakedownsAgainst();
+        mOnlineGameResults.miMarkedManTakedownsFor += lpScoreData->GetMarkedManTakedownsFor();
+
+        // ---- accumulate this round's time: the car's recorded finish time if it has one,
+        //      else the time elapsed since the mode timer started. ----
+        const CgsSystem::Time lFinishTime = lpScoreData->GetFinishTime();
+        const f32 lfFinishTimeAsScalar = static_cast<f32>(lFinishTime.GetSeconds()) + lFinishTime.GetFraction();
+        const CgsSystem::Time lRoundTime = (lfFinishTimeAsScalar == 0.0f) ? GetElapsedTime(lTime) : lFinishTime;
+        mOnlineGameResults.mSecondsInEvent += lRoundTime;
+
+        const s32 liRoundIndex = mOnlineGameResults.miReserved0x2C;
+
+        // ---- mode dispatch (discriminant == the recorded online event type) ----
+        switch (mOnlineGameResults.miEventType)
+        {
+            case GameStateModuleIO::E_MODE_ONLINE_RACE:
+            {
+                if (lpScoreData->GetTimedOut())
+                {
+                    // Timed out: zero finish time, real distance-to-finish.
+                    const f32 lfDistanceToFinish = GetRaceCarDistanceToFinish(leRaceCarIndex);
+                    const CgsSystem::Time lZeroTime(0.0f);
+                    const f32 lafRoundTime[2] = { static_cast<f32>(lZeroTime.GetSeconds()), lZeroTime.GetFraction() };
+                    mOnlineGameResults.SetRaceResults(liRoundIndex, lafRoundTime, lfDistanceToFinish);
+                }
+                else
+                {
+                    // Finished: real finish time, zero distance.
+                    const CgsSystem::Time lFinish = GetFinishTime(leRaceCarIndex);
+                    const f32 lafRoundTime[2] = { static_cast<f32>(lFinish.GetSeconds()), lFinish.GetFraction() };
+                    mOnlineGameResults.SetRaceResults(liRoundIndex, lafRoundTime, 0.0f);
+                }
+                break;
+            }
+
+            case GameStateModuleIO::E_MODE_ONLINE_FUGITIVE:
+            case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN:
+            case GameStateModuleIO::E_MODE_ONLINE_MODE_END:
+            {
+                const s32 liTeamStuntScore = GetTeamStuntScore(lpCarData->GetTeam());
+                mOnlineGameResults.SetStuntResults(liRoundIndex, lpScoreData->GetOnlineStuntScore(), liTeamStuntScore);
+                break;
+            }
+
+            case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY:
+                // No round results recorded for the free-burn lobby.
+                break;
+
+            default:
+                CGS_ASSERT(false, "No results for this game mode");
+                break;
+        }
+    }
+
+    ++mOnlineGameResults.miReserved0x2C;
+}
 
 }
