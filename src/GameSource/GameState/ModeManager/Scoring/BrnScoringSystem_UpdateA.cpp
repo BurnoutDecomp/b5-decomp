@@ -70,29 +70,40 @@
 //       (Get/SetTimeInCurrentTeam @+0x6C, Get/SetTimeInTeam(team) @+0x74), so the
 //       body now reaches them BY NAME with no blob arithmetic. Body lands below.
 //
-//   UpdateTakedowns               (0x8232AC88)
+//   UpdateTakedowns               (0x8232AC88)  [NOW LANDED -- see body below]
 //       Iterates lpQueue (TakedownEvent records) and tallies takedowns/marks onto
-//       the aggressor/victim CarData. lpQueue is InputBuffer::TakedownEventQueue*,
-//       forward-declared only; the per-event accessor BrnGameState::TakedownEvent
-//       and StuntModeScoringOnline::DealWithTakedown are likewise undefined here.
-//       MISSING: BrnGameState::InputBuffer::TakedownEventQueue (+ TakedownEvent
-//                accessor) (definitions).
+//       the aggressor/victim CarData. The queue parameter type now RESOLVES:
+//       InputBuffer::TakedownEventQueue is completed in BrnScoringSystemEventQueues.h
+//       (empty struct deriving CgsModule::EventQueue<TakedownEvent,8>), carrying the
+//       full GetLength/GetEvent surface; TakedownEvent is committed in
+//       BrnTakedownManagerTypes.h. Body lands below. FLAG: the X360 0x8232AC88 carries
+//       two extra params (a3/a4) the DWARF single-arg signature drops; they gate ONLY
+//       the trailing StuntModeScoringOnline::DealWithTakedown online-scoring call
+//       (0x8232AE40-0x8232AE7C). That call cannot be expressed under the committed
+//       single-arg keystone signature and StuntModeScoringOnline is not reachable here,
+//       so the tail is omitted -- every CarScoreData tally the body DOES own
+//       (takedowns/against +0x4C/+0x50, marked-man events +0x108/+0x10C, traitorous
+//       +0x120/+0x124) is reconstructed store-for-store.
 //
-//   UpdatePaybackTakedowns        (0x82338320)
-//       Merges the two DirtyTrickQueue inputs into a DirtyTrickEvent_28 list and
-//       tallies payback-used / payback-succeeded onto the CarData of each event.
-//       Dereferences the forward-declared DirtyTrickQueue and the undefined
-//       BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent_28_ container.
-//       MISSING: BrnGameState::GameStateToNetworkInterface::DirtyTrickQueue
-//                (+ BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent_28_) (definitions).
+//   UpdatePaybackTakedowns        (0x82338320)  [NOW LANDED -- see body below]
+//       Merges the two DirtyTrickQueue inputs into a local DirtyTrickQueue and tallies
+//       payback takedowns onto the aggressor/victim CarData per the DirtyTrickEvent
+//       status word. GameStateToNetworkInterface::DirtyTrickQueue now RESOLVES (empty
+//       struct deriving CgsModule::EventQueue<DirtyTrickEvent,28> in
+//       BrnScoringSystemEventQueues.h -- carries Construct/Append/GetEvent/GetLength);
+//       DirtyTrickEvent is committed in BrnNetworkSharedIO.h. Matches the keystone TWO
+//       queue-pointer signature. Body lands below.
 //
-//   UpdateCrashes                 (0x8231F9B8)
-//       Iterates lpQueue (RaceCarCrashEvent records); for each crash that counts,
-//       increments the victim CarData's crash tally. lpQueue is
-//       VehicleManagerOutputInterface::RaceCarCrashEventQueue*, forward-declared
-//       only; the per-event accessor is likewise undefined here.
-//       MISSING: BrnGameState::VehicleManagerOutputInterface::RaceCarCrashEventQueue
-//                (definition).
+//   UpdateCrashes                 (0x8231F9B8)  [NOW LANDED -- see body below]
+//       Iterates lpQueue (RaceCarCrashEvent records); for each primary crash, decodes
+//       the crashed car's active-race-car index from the packed crash-event volume
+//       instance id and bumps that car's crash tally (CarScoreData +0x54).
+//       VehicleManagerOutputInterface::RaceCarCrashEventQueue now RESOLVES (empty struct
+//       deriving CgsModule::EventQueue<RaceCarCrashEvent,8> in BrnScoringSystemEventQueues.h);
+//       RaceCarCrashEvent is committed in BrnVehicleEvents.h. Body lands below. FLAG: the
+//       crashed-car index is a 14-bit field packed in RaceCarCrashEvent::mRaceCarVolumeInstanceID
+//       (X360 (highword(muId) >> 10) & 0x3FFF); CgsSceneManager::VolumeInstanceId carries NO
+//       committed index accessor, so the X360-proven decode is reproduced in-TU (see helper).
 //
 // (GetOnlinePlayersChallengeHighScores at header line 403 carries only a ':749'
 //  DWARF line and NO X360 0x82 address comment, so it is not a target of this
@@ -131,6 +142,19 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
 #include <stdlib.h>   // qsort (sorts the maRaceCarPositioningData[8] scratch best-first)
+
+// NOTE on EActiveRaceCarIndex scoping (the project's unresolved dual-scope gotcha):
+// the keystone ScoringSystem (BrnScoringSystem.h) is built on the GLOBAL ::EActiveRaceCarIndex
+// (from BurnoutConstants.h) -- GetCarData / GetPlayerTeam / IsRaceCarActive all take that type.
+// The three event-queue ELEMENT types, however, spell their index fields with the namespaced
+// BrnGameState::EActiveRaceCarIndex (homed in BrnTakedownManagerTypes.h, identical values, NOT
+// yet unified with the global one). Pulling BrnScoringSystemEventQueues.h in ABOVE the existing
+// bodies would make BrnGameState::EActiveRaceCarIndex shadow the global one inside `namespace
+// BrnGameState`, breaking the already-landed bodies (GetHighestLobbyRoadRuleScore /
+// UpdateRacePositions) that rely on unqualified == global. So the event-queue header is included
+// BELOW the existing namespace block, and the three new bodies live in a SECOND namespace block
+// after it -- there they static_cast each event's BrnGameState::EActiveRaceCarIndex to the global
+// ::EActiveRaceCarIndex the keystone surface expects. Existing bodies stay textually untouched.
 
 namespace BrnGameState
 {
@@ -484,5 +508,247 @@ namespace BrnGameState
 
         muActualNumberOfCarsInCurrentMode = static_cast<u32>(liPosition);   // this+0x4EEC
         CgsDev::PerfMonCpu::StopMonitor(miUpdateRacePositionsPM);
+    }
+}
+
+// ============================================================================
+// Event-queue update group (UpdateTakedowns / UpdateCrashes / UpdatePaybackTakedowns).
+// ============================================================================
+// Pulled in BELOW the first BrnGameState block on purpose: this header transitively defines
+// BrnGameState::EActiveRaceCarIndex (BrnTakedownManagerTypes.h) which would otherwise shadow
+// the GLOBAL ::EActiveRaceCarIndex the keystone surface (and the bodies above) rely on -- see
+// the scoping note at the top of this file. It completes the three event-queue parameter types
+// (empty structs deriving CgsModule::EventQueue<T,N>; full GetLength/GetEvent/Construct/Append
+// surface) and the three committed element-type homes:
+//   TakedownEvent      (BrnTakedownManagerTypes.h)
+//   RaceCarCrashEvent  (BrnVehicleEvents.h)
+//   DirtyTrickEvent    (BrnNetworkSharedIO.h)
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h"
+
+namespace BrnGameState
+{
+    namespace
+    {
+        // Decode the crashed car's active-race-car index out of a packed
+        // CgsSceneManager::VolumeInstanceId. X360 UpdateCrashes (0x8231F9B8) reads the 64-bit
+        // muId, takes its high 32-bit word and extracts a 14-bit field at bit 10 (asm:
+        // ld 0(event) / srdi 32 / extrwi r4, hi, 14, 8 == (hi >> 10) & 0x3FFF). VolumeInstanceId
+        // is a minimal-recon u64 with NO committed index accessor and the dependency RULE forbids
+        // growing that home from this TU, so the X360-proven bit math lives here. FLAG: when
+        // VolumeInstanceId grows a named race-car-index/instance accessor, route this through it.
+        // Returns the GLOBAL ::EActiveRaceCarIndex (the type GetCarData expects).
+        ::EActiveRaceCarIndex DecodeCrashedRaceCarIndex(const CgsSceneManager::VolumeInstanceId& lVolumeId)
+        {
+            const u32 luHighWord = static_cast<u32>(lVolumeId.muId >> 32);
+            return static_cast< ::EActiveRaceCarIndex>((luHighWord >> 10) & 0x3FFF);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // ScoringSystem::UpdateTakedowns  (X360 0x8232AC88)
+    // ------------------------------------------------------------------------
+    // Walk the per-frame takedown event queue and credit each event to the relevant
+    // cars' CarScoreData records:
+    //   * aggressor.miTakedowns        (+0x4C)  += 1   (every event)
+    //   * victim.miTakedownsAgainst    (+0x50)  += 1   (every event)
+    //   * if the event is a marked-man takedown (TakedownEvent::mbMarkedManTakeDown):
+    //       aggressor.miMarkedManTakedownEventsFor     (+0x108) += 1
+    //       victim.miMarkedManTakedownEventsAgainst    (+0x10C) += 1
+    //   * if both cars are on the same (non-NONE) team -- a "traitorous" takedown:
+    //       aggressor.miTraitorousTakedownsFor         (+0x120) += 1
+    //       aggressor.miTraitorousTakedownsAgainst     (+0x124) += 1
+    //
+    // X360 detail (asm at 0x8232AC88): asserts lpTakedownQueue != NULL (cpp:987), loops
+    // i in [0, GetLength()) (*(queue+8)). Each iteration copies the 40-byte TakedownEvent
+    // out of GetEvent(i) (the 5-qword `do` loop), reads its first two words as the
+    // aggressor / victim race-car indices, and bounds-asserts each in [0,8) (cpp:997/1001).
+    // GetCarData(idx) (sub_8231DCD0) maps an index to its CarData* (NULL on no match); when
+    // BOTH cars resolve it bumps +0x4C(aggressor)/+0x50(victim), then -- gated on
+    // mbMarkedManTakeDown (event +0x24) -- +0x108(aggressor)/+0x10C(victim), then -- gated
+    // on GetPlayerTeam(aggressor) != NONE && GetPlayerTeam(aggressor) == GetPlayerTeam(victim)
+    // -- +0x120/+0x124 (both on the aggressor). FLAG: the trailing
+    // StuntModeScoringOnline::DealWithTakedown call (0x8232AE40-0x8232AE7C) is gated on the
+    // two extra X360 params (a3/a4) the committed single-arg DWARF signature drops and reaches
+    // a scorer not declared on the keystone; it is omitted (see file header).
+    //
+    // The event's index fields are BrnGameState::EActiveRaceCarIndex; GetCarData / GetPlayerTeam
+    // take the GLOBAL ::EActiveRaceCarIndex (identical values, not-yet-unified) -- so each is
+    // static_cast across the dual scope at the call boundary.
+    void ScoringSystem::UpdateTakedowns(const InputBuffer::TakedownEventQueue* lpQueue)
+    {
+        CGS_ASSERT(lpQueue != NULL, "lpTakedownQueue != NULL");
+
+        for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
+        {
+            const TakedownEvent& lEvent = lpQueue->GetEvent(liEvent);
+
+            const s32 liAggressor = static_cast<s32>(lEvent.meAggressorIndex);
+            const s32 liVictim    = static_cast<s32>(lEvent.meVictimIndex);
+            const ::EActiveRaceCarIndex leAggressor = static_cast< ::EActiveRaceCarIndex>(liAggressor);
+            const ::EActiveRaceCarIndex leVictim    = static_cast< ::EActiveRaceCarIndex>(liVictim);
+
+            // X360 bounds asserts (cpp:997/1001); compared on the raw value to dodge the
+            // dual-scope EActiveRaceCarIndex enumerator ambiguity (0 == E_ACTIVE_RACE_CAR_INDEX_0,
+            // 8 == E_ACTIVE_RACE_CAR_INDEX_COUNT).
+            CGS_ASSERT((liAggressor >= 0) && (liAggressor < 8),
+                       "(leAggressorRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leAggressorRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+            CGS_ASSERT((liVictim >= 0) && (liVictim < 8),
+                       "(leVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+            CarData* lpAggressorCarData = GetCarData(leAggressor);
+            CarData* lpVictimCarData    = GetCarData(leVictim);
+            if (lpAggressorCarData != NULL && lpVictimCarData != NULL)
+            {
+                GameStateModuleIO::CarScoreData* lpAggressorScore = lpAggressorCarData->GetScoreData();
+                GameStateModuleIO::CarScoreData* lpVictimScore    = lpVictimCarData->GetScoreData();
+
+                // +0x4C aggressor takedowns / +0x50 victim takedowns-against.
+                lpAggressorScore->SetTakedowns(lpAggressorScore->GetTakedowns() + 1);
+                lpVictimScore->SetTakedownsAgainst(lpVictimScore->GetTakedownsAgainst() + 1);
+
+                // Marked-man takedown event: +0x108 aggressor / +0x10C victim.
+                if (lEvent.mbMarkedManTakeDown)
+                {
+                    lpAggressorScore->SetMarkedManTakedownEventsFor(
+                        lpAggressorScore->GetMarkedManTakedownEventsFor() + 1);
+                    lpVictimScore->SetMarkedManTakedownEventsAgainst(
+                        lpVictimScore->GetMarkedManTakedownEventsAgainst() + 1);
+                }
+
+                // Traitorous takedown: aggressor on a real team AND same team as the victim.
+                const GameStateModuleIO::EPlayerTeam leAggressorTeam = GetPlayerTeam(leAggressor);
+                if (leAggressorTeam != GameStateModuleIO::E_PLAYER_TEAM_NONE &&
+                    leAggressorTeam == GetPlayerTeam(leVictim))
+                {
+                    // X360 bumps BOTH traitorous slots on the aggressor record (+0x120/+0x124).
+                    lpAggressorScore->SetTraitorousTakedownsFor(
+                        lpAggressorScore->GetTraitorousTakedownsFor() + 1);
+                    lpAggressorScore->SetTraitorousTakedownsAgainst(
+                        lpAggressorScore->GetTraitorousTakedownsAgainst() + 1);
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // ScoringSystem::UpdateCrashes  (X360 0x8231F9B8)
+    // ------------------------------------------------------------------------
+    // Walk the per-frame race-car-crash event queue; for every PRIMARY crash, decode the
+    // crashed car's active-race-car index and bump that car's crash tally (+0x54).
+    //
+    // X360 detail (asm at 0x8231F9B8): asserts lpRaceCarCrashQueue != NULL (cpp:1107),
+    // loops i in [0, GetLength()). GetEvent(i) yields a const RaceCarCrashEvent* asserted
+    // non-NULL (cpp:1117). Only events with mbIsPrimaryCrash set (event +0x38, lbz 0x38)
+    // are counted: the crashed car's index is decoded from mRaceCarVolumeInstanceID (the
+    // (highword >> 10) & 0x3FFF bitfield, see DecodeCrashedRaceCarIndex), GetCarData maps
+    // it to a CarData* (skip on NULL), and that car's +0x54 slot is incremented
+    // (lwz/stw 0x54). NOTE: +0x54 is the committed miMarkedManTakedownsFor field; the file
+    // header records the standing FLAG that UpdateCrashes uses this slot as the per-car
+    // crash tally (the "marked-man" label on +0x54 predates this work and may be a misnomer);
+    // left UNCHANGED -- the byte offset is X360-proven and the home is grow-only.
+    void ScoringSystem::UpdateCrashes(const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpQueue)
+    {
+        CGS_ASSERT(lpQueue != NULL, "lpRaceCarCrashQueue != NULL");
+
+        for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
+        {
+            const BrnPhysics::Vehicle::RaceCarCrashEvent* lpCrashEvent = &lpQueue->GetEvent(liEvent);
+            // X360 asserts the per-event pointer non-NULL (cpp:1117). GetEvent returns a
+            // reference into the inline buffer, so the address is non-NULL by construction;
+            // the assert is preserved verbatim as a tripwire.
+            CGS_ASSERT(lpCrashEvent != NULL, "lpCrashEvent != NULL");
+
+            if (lpCrashEvent->mbIsPrimaryCrash)   // event +0x38
+            {
+                const ::EActiveRaceCarIndex leCrashedIndex =
+                    DecodeCrashedRaceCarIndex(lpCrashEvent->mRaceCarVolumeInstanceID);
+
+                CarData* lpCarData = GetCarData(leCrashedIndex);
+                if (lpCarData != NULL)
+                {
+                    GameStateModuleIO::CarScoreData* lpScore = lpCarData->GetScoreData();
+                    // +0x54 crash tally (committed slot miMarkedManTakedownsFor -- see FLAG above).
+                    lpScore->SetMarkedManTakedownsFor(lpScore->GetMarkedManTakedownsFor() + 1);
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // ScoringSystem::UpdatePaybackTakedowns  (X360 0x82338320)
+    // ------------------------------------------------------------------------
+    // Merge the two per-frame dirty-trick (payback) event queues into one local queue, then
+    // tally each event onto the aggressor/victim CarScoreData by the event's status word
+    // (DirtyTrickEvent::meDirtyTrickStatus, the 4th event word):
+    //   status == 4 (succeeded):
+    //       aggressor.miTakedowns                (+0x4C)  += 1
+    //       victim.miTakedownsAgainst            (+0x50)  += 1
+    //       aggressor.miPaybackTakedownsType4For (+0x118) += 1
+    //       victim.miPaybackTakedownsType4Against(+0x11C) += 1
+    //   status == 2 (used):
+    //       aggressor.miPaybackTakedownsType2For (+0x110) += 1
+    //       victim.miPaybackTakedownsType2Against(+0x114) += 1
+    //
+    // X360 detail (asm at 0x82338320): DirtyTrickQueue::Construct(local) then Append(local, A)
+    // and Append(local, B) merge both inputs (the local's length field is also explicitly
+    // zeroed before the appends). Loop i in [0, local.GetLength()): GetEvent(i) supplies the
+    // aggressor index (word0), victim index (word1) and status (word3). For status 4 it maps
+    // both indices via GetCarData (sub_8231DCD0), asserts each non-NULL ("lpAggressorCarData"
+    // cpp:1072 / "lpVictimCarData" cpp:1073), and bumps +0x4C/+0x50/+0x118/+0x11C; for status 2
+    // it does the same map + asserts (cpp:1087/1088) and bumps +0x110/+0x114. Matches the
+    // keystone TWO queue-pointer signature. (Event index fields are BrnGameState::EActiveRaceCarIndex;
+    // static_cast to the GLOBAL ::EActiveRaceCarIndex GetCarData expects -- see scoping note.)
+    void ScoringSystem::UpdatePaybackTakedowns(const GameStateToNetworkInterface::DirtyTrickQueue* lpQueueA,
+                                               const GameStateToNetworkInterface::DirtyTrickQueue* lpQueueB)
+    {
+        GameStateToNetworkInterface::DirtyTrickQueue lPaybackEventQueue;
+        lPaybackEventQueue.Construct();
+        lPaybackEventQueue.Append(*lpQueueA);
+        lPaybackEventQueue.Append(*lpQueueB);
+
+        for (s32 liEvent = 0; liEvent < lPaybackEventQueue.GetLength(); ++liEvent)
+        {
+            const BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent& lEvent =
+                lPaybackEventQueue.GetEvent(liEvent);
+
+            const ::EActiveRaceCarIndex leAggressor =
+                static_cast< ::EActiveRaceCarIndex>(static_cast<s32>(lEvent.meAggressorActiveRaceCarIndex)); // word0
+            const ::EActiveRaceCarIndex leVictim =
+                static_cast< ::EActiveRaceCarIndex>(static_cast<s32>(lEvent.meVictimActiveRaceCarIndex));    // word1
+            const s32 liStatus = static_cast<s32>(lEvent.meDirtyTrickStatus);                                // word3
+
+            if (liStatus == 4)
+            {
+                CarData* lpAggressorCarData = GetCarData(leAggressor);
+                CarData* lpVictimCarData    = GetCarData(leVictim);
+                CGS_ASSERT(lpAggressorCarData != NULL, "lpAggressorCarData");
+                CGS_ASSERT(lpVictimCarData    != NULL, "lpVictimCarData");
+
+                GameStateModuleIO::CarScoreData* lpAggressorScore = lpAggressorCarData->GetScoreData();
+                GameStateModuleIO::CarScoreData* lpVictimScore    = lpVictimCarData->GetScoreData();
+
+                lpAggressorScore->SetTakedowns(lpAggressorScore->GetTakedowns() + 1);                  // +0x4C
+                lpVictimScore->SetTakedownsAgainst(lpVictimScore->GetTakedownsAgainst() + 1);          // +0x50
+                lpAggressorScore->SetPaybackTakedownsType4For(
+                    lpAggressorScore->GetPaybackTakedownsType4For() + 1);                              // +0x118
+                lpVictimScore->SetPaybackTakedownsType4Against(
+                    lpVictimScore->GetPaybackTakedownsType4Against() + 1);                             // +0x11C
+            }
+            else if (liStatus == 2)
+            {
+                CarData* lpAggressorCarData = GetCarData(leAggressor);
+                CarData* lpVictimCarData    = GetCarData(leVictim);
+                CGS_ASSERT(lpAggressorCarData != NULL, "lpAggressorCarData");
+                CGS_ASSERT(lpVictimCarData    != NULL, "lpVictimCarData");
+
+                GameStateModuleIO::CarScoreData* lpAggressorScore = lpAggressorCarData->GetScoreData();
+                GameStateModuleIO::CarScoreData* lpVictimScore    = lpVictimCarData->GetScoreData();
+
+                lpAggressorScore->SetPaybackTakedownsType2For(
+                    lpAggressorScore->GetPaybackTakedownsType2For() + 1);                              // +0x110
+                lpVictimScore->SetPaybackTakedownsType2Against(
+                    lpVictimScore->GetPaybackTakedownsType2Against() + 1);                             // +0x114
+            }
+        }
     }
 }
