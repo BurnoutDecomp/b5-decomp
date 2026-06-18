@@ -65,6 +65,7 @@ namespace BrnGameState
 #include "GameSource/GameState/ModeManager/Scoring/BrnOnlineBurningHomeRunModeScoring.h"    // OnlineBurningHomeRunModeScoring (by value)
 #include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h"              // BaseOnlineModeScoring (mpCurrentOnlineModeScoring*)
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h"                  // BurnoutSkillzData (by value)
+#include "GameSource/GameState/BrnGameActions.h"                                            // GameStateModuleIO::OnlineGameResults (by value, the X360 +19920 member)
 
 // ---- forward-declared peripheral types used BY POINTER/REFERENCE in declare-only signatures ----
 // (No instance data; pointer/reference use only -- full homes are reconstructed by their own TUs.)
@@ -580,6 +581,12 @@ namespace BrnGameState
         BaseOnlineModeScoring* mpCurrentOnlineModeScoring;            // :1224
 
         NetworkRoundData mNetworkRoundData;          // :1227
+
+        // X360 ScoringSystem +19920 (0x4DC0). The per-event online results aggregate the keystone
+        // layout previously omitted -- restored as a by-value member so SaveNetworkRoundData /
+        // ClearData / WriteDataToOutput can reach it by name (the full type is in BrnGameActions.h,
+        // its own DWARF home; semantic-parity placement, not byte-exact -- accessed by name only).
+        GameStateModuleIO::OnlineGameResults mOnlineGameResults;
 
         u32  muTotalLaps;                            // :1230
         u32  muNumCarsFinishedRace;                  // :1231

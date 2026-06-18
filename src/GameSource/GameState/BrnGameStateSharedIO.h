@@ -417,6 +417,9 @@ namespace BrnGameState
 
             s32             GetTakedownsAgainst() const            { return miTakedownsAgainst; }         // +0x50
             void            SetTakedownsAgainst(s32 liTakedowns)   { miTakedownsAgainst = liTakedowns; }  // +0x50
+            s32             GetMarkedManTakedownsFor() const       { return miMarkedManTakedownsFor; }       // +0x54
+            s32             GetTraitorousTakedownsFor() const      { return miTraitorousTakedownsFor; }      // +0x120
+            s32             GetTraitorousTakedownsAgainst() const  { return miTraitorousTakedownsAgainst; }  // +0x124
 
             // Setter for +0x58 already exists above (SetOnlineRacePoints); add the matching getter
             // (UpdateCumulativeResults reads this slot).
@@ -488,7 +491,7 @@ namespace BrnGameState
             f32  mfDistanceToFinish;               // +0x48      captured/finish distance-to-finish (Race gather lfs 0x48; written from +0x18 by SetPlayerEliminated)
             s32  miTakedowns;                      // +0x4C      takedown count (BHR gather lwz 0x4C)
             s32  miTakedownsAgainst;               // +0x50      takedowns-against count; ClearData=0. GetNumberOfTakedownsAgainst: lwz r3,0x50(r3). (carved from old maStorage50)
-            u8   maStorage54[4];                   // +0x54..+0x58  word (ClearData stw 0x54 = 0)
+            s32  miMarkedManTakedownsFor;          // +0x54      marked-man takedowns-for; ClearData=0. SaveNetworkRoundData reads lwz 0x54. (carved from old maStorage54)
             s32  miOnlineFinishPositionScore;      // +0x58      ClearData = 0; online points/finish-position countdown writeback. UpdateCumulativeResults reads it (lwz 0x58) and adds into CarData cumulative @+0x130.
             s32  miOnlineStandingsPosition;        // +0x5C      ClearData = -1; online standings rank writeback (was miInvalidIndex5C)
             EActiveRaceCarIndex meEliminatorRaceCarIndex; // +0x60  race-car index that eliminated this car; ClearData = -1 == E_ACTIVE_RACE_CAR_INDEX_INVALID. GetRaceCarEliminatorIndex return *(r3+0x60); SetPlayerEliminated stw a3,0x60(r31). (was miInvalidIndex60)
@@ -514,7 +517,9 @@ namespace BrnGameState
             CgsSystem::Time mTimeInFirstPlace;     // +0xE0 (8)  time spent in 1st place. GetTimeSpentInFirstPlace: lwz 0xE0(r11)/lfs 0xE4(r11). Ctor/ClearData zero via +0xE0. (carved from old maStorageTail)
             CgsSystem::Time mTimeInLastPlace;      // +0xE8 (8)  time spent in last place. GetTimeSpentInLastPlace: *(CarData+232)/+236 == +0xE8/+0xEC. (carved from old maStorageTail)
             CgsSystem::Time mTimeBoosting;         // +0xF0 (8)  time spent boosting. GetTimeSpentBoosting: *(CarData+240)/+244 == +0xF0/+0xF4. (carved from old maStorageTail)
-            u8   maStorageF8[48];                  // +0xF8..+0x128  trailing fields (through +292; ClearData zeroes +0xF8/+0xFC/+0x100..+0x11C)
+            u8   maStorageF8[40];                  // +0xF8..+0x120  trailing fields (ClearData zeroes +0xF8/+0xFC/+0x100..+0x11C)
+            s32  miTraitorousTakedownsFor;         // +0x120     traitorous takedowns-for; SaveNetworkRoundData reads lwz 0x120. (carved from old maStorageF8)
+            s32  miTraitorousTakedownsAgainst;     // +0x124     traitorous takedowns-against; SaveNetworkRoundData reads lwz 0x124. (carved from old maStorageF8)
             // Byte accounting (each named field carved at its X360-proven offset, blobs padding the
             // gaps so total stays 0x128). Region carves (each sums to the old blob it replaced):
             //   old maStorage18[48]@0x18 -> mfDistanceToFinishLive(4)@0x18 + mfDistanceToPlayer(4)@0x1C +
@@ -557,6 +562,9 @@ namespace BrnGameState
                 static_assert(offsetof(CarScoreData, miCumulativeCheckpoints)     == 0xC4, "CarScoreData::miCumulativeCheckpoints offset");
                 static_assert(offsetof(CarScoreData, miChainableScore)            == 0xC8, "CarScoreData::miChainableScore offset");
                 static_assert(offsetof(CarScoreData, miOnlineStuntScore)          == 0xD4, "CarScoreData::miOnlineStuntScore offset");
+                static_assert(offsetof(CarScoreData, miMarkedManTakedownsFor)     == 0x54,  "CarScoreData::miMarkedManTakedownsFor offset");
+                static_assert(offsetof(CarScoreData, miTraitorousTakedownsFor)    == 0x120, "CarScoreData::miTraitorousTakedownsFor offset");
+                static_assert(offsetof(CarScoreData, miTraitorousTakedownsAgainst)== 0x124, "CarScoreData::miTraitorousTakedownsAgainst offset");
             }
         };
         // Per-member offset guards live in CarScoreData::_AssertLayout above (offsetof on the private
