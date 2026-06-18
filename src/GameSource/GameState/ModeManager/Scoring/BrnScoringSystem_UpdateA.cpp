@@ -16,14 +16,15 @@
 // declare-only) so this TU lands clean and the methods can be picked up once
 // their blocking keystone is reconstructed.
 //
-//   GetHighestLobbyRoadRuleScore  (0x8232B280)
+//   GetHighestLobbyRoadRuleScore  (0x8232B280)  [NOW LANDED -- see body below]
 //       Reads each CarData's road-rule ChallengeHighScoreEntry table and runs a
 //       best-score scan via BrnStreetData::ChallengeData::ContainsData(...) and
-//       BrnStreetData::ChallengeData::CompareScores(...). Neither method is
-//       declared on the committed ChallengeData (BrnChallengeData.h only homes
-//       Construct/GetScore/SetScore/Copy). Growing ChallengeData with those two
-//       methods is the ChallengeData TU's job, not this body's.
-//       MISSING: BrnStreetData::ChallengeData::ContainsData / ::CompareScores.
+//       BrnStreetData::ChallengeData::CompareScores(...). Both methods now resolve
+//       under cl /c: ContainsData is the inline ChallengeData predicate
+//       (BrnChallengeData.h:89) and CompareScores is its declared three-way
+//       comparator (BrnChallengeData.h:107, body in the BrnChallengeData.cpp TU).
+//       ChallengeHighScoreEntry::GetScore (inline) and CarData::GetRoadRulesScores
+//       (keystone, declare-only) complete the dependency set, so the body lands below.
 //
 //   UpdateNumberOfCarsInMode      (0x8231F3F0)  [NOW LANDED -- see body below]
 //       Body is muCarsInCurrentMode = lpOutput->maCarsInTheRace.GetLength()
@@ -89,6 +90,12 @@
 // maCarsInTheRace (Array<CarsInTheRaceData,8>) is declared here. Needed by
 // UpdateNumberOfCarsInMode to dereference the interface BY NAME.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+
+// ChallengeHighScoreEntry (: ChallengeData) -- the concrete per-car road-rule score record
+// GetHighestLobbyRoadRuleScore stack-allocates, fills via CarData::GetRoadRulesScores, then
+// probes with ChallengeData::ContainsData / GetScore / CompareScores. Pulls in CgsNetwork::PlayerName
+// (GetScore's out-param) and the shared ChallengeData home transitively.
+#include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"
 
 namespace BrnGameState
 {
@@ -162,5 +169,78 @@ namespace BrnGameState
 
         CGS_ASSERT(muCarsInCurrentMode <= static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
                    "Too many global race cars think they are in the current mode");
+    }
+
+    // ------------------------------------------------------------------------
+    // ScoringSystem::GetHighestLobbyRoadRuleScore  (X360 0x8232B280)
+    // ------------------------------------------------------------------------
+    // Scan every in-scoring-system car's road-rule high-score table for the single best
+    // recorded score for one challenge (lChallenge) under one score type (leScoreType),
+    // returning that best score (*lpiScore) and the race-car index that owns it
+    // (*lpeActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_INVALID if no car holds a score).
+    //
+    // X360 detail (asm at 0x8232B280):
+    //   * Three leading debug guards: lpiScore != NULL (line 1431), lpeActiveRaceCarIndex
+    //     != NULL (1432), and lChallenge in [0, KI_MAX_CHALLENGES) (1433). The challenge
+    //     bound BrnGameState::KI_MAX_CHALLENGES (== 64) is homed in the not-yet-reconstructed
+    //     BrnGameStateStreetManager.h; rather than fork that constant's home, the bound is
+    //     written numerically with the X360 assert string preserved verbatim.
+    //   * Best-score seed depends on the score-type's ranking direction: for the CRASH-style
+    //     type (leScoreType != 0) higher is better, so the running best starts at 0; for the
+    //     TIME-style type (leScoreType == 0) lower is better, so it starts at INT_MAX. This
+    //     mirrors `v10 = a3 ? 0 : 0x7FFFFFFF`.
+    //   * The walk steps the private maCarData[] record array directly (X360 v13 = this+5137
+    //     dwords, stride 86 dwords == sizeof(CarData)), reading each record's meRaceCarIndex.
+    //     A record is live when that index is neither E_ACTIVE_RACE_CAR_INDEX_COUNT (8, the
+    //     empty-slot sentinel) nor E_ACTIVE_RACE_CAR_INDEX_INVALID (-1). For each live car the
+    //     body fills a ChallengeHighScoreEntry from CarData::GetRoadRulesScores, and -- only if
+    //     that entry actually carries this score type (ContainsData) -- reads the entry's score
+    //     and three-way-compares it against the running best (CompareScores < 0 == the entry is
+    //     the better score), updating the best score + owning car index on a win.
+    //   * The optimizer's per-iteration `leEnumIndex <= E_PLAYER_SCORING_INDEX_COUNT` re-assert
+    //     is the post-increment bounds artifact of the EPlayerScoringIndex counter; the clean
+    //     `< E_ACTIVE_RACE_CAR_INDEX_COUNT` loop subsumes it (same pattern as the sibling TUs).
+    void ScoringSystem::GetHighestLobbyRoadRuleScore(BrnNetwork::Road::ChallengeIndex lChallenge,
+                                                     BrnStreetData::ScoreType leScoreType,
+                                                     s32* lpiScore,
+                                                     EActiveRaceCarIndex* lpeRaceCarIndex)
+    {
+        CGS_ASSERT(lpiScore != NULL, "lpiScore");
+        CGS_ASSERT(lpeRaceCarIndex != NULL, "lpeActiveRaceCarIndex");
+        // BrnGameState::KI_MAX_CHALLENGES == 64 (BrnGameStateStreetManager.h, not yet homed).
+        CGS_ASSERT(lChallenge < 64 && lChallenge >= 0,
+                   "liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0");
+
+        // Best-score seed: higher-is-better types start at 0, lower-is-better (TIME) at INT_MAX.
+        s32 liBestScore = (leScoreType != BrnStreetData::E_SCORE_TYPE_TIME) ? 0 : 0x7FFFFFFF;
+        EActiveRaceCarIndex leBestRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            const EActiveRaceCarIndex leRaceCarIndex = maCarData[liSlot].GetActiveRaceCarIndex();
+            if (leRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_COUNT &&
+                leRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+            {
+                BrnStreetData::ChallengeHighScoreEntry lEntry;
+                maCarData[liSlot].GetRoadRulesScores(lChallenge, &lEntry);
+
+                if (lEntry.ContainsData(leScoreType))
+                {
+                    s32 liCandidateScore = 0;
+                    CgsNetwork::PlayerName lPlayerName;
+                    lEntry.GetScore(leScoreType, &liCandidateScore, &lPlayerName);
+
+                    // CompareScores(type, score0, score1) < 0 => score0 (the candidate) is better.
+                    if (lEntry.CompareScores(leScoreType, liCandidateScore, liBestScore) < 0)
+                    {
+                        leBestRaceCarIndex = leRaceCarIndex;
+                        liBestScore = liCandidateScore;
+                    }
+                }
+            }
+        }
+
+        *lpiScore = liBestScore;
+        *lpeRaceCarIndex = leBestRaceCarIndex;
     }
 }

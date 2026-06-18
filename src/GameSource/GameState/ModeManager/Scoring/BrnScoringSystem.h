@@ -467,6 +467,10 @@ namespace BrnGameState
         void SetPlayerTeam(EActiveRaceCarIndex leRaceCarIndex, GameStateModuleIO::EPlayerTeam leTeam); // :924 / 0x8231FE38
         GameStateModuleIO::EPlayerTeam GetRoundStartPlayerTeam(EActiveRaceCarIndex leRaceCarIndex) const; // :929
         void SetRoundStartPlayerTeam(EActiveRaceCarIndex leRaceCarIndex, GameStateModuleIO::EPlayerTeam leTeam); // :935
+        // Per-team online-stunt-score queries (bodies in BrnScoringSystem_Standings.cpp). Team index ranges
+        // over the per-player team slots, not the 3-value EPlayerTeam enum.
+        s32 GetTeamStuntScore(s32 liTeam) const;                                                          // 0x82320650
+        s32 GetLeadingStuntTeam(s32 liTeamToExclude) const;                                               // 0x823206E0
 
         // ===== sub-scorer accessors (trivial address-of; inline) =====
         CrashModeScoring*           GetCrashScorer()         { return &mCrashModeScoring; }   // :939

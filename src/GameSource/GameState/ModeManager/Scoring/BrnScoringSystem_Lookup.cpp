@@ -352,4 +352,42 @@ s32 ScoringSystem::GetOnlineFinishPosition(EActiveRaceCarIndex leRaceCarIndex)
 
     return mpCurrentOnlineModeScoring->GetPlayerPosition(leRaceCarIndex);
 }
+
+// ----------------------------------------------------------------------------
+// network round data -- FLAGGED BLOCKED (both methods, re-checked this round).
+// ----------------------------------------------------------------------------
+//
+// SaveNetworkRoundData (X360 0x8232BC78) and ClearData (X360 0x8232A4A8) both operate on the
+// OnlineGameResults aggregate that the SEMANTIC-SLICE keystone deliberately OMITS (see the SCOPE
+// NOTE in BrnScoringSystem_Lifecycle.cpp and the WriteDataToOutput blocker there). Neither body is
+// landable, for the SAME root cause that blocks WriteDataToOutput: there is no named-member path to
+// the X360 ScoringSystem byte region the bodies read/write, and the keystone is a semantic slice,
+// NOT a byte-exact layout, so the raw offsets cannot be mapped onto named members.
+//
+//   SaveNetworkRoundData -- the X360 body, on the found CarData*, accumulates per-car stats into the
+//   cumulative block at this+0x4DE0..0x4DF4 and advances a CgsSystem::Time at this+0x4DD8, all inside
+//   an embedded OnlineGameResults aggregate based at this+0x4DD0, then dispatches by game mode into
+//   OnlineGameResults::SetRaceResults / SetStuntResults on that aggregate (passing the round-index
+//   counter at this+0x4DFC) and post-increments that counter. OnlineGameResults itself IS a committed
+//   type (BrnGameActions.h, with SetRaceResults/SetStuntResults committed in BrnGameActions.cpp), but
+//   the keystone exposes NO member of it and NO accessor reaching it. The only adjacent named member,
+//   mNetworkRoundData (NetworkRoundData, reached via GetNetworkRoundData()), is a DISTINCT slice object
+//   with no SetRaceResults/SetStuntResults surface -- writing the accumulation into it instead would be
+//   a fabrication, not a reconstruction. Plus GetRaceCarDistanceToFinish / GetFinishTime / GetTeamStuntScore
+//   are themselves keystone declare-only helpers with no committed body to fold.
+//
+//   ClearData -- the X360 body resets the start/end/total/remaining timers and the per-car maCarData[8]
+//   loop (CarData::ClearData) AND the omitted region: virtual ClearData on the three embedded online
+//   sub-scorers, the OnlineGameResults aggregate, the RaceCarPositioningData scratch and the
+//   per-checkpoint distance arrays -- but every write target sits in the X360 byte-offset space that the
+//   semantic slice does not preserve (the omitted OnlineGameResults / second-StuntModeScoring / debug-base
+//   members shift every offset). It also calls GameStateModuleIO::CarScoreData::ClearData inside the
+//   per-car loop, which is fine, but the surrounding offsets cannot be re-expressed as named members
+//   without the omitted aggregate and a byte-exact layout. A partial body that only cleared the
+//   keystone-named scalars would silently drop the online-results / sub-scorer / positioning reset --
+//   a semantic regression.
+//
+// Both remain declare-only. They land once the keystone grows a named OnlineGameResults member (and the
+// surrounding cumulative-stats region) with accessors -- the same growth WriteDataToOutput is waiting on.
+
 }
