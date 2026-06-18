@@ -87,11 +87,10 @@ namespace BrnGame
         mDebugManager.Construct(&CgsDev::DebugManagerConstructParameters::DEFAULT);
         mDebugManager.ConstructRenderer();
 
-        // Bring up the resource (bitmap) debug font now the device + 2D debug renderer are up: load the
-        // font bundle and hand it to the debug renderers so DrawText uses the bitmap glyphs (X360
-        // GamePrepare handoff). A no-op that leaves the built-in vector font in place until the
-        // "Default.font" bundle DATA is present on disk (the data pipeline is user-owned).
-        CgsDev::LoadAndSetDebugFont("Default.font", mDebugManager);
+        // NOTE: the bitmap debug font is NOT brought up here -- the D3D device does not exist yet at
+        // Construct time (Device::Start's create lands later), so the atlas raster's FixUp would get a
+        // null device and produce a textureless font. It is brought up from DispatchThread instead,
+        // once the render path has the device live (see below).
 
         mMainFlowStateMachine.Construct();
         mMainFlowStateMachine.SetState(BrnGameMainFlowController::E_MGS_INITIAL_LOADING_SCREEN);
@@ -220,6 +219,12 @@ namespace BrnGame
     void BrnGameModule::DispatchThread()
     {
         mRenderModule.Render();
+
+        // Bring up the resource (bitmap) debug font from the render path, where the D3D device is live
+        // (the atlas raster's FixUp creates a D3D texture). Retried every frame; LoadAndSetDebugFont
+        // bails without latching while gDevice is null and latches once it has loaded + created the
+        // atlas, so this is a single real load and a cheap guard check thereafter.
+        CgsDev::LoadAndSetDebugFont("Language/Fonts/Default.font", mDebugManager);
     }
 
     // @ BrnGameModule.cpp:3916 - clear the whole game-module object, then stamp each owned

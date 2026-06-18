@@ -287,6 +287,15 @@ namespace CgsResource
             muLargestFree = lpEntry->GetSize();
     }
 
+    // Free the allocated block at an address. Only reached on the pool's alloc-failure cleanup path
+    // (AllocateMemoryForResource backs out the pools it already carved when a later pool runs out of
+    // room) -- which never happens for a correctly-sized pool. The address->node resolution
+    // (FindFreeNodeContainingAddress / the allocated-node walk) is deferred, so this is a no-op for
+    // now; an undersized pool already asserts at the call site. Use Free(u16) for normal frees.
+    void Heap::Free(void* /*lpPtr*/)
+    {
+    }
+
     // Reset to an unprepared, empty state (the X360 Construct Init's both index-lists).
     void Heap::Construct()
     {

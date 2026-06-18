@@ -119,7 +119,7 @@ namespace Assert
         }
 
         *Log::gpDebugPrint << "[ASSERT " << miAssertCount << "] " << lpcMessage
-                           << " (" << lpcFile << ":" << liLine << ")\n";
+                           << " (" << lpcFile << ":" << liLine << ")\npress END to continue";
 
         // A nested assert raised while the dialog is already up is logged, but does not start a second
         // halt (X360 byte_83019201 gate).

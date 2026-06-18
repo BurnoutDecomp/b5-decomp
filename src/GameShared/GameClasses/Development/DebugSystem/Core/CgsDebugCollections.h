@@ -35,7 +35,7 @@
 //   * Construct/Clear (they take rw::IResourceAllocator and build/zero the backing block) are the
 //     next grounding step - declared here, defined alongside the allocator wiring.
 
-namespace rw { class IResourceAllocator; }
+namespace rw { struct IResourceAllocator; }   // struct (matches rwcore_structs.h) so the placement new[] mangles consistently with callers
 
 namespace CgsDev { namespace Internal {
     // Allocation tag for the debug pools' backing blocks (DWARF CgsDebugCollections.h:30).

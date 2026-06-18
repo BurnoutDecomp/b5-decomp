@@ -1,8 +1,10 @@
 #include "pc/gcm/renderengine/texture.h"
 #include "pc/gcm/renderengine/device.h"   // gDevice
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // WriteToLog (create-failure diagnostics)
 
 #include <d3d9.h>
 #include <cstring>   // memcpy
+#include <cstdio>    // snprintf
 
 // PC / D3D9 implementation of the renderengine 2D-texture create + upload path. The
 // X360/PS3 renderengine marshals a platform resource descriptor and a GPU surface
@@ -205,10 +207,17 @@ namespace renderengine
 
         const UINT luLevels = (lpParams->muNumLevels != 0u) ? lpParams->muNumLevels : 1u;
         IDirect3DTexture9* lpD3DTexture = nullptr;
-        if (FAILED(gDevice->CreateTexture(lpParams->muWidth, lpParams->muHeight, luLevels, 0,
-                                          static_cast<D3DFORMAT>(lpParams->miFormat),
-                                          D3DPOOL_MANAGED, &lpD3DTexture, nullptr)))
+        const HRESULT lhrCreate = gDevice->CreateTexture(lpParams->muWidth, lpParams->muHeight, luLevels, 0,
+                                                         static_cast<D3DFORMAT>(lpParams->miFormat),
+                                                         D3DPOOL_MANAGED, &lpD3DTexture, nullptr);
+        if (FAILED(lhrCreate))
         {
+            char lac[160];
+            std::snprintf(lac, sizeof(lac),
+                "[Texture] CreateTexture(fmt=%d %ux%u mips=%u MANAGED) failed hr=0x%08X\n",
+                lpParams->miFormat, lpParams->muWidth, lpParams->muHeight,
+                static_cast<unsigned>(luLevels), static_cast<unsigned>(lhrCreate));
+            CgsDev::Log::WriteToLog(lac);
             return;
         }
         lpTexture->mpD3DTexture = lpD3DTexture;
