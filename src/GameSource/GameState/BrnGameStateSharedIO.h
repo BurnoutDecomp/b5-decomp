@@ -360,6 +360,7 @@ namespace BrnGameState
             void            SetFinishTime(CgsSystem::Time lTime) { mTotalTime = lTime; }         // +0x00 (RegisterFinishForCar writes the accumulated total race time)
             f32             GetDistanceToFinish() const     { return mfDistanceToFinish; }      // +0x48
             s32             GetTakedowns() const            { return miTakedowns; }             // +0x4C
+            void            SetTakedowns(s32 liTakedowns)   { miTakedowns = liTakedowns; }      // +0x4C (UpdateTakedowns/UpdatePaybackTakedowns @0x8232AC88/0x82338320 increment the aggressor's takedown count)
             bool            GetTimedOut() const             { return mbTimedOut; }              // +0x68
             void            SetTimedOut(bool lbTimedOut)    { mbTimedOut = lbTimedOut; }        // +0x68 (UpdateNetworkPlayerResults stb 0x68)
             bool            GetDisconnected() const         { return mbDisconnected; }          // +0x69
@@ -419,8 +420,30 @@ namespace BrnGameState
             s32             GetTakedownsAgainst() const            { return miTakedownsAgainst; }         // +0x50
             void            SetTakedownsAgainst(s32 liTakedowns)   { miTakedownsAgainst = liTakedowns; }  // +0x50
             s32             GetMarkedManTakedownsFor() const       { return miMarkedManTakedownsFor; }       // +0x54
+            void            SetMarkedManTakedownsFor(s32 li)       { miMarkedManTakedownsFor = li; }         // +0x54 (UpdateCrashes @0x8231F9B8 increments this per primary crash -- see crash-tally FLAG below)
             s32             GetTraitorousTakedownsFor() const      { return miTraitorousTakedownsFor; }      // +0x120
+            void            SetTraitorousTakedownsFor(s32 li)      { miTraitorousTakedownsFor = li; }        // +0x120 (UpdateTakedowns @0x8232AC88 increments on a same-team "traitorous" takedown)
             s32             GetTraitorousTakedownsAgainst() const  { return miTraitorousTakedownsAgainst; }  // +0x124
+            void            SetTraitorousTakedownsAgainst(s32 li)  { miTraitorousTakedownsAgainst = li; }    // +0x124 (UpdateTakedowns @0x8232AC88 increments on a same-team "traitorous" takedown)
+
+            // Marked-man takedown-event tallies (UpdateTakedowns @0x8232AC88 increments the +0x108
+            // aggressor / +0x10C victim slot when TakedownEvent::mbMarkedManTakeDown is set).
+            s32             GetMarkedManTakedownEventsFor() const         { return miMarkedManTakedownEventsFor; }     // +0x108
+            void            SetMarkedManTakedownEventsFor(s32 li)         { miMarkedManTakedownEventsFor = li; }       // +0x108
+            s32             GetMarkedManTakedownEventsAgainst() const     { return miMarkedManTakedownEventsAgainst; } // +0x10C
+            void            SetMarkedManTakedownEventsAgainst(s32 li)     { miMarkedManTakedownEventsAgainst = li; }   // +0x10C
+
+            // Payback / dirty-trick takedown tallies (UpdatePaybackTakedowns @0x82338320 increments
+            // the for/against pair selected by the DirtyTrickEvent status word: status 2 -> +0x110/+0x114,
+            // status 4 -> +0x118/+0x11C).
+            s32             GetPaybackTakedownsType2For() const           { return miPaybackTakedownsType2For; }       // +0x110
+            void            SetPaybackTakedownsType2For(s32 li)           { miPaybackTakedownsType2For = li; }         // +0x110
+            s32             GetPaybackTakedownsType2Against() const       { return miPaybackTakedownsType2Against; }   // +0x114
+            void            SetPaybackTakedownsType2Against(s32 li)       { miPaybackTakedownsType2Against = li; }     // +0x114
+            s32             GetPaybackTakedownsType4For() const           { return miPaybackTakedownsType4For; }       // +0x118
+            void            SetPaybackTakedownsType4For(s32 li)           { miPaybackTakedownsType4For = li; }         // +0x118
+            s32             GetPaybackTakedownsType4Against() const       { return miPaybackTakedownsType4Against; }   // +0x11C
+            void            SetPaybackTakedownsType4Against(s32 li)       { miPaybackTakedownsType4Against = li; }     // +0x11C
 
             // Setter for +0x58 already exists above (SetOnlineRacePoints); add the matching getter
             // (UpdateCumulativeResults reads this slot).
@@ -537,7 +560,26 @@ namespace BrnGameState
             CgsSystem::Time mTimeInLastPlace;      // +0xE8 (8)  time spent in last place. GetTimeSpentInLastPlace: *(CarData+232)/+236 == +0xE8/+0xEC. (carved from old maStorageTail)
             CgsSystem::Time mTimeBoosting;         // +0xF0 (8)  time spent boosting. GetTimeSpentBoosting: *(CarData+240)/+244 == +0xF0/+0xF4. (carved from old maStorageTail)
             f32  mfLongestDrift;                   // +0xF8      longest-drift / longest-continuous-run max distance (f32). UpdateGeneralStats (X360 0x8232B8C0) keeps a per-frame run accumulator on CarData @+0x138 (lfs/stfs 0x138(r30), fmadds |*(carIO+0x3CC)|*dt while *(carIO+0x400)!=0); when that condition lapses it compares the run length (+0x138) against this max (asm 0x8232BC44 lfs f13,0xF8(r30) / 0x8232BC48 fcmpu) and, if greater, stores it here (0x8232BC50 stfs f0,0xF8(r30)) then resets +0x138 to 0.0 (0x8232BC54 stfs f31,0x138). r30 is GetCarData(==CarData), CarScoreData embedded at 0, so +0xF8 lands inside this record. (carved from old maStorageF8; gameplay identity inferred from the max-of-a-conditional-accumulator pattern -- name is provisional, see FLAG)
-            u8   maStorageFC[36];                  // +0xFC..+0x120  remaining trailing fields (ClearData zeroes +0xFC/+0x100..+0x11C)
+            u8   maStorageFC[12];                  // +0xFC..+0x108  trailing pad (ClearData zeroes +0xFC/+0x100/+0x104)
+            // ===== Marked-man takedown-event tallies (carved from old maStorageFC) =====
+            // UpdateTakedowns (X360 0x8232AC88) increments these ONLY when the current TakedownEvent's
+            // mbMarkedManTakeDown flag is set (lbz 0x24 of the 40-byte event): the aggressor's +0x108
+            // and the victim's +0x10C (asm 0x8232ADD8 lwz/stw 0x108(r31) aggressor; 0x8232ADE4 lwz/stw
+            // 0x10C(r30) victim; r31/r30 == sub_8231DCD0 == CarScoreData*). These are DISTINCT from
+            // miMarkedManTakedownsFor@+0x54 (written by UpdateCrashes, a separate path) -- see FLAG.
+            s32  miMarkedManTakedownEventsFor;     // +0x108     marked-man takedown events made (aggressor)
+            s32  miMarkedManTakedownEventsAgainst; // +0x10C     marked-man takedown events suffered (victim)
+            // ===== Payback / dirty-trick takedown tallies (carved from old maStorageFC) =====
+            // UpdatePaybackTakedowns (X360 0x82338320) switches on the DirtyTrickEvent status word
+            // (meDirtyTrickStatus, the 4th event word). For status==2 it increments aggressor's +0x110
+            // (asm 0x823384BC lwz/stw 0x110(r30)) and victim's +0x114 (0x823384C8 lwz/stw 0x114(r31));
+            // for status==4 it increments aggressor's +0x118 (0x82338438 lwz/stw 0x118(r30)) and
+            // victim's +0x11C (0x82338444 lwz/stw 0x11C(r31)). Names keep the X360-proven status value;
+            // EDirtyTrickStatus only names E_DIRTY_TRICK_NONE==0 so the 2/4 semantics stay provisional.
+            s32  miPaybackTakedownsType2For;       // +0x110     dirty-trick status-2 payback made (aggressor)
+            s32  miPaybackTakedownsType2Against;   // +0x114     dirty-trick status-2 payback suffered (victim)
+            s32  miPaybackTakedownsType4For;       // +0x118     dirty-trick status-4 payback made (aggressor)
+            s32  miPaybackTakedownsType4Against;   // +0x11C     dirty-trick status-4 payback suffered (victim)
             s32  miTraitorousTakedownsFor;         // +0x120     traitorous takedowns-for; SaveNetworkRoundData reads lwz 0x120. (carved from old maStorageF8)
             s32  miTraitorousTakedownsAgainst;     // +0x124     traitorous takedowns-against; SaveNetworkRoundData reads lwz 0x124. (carved from old maStorageF8)
             // Byte accounting (each named field carved at its X360-proven offset, blobs padding the
@@ -555,6 +597,14 @@ namespace BrnGameState
             //       miTraitorousTakedownsFor(4)@0x120 + miTraitorousTakedownsAgainst(4)@0x124 = 79.
             //   (the +0x120/+0x124 traitorous fields and +0xF8 longest-drift are carved from the same
             //    tail region; the old single maStorageF8[40]@0xF8 -> mfLongestDrift(4)@0xF8 + maStorageFC[36]@0xFC.)
+            //   old maStorageFC[36]@0xFC -> maStorageFC[12]@0xFC + miMarkedManTakedownEventsFor(4)@0x108 +
+            //       miMarkedManTakedownEventsAgainst(4)@0x10C + miPaybackTakedownsType2For(4)@0x110 +
+            //       miPaybackTakedownsType2Against(4)@0x114 + miPaybackTakedownsType4For(4)@0x118 +
+            //       miPaybackTakedownsType4Against(4)@0x11C = 36. (UpdateTakedowns 0x8232AC88 writes
+            //       +0x108/+0x10C; UpdatePaybackTakedowns 0x82338320 writes +0x110/+0x114/+0x118/+0x11C.)
+            //   FLAG: UpdateCrashes (0x8231F9B8) increments +0x54 per crash event (the field this header
+            //   already names miMarkedManTakedownsFor). The "marked-man" label on +0x54 predates this work
+            //   and may be a misnomer for a crash-aggressor tally; left UNCHANGED (committed field, grow-only).
             // Unchanged named anchors: mTotalTime@0x00, mfDistanceToFinish@0x48, miTakedowns@0x4C,
             // miOnlineFinishPositionScore@0x58, miOnlineStandingsPosition@0x5C, mbTimedOut@0x68,
             // mbDisconnected@0x69, mTimeAsRunner@0x84, maStorage8C@0x8C, mbCompletedBurningHomeRun@0xBC,
@@ -589,6 +639,12 @@ namespace BrnGameState
                 static_assert(offsetof(CarScoreData, miChainableScore)            == 0xC8, "CarScoreData::miChainableScore offset");
                 static_assert(offsetof(CarScoreData, miOnlineStuntScore)          == 0xD4, "CarScoreData::miOnlineStuntScore offset");
                 static_assert(offsetof(CarScoreData, miMarkedManTakedownsFor)     == 0x54,  "CarScoreData::miMarkedManTakedownsFor offset");
+                static_assert(offsetof(CarScoreData, miMarkedManTakedownEventsFor)     == 0x108, "CarScoreData::miMarkedManTakedownEventsFor offset");
+                static_assert(offsetof(CarScoreData, miMarkedManTakedownEventsAgainst) == 0x10C, "CarScoreData::miMarkedManTakedownEventsAgainst offset");
+                static_assert(offsetof(CarScoreData, miPaybackTakedownsType2For)       == 0x110, "CarScoreData::miPaybackTakedownsType2For offset");
+                static_assert(offsetof(CarScoreData, miPaybackTakedownsType2Against)   == 0x114, "CarScoreData::miPaybackTakedownsType2Against offset");
+                static_assert(offsetof(CarScoreData, miPaybackTakedownsType4For)       == 0x118, "CarScoreData::miPaybackTakedownsType4For offset");
+                static_assert(offsetof(CarScoreData, miPaybackTakedownsType4Against)   == 0x11C, "CarScoreData::miPaybackTakedownsType4Against offset");
                 static_assert(offsetof(CarScoreData, miTraitorousTakedownsFor)    == 0x120, "CarScoreData::miTraitorousTakedownsFor offset");
                 static_assert(offsetof(CarScoreData, miTraitorousTakedownsAgainst)== 0x124, "CarScoreData::miTraitorousTakedownsAgainst offset");
             }
