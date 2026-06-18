@@ -472,6 +472,10 @@ namespace BrnGameState
             // stfs 0x1C(GetCarData)). First of the two f32 words ClearData zeroes at +0x1C/+0x20.
             f32             GetDistanceToPlayer() const            { return mfDistanceToPlayer; }         // +0x1C
             void            SetDistanceToPlayer(f32 lfDistance)    { mfDistanceToPlayer = lfDistance; }   // +0x1C
+            f32             GetDistanceToNextCheckpointLive() const { return mfDistanceToNextCheckpointLive; }  // +0x20
+            void            SetDistanceToNextCheckpointLive(f32 lf) { mfDistanceToNextCheckpointLive = lf; }    // +0x20
+            bool            GetRacePositionImproved() const         { return mbRacePositionImproved; }          // +0x44
+            void            SetRacePositionImproved(bool lbImproved) { mbRacePositionImproved = lbImproved; }   // +0x44
 
             // Per-frame distance accumulator (f32). UpdateGeneralStats (X360 0x8232B8C0) reads it,
             // adds |currentSpeed| * deltaTime, and writes it back each frame
@@ -497,9 +501,9 @@ namespace BrnGameState
             s32  miFinishPosition;                 // +0x14      race finish position; ClearData=9. GetCarRaceFinishPosition return *(r3+0x14); RegisterFinishForCar writes it. (was miField14)
             f32  mfDistanceToFinishLive;           // +0x18      live distance-to-finish (f32). GetRaceCarDistanceToFinish: lfs f1,0x18(r3). DISTINCT from mfDistanceToFinish@+0x48 -- SetPlayerEliminated copies +0x18 -> +0x48 (lfs 0x18 / stfs 0x48), i.e. captures the live distance into the +0x48 slot at elimination, proving two separate fields. (carved from old maStorage18)
             f32  mfDistanceToPlayer;               // +0x1C      distance-to-player (f32). UpdateDistanceToPlayer (X360 0x8232B408) stfs 0x1C(GetCarData). First of the two f32 words ClearData zeroes at +0x1C/+0x20. (carved from old maStorage1C[8])
-            u8   maStorage20[4];                   // +0x20..+0x24  remaining f32 word (ClearData stfs 0x20)
+            f32  mfDistanceToNextCheckpointLive;   // +0x20      live distance-to-next-checkpoint (f32; name provisional, offset X360-proven from UpdateRacePositions 0x8232A668; ClearData stfs 0x20). (carved from old maStorage20)
             CgsSystem::Time maaLapTimes[4];        // +0x24..+0x44  per-lap times, KU_MAX_LAPS==4 (8-byte Time stride). RegisterFinishForCar: base addi r28,r31,0x24; stride +=8; element[laps] write stw 0x24(r11)/stfs 0x28(r11) with r11=laps<<3. GetRaceCarTotalTime sums [0..laps); GetRaceCarFastestLapTime mins [1..laps). ClearData inits 4 elements from +0x24 stride 8.
-            u8   maStorage44[1];                   // +0x44       byte (ClearData stb 0x44 = 0)
+            bool mbRacePositionImproved;           // +0x44      race-position-improved flag (name provisional, offset X360-proven from UpdateRacePositions; ClearData stb 0x44). (carved from old maStorage44)
             bool mbHasFinished;                    // +0x45       has-crossed-the-line flag; RegisterFinishForCar stb 1,0x45(r31) at finish; ClearData stb 0,0x45. (carved from old maStorage18)
             u8   maStorage46[2];                   // +0x46..+0x48  padding to +0x48
             f32  mfDistanceToFinish;               // +0x48      captured/finish distance-to-finish (Race gather lfs 0x48; written from +0x18 by SetPlayerEliminated)
@@ -569,6 +573,8 @@ namespace BrnGameState
             static void _AssertLayout()
             {
                 static_assert(offsetof(CarScoreData, mfDistanceToPlayer)          == 0x1C, "CarScoreData::mfDistanceToPlayer offset");
+                static_assert(offsetof(CarScoreData, mfDistanceToNextCheckpointLive) == 0x20, "CarScoreData::mfDistanceToNextCheckpointLive offset");
+                static_assert(offsetof(CarScoreData, mbRacePositionImproved)      == 0x44, "CarScoreData::mbRacePositionImproved offset");
                 static_assert(offsetof(CarScoreData, mfDistanceToFinish)          == 0x48, "CarScoreData::mfDistanceToFinish offset");
                 static_assert(offsetof(CarScoreData, mfDistanceAccumulator)       == 0xDC, "CarScoreData::mfDistanceAccumulator offset");
                 static_assert(offsetof(CarScoreData, mfLongestDrift)              == 0xF8, "CarScoreData::mfLongestDrift offset");

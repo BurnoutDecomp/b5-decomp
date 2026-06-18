@@ -39,27 +39,16 @@
 //       online scorer mOnlineStuntRunModeScoring (ss+0x4D44) by name, so the Fugitive/FreeBurn/
 //       ModeEnd (game-mode 12/14/17) case can target it; mpCurrentOnlineModeScoring (ss+0x4DC8)
 //       is the BaseOnlineModeScoring* the switch assigns.
+//   - HasStuntAttackModeEnded (0x82326708): now lands. The keystone decl was RETYPED to the real
+//       body shape `(const CgsSystem::Time&, EActiveRaceCarIndex, bool)`, the SECOND stunt scorer
+//       mOnlineStuntModeScoring (ss+0x2620) is modelled by name, StuntModeScoring::HasStuntModeEnded
+//       (vtable slot +0x14) is now a named virtual, and CarScoreData::SetEliminated (the +0xD9 write)
+//       exists -- so the online/offline scorer pick + the eliminated-flag write all resolve by name.
 //
 // BLOCKED (omitted -- left declare-only) and why:
 //   - OnRoadRagePlayerCrashed (0x823444B0): dereferences the GameStateModuleIO::OutputBuffer
 //       param (forward-declared only in the keystone) and CgsModule::VariableEventQueue<13312,16>
 //       (no committed home), to push road-rage crash events.
-//   - HasStuntAttackModeEnded (0x82326708): PARAM-SHAPE MISMATCH (the real, unresolved blocker).
-//       The vtable virtual it dispatches (slot +0x14 of the two embedded stunt scorers, this+0x350
-//       offline / this+0x2620 online) now RESOLVES -- the StuntVirtualAndNetworkRounder prereq made
-//       StuntModeScoring polymorphic with `virtual bool HasStuntModeEnded(bool)`, so that call can
-//       be named. BUT the keystone (and the DecFIGS DWARF) declare this method as
-//       `bool HasStuntAttackModeEnded(CgsSystem::Time lTime)` -- a SINGLE Time param. The X360 body
-//       (and its sole caller BrnGameState::ModeManager::UpdateCurrentMode @ 0x823515FC..0x8235161C)
-//       actually passes THREE args: r4 = a Time* (by reference), r5 = an EActiveRaceCarIndex (a3),
-//       r6 = a bool online/force flag (a4). The body needs a3 (to write the eliminated flag at
-//       CarScoreData +0xD9 == SetEliminated on the looked-up car) and a4 (to pick the online vs
-//       offline embedded scorer), neither of which the keystone's single-Time signature carries.
-//       To implement the X360 body the keystone decl would have to GROW from `(CgsSystem::Time)` to
-//       `(const CgsSystem::Time&, EActiveRaceCarIndex, bool)` -- i.e. RETYPE a committed signature in
-//       ANOTHER home, which is out of this work item's scope and violates the additive-only rule.
-//       FLAGGED rather than mis-implemented against the wrong signature. (The +0xD9 write itself is
-//       now reachable via GetEliminated/SetEliminated; the param-shape mismatch is what blocks.)
 //
 // DEFERRED (no standalone X360 export -- inlined away on X360, so no authoritative body):
 //   StartModeTimer, SetCheckPointsForCarsWithinRace, UpdateTimerForEliminator, HasCrashModeEnded.
@@ -218,6 +207,34 @@ bool ScoringSystem::HasModeTimeExpired(const CgsSystem::Time& lTime)
     const CgsSystem::Time lRemaining = GetModeTimeRemaining(lAdjustedTime);
 
     return lRemaining <= lZero;
+}
+
+// X360 0x82326708. Decide whether the stunt-attack mode has ended, for one race car. The lbOnline
+// flag selects which embedded stunt scorer answers: the online scorer (mOnlineStuntModeScoring,
+// ss+0x2620) or the offline scorer (mStuntModeScoring, ss+0x350). Either way the scorer's
+// HasStuntModeEnded(bool) virtual is dispatched with "has the mode timer expired" (HasModeTimeExpired
+// (lTime)) as its time-up argument. On the ONLINE path only, when the scorer reports the mode ended,
+// the looked-up car (GetCarData(leRaceCarIndex)) is flagged eliminated (CarScoreData::SetEliminated,
+// the +0xD9 byte the X360 stores 1 into). The offline path returns the verdict without touching the
+// eliminated flag.
+bool ScoringSystem::HasStuntAttackModeEnded(const CgsSystem::Time& lTime, EActiveRaceCarIndex leRaceCarIndex, bool lbOnline)
+{
+    if (lbOnline)
+    {
+        // Online stunt scorer (ss+0x2620). HasModeTimeExpired(lTime) is the bool time-up arg the
+        // X360 forwards into the HasStuntModeEnded virtual (vtable slot +0x14).
+        const bool lbEnded = mOnlineStuntModeScoring.HasStuntModeEnded(HasModeTimeExpired(lTime));
+        if (lbEnded)
+        {
+            // X360 sub_8231DCD0 == GetCarData; stb 1, 0xD9(r3) == SetEliminated(true) on its score record.
+            CarData* lpCarData = GetCarData(leRaceCarIndex);
+            lpCarData->GetScoreData()->SetEliminated(true);
+        }
+        return lbEnded;
+    }
+
+    // Offline stunt scorer (ss+0x350): just report the verdict (no eliminated-flag write on this path).
+    return mStuntModeScoring.HasStuntModeEnded(HasModeTimeExpired(lTime));
 }
 
 // ----------------------------------------------------------------------------

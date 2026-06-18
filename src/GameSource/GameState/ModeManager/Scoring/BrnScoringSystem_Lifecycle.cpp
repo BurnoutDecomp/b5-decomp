@@ -319,18 +319,26 @@ void ScoringSystem::OnModeStart(GameStateModuleIO::EGameModeType leGameMode,
 //     the X360 free build inlined those getters to raw offsets, so this reconstruction calls the getters
 //     by name rather than replaying the inlined offset math (semantic parity, not byte-exact).
 //
-// ONE residual FLAG -- the hidden 4th register argument (r7). The X360 body keeps r7 (the player's
-// active-race-car index) and uses it ONLY in the online-stunt sub-branch: when online AND r7 is a valid
-// index it computes out.miCurrentScore = OnlineStuntRunModeScoring::GetTeamScore(GetCarData(r7)->team)
-// and out.miTargetScore = GetTeamStuntScore(GetLeadingStuntTeam(team)). r7 is absent from the recovered
-// DWARF C++ signature (3 params) and therefore from the keystone declaration, so there is no in-signature
-// source for it. The X360 itself takes the r7 == -1 path (LABEL_26) when no valid index is supplied --
-// reading the stunt-display scores directly off the scorer -- so this reconstruction takes exactly that
-// faithful fallback for the online case and FLAGS the per-player-index online team-score sub-branch as
-// needing the keystone signature to grow a 4th EActiveRaceCarIndex parameter (a separate additive change).
+// 4TH ARG NOW IN-SIGNATURE (2026-06-18). The keystone declaration was retyped to carry the hidden X360
+// r7 (== ASM pseudocode `a5`, HIDWORD(v9)) as `EActiveRaceCarIndex lePlayerRaceCarIndex`, so the prior
+// LABEL_26-only fallback is replaced by the real branch. ASM grounding of where r7 actually flows:
+//   * out.mePlayerRaceCarIndex (out+0xA38): the ASM stores `*(a1+0x4EE8)` == muCarsInCurrentMode here,
+//     NOT r7 -- so this remains the car-count store (unchanged from the prior round). The task brief's
+//     listing of mePlayerRaceCarIndex as an r7 site is a misread of this slot; the ASM is authoritative.
+//   * online Update(this, *(a1+0x4EE8)) 2nd arg: again muCarsInCurrentMode (a car count), NOT r7.
+//   * online WriteDataToOutput(a3) dispatch arg: a3 == lpOnlineOutput, carries no car index.
+//   * online-stunt sub-branch (ASM 6670-6687): the SOLE genuine r7 consumer. When online AND
+//     lePlayerRaceCarIndex is a valid index (!= INVALID), the body looks the car up via GetCarData(r7),
+//     reads its team, and publishes out.miCurrentScore = mOnlineStuntRunModeScoring.GetTeamScore(team)
+//     and out.miTargetScore = GetTeamStuntScore(GetLeadingStuntTeam(team)). When r7 == -1 (ASM LABEL_26),
+//     it falls back to reading the stunt-display scores directly off the selected scorer. Both paths are
+//     now reconstructed faithfully against lePlayerRaceCarIndex.
+//     (OnlineStuntRunModeScoring::GetTeamScore is declare-only/BLOCKED on the CarScoreData +0xD4 stunt
+//     accessor in its home header -- fine for `cl /c`; the call site here is signature-complete.)
 void ScoringSystem::WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface* lpOutput,
                                       GameStateModuleIO::OnlineScoringOutputInterface* lpOnlineOutput,
-                                      bool lbOnline)
+                                      bool lbOnline,
+                                      EActiveRaceCarIndex lePlayerRaceCarIndex)
 {
     GameStateModuleIO::ScoringOutputInterface& lrOut = *lpOutput;
 
@@ -397,12 +405,33 @@ void ScoringSystem::WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface*
     lrOut.mfShowtimeDistanceTravelled= mCrashModeScoring.GetDistanceTravelled();
 
     // ---- stunt block: offline scorer (mStuntModeScoring) vs online scorer (mOnlineStuntModeScoring) ----
-    // The online per-player-index team-score sub-branch needs the hidden r7 arg (see header flag); with no
-    // valid index in-signature, the faithful X360 path is the direct scorer read (LABEL_26) in BOTH cases.
+    // ASM: v20 = online scorer (this+0x2620 == mOnlineStuntModeScoring) when online, else this+0x350 ==
+    // mStuntModeScoring. miCurrentScore/miTargetScore have TWO sources depending on the 4th arg:
     StuntModeScoring& lrStunt = lbOnline ? mOnlineStuntModeScoring : mStuntModeScoring;
 
-    lrOut.miCurrentScore    = lrStunt.GetCurrentScore();
-    lrOut.miTargetScore     = lrStunt.GetTargetScore();
+    if (lbOnline && lePlayerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        // ASM 6670-6687 -- online AND a valid player index: publish the player's team stunt scores.
+        CGS_ASSERT((lePlayerRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                   (lePlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
+                   "(leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+        const CarData* lpPlayerCarData = GetCarData(lePlayerRaceCarIndex);
+        const s32 liTeam = (lpPlayerCarData != NULL) ? static_cast<s32>(lpPlayerCarData->GetTeam()) : 0;
+
+        // ASM: out+0xA64 = mOnlineStuntRunModeScoring.GetTeamScore(team, this);
+        //      out+0xA68 = GetTeamStuntScore(GetLeadingStuntTeam(team)).
+        lrOut.miCurrentScore = mOnlineStuntRunModeScoring.GetTeamScore(liTeam, this);
+        lrOut.miTargetScore  = GetTeamStuntScore(GetLeadingStuntTeam(liTeam));
+    }
+    else
+    {
+        // ASM LABEL_26 -- offline, or online with no valid index (r7 == -1): read directly off the scorer.
+        lrOut.miCurrentScore = lrStunt.GetCurrentScore();
+        lrOut.miTargetScore  = lrStunt.GetTargetScore();
+    }
+
     lrOut.miComboScore      = lrStunt.GetComboScore();
     lrOut.miComboMultiplier = lrStunt.GetComboMultiplier();
     lrOut.muCurrentStunts   = lrStunt.GetCurrentStunts();

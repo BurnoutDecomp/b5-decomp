@@ -37,14 +37,30 @@
 //       "Array used before Construct/Clear" sentinel assert (CgsArray.h:62), so the
 //       body carries only the X360 "too many global race cars" bound assert.
 //
-//   UpdateRacePositions           (0x8232A668)
+//   UpdateRacePositions           (0x8232A668)  [NOW LANDED -- see body below]
 //       Iterates lpActive->maCarsInTheRace, gathers distances from lpAI, queries
-//       lpModeManager->GetCheckpointPosition(...) and
-//       lpActive->IsRaceCarActive(...), qsorts the positioning scratch and assigns
-//       race positions. Dereferences three forward-declared GameState-side
-//       interfaces plus ModeManager.
-//       MISSING: BrnGameState::ActiveRaceCarOutputInterface / AICarOutputInterface
-//                / ModeManager (definitions).
+//       lpModeManager->GetCheckpointPosition(...) and lpActive->IsRaceCarActive(...),
+//       qsorts the positioning scratch and assigns race positions. The three GameState-side
+//       interface params + ModeManager RESOLVE: ActiveRaceCarOutputInterface /
+//       GlobalRaceCarOutputInterface (typedefs -> RCEntity{Active,Global}RaceCarOutputInterface,
+//       BrnRaceCarEntityModuleOutputInterface.h, included below), AICarOutputInterface (typedef
+//       -> BrnAI::AIModuleIO::AICarOutputInterface, BrnAICarOutputInterface.h, included below) and
+//       ModeManager's GetCheckpointPosition(u32) const (committed minimal slice, BrnModeManager.h:92).
+//       No ModeManager method OUTSIDE the committed slice is called.
+//       The two CarScoreData slots that previously blocked this body NOW HAVE named accessors in their
+//       home (GameStateModuleIO::CarScoreData, BrnGameStateSharedIO.h):
+//         * +0x20 mfDistanceToNextCheckpointLive (f32): the per-car LIVE distance-to-NEXT-checkpoint.
+//           Get/SetDistanceToNextCheckpointLive (BrnGameStateSharedIO.h:475-476). The X360 sets it
+//           from RaceCarPositioningData::mfDistanceToNextCheckpoint for a running car, and to 0.0 for
+//           a finished car (asm 0x8232AC1C stfs 0x20 / 0x8232AC28 stfs f29(0.0),0x20). It is the
+//           companion of mfDistanceToFinishLive(+0x18): the loop writes +0x18 and +0x20 as a pair.
+//         * +0x44 mbRacePositionImproved (bool): a per-frame "race position improved this frame" flag.
+//           Get/SetRacePositionImproved (BrnGameStateSharedIO.h:477-478). The loop clears it to 0 each
+//           car (asm 0x8232AC34 stb 0,0x44), then sets it to 1 when the car's new race position is
+//           better (numerically lower) than its recorded best AND that best was not still the ClearData
+//           seed 9 (asm 0x8232AC48 stb 1,0x44 guarded by miHighestRacePosition != 9). DISTINCT from
+//           mbHasFinished(+0x45). Body lands below; the complete store-for-store mapping is preserved
+//           in the inline comments on each statement.
 //
 //   UpdateTeamStats               (0x8231F308)  [NOW LANDED -- see body below]
 //       Per car, accumulates the frame delta-time into two CgsSystem::Time slots
@@ -97,8 +113,52 @@
 // (GetScore's out-param) and the shared ChallengeData home transitively.
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"
 
+// Completes BrnGameState::AICarOutputInterface (a typedef alias of
+// BrnAI::AIModuleIO::AICarOutputInterface): UpdateRacePositions reads each car's distance-to-checkpoint
+// via lpAI->GetAICarDistanceToCheckpoint(slot) BY NAME (the accessor owns the X360 in-range assert).
+#include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"
+
+// ModeManager::GetCheckpointPosition(u32) const -- UpdateRacePositions queries the checkpoint world
+// position to recompute a car's distance-to-finish when the AI gave no usable distance.
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"
+
+// rw::math::vpu Vector3 vocabulary (operator- / Length), found by ADL on Vector3, used by
+// UpdateRacePositions to turn the car->checkpoint offset into a scalar distance.
+#include "SharedClasses/Maths/BrnVectorMaths.h"
+
+// CgsDev::PerfMonCpu::Start/StopMonitor(handle) -- UpdateRacePositions brackets its work in the
+// miUpdateRacePositionsPM monitor (X360 this+0x5D44).
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+
+#include <stdlib.h>   // qsort (sorts the maRaceCarPositioningData[8] scratch best-first)
+
 namespace BrnGameState
 {
+    namespace
+    {
+        // "No valid distance yet" sentinel (X360 flt_82CDB7D0). RaceCarPositioningData::Construct() /
+        // ClearData seed the scratch distances with it; UpdateRacePositions seeds the same value here and
+        // tests equality against it (AI-distance-missing / already-set guard). The EXACT rodata magnitude
+        // is unrecovered -- the sibling BrnScoringSystem_Lookup.cpp adopts 1.0e9f under the same FLAG, and
+        // this TU follows that convention so the seed/equality test is consistent across the two files.
+        const f32 KF_INVALID_RACE_DISTANCE = 1.0e9f;   // FLAG: flt_82CDB7D0 magnitude unrecovered
+
+        // qsort(3) comparator trampoline. The X360 build passes the address of
+        // ScoringSystem::CompareRaceCarDistances straight to qsort -- the function provably never
+        // touches `this` (see BrnScoringSystem_UpdateB.cpp), so it is a C comparator in all but its
+        // DWARF declaration. A non-static member-function pointer cannot be converted to a plain
+        // function pointer in standard C++ (MSVC C2440), so this file-local free function forwards to
+        // it. `this` is never read inside the comparator, so the null instance is never dereferenced;
+        // this preserves the single source of the ordering logic (no duplicated comparison) while
+        // matching the binary's free-function call. (Keystone surface untouched -- the member stays a
+        // member; this trampoline lives only in this TU.)
+        int CompareRaceCarDistancesTrampoline(const void* lpA, const void* lpB)
+        {
+            ScoringSystem* lpNullThis = NULL;
+            return (lpNullThis->*&ScoringSystem::CompareRaceCarDistances)(lpA, lpB);
+        }
+    }
+
     // ------------------------------------------------------------------------
     // ScoringSystem::UpdateTeamStats  (X360 0x8231F308)
     // ------------------------------------------------------------------------
@@ -242,5 +302,187 @@ namespace BrnGameState
 
         *lpiScore = liBestScore;
         *lpeRaceCarIndex = leBestRaceCarIndex;
+    }
+
+    // ------------------------------------------------------------------------
+    // ScoringSystem::UpdateRacePositions  (X360 0x8232A668)
+    // ------------------------------------------------------------------------
+    // Per-frame race-ordering pass: build a distance-to-finish scratch row for every car in the
+    // race, qsort it (CompareRaceCarDistances), then walk the sorted scratch handing out 1-based
+    // race positions, tracking the new leader / last-place car, and folding each car's live
+    // distances + best-position-so-far back onto its CarScoreData.
+    //
+    // Reconstructed store-for-store against the 0x8232A668 ASM, members named against the keystone
+    // layout. The two CarScoreData slots that previously blocked this body now have named accessors:
+    //   +0x20 mfDistanceToNextCheckpointLive (Get/SetDistanceToNextCheckpointLive)
+    //   +0x44 mbRacePositionImproved        (Get/SetRacePositionImproved)
+    //
+    // KF_INVALID_RACE_DISTANCE == flt_82CDB7D0, the "no valid distance yet" sentinel that
+    // RaceCarPositioningData::Construct() / ClearData seed the scratch distances with. The EXACT rodata
+    // magnitude is unrecovered (no rodata word dump exported); the sibling reset
+    // BrnScoringSystem_Lookup.cpp adopts 1.0e9f with the same FLAG, and this file follows that
+    // convention so the equality test against the seed is consistent across the two TUs.
+    // The 1.35f checkpoint-distance fudge factor is flt_82020F7C (X360-proven).
+    void ScoringSystem::UpdateRacePositions(const ActiveRaceCarOutputInterface* lpActive,
+                                            const GlobalRaceCarOutputInterface* lpGlobal,
+                                            const AICarOutputInterface* lpAI,
+                                            ModeManager* lpModeManager)
+    {
+        (void)lpGlobal;  // X360 stashes a5 (lpGlobal) but never reads it in this pass.
+
+        CgsDev::PerfMonCpu::StartMonitor(miUpdateRacePositionsPM);   // X360 this+0x5D44
+
+        // --- PASS 1: build maRaceCarPositioningData[] from the live race list ---
+        // The loop bound is the active interface's live-race-car count (X360 *(a2+512), via
+        // Array<>::GetLength which owns the "Array used before Construct/Clear" sentinel assert).
+        for (u32 liSlot = 0; liSlot < lpActive->maCarsInTheRace.GetLength(); ++liSlot)
+        {
+            const EActiveRaceCarIndex leIdx = lpActive->maCarsInTheRace[liSlot].meActiveRaceCarIndex; // +0x30
+
+            RaceCarPositioningData& lPos = maRaceCarPositioningData[liSlot];   // this+0x59C0, stride 24
+            lPos.mfDistanceToNextCheckpoint = KF_INVALID_RACE_DISTANCE;        // +0x04 (flt_82CDB7D0 seed)
+            lPos.miCurrentCheckpoint        = -1;                              // +0x0C
+            lPos.mfDistanceToFinish         = KF_INVALID_RACE_DISTANCE;        // +0x08 (seed)
+            lPos.meActiveRaceCarIndex       = E_ACTIVE_RACE_CAR_INDEX_INVALID; // +0x00
+            lPos.miFinishPosition           = 8;                              // +0x10 (KI_MAX_ACTIVE_RACE_CARS)
+            lPos.mbDisconnected             = false;                          // +0x14
+
+            CarData* lpCarData = GetCarData(leIdx);                           // sub_8231DCD0
+            if (lpCarData == NULL)
+            {
+                // No record for this slot: leave the row marked unset (X360 *v28 = -1) and move on.
+                lPos.meActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;  // +0x00
+                continue;
+            }
+
+            // X360 reads *(4*(slot+1283)+a18): the AI distance-to-checkpoint indexed by the SLOT (not
+            // the race-car index). GetAICarDistanceToCheckpoint owns the X360 in-range bound assert
+            // (liAICarIndex >= 0 && < KI_MAX_OUT_OF_RANGE_RACE_CARS).
+            const f32 lfAIDist = lpAI->GetAICarDistanceToCheckpoint(static_cast<s32>(liSlot));
+            const GameStateModuleIO::CarScoreData* lpScore = lpCarData->GetScoreData();
+            // mafCheckpointDistancesToFinish indexed by the car's current checkpoint (X360 *(4*(cp+5928)+a1)).
+            const f32 lfCheckpointBaseline =
+                mafCheckpointDistancesToFinish[lpCarData->GetCurrentCheckPoint()];
+
+            lPos.meActiveRaceCarIndex       = leIdx;                          // +0x00
+            lPos.mfDistanceToNextCheckpoint = lfAIDist;                       // +0x04
+            lPos.miCurrentCheckpoint        = lpCarData->GetCurrentCheckPoint(); // +0x0C (CarData+0x154)
+            lPos.miFinishPosition           = lpScore->GetFinishPosition();   // +0x10 (CarScoreData+0x14)
+            lPos.mbDisconnected             = lpScore->GetDisconnected();     // +0x14 (CarScoreData+0x69)
+
+            if (lfAIDist == KF_INVALID_RACE_DISTANCE)   // AI gave no usable distance
+            {
+                // X360: if mfDistanceToFinish was already set (!= sentinel) the recompute is skipped
+                // and the +0x08 store is bypassed (goto LABEL_16). The seed above leaves it == sentinel,
+                // so on the normal path this recomputes; the guard is preserved for fidelity.
+                if (lPos.mfDistanceToFinish == KF_INVALID_RACE_DISTANCE)
+                {
+                    f32 lfGuessDistToCheckpoint = 0.0f;
+                    if (lpActive->IsRaceCarActive(leIdx))
+                    {
+                        const Vector3 lv3CheckpointPos =
+                            lpModeManager->GetCheckpointPosition(static_cast<u32>(lPos.miCurrentCheckpoint));
+                        const Vector3 lv3CarPos =
+                            lpActive->GetRaceCarState(leIdx)->mTransform.wAxis; // RaceCarState+0x1F0+0x30
+                        lfGuessDistToCheckpoint = Length(lv3CheckpointPos - lv3CarPos) * 1.35f; // flt_82020F7C
+                    }
+                    lPos.mfDistanceToFinish = lfGuessDistToCheckpoint + lfCheckpointBaseline; // +0x08
+                }
+            }
+            else
+            {
+                lPos.mfDistanceToFinish = lfCheckpointBaseline + lfAIDist;    // +0x08
+            }
+
+            // X360 :689 / :690 -- both distances must be non-negative (the asserts format the value
+            // into "Distance: " via the message buffer; reproduced as a value-bearing CGS_ASSERT).
+            CGS_ASSERT(lPos.mfDistanceToNextCheckpoint >= 0.0f,
+                       "RwMathFPU::IsValid( lfDistanceToNextCheckpoint )");
+            CGS_ASSERT(lPos.mfDistanceToFinish >= 0.0f,
+                       "RwMathFPU::IsValid( lfCheckpointDistanceToFinish )");
+        }
+
+        CGS_ASSERT(lpActive->maCarsInTheRace.GetLength() == muCarsInCurrentMode,
+                   "lpActiveRaceCarInterface->maCarsInTheRace.GetLength() == muCarsInCurrentMode"); // :693
+
+        // --- SORT: best (closest-to-finish) car first ---
+        // X360 qsort(&maRaceCarPositioningData, 8, sizeof(RaceCarPositioningData),
+        //            &ScoringSystem::CompareRaceCarDistances). Routed through the file-local trampoline
+        // (the member comparator never reads `this`) -- see CompareRaceCarDistancesTrampoline above.
+        qsort(maRaceCarPositioningData, 8, sizeof(RaceCarPositioningData),
+              CompareRaceCarDistancesTrampoline);
+
+        // --- PASS 2: assign 1-based positions over the sorted scratch ---
+        mbNewLeader    = false;                       // X360 stb 0,0x4EF8
+        mbNewLastPlace = false;                       // X360 stb 0,0x4EF9
+        muActualNumberOfCarsInCurrentMode = 0;        // X360 stw 0,0x4EEC
+        s32 liPosition = 0;
+        for (u32 liSlot = 0; liSlot < muCarsInCurrentMode; ++liSlot)
+        {
+            const EActiveRaceCarIndex leIdx = maRaceCarPositioningData[liSlot].meActiveRaceCarIndex;
+            if (leIdx == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                continue;
+
+            CarData* lpCarData = GetCarData(leIdx);
+            if (lpCarData == NULL)
+                continue;
+
+            // Skip cars already eliminated (X360 EActiveRaceCarIndex_7_::FindFirstInstanceOf != -1).
+            if (maEliminatedActiveRaceCarIndexs.FindFirstInstanceOf(leIdx) != -1)
+                continue;
+
+            ++liPosition;   // 1-based race position
+            CGS_ASSERT(leIdx >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= 0");           // :732
+            CGS_ASSERT(leIdx <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");                // :733
+
+            GameStateModuleIO::CarScoreData* lpScore = lpCarData->GetScoreData();
+
+            // Newly first: this car is at the front of the sorted scratch but did not previously hold
+            // race position 1. (X360 reads the OLD +0x08 value here, BEFORE the writeback below.)
+            if (lpScore->GetRacePosition() != 1 && liSlot == 0)
+            {
+                meLeadRaceCarIndex = leIdx;            // X360 stw 0x4EF0
+                mbNewLeader        = true;            // X360 stb 1,0x4EF8
+            }
+            // Newly last: this car is at the back of the field (slot == count-1) but did not previously
+            // hold the last position.
+            if (lpScore->GetRacePosition() != static_cast<s32>(muCarsInCurrentMode) &&
+                muCarsInCurrentMode - 1 == liSlot)
+            {
+                meLastRaceCarIndex = leIdx;           // X360 stw 0x4EF4
+                mbNewLastPlace     = true;            // X360 stb 1,0x4EF9
+            }
+
+            if (lpScore->GetHasFinished())            // CarScoreData+0x45
+            {
+                // Finished cars freeze their live distances at 0 and keep their already-assigned
+                // race position (the X360 does NOT write +0x08 in this branch).
+                lpScore->SetDistanceToFinishLive(0.0f);            // +0x18
+                lpScore->SetDistanceToNextCheckpointLive(0.0f);    // +0x20
+            }
+            else
+            {
+                lpScore->SetRacePosition(liPosition);              // +0x08
+                lpScore->SetDistanceToFinishLive(
+                    maRaceCarPositioningData[liSlot].mfDistanceToFinish);          // +0x18
+                lpScore->SetDistanceToNextCheckpointLive(
+                    maRaceCarPositioningData[liSlot].mfDistanceToNextCheckpoint);  // +0x20
+            }
+
+            const s32 liNewPos  = lpScore->GetRacePosition();      // +0x08
+            const s32 liBestPos = lpScore->GetHighestRacePosition(); // +0x0C
+            lpScore->SetRacePositionImproved(false);               // +0x44 (cleared each car)
+            if (liNewPos < liBestPos)                              // improved (lower is better)
+            {
+                // Mark "improved this frame" unless the best was still the ClearData seed 9.
+                if (liBestPos != 9)
+                    lpScore->SetRacePositionImproved(true);        // +0x44
+                lpScore->SetHighestRacePosition(liNewPos);         // +0x0C
+            }
+        }
+
+        muActualNumberOfCarsInCurrentMode = static_cast<u32>(liPosition);   // this+0x4EEC
+        CgsDev::PerfMonCpu::StopMonitor(miUpdateRacePositionsPM);
     }
 }
