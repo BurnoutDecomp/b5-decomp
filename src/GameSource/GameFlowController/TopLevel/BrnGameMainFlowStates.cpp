@@ -1,6 +1,8 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
+#include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // gpMainGameFlowController, SendEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "pc/gcm/movie/MoviePlayer.h"                 // CgsGraphics::MoviePlayer (marketing/intro movie)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -137,9 +139,15 @@ void MainGameFlowStateInitialLoadingScreen::Update()
     }
 }
 
-// @ 0x823C6AC8 - once the world has finished loading, advance the flow (SendEvent STATEEND);
-// reconstructed with the controller's event tables.
-void MainGameFlowStateInitialLoadingScreen::FinishLoading() {}
+// @ 0x823C6AC8 - the load is complete: advance the flow. The X360 gates on a completion flag
+// (this+0xC) and stamps a game-module load-state field to 5 before firing; here the Update stage
+// machine gates the call (it fires FinishLoading once, at DONE) and that game-module field isn't
+// mapped in this incremental layout. SendEvent(STATEEND) takes LOADING -> MARKETING_SCREENS.
+void MainGameFlowStateInitialLoadingScreen::FinishLoading()
+{
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
+}
 
 // --- remaining leaves (minimal until each state's TU is reconstructed) ------------------
 MainGameFlowStateStartScreen::MainGameFlowStateStartScreen() : meLoadingStage(E_STARTSCREEN_START) {}
@@ -148,10 +156,50 @@ void MainGameFlowStateStartScreen::OnLeave() {}
 void MainGameFlowStateStartScreen::Update() {}
 void MainGameFlowStateStartScreen::Render() {}
 
+// Marketing/intro movie (Phase 3). The X360 streams a VideoDataResource through BrnGui::MovieManager
+// -> CgsGraphics::MoviePlayer (On2 VP6); the PC path opens a movie file directly with the FFmpeg-backed
+// player and presents it full-screen, advancing the flow when it finishes. Drop a clip at <cwd>/intro.mp4
+// (FFmpeg probes by content, so any readable container -- MP4/VP6/... -- works); absent it, the state
+// advances immediately. [PC DIVERGENCE: the GUI/MovieManager/VideoDataResource plumbing is bypassed here.]
+static CgsGraphics::MoviePlayer sMarketingMovie;
+static bool                     sbMarketingMovieOpen = false;
+
 MainGameFlowStateMarketingScreens::MainGameFlowStateMarketingScreens() {}
-void MainGameFlowStateMarketingScreens::OnEnter() {}
-void MainGameFlowStateMarketingScreens::OnLeave() {}
-void MainGameFlowStateMarketingScreens::Update() {}
+
+void MainGameFlowStateMarketingScreens::OnEnter()
+{
+    sbMarketingMovieOpen = sMarketingMovie.Open("Videos/EAFranchise.mp4");
+    if (sbMarketingMovieOpen)
+    {
+        sMarketingMovie.Play();
+        CgsGraphics::gpActiveMoviePlayer = &sMarketingMovie;   // the renderer draws it each frame
+    }
+    else if (CgsDev::Message::gxMessageFilterFlags & 1)
+    {
+        *CgsDev::Log::gpDebugPrint << "MarketingScreens: no Videos/EAFranchise.mp4 found -> skipping to next state\n";
+    }
+}
+
+void MainGameFlowStateMarketingScreens::OnLeave()
+{
+    CgsGraphics::gpActiveMoviePlayer = 0;
+    sMarketingMovie.Close();
+    sbMarketingMovieOpen = false;
+}
+
+void MainGameFlowStateMarketingScreens::Update()
+{
+    if (sbMarketingMovieOpen)
+    {
+        sMarketingMovie.Update();
+        if (!sMarketingMovie.IsFinished())
+            return;   // still playing
+    }
+    // Movie finished (or none present) -> advance the flow (STATEEND -> START_SCREEN).
+    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+        BrnGameMainFlowController::gpMainGameFlowController->SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
+}
+
 void MainGameFlowStateMarketingScreens::Render() {}
 
 MainGameFlowStateCheckDiskSpace::MainGameFlowStateCheckDiskSpace() {}

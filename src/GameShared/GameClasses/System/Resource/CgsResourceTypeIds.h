@@ -40,7 +40,8 @@ namespace CgsResource
         E_RESOURCETYPE_RW_DEBUG                 = 0x16,
         E_RESOURCETYPE_KDTREE                   = 0x17,
         E_RESOURCETYPE_VOICE_HIERARCHY          = 0x18,
-        E_RESOURCETYPE_FONT                     = 0x21   // wiki "Font"; X360 GetTypeID 0x82834E50 = 33
+        E_RESOURCETYPE_FONT                     = 0x21,  // wiki "Font"; X360 GetTypeID 0x82834E50 = 33
+        E_RESOURCETYPE_VIDEODATA                = 0x42   // X360 VideoDataResourceType::GetTypeID 0x827EB0E8 = 66
         // ... more ids (audio/gui/streaming/etc.) exist in the wiki table; added as their handlers
         // are brought up. See references/Wiki/types.json for the full list.
     };
