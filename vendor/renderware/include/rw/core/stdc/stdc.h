@@ -40,6 +40,12 @@ namespace stdc
     // that is the standard `va_list`. DECLARATION-ONLY.
     s32 Vsprintf(char* lpcDst, const char* lpcFormat, va_list lvaArgs);
 
+    // vsnprintf wrapper: like Vsprintf, but bounded to liSize bytes of lpcDst
+    // (the size-limited formatter, X360 vsnprintf wrapper). ICERender::ScrPrintfArg
+    // formats the on-screen debug text into a 256-byte stack buffer through this.
+    // DECLARATION-ONLY.
+    s32 Vsnprintf(char* lpcDst, s32 liSize, const char* lpcFormat, va_list lvaArgs);
+
     // strlen wrapper: number of characters in the NUL-terminated lpcString. The
     // X360 Hex-Rays renders the argument as `_BYTE*`; it is read-only text, so it
     // is modelled as `const char*`. DECLARATION-ONLY.
