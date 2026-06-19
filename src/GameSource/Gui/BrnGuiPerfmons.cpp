@@ -1,28 +1,17 @@
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "types.hpp"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu::AddMonitor (6-param overload)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (BrnGui::GuiPerfmons::Initialise @0x824EF050).
 //
-// Registers the GUI module's 34-monitor CPU perfmon tree, storing each handle in a
+// Registers the GUI module's 33-monitor CPU perfmon tree, storing each handle in a
 // GuiPerfmons static member, then mirrors selected handles into a set of file-static
 // aliases. Parent wiring (the decompiler-lost 5th AddMonitor arg) is recovered from the
 // monitor name indentation (2 spaces per tree level): a monitor's parent is the nearest
 // preceding monitor one level shallower; the 3 root monitors pass the -1 "no parent"
 // sentinel. Call order is the exact X360 order (so every parent handle is registered
-// before its children).
-
-namespace CgsDev
-{
-// 6-parameter AddMonitor form used by the X360 build (mirrors the local declaration in
-// GameSource/Effects/Particles/LionPerfMon.cpp). Declared locally because the committed
-// CgsPerfMonCpu.h exposes a DIFFERENT 5-parameter overload; the X360 build + LionPerfMon
-// use this 6-param form. (lpcName, liColour, liMin, lfMax, liParent, liFlags) -> handle.
-class PerfMonCpu
-{
-public:
-    static int AddMonitor(const char* lpcName, int liColour, int liMin, double lfMax, int liParent, int liFlags);
-};
-} // namespace CgsDev
+// before its children). The X360 build's 6-param AddMonitor(name, colour, min, budget,
+// parent, flags) is the overload declared in the committed CgsPerfMonCpu.h (its real home).
 
 namespace BrnGui
 {
