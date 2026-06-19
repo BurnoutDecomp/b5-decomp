@@ -15,6 +15,9 @@
 //   * rw::core::stdc::MemCopy(dst, src, size)    -- copy (X360 memcpy wrapper)
 //   * rw::core::stdc::Vsprintf(dst, fmt, args)   -- vararg formatter (X360 vsprintf
 //                                                   wrapper; the StringPrintf sink)
+//   * rw::core::stdc::StringLength(s)            -- strlen wrapper (ICEFileHandler)
+//   * rw::core::stdc::StringCat(dst, src)        -- strcat wrapper (ICEFileHandler);
+//                                                   returns dst, like the C library
 // DECLARATION-ONLY: the real bodies live in the rwcore stdc TU and the per-TU
 // `cl /c` gate does not link. When the full rwcore stdc surface is reconstructed,
 // GROW this header in place (MemSet/MemMove/MemCmp/...) -- do NOT fork it.
@@ -36,6 +39,16 @@ namespace stdc
     // pointer into the spilled register-save area as the third argument; on PC
     // that is the standard `va_list`. DECLARATION-ONLY.
     s32 Vsprintf(char* lpcDst, const char* lpcFormat, va_list lvaArgs);
+
+    // strlen wrapper: number of characters in the NUL-terminated lpcString. The
+    // X360 Hex-Rays renders the argument as `_BYTE*`; it is read-only text, so it
+    // is modelled as `const char*`. DECLARATION-ONLY.
+    s32 StringLength(const char* lpcString);
+
+    // strcat wrapper: append lpcSrc onto the NUL-terminated lpcDst and return
+    // lpcDst (C-library strcat semantics). The X360 Hex-Rays types the buffers as
+    // `unsigned __int8*`/`char*`; modelled as char* here. DECLARATION-ONLY.
+    char* StringCat(char* lpcDst, const char* lpcSrc);
 }
 }
 }
