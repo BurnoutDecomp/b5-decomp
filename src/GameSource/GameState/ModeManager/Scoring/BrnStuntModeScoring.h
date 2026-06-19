@@ -65,6 +65,30 @@ namespace BrnGameState
     class AchievementManagerPS3;
 
     // ------------------------------------------------------------------------
+    // TidyStuntScore -- free function the stunt scorer uses to "tidy" a raw stunt score into the
+    // clean (integer-valued) score it banks / displays. DWARF homes the DECLARATION in this TU
+    // (BrnStuntModeScoring.cpp:88: `extern float32_t TidyStuntScore(float32_t)`); the DEFINITION is
+    // a thin rw::math::fpu wrapper the build inlined into this TU (DecFIGS func map: dominant file
+    // SDKs/EATech/include/rw/math/fpu/scalar.h, inlined into BrnStuntModeScoring.cpp). It is called
+    // by UpdateScores -> UpdateBufferedScore (0x8232C118, tidies mfComboScore before banking) and by
+    // OutputStuntsToDisplay (0x823211E8, tidies each surfaced category score). Because UpdateScore /
+    // UpdateScores / OutputStuntsToDisplay live in StuntModeScoring's own TU and call it, the
+    // declaration belongs in this home so every partial sees one prototype.
+    //
+    // We declare it here and give it a BEST-EFFORT inline body: round the raw score DOWN to an
+    // integer value (the call sites all cast the result to s32 / store it as the displayed score, and
+    // UpdateBufferedScore's sibling spin/roll counters use the X360 `vrfim` floor idiom). The exact
+    // X360 rounding (0x82312CD0) is UNRECOVERED -- magnitude not load-bearing for the embedder gate.
+    // FLAG: confirm the precise rounding (floor vs round-to-nearest vs clamp) against the asm when
+    // BrnStuntModeScoring.cpp's full TU is reconstructed; if it proves to be a shared rw::math helper
+    // it should be re-homed to its rw/math header and this inline removed.
+    inline f32 TidyStuntScore(f32 lfScore)
+    {
+        // Floor to an integer-valued score (best-effort; see FLAG above).
+        return static_cast<f32>(static_cast<s32>(lfScore));
+    }
+
+    // ------------------------------------------------------------------------
     // POD value types published by the stunt scorer.
     // ------------------------------------------------------------------------
 
@@ -107,6 +131,36 @@ namespace BrnGameState
     struct StuntModeScoring
     {
     public:
+        // --------------------------------------------------------------------
+        // MultiplierOutInfo -- the 24-byte (0x18) output record CalculateMultiplier
+        // (X360 0x82312DE8) fills on the stack and BankMultiplier (X360 0x82312D68)
+        // hands it. NO DWARF home: the DecFIGS dwarfdump for this TU dropped both the
+        // helper signatures and this output type, so the field set + layout below are
+        // X360-PROVEN (the store-for-store decode of CalculateMultiplier), provisionally
+        // named per CXX_NAMING_CONVENTIONS where the DWARF is silent.
+        //
+        // Byte offsets CalculateMultiplier writes (relative to the 24-byte struct base):
+        //   +0  u16  -- set to lpStuntInfo->muFlatSpins   when (awesome & 0x01)
+        //   +2  u16  -- set to rol16(muBarrelRolls,1)      when (awesome & 0x02)
+        //   +6  bool -- set to 1                           when (awesome & 0x04)
+        //   +7  bool -- set to 1                           when (awesome & 0x10)
+        //   +8  bool -- set to 1                           when (awesome & 0x40)
+        // The struct is 0x18 (24) bytes; bytes 9..0x17 are unwritten scratch/padding in
+        // the recovered body. We model the proven fields by name + an explicit trailing
+        // pad so the size matches the stack reservation the asm makes. NOT byte-verified;
+        // semantic-parity slice. FLAG: re-confirm field names/extent when this TU's full
+        // BankMultiplier/CalculateMultiplier bodies are reconstructed.
+        struct MultiplierOutInfo
+        {
+            u16  muFlatSpins;            // +0x00 (written when awesome bit 0x01 set)
+            u16  muBarrelRolls;          // +0x02 (written when awesome bit 0x02 set)
+            u8   mPad0[2];               // +0x04 (unwritten scratch)
+            bool mbAwesomeFlatSpin;      // +0x06 (awesome bit 0x04)
+            bool mbAwesomeBarrelRoll;    // +0x07 (awesome bit 0x10)
+            bool mbAwesomeStunt;         // +0x08 (awesome bit 0x40)
+            u8   mPad1[15];              // +0x09 (pads the record out to 24 bytes)
+        };
+
         // --- public surface (DECLARE-ONLY; bodies live in BrnStuntModeScoring.cpp) ---
 
         // DWARF typedef BrnStuntModeScoring.h:67 -- the output interface Update/UpdateXxx read.
@@ -136,6 +190,32 @@ namespace BrnGameState
         bool       IsComboWarningActive() const;                                        // :183
         f32        GetTimeSinceComboWarningActivated() const;                           // :187
 
+        // --- combo-timer named access (asm-proven role of two committed members) ---------
+        // The combo machinery (BeginCombo 0x82313428 zeros both; UpdateCombo 0x82320FF0
+        // accumulates both by frame delta; EndCombo 0x823215D8 copies the warning timer out)
+        // touches two f32 timers at this+0x58 and this+0x5C. Reconciling the X360 byte offsets
+        // against the committed DWARF member ORDER, those two slots ARE the committed members
+        // mfTimeSinceLastStunt (+0x58) and mfSpeedMPHBeforeCrashing (+0x5C): the DWARF spelt them
+        // with those source-level identifiers, but the recovered asm proves their RUNTIME role is
+        // the combo timers (a frame-delta accumulator cannot be a "speed before crashing"). Per the
+        // additive-grow rule we do NOT rename/retype/reorder the committed members; instead we
+        // publish combo-timer-named accessors that ALIAS them, so BeginCombo/UpdateCombo/EndCombo
+        // get clean named access without disturbing the layout the embedders depend on.
+        //   mfTimeSinceLastStunt    (+0x58): UpdateCombo grows it once per combo-no-stunt frame;
+        //                                    crossing KF_TIME_WITHOUT_STUNT_TO_LOSE_COMBO ends the combo.
+        //   mfSpeedMPHBeforeCrashing(+0x5C): the per-frame combo-active timer UpdateCombo grows
+        //                                    unconditionally; EndCombo snapshots it into the
+        //                                    recent-combo time @+0x88; BeginCombo zeros it.
+        // FLAG: provisional role mapping (offset X360-proven); confirm the canonical combo-timer
+        // member names when BrnStuntModeScoring.cpp's full TU lands.
+        f32        GetTimeSinceLastScoringStunt() const  { return mfTimeSinceLastStunt; }      // +0x58
+        void       SetTimeSinceLastScoringStunt(f32 lfTime) { mfTimeSinceLastStunt = lfTime; }
+        f32        GetComboActiveTimer() const           { return mfSpeedMPHBeforeCrashing; }  // +0x5C
+        void       SetComboActiveTimer(f32 lfTime)       { mfSpeedMPHBeforeCrashing = lfTime; }
+        // The recent-combo snapshot timer (this+0x88) -- backed by mfRecentComboTime (added below).
+        f32        GetRecentComboTime() const            { return mfRecentComboTime; }         // +0x88
+        void       SetRecentComboTime(f32 lfTime)        { mfRecentComboTime = lfTime; }
+
         // VIRTUAL -- dispatched through the vtable, NOT a direct call. The keystone
         // ScoringSystem::HasStuntAttackModeEnded (X360 0x82326708) calls this as
         //   v6 = *(scorer);  (*(v6 + 0x14))(scorer, HasModeTimeExpired())
@@ -164,8 +244,8 @@ namespace BrnGameState
         // GROWN signature (additive, own home): the DWARF (BrnStuntModeScoring.h:214) spelt this
         // with two out-params, but the X360 body (0x823132D0) writes THREE: the combo score
         // (s32*), the "is this a valid/qualifying combo" flag (bool*, derived from miCurrentScore
-        // @+0x10 per the asm -- NOT mfComboScore), and a third f32* it fills from mfPendingScoreTimer.
-        // We trust the asm per the
+        // @+0x10 per the asm -- NOT mfComboScore), and a third f32* it fills from mfRecentComboTime
+        // (+0x88, `lfs 0x88` -- NOT mfPendingScoreTimer@+0x8C). We trust the asm per the
         // asm-overrides-DWARF rule and add lpComboTimer so the recovered body matches its
         // declaration. The sole caller (HUDMessageLogic::GenerateStuntMessage) is not yet done,
         // so growing the arity here cannot break a committed embedder.
@@ -204,8 +284,22 @@ namespace BrnGameState
         // (ScoringSystem) names them, so the exact signature does not affect the embedder gate;
         // their bodies + final signatures land with this type's TU. FLAG: re-confirm against the
         // X360 asm when BrnStuntModeScoring.cpp is reconstructed.
-        void       BankMultiplier();                                                    // X360 0x82312D68 (best-effort)
-        s32        CalculateMultiplier();                                               // X360 0x82312DE8 (best-effort; mirrors GetComboMultiplier)
+        //
+        // BankMultiplier / CalculateMultiplier signatures GROWN here (additive, own home) to the
+        // X360-proven shapes -- the round-1 store-for-store decode (.wf/gm-stuntmode-layout/
+        // bodies-draft/BrnStuntModeScoring_Combo.cpp) proves:
+        //   s32 BankMultiplier(StuntInfo* lpRecentStunt)      -- 0x82312D68; asserts lpRecentStunt,
+        //       calls CalculateMultiplier into a stack MultiplierOutInfo, writes
+        //       lpRecentStunt->miStuntMultiplier, returns the multiplier.
+        //   s32 CalculateMultiplier(const StuntInfo*, MultiplierOutInfo*) -- 0x82312DE8; popcount of
+        //       the awesome-type mask + flat-spin/barrel-roll contributions, filling the out record.
+        // Both are virtual in the original (the online variant overrides; base dispatched via vtable
+        // +0x28). We declare CalculateMultiplier virtual so the override can bind; the full vtable
+        // ORDER is still deferred (see the HasStuntModeEnded note above) -- declaring this one extra
+        // virtual is enough for the body + the dispatch to compile (semantic parity; no layout assert).
+        s32        BankMultiplier(StuntInfo* lpRecentStunt);                            // X360 0x82312D68 (grown per asm)
+        virtual s32 CalculateMultiplier(const StuntInfo* lpStuntInfo,
+                                        MultiplierOutInfo* lpMultiplierOutInfo);        // X360 0x82312DE8 (grown per asm; virtual)
         void       DealWithInProgressStunt(const GameStateModuleIO::WorldStuntAction* lpAction); // X360 0x82321710 (best-effort; mirrors DealWithStunt)
         void       UpdateStunts(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar);     // X360 0x82338908 (best-effort; mirrors UpdateAirStunts driver)
         void       UpdateScores(f32 lfDelta);                                           // X360 0x82338A98 (best-effort; mirrors UpdateBufferedScore)
@@ -242,6 +336,16 @@ namespace BrnGameState
         StuntInfo     mRecentStunt;             // :339
         bool          mbRecentCombo;            // :340
         s32           miRecentComboScore;       // :341
+
+        // GROWN (additive, own home): the f32 the X360 build keeps at this+0x88, between
+        // miRecentComboScore (+0x84) and mfPendingScoreTimer (+0x8C). The DecFIGS DWARF dropped it
+        // (its member list jumps 0x84 -> 0x8C), but the asm proves it: EndCombo (0x823215D8) writes
+        //   *(this+0x88) = *(this+0x5C)   -- snapshots the combo-active timer at combo end
+        // and WasComboRecentlyPerformed (0x823132D0) reads *(this+0x88) out to its f32* out-param.
+        // Provisionally named mfRecentComboTime (offset X360-proven; the recent-combo timer surfaced
+        // alongside mbRecentCombo/miRecentComboScore). NOT in DWARF -> FLAG name on full-TU landing.
+        f32           mfRecentComboTime;        // +0x88 (X360-proven; DWARF-silent)
+
         f32           mfPendingScoreTimer;      // :342
 
         // Per-category rating state. GROWN to 18 (additive, own home): the X360 bodies for
@@ -253,6 +357,18 @@ namespace BrnGameState
         // EStuntType index range (categories 0-14 + the error/rating pseudo-types 15-17).
         // KU_STUNT_TYPE_INFO_COUNT = 18.
         StuntTypeInfo mStuntTypeInfo[18];       // :344 (was [15]; grown per X360 asm loop bounds)
+
+        // GROWN (additive, own home): the per-stunt-type s32 hit-counter array the X360 build keeps
+        // at this+0x1B0, immediately after mStuntTypeInfo[18] (which spans 0x90..0x1AF at 16-byte
+        // stride). The DecFIGS DWARF dropped it. The asm proves it:
+        //   UpdateScore (0x823212D8): ++LODWORD(this[a4 + 0x6C/4])  i.e. ++maStuntTypeScoreCount[a4]
+        //                             where a4 is the EStuntType (0..17) -- byte 0x1B0 + 4*a4.
+        //   ClearData   (0x82321108): the second loop (mtctr 18, stw 0, base this+0x1B0, stride 4)
+        //                             zeros all 18 entries.
+        // It records how many times each stunt category has scored this run. 18 wide, matching the
+        // EStuntType index range (0..E_STUNT_TYPE_RATING_AWESOME-1). Provisionally named
+        // maStuntTypeScoreCount (offset X360-proven; DWARF-silent). FLAG: confirm name on full-TU land.
+        s32           maStuntTypeScoreCount[18]; // +0x1B0 (X360-proven; DWARF-silent)
 
         // --- container members (DWARF declared order + types) ---
         // The recent-jump ring buffer (KI_MAX_RECENT_JUMPS = 256 Vector3 entries). DWARF
@@ -272,6 +388,26 @@ namespace BrnGameState
         RecentPropSet mRecentPropSet;           // :350
 
         bool          mbEndlessStuntRun;        // :352
+
+        // GROWN (additive, own home): the "a stunt-info summary event is queued for the HUD" flag the
+        // X360 build keeps at this+0x22BD, between mbEndlessStuntRun (+0x22BC) and the pointer member.
+        // The DecFIGS DWARF dropped it. The asm proves it:
+        //   UpdateBufferedScore (0x8232C118): *(this+0x22BD) = (mRecentStunt.muAwesomeStuntTypes != 0)
+        //                                     -- arms the pending flag when a stunt is banked.
+        //   PreWorldUpdate      (0x823446F8): reads the flag; when set, packs the recent-stunt summary
+        //                                     into the VariableEventQueue and CLEARS it.
+        //   ClearData           (0x82321108): zeros it.
+        // Provisionally named mbStuntInfoEventPending (offset X360-proven; DWARF-silent). FLAG: confirm
+        // name on full-TU landing.
+        bool          mbStuntInfoEventPending;  // +0x22BD (X360-proven; DWARF-silent)
+
         AchievementManager* mpAchievementManager; // :354
+
+    public:
+        // Named access for the X360-proven, DWARF-silent stunt-info-event-pending flag (+0x22BD).
+        // UpdateBufferedScore arms it; PreWorldUpdate reads+clears it. Public so PreWorldUpdate's
+        // sibling-mode caller chain (deferred TUs) can consume it by name.
+        bool GetStuntInfoEventPending() const    { return mbStuntInfoEventPending; }
+        void SetStuntInfoEventPending(bool lbOn) { mbStuntInfoEventPending = lbOn; }
     };
 }
