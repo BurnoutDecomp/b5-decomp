@@ -10,7 +10,7 @@ namespace BrnGui
 struct GuiPerfmons
 {
 public:
-    // Registers the full GUI-module perfmon monitor tree (34 monitors).
+    // Registers the full GUI-module perfmon monitor tree (33 monitors).
     void Initialise();
 
     // --- indent 0 (root) monitors ---

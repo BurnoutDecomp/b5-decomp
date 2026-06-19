@@ -85,6 +85,14 @@ namespace CgsDev
         // StopMonitor / GetMonitorData take that handle. Returns -1 if the registry is full/unbuilt.
         s32  AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum, f32 lfCpuBudget, bool lbLibPerfTagged);
 
+        // X360 ARTIST-build 6-parameter form (a hierarchical variant: liParentHandle nests this
+        // monitor under a parent in the perfmon tree). The X360 call sites pass colour as an int,
+        // the cpu budget as a double, and bool-ish min/flags; declared here (the type's real home)
+        // so callers like BrnGui::GuiPerfmons / LionPerfMon use it instead of re-declaring PerfMonCpu.
+        // Body is its own TU. FLAG: coexists with the 5-param form above pending a maintainer
+        // decision on which signature is canonical for this build.
+        s32  AddMonitor(const char* lpcName, s32 liColour, s32 liMinimum, double lfCpuBudget, s32 liParentHandle, s32 liFlags);
+
         void StartMonitor(s32 liMonitorHandle);
         void StopMonitor(s32 liMonitorHandle);
 
