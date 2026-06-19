@@ -16,27 +16,31 @@
 //   - StuntModeScoring is a plain struct, NO base class (DWARF shows no inheritance).
 //   - The scalar/POD prefix of the member run (miCurrentScore .. mfPendingScoreTimer) is named
 //     verbatim from the DWARF in declared order+types.
-//   - The three template-instance members the DWARF lists last --
-//        FixedRingBuffer<Vector3,256> mRecentJumpSet      (KI_MAX_RECENT_JUMPS = 256)
-//        Set<CgsID,512>               mRecentStuntElementSet
-//        FixedRingBuffer<u16,64>      mRecentPropSet       (KI_MAX_RECENT_PROPS = 64)
-//        bool                         mbEndlessStuntRun
-//        AchievementManager*          mpAchievementManager
-//     -- depend on the FixedRingBuffer<> / Set<> container templates, which have no committed
-//     home in the repo yet. To keep this header self-contained + compilable they are collapsed
-//     into a single NOMINAL reserved-storage block (maReservedContainers). The real members land
-//     when this type's TU (and those container templates) are reconstructed.
+//   - The three template-instance members the DWARF lists last are now the REAL members,
+//     spelled with the just-modelled container templates:
+//        CgsContainers::FixedRingBuffer<Vector3,256> mRecentJumpSet  (KI_MAX_RECENT_JUMPS = 256)
+//        Set<CgsID,512>                              mRecentStuntElementSet
+//        CgsContainers::FixedRingBuffer<u16,64>      mRecentPropSet   (KI_MAX_RECENT_PROPS = 64)
+//        bool                                        mbEndlessStuntRun
+//        AchievementManager*                         mpAchievementManager
+//     FixedRingBuffer<> lives in namespace CgsContainers (CgsRingBuffer.h); Set<> at global
+//     scope (CgsSet.h) -- both included above. The DWARF spells the jump-buffer element as
+//     rw::math::vpu::Vector3; we use the project's Vector3 (BrnCommonTypes.h) per convention,
+//     and CgsID (typedef u64) for the stunt-element set.
 //
-// Methods are DECLARE-ONLY (their bodies live in BrnStuntModeScoring.cpp). Signatures
-// (return type / const / params) are taken from the DWARF. The action / output-interface
-// parameter types are used only BY POINTER, so forward declarations suffice.
+// Methods are DECLARE-ONLY (their bodies live in BrnStuntModeScoring.cpp) except the trivial
+// 1-3 line getters, which are bodied inline. Signatures (return type / const / params) are
+// taken from the DWARF. The action / output-interface parameter types are used only BY
+// POINTER, so forward declarations suffice.
 //
 // EMBED-BY-VALUE rule: ScoringSystem names members + calls methods; it does NOT depend on a
 // byte-exact sizeof. NOT byte-verified. Single owner -- grow this slice, do not fork.
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                                   // Vector3
+#include "BrnCommonTypes.h"                                   // Vector3, CgsID (typedef u64)
 #include "GameSource/GameState/BrnGameStateTypes.h"           // BrnGameState::EStuntType
+#include "GameShared/GameClasses/Containers/CgsRingBuffer.h"  // CgsContainers::FixedRingBuffer<T,N>
+#include "GameShared/GameClasses/Containers/CgsSet.h"         // Set<T,N>
 
 namespace BrnWorld
 {
@@ -120,14 +124,15 @@ namespace BrnGameState
         void       ClearData();                                                         // :149
         void       OutputStuntsToDisplay(s32 liCount, StuntToDisplay* lpStunts);        // :153
 
-        s32        GetCurrentScore() const;                                             // :157
-        s32        GetTargetScore() const;                                              // :160
-        s32        GetComboScore() const;                                               // :163
-        s32        GetComboMultiplier() const;                                          // :166
-        u32        GetCurrentStunts() const;                                            // :170
+        // Trivial direct-member getters -- bodied inline (return type matches the member type).
+        s32        GetCurrentScore() const    { return miCurrentScore; }                // :157
+        s32        GetTargetScore() const     { return miTargetScore; }                 // :160
+        s32        GetComboScore() const;                                               // :163 (s32 from f32 mfComboScore -- conversion lives in .cpp)
+        s32        GetComboMultiplier() const { return miComboMultiplier; }             // :166
+        u32        GetCurrentStunts() const;                                            // :170 (X360 0x82310640 -- real body)
         u32        GetAllStuntTypesForInProgressStunt() const;                          // :174
         bool       HasTargetScoreBeenExceeded() const;                                  // :177
-        bool       IsComboInProgress() const;                                           // :180
+        bool       IsComboInProgress() const  { return mbComboInProgress; }             // :180 (X360 0x82313510 -- one-line getter)
         bool       IsComboWarningActive() const;                                        // :183
         f32        GetTimeSinceComboWarningActivated() const;                           // :187
 
@@ -156,7 +161,15 @@ namespace BrnGameState
         void       DealWithPowerPark(const GameStateModuleIO::PowerParkResultAction* lpAction); // :203
 
         bool       WasStuntRecentlyPerformed(StuntInfo* lpStuntInfo);                   // :208
-        bool       WasComboRecentlyPerformed(s32* lpScore, bool* lpValid);              // :214
+        // GROWN signature (additive, own home): the DWARF (BrnStuntModeScoring.h:214) spelt this
+        // with two out-params, but the X360 body (0x823132D0) writes THREE: the combo score
+        // (s32*), the "is this a valid/qualifying combo" flag (bool*, derived from miCurrentScore
+        // @+0x10 per the asm -- NOT mfComboScore), and a third f32* it fills from mfPendingScoreTimer.
+        // We trust the asm per the
+        // asm-overrides-DWARF rule and add lpComboTimer so the recovered body matches its
+        // declaration. The sole caller (HUDMessageLogic::GenerateStuntMessage) is not yet done,
+        // so growing the arity here cannot break a committed embedder.
+        bool       WasComboRecentlyPerformed(s32* lpScore, bool* lpValid, f32* lpComboTimer); // :214 (grown +lpComboTimer per X360 asm)
         bool       WasTimeRecentlyUp();                                                 // :218
 
     protected:
@@ -181,6 +194,22 @@ namespace BrnGameState
         bool       IsStuntTypeInProgress(EStuntType leStuntType) const;                 // :303
         bool       HasAnyPendingScore() const;                                          // :307
         bool       ShouldBankScore() const;                                             // :311
+
+        // --- LEDGER-ONLY helpers (no DWARF signature) ----------------------------------
+        // The ledger lists 6 StuntModeScoring methods that the DecFIGS DWARF dropped (inlined
+        // / no out-of-line emit in the dumped TU): the DWARF struct body (BrnStuntModeScoring.h
+        // lines 117-311) does NOT declare them, so return types + parameter lists below are
+        // BEST-EFFORT, inferred from the method name + the sibling DWARF helpers they mirror.
+        // They are private members called only from StuntModeScoring's own .cpp -- no embedder
+        // (ScoringSystem) names them, so the exact signature does not affect the embedder gate;
+        // their bodies + final signatures land with this type's TU. FLAG: re-confirm against the
+        // X360 asm when BrnStuntModeScoring.cpp is reconstructed.
+        void       BankMultiplier();                                                    // X360 0x82312D68 (best-effort)
+        s32        CalculateMultiplier();                                               // X360 0x82312DE8 (best-effort; mirrors GetComboMultiplier)
+        void       DealWithInProgressStunt(const GameStateModuleIO::WorldStuntAction* lpAction); // X360 0x82321710 (best-effort; mirrors DealWithStunt)
+        void       UpdateStunts(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar);     // X360 0x82338908 (best-effort; mirrors UpdateAirStunts driver)
+        void       UpdateScores(f32 lfDelta);                                           // X360 0x82338A98 (best-effort; mirrors UpdateBufferedScore)
+        void       PreWorldUpdate(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta);   // X360 0x823446F8 (best-effort)
 
     private:
         // --- data members (DWARF declared order + types) ---
@@ -215,19 +244,34 @@ namespace BrnGameState
         s32           miRecentComboScore;       // :341
         f32           mfPendingScoreTimer;      // :342
 
-        // KI_NUM_STUNTS_TO_DISPLAY-adjacent: per-category rating state, E_STUNT_TYPE_COUNT (15) wide.
-        StuntTypeInfo mStuntTypeInfo[15];       // :344
+        // Per-category rating state. GROWN to 18 (additive, own home): the X360 bodies for
+        // GetCurrentStunts (0x82310640), ShouldBankScore (0x82313208) and OutputStuntsToDisplay
+        // (0x823211E8) all iterate mStuntTypeInfo[0..17] -- i.e. they index every EStuntType slot
+        // from E_STUNT_TYPE_SPIN (0) through E_STUNT_TYPE_RATING_AWESOME (18-1=17 by the `< 18`
+        // loop bound), NOT just the 15 real categories (E_STUNT_TYPE_COUNT). The old [15] was a
+        // minimal-slice guess that the recovered asm proves too small; the array spans the full
+        // EStuntType index range (categories 0-14 + the error/rating pseudo-types 15-17).
+        // KU_STUNT_TYPE_INFO_COUNT = 18.
+        StuntTypeInfo mStuntTypeInfo[18];       // :344 (was [15]; grown per X360 asm loop bounds)
 
-        // NOMINAL -- full layout deferred to this type's own TU.
-        // Collapses the remaining DWARF members that depend on the not-yet-reconstructed
-        // FixedRingBuffer<> / Set<> container templates and the trailing scalars/pointer:
-        //   FixedRingBuffer<Vector3,256> mRecentJumpSet         (:346)
-        //   Set<CgsID,512>               mRecentStuntElementSet (:348)
-        //   FixedRingBuffer<u16,64>      mRecentPropSet         (:350)
-        //   bool                         mbEndlessStuntRun      (:352)
-        //   AchievementManager*          mpAchievementManager   (:354)
-        // The size below is a generous nominal estimate (Vector3[256] dominates) -- NOT byte-exact,
-        // and not relied upon (embed-by-value + named member access, no sizeof assert).
-        u8 maReservedContainers[256 * 16 + 512 * 8 + 64 * 2 + 16]; // NOMINAL
+        // --- container members (DWARF declared order + types) ---
+        // The recent-jump ring buffer (KI_MAX_RECENT_JUMPS = 256 Vector3 entries). DWARF
+        // typedef BrnStuntModeScoring.h:68 RecentJumpSet == FixedRingBuffer<Vector3,256>.
+        // Cleared in ClearData/EndCombo, Constructed in Construct, Push'd in UpdateBufferedScore.
+        typedef CgsContainers::FixedRingBuffer<Vector3, 256> RecentJumpSet;              // :68
+        RecentJumpSet mRecentJumpSet;           // :346
+
+        // The set of stunt-element CgsIDs already counted this run (KI capacity 512). DWARF
+        // typedef BrnStuntModeScoring.h:70 StuntElementSet == Set<CgsID,512u>.
+        typedef Set<CgsID, 512> StuntElementSet;                                         // :70
+        StuntElementSet mRecentStuntElementSet; // :348
+
+        // The recent-prop ring buffer (KI_MAX_RECENT_PROPS = 64 prop-id u16 entries). DWARF
+        // typedef BrnStuntModeScoring.h:69 RecentPropSet == FixedRingBuffer<uint16_t,64>.
+        typedef CgsContainers::FixedRingBuffer<u16, 64> RecentPropSet;                   // :69
+        RecentPropSet mRecentPropSet;           // :350
+
+        bool          mbEndlessStuntRun;        // :352
+        AchievementManager* mpAchievementManager; // :354
     };
 }
