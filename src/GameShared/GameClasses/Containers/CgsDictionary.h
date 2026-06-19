@@ -17,10 +17,12 @@
 // the full member layout (proven by ICEList's pseudocode pointer arithmetic) but
 // provides INLINE bodies ONLY for the three accessors ICEList actually needs --
 // GetNumEntries() const, GetAt(int) const, Find(DictionaryKey) const -- as
-// faithful linear scans matching the inlined X360 code. Everything else
-// (FixUp/FixDown/GetIndexByKey/GetKeyByIndex/GetSize/FindByValue and the
-// non-const Find/GetAt) is declaration-only; future Dictionary TUs EXTEND this
-// header rather than redefining it.
+// faithful linear scans matching the inlined X360 code, PLUS the generic
+// Dictionary<T>::FixUp/FixDown(const Resource&) relocation pass (grown in when the
+// DictionaryResourceType<ICE::ICETakeData> TU landed -- the X360 inlines those two
+// generic template bodies into each per-T resource-type wrapper). Everything else
+// (GetIndexByKey/GetKeyByIndex/GetSize/FindByValue and the non-const Find/GetAt) is
+// declaration-only; future Dictionary TUs EXTEND this header rather than redefining it.
 //
 // LAYOUT (32-bit X360, proven by ICEList's pseudocode):
 //   DictEntry            : mKey(int64 @0), mpData(char* @8), mxUserFlags(int32 @12)
@@ -129,9 +131,50 @@ template <class Type>
 struct Dictionary : public SimpleDictionary<Type>
 {
 public:
-    // ---- declaration-only (reconstructed in their own TUs) ----
-    void FixUp(const CgsResource::Resource& lrResource);    // :396
-    void FixDown(const CgsResource::Resource& lrResource);  // :421
+    // CgsDictionary.h:396 (DWARF). Relocate-on-load: first run the base fix-up
+    // (DictionaryBase::FixUp relocates the entry index), then fix up every entry's
+    // payload by calling Type::FixUp(entry.mpData, lrResource). The X360 ARTIST build
+    // INLINES this generic body into each per-T DictionaryResourceType<T>::FixUp
+    // wrapper (e.g. @0x82665FF8 for ICE::ICETakeData) -- restored here as the logical
+    // template body the wrapper forwards to. Base-FIRST, entries-second (matches the
+    // asm: bl DictionaryBase::FixUp precedes the entry loop).
+    void FixUp(const CgsResource::Resource& lrResource)
+    {
+        DictionaryBase::FixUp();
+
+        const s32 liNumEntries = this->miNumEntries;
+        for ( s32 liIndex = 0; liIndex < liNumEntries; ++liIndex )
+        {
+            // Per-entry bound assert (the X360 re-tests it each iteration;
+            // CgsDictionary.h:356 in the baked image -- path/line dropped here).
+            CGS_ASSERT(liIndex >= 0 && liIndex < this->miNumEntries,
+                "lnIndex>=0 && lnIndex < miNumEntries\n");
+
+            Type* lpEntryData = reinterpret_cast<Type*>( this->mpaIndex[ liIndex ].mpData );
+            lpEntryData->FixUp(lrResource);
+        }
+    }
+
+    // CgsDictionary.h:421 (DWARF). Relocate-for-save: the inverse order -- fix DOWN
+    // every entry's payload FIRST (Type::FixDown(entry.mpData, lrResource)), THEN run
+    // the base fix-down (DictionaryBase::FixDown relocates the entry index last). The
+    // X360 INLINES this into DictionaryResourceType<T>::FixDown (@0x82666090 for
+    // ICE::ICETakeData); entries-FIRST, base-second (matches the asm: the entry loop
+    // precedes the trailing bl DictionaryBase::FixDown).
+    void FixDown(const CgsResource::Resource& lrResource)
+    {
+        const s32 liNumEntries = this->miNumEntries;
+        for ( s32 liIndex = 0; liIndex < liNumEntries; ++liIndex )
+        {
+            CGS_ASSERT(liIndex >= 0 && liIndex < this->miNumEntries,
+                "lnIndex>=0 && lnIndex < miNumEntries\n");
+
+            Type* lpEntryData = reinterpret_cast<Type*>( this->mpaIndex[ liIndex ].mpData );
+            lpEntryData->FixDown(lrResource);
+        }
+
+        DictionaryBase::FixDown();
+    }
 };
 
 } // namespace CgsContainers
