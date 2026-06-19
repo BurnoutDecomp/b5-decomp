@@ -62,14 +62,8 @@ namespace BrnStreetData
         mScoreList = lpSource->mScoreList;
     }
 
-    struct ChallengePlayerScoreEntry : public ChallengeData
-    {
-        ::CgsID maCarIDs[2];   // +24
-
-        void Construct();
-        void Copy(const ChallengePlayerScoreEntry* lpSource);
-    };
-
+    // ChallengePlayerScoreEntry is now defined in the shared BrnChallengeData.h home (above);
+    // only its method bodies live here.
     void ChallengePlayerScoreEntry::Construct()
     {
         ChallengeData::Construct();

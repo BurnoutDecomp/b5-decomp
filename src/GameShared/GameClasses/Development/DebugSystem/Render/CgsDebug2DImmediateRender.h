@@ -67,6 +67,11 @@ namespace CgsDev
         void DrawText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
         void DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max, f32 lfValue, f32 lfMax, RGBA lBackColour, RGBA lBarColour);
 
+        // Width (in virtual-screen units) the given text would occupy at the given scale; used by
+        // label/value layout code to position a value just after its label. Body is the text/font
+        // follow-on (lives in this TU).
+        f32 CalcTextWidth(const char* lpcText, f32 lfScale) const;
+
         void SetRenderBuffer(CgsGraphics::Im2d* lpRenderBuffer);
         bool HasRenderBuffer() const { return mpRenderBuffer != nullptr; }   // safe to Begin() only once set
 
