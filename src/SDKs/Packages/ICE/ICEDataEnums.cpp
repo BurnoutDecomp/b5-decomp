@@ -54,4 +54,64 @@ void ICEParameter::SetValue(f32 lfValue)
     muPacked = (u16)liRounded;
 }
 
+// ICE::ICEChannel::EnforceSpacing(u16 lu16Interval, f32 lfMinSpacing)  @0x8252C4F0
+//
+// Enforce a minimum parameter spacing of lfMinSpacing on either side of the keyed
+// interval lu16Interval. Forward sweep pushes each interval parameter up to at
+// least param[n-1]+spacing (max); backward sweep pulls each down to at most
+// param[n+1]-spacing (min). Only writable interior slots (1 <= n < mu16Intervals)
+// are touched; the store is ICEParameter::SetValue (clamp [0,1] + round-half-up
+// pack), which the backward sweep inlined in the asm.
+void ICEChannel::EnforceSpacing(u16 lu16Interval, f32 lfMinSpacing)
+{
+    const s32 liLastInterval = (s32)mu16Intervals - 1;
+
+    // Forward: param[n] = max(param[n], param[n-1] + lfMinSpacing).
+    for (s32 liInterval = (s32)lu16Interval; liInterval < liLastInterval; ++liInterval)
+    {
+        const u16 lu16Next = (u16)(liInterval + 1);
+        const f32 lfPrev   = GetIntervalParameter((u16)liInterval);
+        const f32 lfThis   = GetIntervalParameter(lu16Next);
+        const f32 lfFloor  = lfPrev + lfMinSpacing;
+        if (lu16Next != 0 && lu16Next < mu16Intervals)
+        {
+            const f32 lfNew = (lfThis >= lfFloor) ? lfThis : lfFloor;   // max
+            mpParameters[lu16Next - 1].SetValue(lfNew);
+        }
+    }
+
+    // Backward: param[n] = min(param[n], param[n+1] - lfMinSpacing).
+    for (s32 liInterval = (s32)lu16Interval; liInterval > 1; --liInterval)
+    {
+        const u16 lu16Prev = (u16)(liInterval - 1);
+        const f32 lfNext   = GetIntervalParameter((u16)liInterval);
+        const f32 lfThis   = GetIntervalParameter(lu16Prev);
+        const f32 lfCeil   = lfNext - lfMinSpacing;
+        if (lu16Prev != 0 && lu16Prev < mu16Intervals)
+        {
+            const f32 lfNew = (lfThis <= lfCeil) ? lfThis : lfCeil;   // min
+            mpParameters[lu16Prev - 1].SetValue(lfNew);
+        }
+    }
+}
+
+// ICE::ICEChannel::GetIntervalStart(u16) const  @0x82531810
+//
+// The parameter value at the START of the channel's CURRENT interval. Like the
+// keystone GetIntervalBracket overload, the u16 argument is part of the frozen
+// overload signature but the body operates on the cached mu16CurrentInterval (the
+// asm reads *(this+4), not the argument): GetIntervalParameter(mu16CurrentInterval)
+// with the sentinel rules (0 -> 0.0, >= mu16Intervals -> 1.0).
+f32 ICEChannel::GetIntervalStart(u16 lu16Interval) const
+{
+    (void)lu16Interval;   // unused: the body works off the cached current interval
+
+    const u16 lu16Current = mu16CurrentInterval;
+    if (lu16Current == 0)
+        return 0.0f;
+    if (lu16Current >= mu16Intervals)
+        return 1.0f;
+    return mpParameters[lu16Current - 1].GetValue();
+}
+
 } // namespace ICE

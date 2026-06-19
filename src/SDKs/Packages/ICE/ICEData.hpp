@@ -50,6 +50,11 @@ namespace CgsResource
 namespace ICE
 {
 
+// Debug text-stream sink used by ICETakeData::SaveData. Its real home is
+// SDKs/Packages/ICE/ICEFile.hpp (the ICEFile.cpp TU); forward-declared here since
+// SaveData only takes it by pointer.
+class ICEFileHandler;
+
 // ---------------------------------------------------------------------------
 // ICE camera/take constants (ICEData.hpp:34-57, DWARF). The float-typed ones are
 // declared extern (defined out-of-line in ICEData.cpp) since their values are not
@@ -129,6 +134,10 @@ struct ICETakeData
     void SetNumIntervals(s32 liChannel, s32 liNumIntervals);
     void SetName(const char* lpcName);
     const char* GetName() const;
+    // Debug text dumper (class:ICE::ICETakeData TU, @0x82532CF8): writes an XML-ish
+    // dump of the decoded take through an ICEFileHandler. ICEFileHandler is the
+    // SDKs/Packages/ICE/ICEFile.cpp type (forward-declared above).
+    void SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber);
 
     // --- Trivial inline-away accessors ---
     bool IsAllocated() const                       { return muAllocated != 0; }

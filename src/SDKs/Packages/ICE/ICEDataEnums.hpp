@@ -299,9 +299,15 @@ public:
     // --- DECLARE-ONLY (bodies in a sibling TU) ---
     void Prepare();
 
-    // --- Trivial inline-away type predicates ---
-    bool IsInt() const   { return mDataType == eICE_INT; }
-    bool IsFloat() const { return mDataType == eICE_FLOAT; }
+    // --- Type predicates ---
+    // IsFloat is the one X360-attested export (0x8252AD60): returns true for the
+    // float-decoding types eICE_FIXED (3) AND eICE_FLOAT (4) -- the asm tests
+    // (mDataType==3) || (mDataType==4), NOT just FLOAT. The other two are
+    // inline-away (no export); modeled as the clean partition of the 5 data types
+    // {INT,UINT}=int, {HASH}=hash, {FIXED,FLOAT}=float. FLAG: IsInt/IsHash grouping
+    // is inferred (only IsFloat is asm-verified).
+    bool IsFloat() const { return mDataType == eICE_FIXED || mDataType == eICE_FLOAT; }
+    bool IsInt() const   { return mDataType == eICE_INT   || mDataType == eICE_UINT; }
     bool IsHash() const  { return mDataType == eICE_HASH; }
 
     // --- DECLARE-ONLY (encode/decode machinery; bodies elsewhere) ---
