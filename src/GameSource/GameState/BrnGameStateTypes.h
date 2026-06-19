@@ -82,6 +82,23 @@ enum EStuntType : s32
     E_STUNT_TYPE_ERRORS           = 98304,
 };
 
+// Stunt-element classification id (DWARF BrnGameStateTypes.h:58). Identifies the kind of
+// world stunt element (a jump/smash/billboard trigger) that the stunt sub-systems
+// complete and the action queue reports. DealWithStunt (X360 0x8232CEB0) uses this as the
+// WorldStuntAction discriminant -- it branches on JUMP(0)/SMASH(1)/BILLBOARD(2) and asserts
+// "Unknown world stunt type." for any value >= COUNT(3). Values are X360-attested by that
+// branch. This is the single owner (DWARF home BrnGameStateTypes.h); grow here, do not fork.
+// NB: declared WITHOUT a fixed underlying type to stay compatible with the existing opaque
+// `enum StuntElementType;` forward declarations in BrnStuntManager.h /
+// BrnStuntManagerDebugComponent.h (a fixed-underlying-type definition would clash with those).
+enum StuntElementType
+{
+    E_STUNT_ELEMENT_TYPE_JUMP      = 0,
+    E_STUNT_ELEMENT_TYPE_SMASH     = 1,
+    E_STUNT_ELEMENT_TYPE_BILLBOARD = 2,
+    E_STUNT_ELEMENT_TYPE_COUNT     = 3,
+};
+
 // X360-attested handle type (DWARF BrnGameStateTypes.h:57). A 2-byte signed wrapper over
 // a trigger-region index. SelectRandomDestinations builds one of these from the s32 it
 // gets out of TriggerRegion::GetRegionIndex() and stores it through its output array.

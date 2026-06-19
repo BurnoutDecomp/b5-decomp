@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<T, N> (SetUpAllDriveThrusAction::maDriveThrus)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"  // BrnTrigger::GenericRegion::Type (DriveThruInfo::meType)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"     // CgsSystem::Time (OnlineGameResults::mSecondsInEvent / maRoundTimes)
+#include "GameSource/GameState/BrnGameStateTypes.h"           // BrnGameState::StuntElementType (WorldStuntAction / OnStuntElementCompleteAction)
 
 // Owning header for the BrnGameState::GameStateModuleIO GameAction<> family slices reconstructed
 // by the GameMode/ModeManager leaf batch. Each struct is a minimal slice: only the members the
@@ -34,6 +35,25 @@ struct TrophyUnlockData
 };
 }
 
+// Provisional enum home for PowerParkResultAction::meOutcome. The committed owner is
+// BrnWorld::EPowerParkOutcome, whose real home (DWARF
+// World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h:11) has not been
+// reconstructed yet -- there is no PowerParking TU in b5-decomp. The full enum is mirrored here
+// (X360 DealWithPowerPark @0x82321530 only tests meOutcome == E_PPO_SUCCESS(1), but the complete
+// 4-value set is DWARF-confirmed) so PowerParkResultAction is a complete type. Re-home / replace
+// this with an #include of BrnPowerParkingManager.h when that TU lands; do not let two definitions
+// coexist (this is provisional only).
+namespace BrnWorld
+{
+enum EPowerParkOutcome
+{
+    E_PPO_TO_BE_DETERMINED = 0,
+    E_PPO_SUCCESS          = 1,
+    E_PPO_FAILURE          = 2,
+    E_PPO_COUNT            = 3,
+};
+}
+
 namespace BrnGameState
 {
 namespace GameStateModuleIO
@@ -54,6 +74,9 @@ enum EGameActionType
     E_ACTION_TROPHY_UNLOCK              = 196,   // DWARF BrnGameActions.h:206
     E_ACTION_PREPARE_FOR_MODE           = 19,    // DWARF BrnGameActions.h:29
     E_ACTION_SET_UP_ALL_DRIVE_THRUS     = 40,    // DWARF BrnGameActions.h:40
+    E_ACTION_ON_STUNT_ELEMENT_COMPLETE  = 53,    // DWARF BrnGameActions.h:63
+    E_ACTION_WORLD_STUNT_PERFORMED      = 122,   // DWARF BrnGameActions.h:132
+    E_ACTION_POWER_PARK_RESULT          = 139,   // DWARF BrnGameActions.h:149
 };
 
 template <EGameActionType T>
@@ -297,6 +320,56 @@ struct OnlineGameResults : public GameAction<E_ACTION_ONLINE_GAME_RESULT>
     f32             mafRoundDistances[KI_MAX_ROUNDS];       // +0x8C (40) race round distance
     s32             maiRoundStuntScores[KI_MAX_ROUNDS];     // +0xB4 (40) stunt score
     s32             maiRoundStuntMultipliers[KI_MAX_ROUNDS];// +0xDC (40) stunt multiplier
+};
+
+// X360 0x8232CEB0 (StuntModeScoring::DealWithStunt reads it). The "a world stunt element was
+// performed" action: a stunt-element discriminant plus the 64-bit element key. DWARF home
+// BrnGameActions.h:3469 (true owning home). Minimal slice -- exactly the two members the consumer
+// reads. The GameAction<T> base is the empty tag, so meStuntElementType is at +0x00 and mId at
+// +0x08. DealWithStunt branches on meStuntElementType (JUMP/SMASH/BILLBOARD, asserts >= COUNT is
+// "Unknown world stunt type.") and Find/Inserts mId (the 64-bit CgsID stunt-element key) into the
+// scorer's mRecentStuntElementSet to de-dupe repeated elements.
+struct WorldStuntAction : public GameAction<E_ACTION_WORLD_STUNT_PERFORMED>
+{
+    StuntElementType meStuntElementType;  // +0x00  (DWARF BrnGameActions.h:3471)
+    CgsID            mId;                  // +0x08  (DWARF BrnGameActions.h:3472)
+};
+
+// X360 0x82321530 (StuntModeScoring::DealWithPowerPark reads it). The power-park-scored result
+// action: the park outcome enum plus the overall rating fed into the score multiplier. DWARF home
+// BrnGameActions.h:3495 (true owning home). Minimal slice -- exactly the two members the consumer
+// reads (meOutcome at +0x00 tested == E_PPO_SUCCESS, miOverallRating at +0x04 multiplied into the
+// awarded score). meOutcome's enum type (BrnWorld::EPowerParkOutcome) is provisionally homed above;
+// see that note.
+struct PowerParkResultAction : public GameAction<E_ACTION_POWER_PARK_RESULT>
+{
+    BrnWorld::EPowerParkOutcome meOutcome;        // +0x00  (DWARF BrnGameActions.h:3497)
+    s32                         miOverallRating;  // +0x04  (DWARF BrnGameActions.h:3498)
+};
+
+// "A stunt element has been completed" action. DWARF home BrnGameActions.h:3837 (true owning home);
+// modelled here per the DWARF SHAPE -- the five named members the PS3 DecFIGS DWARF lists. The
+// GameAction<T> base is the empty tag, so mID is at +0x00.
+//
+// FLAG -- X360/DWARF LAYOUT DIVERGENCE (consumer left BLOCKED): the X360 consumer that dereferences
+// the in-progress stunt-element action, StuntModeScoring::DealWithInProgressStunt (0x82321710),
+// reads a LARGER, convoy-shaped record that this lean DWARF layout does NOT express:
+//   +0x24  float[8]  per-leg distances (walked until a value < flt_82CDB778)
+//   +0x44  s32[8]    convoy member ids (linear-searched for the player id; miss asserts
+//                    "Player not in this convoy!", BrnStuntModeScoring.cpp:1666)
+//   +0x64  s32       convoy member count (the loop gate `count > 1`)
+// Those members cannot be named from the DWARF, so DealWithInProgressStunt stays declare-only /
+// BLOCKED (as recorded in the StuntModeScoring body drafts). When the full stunt-element action
+// family is reconstructed against the X360 layout, GROW this struct ADDITIVELY with the convoy
+// distance/id arrays + count; do NOT retype/reorder the DWARF-named members below.
+struct OnStuntElementCompleteAction : public GameAction<E_ACTION_ON_STUNT_ELEMENT_COMPLETE>
+{
+    CgsID            mID;                  // +0x00  (DWARF BrnGameActions.h:3839)
+    StuntElementType meStuntElementType;   //        (DWARF BrnGameActions.h:3840)
+    s32              miCurrentCount;        //        (DWARF BrnGameActions.h:3841)
+    s32              miTotalCount;          //        (DWARF BrnGameActions.h:3842)
+    EGameModeType    meCurrentGameMode;     //        (DWARF BrnGameActions.h:3843; EGameModeType is
+                                            //        nested in this GameStateModuleIO namespace)
 };
 }
 }
