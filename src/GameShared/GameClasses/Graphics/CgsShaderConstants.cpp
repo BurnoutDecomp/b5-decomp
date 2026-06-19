@@ -1,16 +1,18 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (SetSize / SetNumEntries)
 
-// CgsShaderConstants.cpp - five functions of the CGS shader-constant subsystem:
+// CgsShaderConstants.cpp - functions of the CGS shader-constant subsystem:
 //   * ShaderConstantsExternal::FixUp / HasShaderConstant  (on-disk External block)
 //   * ShaderConstantsInternal::FixUp                      (on-disk Internal block)
 //   * ShaderConstantTable::BeginFrame                     (runtime: prime dirty list)
 //   * ShaderConstantTable::AddDirtyConstantsToDispatchBin (runtime: drain dirty list)
+//   * ShaderConstantTableElement::SetSize / SetNumEntries (recompute cached qw array size)
 //
 // Reconstructed from the DecFIGS DWARF + X360 pseudocode. The relocation FixUps add the
 // load base (a 32-bit X360 address) to every internal pointer; on PC we replicate the
 // exact 32-bit pointer arithmetic via uintptr-sized words so the on-disk layout and the
-// console behaviour are preserved. None of these functions assert in the pseudocode, so
-// none are added.
+// console behaviour are preserved. The FixUp/frame functions do not assert; the two
+// ShaderConstantTableElement setters do (CGS_ASSERT: luNumQwInArray <= 0xFFFF).
 
 // CgsShaderConstants.cpp:54-56
 // File-static shadowing-policy flags. The X360 build compiles these as constant globals
@@ -176,4 +178,32 @@ void ShaderConstantTable::AddDirtyConstantsToDispatchBin(Vector4* lpBinHeaderSpa
     }
 
     mu8NumDirtyConstants = 0;
+}
+
+// CgsShaderConstants.cpp:141 (decl) / X360 @ 0x823F4170
+// Set the per-entry size in bytes, then recompute the cached array size in quadwords.
+// luNumQwInArray = (mu8NumEntries * mu8SizeInBytes) / 16 (1 qw == 16 bytes). The u8*u8
+// product promotes to signed int, so the X360 emits a signed /16 (the v4<0 && (v4&0xF)
+// round-toward-zero adjust in the pseudocode); plain `/ 16` reproduces it exactly. Assert
+// the result fits the u16 cache field, then store it.
+void ShaderConstantTableElement::SetSize(u8 lu8SizeInBytes)
+{
+    mu8SizeInBytes = lu8SizeInBytes;
+
+    const int liNumQwInArray = (mu8NumEntries * mu8SizeInBytes) / 16;
+    CGS_ASSERT(liNumQwInArray <= 0xFFFF, "luNumQwInArray <= 0xFFFF");
+    mu16SizeOfArrayInQw = static_cast<u16>(liNumQwInArray);
+}
+
+// CgsShaderConstants.cpp:171 (decl) / X360 @ 0x823F41E8
+// Set the entry count, then recompute the cached array size in quadwords. Identical body to
+// SetSize except for which byte field is written first; same signed (mu8NumEntries *
+// mu8SizeInBytes) / 16 idiom, same u16 fit assert, same store.
+void ShaderConstantTableElement::SetNumEntries(u8 lu8NumEntries)
+{
+    mu8NumEntries = lu8NumEntries;
+
+    const int liNumQwInArray = (mu8NumEntries * mu8SizeInBytes) / 16;
+    CGS_ASSERT(liNumQwInArray <= 0xFFFF, "luNumQwInArray <= 0xFFFF");
+    mu16SizeOfArrayInQw = static_cast<u16>(liNumQwInArray);
 }
