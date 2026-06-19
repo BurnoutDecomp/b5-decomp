@@ -49,6 +49,19 @@ namespace CgsDev
         // lives in the DebugInterface TU and is the render-mirror follow-on.
         DebugRender& Get2dRender();
 
+        // The buffered 3D (WORLD-space) debug renderer this interface draws through
+        // (X360-attested: ICEWidgetTargetBox::Render @0x8252D2B8 calls GetRender then
+        // DebugRender::DrawBox to draw a world-space target box). Mirrors Get2dRender
+        // but hands back the 3D queue's renderer. DECLARATION-ONLY: the body (forwards
+        // the manager's buffered 3D renderer) lives in the DebugInterface TU and is the
+        // render-mirror follow-on.
+        // FLAG (header grow): GetRender() added here for ICEWidgetTargetBox::Render; the
+        //       symbol is a disasm-attested `bl` target in that Render (NOT in
+        //       progress/tu_index.json) and has no DWARF here, so the signature is
+        //       asm-derived (returns the same DebugRender& as the 2D getter, the 3D
+        //       queue being the renderer's second event queue).
+        DebugRender& GetRender();
+
     private:
         DebugManager* mpDebugManager;
         bool          mbIsAutomaticClass;

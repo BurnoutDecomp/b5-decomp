@@ -73,6 +73,22 @@ namespace CgsDev
         void Draw2DLine(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour);
         void Draw2DBox(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour);
 
+        // Queue a 3D (WORLD-space) box: an axis-aligned box at `lpv3Centre` extending
+        // from `lv4MinCorner` to `lv4MaxCorner` (corner offsets) in the space of the
+        // passed world transform.
+        // X360-attested (CgsDev::DebugRender::DrawBox, progress/tu_index.json):
+        // ICEWidgetTargetBox::Render @0x8252D2B8 passes the widget's world transform base
+        // as the `float*` (r4 = this+0x10, the caller's 4-row matrix), the packed colour
+        // (r5), and the two corner vectors in the SIMD arg registers (v1 = min corner
+        // {-0.05,-0.05,-0.05,0}, v2 = max corner {+0.05,+0.05,+0.05,0}). DECLARATION-ONLY:
+        // the body queues a CInEventDrawBox into the 3D event queue and is the Debug3D
+        // render follow-on (this render currently models only the 2D queue, so no 3D body
+        // is defined here).
+        // FLAG (header grow): DrawBox (3D) added here for ICEWidgetTargetBox::Render; the
+        //       symbol is X360-attested but has no DWARF here, so the arg shape (transform
+        //       float* + RGBA + two Vector4 corners) is asm-derived from the call.
+        void DrawBox(const f32* lpTransform, RGBA lColour, Vector4 lv4MinCorner, Vector4 lv4MaxCorner);
+
         // X360 Dispatch2D: replay the queued 2D events into lpRenderer; clear the queue if lbClear.
         void Dispatch2D(Debug2DImmediateRender* lpRenderer, bool lbClear);
 
