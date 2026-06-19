@@ -5,17 +5,19 @@
 
 // CgsSound::Playback::Name - the sound-playback name-interning facility.
 //
-// FLAG: MINIMAL FLAGGED HOME. Only the two functions executed in the boot trace
-// are modelled here -- Name::MakeHash and Name::HashTable::Store -- plus the
-// data they touch (Name::mHash for shape, the nested HashNode struct, and the
-// HashTable static pool). The full CgsCommon.h (DWARF CgsCommon.h:25-729) is
-// large: typedef Ident, KU32_DEFAULT_ALIGNMENT, the reserved-Ident constants
-// (K_MIN_RESERVED_IDENT / K_INIT_SND9_SUBMIX_IDENT = 0xFFFFFFF0), K_NULL_NAME,
-// all the Name ctors / operators / GetValue / GetCString / IsGenuine / Dump /
-// TraverseHashTable / PointerToName / EndianSwap, HashNode::HashNode / Clear /
-// Dump / Traverse, and HashTable::Retrieve / Dump / Traverse, plus the whole
-// Playback subsystem (Entity, ContentClass, Slot, Factory, ...). All DEFERRED
-// to their own TUs -- do not add them here speculatively.
+// FLAG: MINIMAL FLAGGED HOME, grown as dependents need it. Modelled so far:
+// Name::MakeHash + Name::HashTable::Store (the two boot-trace functions) plus the
+// data they touch (Name::mHash for shape, the nested HashNode struct, the
+// HashTable static pool), AND the Name(const char*) ctor (added for the AEMS
+// param-index static-init TUs -- it is inlined-only on X360, see below). The full
+// CgsCommon.h (DWARF CgsCommon.h:25-729) is large: typedef Ident,
+// KU32_DEFAULT_ALIGNMENT, the reserved-Ident constants (K_MIN_RESERVED_IDENT /
+// K_INIT_SND9_SUBMIX_IDENT = 0xFFFFFFF0), K_NULL_NAME, the remaining Name ctors
+// (Name() / Name(uintptr_t) / Name(const Name&)) / operators / GetValue /
+// GetCString / IsGenuine / Dump / TraverseHashTable / PointerToName / EndianSwap,
+// HashNode::HashNode / Clear / Dump / Traverse, and HashTable::Retrieve / Dump /
+// Traverse, plus the whole Playback subsystem (Entity, ContentClass, Slot,
+// Factory, ...). All DEFERRED to their own TUs -- add only when a TU needs it.
 
 namespace CgsSound
 {
@@ -26,6 +28,15 @@ namespace Playback
 // side-table so equal names share one hash and collisions are caught.
 struct Name
 {
+public:
+    // CgsCommon.h:126. Construct from a C string: hash + intern it. Constructing a
+    // Name from a string interns it (MakeHash -> Store), which is exactly what the
+    // AEMS param-index static initializers do. INLINED-ONLY on X360 (no out-of-line
+    // address -> no own TU), so it is defined inline here; the body matches the
+    // inlined static-init pseudocode (mHash = MakeHash(...)). FLAG: home-grow added
+    // for the AEMS param-index TUs (BrnAutoGenAemsParameterIndexes.*).
+    explicit Name(const char* lkpacName) { mHash = MakeHash(lkpacName); }
+
 private:
     // CgsCommon.h:249. The interned hash value. NOT touched by MakeHash/Store
     // (those are static and operate on the HashTable pool); future Name ctor TUs
