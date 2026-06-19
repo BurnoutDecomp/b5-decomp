@@ -64,6 +64,11 @@ namespace CgsDev
         void Clear();
 
         // Queue a 2D primitive (replayed by Dispatch2D), screen-space in the Im2d logical coords.
+        // X360-attested Vector2 overloads (DecFIGS DWARF CgsDebugRender.h:93/96): the debug overlay
+        // code (ICERender) passes the screen rect/position as Vector2 values and a packed RGBA.
+        void Draw2DText(const char* lpcText, Vector2 lv2Position, f32 lfScale, RGBA lColour);
+        void Draw2DBox(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour);
+
         void Draw2DText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
         void Draw2DLine(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour);
         void Draw2DBox(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour);

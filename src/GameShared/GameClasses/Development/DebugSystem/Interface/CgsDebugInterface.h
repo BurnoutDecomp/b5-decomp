@@ -17,6 +17,7 @@
 namespace CgsDev
 {
     namespace DebugUI { struct DebugUI; }
+    class DebugRender;   // Get2dRender returns a reference (the buffered debug renderer)
 
     struct DebugInterface
     {
@@ -40,6 +41,13 @@ namespace CgsDev
 
         DebugManager&     GetDebugManager() { return *mpDebugManager; }
         DebugUI::DebugUI& GetUI()           { return mpDebugManager->GetUI(); }
+
+        // The buffered 2D debug renderer this interface draws through (X360-attested,
+        // DecFIGS DWARF CgsDebugInterface.h:24 `DebugRender& Get2dRender()`). The debug
+        // overlay code (ICERender::RenderPoly / ScrPrintfArg) queues 2D box/text prims
+        // here. DECLARATION-ONLY: the body (forwards the manager's buffered renderer)
+        // lives in the DebugInterface TU and is the render-mirror follow-on.
+        DebugRender& Get2dRender();
 
     private:
         DebugManager* mpDebugManager;
