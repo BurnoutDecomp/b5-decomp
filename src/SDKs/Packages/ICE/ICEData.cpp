@@ -25,6 +25,7 @@
 #include "SDKs/Packages/ICE/ICEMath.hpp"           // ICE::ICEMath::Round / Clamp (minimal slice)
 #include "SDKs/Packages/ICE/ICEMemory.hpp"         // ICE::gpICEMemoryManager / ICEMemory::GetMemory (minimal slice)
 #include "rw/core/stdc/stdc.h"                      // rw::core::stdc::MemClear / MemCopy (minimal slice)
+#include "SDKs/Packages/ICE/ICEFile.hpp"            // ICE::ICEFileHandler (ICETakeData::SaveData sink)
 
 #include <cstring>                                  // memset (ICETakeData::Construct)
 #include <cstdint>                                  // uintptr_t (SetDataPointers alignment math)
@@ -1821,6 +1822,219 @@ bool ICETake::SetParameter(s32 liChannel, f32 lfParameter, bool lbForce)
     }
 
     return lbChanged;
+}
+
+} // namespace ICE
+
+// ============================================================================
+// ICE::ICETakeData::SaveData @0x82532CF8 -- the debug XML/text dumper (the
+// class:ICE::ICETakeData TU). Walks the take through a scratch ICETake and prints
+// the decoded values via ICEFileHandler::FilePrintf. NOT the binary byte-stream
+// writer (that is SetDataPointers / ComputeActualSize).
+// ============================================================================
+namespace ICE
+{
+
+// FLAG: ICE::Precision has no reconstructed home yet; the real X360 prototype is
+// wider (it produces a precision float + a rounded-string float + raw bits for the
+// <FLOAT> tag). File-local forward declaration with the modeled shape so SaveData
+// compiles; reconcile with the real signature when the Precision TU lands.
+f32 Precision(f32 lfValue, const ICEValue& lrValue);
+
+void ICETakeData::SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber)
+{
+    // ---- Scratch ICETake bound over THIS take's data (read-only walk) ----
+    // WIRING NOTE (same as ICETakeData::FixDown): the frozen ICETake header declares
+    // no default constructor (its Cubic1D[28] member type declares only Cubic1D(s16,f32)),
+    // so ICETake is not default-constructible here. The X360 calls ICETake::ICETake()
+    // on a stack buffer then SetDataPointers; the take is used ONLY as a `this` for the
+    // SetDataPointers + value-query calls, which write before they read. A raw aligned
+    // stack buffer reinterpreted as ICETake is the faithful stand-in.
+    // FLAG: replace with a real `ICETake lTake;` once the ICETake (and Cubic1D) default
+    // ctors are reconstructed into the headers.
+    alignas(ICETake) u8 laTakeStorage[sizeof(ICETake)];
+    ICETake& lTake = *reinterpret_cast<ICETake*>(laTakeStorage);
+    lTake.SetDataPointers(this, false);   // bind live pointers over this take's data
+
+    // ---- Header tags ----
+    const u32 luDataSize = ComputeActualSize();
+    lpHandler->FilePrintf("<DATASIZE>%d</DATASIZE>\n", luDataSize);
+    lpHandler->FilePrintf("<TAKE_NUMBER>%d</TAKE_NUMBER>\n", liTakeNumber);
+    lpHandler->FilePrintf("<LENGTH>%f</LENGTH>\n", mfLength);
+
+    // ---- Per-channel descriptions ----
+    for (s32 liChannel = 0; liChannel < 12; ++liChannel)
+    {
+        const ICEElementCount& lrCount = mElementCounts[liChannel];
+        if (lrCount.mu16Intervals != 0)
+        {
+            lpHandler->FilePrintf(
+                "<CHANNEL_DESCRIPTION name=\"%s\" index=\"%d\"> <NUMINTERVALS>%d</NUMINTERVALS>"
+                "  <NUMKEYS>%d</NUMKEYS></CHANNEL_DESCRIPTION>\n",
+                gaICEElementChannels[liChannel].mpName,
+                liChannel,
+                lrCount.mu16Intervals,
+                lrCount.mu16Keys);
+        }
+    }
+
+    // ---- Per-channel key-index + parameter dumps (from the runtime channels) ----
+    for (s32 liChannel = 0; liChannel < 12; ++liChannel)
+    {
+        // The loop count is the channel's interval count taken from the take header
+        // (mElementCounts[ch].mu16Intervals). The bracket reads below use the runtime
+        // channel the scratch take bound (GetNumIntervals/GetKeyData/GetNumKeys/
+        // GetParameterData), exactly as the asm reads the bound ICEChannel.
+        const u16 lu16Intervals = mElementCounts[liChannel].mu16Intervals;
+        if (lu16Intervals == 0)
+            continue;
+
+        lpHandler->FilePrintf("<CHANNEL name=\"%s\" index=\"%d\">",
+                              gaICEElementChannels[liChannel].mpName, liChannel);
+
+        // --- KEY_INDICIES: the key index at the left edge of each interval ---
+        lpHandler->FilePrintf("<KEY_INDICIES>");
+        for (u32 luInterval = 0; luInterval < lu16Intervals; ++luInterval)
+        {
+            // Interval-key bracket (== ICETake::GetIntervalKey(channel, interval)):
+            //   interval 0          -> key 0
+            //   interior interval n -> mpKeyIndices[n-1]
+            //   final interval      -> mu16Keys - 2
+            u16 lu16Key;
+            if (luInterval == 0)
+            {
+                lu16Key = 0;
+            }
+            else if ((luInterval + 1) < (u32)(u16)lTake.GetNumIntervals(liChannel))
+            {
+                lu16Key = lTake.GetKeyData(liChannel)[luInterval - 1];
+            }
+            else
+            {
+                lu16Key = (u16)(lTake.GetNumKeys(liChannel) - 2);
+            }
+
+            lpHandler->FilePrintf("<INTERVAL_KEY interval=\"%d\">%d</INTERVAL_KEY>\n",
+                                  luInterval, lu16Key);
+        }
+        lpHandler->FilePrintf("</KEY_INDICIES>");
+
+        // --- PARAMETERS: the unit-interval parameter at each interval start ---
+        // (== ICEChannel::GetIntervalParameter: 0 -> 0.0, >= numIntervals -> 1.0, else
+        //  mpParameters[n-1]/65535). Note the bound is `j <= lu16Intervals` -- the final
+        //  pass prints the implicit 1.0 end parameter.
+        lpHandler->FilePrintf("<PARAMETERS>");
+        for (u32 luInterval = 0; luInterval <= lu16Intervals; ++luInterval)
+        {
+            f32 lfParameter;
+            if (luInterval == 0)
+            {
+                lfParameter = 0.0f;
+            }
+            else if (luInterval < (u32)(u16)lTake.GetNumIntervals(liChannel))
+            {
+                lfParameter = lTake.GetParameterData(liChannel)[luInterval - 1].GetValue();
+            }
+            else
+            {
+                lfParameter = 1.0f;
+            }
+
+            lpHandler->FilePrintf("<INTERVAL_START interval=\"%d\">%f</INTERVAL_START>",
+                                  luInterval, lfParameter);
+        }
+        lpHandler->FilePrintf("</PARAMETERS>");
+
+        lpHandler->FilePrintf("</CHANNEL>");
+    }
+
+    // ---- Per-element value dumps ----
+    for (s32 liElement = 0; liElement < eICE_NUM_ELEMENTS; ++liElement)
+    {
+        const ICEElementDescription& lrDesc = ICEElementDescriptions[liElement];
+        const s32 liChannel = lrDesc.miChannelNumber;
+
+        // Value count: interval elements (index >= 28) use mu16Intervals, key elements
+        // use mu16Keys (same key/interval rule as the on-disk sizing).
+        const u16 lu16Count = (liElement >= 28)
+                            ? mElementCounts[liChannel].mu16Intervals
+                            : mElementCounts[liChannel].mu16Keys;
+        if (lu16Count == 0)
+            continue;
+
+        lpHandler->FilePrintf("<ELEMENT name=\"%s\" index=\"%d\">\n", lrDesc.mpTag, liElement);
+
+        for (s32 liValue = 0; liValue < (s32)lu16Count; ++liValue)
+        {
+            lpHandler->FilePrintf("<VALUE index=\"%d\">", liValue);
+
+            if (lrDesc.IsFloat())
+            {
+                // FIXED/FLOAT: read the decoded scalar (FIXED is dequantised to float;
+                // FLOAT is the native word reinterpreted), then format via ICE::Precision.
+                const ICEValue lValue = lTake.GetValue(liElement, (u16)liValue);
+                const f32 lfValue = (lrDesc.mDataType == eICE_FIXED || lrDesc.mDataType == eICE_FLOAT)
+                                  ? lValue.GetFloat()
+                                  : (f32)lValue.GetSignedInt();
+
+                // ICE::Precision(value) -> a {precision, string-rounded, raw-bits} tuple
+                // the <FLOAT> tag prints. FLAG: ICE::Precision has no reconstructed home;
+                // see the helper-declaration note below. Modeled as returning the value to
+                // print; the exact multi-out signature must be recovered with its home.
+                const f32 lfPrecision = Precision(lfValue, lValue);
+                lpHandler->FilePrintf("<FLOAT precision=\"%f\" string=\"%f\">%x</FLOAT>",
+                                      lfPrecision, lfValue);
+            }
+            else if (lrDesc.mDataType == eICE_HASH)
+            {
+                const s32 liRaw = lTake.GetValueInt(liElement, (u16)liValue);
+                // FLAG (shipped quirk): the asm suppresses <HASH> output for the single
+                // eICE_HASH element EVENT_TAG (ICEElementDescriptions[41]) via the guard
+                // `&ICEElementDescriptions[41] != &lrDesc`. Since 41 is the ONLY HASH
+                // element this means <HASH> is effectively never emitted; preserved verbatim.
+                if (&ICEElementDescriptions[41] != &lrDesc)
+                {
+                    lpHandler->FilePrintf("<HASH>%x</HASH>", liRaw);
+                }
+            }
+            else   // eICE_INT / eICE_UINT (token-table lookup)
+            {
+                bool lbPrinted = false;
+                const s32 liRaw = lTake.GetValueInt(liElement, (u16)liValue);
+
+                if (lrDesc.mpTokens != 0)
+                {
+                    if (liRaw >= lrDesc.miTokens)
+                    {
+                        // Out-of-range token index -> assert. (The X360 builds the
+                        // "Could not find token value ... saving <name>." message into
+                        // the assert stream and fires it.)
+                        // FLAG: the CgsDev::Assert::StrStreamBase machinery is out of
+                        // scope here; modeled as a single CGS_ASSERT carrying the message.
+                        CGS_ASSERT(false, "Could not find token value");
+                    }
+                    else
+                    {
+                        lpHandler->FilePrintf("<INT text=\"%s\">%d</INT>",
+                                              lrDesc.mpTokens[liRaw], liRaw);
+                        lbPrinted = true;
+                    }
+                }
+
+                if (!lbPrinted)
+                {
+                    lpHandler->FilePrintf("<UNKNOWN>%d</UNKNOWN>", liRaw);
+                }
+            }
+
+            lpHandler->FilePrintf("</VALUE>\n");
+        }
+
+        lpHandler->FilePrintf("</ELEMENT>\n");
+    }
+
+    // ---- Unbind the scratch take ----
+    lTake.SetDataPointers(0, false);
 }
 
 } // namespace ICE
