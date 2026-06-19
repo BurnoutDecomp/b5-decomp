@@ -31,6 +31,75 @@
 namespace ICE
 {
 
+// ---------------------------------------------------------------------------
+// Forward declarations for the ICEPointers bundle members that are referenced
+// by POINTER only (so an incomplete type is sufficient -- this avoids pulling
+// the ICEFile / ICEActionQueue / ICECameraAnchor / ICETimer / ICEData headers
+// into the ICEMemory vocabulary). Their real homes:
+//   ICEFileHandler  -> SDKs/Packages/ICE/ICEFile.hpp
+//   ActionQueue     -> SDKs/Packages/ICE/ICEActionQueue.hpp (ICE::ActionQueue)
+//   ICECameraAnchor -> SDKs/Packages/ICE/ICECamera* (not yet reconstructed)
+//   IResourceManager-> SDKs/Packages/ICE/ICEData.hpp (defined there; fwd here)
+// ICETimer is fully modelled below (it is small and DWARF-complete).
+// ---------------------------------------------------------------------------
+class ICEFileHandler;
+class ActionQueue;
+class ICECameraAnchor;
+struct IResourceManager;
+
+// ---------------------------------------------------------------------------
+// ICE::ICETimer (DWARF SDKs/Packages/ICE/ICETimer.hpp:33). The ICE camera-system
+// frame clock: holds the current per-frame timestep that the take-playback math
+// scales by. Its sole data member mfTimestep sits at offset 0 -- the X360
+// ICEManager::Update reads `*mpTimer` (i.e. mpTimer->mfTimestep / GetTimestep())
+// as the playback time delta. Modelled fully from the DWARF (3 methods + 1 field);
+// only GetTimestep carries an inline body, the rest are declaration-only.
+//
+// FLAG: TimerStatusInterface (the Update parameter) is an external/not-yet-
+// reconstructed type, referenced by pointer only -> forward-declared.
+// ---------------------------------------------------------------------------
+class TimerStatusInterface;
+
+struct ICETimer
+{
+private:
+    f32 mfTimestep;   // @0x00  current per-frame timestep (seconds)
+
+public:
+    void Construct();
+    void Update(const TimerStatusInterface* lpStatus);
+
+    f32  GetTimestep() const { return mfTimestep; }
+};
+
+// ---------------------------------------------------------------------------
+// ICE::ICEPointers (DWARF SDKs/Packages/ICE/ICEMemory.hpp:83). The subsystem
+// pointer bundle handed to ICEManager::Construct: it carries the ICE memory
+// manager, the take text sink, the action queue, the camera anchor, the frame
+// timer, and the resource manager. The FIELD ORDER is DWARF-attested and
+// corroborated by the X360 ICEManager::Construct word reads (a2[0]=mpICEMemory,
+// a2[1]=mpICEFileHandler, a2[4]=mpICETimer, a2[5]=mpResourceManager). All members
+// are pointers, so the forward-declared dependency types suffice.
+// ---------------------------------------------------------------------------
+struct ICEMemory;   // defined below (the manager itself can appear in the bundle)
+
+struct ICEPointers
+{
+    ICEMemory*                   mpICEMemory;        // @0x00  (a2[0])
+    ICEFileHandler*              mpICEFileHandler;   // @0x04  (a2[1])
+    ActionQueue*                 mpActionQueue;      // @0x08  (a2[2])
+    ICECameraAnchor*             mpICECameraAnchor;  // @0x0C  (a2[3])
+    ICETimer*                    mpICETimer;         // @0x10  (a2[4])
+    const IResourceManager*      mpResourceManager;  // @0x14  (a2[5])
+
+    void Construct(ICEFileHandler* lpFileHandler,
+                   ActionQueue* lpActionQueue,
+                   ICEMemory* lpICEMemory,
+                   ICECameraAnchor* lpCameraAnchor,
+                   ICETimer* lpTimer,
+                   const IResourceManager* lpResourceManager);
+};
+
 // ============================================================================
 // The ICE intrusive doubly-linked list family (DWARF: SDKs/Packages/ICE/
 // ICEMemory.hpp:105-402). This is the canonical mirrored home for bNode / bList /
