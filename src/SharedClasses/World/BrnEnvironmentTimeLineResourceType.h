@@ -7,7 +7,7 @@ namespace BrnWorld
 {
 namespace EnvironmentSettings
 {
-// Resource-type handler for the environment-settings TimeLine resource (0x1000B).
+// Resource-type handler for the environment-settings TimeLine resource (0x10013).
 // GetSerialisedResourceDescriptor / DeSerialise / etc. are inherited from the
 // non-pure CgsResource::Type base (deferred — not part of this TU's recovered
 // slice: only GetTypeID/FixUp/FixDown executed/were recovered). The base virtuals

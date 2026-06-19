@@ -55,7 +55,7 @@ namespace EnvironmentSettings
     static const u32 KU_ENVIRONMENT_TIMELINE_VERSION = 1;
 
     // Resource registry type id for the environment-settings TimeLine resource
-    // (0x1000B). Recovered verbatim from GetTypeID @ 0x82676390.
+    // (65555 = 0x10013). Recovered verbatim from GetTypeID @ 0x82676390.
     static const uint32_t KU_ENVIRONMENT_TIMELINE_RESOURCE_TYPE_ID = 65555;
 
     uint32_t TimeLineResourceType::GetTypeID() const
