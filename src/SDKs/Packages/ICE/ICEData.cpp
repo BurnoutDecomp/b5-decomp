@@ -23,7 +23,7 @@
 #include "SDKs/Packages/ICE/ICEData.hpp"          // pulls ICEDataEnums.hpp + ICEPoint.hpp
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
 #include "SDKs/Packages/ICE/ICEMath.hpp"           // ICE::ICEMath::Round / Clamp (minimal slice)
-#include "SDKs/Packages/ICE/ICEMemory.hpp"         // ICE::gpICEMemoryManager / ICEMemory::GetMemory (minimal slice)
+#include "SDKs/Packages/ICE/ICEMemory.hpp"         // ICE::spICEMemory (ICE::ICEMemory*) / ICEMemory::GetMemory / mEditHeap
 #include "rw/core/stdc/stdc.h"                      // rw::core::stdc::MemClear / MemCopy (minimal slice)
 #include "SDKs/Packages/ICE/ICEFile.hpp"            // ICE::ICEFileHandler (ICETakeData::SaveData sink)
 
@@ -1215,8 +1215,8 @@ void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
 // External symbols this TU provides / references:
 //   * ICE::ICEElementDescriptions[] + eICE_NUM_ELEMENTS  -- GROUP 1 above.
 //   * ICE::gaICEElementChannels (ICEElementChannel[12])  -- GROUP 1 above (see FLAG).
-//   * ICE::ICEMemory::GetMemory + ICE::gpICEMemoryManager + its mEditHeap
-//     (CgsMemory::HeapMalloc); CgsMemory::HeapMalloc::Free -- ICEMemory.hpp slice.
+//   * ICE::ICEMemory::GetMemory + ICE::spICEMemory (the ICE::ICEMemory* singleton)
+//     + its embedded mEditHeap (CgsMemory::HeapMalloc at +0x520) -- ICEMemory.hpp.
 //   * CGS_ASSERT; ICE_INVALID_INTERVAL / ICE_EPSILON (frozen header constants).
 //   * ICETake private helpers MarkChannelFromSubTake / FlushUndo and the public
 //     SetParameter(f32,bool,bool); ICETakeData::Construct / ComputeEditSize /
@@ -1274,10 +1274,11 @@ void ICETake::Construct(const IResourceManager* lpResourceManager)
 // construct it, bind the live channel/element pointers over it (edit mode), seed
 // the parameter, and clear the undo history.
 //
-// FLAG (allocator): the asm is `ICE::ICEMemory::GetMemory(dword_82FB62C0, size)` --
-// dword_82FB62C0 is the global ICE memory-manager singleton (gpICEMemoryManager) and
-// ICEMemory::GetMemory is the ICE allocator entry point. Both are owned by the ICE
-// memory TU; referenced by name here via the ICEMemory.hpp minimal slice.
+// ALLOCATOR: the asm is `ICE::ICEMemory::GetMemory(dword_82FB62C0, size)` --
+// dword_82FB62C0 is the ICE memory-manager singleton, an ICE::ICEMemory* (DWARF
+// ICE::spICEMemory), loaded as a pointer and passed as `this`. So this is a member
+// call spICEMemory->GetMemory(size); GetMemory allocates from the manager's embedded
+// edit heap (mEditHeap, +0x520). Both are owned by the ICE memory TU (ICEMemory.hpp).
 // ---------------------------------------------------------------------------
 void ICETake::NewEditBuffer()
 {
@@ -1291,7 +1292,7 @@ void ICETake::NewEditBuffer()
     ICETakeData lSizer;
     const u32 luEditSize = lSizer.ComputeEditSize();
 
-    ICETakeData* lpEditData = (ICETakeData*)ICEMemory::GetMemory(gpICEMemoryManager, luEditSize);
+    ICETakeData* lpEditData = (ICETakeData*)spICEMemory->GetMemory(luEditSize);
     lpEditData->Construct();
 
     // asm @0x8253B544 sets r5=0: the fresh edit buffer is bound as the PRIMARY take
@@ -1310,17 +1311,17 @@ void ICETake::NewEditBuffer()
 // and clear the undo history. muAllocated != 0 marks a heap-owned edit buffer
 // (vs. a resource-owned, non-freeable take).
 //
-// FLAG (allocator): the asm is `CgsMemory::HeapMalloc::Free(dword_82FB62C0 + 0x520,
-// lpTakeData)` -- dword_82FB62C0 is gpICEMemoryManager and +0x520 is its embedded
-// CgsMemory::HeapMalloc edit-heap (modelled as gpICEMemoryManager->mEditHeap in the
-// ICEMemory.hpp slice).
+// ALLOCATOR: the asm is `CgsMemory::HeapMalloc::Free(dword_82FB62C0 + 0x520,
+// lpTakeData)` -- dword_82FB62C0 is spICEMemory (an ICE::ICEMemory*) and +0x520 is
+// its embedded edit heap (spICEMemory->mEditHeap), the SAME heap GetMemory allocated
+// the buffer from. Free is a member of that heap: spICEMemory->mEditHeap.Free(block).
 // ---------------------------------------------------------------------------
 void ICETake::FreeEditBuffer()
 {
     ICETakeData* lpTakeData = mpTakeData;
     if (lpTakeData != 0 && lpTakeData->IsAllocated())
     {
-        CgsMemory::HeapMalloc::Free(&gpICEMemoryManager->mEditHeap, lpTakeData);
+        spICEMemory->mEditHeap.Free(lpTakeData);
         mpTakeData = 0;
         FlushUndo();
     }
