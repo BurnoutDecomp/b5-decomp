@@ -186,4 +186,12 @@ namespace BrnGame
         BrnDirector::DirectorIO::OutputBuffer* mpDirectorOutputBuffer;// h:497
         // [remaining members - omitted]
     };
+
+    // operator++(EReleaseStage&, int) @ 0x823A8AD8 (X360 ARTIST), defined in BrnGameModule.cpp.
+    // POST-increment for the BrnGameModule::EReleaseStage stage machine (the trailing dummy int is
+    // the post-fix marker): saves the old value, advances the stage, asserts the advanced value has
+    // not run past E_RELEASESTAGE_DONE (=7), and returns the OLD value. Called by
+    // BrnGame::BrnGameModule::Release to step meReleaseStage. Declared here near the enum (the enum
+    // is BrnGameModule::EReleaseStage, public) so all Release-path users of the operator see it.
+    BrnGameModule::EReleaseStage operator++(BrnGameModule::EReleaseStage& leStage, int);
 }

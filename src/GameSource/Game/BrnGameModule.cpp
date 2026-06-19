@@ -179,6 +179,24 @@ namespace BrnGame
         }
     }
 
+    // operator++(EReleaseStage&, int) @ 0x823A8AD8 - POST-increment for the EReleaseStage stage
+    // machine, used by Release() to advance meReleaseStage. X360 body: v1 = *a1; *a1 = *a1 + 1;
+    // if (*a1 > 7) assert; return v1 -- save the old value, advance the stage, assert the advanced
+    // value is still <= E_RELEASESTAGE_DONE (=7), and return the OLD value.
+    //
+    // FLAG (static-message assert): the X360 fires the assert with the literal expression string
+    // "leEnumIndex <= BrnGameModule::E_RELEASESTAGE_DONE" at BrnGameModule.h:1443. We use the
+    // committed CGS_ASSERT macro with that same expression text (the macro supplies __FILE__ /
+    // __LINE__); the original's BrnGameModule.h:1443 site is NOT baked in.
+    BrnGameModule::EReleaseStage operator++(BrnGameModule::EReleaseStage& leStage, int)
+    {
+        BrnGameModule::EReleaseStage leOld = leStage;
+        leStage = static_cast<BrnGameModule::EReleaseStage>(leStage + 1);
+        CGS_ASSERT(leStage <= BrnGameModule::E_RELEASESTAGE_DONE,
+                   "leEnumIndex <= BrnGameModule::E_RELEASESTAGE_DONE");
+        return leOld;
+    }
+
     // @ BrnGameModule.cpp:1580 - one-time per-game-instance prepare (the full body loads the
     // global texture dictionary + game-state module). The loading-screen renderer's own assets
     // are loaded by the renderer; this returns done so UpdateThread advances to the main loop.
