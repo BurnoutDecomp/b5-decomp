@@ -1,7 +1,7 @@
 #include "GameSource/Graphics/BrnRendererModule.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
-#include "pc/gcm/movie/MoviePlayer.h"     // CgsGraphics::gpActiveMoviePlayer (full-screen movie)
+#include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayer.h"   // CgsGraphics::gpActiveMoviePlayer
 
 // Minimal constructors for the off-path placeholder types embedded in BrnRendererModule
 // (Option B). The job system and the buffered dispatch frame are reconstructed with the
@@ -105,7 +105,7 @@ void BrnRendererModule::Render()
     // screen is hidden during it); the debug HUD still overlays below. [PC movie path]
     if (CgsGraphics::gpActiveMoviePlayer != 0)
     {
-        CgsGraphics::gpActiveMoviePlayer->Render();
+        CgsGraphics::gpActiveMoviePlayer->Render(&mIm2dRenderer);
     }
 
     // (gameplay-render passes here when reconstructed; gated off during the loading screen)

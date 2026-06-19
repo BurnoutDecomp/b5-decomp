@@ -2,7 +2,7 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // gpMainGameFlowController, SendEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "pc/gcm/movie/MoviePlayer.h"                 // CgsGraphics::MoviePlayer (marketing/intro movie)
+#include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayer.h"  // CgsGraphics::MoviePlayer (marketing/intro)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -157,18 +157,20 @@ void MainGameFlowStateStartScreen::Update() {}
 void MainGameFlowStateStartScreen::Render() {}
 
 // Marketing/intro movie (Phase 3). The X360 streams a VideoDataResource through BrnGui::MovieManager
-// -> CgsGraphics::MoviePlayer (On2 VP6); the PC path opens a movie file directly with the FFmpeg-backed
-// player and presents it full-screen, advancing the flow when it finishes. Drop a clip at <cwd>/intro.mp4
-// (FFmpeg probes by content, so any readable container -- MP4/VP6/... -- works); absent it, the state
-// advances immediately. [PC DIVERGENCE: the GUI/MovieManager/VideoDataResource plumbing is bypassed here.]
+// -> CgsGraphics::MoviePlayer (On2 VP6); this drives the faithful CgsGraphics::MoviePlayer directly
+// (SetMovieFile -> Prepare -> Play), which presents it full-screen through the renderer's Im2d and
+// advances the flow when it finishes. Drop a clip at <cwd>/Videos/EAFranchise.mp4 (FFmpeg probes by
+// content, so any readable container -- MP4/VP6/... -- works); absent it, the state advances immediately.
+// [PC: the GUI/MovieManager/VideoDataResource plumbing is bypassed here until pieces 3-5 land.]
 static CgsGraphics::MoviePlayer sMarketingMovie;
 static bool                     sbMarketingMovieOpen = false;
 
-MainGameFlowStateMarketingScreens::MainGameFlowStateMarketingScreens() {}
+MainGameFlowStateMarketingScreens::MainGameFlowStateMarketingScreens() { sMarketingMovie.Construct(); }
 
 void MainGameFlowStateMarketingScreens::OnEnter()
 {
-    sbMarketingMovieOpen = sMarketingMovie.Open("Videos/EAFranchise.mp4");
+    sMarketingMovie.SetMovieFile("Videos/EAFranchise.mp4");
+    sbMarketingMovieOpen = sMarketingMovie.Prepare();
     if (sbMarketingMovieOpen)
     {
         sMarketingMovie.Play();
@@ -183,7 +185,7 @@ void MainGameFlowStateMarketingScreens::OnEnter()
 void MainGameFlowStateMarketingScreens::OnLeave()
 {
     CgsGraphics::gpActiveMoviePlayer = 0;
-    sMarketingMovie.Close();
+    sMarketingMovie.Release();
     sbMarketingMovieOpen = false;
 }
 
