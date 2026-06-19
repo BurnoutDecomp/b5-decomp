@@ -12,6 +12,12 @@ namespace CgsUnicode
     // Advance past one UTF-8 character (lead byte + its trailing bytes). X360 ARTIST 0x827E6A28.
     // Used to walk a UTF-8 string a character at a time (font measurement + rendering).
     const u8* IncrementUtf8Pointer(const u8* lpUtf8Char);
+
+    // Byte length of a NUL-terminated UTF-8 string (X360 CgsUnicode.cpp:108; DWARF
+    // uint32_t ByteLength(const UnicodeBuffer::CgsUtf8*)). Declared here in its canonical
+    // home; the body is its own TU. Used by CgsResource::LanguageResourceType's serialised
+    // descriptor (string-table size).
+    u32 ByteLength(const u8* lpUtf8String);
 }
 
 #endif
