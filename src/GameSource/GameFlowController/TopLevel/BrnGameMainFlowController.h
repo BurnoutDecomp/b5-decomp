@@ -68,4 +68,9 @@ namespace BrnGameMainFlowController
         bool                                  mbVideoState;
         bool                                  mbInGameState;
     };
+
+    // Option B bridge: the active controller, set in Construct(). The X360 reaches the controller
+    // through the game-module global (off_830102D0 + 0x9A0664); the flow states use this to fire
+    // SendEvent (e.g. the loading screen's FinishLoading -> SendEvent(E_MGE_STATEEND)).
+    extern GameMainFlowController* gpMainGameFlowController;
 }
