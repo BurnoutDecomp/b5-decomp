@@ -88,6 +88,7 @@ namespace BrnGui
         s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
         while (liEventId >= 0 && lpEvent != 0)
         {
+            // In pre-release builds, I'm pretty sure E_UPDATE_STAGE_MAIN_HD_MOVIE plays EAHD, but in the final release, the HD video is skipped
             switch (meUpdateStage)
             {
             case E_UPDATE_STAGE_LOADING:
