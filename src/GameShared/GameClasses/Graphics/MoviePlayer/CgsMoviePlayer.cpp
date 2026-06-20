@@ -20,8 +20,6 @@ namespace CgsSystem
 
 namespace CgsGraphics
 {
-    MoviePlayer* gpActiveMoviePlayer = 0;
-
     namespace
     {
         const s32 KI_D3DFMT_A8R8G8B8 = 21;   // D3DFORMAT for the BGRA frame texture
@@ -99,16 +97,21 @@ namespace CgsGraphics
 
         if (mcMovieFileName[0] == 0)
         {
+            CgsDev::Log::WriteToLog("[Movie] PrepareResources: empty filename\n");
             return false;
         }
         if (avformat_open_input(&mpFormatCtx, mcMovieFileName, 0, 0) < 0)
         {
             mpFormatCtx = 0;
+            CgsDev::Log::WriteToLog("[Movie] avformat_open_input FAILED: ");
+            CgsDev::Log::WriteToLog(mcMovieFileName);
+            CgsDev::Log::WriteToLog("\n");
             return false;
         }
         if (avformat_find_stream_info(mpFormatCtx, 0) < 0)
         {
             ReleaseResources();
+            CgsDev::Log::WriteToLog("[Movie] avformat_find_stream_info FAILED\n");
             return false;
         }
 
@@ -117,6 +120,7 @@ namespace CgsGraphics
         if (miVideoStream < 0 || lpCodec == 0)
         {
             ReleaseResources();
+            CgsDev::Log::WriteToLog("[Movie] av_find_best_stream FAILED (no video stream)\n");
             return false;
         }
 

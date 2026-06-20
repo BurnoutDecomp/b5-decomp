@@ -94,6 +94,14 @@ namespace BrnGame
 
         mMainFlowStateMachine.Construct();
         mMainFlowStateMachine.SetState(BrnGameMainFlowController::E_MGS_INITIAL_LOADING_SCREEN);
+
+        // GUI module (movie-hosting slice): construct + load VIDEOS\VIDEOLIST.BUNDLE (metadata only, so no
+        // device needed at Construct), and publish gpActiveMovieManager so the renderer draws the active
+        // movie. The X360 loads the GuiModule via the loading flow's LoadGUIModule stage + drives it through
+        // the module dispatch; this is the minimal hookup (construct here, Update in GameMain). It stays
+        // idle until a 508 GuiEventPlayVideo is queued (BrnBootVideos in Phase 3).
+        mGuiModule.Construct();
+        mGuiModule.Prepare();
     }
 
     // @ BrnGameModule.cpp:1047 (X360 0x823BC868) - tear down the owned modules + the module base.
@@ -300,6 +308,9 @@ namespace BrnGame
                     MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
                     lpState->Update();
                 }
+                // GUI module per-frame tick (drives the MovieManager state machine; Phase 2/3 drive the
+                // boot BrnHudFlow -> BootVideos here). The X360 ticks this through the module dispatch.
+                mGuiModule.Update();
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
                 if (liStep != miNumSimFramesRequired - 1)

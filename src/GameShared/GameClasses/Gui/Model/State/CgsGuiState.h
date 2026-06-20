@@ -18,7 +18,7 @@ public:
 // non-virtual helper set are from the DecFIGS DWARF (CgsGuiState.h).
 namespace CgsGui
 {
-    class StateInterface;
+    struct StateInterface;   // defined as a struct in CgsGuiStateInterface.h (match for correct name mangling)
     struct sResourceTuple;
 
     struct State : public CgsFsm::ScriptedState

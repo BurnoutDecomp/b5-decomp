@@ -105,11 +105,6 @@ namespace CgsGraphics
         renderengine::Texture* mpFrameTexture;    // current frame, D3DFMT_A8R8G8B8 (BGRA in memory)
         u32   muTexWidth, muTexHeight;
     };
-
-    // The movie currently owning the screen (the marketing/intro flow state sets it; BrnRendererModule
-    // ::Render draws it through the renderer's Im2d each frame while non-null). Option B bridge until the
-    // GUI MovieManager [piece 3] owns the lifecycle.
-    extern MoviePlayer* gpActiveMoviePlayer;
 }
 
 #endif

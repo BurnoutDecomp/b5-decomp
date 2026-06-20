@@ -14,6 +14,13 @@ namespace CgsResource
 {
     void RegisterAllResourceTypes()
     {
+        // Idempotent: both the debug-font bring-up and the GUI module's movie bundle load call this;
+        // register the handler set exactly once.
+        static bool sbRegistered = false;
+        if (sbRegistered)
+            return;
+        sbRegistered = true;
+
         RegisterRwRasterResourceType();        // 0x00  Texture / RwRaster
         RegisterRwTextureStateResourceType();  // 0x0E  TextureState
         RegisterMaterialStateResourceType();   // 0x0F  MaterialState / BlendState

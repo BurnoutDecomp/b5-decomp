@@ -95,7 +95,10 @@ namespace CgsResource
     struct ResourcePtr : public BaseResourcePtr
     {
     public:
-        ResourcePtr();
+        // Trivial default ctor (X360-inlined): BaseResourcePtr() zeroes the fields. Defined inline so a
+        // ResourcePtr<T> can be a data member; the copy/handle ctors + operator= remain declared-only
+        // (their own TUs / not attested in this batch).
+        ResourcePtr() {}
         ResourcePtr(const ResourcePtr<Type>& lrOther);
         ResourcePtr(const BaseResourcePtr& lrOther);
         ResourcePtr(const ResourceHandle& lrHandle);
