@@ -1,0 +1,282 @@
+#ifndef SDKS_PACKAGES_ICE_ICEDATA_HPP
+#define SDKS_PACKAGES_ICE_ICEDATA_HPP
+
+#include "types.hpp"
+#include "SDKs/Packages/ICE/ICEDataEnums.hpp"   // ICE::ICEValue, ICEChannel, ICEParameter, enums
+#include "SDKs/Packages/ICE/ICEPoint.hpp"        // ICE::Cubic1D (ICETake embeds Cubic1D[28])
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"  // CgsResource::ID (IResourceManager::GetTakeData(ID))
+
+// ============================================================================
+// SDKs/Packages/ICE/ICEData.hpp
+//
+// The ICE camera-take runtime types: ICETakeData (one serialised camera-take
+// record in an ICE take dictionary), the live ICETake that plays one back,
+// ICEElementCount, and the IResourceManager interface ICETake queries for take
+// data. This is the canonical mirrored home (the DecFIGS DWARF declares these in
+// SDKs/Packages/ICE/ICEData.hpp, and the ledger maps ICE::ICETake* /
+// ICE::ICETakeData::* methods to SDKs/Packages/ICE/ICEData.cpp).
+//
+// GROWN from the minimal ICETakeData-header slice to the full DWARF layout so the
+// ICEData.cpp body phase can be reconstructed against a frozen layout. The
+// ICETakeData FIELDS are kept EXACTLY as committed (DWARF-correct; miGuid @+0x8 is
+// X360-attested -- BrnResource::ICEList reads it). Member NAMES/ORDER/TYPES are
+// authoritative from the DWARF; trivial inline-away accessors carry bodies,
+// everything substantial is declaration-only (bodies in ICEData.cpp; the per-TU
+// `cl /c` gate does not link).
+//
+// LAYOUT (32-bit, DWARF ICEData.hpp:51-79; miGuid @+0x8 also X360-attested):
+//   ICETakeData @0x00  bTNode<ICETakeData> base (tree node, 8 bytes on 32-bit)
+//               @0x08  s32  miGuid
+//               @0x0C  char macTakeName[KI_MAX_TAKENAME_LENGTH]
+//               @0x2C  f32  mfLength
+//               @0x30  u32  muAllocated
+//               @0x34  ICEElementCount mElementCounts[12]
+//
+// (DWARF spells the scalars float32_t / int32_t; those are NOT project types ->
+// f32 / s32, per the type vocabulary in types.hpp.)
+// ============================================================================
+
+// CgsResource::Resource -- the resource-fixup argument of ICETakeData::FixUp /
+// FixDown (DWARF: `const Resource&`, i.e. CgsResource::Resource). Those two methods
+// are declaration-only here (the body phase defines them out-of-line) and take the
+// type only by const reference, so an incomplete forward declaration suffices --
+// this avoids pulling the full resource-system header into the ICE vocabulary.
+// (tag `struct` per the DWARF.)
+namespace CgsResource
+{
+    struct Resource;
+}
+
+namespace ICE
+{
+
+// Debug text-stream sink used by ICETakeData::SaveData. Its real home is
+// SDKs/Packages/ICE/ICEFile.hpp (the ICEFile.cpp TU); forward-declared here since
+// SaveData only takes it by pointer.
+class ICEFileHandler;
+
+// ---------------------------------------------------------------------------
+// ICE camera/take constants (ICEData.hpp:34-57, DWARF). The float-typed ones are
+// declared extern (defined out-of-line in ICEData.cpp) since their values are not
+// in the DWARF; the integer ones are inline constants.
+// ---------------------------------------------------------------------------
+static const u32 KU_GTID_STRING_LENGTH    = 13;
+extern const f32 ICE_LENS_DEFAULT;
+extern const f32 ICE_NEAR_CLIP_DEFAULT;
+static const u8  ICE_APERTURE_MAX         = 37;
+extern const f32 ICE_TANGENT_LENGTH_DEFAULT;
+static const u8  ICE_PERCENT_MAX          = 100;
+static const u16 ICE_INVALID_KEY          = 65535;
+static const u16 ICE_INVALID_INTERVAL     = 65535;
+static const u16 ICE_MAX_EDIT_KEYS        = 100;
+static const u16 ICE_MAX_EDIT_INTERVALS   = 99;
+static const u32 ICE_MAX_UNDO_SIZE        = 102400;
+extern const f32 ICE_EPSILON;
+extern const f32 ICE_DATA_SMALL_FLOAT;
+static const s32 ICE_GROUP_NAME_LENGTH       = 128;
+static const s32 ICE_SHORT_GROUP_NAME_LENGTH = 4;
+
+// ICEData.hpp:64 (DWARF). Fixed take-name buffer length.
+static const s32 KI_MAX_TAKENAME_LENGTH = 32;
+
+// ICEData.hpp:75 (DWARF). Per-channel interval/key counts -- 4 bytes (two u16); a
+// 12-entry array spans the 0x34..0x5B region of the take header.
+struct ICEElementCount
+{
+    u16 mu16Intervals;
+    u16 mu16Keys;
+};
+
+// ---------------------------------------------------------------------------
+// ICETakeData (ICEData.hpp:93, DWARF). One serialised camera-take record. In the
+// DWARF this derives from bTNode<ICETakeData> (intrusive tree node); that base has
+// no reconstructed home yet, so it is modeled here as an explicit 8-byte padding
+// buffer (a placeholder for the not-yet-reconstructed base, to be replaced when the
+// bNode/bTNode TU lands -- NOT an offset hack).
+//
+// FIELDS kept EXACTLY as committed (DWARF field-for-field; miGuid @+0x8 is
+// additionally X360-attested via BrnResource::ICEList's guid lookup). The fields
+// stay PUBLIC: BrnResource::ICEList::GetICETakeDataFromGuid reads `mpTakeData->miGuid`
+// directly, so making them private would break that committed consumer.
+//
+// GROWN with the full method set (DWARF ICEData.hpp:111-156). Trivial inline-away
+// accessors carry bodies; everything substantial is declaration-only (bodies in
+// ICEData.cpp).
+// ---------------------------------------------------------------------------
+struct ICETakeData
+{
+    // ---- fields (kept exactly as committed) ----
+    u8              mPadNodeBase[8];                    // @0x00  bNode/bTNode tree base (8 bytes)
+    s32             miGuid;                             // @0x08  GameDB id (read by ICEList)
+    char            macTakeName[KI_MAX_TAKENAME_LENGTH];// @0x0C  take name
+    f32             mfLength;                           // @0x2C  take length (seconds)
+    u32             muAllocated;                        // @0x30  allocated size/flag
+    ICEElementCount mElementCounts[12];                 // @0x34  per-channel interval/key counts
+
+    // ICEData.hpp:64 (DWARF). Key-index storage type for the take's channels.
+    typedef u16 ICE_KEY_INDEX;
+
+    // --- DECLARE-ONLY (bodies in ICEData.cpp / sibling TUs) ---
+    u32  GetResourceType();
+    void FixUp(const CgsResource::Resource& lrResource);
+    void FixDown(const CgsResource::Resource& lrResource);
+    bool operator==(const ICETakeData& lrOther);
+    ICETakeData& operator=(const ICETakeData& lrOther);
+    void Construct();
+    u32  ComputeEditSize();
+    u32  ComputeActualSize() const;
+    u8*  GetVariableData() const;
+    u32  GetVariableDataSize() const;
+    bool HasChannelData(s32 liChannel) const;
+    ICE_KEY_INDEX GetNumKeys(s32 liChannel) const;
+    ICE_KEY_INDEX GetNumIntervals(s32 liChannel) const;
+    void SetNumKeys(s32 liChannel, s32 liNumKeys);
+    void SetNumIntervals(s32 liChannel, s32 liNumIntervals);
+    void SetName(const char* lpcName);
+    const char* GetName() const;
+    // Debug text dumper (class:ICE::ICETakeData TU, @0x82532CF8): writes an XML-ish
+    // dump of the decoded take through an ICEFileHandler. ICEFileHandler is the
+    // SDKs/Packages/ICE/ICEFile.cpp type (forward-declared above).
+    void SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber);
+
+    // --- Trivial inline-away accessors ---
+    bool IsAllocated() const                       { return muAllocated != 0; }
+    const ICEElementCount* GetElementCounts() const { return &mElementCounts[0]; }
+    s32  GetGuid() const                           { return miGuid; }
+    void SetGuid(s32 liGuid)                       { miGuid = liGuid; }
+    f32  GetLength() const                         { return mfLength; }
+    void SetLength(f32 lfLength)                   { mfLength = lfLength; }
+};
+
+// ---------------------------------------------------------------------------
+// IResourceManager (ICEData.hpp:226, DWARF). The abstract interface ICETake holds
+// a const pointer to in order to resolve take data by id or index. Minimal slice --
+// only the two GetTakeData virtuals the DWARF declares; declaration-only (no
+// bodies), modeled as a pure-virtual interface (the I-prefix interface convention).
+// ICETake only ever uses it by const pointer, so the layout impact is one vptr.
+// ---------------------------------------------------------------------------
+struct IResourceManager
+{
+    virtual ~IResourceManager() {}
+
+    virtual const ICETakeData* GetTakeData(CgsResource::ID lId) const = 0;
+    virtual const ICETakeData* GetTakeData(s32 liIndex) const = 0;
+};
+
+// ---------------------------------------------------------------------------
+// ICETake (ICEData.hpp:236, DWARF). A live, evaluatable camera take: it points at
+// the serialised ICETakeData (and an optional sub-take for blending), holds the
+// decoded per-element ICEValue table, the runtime ICEChannel array, the Cubic1D
+// followers, and the edit-buffer element-data pointers, and exposes the value /
+// interval queries the camera system drives each frame.
+//
+// FIELDS IN ORDER (DWARF ICEData.hpp:356-366):
+//   @0x000 const IResourceManager* mpResourceManager
+//   @0x004 ICETakeData* mpTakeData
+//   @0x008 f32 mfParameter
+//   @0x00C f32 mfSubParameter
+//   @0x010 ICETakeData* mpSubTakeData
+//   @0x014 ICEValue mValues[48]
+//   ...    ICEChannel mChannels[12]
+//   ...    Cubic1D mCubics[28]
+//   ...    u8* mpElementData[48]
+//   ...    s32 mxSubTakeChannels         (bitmask: which channels come from the sub-take)
+//   ...    bool mbNewSubTakeThisFrame
+//
+// Trivial inline-away accessors carry bodies; everything the body phase will define
+// (Construct, edit-buffer management, parameter/sub-take setup, value get/set,
+// interval arithmetic) is declaration-only.
+// ---------------------------------------------------------------------------
+struct ICETake
+{
+private:
+    const IResourceManager* mpResourceManager;   // @0x000  take-data provider
+    ICETakeData*            mpTakeData;           // @0x004  primary take
+    f32                     mfParameter;          // @0x008  current playback parameter
+    f32                     mfSubParameter;       // @0x00C  sub-take parameter
+    ICETakeData*            mpSubTakeData;        // @0x010  optional blend sub-take
+    ICEValue                mValues[48];          // @0x014  decoded per-element values
+    ICEChannel              mChannels[12];        //         runtime channels
+    Cubic1D                 mCubics[28];          //         cubic followers
+    u8*                     mpElementData[48];    //         edit-buffer element data
+    s32                     mxSubTakeChannels;    //         sub-take channel bitmask
+    bool                    mbNewSubTakeThisFrame;//         sub-take changed this frame
+
+public:
+    // --- DECLARE-ONLY (lifecycle / edit buffer; bodies in ICEData.cpp) ---
+    void Construct(const IResourceManager* lpResourceManager);
+    void Destruct();
+    void NewEditBuffer();
+    void FreeEditBuffer();
+
+    // --- Trivial inline-away accessors ---
+    bool IsAllocated() const               { return mpElementData[0] != 0; }
+    ICETakeData* GetData() const           { return mpTakeData; }
+    f32  GetParameter() const              { return mfParameter; }
+    f32  GetSubParameter() const           { return mfSubParameter; }
+    void SetSubParameter(f32 lfSubParameter) { mfSubParameter = lfSubParameter; }
+    bool IsNewSubTakeThisFrame() const     { return mbNewSubTakeThisFrame; }
+    f32  GetLength() const                 { return mpTakeData->GetLength(); }
+
+    // --- DECLARE-ONLY (data binding / parameter & sub-take setup; bodies elsewhere) ---
+    void SetData(ICETakeData* lpTakeData, f32 lfParameter);
+    void SetDataPointers(ICETakeData* lpTakeData, bool lbEdit);
+    bool IsChannelFromSubTake(s32 liChannel);
+
+    bool SetParameter(f32 lfParameter, bool lbForce, bool lbWrap);
+
+    void SetSubTake(s32 liGuid, bool lbForce);
+    void SetSubTake(const ICETakeData* lpSubTakeData, bool lbForce);
+
+    void SetLength(f32 lfLength);
+    f32  GetSubTakeLength() const;
+
+    // --- DECLARE-ONLY (value queries; bodies elsewhere) ---
+    ICEValue GetValue(s32 liChannel, u16 lu16Key) const;
+    ICEValue GetValue(s32 liChannel) const;
+    void     SetValue(s32 liChannel, u16 lu16Key, ICEValue lValue);
+
+    f32 GetValueFloat(s32 liChannel, u16 lu16Key) const;
+    f32 GetValueFloat(s32 liChannel) const;
+
+    s32 GetValueInt(s32 liChannel, u16 lu16Key) const;
+    s32 GetValueInt(s32 liChannel) const;
+
+    bool IsHardCut(s32 liChannel, s32 liElement) const;
+    bool IsHardCut(s32 liChannel, u16 lu16Key, s32 liElement) const;
+
+    ICEParameter* GetParameterData(s32 liChannel) const;
+    u16*          GetKeyData(s32 liChannel) const;
+    u8*           GetElementData(s32 liChannel) const;
+
+    u16 GetNumKeys(s32 liChannel) const;
+    u16 GetNumIntervals(s32 liChannel) const;
+    u16 GetCurrentInterval(s32 liChannel) const;
+
+    u16 GetIntervalKey(s32 liChannel, u16 lu16Interval) const;
+    f32 GetIntervalEnd(s32 liChannel, u16 lu16Interval) const;
+    f32 GetIntervalSize(s32 liChannel, u16 lu16Interval) const;
+    f32 GetIntervalStart(s32 liChannel, u16 lu16Interval) const;
+    void GetIntervalBracket(s32 liChannel, u16 lu16Interval, f32* lpfStart, f32* lpfEnd) const;
+    f32 GetIntervalParameter(s32 liChannel, u16 lu16Interval, s32 liElement) const;
+
+private:
+    // --- DECLARE-ONLY (private machinery; bodies elsewhere) ---
+    bool SetParameter(s32 liChannel, f32 lfParameter, bool lbForce);
+    f32  GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) const;
+    void MarkChannelFromSubTake(s32 liChannel);
+    void FlushUndo();
+    bool IsEditable() const;
+};
+
+// ---------------------------------------------------------------------------
+// ICEGroup (ICEData.hpp:376, DWARF). A named collection of takes + assembly takes.
+// Not referenced by-value from ICETake / ICETakeData, so it is intentionally NOT
+// reconstructed here -- the body phase can request it when an ICEData.cpp function
+// actually needs it (it embeds bTList<ICETakeData>, whose home is not yet
+// reconstructed). Kept out per the GROW-don't-fork rule (no speculative types).
+// ---------------------------------------------------------------------------
+
+} // namespace ICE
+
+#endif // SDKS_PACKAGES_ICE_ICEDATA_HPP

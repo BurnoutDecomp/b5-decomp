@@ -17,6 +17,7 @@
 namespace CgsDev
 {
     namespace DebugUI { struct DebugUI; }
+    class DebugRender;   // Get2dRender returns a reference (the buffered debug renderer)
 
     struct DebugInterface
     {
@@ -40,6 +41,26 @@ namespace CgsDev
 
         DebugManager&     GetDebugManager() { return *mpDebugManager; }
         DebugUI::DebugUI& GetUI()           { return mpDebugManager->GetUI(); }
+
+        // The buffered 2D debug renderer this interface draws through (X360-attested,
+        // DecFIGS DWARF CgsDebugInterface.h:24 `DebugRender& Get2dRender()`). The debug
+        // overlay code (ICERender::RenderPoly / ScrPrintfArg) queues 2D box/text prims
+        // here. DECLARATION-ONLY: the body (forwards the manager's buffered renderer)
+        // lives in the DebugInterface TU and is the render-mirror follow-on.
+        DebugRender& Get2dRender();
+
+        // The buffered 3D (WORLD-space) debug renderer this interface draws through
+        // (X360-attested: ICEWidgetTargetBox::Render @0x8252D2B8 calls GetRender then
+        // DebugRender::DrawBox to draw a world-space target box). Mirrors Get2dRender
+        // but hands back the 3D queue's renderer. DECLARATION-ONLY: the body (forwards
+        // the manager's buffered 3D renderer) lives in the DebugInterface TU and is the
+        // render-mirror follow-on.
+        // FLAG (header grow): GetRender() added here for ICEWidgetTargetBox::Render; the
+        //       symbol is a disasm-attested `bl` target in that Render (NOT in
+        //       progress/tu_index.json) and has no DWARF here, so the signature is
+        //       asm-derived (returns the same DebugRender& as the 2D getter, the 3D
+        //       queue being the renderer's second event queue).
+        DebugRender& GetRender();
 
     private:
         DebugManager* mpDebugManager;

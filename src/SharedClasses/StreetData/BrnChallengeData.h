@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                  // ::CgsID (u64) for ChallengePlayerScoreEntry::maCarIDs
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<2u> (canonical generic)
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (ContainsData bounds guard)
 
@@ -105,5 +106,18 @@ namespace BrnStreetData
         // BrnChallengeData.cpp TU (it appears only as [external/unknown] from every caller), so
         // it resolves under cl /c without forcing that TU's reconstruction here.
         int32_t CompareScores( ScoreType leScoreType, int32_t liScore0, int32_t liScore1 );
+    };
+
+    // BrnChallengeData.h:225 (DWARF). The local-player challenge record: a ChallengeData plus the
+    // pair of car ids that scored it. Promoted out of the former file-local definition in
+    // BrnChallengeData.cpp so callers outside that TU (e.g. the network road-rules debug component,
+    // which builds one on the stack to inject a fake personal best) compile against the one shared
+    // definition. Method bodies stay in BrnChallengeData.cpp.
+    struct ChallengePlayerScoreEntry : public ChallengeData
+    {
+        ::CgsID maCarIDs[2];   // +24
+
+        void Construct();
+        void Copy( const ChallengePlayerScoreEntry* lpSource );
     };
 }
