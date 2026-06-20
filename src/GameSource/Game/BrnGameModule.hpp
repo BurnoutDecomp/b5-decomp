@@ -5,6 +5,7 @@
 // Real member types (reconstructed). The renderer module owns the loading-screen renderer;
 // the remaining subsystems below are the ones the per-frame update spine (GameMain) drives.
 #include "GameSource/Graphics/BrnRendererModule.h"                       // BrnGraphics::BrnRendererModule
+#include "GameSource/Gui/BrnGuiModule.h"                                 // BrnGui::GuiModule (hosts the MovieManager)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"        // CgsModule::ModuleSingleBuffered (real base)
 #include "GameShared/GameClasses/System/Threads/CgsThreadLayout.h"       // CgsSystem::IThreadClass
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"              // CgsModule::IOBufferStack
@@ -36,7 +37,8 @@ namespace BrnResource  { class GameDataModule : public CgsModule::ModuleSingleBu
 namespace BrnGameState { class GameStateModule : public CgsModule::ModuleSingleBuffered {}; }
 namespace BrnDirector  { class DirectorModule  : public CgsModule::ModuleSingleBuffered {}; }
 namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleBuffered {}; }
-namespace BrnGui       { class GuiModule       : public CgsModule::ModuleSingleBuffered {}; }
+// BrnGui::GuiModule is now the REAL module (hosts the MovieManager) -- included above (BrnGuiModule.h),
+// no longer the opaque stub.
 namespace BrnEffects   { class EffectsModule   : public CgsModule::ModuleSingleBuffered {}; }
 namespace BrnSound { namespace Module { class RootSoundModule : public CgsModule::ModuleSingleBuffered {}; } }
 namespace BrnReplays   { class ReplayModule    : public CgsModule::ModuleSingleBuffered {}; }

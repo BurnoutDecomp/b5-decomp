@@ -72,4 +72,34 @@ namespace CgsGui
                    "Invalid event observer pointer in StateInterface::SetEventObserver");
         mpObserver = lpObserver;
     }
+
+    // Stand up the interface: zero the channel pointers + construct the output event queue. (Cast to the
+    // VariableEventQueue base so the inline Construct is used, not the GuiEventQueueBase template decl.)
+    void StateInterface::Construct()
+    {
+        mpObserver = nullptr;
+        mpAccessPointers = nullptr;
+        mpAllocator = nullptr;
+        static_cast<CgsModule::VariableEventQueue<65536, 16>&>(mOutEventQueue).Construct();
+    }
+
+    GuiStackEventQueue::GuiEventQueueLarge* StateInterface::GetOutputEventQueue()
+    {
+        return &mOutEventQueue;
+    }
+
+    // [stub] On console, RegisterForEvents installs interest with the EventObserver, which then routes
+    // matching events to this state. The boot driver bridges the output queue to the MovieManager directly,
+    // so registration is a no-op here (the real observer dispatch is a follow-on).
+    void StateInterface::RegisterForEvents(const s32* lpiEventIds, s32 liCount)
+    {
+        (void)lpiEventIds;
+        (void)liCount;
+    }
+
+    void StateInterface::UnRegisterForEvents(const s32* lpiEventIds, s32 liCount)
+    {
+        (void)lpiEventIds;
+        (void)liCount;
+    }
 }

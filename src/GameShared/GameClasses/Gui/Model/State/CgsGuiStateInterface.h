@@ -72,6 +72,17 @@ namespace CgsGui
         GuiStackEventQueue::GuiEventQueueLarge* GetOutputEventQueue();
         void SetEventObserver(CgsGui::EventObserver* lpObserver);
 
+        // Push a GUI event onto the state's output queue, keyed by its GuiEvent<N> type id. The X360
+        // boot states (e.g. BrnGui::BootVideos) emit BrnGui::GuiEventPlayVideo/StopVideo through this; the
+        // template is generic so it can carry a higher-layer (GameSource) event type without this GameShared
+        // header depending on it -- it is only instantiated where TEvent is complete. The queued event is
+        // then routed to the registered observers (the MovieManager for the video events).
+        template <typename TEvent>
+        void OutputGuiEvent(TEvent& lrEvent)
+        {
+            mOutEventQueue.AddEvent(&lrEvent, lrEvent.GetEventType(), static_cast<s32>(sizeof(TEvent)));
+        }
+
         void PlayAptMovie(const char* lpacMovieName, s32 liLevelNum);
         void PlayVideo(const char* lpacVideoName);
         void PlayLoadingScreen();

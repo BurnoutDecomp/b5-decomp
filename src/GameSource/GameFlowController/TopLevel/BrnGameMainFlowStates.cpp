@@ -2,7 +2,6 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // gpMainGameFlowController, SendEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayer.h"  // CgsGraphics::MoviePlayer (marketing/intro)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -120,7 +119,7 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         break;
     case E_LOADINGSTAGE_REPLAYS:            // LoadReplayModule
         meLoadingScreenStage = E_LOADINGSTAGE_DONE;
-        CGS_ASSERT(false, "six seven");
+        //CGS_ASSERT(false, "six seven");
         break;
     case E_LOADINGSTAGE_DONE:
     default:
@@ -156,48 +155,23 @@ void MainGameFlowStateStartScreen::OnLeave() {}
 void MainGameFlowStateStartScreen::Update() {}
 void MainGameFlowStateStartScreen::Render() {}
 
-// Marketing/intro movie (Phase 3). The X360 streams a VideoDataResource through BrnGui::MovieManager
-// -> CgsGraphics::MoviePlayer (On2 VP6); this drives the faithful CgsGraphics::MoviePlayer directly
-// (SetMovieFile -> Prepare -> Play), which presents it full-screen through the renderer's Im2d and
-// advances the flow when it finishes. Drop a clip at <cwd>/Videos/EAFranchise.mp4 (FFmpeg probes by
-// content, so any readable container -- MP4/VP6/... -- works); absent it, the state advances immediately.
-// [PC: the GUI/MovieManager/VideoDataResource plumbing is bypassed here until pieces 3-5 land.]
-static CgsGraphics::MoviePlayer sMarketingMovie;
-static bool                     sbMarketingMovieOpen = false;
-
-MainGameFlowStateMarketingScreens::MainGameFlowStateMarketingScreens() { sMarketingMovie.Construct(); }
+// MARKETING_SCREENS is a LoadingScriptedState (module loading) -- NOT a movie player. The boot/attract
+// videos are owned by the GUI module's HUD flow (BrnGui::BootVideos plays the HD/EA/Criterion logos;
+// BrnGui::BootLegal/BootAttract play the post-title attract), driven by GUI events with data from
+// VIDEOS\VIDEOLIST.BUNDLE (see the movie postmortem). Until the real module-loading body is reconstructed,
+// this passes straight through to the next flow state.
+MainGameFlowStateMarketingScreens::MainGameFlowStateMarketingScreens() {}
 
 void MainGameFlowStateMarketingScreens::OnEnter()
 {
-    sMarketingMovie.SetMovieFile("Videos/EAFranchise.mp4");
-    sbMarketingMovieOpen = sMarketingMovie.Prepare();
-    if (sbMarketingMovieOpen)
-    {
-        sMarketingMovie.Play();
-        CgsGraphics::gpActiveMoviePlayer = &sMarketingMovie;   // the renderer draws it each frame
-    }
-    else if (CgsDev::Message::gxMessageFilterFlags & 1)
-    {
-        *CgsDev::Log::gpDebugPrint << "MarketingScreens: no Videos/EAFranchise.mp4 found -> skipping to next state\n";
-    }
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "MarketingScreens: OnEnter\n";
 }
 
-void MainGameFlowStateMarketingScreens::OnLeave()
-{
-    CgsGraphics::gpActiveMoviePlayer = 0;
-    sMarketingMovie.Release();
-    sbMarketingMovieOpen = false;
-}
+void MainGameFlowStateMarketingScreens::OnLeave() {}
 
 void MainGameFlowStateMarketingScreens::Update()
 {
-    if (sbMarketingMovieOpen)
-    {
-        sMarketingMovie.Update();
-        if (!sMarketingMovie.IsFinished())
-            return;   // still playing
-    }
-    // Movie finished (or none present) -> advance the flow (STATEEND -> START_SCREEN).
     if (BrnGameMainFlowController::gpMainGameFlowController != 0)
         BrnGameMainFlowController::gpMainGameFlowController->SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
 }
