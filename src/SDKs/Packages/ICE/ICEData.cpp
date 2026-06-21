@@ -6,9 +6,8 @@
 // encode/decode/raw machinery, the ICEChannel interval queries, the ICETakeData
 // size/serialisation helpers, and the live ICETake evaluation engine.
 //
-// Reconstructed from the X360 ARTIST 2007-02 build against the FROZEN committed
-// layouts in ICEData.hpp / ICEDataEnums.hpp / ICEPoint.hpp. The 24 function bodies
-// were reconstructed per-function (5 body agents) and ASSEMBLED here in dependency
+// Built against the FROZEN committed layouts in ICEData.hpp / ICEDataEnums.hpp /
+// ICEPoint.hpp. The 24 function bodies are ASSEMBLED here in dependency
 // order: the static schema globals (InitICEDescriptions group) come FIRST so the
 // ICETakeData / ICETake bodies that read ICEElementDescriptions[] /
 // gaICEElementChannels[] see their definitions, then ICEElementDescription,
@@ -33,25 +32,24 @@
 
 // =============================================================================
 // GROUP 1 -- the static element-description schema + per-channel index records +
-// ICE::InitICEDescriptions (X360: InitICEDescriptions @0x82532A08).
+// ICE::InitICEDescriptions.
 //
-// RECONSTRUCTION NOTES (from the init body agent):
+// LAYOUT NOTES:
 // InitICEDescriptions does NOT populate the element-description field immediates.
 // The 48-entry table `ICEElementDescriptions` is a STATICALLY INITIALIZED .data
-// array (guest 0x82F28850, 88 bytes == 0x58 == frozen sizeof(ICEElementDescription)
-// per entry); the original C++ declared it with the aggregate initializer below and
-// the compiler emitted it directly into .data. InitICEDescriptions only does runtime
+// array (88 bytes == 0x58 == frozen sizeof(ICEElementDescription)
+// per entry); it is declared with the aggregate initializer below and
+// the compiler emits it directly into .data. InitICEDescriptions only does runtime
 // CHANNEL BOOKKEEPING: it (loop 1) seeds each of the 12 per-channel index records
 // with its channel name + zeroed counts, then (loop 2) calls Prepare() on every
 // element and files each element index into its channel's key-list (elements 0..27)
 // or interval-list (elements 28..47).
 //
 // The full table -- tags, display names, ALL numeric fields, and the discreet token
-// tables -- was recovered by dumping the .data table from BURNOUT_X360_ARTIST.XEX.i64
-// (.ida-exports/_data_ice_desc.json). Nothing here is a placeholder.
+// tables -- is reproduced from the .data image. Nothing here is a placeholder.
 //
-// eICE_NUM_ELEMENTS == 48: (a) (0x82F298D8-0x82F28850)/88 == 48, (b) loop 2's bound
-// off_82F298D8 stops after 48 iterations, (c) matches ICETake's mValues[48].
+// eICE_NUM_ELEMENTS == 48: (a) the .data table spans 48 * 88 bytes, (b) loop 2's bound
+// stops after 48 iterations, (c) matches ICETake's mValues[48].
 //
 // FLAG: mpTag/mpDisplayName/mpTokens are non-const char*/char** in the frozen header;
 // the data is read-only .rodata at runtime, hence the const_cast<char*> wrappers. If
@@ -70,7 +68,7 @@ namespace ICE
 
 // eICE_NUM_CHANNELS == 12 (see docs/ICEData.md ICEChannels). The 12 channel names, in
 // channel order, seeded into the per-channel index records by InitICEDescriptions loop 1.
-// (.rodata string list at guest 0x82F28654 == IDA off_82F28654.)
+// (A .rodata string list.)
 static const s32 eICE_NUM_CHANNELS = 12;
 static const char* const KAPC_ICE_CHANNEL_NAMES[eICE_NUM_CHANNELS] =
 {
@@ -80,18 +78,17 @@ static const char* const KAPC_ICE_CHANNEL_NAMES[eICE_NUM_CHANNELS] =
 
 // -----------------------------------------------------------------------------
 // Discreet-value token tables (eICE_UINT elements). Each is a .rodata char* array the
-// table entries point at; reproduced verbatim from the .data dump (with their guest
-// addresses for traceability).
+// table entries point at; reproduced verbatim from the .data image.
 // -----------------------------------------------------------------------------
-static const char* const kapcICETokens_NoYes[]   = { "No", "Yes" };  // @0x82F285E4
-static const char* const kapcICETokens_Space[]   = { "Car", "World", "Hybrid", "Scene", "Car 2", "TrafficLight", "Takedown", "Impact", "ReverseTakedown", "Gameplay", "Heading", "Bystander", "Heading2", "LooseHeading" };  // @0x82F285EC
-static const char* const kapcICETokens_BlendCurve[] = { "Linear", "Sinusoidal", "Exponential Symmetrical", "Exponential Out X-Cubed" };  // @0x82F2863C
-static const char* const kapcICETokens_Interp[]  = { "Slerp", "Rotate About Car" };  // @0x82F2864C
-static const char* const kapcICETokens_ShakeType[] = { "None", "Jog", "Still", "WalkFast", "WalkSlow", "Procedural" };  // @0x82F28624
-static const char* const kapcICETokens_FadeColor[] = { "Black", "White", "Red", "Green", "Blue" };  // @0x82F2801C
+static const char* const kapcICETokens_NoYes[]   = { "No", "Yes" };
+static const char* const kapcICETokens_Space[]   = { "Car", "World", "Hybrid", "Scene", "Car 2", "TrafficLight", "Takedown", "Impact", "ReverseTakedown", "Gameplay", "Heading", "Bystander", "Heading2", "LooseHeading" };
+static const char* const kapcICETokens_BlendCurve[] = { "Linear", "Sinusoidal", "Exponential Symmetrical", "Exponential Out X-Cubed" };
+static const char* const kapcICETokens_Interp[]  = { "Slerp", "Rotate About Car" };
+static const char* const kapcICETokens_ShakeType[] = { "None", "Jog", "Still", "WalkFast", "WalkSlow", "Procedural" };
+static const char* const kapcICETokens_FadeColor[] = { "Black", "White", "Red", "Green", "Blue" };
 
 // -----------------------------------------------------------------------------
-// THE GLOBAL ELEMENT-DESCRIPTIONS TABLE (statically initialized; guest 0x82F28850).
+// THE GLOBAL ELEMENT-DESCRIPTIONS TABLE (statically initialized).
 // Field order matches the frozen ICEElementDescription:
 //   mpTag, mpDisplayName, miChannelNumber, mDataType, miDataBits,
 //   mDefault, mMin, mMax,
@@ -386,7 +383,7 @@ ICEElementDescription ICEElementDescriptions[eICE_NUM_ELEMENTS] =
       1.0f, 1.0f, 1.0f,
       const_cast<char**>(kapcICETokens_NoYes), 2 },
     // [40] SHAKE_TYPE -- channel 3 (SHAKE).  FLAG: display name is literally "Shack Type"
-    //      in the shipped .data (an original-source typo); preserved verbatim.
+    //      in the shipped .data (a source typo); preserved verbatim.
     { const_cast<char*>("SHAKE_TYPE"), const_cast<char*>("Shack Type"), 3, eICE_UINT, 5,
       ICEValue((s32)0), ICEValue((s32)0), ICEValue((s32)6),
       0.0f, 0.0f, 0.0f, 0.0f,
@@ -445,7 +442,7 @@ ICEElementDescription ICEElementDescriptions[eICE_NUM_ELEMENTS] =
 };
 
 // -----------------------------------------------------------------------------
-// Per-channel element-index records (guest global unk_82FB5930, 12 * 204 bytes).
+// Per-channel element-index records (a global, 12 * 204 bytes).
 // InitICEDescriptions seeds these from the table above so the take-evaluation code can,
 // for a given channel, walk just the elements that belong to it -- split into the
 // "key" elements (description index < 28) and "interval" elements (index >= 28).
@@ -472,7 +469,7 @@ struct ICEElementChannel
 ICEElementChannel gaICEElementChannels[eICE_NUM_CHANNELS];
 
 // -----------------------------------------------------------------------------
-// ICE::InitICEDescriptions @0x82532A08
+// ICE::InitICEDescriptions
 //
 // Runtime initializer for the ICE element-description system. Does NOT build the
 // description table (that is statically initialized above) -- it builds the per-channel
@@ -480,10 +477,9 @@ ICEElementChannel gaICEElementChannels[eICE_NUM_CHANNELS];
 // Prepare() on every element and files each element index into its channel's key- or
 // interval-list (loop 2).
 //
-// The X360 returns ICEElementDescription::Prepare's int result of the LAST element (an
-// artifact of Prepare's non-void tail in the decompile -- Prepare is logically void; the
-// frozen header declares it void). Reconstructed as void: the return value is never used
-// (the sole caller BrnDirector::ICEWrapper::Prepare ignores it).
+// Prepare is logically void (the frozen header declares it void) and its return value
+// is never used (the sole caller BrnDirector::ICEWrapper::Prepare ignores it), so this
+// is implemented as void.
 // -----------------------------------------------------------------------------
 void InitICEDescriptions()
 {
@@ -514,39 +510,82 @@ void InitICEDescriptions()
 
 
 // =============================================================================
-// GROUP 2 -- ICE::ICEElementDescription bodies (6): Decode, GetRawInt, SetRawInt,
-// GetValue, SetValue, Prepare.
+// GROUP 2 -- ICE::ICEElementDescription bodies (7): Encode, Decode, GetRawInt,
+// SetRawInt, GetValue, SetValue, Prepare.
 //
-// Reconstructed from the X360 ARTIST 2007-02 spine (Decode @0x8252BCE8,
-// GetRawInt @0x8252BD48, SetRawInt @0x8252BDE0, SetValue @0x8252BE68,
-// Prepare @0x8252EE08, GetValue @0x8252F208) against the frozen layout in
-// SDKs/Packages/ICE/ICEDataEnums.hpp. The eICE_FIXED quantization in Decode and
-// the slot/range precompute in Prepare match docs/ICEData.md; GetRawInt/SetRawInt
-// are big-endian bit-stream read/write.
-//
-// FLAG (Encode): ICEElementDescription::Encode is declared in ICEDataEnums.hpp and
-// called by SetValue's eICE_FIXED branch, but its BODY is NOT among the 24 functions
-// in this TU (it is a separate/inline-away deliverable). Declaration-only is correct
-// for the /c gate (no link).
+// Reconstructed against the frozen layout in SDKs/Packages/ICE/ICEDataEnums.hpp.
+// The eICE_FIXED quantization in Encode/Decode and the slot/range precompute in
+// Prepare match docs/ICEData.md; GetRawInt/SetRawInt are big-endian bit-stream
+// read/write.
 // =============================================================================
 
 namespace ICE
 {
 
 // ---------------------------------------------------------------------------
-// Decode (@0x8252BCE8). The eICE_FIXED dequantiser: map a quantised integer slot
+// Encode -- the eICE_FIXED quantiser: the inverse of Decode. Clamp the float into
+// [mMin, mMax], take its offset from mDefault, map that offset to a slot index (the
+// hi range for non-negative offsets, the lo range otherwise) biased by
+// mfQuantSlotsLo, and round the slot to the nearest integer.
+//   clamped = Clamp(value, mMin, mMax);
+//   offset  = clamped - mDefault;
+//   slot    = (offset >= 0) ? mfQuantSlotsHi * offset / mfQuantRangeHi + mfQuantSlotsLo
+//                           : mfQuantSlotsLo * offset / mfQuantRangeLo + mfQuantSlotsLo;
+//   return round-to-nearest(slot);
+// (mDefault @+0x14, mMin @+0x18, mMax @+0x1C, mfQuantSlotsLo @+0x20,
+//  mfQuantRangeLo @+0x24, mfQuantSlotsHi @+0x28, mfQuantRangeHi @+0x2C.) The round
+// is done inline: truncate toward zero, then bias the truncation down to a floor and
+// add one when the fractional part is >= 0.5 -- the same rule
+// ICEMath::RoundFloatToInt applies.
+// ---------------------------------------------------------------------------
+u32 ICEElementDescription::Encode(f32 lfValue) const
+{
+    const f32 lfMin     = mMin.GetFloat();
+    const f32 lfMax     = mMax.GetFloat();
+    const f32 lfDefault = mDefault.GetFloat();
+
+    // Clamp into [mMin, mMax] (low bound then high bound, branchless selects).
+    f32 lfClamped = (lfMin - lfValue >= 0.0f) ? lfMin : lfValue;
+    lfClamped = (lfMax - lfClamped >= 0.0f) ? lfClamped : lfMax;
+
+    const f32 lfOffset = lfClamped - lfDefault;
+
+    f32 lfSlot;
+    if (lfOffset >= 0.0f)
+    {
+        lfSlot = (mfQuantSlotsHi * lfOffset) / mfQuantRangeHi + mfQuantSlotsLo;
+    }
+    else
+    {
+        lfSlot = (mfQuantSlotsLo * lfOffset) / mfQuantRangeLo + mfQuantSlotsLo;
+    }
+
+    // Round to nearest (truncate-toward-zero baseline, bias down to a floor, then
+    // +1 when the fractional part reaches 0.5).
+    s32 liSlot = (s32)lfSlot;          // truncate toward zero
+    f32 lfFloor = (f32)liSlot;
+    if (lfFloor > lfSlot)
+        lfFloor -= 1.0f;
+    if ((lfSlot - lfFloor) >= 0.5f)
+        ++liSlot;
+
+    return (u32)liSlot;
+}
+
+// ---------------------------------------------------------------------------
+// Decode. The eICE_FIXED dequantiser: map a quantised integer slot
 // back to a float using the precomputed (Prepare'd) lo/hi slot counts and value
 // spans. Matches docs/ICEData.md eICE_FIXED:
 //   result = mDefault;
 //   if ((value - quantSlotsLo) >= 0) result += quantRangeHi*(value-quantSlotsLo)/quantSlotsHi;
 //   else                             result += quantRangeLo*(value-quantSlotsLo)/quantSlotsLo;
 // where mfQuantSlotsLo=value@+0x20, mfQuantRangeLo=+0x24, mfQuantSlotsHi=+0x28,
-// mfQuantRangeHi=+0x2C, mDefault=+0x14. The asm sign-extends the slot index to
-// 64-bit then fcfid->frsp, i.e. a signed-int-to-f32 conversion of luEncoded.
+// mfQuantRangeHi=+0x2C, mDefault=+0x14. The slot index is converted as a signed
+// int to f32 (sign-extend to 64-bit, then integer-to-float).
 // ---------------------------------------------------------------------------
 f32 ICEElementDescription::Decode(u32 luEncoded) const
 {
-    // The slot index is converted as a signed integer to float (extsw + fcfid).
+    // The slot index is converted as a signed integer to float.
     f32 lfSlot = (f32)(s32)luEncoded;
 
     f32 lfOffset = lfSlot - mfQuantSlotsLo;
@@ -564,7 +603,7 @@ f32 ICEElementDescription::Decode(u32 luEncoded) const
 }
 
 // ---------------------------------------------------------------------------
-// GetRawInt (@0x8252BD48). Read one element's miDataBits-wide value out of the
+// GetRawInt. Read one element's miDataBits-wide value out of the
 // packed element-data buffer as a big-endian bit field. liIndex selects the
 // (liIndex)th value of width miDataBits within lpElementData. Returns the raw,
 // right-justified bits (no sign extension -- that is done by the caller for
@@ -613,7 +652,7 @@ u32 ICEElementDescription::GetRawInt(u8* lpElementData, s32 liIndex) const
 }
 
 // ---------------------------------------------------------------------------
-// SetRawInt (@0x8252BDE0). The inverse of GetRawInt: store luValue as a
+// SetRawInt. The inverse of GetRawInt: store luValue as a
 // big-endian miDataBits-wide field into lpElementData at slot liIndex, preserving
 // the surrounding bits. The shift amount here is liShiftLeft (positive) where
 // GetRawInt's liShiftRight could go negative; same byte span.
@@ -651,11 +690,11 @@ void ICEElementDescription::SetRawInt(u8* lpElementData, s32 liIndex, u32 luValu
 }
 
 // ---------------------------------------------------------------------------
-// GetValue (@0x8252F208). Read+interpret one element's value from the packed
+// GetValue. Read+interpret one element's value from the packed
 // element-data buffer, dispatching on mDataType:
 //   eICE_INT (0)   : sign-extend the miDataBits raw int into 32 bits.
 //   eICE_UINT (1)  : raw bits (token index; the token table indirection is done
-//                    by a higher layer -- the asm here returns the raw int).
+//                    by a higher layer -- this returns the raw int).
 //   eICE_HASH (2)  : raw bits as an unsigned int.
 //   eICE_FIXED (3) : Decode() the raw slot to a float.
 //   eICE_FLOAT (4) : reinterpret the 32-bit native-endian word as IEEE float.
@@ -711,17 +750,15 @@ ICEValue ICEElementDescription::GetValue(u8* lpElementData, s32 liIndex) const
 }
 
 // ---------------------------------------------------------------------------
-// SetValue (@0x8252BE68). Write one element's value into the packed element-data
+// SetValue. Write one element's value into the packed element-data
 // buffer, dispatching on mDataType:
 //   eICE_INT / eICE_UINT / eICE_HASH (0,1,2): store the raw int bits directly.
 //   eICE_FIXED (3) : Encode() the float to a quantised slot, then store the bits.
 //   eICE_FLOAT (4) : store the float word natively.
 //   default        : no-op.
-// The asm reads the int/float through the ICEValue argument (lrValue): the int
+// The int/float is read through the ICEValue argument (lrValue): the int
 // cases pass lrValue.GetSignedInt() to SetRawInt; the float cases read
-// lrValue.GetFloat().
-// FLAG: Encode body not in this TU -- Encode is declared in ICEDataEnums.hpp and
-// defined in a sibling deliverable; declaration-only is fine for the /c gate.
+// lrValue.GetFloat(). The eICE_FIXED branch calls Encode (GROUP 2 above).
 // ---------------------------------------------------------------------------
 void ICEElementDescription::SetValue(u8* lpElementData, s32 liIndex, const ICEValue& lrValue) const
 {
@@ -737,7 +774,7 @@ void ICEElementDescription::SetValue(u8* lpElementData, s32 liIndex, const ICEVa
 
         case eICE_FIXED:
         {
-            u32 luEncoded = Encode(lrValue.GetFloat());   // FLAG: Encode body not in this TU
+            u32 luEncoded = Encode(lrValue.GetFloat());
             SetRawInt(lpElementData, liIndex, luEncoded);
             break;
         }
@@ -754,7 +791,7 @@ void ICEElementDescription::SetValue(u8* lpElementData, s32 liIndex, const ICEVa
 }
 
 // ---------------------------------------------------------------------------
-// Prepare (@0x8252EE08). Validate the description and precompute the eICE_FIXED
+// Prepare. Validate the description and precompute the eICE_FIXED
 // quantisation slot/range fields. The four quant fields are zeroed up front, then
 // (for eICE_FIXED) filled per docs/ICEData.md:
 //   quantRangeLo = mDefault - mMin;          (mfQuantRangeLo @+0x24)
@@ -868,23 +905,46 @@ void ICEElementDescription::Prepare()
 
 
 // =============================================================================
-// GROUP 3 -- ICE::ICEChannel bodies (3): GetIntervalBracket, GetIntervalSize, IsHardCut.
+// GROUP 3 -- ICE::ICEChannel bodies (5): GetIntervalParameter, GetIntervalBracket,
+// GetIntervalSize, IsHardCut, SetParameter.
 //
 // Frozen layout (ICEDataEnums.hpp): ICEChannel { u16 mu16Keys @0; u16 mu16Intervals @2;
 //   u16 mu16CurrentInterval @4; u16* mpKeyIndices @8; ICEParameter* mpParameters @C }.
-// Reconstructed from X360 asm/pseudocode:
-//   GetIntervalBracket @0x8252D6B8, GetIntervalSize @0x8252BF78, IsHardCut @0x8252F5C8.
-// Constants from the asm: flt_82001CC0 == 0.0f, flt_82001C98 == 1.0f.
+// Constants used: 0.0f, 1.0f, and the parameter dequantiser 1/65535
+// (== 1/ICE_PARAMETER_MAX; the same factor ICEParameter::GetValue divides by).
 // =============================================================================
 
 namespace ICE
 {
 
-// ICE::ICEChannel::GetIntervalBracket(u16, f32*, f32*) const  @0x8252D6B8
+// ICE::ICEChannel::GetIntervalParameter(u16) const
+//
+// The unit-interval parameter (in [0,1]) at the boundary indexed by lu16Interval.
+// Boundary 0 is the take start (0.0); boundary >= mu16Intervals is the take end
+// (1.0); every interior boundary reads the packed parameter stored for the prior
+// interval (mpParameters[lu16Interval - 1]) and dequantises it back to the unit
+// interval. mpParameters entries are u16-packed ICEParameter records, so the read
+// is the same packed-value / 65535 dequantise ICEParameter::GetValue performs.
+f32 ICEChannel::GetIntervalParameter(u16 lu16Interval) const
+{
+    if (lu16Interval == 0)
+        return 0.0f;
+
+    if (lu16Interval >= mu16Intervals)
+        return 1.0f;
+
+    // mpParameters[lu16Interval - 1] read as its packed u16 then dequantised by
+    // 1/ICE_PARAMETER_MAX. The packed halfword is loaded zero-extended and converted
+    // as a (non-negative) integer to float.
+    const u16 lu16Packed = *mpParameters[lu16Interval - 1].GetPackedPtr();
+    return (f32)(s32)lu16Packed * (1.0f / (f32)ICE_PARAMETER_MAX);
+}
+
+// ICE::ICEChannel::GetIntervalBracket(u16, f32*, f32*) const
 //
 // Returns the [start,end] parameter values bracketing the channel's CURRENT interval.
 // Note: lu16Interval is part of the frozen overload signature but the body operates on
-// the cached mu16CurrentInterval (the asm reads *(this+4), not the argument). When no
+// the cached mu16CurrentInterval (it reads *(this+4), not the argument). When no
 // interval is current (mu16CurrentInterval == 0xFFFF) the bracket is the full unit range.
 void ICEChannel::GetIntervalBracket(u16 lu16Interval, f32* lpfStart, f32* lpfEnd) const
 {
@@ -902,7 +962,7 @@ void ICEChannel::GetIntervalBracket(u16 lu16Interval, f32* lpfStart, f32* lpfEnd
     }
 }
 
-// ICE::ICEChannel::GetIntervalSize(u16) const  @0x8252BF78
+// ICE::ICEChannel::GetIntervalSize(u16) const
 //
 // Width of the interval that starts at lu16Interval: the parameter delta between the
 // next key and this one. The 0xFFFF sentinel (no/invalid interval) yields the full 1.0.
@@ -916,7 +976,7 @@ f32 ICEChannel::GetIntervalSize(u16 lu16Interval) const
     return lfEnd - lfStart;
 }
 
-// ICE::ICEChannel::IsHardCut(u16, s32) const  @0x8252F5C8
+// ICE::ICEChannel::IsHardCut(u16, s32) const
 //
 // Detects a discontinuous ("hard cut") interval. liElement selects a neighbouring
 // interval (offset 2*liElement, so 0 = this interval, -1/+1 = the prior/next pair edge);
@@ -951,7 +1011,7 @@ bool ICEChannel::IsHardCut(u16 lu16Interval, s32 liElement) const
     // The key index sitting at the left edge of a given interval: interval 0 maps to key 0,
     // the final interval maps to the last key (mu16Keys - 2), and every interior interval n
     // reads the stored key index for its left boundary (mpKeyIndices[n - 1] via GetKeyIndex).
-    // (Inlined helper, de-duplicated from the two copies in the original.)
+    // (Inlined helper, de-duplicated from its two call sites.)
     struct EdgeKey
     {
         const ICEChannel* lpChannel;
@@ -976,6 +1036,124 @@ bool ICEChannel::IsHardCut(u16 lu16Interval, s32 liElement) const
     return liKeyDelta > 1;
 }
 
+// ICE::ICEChannel::SetParameter(f32, f32*, f32*)
+//
+// Locate the interval that contains the playback parameter lfParameter, write the
+// unit-interval bracket of that interval back through *lpfStart / *lpfEnd, advance
+// mu16CurrentInterval to the located interval, and return whether the current
+// interval actually changed.
+//
+// The bracket is tracked as a pair of packed ICEParameter values (lStartParam /
+// lEndParam, init to 0.0 / 1.0) so the search compares against the same packed
+// query value (lQueryParam = param(lfParameter)) the take stores; the located
+// bracket is dequantised to floats only at the end.
+//
+// FAST PATH: if the cached current interval is still in range, test whether
+// lfParameter still falls inside it; if so accept it without searching.
+//
+// SLOW PATH: clamp lfParameter into [interval-0 start, take end]; if it was already
+// in range, binary-search the interval-boundary parameters for the containing
+// interval, narrowing [lo,hi] and tightening the bracket each step.
+bool ICEChannel::SetParameter(f32 lfParameter, f32* lpfStart, f32* lpfEnd)
+{
+    ICEParameter lStartParam(0.0f);   // start-of-bracket packed value
+    ICEParameter lEndParam(1.0f);     // end-of-bracket packed value
+
+    const u16 lu16NumIntervals = mu16Intervals;
+    u16 lu16Found = 0xFFFF;           // located interval index (0xFFFF == none yet)
+
+    if (lu16NumIntervals != 0)
+    {
+        // The packed unit-interval value being searched for.
+        ICEParameter lQueryParam(lfParameter);
+
+        // The candidate interval for the fast path: the cached current interval,
+        // capped at numIntervals - 1.
+        const u16 lu16Current = mu16CurrentInterval;
+        s32 liCandidate = (s32)lu16NumIntervals - 1;
+        if (liCandidate >= 0)
+        {
+            if (liCandidate >= (s32)lu16Current)
+                liCandidate = (s32)lu16Current;
+        }
+        else
+        {
+            liCandidate = (s32)lu16Current;
+        }
+
+        // --- FAST PATH: is lfParameter still inside the current interval? ---
+        if ((s32)lu16Current == liCandidate)
+        {
+            ICEParameter lBracketStart(GetIntervalParameter(lu16Current));
+            ICEParameter lBracketEnd(GetIntervalParameter((u16)(lu16Current + 1)));
+            // Accept when start <= query <= end (packed comparisons).
+            if (lBracketEnd >= lQueryParam && lQueryParam >= lBracketStart)
+            {
+                lStartParam = lBracketStart;
+                lEndParam   = lBracketEnd;
+                lu16Found   = lu16Current;
+            }
+        }
+
+        // --- SLOW PATH: binary search if the fast path missed. ---
+        if (lu16Found == 0xFFFF)
+        {
+            s32 liHi = (s32)lu16NumIntervals - 1;
+            u16 lu16Lo = 0;
+
+            const f32 lfStart0 = GetIntervalParameter(0);             // interval-0 start (0.0)
+            const f32 lfEnd    = GetIntervalParameter(lu16NumIntervals); // take end (1.0)
+
+            // Clamp lfParameter into [lfStart0, lfEnd]; only search if it was
+            // already in range (the clamp left it unchanged).
+            f32 lfClamped = (lfParameter < lfStart0) ? lfStart0 : lfParameter;
+            if (lfClamped > lfEnd)
+                lfClamped = lfEnd;
+
+            if (lfParameter == lfClamped)
+            {
+                lStartParam = ICEParameter(lfStart0);
+                lEndParam   = ICEParameter(lfEnd);
+
+                if (lu16NumIntervals != 1)
+                {
+                    do
+                    {
+                        const u16 lu16Mid = (u16)((((liHi - (s32)lu16Lo) >> 1) + (s32)lu16Lo));
+                        ICEParameter lMidParam(GetIntervalParameter((u16)(lu16Mid + 1)));
+                        if (lQueryParam < lMidParam)
+                        {
+                            // query lies below the midpoint -> search lower half.
+                            lEndParam = lMidParam;
+                            liHi      = (s32)lu16Mid;
+                        }
+                        else
+                        {
+                            // query lies at/above the midpoint -> search upper half.
+                            lStartParam = lMidParam;
+                            lu16Lo      = (u16)(lu16Mid + 1);
+                        }
+                    }
+                    while ((s32)lu16Lo < liHi);
+                }
+
+                lu16Found = lu16Lo;
+            }
+        }
+    }
+
+    // Dequantise the located bracket back to unit floats.
+    *lpfStart = lStartParam.GetValue();
+    *lpfEnd   = lEndParam.GetValue();
+
+    // Advance the cached current interval; report whether it changed.
+    if (mu16CurrentInterval == lu16Found)
+        return false;
+
+    mu16CurrentInterval = lu16Found;
+    return true;
+}
+
 } // namespace ICE
 
 
@@ -983,12 +1161,12 @@ bool ICEChannel::IsHardCut(u16 lu16Interval, s32 liElement) const
 // GROUP 4 -- ICE::ICETakeData bodies (5): ComputeActualSize, ComputeEditSize,
 // Construct, operator=, FixDown.
 //
-// Reconstructed faithfully from the X360 asm/pseudocode at:
-//   ICETakeData::Construct        @0x8252C380
-//   ICETakeData::ComputeEditSize  @0x8252C1C0
-//   ICETakeData::ComputeActualSize@0x8252F9D0
-//   ICETakeData::FixDown          @0x82532BF8
-//   ICETakeData::operator=        @0x82532B58
+// The five bodies:
+//   ICETakeData::Construct
+//   ICETakeData::ComputeEditSize
+//   ICETakeData::ComputeActualSize
+//   ICETakeData::FixDown
+//   ICETakeData::operator=
 //
 // The Compute*Size pair walks the static schema table ICE::ICEElementDescriptions
 // (GROUP 1 above; eICE_NUM_ELEMENTS == 48). The element's required value count is
@@ -1000,7 +1178,7 @@ bool ICEChannel::IsHardCut(u16 lu16Interval, s32 liElement) const
 namespace ICE {
 
 // ---------------------------------------------------------------------------
-// ICETakeData::ComputeActualSize @0x8252F9D0
+// ICETakeData::ComputeActualSize
 //
 // On-disk size of THIS take: the 100-byte fixed header (bTNode + miGuid + name +
 // mfLength + muAllocated + mElementCounts[12]), then the variable-data block:
@@ -1050,7 +1228,7 @@ u32 ICETakeData::ComputeActualSize() const
 }
 
 // ---------------------------------------------------------------------------
-// ICETakeData::ComputeEditSize @0x8252C1C0
+// ICETakeData::ComputeEditSize
 //
 // Edit-buffer size: identical shape to ComputeActualSize but using the FIXED edit
 // caps instead of the real counts -- every channel is sized for the maximum editable
@@ -1083,7 +1261,7 @@ u32 ICETakeData::ComputeEditSize()
 }
 
 // ---------------------------------------------------------------------------
-// ICETakeData::Construct @0x8252C380
+// ICETakeData::Construct
 //
 // Zero-init: clear the bTNode base (8 bytes) and miGuid, clear the 32-byte take-name
 // buffer, set mfLength = 1.0, muAllocated = 1, zero all 12 mElementCounts, then clear
@@ -1114,7 +1292,7 @@ void ICETakeData::Construct()
 }
 
 // ---------------------------------------------------------------------------
-// ICETakeData::operator= @0x82532B58
+// ICETakeData::operator=
 //
 // Copy the take name (32 bytes), miGuid, and mfLength, then bulk-copy the variable
 // data + mElementCounts block from offset 52 up to the SOURCE's ComputeActualSize()
@@ -1137,7 +1315,7 @@ ICETakeData& ICETakeData::operator=(const ICETakeData& lrOther)
 }
 
 // ---------------------------------------------------------------------------
-// ICETakeData::FixDown @0x82532BF8
+// ICETakeData::FixDown
 //
 // Serialization fix-DOWN: turn live (in-memory, pointer-bearing) take data back into
 // the relocatable on-disk form. Clears the bTNode base pointers (Next/Prev @0x00,
@@ -1154,7 +1332,7 @@ ICETakeData& ICETakeData::operator=(const ICETakeData& lrOther)
 // ---------------------------------------------------------------------------
 void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
 {
-    (void)lrResource;   // resource arg is unused by the X360 body (relocation is self-contained)
+    (void)lrResource;   // resource arg is unused (relocation is self-contained)
 
     // Null the intrusive-tree links (bNode::Next @0x00, bNode::Prev @0x04) before
     // serialization -- they are rebuilt on load. mPadNodeBase is the placeholder for
@@ -1163,8 +1341,8 @@ void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
     *(u32*)&mPadNodeBase[0] = 0;   // bNode::Next
     *(u32*)&mPadNodeBase[4] = 0;   // bNode::Prev
 
-    // A scratch ICETake drives the pointer rebind. The X360 calls the ICETake ctor
-    // on a stack buffer (ICE::ICETake::ICETake) then SetDataPointers.
+    // A scratch ICETake drives the pointer rebind: the ICETake ctor runs on a stack
+    // buffer (ICE::ICETake::ICETake) then SetDataPointers.
     //
     // WIRING NOTE (not an algorithm change): the frozen ICETake header declares no
     // default constructor, and its mCubics[28] member type Cubic1D declares only
@@ -1172,7 +1350,7 @@ void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
     // take is used ONLY as a `this` for the two SetDataPointers calls, which write
     // (never read uninitialised) every member they subsequently consult. So a raw,
     // suitably-aligned stack buffer reinterpreted as ICETake is the faithful
-    // stand-in for the X360's stack ICETake -- no constructor runs, matching that
+    // stand-in for a stack ICETake -- no constructor runs, matching that
     // the rebind is self-contained. FLAG: replace with a real `ICETake lTake;` once
     // the ICETake default ctor (and Cubic1D's) are reconstructed into the headers.
     alignas(ICETake) u8 laTakeStorage[sizeof(ICETake)];
@@ -1201,16 +1379,15 @@ void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
 
 
 // =============================================================================
-// GROUP 5 -- ICE::ICETake bodies (9): Construct, NewEditBuffer, FreeEditBuffer,
-// SetDataPointers, SetSubTake(ptr), GetValue(2-arg), SetValue, GetSlope, SetParameter
-// (private 3-arg).
+// GROUP 5 -- ICE::ICETake bodies (11): Construct, NewEditBuffer, FreeEditBuffer,
+// SetDataPointers, SetSubTake(ptr), GetValue(2-arg), SetValue, GetValueFloat(1-arg),
+// GetValueInt(1-arg), GetSlope, SetParameter (private 3-arg).
 //
-// Reconstructed from the X360 ARTIST 2007-02 spine against the frozen layout in
-// ICEData.hpp (ICETake), ICEDataEnums.hpp (ICEChannel, ICEElementDescription,
-// ICEValue), and ICEPoint.hpp (Cubic1D). Addresses:
-//   Construct       @0x8253B358   NewEditBuffer @0x8253B510   FreeEditBuffer @0x8252FCF0
-//   SetDataPointers @0x8252FD50   SetSubTake    @0x82530E00   SetParameter   @0x82530668
-//   GetValue        @0x8252F738   SetValue      @0x8252BFD8   GetSlope       @0x825303C0
+// Built against the frozen layout in ICEData.hpp (ICETake), ICEDataEnums.hpp
+// (ICEChannel, ICEElementDescription, ICEValue), and ICEPoint.hpp (Cubic1D).
+// The 11 bodies: Construct, NewEditBuffer, FreeEditBuffer, SetDataPointers,
+// SetSubTake, SetParameter, GetValue, SetValue, GetSlope, and the 1-arg
+// GetValueFloat/GetValueInt (which read mValues[element] directly).
 //
 // External symbols this TU provides / references:
 //   * ICE::ICEElementDescriptions[] + eICE_NUM_ELEMENTS  -- GROUP 1 above.
@@ -1226,23 +1403,23 @@ void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
 namespace ICE {
 
 // ---------------------------------------------------------------------------
-// ICETake::Construct(const IResourceManager*)  @0x8253B358
+// ICETake::Construct(const IResourceManager*)
 //
 // Lifecycle init for a live take: store the resource-manager pointer, clear the
 // playback parameters, reset every runtime channel to "no data", then bind the
 // (still-null) data pointers and seed the parameter to 0.
 //
-// FLAG (+0x72C undo member): the X360 ctor also self-links an intrusive undo-list
+// FLAG (+0x72C undo member): the ctor also self-links an intrusive undo-list
 // head at this+0x72C (Next/Prev -> &head), which lies past the frozen ICETake
 // layout's last member (mbNewSubTakeThisFrame @0x728). That undo-list member is NOT
-// in the committed header; omitted here pending its reconstruction (it must be added
+// in the committed header; omitted here pending its addition (it must be added
 // by GROWING the ICETake header when the undo TU lands).
 //
-// FLAG (sub_82534118): the asm parameter-seed tail is `sub_82534118(this,_,1,0,0.0f)`,
-// the all-channels parameter driver and sole caller of the private 3-arg SetParameter.
+// FLAG (parameter-seed tail): the parameter-seed tail is the all-channels parameter
+// driver `(this,_,1,0,0.0f)`, the sole caller of the private 3-arg SetParameter.
 // It is not in the frozen-header method set under a resolved name; the best-matching
 // DECLARED member is the public SetParameter(f32,bool,bool), mapped here. Confirm
-// sub_82534118's identity + exact arg mapping against the disassembly.
+// its exact arg mapping.
 // ---------------------------------------------------------------------------
 void ICETake::Construct(const IResourceManager* lpResourceManager)
 {
@@ -1264,25 +1441,24 @@ void ICETake::Construct(const IResourceManager* lpResourceManager)
 
     // Bind the (null) data pointers, then seed the playback parameter to 0.
     SetDataPointers(0, false);
-    SetParameter(0.0f, /*lbForce=*/true, /*lbWrap=*/false);  // sub_82534118(this,_,1,0,0.0)
+    SetParameter(0.0f, /*lbForce=*/true, /*lbWrap=*/false);  // all-channels parameter seed (this,_,1,0,0.0)
 }
 
 // ---------------------------------------------------------------------------
-// ICETake::NewEditBuffer()  @0x8253B510
+// ICETake::NewEditBuffer()
 //
 // Allocate a fresh editable take-data buffer sized for the maximum editable run,
 // construct it, bind the live channel/element pointers over it (edit mode), seed
 // the parameter, and clear the undo history.
 //
-// ALLOCATOR: the asm is `ICE::ICEMemory::GetMemory(dword_82FB62C0, size)` --
-// dword_82FB62C0 is the ICE memory-manager singleton, an ICE::ICEMemory* (DWARF
-// ICE::spICEMemory), loaded as a pointer and passed as `this`. So this is a member
-// call spICEMemory->GetMemory(size); GetMemory allocates from the manager's embedded
-// edit heap (mEditHeap, +0x520). Both are owned by the ICE memory TU (ICEMemory.hpp).
+// ALLOCATOR: this is the member call spICEMemory->GetMemory(size), where spICEMemory
+// is the ICE memory-manager singleton (an ICE::ICEMemory*). GetMemory allocates from
+// the manager's embedded edit heap (mEditHeap, +0x520). Both are owned by the ICE
+// memory TU (ICEMemory.hpp).
 // ---------------------------------------------------------------------------
 void ICETake::NewEditBuffer()
 {
-    // WIRING NOTE (not an algorithm change): the X360 calls ICETakeData::ComputeEditSize
+    // WIRING NOTE (not an algorithm change): ICETakeData::ComputeEditSize is called
     // static-style (it reads no `this` -- the size is derived purely from the static
     // ICEElementDescriptions[] schema + the fixed edit caps). The frozen ICEData.hpp
     // declares ComputeEditSize as a non-static member, so it must be invoked on an
@@ -1295,26 +1471,25 @@ void ICETake::NewEditBuffer()
     ICETakeData* lpEditData = (ICETakeData*)spICEMemory->GetMemory(luEditSize);
     lpEditData->Construct();
 
-    // asm @0x8253B544 sets r5=0: the fresh edit buffer is bound as the PRIMARY take
-    // data (lbEdit=false -> mpTakeData=buf, mpSubTakeData=0), which is what
-    // FreeEditBuffer later frees via mpTakeData. (NOT edit mode.)
+    // The fresh edit buffer is bound as the PRIMARY take data (lbEdit=false ->
+    // mpTakeData=buf, mpSubTakeData=0), which is what FreeEditBuffer later frees via
+    // mpTakeData. (NOT edit mode.)
     SetDataPointers(lpEditData, false);
-    // Seed the playback parameter across all channels (sub_82534118; see Construct's FLAG).
+    // Seed the playback parameter across all channels (see Construct's FLAG).
     SetParameter(0.0f, /*lbForce=*/true, /*lbWrap=*/false);
     FlushUndo();
 }
 
 // ---------------------------------------------------------------------------
-// ICETake::FreeEditBuffer()  @0x8252FCF0
+// ICETake::FreeEditBuffer()
 //
 // Release the editable take-data buffer (if one is allocated), drop the pointer,
 // and clear the undo history. muAllocated != 0 marks a heap-owned edit buffer
 // (vs. a resource-owned, non-freeable take).
 //
-// ALLOCATOR: the asm is `CgsMemory::HeapMalloc::Free(dword_82FB62C0 + 0x520,
-// lpTakeData)` -- dword_82FB62C0 is spICEMemory (an ICE::ICEMemory*) and +0x520 is
-// its embedded edit heap (spICEMemory->mEditHeap), the SAME heap GetMemory allocated
-// the buffer from. Free is a member of that heap: spICEMemory->mEditHeap.Free(block).
+// ALLOCATOR: this frees through spICEMemory's embedded edit heap at +0x520
+// (spICEMemory->mEditHeap), the SAME heap GetMemory allocated the buffer from.
+// Free is a member of that heap: spICEMemory->mEditHeap.Free(block).
 // ---------------------------------------------------------------------------
 void ICETake::FreeEditBuffer()
 {
@@ -1328,7 +1503,7 @@ void ICETake::FreeEditBuffer()
 }
 
 // ---------------------------------------------------------------------------
-// ICETake::SetDataPointers(ICETakeData*, bool)  @0x8252FD50
+// ICETake::SetDataPointers(ICETakeData*, bool)
 //
 // Bind (or, when lpTakeData == 0, unbind) the runtime channel and element pointers
 // into a serialised ICETakeData's variable-data block. lbEdit selects sub-take
@@ -1401,8 +1576,8 @@ void ICETake::SetDataPointers(ICETakeData* lpTakeData, bool lbEdit)
         // ---- Base pointers into the variable-data block ----
         u8* lpBase = (u8*)lpTakeData;
         u16*          lpIndexBase = (u16*)(lpBase + 100);
-        // Parameter list starts after the index list, 2-byte aligned. (X360 does the
-        // align as 32-bit integer math; use uintptr_t so the same alignment is
+        // Parameter list starts after the index list, 2-byte aligned. (The align is
+        // 32-bit integer math; use uintptr_t so the same alignment is
         // pointer-width-correct on the 64-bit PC host -- identical low-bit semantics.)
         ICEParameter* lpParamBase = reinterpret_cast<ICEParameter*>(
             (reinterpret_cast<uintptr_t>(lpBase + 100) + 2 * liTotalIndices + 1) & ~static_cast<uintptr_t>(1));
@@ -1484,7 +1659,7 @@ void ICETake::SetDataPointers(ICETakeData* lpTakeData, bool lbEdit)
 }
 
 // ---------------------------------------------------------------------------
-// ICETake::SetSubTake(const ICETakeData*, bool)  @0x82530E00
+// ICETake::SetSubTake(const ICETakeData*, bool)
 //
 // Bind a sub-take's data pointers (edit mode), then (if lbForce) re-seed the
 // sub-take parameter so the new sub-take takes effect this frame. This is the
@@ -1497,14 +1672,14 @@ void ICETake::SetSubTake(const ICETakeData* lpSubTakeData, bool lbForce)
     if (lbForce)
     {
         // Re-apply the parameter so the freshly bound sub-take is evaluated this
-        // frame: sub_82534118(this, _, 1, 1, 0.0f). Same helper as Construct (see
-        // FLAG); mapped to the public SetParameter(f32,bool,bool).
+        // frame: the all-channels parameter seed (this, _, 1, 1, 0.0f). Same helper
+        // as Construct (see FLAG); mapped to the public SetParameter(f32,bool,bool).
         SetParameter(0.0f, /*lbForce=*/true, /*lbWrap=*/true);
     }
 }
 
 // ---------------------------------------------------------------------------
-// ICETake::GetValue(s32 liChannel, u16 lu16Key) const  @0x8252F738
+// ICETake::GetValue(s32 liChannel, u16 lu16Key) const
 //
 // Read the decoded value of element liChannel (an element index, 0..47) at sample
 // lu16Key. (The parameter is named liChannel to match the frozen declaration, but
@@ -1538,7 +1713,7 @@ ICEValue ICETake::GetValue(s32 liChannel, u16 lu16Key) const
 }
 
 // ---------------------------------------------------------------------------
-// ICETake::SetValue(s32 liChannel, u16 lu16Key, ICEValue lValue)  @0x8252BFD8
+// ICETake::SetValue(s32 liChannel, u16 lu16Key, ICEValue lValue)
 //
 // Write lValue into element liChannel (element index) at sample lu16Key, encoding
 // it into the bound element-data buffer per the element's data type. (liChannel
@@ -1563,17 +1738,63 @@ void ICETake::SetValue(s32 liChannel, u16 lu16Key, ICEValue lValue)
 }
 
 // ---------------------------------------------------------------------------
+// ICETake::GetValueFloat(s32) const
+//
+// The decoded value of element liElement as a float, read straight out of the
+// take's per-element value table mValues[liElement] (@+0x14). (The parameter is
+// named liChannel in the frozen declaration but indexes the element table.) The
+// element's data type decides the interpretation: a float-decoding element
+// (eICE_FIXED or eICE_FLOAT, ICEElementDescription::IsFloat) returns the stored
+// word as an IEEE float; any other type returns its stored int converted to float.
+// ---------------------------------------------------------------------------
+f32 ICETake::GetValueFloat(s32 liChannel) const
+{
+    if (ICEElementDescriptions[liChannel].IsFloat())
+        return mValues[liChannel].GetFloat();
+
+    // Non-float element: convert the stored signed int to float.
+    return (f32)mValues[liChannel].GetSignedInt();
+}
+
+// ---------------------------------------------------------------------------
+// ICETake::GetValueInt(s32) const
+//
+// The decoded value of element liElement as an int, read straight out of the take's
+// per-element value table mValues[liElement] (@+0x14). (The parameter is named
+// liChannel in the frozen declaration but indexes the element table.) A float-
+// decoding element (IsFloat) returns the stored float rounded to the nearest int;
+// any other type returns its stored int directly.
+// ---------------------------------------------------------------------------
+s32 ICETake::GetValueInt(s32 liChannel) const
+{
+    if (!ICEElementDescriptions[liChannel].IsFloat())
+        return mValues[liChannel].GetSignedInt();
+
+    // Float element: round the stored float to the nearest int (truncate toward
+    // zero, bias down to a floor, +1 when the fractional part reaches 0.5).
+    const f32 lfValue = mValues[liChannel].GetFloat();
+    s32 liResult = (s32)lfValue;        // truncate toward zero
+    f32 lfFloor = (f32)liResult;
+    if (lfFloor > lfValue)
+        lfFloor -= 1.0f;
+    if ((lfValue - lfFloor) >= 0.5f)
+        ++liResult;
+
+    return liResult;
+}
+
+// ---------------------------------------------------------------------------
 // ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) const
-//   @0x825303C0  (private)
+//   (private)
 //
 // Compute the tangent (slope) for element liChannel's Hermite cubic at interval
 // lu16Key on the requested side (liSide == 0 -> incoming/left, else outgoing/right).
 //
-// FLAG (tangent math): matched store-for-store to the asm. f29 starts as the CUBIC
-// value delta (ValDesired-Val), the gate is miCubicLinear (+0x30) not miTangentScale,
-// and the FINAL multiply is the miTangentScale (+0x34) partner sample. sub_8252F848
-// is ICETake's internal float value-sampler (an inlined GetValueFloat-by-element),
-// modelled via GetValueFloat. A focused review of this one function is recommended.
+// FLAG (tangent math): the base slope contribution is the CUBIC value delta
+// (ValDesired-Val), the gate is miCubicLinear (+0x30) not miTangentScale,
+// and the FINAL multiply is the miTangentScale (+0x34) partner sample. The internal
+// float value-sampler (an inlined GetValueFloat-by-element) is modelled via
+// GetValueFloat. A focused review of this one function is recommended.
 // ---------------------------------------------------------------------------
 f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) const
 {
@@ -1583,7 +1804,8 @@ f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) con
     const Cubic1D& lrCubic = mCubics[liChannel];
     const f32 lfCubicDelta = lrCubic.ValDesired - lrCubic.Val;
 
-    // (2) Cubic-linear gate (description field +0x30, dword_82F28880[liChannel]).
+    // (2) Cubic-linear gate (description field +0x30, the per-channel cubic-linear
+    // table indexed by liChannel).
     // When the gate FAILS the function returns the raw cubic delta with no further
     // processing (no blend, no tangent-scale multiply) -- matches the asm early-out.
     const u32 luCubicLinear = (u32)lrDesc.miCubicLinear;
@@ -1592,7 +1814,7 @@ f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) con
     {
         // Gate PASSES (proceed with the blend/tangent math) iff the gating element's
         // value is NON-zero; a zero gating value early-returns the raw cubic delta.
-        // (asm @0x82530448-5C: the `cntlzw/extrwi/xori` computes the `!= 0` predicate.)
+        // (The gate is the `!= 0` predicate on the gating element's value.)
         lbGate = (GetValue((s32)luCubicLinear, lu16Key).GetSignedInt() != 0);
     }
     if (!lbGate)
@@ -1656,7 +1878,7 @@ f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) con
         f32 lfWeight = 1.0f;
         f32 lfRatio  = 0.0f;   // f10 = sizeOther / sum
         const f32 lfSum = lfSizeThis + lfSizeOther;
-        if (lfSum > 0.00000099999997f)   // flt_8207AB94
+        if (lfSum > 0.00000099999997f)   // epsilon guard
         {
             lfRatio  = lfSizeOther / lfSum;
             lfWeight = 1.0f - lfRatio;
@@ -1669,8 +1891,8 @@ f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) con
         lfSlope = (lfValNext - lfValPrev) * lfWeight + lfRatio * lfCubicDelta;
     }
 
-    // (4) Tangent-scale partner multiply (description field +0x34,
-    // dword_82F28884[liChannel]). Sample the partner element at the bracket key.
+    // (4) Tangent-scale partner multiply (description field +0x34, the per-channel
+    // tangent-scale table indexed by liChannel). Sample the partner element at the bracket key.
     f32 lfScale = 1.0f;
     const u32 luTangentScale = (u32)lrDesc.miTangentScale;
     if (luTangentScale <= 0x2F)
@@ -1682,7 +1904,7 @@ f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) con
 }
 
 // ---------------------------------------------------------------------------
-// ICETake::SetParameter(s32 liChannel, f32 lfParameter, bool lbForce)  @0x82530668
+// ICETake::SetParameter(s32 liChannel, f32 lfParameter, bool lbForce)
 //   (PRIVATE overload)
 //
 // Advance one channel to playback parameter lfParameter. First update the channel's
@@ -1691,8 +1913,8 @@ f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) con
 // evaluate every element in the channel at the normalised position within the
 // interval and write the decoded value into mValues[].
 //
-// FLAG (gaICEElementChannels): the per-channel element schedule (guest global
-// unk_82FB5930) is the SAME static record InitICEDescriptions seeds and GROUP 1
+// FLAG (gaICEElementChannels): the per-channel element schedule (a global) is the
+// SAME static record InitICEDescriptions seeds and GROUP 1
 // models as ICE::gaICEElementChannels -- referenced here so consolidation links to
 // one definition (do NOT re-fork; move + grow when its real home lands).
 // ---------------------------------------------------------------------------
@@ -1828,8 +2050,8 @@ bool ICETake::SetParameter(s32 liChannel, f32 lfParameter, bool lbForce)
 } // namespace ICE
 
 // ============================================================================
-// ICE::ICETakeData::SaveData @0x82532CF8 -- the debug XML/text dumper (the
-// class:ICE::ICETakeData TU). Walks the take through a scratch ICETake and prints
+// ICE::ICETakeData::SaveData -- the debug XML/text dumper. Walks the take through
+// a scratch ICETake and prints
 // the decoded values via ICEFileHandler::FilePrintf. NOT the binary byte-stream
 // writer (that is SetDataPointers / ComputeActualSize).
 // ============================================================================
@@ -1859,7 +2081,7 @@ int Precision(f32 lfValue)
 
     s32 liResult = 1;
 
-    // Fractional part of the original value via truncate-then-floor: (f64)(s32)x
+    // Fractional part of the input value via truncate-then-floor: (f64)(s32)x
     // truncates toward zero; if the truncation rose above the value (negative case)
     // step it down by one to get the true floor.
     f64 lfFloor = (f64)(s32)lfDoubleValue;
@@ -1894,8 +2116,8 @@ void ICETakeData::SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber)
     // ---- Scratch ICETake bound over THIS take's data (read-only walk) ----
     // WIRING NOTE (same as ICETakeData::FixDown): the frozen ICETake header declares
     // no default constructor (its Cubic1D[28] member type declares only Cubic1D(s16,f32)),
-    // so ICETake is not default-constructible here. The X360 calls ICETake::ICETake()
-    // on a stack buffer then SetDataPointers; the take is used ONLY as a `this` for the
+    // so ICETake is not default-constructible here. The ICETake ctor runs on a stack
+    // buffer then SetDataPointers; the take is used ONLY as a `this` for the
     // SetDataPointers + value-query calls, which write before they read. A raw aligned
     // stack buffer reinterpreted as ICETake is the faithful stand-in.
     // FLAG: replace with a real `ICETake lTake;` once the ICETake (and Cubic1D) default
@@ -2052,7 +2274,7 @@ void ICETakeData::SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber)
                 {
                     if (liRaw >= lrDesc.miTokens)
                     {
-                        // Out-of-range token index -> assert. (The X360 builds the
+                        // Out-of-range token index -> assert. (Builds the
                         // "Could not find token value ... saving <name>." message into
                         // the assert stream and fires it.)
                         // FLAG: the CgsDev::Assert::StrStreamBase machinery is out of
