@@ -47,6 +47,19 @@ public:
         mObjectsAllocated.UnSetBit(static_cast<u32>(liIndex));
     }
 
+    // Reach the inline object at a pool slot index (callers resolve a slot via the free
+    // queue / their own order array, then index the pool by that slot).
+    T& operator[](TIndex liIndex)
+    {
+        CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_CAPACITY), "Array index out of bounds");
+        return maObjectPool[static_cast<s32>(liIndex)];
+    }
+    const T& operator[](TIndex liIndex) const
+    {
+        CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_CAPACITY), "Array index out of bounds");
+        return maObjectPool[static_cast<s32>(liIndex)];
+    }
+
 private:
     T                  maObjectPool[N];
     TIndex             maiObjectFreeQueue[N];

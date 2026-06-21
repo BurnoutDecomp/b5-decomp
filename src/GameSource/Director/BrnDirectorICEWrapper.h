@@ -5,6 +5,10 @@
 #include "ppmalloc/EAGeneralAllocator.h"                 // EA::Allocator::GeneralAllocator (two embedded heaps)
 #include "SDKs/Packages/ICE/ICEManager.hpp"              // ICE::ICEManager (embedded by value)
 #include "GameSource/Director/Camera/ICECameraMover.h"   // ICE::ICECameraMover (embedded by value)
+#include "GameSource/Director/Camera/Camera.h"           // BrnDirector::Camera::Camera (GetCamera return)
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"  // CgsResource::ID (PlayMovie take id)
+#include "GameSource/Director/Utils/BrnVehicleRef.h"     // BrnDirector::VehicleRef::EType (PlayMovie ref type)
+#include "GameSource/BurnoutConstants.h"                 // EActiveRaceCarIndex (PlayMovie race car)
 
 // ============================================================================
 // GameSource/Director/BrnDirectorICEWrapper.h
@@ -72,6 +76,24 @@ public:
     // Rebuild the camera mover for this frame from the manager's currently-active
     // take. liContext is the per-call director context the mover blends against.
     void ReconstructCameraMover(s32 liContext);
+
+    // ------------------------------------------------------------------------
+    // FLAG: minimal-slice decls the ICE movie-player family (BrnICEMoviePlayer)
+    // drives through an ICEWrapper*. DECLARATION-ONLY -- bodies land with the ICE
+    // wrapper / manager TUs that own them; the per-TU `cl /c` gate does not link.
+    // ------------------------------------------------------------------------
+
+    // Start playing a recorded ICE take. Signature order matches the DWARF: the take
+    // id, then the normalised start position, then the vehicle-ref type the take is
+    // anchored to, then the active race car it targets.
+    void PlayMovie(CgsResource::ID lTakeId, f32 lfStartPosition,
+                   VehicleRef::EType leVehicleRefType, EActiveRaceCarIndex leRaceCar);
+
+    // True while a take started by PlayMovie is still playing.
+    bool IsPlayingMovie();
+
+    // The wrapper's live take camera (the player copies it / blends from it).
+    const Camera::Camera& GetCamera();
 
     // NOTE: the sibling header BrnDirectorResourceManager.h calls inlined wrapper
     // accessors (GetICETakeData / GetShakeGroup) through an ICEWrapper*. Those are
