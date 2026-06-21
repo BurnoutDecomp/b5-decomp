@@ -63,6 +63,13 @@ public:
     const GameMode* GetCurrentGameMode() const;
     bool            IsWaitingForModeDataToLoad() const;
 
+    // ADDITIVE GROW (declare-only) for the BrnMugshotManager TU. X360-inlined helper: true when the
+    // current game mode is in one of its post-event states (the X360 reads the current mode pointer
+    // at ModeManager+0x1DB8, then tests its state field == 3 / 5 / 4). MugshotManager gates camera/
+    // mugshot capture on it (StartMugshotCapture / ProcessImageReceivedEvent). De-inlined to this
+    // named accessor; body + the real mode-state wiring land with the ModeManager TU. FLAG: additive.
+    bool IsInPostEvent() const;
+
     // The mode's live scoring system. X360-inlined: every game-mode body that needs it reaches the
     // ScoringSystem the ModeManager embeds by value (X360 ModeManager+0xDB0) directly, e.g.
     // OnlineRaceMode::PreWorldUpdate / GetOutroTimeout poke ScoringSystem methods off

@@ -246,6 +246,11 @@ namespace GameStateModuleIO
         // the network-to-game-state input interface (this+0x7B0). class:BrnGameState catch-all TU;
         // BurnoutSkillzManager::PreWorldUpdate reads it read-locked.
         const NetworkToGameStateInterface*    GetNetworkToGameStateInterface() const;
+        // X360 0x8231CF78 -- read-side accessor for the embedded in-game player-status interface
+        // (this+0x2CC8). ADDITIVE GROW (declare-only) for the BrnMugshotManager TU:
+        // UpdateCameraStatusData reads each player's active-race-car slot + camera status off it.
+        // Body lands with the GameStateModuleIO TU (mirrors the other read-locked &member getters).
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* GetPlayerStatusInterface() const;
 
         // ---- this TU's 5 functions ----
         // X360 0x8231CE28 (read-lock; "Not locked for reading", line 133) -- read-side accessor for
