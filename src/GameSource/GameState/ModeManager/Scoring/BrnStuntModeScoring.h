@@ -36,9 +36,11 @@
 // EMBED-BY-VALUE rule: ScoringSystem names members + calls methods; it does NOT depend on a
 // byte-exact sizeof. NOT byte-verified. Single owner -- grow this slice, do not fork.
 
+#include <cstring>                                            // memcpy / size_t (SetOnlineChainableMultiplierDisplay)
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                   // Vector3, CgsID (typedef u64)
 #include "GameSource/GameState/BrnGameStateTypes.h"           // BrnGameState::EStuntType
+#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT (SetOnlineChainableMultiplierDisplay guards)
 #include "GameShared/GameClasses/Containers/CgsRingBuffer.h"  // CgsContainers::FixedRingBuffer<T,N>
 #include "GameShared/GameClasses/Containers/CgsSet.h"         // Set<T,N>
 
@@ -144,6 +146,14 @@ namespace BrnGameState
     // DWARF home BrnStuntModeScoring.h:117. No base class.
     struct StuntModeScoring
     {
+        // ScoringSystem embeds this scorer by value (mStuntModeScoring / mOnlineStuntModeScoring) and
+        // legitimately drives its per-frame pre-world step: ScoringSystem::UpdateOnlineStuntModeScorePreWorld
+        // (X360 0x8234CE48) calls mOnlineStuntModeScoring.PreWorldUpdate(queue) directly (the X360 xref
+        // proves the call). PreWorldUpdate is `protected` (it is normally reached through the per-mode
+        // update driver), so grant ScoringSystem friendship for faithful access WITHOUT changing the
+        // method's signature or section.
+        friend class ScoringSystem;
+
     public:
         // --------------------------------------------------------------------
         // MultiplierOutInfo -- the 24-byte (0x18) output record CalculateMultiplier
@@ -450,5 +460,39 @@ namespace BrnGameState
         // sibling-mode caller chain (deferred TUs) can consume it by name.
         bool GetStuntInfoEventPending() const    { return mbStuntInfoEventPending; }
         void SetStuntInfoEventPending(bool lbOn) { mbStuntInfoEventPending = lbOn; }
+
+        // ===== Online chainable-multiplier hand-off surface (X360-proven; DWARF-silent) =====
+        //
+        // ScoringSystem::UpdateOnlineStuntModeScorePreWorld (X360 0x8234CE48), after gathering the
+        // per-car chainable-multiplier table, gates BOTH the PreWorldUpdate call AND the table hand-off
+        // behind a flag the X360 build keeps inside this scorer at this+0x2515 (asm 0x8234CF68
+        // lbz 0x2515(this+0x2620 base)), then memcpy's the 132-byte gathered table into this scorer's
+        // internal display buffer at this+0x23F0 (asm 0x8234CF80 addi 0x23F0 / memcpy size 0x84).
+        //
+        // Both slots are DWARF-silent StuntModeScoring internals; model them as additive named members
+        // (this slice is accessed BY NAME, never sized -- no layout assert). The 132-byte display buffer
+        // is taken/handed by raw bytes + size so this header need not pull the CarScoreData /
+        // ChainableMultiplierInfo type in (that lives in BrnGameStateSharedIO.h, which would cycle).
+        // Provisional names (offsets X360-proven); FLAG: re-confirm when this type's full TU lands.
+        bool IsOnlineChainableUpdateSuppressed() const { return mbOnlineChainableUpdateSuppressed; }     // +0x2515
+        void SetOnlineChainableUpdateSuppressed(bool lbSuppressed) { mbOnlineChainableUpdateSuppressed = lbSuppressed; }
+
+        // Receive the gathered chainable-multiplier display table (the X360 memcpy into +0x23F0). Inline
+        // so callers need no out-of-line StuntModeScoring TU; reproduces the byte-for-byte X360 memcpy.
+        static const s32 KI_ONLINE_CHAINABLE_DISPLAY_BYTES = 132; // X360 memcpy size 0x84
+        void SetOnlineChainableMultiplierDisplay(const void* lpData, s32 liSizeInBytes)                  // +0x23F0
+        {
+            CGS_ASSERT(lpData != NULL, "lpData");
+            CGS_ASSERT(liSizeInBytes <= KI_ONLINE_CHAINABLE_DISPLAY_BYTES, "liSizeInBytes <= KI_ONLINE_CHAINABLE_DISPLAY_BYTES");
+            memcpy(maOnlineChainableMultiplierDisplay, lpData, static_cast<size_t>(liSizeInBytes));
+        }
+
+    private:
+        // +0x2515 -- gate flag (X360-proven; DWARF-silent). When set, UpdateOnlineStuntModeScorePreWorld
+        // skips driving PreWorldUpdate + the display copy.
+        bool mbOnlineChainableUpdateSuppressed;
+        // +0x23F0 -- the 132-byte online chainable-multiplier display buffer
+        // (Array<CarScoreData::ChainableMultiplierInfo,8> raw image; modeled as bytes to avoid a header cycle).
+        u8   maOnlineChainableMultiplierDisplay[KI_ONLINE_CHAINABLE_DISPLAY_BYTES];
     };
 }

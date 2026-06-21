@@ -469,16 +469,14 @@ namespace BrnGameState
         // slot, SetNetworkStuntScore by network player id; both store via CarData::GetScoreData().
         void SetPlayerStuntScore(EActiveRaceCarIndex leRaceCarIndex, s32 liScore);                         // 0x8231F0C8
         void SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lID, s32 liScore);                           // 0x8231FC20
-        // SetNetworkStuntMultiplier (0x8231FC50) writes the per-car "chainable stunt multiplier" trio
+        // SetNetworkStuntMultiplier (0x8231FC50) arms the per-car "chainable stunt multiplier" trio
         // (CarScoreData +0xC8 miChainableScore / +0xD0 miCurrentChainableMultiplier / +0xD8 mbChainActive)
         // on GetCarData(lID); reconciled arg order from the X360 register setup (r5->+0xD0, r6->+0xC8).
-        // DECLARE-ONLY: those chainable slots carry NO named accessor in CarScoreData's committed home
-        // (BrnGameStateSharedIO.h) and growing that dep type is out of this keystone-closure scope.
+        // Body in BrnScoringSystem_UpdateB.cpp (writes via the CarScoreData chainable-trio accessors).
         void SetNetworkStuntMultiplier(BrnNetwork::NetworkPlayerID lID, s32 liMultiplier, s32 liChainableScore); // 0x8231FC50
 
-        // PlayerPerformedBarrelRolls (0x823634D0) adds liCount to a per-car barrel-roll tally living at
-        // CarScoreData +0xFC (currently the unnamed maStorageFC pad). DECLARE-ONLY: that slot carries no
-        // named accessor in CarScoreData's committed home and growing that dep type is out of scope here.
+        // PlayerPerformedBarrelRolls (0x823634D0) adds liCount to the per-car barrel-roll tally at
+        // CarScoreData +0xFC (carved as miBarrelRollCount). Body in BrnScoringSystem_UpdateB.cpp.
         void PlayerPerformedBarrelRolls(EActiveRaceCarIndex leRaceCarIndex, s32 liCount);                  // 0x823634D0
 
         // Forward a completed world-stunt action to the online (mOnlineStuntModeScoring) or offline
