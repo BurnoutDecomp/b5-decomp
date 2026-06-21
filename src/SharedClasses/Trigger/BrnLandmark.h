@@ -18,7 +18,7 @@ namespace rw { class MemoryResource; }
 //
 // SHAPE is gated on the X360 DWARF (references/DecFIGS/dwarfdump/SharedClasses/
 // Trigger/BrnLandmark.h), which is authoritative and DIFFERS from the older
-// LegacySrc reference header:
+// LegacySrc partial source header:
 //   * X360 Landmark has NO mpaFinishLines / miFinishLineCount members (the
 //     finish-line array was removed before ship).
 //   * miStartingGridCount is int8_t (not int32_t).

@@ -8,13 +8,13 @@
 // normalised [0,1) sub-second fraction. Defined entirely inline (a header-only value
 // class). Layout + API authoritative from DecFIGS DWARF (System/Timer/CgsTime.h:33):
 // miSeconds @ +0 (int32), mfFraction @ +4 (float32); full inline logic matches the
-// LegacySrc reference source verbatim (the X360 binary agrees, including operator-'s
+// LegacySrc partial source source verbatim (the X360 binary agrees, including operator-'s
 // clamp-fraction-to-0 branch). The original streamed the assert message through a
 // CgsDev::StrStream temporary; that lowers to the project's CGS_ASSERT.
 //
 // This TU's six binary-recovered functions are operator=(f32), operator+, operator-,
 // operator+=, operator-=, SetFraction. The remaining inline bodies (ctors, copy/assign,
-// comparisons, Get*/Set*) are filled from the LegacySrc reference so the header links
+// comparisons, Get*/Set*) are filled from the LegacySrc partial source so the header links
 // standalone (operator+/operator- construct `Time lNewTime;` and return by value, so
 // they depend on the default ctor being defined here).
 namespace CgsSystem

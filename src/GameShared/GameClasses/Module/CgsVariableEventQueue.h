@@ -12,7 +12,7 @@
 // (CgsEventQueue.h), each event here is a variable-length byte record packed into
 // a single inline buffer (macData). Recovered from the X360 spine with member
 // names/types from the DecFIGS DWARF (CgsVariableEventQueue.h) and the original
-// LegacySrc reference (GameShared/GameClasses/Module/CgsVariableEventQueue.h).
+// LegacySrc partial source (GameShared/GameClasses/Module/CgsVariableEventQueue.h).
 //
 // BUFSIZE is the inline buffer size in bytes; ALIGN is the record alignment (16).
 // The generic template bodies are inline here (the X360 emits each instantiation's

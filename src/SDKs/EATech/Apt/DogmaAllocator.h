@@ -3,7 +3,7 @@
 // ===========================================================================
 // EATech Apt -- DOGMA pool allocator.
 //
-// Reconstructed from the LegacySrc reference
+// Reconstructed from the LegacySrc partial source
 // for SHAPE, and from the X360 ARTIST.XEX pseudocode for the
 // method BODIES that the reference only declared:
 //     DOGMA_PoolManager::DOGMA_PoolManager           @ 0x82ADB850

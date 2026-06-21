@@ -48,7 +48,7 @@ namespace BrnStreetData
         *lpPlayerName = maPlayerNames[ leScoreType ];
     }
 
-    // X360 0x8231C4F0. LegacySrc reference (BrnChallengeHighScoreEntry.h) is the body
+    // X360 0x8231C4F0. LegacySrc partial source (BrnChallengeHighScoreEntry.h) is the body
     // ground truth: SetBit dirty + valid, copy the player name, then chain to the
     // base ChallengeData::SetScore. BINARY-vs-REFERENCE DELTA: the X360 build wraps the
     // whole write in a per-score-type [min,max] range guard

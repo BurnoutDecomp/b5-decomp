@@ -123,6 +123,27 @@ namespace CgsResource
     // These are inlined in the X360 (no out-of-line body), so they are reconstructed from
     // their unambiguous semantics: each is a direct member or parallel-array access.
 
+    // @ 0x828D8580 - one-shot prepare stage flip (asserts the stage is start/done, then
+    // arms release-start and marks prepared). The PoolModule drives this for all 128 pools.
+    bool Pool::Prepare()
+    {
+        CGS_ASSERT(mePrepareStage == E_PREPARESTAGE_START || mePrepareStage == E_PREPARESTAGE_DONE,
+                   "Should never get here!");
+        meReleaseStage = E_RELEASESTAGE_START;
+        mePrepareStage = E_PREPARESTAGE_DONE;
+        return true;
+    }
+
+    // @ 0x828D8600 - one-shot release stage flip (mirror of Prepare).
+    bool Pool::Release()
+    {
+        CGS_ASSERT(meReleaseStage == E_RELEASESTAGE_START || meReleaseStage == E_RELEASESTAGE_DONE,
+                   "Should never get here!");
+        mePrepareStage = E_PREPARESTAGE_START;
+        meReleaseStage = E_RELEASESTAGE_DONE;
+        return true;
+    }
+
     const char* Pool::GetName() const             { return macName; }
     s32  Pool::GetId() const                       { return miId; }
     s32  Pool::GetBankId()                         { return miBankId; }

@@ -22,5 +22,18 @@ namespace MemoryIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mMemoryRequestQueue;
     }
+
+    // OutputBuffer accessors -- mirror of InputBuffer (the response queue lives at this+4).
+    const OutputBuffer::MemoryResponseQueue* OutputBuffer::GetMemoryResponseQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mMemoryResponseQueue;
+    }
+
+    OutputBuffer::MemoryResponseQueue* OutputBuffer::GetMemoryResponseQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mMemoryResponseQueue;
+    }
 }
 }

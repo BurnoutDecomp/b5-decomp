@@ -3,7 +3,7 @@
 #include "types.hpp"
 
 // CgsResource::ID - a resource's identity: a single 64-bit hash. Bundles store one per resource entry +
-// import; the loader/manager look resources up by it. Shape taken from the the LegacySrc reference
+// import; the loader/manager look resources up by it. Shape taken from the LegacySrc partial source
 // (GameShared/GameClasses/System/Resource/CgsResourceID.h), which the X360 spine matches for this type.
 //
 // RECONCILE: the X360/LegacySrc runtime id-hashers are u64 (Construct -> HashString(const RwChar*) /

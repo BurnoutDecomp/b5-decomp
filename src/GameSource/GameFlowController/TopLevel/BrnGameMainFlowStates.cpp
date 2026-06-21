@@ -2,10 +2,22 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // gpMainGameFlowController, SendEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"   // DebugManager::Update during load
+#include "GameSource/Resource/BrnGameDataModule.h"   // the GameDataModule the load stage prepares (case 8)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
+
+// The game-data streaming module the loading screen brings up (X360 Update 0x823EF688 case 8:
+// GameDataModule::Prepare via vtable+64). On X360 it lives in the game module; here a file-static
+// instance is driven by the load stage until it reports ready. Its Prepare spine runs the REAL
+// resource module-tree bring-up (base + ResourceModule::Prepare chaining Memory/Pool/Bundle/
+// FileSystem). The rw-allocator-gated CreateBanks/CreatePools/CreateAllocators inside it are still
+// stubs that report success, so this exercises the real module lifecycle without yet allocating
+// banks/pools (those fills are step 5a/5b). [NEVER run headless -- the user runs the exe.]
+static BrnResource::GameDataModule g_BrnGameDataModule;
+static bool                        g_bGameDataModuleConstructed = false;
 
 // Option B stand-in for the game-module global the original loading-screen state writes
 // (off_830102D0 + 0x99FE38). BrnRendererModule::Render reads it to show the loading screen.
@@ -63,70 +75,119 @@ void MainGameFlowStateInitialLoadingScreen::OnLeave()
 // as the real stage-machine control flow; the per-stage module loads are filled in as each
 // module TU is reconstructed. Advances one stage per update and holds at DONE (the screen
 // stays up until the next flow state is reconstructed).
-void MainGameFlowStateInitialLoadingScreen::Update()
+namespace
 {
-    // DEMO PACING (temporary): the per-stage LoadXxxModule calls are still stubs (instant), so
-    // each stage would complete in one frame and the screen would flash by. Pace the stage
-    // machine by the engine clock (~0.4s/stage) so the load is visible. When the real
-    // per-module loads are reconstructed, their actual load time provides the pacing and this
-    // gate is removed (the stage advances when the current module finishes loading).
-    static u32 s_uStageStartTick = 0;
-    const u32 luNow  = CgsSystem::GetSystemTimerBaseTime();
-    const u32 luFreq = CgsSystem::GetSystemTimerFrequency();
-    if (s_uStageStartTick == 0)
-        s_uStageStartTick = luNow;
-    if (luFreq != 0 && (luNow - s_uStageStartTick) < (luFreq * 4u / 10u))
-        return;
-    s_uStageStartTick = luNow;
-
-    static const char* const kapcStageNames[] = {
+    // The real DWARF/PS3 stage identities (E_LOADINGSTAGE_*). On the X360 ARTIST spine the late
+    // stages (Juice/Massive/Replays) DON'T load those subsystems -- see the per-case notes below.
+    const char* const kapcStageNames[] = {
         "START", "ControllerModule", "GUIModule", "DirectorModule", "SoundModule",
         "Network", "Juice", "Massive", "Replays", "DONE",
     };
-    if ((CgsDev::Message::gxMessageFilterFlags & 1) &&
-        meLoadingScreenStage >= E_LOADINGSTAGE_START && meLoadingScreenStage < E_LOADINGSTAGE_DONE)
+
+    // [INTERIM PACING] The per-stage LoadXxxModule loads are still stubs, so gate each stage on a
+    // short engine-clock dwell (~0.4s) to keep the loading screen visible. The real X360 advances a
+    // stage when its async module load reports complete; this dwell is removed per stage as each real
+    // LoadXxxModule is reconstructed (the real load then provides the natural timing). Resets itself
+    // each time it elapses so the next stage starts a fresh dwell.
+    u32 g_uStageStartTick = 0;
+    bool StageDwellElapsed()
     {
-        *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading stage "
-                                   << (s32)meLoadingScreenStage << " ("
-                                   << kapcStageNames[meLoadingScreenStage] << ")\n";
+        const u32 luNow  = CgsSystem::GetSystemTimerBaseTime();
+        const u32 luFreq = CgsSystem::GetSystemTimerFrequency();
+        if (g_uStageStartTick == 0)
+            g_uStageStartTick = luNow;
+        if (luFreq != 0 && (luNow - g_uStageStartTick) < (luFreq * 4u / 10u))
+            return false;
+        g_uStageStartTick = luNow;
+        return true;
+    }
+}
+
+// @ 0x823EF688 - the real boot-load stage machine: load one engine module per stage
+// (Controller -> GUI -> Director -> Sound -> Network), then the GameDataModule prepare, then
+// FinishLoading. The X360 also creates the GUI IO buffers and renders + bridges the GUI each frame
+// while loading (RendererIO + BrnRendererModule::Update + BridgeGameToGui/BridgeGuiToResource/
+// BridgeGuiToGame + RenderGUI + GuiEventTimeInfo). That render/bridge loop needs the per-module IO
+// types (CgsGui::CgsGuiModuleIO / ViewIO / ModelIO / RendererIO) which aren't reconstructed yet, so
+// it is a [follow-on]; for now the GUI + MovieManager keep running through BrnGameModule's inline
+// hookup. The per-stage LoadXxxModule bodies are also [stubs] (interim dwell) until reconstructed.
+void MainGameFlowStateInitialLoadingScreen::Update()
+{
+    // The debug manager updates every frame while loading (X360 gates this on stage > Controller).
+    if (meLoadingScreenStage > E_LOADINGSTAGE_CONTROLLERMODULE)
+    {
+        if (CgsDev::DebugManager* lpDebug = CgsDev::DebugManager::ThreadSafeAquire())
+        {
+            lpDebug->Update(1.0f / 60.0f);
+            CgsDev::DebugManager::ThreadSafeRelease(lpDebug);
+        }
     }
 
     switch (meLoadingScreenStage)
     {
     case E_LOADINGSTAGE_START:
+    case E_LOADINGSTAGE_CONTROLLERMODULE:
+        // X360: LoadControllerModule (0x823C68C0) -- allocates the Controller module's input
+        // rw::core::GeneralResourceAllocator from the GameData allocator. [stub: interim dwell;
+        // real load = Phase 3]
         meLoadingScreenStage = E_LOADINGSTAGE_CONTROLLERMODULE;
+        if (StageDwellElapsed())
+            AdvanceLoadingStage(E_LOADINGSTAGE_GUIMODULE);
         break;
-    case E_LOADINGSTAGE_CONTROLLERMODULE:   // LoadControllerModule
-        meLoadingScreenStage = E_LOADINGSTAGE_GUIMODULE;
+    case E_LOADINGSTAGE_GUIMODULE:
+        // X360: LoadGUIModule (0x823EF310). The GUI module + MovieManager currently run via
+        // BrnGameModule's inline hookup, so this stage only paces here. [real = GUI-IO/bridge phase]
+        if (StageDwellElapsed())
+            AdvanceLoadingStage(E_LOADINGSTAGE_DIRECTORMODULE);
         break;
-    case E_LOADINGSTAGE_GUIMODULE:          // LoadGUIModule
-        meLoadingScreenStage = E_LOADINGSTAGE_DIRECTORMODULE;
+    case E_LOADINGSTAGE_DIRECTORMODULE:
+        // X360: LoadDirectorModule. [stub: interim dwell; real load = roadmap]
+        if (StageDwellElapsed())
+            AdvanceLoadingStage(E_LOADINGSTAGE_SOUND_MODULE);
         break;
-    case E_LOADINGSTAGE_DIRECTORMODULE:     // LoadDirectorModule
-        meLoadingScreenStage = E_LOADINGSTAGE_SOUND_MODULE;
+    case E_LOADINGSTAGE_SOUND_MODULE:
+        // X360: LoadSoundModule (0x823E75A8). [stub]
+        if (StageDwellElapsed())
+            AdvanceLoadingStage(E_LOADINGSTAGE_NETWORK);
         break;
-    case E_LOADINGSTAGE_SOUND_MODULE:       // LoadSoundModule
-        meLoadingScreenStage = E_LOADINGSTAGE_NETWORK;
-        break;
-    case E_LOADINGSTAGE_NETWORK:            // LoadNetworkModule
-        meLoadingScreenStage = E_LOADINGSTAGE_JUICE;
+    case E_LOADINGSTAGE_NETWORK:
+        // X360: LoadNetworkModule. [stub]
+        if (StageDwellElapsed())
+            AdvanceLoadingStage(E_LOADINGSTAGE_JUICE);
         break;
     case E_LOADINGSTAGE_JUICE:
-        meLoadingScreenStage = E_LOADINGSTAGE_MASSIVE;
+        // [X360 ARTIST divergence] The PS3 DecFIGS build loads Juice here; the X360 ARTIST Update
+        // does NOT -- stage 6 is a passthrough. (The enum name is the DWARF/PS3 identity.)
+        AdvanceLoadingStage(E_LOADINGSTAGE_MASSIVE);
         break;
     case E_LOADINGSTAGE_MASSIVE:
-        meLoadingScreenStage = E_LOADINGSTAGE_REPLAYS;
+        // [X360 ARTIST divergence] No Massive load here; the X360 sets the "engine modules loaded"
+        // flag (off_830102D0 + 10097260 = 1) at this stage. [follow-on: that game-module flag isn't
+        // mapped in this incremental layout]
+        AdvanceLoadingStage(E_LOADINGSTAGE_REPLAYS);
         break;
-    case E_LOADINGSTAGE_REPLAYS:            // LoadReplayModule
-        meLoadingScreenStage = E_LOADINGSTAGE_DONE;
-        //CGS_ASSERT(false, "six seven");
+    case E_LOADINGSTAGE_REPLAYS:
+        // [X360 ARTIST divergence] Not a Replays load -- this is where the X360 prepares the
+        // GameDataModule (case 8: GameDataModule::Prepare via vtable+64). Now WIRED: drive the real
+        // GameDataModule::Prepare each frame until it reports ready (its resumable stage machine
+        // brings up the resource module tree -- base + ResourceModule::Prepare chaining Memory/Pool/
+        // Bundle/FileSystem). The bank/pool/allocator creation inside Prepare is still stubbed
+        // (reports success) until step 5a/5b; bundle streaming + file I/O remain a later phase.
+        if (!g_bGameDataModuleConstructed)
+        {
+            g_BrnGameDataModule.Construct(0);
+            g_bGameDataModuleConstructed = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: preparing GameDataModule (case 8)\n";
+        }
+        if (g_BrnGameDataModule.Prepare(0, 0))
+            AdvanceLoadingStage(E_LOADINGSTAGE_DONE);
         break;
     case E_LOADINGSTAGE_DONE:
     default:
-        // Load complete (once): drop the renderer's loading-screen signal so it fades out
-        // (E_LSC_HIDE). The full game here issues SendEvent(E_MGE_STATEEND) -> the next flow
-        // state (start screen) takes over; that transition lands when those states are
-        // reconstructed. Guarded so the held DONE stage doesn't re-log every frame.
+        // Load complete (once): drop the renderer's loading-screen signal and advance the flow
+        // (FinishLoading -> SendEvent(STATEEND) -> MARKETING_SCREENS). Guarded so the held DONE
+        // stage doesn't re-fire every frame.
         if (gBrnLoadingScreenShouldShow)
         {
             if (CgsDev::Message::gxMessageFilterFlags & 1)
@@ -135,6 +196,21 @@ void MainGameFlowStateInitialLoadingScreen::Update()
             gBrnLoadingScreenShouldShow = false;
         }
         break;
+    }
+}
+
+// Advance to the next load stage + log it (the X360 stages are visible in BrnGame.log so the real
+// progression can be followed). Kept separate so each stage's real LoadXxxModule (Phase 3+) just
+// calls this on its own completion instead of the interim dwell.
+void MainGameFlowStateInitialLoadingScreen::AdvanceLoadingStage(ELoadingScreenStage leNextStage)
+{
+    meLoadingScreenStage = leNextStage;
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) &&
+        leNextStage >= E_LOADINGSTAGE_START && leNextStage <= E_LOADINGSTAGE_DONE)
+    {
+        *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading stage "
+                                   << (s32)leNextStage << " ("
+                                   << kapcStageNames[leNextStage] << ")\n";
     }
 }
 
