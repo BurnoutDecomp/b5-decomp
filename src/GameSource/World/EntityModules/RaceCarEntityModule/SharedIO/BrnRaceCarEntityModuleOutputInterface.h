@@ -115,6 +115,13 @@ namespace RaceCarEntityModuleIO
         // DWARF :415 -- public live race-car list.
         Array<CarsInTheRaceData, 8u> maCarsInTheRace;             // :415
 
+        // X360 0x826BB258 -- the member-wise copy constructor the build emitted out-of-line
+        // (memcpy of the leading POD spans + per-element RaceCarState copy-construction). The
+        // committed header previously declared only operator=; the copy ctor is added here
+        // additively (its definition lives in this interface's own .cpp).
+        RCEntityActiveRaceCarOutputInterface(const RCEntityActiveRaceCarOutputInterface&);
+        RCEntityActiveRaceCarOutputInterface() {}
+
         void operator=(const RCEntityActiveRaceCarOutputInterface&);                         // :213 (own TU)
         void Clear();                                                                        // :216 (own TU)
         const RaceCarState* GetRaceCarState(EActiveRaceCarIndex) const;                       // :220 (own TU)
@@ -137,6 +144,10 @@ namespace RaceCarEntityModuleIO
         bool IsPlayerCarActive() const;                                                      // :287 (own TU)
         EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const;                             // :290 (own TU)
         EntityId GetPlayerRaceCarEntityId() const;                                           // :293 (own TU)
+        // X360 0x8259BB58 -- returns the player car's current speed (mfSpeedMPH @968 inside the
+        // player's RaceCarState). Asserts the player index has been set, like GetPlayerRaceCarState.
+        // Not in the committed declaration set; added additively (definition in this TU's .cpp).
+        f32  GetPlayerSpeedMPH() const;
         bool IsPlayerCarCrashing() const;                                                    // :296 (own TU)
         bool IsPlayerCarDeforming() const;                                                   // :299 (own TU)
         bool IsThePlayerDrivableFromCrash() const;                                           // :302 (own TU)
