@@ -323,9 +323,16 @@ struct ICEAuthor
     void JumpToNextKey();
     void JumpToPreviousKey();
 
-    // --- parameter move ---
-    void MoveParameter();
-    void SetParameterChange();
+    // --- parameter move (bodies in ICEAuthorParamOps.cpp) ---
+    // Nudge the current channel's interval-boundary parameter by a per-frame delta,
+    // optionally snapping it to a neighbouring boundary when within a range-derived
+    // tolerance and folding the leftover into mfMoveAccumulator. lbApply gates the
+    // snap/accumulate path; when false the raw delta is forwarded unchanged.
+    void MoveParameter(f32 lfDelta, bool lbApply);
+    // Apply an accumulated parameter change to the live playback parameter: snap the
+    // current parameter onto a bracket boundary within the tolerance, fold the
+    // leftover into mfMoveAccumulator, then seek the take parameter (clamped 0..1).
+    void SetParameterChange(f32 lfDelta, bool lbApply);
 };
 
 // ---------------------------------------------------------------------------
