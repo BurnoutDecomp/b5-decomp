@@ -1,7 +1,8 @@
 #pragma once
 
 #include "types.hpp"
-#include "ppmalloc/EAGeneralAllocator.h"   // EA::Allocator::GeneralAllocator (the embedded heap engine)
+#include "ppmalloc/EAGeneralAllocator.h"          // EA::Allocator::GeneralAllocator (the embedded heap engine)
+#include "coreallocator/icoreallocator_interface.h" // EA::Allocator::ICoreAllocator (the abstract base)
 
 // ============================================================================
 // GameShared/GameClasses/Memory/CgsHeapMalloc.h
@@ -59,5 +60,39 @@ namespace CgsMemory
         void* mpBuffer;        // CgsHeapMalloc.h:117  +0x0
         s32   mnBufferSize;    // CgsHeapMalloc.h:118  +0x4
         EA::Allocator::GeneralAllocator mAllocator;   // CgsHeapMalloc.h:123 the heap engine
+    };
+
+    // ========================================================================
+    // CgsMemory::HeapMallocCoreAllocator (CgsHeapMalloc.h:137)
+    //
+    // An EA::Allocator::ICoreAllocator front-end onto a HeapMalloc. The X360
+    // Construct (0x82866870) is `HeapMalloc::Construct(this + 1dword, ...)`: with
+    // the vtable pointer at +0x0 the embedded HeapMalloc sits at +0x4, so this is
+    // a thin ICoreAllocator wrapper that OWNS a HeapMalloc and forwards the
+    // interface's Alloc/Free onto HeapMalloc::Malloc/Free. (On X360 the `this + 1`
+    // was a raw +4 dword skip past the vtable pointer; we reconstruct it as a
+    // named embedded member so the x64 layout falls out naturally.)
+    //
+    // Used by CgsSystem::HardwareInit::InitializeHardware to expose the engine's
+    // general heap to the EASTL / EA-middleware code that allocates through an
+    // ICoreAllocator*.
+    // ========================================================================
+    class HeapMallocCoreAllocator : public EA::Allocator::ICoreAllocator
+    {
+    public:
+        // CgsHeapMalloc.cpp:221 - forward the buffer to the embedded HeapMalloc.
+        void Construct(void* lpBuffer, s32 lnBufferSize);
+        // CgsHeapMalloc.cpp:234 - tear the embedded HeapMalloc down.
+        void Destruct();
+
+        // EA::Allocator::ICoreAllocator overrides (CgsHeapMalloc.cpp:247/263/280).
+        // Alloc tags are debug-only and ignored by the underlying engine.
+        virtual void* Alloc(size_t lnSize, const char* lpcName, unsigned int luFlags);
+        virtual void* Alloc(size_t lnSize, const char* lpcName, unsigned int luFlags,
+                            unsigned int luAlignment, unsigned int luAlignmentOffset = 0);
+        virtual void  Free(void* lpBlock, size_t lnSize = 0);
+
+    private:
+        HeapMalloc mAllocator;   // CgsHeapMalloc.h:162 the wrapped general heap (sits past the vtable ptr)
     };
 }
