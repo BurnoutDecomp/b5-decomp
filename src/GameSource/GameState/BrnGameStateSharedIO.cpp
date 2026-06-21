@@ -66,6 +66,48 @@ void SpecificGameModeEventInterface::Event::Construct(
     }
 }
 
+// X360 0x8240E7E0. Return one of this event's landmark indices by value. Bounds-asserts the index
+// in [0, miNumLandmarks) (the X360 streams the live count as "GetNumLandmarks()" into the dynamic
+// assert text; reduced to the static expressions per the committed convention). The X360 reads
+// maLandmarkIndices[liIndex] (lhzx, 2-byte stride from offset 0) into the returned LandmarkIndex.
+LandmarkIndex SpecificGameModeEventInterface::Event::GetLandmark(s32 liIndex) const
+{
+    CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+    CGS_ASSERT(liIndex < miNumLandmarks, "liIndex < GetNumLandmarks()");
+
+    return maLandmarkIndices[liIndex];
+}
+
+// X360 0x82361500. Find the event with id == liEventID (linear scan of maEvents by Event::GetEventID).
+// If present, return that record. Otherwise Construct a fresh Event from the supplied trigger id +
+// landmark array and Append it, returning the newly added record. The over-capacity guard
+// (maEvents.GetLength() < maEvents.GetCapacity()) is asserted (BrnGameStateSharedIO.h:1976) before
+// the push; the X360 emits the push as the generic Array<Event,175>::Append (0x8235BA28).
+SpecificGameModeEventInterface::Event* SpecificGameModeEventInterface::AddEvent(
+    s32            liEventID,
+    u32            luTrafficLightTriggerId,
+    LandmarkIndex* lpaLandmarkIndices,
+    s32            liNumLandmarks)
+{
+    for (u32 luIndex = 0; luIndex < maEvents.GetLength(); ++luIndex)
+    {
+        if (maEvents[luIndex].GetEventID() == liEventID)
+        {
+            return &maEvents[luIndex];
+        }
+    }
+
+    CGS_ASSERT(maEvents.GetLength() < maEvents.GetSize(),
+               "maEvents.GetLength() < maEvents.GetCapacity()");
+
+    Event lNewEvent;
+    lNewEvent.Construct(liEventID, luTrafficLightTriggerId, lpaLandmarkIndices, liNumLandmarks);
+
+    const u32 luNewIndex = maEvents.GetLength();
+    maEvents.Append(lNewEvent);
+    return &maEvents[luNewIndex];
+}
+
 // X360 0x82326360. Initialise the freeburn "every player" completion block: zero each of the 7
 // per-player slots' completion bits + invalidate its player id, then zero the local-player bits.
 void FburnChallengeEveryPlayerStatusData::Construct()
