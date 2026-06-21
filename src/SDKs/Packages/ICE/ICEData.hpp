@@ -328,6 +328,32 @@ public:
     // delegating the per-count deltas to ChangeSize.
     bool SetSize(s32 liChannel, s32 liNumKeys, s32 liNumIntervals);
 
+    // --- DECLARE-ONLY (editor edit operations; bodies in ICEDataICETake.cpp) ---
+    // Insert a key/interval into liChannel at the current playback parameter (no-op
+    // if the parameter already lands on a boundary). lbAfter biases the insert side.
+    bool Insert(s32 liChannel, u8 lbAfter);
+    // Delete the current interval of liChannel (one or two keys depending on the
+    // bracket hard-cut state). No-op if the channel has no intervals.
+    bool Delete(s32 liChannel);
+    // Delete the key on the left side of liChannel's current interval (one key, or
+    // two when that boundary is a hard cut). No-op if no keys or current interval 0.
+    bool DeleteLeftSideKey(s32 liChannel);
+    // Collapse the soft-key run spanning intervals (liFirst, lu16Last) of the
+    // assembly channel (10) to a single interval.
+    bool DeleteAssemblySoftKeys(s32 liFirst, u16 lu16Last);
+    // Split a soft interval boundary into a hard cut by inserting one key (no-op if
+    // already a hard cut for this element).
+    bool Harden(s32 liChannel, s32 liInterval, s32 liElement);
+    // Merge a hard-cut boundary back into a soft one by removing one key (no-op
+    // unless it is a hard cut whose duplicated key pair matches).
+    bool Soften(s32 liChannel, s32 liInterval, s32 liElement);
+    // Copy this take's current-interval element into a destination take (sizes the
+    // destination channel to one interval, then copies the bracket-key value).
+    bool CopyElement(ICETake* lpDest, s32 liChannel, s16 li16Offset, s32 liElement);
+    // Paste a source take's element (its key 0) into this take at the current
+    // interval's bracket key (offset by li16Offset).
+    bool PasteElement(ICETake* lpSrc, s32 liChannel, s16 li16Offset, s32 liElement);
+
 private:
     // --- DECLARE-ONLY (private machinery; bodies elsewhere) ---
     bool SetParameter(s32 liChannel, f32 lfParameter, bool lbForce);

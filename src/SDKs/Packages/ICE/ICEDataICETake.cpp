@@ -558,4 +558,320 @@ namespace ICE
                           liNumIntervals - (s32)mChannels[liChannel].GetNumIntervals(), 0,
                           0, 0);
     }
+
+    // ------------------------------------------------------------------------
+    // ICETake::Insert -- insert a key (and its interval) into liChannel at the
+    // current playback parameter (mfParameter). With keys present, the current
+    // interval and the lbAfter bias choose the run position and hard-cut flags; on an
+    // empty channel the parameter is bracketed against 0.0/1.0. If the parameter
+    // already coincides with an existing boundary the insert is a no-op. The deltas/
+    // positions are forwarded to ChangeSize.
+    //
+    // FLAG: the per-case key/interval-delta selection (and the lbAfter key-at bias)
+    //       is reconstructed by intent -- the four ChangeSize position args and the
+    //       two hard-cut flags are bit-exact, but the branch grouping follows the
+    //       parameter/hard-cut tests rather than being byte-verified.
+    // ------------------------------------------------------------------------
+    bool ICETake::Insert(s32 liChannel, u8 lbAfter)
+    {
+        CGS_ASSERT(IsEditable(), "IsEditable()");
+
+        ICEChannel& lrChannel = mChannels[liChannel];
+
+        s32 liKeyDelta;
+        s32 liKeyAt       = 0;
+        s32 liIntervalDelta;
+        s32 liIntervalAt  = 0;
+
+        const s16 li16NumIntervals = lrChannel.GetNumIntervals();
+        const bool lbHasKeys = (li16NumIntervals > 0);
+        const s32  liAfter   = (lbAfter != 0) ? 1 : 0;
+
+        if (!lbHasKeys)
+        {
+            // Empty channel: a parameter that quantizes onto key 0 (0.0) or key 1
+            // (1.0) collapses to the 2-key/1-interval seeding; otherwise it is a real
+            // interior insert (2 intervals).
+            ICEParameter lParam(mfParameter);
+            ICEParameter lKey0(0.0f);
+            bool lbCoincident = (*lParam.GetPackedPtr() == *lKey0.GetPackedPtr());
+            if (!lbCoincident)
+            {
+                ICEParameter lKey1(1.0f);
+                lbCoincident = (*lParam.GetPackedPtr() == *lKey1.GetPackedPtr());
+            }
+
+            if (lbCoincident)
+            {
+                liKeyDelta      = 2;
+                liIntervalDelta = 1;
+            }
+            else
+            {
+                liIntervalDelta = 2;
+                liKeyDelta      = liAfter + 3;
+            }
+        }
+        else
+        {
+            // With keys, only insert if the current parameter does not already sit on
+            // a boundary (within one frame of slop). A negative interval count
+            // short-circuits straight to the boundary insert.
+            const u16 lu16NumIntervals = (u16)li16NumIntervals;
+
+            if ((lu16NumIntervals & 0x8000u) == 0)
+            {
+                const f32 lfSlop      = 1.0f / (mpTakeData->mfLength * 30.0f);
+                const f32 lfParameter = mfParameter;
+
+                for (u16 lu16Interval = 0; ; ++lu16Interval)
+                {
+                    f32 lfBoundary;
+                    if (lu16Interval == 0)                    lfBoundary = 0.0f;
+                    else if (lu16Interval < lu16NumIntervals) lfBoundary = lrChannel.GetParameterData()[lu16Interval - 1].GetValue();
+                    else                                      lfBoundary = 1.0f;
+
+                    f32 lfLow  = lfBoundary - lfSlop;
+                    if (lfParameter < lfLow)  lfLow  = lfParameter;
+                    f32 lfHigh = lfBoundary + lfSlop;
+                    if (lfHigh < lfLow)       lfHigh = lfLow;
+                    if (lfParameter == lfHigh)
+                        return false;
+
+                    if (lu16Interval >= lu16NumIntervals)
+                        break;
+                }
+            }
+
+            // Boundary insert: one new key + one new interval at the current interval.
+            liIntervalDelta = 1;
+            liIntervalAt    = (s32)lrChannel.GetCurrentInterval() + 1;
+            liKeyDelta      = liAfter + 1;
+
+            const u16 lu16Current = (u16)lrChannel.GetCurrentInterval();
+            if (lu16Current != 0)
+            {
+                s16 li16KeyIndex;
+                if (lu16Current + 1 < lu16NumIntervals)
+                    li16KeyIndex = (s16)lrChannel.GetKeyData()[lu16Current - 1];
+                else
+                    li16KeyIndex = (s16)(lrChannel.GetNumKeys() - 2);
+                liKeyAt = (s32)li16KeyIndex + 1;
+            }
+            else
+            {
+                liKeyAt = 1;
+            }
+        }
+
+        const s32 liLeftHardCut  = liAfter + 1;
+        const s32 liRightHardCut = (lbAfter != 0 && lbHasKeys) ? 1 : 0;
+
+        return ChangeSize(liChannel, liKeyDelta, liKeyAt,
+                          liIntervalDelta, liIntervalAt,
+                          liLeftHardCut, liRightHardCut);
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::Delete -- delete the current interval of liChannel. No-op (false) if
+    // the channel has no intervals. Brackets the current interval, tests its right
+    // (offset +1) and left (offset 0) boundaries for hard cuts, and removes one or
+    // two keys: two when both probed boundaries cut, one otherwise (or when only one
+    // side cuts and the parameter favours the start edge). Positioned at the current
+    // interval's left key.
+    // ------------------------------------------------------------------------
+    bool ICETake::Delete(s32 liChannel)
+    {
+        CGS_ASSERT(IsEditable(), "IsEditable()");
+
+        ICEChannel& lrChannel = mChannels[liChannel];
+
+        if (lrChannel.GetNumIntervals() <= 0)
+            return false;
+
+        f32 lfStart;
+        f32 lfEnd;
+        lrChannel.GetIntervalBracket(&lfStart, &lfEnd);
+
+        const u16 lu16Current = (u16)lrChannel.GetCurrentInterval();
+
+        // Both hard-cut probes index the current interval; element 1 tests the right
+        // boundary, element 0 the left.
+        const bool lbRightHardCut = lrChannel.IsHardCut(lu16Current, 1);
+        const bool lbLeftHardCut  = lrChannel.IsHardCut(lu16Current, 0);
+
+        // Distances of the playback parameter from each bracket edge.
+        f32 lfToEnd   = mfParameter - lfEnd;
+        if (lfToEnd   < 0.0f) lfToEnd   = -lfToEnd;
+        f32 lfToStart = mfParameter - lfStart;
+        if (lfToStart < 0.0f) lfToStart = -lfToStart;
+        const bool lbNearerEnd = (lfToEnd <= lfToStart);
+
+        // Removal lands at the current interval's bracket (left-edge) key, advanced
+        // one key when the right side is soft and either the left side cuts or the
+        // parameter is nearer the end edge. Two hard-cut boundaries remove the
+        // duplicated key pair (2); otherwise one key.
+        const u16 lu16BracketKey = GetIntervalKey(liChannel, lu16Current);
+        const s32 liKeyDelta = (lbLeftHardCut && lbRightHardCut) ? -2 : -1;
+        s32 liKeyAt = (s32)lu16BracketKey;
+        if (!lbRightHardCut && (lbLeftHardCut || lbNearerEnd))
+            liKeyAt += 1;
+
+        return ChangeSize(liChannel, liKeyDelta, liKeyAt, -1, lu16Current, 0, 0);
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::DeleteLeftSideKey -- delete the key on the left side of liChannel's
+    // current interval (one key for a soft boundary, two for a hard cut). No-op
+    // (false) when the channel has no intervals or the current interval is 0.
+    // ------------------------------------------------------------------------
+    bool ICETake::DeleteLeftSideKey(s32 liChannel)
+    {
+        CGS_ASSERT(IsEditable(), "IsEditable()");
+
+        ICEChannel& lrChannel = mChannels[liChannel];
+
+        if (lrChannel.GetNumIntervals() <= 0 || lrChannel.GetCurrentInterval() == 0)
+            return false;
+
+        const u16 lu16Current = (u16)lrChannel.GetCurrentInterval();
+
+        s16 li16KeyAt;
+        if (lu16Current + 1 < (u16)lrChannel.GetNumIntervals())
+            li16KeyAt = (s16)lrChannel.GetKeyData()[lu16Current - 1];
+        else
+            li16KeyAt = (s16)(lrChannel.GetNumKeys() - 2);
+
+        const bool lbHardCut = lrChannel.IsHardCut(lu16Current, 0);
+        const s32  liKeyDelta = (lbHardCut ? 0 : 1) - 2;   // -2 (hard cut) or -1 (soft)
+
+        return ChangeSize(liChannel, liKeyDelta, li16KeyAt, -1, lu16Current, 0, 0);
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::DeleteAssemblySoftKeys -- collapse the soft-key run spanning intervals
+    // (liFirst, lu16Last) of the assembly channel (channel 10) to a single interval.
+    // No-op (false) unless both bounds lie inside the assembly channel's key count
+    // and span more than one interval.
+    // ------------------------------------------------------------------------
+    bool ICETake::DeleteAssemblySoftKeys(s32 liFirst, u16 lu16Last)
+    {
+        CGS_ASSERT(IsEditable(), "IsEditable()");
+
+        const u16 lu16Count = (u16)mChannels[10].GetNumKeys();
+
+        if ((u16)liFirst < lu16Count && lu16Last < lu16Count && (s32)(lu16Last - liFirst) > 1)
+        {
+            const s32 liDelta = 1 - (s32)(lu16Last - liFirst);
+            return ChangeSize(10, liDelta, liFirst + 1, liDelta, liFirst, 0, 0);
+        }
+        return false;
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::Harden -- split a soft interval boundary into a hard cut by inserting
+    // one key. No-op (false) when the channel has no intervals or the boundary is
+    // already a hard cut for this element. The interval's bracket (left-edge) key,
+    // offset by liElement, is the insertion point.
+    // ------------------------------------------------------------------------
+    bool ICETake::Harden(s32 liChannel, s32 liInterval, s32 liElement)
+    {
+        CGS_ASSERT(IsEditable(), "IsEditable()");
+
+        const ICEChannel& lrChannel = mChannels[liChannel];
+
+        if (lrChannel.GetNumIntervals() <= 0 || lrChannel.IsHardCut((u16)liInterval, liElement))
+            return false;
+
+        const u16 lu16BracketKey = GetIntervalKey(liChannel, (u16)liInterval);
+        const s32 liKeyAt = (u16)(lu16BracketKey + (u16)liElement);
+
+        return ChangeSize(liChannel, 1, liKeyAt, 0, liInterval, 0, 0);
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::Soften -- merge a hard-cut boundary back into a soft one by removing
+    // one key. No-op (false) when the channel has no intervals, the boundary is not a
+    // hard cut, the partner-boundary index is out of range, or the duplicated key
+    // pair (elements 30/31) does not match across the cut. The partner boundary index
+    // is (2*liElement + liInterval - 1); the removal is at its bracket key offset by
+    // (liElement ^ 1).
+    // ------------------------------------------------------------------------
+    bool ICETake::Soften(s32 liChannel, s32 liInterval, s32 liElement)
+    {
+        CGS_ASSERT(IsEditable(), "IsEditable()");
+
+        const ICEChannel& lrChannel = mChannels[liChannel];
+
+        const s16 li16NumIntervals = lrChannel.GetNumIntervals();
+        if (li16NumIntervals <= 0 || !lrChannel.IsHardCut((u16)liInterval, liElement))
+            return false;
+
+        const u16 lu16Partner = (u16)(2 * liElement + liInterval - 1);
+
+        // Reject (not clamp) when the partner boundary leaves [0, numIntervals-1].
+        const s32 liPartner     = (s32)lu16Partner;
+        const s32 liMaxBoundary = (s32)li16NumIntervals - 1;
+        s32 liClamped = liPartner;
+        if (liMaxBoundary >= 0)
+            liClamped = (liMaxBoundary < liPartner) ? liMaxBoundary : liPartner;
+        if (liPartner != liClamped)
+            return false;
+
+        // Removable only when both hard-cut elements (30/31) match across the cut.
+        if (GetValue(30, (u16)liInterval) != GetValue(30, lu16Partner))
+            return false;
+        if (GetValue(31, (u16)liInterval) != GetValue(31, lu16Partner))
+            return false;
+
+        const u16 lu16PartnerKey = GetIntervalKey(liChannel, lu16Partner);
+        const s32 liKeyAt = (u16)((liElement ^ 1) + lu16PartnerKey);
+
+        return ChangeSize(liChannel, -1, liKeyAt, 0, (s32)lu16Partner, 0, 0);
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::CopyElement -- copy this take's current-interval element into a
+    // destination take. No-op (false) when this channel has no intervals or no
+    // current interval, or the destination resize is rejected. Sizes the destination
+    // channel to one 2-key/1-interval span, then copies this take's bracket-key
+    // (offset by li16Offset) element value into destination key 0. Direction: this
+    // (source) -> lpDest.
+    // ------------------------------------------------------------------------
+    bool ICETake::CopyElement(ICETake* lpDest, s32 liChannel, s16 li16Offset, s32 liElement)
+    {
+        const ICEChannel& lrChannel = mChannels[liChannel];
+
+        const u16 lu16Interval = (u16)lrChannel.GetCurrentInterval();
+        if (lrChannel.GetNumIntervals() <= 0 || lu16Interval == ICE_INVALID_INTERVAL)
+            return false;
+
+        if (!lpDest->SetSize(liChannel, 2, 1))
+            return false;
+
+        const u16 lu16SrcKey = (u16)(GetIntervalKey(liChannel, lu16Interval) + (u16)li16Offset);
+        lpDest->CopyKeyElement(liChannel, 0, liElement, this, lu16SrcKey);
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::PasteElement -- paste a source take's element (its key 0) into this
+    // take at the current interval's bracket key (offset by li16Offset). No-op
+    // (false) when this channel has no intervals or no current interval, or the
+    // source channel has no keys / intervals. Direction: lpSrc (source) -> this.
+    // ------------------------------------------------------------------------
+    bool ICETake::PasteElement(ICETake* lpSrc, s32 liChannel, s16 li16Offset, s32 liElement)
+    {
+        const ICEChannel& lrChannel    = mChannels[liChannel];
+        const ICEChannel& lrSrcChannel = lpSrc->mChannels[liChannel];
+
+        const u16 lu16Interval = (u16)lrChannel.GetCurrentInterval();
+        if (lrChannel.GetNumIntervals() <= 0 || lu16Interval == ICE_INVALID_INTERVAL
+            || lrSrcChannel.GetNumKeys() == 0 || lrSrcChannel.GetNumIntervals() == 0)
+            return false;
+
+        const u16 lu16DestKey = (u16)(GetIntervalKey(liChannel, lu16Interval) + (u16)li16Offset);
+        CopyKeyElement(liChannel, lu16DestKey, liElement, lpSrc, 0);
+        return true;
+    }
 }
