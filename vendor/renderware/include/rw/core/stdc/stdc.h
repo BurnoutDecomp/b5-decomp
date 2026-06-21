@@ -13,6 +13,8 @@
 // MINIMAL SLICE -- declares exactly the entry points the ICE bodies call:
 //   * rw::core::stdc::MemClear(dst, size)        -- zero-fill (X360 memset wrapper)
 //   * rw::core::stdc::MemCopy(dst, src, size)    -- copy (X360 memcpy wrapper)
+//   * rw::core::stdc::MemCompare(a, b, size)     -- compare (memcmp wrapper; the
+//                                                   ICETake undo DataChanged check)
 //   * rw::core::stdc::Vsprintf(dst, fmt, args)   -- vararg formatter (X360 vsprintf
 //                                                   wrapper; the StringPrintf sink)
 //   * rw::core::stdc::StringLength(s)            -- strlen wrapper (ICEFileHandler)
@@ -35,6 +37,12 @@ namespace stdc
 {
     void MemClear(void* lpDst, u32 luSize);
     void MemCopy(void* lpDst, const void* lpSrc, u32 luSize);
+
+    // memcmp wrapper: compare luSize bytes of lpA against lpB, returning a value
+    // <0 / 0 / >0 (C-library memcmp semantics). ICETake::DataChanged uses it to
+    // detect whether the live take differs from its newest undo snapshot. The
+    // buffers are read-only, modelled as const void*. DECLARATION-ONLY.
+    s32 MemCompare(const void* lpA, const void* lpB, u32 luSize);
 
     // vsprintf wrapper: format lpcFormat with the variadic args in lvaArgs into
     // lpcDst, returning the number of characters written. The X360 build passes a
