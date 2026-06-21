@@ -70,6 +70,13 @@ namespace stdc
     // (C-library strcpy semantics). The buffers are read-only source / writable
     // destination text, modelled as const char*/char* here. DECLARATION-ONLY.
     char* StringCopy(char* lpcDst, const char* lpcSrc);
+
+    // strcmp wrapper: compare the NUL-terminated lpcA against lpcB, returning a
+    // value <0 / 0 / >0 (C-library strcmp semantics; 0 means equal). The ICE menu
+    // widget uses it to detect empty cells (cell text == the empty sentinel) and
+    // the "<ICON>" cell marker. Both buffers are read-only text, modelled as
+    // const char*. DECLARATION-ONLY.
+    s32 StringCompare(const char* lpcA, const char* lpcB);
 }
 }
 }
