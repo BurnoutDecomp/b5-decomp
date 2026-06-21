@@ -84,6 +84,11 @@ struct ICEController
     void Update();
     void DestructMenus();
 
+    // Editor draw pass. BrnDirector::ICEWrapper::Update calls it each frame on the
+    // embedded controller (the editor renders its overlay after the manager advances).
+    // FLAG: declaration-only here; its body lands with the ICEController TU.
+    void Render();
+
     // Editor entry points driven by BrnDirector::ICEWrapper (EditorOn/EditorOff).
     // FLAG: these are ICE::ICEAuthor base methods (ICEAuthor::EditorOn,
     // ICEAuthor::SetState), invoked on the editor `this` (== this controller's
