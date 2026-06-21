@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
-#include "GameSource/GameState/SharedIO/BrnGameStateLeafContainers.h"
+// MultiplierData is now homed as a nested type of the online stunt scorer (its owning TU).
+#include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.h"
 
 // Explicit instantiation(s) of the generic Array<T,N> container methods (inline in CgsArray.h)
 // for the MultiplierData leaf instantiation -- the committed Array_/EventQueue_ explicit-instantiation pattern.
