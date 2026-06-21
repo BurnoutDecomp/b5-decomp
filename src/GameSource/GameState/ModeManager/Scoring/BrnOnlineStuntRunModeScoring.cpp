@@ -98,16 +98,129 @@ s32 OnlineStuntRunModeScoring::GetWinnerTeam(const ScoringSystem* lpScoringSyste
     return liWinningTeam;
 }
 
-// ----------------------------------------------------------------------------------------------------
-// DECLARE-ONLY (BLOCKED) -- intentionally NO body here:
-//   * GetTeamScore           (X360 0x82321D20)
-//   * UpdatePlayerPoints     (X360 0x82338B90)
-// Both read the per-car online stunt score at CarScoreData +0xD4 (X360 `*(CarData + 212)`), which has
-// no committed named accessor -- it is the un-named `maStorageD4[4]` storage in the CarScoreData home
-// (BrnGameStateSharedIO.h). Reconstructing their bodies semantically requires a
-// CarScoreData::GetOnlineStuntScore() (+0xD4) accessor; adding it would GROW that OTHER subsystem's
-// home, which is out of this work item's scope. They land once CarScoreData exposes that field.
-// (The remaining lifecycle virtuals Construct/Prepare/Release/Destruct/ClearData/Update/
-// WriteDataToOutput are likewise declared-only -- their bodies belong to the wider class TU.)
-// ----------------------------------------------------------------------------------------------------
+// X360 @ 0x82321D20. Sums the per-car online stunt scores of every active race car assigned to
+// liTeam. Walks every active-race-car slot through ScoringSystem::GetCarData and, for the cars whose
+// team matches, accumulates the embedded CarScoreData's online stunt score (X360 `*(CarData + 212)`
+// == CarScoreData +0xD4, GetOnlineStuntScore). Empty slots (GetCarData == NULL) are skipped. The
+// ScoringSystem keystone's WriteDataToOutput, GetWinnerTeam and UpdatePlayerPoints call this.
+s32 OnlineStuntRunModeScoring::GetTeamScore(s32 liTeam, const ScoringSystem* lpScoringSystem) const
+{
+    s32 liTeamScore = 0;
+
+    for (s32 leEnumIndex = 0; leEnumIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++leEnumIndex)
+    {
+        const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(leEnumIndex);
+        const CarData* lpCarData = lpScoringSystem->GetCarData(leSlot);
+        if (lpCarData != NULL && static_cast<s32>(lpCarData->GetTeam()) == liTeam)
+        {
+            liTeamScore += lpCarData->GetScoreData()->GetOnlineStuntScore();
+        }
+
+        CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    }
+
+    return liTeamScore;
+}
+
+// X360 @ 0x82338B90. End-of-event scoring for online stunt-run. Three passes:
+//   (1) GATHER -- build one PlayerSortData row per active race car: its slot index, its online stunt
+//       score (CarScoreData +0xD4), whether its team is the winning team (GetWinnerTeam == GetTeam),
+//       and its disconnected flag (CarScoreData +0x69).
+//   (2) TEAM TALLY -- for every contesting team (GetNumPlayersOnTeam > 0) build a TeamSortData row of
+//       {team stunt-score, team index}; sort the car rows by Compare (best first) and the team rows by
+//       CompareTeams (highest score first); then derive a per-team standings rank: the highest-scoring
+//       team gets rank == liNumberOfContestingTeams, counting down.
+//   (3) WRITEBACK -- walk the sorted car rows; each car gets its team's standings rank as online points
+//       (0 if disconnected) at CarScoreData +0x58, its finishing position (sorted order) at +0x5C, and
+//       its finishing position recorded into the base player-position table.
+// The two team-range bounds asserts (E_PLAYER_TEAM_COUNT == 9) and the active-race-car bounds asserts
+// (E_ACTIVE_RACE_CAR_INDEX_COUNT == 8) fire as the X360 build had them (never early-return).
+void OnlineStuntRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s32 liNumberOfCars)
+{
+    const s32 liWinningTeam = GetWinnerTeam(lpScoringSystem);
+
+    // ---- (1) gather one sortable row per active race car ----
+    PlayerSortData laPlayerData[E_ACTIVE_RACE_CAR_INDEX_COUNT];
+
+    for (s32 liIndex = 0; liIndex < liNumberOfCars; ++liIndex)
+    {
+        const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liIndex);
+        CarData* lpCarData = lpScoringSystem->GetCarData(leSlot);
+        const GameStateModuleIO::CarScoreData* lpScore = lpCarData->GetScoreData();
+
+        PlayerSortData& lRow = laPlayerData[liIndex];
+        lRow.miRaceCarIndex  = liIndex;
+        lRow.mbOnWinningTeam = (static_cast<s32>(lpCarData->GetTeam()) == liWinningTeam);
+        lRow.miScore         = lpScore->GetOnlineStuntScore();
+        lRow.mbDisconnected  = lpScore->GetDisconnected();
+
+        CGS_ASSERT(liIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    }
+
+    // ---- (2) team tally: one row per contesting team ----
+    TeamSortData laTeamData[KI_MAX_PLAYER_TEAMS];
+    s32 liNumContestingTeams = 0;
+
+    for (s32 leTeam = 0; leTeam < KI_MAX_PLAYER_TEAMS; ++leTeam)
+    {
+        if (GetNumPlayersOnTeam(leTeam, lpScoringSystem) > 0)
+        {
+            laTeamData[liNumContestingTeams].miTeamScore = GetTeamScore(leTeam, lpScoringSystem);
+            laTeamData[liNumContestingTeams].miTeam      = leTeam;
+            ++liNumContestingTeams;
+        }
+
+        CGS_ASSERT(leTeam + 1 <= KI_MAX_PLAYER_TEAMS, "leEnumIndex <= E_PLAYER_TEAM_COUNT");
+    }
+
+    qsort(laPlayerData, liNumberOfCars, sizeof(PlayerSortData), Compare);
+    qsort(laTeamData, liNumContestingTeams, sizeof(TeamSortData), CompareTeams);
+
+    // ---- derive a standings rank per team (highest-scoring team ranks highest) ----
+    s32 laTeamStandings[KI_MAX_PLAYER_TEAMS];
+    for (s32 li = 0; li < KI_MAX_PLAYER_TEAMS; ++li)
+    {
+        laTeamStandings[li] = 0;
+    }
+
+    s32 liRankValue = liNumContestingTeams;
+    for (s32 liTeamRank = 0; liTeamRank < liNumContestingTeams; ++liTeamRank)
+    {
+        const s32 liTeam = laTeamData[liTeamRank].miTeam;
+        CGS_ASSERT(liTeam >= 0, "lePlayerTeam >= GsmIO::E_PLAYER_TEAM_START");
+        CGS_ASSERT(liTeam < KI_MAX_PLAYER_TEAMS, "lePlayerTeam < GsmIO::E_PLAYER_TEAM_COUNT");
+        laTeamStandings[liTeam] = liRankValue;
+        --liRankValue;
+    }
+
+    // ---- (3) writeback: online points (team standings rank) + finishing position ----
+    for (s32 liPosition = 0; liPosition < liNumberOfCars; ++liPosition)
+    {
+        const PlayerSortData& lRow = laPlayerData[liPosition];
+        CarData* lpCarData = lpScoringSystem->GetCarData(static_cast<EActiveRaceCarIndex>(lRow.miRaceCarIndex));
+        CGS_ASSERT(lpCarData, "lpCarData");
+        GameStateModuleIO::CarScoreData* lpScore = lpCarData->GetScoreData();
+        CGS_ASSERT(lpScore, "lpCarScoreData");
+
+        if (lRow.mbDisconnected)
+        {
+            lpScore->SetOnlineRacePoints(0);
+        }
+        else
+        {
+            const s32 liTeam = static_cast<s32>(lpCarData->GetTeam());
+            CGS_ASSERT(liTeam >= 0, "lpCarData->GetTeam() >= GsmIO::E_PLAYER_TEAM_START");
+            CGS_ASSERT(liTeam < KI_MAX_PLAYER_TEAMS, "lpCarData->GetTeam() < GsmIO::E_PLAYER_TEAM_COUNT");
+            lpScore->SetOnlineRacePoints(laTeamStandings[liTeam]);
+        }
+
+        SetPlayerPosition(lRow.miRaceCarIndex, liPosition);
+        lpScore->SetOnlineFinishPosition(liPosition);
+
+        CGS_ASSERT(liPosition + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    }
+}
 }

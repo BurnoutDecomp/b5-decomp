@@ -103,4 +103,58 @@ namespace CgsContainers
         // Sentinel stored in miCount until InternalInit() runs.
         static const s32 KI_UNINITIALISED = 0x7FFFFFFF;
     };
+
+    // CgsLinkedList.h - one pooled list node: the two intrusive link pointers (inherited
+    // from BaseLinkedListNode at +0/+4) followed by the element payload at +8. The X360
+    // AddTail body (below) writes the value straight into this +8 slot.
+    template <typename T>
+    struct LinkedListNode : public BaseLinkedListNode
+    {
+        // +8 - element payload (immediately after mpNext/mpPrev).
+        T mData;
+    };
+
+    // CgsLinkedList.h - LinkedListHelper<T, N> owns a fixed pool of N LinkedListNode<T>
+    // plus two BaseLinkedList sublists: a free list (nodes available to hand out) and a
+    // live list (nodes currently in use). This is the pointer-based sibling of
+    // IndexedLinkedList<T, Index>; the X360 emits AddTail out of line for some T while
+    // inlining the rest, so the generic body lives here and covers every instantiation.
+    //
+    // LAYOUT (recovered from the X360 AddTail @ 0x826A5E88, a BrnSound::Logic::Resource-
+    // Registrar instantiation): the free BaseLinkedList sits at +0xC4 and the live one at
+    // +0xD0 relative to the owning object; here they are ordered maFreeList then maLiveList
+    // so the same +0xC4/+0xD0 spacing falls out of the node pool that precedes them.
+    template <typename T, u32 N>
+    class LinkedListHelper
+    {
+    public:
+        typedef LinkedListNode<T> Node;
+
+        // Append a value to the live list. Generic body shared by every instantiation
+        // (X360 0x826A5E88 = a BrnSound::Logic::ResourceRegistrar AddTail, CgsLinkedList.h:307):
+        // pull a node off the free list, assert the pool was not exhausted, copy the value
+        // into the node's payload, then chain the node onto the tail of the live list.
+        Node* AddTail(const T& lrElement)
+        {
+            Node* lpNode = static_cast<Node*>(maFreeList.InternalRemoveHead());
+            CGS_ASSERT(lpNode != 0, "We've run out of nodes.");
+            lpNode->mData = lrElement;
+            maLiveList.InternalAddTail(lpNode);
+            return lpNode;
+        }
+
+    private:
+        // The Internal* surgery is protected on BaseLinkedList; a thin subclass re-exposes
+        // exactly the two operations AddTail needs so the helper can drive them.
+        struct Sublist : public BaseLinkedList
+        {
+        public:
+            using BaseLinkedList::InternalRemoveHead;
+            using BaseLinkedList::InternalAddTail;
+        };
+
+        Node    maNodePool[N];   // backing storage handed out to the two sublists
+        Sublist maFreeList;      // +0xC4 - nodes available to hand out
+        Sublist maLiveList;      // +0xD0 - nodes currently in use
+    };
 }

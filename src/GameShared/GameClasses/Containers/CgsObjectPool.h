@@ -37,6 +37,35 @@ public:
         return mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex));
     }
 
+    // Find the first allocated slot whose object compares equal to lrTarget (via T::operator==)
+    // and return its slot index, or -1 when no allocated slot matches. Only instantiated for
+    // element types that define operator== (it is not instantiated unless this method is named).
+    //
+    // FLAG (behaviour-faithful reconstruction, not instruction-identical): the recovered body
+    // walks ONLY the allocated slots by stepping through the occupancy BitArray's set bits with a
+    // lowest-set-bit scan, then compares each allocated object's fields against the target. This
+    // linear walk over allocated slots is value-equivalent: GetFirstNonZeroBit / GetNextNonZeroBit
+    // enumerate exactly the same set bits in the same ascending order, and the field-by-field
+    // compare is precisely what T::operator== performs. Empty (unallocated) slots are skipped in
+    // both forms, so the returned index is identical.
+    TIndex FindObject(const T& lrTarget) const
+    {
+        for (s32 liIndex = mObjectsAllocated.GetFirstNonZeroBit();
+             liIndex >= 0;
+             liIndex = mObjectsAllocated.GetNextNonZeroBit(liIndex))
+        {
+            if (static_cast<s32>(liIndex) >= KI_CAPACITY)
+            {
+                break;
+            }
+            if (maObjectPool[static_cast<s32>(liIndex)] == lrTarget)
+            {
+                return static_cast<TIndex>(liIndex);
+            }
+        }
+        return static_cast<TIndex>(-1);
+    }
+
     void FreeObject(TIndex liIndex)
     {
         CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_CAPACITY), "Array index out of bounds");
@@ -45,6 +74,27 @@ public:
         ++miNumObjectsFree;
         CGS_ASSERT(mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex)), "The object isn't allocated");
         mObjectsAllocated.UnSetBit(static_cast<u32>(liIndex));
+    }
+
+    // Reach the inline object at a pool slot index (callers resolve a slot via the free
+    // queue / their own order array, then index the pool by that slot). The X360 body
+    // (e.g. 0x8231A2E8, the ObjectPool<StoredLeapingData,7,s32>::operator[] instantiation in the
+    // class:BrnGameState catch-all TU) bounds-checks the index ("Array index out of bounds",
+    // CgsObjectPool.h:218) AND verifies the slot is currently allocated ("The referenced object has
+    // not been allocated", CgsObjectPool.h:219) before returning the object -- both are non-gating
+    // tripwire asserts. The allocated-bit check is an ADDITIVE tripwire here (it never changes the
+    // happy-path result); the existing single-bounds-check users are behaviour-unaffected.
+    T& operator[](TIndex liIndex)
+    {
+        CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_CAPACITY), "Array index out of bounds");
+        CGS_ASSERT(mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex)), "The referenced object has not been allocated");
+        return maObjectPool[static_cast<s32>(liIndex)];
+    }
+    const T& operator[](TIndex liIndex) const
+    {
+        CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_CAPACITY), "Array index out of bounds");
+        CGS_ASSERT(mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex)), "The referenced object has not been allocated");
+        return maObjectPool[static_cast<s32>(liIndex)];
     }
 
 private:

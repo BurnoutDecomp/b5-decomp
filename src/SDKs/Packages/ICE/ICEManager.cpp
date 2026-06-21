@@ -23,6 +23,26 @@ namespace ICE
 {
 
 // ---------------------------------------------------------------------------
+// ICEManager (ctor) @0x827E13B8
+//
+// Constructs the embedded takes. In the X360 build this default-constructs the
+// four live takes (mTake / mCopyTake / mShakeTake / mPlaybackTake) and inlines the
+// embedded controller's construction (its own takes and a pair of cleared state
+// flags). Here the controller and all takes are members, so member construction
+// performs the same work: each ICETake default-constructs (zeroing its value table
+// and defaulting its Cubic1D followers), and mController constructs in turn. The
+// scalar playback state is left for Construct(ICEPointers*) to initialise.
+//
+// FLAG: the controller's own construction (its second take and the two state flags
+//       the X360 ctor zeroes at controller+0x7260/+0x7262) belongs to the
+//       ICEController TU; this manager ctor invokes it via member construction once
+//       ICEController is reconstructed to its full layout (it is a minimal slice).
+// ---------------------------------------------------------------------------
+ICEManager::ICEManager()
+{
+}
+
+// ---------------------------------------------------------------------------
 // Construct (@0x8253DCF0)
 //
 // Initialise the manager from the ICEPointers bundle:

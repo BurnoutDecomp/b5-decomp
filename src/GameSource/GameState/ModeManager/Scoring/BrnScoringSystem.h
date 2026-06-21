@@ -304,6 +304,15 @@ namespace BrnGameState
     class ScoringSystem
     {
     public:
+        // X360 0x827E0998. Default constructor. The X360 body sets each embedded sub-object's
+        // vtable + its internal -1 sentinels and runs the per-car array element ctors (all of
+        // which are AUTOMATIC in C++ via the embedded members' own constructors) and zero-inits
+        // the four head CgsSystem::Time members (also automatic -- Time's default ctor yields
+        // {0, 0.0f}); the only ScoringSystem-OWNED scalar it explicitly stores is the tail
+        // miUpdateRacePositionsPM = -1 sentinel. All other ScoringSystem scalars are left for the
+        // post-construction ClearData() pass (the X360 ctor does not touch them either).
+        ScoringSystem();                                                            // X360 0x827E0998
+
         // ===== lifecycle / mode hooks (declare-only -- substantial) =====
         void Construct(StuntModeScoring::AchievementManager* lpAchievementManager); // :314 / X360 0x82337FE0
         bool Prepare(CgsMemory::HeapMalloc* lpHeapMalloc);                          // :319 / 0x8232A430
@@ -428,6 +437,34 @@ namespace BrnGameState
         const s32 GetNumberOfTakedowns(EActiveRaceCarIndex leRaceCarIndex) const;            // :726 / 0x82326D50
         const s32 GetNumberOfCrashes(EActiveRaceCarIndex leRaceCarIndex) const;              // :731
         const s32 GetNumberOfTakedownsAgainst(EActiveRaceCarIndex leRaceCarIndex) const;     // :736 / 0x82326DD0
+
+        // ===== ADDITIVE GROW (declare-only) for the AchievementManagerBase TU =====
+        // FLAG: these three accessors name the deep reads AchievementManagerBase makes
+        // THROUGH its mpScoringSystem back-pointer (X360 OnBodyShop 0x8235AA18, OnTakedown
+        // 0x8235AAE0, OnEventWin 0x82372978). The X360 reads them as raw offsets into the
+        // ScoringSystem and its embedded RoadRage/CarScore sub-objects; the precise members
+        // these offsets land on are owned by the ScoringSystem TU and are NOT mapped here.
+        // Signatures + semantics are X360-asm-attested; offsets are out of scope. Bodies land
+        // with the ScoringSystem TU; declare-only suffices for the `cl /c` compile gate.
+
+        // OnBodyShop: count of cars newly wrecked-but-not-yet-repaired this frame -- the X360
+        // computes (this+0x4B58) - (this+0x4B5C) and fires E_ACHIEVEMENT_REPAIR_FIRST_WRECKED_CAR
+        // when it equals 1 in E_MODE_ROAD_RAGE.
+        s32 GetNewlyWreckedCarCount() const;
+
+        // OnTakedown: takedowns the player has scored in the current (road-rage) mode; X360
+        // reads this+0x4B40 and requires it >= 10 for the perfect-road-rage achievement.
+        s32 GetPlayerModeTakedowns() const;
+
+        // OnTakedown: crashes the player has suffered in the current (road-rage) mode; X360
+        // reads this+0x4B5C and requires it == 0 (no crashes) for perfect-road-rage.
+        s32 GetPlayerModeCrashes() const;
+
+        // OnEventWin (E_MODE_STUNT_ATTACK): the player's score for the millionaires-club check.
+        // The X360 selects the online (this+0x2620) vs offline (this+0x350) car-score block by
+        // lbOnline and reads its +0x10 score field, comparing >= 1,000,000.
+        s32 GetPlayerScore(bool lbOnline) const;
+
         const u32 GetNumberOfActiveCars() const       { return muCarsInCurrentMode; }        // :739 (inline)
         const s32 GetNumberOfFinishedCars() const     { return static_cast<s32>(muNumCarsFinishedRace); } // :743
 
@@ -464,6 +501,30 @@ namespace BrnGameState
         void CheckRoadRageMedalAwarded(u32 luTakedowns);                                      // :855 / 0x82312840
         void UpdateGeneralStats(const ActiveRaceCarOutputInterface* lpOutput, f32 lfDeltaTime, bool lbOnline); // :864 / 0x8232B8C0
 
+        // ===== stunt-score setters / online-stunt pre-world (bodies in BrnScoringSystem_UpdateB.cpp) =====
+        // Per-car online stunt score (CarScoreData +0xD4). SetPlayerStuntScore keys by active-race-car
+        // slot, SetNetworkStuntScore by network player id; both store via CarData::GetScoreData().
+        void SetPlayerStuntScore(EActiveRaceCarIndex leRaceCarIndex, s32 liScore);                         // 0x8231F0C8
+        void SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lID, s32 liScore);                           // 0x8231FC20
+        // SetNetworkStuntMultiplier (0x8231FC50) arms the per-car "chainable stunt multiplier" trio
+        // (CarScoreData +0xC8 miChainableScore / +0xD0 miCurrentChainableMultiplier / +0xD8 mbChainActive)
+        // on GetCarData(lID); reconciled arg order from the X360 register setup (r5->+0xD0, r6->+0xC8).
+        // Body in BrnScoringSystem_UpdateB.cpp (writes via the CarScoreData chainable-trio accessors).
+        void SetNetworkStuntMultiplier(BrnNetwork::NetworkPlayerID lID, s32 liMultiplier, s32 liChainableScore); // 0x8231FC50
+
+        // PlayerPerformedBarrelRolls (0x823634D0) adds liCount to the per-car barrel-roll tally at
+        // CarScoreData +0xFC (carved as miBarrelRollCount). Body in BrnScoringSystem_UpdateB.cpp.
+        void PlayerPerformedBarrelRolls(EActiveRaceCarIndex leRaceCarIndex, s32 liCount);                  // 0x823634D0
+
+        // Forward a completed world-stunt action to the online (mOnlineStuntModeScoring) or offline
+        // (mStuntModeScoring) stunt scorer; the small WorldStuntAction is modeled by pointer in the
+        // scorer's home (BrnStuntModeScoring.h, included above).
+        void DealWithStunt(const GameStateModuleIO::WorldStuntAction* lpAction, bool lbOnline);            // 0x823384F0
+        // Per-frame pre-world step driving the online stunt scorer's PreWorldUpdate (reconciled
+        // AddEvent-queue signature). VariableEventQueue<13312,16> is forward-declared via the stunt header.
+        void UpdateOnlineStuntModeScorePreWorld(s32 liCurrentTimeMs,
+                                                CgsModule::VariableEventQueue<13312, 16>* lpOutputActionQueue); // 0x8234CE48
+
         // ===== points leader / loser / standings (declare-only -- search) =====
         BrnNetwork::NetworkPlayerID GetPointsLeader() const;                                  // :868 / 0x82312648
         EActiveRaceCarIndex GetPointsLoser() const;                                           // :872
@@ -487,10 +548,22 @@ namespace BrnGameState
         // over the per-player team slots, not the 3-value EPlayerTeam enum.
         s32 GetTeamStuntScore(s32 liTeam) const;                                                          // 0x82320650
         s32 GetLeadingStuntTeam(s32 liTeamToExclude) const;                                               // 0x823206E0
+        // Per-team roster / elimination queries (bodies in BrnScoringSystem_Standings.cpp). Team index is
+        // the raw per-player team slot (free-for-all stunt-run), compared against CarData::GetTeam() as
+        // an s32 -- the GetTeamStuntScore convention. Reconciled from the X360 search-loop bodies.
+        s32                          GetTeamPlayerCount(s32 liTeam) const;                                 // 0x823203D8
+        BrnNetwork::NetworkPlayerID  GetFirstTeamPlayer(s32 liTeam) const;                                 // 0x82320460
+        bool                         IsTeamEliminated(s32 liTeam) const;                                   // 0x823205B8
+        bool                         AreAllOtherTeamsEliminated(s32 liTeam) const;                         // 0x82320770
 
         // ===== sub-scorer accessors (trivial address-of; inline) =====
         CrashModeScoring*           GetCrashScorer()         { return &mCrashModeScoring; }   // :939
         StuntModeScoring*           GetStuntScorer()         { return &mStuntModeScoring; }   // :943
+        // Address-of the X360-only ONLINE stunt scorer (mOnlineStuntModeScoring @ ss+0x2620).
+        // Additive accessor (no layout change) so HUDMessageLogic's online stunt-run time
+        // generator can poll IsComboInProgress() on the online scorer by name -- the X360 reads
+        // ss+0x2620 directly (BrnHUDMessageLogic.cpp / 0x82394B88).
+        StuntModeScoring*           GetOnlineStuntScorer()   { return &mOnlineStuntModeScoring; }
         RoadRageModeScoring*        GetRoadRageScoring()       { return &mRoadRageModeScoring; } // :947
         const RoadRageModeScoring*  GetRoadRageScoring() const { return &mRoadRageModeScoring; } // :950
 

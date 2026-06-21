@@ -49,7 +49,15 @@ namespace BrnNetwork
 {
     // DWARF spells this BrnNetwork::ECameraStatus; no committed shared home, so it is defined
     // here (4-byte enum). The X360 cleared record stores 4 ("default") at +284.
-    enum ECameraStatus : s32 { E_CAMERA_STATUS_NONE = 0 };
+    // ADDITIVE GROW (BrnMugshotManager TU): the X360 cleared in-game player record stores 4 at the
+    // camera-status word (KI_CAMERA_STATUS_DEFAULT below), and MugshotManager::DoesPlayerHaveACamera
+    // asserts `meCameraStatus != E_CAMERA_STATUS_COUNT` then treats status 0 as "no camera". So the
+    // enum spans [NONE..COUNT] with COUNT == 4 (the cleared-record sentinel). FLAG: additive only.
+    enum ECameraStatus : s32
+    {
+        E_CAMERA_STATUS_NONE  = 0,
+        E_CAMERA_STATUS_COUNT = 4,
+    };
 
     namespace BrnNetworkModuleIO
     {

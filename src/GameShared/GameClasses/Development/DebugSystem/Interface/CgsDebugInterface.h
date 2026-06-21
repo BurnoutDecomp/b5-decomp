@@ -42,6 +42,15 @@ namespace CgsDev
         DebugManager&     GetDebugManager() { return *mpDebugManager; }
         DebugUI::DebugUI& GetUI()           { return mpDebugManager->GetUI(); }
 
+        // Show/hide the on-screen debug console. FLAG: these DebugInterface members
+        // are inferred from the ICEWrapper call site (no second in-tree reference),
+        // homed in CgsDebugInterface.cpp (DebugInterface::EnableConsole /
+        // DisableConsole); the in-game ICE editor toggles the console through these
+        // (BrnDirector::ICEWrapper::EditorOn/EditorOff). DECLARATION-ONLY: the bodies
+        // belong to the DebugInterface TU and the /c gate does not link.
+        void EnableConsole();
+        void DisableConsole();
+
         // The buffered 2D debug renderer this interface draws through (X360-attested,
         // DecFIGS DWARF CgsDebugInterface.h:24 `DebugRender& Get2dRender()`). The debug
         // overlay code (ICERender::RenderPoly / ScrPrintfArg) queues 2D box/text prims

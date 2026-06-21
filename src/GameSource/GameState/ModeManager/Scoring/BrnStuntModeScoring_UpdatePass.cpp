@@ -11,12 +11,13 @@
 //     UpdateBufferedScore (X360 0x8232C118)   [now bodied: deps grew the +0x22BD flag
 //                                              mbStuntInfoEventPending + homed TidyStuntScore +
 //                                              MultiplierOutInfo; CalculateMultiplier called BY NAME]
-//
-//   BLOCKED (declare-only -- bodies intentionally NOT here; committed-home SIGNATURE mismatch the
-//   asm proves but the additive-grow rule forbids me from retyping unilaterally; see the block
-//   comment at the bottom for the precise blocker of each):
-//     UpdateScores        (X360 0x82338A98)
-//     PreWorldUpdate      (X360 0x823446F8)
+//     UpdateScores        (X360 0x82338A98)   [now bodied: home decl RECONCILED to carry the output
+//                                              interface (the player-active gate); call-site 0x82340B40
+//                                              proved r4=interface, f1=delta]
+//     PreWorldUpdate      (X360 0x823446F8)   [now bodied: home decl RECONCILED to a single
+//                                              CgsModule::VariableEventQueue<13312,16>* arg (no
+//                                              interface/delta); drains mbStuntInfoEventPending into
+//                                              the queue via AddEvent(&payload, 21, 8)]
 //
 // SHAPE = DecFIGS DWARF; BODY = X360 pseudocode/asm (overrides DWARF on conflict). Members are
 // accessed BY NAME against the committed StuntModeScoring layout (BrnStuntModeScoring.h) and the
@@ -57,6 +58,11 @@
 #include "rw/math/vpu/vector3_operation.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+
+// PreWorldUpdate drains the pending stunt-info HUD event into the per-frame output-action queue
+// (CgsModule::VariableEventQueue<13312,16>); it calls AddEvent BY NAME, so the full template
+// definition is needed here (the keystone only forward-declares it for the decl).
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 
 namespace BrnGameState
 {
@@ -104,13 +110,9 @@ namespace BrnGameState
     // home grew mStuntTypeInfo to [18] (per these asm bounds), so the literal 18 is faithful.
     //
     // NOTE on UpdateScores: the X360 call site is UpdateScores(this, a2=interface, a7=delta) -- it
-    // passes the output interface. The committed (best-effort, ledger-only) home declares
-    // UpdateScores(f32) with NO interface param, and UpdateScores' body needs the interface for its
-    // player-active gate (it cannot be reconstructed against the committed sig -- see the BLOCKED
-    // block below). UpdateScores is therefore declare-only; Update calls it with the committed
-    // 1-arg signature (compiles; the interface gate is handled inside UpdateScores once its sig is
-    // corrected). The asm-faithful interface argument is dropped here only because the committed
-    // declaration cannot carry it.
+    // passes the output interface. The home declaration has now been RECONCILED to carry it
+    // (UpdateScores(f32, const ActiveRaceCarOutputInterface*)), so Update threads lpRaceCar through
+    // and UpdateScores' player-active gate is faithful (its body is bodied below).
     void StuntModeScoring::Update(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta)
     {
         CGS_ASSERT(mbStuntModeActive, "mbStuntModeActive");
@@ -122,7 +124,7 @@ namespace BrnGameState
         }
 
         UpdateStunts(lfDelta, lpRaceCar);
-        UpdateScores(lfDelta);
+        UpdateScores(lfDelta, lpRaceCar);   // reconciled sig now carries the interface (player-active gate)
 
         // Tick down the end-of-mode delay; a crashing player car collapses it to zero immediately.
         if (mfTimeDelayBeforeModeEnd > KF_ZERO)
@@ -453,42 +455,92 @@ namespace BrnGameState
         }
     }
 
-    // ============================================================================
-    // BLOCKED -- declare-only (intentionally NO body in this partial). Both are blocked on a
-    // committed-home SIGNATURE that the X360 asm proves WRONG, but the additive-grow rule forbids me
-    // from retyping a committed declaration unilaterally. Each needs its (best-effort, ledger-only)
-    // declaration CORRECTED in BrnStuntModeScoring.h before its body can land faithfully. Neither
-    // has a committed C++ caller (their X360 callers are not yet reconstructed), so correcting the
-    // signature later cannot break an embedder.
+    // ------------------------------------------------------------------------
+    // StuntModeScoring::UpdateScores  (X360 0x82338A98)
+    // ------------------------------------------------------------------------
+    // The score sub-pass of Update. Its ENTIRE body is gated behind a player-active test that
+    // dereferences the output interface: it reads GetPlayerActiveRaceCarIndex() (asserted in range)
+    // and, when that index is set, IsPlayerCarActive(); ONLY when the player car is active does it
+    // run the three score-passes UpdateCombo / UpdateBufferedScore / UpdateStuntRepetition.
+    // UpdateCombo ALSO takes the output interface (asm 0x82338B08 mr r5,r31 -> r5 = the interface);
+    // UpdateBufferedScore / UpdateStuntRepetition take (this, delta) only.
     //
-    //   * UpdateScores       (X360 0x82338A98)
-    //       Committed sig:  void UpdateScores(f32 lfDelta)
-    //       Asm-proven sig: UpdateScores(this, const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta)
-    //       The body's ENTIRE work is gated behind a PLAYER-ACTIVE test that dereferences the output
-    //       interface: it reads *(a2+10328) (GetPlayerActiveRaceCarIndex, asserted < 8) and, when the
-    //       index is set, *(a2+10336) (IsPlayerCarActive); ONLY when the player car is active does it
-    //       call UpdateCombo / UpdateBufferedScore / UpdateStuntRepetition. The committed sig has NO
-    //       interface parameter, so a body written against it would DROP that gate (and would have to
-    //       fabricate a NULL for UpdateCombo, which the asm proves takes only (this, delta)). Per the
-    //       "do NOT ship a body missing a gate" rule, UpdateScores stays declare-only. FIX: GROW the
-    //       home declaration to UpdateScores(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar)
-    //       (and update Update's call site to pass lpRaceCar); then the gated body lands. The round-1
-    //       draft's NULL-passing, gate-less body was incorrect and has been removed.
+    // X360 (0x82338A98): r30=this (v5), r31=a2=the output interface, f31=a3=delta.
+    //   * *(a2+10328) >= 8  -> CGS_ASSERT "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT"
+    //                          (BrnRaceCarEntityModuleOutputInterface.h:967) -> GetPlayerActiveRaceCarIndex().
+    //   * v6 = 0; if (*(a2+10328) != -1) v6 = *(a2+10336)  -> IsPlayerCarActive() (only read when set).
+    //   * if (v6) { UpdateCombo(this, delta, interface); UpdateBufferedScore(this, delta);
+    //               UpdateStuntRepetition(this, delta); }   (asm 0x82338B08 mr r5,r31 -> interface)
+    // The +10328 / +10336 interface offsets are the same the sibling UpdateStunts body maps to
+    // GetPlayerActiveRaceCarIndex() / IsPlayerCarActive(). Param order matches sibling UpdateStunts
+    // (f32 delta, interface*) so Update's two sub-pass call sites are uniform.
+    void StuntModeScoring::UpdateScores(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar)
+    {
+        const EActiveRaceCarIndex lePlayerIndex = lpRaceCar->GetPlayerActiveRaceCarIndex();
+        CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+        bool lbPlayerCarActive = false;
+        if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            lbPlayerCarActive = lpRaceCar->IsPlayerCarActive();
+        }
+
+        if (lbPlayerCarActive)
+        {
+            // X360: UpdateCombo also gets the output interface (asm 0x82338B08 mr r5,r31);
+            // UpdateBufferedScore / UpdateStuntRepetition take delta only.
+            UpdateCombo(lfDelta, lpRaceCar);
+            UpdateBufferedScore(lfDelta);
+            UpdateStuntRepetition(lfDelta);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // StuntModeScoring::PreWorldUpdate  (X360 0x823446F8)
+    // ------------------------------------------------------------------------
+    // Pre-world drain of the pending stunt-info HUD event into the per-frame output-action queue.
+    // When the deps-grown mbStuntInfoEventPending flag (+0x22BD) is armed (UpdateBufferedScore sets
+    // it when a banked stunt had any awesome types), it packs an 8-byte payload describing the recent
+    // stunt and posts it as event type 21 onto the output-action queue, then clears the flag.
     //
-    //   * PreWorldUpdate     (X360 0x823446F8)
-    //       Committed sig:  void PreWorldUpdate(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta)
-    //       Asm-proven sig: PreWorldUpdate(this, CgsModule::VariableEventQueue<13312,16>* lpOutputActionQueue)
-    //       The body reads the deps-grown mbStuntInfoEventPending flag (+0x22BD); when set it packs an
-    //       8-byte payload { u32 mRecentStunt.muAwesomeStuntTypes; s16 mRecentStunt.muFlatSpins;
-    //       s16 mRecentStunt.muBarrelRolls } and calls
-    //       lpOutputActionQueue->AddEvent(&payload, /*type*/21, /*size*/8) (asserting the queue
-    //       non-null, "lpOutputActionQueue"), then CLEARS the flag. The committed sig's first param is
-    //       an ActiveRaceCarOutputInterface*, NOT the VariableEventQueue<13312,16>* the body needs, and
-    //       it carries a spurious f32 the asm has no parameter for -- the queue cannot be threaded
-    //       through. FIX: GROW the home declaration to
-    //       PreWorldUpdate(CgsModule::VariableEventQueue<13312,16>* lpOutputActionQueue) (the deps
-    //       already added the +0x22BD flag this body consumes); then the body lands. The mRecentStunt
-    //       member-offset map (+0x6C muAwesomeStuntTypes, +0x78 muFlatSpins, +0x7A muBarrelRolls) is
-    //       X360-confirmed by the UpdateBufferedScore asm above.
-    // ============================================================================
+    // X360 (0x823446F8): r31=this (v2/result), r30=a2=the output-action queue (NO interface, NO float).
+    //   * if (*(this+0x22BD)) {                        -> mbStuntInfoEventPending
+    //       v4 = *(this+0x6C);  v5 = *(this+0x78);  v6 = *(this+0x7A);
+    //          -> mRecentStunt.muAwesomeStuntTypes (+0x6C == StuntInfo+0x04 at mRecentStunt@+0x68),
+    //             mRecentStunt.muFlatSpins (+0x78 == +0x10), mRecentStunt.muBarrelRolls (+0x7A == +0x12)
+    //       CGS_ASSERT(a2, "lpOutputActionQueue") (BrnStuntModeScoring.cpp:163)
+    //       AddEvent(a2, &payload, 21, 8);
+    //       *(this+0x22BD) = 0;                         -> clear mbStuntInfoEventPending
+    //     }
+    // The payload is a stack record { u32; s16; s16 } (the IDA v4/v5/v6 byref block, 8 bytes); the
+    // queue stores it by its byte image (AddEvent takes a const CgsModule::Event*). mRecentStunt's
+    // muAwesomeStuntTypes/muFlatSpins/muBarrelRolls are accessed BY NAME against the committed
+    // StuntInfo layout; the +0x6C/0x78/0x7A byte offsets the asm reads are mRecentStunt (@this+0x68)
+    // plus the StuntInfo member offsets (+0x04/+0x10/+0x12), exactly as the UpdateBufferedScore map.
+    void StuntModeScoring::PreWorldUpdate(CgsModule::VariableEventQueue<13312, 16>* lpOutputActionQueue)
+    {
+        if (mbStuntInfoEventPending)
+        {
+            // 8-byte payload: the recent stunt's awesome-type mask + flat-spin / barrel-roll counts.
+            struct StuntInfoEvent
+            {
+                u32 muAwesomeStuntTypes;  // +0x00  (mRecentStunt.muAwesomeStuntTypes, this+0x6C)
+                s16 miFlatSpins;          // +0x04  (mRecentStunt.muFlatSpins,        this+0x78)
+                s16 miBarrelRolls;        // +0x06  (mRecentStunt.muBarrelRolls,      this+0x7A)
+            };
+            StuntInfoEvent lEvent;
+            lEvent.muAwesomeStuntTypes = mRecentStunt.muAwesomeStuntTypes;
+            lEvent.miFlatSpins         = static_cast<s16>(mRecentStunt.muFlatSpins);
+            lEvent.miBarrelRolls       = static_cast<s16>(mRecentStunt.muBarrelRolls);
+
+            CGS_ASSERT(lpOutputActionQueue != 0, "lpOutputActionQueue");
+
+            // X360: AddEvent(queue, &payload, /*type*/21, /*size*/8).
+            lpOutputActionQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lEvent), 21, 8);
+
+            mbStuntInfoEventPending = false;
+        }
+    }
 }

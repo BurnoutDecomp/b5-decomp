@@ -88,6 +88,14 @@ struct ICEElementCount
 };
 
 // ---------------------------------------------------------------------------
+// ICE::Precision -- returns the number of significant decimal digits to display
+// for a value (used by ICETakeData::SaveData when formatting a <FLOAT> element).
+// Scans the integer magnitude to cap the fractional-digit budget, then extracts
+// fractional digits until the fraction is exhausted or the budget is reached.
+// ---------------------------------------------------------------------------
+int Precision(f32 lfValue);
+
+// ---------------------------------------------------------------------------
 // ICETakeData (ICEData.hpp:93, DWARF). One serialised camera-take record. In the
 // DWARF this derives from bTNode<ICETakeData> (intrusive tree node); that base has
 // no reconstructed home yet, so it is modeled here as an explicit 8-byte padding
@@ -202,12 +210,51 @@ private:
     s32                     mxSubTakeChannels;    //         sub-take channel bitmask
     bool                    mbNewSubTakeThisFrame;//         sub-take changed this frame
 
+    // ---- EDITOR-ONLY state (present in the camera-take editor; the runtime/eval
+    // layout ends at mbNewSubTakeThisFrame). The edit path maintains a bounded undo
+    // history of whole serialised-take snapshots. Offsets are struct-relative to the
+    // 32-bit layout; sizeof differs on the 64-bit host because the two list-head
+    // pointers widen (same as the IResourceManager vptr situation). ----
+
+    // @0x72C  Undo-history list head: an intrusive doubly-linked list of saved
+    // ICETakeData snapshots. When empty, Next/Prev point back at the head (self-
+    // linked sentinel). Each node is a heap copy of an ICETakeData whose 8-byte node
+    // base provides the Next/Prev linkage; the list is a bTList<ICETakeData> whose
+    // reconstructed home does not exist yet, so it is modeled here as an 8-byte head
+    // buffer (a placeholder for the not-yet-reconstructed list base, to be replaced
+    // when the bTList TU lands -- NOT an offset hack). Edit bodies treat
+    // mUndoList[0] as Next and mUndoList[1] as Prev.
+    void*                   mUndoList[2];         // @0x72C  intrusive undo-snapshot list head
+
+    // @0x734  Running total of bytes held by the undo list (sum of each node's
+    // ComputeActualSize). PushUndo evicts oldest snapshots until a new one fits
+    // within the undo budget; FlushUndo zeroes it.
+    u32                     muUndoUsedBytes;      // @0x734  undo-list byte accumulator
+
 public:
+    // Default constructor: zeros the decoded value table and default-inits the
+    // per-element Cubic1D followers (the data pointers / channels are bound later by
+    // SetData / SetDataPointers). Body in ICEDataICETake.cpp.
+    ICETake();
+
     // --- DECLARE-ONLY (lifecycle / edit buffer; bodies in ICEData.cpp) ---
     void Construct(const IResourceManager* lpResourceManager);
     void Destruct();
     void NewEditBuffer();
     void FreeEditBuffer();
+
+    // --- DECLARE-ONLY (undo history; bodies in ICEDataICETake.cpp) ---
+    // Snapshot the current editable take onto the undo list, evicting the oldest
+    // snapshots first so the list stays within ICE_MAX_UNDO_SIZE.
+    void PushUndo();
+    // Restore the newest snapshot onto the live take and drop it. Returns true if a
+    // snapshot was popped, false if the undo list was empty.
+    bool PopUndo();
+    // Drop the newest snapshot without restoring it.
+    void DiscardUndo();
+    // True if the live editable take differs from its newest undo snapshot (or if
+    // there is no snapshot yet).
+    bool DataChanged() const;
 
     // --- Trivial inline-away accessors ---
     bool IsAllocated() const               { return mpElementData[0] != 0; }
@@ -259,6 +306,58 @@ public:
     f32 GetIntervalStart(s32 liChannel, u16 lu16Interval) const;
     void GetIntervalBracket(s32 liChannel, u16 lu16Interval, f32* lpfStart, f32* lpfEnd) const;
     f32 GetIntervalParameter(s32 liChannel, u16 lu16Interval, s32 liElement) const;
+
+    // --- DECLARE-ONLY (editor element/parameter ops; bodies in ICEDataICETake.cpp) ---
+    // Copy one element's value out of a source take/key into this take at a
+    // destination key. liChannel bounds the destination key; liElement is the
+    // element-description index (passed straight through to GetValue/SetValue).
+    s32  CopyKeyElement(s32 liChannel, s32 liDestKey, s32 liElement,
+                        const ICETake* lpSrc, u16 lu16SrcKey);
+    // Move an interval-boundary parameter by lfParameter, clamped to keep at least
+    // one frame of spacing from each neighbouring boundary, then re-enforce spacing.
+    // liDelta offsets lu16Interval to pick the boundary moved. Returns true when the
+    // boundary actually changed.
+    bool MoveParameter(s32 liChannel, u16 lu16Interval, s32 liDelta, f32 lfParameter);
+
+    // Resize one channel's key/interval storage. liKeyDelta/liIntervalDelta grow or
+    // shrink the channel's key and interval counts (each clamped into the editable
+    // range; a resize that would exceed the range is rejected); liKeyAt/liIntervalAt
+    // position the inserted/removed run; liLeftHardCut/liRightHardCut adjust the
+    // inserted interval-index run for hard-cut boundaries. Rebuilds a fresh edit
+    // buffer, snapshots the prior take onto the undo list, copies it back over the
+    // live take and rebinds. Returns true if the take was resized.
+    bool ChangeSize(s32 liChannel, s32 liKeyDelta, s32 liKeyAt,
+                    s32 liIntervalDelta, s32 liIntervalAt,
+                    s32 liLeftHardCut, s32 liRightHardCut);
+    // Set channel liChannel to exactly liNumKeys keys / liNumIntervals intervals by
+    // delegating the per-count deltas to ChangeSize.
+    bool SetSize(s32 liChannel, s32 liNumKeys, s32 liNumIntervals);
+
+    // --- DECLARE-ONLY (editor edit operations; bodies in ICEDataICETake.cpp) ---
+    // Insert a key/interval into liChannel at the current playback parameter (no-op
+    // if the parameter already lands on a boundary). lbAfter biases the insert side.
+    bool Insert(s32 liChannel, u8 lbAfter);
+    // Delete the current interval of liChannel (one or two keys depending on the
+    // bracket hard-cut state). No-op if the channel has no intervals.
+    bool Delete(s32 liChannel);
+    // Delete the key on the left side of liChannel's current interval (one key, or
+    // two when that boundary is a hard cut). No-op if no keys or current interval 0.
+    bool DeleteLeftSideKey(s32 liChannel);
+    // Collapse the soft-key run spanning intervals (liFirst, lu16Last) of the
+    // assembly channel (10) to a single interval.
+    bool DeleteAssemblySoftKeys(s32 liFirst, u16 lu16Last);
+    // Split a soft interval boundary into a hard cut by inserting one key (no-op if
+    // already a hard cut for this element).
+    bool Harden(s32 liChannel, s32 liInterval, s32 liElement);
+    // Merge a hard-cut boundary back into a soft one by removing one key (no-op
+    // unless it is a hard cut whose duplicated key pair matches).
+    bool Soften(s32 liChannel, s32 liInterval, s32 liElement);
+    // Copy this take's current-interval element into a destination take (sizes the
+    // destination channel to one interval, then copies the bracket-key value).
+    bool CopyElement(ICETake* lpDest, s32 liChannel, s16 li16Offset, s32 liElement);
+    // Paste a source take's element (its key 0) into this take at the current
+    // interval's bracket key (offset by li16Offset).
+    bool PasteElement(ICETake* lpSrc, s32 liChannel, s16 li16Offset, s32 liElement);
 
 private:
     // --- DECLARE-ONLY (private machinery; bodies elsewhere) ---

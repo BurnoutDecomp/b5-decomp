@@ -351,25 +351,50 @@ struct PowerParkResultAction : public GameAction<E_ACTION_POWER_PARK_RESULT>
 // modelled here per the DWARF SHAPE -- the five named members the PS3 DecFIGS DWARF lists. The
 // GameAction<T> base is the empty tag, so mID is at +0x00.
 //
-// FLAG -- X360/DWARF LAYOUT DIVERGENCE (consumer left BLOCKED): the X360 consumer that dereferences
+// GROWN -- X360/DWARF LAYOUT DIVERGENCE (consumer now LANDED): the X360 consumer that dereferences
 // the in-progress stunt-element action, StuntModeScoring::DealWithInProgressStunt (0x82321710),
-// reads a LARGER, convoy-shaped record that this lean DWARF layout does NOT express:
-//   +0x24  float[8]  per-leg distances (walked until a value < flt_82CDB778)
-//   +0x44  s32[8]    convoy member ids (linear-searched for the player id; miss asserts
-//                    "Player not in this convoy!", BrnStuntModeScoring.cpp:1666)
-//   +0x64  s32       convoy member count (the loop gate `count > 1`)
-// Those members cannot be named from the DWARF, so DealWithInProgressStunt stays declare-only /
-// BLOCKED (as recorded in the StuntModeScoring body drafts). When the full stunt-element action
-// family is reconstructed against the X360 layout, GROW this struct ADDITIVELY with the convoy
-// distance/id arrays + count; do NOT retype/reorder the DWARF-named members below.
+// reads a LARGER, convoy-shaped record that the lean 5-member DWARF layout does NOT express. The
+// three convoy members below were GROWN ADDITIVELY (after the DWARF tail) at their X360-asm-proven
+// offsets so the body can name them; the DWARF-named members above are NOT reordered/retyped:
+//   +0x24  f32[8]  maConvoyLegDistances  (walked until a value >= flt_82CDB778)
+//   +0x44  s32[8]  maConvoyMemberIds     (linear-searched for the player id; miss asserts
+//                                         "Player not in this convoy!", BrnStuntModeScoring.cpp:1666)
+//   +0x64  s32     miConvoyMemberCount   (the loop gate `count > 1`)
+// The asm offsets are absolute (r31 = action base): 0x24, 0x44, 0x64. They are X360-only and
+// DWARF-silent (the PS3 DecFIGS DWARF lists only the lean 5 members), so each carries an X360-proven
+// FLAG. The 5 DWARF members end at +0x18 (mID@0x00 [u64,8B], meStuntElementType@0x08 [enum,4B],
+// miCurrentCount@0x0C, miTotalCount@0x10, meCurrentGameMode@0x14 -- tail at +0x18); the convoy block
+// starts at +0x24, leaving a 12-byte (+0x18..+0x23) DWARF-silent gap, modelled here as an explicit
+// reserved pad so the convoy arrays land exactly at the asm-proven offsets. A static_assert below
+// locks the three offsets.
+//
+// FLAG: maConvoyLegDistances / maConvoyMemberIds / miConvoyMemberCount + the +0x18 pad are
+// X360-asm-proven and DWARF-silent (provisionally named per CXX_NAMING_CONVENTIONS); the +0x18..+0x23
+// reserved region's true member(s) are unrecovered. Re-confirm names/extent when the full
+// stunt-element action family is reconstructed against the X360 layout.
 struct OnStuntElementCompleteAction : public GameAction<E_ACTION_ON_STUNT_ELEMENT_COMPLETE>
 {
     CgsID            mID;                  // +0x00  (DWARF BrnGameActions.h:3839)
-    StuntElementType meStuntElementType;   //        (DWARF BrnGameActions.h:3840)
-    s32              miCurrentCount;        //        (DWARF BrnGameActions.h:3841)
-    s32              miTotalCount;          //        (DWARF BrnGameActions.h:3842)
-    EGameModeType    meCurrentGameMode;     //        (DWARF BrnGameActions.h:3843; EGameModeType is
+    StuntElementType meStuntElementType;   // +0x08  (DWARF BrnGameActions.h:3840)
+    s32              miCurrentCount;        // +0x0C  (DWARF BrnGameActions.h:3841)
+    s32              miTotalCount;          // +0x10  (DWARF BrnGameActions.h:3842)
+    EGameModeType    meCurrentGameMode;     // +0x14  (DWARF BrnGameActions.h:3843; EGameModeType is
                                             //        nested in this GameStateModuleIO namespace)
+
+    // ---- X360-only convoy block (GROWN additively; DWARF-silent; offsets asm-proven) ----
+    u8               maReserved0x18[0x0C];  // +0x18 (X360-proven gap; DWARF-silent -- true member(s) unrecovered)
+    f32              maConvoyLegDistances[8];   // +0x24 (X360-proven; DWARF-silent; walked vs flt_82CDB778)
+    s32              maConvoyMemberIds[8];      // +0x44 (X360-proven; DWARF-silent; searched for player index)
+    s32              miConvoyMemberCount;       // +0x64 (X360-proven; DWARF-silent; the count>1 gate)
 };
+
+// Lock the X360-asm-proven convoy offsets (0x24 / 0x44 / 0x64). The GameAction<T> base is the empty
+// tag (no instance data/vtable), so member offsets are measured from the struct base == action base.
+static_assert(offsetof(OnStuntElementCompleteAction, maConvoyLegDistances) == 0x24,
+              "OnStuntElementCompleteAction::maConvoyLegDistances must be at X360 offset +0x24");
+static_assert(offsetof(OnStuntElementCompleteAction, maConvoyMemberIds) == 0x44,
+              "OnStuntElementCompleteAction::maConvoyMemberIds must be at X360 offset +0x44");
+static_assert(offsetof(OnStuntElementCompleteAction, miConvoyMemberCount) == 0x64,
+              "OnStuntElementCompleteAction::miConvoyMemberCount must be at X360 offset +0x64");
 }
 }

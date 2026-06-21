@@ -1,13 +1,34 @@
 #ifndef BRN_DIRECTOR_RESOURCE_MANAGER_H
 #define BRN_DIRECTOR_RESOURCE_MANAGER_H
 
-#include <ICEData.hpp>
+#include "SDKs/Packages/ICE/ICEData.hpp"
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"   // CgsResource::ID (GetICETakeData arg / MakeICEMovieId return)
+#include <cstdio>                                                   // snprintf (GetKeyAnim name formatting)
 
 extern "C" {
     int sub_827DC838(void* a1, int a2, int a3);
     int sub_827DC8C8(void* a1, int a2, int a3);
     extern void* off_820CEA3C;
+}
+
+namespace BrnDirector
+{
+
+// The director-side ICE owner GetKeyAnim / GetShakeTakes reach through. Forward-declared
+// (the inlines below only call its methods through a pointer; a using-TU includes the
+// full home GameSource/Director/BrnDirectorICEWrapper.h before instantiating them).
+class ICEWrapper;
+
+}
+
+// FLAG: BrnResource::MakeICEMovieId hashes an ICE take name into a take resource id.
+// Referenced by DirectorResourceManager::GetKeyAnim but with no reconstructed home yet
+// -- declared here (declaration-only; the per-TU `cl /c` gate does not link). Replace
+// with its real home when the ICE-resource-name TU is reconstructed.
+namespace BrnResource
+{
+    CgsResource::ID MakeICEMovieId(const char* lpacName);
 }
 
 namespace BrnDirector

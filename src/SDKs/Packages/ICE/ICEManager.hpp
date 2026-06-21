@@ -6,6 +6,7 @@
 #include "SDKs/Packages/ICE/ICEMemory.hpp"        // ICE::ICEPointers, ICETimer, ICEMemory
 #include "SDKs/Packages/ICE/ICEController.hpp"    // ICE::ICEController (embedded editor/driver)
 #include "SDKs/Packages/ICE/ICEFile.hpp"          // ICE::ICEFileHandler (mpFileHandler)
+#include "SDKs/Packages/ICE/ICEMath.hpp"          // ICE::Vector3 (FixAnimElevation / GetAnimElevationFixup param)
 
 // ============================================================================
 // SDKs/Packages/ICE/ICEManager.hpp
@@ -61,11 +62,10 @@
 namespace ICE
 {
 
-// Vector3 is referenced by the FixAnimElevation / GetAnimElevationFixup methods
-// (declaration-only here). Forward-declared (those bodies live in other TUs; the
-// /c gate does not need the full type for a declaration-only pointer parameter).
-// Its real home is SDKs/Packages/ICE/ICEMath.hpp (ICE::Vector3).
-struct Vector3;
+// Vector3 (ICE::Vector3) is referenced by the FixAnimElevation / GetAnimElevationFixup
+// methods (declaration-only here). It is a typedef alias for rw::math::vpu::Vector3,
+// pulled in from its real home SDKs/Packages/ICE/ICEMath.hpp (a forward `struct Vector3;`
+// here would clash with that typedef -- C2371 -- once both headers are co-included).
 
 struct ICEManager
 {
@@ -96,6 +96,10 @@ private:
     ICEController   mController;
 
 public:
+    // Default constructor: constructs the embedded takes (and the controller).
+    // Body in ICEManager.cpp.
+    ICEManager();                                 // @0x827E13B8
+
     // ====================================================================
     // Functions OWNED by this TU (bodies in ICEManager.cpp).
     // ====================================================================
@@ -103,6 +107,20 @@ public:
     void Destruct();                              // @0x825333F0
     ICETake* GetCameraTake();                     // @0x8252CAD0
     void Update();                                // @0x82540010
+
+    // ====================================================================
+    // Editor access used by BrnDirector::ICEWrapper's EditorOn/EditorOff.
+    // The wrapper drives the in-game editor in response to dev-tool messages;
+    // the embedded controller lives at this+0x1D10 (the ICEAuthor/editor
+    // `this`). Exposed BY NAME here (not an offset poke).
+    // ====================================================================
+    ICEController& GetEditor() { return mController; }
+
+    // Cancel any in-progress movie playback (the editor takes over the camera).
+    // EditorOn clears the manager's playback flag (this+0x1CE0) before entering
+    // the editor; exposed as a named setter so the wrapper does not poke the flag
+    // through an offset.
+    void ClearPlaybackData() { mbPlaybackDataSet = false; }
 
     // ====================================================================
     // The rest of the DWARF method set -- DECLARATION-ONLY (bodies in their

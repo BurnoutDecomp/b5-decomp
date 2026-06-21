@@ -4,6 +4,8 @@
 #include <cstdint>   // uintptr_t
 #include "types.hpp" // u32
 
+#include <windows.h> // CRITICAL_SECTION for PPMAutoMutex
+
 // EA::Allocator::GeneralAllocator - PPMalloc dlmalloc-style heap allocator. This TU lands the
 // FOUNDATION: the ctor + Init (the empty-allocator setup) + the default assertion/trace sinks +
 // the dtor. The allocation engine (AddCore / MallocInternal / MallocAlignedInternal / FreeInternal
@@ -342,17 +344,260 @@ namespace Allocator
 
     // @ 0x82B500F8 - tear the heap down. PC leaf: the core buffer is owned by the caller
     // (HeapMalloc / the module); just drop our reference and mark uninitialised.
-    void GeneralAllocator::Shutdown()
+    bool GeneralAllocator::Shutdown()
     {
         mHeadCoreBlock.mpCore = 0;
         mHeadCoreBlock.mnSize = 0;
         mbInitialized = false;
+        return true;
     }
 
     // @ 0x82B511A8 - destroy: release any adopted core. (Full body lands with AddCore/FreeCore.)
     GeneralAllocator::~GeneralAllocator()
     {
         Shutdown();
+    }
+
+    // ====================================================================================
+    // FULL-DWARF SURFACE (this round): the core-init ctor/Init overload, SetOption, the
+    // PPMAutoMutex lock, TraceAllocatedMemory, and the trivial accessors / callback setters.
+    // The complex bin/coalescing internals stay declare-only (next round).
+    // ====================================================================================
+
+    // Global head of the init-callback list (X360 dword_832500B0). Empty here.
+    volatile GeneralAllocator::InitCallbackNode* GeneralAllocator::mpInitCallbackNode = 0;
+
+    // @ 0x82B4DF08 / dtor - enter/leave the allocator's mutex (a CRITICAL_SECTION) if present.
+    // The X360 also bumps a recursion counter inside the mutex; the CRITICAL_SECTION tracks its
+    // own recursion. A null mutex is a no-op (the thread-safety option was never enabled).
+    GeneralAllocator::PPMAutoMutex::PPMAutoMutex(void* pMutex)
+        : mpMutex(pMutex)
+    {
+        if (mpMutex)
+            EnterCriticalSection(static_cast<CRITICAL_SECTION*>(mpMutex));
+    }
+
+    GeneralAllocator::PPMAutoMutex::~PPMAutoMutex()
+    {
+        if (mpMutex)
+            LeaveCriticalSection(static_cast<CRITICAL_SECTION*>(mpMutex));
+    }
+
+    // @ 0x82B4FF58 - core-adopting ctor: zero the state + install PPMalloc defaults (delegating to
+    // the default-ctor body), then Init() over the supplied initial core. The X360 inlines the
+    // member init here; we reuse the default ctor's faithful field setup, then adopt the core.
+    GeneralAllocator::GeneralAllocator(void* pInitialCore, size_t nInitialCoreSize,
+                                       bool bShouldFreeInitialCore, bool bShouldTrace,
+                                       unsigned int (*pCoreAddFunction)(GeneralAllocator*, void*, unsigned int, void*),
+                                       void* pCoreAddFunctionContext)
+        : GeneralAllocator()
+    {
+        mbTraceInternalMemory = bShouldTrace;
+        Init(pInitialCore, nInitialCoreSize, bShouldFreeInitialCore, bShouldTrace,
+             pCoreAddFunction, pCoreAddFunctionContext);
+    }
+
+    // @ 0x82B4FA30 - full core-init overload: bring up the empty heap (idempotent), then adopt the
+    // supplied initial core if one was given, then fire the registered init callbacks once.
+    bool GeneralAllocator::Init(void* pInitialCore, size_t nInitialCoreSize,
+                                bool bShouldFreeInitialCore, bool /*bShouldTrace*/,
+                                unsigned int (*/*pCoreAddFunction*/)(GeneralAllocator*, void*, unsigned int, void*),
+                                void* /*pCoreAddFunctionContext*/)
+    {
+        if (!mbInitialized)
+        {
+            // X360 Init enables thread-safety option 1 first, then self-links the bins; the
+            // 0-arg Init() below performs the faithful empty-heap bring-up.
+            SetOption(kOptionEnableThreadSafety, 1);
+            Init();
+        }
+
+        // adopt the initial core (X360: `if (a2 || a3) AddCore(...)`)
+        if (pInitialCore || nInitialCoreSize)
+            AddCore(pInitialCore, nInitialCoreSize, bShouldFreeInitialCore, bShouldFreeInitialCore);
+
+        // fire the one-time init callbacks (X360 tracks this with the +1300 mNotifyInitState byte)
+        if (!mNotifyInitState)
+        {
+            mNotifyInitState = 1;
+            for (volatile InitCallbackNode* lpNode = mpInitCallbackNode; lpNode; lpNode = lpNode->mpNext)
+                lpNode->mpInitCallbackFunction(this, true, lpNode->mpContext);
+        }
+        return true;
+    }
+
+    // @ 0x82B4DF60 - runtime tunables. The X360 dispatches options 1..13 through a jump table;
+    // each case stores nValue into the matching field (a few normalise/clamp it). Reconstructed
+    // as a clean switch over enum Option from the per-case stores in the asm.
+    void GeneralAllocator::SetOption(int option, int nValue)
+    {
+        switch (option)
+        {
+        case kOptionEnableThreadSafety:
+            // create the mutex on enable / tear it down on disable (X360 PPMMutexCreate path).
+            if (nValue)
+            {
+                if (!mpMutex)
+                    mpMutex = mpMutexData;   // back the CRITICAL_SECTION with the in-object storage
+            }
+            else
+            {
+                mpMutex = 0;
+            }
+            break;
+
+        case kOptionEnableHighAllocation:
+            mbHighFenceInternallyDisabled = (nValue == 0);
+            break;
+
+        case kOptionEnableSystemAlloc:
+            mbSystemAllocEnabled = (nValue != 0);
+            break;
+
+        case kOptionEnableMallocFailureAssert:
+            // (X360 stores a boolean flag; folded into the failure-function policy.)
+            break;
+
+        case kOptionMaxMallocFailureCount:
+            mnMaxMallocFailureCount = static_cast<unsigned int>(nValue);
+            break;
+
+        case kOptionMaxFastBinRequestSize:
+        {
+            // clamp request -> chunk size, rounded down to 8, min 16 (X360 0x82B4E138 path).
+            ClearFastBins();
+            unsigned int luRequest = static_cast<unsigned int>(nValue);
+            if (luRequest)
+            {
+                if (luRequest > 0x50)
+                    luRequest = 0x50;
+                unsigned int luChunk = (luRequest + 0x0B) & ~7u;
+                if (luChunk < 0x10)
+                    luChunk = 0x10;
+                mnMaxFastBinChunkSize = luChunk;
+            }
+            else
+            {
+                mnMaxFastBinChunkSize = 0;
+            }
+            break;
+        }
+
+        case kOptionTrimThreshold:
+            mnTrimThreshold = static_cast<unsigned int>(nValue);
+            break;
+
+        case kOptionTopPad:
+            mnTopPad = static_cast<unsigned int>(nValue);
+            break;
+
+        case kOptionMMapThreshold:
+            mnMMapThreshold = static_cast<unsigned int>(nValue);
+            break;
+
+        case kOptionMMapMaxAllowed:
+            mnMMapMaxAllowed = nValue;
+            break;
+
+        case kOptionNewCoreSize:
+            mnNewCoreSize = static_cast<unsigned int>(nValue);
+            break;
+
+        case kOptionCoreIncrementSize:
+            mnCoreIncrementSize = static_cast<unsigned int>(nValue);
+            break;
+
+        case kOptionMMapTopDown:
+            mbMMapTopDown = (nValue != 0);
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    // @ 0x82B516F0 - dump every live allocation through pTraceCallback. The X360 flushes the fast
+    // bins, defaults the callback/context to the installed trace sink, snapshots the heap, then
+    // walks each block describing it into a text buffer. The snapshot/report/describe internals
+    // are declare-only this round, so this faithfully performs the lock + fast-bin flush + sink
+    // defaulting spine; the per-block walk lands when ReportNext/DescribeChunk are bodied.
+    void GeneralAllocator::TraceAllocatedMemory(void (*pTraceCallback)(const char*, void*),
+                                                void* pTraceCallbackContext,
+                                                void* /*pStorage*/, size_t /*nStorageSize*/)
+    {
+        PPMAutoMutex lock(mpMutex);
+
+        ClearFastBins();
+
+        if (!pTraceCallback)
+            pTraceCallback = mpTraceFunction;
+        if (!pTraceCallbackContext)
+            pTraceCallbackContext = mpTraceFunctionContext;
+
+        // (Per-block enumeration via TakeSnapshot/ReportNext/DescribeChunk lands next round.)
+        (void)pTraceCallback;
+        (void)pTraceCallbackContext;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Trivial accessors / callback setters (DWARF surface; store-for-store from the X360).
+    // ------------------------------------------------------------------------------------
+    void GeneralAllocator::SetName(const char* pName)
+    {
+        mpName = pName;
+    }
+
+    const char* GeneralAllocator::GetName() const
+    {
+        return mpName;
+    }
+
+    void GeneralAllocator::SetMallocFailureFunction(
+        bool (*pMallocFailureFunction)(GeneralAllocator*, size_t, size_t, void*), void* pContext)
+    {
+        // The public setter takes size_t (DWARF); the stored slot is unsigned int (the X360 layout
+        // member). Same calling convention on the target - reinterpret to the slot type.
+        mpMallocFailureFunction        = reinterpret_cast<bool (*)(GeneralAllocator*, unsigned int, unsigned int, void*)>(pMallocFailureFunction);
+        mpMallocFailureFunctionContext = pContext;
+    }
+
+    void GeneralAllocator::SetAssertionFailureFunction(void (*pAssertionFailureFunction)(const char*, void*), void* pContext)
+    {
+        mpAssertionFailureFunction        = pAssertionFailureFunction;
+        mpAssertionFailureFunctionContext = pContext;
+    }
+
+    void GeneralAllocator::AssertionFailure(const char* pExpression) const
+    {
+        if (mpAssertionFailureFunction)
+            mpAssertionFailureFunction(pExpression, mpAssertionFailureFunctionContext);
+    }
+
+    void GeneralAllocator::SetHookFunction(void (*pHookFunction)(const HookInfo*, void*), void* pContext)
+    {
+        // mpHookFunction is typed non-const in the layout (X360 store); the public setter takes the
+        // const-HookInfo signature - reinterpret to the stored slot type (same calling convention).
+        mpHookFunction        = reinterpret_cast<void (*)(HookInfo*, void*)>(pHookFunction);
+        mpHookFunctionContext = pContext;
+    }
+
+    void GeneralAllocator::SetTraceFunction(void (*pTraceFunction)(const char*, void*), void* pContext)
+    {
+        mpTraceFunction        = pTraceFunction;
+        mpTraceFunctionContext = pContext;
+    }
+
+    void GeneralAllocator::SetTraceFieldDelimiters(unsigned char fieldDelimiter, unsigned char recordDelimiter)
+    {
+        mcTraceFieldDelimiter  = fieldDelimiter;
+        mcTraceRecordDelimiter = recordDelimiter;
+    }
+
+    void GeneralAllocator::SetAutoHeapValidation(HeapValidationLevel heapValidationLevel, size_t nFrequency)
+    {
+        mAutoHeapValidationLevel       = heapValidationLevel;
+        mnAutoHeapValidationFrequency  = static_cast<unsigned int>(nFrequency);
+        mnAutoHeapValidationEventCount = 0;
     }
 }
 }

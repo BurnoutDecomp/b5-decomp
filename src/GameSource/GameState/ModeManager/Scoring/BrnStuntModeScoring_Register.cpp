@@ -37,17 +37,16 @@
 // the StuntModeScoringOnline overrides the X360 reaches via the vtable. Faithful virtual dispatch
 // lands when this type's TU reconstructs the full vtable order.
 //
-// BLOCKED (left declare-only in the header -- NOT bodied here) and why:
-//   - DealWithInProgressStunt (0x82321710): dereferences the in-progress stunt-element action
-//       (reads action+0x64 convoy member count, action+0x24..0x40 per-leg distances, action
-//       +0x44..0x60 convoy member ids). The owning type GameStateModuleIO::OnStuntElementCompleteAction
-//       IS now homed (BrnGameActions.h:365) but only with its LEAN 5-member DWARF layout
-//       (mID/meStuntElementType/miCurrentCount/miTotalCount/meCurrentGameMode); the convoy-shaped
-//       record the X360 body reads (+0x24 float[8] leg distances, +0x44 s32[8] convoy member ids,
-//       +0x64 s32 convoy count) is X360-only and NOT expressed by that DWARF layout (see the
-//       explicit FLAG at BrnGameActions.h:354-364). Those members cannot be named, so the body
-//       cannot be reconstructed. UNBLOCKS when OnStuntElementCompleteAction is GROWN additively
-//       with the convoy distance/id arrays + count against the X360 layout.
+// LANDED -- DealWithInProgressStunt (0x82321710): signature was RECONCILED earlier from the call-site
+//   ModeManager::ProcessEvent (0x82340AB8) -- the real args are (const OnStuntElementCompleteAction*
+//   lpAction [r4], f32 lfDelta [f1], s32 liPlayerActiveRaceCarIndex [r6 == GameStateModule::
+//   GetPlayerActiveRaceCarIndex]); IDA's a4(r5) is uninitialised garbage at the call site and dropped.
+//   The OLD committed sig (const WorldStuntAction*) was wrong on BOTH the action type AND the missing
+//   delta+index args. The BODY now lands below: OnStuntElementCompleteAction (BrnGameActions.h) has
+//   been GROWN ADDITIVELY with the X360-only convoy block (maConvoyLegDistances[8]@+0x24,
+//   maConvoyMemberIds[8]@+0x44, miConvoyMemberCount@+0x64), so the convoy-shaped record the asm walks
+//   is now expressible by NAME. See the DealWithInProgressStunt body comment for the store-for-store
+//   decode.
 // ============================================================================
 
 namespace BrnGameState
@@ -317,6 +316,99 @@ void StuntModeScoring::UpdateStuntRating(EStuntType leStuntType, f32 lfA, f32 lf
         muStuntTypesInProgress |= 0x200000u;
         muAwesomeStuntTypesInProgress = (1u << static_cast<u32>(leStuntType)) | muAwesomeStuntTypesInProgress;
     }
+}
+
+// ----------------------------------------------------------------------------
+// DealWithInProgressStunt -- X360 0x82321710.
+// A convoy in-progress stunt element resolved for the local player. Gates on the stunt mode being
+// active, then on the action being a real convoy (member count > 1). When both hold it RegisterStunt's
+// and -- if a stunt could be started -- finds the convoy "leg" that qualifies (the first per-leg
+// distance >= flt_82CDB778), locates this player's slot in the convoy member-id table, and awards a
+// score scaled by that slot index (so later joiners score more): UpdateScore((slot * flt_82CDB73C) *
+// lfDelta, E_STUNT_TYPE_RATING_GOOD(17), awesome=true).
+//
+// STORE-FOR-STORE map (asm @0x82321710; r30=this, r31=lpAction, f31=lfDelta, r29=liPlayerActiveRaceCarIndex):
+//   0x82321730 lbz 0x28(this)        -> gate mbStuntModeActive (byte; offset map +0x28).
+//   0x8232173C lwz 0x64(lpAction)>1  -> gate lpAction->miConvoyMemberCount > 1.
+//   0x82321748 bl RegisterStunt; clrlwi r3,24 / beq -> proceed only if it returned true.
+//   0x82321764 r10 = lpAction+0x24   -> &maConvoyLegDistances[0]; walk [0..7] until *p >= flt_82CDB778
+//                                       (lfs/fcmpu/bge), break with that index in r11; if r11==8 none.
+//   0x82321794 r11 = lpAction+0x44   -> &maConvoyMemberIds[0]; linear-search [0..7] for r29 (player
+//                                       index); full miss (r10>=8) -> assert "Player not in this convoy!"
+//                                       (BrnStuntModeScoring.cpp:1666).
+//   0x82321838+ found slot r10: extsw -> (s64) slot, fcfid/frsp -> (f32); f0 = slot * flt_82CDB73C;
+//              f1 = f0 * f31 (lfDelta); li r5,0x11 (E_STUNT_TYPE_RATING_GOOD=17); li r6,1 (awesome);
+//              UpdateScore(this, <r4 garbage dropped>, f1=score, r5=17, r6=1).
+// The committed UpdateScore sig is void(f32 lfScore, EStuntType, bool); confirmed against this call
+// (r5=type, r6=awesome -- the UpdateScore body @0x823212D8 reads its stunt-type from r5/a3 and its
+// awesome flag from r6/a4, the IDA pseudocode's `v9`/r4 is the dropped uninitialised slot). No
+// divergence -- the committed sig matches the asm.
+//
+// FLAG: flt_82CDB778 (per-leg qualifying-distance threshold) and flt_82CDB73C (per-convoy-slot score
+// multiplier) magnitudes are UNRECOVERED -- not present in any .ida-exports data dump (same gap as the
+// sibling flt_82CDB718/71C/720/728 scores in this file). Named constants are defined at their X360
+// addresses with a best-effort value (0.0f); re-confirm against the asm when this TU's full
+// BrnStuntModeScoring.cpp lands.
+// ----------------------------------------------------------------------------
+void StuntModeScoring::DealWithInProgressStunt(const GameStateModuleIO::OnStuntElementCompleteAction* lpAction,
+                                               f32 lfDelta, s32 liPlayerActiveRaceCarIndex)
+{
+    // FLAG: rodata magnitudes unrecovered (see header note).
+    const f32 KF_CONVOY_LEG_DISTANCE_THRESHOLD = 0.0f;   // FLAG: flt_82CDB778 value unrecovered
+    const f32 KF_CONVOY_SLOT_SCORE_MULTIPLIER  = 0.0f;   // FLAG: flt_82CDB73C value unrecovered
+
+    // 0x28(this) gate: only score while the stunt mode is active.
+    if (!mbStuntModeActive)
+    {
+        return;
+    }
+
+    // A real convoy needs more than one member (the loop gate `count > 1`).
+    if (lpAction->miConvoyMemberCount <= 1)
+    {
+        return;
+    }
+
+    // Try to start/continue a scored stunt; bail if it could not be registered.
+    if (!RegisterStunt())
+    {
+        return;
+    }
+
+    // Walk the per-leg distances until one qualifies (>= threshold); break with that leg index.
+    s32 liLegIndex = 0;
+    while (liLegIndex < 8)
+    {
+        if (lpAction->maConvoyLegDistances[liLegIndex] >= KF_CONVOY_LEG_DISTANCE_THRESHOLD)
+        {
+            break;
+        }
+        ++liLegIndex;
+    }
+
+    // No qualifying leg -> nothing to award.
+    if (liLegIndex == 8)
+    {
+        return;
+    }
+
+    // Locate this player's slot in the convoy member-id table.
+    s32 liMemberIndex = 0;
+    while (lpAction->maConvoyMemberIds[liMemberIndex] != liPlayerActiveRaceCarIndex)
+    {
+        ++liMemberIndex;
+        if (liMemberIndex >= 8)
+        {
+            // X360 assert at BrnStuntModeScoring.cpp:1666 (the player must be in this convoy).
+            CGS_ASSERT(false, "Player not in this convoy!");
+            return;
+        }
+    }
+
+    // Award a score scaled by the player's convoy slot index and the frame delta. Stunt type 17 ==
+    // E_STUNT_TYPE_RATING_GOOD (li r5,0x11), awesome == true (li r6,1).
+    const f32 lfScore = (static_cast<f32>(liMemberIndex) * KF_CONVOY_SLOT_SCORE_MULTIPLIER) * lfDelta;
+    UpdateScore(lfScore, E_STUNT_TYPE_RATING_GOOD, true);
 }
 
 }   // namespace BrnGameState
