@@ -464,6 +464,32 @@ namespace BrnGameState
         void CheckRoadRageMedalAwarded(u32 luTakedowns);                                      // :855 / 0x82312840
         void UpdateGeneralStats(const ActiveRaceCarOutputInterface* lpOutput, f32 lfDeltaTime, bool lbOnline); // :864 / 0x8232B8C0
 
+        // ===== stunt-score setters / online-stunt pre-world (bodies in BrnScoringSystem_UpdateB.cpp) =====
+        // Per-car online stunt score (CarScoreData +0xD4). SetPlayerStuntScore keys by active-race-car
+        // slot, SetNetworkStuntScore by network player id; both store via CarData::GetScoreData().
+        void SetPlayerStuntScore(EActiveRaceCarIndex leRaceCarIndex, s32 liScore);                         // 0x8231F0C8
+        void SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lID, s32 liScore);                           // 0x8231FC20
+        // SetNetworkStuntMultiplier (0x8231FC50) writes the per-car "chainable stunt multiplier" trio
+        // (CarScoreData +0xC8 miChainableScore / +0xD0 miCurrentChainableMultiplier / +0xD8 mbChainActive)
+        // on GetCarData(lID); reconciled arg order from the X360 register setup (r5->+0xD0, r6->+0xC8).
+        // DECLARE-ONLY: those chainable slots carry NO named accessor in CarScoreData's committed home
+        // (BrnGameStateSharedIO.h) and growing that dep type is out of this keystone-closure scope.
+        void SetNetworkStuntMultiplier(BrnNetwork::NetworkPlayerID lID, s32 liMultiplier, s32 liChainableScore); // 0x8231FC50
+
+        // PlayerPerformedBarrelRolls (0x823634D0) adds liCount to a per-car barrel-roll tally living at
+        // CarScoreData +0xFC (currently the unnamed maStorageFC pad). DECLARE-ONLY: that slot carries no
+        // named accessor in CarScoreData's committed home and growing that dep type is out of scope here.
+        void PlayerPerformedBarrelRolls(EActiveRaceCarIndex leRaceCarIndex, s32 liCount);                  // 0x823634D0
+
+        // Forward a completed world-stunt action to the online (mOnlineStuntModeScoring) or offline
+        // (mStuntModeScoring) stunt scorer; the small WorldStuntAction is modeled by pointer in the
+        // scorer's home (BrnStuntModeScoring.h, included above).
+        void DealWithStunt(const GameStateModuleIO::WorldStuntAction* lpAction, bool lbOnline);            // 0x823384F0
+        // Per-frame pre-world step driving the online stunt scorer's PreWorldUpdate (reconciled
+        // AddEvent-queue signature). VariableEventQueue<13312,16> is forward-declared via the stunt header.
+        void UpdateOnlineStuntModeScorePreWorld(s32 liCurrentTimeMs,
+                                                CgsModule::VariableEventQueue<13312, 16>* lpOutputActionQueue); // 0x8234CE48
+
         // ===== points leader / loser / standings (declare-only -- search) =====
         BrnNetwork::NetworkPlayerID GetPointsLeader() const;                                  // :868 / 0x82312648
         EActiveRaceCarIndex GetPointsLoser() const;                                           // :872
@@ -487,6 +513,13 @@ namespace BrnGameState
         // over the per-player team slots, not the 3-value EPlayerTeam enum.
         s32 GetTeamStuntScore(s32 liTeam) const;                                                          // 0x82320650
         s32 GetLeadingStuntTeam(s32 liTeamToExclude) const;                                               // 0x823206E0
+        // Per-team roster / elimination queries (bodies in BrnScoringSystem_Standings.cpp). Team index is
+        // the raw per-player team slot (free-for-all stunt-run), compared against CarData::GetTeam() as
+        // an s32 -- the GetTeamStuntScore convention. Reconciled from the X360 search-loop bodies.
+        s32                          GetTeamPlayerCount(s32 liTeam) const;                                 // 0x823203D8
+        BrnNetwork::NetworkPlayerID  GetFirstTeamPlayer(s32 liTeam) const;                                 // 0x82320460
+        bool                         IsTeamEliminated(s32 liTeam) const;                                   // 0x823205B8
+        bool                         AreAllOtherTeamsEliminated(s32 liTeam) const;                         // 0x82320770
 
         // ===== sub-scorer accessors (trivial address-of; inline) =====
         CrashModeScoring*           GetCrashScorer()         { return &mCrashModeScoring; }   // :939

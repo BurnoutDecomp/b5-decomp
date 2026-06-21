@@ -411,4 +411,106 @@ namespace BrnGameState
 
         return liLeadingTeam;
     }
+
+    // ------------------------------------------------------------------------
+    // GetTeamPlayerCount -- X360 0x823203D8
+    // Count the car slots whose CarData team matches liTeam. liTeam is a raw team
+    // INDEX (free-for-all stunt-run; matches the GetTeamStuntScore convention), so
+    // the per-car GetTeam() is compared as a plain s32. Walks all
+    // E_ACTIVE_RACE_CAR_INDEX_COUNT (8) slots, null-checking each lookup.
+    // ------------------------------------------------------------------------
+    s32 ScoringSystem::GetTeamPlayerCount(s32 liTeam) const
+    {
+        s32 liCount = 0;
+
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            const CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpCar && static_cast<s32>(lpCar->GetTeam()) == liTeam)
+            {
+                ++liCount;
+            }
+
+            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        }
+
+        return liCount;
+    }
+
+    // ------------------------------------------------------------------------
+    // GetFirstTeamPlayer -- X360 0x82320460
+    // Return the network player id (CarData +0x148) of the first car slot whose
+    // team matches liTeam. liTeam is a raw team INDEX (see GetTeamPlayerCount).
+    // Fires the "No players in team" assert and returns K_INVALID_PLAYER_ID (-1)
+    // when no slot is on the team.
+    // ------------------------------------------------------------------------
+    BrnNetwork::NetworkPlayerID ScoringSystem::GetFirstTeamPlayer(s32 liTeam) const
+    {
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            const CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpCar && static_cast<s32>(lpCar->GetTeam()) == liTeam)
+            {
+                return lpCar->GetNetworkPlayerID();
+            }
+
+            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        }
+
+        CGS_ASSERT(false, "No players in team");
+        return -1;
+    }
+
+    // ------------------------------------------------------------------------
+    // IsTeamEliminated -- X360 0x823205B8
+    // A team is "eliminated" when NO car slot on it is still playing: i.e. there is
+    // no slot whose team matches liTeam and whose per-car eliminated flag
+    // (CarScoreData +0xD9) is clear. Returns true when every team member has been
+    // eliminated (or the team has no members). liTeam is a raw team INDEX.
+    // ------------------------------------------------------------------------
+    bool ScoringSystem::IsTeamEliminated(s32 liTeam) const
+    {
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            const CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpCar &&
+                static_cast<s32>(lpCar->GetTeam()) == liTeam &&
+                !lpCar->GetScoreData()->GetEliminated())
+            {
+                return false;
+            }
+
+            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        }
+
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // AreAllOtherTeamsEliminated -- X360 0x82320770
+    // True when every car NOT on liTeam has been eliminated: there is no slot whose
+    // team differs from liTeam and whose per-car eliminated flag (CarScoreData
+    // +0xD9) is clear. liTeam is a raw team INDEX.
+    // ------------------------------------------------------------------------
+    bool ScoringSystem::AreAllOtherTeamsEliminated(s32 liTeam) const
+    {
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            const CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpCar &&
+                static_cast<s32>(lpCar->GetTeam()) != liTeam &&
+                !lpCar->GetScoreData()->GetEliminated())
+            {
+                return false;
+            }
+
+            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        }
+
+        return true;
+    }
 }

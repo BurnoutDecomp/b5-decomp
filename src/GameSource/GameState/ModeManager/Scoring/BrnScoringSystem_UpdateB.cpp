@@ -543,4 +543,70 @@ namespace BrnGameState
             }
         }
     }
+
+    // ------------------------------------------------------------------------
+    // SetPlayerStuntScore -- X360 0x8231F0C8
+    // Store the per-car online stunt score (CarScoreData +0xD4) for the car at the
+    // given active-race-car slot. No-op when the slot has no car record. (The X360
+    // body re-runs the GetCarData lookup after the null guard; reproduced once here.)
+    // ------------------------------------------------------------------------
+    void ScoringSystem::SetPlayerStuntScore(EActiveRaceCarIndex leRaceCarIndex, s32 liScore)
+    {
+        CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
+                   leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+        CarData* lpCar = GetCarData(leRaceCarIndex);
+        if (lpCar)
+        {
+            lpCar->GetScoreData()->SetOnlineStuntScore(liScore);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // SetNetworkStuntScore -- X360 0x8231FC20
+    // Store the per-car online stunt score (CarScoreData +0xD4) for the car owned by
+    // the given network player. The lookup (GetCarData(NetworkPlayerID), X360
+    // sub_8231DD88) asserts a valid id and never returns NULL on the live path; the
+    // X360 body writes the score unconditionally on the returned record.
+    // ------------------------------------------------------------------------
+    void ScoringSystem::SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lID, s32 liScore)
+    {
+        CarData* lpCar = GetCarData(lID);
+        lpCar->GetScoreData()->SetOnlineStuntScore(liScore);
+    }
+
+    // ------------------------------------------------------------------------
+    // DealWithStunt -- X360 0x823384F0
+    // Forward a completed world-stunt action to the active stunt-mode scorer: the
+    // ONLINE scorer (mOnlineStuntModeScoring, X360 ss+0x2620) when lbOnline is set,
+    // otherwise the offline scorer (mStuntModeScoring, ss+0x350). The keystone is a
+    // thin selector around StuntModeScoring::DealWithStunt; the small WorldStuntAction
+    // the X360 ABI splits across r4/r5 is modeled by pointer in the scorer's home.
+    // ------------------------------------------------------------------------
+    void ScoringSystem::DealWithStunt(const GameStateModuleIO::WorldStuntAction* lpAction, bool lbOnline)
+    {
+        StuntModeScoring* lpStuntModeScoring = lbOnline ? &mOnlineStuntModeScoring : &mStuntModeScoring;
+        CGS_ASSERT(lpStuntModeScoring != NULL, "lpStuntModeScoring");
+
+        lpStuntModeScoring->DealWithStunt(lpAction);
+    }
+
+    // ------------------------------------------------------------------------
+    // UpdateOnlineStuntModeScorePreWorld -- X360 0x8234CE48 -- DECLARE-ONLY
+    // The X360 body (a) walks every car slot expiring/gathering the per-car "chainable
+    // stunt multiplier" bookkeeping (CarScoreData +0xC8/+0xCC/+0xD0/+0xD8) into a local
+    // table, then (b) drives mOnlineStuntModeScoring.PreWorldUpdate(queue) (the
+    // reconciled AddEvent-queue signature) and copies the gathered table into the
+    // scorer's internal display buffer (StuntModeScoring ss+0x2620 +0x23F0).
+    //
+    // Left declare-only: both load-bearing surfaces are out of this keystone-closure
+    // scope. (a) the chainable-multiplier slots carry no named accessor in CarScoreData's
+    // committed home, and (b) StuntModeScoring::PreWorldUpdate is declared `protected`
+    // in its committed home (BrnStuntModeScoring.h:347) -- the embedding ScoringSystem
+    // cannot call it without that dep header being made accessible (e.g. public or a
+    // friend grant), which this pass may not touch. Body deferred to a CarScoreData +
+    // StuntModeScoring grow round that surfaces the chainable accessors and opens up
+    // PreWorldUpdate's access.
+    // ------------------------------------------------------------------------
 }
