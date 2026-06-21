@@ -421,4 +421,35 @@ bool GameMode::HasCountdownDisplayChanged(s32* lpiNewCountdownDisplay)
     mbCountdownDisplayChanged = false;
     return true;
 }
+
+// ===========================================================================
+// X360: BrnGameState::GameMode::ShouldFinish (DWARF slot 15, BrnGameMode.cpp:352).
+//
+// The base post-race "should the mode end now?" hook, polled each frame. No standalone
+// base body is attested in the X360 ledger: the concrete modes carry the logic and
+// override this slot (RoadRageMode::ShouldFinish @0x82315D60 and StuntAttackMode::
+// ShouldFinish @0x823162B8 both read the ScoringSystem's no-input / stationary timers
+// off *(scoring+23796) and *(scoring+23792); OnlineStuntRunMode::ShouldFinish @0x8233A3F0
+// likewise). The base itself never auto-finishes -- it is the "no, keep running" default
+// that derived modes replace. Returns false; the ScoringSystem* is taken (by-name, for
+// the override slot to bind) but unused by the base body.
+// ===========================================================================
+bool GameMode::ShouldFinish(ScoringSystem* lpScoringSystem)
+{
+    (void)lpScoringSystem;
+    return false;
+}
+
+// ===========================================================================
+// X360: BrnGameState::GameMode::HasLoadingScreen (DWARF slot 25, BrnGameMode.h:530).
+//
+// Whether entering this mode puts up a loading screen. No standalone X360 body exists
+// (the trivial default was inlined at every call site, and the name is otherwise
+// PS3-DWARF-only), so the faithful base is the default-off case: returns false. Derived
+// modes that need a loading screen override this slot by name.
+// ===========================================================================
+bool GameMode::HasLoadingScreen() const
+{
+    return false;
+}
 }
