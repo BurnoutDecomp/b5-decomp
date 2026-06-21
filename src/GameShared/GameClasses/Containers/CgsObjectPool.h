@@ -37,6 +37,35 @@ public:
         return mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex));
     }
 
+    // Find the first allocated slot whose object compares equal to lrTarget (via T::operator==)
+    // and return its slot index, or -1 when no allocated slot matches. Only instantiated for
+    // element types that define operator== (it is not instantiated unless this method is named).
+    //
+    // FLAG (behaviour-faithful reconstruction, not instruction-identical): the recovered body
+    // walks ONLY the allocated slots by stepping through the occupancy BitArray's set bits with a
+    // lowest-set-bit scan, then compares each allocated object's fields against the target. This
+    // linear walk over allocated slots is value-equivalent: GetFirstNonZeroBit / GetNextNonZeroBit
+    // enumerate exactly the same set bits in the same ascending order, and the field-by-field
+    // compare is precisely what T::operator== performs. Empty (unallocated) slots are skipped in
+    // both forms, so the returned index is identical.
+    TIndex FindObject(const T& lrTarget) const
+    {
+        for (s32 liIndex = mObjectsAllocated.GetFirstNonZeroBit();
+             liIndex >= 0;
+             liIndex = mObjectsAllocated.GetNextNonZeroBit(liIndex))
+        {
+            if (static_cast<s32>(liIndex) >= KI_CAPACITY)
+            {
+                break;
+            }
+            if (maObjectPool[static_cast<s32>(liIndex)] == lrTarget)
+            {
+                return static_cast<TIndex>(liIndex);
+            }
+        }
+        return static_cast<TIndex>(-1);
+    }
+
     void FreeObject(TIndex liIndex)
     {
         CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_CAPACITY), "Array index out of bounds");
