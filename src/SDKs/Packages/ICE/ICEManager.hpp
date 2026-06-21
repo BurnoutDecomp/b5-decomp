@@ -109,6 +109,20 @@ public:
     void Update();                                // @0x82540010
 
     // ====================================================================
+    // Editor access used by BrnDirector::ICEWrapper's EditorOn/EditorOff.
+    // The wrapper drives the in-game editor in response to dev-tool messages;
+    // the embedded controller lives at this+0x1D10 (the ICEAuthor/editor
+    // `this`). Exposed BY NAME here (not an offset poke).
+    // ====================================================================
+    ICEController& GetEditor() { return mController; }
+
+    // Cancel any in-progress movie playback (the editor takes over the camera).
+    // EditorOn clears the manager's playback flag (this+0x1CE0) before entering
+    // the editor; exposed as a named setter so the wrapper does not poke the flag
+    // through an offset.
+    void ClearPlaybackData() { mbPlaybackDataSet = false; }
+
+    // ====================================================================
     // The rest of the DWARF method set -- DECLARATION-ONLY (bodies in their
     // own TUs). Shapes follow the DWARF; the /c gate does not link.
     // ====================================================================
