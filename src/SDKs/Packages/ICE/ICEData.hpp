@@ -210,6 +210,27 @@ private:
     s32                     mxSubTakeChannels;    //         sub-take channel bitmask
     bool                    mbNewSubTakeThisFrame;//         sub-take changed this frame
 
+    // ---- EDITOR-ONLY state (present in the camera-take editor; the runtime/eval
+    // layout ends at mbNewSubTakeThisFrame). The edit path maintains a bounded undo
+    // history of whole serialised-take snapshots. Offsets are struct-relative to the
+    // 32-bit layout; sizeof differs on the 64-bit host because the two list-head
+    // pointers widen (same as the IResourceManager vptr situation). ----
+
+    // @0x72C  Undo-history list head: an intrusive doubly-linked list of saved
+    // ICETakeData snapshots. When empty, Next/Prev point back at the head (self-
+    // linked sentinel). Each node is a heap copy of an ICETakeData whose 8-byte node
+    // base provides the Next/Prev linkage; the list is a bTList<ICETakeData> whose
+    // reconstructed home does not exist yet, so it is modeled here as an 8-byte head
+    // buffer (a placeholder for the not-yet-reconstructed list base, to be replaced
+    // when the bTList TU lands -- NOT an offset hack). Edit bodies treat
+    // mUndoList[0] as Next and mUndoList[1] as Prev.
+    void*                   mUndoList[2];         // @0x72C  intrusive undo-snapshot list head
+
+    // @0x734  Running total of bytes held by the undo list (sum of each node's
+    // ComputeActualSize). PushUndo evicts oldest snapshots until a new one fits
+    // within the undo budget; FlushUndo zeroes it.
+    u32                     muUndoUsedBytes;      // @0x734  undo-list byte accumulator
+
 public:
     // --- DECLARE-ONLY (lifecycle / edit buffer; bodies in ICEData.cpp) ---
     void Construct(const IResourceManager* lpResourceManager);
