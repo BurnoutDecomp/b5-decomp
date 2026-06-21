@@ -55,6 +55,23 @@ namespace BrnGameState
             E_MODE_COUNT                   = 17,
         };
 
+        // ADDITIVE GROW (BrnMugshotManager TU): the photo/"mugshot" image-type enum. DWARF
+        // BrnGameStateSharedIO.h:529 (== BrnGameStateImageManagerBase.h:1153). The MugshotManager
+        // stores E_IMAGE_TYPE_COUNT (6) as the cleared meCaptureMugshotType / meShowMugshotType and
+        // uses the lower values to tag each kind of capture it requests. FLAG: declared here (the
+        // SharedIO enum home) for the MugshotManager TU; the ImageManager TU shares the same values.
+        enum EImageType
+        {
+            E_IMAGE_TYPE_START                  = 0,
+            E_IMAGE_TYPE_FREEBURN_MUGSHOT       = 0,
+            E_IMAGE_TYPE_MUGSHOT                = 1,
+            E_IMAGE_TYPE_PAYBACK_MUGSHOT        = 2,
+            E_IMAGE_TYPE_ROAD_RULE_TIME_MUGSHOT = 3,
+            E_IMAGE_TYPE_ROAD_RULE_CRASH_MUGSHOT = 4,
+            E_IMAGE_TYPE_VICTORY_MUGSHOT        = 5,
+            E_IMAGE_TYPE_COUNT                  = 6,
+        };
+
         // Drives the per-mode state machine (GameMode's nested GameModeState set).
         // DWARF: BrnGameStateSharedIO.h:93. Slot 1 (E_GMS_INTRO) is IntroState's state.
         enum EGameModeState
