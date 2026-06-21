@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_UTILS_BRN_VEHICLE_REF_H
 
 #include "types.hpp"
+#include "GameSource/BurnoutConstants.h"   // EActiveRaceCarIndex (VehicleRef::Set race car)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnVehicleRef.h
@@ -37,6 +38,13 @@ namespace BrnDirector
         void* mpRef;       // +0x0C  cleared reference
 
         VehicleRef* Construct();   // body in BrnVehicleRef.cpp
+
+        // Bind this reference to a specific active race car of the given ref type.
+        // BrnDirector::ICEWrapper::PlayMovie calls it as Set(refType, raceCar, true).
+        // FLAG: declaration-only here -- the body lands with VehicleRef's own TU (the
+        // per-TU `cl /c` gate does not link). The trailing bool carries its literal role
+        // (the recorded call passes 1). Grow with the real signature when that TU lands.
+        void Set(EType leType, EActiveRaceCarIndex leRaceCar, bool lbA);
     };
 }
 

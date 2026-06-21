@@ -3,20 +3,20 @@
 //
 // BrnDirector::ICEWrapper -- the director-side owner/driver of the ICE (In-game
 // Camera Editor) runtime. The four functions in this TU:
-//   ICEWrapper              build the heaps + manager + mover, seed state
+//   ICEWrapper              build the heaps + manager + mover, seed the action queue
 //   EditorOn                console off, stop playback, enter editor mode
 //   EditorOff               console on, leave the editor if it is active
 //   ReconstructCameraMover  rebuild the mover from the active take
 //
-// The inlined GeneralAllocator / ICEManager / ICECameraMover accesses are expressed
+// The embedded heap / manager / mover / camera / space-handler accesses are expressed
 // as logical member construction and named member calls (semantic parity by named
-// members; the offsets noted in the header are provenance, never used as casts
-// here).
+// members; the offsets noted in the header are provenance, never used as casts here).
 // ============================================================================
 
 #include "GameSource/Director/BrnDirectorICEWrapper.h"
 
 #include "SDKs/Packages/ICE/ICEData.hpp"                                            // ICE::ICETake (GetCameraTake return)
+#include "GameShared/GameClasses/Containers/CgsStack.h"                             // CgsContainers::KI_STACK_UNCONSTRUCTED (action-queue seed)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"    // DebugManager::ThreadSafeAquire/Release
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // DebugInterface::Enable/DisableConsole
 
@@ -26,15 +26,16 @@ namespace BrnDirector
 // ---------------------------------------------------------------------------
 // ICEWrapper (ctor)
 //
-// Builds the two heaps in place (each with its inline configuration), the ICE
-// manager, and the camera mover, and stores S32_MAX into the reconstruct-frame
-// sentinel just before the mover. Here the heaps, the manager, and the mover are
-// embedded members, so member construction performs the same work; the only scalar
-// the ctor body sets is the reconstruct-frame sentinel.
+// The base heap, the second scratch heap, the ICE manager, the camera mover, the ICE
+// camera and the reference-space cache are all embedded members, so member
+// construction performs their builds. The only scalar the ctor body sets is the
+// action queue's length word: it is seeded to the Stack's "unconstructed" sentinel
+// (the queue is made usable later by Construct()/UpdateAction, which Clear it to 0).
 // ---------------------------------------------------------------------------
 ICEWrapper::ICEWrapper()
-    : miReconstructFrame(0x7FFFFFFF)   // S32_MAX: nothing reconstructed yet
 {
+    // The action stack starts unconstructed: any use before Construct/Clear asserts.
+    mActionQueue.miLength = CgsContainers::KI_STACK_UNCONSTRUCTED;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,21 +96,22 @@ void ICEWrapper::EditorOff()
 // ReconstructCameraMover
 //
 // Rebuild the camera mover for this frame: ask the manager for the take currently
-// driving the camera, then construct the mover against it. The two mover-input
-// blocks (maMoverInputA / maMoverInputB) are passed by address; liContext is the
-// per-call director context the mover blends against.
+// driving the camera, then construct the mover against it. The mover's two by-address
+// inputs are the wrapper's own ICE camera and its per-frame reference-space cache;
+// liContext is the per-call director context the mover blends against.
 //
-// Arg order to ICECameraMover::Construct:
-//   (mover, 1, &maMoverInputB(+0x11ED0), &maMoverInputA(+0x11D60), cameraTake, 0, context)
-// FLAG: the leading `1` is a bool/flag and the `0` a null block, both literal in the
-//   call; the two input-block parameter types are not yet recovered (declared void*
-//   on the ICECameraMover::Construct slice -- see ICECameraMover.h).
+// Arg order to ICECameraMover::Construct (RECONCILED from the earlier opaque
+// input-block model -- arg3 is &mCameraSpaceHandler (+0x11ED0), arg4 is &mICECamera
+// (+0x11D60)):
+//   (mover, 1, &mCameraSpaceHandler, &mICECamera, cameraTake, 0, context)
+// FLAG: the leading `1` is a bool/flag and the `0` a null/extra block, both literal in
+//   the call.
 // ---------------------------------------------------------------------------
 void ICEWrapper::ReconstructCameraMover(s32 liContext)
 {
     ICE::ICETake* lpCameraTake = mICEManager.GetCameraTake();
 
-    mCameraMover.Construct(1, maMoverInputB, maMoverInputA, lpCameraTake, 0, liContext);
+    mCameraMover.Construct(true, &mCameraSpaceHandler, &mICECamera, lpCameraTake, 0, liContext);
 }
 
 } // namespace BrnDirector

@@ -6,6 +6,7 @@
 #include "SDKs/Packages/ICE/ICEMemory.hpp"        // ICE::ICEPointers, ICETimer, ICEMemory
 #include "SDKs/Packages/ICE/ICEController.hpp"    // ICE::ICEController (embedded editor/driver)
 #include "SDKs/Packages/ICE/ICEFile.hpp"          // ICE::ICEFileHandler (mpFileHandler)
+#include "SDKs/Packages/ICE/ICEMath.hpp"          // ICE::Vector3 (FixAnimElevation / GetAnimElevationFixup param)
 
 // ============================================================================
 // SDKs/Packages/ICE/ICEManager.hpp
@@ -61,11 +62,10 @@
 namespace ICE
 {
 
-// Vector3 is referenced by the FixAnimElevation / GetAnimElevationFixup methods
-// (declaration-only here). Forward-declared (those bodies live in other TUs; the
-// /c gate does not need the full type for a declaration-only pointer parameter).
-// Its real home is SDKs/Packages/ICE/ICEMath.hpp (ICE::Vector3).
-struct Vector3;
+// Vector3 (ICE::Vector3) is referenced by the FixAnimElevation / GetAnimElevationFixup
+// methods (declaration-only here). It is a typedef alias for rw::math::vpu::Vector3,
+// pulled in from its real home SDKs/Packages/ICE/ICEMath.hpp (a forward `struct Vector3;`
+// here would clash with that typedef -- C2371 -- once both headers are co-included).
 
 struct ICEManager
 {
