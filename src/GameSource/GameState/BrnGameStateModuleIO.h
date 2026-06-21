@@ -164,6 +164,70 @@ namespace GameStateModuleIO
     };
 
     // ========================================================================
+    // Minimal member types homed by the class:BrnGameState catch-all TU's remaining
+    // GameStateModuleIO &member accessors. Each is a named opaque payload the accessor
+    // returns the address of; their full (own-TU) reconstructions will widen the
+    // opaque storage to real typed members without moving the surrounding anchors.
+    // ========================================================================
+
+    // PostWorldInputBuffer +0x10. DWARF (:198/199, :232): the per-frame race-car crash-event
+    // queue == VehicleManagerOutputInterface::RaceCarCrashEventQueue (an
+    // EventQueue<RaceCarCrashEvent,8>). Read-locked by ModeManager::ProcessPlayerCrashes;
+    // modelled minimally as opaque storage spanning up to the next known member (VehicleOutput
+    // @ +0x220). Swap for the real EventQueue<RaceCarCrashEvent,8> when that physics type is homed.
+    struct RaceCarCrashEventQueue { u8 maOpaque[0x220 - 0x10]; };
+
+    // PostWorldInputBuffer +0x6E34. DWARF (:207/208, :235): the trigger-entity-module output
+    // interface (BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface). Returned
+    // read-locked (TriggerQueryManager::PostWorldUpdate) and write-locked (BridgeWorldToGameState).
+    // Modelled minimally as a named opaque payload; swap for the real interface when it is homed.
+    struct TriggerEntityModuleOutputInterface { u8 maOpaque[16]; };
+
+    // PreWorldInputBuffer +0x7B0. DWARF (:140/141, :166): the network-to-game-state input
+    // interface (NetworkToGameStateInterface). Read-locked by BurnoutSkillzManager::PreWorldUpdate.
+    // Modelled minimally as a named opaque payload; swap for the real interface when it is homed.
+    struct NetworkToGameStateInterface { u8 maOpaque[16]; };
+
+    // OutputBuffer +0x9050. DWARF (:283/284, :347): the trigger-management input interface
+    // (OutputBuffer::TriggerManagementInputInterface). Returned read-locked
+    // (BridgeGameStateToWorld) and write-locked (ModeManager::StartGameMode). Modelled minimally
+    // as a named opaque payload; swap for the real interface when it is homed.
+    struct TriggerManagementInputInterface { u8 maOpaque[16]; };
+
+    // OutputBuffer +0x43AC. DWARF (:293, :344): the game-state-to-controller output interface
+    // (GameStateToControllerInterface). Write-locked by GameStateInviteManager::Update.
+    // Modelled minimally as a named opaque payload; swap for the real interface when it is homed.
+    struct GameStateToControllerInterface { u8 maOpaque[16]; };
+
+    // ------------------------------------------------------------------------
+    // Container element types for the two generic-container catch-all funcs.
+    // ------------------------------------------------------------------------
+
+    // 32-byte trigger-query record. Element of an Array<TriggerQueryRecord,16> indexed by
+    // Array<T,16>::operator[] const (X360 0x8235FBE0); TriggerQueryManager::PreWorldUpdate reads
+    // the two named words at +0x10/+0x14, the remaining bytes have no attested semantics and are
+    // opaque storage closing the 32-byte stride. (No DWARF/leak shape -- recovered purely from the
+    // caller's field reads.)
+    struct TriggerQueryRecord
+    {
+        u8  maHeader[0x10]; // +0x00 leading block (no attested semantics)
+        s32 miField10;      // +0x10 (read by TriggerQueryManager::PreWorldUpdate)
+        s32 miField14;      // +0x14 (read by TriggerQueryManager::PreWorldUpdate)
+        u8  maTail[0x20 - 0x18]; // +0x18 pad to the 32-byte stride
+    };
+
+    // 12-byte GUI-interface event. Element of a CgsModule::BaseEventQueue<GuiInterfaceEvent>
+    // indexed by BaseEventQueue<T>::GetEvent(s32) const (X360 0x823AC338), drained by
+    // BrnGameModule::TranslateGuiInterfaceToGuiEvents. No DWARF/leak shape -- only the 12-byte
+    // stride is X360-attested (the accessor's `12*a2 + *a1`), so the three words are opaque storage.
+    struct GuiInterfaceEvent
+    {
+        u32 muWord00; // +0x00
+        u32 muWord04; // +0x04
+        u32 muWord08; // +0x08
+    };
+
+    // ========================================================================
     // PreWorldInputBuffer  (DWARF BrnGameStateModuleIO.h:90)
     // ========================================================================
     struct PreWorldInputBuffer : public CgsModule::IOBuffer
@@ -178,6 +242,10 @@ namespace GameStateModuleIO
         TakedownEventInputQueueType*          GetTakedownEventInputQueue();
         // X360 0x8231D020 (read-lock; "Not locked for reading", line 149)
         const NetworkPlayerResultsInterface*  GetNetworkPlayerResultsInterface() const;
+        // X360 0x8231CED0 (read-lock; "Not locked for reading", line 140) -- read-side accessor for
+        // the network-to-game-state input interface (this+0x7B0). class:BrnGameState catch-all TU;
+        // BurnoutSkillzManager::PreWorldUpdate reads it read-locked.
+        const NetworkToGameStateInterface*    GetNetworkToGameStateInterface() const;
 
         // ---- this TU's 5 functions ----
         // X360 0x8231CE28 (read-lock; "Not locked for reading", line 133) -- read-side accessor for
@@ -199,7 +267,9 @@ namespace GameStateModuleIO
         TimerStatusInterface mTimerStatusInterface;                         // @ +0x0004 (0x30 bytes)
         ControllerInput      mControllerInput;                              // @ +0x0034 (0x18 bytes)
         u8  mGameEventQueueStorage[0x660 - 0x4C];                       // GameEventQueue   @ +0x004C
-        u8  mTakedownEventInputQueueStorage[0x2CC8 - 0x660];           // TakedownEventQueue@ +0x0660
+        u8  mTakedownEventInputQueueStorage[0x7B0 - 0x660];            // TakedownEventQueue@ +0x0660
+        NetworkToGameStateInterface mNetworkToGameStateInterface;      // @ +0x07B0 (named opaque)
+        u8  maPadToPlayerStatus[0x2CC8 - (0x7B0 + sizeof(NetworkToGameStateInterface))]; // -> +0x2CC8
         BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface mPlayerStatusInterface; // @ +0x2CC8
         u8  maPadToNetworkResults[0x36B8 - (0x2CC8 + sizeof(BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface))]; // -> +0x36B8
         NetworkPlayerResultsInterface mNetworkPlayerResultsInterface;  // @ +0x36B8 (PlayerResultsInterface, 224B)
@@ -241,9 +311,23 @@ namespace GameStateModuleIO
         bool AppendTrafficTypeResponseQueue(
                 const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>& lSource);
 
+        // X360 0x8231D170 (read-lock; "Not locked for reading", line 198) -- read-side accessor for
+        // the race-car crash-event queue (this+0x10). class:BrnGameState catch-all TU;
+        // ModeManager::ProcessPlayerCrashes reads it read-locked.
+        const RaceCarCrashEventQueue* GetRaceCarCrashEventQueue() const;
+        // X360 0x82362A30 (read-lock; "Not locked for reading", line 207) -- read-side accessor for
+        // the trigger-entity-module output interface (this+0x6E34). TriggerQueryManager::PostWorldUpdate.
+        const TriggerEntityModuleOutputInterface* GetTriggerEntityOutputInterface() const;
+        // X360 0x823B9450 (write-lock; "Not locked for writing", line 208) -- non-const twin of the
+        // above (this+0x6E34). BridgeWorldToGameState writes it write-locked.
+        TriggerEntityModuleOutputInterface*       GetTriggerEntityOutputInterface();
+
     private:
-        u8  maPadToVehicleOutput[0x220 - sizeof(CgsModule::IOBuffer)]; // base end -> 0x0220
-        u8  mVehicleOutputInterfaceStorage[0xA4B0 - 0x220];           // VehicleOutputInterface @ +0x0220
+        u8  maPadToRaceCarCrashEventQueue[0x10 - sizeof(CgsModule::IOBuffer)]; // base end -> 0x0010
+        RaceCarCrashEventQueue mRaceCarCrashEventQueue;               // @ +0x0010 (named opaque -> +0x220)
+        u8  mVehicleOutputInterfaceStorage[0x6E34 - 0x220];          // VehicleOutputInterface @ +0x0220
+        TriggerEntityModuleOutputInterface mTriggerEntityOutputInterface; // @ +0x6E34 (named opaque)
+        u8  mPostVehicleOutputStorage[0xA4B0 - (0x6E34 + sizeof(TriggerEntityModuleOutputInterface))]; // -> +0xA4B0
         u8  mGameEventQueueStorage[0xAAC0 - 0xA4B0];                  // GameEventQueue         @ +0xA4B0
         // Real, complete AICarOutputInterface (BrnAI::AIModuleIO::AICarOutputInterface). sizeof == 0x14E8
         // (== 0xBFA8 - 0xAAC0), 4-aligned, so it occupies exactly the former placeholder span and leaves
@@ -281,6 +365,15 @@ namespace GameStateModuleIO
         const GameStateToGuiInterface*    GetGameStateToGuiInterface() const;
         // X360 0x823630F0 (write-lock; "Not locked for writing", line 311)
         RaceCarRaceDistanceInterface*     GetRaceCarRaceDistanceInterface();
+        // X360 0x82362D78 (write-lock; "Not locked for writing", line 293) -- write-side accessor for
+        // the game-state-to-controller output interface (this+0x43AC). GameStateInviteManager::Update.
+        GameStateToControllerInterface*   GetGameStateToControllerInterface();
+        // X360 0x823B9AE0 (read-lock; "Not locked for reading", line 283) -- read-side accessor for
+        // the trigger-management input interface (this+0x9050). BridgeGameStateToWorld.
+        const TriggerManagementInputInterface* GetTriggerManagementInputInterface() const;
+        // X360 0x8231D758 (write-lock; "Not locked for writing", line 284) -- non-const twin of the
+        // above (this+0x9050). ModeManager::StartGameMode writes it write-locked.
+        TriggerManagementInputInterface*       GetTriggerManagementInputInterface();
 
         // ---- OutputBuffer TU accessors ----
         // X360 0x8231D560 (write-lock; line 269) -- non-const twin of GetResourceRequestInterface()
@@ -323,9 +416,13 @@ namespace GameStateModuleIO
         u8  mResourceRequestInterfaceStorage[0x4024 - 0x3414];            // ResourceRequestInterface     @ +0x3414 (RequestInterface<3072>, 3088B -> +0x4024 = 16420)
         u8  mTimerRequestInterfaceStorage[0x4034 - 0x4024];               // TimerRequestInterface        @ +16420 (16B)
         u8  mFrameRateTypeRequestInterfaceStorage[0x4040 - 0x4034];       // FrameRateTypeRequestInterface@ +16436 (12B)
-        u8  mTakedownEventOutputQueueStorage[0x4450 - 0x4040];            // TakedownEventOutputQueue     @ +0x4040 (16448)
+        u8  mTakedownEventOutputQueueStorage[0x43AC - 0x4040];            // TakedownEventOutputQueue     @ +0x4040 (16448)
+        GameStateToControllerInterface mGameStateToControllerInterface;   // @ +0x43AC (17324, named opaque)
+        u8  maPadToGameStateToGui[0x4450 - (0x43AC + sizeof(GameStateToControllerInterface))]; // -> +0x4450
         u8  mGameStateToGuiInterfaceStorage[0x4840 - 0x4450];             // GameStateToGuiInterface      @ +0x4450 (17488)
-        u8  mGuiEventQueueStorage[173180 - 0x4840];                       // GuiEventQueue                @ +18496 .. +173180
+        u8  mGuiEventQueueStorage[0x9050 - 0x4840];                       // GuiEventQueue                @ +18496 .. +0x9050
+        TriggerManagementInputInterface mTriggerManagementInputInterface; // @ +0x9050 (36944, named opaque)
+        u8  mPostGuiEventQueueStorage[173180 - (0x9050 + sizeof(TriggerManagementInputInterface))]; // -> +173180
         BrnNetwork::EPaybackType meActivePaybackType;                     // +173180
         EActiveRaceCarIndex      meActivePaybackAggressor;                // +173184
         OutputBufferTime         mGameModeElapsedTime;                    // +173188 (8B -> +173196)

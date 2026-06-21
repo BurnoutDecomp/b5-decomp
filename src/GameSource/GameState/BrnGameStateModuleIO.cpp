@@ -132,6 +132,13 @@ const NetworkPlayerResultsInterface* PreWorldInputBuffer::GetNetworkPlayerResult
     return &mNetworkPlayerResultsInterface;
 }
 
+// X360 0x8231CED0 - read-lock accessor for the network-to-game-state input interface (this+0x7B0).
+const NetworkToGameStateInterface* PreWorldInputBuffer::GetNetworkToGameStateInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mNetworkToGameStateInterface;
+}
+
 // =====================  PostWorldInputBuffer  =====================
 
 // X360 0x8231D218 - read-lock accessor for the vehicle output interface (this+0x220).
@@ -187,6 +194,28 @@ bool PostWorldInputBuffer::AppendTrafficTypeResponseQueue(
     return mTrafficTypeResponseQueue.Append(lSource);
 }
 
+// X360 0x8231D170 - read-lock accessor for the race-car crash-event queue (this+0x10).
+const RaceCarCrashEventQueue* PostWorldInputBuffer::GetRaceCarCrashEventQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mRaceCarCrashEventQueue;
+}
+
+// X360 0x82362A30 - read-lock accessor for the trigger-entity-module output interface (this+0x6E34).
+const TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntityOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mTriggerEntityOutputInterface;
+}
+
+// X360 0x823B9450 - write-lock (mutable) twin accessor for the trigger-entity-module output
+// interface (this+0x6E34).
+TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntityOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mTriggerEntityOutputInterface;
+}
+
 // =====================  OutputBuffer (GameStateModuleIO TU)  =====================
 
 // X360 0x8231D4B8 - write-lock accessor for the game-action queue (this+0x04).
@@ -230,6 +259,28 @@ RaceCarRaceDistanceInterface* OutputBuffer::GetRaceCarRaceDistanceInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
     return reinterpret_cast<RaceCarRaceDistanceInterface*>(&mRaceCarRaceDistanceInterfaceStorage);
+}
+
+// X360 0x82362D78 - write-lock accessor for the game-state-to-controller output interface (this+0x43AC).
+GameStateToControllerInterface* OutputBuffer::GetGameStateToControllerInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mGameStateToControllerInterface;
+}
+
+// X360 0x823B9AE0 - read-lock accessor for the trigger-management input interface (this+0x9050).
+const TriggerManagementInputInterface* OutputBuffer::GetTriggerManagementInputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mTriggerManagementInputInterface;
+}
+
+// X360 0x8231D758 - write-lock (mutable) twin accessor for the trigger-management input interface
+// (this+0x9050).
+TriggerManagementInputInterface* OutputBuffer::GetTriggerManagementInputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mTriggerManagementInputInterface;
 }
 
 // =====================  OutputBuffer (OutputBuffer TU)  =====================
