@@ -304,6 +304,15 @@ namespace BrnGameState
     class ScoringSystem
     {
     public:
+        // X360 0x827E0998. Default constructor. The X360 body sets each embedded sub-object's
+        // vtable + its internal -1 sentinels and runs the per-car array element ctors (all of
+        // which are AUTOMATIC in C++ via the embedded members' own constructors) and zero-inits
+        // the four head CgsSystem::Time members (also automatic -- Time's default ctor yields
+        // {0, 0.0f}); the only ScoringSystem-OWNED scalar it explicitly stores is the tail
+        // miUpdateRacePositionsPM = -1 sentinel. All other ScoringSystem scalars are left for the
+        // post-construction ClearData() pass (the X360 ctor does not touch them either).
+        ScoringSystem();                                                            // X360 0x827E0998
+
         // ===== lifecycle / mode hooks (declare-only -- substantial) =====
         void Construct(StuntModeScoring::AchievementManager* lpAchievementManager); // :314 / X360 0x82337FE0
         bool Prepare(CgsMemory::HeapMalloc* lpHeapMalloc);                          // :319 / 0x8232A430
