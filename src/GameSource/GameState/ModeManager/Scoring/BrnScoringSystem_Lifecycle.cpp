@@ -42,6 +42,39 @@ namespace
 }
 
 // ----------------------------------------------------------------------------
+// construction
+// ----------------------------------------------------------------------------
+
+// X360 0x827E0998. Default constructor.
+//
+// The X360 ctor body decomposes into four kinds of store, three of which are AUTOMATIC in clean
+// C++ and so are NOT replayed here:
+//   (1) Embedded sub-object vtable pointers -- ss+0x20 (mCrashModeScoring), ss+0x350
+//       (mStuntModeScoring), ss+0x2620 (mOnlineStuntModeScoring), ss+0x4B74 (mOnlineRaceModeScoring),
+//       ss+0x4BF8 (mOnlineRoadRageScoring), ss+0x4CC0 (mOnlineBurningHomeRunScoring), ss+0x4D44
+//       (mOnlineStuntRunModeScoring). Each is set by that sub-object's OWN constructor; hand-setting
+//       vtable pointers is forbidden and unnecessary.
+//   (2) The -1 sentinels the asm stores at ss+0x29C (668), ss+0x4A90 (19088) and ss+0x4B10 (19216)
+//       all fall INSIDE embedded sub-scorers (the crash scorer @0x20 resp. the road-rage scorer that
+//       precedes mOnlineRaceModeScoring), so they too are set by those sub-objects' ctors.
+//   (3) The four head CgsSystem::Time members (mStartTime/mEndTime/mTotalTime/mTimeRemaining at
+//       ss+0x00/0x08/0x10/0x18) -- the asm zero-stores miSeconds=0 / mfFraction=0.0f for each, which
+//       is exactly what CgsSystem::Time's default ctor produces, so the implicit member init covers it.
+//   (4) The per-car array construction loop (_vector_constructor_iterator_ over maCarData[8] +
+//       maRaceCarPositioningData[8] + maBurnoutSkillzData[8] and the inner arrays) -- automatic via
+//       the array members' element constructors.
+//
+// The SINGLE ScoringSystem-owned scalar the asm explicitly stores is the very last instruction
+// (stw r28(=-1), 0x5D40(r31)): ss+0x5D40 == 23872 == miUpdateRacePositionsPM (proven by the
+// "miUpdateRacePositionsPM >= 0" assert + its `== -1` sentinel test elsewhere in the class). Every
+// other ScoringSystem scalar is left untouched by the ctor -- the post-construction ClearData() pass
+// (run from Construct) seeds them -- so we faithfully leave them unset here as well.
+ScoringSystem::ScoringSystem()
+    : miUpdateRacePositionsPM(-1)   // X360 0x827E0B14: stw r28(=-1), 0x5D40(r31)
+{
+}
+
+// ----------------------------------------------------------------------------
 // lifecycle / mode hooks
 // ----------------------------------------------------------------------------
 

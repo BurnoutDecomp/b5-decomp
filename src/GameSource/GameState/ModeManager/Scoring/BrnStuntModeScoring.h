@@ -36,11 +36,23 @@
 // EMBED-BY-VALUE rule: ScoringSystem names members + calls methods; it does NOT depend on a
 // byte-exact sizeof. NOT byte-verified. Single owner -- grow this slice, do not fork.
 
+#include <cstring>                                            // memcpy / size_t (SetOnlineChainableMultiplierDisplay)
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                   // Vector3, CgsID (typedef u64)
 #include "GameSource/GameState/BrnGameStateTypes.h"           // BrnGameState::EStuntType
+#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT (SetOnlineChainableMultiplierDisplay guards)
 #include "GameShared/GameClasses/Containers/CgsRingBuffer.h"  // CgsContainers::FixedRingBuffer<T,N>
 #include "GameShared/GameClasses/Containers/CgsSet.h"         // Set<T,N>
+
+// PreWorldUpdate's reconciled (X360-proven) signature names the per-frame output-action queue the
+// scorer drains its pending stunt-info HUD event into: CgsModule::VariableEventQueue<13312,16>* (see
+// the PreWorldUpdate reconciliation note below). Forward-declared here (pointer-only in the decl);
+// the full template definition is pulled in by BrnStuntModeScoring_UpdatePass.cpp where AddEvent is
+// actually called.
+namespace CgsModule
+{
+    template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue;
+}
 
 namespace BrnWorld
 {
@@ -58,6 +70,10 @@ namespace BrnGameState
         // Used by pointer only in DealWithStunt / DealWithPowerPark.
         struct WorldStuntAction;
         struct PowerParkResultAction;
+        // Used by pointer only in DealWithInProgressStunt (reconciled signature). The in-progress
+        // stunt-element action the X360 body (0x82321710) dereferences for its convoy-shaped record;
+        // homed lean in BrnGameActions.h (see the DealWithInProgressStunt reconciliation note below).
+        struct OnStuntElementCompleteAction;
     }
 
     // DWARF BrnStuntModeScoring.h:36 -- the achievement-manager member is a pointer to this
@@ -130,6 +146,14 @@ namespace BrnGameState
     // DWARF home BrnStuntModeScoring.h:117. No base class.
     struct StuntModeScoring
     {
+        // ScoringSystem embeds this scorer by value (mStuntModeScoring / mOnlineStuntModeScoring) and
+        // legitimately drives its per-frame pre-world step: ScoringSystem::UpdateOnlineStuntModeScorePreWorld
+        // (X360 0x8234CE48) calls mOnlineStuntModeScoring.PreWorldUpdate(queue) directly (the X360 xref
+        // proves the call). PreWorldUpdate is `protected` (it is normally reached through the per-mode
+        // update driver), so grant ScoringSystem friendship for faithful access WITHOUT changing the
+        // method's signature or section.
+        friend class ScoringSystem;
+
     public:
         // --------------------------------------------------------------------
         // MultiplierOutInfo -- the 24-byte (0x18) output record CalculateMultiplier
@@ -253,6 +277,25 @@ namespace BrnGameState
         bool       WasTimeRecentlyUp();                                                 // :218
 
     protected:
+        // ===== ADDITIVE (flagged) protected accessors for the derived online scorer =====
+        // BrnGameState::StuntModeScoringOnline derives from this class and its store-for-store overrides
+        // (EndCombo/Update/ClearData/BeginCombo) read+write four committed base scalars the base keeps
+        // private: miCurrentScore (+0x10), mfComboScore (+0x20), miComboMultiplier (+0x24) and
+        // mbStuntInProgress (+0x28). Rather than make those data members protected (which would touch the
+        // committed layout / embedder expectations), expose minimal protected accessors that ALIAS them.
+        // Purely additive (no member added/reordered/retyped). FLAG: shared-home grow.
+        s32  GetCurrentScoreInternal() const           { return miCurrentScore; }          // +0x10
+        void SetCurrentScoreInternal(s32 liScore)      { miCurrentScore = liScore; }
+        s32  GetComboScoreAsInt() const                { return static_cast<s32>(mfComboScore); } // (s32)+0x20
+        s32  GetComboMultiplierInternal() const        { return miComboMultiplier; }        // +0x24
+        void SetComboMultiplierInternal(s32 liMult)    { miComboMultiplier = liMult; }
+        bool IsStuntInProgressInternal() const         { return mbStuntInProgress; }        // +0x28
+        // The cached online display score = (s32)mfComboScore * miComboMultiplier + miCurrentScore.
+        s32  ComputeOnlineDisplayScore() const
+        {
+            return GetComboScoreAsInt() * miComboMultiplier + miCurrentScore;
+        }
+
         // --- protected helpers (DECLARE-ONLY) ---
         void       BeginCombo();                                                        // :224
         void       EndCombo();                                                          // :229
@@ -300,10 +343,37 @@ namespace BrnGameState
         s32        BankMultiplier(StuntInfo* lpRecentStunt);                            // X360 0x82312D68 (grown per asm)
         virtual s32 CalculateMultiplier(const StuntInfo* lpStuntInfo,
                                         MultiplierOutInfo* lpMultiplierOutInfo);        // X360 0x82312DE8 (grown per asm; virtual)
-        void       DealWithInProgressStunt(const GameStateModuleIO::WorldStuntAction* lpAction); // X360 0x82321710 (best-effort; mirrors DealWithStunt)
+
+        // RECONCILED signature (was best-effort `void(const WorldStuntAction*)`). The X360 call-site
+        // ModeManager::ProcessEvent (0x82340AB8) proves the real args: r4 = the in-progress
+        // stunt-element action pointer, f1 = the frame delta (f32), r6 = the player's active-race-car
+        // index (GameStateModule::GetPlayerActiveRaceCarIndex, used as a plain s32 in the convoy id
+        // search). IDA's a4(r5) is uninitialised garbage at the call site (never loaded) -> dropped.
+        // The action type is the convoy-shaped OnStuntElementCompleteAction (the action behind
+        // E_ACTION_ON_STUNT_ELEMENT_COMPLETE the body walks at +0x24/+0x44/+0x64), NOT WorldStuntAction.
+        // Player index typed s32 (not EActiveRaceCarIndex) to avoid pulling the race-car-interface
+        // enum into this keystone; the asm compares it as a 32-bit word against the convoy id array.
+        void       DealWithInProgressStunt(const GameStateModuleIO::OnStuntElementCompleteAction* lpAction,
+                                           f32 lfDelta, s32 liPlayerActiveRaceCarIndex);  // X360 0x82321710 (reconciled; call-site 0x82340AB8 proved arg count/types)
         void       UpdateStunts(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar);     // X360 0x82338908 (best-effort; mirrors UpdateAirStunts driver)
-        void       UpdateScores(f32 lfDelta);                                           // X360 0x82338A98 (best-effort; mirrors UpdateBufferedScore)
-        void       PreWorldUpdate(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta);   // X360 0x823446F8 (best-effort)
+
+        // RECONCILED signature (was best-effort `void(f32)`). The X360 body (0x82338A98) gates ALL its
+        // work behind a player-active test that dereferences the output interface (*(a2+10328) ==
+        // GetPlayerActiveRaceCarIndex asserted < count, *(a2+10336) == IsPlayerCarActive); only when
+        // active does it call UpdateCombo/UpdateBufferedScore/UpdateStuntRepetition. The Update
+        // call-site (0x82340BC0) loads r4 = the interface, f1 = delta -> sig carries the interface.
+        // Param ORDER matches the sibling UpdateStunts(f32, interface*) so Update's call site is uniform.
+        void       UpdateScores(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar);     // X360 0x82338A98 (reconciled; call-site 0x82340B40 proved the interface arg)
+
+        // RECONCILED signature (was best-effort `void(const ActiveRaceCarOutputInterface*, f32)`).
+        // The X360 body (0x823446F8) takes NO interface and NO float: r3 = this, r4 = the per-frame
+        // output-action queue (CgsModule::VariableEventQueue<13312,16>*). When mbStuntInfoEventPending
+        // (+0x22BD) is set it packs an 8-byte payload {u32 mRecentStunt.muAwesomeStuntTypes; s16
+        // muFlatSpins; s16 muBarrelRolls} and calls queue->AddEvent(&payload, 21, 8) (asserting the
+        // queue non-null), then clears the flag. Both call-sites (ScoringSystem::
+        // UpdateOnlineStuntModeScorePreWorld 0x8234CE48, ModeManager::PreWorldUpdate 0x823537B8) thread
+        // the queue in r4 -- no interface, no delta.
+        void       PreWorldUpdate(CgsModule::VariableEventQueue<13312, 16>* lpOutputActionQueue);  // X360 0x823446F8 (reconciled; AddEvent-queue arg, no interface/delta)
 
     private:
         // --- data members (DWARF declared order + types) ---
@@ -409,5 +479,39 @@ namespace BrnGameState
         // sibling-mode caller chain (deferred TUs) can consume it by name.
         bool GetStuntInfoEventPending() const    { return mbStuntInfoEventPending; }
         void SetStuntInfoEventPending(bool lbOn) { mbStuntInfoEventPending = lbOn; }
+
+        // ===== Online chainable-multiplier hand-off surface (X360-proven; DWARF-silent) =====
+        //
+        // ScoringSystem::UpdateOnlineStuntModeScorePreWorld (X360 0x8234CE48), after gathering the
+        // per-car chainable-multiplier table, gates BOTH the PreWorldUpdate call AND the table hand-off
+        // behind a flag the X360 build keeps inside this scorer at this+0x2515 (asm 0x8234CF68
+        // lbz 0x2515(this+0x2620 base)), then memcpy's the 132-byte gathered table into this scorer's
+        // internal display buffer at this+0x23F0 (asm 0x8234CF80 addi 0x23F0 / memcpy size 0x84).
+        //
+        // Both slots are DWARF-silent StuntModeScoring internals; model them as additive named members
+        // (this slice is accessed BY NAME, never sized -- no layout assert). The 132-byte display buffer
+        // is taken/handed by raw bytes + size so this header need not pull the CarScoreData /
+        // ChainableMultiplierInfo type in (that lives in BrnGameStateSharedIO.h, which would cycle).
+        // Provisional names (offsets X360-proven); FLAG: re-confirm when this type's full TU lands.
+        bool IsOnlineChainableUpdateSuppressed() const { return mbOnlineChainableUpdateSuppressed; }     // +0x2515
+        void SetOnlineChainableUpdateSuppressed(bool lbSuppressed) { mbOnlineChainableUpdateSuppressed = lbSuppressed; }
+
+        // Receive the gathered chainable-multiplier display table (the X360 memcpy into +0x23F0). Inline
+        // so callers need no out-of-line StuntModeScoring TU; reproduces the byte-for-byte X360 memcpy.
+        static const s32 KI_ONLINE_CHAINABLE_DISPLAY_BYTES = 132; // X360 memcpy size 0x84
+        void SetOnlineChainableMultiplierDisplay(const void* lpData, s32 liSizeInBytes)                  // +0x23F0
+        {
+            CGS_ASSERT(lpData != NULL, "lpData");
+            CGS_ASSERT(liSizeInBytes <= KI_ONLINE_CHAINABLE_DISPLAY_BYTES, "liSizeInBytes <= KI_ONLINE_CHAINABLE_DISPLAY_BYTES");
+            memcpy(maOnlineChainableMultiplierDisplay, lpData, static_cast<size_t>(liSizeInBytes));
+        }
+
+    private:
+        // +0x2515 -- gate flag (X360-proven; DWARF-silent). When set, UpdateOnlineStuntModeScorePreWorld
+        // skips driving PreWorldUpdate + the display copy.
+        bool mbOnlineChainableUpdateSuppressed;
+        // +0x23F0 -- the 132-byte online chainable-multiplier display buffer
+        // (Array<CarScoreData::ChainableMultiplierInfo,8> raw image; modeled as bytes to avoid a header cycle).
+        u8   maOnlineChainableMultiplierDisplay[KI_ONLINE_CHAINABLE_DISPLAY_BYTES];
     };
 }

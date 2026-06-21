@@ -66,11 +66,11 @@ public:
     // by score (disconnected last) and the contesting teams by team-stunt-score, derives a per-team
     // standings rank, then writes each car its online-points (its team's rank, or 0 if disconnected)
     // and its finishing position back into the scoring system + the base position table.
-    // DECLARE-ONLY: BLOCKED -- the gather loop reads the per-car online stunt score at
-    // CarScoreData +0xD4, which has no committed named accessor (it is `maStorageD4[4]` in the
-    // CarScoreData home, BrnGameStateSharedIO.h). Reconstructing the body would require GROWING that
-    // OTHER subsystem's home with a GetOnlineStuntScore() accessor, which is out of this work item's
-    // scope. Lands once CarScoreData exposes the +0xD4 stunt-score field.
+    // BODIED in BrnOnlineStuntRunModeScoring.cpp. Reads the per-car online stunt score through
+    // CarScoreData::GetOnlineStuntScore() (+0xD4, now carved into the CarScoreData home). VTABLE
+    // override of base slot 6 (BaseOnlineModeScoring::UpdatePlayerPoints); signature matches the base
+    // exactly (ScoringSystem*, s32). The X360 leading `_DWORD* result` is the unused return-register
+    // artifact -- the function is void.
     virtual void UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s32 liNumberOfCars);
 
     // X360 BrnOnlineStuntRunModeScoring.cpp WriteDataToOutput. Declared-only.
@@ -85,8 +85,8 @@ public:
 
     // X360 @ 0x82321D20. Sums the per-car online stunt scores of every active race car on liTeam.
     // The ScoringSystem keystone's WriteDataToOutput calls this, as do GetWinnerTeam and
-    // UpdatePlayerPoints. DECLARE-ONLY: BLOCKED on the same CarScoreData +0xD4 stunt-score accessor as
-    // UpdatePlayerPoints (the accumulator `v5 += *(CarData + 212)` reads CarScoreData +0xD4).
+    // UpdatePlayerPoints. BODIED in BrnOnlineStuntRunModeScoring.cpp: the accumulator
+    // `v5 += *(CarData + 212)` reads CarScoreData +0xD4 via CarScoreData::GetOnlineStuntScore().
     s32 GetTeamScore(s32 liTeam, const ScoringSystem* lpScoringSystem) const;
 
     // X360 @ 0x8232F950 (Hex-Rays truncated the name to "GetWinnerTea"). Returns the team with the

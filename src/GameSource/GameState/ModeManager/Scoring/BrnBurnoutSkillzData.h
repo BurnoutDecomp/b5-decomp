@@ -34,7 +34,15 @@ struct BurnoutSkillzData
         E_BURNOUT_SKILL_TOTAL                   = 9,
         E_BURNOUT_SKILL_ROAD_RULE_TIME          = 10,
         E_BURNOUT_SKILL_ROAD_RULE_CRASH         = 11,
-        E_BURNOUT_SKILL_COUNT                   = 12,
+        // GROWN (FLAG): the X360 build (Clear @0x8230FBF0 loop bound, GetSkillAccuracy
+        // @0x8230FCD8 + SetBurnoutSkill @0x8231C9A8 range guards) all use E_BURNOUT_SKILL_COUNT
+        // == 14, two more than the Feb-2007 PS3 DWARF's 12. The asm OVERRIDES DWARF, so the
+        // count grows to 14 and the accumulator array to [14]. The DWARF did not name these two
+        // extra skill slots; they are added additively as placeholders (existing enumerators are
+        // left in place, never reordered/retyped). If the leak later names them, rename here.
+        E_BURNOUT_SKILL_EXTRA_12                = 12,
+        E_BURNOUT_SKILL_EXTRA_13                = 13,
+        E_BURNOUT_SKILL_COUNT                   = 14,
     };
 
     // Declare-only -- bodies live in this type's own TU. Signatures verbatim from DWARF
@@ -45,7 +53,14 @@ struct BurnoutSkillzData
     f32  GetSkillAccuracy(EBurnoutSkillType eSkill);           // BrnBurnoutSkillzData.h:101
 
 private:
-    f32 mafBurnoutSkilz[12]; // BrnBurnoutSkillzData.h:104 (EBurnoutSkillType count == 12)
+    // GROWN (FLAG): array sized to E_BURNOUT_SKILL_COUNT == 14 to match the X360 asm.
+    // Clear (0x8230FBF0) zeroes 14 contiguous f32 accumulators; SetBurnoutSkill (0x8231C9A8)
+    // stores at &mafBurnoutSkilz[leSkill] for leSkill in [0,14). The Feb-2007 PS3 DWARF said
+    // [12]; the X360 asm is authoritative for the project, so this grows additively to [14].
+    // Growing this inner array also widens the by-value embedder ScoringSystem::maBurnoutSkillzData[8];
+    // that is a SEMANTIC slice (named members + order/types), not a byte-exact sizeof, so the
+    // grow is in-policy. FLAG for the consolidator.
+    f32 mafBurnoutSkilz[14]; // BrnBurnoutSkillzData.h:104 (EBurnoutSkillType count == 14, X360)
 };
 
 // Postfix increment used to iterate EBurnoutSkillType (BrnBurnoutSkillzData.h:107).

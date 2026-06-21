@@ -38,6 +38,17 @@
 //                                             are provisional (the run is gated on mfTimeInAir, which
 //                                             reads more like an air/jump-distance run than a drift);
 //                                             reproduced verbatim against the committed names, not retyped.]
+//   SetNetworkStuntMultiplier  (0x8231FC50)  [NEW -- CarScoreData grown with the chainable-trio
+//                                             accessors (Get/SetChainableScore +0xC8, Get/Set
+//                                             CurrentChainableMultiplier +0xD0, Get/SetChainActive +0xD8)]
+//   PlayerPerformedBarrelRolls (0x823634D0)  [NEW -- CarScoreData grown with the carved per-car
+//                                             barrel-roll tally miBarrelRollCount (+0xFC) + AddBarrelRolls]
+//   UpdateOnlineStuntModeScorePreWorld (0x8234CE48) [NEW -- per-car chainable expire/gather loop into a
+//                                             local Array<CarScoreData::ChainableMultiplierInfo,8>, then
+//                                             (unless suppressed) drives mOnlineStuntModeScoring.
+//                                             PreWorldUpdate(queue) (ScoringSystem friended into the
+//                                             scorer for the protected call) + hands the 132-byte table to
+//                                             the scorer's display buffer]
 //
 // (UpdateCrashModeScore / UpdateStuntAttackModeScore / UpdateRoadRageModeScore /
 //  SetRoadRageDetails at header lines 426-431 carry only a ':NNN' DWARF line and
@@ -541,6 +552,176 @@ namespace BrnGameState
                     }
                 }
             }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // SetPlayerStuntScore -- X360 0x8231F0C8
+    // Store the per-car online stunt score (CarScoreData +0xD4) for the car at the
+    // given active-race-car slot. No-op when the slot has no car record. (The X360
+    // body re-runs the GetCarData lookup after the null guard; reproduced once here.)
+    // ------------------------------------------------------------------------
+    void ScoringSystem::SetPlayerStuntScore(EActiveRaceCarIndex leRaceCarIndex, s32 liScore)
+    {
+        CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
+                   leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+        CarData* lpCar = GetCarData(leRaceCarIndex);
+        if (lpCar)
+        {
+            lpCar->GetScoreData()->SetOnlineStuntScore(liScore);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // SetNetworkStuntScore -- X360 0x8231FC20
+    // Store the per-car online stunt score (CarScoreData +0xD4) for the car owned by
+    // the given network player. The lookup (GetCarData(NetworkPlayerID), X360
+    // sub_8231DD88) asserts a valid id and never returns NULL on the live path; the
+    // X360 body writes the score unconditionally on the returned record.
+    // ------------------------------------------------------------------------
+    void ScoringSystem::SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lID, s32 liScore)
+    {
+        CarData* lpCar = GetCarData(lID);
+        lpCar->GetScoreData()->SetOnlineStuntScore(liScore);
+    }
+
+    // ------------------------------------------------------------------------
+    // DealWithStunt -- X360 0x823384F0
+    // Forward a completed world-stunt action to the active stunt-mode scorer: the
+    // ONLINE scorer (mOnlineStuntModeScoring, X360 ss+0x2620) when lbOnline is set,
+    // otherwise the offline scorer (mStuntModeScoring, ss+0x350). The keystone is a
+    // thin selector around StuntModeScoring::DealWithStunt; the small WorldStuntAction
+    // the X360 ABI splits across r4/r5 is modeled by pointer in the scorer's home.
+    // ------------------------------------------------------------------------
+    void ScoringSystem::DealWithStunt(const GameStateModuleIO::WorldStuntAction* lpAction, bool lbOnline)
+    {
+        StuntModeScoring* lpStuntModeScoring = lbOnline ? &mOnlineStuntModeScoring : &mStuntModeScoring;
+        CGS_ASSERT(lpStuntModeScoring != NULL, "lpStuntModeScoring");
+
+        lpStuntModeScoring->DealWithStunt(lpAction);
+    }
+
+    // ------------------------------------------------------------------------
+    // SetNetworkStuntMultiplier -- X360 0x8231FC50
+    // ------------------------------------------------------------------------
+    // Arm the per-car "chainable stunt multiplier" trio for the car owned by the given
+    // network player. The lookup (GetCarData(NetworkPlayerID), X360 sub_8231DD88) returns
+    // NULL when no such car is registered; only on a hit does the X360 body write:
+    //   miChainableScore (+0xC8) = liChainableScore   (asm std r30,0xC8 -- r30 == a4)
+    //   miCurrentChainableMultiplier (+0xD0) = liMultiplier  (asm stw r31,0xD0 -- r31 == a3)
+    //   mbChainActive (+0xD8) = 1                      (asm stb 1,0xD8)
+    // Arg order reconciled from the register setup: r5(a3) is the multiplier (->+0xD0),
+    // r6(a4) is the chainable score (->+0xC8); the declared signature names them
+    // (lID, liMultiplier, liChainableScore). The +0xC8 store is a 64-bit `std` whose low
+    // word is the chainable score; the high word (miChainableField, +0xCC) is the
+    // store's incidental tail and is not a meaningful value -- only the named s32 score is
+    // reproduced here.
+    void ScoringSystem::SetNetworkStuntMultiplier(BrnNetwork::NetworkPlayerID lID, s32 liMultiplier, s32 liChainableScore)
+    {
+        CarData* lpCar = GetCarData(lID);
+        if (lpCar)
+        {
+            GameStateModuleIO::CarScoreData* lpScore = lpCar->GetScoreData();
+            lpScore->SetChainableScore(liChainableScore);
+            lpScore->SetCurrentChainableMultiplier(liMultiplier);
+            lpScore->SetChainActive(true);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // PlayerPerformedBarrelRolls -- X360 0x823634D0
+    // ------------------------------------------------------------------------
+    // Add liCount to the per-car barrel-roll tally (CarScoreData +0xFC) for the car at the
+    // given active-race-car slot. The X360 body asserts the index is in
+    // (E_ACTIVE_RACE_CAR_INDEX_INVALID, E_ACTIVE_RACE_CAR_INDEX_COUNT), looks the car up via
+    // GetCarData(EActiveRaceCarIndex) (sub_8231DCD0) and, on a hit, does
+    // *(record + 0xFC) += liCount (asm lwz/add/stw 0xFC).
+    void ScoringSystem::PlayerPerformedBarrelRolls(EActiveRaceCarIndex leRaceCarIndex, s32 liCount)
+    {
+        CGS_ASSERT(leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                   leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+
+        CarData* lpCar = GetCarData(leRaceCarIndex);
+        if (lpCar)
+        {
+            lpCar->GetScoreData()->AddBarrelRolls(liCount);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // UpdateOnlineStuntModeScorePreWorld -- X360 0x8234CE48
+    // ------------------------------------------------------------------------
+    // Per-frame online stunt pre-world step. a2 is the current time in ms; a3 is the per-frame
+    // output-action queue (CgsModule::VariableEventQueue<13312,16>*). The IDA garbage middle arg
+    // is dropped (the X360 ABI threads time in r4, queue in r5).
+    //
+    // Phase 1 -- per active-race-car slot loop (0..7, X360 asserts the running index <= 8):
+    //   For each slot's CarData (GetCarData(slot), sub_8231DCD0):
+    //     * EXPIRE: when the chain is active (mbChainActive, +0xD8) and it has gone stale --
+    //       (current time - 300ms) > miCurrentChainableMultiplier (+0xD0) -- clear the whole
+    //       chainable group: miChainableScore (+0xC8), miChainableField (+0xCC),
+    //       miCurrentChainableMultiplier (+0xD0) and mbChainActive (+0xD8) all to 0.
+    //       (The X360 clears +0xC8 with a word store and +0xCC..+0xD0 with two halfword stores;
+    //       reproduced here as the named-field clears.)
+    //     * GATHER: when the chain is (still) active and not yet at the cutoff
+    //       (miCurrentChainableMultiplier < current time), append a ChainableMultiplierInfo to a
+    //       local Array<...,8> (X360 Array::AddNew, sub_823177E8 -- asserts the element ptr) filled
+    //       with { miChainableScore (+0xC8), miChainableField (+0xCC), the slot index, and
+    //       miCurrentChainableMultiplier (+0xD0) }.
+    //
+    // Phase 2 -- unless the online scorer suppresses it (X360 lbz this+0x2620+0x2515): drive the
+    //   online stunt scorer's PreWorldUpdate (mOnlineStuntModeScoring.PreWorldUpdate(queue)) and hand
+    //   the gathered 132-byte table to its display buffer (X360 memcpy into +0x2620+0x23F0).
+    //
+    // The X360 "result pointer" return is the void method's result-register artifact and is dropped.
+    void ScoringSystem::UpdateOnlineStuntModeScorePreWorld(s32 liCurrentTimeMs,
+                                                           CgsModule::VariableEventQueue<13312, 16>* lpOutputActionQueue)
+    {
+        Array<GameStateModuleIO::CarScoreData::ChainableMultiplierInfo, 8> laChainableMultipliers;
+        laChainableMultipliers.Clear();
+
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            if (lpCar)
+            {
+                GameStateModuleIO::CarScoreData* lpScore = lpCar->GetScoreData();
+
+                // EXPIRE a stale chain (current time - 300ms past the recorded multiplier slot).
+                if (lpScore->GetChainActive() &&
+                    (liCurrentTimeMs - 300) > lpScore->GetCurrentChainableMultiplier())
+                {
+                    lpScore->SetChainableScore(0);
+                    lpScore->SetChainableField(0);
+                    lpScore->SetCurrentChainableMultiplier(0);
+                    lpScore->SetChainActive(false);
+                }
+
+                // GATHER an active chain that has not reached its cutoff time.
+                if (lpScore->GetChainActive() &&
+                    lpScore->GetCurrentChainableMultiplier() < liCurrentTimeMs)
+                {
+                    GameStateModuleIO::CarScoreData::ChainableMultiplierInfo* lpInfo =
+                        laChainableMultipliers.AddNew();
+                    CGS_ASSERT(lpInfo != NULL, "lpChainableMultiplierInfo");
+
+                    lpInfo->miChainableScore = lpScore->GetChainableScore();
+                    lpInfo->miChainableField = lpScore->GetChainableField();
+                    lpInfo->miSuppliedValue  = liSlot;
+                    lpInfo->miMultiplier     = lpScore->GetCurrentChainableMultiplier();
+                }
+            }
+        }
+
+        if (!mOnlineStuntModeScoring.IsOnlineChainableUpdateSuppressed())
+        {
+            mOnlineStuntModeScoring.PreWorldUpdate(lpOutputActionQueue);
+            mOnlineStuntModeScoring.SetOnlineChainableMultiplierDisplay(
+                &laChainableMultipliers,
+                StuntModeScoring::KI_ONLINE_CHAINABLE_DISPLAY_BYTES);
         }
     }
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<RecentCrash,64> maRecentCrashes
 
 // Minimal element-type home for the fixed-capacity
 // Array<BrnGameState::CrashModeScoring::RecentCrash, 64> leaf instantiation (the IsFull/
@@ -20,6 +21,10 @@ class CrashScoreDebugComponent;
 
 struct CrashModeScoring
 {
+    // Fixed capacity of the recent-hit-cars set (BrnCrashModeScoring.h:44). 64 * 8-byte stride
+    // == 0x200 == the count-word offset within the Array<> instantiation.
+    static const u32 KI_MAX_RECENTLY_HIT_CARS = 64;
+
     struct RecentCrash
     {
         u16 muTrafficCarIndex; // 0x00  BrnCrashModeScoring.h:202
@@ -67,13 +72,30 @@ struct CrashModeScoring
     s32  GetOverallScore() const;           // BrnCrashModeScoring.h:168
     s32  GetNumCarsCrashed() const;         // BrnCrashModeScoring.h:177
 
+    // --- slice grown for this type's own TU (BrnCrashModeScoring.cpp) ---
+    // GetRecentCrash linearly scans the live recent-hit-cars set for the element whose
+    // muTrafficCarIndex matches luTrafficCarIndex, returning a mutable pointer to it (or
+    // null if absent). The X360 body (0x8232BEF8) walks maRecentCrashes via the bounds-
+    // checked Array<>::operator[] (the explicit instantiation in Array_RecentCrash_64.cpp).
+    // Called by DealWithHitTrafficCar / DealWithScoreForVehicleClass.
+    RecentCrash* GetRecentCrash(u16 luTrafficCarIndex);   // BrnCrashModeScoring.h (X360 0x8232BEF8)
+
     // NOMINAL reserved storage. The committed home above names only the handful of members the debug
     // overlay reads by hand; the by-value embed in ScoringSystem needs a non-trivial footprint, so the
     // remaining ~0x320 bytes of live-scoring state (the CrashScoreDebugComponent sub-object, the
     // FixedRingBuffer/Array sets, the timers, the per-class crash counters, the air-time accumulators,
     // ...) are reserved here as opaque bytes. NOT byte-verified -- the real layout/order lands with the
     // BrnCrashModeScoring.cpp TU (DWARF members run BrnCrashModeScoring.h:215-258).
-    u8 maReserved[0x320]; // NOMINAL -- full layout deferred to this type's own TU
+    //
+    // The recent-hit-cars set IS now named (GetRecentCrash needs it): the X360 body reaches it at
+    // this+0x7C and its count word at this+0x7C+0x200 == this+0x27C, so the opaque reserve is split
+    // around it -- a 0x7C-byte head, then maRecentCrashes (64*8 elements + the trailing count word ==
+    // 0x204 bytes), then the 0xA0-byte tail. Total footprint preserved at 0x320. Offsets/order around
+    // the array remain NOMINAL until the full BrnCrashModeScoring.cpp layout lands; only maRecentCrashes
+    // is anchored.
+    u8 maReservedHead[0x7C];                  // NOMINAL -- members before the recent-hit set (BrnCrashModeScoring.h:215..)
+    Array<RecentCrash, KI_MAX_RECENTLY_HIT_CARS> maRecentCrashes; // +0x7C  the live recent-hit-cars set
+    u8 maReservedTail[0x320 - 0x7C - 0x204];  // NOMINAL -- remaining live-scoring state past the recent-hit set
 
     friend class CrashScoreDebugComponent;
 };

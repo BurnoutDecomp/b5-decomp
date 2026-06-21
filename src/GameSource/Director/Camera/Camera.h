@@ -65,6 +65,12 @@ namespace BrnDirector
             // validated-transform pointer that SetCameraMatrix forwards (X360 asm),
             // not the DWARF's PS3-internal `void`.
             rw::math::vpu::Matrix44Affine* ValidateTransformWithDebugInfo();
+
+            // FLAG: minimal-slice decls used by the ICE movie-player family (build the
+            // camera / reset it to its empty state). DECLARATION-ONLY -- bodies land with
+            // this type's own TU; the per-TU `cl /c` gate does not link.
+            void Construct();
+            void Clear();
         };
 
         // Pin the two X360-proven offsets.

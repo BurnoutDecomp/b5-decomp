@@ -1,6 +1,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
 
 template <typename T>
 struct Pointer32
@@ -29,57 +30,6 @@ struct RoadRulesRecvData
 namespace CgsNetwork
 {
 static const BrnNetwork::RoadRulesRecvData::NetworkPlayerID K_INVALID_PLAYER_ID = -1;
-}
-
-namespace CgsNumeric
-{
-namespace
-{
-const u32 KU_FLOAT_BUFFER_SIZE = 8;
-const u32 KU_IEEE_754_REPRESENTATION_FLOAT_ONE = 0x3F800000;
-const u64 KU_RANDOM_DEFAULT_SEED = 0xC87CD8C91AD0891Bull;
-const u64 KU_RANDOM_MULTIPLIER = 0x4C957F2D5851F42Dull;
-}
-
-class alignas(8) Random
-{
-public:
-    void Construct()
-    {
-        muSeed = KU_RANDOM_DEFAULT_SEED;
-        muOldestBufferIndex = 0;
-        mauIntegerBuffer[0] = KU_IEEE_754_REPRESENTATION_FLOAT_ONE;
-
-        for (u32 luIndex = 1; luIndex < KU_FLOAT_BUFFER_SIZE; ++luIndex)
-            AddRandomFloatToBuffer();
-
-        muOldestBufferIndex = (muOldestBufferIndex + 1) & (KU_FLOAT_BUFFER_SIZE - 1);
-    }
-
-private:
-    union
-    {
-        f32 mafFloatBuffer[KU_FLOAT_BUFFER_SIZE];
-        u32 mauIntegerBuffer[KU_FLOAT_BUFFER_SIZE];
-    };
-    u64 muSeed;
-    u32 muOldestBufferIndex;
-
-    static u32 ConvertUnsignedFixed32ToFloatRepresentation(u32 lu32Random)
-    {
-        return KU_IEEE_754_REPRESENTATION_FLOAT_ONE | (lu32Random >> 9);
-    }
-
-    void AddRandomFloatToBuffer()
-    {
-        const u32 luRandomFloatBits = ConvertUnsignedFixed32ToFloatRepresentation(static_cast<u32>(muSeed >> 32));
-        muSeed = muSeed * KU_RANDOM_MULTIPLIER + 1;
-        muOldestBufferIndex = (muOldestBufferIndex + 1) & (KU_FLOAT_BUFFER_SIZE - 1);
-        mauIntegerBuffer[muOldestBufferIndex] = luRandomFloatBits;
-    }
-};
-
-static_assert(sizeof(Random) == 0x30, "Random layout drift");
 }
 
 namespace BrnGameState

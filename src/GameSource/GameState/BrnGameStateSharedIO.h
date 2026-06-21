@@ -55,6 +55,23 @@ namespace BrnGameState
             E_MODE_COUNT                   = 17,
         };
 
+        // ADDITIVE GROW (BrnMugshotManager TU): the photo/"mugshot" image-type enum. DWARF
+        // BrnGameStateSharedIO.h:529 (== BrnGameStateImageManagerBase.h:1153). The MugshotManager
+        // stores E_IMAGE_TYPE_COUNT (6) as the cleared meCaptureMugshotType / meShowMugshotType and
+        // uses the lower values to tag each kind of capture it requests. FLAG: declared here (the
+        // SharedIO enum home) for the MugshotManager TU; the ImageManager TU shares the same values.
+        enum EImageType
+        {
+            E_IMAGE_TYPE_START                  = 0,
+            E_IMAGE_TYPE_FREEBURN_MUGSHOT       = 0,
+            E_IMAGE_TYPE_MUGSHOT                = 1,
+            E_IMAGE_TYPE_PAYBACK_MUGSHOT        = 2,
+            E_IMAGE_TYPE_ROAD_RULE_TIME_MUGSHOT = 3,
+            E_IMAGE_TYPE_ROAD_RULE_CRASH_MUGSHOT = 4,
+            E_IMAGE_TYPE_VICTORY_MUGSHOT        = 5,
+            E_IMAGE_TYPE_COUNT                  = 6,
+        };
+
         // Drives the per-mode state machine (GameMode's nested GameModeState set).
         // DWARF: BrnGameStateSharedIO.h:93. Slot 1 (E_GMS_INTRO) is IntroState's state.
         enum EGameModeState
@@ -167,12 +184,18 @@ namespace BrnGameState
             void Clear();   // X360 0x82356EA0
         };
 
-        // DWARF BrnGameStateSharedIO.h:872. The nested per-event record of the game-mode event
-        // interface. Minimal slice: only Event + its Construct are owned here; the parent
-        // SpecificGameModeEventInterface (Array<Event,175>) lands with its own TU.
+        // DWARF BrnGameStateSharedIO.h:872. The per-mode "specific game-mode event" interface: a
+        // fixed Array<Event,175> of per-event records keyed by event id. The nested Event record
+        // holds the event's landmark set + traffic-light trigger id + the event id. Grown by the
+        // SpecificGameModeEventInterface TU (AddEvent @ 0x82361500, Event::GetLandmark @ 0x8240E7E0;
+        // the X360 emits the per-element push as the generic Array<Event,175>::Append @ 0x8235BA28).
         class SpecificGameModeEventInterface
         {
         public:
+            // maEvents capacity. The X360 over-capacity asserts compare the live length against
+            // 0xAF == 175 (BrnGameStateSharedIO.h:1976 + the inlined CgsArray.h:226 capacity).
+            static const u32 KU_MAX_EVENTS = 175;
+
             class Event
             {
             public:
@@ -181,12 +204,100 @@ namespace BrnGameState
                 void Construct(s32 liEventID, u32 luTrafficLightTriggerId,
                                LandmarkIndex* lpaLandmarkIndices, s32 liNumLandmarks); // X360 0x82354340
 
+                // X360 0x8240E7E0. Indexed accessor for one of this event's landmark indices:
+                // returns maLandmarkIndices[liIndex] by value (sizeof(LandmarkIndex)==2). Bounds-
+                // asserts liIndex in [0, miNumLandmarks) (BrnGameStateSharedIO.h:1929/1930); the
+                // X360 assert text streams the count as "GetNumLandmarks()" (== miNumLandmarks).
+                LandmarkIndex GetLandmark(s32 liIndex) const; // X360 0x8240E7E0
+
+                // Inline read of the event id (matched by AddEvent's linear scan) and the landmark
+                // count (no standalone X360 symbol; inlined at the call/assert sites).
+                s32 GetEventID() const      { return miEventID; }
+                s32 GetNumLandmarks() const { return miNumLandmarks; }
+
             private:
                 LandmarkIndex maLandmarkIndices[KI_MAX_LANDMARKS_IN_MODE]; // 0x00
                 u32           mTrafficLightTriggerId;                      // 0x20 (LightTriggerId)
                 s32           miNumLandmarks;                              // 0x24
                 s32           miEventID;                                   // 0x28
             };
+
+            // X360 0x82361500. Find the event whose id == liEventID (linear scan of maEvents by
+            // Event::GetEventID); if found, return that record. Otherwise Construct a fresh Event
+            // (from the supplied trigger id + landmark array) and Append it, returning the new
+            // record. The X360 asserts the over-capacity guard
+            // (maEvents.GetLength() < maEvents.GetCapacity(), BrnGameStateSharedIO.h:1976) before
+            // the Append; the push itself is the generic Array<Event,175>::Append (0x8235BA28).
+            Event* AddEvent(s32 liEventID, u32 luTrafficLightTriggerId,
+                            LandmarkIndex* lpaLandmarkIndices, s32 liNumLandmarks);
+
+        private:
+            Array<Event, KU_MAX_EVENTS> maEvents; // +0x00 (Event stride 44; miCount @ +0x1E14 == 175*44)
+        };
+
+        // DWARF/X360 BrnGameStateSharedIO.h:1700-1728. The per-mode "set up all event starts"
+        // interface: a fixed Array<EventStart,175> of per-event start records keyed by an event
+        // index. Direct twin of SpecificGameModeEventInterface above (same 175 capacity, same
+        // linear-scan-then-Append AddXxx shape) but the EventStart element is 48 bytes wide.
+        // Grown by the SetUpAllEventStartsInterface TU:
+        //   AddEventStart        X360 0x82361398 (BrnGameStateSharedIO.h:1700)
+        //   the per-element push X360 0x8235B7D8 (the inlined generic Array<EventStart,175>::Append;
+        //                        Hex-Rays truncated the symbol to "...::EventSta")
+        // The X360 over-capacity guard compares the live length against 0xAF == 175
+        // (BrnGameStateSharedIO.h:1728, inlined CgsArray.h:226).
+        class SetUpAllEventStartsInterface
+        {
+        public:
+            // maEventStarts capacity. The X360 over-capacity asserts compare the live length
+            // against 0xAF == 175 (BrnGameStateSharedIO.h:1728 + the inlined CgsArray.h:226).
+            static const u32 KU_MAX_EVENT_STARTS = 175;
+
+            // One per-event start record. 48-byte stride (X360-authoritative: AddEventStart builds
+            // the record then the append copies 6 QWORDs == 48 bytes into &maElements[miCount], and
+            // 175 * 48 == 0x20D0 == the miCount offset). Field roles recovered from the X360 store
+            // map at the EventSta call setup (0x823614C4..): a leading 16-byte block, then five
+            // scalar words the caller passes. The two words the AddEventStart scan/assert touch are
+            // named by role (the +0x14 word is the scanned event index, the +0x18 word is the event
+            // id matched by "luEventID == maEventStarts.GetItem(...).GetEventID()"); the remaining
+            // caller-supplied words have no attested semantics and are spelled by their source arg.
+            class EventStart
+            {
+            public:
+                // Inline read of the event id (matched by AddEventStart's assert) and the event
+                // index (matched by AddEventStart's linear scan). No standalone X360 symbols --
+                // both are inlined at the AddEventStart compare/assert sites.
+                s32 GetEventIndex() const { return miEventIndex; }
+                s32 GetEventID() const    { return miEventID; }
+
+            private:
+                // AddEventStart builds a record field-by-field from the caller's args.
+                friend class SetUpAllEventStartsInterface;
+
+                u8  maLeadingBlock[16]; // +0x00  16-byte block from the caller's vector arg (v1)
+                s32 miWord10;           // +0x10  caller arg a4 (r6)
+                s32 miEventIndex;       // +0x14  caller arg a2 (r4); AddEventStart's scan key
+                s32 miEventID;          // +0x18  caller arg a3 (r5); GetEventID()
+                s32 miWord1C;           // +0x1C  caller arg a5 (r7)
+                s16 miWord20;           // +0x20  caller arg a6 (r8, __int16)
+                u8  maPad0x22[0x30 - 0x22]; // pad the record to its 0x30 (48-byte) stride
+            };
+
+            // X360 0x82361398. Find the EventStart whose event index == liEventIndex (linear scan
+            // of maEventStarts by EventStart::GetEventIndex); if found, assert its event id matches
+            // liEventID and return that record. Otherwise assert the over-capacity guard
+            // (maEventStarts.GetLength() < maEventStarts.GetCapacity(), :1728), build a fresh
+            // EventStart from the supplied fields and Append it, returning the new record.
+            EventStart* AddEventStart(const u8* lpLeadingBlock, s32 liEventIndex, s32 liEventID,
+                                      s32 liWord10, s32 liWord1C, s16 liWord20);
+
+        private:
+            // X360 0x8235B7D8 (Hex-Rays "...::EventSta"): the inlined generic
+            // Array<EventStart,175>::Append. Asserts the array was Construct/Clear'd and has room
+            // (the streamed "Array container out of space" message, CgsArray.h:225/226), copies the
+            // 48-byte record into the next slot and bumps the count. Returns the newly added record.
+            EventStart* AppendEventStart(const EventStart& lrEventStart);
+
+            Array<EventStart, KU_MAX_EVENT_STARTS> maEventStarts; // +0x00 (EventStart stride 48; miCount @ +0x20D0 == 175*48)
         };
 
         // DWARF BrnGameStateSharedIO.h:936. The "every player" freeburn completion-status block:
@@ -516,6 +627,38 @@ namespace BrnGameState
             s32             GetOnlineStuntScore() const            { return miOnlineStuntScore; }         // +0xD4
             void            SetOnlineStuntScore(s32 liScore)       { miOnlineStuntScore = liScore; }      // +0xD4
 
+            // ===== Chainable-stunt-multiplier trio accessors (grown for ScoringSystem) =====
+            //
+            // The "chainable stunt multiplier" bookkeeping is the per-car miChainableScore (+0xC8) /
+            // miChainableField (+0xCC) / miCurrentChainableMultiplier (+0xD0) / mbChainActive (+0xD8)
+            // group GetChainableStuntMultipliers (0x8231C170) reads. ScoringSystem also WRITES this
+            // group from two paths whose bodies live in BrnScoringSystem_UpdateB.cpp:
+            //   * SetNetworkStuntMultiplier (0x8231FC50): std 0xC8 (miChainableScore), stw 0xD0
+            //     (miCurrentChainableMultiplier), stb 1,0xD8 (mbChainActive=1).
+            //   * UpdateOnlineStuntModeScorePreWorld (0x8234CE48): the per-car expire path clears the
+            //     trio + miChainableField (stw 0,0xC8 / sth 0,0xCC / sth 0,0xCE / stw 0,0xD0 / stb 0,0xD8),
+            //     and the gather path reads all four into a ChainableMultiplierInfo element.
+            // Those slots are PRIVATE here, so publish additive named accessors (grow-only; no layout
+            // change) for the embedder to reach them by name.
+            s32             GetChainableScore() const              { return miChainableScore; }              // +0xC8
+            void            SetChainableScore(s32 liScore)         { miChainableScore = liScore; }           // +0xC8
+            s32             GetChainableField() const              { return miChainableField; }              // +0xCC
+            void            SetChainableField(s32 liField)         { miChainableField = liField; }           // +0xCC
+            s32             GetCurrentChainableMultiplier() const  { return miCurrentChainableMultiplier; }  // +0xD0
+            void            SetCurrentChainableMultiplier(s32 liMultiplier) { miCurrentChainableMultiplier = liMultiplier; } // +0xD0
+            bool            GetChainActive() const                 { return mbChainActive != 0; }            // +0xD8
+            void            SetChainActive(bool lbActive)          { mbChainActive = lbActive ? 1 : 0; }     // +0xD8
+
+            // ===== Per-car barrel-roll tally (carved from old maStorageFC; +0xFC) =====
+            //
+            // PlayerPerformedBarrelRolls (X360 0x823634D0) adds the supplied count to this per-car slot
+            // (asm 0x8236352C lwz 0xFC(r3) / add / 0x82363534 stw 0xFC(r3)). Carved as a named s32 out of
+            // the old maStorageFC[12] pad PRESERVING the record's sizeof (an 8-byte pad now covers
+            // +0x100..+0x108; ClearData zeroes +0xFC/+0x100/+0x104).
+            s32             GetBarrelRollCount() const             { return miBarrelRollCount; }          // +0xFC
+            void            SetBarrelRollCount(s32 liCount)        { miBarrelRollCount = liCount; }       // +0xFC
+            void            AddBarrelRolls(s32 liCount)            { miBarrelRollCount += liCount; }      // +0xFC
+
         private:
             CgsSystem::Time mTotalTime;            // +0x00 (8)  Time(0) in ClearData; the finish time
             s32  miRacePosition;                   // +0x08      live race position (ClearData=8 == last-of-8). GetCarRacePosition return *(CarData+8); also read by RaceCarHasReachedCheckPointWithinEvent (lwz 8(r28) compared to total-1). The checkpoint COUNTER it increments lives on CarData @+0x154 (lbz/stb 0x154), not here -- so +0x08 is unambiguously the race position. (was miField08)
@@ -560,7 +703,8 @@ namespace BrnGameState
             CgsSystem::Time mTimeInLastPlace;      // +0xE8 (8)  time spent in last place. GetTimeSpentInLastPlace: *(CarData+232)/+236 == +0xE8/+0xEC. (carved from old maStorageTail)
             CgsSystem::Time mTimeBoosting;         // +0xF0 (8)  time spent boosting. GetTimeSpentBoosting: *(CarData+240)/+244 == +0xF0/+0xF4. (carved from old maStorageTail)
             f32  mfLongestDrift;                   // +0xF8      longest-drift / longest-continuous-run max distance (f32). UpdateGeneralStats (X360 0x8232B8C0) keeps a per-frame run accumulator on CarData @+0x138 (lfs/stfs 0x138(r30), fmadds |*(carIO+0x3CC)|*dt while *(carIO+0x400)!=0); when that condition lapses it compares the run length (+0x138) against this max (asm 0x8232BC44 lfs f13,0xF8(r30) / 0x8232BC48 fcmpu) and, if greater, stores it here (0x8232BC50 stfs f0,0xF8(r30)) then resets +0x138 to 0.0 (0x8232BC54 stfs f31,0x138). r30 is GetCarData(==CarData), CarScoreData embedded at 0, so +0xF8 lands inside this record. (carved from old maStorageF8; gameplay identity inferred from the max-of-a-conditional-accumulator pattern -- name is provisional, see FLAG)
-            u8   maStorageFC[12];                  // +0xFC..+0x108  trailing pad (ClearData zeroes +0xFC/+0x100/+0x104)
+            s32  miBarrelRollCount;                // +0xFC      per-car barrel-roll tally. PlayerPerformedBarrelRolls (X360 0x823634D0) adds the supplied count here (lwz/add/stw 0xFC). ClearData zeroes +0xFC. (carved from old maStorageFC[12] head)
+            u8   maStoragePad100[8];               // +0x100..+0x108  trailing pad PRESERVING sizeof (ClearData zeroes +0x100/+0x104)
             // ===== Marked-man takedown-event tallies (carved from old maStorageFC) =====
             // UpdateTakedowns (X360 0x8232AC88) increments these ONLY when the current TakedownEvent's
             // mbMarkedManTakeDown flag is set (lbz 0x24 of the 40-byte event): the aggressor's +0x108
@@ -597,7 +741,8 @@ namespace BrnGameState
             //       miTraitorousTakedownsFor(4)@0x120 + miTraitorousTakedownsAgainst(4)@0x124 = 79.
             //   (the +0x120/+0x124 traitorous fields and +0xF8 longest-drift are carved from the same
             //    tail region; the old single maStorageF8[40]@0xF8 -> mfLongestDrift(4)@0xF8 + maStorageFC[36]@0xFC.)
-            //   old maStorageFC[36]@0xFC -> maStorageFC[12]@0xFC + miMarkedManTakedownEventsFor(4)@0x108 +
+            //   old maStorageFC[36]@0xFC -> miBarrelRollCount(4)@0xFC + maStoragePad100[8]@0x100 +
+            //       miMarkedManTakedownEventsFor(4)@0x108 +
             //       miMarkedManTakedownEventsAgainst(4)@0x10C + miPaybackTakedownsType2For(4)@0x110 +
             //       miPaybackTakedownsType2Against(4)@0x114 + miPaybackTakedownsType4For(4)@0x118 +
             //       miPaybackTakedownsType4Against(4)@0x11C = 36. (UpdateTakedowns 0x8232AC88 writes
@@ -609,7 +754,8 @@ namespace BrnGameState
             // miOnlineFinishPositionScore@0x58, miOnlineStandingsPosition@0x5C, mbTimedOut@0x68,
             // mbDisconnected@0x69, mTimeAsRunner@0x84, maStorage8C@0x8C, mbCompletedBurningHomeRun@0xBC,
             // maStorageBD@0xBD, miCumulativeCheckpoints@0xC4, miChainable*@0xC8, mbChainActive@0xD8.
-            // Carved-from-blob: miOnlineStuntScore(4)@0xD4 replaces the old maStorageD4[4]@0xD4.
+            // Carved-from-blob: miOnlineStuntScore(4)@0xD4 replaces the old maStorageD4[4]@0xD4;
+            // miBarrelRollCount(4)@0xFC carved from the old maStorageFC[12] head (8-byte maStoragePad100 keeps sizeof).
             // Renamed placeholders: miField08/0C/10/14 -> miRacePosition/
             // miHighestRacePosition/miCompletedLaps/miFinishPosition; miInvalidIndex60 -> meEliminatorRaceCarIndex.
 
@@ -638,6 +784,7 @@ namespace BrnGameState
                 static_assert(offsetof(CarScoreData, miCumulativeCheckpoints)     == 0xC4, "CarScoreData::miCumulativeCheckpoints offset");
                 static_assert(offsetof(CarScoreData, miChainableScore)            == 0xC8, "CarScoreData::miChainableScore offset");
                 static_assert(offsetof(CarScoreData, miOnlineStuntScore)          == 0xD4, "CarScoreData::miOnlineStuntScore offset");
+                static_assert(offsetof(CarScoreData, miBarrelRollCount)           == 0xFC, "CarScoreData::miBarrelRollCount offset");
                 static_assert(offsetof(CarScoreData, miMarkedManTakedownsFor)     == 0x54,  "CarScoreData::miMarkedManTakedownsFor offset");
                 static_assert(offsetof(CarScoreData, miMarkedManTakedownEventsFor)     == 0x108, "CarScoreData::miMarkedManTakedownEventsFor offset");
                 static_assert(offsetof(CarScoreData, miMarkedManTakedownEventsAgainst) == 0x10C, "CarScoreData::miMarkedManTakedownEventsAgainst offset");
