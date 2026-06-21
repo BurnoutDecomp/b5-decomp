@@ -22,6 +22,11 @@ namespace BrnGameState
 class GameMode;
 class GameModeParams;
 class NetworkRoundManager;
+// Forward decls for the by-pointer accessors added for the OnlineRaceMode TU. The owning ModeManager
+// embeds the ScoringSystem by value and holds the GameStateModule by pointer; both accessors hand out
+// a pointer, so a forward decl is enough here (the OnlineRaceMode .cpp #includes the real headers).
+class ScoringSystem;
+class GameStateModule;
 
 // MERGED OWNING HEADER for the ModeManager of the game-mode hierarchy (consolidated from the
 // CountdownState / IntroState / RaceMode worker contributions and the existing committed slice).
@@ -57,6 +62,20 @@ public:
     GameStateModuleIO::EGameModeType GetCurrentGameModeType() const;
     const GameMode* GetCurrentGameMode() const;
     bool            IsWaitingForModeDataToLoad() const;
+
+    // The mode's live scoring system. X360-inlined: every game-mode body that needs it reaches the
+    // ScoringSystem the ModeManager embeds by value (X360 ModeManager+0xDB0) directly, e.g.
+    // OnlineRaceMode::PreWorldUpdate / GetOutroTimeout poke ScoringSystem methods off
+    // *(mpModeManager+0xDB0). De-inlined to this named accessor (returns the address of the embedded
+    // member). Body + real member land with the ModeManager TU; declared by-pointer here.
+    ScoringSystem*       GetScoringSystem();
+    const ScoringSystem* GetScoringSystem() const;
+
+    // The owning GameStateModule (X360 mpGameStateModule @ ModeManager+0x6D58). X360-inlined with a
+    // non-null assert ("mpGameStateModule", BrnModeManager.cpp:5700) at the call site, exactly the
+    // shape used by OnlineRaceMode::GetOutroTimeout. De-inlined to this named accessor; body asserts
+    // the pointer is set and returns it. Body + real member land with the ModeManager TU.
+    GameStateModule* GetGameStateModule();
 
     // True when the current online mode (free-burn lobby or showtime) starts without a timed
     // intro -- the composite the X360 build inlines everywhere as

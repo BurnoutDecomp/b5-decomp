@@ -129,6 +129,11 @@ public:
     // ::Update read mfTimeStepSeconds; CountdownState::OnLeave sets mbVisibleCars). De-inlined
     // back to their logical accessor form here, matching the DWARF declarations.
     ModeManager* GetModeManager() const          { return mpModeManager; }
+    // The mode's current state-machine state (EGameModeState). Inlined in the X360 build at the
+    // call sites that gate on it (e.g. OnlineRaceMode::PreWorldUpdate reads the current mode's
+    // meCurrentState @+0x28 and only recomputes the time limit when it is E_GMS_IN_PROGRESS).
+    // De-inlined to this named accessor.
+    s32          GetCurrentState() const          { return meCurrentState; }
     f32          GetUpdateTimeStep() const        { return mfTimeStepSeconds; }
     bool         IsOnline() const                 { return mbIsOnline; }
     void         SetFinished(bool lbFinished)     { mbFinished = lbFinished; }

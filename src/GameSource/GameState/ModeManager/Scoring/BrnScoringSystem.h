@@ -437,6 +437,34 @@ namespace BrnGameState
         const s32 GetNumberOfTakedowns(EActiveRaceCarIndex leRaceCarIndex) const;            // :726 / 0x82326D50
         const s32 GetNumberOfCrashes(EActiveRaceCarIndex leRaceCarIndex) const;              // :731
         const s32 GetNumberOfTakedownsAgainst(EActiveRaceCarIndex leRaceCarIndex) const;     // :736 / 0x82326DD0
+
+        // ===== ADDITIVE GROW (declare-only) for the AchievementManagerBase TU =====
+        // FLAG: these three accessors name the deep reads AchievementManagerBase makes
+        // THROUGH its mpScoringSystem back-pointer (X360 OnBodyShop 0x8235AA18, OnTakedown
+        // 0x8235AAE0, OnEventWin 0x82372978). The X360 reads them as raw offsets into the
+        // ScoringSystem and its embedded RoadRage/CarScore sub-objects; the precise members
+        // these offsets land on are owned by the ScoringSystem TU and are NOT mapped here.
+        // Signatures + semantics are X360-asm-attested; offsets are out of scope. Bodies land
+        // with the ScoringSystem TU; declare-only suffices for the `cl /c` compile gate.
+
+        // OnBodyShop: count of cars newly wrecked-but-not-yet-repaired this frame -- the X360
+        // computes (this+0x4B58) - (this+0x4B5C) and fires E_ACHIEVEMENT_REPAIR_FIRST_WRECKED_CAR
+        // when it equals 1 in E_MODE_ROAD_RAGE.
+        s32 GetNewlyWreckedCarCount() const;
+
+        // OnTakedown: takedowns the player has scored in the current (road-rage) mode; X360
+        // reads this+0x4B40 and requires it >= 10 for the perfect-road-rage achievement.
+        s32 GetPlayerModeTakedowns() const;
+
+        // OnTakedown: crashes the player has suffered in the current (road-rage) mode; X360
+        // reads this+0x4B5C and requires it == 0 (no crashes) for perfect-road-rage.
+        s32 GetPlayerModeCrashes() const;
+
+        // OnEventWin (E_MODE_STUNT_ATTACK): the player's score for the millionaires-club check.
+        // The X360 selects the online (this+0x2620) vs offline (this+0x350) car-score block by
+        // lbOnline and reads its +0x10 score field, comparing >= 1,000,000.
+        s32 GetPlayerScore(bool lbOnline) const;
+
         const u32 GetNumberOfActiveCars() const       { return muCarsInCurrentMode; }        // :739 (inline)
         const s32 GetNumberOfFinishedCars() const     { return static_cast<s32>(muNumCarsFinishedRace); } // :743
 
@@ -531,6 +559,11 @@ namespace BrnGameState
         // ===== sub-scorer accessors (trivial address-of; inline) =====
         CrashModeScoring*           GetCrashScorer()         { return &mCrashModeScoring; }   // :939
         StuntModeScoring*           GetStuntScorer()         { return &mStuntModeScoring; }   // :943
+        // Address-of the X360-only ONLINE stunt scorer (mOnlineStuntModeScoring @ ss+0x2620).
+        // Additive accessor (no layout change) so HUDMessageLogic's online stunt-run time
+        // generator can poll IsComboInProgress() on the online scorer by name -- the X360 reads
+        // ss+0x2620 directly (BrnHUDMessageLogic.cpp / 0x82394B88).
+        StuntModeScoring*           GetOnlineStuntScorer()   { return &mOnlineStuntModeScoring; }
         RoadRageModeScoring*        GetRoadRageScoring()       { return &mRoadRageModeScoring; } // :947
         const RoadRageModeScoring*  GetRoadRageScoring() const { return &mRoadRageModeScoring; } // :950
 
