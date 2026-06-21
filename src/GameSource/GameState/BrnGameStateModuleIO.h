@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <cstddef>   // offsetof (PreWorldInputBuffer layout asserts)
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"      // CgsModule::IOBuffer (base; lock state)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"    // CgsModule::EventQueue<T,N> (mTrafficTypeResponseQueue)
@@ -23,6 +24,8 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (enum : s32)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h" // BrnTraffic::BrnTrafficIO::TrafficTypeResponse
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h" // BrnAI::AIModuleIO::AICarOutputInterface (complete; embedded by value @ +0xAAC0)
+#include "GameSource/Network/BrnNetworkModuleIO.h"                 // BrnNetwork::BrnNetworkModuleIO::PlayerResultsInterface (embedded @ +0x36B8)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusInterface (embedded @ +0x2CC8)
 
 namespace BrnGameState
 {
@@ -31,10 +34,107 @@ namespace GameStateModuleIO
     // ---- forward declarations of the interface member types (own TUs) --------
     // Full layouts live with their own reconstructions; only pointers are returned by the
     // accessors, so incomplete declarations suffice.
-    class ControllerInput;                 // PreWorldInputBuffer +0x34
     class GameEventQueue;                  // == VariableEventQueue<1536,16>
     class TakedownEventInputQueueType;     // PreWorldInputBuffer +0x660
-    class NetworkPlayerResultsInterface;   // PreWorldInputBuffer +0x36B8
+    // PreWorldInputBuffer +0x36B8: the network player-results interface is BrnNetwork's committed
+    // PlayerResultsInterface (operator= @0x823B8F68); alias it so SetNetworkPlayerResultsInterface
+    // can member-copy into it and the const getter still spells NetworkPlayerResultsInterface.
+    typedef BrnNetwork::BrnNetworkModuleIO::PlayerResultsInterface NetworkPlayerResultsInterface;
+
+    // ========================================================================
+    // PreWorldInputBuffer member types (X360-recovered layouts).
+    // ========================================================================
+
+    // Controller-input button-state block embedded at PreWorldInputBuffer +0x34 (0x18 bytes).
+    // SetButtonPressed (X360 0x823BA240) fills the 21 leading bool flags from the per-player pad
+    // action-info record; GetControllerInput returns it read-locked. Field semantics are mostly
+    // unknown (no DWARF/leak shape), so each bool is named by the controller action whose status
+    // bit drives it where the bit position makes it clear, else by its source action-record offset.
+    struct ControllerInput
+    {
+        bool mbDrivingActive;        // +0x00 (src+0x18C bit1) -- ControllerInput +0x34
+        bool mbReverseHeld;          // +0x01 (src+0x16C bit1) -- +0x35
+        bool mbHandbrakeHeld;        // +0x02 (src+0x174 bit1) -- +0x36
+        bool mbBoostHeld;            // +0x03 (src+0x1AC bit1) -- +0x37
+        bool mbAction14C;            // +0x04 (src+0x14C bit1) -- +0x38
+        bool mbAction154;            // +0x05 (src+0x154 bit1) -- +0x39
+        bool mbAction15C;            // +0x06 (src+0x15C bit1) -- +0x3A
+        bool mbAction164;            // +0x07 (src+0x164 bit1) -- +0x3B
+        bool mbAction1B4Pressed;     // +0x08 (src+0x1B4 bit1) -- +0x3C
+        bool mbAction1B4Held;        // +0x09 (src+0x1B4 bit0) -- +0x3D
+        bool mbAction1BCPressed;     // +0x0A (src+0x1BC bit1) -- +0x3E
+        bool mbAction1BCHeld;        // +0x0B (src+0x1BC bit0) -- +0x3F
+        bool mbAction05CPressed;     // +0x0C (src+0x05C bit1) -- +0x40
+        bool mbAction1BCHeldDup;     // +0x0D (src+0x1BC bit0) -- +0x41
+        bool mbAction1B4And1BCHeld;  // +0x0E ((src+0x1B4 bit0) && (src+0x1BC bit0)) -- +0x42
+        bool mbAction024Pressed;     // +0x0F (src+0x024 bit1) -- +0x43
+        bool mbAction1D4Pressed;     // +0x10 (src+0x1D4 bit1) -- +0x44
+        bool mbBothSticksDeflected;  // +0x11 ((src+0x00 > 0.25) && (src+0x08 > 0.25)) -- +0x45
+        bool mbAction004Held;        // +0x12 (src+0x004 bit0) -- +0x46
+        bool mbAction1E4Pressed;     // +0x13 (src+0x1E4 bit1) -- +0x47
+        bool mbAction13CPressed;     // +0x14 (src+0x13C bit1) -- +0x48
+        u8   maPad0x15[0x03];        // +0x15..+0x18 trailing pad to close the 0x18-byte block
+    };
+
+    // Per-player pad action-info source record fed to SetButtonPressed (the caller passes
+    // PadInfo+0x18, X360 BrnGameModule::BridgeControllerToGameState 0x823CD738). Only the words
+    // SetButtonPressed reads are named (each is an action-mapping status word: bit1 == pressed this
+    // frame, bit0 == held); the two leading f32 are analogue stick deflections. Gaps are storage.
+    struct ControllerActionSource
+    {
+        f32 mfStickX;                 // +0x000 (> 0.25 test)
+        u32 mStatus004;               // +0x004 (bit0 held)
+        f32 mfStickY;                 // +0x008 (> 0.25 test)
+        u8  maPad0x00C[0x024 - 0x00C];
+        u32 mStatus024;               // +0x024
+        u8  maPad0x028[0x05C - 0x028];
+        u32 mStatus05C;               // +0x05C
+        u8  maPad0x060[0x13C - 0x060];
+        u32 mStatus13C;               // +0x13C
+        u8  maPad0x140[0x14C - 0x140];
+        u32 mStatus14C;               // +0x14C
+        u8  maPad0x150[0x154 - 0x150];
+        u32 mStatus154;               // +0x154
+        u8  maPad0x158[0x15C - 0x158];
+        u32 mStatus15C;               // +0x15C
+        u8  maPad0x160[0x164 - 0x160];
+        u32 mStatus164;               // +0x164
+        u8  maPad0x168[0x16C - 0x168];
+        u32 mStatus16C;               // +0x16C
+        u8  maPad0x170[0x174 - 0x170];
+        u32 mStatus174;               // +0x174
+        u8  maPad0x178[0x18C - 0x178];
+        u32 mStatus18C;               // +0x18C
+        u8  maPad0x190[0x1AC - 0x190];
+        u32 mStatus1AC;               // +0x1AC
+        u8  maPad0x1B0[0x1B4 - 0x1B0];
+        u32 mStatus1B4;               // +0x1B4
+        u8  maPad0x1B8[0x1BC - 0x1B8];
+        u32 mStatus1BC;               // +0x1BC
+        u8  maPad0x1C0[0x1D4 - 0x1C0];
+        u32 mStatus1D4;               // +0x1D4
+        u8  maPad0x1D8[0x1E4 - 0x1D8];
+        u32 mStatus1E4;               // +0x1E4
+    };
+
+    // Timer-status payload embedded at PreWorldInputBuffer +0x04 (0x30 bytes == two 0x18-byte
+    // entries). SetTimerStatusInterface (X360 0x823B8D08) copies both entries field-for-field from
+    // the input source; the read-locked Get accessor returns it. Each entry is {s32, f32, f32, u8,
+    // s32, f32}; the X360 build copies entry[0] then entry[1] (this+0x04, this+0x1C).
+    struct TimerStatusInterface
+    {
+        struct Entry
+        {
+            s32 miWord00;   // +0x00
+            f32 mfValue04;  // +0x04
+            f32 mfValue08;  // +0x08
+            u8  mbFlag0C;   // +0x0C
+            u8  maPad0x0D[0x10 - 0x0D];
+            s32 miWord10;   // +0x10
+            f32 mfValue14;  // +0x14
+        };
+        Entry maEntries[2];  // 2 * 0x18 == 0x30 bytes
+    };
     class VehicleOutputInterface;          // PostWorldInputBuffer +0x220
     // DWARF (BrnGameStateModuleIO.h:73,181,239): the PostWorldInputBuffer AICarOutputInterface
     // is a typedef IMPORT of the AI module's BrnAI::AIModuleIO::AICarOutputInterface (mirrors
@@ -79,13 +179,43 @@ namespace GameStateModuleIO
         // X360 0x8231D020 (read-lock; "Not locked for reading", line 149)
         const NetworkPlayerResultsInterface*  GetNetworkPlayerResultsInterface() const;
 
+        // ---- this TU's 5 functions ----
+        // X360 0x8231CE28 (read-lock; "Not locked for reading", line 133) -- read-side accessor for
+        // the timer-status payload (this+0x04). (IDA spelled this Get returning unsigned char* this+4.)
+        const TimerStatusInterface* GetTimerStatusInterface() const;
+        // X360 0x823B8D08 (write-lock; line 135) -- copies a TimerStatusInterface into this+0x04.
+        void SetTimerStatusInterface(const TimerStatusInterface* lpSource);
+        // X360 0x823BA240 (write-lock; lines 393/394) -- derives the controller button-state block
+        // (this+0x34) from the per-player pad action-info source.
+        void SetButtonPressed(const ControllerActionSource* lpActionInfo);
+        // X360 0x823C9550 (write-lock; line 147) -- copies an InGamePlayerStatusInterface into this+0x2CC8.
+        void SetPlayerStatusInterface(const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpSource);
+        // X360 0x823C53D0 (write-lock; line 150) -- copies a PlayerResultsInterface into this+0x36B8.
+        void SetNetworkPlayerResultsInterface(const NetworkPlayerResultsInterface* lpSource);
+
     private:
-        // --- raw storage pinned to X360 offsets (gaps = padding) -------------
-        u8  maPadToControllerInput[0x34 - sizeof(CgsModule::IOBuffer)]; // base end -> 0x34
-        u8  mControllerInputStorage[0x4C - 0x34];                       // ControllerInput  @ +0x0034
+        // --- members pinned to X360 offsets (gaps = padding) -----------------
+        u8                   maPad0x01[0x04 - sizeof(CgsModule::IOBuffer)]; // status byte end -> 0x04
+        TimerStatusInterface mTimerStatusInterface;                         // @ +0x0004 (0x30 bytes)
+        ControllerInput      mControllerInput;                              // @ +0x0034 (0x18 bytes)
         u8  mGameEventQueueStorage[0x660 - 0x4C];                       // GameEventQueue   @ +0x004C
-        u8  mTakedownEventInputQueueStorage[0x36B8 - 0x660];            // TakedownEventQueue@ +0x0660
-        u8  mNetworkPlayerResultsInterfaceStorage[0x40];                // NetworkPlayerResultsInterface @ +0x36B8 (widen when its own TU lands)
+        u8  mTakedownEventInputQueueStorage[0x2CC8 - 0x660];           // TakedownEventQueue@ +0x0660
+        BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface mPlayerStatusInterface; // @ +0x2CC8
+        u8  maPadToNetworkResults[0x36B8 - (0x2CC8 + sizeof(BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface))]; // -> +0x36B8
+        NetworkPlayerResultsInterface mNetworkPlayerResultsInterface;  // @ +0x36B8 (PlayerResultsInterface, 224B)
+
+        // Compile-time offset guards (private members -> assert from a member-fn context).
+        static void _AssertLayout()
+        {
+            static_assert(sizeof(ControllerInput) == 0x18, "ControllerInput must be 0x18 bytes");
+            static_assert(sizeof(TimerStatusInterface) == 0x30, "TimerStatusInterface must be 0x30 bytes");
+            static_assert(offsetof(PreWorldInputBuffer, mTimerStatusInterface)          == 0x04,   "mTimerStatusInterface @ +0x04");
+            static_assert(offsetof(PreWorldInputBuffer, mControllerInput)               == 0x34,   "mControllerInput @ +0x34");
+            static_assert(offsetof(PreWorldInputBuffer, mGameEventQueueStorage)         == 0x4C,   "mGameEventQueueStorage @ +0x4C");
+            static_assert(offsetof(PreWorldInputBuffer, mTakedownEventInputQueueStorage) == 0x660,  "TakedownEventInputQueue @ +0x660");
+            static_assert(offsetof(PreWorldInputBuffer, mPlayerStatusInterface)         == 0x2CC8, "mPlayerStatusInterface @ +0x2CC8");
+            static_assert(offsetof(PreWorldInputBuffer, mNetworkPlayerResultsInterface) == 0x36B8, "mNetworkPlayerResultsInterface @ +0x36B8");
+        }
     };
 
     // ========================================================================
