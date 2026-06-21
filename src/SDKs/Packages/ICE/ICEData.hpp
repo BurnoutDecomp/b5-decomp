@@ -88,6 +88,14 @@ struct ICEElementCount
 };
 
 // ---------------------------------------------------------------------------
+// ICE::Precision -- returns the number of significant decimal digits to display
+// for a value (used by ICETakeData::SaveData when formatting a <FLOAT> element).
+// Scans the integer magnitude to cap the fractional-digit budget, then extracts
+// fractional digits until the fraction is exhausted or the budget is reached.
+// ---------------------------------------------------------------------------
+int Precision(f32 lfValue);
+
+// ---------------------------------------------------------------------------
 // ICETakeData (ICEData.hpp:93, DWARF). One serialised camera-take record. In the
 // DWARF this derives from bTNode<ICETakeData> (intrusive tree node); that base has
 // no reconstructed home yet, so it is modeled here as an explicit 8-byte padding

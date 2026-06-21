@@ -1836,11 +1836,58 @@ bool ICETake::SetParameter(s32 liChannel, f32 lfParameter, bool lbForce)
 namespace ICE
 {
 
-// FLAG: ICE::Precision has no reconstructed home yet; the real X360 prototype is
-// wider (it produces a precision float + a rounded-string float + raw bits for the
-// <FLOAT> tag). File-local forward declaration with the modeled shape so SaveData
-// compiles; reconcile with the real signature when the Precision TU lands.
-f32 Precision(f32 lfValue, const ICEValue& lrValue);
+// ICE::Precision -- number of significant decimal digits to display for a value.
+// The integer magnitude scan (cap at 7, halve the budget once per power of ten
+// down to a floor of 1) bounds how many fractional digits are extracted; the
+// extraction loop pulls one decimal digit at a time until the fractional part hits
+// zero or the digit budget runs out. The internal math runs in f64 so the digit
+// extraction matches the value the caller passes as f32.
+int Precision(f32 lfValue)
+{
+    const f64 lfDoubleValue = (f64)lfValue;
+
+    // Scan the integer magnitude: the budget caps the fractional digits extracted.
+    f64 lfScaled = lfDoubleValue;
+    s32 liDigitBudget = 7;
+    while (lfScaled > 1.0)
+    {
+        if (liDigitBudget <= 1)
+            break;
+        lfScaled = lfScaled * 0.1;
+        --liDigitBudget;
+    }
+
+    s32 liResult = 1;
+
+    // Fractional part of the original value via truncate-then-floor: (f64)(s32)x
+    // truncates toward zero; if the truncation rose above the value (negative case)
+    // step it down by one to get the true floor.
+    f64 lfFloor = (f64)(s32)lfDoubleValue;
+    if (lfFloor > lfDoubleValue)
+        lfFloor = lfFloor - 1.0;
+    f64 lfFraction = lfDoubleValue - lfFloor;
+
+    if (liDigitBudget > 1)
+    {
+        do
+        {
+            if (lfFraction == 0.0)
+                break;
+
+            const f64 lfShifted = lfFraction * 10.0;
+            ++liResult;
+
+            f64 lfDigitFloor = (f64)(s32)lfShifted;
+            if (lfDigitFloor > lfShifted)
+                lfDigitFloor = lfDigitFloor - 1.0;
+
+            lfFraction = lfShifted - lfDigitFloor;
+        }
+        while (liResult < liDigitBudget);
+    }
+
+    return liResult;
+}
 
 void ICETakeData::SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber)
 {
@@ -1978,11 +2025,9 @@ void ICETakeData::SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber)
                                   ? lValue.GetFloat()
                                   : (f32)lValue.GetSignedInt();
 
-                // ICE::Precision(value) -> a {precision, string-rounded, raw-bits} tuple
-                // the <FLOAT> tag prints. FLAG: ICE::Precision has no reconstructed home;
-                // see the helper-declaration note below. Modeled as returning the value to
-                // print; the exact multi-out signature must be recovered with its home.
-                const f32 lfPrecision = Precision(lfValue, lValue);
+                // ICE::Precision returns the number of significant decimal digits to
+                // display for the value; cast to f32 to fit the <FLOAT> tag's %f field.
+                const f32 lfPrecision = (f32)Precision(lfValue);
                 lpHandler->FilePrintf("<FLOAT precision=\"%f\" string=\"%f\">%x</FLOAT>",
                                       lfPrecision, lfValue);
             }
