@@ -291,4 +291,271 @@ namespace ICE
 
         return lfCurrent != lfNew;
     }
+
+    // ------------------------------------------------------------------------
+    // ICETake::ChangeSize -- resize one channel's key/interval storage by building
+    // a fresh max-sized edit buffer, splicing the channel's key-index and interval-
+    // parameter tables across the inserted/removed run, carrying every element's
+    // values across, snapshotting the prior take for undo, then copying the rebuilt
+    // take back over the live one and rebinding.
+    //
+    // liKeyDelta/liIntervalDelta grow (>0) or shrink (<0) the channel's key/interval
+    // counts; liKeyAt/liIntervalAt position the run; liLeftHardCut/liRightHardCut
+    // bias the inserted interval-index run. A resize whose resulting count would
+    // leave the editable range [0,100]/[0,99] is REJECTED (returns false) -- the
+    // clamp only detects the out-of-range case. Returns true if resized.
+    //
+    // FLAG: the inserted interval-index value (loop C) is built from liKeyAt with a
+    //       per-interval stride of liLeftHardCut plus the constant liRightHardCut;
+    //       the operands are certain but which of the two is the stride vs the bias
+    //       is reconstructed by intent (constrained, not fully pinned, by the
+    //       Insert/Soften/Harden call sites).
+    // FLAG: the per-element value-carry head/tail bounds follow the same insertion
+    //       structure as the index/parameter rebuild (head before the gap, tail
+    //       shifted by the delta, gap default-filled); the interval-element path is
+    //       solid, the key-element path mirrors it by intent (the key-branch arg
+    //       wiring was not bit-confirmable from the packed value-carry path).
+    // ------------------------------------------------------------------------
+    bool ICETake::ChangeSize(s32 liChannel, s32 liKeyDelta, s32 liKeyAt,
+                             s32 liIntervalDelta, s32 liIntervalAt,
+                             s32 liLeftHardCut, s32 liRightHardCut)
+    {
+        if (liKeyDelta == 0 && liIntervalDelta == 0)
+            return true;
+
+        ICEChannel& lrSrcChannel = mChannels[liChannel];
+
+        const s32 liNewKeys      = (s32)lrSrcChannel.GetNumKeys()      + liKeyDelta;
+        const s32 liNewIntervals = (s32)lrSrcChannel.GetNumIntervals() + liIntervalDelta;
+
+        // Reject (do not clamp) a resize that would leave the editable range.
+        // The editable maxima are one below the buffer capacities (ICE_MAX_EDIT_KEYS
+        // /INTERVALS size the edit buffer; the resize ceiling is one less).
+        s32 liClampedKeys = 0;
+        if (liNewKeys >= 0)
+            liClampedKeys = (liNewKeys > (ICE_MAX_EDIT_KEYS - 1)) ? (ICE_MAX_EDIT_KEYS - 1) : liNewKeys;
+        if (liNewKeys != liClampedKeys)
+            return false;
+
+        s32 liClampedIntervals = 0;
+        if (liNewIntervals >= 0)
+            liClampedIntervals = (liNewIntervals > (ICE_MAX_EDIT_INTERVALS - 1))
+                               ? (ICE_MAX_EDIT_INTERVALS - 1) : liNewIntervals;
+        if (liNewIntervals != liClampedIntervals)
+            return false;
+
+        // Allocate a fresh max-sized edit buffer, seed it from the current take's
+        // 100-byte header, then overwrite this channel's counts (GetElementCounts()
+        // is const-only, so write the resized counts via direct member access).
+        const u32 luEditSize = mpTakeData->ComputeEditSize();
+        ICETakeData* lpNewData = (ICETakeData*)spICEMemory->GetMemory(luEditSize);
+        rw::core::stdc::MemCopy(lpNewData, mpTakeData, 100);
+        lpNewData->mElementCounts[liChannel].mu16Intervals = (u16)liNewIntervals;
+        lpNewData->mElementCounts[liChannel].mu16Keys      = (u16)liNewKeys;
+
+        // A scratch ICETake binds the new buffer so its per-channel index/parameter
+        // pointers point into the rebuilt variable-data region. Raw-storage stand-in
+        // (the FixDown idiom): ICETake is not default-constructible against the frozen
+        // header, and SetDataPointers writes every member it later reads.
+        alignas(ICETake) u8 laScratchStorage[sizeof(ICETake)];
+        ICETake& lScratch = *reinterpret_cast<ICETake*>(laScratchStorage);
+        lScratch.Construct(mpResourceManager);
+        lScratch.SetDataPointers(lpNewData, false);
+
+        const u16 lu16IntervalAt   = (u16)liIntervalAt;
+        const s32 liInsertPositive = (liIntervalDelta < 0) ? 0 : liIntervalDelta;
+        const s32 liTailStart      = (s32)lu16IntervalAt + liInsertPositive;
+
+        // ---- Per-channel index/parameter rebuild. ----
+        for (s32 liCh = 0; liCh < 12; ++liCh)
+        {
+            ICEChannel&       lrSrc = mChannels[liCh];
+            const ICEChannel& lrDst = lScratch.mChannels[liCh];
+
+            if (liCh == liChannel)
+            {
+                // (A) Intervals before the inserted run [0, intervalAt): copied
+                // unchanged (index biased by liKeyDelta once at/after liKeyAt).
+                for (s32 liInterval = 0; liInterval < (s32)lu16IntervalAt; ++liInterval)
+                {
+                    const u16 lu16N = (u16)liInterval;
+
+                    s16 li16KeyIndex;
+                    if (lu16N == 0)                                   li16KeyIndex = 0;
+                    else if (lu16N + 1 < (u16)lrSrc.GetNumIntervals()) li16KeyIndex = (s16)lrSrc.GetKeyData()[lu16N - 1];
+                    else                                              li16KeyIndex = (s16)(lrSrc.GetNumKeys() - 2);
+
+                    f32 lfParameter;
+                    if (lu16N == 0)                                  lfParameter = 0.0f;
+                    else if (lu16N < (u16)lrSrc.GetNumIntervals())   lfParameter = lrSrc.GetParameterData()[lu16N - 1].GetValue();
+                    else                                             lfParameter = 1.0f;
+
+                    if (lu16N != 0 && lu16N < (u16)lrDst.GetNumIntervals())
+                        lrDst.GetParameterData()[lu16N - 1].SetValue(lfParameter);
+
+                    const s16 li16Bias = ((u16)li16KeyIndex < (u16)liKeyAt) ? 0 : (s16)liKeyDelta;
+                    if (lu16N != 0 && lu16N < (u16)(lrDst.GetNumIntervals() - 1))
+                        lrDst.GetKeyData()[lu16N - 1] = (u16)(li16KeyIndex + li16Bias);
+                }
+
+                // (B) Intervals after the inserted run: dst [tailStart, dstNumIntervals),
+                // each reading source interval (dst - liIntervalDelta).
+                {
+                    s32 liDst = liTailStart;
+                    s32 liSrc = liTailStart - liIntervalDelta;
+                    for (; liDst < (s32)lrDst.GetNumIntervals(); ++liDst, ++liSrc)
+                    {
+                        const u16 lu16Src = (u16)liSrc;
+
+                        s16 li16KeyIndex;
+                        if (lu16Src == 0)                                   li16KeyIndex = 0;
+                        else if (lu16Src + 1 < (u16)lrSrc.GetNumIntervals()) li16KeyIndex = (s16)lrSrc.GetKeyData()[lu16Src - 1];
+                        else                                                li16KeyIndex = (s16)(lrSrc.GetNumKeys() - 2);
+
+                        f32 lfParameter;
+                        if (lu16Src == 0)                                lfParameter = 0.0f;
+                        else if (lu16Src < (u16)lrSrc.GetNumIntervals()) lfParameter = lrSrc.GetParameterData()[lu16Src - 1].GetValue();
+                        else                                             lfParameter = 1.0f;
+
+                        const u16 lu16Dst = (u16)liDst;
+                        if (lu16Dst != 0 && lu16Dst < (u16)lrDst.GetNumIntervals())
+                            lrDst.GetParameterData()[lu16Dst - 1].SetValue(lfParameter);
+
+                        const s16 li16Bias = ((u16)li16KeyIndex < (u16)liKeyAt) ? 0 : (s16)liKeyDelta;
+                        if (lu16Dst != 0 && lu16Dst < (u16)(lrDst.GetNumIntervals() - 1))
+                            lrDst.GetKeyData()[lu16Dst - 1] = (u16)(li16KeyIndex + li16Bias);
+                    }
+                }
+
+                // (C) Inserted run [0, liIntervalDelta): parameter = current playback
+                // parameter; interval index = liKeyAt + liLeftHardCut*run + liRightHardCut.
+                for (s32 liRun = 0; liRun < liIntervalDelta; ++liRun)
+                {
+                    const u16 lu16Dst = (u16)(lu16IntervalAt + liRun);
+
+                    if (lu16Dst != 0 && lu16Dst < (u16)lrDst.GetNumIntervals())
+                        lrDst.GetParameterData()[lu16Dst - 1].SetValue(mfParameter);
+
+                    if (lu16Dst != 0 && lu16Dst < (u16)(lrDst.GetNumIntervals() - 1))
+                        lrDst.GetKeyData()[lu16Dst - 1] =
+                            (u16)((u16)liKeyAt + liLeftHardCut * liRun + liRightHardCut);
+                }
+
+                // (D) Shrink fix-up: when removing intervals, re-emit the boundary
+                // parameter at intervalAt if the source key index there is below liKeyAt.
+                if ((s32)lu16IntervalAt < (s32)lrDst.GetNumIntervals() && liIntervalDelta < 0)
+                {
+                    s16 li16KeyIndex;
+                    if (lu16IntervalAt == 0)                                   li16KeyIndex = 0;
+                    else if (lu16IntervalAt + 1 < (u16)lrSrc.GetNumIntervals()) li16KeyIndex = (s16)lrSrc.GetKeyData()[lu16IntervalAt - 1];
+                    else                                                       li16KeyIndex = (s16)(lrSrc.GetNumKeys() - 2);
+
+                    if ((u16)liKeyAt > (u16)li16KeyIndex)
+                    {
+                        f32 lfParameter;
+                        if (lu16IntervalAt == 0)                                lfParameter = 0.0f;
+                        else if (lu16IntervalAt < (u16)lrSrc.GetNumIntervals()) lfParameter = lrSrc.GetParameterData()[lu16IntervalAt - 1].GetValue();
+                        else                                                    lfParameter = 1.0f;
+
+                        if (lu16IntervalAt != 0 && lu16IntervalAt < (u16)lrDst.GetNumIntervals())
+                            lrDst.GetParameterData()[lu16IntervalAt - 1].SetValue(lfParameter);
+                    }
+                }
+            }
+            else
+            {
+                // Non-resized channel: re-emit its interval tables verbatim (high to
+                // low so an in-place write never clobbers a not-yet-read entry).
+                for (s32 liInterval = lrSrc.GetNumIntervals() - 1; liInterval >= 0; --liInterval)
+                {
+                    const u16 lu16N = (u16)liInterval;
+
+                    s16 li16KeyIndex;
+                    if (lu16N == 0)                                   li16KeyIndex = 0;
+                    else if (lu16N + 1 < (u16)lrSrc.GetNumIntervals()) li16KeyIndex = (s16)lrSrc.GetKeyData()[lu16N - 1];
+                    else                                              li16KeyIndex = (s16)(lrSrc.GetNumKeys() - 2);
+
+                    if (lu16N != 0 && lu16N < (u16)(lrDst.GetNumIntervals() - 1))
+                        lrDst.GetKeyData()[lu16N - 1] = (u16)li16KeyIndex;
+
+                    f32 lfParameter;
+                    if (lu16N == 0)                                  lfParameter = 0.0f;
+                    else if (lu16N < (u16)lrSrc.GetNumIntervals())   lfParameter = lrSrc.GetParameterData()[lu16N - 1].GetValue();
+                    else                                             lfParameter = 1.0f;
+
+                    if (lu16N != 0 && lu16N < (u16)lrDst.GetNumIntervals())
+                        lrDst.GetParameterData()[lu16N - 1].SetValue(lfParameter);
+                }
+            }
+        }
+
+        // ---- Per-element value carry. The resized channel's element values are
+        //      spliced across the inserted/removed gap (key elements use the key
+        //      insertion point, interval elements the interval one); other elements'
+        //      packed value runs are bulk-copied. ----
+        for (s32 liElement = 0; liElement < eICE_NUM_ELEMENTS; ++liElement)
+        {
+            const ICEElementDescription& lrDesc = ICEElementDescriptions[liElement];
+            const s32 liElemChannel = lrDesc.miChannelNumber;
+
+            const u16 lu16NewCount = (liElement >= 28)
+                                   ? lpNewData->mElementCounts[liElemChannel].mu16Intervals
+                                   : lpNewData->mElementCounts[liElemChannel].mu16Keys;
+
+            if (liElemChannel == liChannel)
+            {
+                const bool lbInterval = (liElement >= 28);
+                const s32  liGapStart = lbInterval ? (s32)lu16IntervalAt : liKeyAt;
+                const s32  liGapLen   = lbInterval ? liIntervalDelta : liKeyDelta;
+                const s32  liTailDst  = liGapStart + ((liGapLen < 0) ? 0 : liGapLen);
+
+                // (1) Head run unchanged: [0, gapStart).
+                for (s32 liK = 0; liK < liGapStart; ++liK)
+                    lScratch.SetValue(liElement, (u16)liK, GetValue(liElement, (u16)liK));
+
+                // (2) Tail run: dst d <- src (d - gapLen), for [tailDst, newCount).
+                for (s32 liDst = liTailDst; liDst < (s32)lu16NewCount; ++liDst)
+                    lScratch.SetValue(liElement, (u16)liDst, GetValue(liElement, (u16)(liDst - liGapLen)));
+
+                // (3) Gap fill (only when inserting): each inserted slot in
+                // [gapStart, gapStart+gapLen) takes the take's current decoded value
+                // for this element (mValues[liElement]).
+                const ICEValue lFill = mValues[liElement];
+                for (s32 liG = liGapStart; liG < liGapStart + liGapLen; ++liG)
+                    lScratch.SetValue(liElement, (u16)liG, lFill);
+            }
+            else
+            {
+                // Other element: bulk-copy the whole packed value run (bit-packed
+                // values rounded up to a whole 4-byte word).
+                const u32 luBytes = (u32)(((lrDesc.miDataBits * lu16NewCount + 31) >> 3) & ~3);
+                rw::core::stdc::MemCopy(lScratch.mpElementData[liElement],
+                                        mpElementData[liElement], luBytes);
+            }
+        }
+
+        // ---- Commit: snapshot the prior take, copy the rebuilt buffer back over the
+        //      live take, rebind the runtime pointers and re-seed the parameter. ----
+        PushUndo();
+        const u32 luActual = lpNewData->ComputeActualSize();
+        rw::core::stdc::MemCopy(mpTakeData, lpNewData, luActual);
+
+        const f32 lfParameter = mfParameter;
+        SetDataPointers(mpTakeData, false);
+        SetParameter(lfParameter, true, false);
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // ICETake::SetSize -- set channel liChannel to exactly liNumKeys keys /
+    // liNumIntervals intervals by converting each target count into a delta from the
+    // channel's current count and delegating to ChangeSize (run at 0, no hard-cut).
+    // ------------------------------------------------------------------------
+    bool ICETake::SetSize(s32 liChannel, s32 liNumKeys, s32 liNumIntervals)
+    {
+        return ChangeSize(liChannel,
+                          liNumKeys - (s32)mChannels[liChannel].GetNumKeys(), 0,
+                          liNumIntervals - (s32)mChannels[liChannel].GetNumIntervals(), 0,
+                          0, 0);
+    }
 }

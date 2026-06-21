@@ -314,6 +314,20 @@ public:
     // boundary actually changed.
     bool MoveParameter(s32 liChannel, u16 lu16Interval, s32 liDelta, f32 lfParameter);
 
+    // Resize one channel's key/interval storage. liKeyDelta/liIntervalDelta grow or
+    // shrink the channel's key and interval counts (each clamped into the editable
+    // range; a resize that would exceed the range is rejected); liKeyAt/liIntervalAt
+    // position the inserted/removed run; liLeftHardCut/liRightHardCut adjust the
+    // inserted interval-index run for hard-cut boundaries. Rebuilds a fresh edit
+    // buffer, snapshots the prior take onto the undo list, copies it back over the
+    // live take and rebinds. Returns true if the take was resized.
+    bool ChangeSize(s32 liChannel, s32 liKeyDelta, s32 liKeyAt,
+                    s32 liIntervalDelta, s32 liIntervalAt,
+                    s32 liLeftHardCut, s32 liRightHardCut);
+    // Set channel liChannel to exactly liNumKeys keys / liNumIntervals intervals by
+    // delegating the per-count deltas to ChangeSize.
+    bool SetSize(s32 liChannel, s32 liNumKeys, s32 liNumIntervals);
+
 private:
     // --- DECLARE-ONLY (private machinery; bodies elsewhere) ---
     bool SetParameter(s32 liChannel, f32 lfParameter, bool lbForce);

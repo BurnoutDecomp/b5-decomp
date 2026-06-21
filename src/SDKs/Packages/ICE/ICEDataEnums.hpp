@@ -326,6 +326,12 @@ public:
     u32      GetDataSize(s32 liNumElements) const;
 };
 
+// The element schema: eICE_NUM_ELEMENTS descriptions, one per element index. The
+// table is statically initialised in ICEData.cpp; it is declared here so every ICE
+// TU that walks the schema (the codec, the editor) shares the one definition.
+const s32 eICE_NUM_ELEMENTS = 48;
+extern ICEElementDescription ICEElementDescriptions[eICE_NUM_ELEMENTS];
+
 } // namespace ICE
 
 #endif // SDKS_PACKAGES_ICE_ICEDATAENUMS_HPP
