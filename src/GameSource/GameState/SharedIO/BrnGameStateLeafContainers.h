@@ -43,9 +43,9 @@ public:
     enum EOngoingRivalryCompare : s32 { E_ONGOING_RIVALRY_COMPARE_DEFAULT = 0 }; // provisional
 };
 
-class StuntModeScoringOnline
-{
-public:
-    struct MultiplierData { u8 maBlob[40]; };         // X360 stride 40 (provisional)
-};
+// NOTE: BrnGameState::StuntModeScoringOnline (and its nested MultiplierData element type) is now FULLY
+// homed in BrnStuntModeScoringOnline.h -- the online stunt scorer's own TU. The provisional
+// `struct MultiplierData { u8 maBlob[40]; }` stub that used to live here has been removed; the
+// Array<MultiplierData,3> explicit-instantiation TU (Array_MultiplierData_3.cpp) now includes that
+// home directly. This file keeps only the leaf element types it actually owns.
 }

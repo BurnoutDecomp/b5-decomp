@@ -277,6 +277,25 @@ namespace BrnGameState
         bool       WasTimeRecentlyUp();                                                 // :218
 
     protected:
+        // ===== ADDITIVE (flagged) protected accessors for the derived online scorer =====
+        // BrnGameState::StuntModeScoringOnline derives from this class and its store-for-store overrides
+        // (EndCombo/Update/ClearData/BeginCombo) read+write four committed base scalars the base keeps
+        // private: miCurrentScore (+0x10), mfComboScore (+0x20), miComboMultiplier (+0x24) and
+        // mbStuntInProgress (+0x28). Rather than make those data members protected (which would touch the
+        // committed layout / embedder expectations), expose minimal protected accessors that ALIAS them.
+        // Purely additive (no member added/reordered/retyped). FLAG: shared-home grow.
+        s32  GetCurrentScoreInternal() const           { return miCurrentScore; }          // +0x10
+        void SetCurrentScoreInternal(s32 liScore)      { miCurrentScore = liScore; }
+        s32  GetComboScoreAsInt() const                { return static_cast<s32>(mfComboScore); } // (s32)+0x20
+        s32  GetComboMultiplierInternal() const        { return miComboMultiplier; }        // +0x24
+        void SetComboMultiplierInternal(s32 liMult)    { miComboMultiplier = liMult; }
+        bool IsStuntInProgressInternal() const         { return mbStuntInProgress; }        // +0x28
+        // The cached online display score = (s32)mfComboScore * miComboMultiplier + miCurrentScore.
+        s32  ComputeOnlineDisplayScore() const
+        {
+            return GetComboScoreAsInt() * miComboMultiplier + miCurrentScore;
+        }
+
         // --- protected helpers (DECLARE-ONLY) ---
         void       BeginCombo();                                                        // :224
         void       EndCombo();                                                          // :229
