@@ -24,7 +24,84 @@ namespace GameStateModuleIO
 const ControllerInput* PreWorldInputBuffer::GetControllerInput() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const ControllerInput*>(&mControllerInputStorage);
+    return &mControllerInput;
+}
+
+// X360 0x8231CE28 - read-lock accessor for the timer-status payload (this+0x04).
+const TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mTimerStatusInterface;
+}
+
+// X360 0x823B8D08 - write-lock setter copying both 0x18-byte timer-status entries (this+0x04).
+void PreWorldInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lpSource)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    for (s32 liEntry = 0; liEntry < 2; ++liEntry)
+    {
+        TimerStatusInterface::Entry&       lDest = mTimerStatusInterface.maEntries[liEntry];
+        const TimerStatusInterface::Entry& lSrc  = lpSource->maEntries[liEntry];
+        lDest.miWord00  = lSrc.miWord00;
+        lDest.mfValue04 = lSrc.mfValue04;
+        lDest.mfValue08 = lSrc.mfValue08;
+        lDest.mbFlag0C  = lSrc.mbFlag0C;
+        lDest.miWord10  = lSrc.miWord10;
+        lDest.mfValue14 = lSrc.mfValue14;
+    }
+}
+
+// X360 0x823BA240 - write-lock setter deriving the controller button-state block (this+0x34) from
+// the per-player pad action-info source. Each bool is the corresponding action-record status bit
+// (bit1 == pressed this frame, bit0 == held). Two asserts: the write lock and a non-null source.
+void PreWorldInputBuffer::SetButtonPressed(const ControllerActionSource* lpActionInfo)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(lpActionInfo != nullptr, "No action info supplied\n");
+
+    const u32 KU_PRESSED_BIT = 2;
+    const u32 KU_HELD_BIT    = 1;
+
+    mControllerInput.mbDrivingActive       = (lpActionInfo->mStatus18C & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbReverseHeld         = (lpActionInfo->mStatus16C & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbHandbrakeHeld       = (lpActionInfo->mStatus174 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbBoostHeld           = (lpActionInfo->mStatus1AC & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction14C           = (lpActionInfo->mStatus14C & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction154           = (lpActionInfo->mStatus154 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction15C           = (lpActionInfo->mStatus15C & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction164           = (lpActionInfo->mStatus164 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction1B4Pressed    = (lpActionInfo->mStatus1B4 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction1B4Held       = (lpActionInfo->mStatus1B4 & KU_HELD_BIT) != 0;
+    mControllerInput.mbAction1BCPressed    = (lpActionInfo->mStatus1BC & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction1BCHeld       = (lpActionInfo->mStatus1BC & KU_HELD_BIT) != 0;
+    mControllerInput.mbAction05CPressed    = (lpActionInfo->mStatus05C & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction1BCHeldDup    = (lpActionInfo->mStatus1BC & KU_HELD_BIT) != 0;
+    mControllerInput.mbAction1B4And1BCHeld =
+        ((lpActionInfo->mStatus1B4 & KU_HELD_BIT) != 0) && ((lpActionInfo->mStatus1BC & KU_HELD_BIT) != 0);
+    mControllerInput.mbAction024Pressed    = (lpActionInfo->mStatus024 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction1D4Pressed    = (lpActionInfo->mStatus1D4 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction004Held       = (lpActionInfo->mStatus004 & KU_HELD_BIT) != 0;
+    mControllerInput.mbAction1E4Pressed    = (lpActionInfo->mStatus1E4 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAction13CPressed    = (lpActionInfo->mStatus13C & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbBothSticksDeflected =
+        (lpActionInfo->mfStickX > 0.25f) && (lpActionInfo->mfStickY > 0.25f);
+}
+
+// X360 0x823C9550 - write-lock setter copying an InGamePlayerStatusInterface into this+0x2CC8.
+// Forwards to the committed BrnNetwork InGamePlayerStatusInterface::operator= (X360 0x8236B020).
+void PreWorldInputBuffer::SetPlayerStatusInterface(
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpSource)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    mPlayerStatusInterface = *lpSource;
+}
+
+// X360 0x823C53D0 - write-lock setter copying a PlayerResultsInterface into this+0x36B8.
+// Forwards to the committed BrnNetwork PlayerResultsInterface::operator= (X360 0x823B8F68).
+void PreWorldInputBuffer::SetNetworkPlayerResultsInterface(const NetworkPlayerResultsInterface* lpSource)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    mNetworkPlayerResultsInterface = *lpSource;
 }
 
 // X360 0x8231CD80 - read-lock accessor for the buffered game-event queue (this+0x4C).
@@ -52,7 +129,7 @@ TakedownEventInputQueueType* PreWorldInputBuffer::GetTakedownEventInputQueue()
 const NetworkPlayerResultsInterface* PreWorldInputBuffer::GetNetworkPlayerResultsInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const NetworkPlayerResultsInterface*>(&mNetworkPlayerResultsInterfaceStorage);
+    return &mNetworkPlayerResultsInterface;
 }
 
 // =====================  PostWorldInputBuffer  =====================
