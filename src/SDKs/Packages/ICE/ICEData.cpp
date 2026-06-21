@@ -65,8 +65,8 @@
 namespace ICE
 {
 
-// Confirmed from the table size, the loop bound, and ICETake's [48] arrays.
-const s32 eICE_NUM_ELEMENTS = 48;
+// eICE_NUM_ELEMENTS (48) and the extern ICEElementDescriptions[] declaration now
+// live in ICEDataEnums.hpp so every ICE TU shares the one schema table.
 
 // eICE_NUM_CHANNELS == 12 (see docs/ICEData.md ICEChannels). The 12 channel names, in
 // channel order, seeded into the per-channel index records by InitICEDescriptions loop 1.
