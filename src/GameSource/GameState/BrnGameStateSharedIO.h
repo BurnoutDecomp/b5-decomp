@@ -167,12 +167,18 @@ namespace BrnGameState
             void Clear();   // X360 0x82356EA0
         };
 
-        // DWARF BrnGameStateSharedIO.h:872. The nested per-event record of the game-mode event
-        // interface. Minimal slice: only Event + its Construct are owned here; the parent
-        // SpecificGameModeEventInterface (Array<Event,175>) lands with its own TU.
+        // DWARF BrnGameStateSharedIO.h:872. The per-mode "specific game-mode event" interface: a
+        // fixed Array<Event,175> of per-event records keyed by event id. The nested Event record
+        // holds the event's landmark set + traffic-light trigger id + the event id. Grown by the
+        // SpecificGameModeEventInterface TU (AddEvent @ 0x82361500, Event::GetLandmark @ 0x8240E7E0;
+        // the X360 emits the per-element push as the generic Array<Event,175>::Append @ 0x8235BA28).
         class SpecificGameModeEventInterface
         {
         public:
+            // maEvents capacity. The X360 over-capacity asserts compare the live length against
+            // 0xAF == 175 (BrnGameStateSharedIO.h:1976 + the inlined CgsArray.h:226 capacity).
+            static const u32 KU_MAX_EVENTS = 175;
+
             class Event
             {
             public:
@@ -181,12 +187,100 @@ namespace BrnGameState
                 void Construct(s32 liEventID, u32 luTrafficLightTriggerId,
                                LandmarkIndex* lpaLandmarkIndices, s32 liNumLandmarks); // X360 0x82354340
 
+                // X360 0x8240E7E0. Indexed accessor for one of this event's landmark indices:
+                // returns maLandmarkIndices[liIndex] by value (sizeof(LandmarkIndex)==2). Bounds-
+                // asserts liIndex in [0, miNumLandmarks) (BrnGameStateSharedIO.h:1929/1930); the
+                // X360 assert text streams the count as "GetNumLandmarks()" (== miNumLandmarks).
+                LandmarkIndex GetLandmark(s32 liIndex) const; // X360 0x8240E7E0
+
+                // Inline read of the event id (matched by AddEvent's linear scan) and the landmark
+                // count (no standalone X360 symbol; inlined at the call/assert sites).
+                s32 GetEventID() const      { return miEventID; }
+                s32 GetNumLandmarks() const { return miNumLandmarks; }
+
             private:
                 LandmarkIndex maLandmarkIndices[KI_MAX_LANDMARKS_IN_MODE]; // 0x00
                 u32           mTrafficLightTriggerId;                      // 0x20 (LightTriggerId)
                 s32           miNumLandmarks;                              // 0x24
                 s32           miEventID;                                   // 0x28
             };
+
+            // X360 0x82361500. Find the event whose id == liEventID (linear scan of maEvents by
+            // Event::GetEventID); if found, return that record. Otherwise Construct a fresh Event
+            // (from the supplied trigger id + landmark array) and Append it, returning the new
+            // record. The X360 asserts the over-capacity guard
+            // (maEvents.GetLength() < maEvents.GetCapacity(), BrnGameStateSharedIO.h:1976) before
+            // the Append; the push itself is the generic Array<Event,175>::Append (0x8235BA28).
+            Event* AddEvent(s32 liEventID, u32 luTrafficLightTriggerId,
+                            LandmarkIndex* lpaLandmarkIndices, s32 liNumLandmarks);
+
+        private:
+            Array<Event, KU_MAX_EVENTS> maEvents; // +0x00 (Event stride 44; miCount @ +0x1E14 == 175*44)
+        };
+
+        // DWARF/X360 BrnGameStateSharedIO.h:1700-1728. The per-mode "set up all event starts"
+        // interface: a fixed Array<EventStart,175> of per-event start records keyed by an event
+        // index. Direct twin of SpecificGameModeEventInterface above (same 175 capacity, same
+        // linear-scan-then-Append AddXxx shape) but the EventStart element is 48 bytes wide.
+        // Grown by the SetUpAllEventStartsInterface TU:
+        //   AddEventStart        X360 0x82361398 (BrnGameStateSharedIO.h:1700)
+        //   the per-element push X360 0x8235B7D8 (the inlined generic Array<EventStart,175>::Append;
+        //                        Hex-Rays truncated the symbol to "...::EventSta")
+        // The X360 over-capacity guard compares the live length against 0xAF == 175
+        // (BrnGameStateSharedIO.h:1728, inlined CgsArray.h:226).
+        class SetUpAllEventStartsInterface
+        {
+        public:
+            // maEventStarts capacity. The X360 over-capacity asserts compare the live length
+            // against 0xAF == 175 (BrnGameStateSharedIO.h:1728 + the inlined CgsArray.h:226).
+            static const u32 KU_MAX_EVENT_STARTS = 175;
+
+            // One per-event start record. 48-byte stride (X360-authoritative: AddEventStart builds
+            // the record then the append copies 6 QWORDs == 48 bytes into &maElements[miCount], and
+            // 175 * 48 == 0x20D0 == the miCount offset). Field roles recovered from the X360 store
+            // map at the EventSta call setup (0x823614C4..): a leading 16-byte block, then five
+            // scalar words the caller passes. The two words the AddEventStart scan/assert touch are
+            // named by role (the +0x14 word is the scanned event index, the +0x18 word is the event
+            // id matched by "luEventID == maEventStarts.GetItem(...).GetEventID()"); the remaining
+            // caller-supplied words have no attested semantics and are spelled by their source arg.
+            class EventStart
+            {
+            public:
+                // Inline read of the event id (matched by AddEventStart's assert) and the event
+                // index (matched by AddEventStart's linear scan). No standalone X360 symbols --
+                // both are inlined at the AddEventStart compare/assert sites.
+                s32 GetEventIndex() const { return miEventIndex; }
+                s32 GetEventID() const    { return miEventID; }
+
+            private:
+                // AddEventStart builds a record field-by-field from the caller's args.
+                friend class SetUpAllEventStartsInterface;
+
+                u8  maLeadingBlock[16]; // +0x00  16-byte block from the caller's vector arg (v1)
+                s32 miWord10;           // +0x10  caller arg a4 (r6)
+                s32 miEventIndex;       // +0x14  caller arg a2 (r4); AddEventStart's scan key
+                s32 miEventID;          // +0x18  caller arg a3 (r5); GetEventID()
+                s32 miWord1C;           // +0x1C  caller arg a5 (r7)
+                s16 miWord20;           // +0x20  caller arg a6 (r8, __int16)
+                u8  maPad0x22[0x30 - 0x22]; // pad the record to its 0x30 (48-byte) stride
+            };
+
+            // X360 0x82361398. Find the EventStart whose event index == liEventIndex (linear scan
+            // of maEventStarts by EventStart::GetEventIndex); if found, assert its event id matches
+            // liEventID and return that record. Otherwise assert the over-capacity guard
+            // (maEventStarts.GetLength() < maEventStarts.GetCapacity(), :1728), build a fresh
+            // EventStart from the supplied fields and Append it, returning the new record.
+            EventStart* AddEventStart(const u8* lpLeadingBlock, s32 liEventIndex, s32 liEventID,
+                                      s32 liWord10, s32 liWord1C, s16 liWord20);
+
+        private:
+            // X360 0x8235B7D8 (Hex-Rays "...::EventSta"): the inlined generic
+            // Array<EventStart,175>::Append. Asserts the array was Construct/Clear'd and has room
+            // (the streamed "Array container out of space" message, CgsArray.h:225/226), copies the
+            // 48-byte record into the next slot and bumps the count. Returns the newly added record.
+            EventStart* AppendEventStart(const EventStart& lrEventStart);
+
+            Array<EventStart, KU_MAX_EVENT_STARTS> maEventStarts; // +0x00 (EventStart stride 48; miCount @ +0x20D0 == 175*48)
         };
 
         // DWARF BrnGameStateSharedIO.h:936. The "every player" freeburn completion-status block:
