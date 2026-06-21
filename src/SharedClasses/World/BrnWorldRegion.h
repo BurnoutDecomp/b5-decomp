@@ -4,7 +4,7 @@
 
 // New header b5-decomp/src/SharedClasses/World/BrnWorldRegion.h. Sourced from
 // references/DecFIGS/dwarfdump/SharedClasses/World/BrnWorldRegion.h:30-76,81-83
-// and the Feb-2007 leak SharedClasses/World/BrnWorldRegion.h. X360 binary
+// and the Feb-2007 partial source SharedClasses/World/BrnWorldRegion.h. X360 binary
 // authoritative on the 8-byte layout (Construct @0x8229FE20 writes meCounty@+0,
 // meDistrict@+4). Enum *type* names are ECounty/EDistrict (DWARF + binary),
 // NOT the leak's County/District (PS3/leak drift).

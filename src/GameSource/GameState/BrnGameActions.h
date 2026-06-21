@@ -132,7 +132,7 @@ struct alignas(16) SetupNetworkCarAction : public GameAction<E_ACTION_SETUP_NETW
                    CgsID               lWheelModelId);
 };
 
-// X360 0x823551F0 (SetPlayerScoringIndex). Layout per the Feb-2007 leak (this X360 build).
+// X360 0x823551F0 (SetPlayerScoringIndex). Layout per the Feb-2007 partial source (this X360 build).
 struct OnlinePlayerAddedAction : public GameAction<E_ACTION_ONLINE_PLAYER_ADDED>
 {
     CgsID               mModelID;             // 0x00

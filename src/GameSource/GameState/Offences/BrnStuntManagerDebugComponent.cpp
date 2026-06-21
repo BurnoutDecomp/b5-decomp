@@ -1,4 +1,4 @@
-// X360 0x827DB6B0. Compiler-synthesized default constructor (the Feb-2007 leak has no hand-written
+// X360 0x827DB6B0. Compiler-synthesized default constructor (the Feb-2007 partial source has no hand-written
 // body; the DecFIGS DWARF emits an empty body at BrnStuntManagerDebugComponent.h:50). It exists
 // only because members need non-trivial construction: the CgsDev::DebugComponent base (installs its
 // vtable, off_820CDE8C as the most-derived) and the three CgsDev::SimpleStrStream subobjects (each

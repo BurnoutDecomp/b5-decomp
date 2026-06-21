@@ -16,6 +16,7 @@ namespace CgsMemory
         void Construct();
         void Create(void* lpAlloc, size_t lnSize);
         void* Malloc(size_t lnSize);   // 0x82866DC0 - align the bump pointer, advance, return it (null if it overflows the region)
+        void FreeAll();                // 0x82866E60 - reset the bump pointer to the start (frees every allocation)
         void Destruct();
         void StartRWAllocation();
         void StopRWAllocation();

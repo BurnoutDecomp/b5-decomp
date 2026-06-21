@@ -13,7 +13,7 @@
 // BrnRegion.h), which is authoritative.
 //
 // X360 layout (DWARF): BoxRegion mBoxRegion; int32_t mId; int16_t miRegionIndex;
-// uint8_t meType; uint8_t muPad[1].  (The Feb-2007 leaked header had `int32_t
+// uint8_t meType; uint8_t muPad[1].  (The Feb-2007 partial source header had `int32_t
 // miRegionIndex` + `uint8_t muPad[3]`; the shipped build narrowed the region
 // index to 16 bits, hence a single pad byte. We follow the DWARF.)
 //

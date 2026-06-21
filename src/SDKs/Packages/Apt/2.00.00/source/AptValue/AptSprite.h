@@ -20,7 +20,7 @@
 // gperf emits to scope the recognizer (gperf `%define class-name`).
 //
 // Shape derived from the X360 pseudocode at 0x82AD6800 (in_word_set) and
-// 0x82AD6798 (hash); the DecFIGS DWARF and the Feb-2007 leak have no source for
+// 0x82AD6798 (hash); the DecFIGS DWARF and the Feb-2007 partial source have no source for
 // this TU, so the X360 binary is authoritative for the algorithm.
 //
 // This recognizer is the SIMPLE gperf form: a single, direct hash-indexed

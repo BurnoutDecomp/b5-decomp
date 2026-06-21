@@ -182,6 +182,18 @@ struct LinearResourceAllocator {  // sizeof = 144 (rwcore.pdb, x64)
     ::rw::ResourceDescriptor m_paddingUsed;  // +104
     uint32_t m_numAllocations;  // +136
     uint8_t _pad0[4];  // +140
+
+    // [PC-LEAF] reconstructed methods (bodies in renderware/src/rwcore_alloc.cpp). Non-virtual
+    // (the resource code holds the concrete LinearResourceAllocator*, e.g. via AllocatorList), so
+    // no rw vtable / rwcore.lib link is needed. A linear (bump) allocator over the 4 resource pools:
+    // each pool [m_heapResource[t], +m_heapCapacity[t].m_size) is sub-allocated by bumping
+    // m_currentUsage[t]. Frees happen en masse (re-Initialize). Faithful to the X360 semantics
+    // (LinearResourceAllocator::GetResourceDescriptor 0x..., Initialize, DoAllocate); the bump math
+    // is portable, only the bit-exact rwcore.lib chunk layout is elided.
+    static ResourceDescriptor* GetResourceDescriptor(ResourceDescriptor* lpOut, const ResourceDescriptor* lpIn);
+    void  Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
+    void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);
+    void  Free(void* lpBlock);
 };
 RW_SIZE_ASSERT(rw::LinearResourceAllocator, 144);
 

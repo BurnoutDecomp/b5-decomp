@@ -7,7 +7,7 @@
 // The X360 build inlines the generated accessor / `using Instance::…` API away, so the
 // constructor is the only surfacelist function in the ledger — this is therefore a
 // minimal, X360-faithful recon (class identity + ctor). The full generated accessor
-// surface (DefaultSurface/Surfaces + the _LayoutStruct) lives in the Feb-2007 leak and
+// surface (DefaultSurface/Surfaces + the _LayoutStruct) lives in the Feb-2007 partial source and
 // can be added if/when a caller TU needs those symbols. Derives from Attrib::Instance.
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 

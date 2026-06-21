@@ -7,7 +7,7 @@
 //   BrnWorld::CollisionDebugComponent::GetPath @ 0x827DD250  -> "World"
 //
 // Debug-UI identity hooks for the collision debug component. The X360 build (the
-// spine) returns "Collision draw mode" for GetName (the Feb-2007 leak header read
+// spine) returns "Collision draw mode" for GetName (the Feb-2007 partial source header read
 // "Collision Tags" - a different build). Header-keyed TU; members inline.
 
 namespace BrnWorld

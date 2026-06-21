@@ -40,7 +40,7 @@ namespace CgsResource
     };
 
     // The language-string-table resource-type handler -- resource type id 0x27 ("Language", 39).
-    // Reconstructed from the X360 ARTIST bodies (no Feb-2007 leak source for this TU):
+    // Reconstructed from the X360 ARTIST bodies (no Feb-2007 partial source source for this TU):
     //   GetTypeID                        0x82860F18  (= 39)
     //   GetSerialisedResourceDescriptor  0x82863D00  (12 + Sum(ByteLength(string) + 9); block0 size)
     //   FixDown                          0x82864560  (un-rebase each string, then the entry array)

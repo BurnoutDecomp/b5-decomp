@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // CgsResource::LanguageResourceType -- the language string-table handler (id 0x27 = 39). A faithful
-// port of the X360 ARTIST bodies (no Feb-2007 leak source for this TU):
+// port of the X360 ARTIST bodies (no Feb-2007 partial source source for this TU):
 //   GetTypeID                        0x82860F18
 //   GetSerialisedResourceDescriptor  0x82863D00
 //   FixDown                          0x82864560

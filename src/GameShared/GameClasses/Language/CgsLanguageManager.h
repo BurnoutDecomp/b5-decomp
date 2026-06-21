@@ -15,7 +15,7 @@ namespace CgsLanguage
         bool IsUsingMetricUnits() const;
 
         // Localised value -> string formatters. Signatures for the overlapping ones are from the
-        // Feb-2007 leaked CgsLanguageManager.h (target buffer, value(s), buffer size); the X360
+        // Feb-2007 partial source CgsLanguageManager.h (target buffer, value(s), buffer size); the X360
         // ARTIST build adds the XoverY / Date / *AndHundreds variants (version drift over the leak).
         // The leaked source types the buffer as CgsUnicode::CgsUtf8* (== u8); modelled here as char*
         // since callers (e.g. the debug HUD) pass a plain byte buffer straight to the text renderer.

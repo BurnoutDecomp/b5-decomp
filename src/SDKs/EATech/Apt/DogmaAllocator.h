@@ -3,7 +3,7 @@
 // ===========================================================================
 // EATech Apt -- DOGMA pool allocator.
 //
-// Reconstructed from the Feb-2007 leak (SDKs/Packages/Apt/2.00.00/include/Apt/
+// Reconstructed from the Feb-2007 partial source (SDKs/Packages/Apt/2.00.00/include/Apt/
 // DogmaAllocator.h) for SHAPE, and from the X360 ARTIST.XEX pseudocode for the
 // method BODIES that the leak only declared:
 //     DOGMA_PoolManager::DOGMA_PoolManager           @ 0x82ADB850

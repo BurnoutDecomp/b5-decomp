@@ -4,7 +4,7 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   Attrib::Gen::debrisparams::debrisparams @ 0x8227E9A0
 //
-// class-sourced (no Feb-2007 leak / DWARF for this TU) — same generated-ctor pattern as
+// class-sourced (no Feb-2007 partial source / DWARF for this TU) — same generated-ctor pattern as
 // surfacelist. The X360 build inlines the generated accessor / `using` API away, so the
 // constructor is the only debrisparams function in the ledger (minimal X360-faithful
 // recon). Derives from Attrib::Instance.

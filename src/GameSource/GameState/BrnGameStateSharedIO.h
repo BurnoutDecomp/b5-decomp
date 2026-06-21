@@ -319,7 +319,7 @@ namespace BrnGameState
         // X360-AUTHORITATIVE 296-byte (0x128) layout, recovered from the four owned methods
         // (ctor 0x822A45A8, ClearData 0x821F2B28, operator= 0x821F4740 -- a full field-by-field
         // copy through +292, and GetChainableStuntMultipliers 0x8231C170). The PS3 DecFIGS DWARF +
-        // Feb-2007 leak describe an EARLIER CarScoreData (with LandmarkIndex[16] arrays) that does
+        // Feb-2007 partial source describe an EARLIER CarScoreData (with LandmarkIndex[16] arrays) that does
         // NOT match the packed X360 record. Field semantics are mostly unknown, so only the fields
         // the methods meaningfully name are declared; runs of untouched scalar/Time words (incl. the
         // ten chainable-stunt CgsSystem::Time pairs the ctor zeroes at +0x6C..+0xBC) are collapsed

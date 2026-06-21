@@ -46,6 +46,13 @@ namespace CgsMemory
         return nullptr;
     }
 
+    // 0x82866E60 - reset the bump pointer to the region start (X360: next = start), freeing
+    // every allocation made since Create() without releasing the backing region.
+    void LinearMalloc::FreeAll()
+    {
+        mnNextAddress = mnStartAddress;
+    }
+
     void LinearMalloc::Destruct()
     {
         mbCreated = false;

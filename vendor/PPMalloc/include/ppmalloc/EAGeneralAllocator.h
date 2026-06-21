@@ -127,17 +127,33 @@ namespace Allocator
 
         bool  Init();
         void  Shutdown();
+        // Adopt [pCore, pCore+nSize) as the heap's backing memory. @ 0x82B4F800.
+        bool  AddCore(void* pCore, size_t nSize, bool bShouldFree = false, bool bShouldFreeOnShutdown = false);
         void* Malloc(size_t nSize, int nAllocationFlags = 0);
         void* MallocAligned(size_t nSize, size_t nAlignment, size_t nAlignmentOffset = 0, int nAllocationFlags = 0);  // @ 0x82B515B0
         void* Calloc(size_t nElementCount, size_t nElementSize, int nAllocationFlags = 0);
         void* Realloc(void* pData, size_t nNewSize, int nAllocationFlags = 0);
         void  Free(void* pData);
+        // True if pData lies within this allocator's adopted core (used to route Free between
+        // sibling allocators, e.g. rw::core::GeneralResourceAllocator's main vs physical heaps).
+        bool  Owns(const void* pData) const;
         void  SetName(const char* pName);
         const char* GetName() const;
 
     protected:
         void* MallocInternal(size_t nSize, int nAllocationFlags);
         void* MallocAlignedInternal(size_t nSize, size_t nAlignment, size_t nAlignmentOffset, int nAllocationFlags);
+
+        // Default assertion/trace sinks the ctor installs (X360 AssertionFailureFunctionDefault
+        // 0x82B4EDC8 / TraceFunctionDefault 0x82B4DC98).
+        static void AssertionFailureFunctionDefault(const char* pMessage, void* pContext);
+        static void TraceFunctionDefault(const char* pMessage, void* pContext);
+
+        // bin_at(i): the regular bins overlap successive Chunk fd/bk fields (the classic dlmalloc
+        // trick). On x64 a Chunk's fd (mpPrevChunk) is at +8, so bin i (1-based) aliases the pair
+        // mpBinArray[2*(i-1)] / mpBinArray[2*(i-1)+1]. Recovered behaviourally from the X360 bin
+        // self-link loop (Init 0x82B4FA30) rather than by byte offset (the X86/PPC/x64 layouts differ).
+        Chunk* GetBin(int i);
 
     private:
         // --- members (real order; see the PDB dump) -------------------------------------

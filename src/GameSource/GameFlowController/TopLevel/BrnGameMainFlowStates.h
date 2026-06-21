@@ -92,6 +92,11 @@ struct MainGameFlowStateInitialLoadingScreen : public LoadingScriptedState
     virtual void Update();
     virtual void FinishLoading();
 
+private:
+    // Advance to + log the next load stage (interim helper; each real LoadXxxModule will call this
+    // on its own completion). Non-virtual; does not affect layout/vtable.
+    void AdvanceLoadingStage(ELoadingScreenStage leNextStage);
+
 protected:
     ELoadingScreenStage                 meLoadingScreenStage;
     rw::core::GeneralResourceAllocator* mpInputModuleAllocator;

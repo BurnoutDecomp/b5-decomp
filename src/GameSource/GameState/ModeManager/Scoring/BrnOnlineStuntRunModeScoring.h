@@ -6,7 +6,7 @@
 // Online STUNT-RUN (free-for-all team-stunt) mode scorer. Derives from BaseOnlineModeScoring and
 // overrides the scoring lifecycle. This is the FOURTH online sub-scorer the ScoringSystem keystone
 // reaches through WriteDataToOutput / StartOnlineGameModeScoring (alongside OnlineRaceModeScoring,
-// OnlineRoadRageModeScoring and OnlineBurningHomeRunModeScoring). No Feb-2007 leak and NO DecFIGS
+// OnlineRoadRageModeScoring and OnlineBurningHomeRunModeScoring). No Feb-2007 partial source and NO DecFIGS
 // DWARF exists for this TU, so the layout below is recovered purely from the X360 pseudocode of its
 // six functions (Compare/CompareTeams/GetNumPlayersOnTeam/GetTeamScore/GetWinnerTeam/
 // UpdatePlayerPoints @ 0x823159C8 / 0x82315A08 / 0x82321DB0 / 0x82321D20 / 0x8232F950 / 0x82338B90).

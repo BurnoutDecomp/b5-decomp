@@ -3,7 +3,7 @@
 // Canonical RenderWare SDK home for the rw::math::vpu Vector3 operation vocabulary
 // (EARenderWare rwmath 1.02.00, rw/math/vpu/vector3_operation.h -- sibling to types.h).
 // Reconstructed from BURNOUT_X360_ARTIST.XEX with the public-header names and signatures
-// locked from the Feb-2007 leak (rwmath/1.02.00/include/rw/math/vpu/vector3_operation.h
+// locked from the Feb-2007 partial source (rwmath/1.02.00/include/rw/math/vpu/vector3_operation.h
 // + detail/vector3_operation_inline.h) and the DecFIGS DWARF (BrnMathUnity attests the
 // live Vector3 instances of MagnitudeSquared/Cross/Normalize/IsZero, fpu mirror confirms
 // the free-function family).

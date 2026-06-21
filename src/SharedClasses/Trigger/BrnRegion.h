@@ -10,7 +10,7 @@
 //
 // SHAPE is gated on the X360 DWARF (references/DecFIGS/dwarfdump/SharedClasses/
 // Trigger/BrnRegion.h), which is authoritative. NOTE: the X360 build's BoxRegion
-// differs from the older Feb-2007 leaked header — the leaked struct stored a
+// differs from the older Feb-2007 partial source header — the leaked struct stored a
 // Matrix44Affine transform + a Vector3 of dimensions; the shipped X360 layout
 // instead stores nine scalar floats (position xyz / rotation xyz / dimensions xyz)
 // and derives Vector3/Matrix44 results through accessors. We follow the DWARF.
