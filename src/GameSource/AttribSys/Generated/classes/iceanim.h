@@ -21,6 +21,12 @@ namespace Gen
         // BrnDirector::SimpleIceTakedownPlayer::SetIceAnim against a passed object's
         // leading class-key tag.
         static s64 ClassKey() { return 0x4644E379A997C1EELL; }
+
+        // The instance's STORED class-key tag: the leading 8 bytes of the object. The
+        // inline form callers use (mirrors SimpleIceTakedownPlayer::SetIceAnim's
+        // *reinterpret_cast<const s64*>(lpIceAnim)). The class-key asserts compare this
+        // against ClassKey().
+        s64 GetClassKey() const { return *reinterpret_cast<const s64*>(this); }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::iceanim
