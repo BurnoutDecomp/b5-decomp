@@ -13,10 +13,8 @@
 // optional first- and second-derivative clamping.
 //
 // This file currently models a MINIMAL but FAITHFUL slice: the Cubic1D field
-// layout (matched field-for-field against the DecFIGS DWARF ICEPoint.hpp:28-40)
-// plus the full Cubic1D method set the DWARF declares. Only the three functions
-// reconstructed in this TU -- ClampDerivative @0x8252CD30,
-// ClampSecondDerivative @0x8252CD98, and Update @0x8252CE70 -- have bodies
+// layout plus the full Cubic1D method set. Only the three functions reconstructed
+// in this TU -- ClampDerivative, ClampSecondDerivative, and Update -- have bodies
 // (in ICEPoint.cpp); the remaining methods are declaration-only until their own
 // TUs land (the per-TU cl /c gate does not link, so declarations suffice).
 //
@@ -25,41 +23,40 @@
 // accessors -- EXTENDS this header in place. It must NOT re-declare Cubic1D in a
 // parallel header.
 //
-// LAYOUT (32-bit, DWARF ICEPoint.hpp:28-40; offsets X360-attested via the
-// result[N] float-index / *(result+byte) accesses in the three reconstructed
-// functions' pseudocode/asm):
-//   @0x00  f32 Val          result[0]   current value
-//   @0x04  f32 dVal         result[1]   current first derivative (velocity)
-//   @0x08  f32 ValDesired   result[2]   target value
-//   @0x0C  f32 dValDesired  result[3]   target first derivative
-//   @0x10  f32 Coeff[4]     result[4..7] cubic coefficients (C0 t^3 + C1 t^2 + C2 t + C3)
-//   @0x20  f32 time         result[8]   normalised progress 0..1
-//   @0x24  f32 duration     result[9]   seek duration (seconds)
-//   @0x28  s16 state        *(result+40) state machine (1 = running, 2 = (re)start, 0 = arrived)
-//   @0x2A  s16 flags        *(result+42)
+// LAYOUT (32-bit; struct-relative offsets, confirmed by the float-index / byte
+// accesses in the three reconstructed functions):
+//   @0x00  f32 Val          current value
+//   @0x04  f32 dVal         current first derivative (velocity)
+//   @0x08  f32 ValDesired   target value
+//   @0x0C  f32 dValDesired  target first derivative
+//   @0x10  f32 Coeff[4]     cubic coefficients (C0 t^3 + C1 t^2 + C2 t + C3)
+//   @0x20  f32 time         normalised progress 0..1
+//   @0x24  f32 duration     seek duration (seconds)
+//   @0x28  s16 state        state machine (1 = running, 2 = (re)start, 0 = arrived)
+//   @0x2A  s16 flags
 //
-// (DWARF spells the scalars float32_t; float32_t is NOT a project type -> f32,
-// and short int -> s16, per the project type vocabulary in types.hpp.)
+// (The scalars are 32-bit float -> f32, and the state/flags are short int -> s16,
+// per the project type vocabulary in types.hpp.)
 // ============================================================================
 
 namespace ICE
 {
 
-// ICEPoint.hpp:28 (DWARF). 1-D cubic-spline follower.
+// 1-D cubic-spline follower.
 struct Cubic1D
 {
-    f32 Val;          // @0x00  result[0]
-    f32 dVal;         // @0x04  result[1]
-    f32 ValDesired;   // @0x08  result[2]
-    f32 dValDesired;  // @0x0C  result[3]
-    f32 Coeff[4];     // @0x10  result[4..7]
-    f32 time;         // @0x20  result[8]
-    f32 duration;     // @0x24  result[9]
-    s16 state;        // @0x28  *(result+40)
-    s16 flags;        // @0x2A  *(result+42)
+    f32 Val;          // @0x00
+    f32 dVal;         // @0x04
+    f32 ValDesired;   // @0x08
+    f32 dValDesired;  // @0x0C
+    f32 Coeff[4];     // @0x10
+    f32 time;         // @0x20
+    f32 duration;     // @0x24
+    s16 state;        // @0x28
+    s16 flags;        // @0x2A
 
-    // --- Full Cubic1D method set (DWARF ICEPoint.hpp:42-87). Only the three
-    //     below with a comment-marked address are reconstructed in this TU; the
+    // --- Full Cubic1D method set. Only the three reconstructed in this TU
+    //     (Update / ClampDerivative / ClampSecondDerivative) have bodies; the
     //     rest are declaration-only until their own TUs land. ---
 
     Cubic1D(s16 state, f32 duration);
@@ -72,7 +69,7 @@ struct Cubic1D
     {
     }
 
-    void Update(f32 dt, f32 derivativeLimit, f32 secondDerivativeLimit);   // @0x8252CE70
+    void Update(f32 dt, f32 derivativeLimit, f32 secondDerivativeLimit);
     void Snap();
 
     void SetVal(f32 val);
@@ -97,12 +94,31 @@ struct Cubic1D
     f32 GetDerivative(f32 t) const;
     f32 GetSecondDerivative(f32 t) const;
 
-    void ClampDerivative(f32 limit);          // @0x8252CD30
-    void ClampSecondDerivative(f32 limit);    // @0x8252CD98
+    void ClampDerivative(f32 limit);
+    void ClampSecondDerivative(f32 limit);
 
     void MakeCoeffs();
 
     s32 HasArrived() const;
+};
+
+// ============================================================================
+// ICE::Cubic3D -- three Cubic1D followers driving the X/Y/Z of a 3-D quantity
+// (e.g. the ICE camera's accel-offset and forward followers).
+//
+// GROWN here (minimal slice) for ICECameraMover, which embeds two Cubic3D by value
+// (its mAccelOffset and mForward members). The full ICEPoint.hpp TU -- Cubic2D, the
+// rw::math Vector2/Vector3 convenience accessors, and ICE::Point -- EXTENDS this
+// header in place; it must NOT re-declare Cubic3D in a parallel header.
+//
+// LAYOUT: three Cubic1D laid out back-to-back (44 bytes each = 132 bytes total).
+// Attested by ICECameraMover::Construct (which builds two 132-byte blocks) and by
+// ICECameraMover::UpdateForwardVector (which Updates the three component Cubic1D at
+// +0x00 / +0x2C / +0x58 of the mForward block).
+// ============================================================================
+struct Cubic3D
+{
+    Cubic1D maComponents[3];   // @0x00 X, @0x2C Y, @0x58 Z   (3 * 44 = 132 bytes)
 };
 
 } // namespace ICE

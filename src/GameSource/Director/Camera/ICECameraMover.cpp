@@ -1,23 +1,26 @@
-#include "ICECameraMover.h"
+#include "GameSource/Director/Camera/ICECameraMover.h"
+
+// ============================================================================
+// GameSource/Director/Camera/ICECameraMover.cpp
+//
+// ICE::ICECameraMover default constructor. The mover is embedded by value in
+// BrnDirector::ICEWrapper, so it must be default-constructible; the real per-frame
+// state is set by ICECameraMover::Construct (its own TU, SDKs/Packages/ICE/
+// ICECameraMover.cpp). The ctor leaves the cubic followers / transform / vectors to
+// their members' own default-init (each Cubic1D default-constructs to its rest state)
+// and clears the pointers + scalar hysteresis so an un-Construct'd mover is inert.
+// ============================================================================
 
 namespace ICE
 {
 ICECameraMover::ICECameraMover()
+    : mpCar(0)
+    , mpICECamera(0)
+    , mpTake(0)
+    , miHardCutInterval(-1)
+    , mfSimTime(0.0f)
+    , muOldTag(0)
+    , miOldOverlay(0)
 {
-    for (CameraMoveChannel& lChannel : maChannels)
-    {
-        lChannel.mfPositionX = 0.0f;
-        lChannel.mfPositionY = 0.0f;
-        lChannel.mfPositionZ = 0.0f;
-        lChannel.mfVelocityX = 0.0f;
-        lChannel.mfVelocityY = 0.0f;
-        lChannel.mfVelocityZ = 0.0f;
-        lChannel.mfAccelerationX = 0.0f;
-        lChannel.mfAccelerationY = 0.0f;
-        lChannel.mfBlend = 0.0f;
-        lChannel.mfWeight = 1.0f;
-        lChannel.mu16Flags = 0;
-        lChannel.mu16Enabled = 1;
-    }
 }
 }

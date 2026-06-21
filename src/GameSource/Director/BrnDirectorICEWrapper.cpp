@@ -96,22 +96,32 @@ void ICEWrapper::EditorOff()
 // ReconstructCameraMover
 //
 // Rebuild the camera mover for this frame: ask the manager for the take currently
-// driving the camera, then construct the mover against it. The mover's two by-address
-// inputs are the wrapper's own ICE camera and its per-frame reference-space cache;
-// liContext is the per-call director context the mover blends against.
+// driving the camera, then construct the mover against it.
 //
-// Arg order to ICECameraMover::Construct (RECONCILED from the earlier opaque
-// input-block model -- arg3 is &mCameraSpaceHandler (+0x11ED0), arg4 is &mICECamera
-// (+0x11D60)):
-//   (mover, 1, &mCameraSpaceHandler, &mICECamera, cameraTake, 0, context)
-// FLAG: the leading `1` is a bool/flag and the `0` a null/extra block, both literal in
-//   the call.
+// Arg order to ICECameraMover::Construct (RECONCILED against the real mover layout the
+// 11 reconstructed mover functions prove -- the second arg is stored at mover+0x00 as
+// its ICECameraAnchor* mpCar, the third at +0x04 as mpICECamera, the fourth at +0x110
+// as mpTake):
+//   (mover, viewIndex=1, &mCameraSpaceHandler, &mICECamera, cameraTake, 0, context)
+//
+// FLAG: the mover's anchor (ICE::ICECameraAnchor) is the layout `{ CameraSpaceHandler
+//   mSpace; }`, so the wrapper's reference-space cache &mCameraSpaceHandler IS the
+//   anchor's leading member -- the two pointers address the same bytes. Bridge the
+//   types with a reinterpret_cast (layout-coincident head), not an offset poke; the
+//   mover only reads the anchor's car-to-world (its mSpace).
+// FLAG: liContext (an s32) flows into Construct's trailing context slot, which the
+//   mover's Construct body ignores; the recovered declaration types that slot as const
+//   IResourceManager* (version drift -- the recorded caller passes the int context there).
 // ---------------------------------------------------------------------------
 void ICEWrapper::ReconstructCameraMover(s32 liContext)
 {
     ICE::ICETake* lpCameraTake = mICEManager.GetCameraTake();
 
-    mCameraMover.Construct(true, &mCameraSpaceHandler, &mICECamera, lpCameraTake, 0, liContext);
+    mCameraMover.Construct(1,
+                           reinterpret_cast<ICE::ICECameraAnchor*>(&mCameraSpaceHandler),
+                           &mICECamera, lpCameraTake, 0,
+                           reinterpret_cast<const ICE::IResourceManager*>(
+                               static_cast<intptr_t>(liContext)));
 }
 
 } // namespace BrnDirector
