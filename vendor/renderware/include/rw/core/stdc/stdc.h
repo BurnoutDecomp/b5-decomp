@@ -18,6 +18,8 @@
 //   * rw::core::stdc::StringLength(s)            -- strlen wrapper (ICEFileHandler)
 //   * rw::core::stdc::StringCat(dst, src)        -- strcat wrapper (ICEFileHandler);
 //                                                   returns dst, like the C library
+//   * rw::core::stdc::StringCopy(dst, src)       -- strcpy wrapper (ICEWidgetMenuItem);
+//                                                   returns dst, like the C library
 // DECLARATION-ONLY: the real bodies live in the rwcore stdc TU and the per-TU
 // `cl /c` gate does not link. When the full rwcore stdc surface is reconstructed,
 // GROW this header in place (MemSet/MemMove/MemCmp/...) -- do NOT fork it.
@@ -55,6 +57,11 @@ namespace stdc
     // lpcDst (C-library strcat semantics). The X360 Hex-Rays types the buffers as
     // `unsigned __int8*`/`char*`; modelled as char* here. DECLARATION-ONLY.
     char* StringCat(char* lpcDst, const char* lpcSrc);
+
+    // strcpy wrapper: copy the NUL-terminated lpcSrc into lpcDst and return lpcDst
+    // (C-library strcpy semantics). The buffers are read-only source / writable
+    // destination text, modelled as const char*/char* here. DECLARATION-ONLY.
+    char* StringCopy(char* lpcDst, const char* lpcSrc);
 }
 }
 }
