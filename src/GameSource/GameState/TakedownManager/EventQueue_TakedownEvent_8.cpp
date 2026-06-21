@@ -11,3 +11,9 @@ template void CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>::Construct()
 template bool CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>::AddEvent(const BrnGameState::TakedownEvent&);
 template bool CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>::Append(const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>&);
 template BrnGameState::TakedownEvent& CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>::GetEvent(s32);
+// X360 0x822AC660 (class:BrnGameState catch-all TU, ledger "BrnGameState::TakedownEvent>:") = the
+// const indexed accessor of this same instantiation. The 14 callers (ProcessTakedownEvents,
+// ScoringSystem::UpdateTakedowns, ...) read events out of the takedown queue by index: the X360 body
+// is the "mpEvents != NULL" (CgsBaseEventQueue.h:272) + "liIndex < GetLength()" (274) + "liIndex >= 0"
+// (275) sequence returning &mpEvents[i] (stride 40 == sizeof(TakedownEvent)) -- the const GetEvent body.
+template const BrnGameState::TakedownEvent& CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>::GetEvent(s32) const;

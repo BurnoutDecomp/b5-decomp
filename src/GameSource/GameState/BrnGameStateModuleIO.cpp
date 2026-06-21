@@ -217,6 +217,14 @@ GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface()
     return reinterpret_cast<GameStateToGuiInterface*>(&mGameStateToGuiInterfaceStorage);
 }
 
+// X360 0x823B9D80 - read-lock (const) twin accessor for the game-state-to-GUI interface (this+0x4450,
+// == 17488). class:BrnGameState catch-all TU; BridgeGameStateToGui reads it under a read lock.
+const GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const GameStateToGuiInterface*>(&mGameStateToGuiInterfaceStorage);
+}
+
 // X360 0x823630F0 - write-lock accessor for the race-car race-distance interface (this+0x2A48C).
 RaceCarRaceDistanceInterface* OutputBuffer::GetRaceCarRaceDistanceInterface()
 {

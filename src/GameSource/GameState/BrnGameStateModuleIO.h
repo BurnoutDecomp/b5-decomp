@@ -276,6 +276,9 @@ namespace GameStateModuleIO
         TakedownEventOutputQueueType*     GetTakedownEventOutputQueue();
         // X360 0x8231D8A8 (write-lock; "Not locked for writing", line 296)
         GameStateToGuiInterface*          GetGameStateToGuiInterface();
+        // X360 0x823B9D80 (read-lock; "Not locked for reading", line 295) -- const twin of the above.
+        // (class:BrnGameState catch-all TU; the BridgeGameStateToGui consumer reads it read-locked.)
+        const GameStateToGuiInterface*    GetGameStateToGuiInterface() const;
         // X360 0x823630F0 (write-lock; "Not locked for writing", line 311)
         RaceCarRaceDistanceInterface*     GetRaceCarRaceDistanceInterface();
 
