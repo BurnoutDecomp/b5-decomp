@@ -25,13 +25,29 @@ public:
     static const u32 KU_SIZE          = N;
     static const s32 KI_UNCONSTRUCTED = -1; // sentinel before Construct/Clear has run
 
-    T&       operator[](u32 luIndex)       { return maElements[luIndex]; }
-    const T& operator[](u32 luIndex) const { return maElements[luIndex]; }
+    // Checked indexed accessor (X360 Array<T,N>::operator[]). The X360 body asserts the
+    // array was Construct/Clear'd (miCount != the -1 sentinel) then bounds-checks the index
+    // against the live count, streaming "Array index out of bounds. Index: <i>, length: <n>"
+    // before returning &maElements[luIndex]. Generic body shared by every instantiation:
+    //   non-const  CgsArray.h:538/539  (X360 0x823AFEC8 [sizeof T 24], 0x82200248 [116], 0x8241D4F8 [44])
+    //   const      CgsArray.h:556/557  (X360 0x8235B918 [sizeof T 48], 0x82200140 [116], 0x8235BB50 [44])
+    T& operator[](u32 luIndex)
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Array index out of bounds");
+        return maElements[luIndex];
+    }
+    const T& operator[](u32 luIndex) const
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Array index out of bounds");
+        return maElements[luIndex];
+    }
 
     // GetItem - the DWARF spells the indexed accessor as Array<T,N>::GetItem (e.g.
     // GameMainFlowController dispatches its active state via maStates.GetItem(index)).
-    T&       GetItem(u32 luIndex)       { return maElements[luIndex]; }
-    const T& GetItem(u32 luIndex) const { return maElements[luIndex]; }
+    T&       GetItem(u32 luIndex)       { return (*this)[luIndex]; }
+    const T& GetItem(u32 luIndex) const { return (*this)[luIndex]; }
 
     // Bring the array to its empty-but-usable state: zero live elements. This is what the
     // X360 build does to each embedded Array<> in its owner's Construct (a single `stw 0`
@@ -97,9 +113,11 @@ public:
         return FindFirstInstanceOf(lrElement) != KI_UNCONSTRUCTED;
     }
 
-    // Checked element accessor (the X360 build's Array<>::Ge).
-    T&       Ge(u32 luIndex)       { return maElements[luIndex]; }
-    const T& Ge(u32 luIndex) const { return maElements[luIndex]; }
+    // Checked element accessor (the X360 build's Array<>::Ge); same checked body as
+    // operator[] (constructed-assert + bounds-check), routed through it so the bounds
+    // logic lives in one place.
+    T&       Ge(u32 luIndex)       { return (*this)[luIndex]; }
+    const T& Ge(u32 luIndex) const { return (*this)[luIndex]; }
 
     // Push one element onto the inline buffer (X360 Array<T,N>::Append, generic template body
     // shared by every instantiation). Asserts the array was Construct/Clear'd and has room; the
