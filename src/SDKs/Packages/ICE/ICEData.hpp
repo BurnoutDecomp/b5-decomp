@@ -232,6 +232,11 @@ private:
     u32                     muUndoUsedBytes;      // @0x734  undo-list byte accumulator
 
 public:
+    // Default constructor: zeros the decoded value table and default-inits the
+    // per-element Cubic1D followers (the data pointers / channels are bound later by
+    // SetData / SetDataPointers). Body in ICEDataICETake.cpp.
+    ICETake();
+
     // --- DECLARE-ONLY (lifecycle / edit buffer; bodies in ICEData.cpp) ---
     void Construct(const IResourceManager* lpResourceManager);
     void Destruct();

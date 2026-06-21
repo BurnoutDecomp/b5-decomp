@@ -16,6 +16,17 @@
 namespace ICE
 {
     // ------------------------------------------------------------------------
+    // ICETake::ICETake -- zero the decoded per-element value table; the 28 Cubic1D
+    // followers are default-constructed (duration 1.0, flags 1, the rest 0). The
+    // take's data pointers, channels and edit buffer are bound later by SetData /
+    // SetDataPointers / NewEditBuffer.
+    // ------------------------------------------------------------------------
+    ICETake::ICETake()
+    {
+        rw::core::stdc::MemClear(&mValues[0], sizeof(mValues));
+    }
+
+    // ------------------------------------------------------------------------
     // ICETake::GetIntervalKey -- map an interval index to its left-edge key
     // index: interval 0 starts at key 0; an interior interval n starts at the
     // stored key-index table entry [n-1]; the final interval starts at the
