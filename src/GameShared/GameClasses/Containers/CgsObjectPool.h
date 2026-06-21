@@ -77,15 +77,23 @@ public:
     }
 
     // Reach the inline object at a pool slot index (callers resolve a slot via the free
-    // queue / their own order array, then index the pool by that slot).
+    // queue / their own order array, then index the pool by that slot). The X360 body
+    // (e.g. 0x8231A2E8, the ObjectPool<StoredLeapingData,7,s32>::operator[] instantiation in the
+    // class:BrnGameState catch-all TU) bounds-checks the index ("Array index out of bounds",
+    // CgsObjectPool.h:218) AND verifies the slot is currently allocated ("The referenced object has
+    // not been allocated", CgsObjectPool.h:219) before returning the object -- both are non-gating
+    // tripwire asserts. The allocated-bit check is an ADDITIVE tripwire here (it never changes the
+    // happy-path result); the existing single-bounds-check users are behaviour-unaffected.
     T& operator[](TIndex liIndex)
     {
         CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_CAPACITY), "Array index out of bounds");
+        CGS_ASSERT(mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex)), "The referenced object has not been allocated");
         return maObjectPool[static_cast<s32>(liIndex)];
     }
     const T& operator[](TIndex liIndex) const
     {
         CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_CAPACITY), "Array index out of bounds");
+        CGS_ASSERT(mObjectsAllocated.IsBitSet(static_cast<u32>(liIndex)), "The referenced object has not been allocated");
         return maObjectPool[static_cast<s32>(liIndex)];
     }
 

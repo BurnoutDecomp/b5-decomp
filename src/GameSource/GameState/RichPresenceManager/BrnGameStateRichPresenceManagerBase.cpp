@@ -217,4 +217,38 @@ bool RichPresenceManagerBase::SetRankedParameter()
     return false;
 }
 
+// ----------------------------------------------------------------------------
+// X360 0x8235A820 (class:BrnGameState catch-all TU, ledger "BrnGameState::RichPresenceManagerBase:").
+// EGameModeTypeToERichPresenceState -- map an EGameModeType to the rich-presence state the platform
+// presence layer displays, via the file-scope KE_GAME_MODES_TO_RICH_PRESENCE_STATES[] lookup table
+// (X360 dword_8202AF20). The asm bounds-asserts the mode against [E_MODE_NONE, the invalid-lobby
+// sentinel] (BrnGameStateRichPresenceManagerBase.cpp:458/459), returns E_PRESENCE_STATE_OFFLINE_DEFAULT
+// for the two endpoint sentinels (E_MODE_NONE == -1 and the +18 invalid-lobby sentinel -- both mean
+// "no real mode -> default presence"), and otherwise indexes the table by the mode ordinal.
+//
+// FLAG (data dependency, NOT fabricated): the 18 table entries live in this source's .rodata at X360
+// 0x8202AF20 and are NOT recoverable from the function export. The table is declared extern here and
+// DEFINED BY ITS OWNING DATA TU (the header note pins it to this source but defers its definition to
+// avoid a duplicate); the control flow + bounds + sentinel handling above are byte-faithful to the asm.
+// Compiles under the /c gate; a linker build needs the table TU to land. Do NOT invent the 18 values.
+extern const RichPresenceManagerBase::ERichPresenceStates
+    KE_GAME_MODES_TO_RICH_PRESENCE_STATES[GameStateModuleIO::E_MODE_COUNT + 1];
+
+RichPresenceManagerBase::ERichPresenceStates
+RichPresenceManagerBase::EGameModeTypeToERichPresenceState(GameStateModuleIO::EGameModeType leGameMode)
+{
+    CGS_ASSERT(leGameMode >= GameStateModuleIO::E_MODE_NONE,
+               "leModeType >= GameStateModuleIO::E_MODE_NONE");
+    CGS_ASSERT(static_cast<s32>(leGameMode) <= KI_INVALID_LOBBY_TYPE,
+               "leModeType <= GameStateModuleIO::E_MODE_COUNT");
+
+    if (leGameMode == GameStateModuleIO::E_MODE_NONE ||
+        static_cast<s32>(leGameMode) == KI_INVALID_LOBBY_TYPE)
+    {
+        return E_PRESENCE_STATE_OFFLINE_DEFAULT;
+    }
+
+    return KE_GAME_MODES_TO_RICH_PRESENCE_STATES[static_cast<s32>(leGameMode)];
+}
+
 }
