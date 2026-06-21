@@ -8,6 +8,15 @@
 // gameplay). Non-virtual concrete methods (callers hold the concrete type via the AllocatorList).
 namespace rw
 {
+    // Base default: a concrete allocator (the game's root allocator, or Linear/General) overrides this.
+    Resource IResourceAllocator::DoAllocate(const ResourceDescriptor& /*lrDescriptor*/, const char* /*lpcName*/)
+    {
+        Resource lEmpty;
+        for (uint32_t lu = 0; lu < 4; ++lu)
+            lEmpty.m_baseResources[lu] = 0;
+        return lEmpty;
+    }
+
     // A linear allocator keeps its bookkeeping in its own object (m_currentUsage), not inside the
     // managed heap, so the heap descriptor it requires == the requested usage. (X360
     // LinearResourceAllocator::GetResourceDescriptor.)

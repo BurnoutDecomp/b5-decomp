@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"   // DebugManager::Update during load
-#include "GameSource/Resource/BrnGameDataModule.h"   // the GameDataModule the load stage prepares (case 8)
+#include "GameSource/Resource/BrnGameDataModule.h"   // GameDataModule + BrnGame::GetMainGameDataModule()
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -16,8 +16,11 @@ namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(
 // FileSystem). The rw-allocator-gated CreateBanks/CreatePools/CreateAllocators inside it are still
 // stubs that report success, so this exercises the real module lifecycle without yet allocating
 // banks/pools (those fills are step 5a/5b). [NEVER run headless -- the user runs the exe.]
-static BrnResource::GameDataModule g_BrnGameDataModule;
-static bool                        g_bGameDataModuleConstructed = false;
+// The game's one GameDataModule lives in BrnGameModule (gGameModule.mGameDataModule), constructed by
+// BrnGameModule::Construct; the loading flow (case 8) drives THAT instance via GetMainGameDataModule()
+// -- no parallel copy. (gGameModule is a file-scope static -> zero-init BSS + ctor-run, so its stage
+// fields are valid and its vtables are set, no calloc/placement-new needed.)
+static bool g_bLoggedGameDataPrepare = false;
 
 // Option B stand-in for the game-module global the original loading-screen state writes
 // (off_830102D0 + 0x99FE38). BrnRendererModule::Render reads it to show the loading screen.
@@ -173,14 +176,14 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         // brings up the resource module tree -- base + ResourceModule::Prepare chaining Memory/Pool/
         // Bundle/FileSystem). The bank/pool/allocator creation inside Prepare is still stubbed
         // (reports success) until step 5a/5b; bundle streaming + file I/O remain a later phase.
-        if (!g_bGameDataModuleConstructed)
+        if (!g_bLoggedGameDataPrepare)
         {
-            g_BrnGameDataModule.Construct(0);
-            g_bGameDataModuleConstructed = true;
+            g_bLoggedGameDataPrepare = true;
             if (CgsDev::Message::gxMessageFilterFlags & 1)
                 *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: preparing GameDataModule (case 8)\n";
         }
-        if (g_BrnGameDataModule.Prepare(0, 0))
+        // Prepare the game's one GameDataModule (already Construct'd by BrnGameModule::Construct).
+        if (BrnGame::GetMainGameDataModule()->Prepare(0, 0))
             AdvanceLoadingStage(E_LOADINGSTAGE_DONE);
         break;
     case E_LOADINGSTAGE_DONE:

@@ -36,6 +36,7 @@ namespace CgsResource
     // sub-step is not yet ready.
     bool PoolModule::Prepare()
     {
+        mbIsNewModule = true;   // [reliable] see ResourceModule::Prepare -- set before base Prepare
         switch (mePoolPrepareStage)
         {
         case E_POOLPREPARE_START:

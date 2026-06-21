@@ -52,6 +52,9 @@ namespace CgsResource
             E_RELEASE_MEMORY = 4, E_RELEASE_BASE = 5, E_RELEASE_DONE = 6
         };
 
+        // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
+        ResourceModule() { mbIsNewModule = true; }
+
         void Construct(const void* lpInitOptions, void* lpAllocator);  // deferred
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570

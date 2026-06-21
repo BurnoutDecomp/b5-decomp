@@ -10,6 +10,7 @@ namespace CgsResource
     // receiver + load/unload queues, then bring up the base module.
     bool BundleLoaderModule::Prepare()
     {
+        mbIsNewModule = true;   // [reliable] see ResourceModule::Prepare -- set before base Prepare
         switch (mePrepareStage)
         {
         case E_STAGE_START:

@@ -29,12 +29,16 @@ namespace BrnResource
 // The Burnout heap-backed RenderWare resource allocator. Public Allocate() returns
 // an rw::Resource carved from the underlying general allocator (the X360 build
 // resolves this through the IResourceAllocator vtable's DoAllocate slot).
-class HeapResourceAllocator
+class HeapResourceAllocator : public rw::IResourceAllocator
 {
 public:
     // Allocate a resource matching lDescriptor (lpcName is a debug tag). The
     // returned rw::Resource's m_baseResources[0] is the memory-resource pointer.
     rw::Resource Allocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName = 0);
+
+    // rw::IResourceAllocator interface: the resource modules allocate their backing memory through
+    // this (virtual) entry point; it just forwards to Allocate.
+    rw::Resource DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName) override;
 };
 
 // Accessor for the global debug allocator (asserts the backing allocator exists).

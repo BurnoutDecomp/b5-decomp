@@ -15,6 +15,11 @@ namespace CgsResource
     // is not yet ready.
     bool ResourceModule::Prepare()
     {
+        // [reliable] The X360 sets *(this+4)=1 (mbIsNewModule) in Construct; that Construct chain isn't
+        // wired for the embedded static yet, and the header ctor doesn't take effect on it, so set it
+        // here (before the base Prepare) so ModuleSingleBuffered skips the old DataStructure IO path
+        // (and its virtual CreateInputDataStructure). Move to Construct once the bring-up chain lands.
+        mbIsNewModule = true;
         switch (mePrepareStage)
         {
         case E_PREPARE_START:
@@ -96,13 +101,22 @@ namespace CgsResource
         }
     }
 
-    // ---- DEFERRED (rw allocator middleware) ------------------------------------------
-    // Construct (0x829055B0) allocates and constructs the four sub-modules + debug component
-    // through the rw::IResourceAllocator (gated on the rwcore allocator layer). Update
-    // (0x82907948) pumps each sub-module and shuttles requests/responses between memory, pool,
-    // bundle and filesystem; Destruct (0x828EC6B0) tears them down. All inert until the
-    // GameDataModule's loading-machine case 8 drives this module.
-    void ResourceModule::Construct(const void* /*lpInitOptions*/, void* /*lpAllocator*/) {}
+    // @ 0x829055B0 - construct the sub-modules over the resource heaps. [5b in progress] Currently
+    // brings up the MemoryModule (it carves the bank/block tables from the resource allocator);
+    // PoolModule/BundleLoaderModule/FileSystem Construct + the FileSystem GeneralResourceAllocator
+    // remain deferred (next 5b passes). lpInitOptions is the MemoryModule InitOptions the GameDataModule
+    // built; lpAllocator is the root rw::IResourceAllocator.
+    void ResourceModule::Construct(const void* lpInitOptions, void* lpAllocator)
+    {
+        if (lpInitOptions == 0 || lpAllocator == 0)
+            return;
+        mMemoryModule.Construct(
+            const_cast<CgsMemory::MemoryModule::InitOptions*>(
+                static_cast<const CgsMemory::MemoryModule::InitOptions*>(lpInitOptions)),
+            static_cast<rw::IResourceAllocator*>(lpAllocator));
+    }
+    // Update (0x82907948) pumps each sub-module + shuttles requests; Destruct (0x828EC6B0) tears them
+    // down. Deferred.
     void ResourceModule::Destruct() {}
     bool ResourceModule::Update(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return false; }
 }
