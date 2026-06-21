@@ -238,6 +238,19 @@ public:
     void NewEditBuffer();
     void FreeEditBuffer();
 
+    // --- DECLARE-ONLY (undo history; bodies in ICEDataICETake.cpp) ---
+    // Snapshot the current editable take onto the undo list, evicting the oldest
+    // snapshots first so the list stays within ICE_MAX_UNDO_SIZE.
+    void PushUndo();
+    // Restore the newest snapshot onto the live take and drop it. Returns true if a
+    // snapshot was popped, false if the undo list was empty.
+    bool PopUndo();
+    // Drop the newest snapshot without restoring it.
+    void DiscardUndo();
+    // True if the live editable take differs from its newest undo snapshot (or if
+    // there is no snapshot yet).
+    bool DataChanged() const;
+
     // --- Trivial inline-away accessors ---
     bool IsAllocated() const               { return mpElementData[0] != 0; }
     ICETakeData* GetData() const           { return mpTakeData; }
@@ -288,6 +301,18 @@ public:
     f32 GetIntervalStart(s32 liChannel, u16 lu16Interval) const;
     void GetIntervalBracket(s32 liChannel, u16 lu16Interval, f32* lpfStart, f32* lpfEnd) const;
     f32 GetIntervalParameter(s32 liChannel, u16 lu16Interval, s32 liElement) const;
+
+    // --- DECLARE-ONLY (editor element/parameter ops; bodies in ICEDataICETake.cpp) ---
+    // Copy one element's value out of a source take/key into this take at a
+    // destination key. liChannel bounds the destination key; liElement is the
+    // element-description index (passed straight through to GetValue/SetValue).
+    s32  CopyKeyElement(s32 liChannel, s32 liDestKey, s32 liElement,
+                        const ICETake* lpSrc, u16 lu16SrcKey);
+    // Move an interval-boundary parameter by lfParameter, clamped to keep at least
+    // one frame of spacing from each neighbouring boundary, then re-enforce spacing.
+    // liDelta offsets lu16Interval to pick the boundary moved. Returns true when the
+    // boundary actually changed.
+    bool MoveParameter(s32 liChannel, u16 lu16Interval, s32 liDelta, f32 lfParameter);
 
 private:
     // --- DECLARE-ONLY (private machinery; bodies elsewhere) ---
