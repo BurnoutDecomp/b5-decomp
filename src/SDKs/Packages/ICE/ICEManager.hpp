@@ -96,6 +96,10 @@ private:
     ICEController   mController;
 
 public:
+    // Default constructor: constructs the embedded takes (and the controller).
+    // Body in ICEManager.cpp.
+    ICEManager();                                 // @0x827E13B8
+
     // ====================================================================
     // Functions OWNED by this TU (bodies in ICEManager.cpp).
     // ====================================================================
