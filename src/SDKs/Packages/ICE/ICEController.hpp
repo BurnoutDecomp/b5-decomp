@@ -84,6 +84,17 @@ struct ICEController
     void Update();
     void DestructMenus();
 
+    // Editor entry points driven by BrnDirector::ICEWrapper (EditorOn/EditorOff).
+    // FLAG: these are ICE::ICEAuthor base methods (ICEAuthor::EditorOn,
+    // ICEAuthor::SetState), invoked on the editor `this` (== this controller's
+    // base). ICEController is-an ICEAuthor, but this minimal slice does not yet
+    // model the ICEAuthor base, so the two methods are DECLARED here on the slice
+    // (their `this` is identical). When the ICEController TU lands its real
+    // ICEAuthor base, MOVE these (and the miMenusActive/edit-mode state) onto that
+    // base -- do NOT keep a fork.
+    void EditorOn(s32 liMode);
+    void SetState(s32 liState);
+
     // Accessor used by ICEManager::GetCameraTake to return the embedded edit take.
     ICETake* GetEditTake() { return &mEditTake; }
 
