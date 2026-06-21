@@ -12,6 +12,9 @@
 // system; here it is the single instance the boot path constructs and drives.
 static BrnGame::BrnGameModule gGameModule;
 
+// The loading flow (case 8) prepares the game's one GameDataModule through this accessor.
+namespace BrnGame { BrnResource::GameDataModule* GetMainGameDataModule() { return &gGameModule.GetGameDataModule(); } }
+
 void LoadConfig()
 {
     // TODO: Implement LoadConfig

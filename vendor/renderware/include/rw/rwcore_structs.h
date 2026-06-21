@@ -147,8 +147,15 @@ RW_SIZE_ASSERT(rw::FreeList, 80);
 //   [ 3] +24  ?Free@IResourceAllocator@rw@@UEAAXPEAX_K@Z
 //   [ 4] +32  ?AllocDebug@ICoreAllocator@Allocator@EA@@UEAAPEAX_KUDebugParams@123@III@Z
 //   [ 5] +40  ?AllocDebug@ICoreAllocator@Allocator@EA@@UEAAPEAX_KUDebugParams@123@I@Z
-struct IResourceAllocator {  // sizeof = 8 (rwcore.pdb, x64)
-    uint8_t field_0x0[8];  // +0  was: EA::Allocator::ICoreAllocator
+// [PC] Modelled as a real polymorphic interface (a single vptr = 8 bytes, matching the PDB sizeof)
+// so the resource modules can allocate through it by virtual dispatch (the engine holds the abstract
+// rw::IResourceAllocator*; the game supplies a concrete one). DoAllocate is the one method the bring-up
+// uses (carve a Resource matching a descriptor); the X360 rw vtbl also has Alloc/Free/AllocDebug/DoFree
+// /DoFreeDisposable -- modelled minimally. Non-pure (has a default) so the vestigial `IResourceAllocator
+// field_0x0;` members in the concrete allocator structs below stay instantiable.
+struct IResourceAllocator {  // sizeof = 8 (rwcore.pdb, x64) == one vptr
+    virtual ~IResourceAllocator() {}
+    virtual ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor, const char* lpcName);
 };
 RW_SIZE_ASSERT(rw::IResourceAllocator, 8);
 

@@ -52,6 +52,9 @@ namespace CgsResource
             const char* mpcName;    // [+0x08] (X360 entry +564)
         };
 
+        // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
+        PoolModule() { mbIsNewModule = true; }
+
         // ---- lifecycle (Construct is rw-allocator-gated -> deferred) -------------------
         void Construct(const void* lpInitOptions, void* lpAllocator);
         bool Prepare();

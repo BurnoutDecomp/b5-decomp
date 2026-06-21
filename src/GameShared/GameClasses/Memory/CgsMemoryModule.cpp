@@ -388,6 +388,19 @@ namespace CgsMemory
     // @ 0x8286ACA8 - one-time construction: carve a single backing block from the resource allocator,
     // lay a bump-allocator (mScratchSpace) over it, and sub-allocate the bank / block / id-map / name
     // tables. The actual bank/block records are zeroed later by InitBanks/InitBlocks (in Prepare).
+    // Zero-init so unused root resource sets read muNumBlocks=0 (skipped by CreateRootBank, not the
+    // 0xFFFF "not initialised" marker). The caller fills the active counts + regions.
+    MemoryModule::InitOptions::InitOptions()
+        : muMaxBanks(0), muHighestId(0), muMaxBlocks(0)
+    {
+        for (s32 li = 0; li < 6; ++li)
+        {
+            maResourceSets[li].mpDataStart = 0;
+            maResourceSets[li].muDataSize  = 0;
+            maResourceSets[li].muNumBlocks = 0;
+        }
+    }
+
     void MemoryModule::Construct(InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator)
     {
         ModuleSingleBuffered::Construct();
@@ -412,10 +425,10 @@ namespace CgsMemory
                               + static_cast<u32>(sizeof(char*))       * luMaxBanks
                               + 32u * luMaxBanks;
 
-        // Carve the backing block from the resource allocator. The X360 calls the allocator's vtbl
-        // DoAllocate with a {m_size = total, m_alignment = 16} descriptor and takes the resulting
-        // Resource's main-memory pointer. Reconstructed via the rwcore IResourceAllocator_vtbl by name.
-        // [VERIFY WHEN FIRST RUN: the vtbl slot + descriptor packing are x64-rwcore-shaped, not the X360's.]
+        // Carve the backing block from the resource allocator via its virtual DoAllocate (the engine
+        // holds the abstract rw::IResourceAllocator*; the game supplies a concrete one). Descriptor =
+        // {m_size = total, m_alignment = 16} on pool 0; the returned Resource's main-memory pointer is
+        // the backing block.
         rw::ResourceDescriptor lDescriptor;
         for (u32 li = 0; li < 4; ++li)
         {
@@ -425,11 +438,7 @@ namespace CgsMemory
         lDescriptor.m_baseResourceDescriptors[0].m_size      = luTotalSize;
         lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
 
-        typedef void (*FDoAllocate)(rw::IResourceAllocator*, rw::Resource*, const rw::ResourceDescriptor*, const char*);
-        const rw::IResourceAllocator_vtbl* lpVtbl =
-            *reinterpret_cast<rw::IResourceAllocator_vtbl* const*>(lpAllocator);
-        rw::Resource lBacking;
-        reinterpret_cast<FDoAllocate>(lpVtbl->DoAllocate)(lpAllocator, &lBacking, &lDescriptor, 0);
+        rw::Resource lBacking = lpAllocator->DoAllocate(lDescriptor, 0);
 
         mScratchSpace.Create(lBacking.m_baseResources[0], luTotalSize);
         mpBanks   = static_cast<MemoryBank*>(mScratchSpace.Malloc(sizeof(MemoryBank)  * luMaxBanks));
@@ -759,6 +768,7 @@ namespace CgsMemory
     // Prepare is not ready it returns false with the stage parked so the next call resumes there.
     bool MemoryModule::Prepare()
     {
+        mbIsNewModule = true;   // [reliable] see ResourceModule::Prepare -- set before base Prepare
         switch (mePrepareStage)
         {
         case E_PREPARE_START:
@@ -769,9 +779,16 @@ namespace CgsMemory
             // fall through -- base module is prepared, initialise memory
         case E_PREPARE_INIT_MEMORY:
             mePrepareStage = E_PREPARE_INIT_MEMORY;
-            InitBanks();
-            InitBlocks();
-            CreateRootBank();
+            // [PC incremental] Construct allocates the bank/block arrays (mpBanks) from the resource
+            // allocator; until that bring-up is wired, skip bank init so the (still-stubbed-Construct)
+            // module's Prepare runs harmlessly instead of dereferencing a null mpBanks. Becomes a no-op
+            // guard automatically once Construct sets mpBanks.
+            if (mpBanks != 0)
+            {
+                InitBanks();
+                InitBlocks();
+                CreateRootBank();
+            }
             // fall through -- done
         case E_PREPARE_DONE:
             meReleaseStage = E_RELEASE_START;

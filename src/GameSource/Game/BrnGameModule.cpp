@@ -60,6 +60,11 @@ namespace BrnGame
         // stages + constructs the two DataBuffers (flag/pointer init only - boot-safe).
         CgsModule::ModuleSingleBuffered::Construct();
 
+        // Construct the owned GameDataModule (the loading flow's case 8 then Prepares this same
+        // instance via BrnGame::GetMainGameDataModule()). Construct currently just marks it a new
+        // module type; the real resource bring-up (banks/pools/allocators) lands in step 5b.
+        mGameDataModule.Construct(0);
+
         // Per-frame IO buffer stacks the update spine pushes/pops GUI+director buffers on. The
         // full Construct owns these via the module IO system + the hardware memory arena; for
         // the boot/loading path they are backed by fixed scratch blocks here.

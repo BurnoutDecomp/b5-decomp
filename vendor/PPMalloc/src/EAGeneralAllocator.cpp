@@ -161,6 +161,14 @@ namespace Allocator
         };
 
         inline u32 PcRoundUp(u32 lu, u32 luAlign) { return (lu + luAlign - 1) & ~(luAlign - 1); }
+
+        // Align a POINTER up to luAlign. Must use uintptr_t (64-bit on x64) -- rounding the pointer as a
+        // u32 truncates the high address bits and yields a garbage pointer.
+        inline char* PcAlignPtr(char* lpPtr, u32 luAlign)
+        {
+            const uintptr_t lu = (reinterpret_cast<uintptr_t>(lpPtr) + (luAlign - 1)) & ~(static_cast<uintptr_t>(luAlign) - 1);
+            return reinterpret_cast<char*>(lu);
+        }
     }
 
     // @ 0x82B4F800 - adopt [pCore, pCore+nSize) as one big free block. (PC leaf: one core block.)
@@ -170,7 +178,7 @@ namespace Allocator
             return false;
 
         char* lpBase   = reinterpret_cast<char*>(pCore);
-        char* lpAligned = reinterpret_cast<char*>(PcRoundUp(static_cast<u32>(reinterpret_cast<uintptr_t>(lpBase)), KU_PC_ALIGN));
+        char* lpAligned = PcAlignPtr(lpBase, KU_PC_ALIGN);
         u32   luUsable = static_cast<u32>(nSize) - static_cast<u32>(lpAligned - lpBase);
         luUsable &= ~(KU_PC_ALIGN - 1);
 
@@ -200,7 +208,7 @@ namespace Allocator
             if (lpBlk->mbFree)
             {
                 // place the (16-aligned) data at the next `luAlign` boundary at/after lpCur+16
-                char* lpAlignedData = reinterpret_cast<char*>(PcRoundUp(static_cast<u32>(reinterpret_cast<uintptr_t>(lpCur + KU_PC_ALIGN)), luAlign));
+                char* lpAlignedData = PcAlignPtr(lpCur + KU_PC_ALIGN, luAlign);
                 char* lpUsedHdr     = lpAlignedData - KU_PC_ALIGN;
                 u32   luFrontPad    = static_cast<u32>(lpUsedHdr - lpCur);   // multiple of 16 (0 or >=16)
                 u32   luNeedFromCur = luFrontPad + KU_PC_ALIGN + luDataNeed; // front-block + used header + data

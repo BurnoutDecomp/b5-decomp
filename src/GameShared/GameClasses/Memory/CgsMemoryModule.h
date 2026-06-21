@@ -72,6 +72,9 @@ namespace CgsMemory
 
         u32  GetOverheadRequired(const InitOptions* lpInitOptions);
 
+        // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
+        MemoryModule() { mbIsNewModule = true; }
+
         virtual void Construct(InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator);
         virtual bool Prepare();
         virtual bool Release();

@@ -33,7 +33,18 @@ namespace BrnDirector { namespace DirectorIO { struct OutputBuffer {}; } }
 // Names/namespaces/order are the real ones (DWARF BrnGameModule.h h:356-368). WorldModule is in
 // the global namespace (DWARF BrnWorldModule.h: struct WorldModule : CgsModule::ModuleSingleBuffered).
 class WorldModule : public CgsModule::ModuleSingleBuffered {};
-namespace BrnResource  { class GameDataModule : public CgsModule::ModuleSingleBuffered {}; }
+// GameDataModule is now the REAL reconstruction (was an empty stub here, which ODR-clashed with the
+// real BrnGameDataModule.h -- different sizeof/ctor in different TUs -> the empty ctor got linked,
+// leaving mResourceModule unconstructed = null vtable crash). Include the real definition so every TU
+// (BrnGameModule + the loading flow) sees ONE GameDataModule.
+#include "GameSource/Resource/BrnGameDataModule.h"
+// !!! ODR TRAP WARNING !!! The remaining empty stubs below (GameStateModule/DirectorModule/InputModule/
+// EffectsModule/RootSoundModule/ReplayModule/BrnNetworkModule/WorldModule) are placeholders so this
+// module can embed them by value. When ANY of them is reconstructed for real in its own header, DELETE
+// the matching stub here and #include the real header instead -- do NOT leave both. Two different
+// definitions of the same class = ODR violation: the linker silently binds the empty do-nothing ctor,
+// leaving the member unconstructed (null vtable) -> crash. (That exact bug cost a debugging session on
+// GameDataModule; see memory gamedatamodule-scoping "ODR-STUB TRAP".)
 namespace BrnGameState { class GameStateModule : public CgsModule::ModuleSingleBuffered {}; }
 namespace BrnDirector  { class DirectorModule  : public CgsModule::ModuleSingleBuffered {}; }
 namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleBuffered {}; }
@@ -58,6 +69,10 @@ namespace BrnGame
     class BrnGameModule : public CgsModule::ModuleSingleBuffered, public CgsSystem::IThreadClass
     {
     public:
+        // The game module owns the GameDataModule; the loading flow (case 8) prepares it through here
+        // (and via BrnGame::GetMainGameDataModule()) so there's ONE instance, not a parallel copy.
+        BrnResource::GameDataModule& GetGameDataModule() { return mGameDataModule; }
+
         enum EGameUpdateStage   // h:248
         {
             E_GAMEUPDATESTAGE_PREPARE = 0,

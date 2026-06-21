@@ -36,6 +36,9 @@ namespace BrnResource
             E_PREPARE_POOLS = 4, E_PREPARE_ALLOCATORS = 5, E_PREPARE_DONE = 6
         };
 
+        // [DIAG] ctor moved to the .cpp with logging to prove whether it runs + sets mbIsNewModule.
+        GameDataModule();
+
         void Construct(const void* lpInitOptions);   // deferred
         bool Prepare(void* lpInputBuffer, void* lpOutputBuffer);   // 0x82673F38
         bool Release();                               // deferred
@@ -57,3 +60,7 @@ namespace BrnResource
         //  message / popup controllers and the game-data tables are added with their own passes.)
     };
 }
+
+// Accessor for the one game-owned GameDataModule instance (BrnMain's gGameModule.mGameDataModule).
+// Lets the loading flow drive the real instance without pulling in the heavy BrnGameModule.hpp.
+namespace BrnGame { BrnResource::GameDataModule* GetMainGameDataModule(); }

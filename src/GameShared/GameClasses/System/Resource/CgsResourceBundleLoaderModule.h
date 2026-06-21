@@ -45,6 +45,9 @@ namespace CgsResource
             u32 muReserved2;          // [+0x1C]
         };
 
+        // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
+        BundleLoaderModule() { mbIsNewModule = true; }
+
         // ---- lifecycle ----------------------------------------------------------------
         void Construct();   // deferred (embeds the GeneralAllocator + jobs)
         bool Prepare();     // 0x828E2678
