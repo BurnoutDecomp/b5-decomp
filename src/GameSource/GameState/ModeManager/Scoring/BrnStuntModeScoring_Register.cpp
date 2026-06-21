@@ -37,17 +37,28 @@
 // the StuntModeScoringOnline overrides the X360 reaches via the vtable. Faithful virtual dispatch
 // lands when this type's TU reconstructs the full vtable order.
 //
-// BLOCKED (left declare-only in the header -- NOT bodied here) and why:
-//   - DealWithInProgressStunt (0x82321710): dereferences the in-progress stunt-element action
-//       (reads action+0x64 convoy member count, action+0x24..0x40 per-leg distances, action
-//       +0x44..0x60 convoy member ids). The owning type GameStateModuleIO::OnStuntElementCompleteAction
-//       IS now homed (BrnGameActions.h:365) but only with its LEAN 5-member DWARF layout
-//       (mID/meStuntElementType/miCurrentCount/miTotalCount/meCurrentGameMode); the convoy-shaped
-//       record the X360 body reads (+0x24 float[8] leg distances, +0x44 s32[8] convoy member ids,
-//       +0x64 s32 convoy count) is X360-only and NOT expressed by that DWARF layout (see the
-//       explicit FLAG at BrnGameActions.h:354-364). Those members cannot be named, so the body
-//       cannot be reconstructed. UNBLOCKS when OnStuntElementCompleteAction is GROWN additively
-//       with the convoy distance/id arrays + count against the X360 layout.
+// SIGNATURE RECONCILED, BODY still BLOCKED (left declare-only in the header -- NOT bodied here):
+//   - DealWithInProgressStunt (0x82321710): the home declaration has now been RECONCILED to the
+//       X360-proven shape -- the call-site ModeManager::ProcessEvent (0x82340AB8) proves the real
+//       args are (const OnStuntElementCompleteAction* lpAction [r4], f32 lfDelta [f1],
+//       s32 liPlayerActiveRaceCarIndex [r6 == GameStateModule::GetPlayerActiveRaceCarIndex]); IDA's
+//       a4(r5) is uninitialised garbage at the call site and dropped. The OLD committed sig
+//       (const WorldStuntAction*) was wrong on BOTH the action type AND the missing delta+index args.
+//       The BODY still cannot be reconstructed: it dereferences the in-progress stunt-element action's
+//       CONVOY-shaped record (reads action+0x64 convoy member count [gate `count > 1`],
+//       action+0x24..0x40 per-leg distances [walked until a value < flt_82CDB778], action
+//       +0x44..0x60 convoy member ids [linear-searched for liPlayerActiveRaceCarIndex; a miss asserts
+//       "Player not in this convoy!", BrnStuntModeScoring.cpp:1666], then UpdateScore((index *
+//       flt_82CDB73C) * lfDelta, type 17, awesome=true)). The owning type
+//       GameStateModuleIO::OnStuntElementCompleteAction IS homed (BrnGameActions.h:365) but only with
+//       its LEAN 5-member DWARF layout (mID/meStuntElementType/miCurrentCount/miTotalCount/
+//       meCurrentGameMode); the convoy arrays/count are X360-only and NOT expressed by that DWARF
+//       layout (see the explicit FLAG at BrnGameActions.h:354-364). Those members cannot be named
+//       without fabricating the type (forbidden) or growing BrnGameActions.h (a different TU, out of
+//       this work item's scope). The whole body is convoy access -- there is no expressible "rest of
+//       body" to ship behind a single deferred-call FLAG -- so it stays declare-only. UNBLOCKS when
+//       OnStuntElementCompleteAction is GROWN additively with the convoy distance/id arrays + count
+//       against the X360 layout; the reconstructed body then lands here.
 // ============================================================================
 
 namespace BrnGameState
