@@ -56,6 +56,13 @@ namespace CgsMemory
         void  PrintAllocations();
         u32   GetLargestFreeBlock(bool lbContiguous);
 
+        // Accessor onto the embedded GeneralAllocator engine. The X360 build inlines
+        // `mpNetworkHeapMalloc->GetAllocator()->ValidateHeap(...)` at the heap-validation
+        // assert sites (e.g. CarData::Prepare 0x82327158), so a by-name accessor is needed
+        // rather than reaching the private member through an offset cast.
+        EA::Allocator::GeneralAllocator*       GetAllocator()       { return &mAllocator; }
+        const EA::Allocator::GeneralAllocator* GetAllocator() const { return &mAllocator; }
+
     private:
         void* mpBuffer;        // CgsHeapMalloc.h:117  +0x0
         s32   mnBufferSize;    // CgsHeapMalloc.h:118  +0x4
