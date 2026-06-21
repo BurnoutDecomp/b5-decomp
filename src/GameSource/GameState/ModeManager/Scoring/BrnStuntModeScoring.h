@@ -42,6 +42,16 @@
 #include "GameShared/GameClasses/Containers/CgsRingBuffer.h"  // CgsContainers::FixedRingBuffer<T,N>
 #include "GameShared/GameClasses/Containers/CgsSet.h"         // Set<T,N>
 
+// PreWorldUpdate's reconciled (X360-proven) signature names the per-frame output-action queue the
+// scorer drains its pending stunt-info HUD event into: CgsModule::VariableEventQueue<13312,16>* (see
+// the PreWorldUpdate reconciliation note below). Forward-declared here (pointer-only in the decl);
+// the full template definition is pulled in by BrnStuntModeScoring_UpdatePass.cpp where AddEvent is
+// actually called.
+namespace CgsModule
+{
+    template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue;
+}
+
 namespace BrnWorld
 {
     namespace RaceCarEntityModuleIO
@@ -58,6 +68,10 @@ namespace BrnGameState
         // Used by pointer only in DealWithStunt / DealWithPowerPark.
         struct WorldStuntAction;
         struct PowerParkResultAction;
+        // Used by pointer only in DealWithInProgressStunt (reconciled signature). The in-progress
+        // stunt-element action the X360 body (0x82321710) dereferences for its convoy-shaped record;
+        // homed lean in BrnGameActions.h (see the DealWithInProgressStunt reconciliation note below).
+        struct OnStuntElementCompleteAction;
     }
 
     // DWARF BrnStuntModeScoring.h:36 -- the achievement-manager member is a pointer to this
@@ -300,10 +314,37 @@ namespace BrnGameState
         s32        BankMultiplier(StuntInfo* lpRecentStunt);                            // X360 0x82312D68 (grown per asm)
         virtual s32 CalculateMultiplier(const StuntInfo* lpStuntInfo,
                                         MultiplierOutInfo* lpMultiplierOutInfo);        // X360 0x82312DE8 (grown per asm; virtual)
-        void       DealWithInProgressStunt(const GameStateModuleIO::WorldStuntAction* lpAction); // X360 0x82321710 (best-effort; mirrors DealWithStunt)
+
+        // RECONCILED signature (was best-effort `void(const WorldStuntAction*)`). The X360 call-site
+        // ModeManager::ProcessEvent (0x82340AB8) proves the real args: r4 = the in-progress
+        // stunt-element action pointer, f1 = the frame delta (f32), r6 = the player's active-race-car
+        // index (GameStateModule::GetPlayerActiveRaceCarIndex, used as a plain s32 in the convoy id
+        // search). IDA's a4(r5) is uninitialised garbage at the call site (never loaded) -> dropped.
+        // The action type is the convoy-shaped OnStuntElementCompleteAction (the action behind
+        // E_ACTION_ON_STUNT_ELEMENT_COMPLETE the body walks at +0x24/+0x44/+0x64), NOT WorldStuntAction.
+        // Player index typed s32 (not EActiveRaceCarIndex) to avoid pulling the race-car-interface
+        // enum into this keystone; the asm compares it as a 32-bit word against the convoy id array.
+        void       DealWithInProgressStunt(const GameStateModuleIO::OnStuntElementCompleteAction* lpAction,
+                                           f32 lfDelta, s32 liPlayerActiveRaceCarIndex);  // X360 0x82321710 (reconciled; call-site 0x82340AB8 proved arg count/types)
         void       UpdateStunts(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar);     // X360 0x82338908 (best-effort; mirrors UpdateAirStunts driver)
-        void       UpdateScores(f32 lfDelta);                                           // X360 0x82338A98 (best-effort; mirrors UpdateBufferedScore)
-        void       PreWorldUpdate(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta);   // X360 0x823446F8 (best-effort)
+
+        // RECONCILED signature (was best-effort `void(f32)`). The X360 body (0x82338A98) gates ALL its
+        // work behind a player-active test that dereferences the output interface (*(a2+10328) ==
+        // GetPlayerActiveRaceCarIndex asserted < count, *(a2+10336) == IsPlayerCarActive); only when
+        // active does it call UpdateCombo/UpdateBufferedScore/UpdateStuntRepetition. The Update
+        // call-site (0x82340BC0) loads r4 = the interface, f1 = delta -> sig carries the interface.
+        // Param ORDER matches the sibling UpdateStunts(f32, interface*) so Update's call site is uniform.
+        void       UpdateScores(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar);     // X360 0x82338A98 (reconciled; call-site 0x82340B40 proved the interface arg)
+
+        // RECONCILED signature (was best-effort `void(const ActiveRaceCarOutputInterface*, f32)`).
+        // The X360 body (0x823446F8) takes NO interface and NO float: r3 = this, r4 = the per-frame
+        // output-action queue (CgsModule::VariableEventQueue<13312,16>*). When mbStuntInfoEventPending
+        // (+0x22BD) is set it packs an 8-byte payload {u32 mRecentStunt.muAwesomeStuntTypes; s16
+        // muFlatSpins; s16 muBarrelRolls} and calls queue->AddEvent(&payload, 21, 8) (asserting the
+        // queue non-null), then clears the flag. Both call-sites (ScoringSystem::
+        // UpdateOnlineStuntModeScorePreWorld 0x8234CE48, ModeManager::PreWorldUpdate 0x823537B8) thread
+        // the queue in r4 -- no interface, no delta.
+        void       PreWorldUpdate(CgsModule::VariableEventQueue<13312, 16>* lpOutputActionQueue);  // X360 0x823446F8 (reconciled; AddEvent-queue arg, no interface/delta)
 
     private:
         // --- data members (DWARF declared order + types) ---
