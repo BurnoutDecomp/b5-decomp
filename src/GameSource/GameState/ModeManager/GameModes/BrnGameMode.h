@@ -102,6 +102,23 @@ public:
                               GameModeParams* lpGameModeParams,
                               ScoringSystem* lpScoringSystem);
 
+    // ---- DWARF-order base-vtable extensions (appended after the committed virtuals) -------
+    // These grow the base vtable so the concrete-mode family has real base slots to override
+    // (the mode overrides bind BY NAME). Declared in DWARF source order (BrnGameMode.h block,
+    // slots numbered below); the committed virtuals above are left untouched in order/type.
+
+    // DWARF slot 15 (BrnGameMode.cpp:352). The post-race "is the mode over?" hook the outer
+    // loop polls each frame. Derived modes (RoadRageMode @0x82315D60, StuntAttackMode
+    // @0x823162B8, OnlineStuntRunMode @0x8233A3F0) override it with mode-specific logic; the
+    // base never auto-finishes (returns false). Takes the live ScoringSystem* (by-name fwd
+    // decl); base body ignores it. Required base blocker for the online mode family.
+    virtual bool        ShouldFinish(ScoringSystem* lpScoringSystem);
+
+    // DWARF slot 25 (BrnGameMode.h:530). Whether entering this mode shows a loading screen.
+    // No standalone X360 body (the trivial default was inlined / is PS3-DWARF-only); base
+    // default returns false. Required base blocker for the online mode family.
+    virtual bool        HasLoadingScreen() const;
+
     void    SetCurrentState(s32 liState);
     s32     CalculateMaxPlayerWrecks();
     bool    HasCountdownDisplayChanged(s32* lpiNewCountdownDisplay);
