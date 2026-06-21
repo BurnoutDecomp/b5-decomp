@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h" // CgsID (typedef u64)
+#include "GameSource/GameState/BrnGameStateTypes.h" // BrnGameState::StuntElementType
 
 namespace BrnProgression
 {
@@ -47,5 +48,32 @@ public:
     // declaration is sufficient for the cl /c compile gate on the OfflineGameMode TU, which
     // only needs the method's signature to type-check the call site.
     u16 FindLandmarkAISectionIndex(CgsID lLandmarkId) const;
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the AchievementManagerBase TU.
+    //
+    // FLAG: these accessors name the deep reads AchievementManagerBase::OnTakedown,
+    // OnEventWin and OnCollectStunt make THROUGH the mpProgressionManager back-pointer.
+    // The X360 reads them as raw offsets off the ProgressionManager (and its embedded
+    // Profile / collected-stunt CgsSet array) whose full layout is owned by the
+    // ProgressionManager TU and is NOT modelled here. Signatures + semantics are
+    // X360-asm-attested; member offsets / the Profile sub-object are out of scope.
+    // Bodies land with the ProgressionManager TU; declare-only suffices for `cl /c`.
+    // ------------------------------------------------------------------------
+
+    // OnTakedown (X360 0x8235AAE0): the embedded Profile (this+0x170) lifetime takedown
+    // tally read at Profile+0x198 and compared >= 500 (E_ACHIEVEMENT_GET_500_TAKEDOWNS).
+    s32 GetProfileTotalTakedowns() const;
+
+    // OnEventWin (X360 0x82372978) case E_MODE_MARKED_MAN: a win-count tally read at
+    // this+0x358 and compared >= 25 (win-10-XS / 0x15) then >= 35 (win-25-XS / 0x18).
+    s32 GetCarChallengeWinCount() const;
+
+    // OnCollectStunt (X360 0x82366EB8): per-stunt-type collected-element count. The X360
+    // indexes an embedded CgsSet array at this+0x7768 (stride 0x1008 / 4104 bytes per
+    // element) and returns the set's element-count field (set base +0x1000). The leading
+    // set-sentinel check (set base +0x1000 == -1 -> "Set used before Construct/Clear")
+    // is reproduced inside this accessor in the full TU.
+    s32 GetCollectedStuntElementCount(BrnGameState::StuntElementType leStuntType) const;
 };
 }

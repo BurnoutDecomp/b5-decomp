@@ -29,6 +29,13 @@ public:
     // X360 @ 0x823116D0 (BrnGameStateModule.h:982). Out-of-line; defined in BrnGameStateModule.cpp.
     bool IsOnlineGameMode();
 
+    // ADDITIVE GROW (declare-only) for the AchievementManagerBase TU. FLAG: the cached
+    // current-game-mode-type scalar AchievementManagerBase::OnTakedown (X360 0x8235AAE0)
+    // reads through mpGameStateModule (raw read at this+7604, just below mModeManager) and
+    // compares == E_MODE_ROAD_RAGE. Body lands with the GameStateModule TU; declare-only
+    // suffices for the compile gate.
+    GameStateModuleIO::EGameModeType GetCurrentGameModeType() const;
+
     // DWARF BrnGameStateModule.h:1300/651. X360 inlines it (sets mbToggleShowtimeBehaviour=true at
     // offset 284512); declared-only here, used by GameStateDebugComponent::ToggleShowtimeCallback.
     void ToggleShowtimeBehaviour();
