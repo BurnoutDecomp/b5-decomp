@@ -5,6 +5,7 @@
 // sites, so the constructor is the only iceanim entry point in the build (a
 // minimal generated-ctor recon, same shape as the sibling generated classes
 // surfacelist / debrisparams). Derives from Attrib::Instance.
+#include "types.hpp"                                                          // s64 (ClassKey)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 
 namespace Attrib
@@ -15,6 +16,11 @@ namespace Gen
     {
     public:
         explicit iceanim(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // The 64-bit class-key tag identifying an iceanim runtime object. Checked by
+        // BrnDirector::SimpleIceTakedownPlayer::SetIceAnim against a passed object's
+        // leading class-key tag.
+        static s64 ClassKey() { return 0x4644E379A997C1EELL; }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::iceanim
