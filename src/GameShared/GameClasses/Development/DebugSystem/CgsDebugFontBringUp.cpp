@@ -157,10 +157,13 @@ namespace CgsDev
             }
         }
 
-        // 6. hand the font to the debug renderers (flips DrawText onto the bitmap path).
+        // 6. hand the font to the debug renderers (flips DrawText onto the bitmap path). Build a real
+        // canonical SafeResourceHandle: mpResourceMemory points at the pool entry's main-memory resource
+        // slot (entry.mResource[0], which holds the Font*), so the handle's double-deref yields the Font --
+        // the faithful X360 model (mpResourceMemory -> SmallResource -> resource ptr).
         CgsResource::SafeResourceHandle<CgsResource::Font> lHandle;
-        lHandle.mpResource = lpFont;
-        lHandle.muSafetyId = 1u;   // non-null: HasResourceFont() now true
+        lHandle.mpResourceMemory = &lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
+        lHandle.mpSourceEntry    = lpEntry;
         lrManager.SetDebugFont(lHandle);
 
         glbDebugFontLoaded = true;
