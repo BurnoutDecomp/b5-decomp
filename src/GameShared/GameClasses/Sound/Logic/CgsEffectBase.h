@@ -115,17 +115,31 @@ struct EffectBase : public CgsSound::MemBase
     {
     }
 
-    virtual ~EffectBase() {} // CgsEffectBase.cpp:80
+    virtual ~EffectBase() {}
 
-    // CgsEffectBase.cpp:157 @ 0x8268CEC8. Latch the controlling State and pull the
+    // @ 0x8268CEC8. Latch the controlling State and pull the
     // owning logic module from it. The X360 reads State+0x24 (the state's owner
     // back-link) and then +0x2C off that to recover the Module*; reconstructed by
     // name via the State accessor below.
     virtual bool Prepare(State* apState);
 
-    // CgsEffectBase.cpp:174 @ 0x826A1138. Reset the detach state and bump the
+    // @ 0x826A1138. Reset the detach state and bump the
     // attach count. Returns true.
     virtual bool Attach();
+
+    // Recovered teardown reset shared by the EffectControl/EffectObject deleting
+    // destructors (@ 0x826963D8 / 0x826965D0). The X360 thunks store, by member:
+    //   meDetachState = E_DETACH_STATE_FINISHED (stw 3, 0x24)
+    //   meAttachState = E_ATTACH_STATE_NONE     (stw 0, 0x20)
+    //   mbHasLoadedData = false                 (stb 0, 0x2D)
+    // (the MemBase base vtable re-install + conditional allocator free are the
+    // compiler-synthesised parts of the thunk). Done by name; no offset cast.
+    void ResetOnDestroy()
+    {
+        meDetachState   = E_DETACH_STATE_FINISHED;
+        meAttachState   = E_ATTACH_STATE_NONE;
+        mbHasLoadedData = false;
+    }
 
     EAttachState GetAttachState() const { return meAttachState; }
     void         SetAttachState(EAttachState aeState) { meAttachState = aeState; }
@@ -181,7 +195,12 @@ protected:
 struct EffectControl : public EffectBase
 {
     EffectControl() {}
-    virtual ~EffectControl() {}
+
+    // Out-of-line so the deleting-destructor thunk @ 0x826963D8 is emitted in this
+    // class's own TU (CgsEffectControlDtor.cpp). The recovered teardown body resets
+    // the EffectBase attach/detach state machine; bodied via the protected base
+    // helper EffectBase::ResetOnDestroy() so no raw-offset cast is needed.
+    virtual ~EffectControl();
 
     // CgsEffectBase.cpp @ 0x8268CEB8. Returns the static type name "EffectControl".
     virtual const char* GetTypeName() const;
@@ -196,7 +215,11 @@ struct EffectControl : public EffectBase
 struct EffectObject : public EffectBase
 {
     EffectObject() {}
-    virtual ~EffectObject() {}
+
+    // Out-of-line so the deleting-destructor thunk @ 0x826965D0 is emitted in this
+    // class's own TU (CgsEffectObjectDtor.cpp). Same recovered teardown as
+    // EffectControl (identical store sequence in the X360 build).
+    virtual ~EffectObject();
 
     // CgsEffectBase.cpp @ 0x8268CE98. Returns the static type name "EffectObject".
     virtual const char* GetTypeName() const;

@@ -287,6 +287,11 @@ public:
 
     void SetupAttribsForDonutAI();
 
+    // @0x825B2B68  BrnPhysics::Vehicle::VehicleAttribs::operator=
+    // Full-object copy assignment (additive grow of this committed home -- declared here, bodied
+    // out-of-line below). Used by VehicleAttribs::SetupAttribsForAI and VehiclePhysics::Prepare.
+    VehicleAttribs& operator=(const VehicleAttribs& lrSource);
+
     VehicleBaseAttribs mBaseAttribs;
     SteeringAttribs    mSteeringAttribs;
     EngineAttribs      mEngineAttribs;
@@ -294,6 +299,12 @@ public:
     u8                 mPadAfterDrift[0xA0];
     Wheel::TireAttribs mFrontTireAttribs;
     Wheel::TireAttribs mRearTireAttribs;
+    // Trailing attribute words past the two tire blocks (no DWARF field structure for this
+    // TU; named byte-accurate fields so operator= copies them BY NAME, no raw-offset casts).
+    u32                muTrailingWord;     // @0x350 (asm lwz/stw, 4-byte)
+    u8                 mPad354[4];         // @0x354 : gap to the 8-byte field at 0x358
+    u64                muTrailingData;     // @0x358 (asm ld/std, 8-byte)
+    bool               mbIsValid;          // @0x360 : operator= sets this true (asm li 1; stb)
 };
 
 static_assert(sizeof(rw::math::vpu::Vector3) == 16, "Vector3 layout drift");
@@ -358,6 +369,36 @@ void VehicleAttribs::SetupAttribsForDonutAI()
     mFrontTireAttribs.PrepareFrontTireForDonutAI();
     mRearTireAttribs.PrepareRearTireForDonutAI();
     mBaseAttribs.SetMass(rw::math::vpu::VecFloat(KF_DONUT_AI_MASS));
+}
+
+// @0x825B2B68  BrnPhysics::Vehicle::VehicleAttribs::operator=
+//
+// The X360 leaf copies the whole attribute block from source to destination: a memcpy of the
+// leading 0xE0 bytes (== sizeof VehicleBaseAttribs) followed by per-sub-aggregate copies for the
+// steering/engine/drift blocks, the inter-block padding, and the two TireAttribs (the two
+// trailing 8-store do/while loops copy 0x40 bytes each). Every member is a trivially-copyable POD
+// slice (Vector3/Vector4/InterpedParam3/TireAttribs/padding), so a memberwise assignment is
+// store-for-store equivalent to the blob copy. The Hex-Rays artifacts of the form
+// *(*(a2+632)+24)=*(a2+632) are mis-rendered 16-byte vector stores, not pointer writes.
+// AFTER the two tire copies the asm has three more stores: lwz/stw @0x350 (4-byte word copy),
+// ld/std @0x358 (8-byte copy), and `li r10,1; stb r10,0x360` -- the byte at 0x360 (mbIsValid) is
+// set to the CONSTANT 1, not copied (the Hex-Rays BYTE3(v32) rendering is the li-1 misread).
+VehicleAttribs& VehicleAttribs::operator=(const VehicleAttribs& lrSource)
+{
+    mBaseAttribs     = lrSource.mBaseAttribs;
+    mSteeringAttribs = lrSource.mSteeringAttribs;
+    mEngineAttribs   = lrSource.mEngineAttribs;
+    mDriftAttribs    = lrSource.mDriftAttribs;
+    for ( u32 luByte = 0; luByte < sizeof(mPadAfterDrift); ++luByte )
+    {
+        mPadAfterDrift[luByte] = lrSource.mPadAfterDrift[luByte];
+    }
+    mFrontTireAttribs = lrSource.mFrontTireAttribs;
+    mRearTireAttribs  = lrSource.mRearTireAttribs;
+    muTrailingWord    = lrSource.muTrailingWord;   // stw @0x350
+    muTrailingData    = lrSource.muTrailingData;   // std @0x358
+    mbIsValid         = true;                      // li 1; stb @0x360 (set unconditionally)
+    return *this;
 }
 }
 }

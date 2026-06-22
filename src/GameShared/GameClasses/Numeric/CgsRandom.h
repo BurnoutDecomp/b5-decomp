@@ -52,6 +52,7 @@ class Random;
 namespace BrnEffects { namespace Utils {
 struct Vector3Randomiser;
 struct Vector4Randomiser;
+struct DebrisColourRandomiser;
 } }
 
 namespace CgsNumeric
@@ -64,6 +65,7 @@ class alignas(8) Random
     // randomiser bodies, not here.
     friend struct BrnEffects::Utils::Vector3Randomiser;
     friend struct BrnEffects::Utils::Vector4Randomiser;
+    friend struct BrnEffects::Utils::DebrisColourRandomiser;
 
 public:
     // X360 (inlined at every Construct site, e.g. FlybyManager::Construct and the

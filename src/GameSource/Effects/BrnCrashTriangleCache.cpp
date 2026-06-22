@@ -212,6 +212,34 @@ namespace BrnEffects
         }
     }
 
+    // @ 0x8227B2D0. Writes the incoming scalar triangle into the current
+    // component lane of the current packed slot, then advances the fill cursors.
+    // The asm copies each Vector4 field of *lpPackedTriangle into component
+    // mnNextComponentToFill of maPackedTriangles[mnNextPackedTriangleToFill] using
+    // a per-component vsel mask (the unk_8327F240 lookup) -- the lane-set semantic
+    // of SetScalarTriangle. When the 4th component fills (wraps to 0), the slot
+    // cursor advances modulo 48 and the populated-slot count saturates at 48.
+    void BrnCrashTriangleCache::InsertTriangleIntoCache(
+        BrnCrashTrianglePackedFormat* lpPackedTriangle)
+    {
+        maPackedTriangles[mnNextPackedTriangleToFill].SetScalarTriangle(
+            *lpPackedTriangle, mnNextComponentToFill);
+
+        mnNextComponentToFill = (mnNextComponentToFill + 1) & (KU_TRIANGLES_PER_PACK - 1);
+
+        if (mnNextComponentToFill == 0)
+        {
+            const u32 luNumberOfPackedTriangles = mnNumberOfPackedTriangles;
+            mnNextPackedTriangleToFill =
+                (mnNextPackedTriangleToFill + 1) % KU_MAX_NUMBER_PACKED_TRIANGLES;
+
+            mnNumberOfPackedTriangles =
+                (luNumberOfPackedTriangles == KU_MAX_NUMBER_PACKED_TRIANGLES)
+                    ? KU_MAX_NUMBER_PACKED_TRIANGLES
+                    : luNumberOfPackedTriangles + 1;
+        }
+    }
+
     void BrnCrashTriangleCache::CalculateHashForPackedTriangle(
         BrnCrashTrianglePackedFormat* lpPackedTriangle) const
     {
