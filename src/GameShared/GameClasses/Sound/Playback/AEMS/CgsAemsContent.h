@@ -3,6 +3,9 @@
 
 #include "types.hpp"
 
+#include "GameShared/GameClasses/Sound/Playback/CgsContent.h"             // CgsSound::Playback::Content / Factory / ContentSpec
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h" // ContentLoader<T> + CgsResource::BinaryFileResource
+
 // =============================================================================
 // CgsSound::Playback::AemsContentSlot
 //   GameShared/GameClasses/Sound/Playback/aems/CgsAemsContent.h (DWARF home) +
@@ -75,9 +78,9 @@ struct AemsPlayerVoice
     void SetPlaying() { mu8PlaybackFlags = static_cast<u8>(mu8PlaybackFlags | E_PLAYBACK_STATE_PLAYING_BIT); }
 
     // Cross-TU member bodies (defined in the AemsPlayerVoice TUs; declared here).
-    bool Play(u32 au32Param); // CgsAemsPlayerVoice.cpp:141
-    bool Stop();              // CgsAemsPlayerVoice.cpp:163
-    bool Update(f32 af32Dt);  // CgsAemsPlayerVoice.cpp:97
+    bool Play(u32 au32Param); // that TU
+    bool Stop();              // that TU
+    bool Update(f32 af32Dt);  // that TU
 };
 
 // The Slot dispatches play/stop/update through a PlayerVoice& base; for the AEMS
@@ -98,14 +101,65 @@ struct ISlotImplementation
                                  Content& aContent, f32 af32Dt) = 0;
 };
 
+// =============================================================================
+// CgsSound::Playback::AemsContent  (CgsAemsContent.h:115 DWARF home)
+//
+// The AEMS bank's concrete Content. `: public Content` (CgsContent.h) carrying a
+// single ContentLoader<CgsResource::BinaryFileResource> mLoader at object +0x20
+// (DWARF CgsAemsContent.h:189) -- the SAME Content+ContentLoader layout as the two
+// generic-RWAC contents in CgsGenericRwacContent.h. The remaining members
+// (miAemsBankHandle, mbRemoveBegun, mpAemsData -- CgsAemsContent.h:190..192) are
+// trivially destructible and do not appear in the dtor asm.
+//
+// The TU here is the compiler-synthesized vector-deleting destructor @ 0x826DA150:
+//   *this = vtable;                                  // off_820B54DC
+//   v4 = *(this+44); if (v4) *(v4+16) = *(this+48);  // unlink mLoader.mpResource
+//   v5 = *(this+48); if (v5) *(v5+12) = *(this+44);  //   BaseResourcePtr alias ring
+//   *(this+44) = this+32; *(this+48) = this+32;      // re-self-link the ring
+//   CgsSound::Playback::Content::~Content(this);     // base dtor
+//   if (a2 & 1) operator delete(this);               // (vector-)deleting tail
+// this+32(0x20) == mLoader.mpResource; the alias links at +0x0C/+0x10 of its
+// BaseResourcePtr == object +44/+48. The unlink + re-self-link IS
+// CgsResource::BaseResourcePtr::~BaseResourcePtr() (@0x821F1E18), run when the
+// compiler destroys mLoader.mpResource. Defining the class destructor out-of-line
+// (CgsAemsContentDtor.cpp) emits that exact sequence; the body is empty because the
+// member/base destructors do all the work.
+//
+// FLAG (method family is CROSS-TU): AemsContent's ctor, DoLoad/DoUnload/DoUpdate/
+// DoGetData/DoOnPostLoad/DoOnPreUnload and AddAemsBankCallback (CgsAemsContent.h:
+// 123..183) live in their own (not-yet-done) AemsContent TUs; they are DECLARED here
+// (where they affect the vtable shape) and resolved at consolidation -- NOT defined.
+// =============================================================================
+struct AemsContent : public Content
+{
+    AemsContent(Factory& aFactory, const ContentSpec& aSpec, u32 au32DataSize); // :123 (own TU)
+    virtual ~AemsContent();                                                     // :129
+
+protected:
+    virtual bool  DoLoad();            // :133 (own TU)
+    virtual bool  DoUnload();          // :134 (own TU)
+    virtual void  DoUpdate(f32 af32Dt); // :135 (own TU)
+    virtual void* DoGetData();         // :136 (own TU)
+    virtual bool  DoOnPostLoad();      // :141 (own TU)
+    virtual bool  DoOnPreUnload();     // :155 (own TU)
+
+    void* AddAemsBankCallback(void* apData, int aiArg1, int aiArg2); // :183 (own TU)
+
+private:
+    ContentLoader<CgsResource::BinaryFileResource> mLoader; // :189  (object +0x20)
+    int   miAemsBankHandle;                                 // :190
+    bool  mbRemoveBegun;                                    // :191
+    void* mpAemsData;                                       // :192
+};
+
 // CgsAemsContent.h:200 (DWARF): AemsContentSlot : public ISlotImplementation.
 struct AemsContentSlot : public ISlotImplementation
 {
-    // CgsAemsContent.cpp:85 @ 0x826DAFF0.
+    // that TU @ 0x826DAFF0.
     virtual bool DoPlay(const Slot& aSlot, PlayerVoice& aVoice, Content& aContent, u32 au32Param);
-    // CgsAemsContent.cpp:103 @ 0x826DB008.
+    // that TU @ 0x826DB008.
     virtual bool DoStop(const Slot& aSlot, PlayerVoice& aVoice, Content& aContent);
-    // CgsAemsContent.cpp:72 @ 0x826DAFE8.
+    // that TU @ 0x826DAFE8.
     virtual bool DoUpdatePlaying(System* apSystem, const Slot& aSlot, PlayerVoice& aVoice,
                                  Content& aContent, f32 af32Dt);
 };

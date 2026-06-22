@@ -14,6 +14,12 @@
 //
 // This message is embedded by value inside BrnNetwork::TrafficManager::TrafficSyncData
 // (send/recv copies), so the layout must be exact.
+//
+// LEDGER FUNCTION bodied in this (header) TU (X360 BURNOUT_X360_ARTIST.XEX):
+//   BrnNetwork::TrafficHashMessage::GetName  @ 0x827DE098
+//     -> returns the literal "Traffic Hash Message" (lis/addi a rodata string, blr).
+//        No member or base access. The remaining declared methods live in the sibling
+//        BrnTrafficHashMessage.cpp TU.
 // ===================================================================================
 
 #include "types.hpp"
@@ -39,5 +45,15 @@ namespace BrnNetwork
                                                 u16* lpu16TrafficHash);
         s32                            GetPackedMessageSize();
         CgsNetwork::PackOrUnpackResult PackOrUnpack();
+
+        // LEDGER func @ 0x827DE098 -- bodied inline below (DWARF BrnTrafficHashMessage.h:105).
+        const char*                    GetName() const;
     };
+
+    // BrnNetwork::TrafficHashMessage::GetName  @ 0x827DE098
+    //   lis/addi a rodata string literal, blr -- no member or base access.
+    inline const char* TrafficHashMessage::GetName() const
+    {
+        return "Traffic Hash Message";
+    }
 } // namespace BrnNetwork

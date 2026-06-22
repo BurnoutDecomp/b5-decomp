@@ -41,6 +41,7 @@
 #include "types.hpp"                                                              // u16, s32, f32, bool
 #include "rw/math/vpu/types.h"                                                    // rw::math::vpu::Matrix44Affine, Vector3
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // BrnNetwork::ECameraStatus (committed home)
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"          // CgsNetwork::Message (committed base)
 
 namespace BrnNetwork
 {
@@ -74,4 +75,45 @@ namespace BrnNetwork
         // Memberwise copy assignment @ 0x82579CD0 (store-for-store; body in BrnUpdateMessage.cpp).
         UpdateData& operator=(const UpdateData& lOther);
     };
+
+    // DWARF BrnUpdateMessage.h:87 -- one car's per-frame update network message.
+    // Adds the embedded UpdateData payload after the 0x20-byte CgsNetwork::Message base.
+    // The committed CgsNetwork::Message base is reused BY NAME here -- not forked.
+    //
+    // LEDGER FUNCTION bodied in this (header) TU (X360 BURNOUT_X360_ARTIST.XEX):
+    //   BrnNetwork::UpdateMessage::GetName  @ 0x827DDED8
+    //     -> returns the literal "Update Message" (lis/addi a rodata string, blr). No
+    //        member or base access. The remaining declared methods (Construct/PrepareForSend/
+    //        Release/Destruct/GetPackedMessageSize/GetUpdateData/GetU16FramesSinceStart/
+    //        GetU16SentFrame/PackOrUnpack) live in the sibling BrnUpdateMessage.cpp TU and
+    //        are declared here for the class shape but NOT bodied in this TU.
+    struct UpdateMessage : public CgsNetwork::Message
+    {
+    public:
+        // Sibling-.cpp methods (declared for class shape; NOT bodied in this TU).
+        void          Construct();
+        void          PrepareForSend(UpdateData* lpUpdateData);
+        void          Release();
+        void          Destruct();
+        virtual s32   GetPackedMessageSize();          // DWARF :- (sibling .cpp)
+        const UpdateData* GetUpdateData();             // DWARF :129 (sibling .cpp)
+        u16           GetU16FramesSinceStart();         // DWARF :136 (sibling .cpp)
+        u16           GetU16SentFrame();                // DWARF :143 (sibling .cpp)
+
+        // LEDGER func @ 0x827DDED8 -- bodied inline below (DWARF BrnUpdateMessage.h:150).
+        virtual const char* GetName() const;
+
+    protected:
+        virtual CgsNetwork::PackOrUnpackResult PackOrUnpack();
+
+    private:
+        UpdateData mUpdateData;   // +0x20 (DWARF :125)
+    };
+
+    // BrnNetwork::UpdateMessage::GetName  @ 0x827DDED8
+    //   lis/addi a rodata string literal, blr -- no member or base access.
+    inline const char* UpdateMessage::GetName() const
+    {
+        return "Update Message";
+    }
 } // namespace BrnNetwork

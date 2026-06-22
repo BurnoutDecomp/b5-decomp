@@ -4,10 +4,30 @@
 #include "GameSource/Network/Messages/BrnUpdateMessage.h"
 
 #include <cstddef>
+#include <type_traits>
 
 namespace
 {
     using BrnNetwork::UpdateData;
+    using BrnNetwork::UpdateMessage;
+
+    // The message derives from the committed CgsNetwork::Message base (by name).
+    static_assert(std::is_base_of<CgsNetwork::Message, UpdateMessage>::value,
+                  "UpdateMessage : CgsNetwork::Message");
+
+    // Exercises the bodied ledger func GetName() @ 0x827DDED8.
+    bool CheckGetName()
+    {
+        UpdateMessage lMessage;
+        const char* lpName = lMessage.GetName();
+        const char* lpExpect = "Update Message";
+        for (int i = 0; ; ++i)
+        {
+            if (lpName[i] != lpExpect[i]) return false;
+            if (lpExpect[i] == '\0') return true;
+        }
+    }
+    inline bool TouchGetName() { return CheckGetName(); }
 
     // Member byte offsets must match the X360 copy @0x82579CD0 store offsets exactly.
     static_assert(offsetof(UpdateData, mu16SentFrame)              == 0x00, "mu16SentFrame @0x00");
