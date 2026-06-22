@@ -71,7 +71,15 @@ namespace CgsNetwork
         u16   mu16Frame;                // 0x1C
 
         // --- reconstructed members (this TU) ---
+        // Placement-style initialiser the X360 build calls "Construct" (returns this);
+        // and the packed-size query. Both have their bodies in their own TUs; declared
+        // here so every subclass ctor / GetPackedMessageSize can chain to the base.
+        Message* Construct();
+        s32      GetPackedMessageSize();
         u8   GetGameID() const;
+        // vtable slot 0 in the X360 build: the base reports "not reliable"; only
+        // ReliableMessage overrides it. Subclass PrepareForSend asserts on it.
+        bool IsReliable() const;
         Message* SetType(s32 leType);
         void PrepareForSend(s32 leType, u16 lu16Frame);
         void PrepareAck(s32 leType, u16 lu16Frame, u8 lu8GameID);
@@ -90,25 +98,30 @@ namespace CgsNetwork
     bool UInt16IsLargerOrEqualWrapped(u16 lu16A, u16 lu16B);
     u16  GetFrameDiffWrapped16(u16 lu16FrameA, u16 lu16FrameB);
 
-    // CgsNetwork::ReliableMessage  (CgsMessage.h in the leak)
-    //
-    // A Message subclass that carries the RELIABLE flag and a wrapped 16-bit
-    // reliable id. PrepareForSend @ 0x82882100 touches only the inherited Message
-    // base scalars (mx8Flags @+0x19, mu16Frame @+0x1C) and dispatches through the
-    // committed Message::SetType -- so the reconstructed body needs no members
-    // beyond the Message base.
-    //
-    // FLAGGED: CgsReliableMessage.cpp (a separate TU, ReliableMessage::PackOrUnpack
-    // @ 0x828821A8) currently declares its OWN local, opaque `struct
-    // ReliableMessage` (mPad[28] + mu16ReliableId @0x1C) rather than this Message
-    // subclass. The two are layout-compatible at the offsets each touches
-    // (mu16ReliableId == base mu16Frame == +0x1C). This header is the canonical
-    // home; that local definition should fold into this subclass when that TU is
-    // revisited. They are never compiled in one TU together today.
-    struct ReliableMessage : Message
-    {
-        void PrepareForSend(s32 leType, u16 lu16Frame);
-    };
+    // ------------------------------------------------------------------------
+    // Shared field (de)serialise primitives (homed in CgsMessage.cpp; each is its
+    // own not-yet-reconstructed TU, so they are declared here -- the whole message
+    // hierarchy packs/unpacks fields by name through these). Every Pack/Unpack pass
+    // routes the field through the message's bitstream and the lifecycle word
+    // (mePackOrUnpack) decides pack vs unpack. Each returns a per-field status that
+    // the callers OR together (0 == all fields succeeded == KX_PACK_OR_UNPACK_SUCCESS).
+    //   PackOrUnpackInt  -- sub_82881370: a quantised 32-bit int in [liMin, liMax].
+    //   PackOrUnpackU16  -- sub_82881250: a quantised 16-bit value in [liMin, liMax].
+    //   PackOrUnpackBool -- sub_8288DDA0: a single boolean flag.
+    //   PackOrUnpackCgsID-- sub_82881C00: a 64-bit CgsID.
+    // The field to (de)serialise is passed by pointer; the return is a per-field
+    // status the callers bitwise-OR together into the message's PackOrUnpackResult.
+    PackOrUnpackResult PackOrUnpackInt(Message* lpMessage, s32* lpiField, s32 liMin, s32 liMax);
+    PackOrUnpackResult PackOrUnpackU16(Message* lpMessage, u16* lpu16Field, s32 liMin, s32 liMax);
+    PackOrUnpackResult PackOrUnpackBool(Message* lpMessage, bool* lpbField);
+    PackOrUnpackResult PackOrUnpackCgsID(Message* lpMessage, u64* lpu64Field);
+
+    // CgsNetwork::MessageWithPlayerIDs and CgsNetwork::ReliableMessage are the next two
+    // rungs of the message hierarchy. They now live in their proper home headers
+    // (CgsMessageWithPlayerIDs.h / CgsReliableMessage.h), which #include this file --
+    // include those when you need a ReliableMessage-derived type. (They used to be a
+    // single bare `ReliableMessage : Message` stub here; recovering the real DWARF
+    // hierarchy moved them out and gave MessageWithPlayerIDs its two player-id fields.)
 }
 
 // CgsNetwork::HostMigrationManager  (no committed home -- minimal owning header).

@@ -19,7 +19,7 @@
 #pragma once
 
 #include "types.hpp"                                                       // bool, s32, u16
-#include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"  // CgsNetwork::ReliableMessage (committed base)
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsReliableMessage.h"  // CgsNetwork::ReliableMessage (committed base; moved out of CgsMessage.h)
 #include "GameShared/GameClasses/Core/CgsID.h"                             // CgsID (committed core id)
 
 namespace BrnNetwork

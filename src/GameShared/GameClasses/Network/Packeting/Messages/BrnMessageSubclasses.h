@@ -18,15 +18,11 @@
 
 namespace BrnNetwork
 {
-    // BrnNetwork::HullSyncMessage  (Release @ 0x8257DD40)
-    struct HullSyncMessage : CgsNetwork::Message
-    {
-        // Message base occupies 0x00..0x1E (mu16Frame @+0x1C). Reserve up to +0x54.
-        u8  mReserved[0x54 - 0x20];     // 0x20 .. 0x53 (opaque, FLAGGED placeholder)
-        s32 miSyncState;                // 0x54  -- cleared to 0 on Release()
-
-        void Release();
-    };
+    // BrnNetwork::HullSyncMessage now has its real layout in its owning header
+    // (BrnHullSyncMessage.h): a CgsNetwork::ReliableMessage carrying a
+    // BufferedHullsToActivate array. The field this TU's Release() zeroes (+0x54) is the
+    // array's live-element count, so Release() clears the array. (It used to be modelled
+    // here as an opaque struct with a bare miSyncState @ +0x54.)
 
     // BrnNetwork::UpdateMessage  (Release @ 0x8257D990)
     struct UpdateMessage : CgsNetwork::Message

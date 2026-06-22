@@ -1,5 +1,7 @@
 #include "CgsMessage.h"
+#include "CgsReliableMessage.h"   // CgsNetwork::ReliableMessage (moved out of CgsMessage.h)
 #include "BrnMessageSubclasses.h"
+#include "GameSource/Network/Messages/BrnHullSyncMessage.h"   // BrnNetwork::HullSyncMessage (real layout)
 
 // Reconstructed bodies for four functions of the CgsMessage.h message hierarchy
 // that were previously dropped (a prior pass wrongly folded this TU into
@@ -22,7 +24,7 @@ namespace BrnNetwork
     void HullSyncMessage::Release()
     {
         mx8Flags &= static_cast<u8>(~CgsNetwork::KX8_FLAGS_VALID);
-        miSyncState = 0;
+        mBufferedHullActivates.Clear();     // zero the array live-count (+0x54)
     }
 
     // ---- UpdateMessage::Release @ 0x8257D990 -----------------------------------
