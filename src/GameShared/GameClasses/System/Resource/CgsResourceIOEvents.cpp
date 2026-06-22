@@ -1,0 +1,54 @@
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
+
+#include <GameShared/GameClasses/Core/CgsAssert.h>
+
+// CgsResource::Events::BundleLoaderEvent::SetFileName @ 0x822770F8
+//
+// Stores a NUL-terminated file path into the event's inline macFileName[128]
+// buffer. The X360 build inlines the bounded string-copy helper from
+// CgsStringUtils.h:65: it first measures the source length, asserts it fits the
+// destination buffer (length < 128), then copies the bytes (including the NUL
+// terminator) into macFileName. A null source simply clears the buffer to "".
+// Returns *this so the loader call sites can chain the store with the rest of
+// the event setup.
+
+namespace CgsResource
+{
+namespace Events
+{
+
+BundleLoaderEvent& BundleLoaderEvent::SetFileName(const char* pcFileName)
+{
+    if (pcFileName != nullptr)
+    {
+        // Measure the source length (excluding the NUL), matching the inlined
+        // helper's strlen-style pre-pass that feeds the bounds assert.
+        const char* pcScan = pcFileName;
+        while (*pcScan)
+            ++pcScan;
+        const s32 liLength = static_cast<s32>(pcScan - pcFileName);
+
+        CGS_ASSERT(liLength < static_cast<s32>(sizeof(macFileName)),
+                   "String is too long for the destination buffer");
+
+        // Copy the path verbatim, NUL terminator included.
+        char* pcDest = macFileName;
+        const char* pcSrc = pcFileName;
+        char lcChar;
+        do
+        {
+            lcChar = *pcSrc++;
+            *pcDest++ = lcChar;
+        }
+        while (lcChar != '\0');
+    }
+    else
+    {
+        macFileName[0] = '\0';
+    }
+
+    return *this;
+}
+
+}
+}

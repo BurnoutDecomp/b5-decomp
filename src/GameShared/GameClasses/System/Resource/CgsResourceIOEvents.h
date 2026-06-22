@@ -19,6 +19,13 @@ namespace Events
         bool mbLiveUpdateReplace;
         char macFileName[128];
         s32  miPoolId;
+
+        // Copies a NUL-terminated path into macFileName, asserting the source fits
+        // (length < 128, the macFileName buffer size); a null source clears the
+        // buffer. Returns *this so callers can chain. Recovered from
+        // CgsResource::Events::BundleLoaderEvent::SetFileName @ 0x822770F8; the X360
+        // build inlines the CgsStringUtils.h:65 bounded-copy helper at the call site.
+        BundleLoaderEvent& SetFileName(const char* pcFileName);
     };
 
     struct LoadBundleRequest : public BundleLoaderEvent
