@@ -187,6 +187,16 @@ public:
     void OnBoostChain(s32 liChainLength);                                       // DWARF :163
     void OnTakedownChain(s32 liChainLength);                                    // DWARF :168
 
+    // ADDITIVE GROW (FLAG): X360 BurnoutSkillzManager::UpdateBurnoutSkillzTotals
+    // (0x82322C30) calls this through the achievement-manager back-pointer when a
+    // local player's free-burn skillz total changes (it forwards the network player
+    // count + the new total). The PS3-derived AchievementManagerPS3 supplies the body;
+    // declared-only here (no body in this base / in the SkillzManager TU). The DWARF
+    // member list for this base did not name it; added additively (existing members and
+    // method order left untouched). If the leak later attests a different signature,
+    // reconcile here.
+    void OnFreeburnSkillzTotalChange(s32 liNumberOfNetworkPlayers, f32 lfNewSkillzTotal);
+
 protected:
     // Vtable slot 0 / slot 1 respectively (the X360 calls slot 0 at vtable+0 and
     // slot 1 at vtable+4). Pure in this base in spirit; the PS3 variant supplies
@@ -200,6 +210,24 @@ protected:
     StreetManager*                      mpStreetManager;                        // this+0x08 (DWARF :229)
     ScoringSystem*                      mpScoringSystem;                         // this+0x0C (DWARF :230)
     GameStateModule*                    mpGameStateModule;                       // this+0x10 (DWARF :231)
+};
+
+// ---------------------------------------------------------------------------
+// BrnGameState::AchievementManagerPS3 -- the concrete platform achievement manager
+// (DWARF: derives from AchievementManagerBase, supplies the two pure virtuals + a
+// BitArray<60> send-queue). Its full data-table-gated layout is BLOCKED (the X360
+// achievement-id tables are not in the exports), so this is a MINIMAL complete slice:
+// it derives from the base and stubs the two pure virtuals so callers that hold a
+// StuntModeScoring::AchievementManager* (== this) can resolve the inherited base
+// methods (e.g. SkillzManager's OnFreeburnSkillzTotalChange forward) under cl /c.
+// Grow this in place when the PS3 manager's own TU is reconstructed; do NOT fork.
+// FLAG: the override bodies + the send-queue member are placeholders, not the real PS3
+// behaviour (compile-only completeness for pointer-method dispatch).
+class AchievementManagerPS3 : public AchievementManagerBase
+{
+protected:
+    void AchievementEarnt(EAchievement leAchievement) override;
+    bool IsAchievementEarnt(EAchievement leAchievement) override;
 };
 
 }

@@ -10,6 +10,9 @@
 // reference only -- no layout needed here; the real types are included by the TrainingManager TU).
 namespace BrnGameState { namespace GameStateModuleIO { class GameActionQueue; } }
 namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
+// The achievement manager the BurnoutSkillzManager grow returns (StuntModeScoring::AchievementManager
+// is a typedef of this; pointer only here).
+namespace BrnGameState { class AchievementManagerPS3; }
 
 namespace BrnGameState
 {
@@ -51,6 +54,15 @@ public:
     // DWARF BrnGameStateModule.h:1300/651. X360 inlines it (sets mbToggleShowtimeBehaviour=true at
     // offset 284512); declared-only here, used by GameStateDebugComponent::ToggleShowtimeCallback.
     void ToggleShowtimeBehaviour();
+
+    // ADDITIVE GROW (declare-only) for the BrnBurnoutSkillzManager TU. FLAG: the X360
+    // BurnoutSkillzManager::Construct (0x82332688) reaches the embedded achievement manager
+    // through the owning GameStateModule (the inlined `*(modeManager->mpGameStateModule) +
+    // 181680` pointer adjust to the achievement-manager subobject). De-inlined to this named
+    // accessor; body + the real embedded-AchievementManager wiring land with the GameStateModule
+    // TU. Returns the StuntModeScoring::AchievementManager (== AchievementManagerPS3) the manager
+    // caches as mpAchievementManager.
+    AchievementManagerPS3* GetAchievementManager();
 
     // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU.
     // X360 BrnGameState::GameStateModule::RequestPause -- TrainingManager::TriggerAnyFollowOnTrainingTips
