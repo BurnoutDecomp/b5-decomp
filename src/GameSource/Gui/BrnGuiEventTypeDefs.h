@@ -87,23 +87,58 @@ struct GuiEventUpdateSatNav
         void          SetIconType(SatNavIconType leType);
         SatNavIconType GetIconType() const;
 
+        // FLAGGED ADDITIVE GROW (Scene-Gui-Realmc group): the X360 DoWorstCase
+        // @0x823B1980 reads/writes the position vector at icon-relative +0x00
+        // (`lvx128 v0,r0,<icon>`, 16 bytes), the county/district/index bytes at
+        // +0x24/+0x25/+0x26 and the icon-type byte at +0x28, with a 0x30-byte stride
+        // between icons. So the full SatNavIconInfo is 0x30 bytes (the previously
+        // 0x28-modelled struct undersized it). This grow ONLY ADDS named fields at
+        // X360-proven offsets and pins the total size to 0x30; the four committed
+        // accessors and their proven 0x24..0x27 offsets are untouched.
     private:
         // ---- leading payload (PS3 DWARF :1699-1707) ----
-        // Reproduced in declaration order below for documentation, but kept inside an
-        // explicitly-reserved 0x24-byte head so the four X360-verified trailing bytes
-        // land at their proven offsets regardless of the head's inter-member padding
-        // (which is NOT independently verified against the X360 binary). The named
-        // layout is, in order: Vector3 mv3Position @0x00; CgsID mCgsId @0x10;
-        // f32 mfRotation @0x18; f32 mfSpeedMph @0x1C; LandmarkIndex mLandmarkIndex @0x20;
-        // u8 mu8DesignIndex; bool mbIsHiddenDriveThru. See LAYOUT NOTE at top of file.
-        u8      maHeadReserved[0x24];  // @0x00 .. 0x23  (named head, see comment above)
+        // The DWARF-documented head order is, at byte offsets: Vector3 mv3Position
+        // @0x00; CgsID mCgsId @0x10; f32 mfRotation @0x18; f32 mfSpeedMph @0x1C;
+        // LandmarkIndex @0x20; u8 mu8DesignIndex; bool mbIsHiddenDriveThru. Only the
+        // 16-byte position lane (read/written by DoWorstCase via lvx128/stvx128) is
+        // pinned by the X360 binary; the remaining head bytes' exact inter-member
+        // padding is NOT independently verified, so they stay an explicitly-reserved
+        // mid block. This keeps the four verified trailing bytes at their proven
+        // offsets. See LAYOUT NOTE at top of file.
+        Vector4 mv4Position;          // @0x00 .. 0x0F  (X360-pinned; DoWorstCase lvx128)
+        u8      maHeadReserved[0x14]; // @0x10 .. 0x23  (named head tail, see comment above)
 
         // ---- trailing bytes, X360-pinned (offsets proven by the four accessors) ----
-        u8      mu8County;          // @0x24  (GetCounty)
-        u8      mu8District;        // @0x25  (GetDistrict)
-        s8      mi8ActiveRaceCarIndex; // @0x26 (GetActiveRaceCarIndex, sign-extended)
+        u8      mu8County;          // @0x24  (GetCounty / DoWorstCase write)
+        u8      mu8District;        // @0x25  (GetDistrict / DoWorstCase write)
+        s8      mi8ActiveRaceCarIndex; // @0x26 (GetActiveRaceCarIndex / DoWorstCase write)
         s8      mi8PlayerTeam;      // @0x27  (GetPlayerTeam, sign-extended; X360 drift vs DWARF mi8IconType)
+        s8      mi8IconType;        // @0x28  (validity-loop read; DoWorstCase writes E_SATNAVICON_NETWORKRIVAL)
+        u8      maTailReserved[7];  // @0x29 .. 0x2F  (pads SatNavIconInfo to its 0x30 stride)
+
+        // DoWorstCase / SatNavI need direct access to these X360-pinned fields.
+        friend struct GuiEventUpdateSatNav;
     };
+
+    // FLAGGED ADDITIVE GROW (Scene-Gui-Realmc group): the OUTER GuiEventUpdateSatNav
+    // body the X360 emitted (DoWorstCase @0x823B1980, SatNavI @0x823A6B30) treats the
+    // event as an array of SatNavIconInfo entries at +0x00 (0x30-byte stride) followed
+    // by an icon count at +0x900. 0x900 / 0x30 == 0x30 (48) entries of capacity. These
+    // members are pinned by the X360 binary (count at byte +0x900, entry stride 0x30).
+    static const s32 KI_MAX_SAT_NAV_ICONS = 0x900 / 0x30; // 48 (capacity)
+
+    SatNavIconInfo maIconInfo[KI_MAX_SAT_NAV_ICONS]; // @0x000 .. 0x8FF
+    s32            miNumIcons;                        // @0x900
+
+    // ---- reconstructed out-of-line bodies (X360 ARTIST) ----
+    // @0x823B1980 — recompute the "worst case" sat-nav icon set: validate the active
+    // icons, compact the located player-position icon to the front, then synthesise a
+    // ring of placeholder icons. Returns `this`.
+    GuiEventUpdateSatNav* DoWorstCase();
+
+    // @0x823A6B30 — range-check + return the leading icon's icon-type byte (a static
+    // helper the CrashNavMap callers use). Reads maIconInfo[0].mi8IconType.
+    static s32 SatNavI(const GuiEventUpdateSatNav* lpThis);
 };
 
 } // namespace BrnGui

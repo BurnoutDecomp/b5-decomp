@@ -51,6 +51,14 @@ public:
     // CgsObject.h:82. Subsystem dispose hook (overridden by Content & friends).
     virtual void DoDispose() {}
 
+    // FLAG (additive grow to a committed shared home): const reference-count
+    // accessor added for the StateManager::RegisteredContent slot teardown
+    // (0x826EAC90), which reads mu32RefCount to (a) assert it is > 0 and (b)
+    // detect the drop-to-zero before disposing. The X360 reads the raw word
+    // a1[1]; this read-only getter exposes the same value by NAME without
+    // changing layout or any existing behaviour.
+    u32 GetRefCount() const { return mu32RefCount; }
+
 protected:
     // CgsObject.h:85. Outstanding reference count. The destructor at 0x826916F0
     // reads this (a1[1] on X360, i.e. the word right after the 4-byte vptr) and
