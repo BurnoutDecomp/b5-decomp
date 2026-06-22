@@ -632,7 +632,9 @@ namespace BrnGameState
 
         // ===== burnout-skillz tally (declare-only) =====
         void AddPlayerBurnoutSkillz(BrnNetwork::NetworkPlayerID lID, BrnNetwork::NetworkPlayerID lOtherID); // :1141 / 0x823561D0
-        BurnoutSkillzData* GetBurnoutSkillzData(EActiveRaceCarIndex leRaceCarIndex);          // :1146 / 0x82311110
+        // by-active-race-car-index entry 0x8231E408: translates the index to a key (per-car table
+        // @ scoring+0x5044, stride 0x158) then forwards to the inner by-key lookup at 0x82311110.
+        BurnoutSkillzData* GetBurnoutSkillzData(EActiveRaceCarIndex leRaceCarIndex);          // :1146 / 0x8231E408
         BurnoutSkillzData* GetBurnoutSkillzData(BrnNetwork::NetworkPlayerID lID);             // :1151
         void ClearAllBurnoutSkillzData();                                                     // :1155 / 0x82311198
         void ClearPlayersBurnoutSkillzData(BrnNetwork::NetworkPlayerID lID);                  // :1160 / 0x82311210

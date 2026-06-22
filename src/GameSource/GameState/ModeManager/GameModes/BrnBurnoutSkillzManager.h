@@ -88,6 +88,12 @@ public:
     // BrnBurnoutSkillzManager.h:72 (body in another TU -- not this 16-function TU)
     void UpdatePostWorld(const GameStateModuleIO::PostWorldInputBuffer* lpInput);
 
+    // X360 0x8233A560. The per-frame post-world entry point: resolve the local player's
+    // active-race-car index from the post-world input buffer, feed the frame's post-world
+    // game events into the per-car skill records, then bank the car's takedown count as the
+    // TOTAL skill. Returns the per-car BurnoutSkillzData* it operated on (null when no record).
+    BurnoutSkillzData* PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpInput);
+
     // BrnBurnoutSkillzManager.h:78 / X360 0x82322988
     void SendUpdatePlayerSkillsEvent(EActiveRaceCarIndex leActiveRaceCarIndex, bool lbShowHudMessage);
 

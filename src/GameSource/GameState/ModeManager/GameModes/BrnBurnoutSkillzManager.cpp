@@ -1109,4 +1109,48 @@ void BurnoutSkillzManager::PreWorldUpdate(
     }
 }
 
+// ----------------------------------------------------------------------------
+// PostWorldUpdate -- X360 0x8233A560. The per-frame post-world entry point. Resolves the
+// local player's active-race-car index from the post-world input buffer's active-car output
+// interface, looks up that car's skillz record, feeds the frame's post-world game events into
+// it, then banks the car's takedown count as the TOTAL skill. Returns the skillz record it
+// operated on (null when the scoring system has no record for the index).
+// ----------------------------------------------------------------------------
+BurnoutSkillzData* BurnoutSkillzManager::PostWorldUpdate(
+    const GameStateModuleIO::PostWorldInputBuffer* lpInput)
+{
+    CGS_ASSERT(lpInput, "lpInput");
+
+    // The active-car output interface lives inside the post-world input buffer; its
+    // GetPlayerActiveRaceCarIndex returns the global ::EActiveRaceCarIndex -- cast across the
+    // same-valued dup enum into this TU's BrnGameState::EActiveRaceCarIndex.
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface =
+        lpInput->GetActiveRaceCarOutputInterface();
+    EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex =
+        static_cast<EActiveRaceCarIndex>(lpActiveCarInterface->GetPlayerActiveRaceCarIndex());
+    CGS_ASSERT(leLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+               "Player car index hasn't been set");
+
+    CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
+    BurnoutSkillzData* lpSkillzData =
+        mpScoringSystem->GetBurnoutSkillzData(leLocalPlayerActiveRaceCarIndex);
+    if (lpSkillzData)
+    {
+        ProcessGameEventInputQueuePostWorld(lpSkillzData, lpInput->GetActiveRaceCarOutputInterface(),
+                                            lpInput->GetGameEventQueue(),
+                                            leLocalPlayerActiveRaceCarIndex);
+
+        // Bank the car's takedown count (CarScoreData +0x4C) as the TOTAL skill.
+        CarData* lpCarData = mpScoringSystem->GetCarData(leLocalPlayerActiveRaceCarIndex);
+        if (lpCarData)
+        {
+            const s32 liTakedowns = lpCarData->GetScoreData()->GetTakedowns();
+            SetNewSkillIfGreater(BurnoutSkillzData::E_BURNOUT_SKILL_TOTAL, lpSkillzData,
+                                 leLocalPlayerActiveRaceCarIndex, static_cast<f32>(liTakedowns));
+        }
+    }
+
+    return lpSkillzData;
+}
+
 } // namespace BrnGameState

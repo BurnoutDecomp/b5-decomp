@@ -35,6 +35,7 @@ void EmbedderCheck_ExerciseBurnoutSkillz(
     lrManager.OnEnterRoad(liChallengeIndex);
     lrManager.PreWorldUpdate(lpInput, lpActiveCarInterface, lpOutput, false);
     lrManager.UpdatePostWorld(lpPostWorldInput);
+    (void)lrManager.PostWorldUpdate(lpPostWorldInput);
     lrManager.SendUpdatePlayerSkillsEvent(leActiveRaceCarIndex, true);
     lrManager.ProcessNewRoadScore(lpOutput, lScore, leScoreType, liChallengeIndex, leActiveRaceCarIndex);
     lrManager.BufferNewRoadScore(lScore, leScoreType, liChallengeIndex);
