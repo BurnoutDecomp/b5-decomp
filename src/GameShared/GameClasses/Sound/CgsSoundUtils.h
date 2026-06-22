@@ -1,0 +1,162 @@
+#ifndef CGS_SOUND_CGSSOUNDUTILS_H
+#define CGS_SOUND_CGSSOUNDUTILS_H
+
+#include "types.hpp"
+
+#include <cmath>
+
+// CgsSound::Utils - sound-subsystem math/utility helpers. The ONLY function homed
+// here is the Slope copy-from-params constructor at 0x826A1F70; the surrounding
+// SlopeParams and Slope surface is declared (per the DecFIGS DWARF + DWARF
+// CgsSoundUtils.h) so the constructor can be bodied with member-by-name access.
+// The remaining Slope methods (Initialize/GetValue/dtor) and the other utility
+// classes (Curve, PathLine, InterpolateLine, Graph, ...) live in their own TUs and
+// are intentionally not bodied here.
+namespace CgsSound
+{
+namespace Utils
+{
+
+// ===== ADDITIVE GROW (BrnSound-B group: FrameInformation + HUDEffect::GameModeData) =====
+// CgsSound::Utils::DataPoint<T> (DWARF CgsSoundUtils.h:417 for the bool
+// instantiation; the same generic is used throughout the sound-logic state with
+// many T). A two-sample value: the current value and the previous (pre-Update)
+// value. The X360 `Update(v)` semantics are: mPreviousValue = mCurrentValue;
+// mCurrentValue = v -- which the FrameInformation::UpdateFatalityFlag asm shows as
+// the paired stores (cur at the value word, the displaced cur written to the
+// previous word). All methods are header-inline (the X360 build inlines every
+// DataPoint instantiation at its call site); zero-risk additive (no change to the
+// existing Slope/SlopeParams surface).
+template <typename T>
+struct DataPoint
+{
+    DataPoint() : mCurrentValue(), mPreviousValue() {}
+    explicit DataPoint(const T& lValue) : mCurrentValue(lValue), mPreviousValue(lValue) {}
+    DataPoint(const T& lCurrent, const T& lPrevious)
+        : mCurrentValue(lCurrent), mPreviousValue(lPrevious) {}
+
+    const T& GetCurrent() const  { return mCurrentValue; }
+    const T& GetPrevious() const { return mPreviousValue; }
+    bool     HasChanged() const  { return mCurrentValue != mPreviousValue; }
+
+    // Push a new sample: the old current becomes previous. (X360 paired-store
+    // semantics from FrameInformation::UpdateFatalityFlag.)
+    void Update(const T& lValue)
+    {
+        mPreviousValue = mCurrentValue;
+        mCurrentValue  = lValue;
+    }
+
+    void Flush(const T& lValue)
+    {
+        mCurrentValue  = lValue;
+        mPreviousValue = lValue;
+    }
+
+    DataPoint<T>& operator=(const T& lValue) { Update(lValue); return *this; }
+
+    // ORDER mirrors the DWARF (mCurrentValue @ +0, mPreviousValue @ +sizeof(T)).
+    T mCurrentValue;   // CgsSoundUtils.h:510
+    T mPreviousValue;  // CgsSoundUtils.h:511
+};
+
+// CgsSound::Utils::Average<tuNumPoints, T> (DWARF CgsSoundUtils.h:627). A fixed
+// ring buffer of tuNumPoints samples plus the cached running average. Layout
+// (DWARF CgsSoundUtils.h:643-645): maPoints[tuNumPoints], then muNextPoint (u8),
+// then mfAverage. Header-inline (every instantiation is folded at its call site on
+// X360). Additive only.
+template <u32 tuNumPoints, typename T>
+struct Average
+{
+    Average() : muNextPoint(0), mfAverage(T())
+    {
+        for (u32 lu = 0; lu < tuNumPoints; ++lu)
+        {
+            maPoints[lu] = T();
+        }
+    }
+
+    T GetAverage() const { return mfAverage; }
+
+    void Flush(const T& lValue)
+    {
+        for (u32 lu = 0; lu < tuNumPoints; ++lu)
+        {
+            maPoints[lu] = lValue;
+        }
+        muNextPoint = 0;
+        mfAverage   = lValue;
+    }
+
+    // ORDER mirrors the DWARF (maPoints @ +0, muNextPoint @ +tuNumPoints*sizeof(T),
+    // mfAverage next).
+    T   maPoints[tuNumPoints];  // CgsSoundUtils.h:643
+    u8  muNextPoint;            // CgsSoundUtils.h:644
+    T   mfAverage;              // CgsSoundUtils.h:645
+};
+
+// Slope input/output range parameters (DWARF CgsSoundUtils.h:258). Four f32:
+// the input range [mfMinInput, mfMaxInput] mapped to [mfMinOutput, mfMaxOutput].
+struct SlopeParams
+{
+    SlopeParams()
+    {
+        Reset();
+    }
+
+    SlopeParams(f32 lfMinInput, f32 lfMaxInput, f32 lfMinOutput, f32 lfMaxOutput)
+        : mfMinInput(lfMinInput)
+        , mfMaxInput(lfMaxInput)
+        , mfMinOutput(lfMinOutput)
+        , mfMaxOutput(lfMaxOutput)
+    {
+    }
+
+    void Reset()
+    {
+        mfMinInput  = 0.0f;
+        mfMaxInput  = 0.0f;
+        mfMinOutput = 0.0f;
+        mfMaxOutput = 0.0f;
+    }
+
+    f32 mfMinInput;    // CgsSoundUtils.h:287
+    f32 mfMaxInput;    // CgsSoundUtils.h:288
+    f32 mfMinOutput;   // CgsSoundUtils.h:289
+    f32 mfMaxOutput;   // CgsSoundUtils.h:290
+};
+
+// Linear input->output mapper backed by a SlopeParams (DWARF CgsSoundUtils.h:305).
+class Slope
+{
+public:
+    Slope();
+    Slope(f32 lfMinInput, f32 lfMaxInput, f32 lfMinOutput, f32 lfMaxOutput);
+
+    // Copy-from-params constructor. Recovered from the X360 ctor at 0x826A1F70:
+    //
+    //   result[0..3] = params[0..3];               // copy the 4 range floats
+    //   if (fabs(mfMaxInput - mfMinInput) < 1e-6)   // degenerate input span?
+    //       mfMaxInput += 1e-6;                     // nudge so GetValue never /0
+    //
+    // The DWARF declares Slope(const SlopeParams&); the asm zeroes mParams then
+    // copies each of the four floats from the source and guards the input span.
+    Slope(const SlopeParams& params);
+
+    ~Slope();
+
+    f32 GetValue(f32 lfInput) const;
+
+    void Initialize(f32 lfMinInput, f32 lfMaxInput, f32 lfMinOutput, f32 lfMaxOutput);
+    void Initialize(const SlopeParams& params);
+
+    const SlopeParams& GetParams() const { return mParams; }
+
+private:
+    SlopeParams mParams;   // CgsSoundUtils.h:346
+};
+
+}
+}
+
+#endif // CGS_SOUND_CGSSOUNDUTILS_H

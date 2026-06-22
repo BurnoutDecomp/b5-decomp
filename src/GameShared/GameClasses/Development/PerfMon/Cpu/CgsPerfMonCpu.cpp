@@ -203,5 +203,38 @@ namespace CgsDev
         {
             return IsValidHandle(liMonitorHandle) ? gpMonitorsArray[liMonitorHandle].mePage : E_PMP_GENERAL;
         }
+
+        namespace
+        {
+            // PIX (Performance Investigator for Xbox) named-counter sink. The X360 build linked the
+            // console PIX SDK (PIXAddNamedCounter pushed a labelled scalar into the PIX timeline);
+            // there is no PIX on PC, so this is a no-op shim that preserves the call shape. FLAG:
+            // the X360 passed a printf-style label format whose rodata string was not recovered;
+            // KAC_PIX_COUNTER_FORMAT below is a documented placeholder, not an X360 fact.
+            const char* KAC_PIX_COUNTER_FORMAT = "%s"; // FLAG: placeholder (unrecovered rodata)
+
+            void PIXAddNamedCounter(f32 /*lfValue*/, const char* /*lpcFormat*/, const char* /*lpcName*/)
+            {
+                // No PIX profiler on the PC target: intentionally empty.
+            }
+        }
+
+        // X360 0x828172E8. Walk the live registry and emit one PIX named counter per monitor.
+        void AddPIXCounters()
+        {
+            const s32 liCount = giMonitorCount;
+            if (!gpMonitorsArray || liCount <= 0)
+                return;
+
+            for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+            {
+                PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
+                // X360 emits a counter for EVERY monitor up to giMonitorCount. The asm's
+                // `addic. r4,r11,0x1C; beq` only computes &macName (entry+0x1C) and sets the
+                // condition on that address -- never zero for a real slot, so the branch is
+                // never taken (no active/sentinel skip). Emit unconditionally to match.
+                PIXAddNamedCounter(lrInstance.mfCurrentValue, KAC_PIX_COUNTER_FORMAT, lrInstance.macName);
+            }
+        }
     }
 }

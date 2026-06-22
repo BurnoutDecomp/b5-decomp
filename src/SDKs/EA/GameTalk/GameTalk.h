@@ -49,6 +49,28 @@ namespace EA
 {
 namespace GameTalk
 {
+    // ------------------------------------------------------------------------
+    // GameTalk namespace-level helpers (X360 .XEX, BURNOUT_X360_ARTIST.XEX).
+    //
+    //   Alloc(s32 liSize)              @ 0x82838000
+    //   Free(void* lpBlock)            @ 0x82836E18
+    //   StrIEqual(const char*, const char*) @ 0x82836C60
+    //
+    // Alloc/Free are GameTalk's allocation shims: they route every GameTalk
+    // allocation through the AttribSys GameTalk package allocator. The X360 asm
+    // inlines CgsAttribSys::AttribSysMemoryManager::GetGameTalkAllocator() (it
+    // reads the manager's sbHasLinearAllocator flag and the static GameTalk
+    // package-allocator instance &dword_83011B64 directly, asserting the manager
+    // has been Prepare'd against CgsAttribSysMemoryManager.h:192) and forwards to
+    // that allocator's Malloc(size, 0) / Free(block). A NULL size / NULL block is
+    // a no-op (Alloc returns 0, Free returns its argument).
+    //
+    // StrIEqual is a case-insensitive C-string equality test (used by
+    // GameTalkManager::IsMessageMatching / ConfigHandler to match channel keys).
+    void* Alloc(s32 liSize);
+    void* Free(void* lpBlock);
+    bool  StrIEqual(const char* lpcLhs, const char* lpcRhs);
+
     class GameTalkMessage
     {
     public:

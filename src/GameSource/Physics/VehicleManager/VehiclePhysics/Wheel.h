@@ -36,6 +36,15 @@ namespace Vehicle
             // Owned by the Wheel TU -- declare only (no body) to avoid an ODR clash.
             void operator=(const RoadContact&);
         };
+
+        // ADDITIVE GROW (Vehicle-physics group): RaceCarPhysics::GetHeightAboveRoad
+        // (@0x825B3998) iterates the driven wheels reading each wheel's road-contact result, so a
+        // RoadContact instance member + its accessor are added here. The full Wheel TU owns the
+        // suspension/inertia blobs that precede it on the console; per project rule the absolute
+        // per-wheel stride (0xE0) is pinned BY NAME (maWheels[]), not reproduced as padding.
+        const RoadContact& GetRoadContact() const { return mRoadContact; }
+
+        RoadContact mRoadContact;
     };
 }
 }

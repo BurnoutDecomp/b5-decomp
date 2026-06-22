@@ -271,7 +271,49 @@ private:
     uint8_t                  muNumPlayers;       // :463  @0xD3
     uint8_t                  muNumActions;       // :464  @0xD4
     uint8_t                  muDifficulty;       // :465  @0xD5
+
+    // ADDITIVE GROW (FLAG -- X360-attested, DWARF-gap): the PS3 DecFIGS DWARF ends the
+    // record at muDifficulty (@0xD5); the X360 ARTIST binary reads a byte at @0xD6 in
+    // ChallengeList::IsChallengeContentBought @0x8267BC08 (`lbz 0xD6`) and branches on
+    // values 1 / 2 to select which downloadable-content entitlement gates the challenge
+    // (0 / other == always available). It occupies tail space already inside the
+    // 0xD8 sizeof (216, proven by GetChallengeData's 216-byte stride), so adding it does
+    // not change the record size. No prior TU read @0xD6, so the grow is safe.
+public:
+    enum EContentBoughtType
+    {
+        E_CONTENT_BOUGHT_NONE  = 0,   // no DLC requirement (always available)
+        E_CONTENT_BOUGHT_DLC_A = 1,   // gated by the first content entitlement
+        E_CONTENT_BOUGHT_DLC_B = 2,   // gated by the second content entitlement
+    };
+
+    // The X360 reads this byte raw; the accessor exposes it for ChallengeList.
+    uint8_t GetContentBoughtType() const { return muContentBoughtType; }
+
+private:
+    uint8_t                  muContentBoughtType; // X360 @0xD6 (DWARF-gap; see note above)
 };
+
+// ChallengeListEntryAction::GetActionType @ 0x8230EDC8
+// (DWARF: EChallengeActionType GetActionType() const, ChallengeListEntry.h:162; baked
+// assert at ChallengeListEntry.h:660.) X360 reads muActionType (the byte at offset 0),
+// range-guards it via CGS_ASSERT and returns it cast to EChallengeActionType. The guard
+// is non-fatal (the binary returns the raw byte even when it fails).
+//
+// X360/DWARF DRIFT (binary authoritative): the X360 fires the assert when the type byte
+// is >= 0x29 (41), whereas the committed/PS3-DWARF EChallengeActionType has
+// E_ACTION_COUNT == 22. We do NOT redefine the committed enum (same call recorded for
+// GetChallengeStyle below); the condition is written against the named constant for
+// source fidelity (the byte-exact X360 threshold is 0x29).
+inline ChallengeListEntryAction::EChallengeActionType
+ChallengeListEntryAction::GetActionType() const
+{
+    CGS_ASSERT(
+        muActionType < E_ACTION_COUNT,
+        "(ChallengeListEntryAction::EChallengeActionType)muActionType < ChallengeListEntryAction::E_ACTION_COUNT" );
+
+    return static_cast<EChallengeActionType>( muActionType );
+}
 
 // ChallengeListEntry::GetAction @ 0x8230F0F8
 // X360 pseudocode: `return 80 * a2 + a1;` with a1==this, a2==liActionIndex. Since

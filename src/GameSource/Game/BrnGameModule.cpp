@@ -40,6 +40,14 @@ namespace BrnGame
         , mpGuiModelOutputBuffer(0)
         , mpGuiOutputBuffer(0)
         , mpDirectorOutputBuffer(0)
+        , miInputModuleState(0)
+        , miPlayer0ControllerPort(0)
+        , miSecondaryControllerPort(0)
+        , mbGuiAcceptsControllerInput(false)
+        , mbGuiSuppressMenuAccept(false)
+        , miLanguageCycleTimerLo(0)
+        , miLanguageCycleTimerHi(0)
+        , mpCgsGuiModule(0)
     {
         mCpuMonitors.Construct();
     }

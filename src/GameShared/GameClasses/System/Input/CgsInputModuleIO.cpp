@@ -3,6 +3,20 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsEventQueue.h" // CgsModule::EventQueue<T,N>
 
+#include <cstddef>   // offsetof
+
+// Pin the X360-proven PadOutputInformation field offsets (the controller bridges read these by
+// name; the record must stay 932 bytes so OutputBuffer::maPadOutputInformation[7] does not move).
+namespace CgsInput { namespace InputIO {
+static_assert(sizeof(PadOutputInformation) == 932, "PadOutputInformation must be 0x3A4 bytes");
+static_assert(offsetof(PadOutputInformation, mfStickLX)       == 0x00,  "stickLX @ +0x00");
+static_assert(offsetof(PadOutputInformation, maActionInfo)    == 0x18,  "action table @ +0x18");
+static_assert(offsetof(PadOutputInformation, muConnectionWord)== 0x398, "connection word @ +0x398");
+static_assert(offsetof(PadOutputInformation, meControllerState)==0x39C, "controller state @ +0x39C");
+static_assert(offsetof(PadOutputInformation, mbDisconnected)  == 0x3A0, "disconnected flag @ +0x3A0");
+static_assert(sizeof(ActionInfo) == 8, "ActionInfo must be 8 bytes");
+} }
+
 // =============================================================================
 // CgsInput::InputIO IO-buffer accessors (the genuine "class layout" of this TU).
 // Each lock-guarded accessor asserts the IOBuffer lock (read-lock bit 4 for const
@@ -72,6 +86,19 @@ OutputBuffer::PadDisconnectedQueue* OutputBuffer::GetPadDisconnectedQueue()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
     return &mPadDisconnectedQueue;
+}
+
+// X360 0x823B1230 - read-lock accessor returning the iPort-th pad output record (this+296+932*iPort).
+// Callers: BrnGame::BrnGameModule::{GetPadInfoForPlayer0, BridgeControllerToDirector,
+// DoUpdate_InputPreWorld, BridgeControllerToWorld, DoUpdate_Effects, BridgeControllerToGui}.
+// The X360 asserts the read lock then the pad index against [0,4) - matching the three
+// inline asserts at CgsInputModuleIO.h:1203-1205 (messages preserved verbatim, typos and all).
+const PadOutputInformation* OutputBuffer::GetPadInfo(s32 iPort) const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(iPort < 4, "Invalid pad specified\n");
+    CGS_ASSERT(iPort >= 0, "Port must me positive\n");
+    return &maPadOutputInformation[iPort];
 }
 
 // =====================  PreWorldInputBuffer  =====================

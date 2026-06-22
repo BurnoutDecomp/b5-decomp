@@ -24,6 +24,13 @@ namespace SceneManagerIO
 {
     struct alignas(16) InSceneUpdateInterface
     {
+        // ADDITIVE GROW (FLAG -- body owned by InSceneUpdateInterface's own TU): the
+        // X360 trigger/prop output-buffer Construct bodies (e.g.
+        // BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene::Construct @0x822EED90)
+        // tail-call InSceneUpdateInterface::Construct on this aggregate. Declared-only here
+        // so consuming TUs compile; the owning TU emits the body. No layout change.
+        void Construct();
+
         unsigned char maReserved[256];
     };
 }

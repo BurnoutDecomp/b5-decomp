@@ -1,5 +1,7 @@
 #include "types.hpp"
 
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsReliableMessage.h"
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x828821A8
 //   (CgsNetwork::ReliableMessage::PackOrUnpack)
 //
@@ -9,32 +11,23 @@
 //     *(this + 28) = v3;                        // write it back
 //     return result;
 //
-// sub_82881250 is the shared 16-bit field (de)serialiser used by the whole
-// Message hierarchy (25 callers): it packs or unpacks a u16 in the inclusive
-// range [0, 65534], reading/writing the value through the pointer. It is not yet
-// reconstructed, so it is forward-declared here (a stub-style external reference);
-// the real body lands when its own TU is reconstructed.
+// +0x1C is the inherited Message::mu16Frame field, which a reliable message reuses to
+// carry its wrapped reliable id. sub_82881250 is the shared 16-bit field serialiser
+// (now CgsNetwork::PackOrUnpackU16, declared in CgsMessage.h): it packs or unpacks a
+// u16 in the inclusive range [0, 65534], reading/writing through the pointer. It is
+// its own not-yet-reconstructed TU; the real body lands when that TU is worked.
+//
+// (Previously this file forked a local opaque `struct ReliableMessage` -- mPad[28] +
+// mu16ReliableId @ 0x1C -- which is now resolved against the canonical hierarchy
+// header CgsReliableMessage.h; the reliable id == base mu16Frame at the same +0x1C.)
 
 namespace CgsNetwork
 {
-    struct ReliableMessage;
-
-    // Shared serialiser helper, unnamed in the export @ 0x82881250.
-    int PackOrUnpackU16(ReliableMessage* lpThis, u16* lpu16Value, int liMin, int liMax);
-
-    struct ReliableMessage
+    PackOrUnpackResult ReliableMessage::PackOrUnpack()
     {
-        u8   mPad[28];          // [0x00] opaque
-        u16  mu16ReliableId;    // [0x1C] the reliable-message id (range [0,65534])
-
-        int PackOrUnpack();
-    };
-
-    int ReliableMessage::PackOrUnpack()
-    {
-        u16 lu16Value = mu16ReliableId;
-        const int liResult = PackOrUnpackU16(this, &lu16Value, 0, 65534);
-        mu16ReliableId = lu16Value;
-        return liResult;
+        u16 lu16ReliableId = mu16Frame;
+        const PackOrUnpackResult lxResult = PackOrUnpackU16(this, &lu16ReliableId, 0, 65534);
+        mu16Frame = lu16ReliableId;
+        return lxResult;
     }
 }

@@ -33,19 +33,47 @@ namespace BrnResource
 // whose first dword is the wheel count). To keep this TU minimal we model that
 // single accessor below as GetNumWheels() rather than pull in the full (deferred)
 // WheelListResource layout.
-// FLAG: WheelListResource is modeled as a MINIMAL slice (only GetNumWheels()); the
-// real class is reconstructed in its own TU and the exact accessor name is inferred
-// from the asm (the symbol is truncated to BrnResource::WheelListResource_::()).
+// FLAG: WheelListResource is modeled as a MINIMAL slice (count + entry-array base);
+// the real class is reconstructed in its own TU and the exact accessor name is
+// inferred from the asm (the symbol is truncated to BrnResource::WheelListResource_::()).
+//
+// LAYOUT (X360-proven, minimal): +0x00 muNumWheels (count, read by AddListResource),
+// +0x04 mpaEntries (pointer to the WheelListEntry[] array; this is the field
+// rebased by WheelListResourceType::FixUp @ 0x8267DF28 and dereferenced by
+// WheelList::GetWheelData via `*(resource+4) + 72*entryIndex`). Only these two
+// fields are attested here; the rest of the record is owned by the dedicated
+// WheelListResource TU and intentionally not modeled.
+struct WheelListEntry;
+
 class WheelListResource
 {
 public:
-    u32 GetNumWheels() const;   // X360: *BrnResource::WheelListResource_::(a2) -- count read
+    u32 GetNumWheels() const;   // X360: *BrnResource::WheelListResource_::(a2) -- count @+0x00
+
+    // X360 (BrnResource::WheelList::GetWheelData @ 0x822CD3E8): the entry array base
+    // is the pointer at +0x04 and the per-entry stride is 72 (sizeof WheelListEntry);
+    // returns &mpaEntries[liEntryIndex]. Const accessor; the base is read directly.
+    const WheelListEntry* GetEntry(s32 liEntryIndex) const;
+
+private:
+    u32                   muNumWheels;   // +0x00  wheel count
+    const WheelListEntry* mpaEntries;    // +0x04  entry array base (FixUp-rebased)
 };
 
-// WheelListEntry is referenced only by the declared-only accessors below (as a
-// pointer return type). Forward-declared (its full layout lives in its own
-// committed header, intentionally not pulled in here to keep this TU minimal).
-struct WheelListEntry;
+// WheelListEntry -- one wheel record inside a WheelListResource. Owned here in the
+// DataLists family (no other TU defines it). sizeof == 72 (0x48) is X360-proven by
+// the GetWheelData @ 0x822CD3E8 stride (`base + 72*index`); the name C-string at
+// +0x08 is proven by FindWheelIndexFromName @ 0x822CD4D8 (`stricmp(entry+8, name)`).
+// FLAG: only the +0x08 name field and the 72-byte footprint are attested by the asm
+// in this group's TUs. The leading 8 bytes (modeled as the wheel's CgsID hash, the
+// canonical first member of these *Entry records -- cf. ChallengeListEntry) and the
+// trailing bytes after the name are HONEST opaque padding sized to the proven 72-byte
+// record; replace with the fully-decoded members when a WheelListEntry-detail TU lands.
+struct WheelListEntry
+{
+    CgsID mID;                  // +0x00  wheel id/hash (modeled; sibling-pattern)
+    char  macName[72 - 8];      // +0x08  name C-string (stricmp target); fills to sizeof 72
+};
 
 // WheelList.h:45 -- one per-wheel runtime slot. POD; DWARF offsets:
 // mbBought @+0, miListIndex @+4, miEntryIndex @+8. Namespace-scope sibling of

@@ -6,6 +6,14 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CgsDev::Assert Begin/Fire/EndAssert
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"        // BrnGameState::ModeManager (mModeManager, by value)
 
+// Forward declarations for the BrnTrainingManager additive-grow accessor signatures below (pointer/
+// reference only -- no layout needed here; the real types are included by the TrainingManager TU).
+namespace BrnGameState { namespace GameStateModuleIO { class GameActionQueue; } }
+namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
+// The achievement manager the BurnoutSkillzManager grow returns (StuntModeScoring::AchievementManager
+// is a typedef of this; pointer only here).
+namespace BrnGameState { class AchievementManagerPS3; }
+
 namespace BrnGameState
 {
 // Minimal slice (BrnPursuitMode.h GetName-only precedent): the full GameStateModule layout (~290KB,
@@ -46,6 +54,51 @@ public:
     // DWARF BrnGameStateModule.h:1300/651. X360 inlines it (sets mbToggleShowtimeBehaviour=true at
     // offset 284512); declared-only here, used by GameStateDebugComponent::ToggleShowtimeCallback.
     void ToggleShowtimeBehaviour();
+
+    // ADDITIVE GROW (declare-only) for the BrnBurnoutSkillzManager TU. FLAG: the X360
+    // BurnoutSkillzManager::Construct (0x82332688) reaches the embedded achievement manager
+    // through the owning GameStateModule (the inlined `*(modeManager->mpGameStateModule) +
+    // 181680` pointer adjust to the achievement-manager subobject). De-inlined to this named
+    // accessor; body + the real embedded-AchievementManager wiring land with the GameStateModule
+    // TU. Returns the StuntModeScoring::AchievementManager (== AchievementManagerPS3) the manager
+    // caches as mpAchievementManager.
+    AchievementManagerPS3* GetAchievementManager();
+
+    // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU.
+    // X360 BrnGameState::GameStateModule::RequestPause -- TrainingManager::TriggerAnyFollowOnTrainingTips
+    // (0x823889C8) calls it as RequestPause(this, 64, lpGameActionQueue, 0, 0) to pause the world while a
+    // training voiceover plays. The leading s32 is the pause-reason bitflag (the X360 immediate 0x40 ==
+    // "training" reason); the GameActionQueue* is the OutputBuffer's action queue the pause request is
+    // broadcast through; the trailing two s32s are 0 at this call site. Body + the real pause-stack
+    // wiring land with the GameStateModule TU. FLAG: declare-only additive grow on the minimal slice.
+    void RequestPause(s32 liPauseReasonFlags,
+                      GameStateModuleIO::GameActionQueue* lpGameActionQueue,
+                      s32 liArg3, s32 liArg4);
+
+    // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU. FLAG: the X360 reads an s32 at
+    // this+232288 (0x38B60) in BOTH TrainingManager::RequestTraining (0x82365B20) and
+    // TriggerAnyFollowOnTrainingTips (0x823889C8); in each it suppresses the training-driven pause /
+    // request when nonzero (the X360 `if (*(mpGameStateModule+232288)) bail/skip-pause`). The exact
+    // member name is unconfirmed in this bounded view -- semantics ("a training-pause is currently
+    // suppressed/blocked") are inferred from the two call sites; rename when the GameStateModule TU is
+    // fully reconstructed. Body + real member land with the GameStateModule TU.
+    bool IsTrainingPauseSuppressed() const;
+
+    // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU.
+    // X360 BrnGameState::GameStateModule::GetLastActiveRaceCarInterface -- the read-only snapshot of the
+    // player's + rivals' active race cars the GameStateModule cached at the end of the last world update
+    // (the X360 reaches it as the embedded interface at this+0x397E0). RequestTraining queries it for the
+    // boost / player-car state behind the boost-training tip. Returns a pointer to the embedded
+    // by-value interface; body + real member land with the GameStateModule TU. FLAG: declare-only grow.
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+        GetLastActiveRaceCarInterface() const;
+
+    // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU. FLAG: the X360 reads an f32 at
+    // this+42300 (0xA53C) in TrainingManager::RequestTraining / IsTipAllowedInGameMode and compares it
+    // against fixed thresholds (5.0 == KF_MAX_TIMED_PLAYED_FOR_NOOB_TRAINING_TIPS, 30.0 for the
+    // DISCOVERS_EVENT / boost gates). Semantically the elapsed time the player has spent in the current
+    // timed game mode. Body + real member land with the GameStateModule TU.
+    f32 GetTimePlayedInTimedMode() const;
 
 private:
     // DWARF BrnGameStateModule.h:771. The by-value ModeManager that owns the current game mode.
