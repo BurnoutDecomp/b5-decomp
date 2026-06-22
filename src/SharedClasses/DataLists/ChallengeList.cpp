@@ -21,6 +21,9 @@
 
 #include "SharedClasses/DataLists/ChallengeList.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle (used by value below)
+#include "SharedClasses/DataLists/ChallengeListResourceType.h"          // ChallengeListResource (complete: operator-> + mpEntries)
+#include "SharedClasses/DataLists/ChallengeListEntry.h"                 // ChallengeListEntry (complete: mChallengeID, content-bought type)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 
 namespace BrnResource
 {
@@ -65,6 +68,97 @@ void ChallengeList::Destruct()
     {
         maStaticDataLists[ liIndex ] = skInvalidHandle;
     }
+}
+
+// ---------------------------------------------------------------------------
+// File-scope DLC entitlement state (FLAG -- foreign home).
+//
+// IsChallengeContentBought reads a small block of downloadable-content state that the
+// X360 binary lays out from base byte_82FFA7F0:
+//   dword_82FFA7F4   -- the owned/entitlement bitmask          (+0x04)
+//   dword_82FFA7F8[] -- per-content required-bit values        (+0x08, indexed)
+//   dword_82FFA80C   -- index into the array for content-type 1 (+0x1C)
+//   dword_82FFA810   -- index into the array for content-type 2 (+0x20)
+//   byte_82FFA870    -- "type-1 content bought" flag            (+0x80)
+//   byte_82FFA871    -- "type-2 content bought" flag            (+0x81)
+// These belong to the DLC subsystem (BrnResource::DLCManager / its translation unit),
+// NOT to ChallengeList. They are declared here as honest extern placeholders so the
+// observable read pattern is faithful; the real definitions land with the DLC manager
+// pass. The exact .rodata extents of dword_82FFA7F8[] are not recovered (it is indexed
+// by the two index globals); modeled as an extern unbounded array. Do NOT treat these
+// names/semantics as a committed home -- they are placeholders to be re-homed.
+extern u32  gauChallengeDlcOwnedMask;        // byte_82FFA7F4
+extern u32  gauChallengeDlcRequiredBits[];   // byte_82FFA7F8[]
+extern u32  guChallengeDlcIndexTypeA;        // byte_82FFA80C
+extern u32  guChallengeDlcIndexTypeB;        // byte_82FFA810
+extern u8   gbChallengeContentBoughtTypeA;   // byte_82FFA870
+extern u8   gbChallengeContentBoughtTypeB;   // byte_82FFA871
+
+// ChallengeList::GetChallengeData(s32) @ 0x82326080
+// X360: range-guard the index against miCount ("Index out of range", ChallengeList.h:162,
+// non-fatal), then resolve the entry as
+//   maStaticDataLists[ maSlots[liIndex].miListIndex ]->mpEntries[ maSlots[liIndex].miEntryIndex ]
+// The list ResourcePtr is dereferenced through operator-> (the X360 BrnResource::ChallengeL
+// helper @0x82324D20 == ResourcePtr<ChallengeListResource>::operator-> const, baked assert
+// CgsResourcePtr.h:563), and the entry is reached by indexing mpEntries (216-byte stride).
+const ChallengeListEntry* ChallengeList::GetChallengeData( s32 liIndex ) const
+{
+    CGS_ASSERT( liIndex >= 0 && liIndex < miCount, "Index out of range\n" );
+
+    const ChallengeSlot& lrSlot = maSlots[ liIndex ];
+
+    const ChallengeListResource* lpResource = maStaticDataLists[ lrSlot.miListIndex ].operator->();
+
+    return &lpResource->mpEntries[ lrSlot.miEntryIndex ];
+}
+
+// ChallengeList::GetChallengeIndex(CgsID) @ 0x82326168
+// X360: linear scan [0, miCount); return the first slot whose challenge data has
+// GetChallengeData(i)->mChallengeID == lID (the 8-byte CgsID compared at entry +0xC0),
+// else -1.
+s32 ChallengeList::GetChallengeIndex( CgsID lID ) const
+{
+    for ( s32 liIndex = 0; liIndex < miCount; ++liIndex )
+    {
+        if ( GetChallengeData( liIndex )->GetChallengeID() == lID )
+        {
+            return liIndex;
+        }
+    }
+    return -1;
+}
+
+// ChallengeList::IsChallengeContentBought(s32) @ 0x8267BC08
+// X360: read the challenge's content-bought type (entry byte @0xD6). Type 1 / 2 each
+// gate the challenge behind a downloadable-content entitlement: the content counts as
+// "bought" only if (a) the owned-mask has ALL the required bits for that content's index
+// AND (b) the matching per-type bought flag is set. Any other type value (0, ...) means
+// the content is always available (returns true).
+bool ChallengeList::IsChallengeContentBought( s32 liIndex ) const
+{
+    const u8 luType = GetChallengeData( liIndex )->GetContentBoughtType();
+
+    if ( luType == ChallengeListEntry::E_CONTENT_BOUGHT_DLC_A )
+    {
+        const u32 luRequired = gauChallengeDlcRequiredBits[ guChallengeDlcIndexTypeA ];
+        if ( ( gauChallengeDlcOwnedMask & luRequired ) != luRequired )
+        {
+            return false;
+        }
+        return gbChallengeContentBoughtTypeA != 0;
+    }
+
+    if ( luType == ChallengeListEntry::E_CONTENT_BOUGHT_DLC_B )
+    {
+        const u32 luRequired = gauChallengeDlcRequiredBits[ guChallengeDlcIndexTypeB ];
+        if ( ( gauChallengeDlcOwnedMask & luRequired ) != luRequired )
+        {
+            return false;
+        }
+        return gbChallengeContentBoughtTypeB != 0;
+    }
+
+    return true;
 }
 
 } // namespace BrnResource

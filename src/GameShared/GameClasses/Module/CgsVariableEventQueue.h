@@ -77,6 +77,22 @@ namespace CgsModule
         template <typename EventT>
         bool AddEvent(const EventT* lpEvent, s32 liType);
 
+        // ADDITIVE GROW (FLAG): bulk-append another (smaller) VariableEventQueue's packed
+        // event bytes into this one. The X360 emits this as a distinct templated member of
+        // VariableEventQueue<BUFSIZE,ALIGN> parameterised on the *source* queue's
+        // <SRCBUF,SRCALIGN>: e.g. ??$Append@$0BAAA@$0BA@@?$VariableEventQueue@$0EIAA@$0BA@@
+        // CgsModule@@ == VariableEventQueue<18432,16>::Append<4096,16>(const
+        // VariableEventQueue<4096,16>&) @ 0x82504F68. It asserts this queue is constructed
+        // (CgsVariableEventQueue.h:759), checks the destination would not overflow
+        // (lrSource.GetSizeInBytes() + miBufferWritePos > BUFSIZE -> overflow), then memcpy's
+        // the source's packed bytes (from GetFirstWritePointer(), GetSizeInBytes() bytes) to
+        // &macData[miBufferWritePos], advances miBufferWritePos by the byte count and miLength
+        // by the source's event count. Used by the GUI/resource OutputBuffer AddGuiOutEvents /
+        // AddResourceRequests publishers. DWARF declares only the single-event AddEvent forms;
+        // this bulk Append is X360-attested and added here additively.
+        template <s32 SRCBUF, s32 SRCALIGN>
+        bool Append(const VariableEventQueue<SRCBUF, SRCALIGN>& lrSource);
+
         void* AllocateEvent(s32 liType, s32 liSize);
         void* AllocateEventSafe(s32 liType, s32 liSize);
 
@@ -424,6 +440,44 @@ namespace CgsModule
         }
 
         return AddEvent(reinterpret_cast<const Event*>(lpEvent), liType, (s32)sizeof(EventT));
+    }
+
+    // -------- Append<SRCBUF,SRCALIGN> @ X360 0x82504F68 (dest <18432,16>, src <4096,16>) --------
+    template <s32 BUFSIZE, s32 ALIGN>
+    template <s32 SRCBUF, s32 SRCALIGN>
+    bool VariableEventQueue<BUFSIZE, ALIGN>::Append(const VariableEventQueue<SRCBUF, SRCALIGN>& lrSource)
+    {
+        if (!mbIsConstructed)
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Not Constructed\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 759);
+            CgsDev::Assert::EndAssert();
+        }
+
+        s32 liSizeInBytes = lrSource.GetSizeInBytes();
+        if (liSizeInBytes + miBufferWritePos > BUFSIZE)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "ERROR: Overflowed variable event queue when appending another one\n";
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "  Our contents:\n";
+            OutputQueueContents();
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "\n  Other queue contents:\n";
+            lrSource.OutputQueueContents();
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("\n\nVariable event queue overflowed", detail::KAC_VEQ_FILE, 773);
+            CgsDev::Assert::EndAssert();
+        }
+
+        const char* lpSrc = lrSource.GetFirstWritePointer();
+        memcpy(&macData[miBufferWritePos], lpSrc, liSizeInBytes);
+        miBufferWritePos += liSizeInBytes;
+        miLength += lrSource.GetLength();
+        return true;
     }
 
     // -------- AllocateEvent @ X360 0x82652420 --------
