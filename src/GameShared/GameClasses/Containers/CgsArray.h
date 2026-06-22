@@ -60,6 +60,13 @@ public:
     void Construct() { miCount = 0; }
     void Clear()     { miCount = 0; }
 
+    // Initialise a FIXED index->element table as fully populated: live count = capacity N. Used
+    // where the X360 fills every slot by index (rather than growing via Append) -- e.g.
+    // GameMainFlowController::Construct (X360 0x823C6440) stores N(7) directly into maStates' count
+    // word @ +0x4C, then assigns all N entries; the checked operator[] then bounds-checks indices
+    // 0..N-1 against this count. Distinct from Construct()/Clear() (empty list, count=0, Append-grown).
+    void SetFullCount() { miCount = static_cast<s32>(N); }
+
     // Number of live elements (-1 until Construct/Clear initialises it).
     s32 GetCount() const { return miCount; }
 

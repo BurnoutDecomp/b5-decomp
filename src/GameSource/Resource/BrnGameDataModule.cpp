@@ -4,6 +4,12 @@
 #include "GameSource/Resource/BrnResourceAllocator.h"        // Allocators::mpInternalDebugAllocator
 #include "rw/rwcore_structs.h"                                // rw::IResourceAllocator / Resource / ResourceDescriptor
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [5b trace] (Construct runs at runtime, gpDebugPrint ready)
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistration.h" // RegisterAllResourceTypes (bridge)
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"     // ResolveResourceType (bridge)
+#include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"             // Pool::InitOptions (CreatePools)
+#include "GameShared/GameClasses/Memory/CgsMemoryBank.h"                        // MemoryBank::Params (CreatePoolBank)
+#include "GameSource/Resource/BrnMemoryMapData.h"                               // KAC_MEMORY_MAP_POOLS (the 27 real pools)
+#include <cstring>                                                              // memset
 
 // BrnResource::GameDataModule - see the header. This pass reconstructs the rw-INDEPENDENT
 // lifecycle spine (Prepare's base -> ResourceModule::Prepare core). The rw-allocator-gated
@@ -76,46 +82,242 @@ namespace BrnResource
     // (ProcessGetVehicle/Wheel/Traffic/WorldUnit/PVS/... - 30+ handlers); Destruct (0x82664508)
     // tears it down. All inert until the loading-machine case 8 drives this module.
     bool GameDataModule::CreateBanks(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return true; }
-    bool GameDataModule::CreatePools(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return true; }
+
+    // @ 0x8266DB88 - create the game's resource pools. The X360 iterates the binary memory map
+    // (unk_82F2A788) and sends a CreatePoolRequest per pool through the async dispatch
+    // (DoCreatePoolRequest -> SendCreatePoolMemoryRequest -> MemoryModule alloc -> CreatePool). Here we
+    // drive the SAME pool set directly from the extracted memory-map table (BrnMemoryMapData.h, generated
+    // from progress/memory_map_artist.yaml): per pool, allocate its per-type backing memory from the root
+    // debug allocator and PoolModule::CreatePool it. [marked deviation: the faithful async memory-request
+    // dispatch is deferred; the pool data + Pool::InitPool are faithful.] Runs once (the Prepare stage
+    // re-enters until done).
+    bool GameDataModule::CreatePools(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/)
+    {
+        static bool s_bPoolsCreated = false;
+        if (s_bPoolsCreated)
+            return true;
+        s_bPoolsCreated = true;
+
+        rw::IResourceAllocator* lpAllocator =
+            static_cast<rw::IResourceAllocator*>(Allocators::mpInternalDebugAllocator);
+        if (lpAllocator == 0)
+            return true;
+        CgsResource::PoolModule&  lrPoolModule   = mResourceModule.GetPoolModule();
+        CgsMemory::MemoryModule&  lrMemoryModule = mResourceModule.GetMemoryModule();
+        const u32 KU_BLOCK = 0x10000u;   // 64 KB -- the MemoryModule root-bank block granularity
+
+        s32 lNumCreated = 0, lNumFromBank = 0, lNumFromHeap = 0;
+        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_POOLS; ++li)
+        {
+            const MemoryMapPoolDef& lrDef = KAC_MEMORY_MAP_POOLS[li];
+
+            CgsResource::Pool::InitOptions lOpt;
+            memset(&lOpt, 0, sizeof(lOpt));   // POD-ish; zero unused types/deps
+            lOpt.miId                   = lrDef.miId;
+            lOpt.mpcName                = lrDef.mpcName;
+            lOpt.muMaxResources         = static_cast<u32>(lrDef.miMaxResources);
+            lOpt.muMaxImports           = static_cast<u32>(lrDef.miMaxImports);
+            lOpt.miRefCountThreshold    = 0;
+            lOpt.miBankId               = -1;
+            lOpt.miNumDependencies      = 0;   // import deps resolved later (not needed to create)
+            lOpt.mbAllowDefragmentation = lrDef.mbAllowDefrag;
+
+            // Per-type region = heap budget + (type 0) a margin >= the pool overhead (entry arrays / hash /
+            // heap nodes Pool::InitPool Mallocs from the region), rounded up to the 64 KB block size so the
+            // MemoryModule bank carve is block-exact. (Bump allocator -> the slack is harmless.)
+            u32 lauRegion[3] = { 0, 0, 0 };
+            u32 lauAlign[3]  = { 16u, 16u, 16u };
+            for (s32 lt = 0; lt < 3; ++lt)
+            {
+                const u32 luHeapSize = lrDef.mauHeapSize[lt];
+                if (luHeapSize == 0)
+                    continue;
+                lOpt.maHeapInfo[lt].muMaxNodes       = static_cast<u32>(lrDef.miMaxHeapNodes);
+                lOpt.maHeapInfo[lt].muHeapMemorySize = luHeapSize;
+                lOpt.maHeapInfo[lt].muHeapAlignment  = lrDef.mauHeapAlign[lt];
+
+                u32 luMargin = 0;
+                if (lt == 0)
+                {
+                    const u32 luMax = static_cast<u32>(lrDef.miMaxResources);
+                    u32 luHashLen = 3u * luMax; --luHashLen;
+                    luHashLen |= luHashLen >> 1;  luHashLen |= luHashLen >> 2;
+                    luHashLen |= luHashLen >> 4;  luHashLen |= luHashLen >> 8;
+                    luHashLen |= luHashLen >> 16; ++luHashLen;
+                    luMargin = luMax * 512u + luHashLen * 16u
+                             + static_cast<u32>(lrDef.miMaxHeapNodes) * 3u * 128u + 0x10000u;
+                }
+                lauAlign[lt]  = lrDef.mauHeapAlign[lt] < 16u ? 16u : lrDef.mauHeapAlign[lt];
+                lauRegion[lt] = (luHeapSize + luMargin + (KU_BLOCK - 1u)) & ~(KU_BLOCK - 1u);
+            }
+
+            // [#2] Source the pool memory from the MemoryModule banks: carve a leaf bank (parent = root
+            // bank 0) sized to the per-type regions. The faithful X360 path is async (SendCreatePoolMemory
+            // Request -> MemoryModule -> response -> DoCreatePoolRequest); this drives it synchronously via
+            // the reconstructed CreateBank. Falls back to the root debug allocator if the bank carve fails,
+            // so the pool set always comes up (and the log reports how many used each source).
+            CgsMemory::MemoryBank::Params lParams;
+            memset(&lParams, 0, sizeof(lParams));
+            for (s32 lc = 0; lc < 31 && lrDef.mpcName[lc]; ++lc)
+                lParams.macName[lc] = lrDef.mpcName[lc];
+            lParams.mnParentBankId       = 0;            // root bank
+            lParams.mnBankId             = 100 + li;     // unique leaf-bank id (pool ids occupy 0..26)
+            lParams.mbIsLeaf             = true;
+            lParams.mbAllowFragmentation = lrDef.mbAllowDefrag;
+            bool lbAnyType = false;
+            for (s32 lt = 0; lt < 3; ++lt)
+            {
+                if (lauRegion[lt] == 0)
+                    continue;
+                lbAnyType = true;
+                lParams.mauBankSize[lt]   = lauRegion[lt];
+                lParams.mauBankBlocks[lt] = lauRegion[lt] / KU_BLOCK;
+            }
+
+            rw::Resource lMem;
+            for (s32 lr = 0; lr < 4; ++lr)
+                lMem.m_baseResources[lr] = 0;
+            const bool lbFromBank = lbAnyType && lrMemoryModule.CreatePoolBank(&lParams, lMem);
+
+            bool lbAllocOk = true;
+            for (s32 lt = 0; lt < 3; ++lt)
+            {
+                if (lauRegion[lt] == 0)
+                    continue;
+                void* lpMem = lbFromBank ? lMem.m_baseResources[lt] : 0;
+                if (!lbFromBank)
+                {
+                    rw::ResourceDescriptor lDesc;
+                    for (u32 lu = 0; lu < 4; ++lu)
+                    {
+                        lDesc.m_baseResourceDescriptors[lu].m_size      = 0;
+                        lDesc.m_baseResourceDescriptors[lu].m_alignment = 1;
+                    }
+                    lDesc.m_baseResourceDescriptors[0].m_size      = lauRegion[lt];
+                    lDesc.m_baseResourceDescriptors[0].m_alignment = lauAlign[lt];
+                    rw::Resource lFb = lpAllocator->DoAllocate(lDesc, lrDef.mpcName);
+                    lpMem = lFb.m_baseResources[0];
+                }
+                if (lpMem == 0)
+                {
+                    lbAllocOk = false;
+                    break;
+                }
+                lOpt.mResource.m_baseResources[lt] = lpMem;
+                lOpt.mDescriptor.m_baseResourceDescriptors[lt].m_size      = lauRegion[lt];
+                lOpt.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = lauAlign[lt];
+            }
+
+            if (!lbAllocOk)
+            {
+                *CgsDev::Log::gpDebugPrint << "[5b POOLS] alloc FAILED for pool " << lrDef.mpcName << "\n";
+                continue;
+            }
+            if (lbFromBank) ++lNumFromBank; else ++lNumFromHeap;
+
+            CgsResource::Pool* lpPool = lrPoolModule.CreatePool(&lOpt);
+            if (lpPool != 0 && lpPool->IsValid())
+                ++lNumCreated;
+        }
+        *CgsDev::Log::gpDebugPrint << "[5b POOLS] created " << (s32)lNumCreated << " of "
+                                  << (s32)KI_NUM_MEMORY_MAP_POOLS << " pools ("
+                                  << (s32)lNumFromBank << " from MemoryModule banks, "
+                                  << (s32)lNumFromHeap << " from debug heap)\n";
+        return true;
+    }
+
     bool GameDataModule::CreateAllocators(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return true; }
 
     void GameDataModule::Construct(const void* /*lpInitOptions*/)
     {
         mbIsNewModule = true;   // X360 *(this+4)=1 (new module type; base Prepare skips the old IO path)
 
-        // [5b] Bring up the resource memory system. This is a minimal stand-in for the X360
-        // ConstructResourceModule (which builds a 1216-byte ResourceModule::InitOptions): build just the
-        // MemoryModule InitOptions, carve the root memory region from the debug allocator, and construct
-        // the ResourceModule -> MemoryModule carves its bank/block tables. (Pool/Bundle/FileSystem
-        // Construct + the full multi-pool heaps land in later 5b passes.)
+        // [5b] Bring up the resource memory system. This is an incrementally-populated stand-in for the
+        // X360 ConstructResourceModule (0x8266D570): it now builds the real CgsResource::ResourceModule::
+        // InitOptions composite (memory + pool + bundle-loader option blocks) instead of a bare
+        // MemoryModule InitOptions, carves the root region from the debug allocator, and constructs the
+        // ResourceModule. The MemoryModule block is fully populated (so MemoryModule carves its bank/block
+        // tables, as before); the Pool/BundleLoader blocks are minimal for now (PoolModule front half
+        // ignores them; the type-list + defrag/heap params land with the PoolModule back half + the full
+        // RegisterResourceTypes).
         rw::IResourceAllocator* lpAllocator =
             static_cast<rw::IResourceAllocator*>(Allocators::mpInternalDebugAllocator);
         if (lpAllocator == 0)
             return;
 
-        static CgsMemory::MemoryModule::InitOptions s_InitOptions;   // outlives Construct (module keeps the region)
-        s_InitOptions.muMaxBanks  = 128;
-        s_InitOptions.muHighestId = 1024;
-        s_InitOptions.muMaxBlocks = 30000;
+        static CgsResource::ResourceModule::InitOptions s_InitOptions;   // outlives Construct (module keeps the region)
+        CgsMemory::MemoryModule::InitOptions& lrMem = s_InitOptions.mMemoryInitOptions;
+        lrMem.muMaxBanks  = 128;
+        lrMem.muHighestId = 1024;
+        lrMem.muMaxBlocks = 30000;
 
-        // Root region for memory type 0 (main): 4 MB carved in 64 KB blocks.
+        // Root memory regions, carved in 64 KB blocks, sized to hold the 27 pools' per-type memory (sum
+        // ~70 MB type 0 / main + ~196 MB type 1 / graphics, + per-pool overhead + block rounding). The
+        // MemoryModule's root bank (bank 0) is built from these; GameDataModule::CreatePools then carves a
+        // leaf bank per pool out of them (#2 -- pool memory from the MemoryModule banks).
+        const u32 KU_BLOCK    = 0x00010000u;   // 64 KB
+        const u32 KU_TYPE0    = 0x0A000000u;   // 160 MB main  (2560 blocks)
+        const u32 KU_TYPE1    = 0x0E000000u;   // 224 MB gfx   (3584 blocks)
         rw::ResourceDescriptor lRegionDesc;
         for (u32 li = 0; li < 4; ++li)
         {
             lRegionDesc.m_baseResourceDescriptors[li].m_size      = 0;
             lRegionDesc.m_baseResourceDescriptors[li].m_alignment = 1;
         }
-        lRegionDesc.m_baseResourceDescriptors[0].m_size      = 0x00400000;  // 4 MB
-        lRegionDesc.m_baseResourceDescriptors[0].m_alignment = 16;
-        rw::Resource lRegion = lpAllocator->DoAllocate(lRegionDesc, "GameDataRoot");
+        // Align the root regions to the block size (64 KB): leaf-bank memory is root + N*blockSize, so a
+        // block-aligned root keeps every pool's per-type heap memory aligned to its heap alignment (16 main
+        // / 4096 graphics, both <= 64 KB) -- else Heap::Prepare asserts (lpHeapMemory % heapAlign == 0).
+        lRegionDesc.m_baseResourceDescriptors[0].m_alignment = KU_BLOCK;
 
-        s_InitOptions.maResourceSets[0].mpDataStart = lRegion.m_baseResources[0];
-        s_InitOptions.maResourceSets[0].muDataSize  = 0x00400000;
-        s_InitOptions.maResourceSets[0].muNumBlocks = 64;       // 64 x 64KB = 4MB
-        // memory types 1-4 left zeroed (skipped by CreateRootBank)
+        lRegionDesc.m_baseResourceDescriptors[0].m_size = KU_TYPE0;
+        rw::Resource lType0 = lpAllocator->DoAllocate(lRegionDesc, "GameDataRoot0");
+        lrMem.maResourceSets[0].mpDataStart = lType0.m_baseResources[0];
+        lrMem.maResourceSets[0].muDataSize  = KU_TYPE0;
+        lrMem.maResourceSets[0].muNumBlocks = static_cast<u16>(KU_TYPE0 / KU_BLOCK);
 
-        *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: region="
-                                  << (s32)(u32)(size_t)lRegion.m_baseResources[0]
+        lRegionDesc.m_baseResourceDescriptors[0].m_size = KU_TYPE1;
+        rw::Resource lType1 = lpAllocator->DoAllocate(lRegionDesc, "GameDataRoot1");
+        lrMem.maResourceSets[1].mpDataStart = lType1.m_baseResources[0];
+        lrMem.maResourceSets[1].muDataSize  = KU_TYPE1;
+        lrMem.maResourceSets[1].muNumBlocks = static_cast<u16>(KU_TYPE1 / KU_BLOCK);
+        // memory types 2-4 left zeroed (skipped by CreateRootBank)
+
+        // [BRIDGE -- marked deviation from X360 RegisterResourceTypes 0x82667EA8] Populate the pool type
+        // list from our existing singleton resource-type handlers. The X360 operator-new's ~50 Type objects
+        // into a GSResourceType array, but that path's prerequisites (Type::operator new / InitCachedValues
+        // + the ~50 subclasses) are deferred, and our tree already registers handler SINGLETONS into a
+        // CgsResource::TypeRegistry (RegisterAllResourceTypes). So reuse those: register them (idempotent),
+        // then build the GSResourceType list from ResolveResourceType(id) for the wired type ids. The
+        // PoolModule type-registry loop then copies them into maTypes (keyed by GetTypeID()). Grows as more
+        // handlers are wired; backfill the faithful operator-new path if byte-fidelity is needed.
+        CgsResource::RegisterAllResourceTypes();
+        static CgsResource::PoolModule::InitOptions::GSResourceType s_aGameTypes[5];
+        static const struct { u32 muId; const char* mpcName; } skWiredTypes[5] =
+        {
+            { 0x00u, "RwRasterResourceType" },
+            { 0x0Eu, "RwTextureStateResourceType" },
+            { 0x0Fu, "MaterialStateResourceType" },
+            { 0x21u, "FontResourceType" },
+            { 0x42u, "VideoDataResourceType" },
+        };
+        s32 lNumGameTypes = 0;
+        for (s32 li = 0; li < 5; ++li)
+        {
+            const CgsResource::Type* lpType = CgsResource::ResolveResourceType(skWiredTypes[li].muId);
+            if (lpType == 0)
+                continue;
+            s_aGameTypes[lNumGameTypes].mpType  = lpType;
+            s_aGameTypes[lNumGameTypes].mpcName = skWiredTypes[li].mpcName;
+            ++lNumGameTypes;
+        }
+        s_InitOptions.mPoolInitOptions.mpGameSpecificTypes    = s_aGameTypes;
+        s_InitOptions.mPoolInitOptions.miNumGameSpecificTypes = lNumGameTypes;
+        s_InitOptions.mDebugParams.mpDebugAllocator           = lpAllocator;
+        *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: registered "
+                                  << (s32)lNumGameTypes << " resource types into the pool registry\n";
+
+        *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: root type0="
+                                  << (s32)(u32)(size_t)lType0.m_baseResources[0]
                                   << " -> ResourceModule::Construct\n";
         mResourceModule.Construct(&s_InitOptions, lpAllocator);
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: ResourceModule constructed ok\n";

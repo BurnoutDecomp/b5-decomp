@@ -8,7 +8,7 @@
 #include "GameShared/GameClasses/Memory/DebugComponent/CgsDebugComponentMemory.h"  // DebugComponentMemory (by value)
 
 // Pointer/parameter-only types -> forward declarations.
-namespace rw { struct IResourceAllocator; }
+namespace rw { struct IResourceAllocator; struct Resource; }
 namespace CgsModule { class IOBufferStack; }
 
 // CgsMemory::MemoryModule -- the engine's memory-bank manager (one of the four sub-modules embedded by
@@ -82,6 +82,13 @@ namespace CgsMemory
 
         void Update(CgsModule::IOBufferStack* lpInStack, CgsModule::IOBufferStack* lpOutStack,
                     const MemoryIO::InputBuffer* lpInput, MemoryIO::OutputBuffer* lpOutput);
+
+        // Synchronous bank-create helper (PC bring-up): CreateBank from Params (sub-allocated from its
+        // parent), then return the new bank's per-type memory in lrOut.m_baseResources[]. The faithful
+        // path is the async CreateBankRequest dispatch (Update -> ProcessCreateBankRequest); this is the
+        // synchronous equivalent used by GameDataModule::CreatePools until the ResourceModule::Update
+        // request/response shuttle lands. Returns false if CreateBank fails or the bank is missing.
+        bool CreatePoolBank(const MemoryBank::Params* lpParams, rw::Resource& lrOut);
 
     private:
         // Internal request CreateBank builds + hands to AllocateIntoBank: the new bank's slot + its parent

@@ -11,6 +11,10 @@ namespace BrnGameMainFlowController
     void GameMainFlowController::Construct()
     {
         gpMainGameFlowController = this;   // register the active controller (X360 game-module global)
+        // X360 0x823C6440: store N(7) into maStates' count word (@ +0x4C) BEFORE the per-state
+        // assignments -- maStates is a fixed index->state lookup table that is fully populated by
+        // index, so its live count is its capacity (the checked GetItem then accepts indices 0..6).
+        maStates.SetFullCount();
         maStates.GetItem(E_MGS_INITIAL_LOADING_SCREEN) = &mInitialLoadingScreen;
         maStates.GetItem(E_MGS_CHECK_DISK_SPACE)       = &mCheckDiskSpace;
         maStates.GetItem(E_MGS_MARKETING_SCREENS)      = &mMarketingScreens;

@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
+#include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator (DebugComponentParams)
 
 // CgsResource::ResourceModule - the resource-streaming engine: the container module that owns
 // and orchestrates the four resource sub-modules (BundleLoaderModule, PoolModule, MemoryModule,
@@ -37,6 +38,21 @@ namespace CgsResource
         void Register();
     };
 
+    struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
+
+    // CgsResource::DebugComponentParams (DWARF CgsResourceDebugComponent.h:57) - the debug-component
+    // bring-up params carried in ResourceModule::InitOptions. The X360 callback signature is
+    // void(*)(renderengine::Texture*, Vector2, Vector2, void*, bool, bool); modelled as a generic
+    // function pointer to avoid the renderengine/Vector2 include cascade (a pointer either way, so the
+    // layout is faithful). ConstructResourceModule fills: callback=TextureRenderCallback,
+    // userData=the GameDataModule, debugAllocator=Allocators::mpInternalDebugAllocator.
+    struct DebugComponentParams
+    {
+        void*                   mpTextureRenderCallback;   // :59 (DebugTextureRenderCallback)
+        void*                   mpTextureRenderUserData;   // :60
+        rw::IResourceAllocator* mpDebugAllocator;          // :61
+    };
+
     class ResourceModule : public CgsModule::ModuleSingleBuffered
     {
     public:
@@ -52,6 +68,23 @@ namespace CgsResource
             E_RELEASE_MEMORY = 4, E_RELEASE_BASE = 5, E_RELEASE_DONE = 6
         };
 
+        // CgsResource::ResourceModule::InitOptions (DWARF CgsResourceModule.h:148) - the full bring-up
+        // options ConstructResourceModule (X360 0x8266D570) builds on the stack (1216B on X360) and
+        // ResourceModule::Construct consumes: the three sub-module option blocks (handed to each
+        // sub-module's Construct) + the disk layout + debug params + the file search path / cache drive.
+        struct InitOptions
+        {
+            CgsMemory::MemoryModule::InitOptions  mMemoryInitOptions;       // :150
+            BundleLoaderModule::InitOptions       mLoaderInitOptions;       // :151
+            PoolModule::InitOptions               mPoolInitOptions;         // :152
+            DiskLayout*                           mpDiskLayout;             // :153
+            DebugComponentParams                  mDebugParams;             // :155
+            char                                  macFileSearchPath[1024];  // :157
+            const char*                           mpcDiskCacheDrive;        // :158
+
+            InitOptions();   // :148 zero-init (X360 ctor + memset 0)
+        };
+
         // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
         ResourceModule() { mbIsNewModule = true; }
 
@@ -60,6 +93,11 @@ namespace CgsResource
         bool Release();    // 0x82906570
         void Destruct();   // deferred
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);        // deferred
+
+        // Accessor so the GameDataModule's CreatePools/CreateBanks can drive the embedded PoolModule
+        // (the X360 reaches it through the resource-module vtable; here a by-name accessor).
+        PoolModule&             GetPoolModule()   { return mPoolModule; }
+        CgsMemory::MemoryModule& GetMemoryModule() { return mMemoryModule; }
 
     private:
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
