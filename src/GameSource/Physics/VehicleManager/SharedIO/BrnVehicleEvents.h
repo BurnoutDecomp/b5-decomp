@@ -134,6 +134,36 @@ namespace Vehicle
         void operator=(const RaceCarState&);
     };
 
+    // Per-frame physics snapshot of a physical-traffic vehicle, published to consumers
+    // (e.g. BrnEffectsGlassManager::UpdateVehicleEffectPositions copy-constructs one).
+    // Layout/order/types verbatim from the DWARF (BrnVehicleEvents.h:121..131); the
+    // reconstructed member offsets match the X360 copy-ctor @0x82284EE8 exactly:
+    //   memcpy 448 (the WheelLite[4] head) + VMX 16-byte block copies across the
+    //   matrices/vectors region [448..800) + scalar tail at +800 (mEntityID, u32),
+    //   +804 (mfSpeed, f32), +808/+809/+810 (3 bools), +812 (mfSteering, f32).
+    // sizeof == 816 (0x330). 16-byte aligned (carries Matrix44Affine / Vector3Plus).
+    struct alignas(16) PhysicalTrafficState
+    {
+        WheelLite      maWheels[4];                       // @0   (4 * 112 = 448)
+        Matrix44Affine mTransform;                        // @448
+        Vector3Plus    mvRoadTestNormal_HeightAboveRoad;  // @512
+        Vector3        mLinearVelocity;                   // @528
+        Matrix44Affine maWheelTransforms[4];              // @544 (4 * 64 = 256)
+        EntityId       mEntityID;                         // @800
+        f32            mfSpeed;                           // @804
+        bool           mbFrozen;                          // @808
+        bool           mbIsDeforming;                     // @809
+        bool           mbIsFatallyCrashing;               // @810
+        f32            mfSteering;                         // @812
+
+        // Copy ctor @0x82284EE8: the X360 body is a pure bitwise copy of the whole object
+        // (memcpy 448 + VMX 16-byte block copies + scalar tail). PhysicalTrafficState is
+        // trivially copyable, so a defaulted copy ctor reproduces it exactly. Kept
+        // out-of-line in the .cpp via `= default` so this ledger func has a definition site.
+        PhysicalTrafficState() {}
+        PhysicalTrafficState( const PhysicalTrafficState& );
+    };
+
     // A vehicle-vs-vehicle impact (aggressor/victim, severity, recovery).
     struct alignas(16) ImpactEvent
     {

@@ -1,0 +1,210 @@
+#ifndef CGS_SERVER_INTERFACE_DIRTY_SOCK_H
+#define CGS_SERVER_INTERFACE_DIRTY_SOCK_H
+
+#include "types.hpp"
+
+// ===========================================================================
+// CgsNetwork::ServerInterfaceDirtySock
+//   Home: GameShared/GameClasses/Network/ServerInterface/DirtySock/
+//         CgsServerInterfaceDirtySock.{h,cpp}
+//
+// The DirtySock server-interface facade: the platform-shared base that owns the
+// twelve server-interface components, the DirtySock SDK ref handles, and the
+// shared 2 KB message buffer. The PC build derives ServerInterfaceDirtySockX360
+// from this (see CgsServerInterfaceDirtySockX360.{h,cpp}); CgsNetwork::ServerInterface
+// in turn derives from that.
+//
+// LAYOUT from dwarfdump (CgsServerInterfaceGameParams sibling dump) +
+// CgsServerInterfaceDirtySock.h DWARF, with offsets confirmed against the X360
+// ARTIST asm:
+//   GetMessageBuffer @ 0x82580B48 reads mpacMessageBuffer at this+0x94 (=148) and
+//   asserts it is non-null ("mpacMessageBuffer", CgsServerInterfaceDirtySock.h:719).
+//
+// This TU bodies only GetMessageBuffer and the vector deleting destructor; every
+// other declared member is reconstructed in its own dossier. The DirtySock SDK
+// ref types and the component classes are owned by OTHER groups / not-yet-homed
+// TUs, so they are FLAGGED here as opaque incomplete types reached by pointer.
+// Pinning is BY NAME; the X360 +148 offset for mpacMessageBuffer is a 32-bit-
+// pointer layout fact and is intentionally NOT static_asserted (the host vptr +
+// pointers widen to 8 bytes).
+// ===========================================================================
+
+namespace CgsNetwork
+{
+    // CgsServerInterfaceDirtySock.h:47
+    const s32 KI_MESSAGE_BUFFER_SIZE = 2048;
+
+    // Suspension update mask bits (CgsServerInterfaceDirtySock.h:209..216).
+    const s32 KI_SUSPENSION_UPDATE_MASK_USERS    = 1;
+    const s32 KI_SUSPENSION_UPDATE_MASK_GAMES    = 2;
+    const s32 KI_SUSPENSION_UPDATE_MASK_MYGAME   = 4;
+    const s32 KI_SUSPENSION_UPDATE_MASK_ROOMS    = 8;
+    const s32 KI_SUSPENSION_UPDATE_MASK_MESSAGES = 16;
+    const s32 KI_SUSPENSION_UPDATE_MASK_ASYNC    = 32;
+    const s32 KI_SUSPENSION_UPDATE_MASK_USERSETS = 64;
+    const s32 KI_SUSPENSION_UPDATE_MASK_STATS    = 128;
+
+    // CgsServerInterfaceDirtySock.h:80
+    enum EComponents
+    {
+        E_COMPONENTS_START              = 0,
+        E_COMPONENTS_CONNECTION         = 0,
+        E_COMPONENTS_GAMES              = 1,
+        E_COMPONENTS_PLAYER_INFO        = 2,
+        E_COMPONENTS_BROADCAST_MESSAGES = 3,
+        E_COMPONENTS_HTTP               = 4,
+        E_COMPONENTS_SERVERINFO         = 5,
+        E_COMPONENTS_DOWNLOADABLE_CONFIG= 6,
+        E_COMPONENTS_TELEMETRY          = 7,
+        E_COMPONENTS_RANKINGS           = 8,
+        E_COMPONENTS_CUSTOM_COMMANDS    = 9,
+        E_COMPONENTS_USERSETS           = 10,
+        E_COMPONENTS_PING_REGIONS       = 11,
+        E_COMPONENTS_COUNT              = 12
+    };
+
+    // CgsServerInterfaceDirtySock.h:101
+    enum EKickReason
+    {
+        E_KICKREASON_HOSTKICK       = 0,
+        E_KICKREASON_NOGAME         = 1,
+        E_KICKREASON_BANNED_BUDDY   = 2,
+        E_KICKREASON_UNNATABLE      = 3,
+        E_KICKREASON_LOST_CONNECTION= 4,
+        E_KICKREASON_COUNT          = 5
+    };
+
+    // ---- FLAGGED opaque component classes (owned by other groups / not yet homed).
+    class ServerInterfaceComponent;
+    class ServerInterfaceConnection;
+    class ServerInterfaceGames;
+    class ServerInterfacePlayerInfo;
+    class ServerInterfaceBroadcastMessages;
+    class ServerInterfaceHttp;
+    class ServerInterfaceServerInfo;
+    class ServerInterfaceDownloadableConfig;
+    class ServerInterfaceTelemetry;
+    class ServerInterfaceRankings;
+    class ServerInterfaceCustomCommands;
+    class ServerInterfaceUsersets;
+    class ServerInterfacePingRegions;
+
+    enum EServerInterfaceEvent : int;
+    enum EServerInterfaceError : int;
+
+    // ---- FLAGGED opaque DirtySock SDK ref handles (vendor SDK; reached by pointer).
+    struct LobbyApiRefT;
+    struct LobbyApiMsgT;
+    struct DSErrorToServerInterfaceError;
+
+    namespace DirtySock
+    {
+        struct ConnApiRefT;
+        struct ConnApiCbInfoT;
+        struct LobbyLoginRefT;
+        struct GameManagerRefT;
+        struct LobbySettingRefT;
+    }
+
+    // CgsServerInterfaceDirtySock.h:153 -- ConnAPI prepare params (POD).
+    struct ConnAPIPrepareParams
+    {
+        s32  miPort;
+        s32  miMaxPlayers;
+        bool mbPeerToPeer;
+
+        void Construct();
+    };
+
+    // CgsServerInterfaceDirtySock.h:193 -- per-component slot.
+    struct ServerInterfaceComponentData
+    {
+        // CgsServerInterfaceDirtySock.h:115
+        typedef void (*ServerInterfaceConnApiCallback)(DirtySock::ConnApiCbInfoT*,
+                                                       ServerInterfaceComponent*);
+
+        ServerInterfaceComponent*     mpComponent;
+        ServerInterfaceConnApiCallback mConnApiCallback;
+    };
+
+    struct ServerInterfaceDirtySock
+    {
+    public:
+        // CgsServerInterfaceDirtySock.h:219
+        enum EStatus
+        {
+            E_STATUS_BUSY  = 0,
+            E_STATUS_ERROR = 1,
+            E_STATUS_IDLE  = 2,
+            E_STATUS_COUNT = 3
+        };
+
+        // CgsServerInterfaceDirtySock.h:120
+        typedef void (*ConnectionStatusChangeCallback)(DirtySock::ConnApiRefT*,
+                                                        DirtySock::ConnApiCbInfoT*,
+                                                        void*);
+
+        ServerInterfaceDirtySock();
+
+        // CgsServerInterfaceDirtySock.h:229
+        virtual ~ServerInterfaceDirtySock();
+
+        // Lifecycle virtuals (bodies in their own dossiers).
+        virtual void Construct();
+        virtual bool Prepare(struct ServerInterfacePrepareParams* lpParams);
+        virtual bool Release();
+        virtual void Destruct();
+        virtual void Update();
+        virtual void Suspend(s32 liUpdateFlags);
+        virtual void Resume();
+        virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
+
+        // CgsServerInterfaceDirtySock.h:717 -- THIS TU. Returns mpacMessageBuffer.
+        char* GetMessageBuffer() const;
+        // CgsServerInterfaceDirtySock.h:724
+        s32 GetMessageBufferLength() const;
+
+    protected:
+        // CgsServerInterfaceDirtySock.cpp:826
+        virtual EServerInterfaceError ConvertError(int liError,
+                                                   const DSErrorToServerInterfaceError* lpTable,
+                                                   int liCount) const;
+
+    private:
+        // ---- Data members, DWARF order (CgsServerInterfaceDirtySock.h). The vptr
+        // sits at +0 (this struct's first non-static data). On the X360 build
+        // mpacMessageBuffer lands at +148; not asserted (see header note).
+        ServerInterfaceComponentData maComponents[E_COMPONENTS_COUNT];  // :473
+        ConnAPIPrepareParams         mConnApiPrepareParams;             // :474
+        ConnectionStatusChangeCallback mpfConnectionStatusChangeCallback; // :477
+        void*                        mpConnectionStatusChangeUserData;  // :478
+        LobbyApiRefT*                mpLobbyAPIRef;                      // :481
+        DirtySock::LobbyLoginRefT*   mpLobbyLoginRef;                   // :482
+        DirtySock::ConnApiRefT*      mpConnApiRef;                      // :483
+        DirtySock::GameManagerRefT*  mpGameManagerRef;                  // :484
+        DirtySock::LobbySettingRefT* mpSettingRef;                      // :485
+        bool                         mbWaitingToSuspend;                // :487
+        s32                          miSuspendUpdateFlags;              // :488
+        char*                        mpacMessageBuffer;                 // :490 (this+148 on X360)
+        // CgsServerInterfaceDirtySock.cpp:107 -- mpMemoryBlock (CgsMemory::HeapMalloc*):
+        // FLAGGED opaque; modelled as void* to avoid pulling an un-homed allocator.
+        void*                        mpMemoryBlock;
+        const char*                  mpcCurrentAction;                  // :496
+        EStatus                      meStatus;                          // :497
+        s32                          miLastError;                       // :498
+        const char*                  mpcStandardSelectOptions;          // :500
+        const char*                  mpcVersion;                        // :504
+        const char*                  mpcSKU;                            // :505
+        const char*                  mpcSLUS;                           // :506
+        s32                          miLanguage;                        // :507
+        bool                         mbRecreateDirtySock;               // :509
+        // CgsServerInterfaceDirtySock.cpp:113 -- mNetStreamLogChannelOutput
+        // (CgsDev::Log::LogChannelOutput): FLAGGED opaque; modelled by storage so the
+        // trailing member offset (miCgsNetworkServerInterfacePM1) is preserved. Two
+        // pointers wide is sufficient for the named-member contract on this TU.
+        void*                        maNetStreamLogChannelOutput[2];
+        s32                          miCgsNetworkServerInterfacePM1;    // :517
+    };
+}
+
+#endif // CGS_SERVER_INTERFACE_DIRTY_SOCK_H

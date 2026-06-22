@@ -166,6 +166,16 @@ protected:
     void AddFreeBlockBySize(void* pNowFree, size_t nSize);
     size_t ToNextValidSize(size_t nSize);
 
+    // ADDITIVE GROW (FLAGGED): protected pool/outside-list accessors used by
+    // the AptValueGC_PoolManager subclass to walk live items (GetFirst/
+    // GetNextAptValue @ 0x82AE0DF8 / 0x82AE0BE0). The X360 GC walk reads
+    // mpFirstPool / mpFirstOutSideAllocation / mbTrackOutsideAllocations
+    // directly; exposed here by name (rather than re-deriving offsets) so the
+    // subclass need not friend or offset-cast. No layout change.
+    DOGMA_MemPool* GetFirstPool() const { return mpFirstPool; }
+    void*  GetFirstOutsideAllocationRaw() const { return mpFirstOutSideAllocation; }
+    bool   GetTracksOutsideAllocations() const { return mbTrackOutsideAllocations != 0; }
+
     uintptr_t** mpaFirstFreeBySize;
 
     DOGMA_MemPool* mpFirstPool;
