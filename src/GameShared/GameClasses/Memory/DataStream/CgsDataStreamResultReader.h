@@ -21,8 +21,17 @@
 // mbStreaming@32, miNextResult@36, miNumResultsAtEnd@40.
 namespace CgsMemory
 {
+    // Forward decl: the poster feeds this reader and mutates its packed status
+    // word / result buffer directly (see CgsDataStreamResultPoster).
+    struct DataStreamResultPoster;
+
     struct DataStreamResultReader
     {
+        // The poster appends results straight into this reader's buffers and
+        // CAS-updates its packed status; it needs access to the private members
+        // below. (Additive: layout/sizeof unchanged.)
+        friend struct DataStreamResultPoster;
+
         // Result of a single ReadResult() (CgsDataStreamResultReader.h:57).
         enum EReadResultStatus
         {
