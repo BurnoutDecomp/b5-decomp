@@ -40,29 +40,39 @@ int BrnReplayBaseSerialiser_embed_check()
 {
     TestSerialiser lSer;
 
-    // --- record path ---
+    // --- record path (via the Serialise dispatch) ---
     lSer.Lock();
     lSer.DriveMode(BaseSerialiser::E_MODE_RECORDING);
     if (!lSer.IsRecording())
         return 1;
 
     const s32 liPayload = 0x12345678;
-    if (lSer.Write(&liPayload, static_cast<s32>(sizeof(liPayload)))
+    // Serialise must route to Write while recording and report the byte count.
+    if (lSer.Serialise(const_cast<s32*>(&liPayload), static_cast<s32>(sizeof(liPayload)))
             != static_cast<s32>(sizeof(liPayload)))
         return 1;
     lSer.Unlock();
 
-    // --- playback path ---
+    // --- playback path (via the Serialise dispatch) ---
     lSer.Lock();
     lSer.DriveMode(BaseSerialiser::E_MODE_PLAYING);
     if (!lSer.IsPlaying())
         return 1;
 
     s32 liReadBack = 0;
-    if (lSer.Read(&liReadBack, static_cast<s32>(sizeof(liReadBack)))
+    // Serialise must route to Read while playing.
+    if (lSer.Serialise(&liReadBack, static_cast<s32>(sizeof(liReadBack)))
             != static_cast<s32>(sizeof(liReadBack)))
         return 1;
     lSer.Unlock();
+
+    // --- idle path: Serialise is a no-op outside record/playback ---
+    lSer.Lock();
+    lSer.DriveMode(BaseSerialiser::E_MODE_IDLE);
+    lSer.Unlock();
+    s32 liUnused = 0;
+    if (lSer.Serialise(&liUnused, static_cast<s32>(sizeof(liUnused))) != 0)
+        return 1;
 
     return (liReadBack == liPayload) ? 0 : 1;
 }

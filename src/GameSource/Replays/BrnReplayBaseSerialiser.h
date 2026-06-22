@@ -67,6 +67,11 @@ namespace BrnReplays
         // buffer at the read cursor; returns bytes read.
         s32 Read(void* lpData, s32 liSize);
 
+        // Serialise(void*, int32_t) @ 0x8264C470. Mode-directed dispatch: forwards
+        // the (buffer, size) pair to Write while recording, to Read while playing,
+        // and is a no-op (returns 0) in every other mode.
+        s32 Serialise(void* lpBuffer, s32 liSize);
+
         // Lock @ 0x823A6718 / Unlock @ 0x823A67C0. Guard the buffer against
         // concurrent serialiser access.
         bool Lock();
