@@ -24,6 +24,7 @@
 
 #include "types.hpp"          // u32, s32
 #include "BrnCommonTypes.h"   // Matrix44Affine (rw::math::vpu::Matrix44Affine)
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer
 
 namespace BrnWorld
 {
@@ -57,6 +58,53 @@ namespace PropEntityIO
         Matrix44Affine mTransform;   // :268
         u32            muTypeId;     // :269
         EEventType     meEventType;  // :270
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::OutputBuffer_PreScene (DWARF BrnPropEntityModuleIO.h:676).
+    // ADDITIVE GROW: this slice homes ONLY the IO-OutputBuffers group's X360-emitted
+    // accessors of the pre-scene output buffer:
+    //   GetResourceRequestInterface()    @ 0x822B9888  write-lock (bit 3) -> +4      (asm-line 648)
+    //   GetPropInputInterface() const    @ 0x827A1970  read-lock  (bit 4) -> +819824 (asm-line 642)
+    //   GetPropInputInterface()          @ 0x822B97E0  write-lock (bit 3) -> +819824 (asm-line 645)
+    //
+    // LAYOUT (DWARF :676 member order + X360 getter return-offsets, authoritative):
+    //   base  CgsModule::IOBuffer                            (1-byte status; +1..+3 pad)
+    //   +4       ResourceRequestInterface mResourceRequestInterface (RequestInterface<1024>) :647
+    //   +...     SceneInputInterface      mSceneInputInterface      (InSceneUpdateInterface)  :648
+    //   +819824  PropInputInterface       mPropInputInterface       (PropInputInterface)      :649
+    //   +...     VisibleOverheadSignArray mVisibleOverheadSignArray                           :650
+    //
+    // FLAG (foreign types): the three interface members and the overhead-sign array have
+    // their own owning homes elsewhere and are NOT reconstructed here; the region between
+    // the +4 member start and the +819824 member start is modelled as correctly-sized
+    // opaque storage so the two X360-pinned return offsets (+4, +819824) are exact. The
+    // intervening mSceneInputInterface byte split is not separately recoverable from this
+    // DWARF, so it is folded into the padding (named in the comment above). Adopt the
+    // named interface types additively when their homes land.
+    class OutputBuffer_PreScene : public CgsModule::IOBuffer
+    {
+    public:
+        // Opaque foreign-type storages (see FLAG above).
+        struct ResourceRequestInterfaceStorage { unsigned char maBytes[1]; };
+        struct PropInputInterfaceStorage       { unsigned char maBytes[1]; };
+
+        // X360 0x822B9888: write-lock handle, returns this + 4 (mResourceRequestInterface).
+        ResourceRequestInterfaceStorage* GetResourceRequestInterface();
+        // X360 0x827A1970: read-lock handle, returns this + 819824 (mPropInputInterface).
+        const PropInputInterfaceStorage* GetPropInputInterface() const;
+        // X360 0x822B97E0: write-lock handle, returns this + 819824 (mPropInputInterface).
+        PropInputInterfaceStorage* GetPropInputInterface();
+
+        static void _AssertLayout();
+
+    private:
+        u8                              maStatusPad[3];             // +1..+3 (force +4 placement)
+        ResourceRequestInterfaceStorage mResourceRequestInterface;  // +4      :647
+        // mSceneInputInterface (:648) is folded into this padding (see FLAG): it spans from
+        // the end of mResourceRequestInterface (+5) to the +819824 start of mPropInputInterface.
+        unsigned char                   maSceneInputAndPad[819824 - 5]; // ...    :648
+        PropInputInterfaceStorage       mPropInputInterface;        // +819824 :649
     };
 }
 }

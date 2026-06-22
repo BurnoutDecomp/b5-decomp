@@ -271,6 +271,27 @@ private:
     uint8_t                  muNumPlayers;       // :463  @0xD3
     uint8_t                  muNumActions;       // :464  @0xD4
     uint8_t                  muDifficulty;       // :465  @0xD5
+
+    // ADDITIVE GROW (FLAG -- X360-attested, DWARF-gap): the PS3 DecFIGS DWARF ends the
+    // record at muDifficulty (@0xD5); the X360 ARTIST binary reads a byte at @0xD6 in
+    // ChallengeList::IsChallengeContentBought @0x8267BC08 (`lbz 0xD6`) and branches on
+    // values 1 / 2 to select which downloadable-content entitlement gates the challenge
+    // (0 / other == always available). It occupies tail space already inside the
+    // 0xD8 sizeof (216, proven by GetChallengeData's 216-byte stride), so adding it does
+    // not change the record size. No prior TU read @0xD6, so the grow is safe.
+public:
+    enum EContentBoughtType
+    {
+        E_CONTENT_BOUGHT_NONE  = 0,   // no DLC requirement (always available)
+        E_CONTENT_BOUGHT_DLC_A = 1,   // gated by the first content entitlement
+        E_CONTENT_BOUGHT_DLC_B = 2,   // gated by the second content entitlement
+    };
+
+    // The X360 reads this byte raw; the accessor exposes it for ChallengeList.
+    uint8_t GetContentBoughtType() const { return muContentBoughtType; }
+
+private:
+    uint8_t                  muContentBoughtType; // X360 @0xD6 (DWARF-gap; see note above)
 };
 
 // ChallengeListEntryAction::GetActionType @ 0x8230EDC8
