@@ -68,7 +68,16 @@ namespace Playback
         Content(Factory& lFactory, const ContentSpec& lContentSpec, u32 lu32DataSize);
         virtual ~Content();
 
-        virtual int DoDispose();
+        // FLAG (committed-home DEFECT corrected to match DWARF ground truth):
+        // CgsContent.h DWARF (line 141/301) declares Content::DoDispose() returning
+        // *void*, matching Object::DoDispose() (CgsObject.h:27, also void). The prior
+        // commit declared it `int`, which is an ILLEGAL non-covariant override of the
+        // void base method -- the class did not compile once instantiated as a full
+        // hierarchy (no .cpp had included this header before the CgsSound-RWAC-content
+        // group). This is a return-type correction proven by DWARF; it changes NO
+        // layout/offset/sizeof and adds no member, so it is safe under the
+        // grow-additively rule. Not a semantic change -- the X360 method is void.
+        virtual void DoDispose();
         virtual bool DoOnPostLoad();
 
         Factory& mFactory;
@@ -101,14 +110,16 @@ namespace Playback
         CGS_ASSERT(mu32RefCount == 0, "0 == mu32RefCount");
     }
 
-    inline int Content::DoDispose()
+    inline void Content::DoDispose()
     {
         Factory& lFactory = mFactory;
         this->~Content();
 
         ContentDisposeRequest lRequest = {};
         lRequest.mpContent = this;
-        return lFactory.GetContentDisposer()->DisposeContent(&lRequest);
+        // DWARF: Content::DoDispose() is void; the disposer call's result is not
+        // propagated out of the override (return type corrected above).
+        lFactory.GetContentDisposer()->DisposeContent(&lRequest);
     }
 
     inline bool Content::DoOnPostLoad()

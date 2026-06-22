@@ -1,5 +1,7 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "ppmalloc/EAGeneralAllocator.h"             // EA::Allocator::GeneralAllocator::BlockInfo
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 
 // BrnResource::GameDataIO::AllocatorList -- see the header. The per-type accessors are faithful
 // reconstructions of the X360 ARTIST bodies (each: assert the bank id is in range, has an allocator
@@ -76,6 +78,36 @@ namespace BrnResource
         rw::core::GeneralResourceAllocator* AllocatorList::GetRWGeneralResourceAllocator(s32 liBankId) const
         {
             return mapRWGeneralAllocators[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP)];
+        }
+
+        // @ 0x82662E90 -- PPMalloc invokes this once per block while DebugDumpStats walks an rw general
+        // heap; it tallies the block's usable size into the GenAllocUsage accumulator by block type.
+        // X360: tests mBlockType (BlockInfo+0x14) against the PPMalloc free(4)/allocated(2) bits and adds
+        // mnDataSize (BlockInfo+0x10) into muFree / muAllocated respectively; any other block type is
+        // logged as "Unknown block found of size N" when the message filter's bit 0 is set. Always
+        // returns true (continue the walk). lpContext is the GenAllocUsage being accumulated.
+        bool AllocatorList::GeneralAllocatorReportCB(const EA::Allocator::GeneralAllocator::BlockInfo* lpBlockInfo,
+                                                     void* lpContext)
+        {
+            // PPMalloc block-type bits (EAGeneralAllocator): allocated = 2, free = 4.
+            const char KC_BLOCK_TYPE_ALLOCATED = 2;
+            const char KC_BLOCK_TYPE_FREE      = 4;
+
+            GenAllocUsage* lpUsage = static_cast<GenAllocUsage*>(lpContext);
+
+            if (lpBlockInfo->mBlockType & KC_BLOCK_TYPE_FREE)
+            {
+                lpUsage->muFree += lpBlockInfo->mnDataSize;
+            }
+            else if (lpBlockInfo->mBlockType & KC_BLOCK_TYPE_ALLOCATED)
+            {
+                lpUsage->muAllocated += lpBlockInfo->mnDataSize;
+            }
+            else if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint << "Unknown block found of size " << lpBlockInfo->mnDataSize << "\n";
+            }
+            return true;
         }
     }
 }

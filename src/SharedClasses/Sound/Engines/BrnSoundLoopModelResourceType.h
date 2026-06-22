@@ -2,6 +2,10 @@
 #define BRN_SOUND_LOOP_MODEL_RESOURCE_TYPE_H
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
+// LoopModelData (header + relocation walkers) now lives in its DWARF home; the
+// previous inline forward-stub here was promoted there. The FixUp(int)/FixDown(int)
+// worker signatures the wrapper below calls are preserved unchanged.
+#include "SharedClasses/Sound/Engines/BrnSoundLoopModelData.h"
 
 namespace BrnSound
 {
@@ -9,12 +13,6 @@ namespace Vehicles
 {
 namespace Engines
 {
-struct LoopModelData
-{
-    int FixUp(int liDelta);
-    int FixDown(int liDelta);
-};
-
 class LoopModelResourceType : public CgsResource::Type
 {
 public:
