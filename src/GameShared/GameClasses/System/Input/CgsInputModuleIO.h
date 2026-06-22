@@ -113,15 +113,55 @@ namespace InputIO
         // CgsInput::Device::WheelFFSpring mWheelFFSpring; // tail member -- own TU
     };
 
-    // PadOutputInformation is the per-pad output record (rumble/jolt/force-feedback state
-    // the input module publishes back to each connected pad). Its full field layout is its
-    // own reconstruction TU; here only its X360 byte width is needed so OutputBuffer's
-    // maPadOutputInformation[7] array lands at the right offset and GetPadInfo()'s
-    // `&a1[932*a2 + 296]` element math reproduces exactly. Width 932B (0x3A4) is taken from
-    // the X360 stride (`mulli r11, r22, 0x3A4`). Promote to the real fielded type when homed.
+    // ------------------------------------------------------------------------
+    // PadOutputInformation is the per-pad input/output record the input module publishes for
+    // each connected pad. GetPadInfo(port) returns &maPadOutputInformation[port]; the game's
+    // controller bridges (BrnGame::BrnGameModule::BridgeControllerTo*) read this record by field.
+    //
+    // ADDITIVE GROW (was an opaque u8[932] placeholder). The fields named below are exactly the
+    // ones the bridge funcs + SetButtonPressed + MapActionInfoToDebugController read, each pinned
+    // to its X360 byte offset; untouched spans remain explicit u8 storage so the record stays
+    // 932 bytes (0x3A4, the X360 stride `mulli r11, r22, 0x3A4`) and the maPadOutputInformation[7]
+    // array offsets do not move. FLAG: the precise semantics of most fields (axis identities,
+    // which action each ActionInfo slot is) are not DWARF/leak-attested -- they are named from
+    // their bridge usage (analogue stick deflections, per-action {value,status} pairs, the
+    // controller connection/state/user-index tail). Promote field names as more callers land.
+    //
+    // ActionInfo is the per-action {value, status} pair the bridges index as `&record.maActionInfo[k]`
+    // (X360 `v15 = padRecord + 0x18; v15[2*k]`). The action-index tables map a GUI/world action id k
+    // to a slot; status bit0 == held this frame, bit1 == pressed this frame, bit2 == released this
+    // frame (the &1 / >>1&1 / >>2&1 tests across the bridges + SetButtonPressed). The block also holds
+    // the two analogue stick deflections at its head (the >0.25 / >0.1 magnitude tests).
+    struct ActionInfo
+    {
+        f32 mfValue;    // +0x00 analogue / axis magnitude for this action slot
+        u32 muStatus;   // +0x04 bit0 held, bit1 pressed-this-frame, bit2 released-this-frame
+    };
+
     struct PadOutputInformation
     {
-        u8 mRawStorage[932]; // X360 sizeof == 0x3A4; HONEST placeholder until fielded TU
+        // ---- leading analogue axes ---------------------------------------------------------------
+        // The two analogue sticks. The GUI bridge forwards {LX,LY} and {RX,RY} as GuiEventControllerAxis,
+        // the world bridge maps LX through the steering response curve, and SetButtonPressed tests
+        // |LX|>0.25 && |RY?|>0.25 for the both-sticks-deflected flag.
+        f32 mfStickLX;          // +0x00
+        f32 mfStickLY;          // +0x04
+        f32 mfStickRX;          // +0x08
+        f32 mfStickRY;          // +0x0C
+        f32 mfAxis10;           // +0x10 (world: ShowtimeIntro steering source pre-curve)
+        f32 mfAxis14;           // +0x14
+        // ---- per-action {value,status} table @ +0x18 ---------------------------------------------
+        // 96 entries (8-byte stride) spanning +0x18..+0x318. Indexed by-name via maActionInfo[k]; the
+        // bridges read specific slots (k = 4,6,8,..,17) plus MapActionInfoToDebugController copies
+        // maActionInfo[0..21] into the debug-controller image, and SetButtonPressed reads a sparse set
+        // of slots from this same block (it receives &maActionInfo[0] == record+0x18 as its source).
+        ActionInfo maActionInfo[(0x318 - 0x18) / sizeof(ActionInfo)]; // +0x18 .. +0x318 (96 entries)
+        u8  maPad0x318[0x398 - 0x318];   // +0x318 unattested span up to the connection/state tail
+        // ---- connection / controller-state / connected-this-scan tail ----------------------------
+        u32  muConnectionWord;  // +0x398 (GetPadInfoForPlayer0: `*(PadInfo+920)`; 0 => use this pad)
+        u32  meControllerState; // +0x39C (==2 test feeds the pressed-bit in ToGameState / ToWorld / ToGui)
+        u8   mbDisconnected;    // +0x3A0 (GetPadInfo scan / ToGui: nonzero => pad not present this scan)
+        u8   maPad0x3A1[0x3A4 - 0x3A1]; // +0x3A1 close the 932-byte (0x3A4) record
     };
 
     // ---- OutputBuffer (DWARF CgsInputModuleIO.h:844) ------------------------
