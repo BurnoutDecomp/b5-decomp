@@ -19,7 +19,7 @@ namespace BrnReplays
 
     // DWARF: BrnReplayStreamHeader.h:45 -- one index entry per recorded frunk.
     //
-    // FLAG (X360 overrides DWARF on layout): the Feb-2007 PS3 DWARF lays this out as
+    // FLAG (X360 overrides DWARF on layout): the PS3 DWARF lays this out as
     // {miFileOffset s32, miFrunkSize s32, miFrameNumber s16, mxFlags u16, mfFrameTime
     // f32} == 16 bytes. The X360 InvalidateFrunksAhead @0x8264D190 indexes the
     // mpFrameOffsets array with a 24-byte stride and reads: a full 32-bit frame
@@ -52,5 +52,11 @@ namespace BrnReplays
         s32          miNumFrunks;       // @0x0C count of live frunks in the ring
         s32          miFirstFrunk;      // @0x10 ring index of the first live frunk
         StreamOffset* mpFrameOffsets;   // @0x14 base of the frunk index array (ring of KI_MAX_FRUNKS)
+
+        // @0x8264B270 -- trim trailing frunks that cannot be replayed from.
+        // Walks back from the last recorded frunk and drops every tail frunk that is
+        // not a live keyframe, shrinking miNumFrunks. Defined in
+        // BrnReplayStreamHeader.cpp. Called by ReplayModule::UpdateRecording_PreSim.
+        StreamHeader* ChopOffTailFrames();
     };
 }

@@ -42,8 +42,29 @@ const u32 KU_IEEE_754_REPRESENTATION_FLOAT_ONE = 0x3F800000;
 // DWARF CgsRandom.h:163. The 8-slot float ring buffer size.
 const u32 KU_FLOAT_BUFFER_SIZE = 8;
 
+class Random;
+}
+
+// The effects-system per-call vector randomisers draw straight from a Random's
+// internal LCG ring (asm @ 0x82277EC8 / 0x82277FB8 read muSeed @+0x20, the index
+// @+0x28, and the f32/u32 ring union at +0). They are granted friend access below
+// so they can reconstruct that spine by NAME rather than by raw offset.
+namespace BrnEffects { namespace Utils {
+struct Vector3Randomiser;
+struct Vector4Randomiser;
+} }
+
+namespace CgsNumeric
+{
 class alignas(8) Random
 {
+    // Additive grant only -- does not change Random's own layout or method
+    // semantics. The randomisers use their own Vector-slot indexing scheme
+    // ((index + 3) & 4) over the same 8-slot ring; that scheme lives in the
+    // randomiser bodies, not here.
+    friend struct BrnEffects::Utils::Vector3Randomiser;
+    friend struct BrnEffects::Utils::Vector4Randomiser;
+
 public:
     // X360 (inlined at every Construct site, e.g. FlybyManager::Construct and the
     // online-mode Start blocks). Installs the default seed, primes the 8-slot float
