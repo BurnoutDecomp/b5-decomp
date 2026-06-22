@@ -197,6 +197,20 @@ public:
     // reconcile here.
     void OnFreeburnSkillzTotalChange(s32 liNumberOfNetworkPlayers, f32 lfNewSkillzTotal);
 
+    // ===== ADDITIVE GROW: the seven remaining gameplay-event hooks bodied in the
+    // PS3 unit BrnGameStateAchievementManagerPS3.cpp (X360-attested). Each fires its
+    // achievement id(s) through the two virtuals once the event threshold is met.
+    // Signatures pinned from the X360 call-site arg-register setup (see that .cpp's
+    // per-func X360 address comment). Appended additively; existing members untouched.
+    void OnCaughtFever();                                                       // X360 0x8235B590
+    void OnFreeburnChallengeBlockComplete();                                    // X360 0x8235B370
+    void OnFreeburnChallengeComplete(u32 luCompletedChallengeCount);            // X360 0x8235B2D8
+    void OnMugshotAdded(u32 luMugshotCount);                                    // X360 0x8235B3D0
+    void OnMugshotSent(s32 liMugshotCount);                                     // X360 0x8235B5F0
+    void OnOnlineRaceComplete(s32 liGameModeType, bool lbFlag,
+                              s32 liChainA, s32 liChainB);                      // X360 0x8235B6A8
+    void OnRivalAdded(s32 liRivalCount);                                        // X360 0x8235B448
+
 protected:
     // Vtable slot 0 / slot 1 respectively (the X360 calls slot 0 at vtable+0 and
     // slot 1 at vtable+4). Pure in this base in spirit; the PS3 variant supplies
