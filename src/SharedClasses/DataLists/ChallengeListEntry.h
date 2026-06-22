@@ -273,6 +273,27 @@ private:
     uint8_t                  muDifficulty;       // :465  @0xD5
 };
 
+// ChallengeListEntryAction::GetActionType @ 0x8230EDC8
+// (DWARF: EChallengeActionType GetActionType() const, ChallengeListEntry.h:162; baked
+// assert at ChallengeListEntry.h:660.) X360 reads muActionType (the byte at offset 0),
+// range-guards it via CGS_ASSERT and returns it cast to EChallengeActionType. The guard
+// is non-fatal (the binary returns the raw byte even when it fails).
+//
+// X360/DWARF DRIFT (binary authoritative): the X360 fires the assert when the type byte
+// is >= 0x29 (41), whereas the committed/PS3-DWARF EChallengeActionType has
+// E_ACTION_COUNT == 22. We do NOT redefine the committed enum (same call recorded for
+// GetChallengeStyle below); the condition is written against the named constant for
+// source fidelity (the byte-exact X360 threshold is 0x29).
+inline ChallengeListEntryAction::EChallengeActionType
+ChallengeListEntryAction::GetActionType() const
+{
+    CGS_ASSERT(
+        muActionType < E_ACTION_COUNT,
+        "(ChallengeListEntryAction::EChallengeActionType)muActionType < ChallengeListEntryAction::E_ACTION_COUNT" );
+
+    return static_cast<EChallengeActionType>( muActionType );
+}
+
 // ChallengeListEntry::GetAction @ 0x8230F0F8
 // X360 pseudocode: `return 80 * a2 + a1;` with a1==this, a2==liActionIndex. Since
 // sizeof(ChallengeListEntryAction)==0x50 and maAction is at offset 0, this is simply

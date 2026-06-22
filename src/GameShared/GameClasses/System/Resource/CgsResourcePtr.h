@@ -131,10 +131,19 @@ namespace CgsResource
             return *static_cast<Type*>(mpResourceMemory);
         }
 
+        // CgsResourcePtr.h:631 -> baked assert line 637 (const operator*).
+        // FLAG (verified X360 fact, additive correction): this const-deref accessor
+        // fires the "Can not DEREFERENCE resource pointer ..." message at baked line
+        // 637, NOT the "instance" message the other accessors use. Proven by the
+        // out-of-line instantiation BrnResource::VehicleListResourc @ 0x82665E88
+        // (ResourcePtr<VehicleListResource>::operator*() const), baked file
+        // CgsResourcePtr.h line 637, msg "Can not dereference resource pointer - it
+        // has no main memory resource". No prior instantiation forced this symbol, so
+        // correcting the message here is safe (no other TU re-verifies against it).
         const Type& operator*() const
         {
             CGS_ASSERT(mpResourceMemory,
-                "Can not instance resource pointer - it has no main memory resource\n");
+                "Can not dereference resource pointer - it has no main memory resource\n");
             return *static_cast<const Type*>(mpResourceMemory);
         }
 
