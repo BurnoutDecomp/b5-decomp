@@ -2,6 +2,7 @@
 #define BRN_PROFILE_H
 
 #include "types.hpp"
+#include "SharedClasses/Progression/BrnTrainingTypes.h"  // BrnProgression::ETrainingType (Profile training-flag accessors)
 
 // Minimal owning slice for BrnProgression::ProfileEvent -- the element type of
 // Array<BrnProgression::ProfileEvent,175>. DWARF home is BrnProfile.h:312.
@@ -66,6 +67,33 @@ private:
     // Opaque 56-byte body (X360-proven stride). Replace with the real named members
     // (incl. UniquePlayerID) when MugshotInfo's own TU is reconstructed.
     u8 mPad_Body[56];   // sizeof(MugshotInfo) == 56 (X360 Array<MugshotInfo,20>::GetItem stride)
+};
+
+// ----------------------------------------------------------------------------
+// MINIMAL DECLARE-ONLY slice for BrnProgression::Profile -- the player's persisted
+// progression record (embedded by value inside ProgressionManager at +0x170). Its full
+// layout (the discovered-event table, training-flag bitfields, takedown/win tallies, etc.)
+// is a large, separate TU and is NOT modelled here. Only the methods concrete callers in
+// already-reconstructed TUs name are declared; bodies + the real member layout land with
+// the Profile/ProgressionManager TU. FLAG: declare-only additive slice.
+// ----------------------------------------------------------------------------
+class Profile
+{
+public:
+    // X360 BrnProgression::Profile::ClearTrainingFlags -- DEBUG-only reset of the persisted
+    // training-flag bitfield. TrainingManager::DEBUG_ClearTrainingFlags (0x82366050) zeroes the
+    // four-qword flag region the X360 keeps at Profile+0x1CCC0; that internal layout belongs to
+    // the Profile TU. Declare-only here.
+    void ClearTrainingFlags();
+
+    // X360 BrnProgression::Profile::HasPlayerSeenTrainingType -- true when the player has already
+    // seen training tip leTrainingType (read from the persisted seen-bitfield). Named by
+    // TrainingManager::RequestTraining (0x82365B20) and several Progression callers. Declare-only.
+    bool HasPlayerSeenTrainingType(ETrainingType leTrainingType) const;
+
+    // X360 BrnProgression::Profile::SetTrainingAlreadySeen -- mark training tip leTrainingType as
+    // seen. Named by TrainingManager::SendTrainingTickerMessage. Declare-only.
+    void SetTrainingAlreadySeen(ETrainingType leTrainingType);
 };
 }
 

@@ -6,6 +6,7 @@
 
 namespace BrnProgression
 {
+class Profile;  // GetProfile() return type; full slice in BrnProfile.h
 // MINIMAL OWNING HEADER for BrnProgression::ProgressionManager.
 //
 // SCOPE: this is a deliberately *thin* slice. The full ProgressionManager is a large,
@@ -75,5 +76,13 @@ public:
     // set-sentinel check (set base +0x1000 == -1 -> "Set used before Construct/Clear")
     // is reproduced inside this accessor in the full TU.
     s32 GetCollectedStuntElementCount(BrnGameState::StuntElementType leStuntType) const;
+
+    // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU.
+    // X360 BrnProgression::ProgressionManager::GetProfile -- returns the embedded player Profile
+    // (the X360 reaches it as the by-value sub-object at this+0x170). TrainingManager::
+    // DEBUG_ClearTrainingFlags (0x82366050) / RequestTraining / SendTrainingTickerMessage call it,
+    // assert the result is non-null, then poke training flags through it. Body + the real embedded
+    // Profile member land with the ProgressionManager TU. FLAG: declare-only additive grow.
+    Profile* GetProfile();
 };
 }
