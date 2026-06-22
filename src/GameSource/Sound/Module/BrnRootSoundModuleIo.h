@@ -4,6 +4,8 @@
 #include <cstddef>   // offsetof (buffer layout asserts)
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer (base; lock state machine)
+#include "GameShared/GameClasses/Module/CgsEventQueue.h" // CgsModule::EventQueue<T,N> (AudioCarLoadedDataQueue)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // AudioCarDataLoadedEvent (queue element)
 
 // =============================================================================
 // BrnSound::Module::Io buffer accessors
@@ -60,6 +62,66 @@ namespace Io
     // (PropUpdateNotification_::Append) supplies the queue operations in its own TU.
     class PropUpdateNotificationQueue;
 
+    // =========================================================================
+    // BrnSound::Module::Io::PreUpdateOutput -- MINIMAL SLICE (canonical home is
+    // GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h:149; reproduced here
+    // only as far as RootPreUpdateOutputBuffer::SetPreUpdateOutput touches it).
+    //
+    // DWARF member order (BrnPreUpdateSharedIo.h:212-214):
+    //   +0x000  GuiOutEventQueue (GuiEventQueueBase<256,16>)  mGuiOutEventQueue
+    //   +0x110  EventQueue<AudioCarDataLoadedEvent,16>        mAudioCarDataLoadedQueue
+    //   +0x2A0  AudioEffectsMessageQueue (VariableEventQueue<128,16>) mAudioEffectsMessageQueue
+    //   sizeof == 0x330 (816)
+    //
+    // The X360 SetPreUpdateOutput (0x826E0C10) copies this struct in three steps,
+    // which fixes the offsets:
+    //   memcpy(dst+0x000, src+0x000, 0x110)   -> the GuiOut queue region
+    //   dst.mAudioCarDataLoadedQueue.miLength = 0; Append(src.mAudioCarDataLoadedQueue)
+    //   memcpy(dst+0x2A0, src+0x2A0, 0x090)   -> the AudioEffects queue region
+    // The middle queue is copied via Clear()+Append (NOT memcpy) because it owns a
+    // self-referential mpEvents pointer into its own inline buffer.
+    //
+    // The GuiOut and AudioEffects queues are NOT touched member-wise by this group,
+    // so they are modelled as named opaque byte storage of their exact X360 width;
+    // the real typed members land with the BrnPreUpdateSharedIo.h TU without moving
+    // anything. The AudioCarDataLoadedQueue IS modelled as its real committed type
+    // (EventQueue<AudioCarDataLoadedEvent,16>) so the Clear()+Append the X360 body
+    // performs are reconstructed by name against the committed queue generics.
+    // FLAG: minimal slice -- the omitted GuiOut/AudioEffects queue internals are
+    // reconstructed by the BrnPreUpdateSharedIo.h TU; do not duplicate them here.
+    // =========================================================================
+    typedef CgsModule::EventQueue<BrnWorld::RaceCarEntityModuleIO::AudioCarDataLoadedEvent, 16>
+        AudioCarLoadedDataQueue;   // BrnWorldModuleIO.h:1505 (DWARF typedef)
+
+    struct PreUpdateOutput
+    {
+        // GetCarDataLoadedQueue() const (BrnPreUpdateSharedIo.h:193); referenced by
+        // SetPreUpdateOutput to merge the source's audio-car-loaded events.
+        const AudioCarLoadedDataQueue& GetCarDataLoadedQueue() const { return mAudioCarDataLoadedQueue; }
+        AudioCarLoadedDataQueue&       GetCarDataLoadedQueue()       { return mAudioCarDataLoadedQueue; }
+
+        u8                      maGuiOutEventQueueStorage[0x110];     // @ +0x000 mGuiOutEventQueue
+        AudioCarLoadedDataQueue mAudioCarDataLoadedQueue;            // @ +0x110 (0x190 wide)
+        u8                      maAudioEffectsMessageQueueStorage[0x90]; // @ +0x2A0 mAudioEffectsMessageQueue
+
+        static void _AssertLayout()
+        {
+            // X360 byte-faithful up to the audio-car-loaded queue: the leading GuiOut
+            // region is pure POD storage (no host-wider members), so the queue's start
+            // is asserted at its exact X360 offset (load-bearing for the memcpy split).
+            static_assert(offsetof(PreUpdateOutput, mAudioCarDataLoadedQueue) == 0x110,
+                          "PreUpdateOutput.mAudioCarDataLoadedQueue @ +0x110");
+            // X360-32bit vs host-64bit divergence: AudioCarDataLoadedEvent embeds a
+            // host-wider pointer (mpVehicleListEntry: 4B on X360, 8B on host) and the
+            // queue's mpEvents pointer is likewise host-wider, so the queue is larger on
+            // the 64-bit gate than the X360 0x190. The trailing AudioEffects region and
+            // total size therefore CANNOT be asserted at the X360 offsets 0x2A0 / 0x330;
+            // members are pinned BY NAME and SEQUENCE only past the queue. The three-step
+            // SetPreUpdateOutput copy stays correct because it copies each region by its
+            // named bounds (sizeof storage / Clear()+Append), never by absolute offset.
+        }
+    };
+
     // BrnSound::Module::Io::LogicInputBuffer -- the per-frame logic input payload the
     // sound logic module reads. Derives from CgsModule::IOBuffer.
     struct LogicInputBuffer : public CgsModule::IOBuffer
@@ -101,6 +163,39 @@ namespace Io
         {
             static_assert(offsetof(RootInputBuffer, mPropUpdateNotificationQueueStorage) == 0x10520,
                           "PropUpdateNotificationQueue @ +0x10520");
+        }
+    };
+
+    // BrnSound::Module::Io::RootPreUpdateOutputBuffer (DWARF BrnRootSoundModuleIo.h:322)
+    // -- the root sound module's pre-update output payload. Derives from CgsModule::
+    // IOBuffer and holds a single PreUpdateOutput. The X360 places mPreUpdateOutput at
+    // this+0x08: the 1-byte IOBuffer status base pads up to the PreUpdateOutput's
+    // 8-byte alignment (its leading queue member is 8-aligned). Confirmed by the two
+    // accessor bodies returning/operating at this+0x08:
+    //   * GetPreUpdateOutput() const  (X360 0x823B8BB8, read-lock "Not locked for
+    //     reading", BrnRootSoundModuleIo.h:338) -- returns &mPreUpdateOutput.
+    //   * SetPreUpdateOutput(const PreUpdateOutput&)  (X360 0x826E0C10, write-lock
+    //     "Not locked for writing", BrnRootSoundModuleIo.h:346) -- copies the source
+    //     PreUpdateOutput into mPreUpdateOutput (POD spans by memcpy, the
+    //     audio-car-loaded queue by Clear()+Append).
+    struct RootPreUpdateOutputBuffer : public CgsModule::IOBuffer
+    {
+        // BrnRootSoundModuleIo.h:331 (DWARF; own TU, declared-only here).
+        void Construct();
+
+        // BrnRootSoundModuleIo.h:338 (DWARF). X360 0x823B8BB8.
+        const PreUpdateOutput& GetPreUpdateOutput() const;
+
+        // BrnRootSoundModuleIo.h:346 (DWARF). X360 0x826E0C10.
+        void SetPreUpdateOutput(const PreUpdateOutput& lPreUpdateOutput);
+
+    private:
+        PreUpdateOutput mPreUpdateOutput;   // @ +0x08 (X360)
+
+        static void _AssertLayout()
+        {
+            static_assert(offsetof(RootPreUpdateOutputBuffer, mPreUpdateOutput) == 0x08,
+                          "RootPreUpdateOutputBuffer.mPreUpdateOutput @ +0x08");
         }
     };
 

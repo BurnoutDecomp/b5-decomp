@@ -67,6 +67,17 @@ namespace BrnWorld
 
         void AssertIsProp() const;              // inlined tripwire (owner byte == 3)
 
+        // ADDITIVE GROW (FLAG): conversion to CgsSceneManager::EntityId.
+        // 0x822B78E8 — BrnWorld::PropEntityID::operator class CgsSceneManager::EntityId().
+        // The X360 body reads the owner byte (`lbz r11,0(r30)`), fires the owner tripwire
+        // ("mEntityId.GetOwner() == E_ENTITYTYPE_PROP", BrnPropEntityID.h:278) when it is
+        // not 3, then copies the whole packed word into the returned EntityId
+        // (`lwz r11,0(r30); stw r11,0(r31)` -> result.muValue = mEntityId.muValue). Called by
+        // BrnWorld::PropCellManager::AddPropToScene and BrnWorld::PropZoneManager::UpdateInstance.
+        // CgsSceneManager::EntityId is the same packed handle the project aliases as EntityId
+        // (BrnCommonTypes.h struct EntityId { u32 muValue; }), so the operator yields it.
+        operator EntityId() const;              // 0x822B78E8
+
         EntityId mEntityId;
     };
 

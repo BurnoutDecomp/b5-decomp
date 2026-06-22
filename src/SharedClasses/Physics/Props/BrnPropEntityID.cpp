@@ -66,6 +66,21 @@ namespace BrnWorld
                           | (static_cast<u32>(luEntityIndex) << KU_ENTITY_INDEX_BASE);
     }
 
+    // 0x822B78E8: operator CgsSceneManager::EntityId(). The asm reads the owner byte
+    // (`lbz r11,0(r30); cmplwi r11,3`) and fires the owner tripwire when it is not 3
+    // BEFORE copying, then copies the full packed word into the result EntityId
+    // (`lwz r11,0(r30); stw r11,0(r31)`). The tripwire here is the AssertIsProp field
+    // extraction (endian-independent owner read, == the asm's high-byte compare); the
+    // copy is the whole-word muValue assignment. CgsSceneManager::EntityId is the
+    // project-aliased EntityId, so the return type is EntityId.
+    PropEntityID::operator EntityId() const
+    {
+        AssertIsProp();
+        EntityId lResult;
+        lResult.muValue = mEntityId.muValue;
+        return lResult;
+    }
+
     // 0x822B7A70: AssertIsProp; then assert index < 1<<10 (baked CgsEntityId.h:167
     // "luPartIndex < (1U << KU_NUM_BITS_FOR_PART_NUM)"); finally splice the field:
     // muValue = (muValue & 0xFFFFFC00) | idx (`clrrwi r11,r11,10`, `or`).
