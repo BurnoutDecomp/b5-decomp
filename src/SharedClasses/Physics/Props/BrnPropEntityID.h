@@ -25,6 +25,7 @@
 #include "BrnCommonTypes.h"                               // EntityId { u32 muValue }
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h" // VolumeInstanceId { u64 muId }
+#include "GameShared/GameClasses/SceneManager/CgsVolumeId.h"         // VolumeId { u64 mId } (PropVolumeID home)
 
 namespace BrnWorld
 {
@@ -127,5 +128,53 @@ namespace BrnWorld
         void AssertIsProp() const;
 
         CgsSceneManager::VolumeInstanceId mVolumeInstanceId;
+    };
+
+    // ---------------------------------------------------------------------------
+    // FLAGGED ADDITIVE GROW (BrnWorld group): the DecFIGS DWARF places
+    // BrnWorld::PropVolumeID in this same header (BrnPropEntityID.h:71, members at
+    // :116-:158) and the X360 Set asm bakes its assert strings against this file
+    // (lines 387 / 311 / 312), so its home is here alongside its siblings
+    // PropEntityID / PropVolumeInstanceID. Nothing above is modified; this only adds
+    // the new type + the CgsVolumeId include (added at the top).
+    //
+    // BrnWorld::PropVolumeID — wraps a CgsSceneManager::VolumeId whose 64-bit packed
+    // word carries an owner byte + a packed (type-id, volume-number) payload in its
+    // low 32 bits. The X360 Set body (0x822B7C20) is authoritative on the layout:
+    //     owner       : bits [16..23]  (8 bits)  — VolumeId::GetOwner(); E_ENTITYTYPE_PROP == 3
+    //     typeId      : bits  [6..15]  (10 bits) — KU_BITS_FOR_TYPE_ID == 10
+    //     volumeNumber: bits  [0..5]   ( 6 bits) — KU_BITS_FOR_VOLUME_NUMBER == 6
+    //   Set @ 0x822B7C20  builds  mId = (E_ENTITYTYPE_PROP << 16)
+    //                                 | ((luPropType << KU_TYPE_ID_OFFSET) & KU_TYPE_ID_MASK)
+    //                                 | (luVolumeNumber & KU_VOLUME_NUMBER_MASK)
+    //     with three tripwires (asm order):
+    //       GetOwner()==E_ENTITYTYPE_PROP            (line 387) — reads the pre-existing owner byte
+    //       (luPropType >> KU_BITS_FOR_TYPE_ID)==0   (line 311)
+    //       (luVolumeNumber >> KU_BITS_FOR_VOLUME_NUMBER)==0 (line 312)
+    // The owner tripwire reads the OWNER BYTE of the word *before* the new value is
+    // stored (`ld; srdi 16; clrlwi 24; cmplwi 3` precedes the `std`), so the asserted
+    // owner is whatever Construct() seeded (E_ENTITYTYPE_PROP). Field constants/masks
+    // are the DecFIGS DWARF values (BrnPropEntityID.h:147-155).
+    struct PropVolumeID
+    {
+        // --- packed-field geometry (DWARF BrnPropEntityID.h:147-155; X360-consistent) ---
+        static const u32 KU_BITS_FOR_VOLUME_NUMBER = 6;       // :147
+        static const u32 KU_BITS_FOR_TYPE_ID       = 10;      // :148
+        static const u32 KU_VOLUME_NUMBER_OFFSET   = 0;       // :150
+        static const u32 KU_TYPE_ID_OFFSET         = 6;       // :151
+        static const u32 KU_VOLUME_NUMBER_MASK     = 0x0000003Fu; // 63   :154 bits [0..5]
+        static const u32 KU_TYPE_ID_MASK           = 0x0000FFC0u; // 65472 :155 bits [6..15]
+
+        PropVolumeID() {}                       // BrnPropEntityID.h:141 (trivial)
+        explicit PropVolumeID(CgsSceneManager::VolumeId lVolumeId) // :142
+            : mVolumeId(lVolumeId) {}
+
+        // 0x822B7C20 — pack (propType, volumeNumber) over the existing owner byte.
+        void Set(u16 luPropType, u8 luVolumeNumber);
+
+        // Owner tripwire (baked line 387).
+        void AssertIsProp() const;
+
+        CgsSceneManager::VolumeId mVolumeId;
     };
 }

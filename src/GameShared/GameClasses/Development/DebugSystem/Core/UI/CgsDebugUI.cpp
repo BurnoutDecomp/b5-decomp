@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // DebugManagerConstructParameters
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (Get2DRenderer guard)
 
 // CgsDev::DebugUI::DebugUI - the manager accessors every DebugComponent / manager reaches through
 // GetUI(). The X360 reads them as fixed sub-objects of the UI singleton (MenuManager@+228,
@@ -42,7 +43,15 @@ namespace CgsDev
         // X360 CgsDebugUI.cpp:345 is empty (the debug allocator owns the managers' pool backing).
         void DebugUI::Destruct() {}
 
-        Debug2DImmediateRender* const DebugUI::Get2DRenderer() const   { return mp2dRender; }
+        // X360 0x828221A8 (CgsDebugUI.h:246). Asserts the 2D immediate renderer has been wired
+        // (DebugManager::ConstructRenderer calls Set2DRenderer at boot) then returns it. Every
+        // window/menu/log ComputeSize-style measure path reaches the font metrics through here.
+        Debug2DImmediateRender* const DebugUI::Get2DRenderer() const
+        {
+            CGS_ASSERT(mp2dRender != NULL, "mp2dRender != NULL");
+            return mp2dRender;
+        }
+
         void DebugUI::Set2DRenderer(Debug2DImmediateRender* lpRender)  { mp2dRender = lpRender; }
 
         // Bounded string helpers (MakeFullPath/menu-path building use these). Always null-terminate
