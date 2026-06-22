@@ -18,7 +18,7 @@ namespace CgsMemory
     // count = miCommandSize); result = ++miNumCommands.
     s32 DataStreamCommandPoster::AddCommand(void* lpCommand)
     {
-        // X360 fires at CgsDataStreamCommandPoster.cpp:199 / :200.
+        // Two X360 assert tripwires (fire-on-failure), in store order.
         CGS_ASSERT(!mbStreaming,
                    "Streaming has already begun so can't syncronously add commands\n");
         CGS_ASSERT(miNumCommands < miMaxCommands,
@@ -42,7 +42,7 @@ namespace CgsMemory
     // vs AddCommand, same product) and stored to *lppOutBuffer; result = ++miNumCommands.
     s32 DataStreamCommandPoster::AllocateCommand(void** lppOutBuffer)
     {
-        // X360 fires at CgsDataStreamCommandPoster.cpp:242 / :243 / :244.
+        // Three X360 assert tripwires (fire-on-failure), in store order.
         CGS_ASSERT(!mbStreaming,
                    "Streaming has already begun so can't synchronously add commands\n");
         CGS_ASSERT(miNumCommands < miMaxCommands,

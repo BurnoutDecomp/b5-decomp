@@ -11,9 +11,14 @@ namespace BrnGame
 {
     struct BrnCpuMonitors
     {
-        s32 miUT_TotalUpdate;
-        s32 miUT_EachUpdate;
-        s32 miUT_NetworkAIRaceCar;
+        s32 miUT_TotalUpdate;       // +0x00
+        s32 miUT_EachUpdate;        // +0x04
+        // X360 +0x08: Construct stores the 39 monitor handles at {0,4,0xC..0x9C},
+        // skipping +0x08 (asm hole) -> there is a non-monitor reserved word here that
+        // Construct leaves untouched. Modelled so the 39 named handles land at their
+        // true offsets (miUT_NetworkAIRaceCar@0xC .. miUT_SoundUpdate@0x9C; sizeof 160).
+        s32 mReserved08;
+        s32 miUT_NetworkAIRaceCar;  // +0x0C
         s32 miUT_Network;
         s32 miUT_GameState;
         s32 miUT_GUI;

@@ -1,38 +1,22 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/FSM/CgsFsm.h"   // CgsFsm::Fsm + CgsFsm::State
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x... (CgsFsm::Fsm::Update)
-// First-pass reconstruction: behaviour-faithful to the X360 pseudocode. Update
-// dispatches three virtual calls on the current state. The three slots are named
-// by their vtable position (offsets 8/12/16 -> slots 2/3/4); their semantics are
-// not yet recovered, hence the placeholder names.
+// CgsFsm::Fsm::Update @ 0x82835CE0
+// Per-frame drive of the current state. When a state is set, runs the three-call
+// spine in vtable order: PreUpdate (State vtable +12), Update (+8), PostUpdate (+16);
+// no-op when there is no current state. Behaviour-faithful to the X360 pseudocode,
+// which reads mpCurrentState and dispatches the three State virtuals through its
+// vtable. Reuses the committed CgsFsm::State (CgsState.h) by name.
 
 namespace CgsFsm
 {
-    struct IState
+    void Fsm::Update()
     {
-        virtual void slot0() = 0;
-        virtual void slot1() = 0;
-        virtual void slot2() = 0;  // vtable offset 8
-        virtual void slot3() = 0;  // vtable offset 12
-        virtual int  slot4() = 0;  // vtable offset 16
-    };
-
-    struct Fsm
-    {
-        IState* current;  // [0]
-
-        int Update();
-    };
-
-    int Fsm::Update()
-    {
-        IState* state = current;
-        if (state)
+        State* lpState = mpCurrentState;
+        if (lpState)
         {
-            state->slot3();
-            state->slot2();
-            return state->slot4();
+            lpState->PreUpdate();
+            lpState->Update();
+            lpState->PostUpdate();
         }
-        return 0;
     }
 }
