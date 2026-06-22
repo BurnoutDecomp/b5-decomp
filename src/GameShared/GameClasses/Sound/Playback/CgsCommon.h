@@ -29,6 +29,15 @@ namespace Playback
 struct Name
 {
 public:
+    // CgsCommon.h. Default-construct an (uninterned) Name. The DWARF lists Name()
+    // (see the deferred-surface note above); modelled here as a trivial zero-init so
+    // Name-bearing aggregates (Entity, and thus VoiceSchema/FeatureSchema) are
+    // default-constructible. The X360 VoiceSchema ctor leaves mName untouched and
+    // only seeds mTypeName, which requires the embedding Entity base to be default-
+    // constructible. FLAG: ADDITIVE home-grow for the VoiceSchema TU; shape-only,
+    // not a recon'd standalone ctor TU (K_NULL_NAME semantics are 0).
+    Name() : mHash(0) {}
+
     // CgsCommon.h:126. Construct from a C string: hash + intern it. Constructing a
     // Name from a string interns it (MakeHash -> Store), which is exactly what the
     // AEMS param-index static initializers do. INLINED-ONLY on X360 (no out-of-line

@@ -1,9 +1,11 @@
 #include "types.hpp"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnTraffic::HullRuntime::Construct @ 0x82751428
-//   BrnTraffic::HullRuntime::Prepare   @ 0x82751438
-//   BrnTraffic::HullRuntime::Release   @ 0x82751578
+//   BrnTraffic::HullRuntime::Construct              @ 0x82751428
+//   BrnTraffic::HullRuntime::Prepare                @ 0x82751438
+//   BrnTraffic::HullRuntime::Release                @ 0x82751578
+//   BrnTraffic::HullRuntime::GetFirstParamInSection @ 0x82706768
+//   BrnTraffic::HullRuntime::IsStoplineRed          @ 0x827068A0
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -46,6 +48,10 @@ namespace BrnTraffic
         void Construct();
         void Prepare(const Hull* lpHull, u16 luHull);
         void Release();
+
+        // X360 @ 0x82706768 / 0x827068A0 -- bounds-asserted per-hull lookups.
+        u16  GetFirstParamInSection(u32 luSection) const;
+        bool IsStoplineRed(u32 luStopline) const;
 
         f32 mafJunctionStateChangeTimes[16];
         u8 mauJunctionCurrentStates[16];
@@ -95,5 +101,35 @@ namespace BrnTraffic
     {
         CGS_ASSERT(mbPrepared == true, "mbPrepared == true");
         mbPrepared = false;
+    }
+
+    // BrnTrafficHullRuntime.h:151-152 -- the section's first-param head index.
+    // X360 @ 0x82706768: assert mbPrepared (line 151), bounds-assert the section
+    // against muNumSectionsInHull (line 152), then return mauFirstParamInSection
+    // [luSection] (the asm reads the u16 at this + 2*(luSection+40), and the table
+    // base is at byte +0x50 == 2*40, so the index math is mauFirstParamInSection
+    // [luSection]). The X360 bounds assert builds a rich streamed message
+    // ("Out of range section in hull runtime for hull <i>, section was <n>, max is
+    // <m>") via the out-of-line CgsDev debug-stream operators (un-homed, not owned
+    // by this group); the faithful stringized-condition CGS_ASSERT carries the same
+    // guard semantics and matches the surrounding TU style.
+    u16 HullRuntime::GetFirstParamInSection(u32 luSection) const
+    {
+        CGS_ASSERT(mbPrepared, "mbPrepared");
+        CGS_ASSERT(luSection < muNumSectionsInHull, "luSection < muNumSectionsInHull");
+        return mauFirstParamInSection[luSection];
+    }
+
+    // BrnTrafficHullRuntime.h:161-162 -- whether the stopline's light is red.
+    // X360 @ 0x827068A0: assert mbPrepared (line 161), bounds-assert the stopline
+    // against muNumStoplinesInHull (line 162), then return mabStoplineRedState
+    // [luStopline] (the asm reads the byte at this + 0x250 + luStopline, and the
+    // table base is at byte +0x250, so the index is mabStoplineRedState[luStopline]).
+    // Same rich-vs-stringized assert note as GetFirstParamInSection above.
+    bool HullRuntime::IsStoplineRed(u32 luStopline) const
+    {
+        CGS_ASSERT(mbPrepared, "mbPrepared");
+        CGS_ASSERT(luStopline < muNumStoplinesInHull, "luStopline < muNumStoplinesInHull");
+        return mabStoplineRedState[luStopline];
     }
 }

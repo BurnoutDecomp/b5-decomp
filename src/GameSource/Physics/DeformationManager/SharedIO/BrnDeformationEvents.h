@@ -75,6 +75,21 @@ namespace BrnPhysics
             EBodyParts meType;
         };
 
+        // ADDITIVE GROW (flagged by Deformation group, BrnIKDrivenPoint/DetachedPartRenderEvent
+        // TU): the per-frame render-side detached-part transform event. Member names/types from
+        // the DecFIGS DWARF (BrnDeformationOutputInterface.h:56). The X360
+        // BaseEventQueue<DetachedPartRenderEvent>::AddEvent (@0x825E5C78) copies the leading
+        // 64-byte Matrix44Affine in four 16-byte SIMD stores (offsets +0/+16/+32/+48), then the
+        // two scalar dwords at +64/+68 and the bool at +72 — i.e. stride 80 (0x50). alignas(16):
+        // carries a Matrix44Affine (SIMD) and the owning queue's inline buffer is 16-byte aligned.
+        struct alignas(16) DetachedPartRenderEvent
+        {
+            Matrix44Affine mTransform;        // +0x00  (4x Vector3 lane = 64 bytes)
+            EntityId       mVehicleEntityId;  // +0x40
+            s32            miPartIndex;       // +0x44
+            bool           mbIsAttached;      // +0x48
+        };
+
         // Output event: current orientation/velocity of a hinged (jointed) part.
         // NOT 16-byte aligned (no SIMD members): DeformationOutputInterface places its
         // queue at byte +116, which is only 4-aligned — proof it is a plain 4-aligned
