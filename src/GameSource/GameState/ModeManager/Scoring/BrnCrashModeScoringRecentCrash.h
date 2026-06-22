@@ -1,7 +1,39 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<RecentCrash,64> maRecentCrashes
+#include "BrnCommonTypes.h"                                   // EntityId, CgsID (typedef u64)
+#include "GameSource/BurnoutConstants.h"                      // EActiveRaceCarIndex
+#include "SharedClasses/Traffic/BrnTrafficVehicleType.h"      // BrnTraffic::VehicleClass
+#include "GameShared/GameClasses/Containers/CgsArray.h"       // Array<RecentCrash,64> maRecentCrashes
+#include "GameShared/GameClasses/Containers/CgsRingBuffer.h"  // CgsContainers::FixedRingBuffer<u16,8> mRecentlyHitPropSet
+
+// --- crash-mode event / interface parameter types (pointer-only in the decls below) ---
+// These belong to other (not-yet-homed in this scope) TUs; CrashModeScoring names them only by
+// pointer, so a forward declaration keeps the keystone's by-value embed leak-free. The handlers
+// that must DEREFERENCE one of these are bodied to what compiles and FLAGGED in the .cpp.
+struct CrashComboItemEvent;
+struct TriggerCrashBreakerEvent;
+struct PickupEvent;
+struct VehicleLeaptEvent;
+
+namespace BrnWorld { namespace RaceCarEntityModuleIO { class RCEntityActiveRaceCarOutputInterface; } }
+namespace VehicleOutputInterface { class PhysicalTrafficStateQueue; }
+
+namespace BrnTraffic
+{
+    // VehicleScoreLookup's score-category tag (DWARF BrnCrashModeScoring.cpp:82). The four explicit
+    // category values are the ones the X360 GetVehicleScoreData fallback writes by VehicleClass
+    // (0x82312AB0: car->0, van->1, bus->3, bigrig->4); the lookup table publishes one per row.
+    // Minimal home grown for this TU (un-homed elsewhere); plain enum keeps the parameter passable.
+    enum VehicleScoreCategory : s32
+    {
+        E_VEHICLESCORECATEGORY_CAR     = 0,
+        E_VEHICLESCORECATEGORY_VAN     = 1,
+        E_VEHICLESCORECATEGORY_TRUCK   = 2,
+        E_VEHICLESCORECATEGORY_BUS     = 3,
+        E_VEHICLESCORECATEGORY_BIGRIG  = 4
+    };
+}
 
 // Minimal element-type home for the fixed-capacity
 // Array<BrnGameState::CrashModeScoring::RecentCrash, 64> leaf instantiation (the IsFull/
@@ -44,10 +76,9 @@ struct CrashModeScoring
 
     // Members the debug overlay touches that have no accessor in the DWARF: OnActivate registers the
     // infinite-crash flag, and DisplayScores reads mfHighestJump directly (the X360 reads +0x320 inline;
-    // CrashModeScoring's getter set is closed -- there is no GetHighestJump). The full member layout is
-    // the BrnCrashModeScoring.cpp TU's responsibility; only the fields this debug TU names are sliced in.
-    bool mbInfiniteCrashMode;           // BrnCrashModeScoring.h:227
-    f32  mfHighestJump;                 // BrnCrashModeScoring.h:256 (+0x320)
+    // CrashModeScoring's getter set is closed -- there is no GetHighestJump). Both members are now
+    // carved at their asm-proven offsets in the full layout block below (mbInfiniteCrashMode @+0x55,
+    // mfHighestJump @+0x320) so the debug overlay still names them by hand.
 
     // --- slice grown so BrnGameState::ScoringSystem can embed CrashModeScoring BY VALUE and compile ---
     // ScoringSystem holds a CrashModeScoring sub-scorer member; it drives the lifecycle and reads the
@@ -80,22 +111,93 @@ struct CrashModeScoring
     // Called by DealWithHitTrafficCar / DealWithScoreForVehicleClass.
     RecentCrash* GetRecentCrash(u16 luTrafficCarIndex);   // BrnCrashModeScoring.h (X360 0x8232BEF8)
 
-    // NOMINAL reserved storage. The committed home above names only the handful of members the debug
-    // overlay reads by hand; the by-value embed in ScoringSystem needs a non-trivial footprint, so the
-    // remaining ~0x320 bytes of live-scoring state (the CrashScoreDebugComponent sub-object, the
-    // FixedRingBuffer/Array sets, the timers, the per-class crash counters, the air-time accumulators,
-    // ...) are reserved here as opaque bytes. NOT byte-verified -- the real layout/order lands with the
-    // BrnCrashModeScoring.cpp TU (DWARF members run BrnCrashModeScoring.h:215-258).
+    // --- slice grown for this type's own TU (BrnCrashModeScoring.cpp), batch of 13 ---
+    // The crash-event handlers + per-frame Update that mutate the live-scoring members named
+    // below. Signatures are DWARF-authoritative; bodies are reconstructed store-for-store from
+    // each method's X360 dossier (see BrnCrashModeScoring.cpp). Event/interface parameter types
+    // that are NOT yet homed in this scope are forward-declared (pointer-only) so the keystone's
+    // by-value embed stays leak-free; the handlers that must DEREFERENCE such a type are bodied
+    // to what compiles and FLAGGED in the .cpp.
+    void DealWithComboItem(const CrashComboItemEvent* lpComboItemEvent);            // X360 0x82312918
+    void DealWithCrashbreakerRequest(const TriggerCrashBreakerEvent* lpEvent);      // X360 0x82320EB8
+    void DealWithHitProp(u16 luPropIndex, u8 luPropFlags);                          // X360 0x82320DC8
+    bool DealWithHitTrafficCar(EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex,
+                               EntityId lEntityIdA, EntityId lEntityIdB,
+                               u16* lpOutVictimIndex);                              // X360 0x82338558
+    void DealWithPickup(const PickupEvent* lpPickupEvent);                          // X360 0x82312970
+    void DealWithScoreForVehicleClass(u16 luTrafficEntityIndex,
+                                      BrnTraffic::VehicleClass leVehicleClass,
+                                      CgsID lVehicleTypeID,
+                                      s32* lpiVehicleTypeCrashed,
+                                      s32* lpiVehicleBaseScore,
+                                      BrnTraffic::VehicleScoreCategory* lpeVehicleScoreCategory,
+                                      s32* lpiScoreMultiplierEarned,
+                                      s32* lpiComboBonusEarned);                    // X360 0x82338778
+    void DealWithVehicleLeaping(const VehicleLeaptEvent* lpLeapEvent);             // X360 0x82312980
+    void GetVehicleScoreData(BrnTraffic::VehicleClass leVehicleClass,
+                             CgsID lVehicleTypeID,
+                             s32* lpiScore, s32* lpiMultiplier,
+                             BrnTraffic::VehicleScoreCategory* lpeCategory);        // X360 0x82312AB0
+    bool IsActiveCrash(const RecentCrash* lpCrash) const;                          // X360 0x82312A30
+    void Update(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                const VehicleOutputInterface::PhysicalTrafficStateQueue* lpTrafficStateQueue,
+                f32 lfSimTimeStep);                                                 // X360 0x82320808
+
+    // === Full live-scoring member layout (BrnCrashModeScoring.cpp TU) ===
+    // The byte offsets below are PROVEN by the X360 asm of this TU's methods (the ClearData /
+    // DealWith* / Update store offsets pin every named member; see the OFFSET->MEMBER MAP in
+    // BrnCrashModeScoring.cpp). DWARF member ORDER (BrnCrashModeScoring.h:215-258) is authoritative
+    // for naming; the X360 store offsets are authoritative for placement. This GROWS the prior
+    // NOMINAL opaque reserve ADDITIVELY: every member is carved at its proven offset, the
+    // maRecentCrashes@+0x7C anchor (count word @+0x27C) is preserved, and the total footprint is the
+    // asm-proven 0x32C (the prior 0x320 reserve was explicitly NOMINAL / not byte-verified; the
+    // crash-mode-scorer's own TU asm reaches +0x328 as the last member, so the true size is 0x32C).
     //
-    // The recent-hit-cars set IS now named (GetRecentCrash needs it): the X360 body reaches it at
-    // this+0x7C and its count word at this+0x7C+0x200 == this+0x27C, so the opaque reserve is split
-    // around it -- a 0x7C-byte head, then maRecentCrashes (64*8 elements + the trailing count word ==
-    // 0x204 bytes), then the 0xA0-byte tail. Total footprint preserved at 0x320. Offsets/order around
-    // the array remain NOMINAL until the full BrnCrashModeScoring.cpp layout lands; only maRecentCrashes
-    // is anchored.
-    u8 maReservedHead[0x7C];                  // NOMINAL -- members before the recent-hit set (BrnCrashModeScoring.h:215..)
-    Array<RecentCrash, KI_MAX_RECENTLY_HIT_CARS> maRecentCrashes; // +0x7C  the live recent-hit-cars set
-    u8 maReservedTail[0x320 - 0x7C - 0x204];  // NOMINAL -- remaining live-scoring state past the recent-hit set
+    // Three sub-objects are kept as opaque byte storage to keep this home leak-free / decoupled from
+    // the keystone's by-value embed (they are not touched by name by any of this TU's 13 methods):
+    //   - the embedded CrashScoreDebugComponent (0x20 bytes; its real type derives from
+    //     CgsDev::DebugComponent and is homed in BrnCrashScoreDebugComponent.h),
+    //   - the two Vector3 player-position members (Update mutates them only via raw vector ops),
+    //   - the CgsID stunt-set ring (only Construct/Clear, not in this batch, touch it).
+
+    u8  maCrashScoreDebugComponent[0x20];     // +0x00  CrashScoreDebugComponent (h:215; opaque sub-object)
+    u8  maPlayerPosLastFrame[0x10];           // +0x20  Vector3 mPlayerPosLastFrame  (h:219; vector-op only)
+    u8  maPlayerPosLastStored[0x10];          // +0x30  Vector3 mPlayerPosLastStored (h:220; vector-op only)
+    f32 mfTimeSincePlayerCarMoved;            // +0x40  h:221
+    f32 mfTimeSinceLastEvent;                 // +0x44  h:222
+    f32 mfTimeSinceModeStart;                 // +0x48  h:223  (the running crash clock IsActiveCrash reads)
+    f32 mfDistanceUntilStorePosition;         // +0x4C  h:224
+    f32 mfPlayerBoostPercentage;              // +0x50  h:225
+    bool mbPlayerIsCrashing;                  // +0x54  h:226
+    bool mbInfiniteCrashMode;                 // +0x55  h:227  (debug overlay registers this flag)
+    u8  maPad0x56[2];                         //         alignment pad up to the prop ring
+
+    CgsContainers::FixedRingBuffer<u16, 8> mRecentlyHitPropSet; // +0x58  h:231 (KI_MAX_RECENTLY_HIT_PROPS == 8)
+
+    Array<RecentCrash, KI_MAX_RECENTLY_HIT_CARS> maRecentCrashes; // +0x7C  h:234 the live recent-hit-cars set
+                                                                  //        (count word @+0x27C; ends @+0x280)
+
+    u8  maRecentStuntSet[0x58];               // +0x280 FixedRingBuffer<CgsID,8> mRecentStuntSet (h:237; opaque)
+
+    s32 miNumWheelsLastFrame;                 // +0x2D8 h:239
+    s32 miBaseScore;                          // +0x2DC h:242  (raw crash score accumulator)
+    s32 miCurrentComboCount;                  // +0x2E0 h:243  (cars in the current chain)
+    s32 miScoreMultiplier;                    // +0x2E4 h:244  (accumulated multiplier; starts at 1)
+    s32 maiNumCarsCrashed[4];                 // +0x2E8 h:245  (per VehicleClass 0..3)
+    s32 miNumCarsLeaped;                      // +0x2F8 h:246
+    s32 miNumPropsDestroyed;                  // +0x2FC h:247
+    bool mbAboutToResetCombo;                 // +0x300 h:248
+    u8  maPad0x301[3];                        //         alignment pad
+    f32 mfResetComboGracePeriod;              // +0x304 h:249
+    f32 mfDistanceTravelled;                  // +0x308 h:250
+    f32 mfTimeSinceLastHitOverheadSign;       // +0x30C h:251
+    f32 mfTimeContactingWall;                 // +0x310 h:252
+    f32 mfTotalAirTime;                       // +0x314 h:253
+    f32 mfCurrentJumpAirTime;                 // +0x318 h:254
+    f32 mfLongestJumpAirTime;                 // +0x31C h:255
+    f32 mfHighestJump;                        // +0x320 h:256  (debug overlay reads this directly)
+    s32 miStuntsPerformed;                    // +0x324 h:257
+    s32 miCarDestructionBonus;                // +0x328 h:258
 
     friend class CrashScoreDebugComponent;
 };
