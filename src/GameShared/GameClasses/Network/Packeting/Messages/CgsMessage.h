@@ -82,4 +82,53 @@ namespace CgsNetwork
         bool Pack(s32 liA, s32 liB, s32 liC, s32* lpiBitsWritten);
         Message* UnPack(s32 liA, s32 liB, s32 liC, s32* lpiBitsRead);
     };
+
+    // 16-bit frame-ring helpers (homed in CgsMessageFrameUtils.cpp; declared in
+    // CgsMessage.h in the leak). Declared here so the rest of the Message hierarchy
+    // -- e.g. HostMigrationManager::IsHostAlive -- can call them by name.
+    bool UInt16IsLargerWrapped(u16 lu16A, u16 lu16B);
+    bool UInt16IsLargerOrEqualWrapped(u16 lu16A, u16 lu16B);
+    u16  GetFrameDiffWrapped16(u16 lu16FrameA, u16 lu16FrameB);
+
+    // CgsNetwork::ReliableMessage  (CgsMessage.h in the leak)
+    //
+    // A Message subclass that carries the RELIABLE flag and a wrapped 16-bit
+    // reliable id. PrepareForSend @ 0x82882100 touches only the inherited Message
+    // base scalars (mx8Flags @+0x19, mu16Frame @+0x1C) and dispatches through the
+    // committed Message::SetType -- so the reconstructed body needs no members
+    // beyond the Message base.
+    //
+    // FLAGGED: CgsReliableMessage.cpp (a separate TU, ReliableMessage::PackOrUnpack
+    // @ 0x828821A8) currently declares its OWN local, opaque `struct
+    // ReliableMessage` (mPad[28] + mu16ReliableId @0x1C) rather than this Message
+    // subclass. The two are layout-compatible at the offsets each touches
+    // (mu16ReliableId == base mu16Frame == +0x1C). This header is the canonical
+    // home; that local definition should fold into this subclass when that TU is
+    // revisited. They are never compiled in one TU together today.
+    struct ReliableMessage : Message
+    {
+        void PrepareForSend(s32 leType, u16 lu16Frame);
+    };
+}
+
+// CgsNetwork::HostMigrationManager  (no committed home -- minimal owning header).
+//
+// IsHostAlive @ 0x82872258 reads two u16 frame fields out of the manager:
+//   +0x5BA  mu16HostFrame    (the last host heartbeat frame)
+//   +0x5D2  mu16AliveWindow  (allowed frame gap before the host is dead)
+// The surrounding bytes are not modelled by this TU, so they are reserved as a
+// sized opaque placeholder so those two named fields land at the exact offsets the
+// asm dereferences. FLAGGED: only the two frame fields are reconstructed by name;
+// everything else in HostMigrationManager is an opaque sized placeholder.
+namespace CgsNetwork
+{
+    struct HostMigrationManager
+    {
+        u8  mReserved0[0x5BA];      // 0x000 .. 0x5B9 (opaque, FLAGGED placeholder)
+        u16 mu16HostFrame;          // 0x5BA
+        u8  mReserved1[0x5D2 - 0x5BA - 2]; // 0x5BC .. 0x5D1 (opaque placeholder)
+        u16 mu16AliveWindow;        // 0x5D2
+
+        bool IsHostAlive(u16 lu16CurrentFrame) const;
+    };
 }
