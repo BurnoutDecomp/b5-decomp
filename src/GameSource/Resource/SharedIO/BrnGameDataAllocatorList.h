@@ -13,6 +13,10 @@ namespace rw
     struct LinearResourceAllocator;
     namespace core { struct GeneralResourceAllocator; }
 }
+// The PPMalloc per-block report record handed to the debug-stats walk callback
+// (EA::Allocator::GeneralAllocator::BlockInfo) -- it is a nested type, so the full vendor header
+// is needed to name it in the callback declaration below.
+#include "ppmalloc/EAGeneralAllocator.h"   // EA::Allocator::GeneralAllocator::BlockInfo
 
 // BrnResource::GameDataIO::AllocatorList -- the GameDataModule's allocator registry. It maps a bank
 // id (0..0x42) to a typed allocator: a raw resource, a CgsMemory::LinearMalloc / HeapMalloc, or an
@@ -51,6 +55,20 @@ namespace BrnResource
             CgsMemory::LinearMalloc*            GetAudioStreamAllocator() const { return mpAudioStreamAllocator; }
 
         private:
+            // DWARF BrnGameDataAllocatorList.h:85 -- the running allocated/free byte totals the
+            // GeneralAllocatorReportCB walk accumulates while DebugDumpStats reports an rw general heap.
+            struct GenAllocUsage
+            {
+                u32 muAllocated;   // BrnGameDataAllocatorList.h:87
+                u32 muFree;        // BrnGameDataAllocatorList.h:88
+            };
+
+            // DWARF BrnGameDataAllocatorList.h:103 -- the per-block callback PPMalloc's report walk
+            // invokes once per block; tallies the block's data size into muAllocated or muFree by its
+            // block type (X360 0x82662E90). Declared as a callback (no `this`); registered statically.
+            static bool GeneralAllocatorReportCB(const EA::Allocator::GeneralAllocator::BlockInfo* lpBlockInfo,
+                                                 void* lpContext);
+
             // Validate the bank id + its registered allocator type, returning the slot index into the
             // matching pointer array (X360: each Get* asserts id<=0x42, map[id]>=0, type[id]==expected).
             s32 GetAllocatorSlot(s32 liBankId, CgsMemory::MemoryMap::EAllocatorType leExpectedType) const;

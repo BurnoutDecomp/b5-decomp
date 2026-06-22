@@ -69,7 +69,8 @@ struct EffectBase
     };
 
     EffectBase()
-        : mfDeltaTime(0.0f)
+        : miObjectId(0)
+        , mfDeltaTime(0.0f)
         , meAttachState(E_ATTACH_STATE_NONE)
         , meDetachState(E_DETACH_STATE_NONE)
         , mpLogicModule(nullptr)
@@ -80,12 +81,21 @@ struct EffectBase
 
     EAttachState GetAttachState() const { return meAttachState; }
 
+    // CgsEffectBase.h:739 (DWARF) — the per-instance class/object id. The X360
+    // reads it at +0x14 (`*(controller+20)`) when a controller-attach hook tests a
+    // supplied controller's class; exposed BY NAME for those tests (e.g.
+    // SingleGinsuEffect::AttachController). FLAG: ADDITIVE home-grow of this minimal
+    // base for the controller-attach TUs; the canonical full home is CgsEffectBase.h.
+    s32 GetObjectId() const { return miObjectId; }
+
     // ORDER mirrors the X360 access pattern:
+    //   +0x14 -> miObjectId     (controller-attach hooks read this on a controller)
     //   +0x20 -> mfDeltaTime    (Detach stores 0 here)
     //   +0x24 -> meAttachState  (Detach/ResourcesAreReady/dtor read+write here)
     //   +0x28 -> meDetachState  (dtor stores E_DETACH_STATE_FINISHED here)
     //   +0x2C -> mpLogicModule  (GetResourceRegistr reads here)
     // FLAG: X360 byte offsets; not asserted on the 64-bit host.
+    s32          miObjectId;
     f32          mfDeltaTime;
     EAttachState meAttachState;
     EDetachState meDetachState;
@@ -152,7 +162,7 @@ struct BrnEffectObject : public CgsSound::Logic::EffectObject,
     BrnEffectObject();
     virtual ~BrnEffectObject();
 
-    // BrnEffectObject.cpp:33 — per-class RTTI.
+    // — per-class RTTI.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char*                                                    GetTypeName() const;
 
