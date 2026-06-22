@@ -3,6 +3,22 @@
 
 #include "types.hpp"
 
+// This header is pulled in transitively by rw/rwcore_structs.h (the rw:: type vocabulary), so it is
+// included very widely. Keep <windows.h> from leaking its USER/GDI macros (GetNextWindow, DrawText,
+// GetUI...) into the project's debug-UI/render code: CRITICAL_SECTION lives in winbase.h, which the
+// LEAN_AND_MEAN subset keeps while NOGDI/NOUSER/NOMINMAX drop the colliding macros.
+#ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOGDI
+#  define NOGDI
+#endif
+#ifndef NOUSER
+#  define NOUSER
+#endif
+#ifndef NOMINMAX
+#  define NOMINMAX
+#endif
 #include <windows.h>
 
 // rw::core::debug::detail::DebugCriticalSection - RenderWare's thin wrapper around a Win32

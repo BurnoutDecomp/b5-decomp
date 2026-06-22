@@ -6,6 +6,7 @@
 #pragma once
 #include <cstdint>
 #include "rwcore_enums.h"
+#include "rw/core/debug/DebugCriticalSection.h"  // canonical DebugCriticalSection (SKIP_EMIT_BODY)
 
 // Layout verification (PDB is x64; only meaningful on a 64-bit build).
 #if defined(RW_VERIFY_LAYOUT) && (UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFull)
@@ -598,10 +599,10 @@ RW_SIZE_ASSERT(rw::core::debug::PrintOpts, 6);
 }  // namespace rw::core::debug
 namespace rw::core::debug::detail {
 
-struct DebugCriticalSection {  // sizeof = 44 (rwcore.pdb, x64)
-    uint32_t mValid;  // +0
-    uint8_t mData[40];  // +4
-};
+// DebugCriticalSection is SKIP_EMIT_BODY: the canonical hand-maintained wrapper (with
+// Create/Enter/Leave) lives in rw/core/debug/DebugCriticalSection.h (#included above);
+// its x64 layout matches (int miInitialised + CRITICAL_SECTION = 44 bytes). Emitting the
+// PDB-derived opaque body here too would be an ODR redefinition (C2011).
 RW_SIZE_ASSERT(rw::core::debug::detail::DebugCriticalSection, 44);
 }  // namespace rw::core::debug::detail
 namespace rw::core::debug {
