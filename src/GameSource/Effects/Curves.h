@@ -49,26 +49,8 @@ struct SmoothStep
     //       result = (t * 0.5 + 0.5) * (scale.y - scale.x) + scale.x
     //
     // The 0.5 factor (rodata flt_82001DA0) splits the [scale.x, scale.y] span
-    // evenly across the two halves about the mid threshold.
-    f32 Evaluate(const Vector3 &lvParams, const Vector2 &lvScale, f32 lfInput) const
-    {
-        if (lfInput < lvParams.x)
-            return lvScale.x;
-
-        if (lfInput > lvParams.z)
-            return lvScale.y;
-
-        const f32 lfSpan = lvScale.y - lvScale.x;
-
-        if (lfInput > lvParams.y)
-        {
-            const f32 lfT = (lfInput - lvParams.y) / (lvParams.z - lvParams.y);
-            return (lfT * 0.5f + 0.5f) * lfSpan + lvScale.x;
-        }
-
-        const f32 lfT = (lfInput - lvParams.x) / (lvParams.y - lvParams.x);
-        return (lfT * 0.5f) * lfSpan + lvScale.x;
-    }
+    // evenly across the two halves about the mid threshold. Defined in Curves.cpp.
+    f32 Evaluate(const Vector3 &lvParams, const Vector2 &lvScale, f32 lfInput) const;
 
     // DWARF Curves.h:126. Instance Evaluate using the stored params. Other-TU body.
     f32 Evaluate(f32 lfInput) const;
