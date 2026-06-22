@@ -48,4 +48,11 @@ namespace BrnReplays
         E_CONTEXT_DEBUG  = 1,
         E_CONTEXT_COUNT  = 2,
     };
+
+    // DWARF: BrnReplayShared.h:135-150. Replay stream sizing constants (recovered
+    // from the Feb-2007 leak). GROW this set as more replay TUs land. KI_MAX_FRUNKS
+    // is the size of the WriteStream/ReadStream frunk-index ring -- the X360
+    // InvalidateFrunksAhead @0x8264D190 wraps its ring cursor with `i % 1800`,
+    // matching this value.
+    static const s32 KI_MAX_FRUNKS = 1800; // BrnReplayShared.h:138
 }

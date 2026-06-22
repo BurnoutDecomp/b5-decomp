@@ -119,4 +119,23 @@ namespace BrnReplays
 
         return 0;
     }
+
+    // @ 0x8264C470
+    // Mode-directed serialise dispatch. The X360 body switches on meMode (read at
+    // *this+0): in E_MODE_RECORDING it tail-calls Write(buffer, size); in
+    // E_MODE_PLAYING it tail-calls Read(buffer, size); any other mode returns 0
+    // without touching the buffer. The compares are against the exact RECORDING(2)
+    // and PLAYING(5) modes -- the prepare/stalled sub-states do NOT serialise here.
+    // (Both branches are tail-calls that leave the buffer/size arg registers
+    // untouched, so the same lpBuffer/liSize pass straight through.)
+    s32 BaseSerialiser::Serialise(void* lpBuffer, s32 liSize)
+    {
+        if (meMode == E_MODE_RECORDING)
+            return Write(lpBuffer, liSize);
+
+        if (meMode == E_MODE_PLAYING)
+            return Read(lpBuffer, liSize);
+
+        return 0;
+    }
 }
