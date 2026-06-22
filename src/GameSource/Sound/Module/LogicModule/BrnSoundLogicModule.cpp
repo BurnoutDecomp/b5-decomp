@@ -1,5 +1,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (attached-buffer guard)
+
 // BrnSound::Module::SoundLogicModule -- accessor bodies recovered from
 // BURNOUT_X360_ARTIST.XEX. See BrnSoundLogicModule.h for the layout/slice notes.
 
@@ -57,6 +59,16 @@ SoundLogicModule::GetSoundTriggerAction(
 BrnSound::Logic::ResourceRegistrar& SoundLogicModule::GetResourceRegistrar()
 {
     return mResourceRegistrar;
+}
+
+// X360 0x82682518. Return the attached sound logic input buffer, asserting it is
+// non-null first (the X360 fires CgsDev::Assert with the stringized member name
+// "mpBrnLogicInputBuffer" at BrnSoundLogicModule.h:432, then still returns the
+// pointer -- a non-gating tripwire).
+Io::LogicInputBuffer* SoundLogicModule::GetBrnInputStructure()
+{
+    CGS_ASSERT(mpBrnLogicInputBuffer, "mpBrnLogicInputBuffer");
+    return mpBrnLogicInputBuffer;
 }
 
 } // namespace Module

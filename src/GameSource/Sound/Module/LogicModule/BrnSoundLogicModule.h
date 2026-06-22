@@ -77,6 +77,13 @@ struct SoundLogicModule : public BrnSound::Logic::IResourceRequester
     // embedded registrar by reference. X360 0x826838C0: &mResourceRegistrar.
     virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar();
 
+    // BrnSoundLogicModule.h:423 (DWARF). Hand out the sound logic input buffer the
+    // module reads each frame, asserting it has been attached. X360 0x82682518:
+    // loads mpBrnLogicInputBuffer (this+0x4C94), fires the "mpBrnLogicInputBuffer"
+    // assert when null, then returns it. Non-const overload (the const overload at
+    // h:431 is its own function and is not part of this slice).
+    Io::LogicInputBuffer* GetBrnInputStructure();
+
 private:
     // Members in DWARF source order (BrnSoundLogicModule.h:365-383). Only the two
     // touched members are real typed members; the rest of the class tail is omitted

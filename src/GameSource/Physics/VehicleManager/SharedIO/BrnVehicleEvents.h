@@ -253,6 +253,21 @@ namespace Vehicle
         bool     mbCrashing;
     };
 
+    // A physical-traffic vehicle was slammed/checked by another vehicle. Layout/order/types
+    // verbatim from the DWARF (BrnVehicleEvents.h:493). Five 4-byte fields, natural
+    // alignment => sizeof == 20 (0x14), matching the X360 BaseEventQueue<TrafficSlammedEvent>
+    // AddEvent's 5-_DWORD element copy and Append's 20*count XMemCpy.
+    // ADDITIVE GROW (flagged by Vehicle-events group): new event struct, no change to
+    // existing types.
+    struct TrafficSlammedEvent
+    {
+        EntityId          mTrafficId;
+        EntityId          mEntityThatSlammedIt;
+        eCrashTrafficType meCrashTrafficType;
+        f32               mfSteeringDirection;
+        f32               mfDriveDirection;
+    };
+
     struct TrafficRemovedEvent
     {
         EntityId     mRemovedVehicleEntityId;
