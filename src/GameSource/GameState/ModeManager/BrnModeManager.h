@@ -3,8 +3,18 @@
 #include "types.hpp"
 
 #include "BrnCommonTypes.h"                             // Vector3 (== rw::math::vpu::Vector3), GetCheckpointPosition return
-#include "GameSource/GameState/BrnGameStateSharedIO.h" // GameStateModuleIO::EGameModeType
+#include "GameSource/GameState/BrnGameStateSharedIO.h" // GameStateModuleIO::EGameModeType, CarCheckpointData, KI_MAX_LANDMARKS_IN_MODE
 #include "GameSource/GameState/BrnGameEvents.h"        // GameStateModuleIO::StartNetworkGameEvent (SetOnlineRaceCars signature)
+
+// ADDITIVE GROW (the ModeManager TU): the core mode-management methods bodied by this TU embed the
+// ScoringSystem by value and reach the per-car checkpoint trackers / the checkpoint TriggerData by
+// name, so the full owning headers are pulled in here (the header is no longer pointer-only).
+#include "GameSource/BurnoutConstants.h"                                // EGlobalRaceCarIndex/EActiveRaceCarIndex (the 35/8 car spaces)
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"  // BrnGameState::ScoringSystem (embedded by value)
+#include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"     // BrnGameState::GameMode (current-mode accessors)
+#include "SharedClasses/Trigger/BrnTriggerData.h"                       // BrnTrigger::TriggerData (GetCheckpointPosition landmark lookup)
+#include "SharedClasses/Trigger/BrnLandmark.h"                          // BrnTrigger::Landmark / BoxRegion::GetPosition
+#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT (house assert macro)
 
 namespace BrnProgression
 {
@@ -124,6 +134,103 @@ public:
     // header is not yet reconstructed (forward-declared above, used by pointer only).
     BrnProgression::ProgressionManager* GetProgressionManager() const;
 
+    // =====================================================================================
+    // ADDITIVE GROW (the ModeManager TU): the 15 mode-management-core methods bodied by this
+    // TU. Each is X360-attested (identity.json); the bodies live in BrnModeManager.cpp.
+    // =====================================================================================
+
+    // X360 0x82311410. True iff the current game mode is an online mode (reads the current mode's
+    // cached online flag -- the de-inlined GameMode::IsOnline()). Returns false when there is no
+    // current mode. Called by TriggerQueryManager::PostWorldUpdate.
+    bool IsOnlineGameMode() const;
+
+    // X360 0x82329890. The next (lowest-indexed) checkpoint the given car still has to reach, as a
+    // LandmarkIndex (clamped to u8 by the X360). Delegates to the car's CarCheckpointData tracker.
+    s32 GetNextLandmarkIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex) const;
+
+    // X360 0x8231E960. How many checkpoints the given car still has to reach (the popcount of its
+    // "remaining" bit set). Asserts the car index is in [0, COUNT).
+    u32 CountCheckpointsRemaining(EGlobalRaceCarIndex leGlobalRaceCarIndex) const;
+
+    // X360 0x8231E800. Mark a checkpoint as reached by the given car (clears its remaining bit).
+    // Asserts the checkpoint index is in [0, muNumLandmarks) and the car index is in range.
+    void MarkCarHittingCheckpoint(u32 luCheckpointIndex, EGlobalRaceCarIndex leGlobalRaceCarIndex);
+
+    // X360 0x8231E8D8. Re-arm the given car's checkpoint tracker for the next lap (re-mark all
+    // muNumLandmarks checkpoints as remaining). Called by RaceCarFinishes.
+    void ResetCheckpointDataForNextLap(EGlobalRaceCarIndex leGlobalRaceCarIndex);
+
+    // X360 0x82329910. Process a landmark trigger for the given car: if luLandmarkId matches a mode
+    // landmark and is the car's next-expected checkpoint, record the next landmark, mark the
+    // checkpoint hit (and, for the online burning-home-run mode, bump the player's checkpoint
+    // counters) and return true. Returns false otherwise. Called by RaceCarTriggersLandmark.
+    bool HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarIndex leGlobalRaceCarIndex);
+
+    // X360 0x823283E8. True iff the player has won: finishing position 1, or (offline-race only, when
+    // mbWinIfSecond is set) position 2. Calls GetPlayersFinishPosition().
+    bool HasPlayerWon();
+
+    // X360 0x8231EB00 / 0x823120E8. Begin / end the stunt challenge: clear the online stunt scorer and
+    // (Setup) activate it, then latch mbStuntChallengeActive. Reached through the ScoringSystem's
+    // online stunt scorer.
+    void SetupStuntChallenge();
+    void EndStuntChallenge();
+
+    // X360 0x82363540. Cache + forward a player's network stunt score: look up the player's CarData,
+    // snapshot its prior online stunt score + active-car index into the network-stunt cache, then
+    // forward to ScoringSystem::SetNetworkStuntScore.
+    void SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liScore);
+
+    // X360 0x82327388. World position of the checkpoint with the given mode-local id (looks the id up
+    // through the mode's checkpoint TriggerData landmark table). Asserts luCheckpointId < muNumLandmarks.
+    // Called by ScoringSystem::UpdateRacePositions. (Overload of the existing GetCheckpointPosition.)
+
+    // X360 0x82337B70. Copy each active car's checkpoint-remaining bit set into the scoring output
+    // interface, then delegate to ScoringSystem::WriteDataToOutput. Called by
+    // GameStateModule::CopyScoringDataToOutput.
+    void WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface* lpOutput,
+                           GameStateModuleIO::OnlineScoringOutputInterface* lpOnlineOutput,
+                           bool lbOnline,
+                           EActiveRaceCarIndex lePlayerRaceCarIndex);
+
+    // X360 0x82343438. Pack the player's mode results (finish time, fastest lap, takedowns, distance,
+    // eliminator, race position, eliminations + per-mode fields) into a results record and AddEvent it
+    // onto the supplied per-frame output action queue. Called by FinishCurrentMode / UpdateCurrentMode.
+    void SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOutputQueue);
+
+    // X360 0x82329B68. Tell the GUI to show the online final standings: refresh the cumulative results
+    // through the ScoringSystem and latch mbOnlineFinalStandingsShown. Called by OnlineGameMode::SendEvent.
+    // (Already declared above as void TellGuiToShowOnlineFinalStandings(); bodied by this TU.)
+
+    // X360 0x823281E8. The player's finishing position (1-based). NOT one of this TU's 15; declared
+    // here (additive) so HasPlayerWon can call it. Body lands with a sibling ModeManager partial.
+    s32 GetPlayersFinishPosition();
+
+    // ---- named accessors for the embedded sub-objects (de-inlined) -------------------------
+    // GetScoringSystem() / GetGameStateModule() are declared above; bodied by this TU.
+    const BrnTrigger::TriggerData* GetCheckpointTriggerData() const;   // resolves mpGameStateModule's checkpoint TriggerData resource
+
+    // FLAG (declare-only, blocked on the GameStateModule minimal slice): the X360 reaches these three
+    // through mpGameStateModule by raw offset (the global race-car output interface @+0x3C0D0 / the
+    // active interface @+0x245968, the current online round @+0xBB24/+0xBB20). The minimal
+    // GameStateModule slice (BrnGameStateModule.h) exposes no named accessor for them, and growing
+    // GameStateModule is out of this TU's scope. De-inlined to these ModeManager helpers so the
+    // bodied methods stay member-by-name; the helper bodies (which read through mpGameStateModule) land
+    // when GameStateModule grows the matching accessors. DO NOT fabricate the offsets here.
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*
+        GetGlobalRaceCarOutputInterface() const;                       // X360 mpGameStateModule+0x3C0D0
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+        GetActiveRaceCarOutputInterface() const;                       // X360 mpGameStateModule+0x245968
+    s32 GetOnlineRoundIndex() const;                                   // X360 mpGameStateModule+0x32DAC
+    s32 GetOnlineActiveCarCount() const;                               // X360 mpGameStateModule (+0xBB24)-(+0xBB20)
+
+    // FLAG (declare-only): the X360 maps a global race-car index to its active slot through an
+    // internal table on the active interface (`*(4*(global+525)+interface)`); the active interface
+    // exposes only the active->global direction by name (GetGlobalRaceCarIndex). De-inlined here so
+    // HasRaceCarHitValidCheckpoint stays member-by-name; body lands when the active interface grows the
+    // inverse accessor. DO NOT fabricate the table walk.
+    EActiveRaceCarIndex GlobalToActiveRaceCarIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex) const;
+
     // Debug-tunable mode flags driven by the mode-manager debug menu (ModeManagerDebugComponent).
     // Declared as named members here (the real home) so the debug component accesses them by name
     // rather than by raw offset; the full ModeManager layout (the X360 places these deep in the
@@ -132,5 +239,48 @@ public:
     bool mbWinIfSecond;
     bool mbFinishCurrentEvent;
     s32  miFinishPosition;
+
+private:
+    // =====================================================================================
+    // ADDITIVE GROW: named data members the bodied methods touch. RELATIVE ORDER + named
+    // access for semantic parity -- NOT X360-faithful byte offsets (pointers are 8 bytes on the
+    // PC gate, the ScoringSystem is embedded by value at a slice size, and the per-car checkpoint
+    // array lives in the X360 deep in the ~38KB object). The X360 byte offsets each member stands
+    // in for are documented inline. FLAG: provisional layout; settles when the full ModeManager
+    // layout is reconstructed.
+    // =====================================================================================
+
+    GameStateModuleIO::EGameModeType meCurrentGameModeType;   // X360 +0xD94 -- the live mode type
+    GameMode*                        mpCurrentGameMode;       // X360 +0xD98 -- current mode (null between modes)
+    ScoringSystem                    mScoringSystem;          // X360 +0xDB0 -- embedded by value (online stunt scorer at +0x2620)
+    GameStateModule*                 mpGameStateModule;       // X360 +0x6D58 -- owning module (asserted non-null)
+
+    // The mode's checkpoint TriggerData (X360 reaches it through a CgsResourcePtr<TriggerData> nested
+    // at mpGameStateModule's +0x6D60/+0x620 region; modelled here as the resolved main-memory resource
+    // for named access). GetCheckpointPosition reads landmark positions through it.
+    const BrnTrigger::TriggerData*   mpCheckpointTriggerData; // X360-resolved trigger data
+
+    u32                              muNumLandmarks;          // X360 +0x801C -- checkpoint count for the current mode
+    // Per-checkpoint mode-local landmark -> region-table index map (X360 u16[] at +0x7E20).
+    u16                              maLandmarkRegionIndexes[GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE];
+    // The next-expected landmark index recorded per car (X360 u8[] at +0x7FF8). One per global car.
+    u8                               maNextLandmarkIndex[E_GLOBAL_RACE_CAR_INDEX_COUNT];
+
+    // Per-car checkpoint trackers (X360 CarCheckpointData[35] at +0x7EE0). A set bit == checkpoint
+    // not yet reached; indexed by EGlobalRaceCarIndex.
+    GameStateModuleIO::CarCheckpointData maCarCheckpointData[E_GLOBAL_RACE_CAR_INDEX_COUNT];
+
+    // Network stunt-score cache (X360 +0x6CD0/+0x6CD4/+0x6CD8 written by SetNetworkStuntScore).
+    s32                              miNetworkStuntActiveCarIndex;  // X360 +0x6CD0 (CarData active-race-car index)
+    s32                              miNetworkStuntScore;           // X360 +0x6CD4 (the new score)
+    s32                              miNetworkStuntPreviousScore;   // X360 +0x6CD8 (the car's prior online stunt score)
+
+    // Latch flags (X360 single bytes deep in the object).
+    bool                             mbOnlineFinalStandingsShown;   // X360 +0x94F8 (set by TellGuiToShowOnlineFinalStandings)
+    bool                             mbStuntChallengeActive;        // X360 +0x950D (Setup=1 / End=0 StuntChallenge)
+    bool                             mbResultsPositionValid;        // X360 +0x94F7 (SendModeResults: use the override position)
+    bool                             mbResultsTeamWon;              // X360 +0x94FD (SendModeResults: per-mode flag byte)
+    bool                             mbResultsEliminatorValid;      // X360 +0x9519/region byte read by SendModeResults
+    s32                              miResultsOverridePosition;     // X360 +0x9518 (SendModeResults: explicit race position)
 };
 }
