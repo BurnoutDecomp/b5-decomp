@@ -116,6 +116,53 @@ void         MassiveGetSystemTimeBlock(unsigned char* pacSystemTime);
 extern const char* gpcDefaultBaseObjectName;
 
 // ---------------------------------------------------------------------------
+// MassiveAd debug-log hook (FLAGGED vendor logging API).
+//
+// The CMassiveCriticalSection Enter/Exit paths emit a printf-style trace through
+// a vendor logging entry point that Hex-Rays renders as the placeholder symbol
+// `STUB(level, name, format, ...)`. The call-site registers fix the leading
+// operands exactly: r3 = a log level/category (the X360 passes 7), r4 = the
+// object's base name (CMassiveBaseObject::mpcName, read from +0x0C), r5 = the
+// format string, then the variadic substitution arguments (the section name and
+// the "by whom" caller name). It is the classic MassiveAd verbose-logging sink.
+// Declared here and supplied by the MassiveAd logging layer (another TU). FLAG:
+// this is an external/vendor variadic logging API, not project-owned code, so it
+// keeps a vendor-shaped signature rather than the project mp/lf scheme.
+//   MassiveLog(nLevel, pcName, pcFormat, ...) -> emit a formatted trace line
+// ---------------------------------------------------------------------------
+void MassiveLog(int nLevel, const char* pcName, const char* pcFormat, ...);
+
+// ---------------------------------------------------------------------------
+// MassiveAd critical-section platform hooks (FLAGGED platform APIs).
+//
+// On the X360 CMassiveCriticalSection wraps the Win32/NT critical-section kernel
+// APIs directly (RtlInitializeCriticalSection / RtlEnterCriticalSection /
+// RtlLeaveCriticalSection over a 28-byte RTL_CRITICAL_SECTION embedded in the
+// object at +0x14). The on-disk RTL_CRITICAL_SECTION width is platform-specific
+// (28 bytes on the 32-bit X360, wider on the 64-bit host), so the embedded
+// section is modelled by NAME as an opaque host-sized block and the hooks are
+// declared platform-side rather than asserting the X360 byte size on the host.
+// FLAG: these wrap the OS critical-section primitive -- external/platform, not
+// project-owned. Declared here, supplied by the MassiveAd platform layer.
+//   MassiveCriticalSectionStorage -- opaque storage for one OS critical section
+//   MassiveInitializeCriticalSection(p) -> RtlInitializeCriticalSection(p)
+//   MassiveEnterCriticalSection(p)      -> RtlEnterCriticalSection(p)
+//   MassiveLeaveCriticalSection(p)      -> RtlLeaveCriticalSection(p)
+// ---------------------------------------------------------------------------
+struct MassiveCriticalSectionStorage
+{
+    // Opaque OS critical-section storage. The X360 RTL_CRITICAL_SECTION is 28
+    // bytes; a host-sized reservation (64 bytes covers the wider 64-bit Win32
+    // CRITICAL_SECTION) keeps the wrapper self-contained without depending on
+    // <windows.h> here. Touched only by name via the platform hooks below.
+    unsigned char abOpaque[64];
+};
+
+void MassiveInitializeCriticalSection(MassiveCriticalSectionStorage* pSection);
+void MassiveEnterCriticalSection(MassiveCriticalSectionStorage* pSection);
+void MassiveLeaveCriticalSection(MassiveCriticalSectionStorage* pSection);
+
+// ---------------------------------------------------------------------------
 // CMassiveBaseObject -- polymorphic base for MassiveAd client objects.
 // ---------------------------------------------------------------------------
 class CMassiveBaseObject
@@ -143,11 +190,73 @@ public:
     // @ 0x82BCF0B8. Routes object teardown through the MassiveAd heap hook.
     static void operator delete(void* pMemory);
 
+protected:
+    // Additive accessor (FLAG: not its own X360 function -- derived MassiveAd
+    // objects read the base name field directly, e.g. CMassiveCriticalSection's
+    // Enter/Exit load mpcName from +0x0C for their trace lines; this exposes that
+    // same field to subclasses by NAME without widening the layout).
+    const char* GetName() const { return mpcName; }
+
 private:
     int         mnLastError;     // +0x04
     int         mnReportedError; // +0x08
     char*       mpcName;         // +0x0C
     int         mbIsValid;       // +0x10
+};
+
+// ---------------------------------------------------------------------------
+// CMassiveCriticalSection -- a CMassiveBaseObject that owns one OS critical
+// section plus an optional descriptive name, for serialising MassiveAd client
+// access. Reconstructed from the X360 ARTIST.XEX (no leak / DecFIGS):
+//     MassiveAdClient3::CMassiveCriticalSection::CMassiveCriticalSection   @ 0x82BD2700
+//     MassiveAdClient3::CMassiveCriticalSection::~CMassiveCriticalSection  @ 0x82BD2788
+//     MassiveAdClient3::CMassiveCriticalSection::Enter                     @ 0x82BD27E8
+//     MassiveAdClient3::CMassiveCriticalSection::Exit                      @ 0x82BD28C0
+//     MassiveAdClient3::CMassiveCriticalSection::`vector deleting destructor' @ 0x82BD2918
+//
+// The X360 ctor chains the CMassiveBaseObject base (name "MassiveCriticalSection"),
+// installs this class's own vftable (off_821856B8 -- the virtual dtor below
+// models it), RtlInitializeCriticalSection's the embedded section, and -- when a
+// non-empty section name is supplied -- copies it into a MassiveMalloc'd buffer.
+//
+// Layout (members BY NAME; absolute offsets are X360-relative and not asserted on
+// the host because the embedded critical section's width is platform-specific):
+//   +0x00  vftable pointer        (off_821856B8; modelled via the virtual dtor)
+//   +0x04  base CMassiveBaseObject body (mnLastError/mnReportedError/mpcName/mbIsValid)
+//   +0x14  mCriticalSection       (a1+5; RtlInitializeCriticalSection target)
+//   +0x30  mpcSectionName         (a1[12]; MassiveMalloc'd section-name copy, or 0)
+// ---------------------------------------------------------------------------
+class CMassiveCriticalSection : public CMassiveBaseObject
+{
+public:
+    // @ 0x82BD2700. Constructs the base ("MassiveCriticalSection"), initialises
+    // the embedded OS critical section, and -- when pcSectionName is non-null and
+    // non-empty -- copies it into a MassiveMalloc'd buffer (left null on a failed
+    // or skipped allocation).
+    CMassiveCriticalSection(const char* pcSectionName);
+
+    // @ 0x82BD2788. Rewrites the vftable (compiler-emitted for a virtual dtor),
+    // frees the section-name buffer through the MassiveAd heap hook and nulls it,
+    // then chains the base dtor.
+    virtual ~CMassiveCriticalSection();
+
+    // @ 0x82BD27E8. Acquires the OS critical section (blocking) and logs a
+    // "Try(blocking) succeeded on <section> by <who>" trace. pcWho is the caller
+    // tag passed straight through to the log.
+    void Enter(const char* pcWho);
+
+    // @ 0x82BD28C0. Releases the OS critical section and logs an
+    // "Exit succeeded on <section> by <who>" trace.
+    void Exit(const char* pcWho);
+
+    // @ 0x82BD2918. Vector deleting destructor (the X360 vftable entry): runs the
+    // dtor, then frees the object through CMassiveBaseObject::operator delete when
+    // the low bit of bDelete is set. Returns this.
+    void* VectorDeletingDestructor(char bDelete);
+
+private:
+    MassiveCriticalSectionStorage mCriticalSection; // +0x14 (RTL_CRITICAL_SECTION)
+    char*                         mpcSectionName;    // +0x30 (section-name copy, or 0)
 };
 
 // ---------------------------------------------------------------------------

@@ -46,6 +46,23 @@ namespace vpu
             zAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; wAxis = { 0.0f, 0.0f, 0.0f, 0.0f };
         }
     };
+
+    // ADDITIVE GROW (flagged by BrnPhysics-bodies group): a 3x3 rotation/inertia matrix,
+    // stored as three 16-byte rows (each a Vector3 lane register), matching the console
+    // `rw::math::vpu::Matrix33` layout (48 bytes, 16-aligned). Needed as the storage type
+    // for BrnPhysics::ExternalPhysicsBody::m{Local,World}InverseInertia (DWARF spells those
+    // members `Matrix33`). No existing user; purely a new type-vocabulary entry in the
+    // canonical RW math home. SetIdentity sets the upper-3x3 to the identity basis.
+    struct alignas(16) Matrix33
+    {
+        Vector3 xAxis, yAxis, zAxis;
+        void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); }
+        void SetIdentity()
+        {
+            xAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; yAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
+            zAxis = { 0.0f, 0.0f, 1.0f, 0.0f };
+        }
+    };
 }
 }
 }

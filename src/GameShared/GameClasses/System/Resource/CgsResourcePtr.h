@@ -54,9 +54,23 @@ namespace EAThread
 namespace CgsResource
 {
     // CgsResourcePtr.h:65 (DWARF). Non-templated base shared by every ResourcePtr<T>.
-    // Members declared at their DWARF offsets; only mpResourceMemory (offset 0) is
-    // read by the templated accessors. The list/lifecycle methods have their own TUs
-    // and are declaration-only here.
+    //
+    // *** FLAG -- COMMITTED-HOME LAYOUT CORRECTION (X360-authoritative reorder) ***
+    // The prior commit declared the members in DWARF source-LINE order
+    // (mpResourceMemory, mpNext, mpPrev, mHandle, mpThis, muThreadId), which placed
+    // the intrusive list pointers at +0x04/+0x08 and mHandle at +0x0C. The X360
+    // ARTIST binary proves the real byte layout is different: every list/identity
+    // method (ctor @0x82204E20, dtor @0x821F1E18, AddToNewList @0x828D6230,
+    // IsEqual @0x8227D298) touches mpNext at +0x0C and mpPrev at +0x10, and treats
+    // the FIRST THREE dwords (+0x00,+0x04,+0x08) as the comparable identity --
+    // i.e. mResourceMemory followed immediately by the two ResourceHandle pointers.
+    // So mHandle sits at +0x04..+0x0B and the list links at +0x0C/+0x10. The member
+    // order below is reordered to match the asm. This is a layout REORDER (not an
+    // additive grow); only mpResourceMemory (+0x00) is unchanged, so the templated
+    // accessors in every per-type TU are unaffected (they only read offset 0). Any
+    // code that read mHandle / mpNext / mpPrev by NAME stays correct. No prior TU
+    // verified an absolute offset of these members across a pointer, so the reorder
+    // is safe. Source-line refs kept in trailing comments for traceability.
     struct BaseResourcePtr
     {
     public:
@@ -67,7 +81,12 @@ namespace CgsResource
         void           GetResourceHandle(ResourceHandle* lpHandle) const; // :80
         ResourceHandle GetResourceHandle() const;                      // :84
         void           SetResource(void* const* lppResource);          // :88
-        bool           IsEqual(void* const* lppResource) const;        // :92
+        // IsEqual @0x8227D298: the X360 compares the first three dwords of THIS and
+        // of *lpOther (mResourceMemory + the two mHandle pointers); equal iff all
+        // three match. Modeled with a raw const-pointer arg because the binary reads
+        // three consecutive dwords from it (a BaseResourcePtr's / ResourceHandle's
+        // identity region). DWARF declared it IsEqual(const Resource*).
+        bool           IsEqual(const void* lpOther) const;             // :92
 
     protected:
         void Reset();                                                  // :111
@@ -79,9 +98,9 @@ namespace CgsResource
 
     protected:
         void*               mpResourceMemory;  // +0x00  :97  main-memory resource ptr (X360 *a1)
-        BaseResourcePtr*    mpNext;            // +0x04  :98  intrusive alias list
-        BaseResourcePtr*    mpPrev;            // +0x08  :99
-        ResourceHandle      mHandle;           // +0x0C  :100 (two pointers == 8 bytes)
+        ResourceHandle      mHandle;           // +0x04  :100 (two pointers == 8 bytes; +0x04,+0x08)
+        BaseResourcePtr*    mpNext;            // +0x0C  :98  intrusive alias list (X360 +0xC)
+        BaseResourcePtr*    mpPrev;            // +0x10  :99  (X360 +0x10)
         BaseResourcePtr*    mpThis;            // +0x14  :104
         EAThread::ThreadId  muThreadId;        // +0x18  :107 owning-thread id (DWARF _mUThreadId)
     };

@@ -28,6 +28,21 @@ void         MassiveGetSystemTimeBlock(unsigned char* pacSystemTime)
 {
     std::memset(pacSystemTime, 0, 16);
 }
+
+void MassiveLog(int /*nLevel*/, const char* /*pcName*/, const char* pcFormat, ...)
+{
+    std::va_list largs;
+    va_start(largs, pcFormat);
+    (void)pcFormat;
+    va_end(largs);
+}
+
+void MassiveInitializeCriticalSection(MassiveCriticalSectionStorage* pSection)
+{
+    std::memset(pSection->abOpaque, 0, sizeof(pSection->abOpaque));
+}
+void MassiveEnterCriticalSection(MassiveCriticalSectionStorage* /*pSection*/) {}
+void MassiveLeaveCriticalSection(MassiveCriticalSectionStorage* /*pSection*/) {}
 }
 
 void MassiveAdClient3_EmbedCheck()
@@ -74,4 +89,12 @@ void MassiveAdClient3_EmbedCheck()
     (void)CMassiveSystem::GetHardwareAddress(0, &lpcMac);
 
     (void)CMassiveSystem::Shutdown();
+
+    // CMassiveCriticalSection surface.
+    CMassiveCriticalSection lSection("RequestQueue");
+    lSection.Enter("Worker");
+    lSection.Exit("Worker");
+
+    CMassiveCriticalSection* lpSection = new CMassiveCriticalSection(0);
+    lpSection->VectorDeletingDestructor(1);
 }
