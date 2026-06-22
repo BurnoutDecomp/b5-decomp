@@ -52,6 +52,9 @@ namespace BrnPhysics
             Vector3 GetPosition() const;                                   // :147
             Vector3 GetLinearVelocity() const;                             // :150
             Vector3 GetAngularVelocity() const;                            // :153
+            // X360 0x826944E0: asserts the owner byte (mEntityId+0, bits[24..31]) == 3 then
+            // returns mEntityId by value -- the inlined PropEntityID::AssertIsProp tripwire.
+            BrnWorld::PropEntityID GetEntityId() const;                    // :156 / 0x826944E0
         };
     }
 }
