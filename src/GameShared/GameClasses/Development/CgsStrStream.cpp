@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (AppendFormat copy guard)
 
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 
@@ -88,6 +90,26 @@ namespace CgsDev
         return *this;
     }
 
+    // 0x82817720 - render a printf-style format into a 256-byte stack buffer (X360 `v18[288]`,
+    // formatted with vsnprintf capped at 256) and forward it to the virtual char* sink. The X360
+    // guards that the formatted length did not exceed the destination (CgsStringUtils copy guard:
+    // `lNumBytesCopied < (int32_t)luBytes`); CGS_ASSERT carries that bound here. The sink call
+    // `(*(*this+4))(this, buffer)` is the virtual operator<<(const char*) override.
+    void StrStreamBase::AppendFormat(const char* lpcFormat, ...)
+    {
+        char lacBuffer[256];
+
+        va_list lArgs;
+        va_start(lArgs, lpcFormat);
+        const int liWritten = std::vsnprintf(lacBuffer, sizeof(lacBuffer), lpcFormat, lArgs);
+        va_end(lArgs);
+
+        CGS_ASSERT(liWritten < static_cast<int>(sizeof(lacBuffer)),
+                   "lNumBytesCopied<(int32_t)luBytes");
+
+        *this << lacBuffer;
+    }
+
     void StrStreamBase::Append64IntDecimal(u64 luValue)
     {
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
@@ -111,16 +133,28 @@ namespace CgsDev
             mpcBuffer[0] = '\0';
     }
 
-    // Append text to the buffer, never overflowing it.
-    StrStreamBase& StrStream::operator<<(const char* lpcText)
+    // 0x82815E80 - the buffer sink. Walk to the NUL terminator in mpcBuffer, then strncat the new
+    // text with the remaining room (miBufferSize - usedLength), exactly as the X360 does
+    // (`v3 = *(this+8); while(*v4++); strncat(v3, text, *(this+12) - (v4-v3-1))`).
+    void StrStream::Append(const char* lpcText)
     {
         if (mpcBuffer && lpcText && miBufferSize > 0)
         {
             const size_t luUsed = std::strlen(mpcBuffer);
-            const size_t luRoom = (size_t)miBufferSize - 1 - luUsed;
-            if (luRoom > 0)
+            // X360 store-for-store: strncat count = *(this+12) - (v4-v3-1) = miBufferSize - usedLength
+            // (NOT miBufferSize-1; the console passes the full remaining count).
+            if ((size_t)miBufferSize > luUsed)
+            {
+                const size_t luRoom = (size_t)miBufferSize - luUsed;
                 std::strncat(mpcBuffer, lpcText, luRoom);
+            }
         }
+    }
+
+    // operator<<(const char*) forwards to the named sink (Append).
+    StrStreamBase& StrStream::operator<<(const char* lpcText)
+    {
+        Append(lpcText);
         return *this;
     }
 

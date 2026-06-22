@@ -25,7 +25,8 @@
 // mAngularVelocity in the console layout (the damp funcs operate on the angular velocity).
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"   // Vector3, Matrix44Affine
+#include "BrnCommonTypes.h"        // Vector3, Matrix44Affine
+#include "rw/physics/rigidbody.h"  // rw::physics::RigidBody (ReadFromRenderware source body)
 
 namespace BrnPhysics
 {
@@ -48,6 +49,14 @@ namespace BrnPhysics
         void           SetLinearVelocity(Vector3 lV)  { mLinearVelocity = lV; }
         void           SetAngularVelocity(Vector3 lV) { mAngularVelocity = lV; }
         void           SetFrozen(bool lb)             { mbFrozen = lb; }
+
+        // --- bodied by the Physics-IO-util group (ExternallySimulatedBody.cpp) ---
+        // @0x825A2E88: mirror the RenderWare physics body's pose+velocity into this body. When
+        // mbFrozen, leave everything untouched. ADDITIVE GROW (flagged): this RenderWare-IO
+        // method was declared-only's sibling-set before; only ReadFromRenderware is added here
+        // for the group's ledger func. The remaining Write*/Read*RenderWare methods stay owned
+        // by a future TU and are still NOT declared.
+        void ReadFromRenderware(const rw::physics::RigidBody* lpRigidBody);
 
         // --- declared-only (owned by a future ExternallySimulatedBody TU) ---
         void Construct();

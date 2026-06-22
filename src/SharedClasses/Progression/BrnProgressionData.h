@@ -2,6 +2,7 @@
 #define BRN_PROGRESSION_DATA_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // CgsID
 
 // =============================================================================
 // BrnProgressionData.h  (OWNING HEADER for BrnProgression::ProgressionData)
@@ -47,6 +48,21 @@ struct TrophyUnlockData;
 // so it lives in the sibling owning header BrnRaceBalance.h.
 struct OpponentBalanceData;
 
+// The remaining array element types. Held only by pointer in the layout below, so an
+// incomplete forward declaration is enough here; the lookup/relocation TU that needs a
+// complete one includes the element's owning header (BrnRival.h, BrnOpponentData.h,
+// BrnRaceEventData.h). Real homes:
+//   Rival                 -> SharedClasses/Progression/BrnRival.h
+//   CarOpponentSet        -> SharedClasses/Progression/BrnOpponentData.h
+//   EventJunction         -> SharedClasses/Progression/BrnRaceEventData.h
+//   RaceEventData         -> SharedClasses/Progression/BrnRaceEventData.h
+//   EventRacerPersonality -> SharedClasses/Progression/BrnRaceEventData.h
+struct Rival;
+struct CarOpponentSet;
+struct EventJunction;
+struct RaceEventData;
+struct EventRacerPersonality;
+
 struct ProgressionData
 {
     // ---- Accessors reconstructed by this TU (X360 standalone symbols) ----------------------
@@ -61,6 +77,17 @@ struct ProgressionData
     // returns the result by value (the catch-up cut-off ratio is left zeroed).
     OpponentBalanceData GetInterpolatedAIBalanceGraph(s32 liIndexA, s32 liIndexB, f32 lfBlend) const;
 
+    // X360 0x82676B18. Finds the CarOpponentSet for a given player car id whose rank is the
+    // closest match <= the player's race rank (exact rank wins immediately).
+    CarOpponentSet* FindCarOpponentSet(CgsID lCarModelId, s32 liPlayerRaceRank) const;
+
+    // X360 0x82676AC8. Returns the rival whose id matches lRivalId, or null if none.
+    const Rival* FindRival(CgsID lRivalId) const;
+
+    // X360 0x82676A90. Returns the index of the rival whose id matches lRivalId, or the rival
+    // count if none matches.
+    s32 FindRivalIndexFromId(CgsID lRivalId) const;
+
     // ---- Other X360-attested methods this header owns (bodies are separate TUs) ------------
     // FixUp/FixDown keep the int-delta contract the committed ProgressionResourceType.cpp uses
     // (X360-authoritative over the PS3 DWARF's `void FixUp(MemoryResource)`).
@@ -68,26 +95,39 @@ struct ProgressionData
     int FixDown(int liDelta);
 
 private:
-    // 0x00 muVersionNumber + 0x04 muSize + 0x08 mpaPlayerCarIds + 0x0C muPlayerCarIdCount.
-    u8 maPadHeader[0x10];          // 0x00..0x0F
+    // Full DWARF-faithful layout (BrnProgressionData.h:249-277): a flat list of {pointer, count}
+    // pairs. The padding the minimal slice used has been replaced in place by the real named
+    // members at their console offsets (additive growth -- offsets/sizeof preserved). NOTE: the
+    // pointer members are 32-bit on the console and 64-bit on the host, so the byte offsets in the
+    // comments are the X360 offsets and are NOT asserted across the pointer members on the gate.
+    u32                    muVersionNumber;         // 0x00  (DWARF :249)
+    u32                    muSize;                  // 0x04  (DWARF :250)
+    CgsID*                 mpaPlayerCarIds;         // 0x08  (DWARF :252)
+    u32                    muPlayerCarIdCount;      // 0x0C  (DWARF :253)
 
-    ProgressionRankData* mpaProgressionRanks;     // 0x10  (DWARF BrnProgressionData.h:255)
-    u32                  muProgressionRankCount;  // 0x14  (DWARF :256)
+    ProgressionRankData*   mpaProgressionRanks;     // 0x10  (DWARF :255)
+    u32                    muProgressionRankCount;  // 0x14  (DWARF :256)
 
-    // 0x18 mpaEventJunctions + count + 0x20 mpaEvents + count + 0x28 mpaRivals + count.
-    u8 maPadEventsRivals[0x18];    // 0x18..0x2F
+    EventJunction*         mpaEventJunctions;       // 0x18  (DWARF :258)
+    u32                    muEventJunctionCount;    // 0x1C  (DWARF :259)
 
-    OpponentBalanceData* mpaAIBalances;           // 0x30  (DWARF :267)
-    u32                  muAIBalanceCount;        // 0x34  (DWARF :268)
+    RaceEventData*         mpaEvents;               // 0x20  (DWARF :261)
+    u32                    muEventCount;            // 0x24  (DWARF :262)
 
-    // 0x38 mpaPersonalities + 0x3C muPersonalityCount.
-    u8 maPadPersonalities[0x08];   // 0x38..0x3F
+    Rival*                 mpaRivals;               // 0x28  (DWARF :264)
+    s32                    miRivalCount;            // 0x2C  (DWARF :265)
 
-    TrophyUnlockData*    mpaTrophyUnlocks;        // 0x40  (DWARF :273)
-    u32                  muTrophyUnlockCount;     // 0x44  (DWARF :274)
+    OpponentBalanceData*   mpaAIBalances;           // 0x30  (DWARF :267)
+    u32                    muAIBalanceCount;        // 0x34  (DWARF :268)
 
-    // 0x48 mpaCarOpponentSet + 0x4C muCarOpponentsCount. Padded so sizeof == 0x50.
-    u8 maPadCarOpponents[0x08];    // 0x48..0x4F
+    EventRacerPersonality* mpaPersonalities;        // 0x38  (DWARF :270)
+    u32                    muPersonalityCount;      // 0x3C  (DWARF :271)
+
+    TrophyUnlockData*      mpaTrophyUnlocks;        // 0x40  (DWARF :273)
+    u32                    muTrophyUnlockCount;     // 0x44  (DWARF :274)
+
+    CarOpponentSet*        mpaCarOpponentSet;       // 0x48  (DWARF :276)
+    u32                    muCarOpponentsCount;     // 0x4C  (DWARF :277)
 };
 }
 

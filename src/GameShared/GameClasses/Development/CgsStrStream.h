@@ -34,6 +34,12 @@ namespace CgsDev
         StrStreamBase& operator<<(void* lpValue);
         StrStreamBase& operator<<(PrintMode leMode);
 
+        // 0x82817720 - render a printf-style format into a 256-byte stack buffer and forward the
+        // result to the virtual char* sink (the X360 StrStreamBase::AppendFormat). The X360 asserts
+        // the formatted length did not exceed the buffer (CgsStringUtils.h copy guard); we keep that
+        // bounds intent with the CGS_ASSERT machinery. The vararg pass-through forwards to vsnprintf.
+        void AppendFormat(const char* lpcFormat, ...);
+
     protected:
         void Append64IntDecimal(u64 luValue);
         void Append64IntHex(u64 luValue);
@@ -48,11 +54,25 @@ namespace CgsDev
         StrStream(char* lpcBuffer, s32 liBufferSize);
 
         StrStreamBase& operator<<(const char* lpcText) override;
+
+        // 0x82815E80 - the buffer sink: append text to mpcBuffer without overflowing it (X360
+        // CgsDev::StrStream::Append - walk to the NUL then strncat with the remaining room
+        // miBufferSize - used). operator<<(const char*) forwards here; exposed by name because the
+        // X360 streams the assert/HUD label text through this method.
+        void Append(const char* lpcText);
+
         char* GetBuffer() { return mpcBuffer; }
 
-        // Clear the caller-supplied buffer back to the empty string (X360 CgsDev::StrStream::Reset,
-        // called between successive label builds in the debug HUD; the X360 `stb 0,0(buffer)`).
-        void Reset() { if (mpcBuffer && miBufferSize > 0) mpcBuffer[0] = '\0'; }
+        // 0x82815E68 - clear the caller-supplied buffer back to the empty string and reset the
+        // formatting mode to decimal (X360 CgsDev::StrStream::Reset: `*(this+4)=0` resets
+        // mePrintMode, `*(this+8)` is the buffer whose first byte is zeroed). Called between
+        // successive label builds in the debug HUD.
+        void Reset()
+        {
+            mePrintMode = E_PRINTMODE_DECIMAL;
+            if (mpcBuffer && miBufferSize > 0)
+                mpcBuffer[0] = '\0';
+        }
 
     private:
         char* mpcBuffer;
@@ -76,9 +96,15 @@ namespace CgsDev
 
         char* GetBuffer() { return macCharBuffer; }
 
-        // Clear the inline buffer back to the empty string (X360 CgsDev::SimpleStrStream::Reset,
-        // called between the three score cells of each debug-HUD table row).
-        void Reset() { macCharBuffer[0] = '\0'; }
+        // 0x82815EB8 - clear the inline buffer to the empty string and reset the formatting mode
+        // to decimal (X360 CgsDev::SimpleStrStream::Reset: `*(this+4)=0` mePrintMode,
+        // `*(this+8)=0` macCharBuffer[0]). Called between the three score cells of each debug-HUD
+        // table row.
+        void Reset()
+        {
+            mePrintMode = E_PRINTMODE_DECIMAL;
+            macCharBuffer[0] = '\0';
+        }
 
     private:
         static const s32 KI_BUFFER_SIZE = 256;   // DWARF CgsStrStream.h:306
