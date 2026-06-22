@@ -71,6 +71,24 @@ namespace BrnNetwork
 
     namespace BrnNetworkModuleIO
     {
+        // FLAG (additive header grow): the Xbox-Live invite/join parameters block, homed here
+        // because BrnGameStateInviteManager.cpp embeds one by value (mInviteOrJoinParams) and
+        // needs its exact layout. Members + order are DWARF-authoritative
+        // (BrnNetworkSharedIO.h:523-527, struct BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams).
+        // Offsets are X360-pinned by the InviteManager bodies: miUserControllerPort lands at +0x14
+        // (read in UpdatePrepareForInvite case BIND) and mbIsLocalUserChangeNeeded at +0x98 (read
+        // in CheckPreparedForInvite). PlayerName is the committed 16-byte X360 width, so the block
+        // is 0x9C bytes (padded to s32). This is layout-only (no methods); the BrnNetwork invite
+        // TUs that construct/consume it own its behaviour.
+        struct InviteOrJoinParams
+        {
+            PlayerName mPlayerName;               // +0x00 (16B)
+            s32        miGameID;                  // +0x10
+            s32        miUserControllerPort;      // +0x14
+            char       macSessionID[128];         // +0x18 .. +0x98
+            bool       mbIsLocalUserChangeNeeded; // +0x98
+        };
+
         struct DirtyTrickEvent
         {
             EActiveRaceCarIndex meAggressorActiveRaceCarIndex;
