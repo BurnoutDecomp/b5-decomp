@@ -26,6 +26,20 @@
 namespace BrnResource
 {
 
+// ADDITIVE GROW: the asset-set selector. DWARF home BrnAssetIds.h:33 (this header).
+// A resource request names which slice(s) of an asset to act on. Consumed as a 4-byte
+// enum field (meType) by the GameData IO event payloads. Values from the DecFIGS DWARF.
+enum EAssetSet
+{
+    E_ASSETSET_GRAPHICS    = 0,
+    E_ASSETSET_PHYSICS     = 1,
+    E_ASSETSET_SOUND       = 2,
+    E_ASSETSET_DATA        = 3,
+    E_ASSETSET_ATTRIBS     = 4,
+    E_ASSETSET_ALL         = 5,
+    E_ASSETSET_FORCE_DWORD = 0xFFFFFFFF
+};
+
 // Build the CgsID for a player/race vehicle from its <=8-char asset name. X360
 // asserts the name is at most 8 characters ("Vehicle name too long"), formats
 // "VEH_<name>" into a 13-byte buffer (KI_CGSID_STRING_LEN) and compresses it.

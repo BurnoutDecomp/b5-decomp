@@ -79,6 +79,37 @@ namespace MassiveAdClient3
 void* MassiveMalloc(std::size_t nSize);
 void  MassiveFree(void* pBlock);
 
+// ---------------------------------------------------------------------------
+// MassiveAd string-format helper (sub_82C10930).
+//
+// Every MassiveAd identifier-building path (GUID, MAC address, server-time
+// string) routes through this single snprintf-style formatter: it writes at
+// most `nCount` bytes (NUL-terminated) into `pcBuffer` from a printf format and
+// varargs, and returns the formatted length. On the X360 it is a vendor wrapper
+// around the platform vsnprintf; declared here, defined by the MassiveAd
+// platform string layer (another TU). The leaf consumers below build small
+// fixed-size strings, so a vararg signature is the faithful shape.
+//   FLAG: the X360 passes %I64d (a 64-bit conversion) in a PPC register pair;
+//   the vararg packing below is reproduced from the Hex-Rays decode -- the
+//   buffer/count/format operands are confirmed against the call-site registers,
+//   but the exact 64-bit lane order of the timestamp argument is unverifiable
+//   from a blind compile and is flagged rather than asserted.
+int MassiveFormatString(char* pcBuffer, unsigned int nCount, const char* pcFormat, ...);
+
+// ---------------------------------------------------------------------------
+// MassiveAd platform clock hooks (FLAGGED platform APIs).
+//
+// On the X360 these are the Win32-style GetTickCount() and GetSystemTime():
+//   MassiveGetTickCount()        -> milliseconds since boot (the DWORD tick)
+//   MassiveGetSystemTimeBlock(p) -> fills the 16-byte SYSTEMTIME-shaped block p
+//                                   (the wall clock; only its trailing two 16-bit
+//                                    words are consumed by CreateMassiveGuid)
+// Declared here and supplied by the MassiveAd platform layer (another TU). FLAG:
+// these wrap OS time APIs, so they are external/platform, not project-owned.
+// ---------------------------------------------------------------------------
+unsigned int MassiveGetTickCount();
+void         MassiveGetSystemTimeBlock(unsigned char* pacSystemTime);
+
 // The default name handed to a CMassiveBaseObject constructed without (or with an
 // empty) name. The X360 reads it through the .data pointer off_82F91A94[0]; the
 // string content is "Invalid BaseObject Name". Defined in MassiveAdClient3.cpp.
@@ -189,6 +220,94 @@ private:
     CMassiveListNode* mpTail;    // +0x04
     CMassiveListNode* mpCurrent; // +0x08
     int               mnCount;   // +0x0C
+};
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem -- the MassiveAd client system root / process singleton.
+//
+// Reconstructed from the X360 ARTIST.XEX (no leak / DecFIGS):
+//     MassiveAdClient3::CMassiveSystem::ClearMassiveGuid               @ 0x82BD2218
+//     MassiveAdClient3::CMassiveSystem::CreateMassiveGuid              @ 0x82BD2628
+//     MassiveAdClient3::CMassiveSystem::GetHardwareAddress             @ 0x82BD23D0
+//     MassiveAdClient3::CMassiveSystem::GetServerTimeFormatted         @ 0x82BD2308
+//     MassiveAdClient3::CMassiveSystem::GetSystemTime                  @ 0x82BD22E0
+//     MassiveAdClient3::CMassiveSystem::Initialize                     @ 0x82BD25C0
+//     MassiveAdClient3::CMassiveSystem::Instance                       @ 0x82BD2208
+//     MassiveAdClient3::CMassiveSystem::SetGuid                        @ 0x82BD2268
+//     MassiveAdClient3::CMassiveSystem::Shutdown                       @ 0x82BD26B8
+//     MassiveAdClient3::CMassiveSystem::`scalar deleting destructor'   @ 0x82BD2560
+//
+// The X360 object is a single dword (MassiveMalloc(4); *p = 0): just the
+// heap-owned GUID-string pointer. It is NOT polymorphic -- the scalar deleting
+// destructor frees the GUID then conditionally frees the object via the heap
+// hook (no vftable rewrite), so this class has no virtuals and stays 4 bytes
+// (host pointer width 8B is the only floor -- FLAG: do not assert the absolute
+// X360 4-byte size on the 64-bit host).
+//
+// Layout:
+//   +0x00  mpcGuid   (the MassiveMalloc'd 37-byte GUID string; *this on X360)
+//
+// Lifetime is a classic lazy process singleton kept in one .data slot
+// (dword_8327F380): Initialize() allocates + zeroes it on first call, Instance()
+// returns it, Shutdown() tears it down and clears the slot.
+// ---------------------------------------------------------------------------
+class CMassiveSystem
+{
+public:
+    // @ 0x82BD25C0. Lazily allocates the singleton (MassiveMalloc(4), GUID
+    // pointer zeroed) into the shared .data slot and returns it; a prior
+    // instance is returned untouched. Returns null on allocation failure.
+    static CMassiveSystem* Initialize();
+
+    // @ 0x82BD2208. Returns the current singleton pointer (the raw .data slot;
+    // null before Initialize / after Shutdown).
+    static CMassiveSystem* Instance();
+
+    // @ 0x82BD26B8. Destroys the singleton (scalar deleting destructor) and
+    // clears the .data slot. Always returns 1.
+    static int Shutdown();
+
+    // @ 0x82BD22E0. Returns GetTickCount() (a millisecond tick, zero-extended to
+    // the X360 DWORD return).
+    static unsigned int GetSystemTime();
+
+    // @ 0x82BD2308. Formats a server timestamp (Unix milliseconds in nMilliseconds)
+    // as "YYYY-MM-DD HH:MM:SS,mmm" via localtime64 into pcBuffer (capacity nCount);
+    // writes "Time Unavailable" when localtime64 fails. The X360 carries a dead
+    // leading argument (a1, unused by the asm) ahead of the timestamp; it is kept
+    // here as nUnused to preserve the call ABI. The ms remainder is computed from
+    // the same timestamp value, not a separate argument (the Hex-Rays a3 was
+    // register noise). Returns the formatted length.
+    static int GetServerTimeFormatted(int nUnused, unsigned int nMilliseconds,
+                                      char* pcBuffer, unsigned int nCount);
+
+    // @ 0x82BD23D0. Queries the title XNADDR (XNetGetTitleXnAddr) and formats the
+    // 6-byte ethernet MAC into a freshly MassiveMalloc'd 18-byte string at *ppcOut
+    // ("AA:BB:CC:DD:EE:FF"). Returns the XNetGetTitleXnAddr status (<0 on error,
+    // also returned when the allocation fails).
+    static signed int GetHardwareAddress(int nUnused, char** ppcOut);
+
+    // @ 0x82BD2628. Allocates a 37-byte buffer at *ppcOut and formats a
+    // pseudo-GUID from the buffer address + tick counter + a SYSTEMTIME-derived
+    // word via MassiveFormatString. Returns the formatted length (0 on allocation
+    // failure, mirroring the X360 which returns the null malloc result).
+    static int CreateMassiveGuid(char** ppcOut);
+
+    // @ 0x82BD2268. Replaces this->mpcGuid with a fresh 37-byte copy of pcGuid:
+    // clears any existing GUID, allocates + zero-fills, then strncpy's at most 37
+    // bytes. Returns the (strncpy) destination pointer, or null on alloc failure.
+    char* SetGuid(const char* pcGuid);
+
+    // @ 0x82BD2218. Frees this->mpcGuid through the MassiveAd heap hook and nulls
+    // it. Returns the old pointer value (0 when nothing was freed).
+    void* ClearMassiveGuid();
+
+    // @ 0x82BD2560. Scalar deleting destructor: clears the GUID, then frees the
+    // object itself through the heap hook when bDelete & 1. Returns this.
+    void* ScalarDeletingDestructor(char bDelete);
+
+private:
+    char* mpcGuid;  // +0x00
 };
 
 } // namespace MassiveAdClient3

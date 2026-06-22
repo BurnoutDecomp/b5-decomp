@@ -37,5 +37,37 @@ namespace
         FreeThreadDynamicData(lpData);
 
         SetCurrentThreadHandle(0, false);
+
+        // EA::Thread::Thread object API (this TU): construct/destruct and touch
+        // each recovered method by its X360 signature.
+        Thread::SetGlobalRunnableFunctionUserWrapper(0);
+    }
+
+    // intptr_t (*)(void*) runnable used to exercise Begin's signature.
+    intptr_t BrnEAThreadX360EmbedRunnable(void* /*pContext*/) { return 0; }
+
+    void BrnEAThreadX360ThreadObjectEmbedCheck()
+    {
+        using namespace EA::Thread;
+
+        Thread lThread; // ctor is implicit/trivial; dtor releases the record.
+
+        ThreadParameters lParams;
+        lParams.mnStackSize = 0;
+        lParams.mnPriority  = 0;
+        lParams.mnProcessor = -1;
+        lParams.mpName      = "worker";
+
+        ThreadId lTid = lThread.Begin(&BrnEAThreadX360EmbedRunnable, 0, &lParams, 0);
+        (void)lTid;
+
+        intptr_t lReturn = 0;
+        Thread::Status lStatus = lThread.GetStatus(&lReturn);
+        (void)lStatus;
+        (void)lReturn;
+
+        (void)lThread.GetId();
+        (void)lThread.GetPriority();
+        lThread.SetName("worker");
     }
 }
