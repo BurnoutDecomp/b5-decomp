@@ -37,6 +37,14 @@ public:
     // for the AEMS param-index TUs (BrnAutoGenAemsParameterIndexes.*).
     explicit Name(const char* lkpacName) { mHash = MakeHash(lkpacName); }
 
+    // CgsCommon.h. The raw interned hash value. FLAG: ADDITIVE home-grow for the
+    // CgsSound::Playback::Registry TU (Registry::AddEntity reads an Entity's
+    // mName/mTypeName hash words directly -- `*a2` / `a2[1]` in the X360 asm).
+    // The DWARF lists Name::GetValue (CgsCommon.h notes); modelled here as the
+    // trivial mHash getter so dependents can read the hash by name instead of by
+    // raw offset. Shape-only -- not a recon'd standalone TU.
+    uintptr_t GetValue() const { return mHash; }
+
 private:
     // CgsCommon.h:249. The interned hash value. NOT touched by MakeHash/Store
     // (those are static and operate on the HashTable pool); future Name ctor TUs

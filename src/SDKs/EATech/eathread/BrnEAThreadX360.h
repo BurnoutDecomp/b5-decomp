@@ -97,25 +97,43 @@ namespace Thread
     // ---- Thread-dynamic-data pool (X360) -----------------------------------
 
     // EAThreadDynamicData is the per-thread bookkeeping record. The X360 binary
-    // touches a 68-byte (0x44) record and zeroes offsets 0,4,8,0xC,0x1C plus a
-    // spinlock word at +0x20 on allocation. Only the touched offsets are named;
-    // the remainder is opaque payload preserved to keep the 68-byte size.
+    // touches a 68-byte (0x44) record. Field meanings below are now grounded by
+    // the EA::Thread::Thread object TU (Begin/GetStatus/SetName/~Thread @
+    // 0x82B43F80/0x82B42EF8/0x82B43000/0x82B43E88) and the static thread-entry
+    // trampoline sub_82B43EC8, cross-checked against the EATech DWARF
+    // (eathread_thread.h). The X360 store offsets prove:
+    //   +0x00 mhThread           : Win32 thread HANDLE (begin result; status
+    //                              checks GetExitCodeThread/CloseHandle target).
+    //   +0x08 mnStatus           : kStatusNone/Running/Ended (trampoline sets 1
+    //                              then 2; GetStatus stores 2).
+    //   +0x0C mnReturnValue      : trampoline stores the runnable's return; GetStatus
+    //                              copies it out through its out-param.
+    //   +0x10 mpStartContext[0]  : RunnableFunction / IRunnable* (Begin a2).
+    //   +0x14 mpStartContext[1]  : user context pointer (Begin a3).
+    //   +0x18 mhThreadHandleCopy : copy of mhThread handed to SetCurrentThreadHandle
+    //                              inside the trampoline (a1[6]).
+    //   +0x1C mpBeginThreadUserWrapper : optional begin-thread user wrapper (Begin a5).
+    //   +0x20 mnRefCount         : AtomicInt32 refcount (lwarx/stwcx. inc in Begin,
+    //                              dec in ~Thread / Begin-failure / trampoline; freed
+    //                              when it reaches 0).
+    //   +0x24 mName[32]          : thread name (SetName strncpy's 32 bytes, NUL@+0x43).
     //
-    // FLAG: the exact semantics of most of these fields are not recoverable
-    // from this leaf TU alone (they are written/read by EAThreadDynamicData
-    // users outside this dossier). Names below are HONEST placeholders sized to
-    // the proven 68-byte record; do not treat field meanings beyond the offsets
-    // as X360 fact.
+    // FLAG: +0x04 is never touched by this TU's code and its meaning is not
+    // recoverable from this dossier (the modern EATech DWARF places intptr_t
+    // mnReturnValue earlier; the X360 layout above is asm-authoritative). It is
+    // left as an HONEST placeholder. The record is exactly 68 bytes.
     struct EAThreadDynamicData
     {
-        HANDLE mhThread;        // +0x00  (zeroed on alloc; CloseHandle target on free)
-        u32    muField04;       // +0x04
-        u32    muField08;       // +0x08
-        u32    muField0C;       // +0x0C
-        u32    muOpaque10[3];   // +0x10..0x1B (untouched on alloc)
-        u32    muField1C;       // +0x1C
-        s32    miSpinLock;      // +0x20  (lwarx/stwcx. word; zeroed on alloc)
-        u32    muOpaque24[8];   // +0x24..0x43  (fills out to 68 bytes)
+        HANDLE mhThread;                  // +0x00
+        u32    mnThreadId;                // +0x04  OS thread id (_beginthreadex writes it via the
+                                          //        ThrdAddr=record+4 out-param @0x82B4409C; SetName reads it back @0x82B43068)
+        s32    mnStatus;                  // +0x08
+        s32    mnReturnValue;             // +0x0C
+        void*  mpStartContext[2];         // +0x10, +0x14
+        HANDLE mhThreadHandleCopy;        // +0x18
+        void*  mpBeginThreadUserWrapper;  // +0x1C
+        s32    mnRefCount;                // +0x20  (lwarx/stwcx. AtomicInt32)
+        char   mName[32];                 // +0x24..0x43
     };
 
     // X360: 24 statically-allocated EAThreadDynamicData slots guarded by a
@@ -143,5 +161,101 @@ namespace Thread
     bool     SetThreadPriority(int nPriority);
     // 0x82B42610: a1 points at a millisecond count; 0 -> yield, else SleepEx.
     u32      ThreadSleep(const u32* lpuMilliseconds);
+
+    // ---- IRunnable + RunnableFunction (EATech DWARF eathread_thread.h) ------
+
+    // A thread body can be either a free function (RunnableFunction) or an
+    // IRunnable instance. The X360 trampoline (sub_82B43EC8) calls the stored
+    // wrapper if present, else dispatches the raw function pointer.
+    struct IRunnable
+    {
+        virtual ~IRunnable() {}
+        virtual intptr_t Run(void* pContext = 0) = 0;
+    };
+
+    // intptr_t RunnableFunction(void* pContext);
+    typedef intptr_t (*RunnableFunction)(void* pContext);
+
+    // The two optional global user-wrappers the trampoline can route through.
+    typedef intptr_t (*RunnableFunctionUserWrapper)(RunnableFunction pFunction, void* pContext);
+    typedef intptr_t (*RunnableClassUserWrapper)(IRunnable* pRunnable, void* pContext);
+
+    // 0x82B42660-ish: ThreadParameters POD (EATech DWARF eathread_thread.h:335).
+    // Only mnStackSize/mnPriority/mnProcessor/mpName are read by Begin (a4[1],
+    // a4[2], a4[3], a4[5]); the X360 build threads them through unchanged.
+    struct ThreadParameters
+    {
+        void*       mpStack;        // a4[0]
+        size_t      mnStackSize;    // a4[1]  (-> _beginthreadex StackSize)
+        int         mnPriority;     // a4[2]  (-> SetThreadPriority if nonzero)
+        int         mnProcessor;    // a4[3]  (-> XSetThreadProcessor)
+        bool        mbSuspended;    // a4[4]
+        const char* mpName;         // a4[5]  (-> Thread::SetName)
+
+        ThreadParameters()
+          : mpStack(0), mnStackSize(0), mnPriority(0), mnProcessor(-1),
+            mbSuspended(false), mpName(0) {}
+    };
+
+    // ---- The Thread object (this TU) ---------------------------------------
+
+    // EAThreadData is the single-pointer wrapper that is the Thread object's
+    // only data member: mpData -> EAThreadDynamicData (or null when unstarted).
+    struct EAThreadData
+    {
+        EAThreadDynamicData* mpData;
+    };
+
+    // EA::Thread::Thread -- the thread handle object. Its sole instance member
+    // is mThreadData.mpData (== *this as an EAThreadDynamicData** in the asm,
+    // which dereferences r3 at offset 0 to reach mpData).
+    //
+    // Recovered functions (X360 addrs):
+    //   ~Thread                            0x82B43E88
+    //   GetStatus                          0x82B42EF8
+    //   SetGlobalRunnableFunctionUserWrapper 0x82B42D98
+    //   GetId                              0x82B42FB8
+    //   GetPriority                        0x82B42FD8
+    //   SetName                            0x82B43000
+    //   Begin                              0x82B43F80
+    class Thread
+    {
+    public:
+        // Status (EATech DWARF eathread_thread.h:364).
+        enum Status
+        {
+            kStatusNone    = 0,
+            kStatusRunning = 1,
+            kStatusEnded   = 2
+        };
+
+        ~Thread();
+
+        // Start a thread running pFunction(pContext), per pParameters. Returns
+        // the new thread's HANDLE (ThreadId) or 0 on failure. (0x82B43F80)
+        ThreadId Begin(RunnableFunction       pFunction,
+                       void*                   pContext     = 0,
+                       const ThreadParameters* pParameters  = 0,
+                       RunnableFunctionUserWrapper pUserWrapper = 0);
+
+        // Poll thread status; optionally writes the return value out. (0x82B42EF8)
+        Status GetStatus(intptr_t* pThreadReturnValue = 0);
+
+        // (0x82B42FB8) thread id or 0 if unstarted.
+        ThreadId GetId() const;
+
+        // (0x82B42FD8) Win32 priority, or 0x80000000 if unstarted.
+        int GetPriority() const;
+
+        // (0x82B43000) set the OS-visible thread name (and raise the VS
+        // SetThreadName debugger exception on the X360 build).
+        void SetName(const char* pName);
+
+        // (0x82B42D98) latch the process-wide function user-wrapper once.
+        static void SetGlobalRunnableFunctionUserWrapper(RunnableFunctionUserWrapper pUserWrapper);
+
+    protected:
+        EAThreadData mThreadData;
+    };
 }
 }

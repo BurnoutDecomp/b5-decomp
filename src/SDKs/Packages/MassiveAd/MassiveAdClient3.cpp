@@ -1,6 +1,8 @@
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"
 
-#include <cstring>  // strlen, strncpy
+#include <cstdint>  // uintptr_t
+#include <cstring>  // strlen, strncpy, memset
+#include <ctime>    // tm, _localtime64, __time64_t
 
 // ===========================================================================
 // MassiveAdClient3 -- CMassiveBaseObject + CMassiveListNode.
@@ -294,6 +296,275 @@ void* CMassiveList::GetCurrData()
     if (lpCurr)                            // if (v1)
         return lpCurr->mpOwner;            //   return *(v1 + 8)
     return 0;
+}
+
+// ===========================================================================
+// CMassiveSystem -- the MassiveAd client system root / process singleton.
+// ===========================================================================
+
+// dword_8327F380 -- the single .data slot holding the lazily-created singleton.
+// Defined here so the slot has exactly one home; Initialize/Instance/Shutdown
+// all touch it by name.
+static CMassiveSystem* gpMassiveSystemInstance = 0;
+
+// ---------------------------------------------------------------------------
+// Platform externs (FLAGGED).
+//
+// XNetGetTitleXnAddr is the Xbox 360 networking API that fills an XNADDR with
+// the title's network identity. Only its 6-byte ethernet MAC (XNADDR::abEnet,
+// at byte offset +0x0A of the 0x60-byte struct read on the X360) is consumed
+// here. Declared with a minimal local shape sufficient to reproduce the field
+// reads; the real definition lives in the Xbox networking layer (not in this
+// project). FLAG: this is a platform API stub -- the byte offsets are taken
+// straight from the disassembly (lbz from var_36..var_31 == struct +0x0A..+0x0F).
+// ---------------------------------------------------------------------------
+struct MassiveXnAddr  // mirrors the leading bytes of the X360 XNADDR
+{
+    unsigned char abLeading[0x0A]; // ina + inaOnline (8) + wPortOnline (2)
+    unsigned char abEnet[6];       // +0x0A: ethernet MAC (the only field used)
+    unsigned char abPad[0x60 - 0x10];
+};
+
+extern "C" signed int XNetGetTitleXnAddr(MassiveXnAddr* pxna);
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem::ClearMassiveGuid @ 0x82BD2218
+//
+// result = mpcGuid; if (result) { MassiveFree(result); mpcGuid = 0; } return
+// result. (The X360 reads the freed pointer's old value into r3 and returns it.)
+// ---------------------------------------------------------------------------
+void* CMassiveSystem::ClearMassiveGuid()
+{
+    void* lpOld = mpcGuid;       // r3 = *(r31) = mpcGuid
+    if (lpOld)                   // cmplwi r3,0; beq ...
+    {
+        MassiveFree(lpOld);      // off_82F91C18(r3)  (free hook)
+        mpcGuid = 0;             // stw r11(=0), 0(r31)
+    }
+    return lpOld;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem::SetGuid @ 0x82BD2268
+//
+// Clears the current GUID, allocates a fresh 37-byte buffer into mpcGuid,
+// zero-fills it, and strncpy's at most 37 bytes from pcGuid. Returns the strncpy
+// destination (mpcGuid), or null when the allocation failed.
+// ---------------------------------------------------------------------------
+char* CMassiveSystem::SetGuid(const char* pcGuid)
+{
+    ClearMassiveGuid();                                     // bl ...ClearMassiveGuid
+    char* lpcBuffer = static_cast<char*>(MassiveMalloc(37)); // malloc(0x25)
+    mpcGuid = lpcBuffer;                                     // stw r3, 0(r31)
+    if (!lpcBuffer)                                          // beq (alloc failed)
+        return lpcBuffer;                                    // returns 0 in r3
+    std::memset(lpcBuffer, 0, 37);                           // memset(...,0,0x25)
+    return std::strncpy(mpcGuid, pcGuid, 37);                // strncpy(dst,src,0x25)
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem::ScalarDeletingDestructor @ 0x82BD2560
+//
+// Clears the GUID, then frees the object itself through the heap hook iff the
+// low bit of bDelete is set (and this is non-null). Returns this. The X360 dtor
+// is NOT virtual -- there is no vftable rewrite, just the manual free.
+// ---------------------------------------------------------------------------
+void* CMassiveSystem::ScalarDeletingDestructor(char bDelete)
+{
+    ClearMassiveGuid();                  // bl ...ClearMassiveGuid
+    if ((bDelete & 1) != 0 && this)      // clrlwi. r11,r30,31; ...; cmplwi r31,0
+        MassiveFree(this);               // off_82F91C18(r31)  (free hook)
+    return this;                         // r3 = r31
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem::Initialize @ 0x82BD25C0
+//
+// Lazy singleton: if the slot is empty, MassiveMalloc(4) a system object, zero
+// its GUID pointer (*result = 0), and store it back; an existing instance is
+// returned untouched. A failed allocation stores (and returns) null.
+// ---------------------------------------------------------------------------
+CMassiveSystem* CMassiveSystem::Initialize()
+{
+    CMassiveSystem* lpInstance = gpMassiveSystemInstance;   // lwz r3, slot
+    if (!lpInstance)                                         // bne -> skip
+    {
+        lpInstance = static_cast<CMassiveSystem*>(MassiveMalloc(4)); // malloc(4)
+        if (lpInstance)
+            lpInstance->mpcGuid = 0;                         // stw 0, 0(r3)
+        else
+            lpInstance = 0;                                  // li r3, 0
+        gpMassiveSystemInstance = lpInstance;                // stw r3, slot
+    }
+    return lpInstance;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem::Instance @ 0x82BD2208
+//
+// Returns the raw singleton slot.
+// ---------------------------------------------------------------------------
+CMassiveSystem* CMassiveSystem::Instance()
+{
+    return gpMassiveSystemInstance;   // lwz r3, slot; blr
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem::Shutdown @ 0x82BD26B8
+//
+// If the singleton exists, run its scalar deleting destructor (bDelete = 1) and
+// clear the slot. Always returns 1.
+// ---------------------------------------------------------------------------
+int CMassiveSystem::Shutdown()
+{
+    CMassiveSystem* lpInstance = gpMassiveSystemInstance;   // lwz r3, slot
+    if (lpInstance)                                         // beq -> return 1
+    {
+        lpInstance->ScalarDeletingDestructor(1);            // r4=1; bl ...dtor
+        gpMassiveSystemInstance = 0;                        // stw 0, slot
+    }
+    return 1;                                               // li r3, 1
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem::GetSystemTime @ 0x82BD22E0
+//
+// Returns GetTickCount() (clrldi r3,r3,32 -> zero-extended DWORD). std::clock
+// here would be a different clock; the faithful source is the platform tick
+// counter. FLAG: GetTickCount is a Win32/X360 platform API -- declared below and
+// supplied by the platform layer.
+// ---------------------------------------------------------------------------
+unsigned int CMassiveSystem::GetSystemTime()
+{
+    return MassiveGetTickCount();   // bl GetTickCount; clrldi r3,r3,32
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem::GetServerTimeFormatted @ 0x82BD2308
+//
+// Builds "YYYY-MM-DD HH:MM:SS,mmm" from a Unix-millisecond timestamp:
+//   seconds = nMilliseconds / 1000  -> localtime64 -> tm
+//   date  via "%d-%.2d-%.2d "      (tm_year+1900, tm_mon+1, tm_mday)
+//   time  via "%.2d:%.2d:%.2d,%.3d" (tm_hour, tm_min, tm_sec, ms remainder)
+//   final via "%s%s" (date then time) into pcBuffer
+// On a localtime64 failure the whole buffer is set to "Time Unavailable".
+// The asm reads tm fields by byte offset; the host struct tm member names map as:
+//   *(tm+0x00)=tm_sec  *(tm+0x04)=tm_min  *(tm+0x08)=tm_hour  *(tm+0x0C)=tm_mday
+//   *(tm+0x10)=tm_mon  *(tm+0x14)=tm_year
+// ---------------------------------------------------------------------------
+int CMassiveSystem::GetServerTimeFormatted(int /*nUnused*/, unsigned int nMilliseconds,
+                                           char* pcBuffer, unsigned int nCount)
+{
+    __time64_t lnSeconds = static_cast<__time64_t>(nMilliseconds) / 1000; // divdu r30,1000
+    struct tm* lpTm = _localtime64(&lnSeconds);                           // localtime64
+
+    if (lpTm)
+    {
+        char lacDate[32];  // var_50
+        char lacTime[32];  // var_70
+
+        MassiveFormatString(lacDate, 0x20, "%d-%.2d-%.2d ",
+                            lpTm->tm_year + 1900,   // r6 = *(tm+0x14)+0x76C
+                            lpTm->tm_mon + 1,       // r7 = *(tm+0x10)+1
+                            lpTm->tm_mday);         // r8 = *(tm+0x0C)
+
+        unsigned int luMsRemainder = nMilliseconds - 1000u * (nMilliseconds / 1000u); // subf r9
+        MassiveFormatString(lacTime, 0x20, "%.2d:%.2d:%.2d,%.3d",
+                            lpTm->tm_hour,          // r6 = *(tm+0x08)
+                            lpTm->tm_min,           // r7 = *(tm+0x04)
+                            lpTm->tm_sec,           // r8 = *(tm+0x00)
+                            luMsRemainder);         // r9
+
+        return MassiveFormatString(pcBuffer, nCount, "%s%s", lacDate, lacTime); // r6=date,r7=time
+    }
+
+    return MassiveFormatString(pcBuffer, nCount, "Time Unavailable");
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem::GetHardwareAddress @ 0x82BD23D0
+//
+// XNetGetTitleXnAddr -> XNADDR; on success allocate an 18-byte string into
+// *ppcOut, zero it, and format the 6 MAC bytes (abEnet, struct +0x0A..+0x0F) as
+// "%02X:%02X:%02X:%02X:%02X:%02X". Returns the XNetGetTitleXnAddr status (the
+// negative error is returned directly; on alloc failure the positive status is
+// returned without writing the string).
+// ---------------------------------------------------------------------------
+signed int CMassiveSystem::GetHardwareAddress(int /*nUnused*/, char** ppcOut)
+{
+    MassiveXnAddr lXnAddr;  // var_40 (XNADDR scratch)
+
+    signed int lnStatus = XNetGetTitleXnAddr(&lXnAddr);  // r3 = status
+    if (lnStatus < 0)                                    // blt -> return status
+        return lnStatus;
+
+    char* lpcBuffer = static_cast<char*>(MassiveMalloc(0x12)); // malloc(18)
+    *ppcOut = lpcBuffer;                                       // stw r3, 0(r31)
+    if (!lpcBuffer)                                            // beq -> return status
+        return lnStatus;
+
+    std::memset(lpcBuffer, 0, 0x12);                          // memset(...,0,18)
+
+    // r6..r10 + a stacked 6th arg = abEnet[0..5] (struct +0x0A..+0x0F).
+    MassiveFormatString(*ppcOut, 0x11, "%02X:%02X:%02X:%02X:%02X:%02X",
+                        lXnAddr.abEnet[0],   // var_36 (+0x0A)
+                        lXnAddr.abEnet[1],   // var_35 (+0x0B)
+                        lXnAddr.abEnet[2],   // var_34 (+0x0C)
+                        lXnAddr.abEnet[3],   // var_33 (+0x0D)
+                        lXnAddr.abEnet[4],   // var_32 (+0x0E)
+                        lXnAddr.abEnet[5]);  // var_31 (+0x0F, stacked vararg)
+    return lnStatus;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveSystem::CreateMassiveGuid @ 0x82BD2628
+//
+// Allocates a 37-byte buffer at *ppcOut, zero-fills it, then formats a
+// pseudo-GUID "%8.8x-%I64d-%d" from a fixed tag, the wall-clock SYSTEMTIME, and
+// the tick counter. Returns the buffer pointer (null on allocation failure).
+//
+// Operand mapping confirmed against the call-site registers (asm @ 0x82BD2680..):
+//   r3 = *ppcOut (buffer)         r4 = 0x25 (count)        r5 = "%8.8x-%I64d-%d"
+//   r6 = a1 (the char** address itself)        -> %8.8x  (hex of the slot ptr)
+//   r7 = TickCount (clrldi, zero-extended 64b) -> %I64d   (the tick counter)
+//   r8 = v17 * v16 (product of the two trailing SYSTEMTIME 16-bit words) -> %d
+// FLAG: %8.8x prints the host pointer value of `ppcOut`; on the 64-bit host this
+// is an 8-byte pointer truncated to 32 bits by %x, matching the X360's 32-bit
+// pointer width only in the low word. The two SYSTEMTIME words (v16 at the
+// 12-byte block +0x0C, v17 at +0x0E) are read back as the X360 stored them; the
+// product is reproduced verbatim. The observable contract is a per-call unique
+// GUID-shaped string of the form "%8.8x-%I64d-%d".
+// ---------------------------------------------------------------------------
+int CMassiveSystem::CreateMassiveGuid(char** ppcOut)
+{
+    char* lpcBuffer = static_cast<char*>(MassiveMalloc(0x25)); // malloc(37)
+    *ppcOut = lpcBuffer;                                       // stw r3, 0(r31)
+    if (!lpcBuffer)                                            // beq -> return result(=0)
+        return 0;
+
+    std::memset(lpcBuffer, 0, 0x25);                           // memset(...,0,37)
+
+    // The X360 passes a SYSTEMTIME-shaped block to GetSystemTime (8 WORDs / 16
+    // bytes); IDA typed only the leading 12 bytes as v15 but reads v16/v17 from
+    // the last two WORDs (+0x0C/+0x0E), so the full 16-byte block is modelled.
+    unsigned char lacSystemTime[16];                           // v15 (GetSystemTime BYREF)
+    MassiveGetSystemTimeBlock(lacSystemTime);                  // GetSystemTime(v15)
+    unsigned int luTickCount = MassiveGetTickCount();          // GetTickCount() -> r3
+
+    // v16 @ block+0x0C (var_14), v17 @ block+0x0E (var_12); both 16-bit.
+    unsigned short luWord16 = static_cast<unsigned short>(     // v16  (lhz var_14)
+        lacSystemTime[12] | (lacSystemTime[13] << 8));
+    unsigned short luWord17 = static_cast<unsigned short>(     // v17  (lhz var_12)
+        lacSystemTime[14] | (lacSystemTime[15] << 8));
+
+    unsigned int luProduct  = static_cast<unsigned int>(luWord17 * luWord16); // mullw r8,r9,r8
+
+    unsigned int luSlotAddr = static_cast<unsigned int>(           // r6 = a1 (low 32b of slot ptr)
+        reinterpret_cast<std::uintptr_t>(ppcOut));
+    return MassiveFormatString(*ppcOut, 0x25, "%8.8x-%I64d-%d",
+                               luSlotAddr,                          // %8.8x
+                               static_cast<long long>(luTickCount), // r7 = TickCount (%I64d)
+                               static_cast<int>(luProduct));        // r8 = v17*v16 (%d)
 }
 
 } // namespace MassiveAdClient3
