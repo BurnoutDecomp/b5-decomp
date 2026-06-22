@@ -113,12 +113,24 @@ namespace InputIO
         // CgsInput::Device::WheelFFSpring mWheelFFSpring; // tail member -- own TU
     };
 
+    // PadOutputInformation is the per-pad output record (rumble/jolt/force-feedback state
+    // the input module publishes back to each connected pad). Its full field layout is its
+    // own reconstruction TU; here only its X360 byte width is needed so OutputBuffer's
+    // maPadOutputInformation[7] array lands at the right offset and GetPadInfo()'s
+    // `&a1[932*a2 + 296]` element math reproduces exactly. Width 932B (0x3A4) is taken from
+    // the X360 stride (`mulli r11, r22, 0x3A4`). Promote to the real fielded type when homed.
+    struct PadOutputInformation
+    {
+        u8 mRawStorage[932]; // X360 sizeof == 0x3A4; HONEST placeholder until fielded TU
+    };
+
     // ---- OutputBuffer (DWARF CgsInputModuleIO.h:844) ------------------------
     //   GetBindResultQueue()      const -> X360 0x823B1038, read-lock,  this+4
     //   GetUnbindResultQueue()    const -> X360 0x823B10E0, read-lock,  this+112
     //   GetPadDisconnectedQueue() const -> X360 0x823B1188, read-lock,  this+220
     //   GetUnbindResultQueue()          -> X360 0x828E6DD0, write-lock, this+112
     //   GetPadDisconnectedQueue()       -> X360 0x828E6E78, write-lock, this+220
+    //   GetPadInfo(pad)           const -> X360 0x823B1230, read-lock,  this+296+932*pad
     struct OutputBuffer : public CgsModule::IOBuffer
     {
         typedef CgsModule::EventQueue<BindResult,     8> BindResultQueue;      // 108B (BindResult=12B)
@@ -132,11 +144,14 @@ namespace InputIO
         UnBindResultQueue*          GetUnbindResultQueue();          // 0x828E6DD0
         PadDisconnectedQueue*       GetPadDisconnectedQueue();       // 0x828E6E78
 
+        // X360 0x823B1230 - read-lock accessor returning the iPort-th pad output record.
+        const PadOutputInformation* GetPadInfo(s32 iPort) const;     // 0x823B1230
+
     private:
-        BindResultQueue      mBindResultQueue;       // @ +4   .. +112
-        UnBindResultQueue    mUnBindResultQueue;     // @ +112 .. +220
-        PadDisconnectedQueue mPadDisconnectedQueue;  // @ +220 .. +296
-        // PadOutputInformation maPadOutputInformation[7]; // tail @ +296 -- own TU
+        BindResultQueue      mBindResultQueue;          // @ +4   .. +112
+        UnBindResultQueue    mUnBindResultQueue;        // @ +112 .. +220
+        PadDisconnectedQueue mPadDisconnectedQueue;     // @ +220 .. +296
+        PadOutputInformation maPadOutputInformation[7]; // @ +296 .. +6820
     };
 
     // ---- PreWorldInputBuffer (DWARF CgsInputModuleIO.h:603) -----------------

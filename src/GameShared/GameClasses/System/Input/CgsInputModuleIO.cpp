@@ -74,6 +74,19 @@ OutputBuffer::PadDisconnectedQueue* OutputBuffer::GetPadDisconnectedQueue()
     return &mPadDisconnectedQueue;
 }
 
+// X360 0x823B1230 - read-lock accessor returning the iPort-th pad output record (this+296+932*iPort).
+// Callers: BrnGame::BrnGameModule::{GetPadInfoForPlayer0, BridgeControllerToDirector,
+// DoUpdate_InputPreWorld, BridgeControllerToWorld, DoUpdate_Effects, BridgeControllerToGui}.
+// The X360 asserts the read lock then the pad index against [0,4) - matching the three
+// inline asserts at CgsInputModuleIO.h:1203-1205 (messages preserved verbatim, typos and all).
+const PadOutputInformation* OutputBuffer::GetPadInfo(s32 iPort) const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(iPort < 4, "Invalid pad specified\n");
+    CGS_ASSERT(iPort >= 0, "Port must me positive\n");
+    return &maPadOutputInformation[iPort];
+}
+
 // =====================  PreWorldInputBuffer  =====================
 
 // X360 0x828E6740 - read-lock accessor for the play-jolt-effect event queue (this+4).
