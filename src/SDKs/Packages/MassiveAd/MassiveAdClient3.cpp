@@ -567,4 +567,111 @@ int CMassiveSystem::CreateMassiveGuid(char** ppcOut)
                                static_cast<int>(luProduct));        // r8 = v17*v16 (%d)
 }
 
+// ===========================================================================
+// CMassiveCriticalSection -- CMassiveBaseObject + one OS critical section.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// CMassiveCriticalSection::CMassiveCriticalSection @ 0x82BD2700
+//
+// X360 order: chain CMassiveBaseObject(this, "MassiveCriticalSection"), install
+// this class's vftable (*a1 = &off_821856B8 -- compiler-emitted for the virtual
+// dtor), RtlInitializeCriticalSection(a1 + 5 == mCriticalSection). Then, iff the
+// section name is non-null AND strlen != 0, MassiveMalloc(strlen+1), store it into
+// mpcSectionName (a1[12], stored even on alloc failure -> may be null), and on a
+// non-null buffer strncpy(buffer, name, strlen+1). A null/empty name leaves
+// mpcSectionName untouched -- so it must start null.
+//   asm: r29 = a2 (name) captured before the base ctor; v4 = strlen(name);
+//        v5 = v4 + 1 (the strncpy count); v6 = MassiveMalloc(v5); a1[12] = v6.
+// ---------------------------------------------------------------------------
+CMassiveCriticalSection::CMassiveCriticalSection(const char* pcSectionName)
+    : CMassiveBaseObject("MassiveCriticalSection")  // bl ...CMassiveBaseObject(a1,"...")
+    , mpcSectionName(0)                              // a1[12] default (untouched on null/empty)
+{
+    // *a1 = &off_821856B8 is the compiler-emitted vftable install for this
+    // derived virtual-dtor class; nothing to write by hand.
+
+    MassiveInitializeCriticalSection(&mCriticalSection); // RtlInitializeCriticalSection(a1+5)
+
+    if (pcSectionName)                                   // if (a2)
+    {
+        std::size_t luLength = std::strlen(pcSectionName); // v4 = strlen(a2)
+        if (luLength != 0)                                 // if (v4)
+        {
+            std::size_t luCount = luLength + 1;            // v5 = v4 + 1
+            char* lpcBuffer = static_cast<char*>(MassiveMalloc(luCount)); // v6 = MassiveMalloc(v5)
+            mpcSectionName = lpcBuffer;                    // a1[12] = v6
+            if (lpcBuffer)                                 // if (v6)
+                std::strncpy(lpcBuffer, pcSectionName, luCount); // strncpy(v6, a2, v5)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveCriticalSection::~CMassiveCriticalSection @ 0x82BD2788
+//
+// X360: v2 = a1[12]; *a1 = &off_821856B8 (compiler-emitted vftable rewrite for a
+// virtual dtor); if (v2) { free-hook(v2); a1[12] = 0; }; then chain the base dtor
+// (bl ...CMassiveBaseObject::~CMassiveBaseObject). The store order is
+// vftable-rewrite, then free of mpcSectionName -- both before the base dtor, which
+// the compiler sequences after this body.
+// ---------------------------------------------------------------------------
+CMassiveCriticalSection::~CMassiveCriticalSection()
+{
+    if (mpcSectionName)        // v2 = a1[12]; if (v2)
+    {
+        MassiveFree(mpcSectionName); // off_82F91C18(v2)  (free hook)
+        mpcSectionName = 0;          // a1[12] = 0
+    }
+    // ~CMassiveBaseObject() runs next (compiler-chained).
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveCriticalSection::Enter @ 0x82BD27E8
+//
+// RtlEnterCriticalSection(a1 + 20 == mCriticalSection), then a verbose trace:
+//   STUB(7, *(a1 + 12), "Try(blocking) succeeded on %s by %s", *(a1 + 48), a2)
+// r3 = 7 (level), r4 = base mpcName (+0x0C), r5 = format, r6 = mpcSectionName
+// (+0x30), r7 = a2 (the caller tag). Args modelled through the MassiveLog hook.
+// ---------------------------------------------------------------------------
+void CMassiveCriticalSection::Enter(const char* pcWho)
+{
+    MassiveEnterCriticalSection(&mCriticalSection);   // RtlEnterCriticalSection(a1+20)
+    MassiveLog(7, GetName(),                          // r3 = 7, r4 = +0x0C (base name)
+               "Try(blocking) succeeded on %s by %s",
+               mpcSectionName,                        // r6 = +0x30 (section name)
+               pcWho);                                // r7 = a2 (caller tag)
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveCriticalSection::Exit @ 0x82BD28C0
+//
+// Mirror of Enter on the release path:
+//   RtlLeaveCriticalSection(a1 + 20)
+//   STUB(7, *(a1 + 12), "Exit succeeded on %s by %s", *(a1 + 48), a2)
+// ---------------------------------------------------------------------------
+void CMassiveCriticalSection::Exit(const char* pcWho)
+{
+    MassiveLeaveCriticalSection(&mCriticalSection);   // RtlLeaveCriticalSection(a1+20)
+    MassiveLog(7, GetName(),                          // r3 = 7, r4 = +0x0C (base name)
+               "Exit succeeded on %s by %s",
+               mpcSectionName,                        // r6 = +0x30 (section name)
+               pcWho);                                // r7 = a2 (caller tag)
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveCriticalSection::VectorDeletingDestructor @ 0x82BD2918
+//
+// The X360 vftable's deleting-destructor thunk: run ~CMassiveCriticalSection,
+// then -- iff (bDelete & 1) -- free the object through the base operator delete
+// (the MassiveAd free hook). Returns this. (a2 & 1 gate via clrlwi. r11,r30,31.)
+// ---------------------------------------------------------------------------
+void* CMassiveCriticalSection::VectorDeletingDestructor(char bDelete)
+{
+    this->~CMassiveCriticalSection();           // bl ...::~CMassiveCriticalSection(a1)
+    if ((bDelete & 1) != 0)                     // clrlwi. r11,r30,31; beq ...
+        CMassiveBaseObject::operator delete(this); // bl ...CMassiveBaseObject::operator delete(a1)
+    return this;                                // r3 = r31
+}
+
 } // namespace MassiveAdClient3

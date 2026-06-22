@@ -24,6 +24,7 @@
 // baked into CgsEntityId.h (lines 160 / 167) and reproduced as house CGS_ASSERTs.
 #include "BrnCommonTypes.h"                               // EntityId { u32 muValue }
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h" // VolumeInstanceId { u64 muId }
 
 namespace BrnWorld
 {
@@ -66,5 +67,65 @@ namespace BrnWorld
         void AssertIsProp() const;              // inlined tripwire (owner byte == 3)
 
         EntityId mEntityId;
+    };
+
+    // ---------------------------------------------------------------------------
+    // FLAGGED ADDITIVE GROW (PropVolumeInstanceID group): the DecFIGS DWARF places
+    // BrnWorld::PropVolumeInstanceID in this same header (BrnPropEntityID.h:170) and
+    // the X360 accessor asm bakes its assert strings against this file (lines 455 /
+    // 278), so its home is here alongside its sibling PropEntityID. Nothing above is
+    // modified; this only adds the new type + a forward to its CgsVolumeInstanceId
+    // include.
+    //
+    // BrnWorld::PropVolumeInstanceID — wraps a CgsSceneManager::VolumeInstanceId whose
+    // 64-bit packed word (CgsVolumeInstanceId.h) is laid out as
+    //     entityId    : bits [32..63]  (32 bits) — an embedded PropEntityID word
+    //     reserved    : bits  [8..31]  (24 bits)
+    //     volumeIndex : bits  [0..7]   ( 8 bits)
+    // The X360 asm is authoritative for this layout:
+    //   Set            @ 0x822B7CE0  `sldi r,entity,32; or volume&0xFF; std`
+    //                                -> muId = (entityWord << 32) | (volume & 0xFF)
+    //   GetEntityIndex @ 0x822B7F30  reads (muId>>32) then `extrwi r,w,14,8`
+    //                                -> embedded PropEntityID::GetEntityIndex()
+    //   SetEntityIndex @ 0x822B7D70  splices a PropEntityID::SetEntityIndex result back
+    //   SetPartIndex   @ 0x822B7E50  splices a PropEntityID::SetPartIndex result back
+    //   GetPropEntityID@ 0x822B8058  returns the high-dword word as a PropEntityID
+    //   SetPropEntityId@ 0x822B7FE0  installs a PropEntityID into the high dword
+    // Two owner tripwires fire in these bodies: the volume-level one bakes
+    // "mVolumeInstanceId.GetEntityIDOwner() == E_ENTITYTYPE_PROP" (line 455) and the
+    // entity-level one bakes "mEntityId.GetOwner() == E_ENTITYTYPE_PROP" (line 278),
+    // both comparing the owner byte (top byte of the embedded entity word) against
+    // E_ENTITYTYPE_PROP (== 3).
+    struct PropVolumeInstanceID
+    {
+        // Position of the embedded EntityId word inside the 64-bit VolumeInstanceId
+        // (matches CgsVolumeInstanceId.h KU_ENTITY_ID_START_INDEX == 32).
+        static const u32 KU_ENTITY_ID_BASE        = 32;
+        static const u64 KU_VOLUME_INDEX_MASK     = 0x00000000000000FFull; // bits [0..7]
+
+        PropVolumeInstanceID() {}
+
+        // 0x822B7CE0 — Set(propEntityId, volumeNumber).
+        void Set(PropEntityID lPropEntityId, u8 luVolumeNumber);
+
+        // 0x822B7FE0 — install a PropEntityID into the high dword (keep volume index).
+        void SetPropEntityId(PropEntityID lPropEntityId);
+
+        // 0x822B8058 — return the embedded PropEntityID (high-dword word).
+        PropEntityID GetPropEntityID();
+
+        // 0x822B7F30 — embedded PropEntityID::GetEntityIndex().
+        u32 GetEntityIndex() const;
+
+        // 0x822B7D70 — splice PropEntityID::SetEntityIndex back into the entity word.
+        void SetEntityIndex(u16 luEntityIndex);
+
+        // 0x822B7E50 — splice PropEntityID::SetPartIndex back into the entity word.
+        void SetPartIndex(u32 luPartIndex);
+
+        // Volume-level owner tripwire (baked line 455).
+        void AssertIsProp() const;
+
+        CgsSceneManager::VolumeInstanceId mVolumeInstanceId;
     };
 }
