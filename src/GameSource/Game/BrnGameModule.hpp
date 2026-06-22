@@ -45,6 +45,17 @@ class WorldModule : public CgsModule::ModuleSingleBuffered {};
 // definitions of the same class = ODR violation: the linker silently binds the empty do-nothing ctor,
 // leaving the member unconstructed (null vtable) -> crash. (That exact bug cost a debugging session on
 // GameDataModule; see memory gamedatamodule-scoping "ODR-STUB TRAP".)
+// Forward declarations for the controller-bridge family parameter types (declared-only here; the
+// bridge bodies in GameBridgeControllerToX.cpp include the real homes). Keeping these as forward
+// decls avoids pulling the heavy IO headers into this keystone header.
+namespace CgsInput { namespace InputIO { struct PadOutputInformation; struct OutputBuffer; struct ActionInfo; } }
+namespace BrnDirector { namespace DirectorIO { struct InputBuffer; } }
+namespace BrnWorldIO { struct UpdateInputBuffer; }
+namespace BrnGame { struct DebugControllerImage; }
+namespace CgsGui { class GuiModule; }
+// (CgsGui::CgsGuiModuleIO::OutputBuffer is the GUI output buffer the ToGui bridge threads through;
+//  it is already declared as a placeholder struct below near the IO-payload stubs.)
+
 namespace BrnGameState { class GameStateModule : public CgsModule::ModuleSingleBuffered {}; }
 namespace BrnDirector  { class DirectorModule  : public CgsModule::ModuleSingleBuffered {}; }
 namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleBuffered {}; }
@@ -147,6 +158,46 @@ namespace BrnGame
         bool GamePrepare();  // @ BrnGameModule.cpp:1580
         bool GameRelease();  // @ BrnGameModule.cpp:2650
 
+    public:
+        // ---- controller-input bridge family (GameSource/Unity/../Game/GameBridgeControllerToX.cpp) --
+        // Each per-frame bridge reads player-0's pad record (via CgsInput OutputBuffer::GetPadInfo)
+        // and publishes it into a subsystem's input buffer. Signatures recovered from the X360
+        // call sites (the leading int args are subsystem InputBuffer* / the input OutputBuffer*).
+        // The pad records / GUI events / debug-controller image these touch live in
+        // GameBridgeControllerToX.h (several are FLAGGED un-homed placeholders).
+
+        // X360 0x823C0EA0 -- locate player-0's pad record. Returns the read-locked
+        // PadOutputInformation* for the player-0 controller port (or null if no controller is
+        // assigned), and writes the resolved port into *lpOutPort. Shared helper for the 5 bridges.
+        const CgsInput::InputIO::PadOutputInformation* GetPadInfoForPlayer0(
+            const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer, s32* lpOutPort);
+
+        // X360 0x823AA580 -- copy the player's 22 pad ActionInfo slots into a debug-controller image.
+        void MapActionInfoToDebugController(BrnGame::DebugControllerImage* lpImage,
+                                            const CgsInput::InputIO::ActionInfo* lpActionInfo);
+
+        // X360 0x823C0F70 -- publish player-0 controller state into the Director input buffer.
+        void BridgeControllerToDirector(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
+                                        const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
+
+        // X360 0x823CD890 -- publish player-0 controller state into the World update input buffer.
+        void BridgeControllerToWorld(BrnWorldIO::UpdateInputBuffer* lpWorldInput,
+                                     const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
+
+        // X360 0x823CD738 -- publish player-0 controller state into the GameState PreWorld input
+        // buffer (+ merge the bind/unbind result queues). FLAG: ledger dest is
+        // GameSource/GameState/BrnGameStateModuleIO.h, but as a BrnGameModule method it co-locates
+        // with its siblings + the shared GetPadInfoForPlayer0 helper in GameBridgeControllerToX.cpp.
+        void BridgeControllerToGameState(BrnGameState::GameStateModule* lpGameStateModule,
+                                         const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+                                         s32 liActionContext);
+
+        // X360 0x823E6B18 -- synthesise GUI events from player-0 (and, when no player-0 controller is
+        // assigned, the cross-pad menu-accept scan) and push them through the GUI module.
+        void BridgeControllerToGui(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+                                   const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
+    private:
+
         // ---- members (real order; off-path ranges omitted; see LAYOUT NOTE) -------------
         // ---- the 11 engine modules (real names/types/order; all derive from the module base) --
         BrnRendererModule mRenderModule;                             // h:356
@@ -202,6 +253,24 @@ namespace BrnGame
         CgsGui::CgsGuiModuleIO::OutputBuffer*  mpGuiOutputBuffer;    // h:496
         BrnDirector::DirectorIO::OutputBuffer* mpDirectorOutputBuffer;// h:497
         // [remaining members - omitted]
+
+        // ---- controller-bridge inputs (real names; off-path absolute offsets noted) -------------
+        // These are the game-module fields the BridgeControllerTo* family reads each frame. They sit
+        // far past the boot-path members above (X360 absolute offsets in comments); declared here in
+        // the omitted tail per the LAYOUT NOTE (semantic parity, not byte-exact).
+        s32  miInputModuleState;        // @ +10094136 (==4 means input module ready / player-0 assigned)
+        s32  miPlayer0ControllerPort;   // @ +10094140 (asserted <= CgsInput::KU_NUMBER_OF_PADS)
+        s32  miSecondaryControllerPort; // @ +10094144 (the rumble/debug-controller read port)
+        bool mbGuiAcceptsControllerInput;// @ +10094266 (gates the ToGui change-car / menu-accept events)
+        bool mbGuiSuppressMenuAccept;    // @ +10095408 (when set, the menu-accept synthesis is skipped)
+        s32  miLanguageCycleTimerLo;     // @ +10095388 (ToGui language-cycle debounce time, low word)
+        s32  miLanguageCycleTimerHi;     // @ +10095392 (ToGui language-cycle debounce time, high word)
+        // The CgsGui GUI module the ToGui bridge pushes events into (X360 +7252512). Distinct from
+        // mGuiModule (BrnGui::GuiModule, the movie host) -- this is the CgsGui event sink. Held by
+        // pointer (initialised to the embedded module in the full Construct) so the keystone header
+        // need not embed the un-homed CgsGui::GuiModule placeholder by value. The ToGui bridge calls
+        // mpCgsGuiModule->AddGuiEvent<T>(...). FLAG: real layout embeds the module by value @ +7252512.
+        CgsGui::GuiModule* mpCgsGuiModule; // @ +7252512
     };
 
     // operator++(EReleaseStage&, int) @ 0x823A8AD8 (X360 ARTIST), defined in BrnGameModule.cpp.
