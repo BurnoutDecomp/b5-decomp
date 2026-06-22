@@ -159,4 +159,141 @@ void* CMassiveListNode::operator new(std::size_t nSize)
     return MassiveMalloc(nSize);
 }
 
+// ---------------------------------------------------------------------------
+// CMassiveList::Append @ 0x82BCEFE8
+//
+// X360: a null node returns 0. When the list is non-empty (head != 0) the new
+// node is stitched after the current tail: tail->mpNext = node (**(a1+4)=a2)
+// and node->mpPrev = old tail (*(a2+4)=*(a1+4)). When empty, the node becomes
+// the head (*a1 = a2). The tail and the iterator cursor are then both pointed at
+// the new node and the count is incremented. Returns 1.
+// ---------------------------------------------------------------------------
+int CMassiveList::Append(CMassiveListNode* pNode)
+{
+    if (!pNode)                       // if (!a2) return 0;
+        return 0;
+
+    if (mpHead)                       // if (*a1)
+    {
+        mpTail->mpNext = pNode;       // **(a1 + 4) = a2  (tail->mpNext = node)
+        pNode->mpPrev  = mpTail;      // *(a2 + 4) = *(a1 + 4)  (node->mpPrev = tail)
+    }
+    else
+    {
+        mpHead = pNode;               // *a1 = a2
+    }
+
+    int lnCount = mnCount;            // v3 = *(a1 + 12)
+    mpTail    = pNode;                // *(a1 + 4) = a2
+    mpCurrent = pNode;                // *(a1 + 8) = a2
+    mnCount   = lnCount + 1;          // *(a1 + 12) = v3 + 1
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveList::Remove @ 0x82BCF0D8
+//
+// Unlinks pNode and patches the three list pointers, then optionally destroys
+// it. A null node returns 0. Head/tail are reseated when they referenced the
+// removed node (*a1 == a2 / a1[1] == a2). The neighbours are relinked across the
+// gap: prev->mpNext = node->mpNext (*v6 = *a2) and node->mpNext->mpPrev =
+// node->mpPrev (*(*a2 + 4) = a2[1]). If the cursor sat on the node it advances to
+// node->mpNext. When bDelete is set the node is run through ~CMassiveListNode and
+// freed via CMassiveBaseObject::operator delete (the MassiveAd free hook). The
+// count is decremented and 1 returned.
+// ---------------------------------------------------------------------------
+int CMassiveList::Remove(CMassiveListNode* pNode, int bDelete)
+{
+    if (!pNode)                            // if (!a2) return 0;
+        return 0;
+
+    if (mpHead == pNode)                   // if (*a1 == a2)
+        mpHead = pNode->mpNext;            //   *a1 = *a2
+
+    if (mpTail == pNode)                   // if (a1[1] == a2)
+        mpTail = pNode->mpPrev;            //   a1[1] = a2[1]
+
+    CMassiveListNode* lpPrev = pNode->mpPrev;  // v6 = a2[1]
+    if (lpPrev)                            // if (v6)
+        lpPrev->mpNext = pNode->mpNext;    //   *v6 = *a2
+
+    if (pNode->mpNext)                     // if (*a2)
+        pNode->mpNext->mpPrev = pNode->mpPrev; // *(*a2 + 4) = a2[1]
+
+    if (pNode == mpCurrent)                // if (a2 == a1[2])
+        mpCurrent = pNode->mpNext;         //   a1[2] = *a2
+
+    if (bDelete)                           // if (a3)
+    {
+        pNode->~CMassiveListNode();        // CMassiveListNode::~CMassiveListNode(a2)
+        CMassiveBaseObject::operator delete(pNode); // ...::operator delete(a2)
+    }
+
+    --mnCount;                             // --a1[3]
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveList::RemoveAll @ 0x82BCF1A8
+//
+// Repeatedly removes (with deletion) the head node until the list is empty.
+// ---------------------------------------------------------------------------
+void CMassiveList::RemoveAll()
+{
+    for (; mpHead; )               // for ( i = result; *i; ... )
+        Remove(mpHead, 1);         // result = Remove(i, *i, 1)
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveList::~CMassiveList @ 0x82BCF1F0
+//
+// Tail-calls RemoveAll (a plain branch in the X360).
+// ---------------------------------------------------------------------------
+CMassiveList::~CMassiveList()
+{
+    RemoveAll();
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveList::GoToStart @ 0x82BCF060
+//
+// Resets the cursor to the head and returns it.
+// ---------------------------------------------------------------------------
+CMassiveListNode* CMassiveList::GoToStart()
+{
+    CMassiveListNode* lpHead = mpHead;  // result = *a1
+    mpCurrent = lpHead;                 // a1[2] = result
+    return lpHead;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveList::GoToNext @ 0x82BCF070
+//
+// Advances the cursor to mpCurrent->mpNext and returns the new cursor. A null
+// cursor short-circuits to 0.
+// ---------------------------------------------------------------------------
+CMassiveListNode* CMassiveList::GoToNext()
+{
+    CMassiveListNode* lpCurr = mpCurrent;  // v2 = *(a1 + 8)
+    if (!lpCurr)                           // if (!v2) return 0;
+        return 0;
+
+    CMassiveListNode* lpNext = lpCurr->mpNext;  // result = *v2
+    mpCurrent = lpNext;                         // *(a1 + 8) = *v2
+    return lpNext;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveList::GetCurrData @ 0x82BCF098
+//
+// Returns the payload pointer (mpOwner) of the node under the cursor, or 0.
+// ---------------------------------------------------------------------------
+void* CMassiveList::GetCurrData()
+{
+    CMassiveListNode* lpCurr = mpCurrent;  // v1 = *(a1 + 8)
+    if (lpCurr)                            // if (v1)
+        return lpCurr->mpOwner;            //   return *(v1 + 8)
+    return 0;
+}
+
 } // namespace MassiveAdClient3

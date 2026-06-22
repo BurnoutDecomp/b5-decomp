@@ -39,4 +39,13 @@ namespace BrnReplays
 
         E_ID_COUNT = 11, // X360 (leak: 5)
     };
+
+    // DWARF: BrnReplayShared.h:57. The replay-time vs debug-time context a
+    // serialiser runs in. Recovered fully from the Feb-2007 leak.
+    enum ESerialiserContext
+    {
+        E_CONTEXT_NORMAL = 0,
+        E_CONTEXT_DEBUG  = 1,
+        E_CONTEXT_COUNT  = 2,
+    };
 }

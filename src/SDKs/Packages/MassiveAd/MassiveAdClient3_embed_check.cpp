@@ -22,5 +22,17 @@ void MassiveAdClient3_EmbedCheck()
     (void)lnValid;
 
     CMassiveListNode* lpNode = new CMassiveListNode(&lObject);
-    delete lpNode;
+
+    CMassiveList lList;
+    lList.Append(lpNode);
+    lList.Append(new CMassiveListNode(&lObject));
+
+    for (CMassiveListNode* lpIt = lList.GoToStart(); lpIt; lpIt = lList.GoToNext())
+    {
+        void* lpData = lList.GetCurrData();
+        (void)lpData;
+    }
+
+    lList.Remove(lpNode, 1);
+    lList.RemoveAll();
 }

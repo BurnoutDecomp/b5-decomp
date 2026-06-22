@@ -42,7 +42,21 @@
 //     +0x00  mpNext                   (result[0])
 //     +0x04  mpPrev                   (result[1])
 //     +0x08  mpOwner                  (result[2]; the listed payload pointer)
+//   CMassiveList (4 dwords, 0x10 bytes)
+//     +0x00  mpHead                   (a1[0]; first node, 0 when empty)
+//     +0x04  mpTail                   (a1[1]; last node)
+//     +0x08  mpCurrent                (a1[2]; iterator cursor)
+//     +0x0C  mnCount                  (a1[3]; live node count)
 // ===========================================================================
+//
+// CMassiveList bodies reconstructed from the X360 ARTIST.XEX:
+//     MassiveAdClient3::CMassiveList::Append       @ 0x82BCEFE8
+//     MassiveAdClient3::CMassiveList::GetCurrData   @ 0x82BCF098
+//     MassiveAdClient3::CMassiveList::GoToNext      @ 0x82BCF070
+//     MassiveAdClient3::CMassiveList::GoToStart     @ 0x82BCF060
+//     MassiveAdClient3::CMassiveList::Remove        @ 0x82BCF0D8
+//     MassiveAdClient3::CMassiveList::RemoveAll     @ 0x82BCF1A8
+//     MassiveAdClient3::CMassiveList::~CMassiveList @ 0x82BCF1F0
 
 #include <cstddef>
 
@@ -122,9 +136,59 @@ public:
     static void* operator new(std::size_t nSize);
 
 private:
+    // CMassiveList owns the intrusive links and walks them by name on the X360
+    // (it reads/writes node +0x00 / +0x04 / +0x08 directly), so it is the one
+    // class permitted to touch these private link members.
+    friend class CMassiveList;
+
     CMassiveListNode* mpNext;  // +0x00
     CMassiveListNode* mpPrev;  // +0x04
     void*             mpOwner; // +0x08
+};
+
+// ---------------------------------------------------------------------------
+// CMassiveList -- intrusive doubly-linked list over CMassiveListNode.
+//
+// The X360 keeps head/tail, a single-cursor iterator (GoToStart / GoToNext /
+// GetCurrData), and a live count. Append links a caller-owned node at the tail
+// and advances the cursor onto it; Remove unlinks a node (optionally destroying
+// it through the MassiveAd heap hook) and patches head/tail/cursor as needed.
+// ---------------------------------------------------------------------------
+class CMassiveList
+{
+public:
+    // @ 0x82BCF1F0. Tail-calls RemoveAll: destroys and frees every remaining
+    // node. The X360 dtor is non-virtual (a plain branch into RemoveAll).
+    ~CMassiveList();
+
+    // @ 0x82BCEFE8. Links pNode at the tail (cursor follows it) and bumps the
+    // count. A null node is a no-op returning 0; otherwise returns 1.
+    int Append(CMassiveListNode* pNode);
+
+    // @ 0x82BCF0D8. Unlinks pNode and patches head/tail/cursor; when bDelete is
+    // set it also runs the node dtor and frees it through the heap hook. A null
+    // node returns 0; otherwise returns 1.
+    int Remove(CMassiveListNode* pNode, int bDelete);
+
+    // @ 0x82BCF1A8. Removes (and deletes) every node, leaving the list empty.
+    void RemoveAll();
+
+    // @ 0x82BCF060. Resets the cursor to the head node.
+    CMassiveListNode* GoToStart();
+
+    // @ 0x82BCF070. Advances the cursor to the next node and returns it (0 when
+    // the cursor was already past the end).
+    CMassiveListNode* GoToNext();
+
+    // @ 0x82BCF098. Returns the payload (mpOwner) of the node under the cursor,
+    // or 0 when the cursor is null.
+    void* GetCurrData();
+
+private:
+    CMassiveListNode* mpHead;    // +0x00
+    CMassiveListNode* mpTail;    // +0x04
+    CMassiveListNode* mpCurrent; // +0x08
+    int               mnCount;   // +0x0C
 };
 
 } // namespace MassiveAdClient3
