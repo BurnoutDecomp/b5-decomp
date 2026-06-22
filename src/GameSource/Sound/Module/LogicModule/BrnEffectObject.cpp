@@ -12,6 +12,23 @@ namespace Logic
 {
 
 // ---------------------------------------------------------------------------
+// GetTypeName  @ 0x82682BF8
+//
+//   lis   r11, off_82F2E800@ha
+//   addi  r11, r11, off_82F2E800@l
+//   lwz   r3,  (off_82F2E800)(r11)   ; r3 = "BrnEffectObject"
+//   blr
+//
+// Returns the per-class RTTI type name. The X360 loads a pointer to the static
+// string literal "BrnEffectObject" (the rodata at off_82F2E800 holds the
+// address of that C string).
+// ---------------------------------------------------------------------------
+const char* BrnEffectObject::GetTypeName() const
+{
+    return "BrnEffectObject";
+}
+
+// ---------------------------------------------------------------------------
 // GetResourceRegistrar  @ 0x82696850
 //
 //   lwz   r11, 0x2C(r3)        ; r11 = this->mpLogicModule
