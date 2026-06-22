@@ -165,15 +165,19 @@ namespace CgsDev
         macCharBuffer[0] = '\0';
     }
 
-    // Inline-buffer sink: append text into macCharBuffer without overflowing it.
+    // 0x8229F6C8 - inline-buffer sink. The X360 substitutes the literal "<NULLSTRING>" for a null
+    // pointer (`if (!a2) a2 = "<NULLSTRING>";`) before appending, then forwards to the virtual char*
+    // sink; here that sink is this same override, which strncats into macCharBuffer without overflow.
     StrStreamBase& SimpleStrStream::operator<<(const char* lpcText)
     {
-        if (lpcText)
+        if (!lpcText)
+            lpcText = "<NULLSTRING>";
+
+        const size_t luUsed = std::strlen(macCharBuffer);
+        if ((size_t)KI_BUFFER_SIZE - 1 > luUsed)
         {
-            const size_t luUsed = std::strlen(macCharBuffer);
             const size_t luRoom = (size_t)KI_BUFFER_SIZE - 1 - luUsed;
-            if (luRoom > 0)
-                std::strncat(macCharBuffer, lpcText, luRoom);
+            std::strncat(macCharBuffer, lpcText, luRoom);
         }
         return *this;
     }
