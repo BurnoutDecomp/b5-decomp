@@ -15,6 +15,8 @@ using namespace CgsSound::Playback;
 // no pointer members -- so an absolute-offset check is legal here.
 static_assert(sizeof(VoiceProfilingData<128u>) == (128u + 4u) * sizeof(f32),
               "VoiceProfilingData<128>: 128 history floats + 4 stat floats, no padding");
+static_assert(sizeof(VoiceProfilingData<16u>) == (16u + 4u) * sizeof(f32),
+              "VoiceProfilingData<16>: 16 history floats + 4 stat floats, no padding");
 
 static bool fnearly(f32 a, f32 b)
 {
@@ -54,8 +56,28 @@ static void exercise()
     CGS_ASSERT(fnearly(lData.GetAverageTime(), 8.0f / 128.0f), "mean over {5,1,2}");
 }
 
+// Exercise the <16> instantiation (SubmitNewTime @0x8268EE28) -- same algorithm,
+// window mean over 1/16 == 0.0625f.
+static void exercise16()
+{
+    VoiceProfilingData<16u> lData;
+
+    lData.SubmitNewTime(2.0f, 1.0f);
+    CGS_ASSERT(fnearly(lData.GetMostRecentTime(), 2.0f), "<16> most-recent");
+    CGS_ASSERT(fnearly(lData.GetMaximumTime(), 2.0f), "<16> max seeded");
+    CGS_ASSERT(fnearly(lData.GetMinimumTime(), 2.0f), "<16> min seeded");
+    CGS_ASSERT(fnearly(lData.GetAverageTime(), 2.0f / 16.0f), "<16> mean == sum/16");
+
+    lData.SubmitNewTime(1.0f, 1.0f);
+    CGS_ASSERT(fnearly(lData.GetMinimumTime(), 1.0f), "<16> min lowered");
+    CGS_ASSERT(fnearly(lData.GetTimeByIndex(0), 1.0f), "<16> newest slot 0");
+    CGS_ASSERT(fnearly(lData.GetTimeByIndex(1), 2.0f), "<16> prior shifted");
+    CGS_ASSERT(fnearly(lData.GetAverageTime(), 3.0f / 16.0f), "<16> window mean");
+}
+
 int main()
 {
     exercise();
+    exercise16();
     return 0;
 }
