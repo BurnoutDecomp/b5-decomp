@@ -274,6 +274,19 @@ namespace Vehicle
         ETrafficType meTrafficType;
     };
 
+    // A physical-traffic vehicle crashed. Layout/order/types verbatim from the DWARF
+    // (BrnVehicleEvents.h:478): VolumeInstanceId(8, 8-byte aligned) + EntityId(4). The
+    // 8-byte alignment of VolumeInstanceId pads the trailing EntityId out to sizeof == 16
+    // (0x10), matching the X360 BaseEventQueue<TrafficCrashedEvent>::AddEvent's two-_QWORD
+    // (16-byte) element copy and Append's 16*count XMemCpy.
+    // ADDITIVE GROW (flagged by Vehicle-events group): new event struct, no change to
+    // existing types.
+    struct TrafficCrashedEvent
+    {
+        VolumeInstanceId mTrafficVolumeInstanceID;
+        EntityId         mCrasherEntityID;
+    };
+
     struct alignas(16) UpdateNetworkTrafficEvent
     {
         VolumeInstanceId mVolumeInstanceID;

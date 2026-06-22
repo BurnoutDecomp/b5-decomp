@@ -74,6 +74,103 @@ private:
     static const IEntityFixer* spHead;
 };
 
+// ============================================================================
+// ADDITIVE HOME-GROW (Sound group): CgsSound::Playback::FeatureSchema +
+// CgsSound::Playback::VoiceSchema -- the runtime "voice schema" entity and its
+// per-feature sub-schema, both Entity subclasses (DWARF CgsDataStructures.h:887
+// and :1233). Added for the VoiceSchema TU (ctor @ 0x82691E98 + SetFeatureSchema
+// @ 0x82692058). These compose with the committed Entity (CgsRegistry.h) and Name
+// (CgsCommon.h) sibling homes -- NOT forked. The existing IEntityFixer surface
+// above is untouched.
+//
+// LAYOUT (X360, all words 4 bytes; matches the ctor/SetFeatureSchema asm):
+//   Entity base:  mName @ +0, mTypeName @ +4   (CgsRegistry.h Entity)
+//   VoiceSchema adds:
+//     +0x8  mu32FeatureSchemaCount   (ctor: a1[2] = count arg)
+//     +0xC  mu32SlotCount            (ctor 0; SetFeatureSchema += feature SlotSchemaCount)
+//     +0x10 mu32ParameterCount       (ctor 0; SetFeatureSchema += feature ParameterSchemaCount)
+//     +0x14 mu32OutputParamCount     (ctor 0; SetFeatureSchema += feature OutputParamCount)
+//     +0x18 mapFeatureSchema[]       (flexible array of const FeatureSchema*, a1+6 dwords)
+//   FeatureSchema adds (only the 3 counts this TU reads are modelled BY NAME):
+//     +0x8  mu32ParameterSchemaCount (SetFeatureSchema reads *(schema+8))
+//     +0xC  mu32SlotSchemaCount      (SetFeatureSchema reads *(schema+12))
+//     +0x10 mu32OutputParamCount     (SetFeatureSchema reads *(schema+16))
+// HOST-WIDTH FLAG: the flexible FeatureSchema* array widens on a 64-bit host;
+// members are pinned BY NAME and SEQUENCE only -- absolute offsets not asserted.
+// ============================================================================
+
+// CgsDataStructures.h:887. FLAG: MINIMAL home-grow -- only the three allocation-
+// accounting counts that the VoiceSchema TU reads are modelled BY NAME; the full
+// FeatureSchema surface (GetAllocationSize/ctor/Get/SetParameterSchema/
+// Get/SetSlotSchema/... and its own flexible ParameterSchema*/SlotSchema* arrays)
+// is DEFERRED to the FeatureSchema TU. The leading three counts match the DWARF
+// member order (CgsDataStructures.h:1075-1077) and the +8/+0xC/+0x10 asm reads.
+struct FeatureSchema : public Entity
+{
+    u32 mu32ParameterSchemaCount;   // CgsDataStructures.h:1075  (+0x8)
+    u32 mu32SlotSchemaCount;        // CgsDataStructures.h:1076  (+0xC)
+    u32 mu32OutputParamCount;       // CgsDataStructures.h:1077  (+0x10)
+
+    u32 GetParameterSchemaCount() const { return mu32ParameterSchemaCount; }
+    u32 GetSlotSchemaCount() const      { return mu32SlotSchemaCount; }
+    u32 GetOutputParamCount() const     { return mu32OutputParamCount; }
+};
+
+// CgsDataStructures.h:1233. A playback voice schema: an Entity carrying a count
+// of FeatureSchema sub-schemas plus the running totals of the slots/parameters/
+// output-params those features contribute. The FeatureSchema pointers live in a
+// trailing flexible array right after the header (the X360 `a1 + 6` dword base).
+struct VoiceSchema : public Entity
+{
+    // CgsDataStructures.h:1236. The interned type-name the ctor seeds mTypeName
+    // from (the X360 static word dword_83008280). DECLARED here for the ctor to
+    // reference BY NAME; its DEFINITION (the interned-Name initializer) lives with
+    // the EntityFixer<VoiceSchema> registration TU and is DEFERRED -- resolved at
+    // TU consolidation, NOT defined in this TU. FLAG.
+    static const Name SK_TYPE_NAME;
+
+    // CgsDataStructures.h:1257. Construct for aFeatureSchemaCount features: store
+    // the count, zero the running totals, and null every feature slot. Bodied
+    // store-for-store from the X360 ctor @ 0x82691E98.
+    explicit VoiceSchema(u32 au32FeatureSchemaCount);
+
+    // CgsDataStructures.h:1271.
+    u32 GetFeatureSchemaCount() const { return mu32FeatureSchemaCount; }
+
+    // CgsDataStructures.h:1342 / :1348 / :1354.
+    u32 GetSlotCount() const        { return mu32SlotCount; }
+    u32 GetParameterCount() const   { return mu32ParameterCount; }
+    u32 GetOutputParamCount() const { return mu32OutputParamCount; }
+
+    // CgsDataStructures.h:1289. Install the FeatureSchema at index au32Index:
+    // back out the previously-installed (resolved) feature's contributions to the
+    // running totals, store the new pointer, then add the new feature's totals.
+    // Bodied store-for-store from the X360 SetFeatureSchema @ 0x82692058.
+    void SetFeatureSchema(u32 au32Index, const FeatureSchema& arSchema);
+
+private:
+    // CgsDataStructures.h:1362. Address of feature-schema slot au32Index in the
+    // trailing flexible array (the X360 `&v3[a2 + 6]`). Named accessor replacing
+    // the raw dword index.
+    const FeatureSchema** GetFeatureSchemaAddress(u32 au32Index)
+    {
+        return &mapFeatureSchema[au32Index];
+    }
+
+    u32 mu32FeatureSchemaCount;     // CgsDataStructures.h:1373  (+0x8)
+    u32 mu32SlotCount;              // CgsDataStructures.h:1374  (+0xC)
+    u32 mu32ParameterCount;         // CgsDataStructures.h:1375  (+0x10)
+    u32 mu32OutputParamCount;       // CgsDataStructures.h:1376  (+0x14)
+
+    // CgsDataStructures.h. The trailing flexible array of resolved/unresolved
+    // FeatureSchema pointers. On X360 it begins at +0x18 (the `a1 + 6` dword base
+    // in the ctor and `&v3[a2 + 6]` in SetFeatureSchema). Modelled as a 1-length
+    // trailing array so the slots can be indexed BY NAME; the real length is
+    // mu32FeatureSchemaCount. FLAG (host-width: the array element widens to 8 bytes
+    // on a 64-bit host, so the +0x18 base is X360-only -- pinned BY NAME).
+    const FeatureSchema* mapFeatureSchema[1];
+};
+
 }
 }
 

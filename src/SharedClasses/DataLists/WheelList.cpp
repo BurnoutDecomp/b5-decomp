@@ -1,10 +1,14 @@
 // WheelList.cpp
-// BrnResource::WheelList -- Construct / Destruct / AddListResource.
+// BrnResource::WheelList -- Construct / Destruct / AddListResource / GetWheelData /
+// FindWheelIndexFromName.
 //
 // Reconstructed from the X360 ARTIST build:
-//   WheelList::Construct        @ 0x82677DB8  (executed in the boot trace)
-//   WheelList::Destruct         @ 0x82677E30
-//   WheelList::AddListResource  @ 0x8267BFC0
+//   WheelList::Construct              @ 0x82677DB8  (executed in the boot trace)
+//   WheelList::Destruct               @ 0x82677E30
+//   WheelList::AddListResource        @ 0x8267BFC0
+//   WheelList::GetWheelData(s32)      @ 0x822CD3E8
+//   WheelList::FindWheelIndexFromName @ 0x822CD4D8
+//   WheelListResource::GetEntry       (inlined as `*(resource+4) + 72*idx`)
 //
 // Direct structural sibling of BrnResource::ChallengeList; Construct/Destruct mirror
 // that TU exactly (re-rolled marching-pointer loops over named members -- semantic
@@ -22,6 +26,7 @@
 #include "SharedClasses/DataLists/WheelList.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle (used by value below)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include <string.h>                                                    // _stricmp
 
 namespace BrnResource
 {
@@ -109,6 +114,58 @@ void WheelList::AddListResource(CgsResource::ResourcePtr<WheelListResource>& lrR
 
     // X360 @0x8267C150: ++miListCount.
     ++miListCount;
+}
+
+// WheelListResource::GetEntry -- inlined inside WheelList::GetWheelData on X360
+// (no standalone symbol; the body is the `*(resource+4) + 72*index` tail at
+// 0x822CD4A8..0x822CD4CC). The entry array base is mpaEntries (+0x04, FixUp-rebased)
+// and the per-entry stride is sizeof(WheelListEntry) == 72. No bounds check here --
+// the caller (GetWheelData) is the one that asserts the slot index range.
+const WheelListEntry* WheelListResource::GetEntry(s32 liEntryIndex) const
+{
+    return &mpaEntries[ liEntryIndex ];
+}
+
+// WheelList::GetWheelData(s32) @ 0x822CD3E8
+// Bounds-assert the wheel index against miCount, then resolve the wheel record:
+// look up the slot's owning list + entry ordinal, instance that list's resource,
+// and return the entry at that ordinal.
+const WheelListEntry* WheelList::GetWheelData(s32 liIndex) const
+{
+    // X360 @0x822CD3FC..0x822CD40C: if (liIndex < 0 || liIndex >= miCount) fire
+    // assert "Index out of range" (WheelList.h line 141). The rich stream message is
+    // the file-local debug builder; the stringized-condition CGS_ASSERT carries the
+    // same guard.
+    CGS_ASSERT(liIndex >= 0 && liIndex < miCount, "liIndex >= 0 && liIndex < miCount");
+
+    // X360 @0x822CD488..0x822CD4CC: the slot at liIndex names which static data list
+    // (miListIndex) owns the wheel and the wheel's ordinal within that list's
+    // resource (miEntryIndex). Instance that list's resource (the WheelListResou
+    // accessor == ResourcePtr<WheelListResource>::operator-> reading offset 0) and
+    // return its entry at miEntryIndex (stride 72).
+    const WheelSlot& lrSlot = maSlots[ liIndex ];
+    return maStaticDataLists[ lrSlot.miListIndex ]->GetEntry( lrSlot.miEntryIndex );
+}
+
+// WheelList::FindWheelIndexFromName @ 0x822CD4D8
+// Linear scan of all registered wheels; return the index of the first whose name
+// matches lpcName case-insensitively, or -1 if none.
+s32 WheelList::FindWheelIndexFromName(const char* lpcName) const
+{
+    // X360 @0x822CD4F4: loop liIndex 0..miCount (the count at +0x1000). For each,
+    // GetWheelData(liIndex) then _stricmp(entry->macName, lpcName) -- the name field
+    // sits at +0x08 of the WheelListEntry (asm `addi r3, r3, 8` before the compare).
+    // The early `if (miCount <= 0) return -1` is the loop guard.
+    for ( s32 liIndex = 0; liIndex < miCount; ++liIndex )
+    {
+        const WheelListEntry* lpEntry = GetWheelData( liIndex );
+        if ( _stricmp( lpEntry->macName, lpcName ) == 0 )
+        {
+            return liIndex;
+        }
+    }
+
+    return -1;
 }
 
 } // namespace BrnResource
