@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::Resource (mTextureStateResource)
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"   // CgsResource::SafeResourceHandle (canonical)
 
 namespace renderengine { class Texture; class TextureState; }
 namespace rw { struct IResourceAllocator; }   // Font::CreateTextureState allocator
@@ -12,20 +13,12 @@ namespace CgsResource
     typedef u16 CgsUtf16;
     typedef u8  CgsUtf8;   // UnicodeBuffer::CgsUtf8 (one byte of a UTF-8 sequence)
 
-    // SafeResourceHandle<T> -- a resource pointer plus a safety/generation id (the X360 handle is 8
-    // bytes; the null handle is CgsResource::NULLResourceHandle, which the debug-font handoff asserts
-    // against). operator-> yields the resource. Full safe-handle validation is deferred; this models
-    // the access the font + debug-text paths need.
-    template <class T>
-    struct SafeResourceHandle
-    {
-        T*  mpResource;   // X360 +0
-        u32 muSafetyId;   // X360 +4
-
-        T* operator->() const { return mpResource; }
-        T* Get() const { return mpResource; }
-        bool IsNull() const { return mpResource == 0; }
-    };
+    // [RECONCILED 2026-06-22] The debug-font path uses the canonical CgsResource::SafeResourceHandle<T>
+    // (CgsResourceHandle.h) -- the DWARF-accurate `: public ResourceHandle` double-deref handle. CgsFont.h
+    // previously carried its own simplified {mpResource, muSafetyId} stand-in (an ODR conflict the merge
+    // surfaced); now that the font loads into a REAL pool, the handle is built properly from the pool entry's
+    // SmallResource (mpResourceMemory -> entry.mResource[0] -> the Font*), so the stand-in is gone and the one
+    // canonical handle is used everywhere (per CgsResourcePtr_CgsResource_Font.cpp's DEP_FLAG).
 
     // The default glyph used when a character is missing ('-', CgsFont.h:28).
     enum { KUTF16_DEFAULT_CHARACTER = 45 };

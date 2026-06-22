@@ -1,3 +1,9 @@
+#include <Windows.h>   // VK_END / GetAsyncKeyState / MSG / PeekMessage / Translate/DispatchMessage (the assert
+                        // message pump). Included FIRST so winuser.h is fully pulled in before any merged
+                        // renderengine header (reached via device.h below) can suppress it with WIN32_LEAN_AND_MEAN.
+#undef DrawText         // winuser.h defines DrawText as a macro (->DrawTextW); undef it so this file's own
+                        // DrawText method (the assert-overlay text path) resolves. (device.h's later guarded
+                        // re-include won't redefine it.)
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mpRender Begin/End/HasRenderBuffer

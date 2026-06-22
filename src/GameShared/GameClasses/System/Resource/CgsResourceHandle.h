@@ -88,5 +88,14 @@ namespace CgsResource
                 "Can not get resource pointer - it has no main memory resource\n");
             return *reinterpret_cast<ResourceType* const*>(mpResourceMemory);
         }
+
+        // Convenience accessors (the debug-font path uses these; grown here per the
+        // CgsResourcePtr_CgsResource_Font.cpp DEP_FLAG so CgsFont.h can drop its private handle and reuse
+        // this one). A null handle has no resource memory; Get() null-safely follows the double-deref.
+        bool IsNull() const { return mpResourceMemory == 0; }
+        ResourceType* Get() const
+        {
+            return mpResourceMemory ? *reinterpret_cast<ResourceType* const*>(mpResourceMemory) : 0;
+        }
     };
 }

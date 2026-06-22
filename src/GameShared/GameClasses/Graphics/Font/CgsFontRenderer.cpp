@@ -20,9 +20,10 @@ namespace CgsGraphics
     // font = the default (invalid) handle; the alternate-colour table args are stored as given.
     void TextObject::Construct(const RGBA* lpAlternateColours, s32 liNumAlternateColours)
     {
-        // X360 default font handle (dword_83011A50/A54): the invalid/null SafeResourceHandle.
-        mpFont.mpResource = 0;
-        mpFont.muSafetyId = 0;
+        // X360 default font handle (dword_83011A50/A54): the invalid/null SafeResourceHandle (no resource
+        // memory -> IsNull() true -> HasResourceFont() false until SetDebugFont points it at a pool entry).
+        mpFont.mpResourceMemory = 0;
+        mpFont.mpSourceEntry    = 0;
 
         mfFontHeight          = 0.0f;
         mfAutosizedFontHeight = 0.0f;
