@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"       // Assert::gAssertManager / AssertData (on-screen assert overlay)
 #include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReader.h"     // MapFile::Reader::GetStackEntryName (call-stack names)
+#include "rw/core/debug/DebugCriticalSection.h"                                     // gDebugManagerSection (ThreadSafeAquire/Release lock)
 
 #include <cstdio>   // snprintf (debug text formatting; the X360 used CgsCore::SPrintf)
 
@@ -50,6 +51,12 @@ namespace CgsDev
     // QUEUED here and flushed by RenderHUD's Dispatch2D. File-static (X360 has it as a by-value member;
     // kept out of the widely-included manager header to avoid pulling the event-queue in everywhere).
     static DebugRender gBufferedRenderer;
+
+    // The per-DebugManager lock the thread-safe accessors bracket (X360 dword_83019264 - a file-static
+    // rw DebugCriticalSection passed by &address to Enter/Leave). ThreadSafeAquire enters it, Release
+    // leaves it. It stays un-Created (so Enter/Leave are no-ops, matching the X360 "if (*result)" guard)
+    // on the single-threaded boot; DebugManager::Construct Creates it when the threading core wires up.
+    static rw::core::debug::detail::DebugCriticalSection gDebugManagerSection = { 0 };
 
     namespace
     {
@@ -180,16 +187,20 @@ namespace CgsDev
 
     void DebugManager::Update(f32) {}
 
+    // Faithful port of X360 0x821F1E50: assert the singleton exists, enter the per-manager debug
+    // critical section, then hand the singleton back. (Enter is a no-op until the section is Created.)
     DebugManager* DebugManager::ThreadSafeAquire()
     {
         CGS_ASSERT(mpInstance, "mpInstance");
-        // X360 enters the debug-manager critical section here (no-op on the single-threaded boot).
+        gDebugManagerSection.Enter();
         return mpInstance;
     }
 
+    // Faithful port of X360 0x821F1EB8: leave the per-manager debug critical section FIRST (the X360
+    // calls Leave before the assert), then assert the released pointer is the live singleton.
     void DebugManager::ThreadSafeRelease(DebugManager* lpDebugManager)
     {
-        // X360 leaves the debug-manager critical section here (no-op on the single-threaded boot).
+        gDebugManagerSection.Leave();
         CGS_ASSERT(lpDebugManager == mpInstance, "lpDebugManager == mpInstance");
     }
 
