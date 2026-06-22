@@ -69,3 +69,21 @@ inline EGlobalRaceCarIndex operator++(EGlobalRaceCarIndex &leIndex, int)
     leIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leIndex) + 1);
     return lePrev;
 }
+
+namespace BrnGameState
+{
+    // DWARF BurnoutConstants.h:91 -- lifecycle of a freeburn challenge. COUNT (7)
+    // doubles as the "no status / uninitialised" sentinel that network messages
+    // construct the field with (e.g. BrnNetwork::FreeburnChallengeMessage).
+    enum EChallengeStatus
+    {
+        E_CHALLENGE_STATUS_ONGOING                      = 0,
+        E_CHALLENGE_STATUS_SUCCESS                      = 1,
+        E_CHALLENGE_STATUS_ABORTED                      = 2,
+        E_CHALLENGE_STATUS_ABORTED_DUE_TO_PLAYER_LEAVE  = 3,
+        E_CHALLENGE_STATUS_ABORTED_BEFORE_STARTING      = 4,
+        E_CHALLENGE_STATUS_RESET_IF_NEEDED              = 5,
+        E_CHALLENGE_STATUS_FAILURE                      = 6,
+        E_CHALLENGE_STATUS_COUNT                        = 7,
+    };
+} // namespace BrnGameState

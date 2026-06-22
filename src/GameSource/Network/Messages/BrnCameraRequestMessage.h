@@ -1,50 +1,46 @@
+#pragma once
+
 // ===================================================================================
 // BrnNetwork::CameraRequestMessage -- owning header
 //   b5-decomp/src/GameSource/Network/Messages/BrnCameraRequestMessage.h
 //
-// A CgsNetwork::ReliableMessage subclass carrying a single "release feed" flag.
-// Class shape from the DecFIGS DWARF
-// (references/DecFIGS/dwarfdump/GameSource/Network/Messages/BrnCameraRequestMessage.h);
-// the base (CgsNetwork::ReliableMessage) is the committed home in CgsMessage.h and is
-// reused BY NAME here -- not forked.
+// SHAPE from DecFIGS DWARF (BrnCameraRequestMessage.h:43) gated against the X360 binary.
+// Construct @ 0x8257ADC0 initialises the inherited MessageWithPlayerIDs ids at +0x20/
+// +0x24 (to -1) then stores its one bool at +0x28, i.e. immediately after the 0x28-byte
+// CgsNetwork::ReliableMessage base:
+//   +0x00  (CgsNetwork::ReliableMessage base, size 0x28)
+//   +0x28  bool mbReleaseFeed
 //
-// LEDGER FUNCTION reconstructed in this TU (X360 BURNOUT_X360_ARTIST.XEX):
-//   BrnNetwork::CameraRequestMessage::GetName  @ 0x827DFD80
-//     -> returns the literal "Camera Request Message" (lis/addi a rodata string, blr).
-//        No member or base access.
+// The base (CgsNetwork::ReliableMessage) is reused BY NAME from its committed home header
+// (CgsReliableMessage.h: Message -> MessageWithPlayerIDs -> ReliableMessage) -- not forked.
 //
-// The other declared methods (Construct/Destruct/PrepareForSend/Retrieve/
-// GetPackedMessageSize/PackOrUnpack) live in the sibling BrnCameraRequestMessage.cpp TU
-// and are declared here for class shape but NOT bodied in this TU.
-#pragma once
+// LEDGER FUNCTIONS in this TU (X360 BURNOUT_X360_ARTIST.XEX):
+//   Construct/GetPackedMessageSize/PackOrUnpack/PrepareForSend/Retrieve -> bodied in the
+//     sibling BrnCameraRequestMessage.cpp.
+//   GetName @ 0x827DFD80 -> returns the literal "Camera Request Message" (no member/base
+//     access); bodied inline here.
+// ===================================================================================
 
-#include "types.hpp"                                                       // bool, s32, u16
-#include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"  // CgsNetwork::ReliableMessage (committed base)
+#include "types.hpp"
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsReliableMessage.h"
 
 namespace BrnNetwork
 {
-    // DWARF BrnCameraRequestMessage.h:43.
-    struct CameraRequestMessage : public CgsNetwork::ReliableMessage
+    // Reliable request from a spectator to start/stop receiving another player's
+    // camera feed. mbReleaseFeed distinguishes a request (false) from a release (true).
+    struct CameraRequestMessage : CgsNetwork::ReliableMessage
     {
-    private:
-        bool mbReleaseFeed;   // DWARF BrnCameraRequestMessage.h:78
+        bool mbReleaseFeed;     // +0x28
 
-    public:
-        // Sibling-.cpp methods (declared for class shape; NOT bodied in this TU).
-        void Construct();
-        void Destruct();
-        void PrepareForSend(u16 lu16Frame, bool lbReleaseFeed);
-        bool Retrieve(bool* lpbReleaseFeed);
-        virtual s32 GetPackedMessageSize();
-
-        // LEDGER func @ 0x827DFD80 -- bodied in this TU.
-        virtual const char* GetName() const;
-
-    protected:
-        virtual CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        void                           Construct();
+        void                           PrepareForSend(u16 lu16FrameCount, bool lbReleaseFeed);
+        bool                           Retrieve(bool* lpbReleaseFeed);
+        s32                            GetPackedMessageSize();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        const char*                    GetName() const;
     };
 
-    // BrnNetwork::CameraRequestMessage::GetName  @ 0x827DFD80
+    // BrnNetwork::CameraRequestMessage::GetName @ 0x827DFD80.
     inline const char* CameraRequestMessage::GetName() const
     {
         return "Camera Request Message";

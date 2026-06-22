@@ -72,6 +72,20 @@ namespace BrnNetwork
 {
 namespace BrnNetworkModuleIO
 {
+    // DWARF BrnNetworkSharedIO.h:458 -- the lifecycle event a freeburn challenge
+    // broadcasts over the network. COUNT (6) is the count, not a valid event. The X360
+    // build attests its use via BrnNetwork::FreeburnChallengeMessage.
+    enum EChallengeEventType
+    {
+        E_CHALLENGE_EVENT_SELECTED         = 0,
+        E_CHALLENGE_EVENT_TRIGGERED        = 1,
+        E_CHALLENGE_EVENT_ACTION_SUCCESS   = 2,
+        E_CHALLENGE_EVENT_RESET            = 3,
+        E_CHALLENGE_EVENT_ENDED            = 4,
+        E_CHALLENGE_EVENT_RESULTS_FINISHED = 5,
+        E_CHALLENGE_EVENT_COUNT            = 6,
+    };
+
     // ---- forward declarations of the interface member types (own TUs) --------
     // Full layouts live with their own reconstructions; the accessors return pointers, so
     // incomplete declarations suffice. Replace the matching offset-pinned u8 storage with the
