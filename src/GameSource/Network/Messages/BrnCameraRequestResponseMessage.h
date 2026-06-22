@@ -32,6 +32,18 @@ namespace BrnNetwork
         void                           Construct();
         void                           PrepareForSend(u16 lu16FrameCount, EResponse leResponse);
         bool                           Retrieve(EResponse* lpeCameraRequestResponse);
+        virtual s32                    GetPackedMessageSize();   // DWARF :148 (sibling .cpp)
+
+        // LEDGER func @ 0x827DFD90 -- bodied in this TU (DWARF BrnCameraRequestResponseMessage.h:99).
+        virtual const char*            GetName() const;
+
         CgsNetwork::PackOrUnpackResult PackOrUnpack();
     };
+
+    // BrnNetwork::CameraRequestResponseMessage::GetName  @ 0x827DFD90
+    //   lis/addi a rodata string literal, blr -- no member or base access.
+    inline const char* CameraRequestResponseMessage::GetName() const
+    {
+        return "Camera Request Response Message";
+    }
 } // namespace BrnNetwork
