@@ -123,6 +123,58 @@ namespace CgsResource
     // These are inlined in the X360 (no out-of-line body), so they are reconstructed from
     // their unambiguous semantics: each is a direct member or parallel-array access.
 
+    // @ 0x828ED058 - bring the pool to its clean empty/invalid state (the per-pool init the
+    // PoolModule runs for all 128 pools before they are InitPool'd with real memory).
+    //
+    // [SEMANTIC RECONSTRUCTION] The X360 body is raw-offset writes (264..272/304/308/416/452 plus a
+    // 3x stride-64 loop over the heaps) emitted from a decomp whose local-variable allocation failed,
+    // and our Pool is compiler-laid-out (named members, NOT byte-matched), so this reproduces the
+    // OBSERVABLE effect by named member rather than transcribing offsets: construct the 3 heaps and
+    // zero the management state, with the id/bank sentinels set to -1 (the X360's two -1 stores) and
+    // the stages at their start/idle values. The X360 also sets one field (+308) to 1 that could not
+    // be byte-mapped to a named member; it is almost certainly mbAllowDefragmentation, which InitPool
+    // overwrites from InitOptions for any real pool, so it is left at the InitPool-supplied default
+    // here (no observable difference for an un-InitPool'd pool). mResource/mDescriptor/mHashTable are
+    // built by InitPool (the X360 Construct only zeroes them, which static-init already guarantees).
+    void Pool::Construct()
+    {
+        for (s32 li = 0; li < 3; ++li)
+            maHeaps[li].Construct();
+
+        mbIsValid               = false;
+        mpResourceEntries       = 0;
+        mpx8ResourceStatuses    = 0;
+        mpiResourceRefCounts    = 0;
+        mpiResourceImportCounts = 0;
+        mpHash                  = 0;
+        mpTracker               = 0;
+        mpnBatchIndices         = 0;
+        muMaxResources          = 0;
+        muNumFreeResources      = 0;
+        miRefCountThreshold     = 0;
+        miId                    = -1;   // X360 -1 sentinel: no id until InitPool assigns one
+        macName[0]              = 0;
+        mePrepareStage          = E_PREPARESTAGE_START;
+        meReleaseStage          = E_RELEASESTAGE_START;
+        meDefragStage           = DEFRAGSTAGE_IDLE;
+        miNumDependencies       = 0;
+        for (s32 li = 0; li < 16; ++li)   // mapDependencies[16]
+            mapDependencies[li] = 0;
+        mpHashEntries           = 0;
+        miBankId                = -1;   // X360 -1 sentinel: no bank until InitPool assigns one
+        mpCurrentRelocator      = 0;
+        mpCurrentScratchPool    = 0;
+        muNumRelocations        = 0;
+        muNextRelocation        = 0;
+        mpRelocateRequests      = 0;
+        mpRelocateSources       = 0;
+        miDefragFrame           = 0;
+        miDefragMemType         = 0;
+        mbAllowDefragmentation  = false;
+        mbDefragHitEndResource  = false;
+        miNumResourcesInPurgatory = 0;
+    }
+
     // @ 0x828D8580 - one-shot prepare stage flip (asserts the stage is start/done, then
     // arms release-start and marks prepared). The PoolModule drives this for all 128 pools.
     bool Pool::Prepare()

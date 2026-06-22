@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"   // mReceiverQueue
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"    // Pool (128 embedded)
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"    // Type (type table)
+#include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h" // ScratchPool (defrag staging, embedded)
+#include "rw/rwcore_structs.h"                                          // rw::Resource / ResourceDescriptor (InitOptions)
 
 // CgsResource::PoolModule - the resource-pool manager module (X360 CgsPoolModule.cpp). It
 // owns the game's fixed bank of 128 resource Pools and a registry of resource Types, and
@@ -52,6 +54,29 @@ namespace CgsResource
             const char* mpcName;    // [+0x08] (X360 entry +564)
         };
 
+        // CgsResource::PoolModule::InitOptions (DWARF CgsPoolModule.h:121) - the pool-manager bring-up
+        // options PoolModule::Construct consumes (the X360 `a2`): the defrag/scratch-buffer sizing plus
+        // the game-specific resource-type list (registered into maTypes after the built-in "IDList").
+        // [ARTIST 5-TYPE DRIFT: the X360 mDefragBufferDescriptor is a 5-type ResourceDescriptor (40B)
+        // and mDefragBufferResource is 5 base ptrs; modelled here with the rw 4-type typedefs since the
+        // defrag buffer is a deferred subsystem -- widen to 5-type when the defrag path is reconstructed.]
+        struct InitOptions
+        {
+            // A game-specific resource type to register into maTypes (X360 a2 type list / count).
+            struct GSResourceType
+            {
+                const Type* mpType;    // CgsPoolModule.h:127
+                const char* mpcName;   // CgsPoolModule.h:128
+            };
+
+            s32                    miMaxResourceToDefrag;     // :131
+            rw::ResourceDescriptor mDefragBufferDescriptor;   // :132 [ARTIST 5-type]
+            rw::Resource           mDefragBufferResource;     // :133 [ARTIST 5-type]
+            u32                    muDebugBufferSize;         // :134
+            GSResourceType*        mpGameSpecificTypes;       // :135 the type list
+            s32                    miNumGameSpecificTypes;    // :136
+        };
+
         // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
         PoolModule() { mbIsNewModule = true; }
 
@@ -64,6 +89,11 @@ namespace CgsResource
         // ---- pure-logic accessors -----------------------------------------------------
         s32         GetPoolIndex(s32 liPoolId);            // 0x828D80E8
         const Type* FindResourceType(u32 luTypeId);        // 0x828D8268
+
+        // @ 0x82904B20 - stand up a pool from InitOptions: validate the id, assert no duplicate, find a
+        // free slot (GetId()==-1), Pool::InitPool it. Returns the created pool (null if no free slot).
+        // The dispatch (DoCreatePoolRequest) calls this after allocating the pool's backing memory.
+        Pool* CreatePool(const Pool::InitOptions* lpOptions);
 
         // ---- dispatch (deferred) ------------------------------------------------------
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
@@ -78,6 +108,7 @@ namespace CgsResource
         EPoolReleaseStage mePoolReleaseStage;        // +0x1A30 (a1[1676])
         Pool              maPools[KI_MAX_POOLS];      // +0x1A38 the 128 resource pools (464B X360 stride)
         CgsModule::BaseEventReceiverQueue mReceiverQueue; // +0x158C4 (a1[22033]) create/delete-pool events
+        ScratchPool       mScratchPool;              // +0x198C0 (a1+104576) defrag staging (Construct'd; InitPool deferred)
         s32               mProcessState;             // +0x19B30 defrag/alloc state machine (0..6)
         // (embedded ScratchPool / Relocator / defrag-state cluster / EA Job / RW mutexes /
         //  resource registry / typed request queues are added with the Construct + dispatch

@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include <cstring>                                    // memset (InitOptions zero-init)
 
 // CgsResource::ResourceModule - see the header. This pass reconstructs the lifecycle
 // orchestration spine (Prepare / Release). Construct + Update + the request shuttles are
@@ -9,6 +10,14 @@ namespace CgsResource
     // Minimal placeholder debug component (deferred).
     void DebugComponent::Construct() {}
     void DebugComponent::Register() {}
+
+    // ResourceModule::InitOptions ctor - zero-init. The X360 ConstructResourceModule constructs this
+    // then memset(0)s the whole 1216B block before filling fields, so a zero-init is the faithful net
+    // state. (memset over the already-constructed members matches that ctor-then-memset sequence.)
+    ResourceModule::InitOptions::InitOptions()
+    {
+        memset(this, 0, sizeof(*this));
+    }
 
     // @ 0x828F4140 - resumable bring-up: base module, then Memory -> FileSystem -> Bundle ->
     // Pool, then register the debug component. Re-enters at the current stage if a sub-module
@@ -101,19 +110,27 @@ namespace CgsResource
         }
     }
 
-    // @ 0x829055B0 - construct the sub-modules over the resource heaps. [5b in progress] Currently
-    // brings up the MemoryModule (it carves the bank/block tables from the resource allocator);
-    // PoolModule/BundleLoaderModule/FileSystem Construct + the FileSystem GeneralResourceAllocator
-    // remain deferred (next 5b passes). lpInitOptions is the MemoryModule InitOptions the GameDataModule
-    // built; lpAllocator is the root rw::IResourceAllocator.
+    // @ 0x829055B0 - construct the sub-modules over the resource heaps. [5b in progress] lpInitOptions
+    // is now the real CgsResource::ResourceModule::InitOptions composite (the GameDataModule builds it);
+    // each sub-module gets its own option block. Brings up the MemoryModule (carves the bank/block tables
+    // from the resource allocator, from mMemoryInitOptions) and the PoolModule structural front half
+    // (base + 128 Pool::Construct + stages); the PoolModule allocator-gated back half (consumes
+    // mPoolInitOptions), BundleLoaderModule/FileSystem Construct + the FileSystem GeneralResourceAllocator
+    // remain deferred (next 5b passes). lpAllocator is the root rw::IResourceAllocator.
     void ResourceModule::Construct(const void* lpInitOptions, void* lpAllocator)
     {
         if (lpInitOptions == 0 || lpAllocator == 0)
             return;
+        const InitOptions* lpOptions = static_cast<const InitOptions*>(lpInitOptions);
+        rw::IResourceAllocator* lpRwAllocator = static_cast<rw::IResourceAllocator*>(lpAllocator);
+
         mMemoryModule.Construct(
-            const_cast<CgsMemory::MemoryModule::InitOptions*>(
-                static_cast<const CgsMemory::MemoryModule::InitOptions*>(lpInitOptions)),
-            static_cast<rw::IResourceAllocator*>(lpAllocator));
+            const_cast<CgsMemory::MemoryModule::InitOptions*>(&lpOptions->mMemoryInitOptions),
+            lpRwAllocator);
+        // PoolModule front half (rw-allocator-independent: base + 128 Pool::Construct + stage init).
+        // It receives its own mPoolInitOptions; the front half ignores it (the type-registry /
+        // ScratchPool / region allocations that consume it are deferred to the back half).
+        mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator);
     }
     // Update (0x82907948) pumps each sub-module + shuttles requests; Destruct (0x828EC6B0) tears them
     // down. Deferred.

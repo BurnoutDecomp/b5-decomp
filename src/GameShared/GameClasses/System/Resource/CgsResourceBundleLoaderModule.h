@@ -45,6 +45,20 @@ namespace CgsResource
             u32 muReserved2;          // [+0x1C]
         };
 
+        // CgsResource::BundleLoaderModule::InitOptions (DWARF CgsBundleLoaderModule.h:121) - the
+        // bundle-loader bring-up options (Construct consumes them): the stream/header/debug buffer
+        // sizes, the bundle/per-bundle-resource limits, and the filename-case flags.
+        struct InitOptions
+        {
+            s32  miBundleHeaderBufferSize;         // :127
+            s32  miDebugDataBufferSize;            // :128
+            s32  miStreamBufferSize;               // :129
+            s32  miMaxBundles;                     // :130
+            s32  miMaxResourcesPerBundle;          // :131
+            bool mbForceUpperCaseFileNames;        // :132
+            bool mbForcePS3HardDriveUpperCaseGame; // :134
+        };
+
         // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
         BundleLoaderModule() { mbIsNewModule = true; }
 

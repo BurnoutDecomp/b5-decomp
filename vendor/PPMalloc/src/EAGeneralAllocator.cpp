@@ -311,6 +311,43 @@ namespace Allocator
         return lpP >= lpCore && lpP < lpCore + mHeadCoreBlock.mnSize;
     }
 
+    // @ 0x82B4E0B0 - consolidate the fast bins back into the regular free list. The real X360
+    // engine caches small frees in mpFastBinArray and flushes them here (from SetOption /
+    // TraceAllocatedMemory / GetLargestFreeBlock). The PC-leaf engine never populates the fast
+    // bins (Free coalesces directly in the boundary-tag list), so there is nothing to flush --
+    // an inert but faithful entry point. (Reinstate the real flush if the bit-exact dlmalloc
+    // engine is ever restored.)
+    void GeneralAllocator::ClearFastBins()
+    {
+        // PC leaf: no fast-bin chunks are ever created; the boundary-tag list is always consolidated.
+    }
+
+    // @ 0x82B4E2E8 - the largest single block that can currently be allocated. The X360 flushes the
+    // fast bins (when bClearCache) then walks the free bins for the biggest free chunk. PC leaf:
+    // flush (no-op) then scan the boundary-tag core for the largest free PcBlock, returning its
+    // usable byte count (block size minus the 16-byte header).
+    size_t GeneralAllocator::GetLargestFreeBlock(bool bClearCache)
+    {
+        if (bClearCache)
+            ClearFastBins();
+        if (!mHeadCoreBlock.mpCore)
+            return 0;
+
+        u32 luLargest = 0;
+        char* lpBase = static_cast<char*>(mHeadCoreBlock.mpCore);
+        char* lpEnd  = lpBase + mHeadCoreBlock.mnSize;
+        for (char* lpCur = lpBase; lpCur < lpEnd; )
+        {
+            PcBlock* lpBlk = reinterpret_cast<PcBlock*>(lpCur);
+            if (lpBlk->mnMagic != KU_PC_MAGIC || lpBlk->mnSize < KU_PC_ALIGN)
+                break;   // corrupt / past the end
+            if (lpBlk->mbFree && lpBlk->mnSize > luLargest)
+                luLargest = lpBlk->mnSize;
+            lpCur += lpBlk->mnSize;
+        }
+        return luLargest >= KU_PC_ALIGN ? static_cast<size_t>(luLargest - KU_PC_ALIGN) : 0;
+    }
+
     void* GeneralAllocator::Calloc(size_t nElementCount, size_t nElementSize, int nAllocationFlags)
     {
         size_t lnTotal = nElementCount * nElementSize;

@@ -28,6 +28,25 @@ namespace CgsMemory
         return mpu8IdMap[luBankId];
     }
 
+    // Synchronous bank-create helper (see the header): CreateBank then hand back the new bank's per-type
+    // memory. Used by GameDataModule::CreatePools to source pool memory from the MemoryModule banks
+    // instead of the raw debug heap (the faithful async CreateBankRequest dispatch is the follow-on).
+    bool MemoryModule::CreatePoolBank(const MemoryBank::Params* lpParams, rw::Resource& lrOut)
+    {
+        if (CreateBank(lpParams) != 0)   // 0 == success
+            return false;
+        const u8 lu8Index = GetBankIndexFromId(static_cast<u32>(lpParams->mnBankId));
+        if (lu8Index == MemoryBank::KU_INVALID_BANK)
+            return false;
+        MemoryBank* lpBank = GetBank(lu8Index);
+        if (lpBank == 0)
+            return false;
+        // rw::Resource carries 4 base pointers; the pool memory types in use (0=main, 1=graphics) fit.
+        for (s32 lt = 0; lt < 4; ++lt)
+            lrOut.m_baseResources[lt] = lpBank->GetData(lt);
+        return true;
+    }
+
     // @ 0x828670D0 - reset every bank record to "unused" + clear its id-map slot and name buffer.
     void MemoryModule::InitBanks()
     {

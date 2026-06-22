@@ -16,7 +16,11 @@ namespace BrnResource
 {
     namespace
     {
-        const size_t KN_DEBUG_HEAP_SIZE = 64u * 1024u * 1024u;   // 64 MB root debug heap (X360 reserves a fixed region)
+        // 768 MB root debug heap. [PC-LEAF] the X360 reserves a fixed ~smaller budget split across banks;
+        // the PC bring-up routes the 27 pools' memory (~266 MB) through the MemoryModule's root banks (a
+        // ~384 MB type0+type1 backing carved from here), with a debug-heap FALLBACK if a bank carve fails
+        // (another ~266 MB) -- so this is sized to hold the bank backing + a full fallback at once.
+        const size_t KN_DEBUG_HEAP_SIZE = 768u * 1024u * 1024u;
 
         EA::Allocator::GeneralAllocator s_DebugGeneralAllocator;   // ctor -> Init (empty) at static init
         HeapResourceAllocator           s_DebugResourceAllocator;
