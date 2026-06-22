@@ -17,6 +17,84 @@ namespace CgsSound
 namespace Utils
 {
 
+// ===== ADDITIVE GROW (BrnSound-B group: FrameInformation + HUDEffect::GameModeData) =====
+// CgsSound::Utils::DataPoint<T> (DWARF CgsSoundUtils.h:417 for the bool
+// instantiation; the same generic is used throughout the sound-logic state with
+// many T). A two-sample value: the current value and the previous (pre-Update)
+// value. The X360 `Update(v)` semantics are: mPreviousValue = mCurrentValue;
+// mCurrentValue = v -- which the FrameInformation::UpdateFatalityFlag asm shows as
+// the paired stores (cur at the value word, the displaced cur written to the
+// previous word). All methods are header-inline (the X360 build inlines every
+// DataPoint instantiation at its call site); zero-risk additive (no change to the
+// existing Slope/SlopeParams surface).
+template <typename T>
+struct DataPoint
+{
+    DataPoint() : mCurrentValue(), mPreviousValue() {}
+    explicit DataPoint(const T& lValue) : mCurrentValue(lValue), mPreviousValue(lValue) {}
+    DataPoint(const T& lCurrent, const T& lPrevious)
+        : mCurrentValue(lCurrent), mPreviousValue(lPrevious) {}
+
+    const T& GetCurrent() const  { return mCurrentValue; }
+    const T& GetPrevious() const { return mPreviousValue; }
+    bool     HasChanged() const  { return mCurrentValue != mPreviousValue; }
+
+    // Push a new sample: the old current becomes previous. (X360 paired-store
+    // semantics from FrameInformation::UpdateFatalityFlag.)
+    void Update(const T& lValue)
+    {
+        mPreviousValue = mCurrentValue;
+        mCurrentValue  = lValue;
+    }
+
+    void Flush(const T& lValue)
+    {
+        mCurrentValue  = lValue;
+        mPreviousValue = lValue;
+    }
+
+    DataPoint<T>& operator=(const T& lValue) { Update(lValue); return *this; }
+
+    // ORDER mirrors the DWARF (mCurrentValue @ +0, mPreviousValue @ +sizeof(T)).
+    T mCurrentValue;   // CgsSoundUtils.h:510
+    T mPreviousValue;  // CgsSoundUtils.h:511
+};
+
+// CgsSound::Utils::Average<tuNumPoints, T> (DWARF CgsSoundUtils.h:627). A fixed
+// ring buffer of tuNumPoints samples plus the cached running average. Layout
+// (DWARF CgsSoundUtils.h:643-645): maPoints[tuNumPoints], then muNextPoint (u8),
+// then mfAverage. Header-inline (every instantiation is folded at its call site on
+// X360). Additive only.
+template <u32 tuNumPoints, typename T>
+struct Average
+{
+    Average() : muNextPoint(0), mfAverage(T())
+    {
+        for (u32 lu = 0; lu < tuNumPoints; ++lu)
+        {
+            maPoints[lu] = T();
+        }
+    }
+
+    T GetAverage() const { return mfAverage; }
+
+    void Flush(const T& lValue)
+    {
+        for (u32 lu = 0; lu < tuNumPoints; ++lu)
+        {
+            maPoints[lu] = lValue;
+        }
+        muNextPoint = 0;
+        mfAverage   = lValue;
+    }
+
+    // ORDER mirrors the DWARF (maPoints @ +0, muNextPoint @ +tuNumPoints*sizeof(T),
+    // mfAverage next).
+    T   maPoints[tuNumPoints];  // CgsSoundUtils.h:643
+    u8  muNextPoint;            // CgsSoundUtils.h:644
+    T   mfAverage;              // CgsSoundUtils.h:645
+};
+
 // Slope input/output range parameters (DWARF CgsSoundUtils.h:258). Four f32:
 // the input range [mfMinInput, mfMaxInput] mapped to [mfMinOutput, mfMaxOutput].
 struct SlopeParams
