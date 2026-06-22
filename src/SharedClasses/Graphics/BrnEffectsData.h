@@ -38,6 +38,13 @@ struct BloomData
         mfThreshold = KF_DEF_BLOOM_THRESHOLD;
         mv4Scale = kv4DefScale;
     }
+
+    // 4-way per-member weighted blend (X360 ARTIST @ 0x823F34B0). Each scalar and
+    // each lane of mv4Scale is the linear combination of the four source instances
+    // weighted by (lfWa..lfWd). Returns lpResult (callers chain on the return).
+    static BloomData* SetToBlend(BloomData* lpResult,
+                                 const BloomData* lpA, f32 lfWa, f32 lfWb, f32 lfWc, f32 lfWd,
+                                 const BloomData* lpB, const BloomData* lpC, const BloomData* lpD);
 };
 
 struct VignetteData
@@ -65,6 +72,12 @@ struct VignetteData
         mv4InnerColour = kv4DefInnerColour;
         mv4OuterColour = kv4DefOuterColour;
     }
+
+    // 2-way per-member weighted blend (X360 ARTIST @ 0x823F35B8): every scalar and
+    // every lane of the Vector2/Vector4 members is lpA*lfWa + lpB*lfWb. Returns lpResult.
+    static VignetteData* SetToBlend(VignetteData* lpResult,
+                                    const VignetteData* lpA, f32 lfWa, f32 lfWb,
+                                    const VignetteData* lpB);
 };
 
 struct DepthOfFieldData
@@ -126,6 +139,12 @@ struct BlurData
         mv2BlendCentre = kv2DefBlendCentre;
         mv2BlurCentre = kv2DefBlurCentre;
     }
+
+    // 2-way per-member weighted blend (X360 ARTIST @ 0x823F3A50): every scalar and
+    // every lane of the Vector2 members is lpA*lfWa + lpB*lfWb. Returns lpResult.
+    static BlurData* SetToBlend(BlurData* lpResult,
+                                const BlurData* lpA, f32 lfWa, f32 lfWb,
+                                const BlurData* lpB);
 };
 
 struct TintData
