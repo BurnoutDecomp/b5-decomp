@@ -1,0 +1,121 @@
+#pragma once
+
+// =============================================================================
+// BrnTrafficHull.h  (NEW OWNING HEADER)
+//
+// Home for BrnTraffic::Hull -- the per-hull traffic-graph geometry block of the
+// TrafficData resource (the Hull subsystem gates OnlineStuntRunMode start-grid
+// setup). This slice reconstructs the single attested standalone accessor:
+//
+//   BrnTraffic::Hull::GetSection  @ 0x821F52E0
+//
+// LAYOUT: the scalar-then-pointer member order and names are DWARF-authoritative
+// (references/DecFIGS/dwarfdump/SharedClasses/Traffic/BrnTrafficHull.h, struct @
+// line 53). The pointer block begins at byte offset 0x10, which is exactly where
+// the X360 asm reads mpaSections (`lwz r10, 0x10(r30)`); the 16 leading scalar
+// bytes (7 u8 + 1 alignment pad + u16 muNumRungs + 2*u16 lights + 2 u8 counters)
+// place it there with no synthetic padding beyond the natural pad7 hole the
+// DWARF list implies between muNumVehicleAssets (+6) and muNumRungs (+8).
+//
+// X360 NOTE: pointers are 4 bytes on X360 and 8 bytes on the host. Members are
+// pinned BY NAME; absolute offsets are not static_asserted across the pointer
+// block because pointer width differs between target and host.
+// =============================================================================
+
+#include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
+namespace BrnTraffic
+{
+
+// -----------------------------------------------------------------------------
+// UN-HOMED dependency placeholders.
+//
+// FLAG: the broader Hull geometry value types below (Section, LaneRung,
+// Neighbour, SectionSpan, SectionFlow, StaticTrafficVehicle, StopLine,
+// LightTrigger, LightTriggerStartData, JunctionLogicBox) have their real DWARF
+// home at SharedClasses/Traffic/BrnTrafficSection.h (and siblings), which is NOT
+// yet reconstructed in this tree. They are NOT owned by this group, so they are
+// declared here only as the minimum the Hull layout + GetSection need:
+//
+//   * Section is given an exact 48-byte placeholder body. The X360 asm for
+//     GetSection multiplies the index by 48 (`index*3 << 4`), so sizeof(Section)
+//     == 48 is load-bearing for the `&mpaSections[luIndex]` arithmetic to be
+//     store-for-store faithful. The natural member sum of the DWARF Section list
+//     reaches +44 at mfLength; the X360 build sizes the record to 48, so the
+//     placeholder carries the proven 48-byte footprint. When BrnTrafficSection.h
+//     is reconstructed it should DEFINE Section (size 48) and this placeholder
+//     must be dropped; it is guarded so the real home wins.
+//   * The remaining types are pointer targets only inside Hull, so opaque
+//     forward declarations are sufficient for this slice.
+// -----------------------------------------------------------------------------
+
+#ifndef BRNTRAFFIC_SECTION_DEFINED
+#define BRNTRAFFIC_SECTION_DEFINED
+// PLACEHOLDER (un-homed): exact 48-byte footprint proven by the GetSection stride.
+// Replace with the reconstructed BrnTrafficSection.h definition when it lands.
+struct Section
+{
+    u8 maPlaceholder[48];
+};
+#endif
+
+struct LaneRung;
+struct Neighbour;
+struct SectionSpan;
+struct SectionFlow;
+struct StaticTrafficVehicle;
+struct StopLine;
+struct LightTrigger;
+struct LightTriggerStartData;
+class  JunctionLogicBox;
+
+// BrnTrafficHull.h:53 -- per-hull traffic-graph geometry block.
+struct Hull
+{
+    // --- scalar header (offsets +0 .. +15) -----------------------------------
+    u8  muNumSections;              // +0   (GetSection bounds field)
+    u8  muNumSectionSpans;          // +1
+    u8  muNumJunctions;             // +2
+    u8  muNumStoplines;             // +3
+    u8  muNumNeighbours;            // +4
+    u8  muNumStaticTraffic;         // +5
+    u8  muNumVehicleAssets;         // +6
+    u8  maPad7;                     // +7   (alignment hole before muNumRungs)
+    u16 muNumRungs;                 // +8
+    u16 muFirstTrafficLight;        // +10
+    u16 muLastTrafficLight;         // +12
+    u8  muNumLightTriggers;         // +14
+    u8  muNumLightTriggersStartData;// +15
+
+    // --- pointer block (starts at +0x10 on X360) -----------------------------
+    Section*               mpaSections;                 // +0x10
+    LaneRung*              mpaRungs;
+    f32*                   mpafCumulativeRungLengths;
+    Neighbour*            mpaNeighbourData;
+    SectionSpan*          mpaSectionSpans;
+    StaticTrafficVehicle* mpaStaticTrafficVehicles;
+    SectionFlow*          mpaSectionFlows;
+    JunctionLogicBox*     mpaJunctions;
+    StopLine*             mpaStopLines;
+    LightTrigger*         mpaLightTriggers;
+    LightTriggerStartData* mpaLightTriggerStartData;
+    u8*                    mpaLightTriggerJunctionLookup;
+
+    // BrnTrafficHull.h:90 -- inline per-hull vehicle-asset index table.
+    static const u32 KU_MAX_VEHICLE_ASSETS_PER_HULL = 16;
+    u8 mauVehicleAssets[KU_MAX_VEHICLE_ASSETS_PER_HULL];
+
+    // --- attested standalone accessor (this TU) ------------------------------
+    // X360 @ 0x821F52E0. Bounds-asserts luIndex against muNumSections, then
+    // returns &mpaSections[luIndex] (stride 48, proven by the asm index math).
+    inline const Section* GetSection(u32 luIndex) const;
+};
+
+inline const Section* Hull::GetSection(u32 luIndex) const
+{
+    CGS_ASSERT(luIndex < muNumSections, "luIndex < muNumSections");
+    return &mpaSections[luIndex];
+}
+
+}

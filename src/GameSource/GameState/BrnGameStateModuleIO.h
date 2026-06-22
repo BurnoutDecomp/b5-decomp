@@ -27,6 +27,10 @@
 #include "GameSource/Network/BrnNetworkModuleIO.h"                 // BrnNetwork::BrnNetworkModuleIO::PlayerResultsInterface (embedded @ +0x36B8)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusInterface (embedded @ +0x2CC8)
 
+// PostWorldInputBuffer hands out the active-race-car output interface by pointer only
+// (GetActiveRaceCarOutputInterface, X360 0x8231D2C0); forward-declare its real home.
+namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
+
 namespace BrnGameState
 {
 namespace GameStateModuleIO
@@ -136,6 +140,10 @@ namespace GameStateModuleIO
         Entry maEntries[2];  // 2 * 0x18 == 0x30 bytes
     };
     class VehicleOutputInterface;          // PostWorldInputBuffer +0x220
+    // PostWorldInputBuffer +0x7250: the active-race-car output interface
+    // (BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface). Returned read-locked
+    // by GetActiveRaceCarOutputInterface (X360 0x8231D2C0, "Not locked for reading" line 210); only
+    // a pointer is handed out, so a forward declaration suffices.
     // DWARF (BrnGameStateModuleIO.h:73,181,239): the PostWorldInputBuffer AICarOutputInterface
     // is a typedef IMPORT of the AI module's BrnAI::AIModuleIO::AICarOutputInterface (mirrors
     // the ActiveRaceCarOutputInterface == RCEntityActiveRaceCarOutputInterface pattern). It is
@@ -306,6 +314,10 @@ namespace GameStateModuleIO
         const GameEventQueue*         GetGameEventQueue() const;
         // X360 0x823B91B0 (write-lock; "Not locked for writing", line 196)
         GameEventQueue*               GetGameEventQueue();
+        // X360 0x8231D2C0 (read-lock; "Not locked for reading", line 210) -- the active-race-car
+        // output interface (this+0x7250). BurnoutSkillzManager::PostWorldUpdate reads it read-locked.
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+                                      GetActiveRaceCarOutputInterface() const;
         // X360 0x8231D410 (read-lock; "Not locked for reading", line 216)
         const AICarOutputInterface*   GetAICarOutputInterface() const;
         // X360 0x823B9648 (write-lock; "Not locked for writing", line 217) -- non-const twin
@@ -332,7 +344,12 @@ namespace GameStateModuleIO
         RaceCarCrashEventQueue mRaceCarCrashEventQueue;               // @ +0x0010 (named opaque -> +0x220)
         u8  mVehicleOutputInterfaceStorage[0x6E34 - 0x220];          // VehicleOutputInterface @ +0x0220
         TriggerEntityModuleOutputInterface mTriggerEntityOutputInterface; // @ +0x6E34 (named opaque)
-        u8  mPostVehicleOutputStorage[0xA4B0 - (0x6E34 + sizeof(TriggerEntityModuleOutputInterface))]; // -> +0xA4B0
+        u8  mPostVehicleOutputStorage[0x7250 - (0x6E34 + sizeof(TriggerEntityModuleOutputInterface))]; // -> +0x7250
+        // The active-race-car output interface (BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface)
+        // @ +0x7250. Named opaque storage (its full layout lives in its own TU); GetActiveRaceCarOutputInterface
+        // returns &this member. Its GetPlayerActiveRaceCarIndex reads at interface+0x2858.
+        u8  mActiveRaceCarOutputInterfaceStorage[0x2890]; // RCEntityActiveRaceCarOutputInterface @ +0x7250 (covers +0x2858 read)
+        u8  mPostActiveCarOutputStorage[0xA4B0 - (0x7250 + 0x2890)]; // -> +0xA4B0
         u8  mGameEventQueueStorage[0xAAC0 - 0xA4B0];                  // GameEventQueue         @ +0xA4B0
         // Real, complete AICarOutputInterface (BrnAI::AIModuleIO::AICarOutputInterface). sizeof == 0x14E8
         // (== 0xBFA8 - 0xAAC0), 4-aligned, so it occupies exactly the former placeholder span and leaves
@@ -341,6 +358,17 @@ namespace GameStateModuleIO
         // TrafficTypeResponse query-response queue @ +0xBFA8 (49064). Fixed-capacity EventQueue<...,32>;
         // 16B element stride == sizeof(TrafficTypeResponse). AppendTrafficTypeResponseQueue forwards to it.
         CgsModule::EventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse, 32> mTrafficTypeResponseQueue; // +0xBFA8
+
+        // Compile-time offset guards (private members -> assert from a member-fn context).
+        static void _AssertLayout()
+        {
+            static_assert(offsetof(PostWorldInputBuffer, mActiveRaceCarOutputInterfaceStorage) == 0x7250,
+                          "RCEntityActiveRaceCarOutputInterface @ +0x7250");
+            static_assert(offsetof(PostWorldInputBuffer, mGameEventQueueStorage) == 0xA4B0,
+                          "GameEventQueue @ +0xA4B0");
+            static_assert(offsetof(PostWorldInputBuffer, mAICarOutputInterface) == 0xAAC0,
+                          "AICarOutputInterface @ +0xAAC0");
+        }
     };
 
     // ========================================================================

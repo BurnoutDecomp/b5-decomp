@@ -50,6 +50,30 @@ namespace CgsResource
         return KU_MATERIAL_TECHNIQUE_RESOURCE_TYPE_ID;
     }
 
+    // Faithful port of X360 0x828A97D8. The serialised material-technique blob's tail
+    // bytes describe the per-instance shader-parameter payload: byte[32]+byte[33] is the
+    // parameter count, byte[34]/byte[35] are two trailing byte sizes. The whole-resource
+    // size is (count+10) parameter words (4 bytes each) plus the two trailing bytes; the
+    // remaining four descriptor entries are the empty {size 0, alignment 1} default. Slot 0
+    // alignment is 16. The X360 reads each header byte with lbz + extsb (SIGN-extend to 32-bit),
+    // so the blob bytes are read as signed (s8) -- matters only for byte values >= 0x80.
+    ResourceDescriptor MaterialTechniqueResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        const s8* lpBytes = static_cast<const s8*>(lpResource);
+        const s32 liCount = static_cast<s32>(lpBytes[33]) + static_cast<s32>(lpBytes[32]);
+        const u32 luSize  = static_cast<u32>(4 * (liCount + 10)
+                            + static_cast<s32>(lpBytes[35]) + static_cast<s32>(lpBytes[34]));
+
+        ResourceDescriptor lDescriptor;
+        u32* lpData = reinterpret_cast<u32*>(&lDescriptor);
+        lpData[0] = luSize;  lpData[1] = 16u;   // slot0: {whole-resource size, align 16}
+        lpData[2] = 0u;  lpData[3] = 1u;
+        lpData[4] = 0u;  lpData[5] = 1u;
+        lpData[6] = 0u;  lpData[7] = 1u;
+        lpData[8] = 0u;  lpData[9] = 1u;
+        return lDescriptor;
+    }
+
     // The relocation delta is the leading word of the rw::Resource (the load base).
     void MaterialTechniqueResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {

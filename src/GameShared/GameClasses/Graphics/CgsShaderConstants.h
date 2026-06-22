@@ -53,16 +53,13 @@ namespace CgsGraphics
     struct DispatchObjectContext;
 }
 
-// rwmath SIMD scalar/3x3 types used only by out-of-scope SetShaderConstantData overloads
-// declared below. They are owned by the renderware SDK (rw/math/vpu); these declarations
-// are never defined or called in this TU, so an incomplete type is sufficient as a by-value
-// parameter in a declaration. Forward-declared (not redefined) so the real SDK home wins.
-namespace rw { namespace math { namespace vpu {
-    struct VecFloat;
-    struct Matrix33;
-} } }
-typedef rw::math::vpu::VecFloat VecFloat;
-typedef rw::math::vpu::Matrix33 Matrix33;
+// VecFloat / Matrix33 used by the (out-of-scope) SetShaderConstantData overloads are
+// already aliased canonically in BrnCommonTypes.h (included above): the project-wide
+// committed decision (flagged by the BrnPhysics-bodies group) is VecFloat == Vector4 and
+// Matrix33 == rw::math::vpu::Matrix33. Re-typedef'ing them locally to a distinct
+// forward-declared rw::math::vpu::VecFloat struct collided with that alias (C2371) and made
+// the SetShaderConstantData(VecFloat) overload a duplicate of the Vector4 one (C2535), which
+// broke compilation of this header for every includer. Reuse the committed aliases instead.
 
 // CgsShaderConstants.h:97
 const u32 KU_INSTANCING_MATRIX_ARRAY_MAX = 5;
@@ -139,14 +136,21 @@ struct ShaderConstantTable
     void Construct();
 
     // CgsShaderConstants.h:283
-    void AddShaderConstant(u32 luNameHash, const char* lpcName, u8 lu8SizeInBytes);
+    // First parameter is the table SLOT INDEX (asserted < KU_MAX_SHADER_CONSTANTS), not a
+    // name hash: corrected from the DWARF prototype (AddShaderConstant(uint32_t luIndex,
+    // const char*, uint8_t)) and the X360 asm, which uses a2 as the maConstants[] index.
+    void AddShaderConstant(u32 luIndex, const char* lpcName, u8 lu8SizeInBytes);
 
     // CgsShaderConstants.h:304
-    void AddShaderConstantArray(u32 luNameHash, const char* lpcName, u8 lu8SizeInBytes, u8 lu8NumEntries);
+    // luIndex is the table slot (DWARF: AddShaderConstantArray(uint32_t luIndex, const char*,
+    // uint8_t luSizeOfEachEntryInBytes, uint8_t luNumEntries)). Defined in this TU.
+    void AddShaderConstantArray(u32 luIndex, const char* lpcName, u8 lu8SizeOfEachEntryInBytes, u8 lu8NumEntries);
 
     // CgsShaderConstants.h:325-441 - the SetShaderConstantData overload family.
+    // (The leak's separate SetShaderConstantData(VecFloat) overload is omitted: the project
+    // committed VecFloat == Vector4 in BrnCommonTypes.h, so it would duplicate the Vector4
+    // overload below. The original VecFloat scalar-broadcast distinction is not modelled.)
     void SetShaderConstantData(u32 luIndex, const float& lfValue);
-    void SetShaderConstantData(u32 luIndex, VecFloat lvfValue);
     void SetShaderConstantData(u32 luIndex, Vector2 lValue);
     void SetShaderConstantData(u32 luIndex, Vector3 lValue);
     void SetShaderConstantData(u32 luIndex, Vector3Plus lValue);

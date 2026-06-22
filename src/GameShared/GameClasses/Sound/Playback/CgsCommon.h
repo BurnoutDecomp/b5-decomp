@@ -29,6 +29,15 @@ namespace Playback
 struct Name
 {
 public:
+    // CgsCommon.h. Default-construct an (uninterned) Name. The DWARF lists Name()
+    // (see the deferred-surface note above); modelled here as a trivial zero-init so
+    // Name-bearing aggregates (Entity, and thus VoiceSchema/FeatureSchema) are
+    // default-constructible. The X360 VoiceSchema ctor leaves mName untouched and
+    // only seeds mTypeName, which requires the embedding Entity base to be default-
+    // constructible. FLAG: ADDITIVE home-grow for the VoiceSchema TU; shape-only,
+    // not a recon'd standalone ctor TU (K_NULL_NAME semantics are 0).
+    Name() : mHash(0) {}
+
     // CgsCommon.h:126. Construct from a C string: hash + intern it. Constructing a
     // Name from a string interns it (MakeHash -> Store), which is exactly what the
     // AEMS param-index static initializers do. INLINED-ONLY on X360 (no out-of-line
@@ -36,6 +45,14 @@ public:
     // inlined static-init pseudocode (mHash = MakeHash(...)). FLAG: home-grow added
     // for the AEMS param-index TUs (BrnAutoGenAemsParameterIndexes.*).
     explicit Name(const char* lkpacName) { mHash = MakeHash(lkpacName); }
+
+    // CgsCommon.h. The raw interned hash value. FLAG: ADDITIVE home-grow for the
+    // CgsSound::Playback::Registry TU (Registry::AddEntity reads an Entity's
+    // mName/mTypeName hash words directly -- `*a2` / `a2[1]` in the X360 asm).
+    // The DWARF lists Name::GetValue (CgsCommon.h notes); modelled here as the
+    // trivial mHash getter so dependents can read the hash by name instead of by
+    // raw offset. Shape-only -- not a recon'd standalone TU.
+    uintptr_t GetValue() const { return mHash; }
 
 private:
     // CgsCommon.h:249. The interned hash value. NOT touched by MakeHash/Store

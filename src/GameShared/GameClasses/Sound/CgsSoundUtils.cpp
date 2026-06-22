@@ -1,45 +1,43 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 
 #include <cmath>
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x826A1F70
-//   (CgsSound::Utils::Slope::Slope  — constructor)
+// CgsSound::Utils::Slope::Slope(const SlopeParams&) @ 0x826A1F70.
 //
-// Copies a 4-float source (start, end, and two trailing values) into the Slope,
-// then nudges `end` away from `start` by a tiny epsilon if they are within 1e-6,
-// guaranteeing a non-zero span (so later slope/divide math never sees start==end).
-// Behaviour-faithful to the X360 pseudocode (returns `this`):
+// Reconstructed from the X360 pseudocode/asm (member access by name -- no offset
+// cast). The constructor copies the four range floats out of the source params,
+// then nudges mfMaxInput away from mfMinInput by a tiny epsilon when the input span
+// is (near) zero, guaranteeing a non-zero denominator for the later GetValue scale
+// division.
 //
-//   result[0..3] = a2[0..3];
-//   if (fabs(result[1] - result[0]) < 1e-6)  result[1] += 1e-6;
+//   0x826A1F70  lfs  f0, flt_82001CC0   ; 0.0f
+//   ...         stfs f0, 0/4/8/0xC(r3)  ; zero mParams (the SlopeParams ctor)
+//   0x826A1F88  lwz/stw 0(r4)->0(r3)    ; mfMinInput  = params.mfMinInput
+//   0x826A1F94  lwz/stw 4(r4)->4(r3)    ; mfMaxInput  = params.mfMaxInput
+//   0x826A1FA0  lwz/stw 8(r4)->8(r3)    ; mfMinOutput = params.mfMinOutput
+//   0x826A1FAC  lwz/stw 0xC(r4)->0xC(r3); mfMaxOutput = params.mfMaxOutput
+//   0x826A1FA4  fsubs f13, mfMaxInput, mfMinInput
+//   0x826A1FB0  fabs  f12, f13
+//   0x826A1FC0  fcmpu f12, flt_820AD47C ; 0.000001f
+//   0x826A1FC4  bgelr                   ; if |span| >= 1e-6 return
+//   0x826A1FC8  fadds mfMaxInput += 1e-6
 
 namespace CgsSound
 {
-    namespace Utils
+namespace Utils
+{
+
+// flt_820AD47C -- the degenerate-span epsilon used by this ctor (1e-6f).
+static const f32 KF_MIN_INPUT_SPAN = 0.000001f;
+
+Slope::Slope(const SlopeParams& params)
+    : mParams(params)
+{
+    if (std::fabs(mParams.mfMaxInput - mParams.mfMinInput) < KF_MIN_INPUT_SPAN)
     {
-        struct Slope
-        {
-            f32 mfStart;    // [0]
-            f32 mfEnd;      // [1]
-            f32 mf2;        // [2]
-            f32 mf3;        // [3]
-
-            Slope* Construct(const f32* lpaSource);
-        };
-
-        static const f32 KF_MIN_SPAN = 0.000001f;
-
-        Slope* Slope::Construct(const f32* lpaSource)
-        {
-            mfStart = lpaSource[0];
-            mfEnd   = lpaSource[1];
-            mf2     = lpaSource[2];
-            mf3     = lpaSource[3];
-
-            if (fabsf(mfEnd - mfStart) < KF_MIN_SPAN)
-                mfEnd += KF_MIN_SPAN;
-
-            return this;
-        }
+        mParams.mfMaxInput += KF_MIN_INPUT_SPAN;
     }
+}
+
+}
 }

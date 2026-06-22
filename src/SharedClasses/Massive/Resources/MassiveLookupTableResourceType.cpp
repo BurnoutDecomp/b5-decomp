@@ -37,6 +37,27 @@ namespace CgsResource
         return KU_MASSIVE_LOOKUP_TABLE_RESOURCE_TYPE_ID;
     }
 
+    // Faithful port of X360 0x8267D818. The serialised lookup-table blob carries its own
+    // span: leading word [0] is the entry count, word [1] is the absolute end pointer;
+    // count*64 + end - base is the whole-resource byte size (same span Serialise copies).
+    // Slot 0 = {size, alignment 16}; the other four entries are the empty {0, 1} default.
+    ResourceDescriptor MassiveLookupTableResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        const uintptr_t lSrc  = reinterpret_cast<uintptr_t>(lpResource);
+        const u32       luSize = static_cast<u32>(
+            ((*reinterpret_cast<const u32*>(lSrc) << 6)
+             + *reinterpret_cast<const u32*>(lSrc + 4)) - lSrc);
+
+        ResourceDescriptor lDescriptor;
+        u32* lpData = reinterpret_cast<u32*>(&lDescriptor);
+        lpData[0] = luSize;  lpData[1] = 16u;   // slot0: {whole-resource size, align 16}
+        lpData[2] = 0u;  lpData[3] = 1u;
+        lpData[4] = 0u;  lpData[5] = 1u;
+        lpData[6] = 0u;  lpData[7] = 1u;
+        lpData[8] = 0u;  lpData[9] = 1u;
+        return lDescriptor;
+    }
+
     // The relocation delta is the first word of the rw::Resource (the load base).
     void MassiveLookupTableResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {

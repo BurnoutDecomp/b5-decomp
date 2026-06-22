@@ -103,6 +103,12 @@ namespace CgsModule
             return true;
         }
 
+        // Drop all live events without touching the backing buffer (X360 sets miLength = 0
+        // directly; e.g. inlined into NetworkInputInterface::operator= before each per-car
+        // Append). ADDITIVE GROW (flagged): pure miLength reset, no layout/behaviour change to
+        // existing users.
+        void Clear() { miLength = 0; }
+
         s32 GetMaxLength() const { return miMaxLength; }
         s32 GetLength() const { return miLength; }
 

@@ -1,26 +1,7 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82680D48
-//   (CgsSound::Logic::StateManager::IsStateAlias)
-//
-// Behaviour-faithful to the X360 pseudocode:
-//     return *(this + 20) == liState;     // alias target stored at offset 0x14
-
-namespace CgsSound
-{
-    namespace Logic
-    {
-        struct StateManager
-        {
-            u8   mPad[20];          // [0x00] opaque
-            s32  miAliasState;      // [0x14] the state this manager aliases
-
-            bool IsStateAlias(int liState) const;
-        };
-
-        bool StateManager::IsStateAlias(int liState) const
-        {
-            return miAliasState == liState;
-        }
-    }
-}
+// CgsSound::Logic::StateManager::IsStateAlias @ 0x82680D48 is homed inline in
+// CgsStateManager.h (member access by name -- meMapState; no raw-offset cast). This
+// TU exists so the header is exercised by a real compilation unit. The old opaque
+// mPad[20] + miAliasState stub is superseded by the DWARF-named layout in the
+// header.

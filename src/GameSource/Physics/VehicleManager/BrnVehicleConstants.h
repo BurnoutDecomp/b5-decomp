@@ -31,5 +31,21 @@ namespace Vehicle
         E_TRAFFIC_TYPE_SLAMMED   = 3,
         E_TRAFFIC_TYPE_COUNT     = 4
     };
+
+    // How a traffic vehicle was made to crash. DWARF home BrnTrafficPhysicsConstants.h:32;
+    // homed here additively alongside its sibling ETrafficType (the project already keeps
+    // the vehicle traffic enums in BrnVehicleConstants.h rather than forking a new header).
+    // ADDITIVE GROW (flagged by Vehicle-events group): new enum, no change to existing types.
+    // Plain (un-fixed) enum per the DWARF; the X360 copies it as a 4-byte word. Top enumerator
+    // 255 forces an int-width underlying type, matching the 4-byte field stride in
+    // TrafficSlammedEvent.
+    enum eCrashTrafficType
+    {
+        eCrashTrafficType_Standard    = 0,
+        eCrashTrafficType_Checked     = 1,
+        eCrashTrafficType_Spontaneous = 2,
+        eCrashTrafficType_Slammed     = 3,
+        eCrashTrafficType_Invalid     = 255
+    };
 }
 }

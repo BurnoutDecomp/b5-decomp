@@ -1,0 +1,84 @@
+#ifndef BRN_SOUND_LOGIC_BRN_3D_EFFECT_CONTROL_H
+#define BRN_SOUND_LOGIC_BRN_3D_EFFECT_CONTROL_H
+
+#include "types.hpp"
+#include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
+
+// =============================================================================
+// BrnSound::Logic::Brn3DEffectControl  (+ its Cgs3dEffectControl base)
+//   GameSource/Sound/Module/LogicModule/Brn3DEffectControl.h (minimal OWNING home)
+//
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. DWARF (BrnEffectControl.h:100):
+//   struct BrnSound::Logic::Brn3DEffectControl : public Cgs3dEffectControl
+// with private members:
+//   globalenginedata                          mEngineDataAtrib;  // BrnEffectControl.h:149
+//   BrnSound::Logic::Brn3DEffectControl::DrawSphere mDrawSphere;  // BrnEffectControl.h:152
+// and the RTTI/Prepare/UpdateParams/Notify control surface.
+//
+// This is a MINIMAL owning slice introduced because no committed Brn3DEffectControl
+// home exists yet; it is needed only so the Passby::Passby3DControl leaf (which
+// derives from Brn3DEffectControl) can structurally tear down its inherited
+// members. The ONLY member modelled BY NAME is mEngineDataAtrib, because the
+// Passby3DControl `scalar deleting destructor' (@ 0x826E8ED0) tears it down via the
+// committed Attrib::Instance::~Instance:
+//   Attrib::Instance::~Instance(this + 176);   // mEngineDataAtrib teardown
+// In the X360 build mEngineDataAtrib is the generated class Attrib::Gen::
+// globalenginedata, which derives from Attrib::Instance; only the Attrib::Instance
+// sub-object slice the destructor touches is load-bearing here, so we model the
+// member as a plain Attrib::Instance (reused BY NAME from the committed AttribSys
+// home). The DrawSphere member, the Cgs3dEffectControl transform/emitter state, and
+// the RTTI/Prepare/UpdateParams/Notify surface are DEFERRED.
+//
+// FLAG: minimal reconstruction of an un-homed base (Cgs3dEffectControl) and an
+// un-homed leaf (Brn3DEffectControl). Only the inheritance spine and the single
+// destructor-touched member are present. The X360 +176 byte offset of
+// mEngineDataAtrib is NOT reproduced as a host offset (32-bit-vs-64-bit pointer
+// widths differ); the member is pinned BY NAME only.
+// =============================================================================
+
+namespace CgsSound
+{
+namespace Logic
+{
+
+// Cgs3dEffectControl : public EffectControl (DWARF: Brn3DEffectControl's base is
+// Cgs3dEffectControl, the engine 3D-positional effect control). Modelled as the
+// committed EffectControl shape; the 3D transform/emitter state is DEFERRED.
+// FLAG: minimal reconstruction of an un-homed engine base.
+struct Cgs3dEffectControl : public CgsSound::Logic::EffectControl
+{
+    Cgs3dEffectControl() {}
+    virtual ~Cgs3dEffectControl() {}
+};
+
+} // namespace Logic
+} // namespace CgsSound
+
+namespace BrnSound
+{
+namespace Logic
+{
+
+// BrnEffectControl.h:100 (DWARF). Minimal owning slice: inherits the engine 3D
+// effect-control base and owns the single member the Passby3DControl destructor
+// tears down (mEngineDataAtrib, an Attrib::Instance).
+struct Brn3DEffectControl : public CgsSound::Logic::Cgs3dEffectControl
+{
+    Brn3DEffectControl()
+        : mEngineDataAtrib(nullptr, this)
+    {
+    }
+
+    virtual ~Brn3DEffectControl() {}
+
+    // BrnEffectControl.h:149 (DWARF) — generated globalenginedata attribute handle.
+    // Modelled as the Attrib::Instance sub-object slice the destructor tears down.
+    // FLAG: full Attrib::Gen::globalenginedata generated class is DEFERRED.
+    Attrib::Instance mEngineDataAtrib;
+};
+
+} // namespace Logic
+} // namespace BrnSound
+
+#endif // BRN_SOUND_LOGIC_BRN_3D_EFFECT_CONTROL_H

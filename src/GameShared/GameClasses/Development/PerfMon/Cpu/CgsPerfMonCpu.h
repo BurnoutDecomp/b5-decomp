@@ -104,5 +104,14 @@ namespace CgsDev
         void           GetMonitorData(s32 liMonitorHandle, PerfMonCpuMonitorData* lpData);
         bool           IsMonitorOverBudget(s32 liMonitorHandle);
         PerfMonCpuPage GetMonitorPage(s32 liMonitorHandle);
+
+        // X360 0x828172E8. Register every live monitor as a PIX named counter so the X360 PIX
+        // profiler graphs the per-region time alongside the engine's own overlay. The X360 walks
+        // the registry (giMonitorCount entries of stride sizeof(PerfMonCpuInstance)) and, for each
+        // valid monitor, hands PIX the monitor's current millisecond value (mfCurrentValue) and its
+        // name (macName). PIX is an X360-only SDK (the PPC PIXAddNamedCounter), so on PC this routes
+        // through a no-op shim; the per-counter format string the X360 passed lived in rodata that
+        // did not survive (FLAG: format string is a documented placeholder, not a recovered fact).
+        void AddPIXCounters();
     }
 }

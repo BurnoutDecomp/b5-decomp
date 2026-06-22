@@ -56,6 +56,12 @@ namespace Attrib
         int         GetClass() const;
         void*       GetCollection() const;
 
+        // Raw-field accessors used by Attrib::Attribute (ctor @ 0x82805AF0 reads the
+        // layout block; IsInherited @ 0x82803600 reads the resolved collection + flags).
+        const Collection* GetResolvedCollection() const { return mpCollection; }
+        void*             GetLayoutPointer() const { return mpAttributeData; }
+        bool              IsModified() const { return (muFlags & 1u) != 0; }
+
     protected:
         Collection* mpCollection;     // +0
         void*       mpAttributeData;  // +4

@@ -21,11 +21,11 @@ namespace CgsDev
 
     struct DebugInterface
     {
-        DebugInterface()
-            : mpDebugManager(nullptr)
-            , mbIsAutomaticClass(false)
-        {
-        }
+        // X360 DebugInterface() @ 0x821F1F20 - the AUTOMATIC (stack-scoped) handle: it sets the
+        // is-automatic flag, asserts the DebugManager singleton exists, ENTERS the per-manager
+        // debug critical section, and grabs the singleton into mpDebugManager. The matching
+        // release (when mbIsAutomaticClass) leaves the section. Bodied in CgsDebugInterface.cpp.
+        DebugInterface();
 
         explicit DebugInterface(DebugManager* lpDebugManager)
             : mpDebugManager(lpDebugManager)
@@ -39,7 +39,9 @@ namespace CgsDev
             // caller (DebugComponent::Register) releases the lock explicitly.
         }
 
-        DebugManager&     GetDebugManager() { return *mpDebugManager; }
+        // X360 GetDebugManager @ 0x823A61B0 - assert the manager pointer is set, then return it.
+        // Bodied in CgsDebugInterface.cpp (the X360 asserts mpDebugManager, CgsDebugInterface.h:163).
+        DebugManager&     GetDebugManager();
         DebugUI::DebugUI& GetUI()           { return mpDebugManager->GetUI(); }
 
         // Show/hide the on-screen debug console. FLAG: these DebugInterface members

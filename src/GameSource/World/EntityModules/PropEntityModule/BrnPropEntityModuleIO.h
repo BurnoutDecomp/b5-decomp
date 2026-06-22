@@ -1,0 +1,110 @@
+// ============================================================================
+// b5-decomp/src/GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h
+//
+// Canonical (DWARF) home for the BrnWorld::PropEntityIO prop-entity IO types
+// (BrnPropEntityModuleIO.h). This is a MINIMAL-COMPLETE slice: it currently homes only
+// PropVFXLocatorEvent -- the element type of the EventQueue<PropVFXLocatorEvent,10>
+// instantiation whose Construct the X360 emitted out-of-line (0x8228DB20). The many
+// other PropEntityIO types/buffers in the DWARF (OutputBuffer_*, the other event
+// structs, the queue typedefs) are intentionally NOT reproduced here yet; their own
+// TUs grow this header ADDITIVELY when they land.
+//
+// Member names/types and the EEventType enumerators are from the DecFIGS DWARF
+// (BrnPropEntityModuleIO.h:228/268..270), X360-gated. Layout (DWARF-faithful):
+//   +0   Matrix44Affine mTransform     (rw::math::vpu::Matrix44Affine, 64B, 16-aligned)
+//   +64  u32            muTypeId
+//   +68  EEventType     meEventType    (s32)
+// => sizeof 80 (16-aligned because Matrix44Affine forces alignas(16)); the event has
+// no trailing pad beyond natural alignment. The owning EventQueue<...,10> places its
+// inline maEvents[10] at the 16-aligned offset +16 inside the queue (mpEvents@0,
+// miMaxLength@4, miLength@8, 4B pad, maEvents@16) -- matching X360 Construct's
+// `lpEventBuffer = this + 0x10` and the stores mpEvents=&maEvents, miMaxLength=10,
+// miLength=0.
+#pragma once
+
+#include "types.hpp"          // u32, s32
+#include "BrnCommonTypes.h"   // Matrix44Affine (rw::math::vpu::Matrix44Affine)
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer
+
+namespace BrnWorld
+{
+namespace PropEntityIO
+{
+    // BrnPropEntityModuleIO.h:66 -- the PropVFXLocator output queue capacity.
+    const u32 KU_PROP_VFX_QUEUE_SIZE = 10;
+
+    // BrnPropEntityModuleIO.h:225 -- a VFX-locator hit/smash event published per prop
+    // impact: the prop's affine world transform, its type id, and which event fired.
+    struct PropVFXLocatorEvent
+    {
+        // BrnPropEntityModuleIO.h:228
+        enum EEventType : s32
+        {
+            E_EVENTTYPE_PROPHIT  = 0,
+            E_EVENTTYPE_PROPSMASH = 1,
+            E_EVENTTYPE_MAX      = 2
+        };
+
+        // BrnPropEntityModuleIO.h:242 -- own TU (declared-only here).
+        void Construct(Matrix44Affine lTransform, u32 luTypeId, EEventType leEventType);
+        // BrnPropEntityModuleIO.h:250 -- own TU.
+        const Matrix44Affine& GetTransform() const;
+        // BrnPropEntityModuleIO.h:256 -- own TU.
+        u32 GetPropType() const;
+        // BrnPropEntityModuleIO.h:262 -- own TU.
+        EEventType GetEventType() const;
+
+    private:
+        Matrix44Affine mTransform;   // :268
+        u32            muTypeId;     // :269
+        EEventType     meEventType;  // :270
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::OutputBuffer_PreScene (DWARF BrnPropEntityModuleIO.h:676).
+    // ADDITIVE GROW: this slice homes ONLY the IO-OutputBuffers group's X360-emitted
+    // accessors of the pre-scene output buffer:
+    //   GetResourceRequestInterface()    @ 0x822B9888  write-lock (bit 3) -> +4      (asm-line 648)
+    //   GetPropInputInterface() const    @ 0x827A1970  read-lock  (bit 4) -> +819824 (asm-line 642)
+    //   GetPropInputInterface()          @ 0x822B97E0  write-lock (bit 3) -> +819824 (asm-line 645)
+    //
+    // LAYOUT (DWARF :676 member order + X360 getter return-offsets, authoritative):
+    //   base  CgsModule::IOBuffer                            (1-byte status; +1..+3 pad)
+    //   +4       ResourceRequestInterface mResourceRequestInterface (RequestInterface<1024>) :647
+    //   +...     SceneInputInterface      mSceneInputInterface      (InSceneUpdateInterface)  :648
+    //   +819824  PropInputInterface       mPropInputInterface       (PropInputInterface)      :649
+    //   +...     VisibleOverheadSignArray mVisibleOverheadSignArray                           :650
+    //
+    // FLAG (foreign types): the three interface members and the overhead-sign array have
+    // their own owning homes elsewhere and are NOT reconstructed here; the region between
+    // the +4 member start and the +819824 member start is modelled as correctly-sized
+    // opaque storage so the two X360-pinned return offsets (+4, +819824) are exact. The
+    // intervening mSceneInputInterface byte split is not separately recoverable from this
+    // DWARF, so it is folded into the padding (named in the comment above). Adopt the
+    // named interface types additively when their homes land.
+    class OutputBuffer_PreScene : public CgsModule::IOBuffer
+    {
+    public:
+        // Opaque foreign-type storages (see FLAG above).
+        struct ResourceRequestInterfaceStorage { unsigned char maBytes[1]; };
+        struct PropInputInterfaceStorage       { unsigned char maBytes[1]; };
+
+        // X360 0x822B9888: write-lock handle, returns this + 4 (mResourceRequestInterface).
+        ResourceRequestInterfaceStorage* GetResourceRequestInterface();
+        // X360 0x827A1970: read-lock handle, returns this + 819824 (mPropInputInterface).
+        const PropInputInterfaceStorage* GetPropInputInterface() const;
+        // X360 0x822B97E0: write-lock handle, returns this + 819824 (mPropInputInterface).
+        PropInputInterfaceStorage* GetPropInputInterface();
+
+        static void _AssertLayout();
+
+    private:
+        u8                              maStatusPad[3];             // +1..+3 (force +4 placement)
+        ResourceRequestInterfaceStorage mResourceRequestInterface;  // +4      :647
+        // mSceneInputInterface (:648) is folded into this padding (see FLAG): it spans from
+        // the end of mResourceRequestInterface (+5) to the +819824 start of mPropInputInterface.
+        unsigned char                   maSceneInputAndPad[819824 - 5]; // ...    :648
+        PropInputInterfaceStorage       mPropInputInterface;        // +819824 :649
+    };
+}
+}
