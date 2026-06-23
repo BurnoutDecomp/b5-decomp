@@ -39,5 +39,28 @@ namespace CrashIO
     {
         u16 muVehicleId;
     };
+
+    // Traffic-input event: a crashed traffic vehicle to remove from the world. A single u16
+    // traffic-vehicle index (0..KU_MAX_TOTAL_TRAFFIC). The producer
+    // (TrafficEntityModule::GenerateRemovedVehicleEvents @0x827206E8) stores the index into a
+    // local __int16 and forwards it to AddEvent; the X360 AddEvent (@0x8271A568) writes a single
+    // 2-byte element at a 2-byte stride. The queue base subobject stays 12 bytes (4-byte element
+    // alignment), giving the maEvents offset 0xC the EventQueue<...,160>::Construct attests
+    // (@0x827608A0).
+    struct RemoveCrashedTrafficEvent
+    {
+        u16 muVehicleId;
+    };
+
+    // Traffic-input event: a slam-recovered traffic vehicle to remove. Identical single-u16
+    // payload to RemoveCrashedTrafficEvent; the producer
+    // (TrafficEntityModule::GenerateSlamRecoveryEvents @0x827207E0) forwards a traffic index and
+    // the X360 AddEvent (@0x8271A430) writes one 2-byte element at a 2-byte stride. The queue
+    // base subobject stays 12 bytes (4-byte element alignment), giving the maEvents offset 0xC
+    // the EventQueue<...,160>::Construct attests (@0x82760830).
+    struct RemoveSlammedTrafficEvent
+    {
+        u16 muVehicleId;
+    };
 }
 }
