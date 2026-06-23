@@ -127,4 +127,51 @@ void PackedOobb::ToMatrix(rw::math::vpu::Matrix44& roMatrix) const
     roMatrix.wAxis.w = 1.0f;
 }
 
+// ===========================================================================
+// CgsGraphics::PackedOobb::MultiplyByMatrix @ 0x827F0438
+//
+// roOut = ToMatrix(this) * roIn  (row-vector convention: output row i is the
+// linear combination of roIn's four rows weighted by oobb-matrix row i).
+//
+// The X360 body first calls ToMatrix(this, &stackMatrix) to decode the packed
+// OOBB into a 4x4 (the recovered ToMatrix above), then does a full VMX 4x4
+// multiply: each oobb-matrix row's four lanes (vspltw) scale the four roIn rows
+// (vmulfp + vmaddfp chains), and the four result rows are stored to roOut in row
+// order (out+0x00, +0x10, +0x20, +0x30). vmaddfp on PPC is vD = vA*vC + vB, so
+// each chain accumulates oobbRow.x*roIn0 + oobbRow.y*roIn1 + oobbRow.z*roIn2 +
+// oobbRow.w*roIn3. Reproduced here as the equivalent named-member 4x4 multiply.
+//
+// The asm returns r3 (this); the recovered class declares this `void` (the
+// chained-call return is incidental), so the meaningful effect -- writing roOut
+// -- is what is reproduced.
+// ===========================================================================
+void PackedOobb::MultiplyByMatrix(const rw::math::vpu::Matrix44& roIn,
+                                  rw::math::vpu::Matrix44& roOut) const
+{
+    rw::math::vpu::Matrix44 lOobb;
+    ToMatrix(lOobb);
+
+    const rw::math::vpu::Vector4* lapOobbRows[4] =
+        { &lOobb.xAxis, &lOobb.yAxis, &lOobb.zAxis, &lOobb.wAxis };
+    const rw::math::vpu::Vector4* lapInRows[4] =
+        { &roIn.xAxis, &roIn.yAxis, &roIn.zAxis, &roIn.wAxis };
+    rw::math::vpu::Vector4* lapOutRows[4] =
+        { &roOut.xAxis, &roOut.yAxis, &roOut.zAxis, &roOut.wAxis };
+
+    for (int liRow = 0; liRow < 4; ++liRow)
+    {
+        const rw::math::vpu::Vector4& lrW = *lapOobbRows[liRow]; // row weights
+        rw::math::vpu::Vector4&       lrO = *lapOutRows[liRow];
+
+        lrO.x = lrW.x * lapInRows[0]->x + lrW.y * lapInRows[1]->x
+              + lrW.z * lapInRows[2]->x + lrW.w * lapInRows[3]->x;
+        lrO.y = lrW.x * lapInRows[0]->y + lrW.y * lapInRows[1]->y
+              + lrW.z * lapInRows[2]->y + lrW.w * lapInRows[3]->y;
+        lrO.z = lrW.x * lapInRows[0]->z + lrW.y * lapInRows[1]->z
+              + lrW.z * lapInRows[2]->z + lrW.w * lapInRows[3]->z;
+        lrO.w = lrW.x * lapInRows[0]->w + lrW.y * lapInRows[1]->w
+              + lrW.z * lapInRows[2]->w + lrW.w * lapInRows[3]->w;
+    }
+}
+
 } // namespace CgsGraphics

@@ -225,9 +225,20 @@ namespace CgsSystem
         return GetRawTimeValue() == lDateAndTime.GetRawTimeValue();
     }
 
+    // 0x828D6AB8 - the recovered standalone body is NOT a 64-bit raw compare. The asm
+    // compares the two FILETIME halves independently and ANDs the results:
+    //   if (this.muLowDateTime  >  rhs.muLowDateTime)  return false;   // bgt -> 0
+    //   if (this.muHighDateTime >= rhs.muHighDateTime) return false;   // !blt -> 0
+    //   return true;
+    // i.e. (this.low <= rhs.low) && (this.high < rhs.high). This is reproduced exactly
+    // as the binary does it (the fields at +4/+8 are dwLowDateTime/dwHighDateTime).
     bool DateAndTime::operator<(const DateAndTime& lDateAndTime) const
     {
-        return GetRawTimeValue() < lDateAndTime.GetRawTimeValue();
+        if (mFileTime.muLowDateTime > lDateAndTime.mFileTime.muLowDateTime)
+            return false;
+        if (mFileTime.muHighDateTime >= lDateAndTime.mFileTime.muHighDateTime)
+            return false;
+        return true;
     }
 
     bool DateAndTime::operator<=(const DateAndTime& lDateAndTime) const
