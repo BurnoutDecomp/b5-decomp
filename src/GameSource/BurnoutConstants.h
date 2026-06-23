@@ -2,6 +2,7 @@
 
 // Game-wide constants/enums. Recovered from the DecFIGS DWARF (BurnoutConstants.h).
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (range-guarded operator++)
 
 // Slot index of an active race car (the local player + rivals), or INVALID.
 enum EActiveRaceCarIndex : s32
@@ -68,6 +69,22 @@ inline EGlobalRaceCarIndex operator++(EGlobalRaceCarIndex &leIndex, int)
     const EGlobalRaceCarIndex lePrev = leIndex;
     leIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leIndex) + 1);
     return lePrev;
+}
+
+// Post-increment over the active-race-car slots. X360 @0x821F1DB8 (DWARF
+// BurnoutConstants.h:39): saves the old value, increments, then range-guards the new
+// value with the project CGS_ASSERT (X360 fires when the incremented index exceeds
+// E_ACTIVE_RACE_CAR_INDEX_COUNT, i.e. > 8). The guard is non-fatal -- the X360 returns
+// the saved old value even on a failed guard. The assert is included here (rather than
+// only at the .cpp anchor) so the macro is expanded exactly once where the operator is
+// defined; CgsAssert.h is pulled in below for the macro.
+inline EActiveRaceCarIndex operator++(EActiveRaceCarIndex &leEnumIndex, int)
+{
+    const EActiveRaceCarIndex leOldEnumIndex = leEnumIndex;
+    leEnumIndex = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leEnumIndex) + 1);
+    CGS_ASSERT( leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+    return leOldEnumIndex;
 }
 
 namespace BrnGameState

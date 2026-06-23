@@ -5,6 +5,7 @@
 // the two stored pointers (accessors are inlined / live in their own TUs).
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"   // CgsResource::ID (returned by value)
 
 namespace CgsResource
 {
@@ -14,6 +15,11 @@ namespace CgsResource
     {
         void* mpResourceMemory;
         Entry* mpSourceEntry;
+
+        // CgsResourceHandle.h:93 (DWARF). The resource's identity hash, read from the
+        // source pool entry. Out-of-line in the X360 ARTIST build (@0x828D8438); declared
+        // here, defined in CgsResourceHandle.cpp.
+        ID GetResourceId() const;
     };
 
     // ========================================================================

@@ -45,11 +45,18 @@ namespace CgsGuiModuleIO
         typedef CgsModule::VariableEventQueue<18432, 16> GuiEventQueue;
         typedef CgsModule::VariableEventQueue<4096, 16>  GuiEventQueueSmall;
 
-        // FLAG: ResourceRequestQueue<2048> (foreign home). 2064 bytes, placed at +4 (the
-        // 3 bytes after the 1-byte IOBuffer status are the type's natural-alignment pad).
-        struct GuiResourceRequestQueueStorage
+        // GuiResourceRequestQueue == ResourceRequestQueue<2048> (DWARF CgsGuiModuleIO.h:205,
+        // CgsGuiResourceModuleIO.h:193). The X360 SetGuiResourceRequestQueue @0x8285AFB0
+        // bulk-appends a source request queue into this member via
+        // VariableEventQueue<2048,16>::Append<2048,16>, so the member IS a
+        // VariableEventQueue<2048,16> (sizeof == 2064 -- identical to the prior opaque
+        // 2064-byte storage, so the +4 placement and the OutputBuffer sizeof are preserved).
+        // The ~25 typed request-builder methods of the real ResourceRequestQueue<2048> live
+        // in their own home; modelled here as the thin VEQ-derived base it is. The name is
+        // kept as GuiResourceRequestQueueStorage so the committed GetGuiResourceRequestQueue
+        // accessor (CgsGuiModuleIO_OutputBuffer.cpp) is unchanged.
+        struct GuiResourceRequestQueueStorage : public CgsModule::VariableEventQueue<2048, 16>
         {
-            unsigned char maBytes[2064];
         };
 
         // FLAG: BaseGameActionQueue<13312> (foreign home). Trailing member; sized to the
@@ -62,6 +69,10 @@ namespace CgsGuiModuleIO
         // ---- accessors owned/bodied by this group --------------------------------------
         // X360 0x8284F388: write-lock (bit 3) handle to the resource-request queue.
         GuiResourceRequestQueueStorage* GetGuiResourceRequestQueue();
+        // X360 0x8285AFB0: write-lock (bit 3); asserts the source ptr is non-null, then
+        // bulk-appends it into mResourceRequestQueue (VariableEventQueue<2048,16>::
+        // Append<2048,16>). Returns the Append result (int/bool).
+        int SetGuiResourceRequestQueue(const GuiResourceRequestQueueStorage* lpRequestQueue);
         // X360 0x823B4130: read-lock (bit 4) handle to the out-event queue.
         const GuiEventQueue* GetOutEventQueue() const;
         // X360 0x8250C718: write-lock (bit 3); asserts the source queue ptr is non-null,
