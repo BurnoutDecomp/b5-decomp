@@ -6,11 +6,13 @@
 namespace CgsResource
 {
 // Resource-type handler for a serialised RenderWare vertex descriptor. Derives from
-// CgsResource::Type; FixUp is a virtual override. From DecFIGS DWARF.
+// CgsResource::Type; FixUp and GetSerialisedResourceDescriptor are virtual overrides.
+// From DecFIGS DWARF.
 class RwVertexDescResourceType : public Type
 {
 public:
-    void FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    void               FixUp(void* lpResource, const rw::Resource& lrResource) const override;
 };
 }
 

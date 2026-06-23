@@ -60,6 +60,15 @@ public:
     void Construct() { miCount = 0; }
     void Clear()     { miCount = 0; }
 
+    // Drop the array back to the pre-Construct state: store the KI_UNCONSTRUCTED(-1)
+    // sentinel into the count word so the next access fires the "Array used before
+    // Construct/Clear was called" assert. The X360 emits this as a single `stw -1`
+    // into the count member from an owner's constructor (e.g. CgsGui::AnimData::AnimData
+    // @0x824E8FC8 stores -1 into both embedded arrays' count words @+0x90/+0xAC before
+    // any Construct runs). Additive accessor over the existing miCount field; does not
+    // change layout/sizeof.
+    void MarkUnconstructed() { miCount = KI_UNCONSTRUCTED; }
+
     // Initialise a FIXED index->element table as fully populated: live count = capacity N. Used
     // where the X360 fills every slot by index (rather than growing via Append) -- e.g.
     // GameMainFlowController::Construct (X360 0x823C6440) stores N(7) directly into maStates' count

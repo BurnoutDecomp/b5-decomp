@@ -10,19 +10,21 @@ namespace CgsResource
 class SatNavTileDirectoryResourceType : public Type
 {
 public:
-    uint32_t GetTypeID() const override;
-    void     FixDown(void* lpResource, const rw::Resource& lrResource) const override;
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t           GetTypeID() const override;
+    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    void               FixDown(void* lpResource, const rw::Resource& lrResource) const override;
+    void               FixUp(void* lpResource, const rw::Resource& lrResource) const override;
 };
 
 class SatNavTileResourceType : public Type
 {
 public:
-    uint32_t GetTypeID() const override;
-    void     FixDown(void* lpResource, const rw::Resource& lrResource) const override;
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    uint32_t GetImportCount(const void* lpResource) const override;
-    void     GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
+    uint32_t           GetTypeID() const override;
+    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    void               FixDown(void* lpResource, const rw::Resource& lrResource) const override;
+    void               FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t           GetImportCount(const void* lpResource) const override;
+    void               GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
 };
 }
 

@@ -75,9 +75,25 @@ namespace CgsGui
         Array<AnimChannelData, 6> mChannelData;  // [+0x00] keyframe payload per active channel (h:137)
         Array<AnimatorChannel, 6> meChannels;    // [+0x94] which channels this animation drives (h:138)
 
-        // The AnimData methods (AnimData ctor / Construct / Clear / AddAnimationChannel /
-        // GetChannelData / AnimatorChan) are homed by their own ledger TUs; declared
-        // there. This slice models the layout so the Array<AnimData,N> container
-        // instantiations have a complete element type.
+        // ----- methods homed by class:CgsGui::AnimData (CgsAptAnimDataAnimData.cpp) -----
+
+        // Default ctor (X360 0x824E8FC8): leaves both embedded Array<> members in the
+        // pre-Construct state -- the X360 body stores the KI_UNCONSTRUCTED(-1) sentinel
+        // into mChannelData.miCount (@+0x90) and meChannels.miCount (@+0xAC). It does
+        // NOT zero/Construct them; a later Construct/Clear flips the sentinels.
+        AnimData();
+
+        // X360 0x8284D940 (AnimData::AnimatorChan): checked indexed access into the
+        // meChannels list -- returns a reference to the AnimatorChannel at luIndex
+        // (the X360 inlined Array<AnimatorChannel,6>::operator[] here: count @ +0x18 of
+        // the array subobject, stride 4, with the CgsArray.h:538/539 bounds asserts).
+        // Called by AnimData::GetChannelData.
+        AnimatorChannel&       AnimatorChan(u32 luIndex);
+        const AnimatorChannel& AnimatorChan(u32 luIndex) const;
+
+        // The remaining AnimData methods (Construct / Clear / AddAnimationChannel /
+        // GetChannelData) are homed by their own ledger TUs; declared there. This slice
+        // models the layout so the Array<AnimData,N> container instantiations have a
+        // complete element type.
     };
 }
