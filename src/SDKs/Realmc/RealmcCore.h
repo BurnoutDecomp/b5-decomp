@@ -258,6 +258,12 @@ public:
 
     void OnUnreferenced() override {}  // slot +4 (final vtable)
 
+    // Additive accessor (FLAG: not its own X360 function). Returns mpPayload (+8) by
+    // NAME so the response-side smart pointer RealmcCore::ResponsePtr::GetValue
+    // (@0x82C44D68) reads the held response's payload word through Response rather
+    // than via a raw +8 offset. No layout change.
+    void* GetPayload() const { return mpPayload; }
+
     // slot +0 -- backs the X360 `vector deleting destructor' @ 0x82C458F0.
     ~Response() override;
 
@@ -485,5 +491,63 @@ public:
 // The global default-message holder (X360 off_832BE1F4) and the default-message source
 // (off_832BE1F8) the filter binds its MessagePtr to. Installed by another Realmc TU at
 // boot; declared here for compile/link. Modelled via the empty-message singleton.
+
+// ---------------------------------------------------------------------------
+// WAVE-EXTENSION (additive). RealmcCore::ResponsePtr -- the response-side sibling
+// of MessagePtr: a small intrusive smart pointer / refcount wrapper over a Realmc
+// Response object. Reconstructed from BURNOUT_X360_ARTIST.XEX (no leak / DWARF).
+// Per-function X360 addresses:
+//
+//     RealmcCore::ResponsePtr::ResponsePtr    @ 0x82C45950  (ctor; AddRef the response)
+//     RealmcCore::ResponsePtr::~ResponsePtr   @ 0x82C45990  (Release the response, null it)
+//     RealmcCore::ResponsePtr::GetValue       @ 0x82C44D68  (read the held response's payload)
+//     RealmcCore::ResponsePtr::EMPTY_RESPONSE @ 0x82C44D58  (shared empty-response singleton)
+//     RealmcCore::ResponsePtr::`scalar deleting destructor' @ 0x82C460A0
+//
+// LAYOUT (from the ctor / dtor asm -- IDENTICAL to MessagePtr's layout, and the
+// X360 ~ResponsePtr literally tail-branches into RealmcCore::MessagePtr::~MessagePtr,
+// so the two smart pointers share the same vtables AND the same teardown body):
+//   +0x00  vtable pointer  (base off_821BA2F4 then final off_821BA308 -- the SAME
+//                           two vtables MessagePtr installs; the only virtual is the
+//                           destructor)
+//   +0x04  mpResponse      (the held Response*; AddRef'd on bind, Release'd on teardown)
+//
+// sizeof(ResponsePtr) == 8 (vtable ptr + mpResponse) -- the scalar deleting
+// destructor frees 8 bytes.
+//
+// Because the X360 ~ResponsePtr branches into MessagePtr::~MessagePtr, the held
+// pointer occupies the same +0x04 slot a MessagePtr's mpMessage does and is
+// Release'd through the shared RefCount machinery; Response derives RefCount, so the
+// AddRef (ctor) and Release (dtor) reach the refcount at the held object's +4 by name.
+// GetValue reads the held Response's +0x08 == Response::mpPayload.
+// ---------------------------------------------------------------------------
+class ResponsePtr
+{
+public:
+    // @ 0x82C45950 -- install ResponsePtr's vtable, AddRef the response (the X360
+    //                 inlines the interrupt-masked lwarx/addi+1/stwcx. increment of
+    //                 *(response + 4) == the RefCount count), store mpResponse.
+    explicit ResponsePtr(Response* pResponse);
+
+    // @ 0x82C44D68 -- read the held response's payload value:
+    //                 r11 = *(this + 4) (mpResponse); return *(r11 + 8) ==
+    //                 mpResponse->mpPayload (reinterpreted as an int, the X360
+    //                 leaves the word in r3).
+    int GetValue() const;
+
+    // @ 0x82C44D58 -- return the shared empty-response singleton (X360 off_832BE1F4,
+    //                 the same global default-message holder MessageFilter binds to),
+    //                 the placeholder a ResponsePtr points at when it carries no real
+    //                 response.
+    static void* EMPTY_RESPONSE();
+
+    // slot +0 -- backs the X360 `scalar deleting destructor' @ 0x82C460A0
+    //            (restore vtable, Release mpResponse via MessagePtr::~MessagePtr,
+    //            null it; then operator delete 8 bytes when the delete flag is set).
+    virtual ~ResponsePtr();
+
+private:
+    Response* mpResponse;  // +0x04 (held, AddRef'd response)
+};
 
 } // namespace RealmcCore

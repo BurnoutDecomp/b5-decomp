@@ -14,13 +14,10 @@
 
 #include "types.hpp"
 #include "GameSource/GameState/BrnCgsPlayerName.h"   // CgsNetwork::PlayerName (committed, 16B)
+#include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // CgsSystem::DateAndTime (committed, 12B; mLastTimeChanged @+72)
 
 namespace BrnNetwork
 {
-    // Uncommitted dependency types -- forward-declared only (this TU touches them only in
-    // declaration-only accessors, never defining/calling them here). Promote to their real
-    // homes when those TUs land.
-    struct DateAndTime;     // mLastTimeChanged storage (un-homed)
 
     // BrnNetworkLiveRevengeRelationship.h:47 (DWARF) -- 9 x int32 == 36 bytes.
     struct CommonRelationshipStats
@@ -131,18 +128,28 @@ namespace BrnNetwork
         // BrnNetworkLiveRevengeRelationship.h:320 (DWARF) -- TOUCHED by this TU.
         CommonRelationship mOverallStats;          // +0  (72 bytes)
 
-        // Untouched tail. Real members per DWARF are:
-        //   BrnNetworkLiveRevengeRelationship.h:323  DateAndTime                 mLastTimeChanged;
-        //   BrnNetworkLiveRevengeRelationship.h:326  MugshotInfo::UniquePlayerID mUniqueID;
-        //   BrnNetworkLiveRevengeRelationship.h:329  s32                         miCurrentScoreForPlayersPointOfView;
-        //   BrnNetworkLiveRevengeRelationship.h:332  u32                         miTotalEvents;
-        // DateAndTime and MugshotInfo::UniquePlayerID are NOT committed yet, so the
-        // first two are modelled as an opaque 40-byte pad to keep the object at the
-        // X360-proven 120-byte size (see header comment: the InGamePl copy memcpy's 120B
-        // for this object so PlayerName lands at +256) without fabricating their internal
-        // layouts. The owning TUs of those accessors must replace this pad with the real
-        // members, keeping the combined DateAndTime+UniquePlayerID span at 40 bytes.
-        u8  mPad_LastTimeChanged_UniqueID[40];     // +72 (DateAndTime + UniquePlayerID)
+        // === ADDITIVE GROW (this TU, the owning home for the clear path) ===
+        // The committed home previously modelled this region as an opaque 40-byte pad
+        // (mPad_LastTimeChanged_UniqueID) "to be replaced by the real members, keeping the
+        // combined DateAndTime+UniquePlayerID span at 40 bytes" -- this is that owning TU.
+        // The clear bodies (Destruct/Release/DEBUGClearRelationship @0x82547xxx) write
+        // exact sub-offsets inside this region and DEBUGClearRelationship tail-calls
+        // CgsSystem::DateAndTime::Update(this+0x48 == +72), proving mLastTimeChanged is the
+        // committed CgsSystem::DateAndTime AT +72. (Confirmed independently by the Flyby
+        // home, which spells the same +72 field `CgsSystem::DateAndTime mLastActivity`.)
+        // Size/offsets are preserved (12 + 28 == the old 40-byte span); object stays 120B.
+        CgsSystem::DateAndTime mLastTimeChanged;   // +72  (12 bytes) committed type
+
+        // mUniqueID: the un-homed MugshotInfo::UniquePlayerID (28 bytes, +84..+111). Its
+        // internal layout is NOT committed, so it is modelled as named byte-span fields at
+        // exactly the offsets the X360 clear path stores to (a byte @+88, an 8-byte field
+        // @+104) plus opaque spans -- reproducing the clear stores by name without
+        // fabricating the UniquePlayerID layout. The owning TU of UniquePlayerID should
+        // replace this with the real member, keeping the 28-byte span.
+        u8  maUniqueID_84[4];                      // +84  (opaque head)
+        u8  mbUniqueID_88;                         // +88  (stb 0 here)
+        u8  maUniqueID_89[15];                      // +89..+103 (opaque)
+        u64 muUniqueID_104;                        // +104 (std 0 here -> +104..+111)
         s32 miCurrentScoreForPlayersPointOfView;   // +112
         u32 miTotalEvents;                         // +116
     };

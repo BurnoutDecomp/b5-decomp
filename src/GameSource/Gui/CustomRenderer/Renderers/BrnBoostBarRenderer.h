@@ -93,6 +93,39 @@ private:
     // standing in for a far-trailing guest field.
     s32 miTrailingSentinel;
 };
+
+// BrnGui::GuiCustRendererDebugComponent -- the debug-menu component that lets a developer override
+// the boost-bar colours at runtime. It edits the colours of the live BoostBarRenderer and mirrors
+// the chosen inner/outer colours into its own cached fields so the debug menu can display them.
+//
+// Reconstructed from BURNOUT_X360_ARTIST.XEX:
+//   GuiCustRendererDebugComponent::UpdateBoostColours @ 0x824F7C48
+//
+// MINIMAL-SLICE class. Only UpdateBoostColours is in scope; the X360 object is large (the full
+// CgsDev::DebugComponent base, the per-boost-type menu-variable registrations, callbacks, etc. are
+// all uncommitted and OMITTED). The guest reaches the live BoostBarRenderer through a renderer/cache
+// pointer at +0xC plus the +0xE520 BoostBarRenderer subobject offset; on the 64-bit host the offset
+// is not load-bearing, so the resolved BoostBarRenderer pointer is held directly and accessed BY NAME
+// (no raw +0xE520 cast). The two cached colour triples are the destination fields the asm writes:
+// outer RGB at guest +0x18/+0x1C/+0x20, inner RGB at guest +0x24/+0x28/+0x2C.  FLAG: minimal-slice
+// class + member-pointer models the resolved BoostBarRenderer (not the +0xC owner + +0xE520 offset).
+class GuiCustRendererDebugComponent
+{
+public:
+    // 0x824F7C48 -- pull the boost-type-indexed inner/outer colours out of the live BoostBarRenderer
+    // and cache them into the component's own colour fields. Returns the GetOuterBoostBarColour result
+    // (the X360 leaves the outer-getter's return value in r3).
+    int UpdateBoostColours();
+
+private:
+    // The live boost-bar renderer this component edits (guest: a renderer/cache pointer at +0xC whose
+    // BoostBarRenderer subobject is at +0xE520; held resolved here for by-name access).
+    BoostBarRenderer* mpBoostBarRenderer;   // guest +0x0C (resolved to the +0xE520 subobject)
+
+    // Cached colour triples mirrored from the renderer (the asm's tail stores).
+    Vector3 mv3OuterColour;   // guest +0x18/+0x1C/+0x20 (x/y/z)
+    Vector3 mv3InnerColour;   // guest +0x24/+0x28/+0x2C (x/y/z)
+};
 }
 
 #endif

@@ -509,4 +509,88 @@ MessagePtr MessageFilter::FilterMessage(IRealmcFilterableMessage* pIncoming)
     return MessagePtr(maMessage.Get());
 }
 
+// ===========================================================================
+// ResponsePtr -- the response-side intrusive refcount wrapper (the X360 sibling of
+// MessagePtr; same vtables off_821BA2F4 / off_821BA308). Reconstructed from the
+// X360 asm; see RealmcCore.h for the layout. Note the X360 ~ResponsePtr literally
+// tail-branches into MessagePtr::~MessagePtr, so the teardown body is shared with
+// MessagePtr -- reproduced here as the same Release-then-null sequence.
+// ===========================================================================
+
+// The shared empty-response singleton (X360 off_832BE1F4) -- the SAME global
+// default-message holder MessageFilter binds its MessagePtr to. Defined here as a
+// null-initialised pointer; another Realmc TU installs the real empty-response
+// object at boot. (Owning definition for the EMPTY_RESPONSE() accessor.)
+static void* g_pRealmcEmptyResponse = nullptr;
+
+// ---------------------------------------------------------------------------
+// ResponsePtr::ResponsePtr @ 0x82C45950
+//
+//   stw off_821BA2F4, 0(r3)                   -> install ResponsePtr vtable (base)
+//   addi r10, r4, 4                           -> &mpResponse->miRefCount
+//   <mfmsr/mtmsree/lwarx/addi +1/stwcx./mtmsree/bne>  -> AddRef the response
+//   stw r4, 4(r3)                             -> mpResponse = pResponse
+//   stw off_821BA308, 0(r3)                   -> install ResponsePtr vtable (final)
+//
+// Structurally identical to MessagePtr::MessagePtr (@0x82C45778): the two vtable
+// stores are MSVC's ctor prologue (emitted from the class definition); the inlined
+// atomic increment is RefCount::AddRef on the held response (Response derives
+// RefCount, so the count at +4 is reached by name).
+// ---------------------------------------------------------------------------
+ResponsePtr::ResponsePtr(Response* pResponse)
+    : mpResponse(pResponse)
+{
+    mpResponse->AddRef();
+}
+
+// ---------------------------------------------------------------------------
+// ResponsePtr::~ResponsePtr @ 0x82C45990
+//
+//   stw off_821BA308, 0(r3)                   -> (re)install ResponsePtr vtable
+//   b   RealmcCore::MessagePtr::~MessagePtr   -> tail-call the SHARED teardown:
+//                                                Release(mpResponse); mpResponse = 0
+//
+// Backs the X360 `scalar deleting destructor' @ 0x82C460A0, which (when its delete
+// flag bit0 is set) frees 8 bytes through the Realmc backend afterwards. The held
+// member sits at the same +0x04 slot MessagePtr's mpMessage occupies, so the shared
+// MessagePtr dtor body Releases it through the RefCount machinery; Response derives
+// RefCount, so Release reaches the count at +4 by name.
+// ---------------------------------------------------------------------------
+ResponsePtr::~ResponsePtr()
+{
+    // RefCount::Release takes the target object explicitly (the X360 thunk reads
+    // r3 == the object), so it is invoked through the held response itself; the
+    // committed Release signature is left untouched -- exactly MessagePtr's dtor.
+    mpResponse->Release(mpResponse);
+    mpResponse = nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// ResponsePtr::GetValue @ 0x82C44D68
+//
+//   lwz r11, 4(r3)                            -> r11 = mpResponse
+//   lwz r3,  8(r11)                           -> r3  = mpResponse->mpPayload (+8)
+//   blr
+//
+// Return the held response's payload word as an int (the X360 leaves the 32-bit
+// value in r3); reached through Response::GetPayload() by name.
+// ---------------------------------------------------------------------------
+int ResponsePtr::GetValue() const
+{
+    return static_cast<int>(reinterpret_cast<std::intptr_t>(mpResponse->GetPayload()));
+}
+
+// ---------------------------------------------------------------------------
+// ResponsePtr::EMPTY_RESPONSE @ 0x82C44D58
+//
+//   lis r11, off_832BE1F4@ha ; lwz r3, off_832BE1F4@l(r11) ; blr
+//
+// Returns the shared empty-response singleton pointer (the same global the message-
+// filter default binds to).
+// ---------------------------------------------------------------------------
+void* ResponsePtr::EMPTY_RESPONSE()
+{
+    return g_pRealmcEmptyResponse;
+}
+
 } // namespace RealmcCore

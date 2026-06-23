@@ -54,6 +54,11 @@ namespace CgsDev
 
         Vector2 GetVirtualScreenSize() const;
 
+        // True if the screen-space point lies within the virtual-screen rect
+        // [0,mfVirtualScreenWidth] x [0,mfVirtualScreenHeight] (inclusive). Used by the
+        // line/text cull (Is2DLineOnScreen / DrawText). X360 @ 0x82818838.
+        bool Is2DPointOnScreen(Vector2 lv2Point) const;
+
         void DrawBox(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour);
         void DrawBox(f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight, RGBA lColour);
         void DrawLine(Vector2 lv2Start, Vector2 lv2End, RGBA lColour);
