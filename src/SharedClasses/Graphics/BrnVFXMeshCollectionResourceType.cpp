@@ -1,5 +1,5 @@
 #include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"
-#include "rw/rwcore_structs.h"                            // rw::Resource complete for FixUp
+#include "rw/rwcore_structs.h"                            // rw::Resource / BaseResourceDescriptors complete
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "pc/gcm/renderengine/VertexBuffer.h"             // renderengine::VertexBuffer::Xbox2CheckPhysicalMemoryFlags
 #include "pc/gcm/renderengine/IndexBuffer.h"              // renderengine::IndexBuffer::Xbox2CheckPhysicalMemoryFlags
@@ -51,6 +51,30 @@ namespace BrnParticle
     uint32_t BrnVFXMeshCollectionResourceType::GetTypeID() const
     {
         return KU_VFX_MESH_COLLECTION_RESOURCE_TYPE_ID;
+    }
+
+    // GetSerialisedResourceDescriptor @ 0x8267C3F8. This handler does not compute a
+    // build-time allocation descriptor at runtime: the X360 body fires the single
+    // "not expected at runtime" assert, then returns a five-entry descriptor. Slots 1..4
+    // are {size=0, alignment=1} (no main allocation; the mesh/buffers come in as imports);
+    // slot0 is then zeroed wholesale by a trailing `std r9,0(r31)` (r9 = 64-bit 0), so
+    // slot0 ends {size=0, alignment=0}.
+    CgsResource::ResourceDescriptor
+    BrnVFXMeshCollectionResourceType::GetSerialisedResourceDescriptor(const void* /*lpResource*/) const
+    {
+        CGS_ASSERT(false, "This code is not expected at runtime.");
+
+        CgsResource::ResourceDescriptor lDescriptor;
+        for (uint32_t luIndex = 0; luIndex < 5; ++luIndex)
+        {
+            lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0u;
+            lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1u;
+        }
+        // Trailing `std r9,0(r31)` (r9 = 64-bit 0) re-writes slot0's full qword, zeroing
+        // BOTH m_size and m_alignment -- so slot0 ends {0,0}, not {0,1}.
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = 0u;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 0u;
+        return lDescriptor;
     }
 
     void BrnVFXMeshCollectionResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const

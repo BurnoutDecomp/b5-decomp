@@ -29,6 +29,47 @@ namespace CgsNetwork
 {
     struct NetworkManagerPrepareParams
     {
+        // -----------------------------------------------------------------------------
+        // Nested source param sub-blocks. NetworkManagerPrepareParams::Construct copies
+        // these in by value (see maVersionDisplay[3] / maPlayerManager[5] below). Each has
+        // its own Construct() validate-and-store initialiser, bodied in CgsNetworkManager.cpp.
+        // -----------------------------------------------------------------------------
+
+        // CgsNetworkManager.h:452-453 -- the version-display sub-block (3 words). Construct
+        // @ 0x82581568 validates the version string + server-type range, then stores three
+        // words. leServerType is range-checked against [E_SERVER_TYPE_LOCAL, E_SERVER_TYPE_COUNT)
+        // -- i.e. [0, 7) -- with two signed compares in the asm.
+        struct VersionDisplayPrepareParams
+        {
+            // @ 0x82581568 -- store (lpcServerVersion, a3, leServerType); returns `this`.
+            VersionDisplayPrepareParams* Construct(const char* lpcServerVersion,
+                                                   u32 luField_04,
+                                                   u32 leServerType);
+
+            const char* mpcServerVersion;   // +0x00  (stw r29, lpcServerVersion)
+            u32         muField_04;          // +0x04  (stw r27, a3)
+            u32         meServerType;        // +0x08  (stw r28, leServerType)
+        };
+
+        // CgsNetworkManager.h:486 -- the player-manager sub-block (5 words). Construct
+        // @ 0x825815F0 asserts the server-interface pointer is non-null, then stores five
+        // words verbatim; returns `this`.
+        struct PlayerManagerPrepareParams
+        {
+            // @ 0x825815F0 -- store (lpServerInterface, a3, a4, a5, a6); returns `this`.
+            PlayerManagerPrepareParams* Construct(void* lpServerInterface,
+                                                  u32 luField_04,
+                                                  u32 luField_08,
+                                                  u32 luField_0C,
+                                                  u32 luField_10);
+
+            void* mpServerInterface;   // +0x00  (stw r30, lpServerInterface)
+            u32   muField_04;          // +0x04  (stw r29, a3)
+            u32   muField_08;          // +0x08  (stw r28, a4)
+            u32   muField_0C;          // +0x0C  (stw r27, a5)
+            u32   muField_10;          // +0x10  (stw r26, a6)
+        };
+
         // @ 0x82581468 -- copy the three source param blocks in and stash the trailing
         // word (returns `this`). The blocks are passed by pointer; the asm copies 3 / 5 / 5
         // words respectively, then stores a5.
