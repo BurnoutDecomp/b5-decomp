@@ -66,4 +66,34 @@ CMassiveRecordImpression::~CMassiveRecordImpression()
 {
 }
 
+// ---------------------------------------------------------------------------
+// CMassiveRecordImpression::Reset
+//
+// The X360 has no standalone impression Reset symbol; CMassiveRecord::Reset
+// @ 0x82BDD7A8 inlines this per-impression accumulator clear (twice -- once per
+// embedded impression). The asm reads mnParentRecord (+0x14 within the
+// impression), then re-stores it unchanged, while zeroing every other slot:
+//   stfs flt_82001CC0(0.0), +0x20 / +0x28      -> mfField20 = mfField28 = 0.0f
+//   stw  0, +0x18 / +0x30 / +0x34              -> mnField18/30/34 = 0
+//   std  0, +0x40 / +0x48 / +0x50              -> mnField40/48/50 = 0 (i64)
+//   sth  0, +0x1C / +0x24 / +0x2C / +0x58      -> msField1C/24/2C/58 = 0 (u16)
+// mnParentRecord is preserved; reproduced here BY NAME, store-for-store.
+// ---------------------------------------------------------------------------
+void CMassiveRecordImpression::Reset()
+{
+    // mnParentRecord (+0x14) is intentionally left untouched.
+    mnField18 = 0;
+    msField1C = 0;
+    mfField20 = 0.0f;
+    msField24 = 0;
+    mfField28 = 0.0f;
+    msField2C = 0;
+    mnField30 = 0;
+    mnField34 = 0;
+    mnField40 = 0;
+    mnField48 = 0;
+    mnField50 = 0;
+    msField58 = 0;
+}
+
 } // namespace MassiveAdClient3

@@ -72,6 +72,19 @@ namespace GameDataIO
 
     // DWARF: BrnGameDataEvents.h:657 -- no own members (Construct(queue, eventId) only).
     struct GetVehicleListRequest : public GameDataAssetEvent {};
+
+    // ADDITIVE GROW: sibling typed GameData request events used by the per-N
+    // RequestInterface request-builders. Each is an empty GameDataAssetEvent derivative
+    // (no own members; the builder populates the base fields by NAME and picks the
+    // event TYPE id at the call site, exactly like GetVehicleListRequest above). The
+    // X360 emits one typed AddEvent<EventT> per family; the distinct event TYPES are
+    // what differentiate the request, not the struct shape.
+    //   GetICEListRequest              (RequestInterface<512>::GetICEList            @ 0x82256358)
+    //   GetWheelListRequest            (RequestInterface<8192>::GetWheelList         @ 0x822FD380)
+    //   GetFreeburnChallengeListRequest(RequestInterface<32768>::GetFreeburnChallengeList @ 0x8250BBE0)
+    struct GetICEListRequest : public GameDataAssetEvent {};
+    struct GetWheelListRequest : public GameDataAssetEvent {};
+    struct GetFreeburnChallengeListRequest : public GameDataAssetEvent {};
 }
 }
 

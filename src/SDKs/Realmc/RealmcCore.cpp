@@ -432,4 +432,81 @@ IRealmcMessage* MessagePtr::EMPTY_MESSAGE()
     return g_pRealmcEmptyMessage;
 }
 
+// ===========================================================================
+// MessageFilter -- a Realmc message-filter object (derives the abstract filter base
+// IRealmcMessageFilter, base vtable off_82148660; final vtable off_821BA310). It holds
+// a handler/owner pointer (+4) and an embedded MessagePtr (+8). Reconstructed from the
+// X360 asm; see RealmcCore.h for the layout.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// MessageFilter::MessageFilter @ 0x82C45F08
+//
+//   stw  r4, 4(r3)                              -> mpHandler = pHandler
+//   stw  off_821BA310, 0(r3)                    -> final MessageFilter vtable
+//   r11 = *(off_832BE1F4) ; r11 = *(r11 + 4)    -> the default/empty message
+//   stw  off_821BA2F4, 8(r3)                    -> embedded MessagePtr base vtable @ +8
+//   <atomic increment of *(r11 + 4)>            -> AddRef the message
+//   stw  r11, 0xC(r3)                           -> maMessage.mpMessage = message
+//   stw  off_821BA308, 8(r3)                    -> embedded MessagePtr final vtable @ +8
+//
+// The two vtable stores at +0 are MSVC's base-then-final derived-ctor sequence; the
+// MessagePtr subobject at +8 is constructed bound to the default message (modelled via
+// the shared empty-message singleton), AddRefing it -- exactly MessagePtr's own ctor.
+// ---------------------------------------------------------------------------
+MessageFilter::MessageFilter(void* pHandler)
+    : mpHandler(pHandler),
+      maMessage(MessagePtr::EMPTY_MESSAGE())   // binds + AddRefs the default message
+{
+}
+
+// ---------------------------------------------------------------------------
+// MessageFilter::~MessageFilter @ 0x82C45F68
+//
+//   *r3 = off_821BA310                          -> (re)install MessageFilter vtable
+//   *(r3 + 8) = off_821BA308                    -> the embedded MessagePtr vtable
+//   bl RealmcCore::MessagePtr::~MessagePtr(r3+8)-> tear down maMessage (Release + null)
+//   *r3 = off_82148660                          -> restore the abstract-base vtable
+//
+// The MessagePtr subobject destructor (Release the held message) is the only real work;
+// the vtable stores frame the base-class teardown the compiler emits. Backs the X360
+// `vector deleting destructor' @ 0x82C46240, which frees 0x10 bytes (sizeof).
+// ---------------------------------------------------------------------------
+MessageFilter::~MessageFilter()
+{
+    // maMessage's destructor (Release + null) runs automatically as the member is
+    // destroyed -- the X360's inlined MessagePtr::~MessagePtr on this+8.
+}
+
+// ---------------------------------------------------------------------------
+// MessageFilter::FilterMessage @ 0x82C462A8
+//
+//   RealmcCore::MessagePtr::operator=(this + 8, off_832BE1F8)
+//                                              -> rebind maMessage to the default message
+//   r11 = *(pIncoming) ; r11 = *(r11 + 4)      -> incoming message vtable slot +4
+//   (r11)(pIncoming, this)                     -> incoming->ApplyToFilter(this)
+//   r11 = *(this + 0xC)                        -> the message the filter now holds
+//   *out = off_821BA2F4 ; <AddRef *(r11+4)> ; out[1] = r11 ; *out = off_821BA308
+//                                              -> copy-build the returned MessagePtr
+//
+// i.e. reset the held message, let the incoming message apply itself to this filter,
+// then return (by value) a MessagePtr over the filter's now-held message. The returned
+// MessagePtr's copy-build AddRefs the message (the two-vtable store is MSVC's base-then-
+// final MessagePtr ctor); reproduced by constructing it from the held message.
+// ---------------------------------------------------------------------------
+MessagePtr MessageFilter::FilterMessage(IRealmcFilterableMessage* pIncoming)
+{
+    // Rebind the held MessagePtr to the default/empty message (the X360 assigns it from
+    // the global default-MessagePtr at off_832BE1F8; modelled via the empty singleton).
+    MessagePtr lDefault(MessagePtr::EMPTY_MESSAGE());
+    maMessage = lDefault;
+
+    // Let the incoming message apply itself to this filter (vtable slot +4 dispatch),
+    // which sets the message the filter should carry.
+    pIncoming->ApplyToFilter(this);
+
+    // Return a MessagePtr over the filter's now-held message (copy-build AddRefs it).
+    return MessagePtr(maMessage.Get());
+}
+
 } // namespace RealmcCore

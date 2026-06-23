@@ -240,6 +240,13 @@ struct ResourceAllocatorRegistry {  // sizeof = 1 (rwcore.pdb, x64)
     // points this at the static SystemAllocatorGeneric instance the first time
     // rw::ResourceAllocatorRegistry::GetDefaultAllocator runs, if it is still null.
     static ::rw::IResourceAllocator* s_defaultAllocator;
+
+    // ADDITIVE (static member fns, no storage -> sizeof unchanged): the registry
+    // accessors. GetDefaultAllocator (X360 @0x82BBD1E0) lazily runs the
+    // DefaultSystemAllocatorInitializer once (guarded) then returns the slot;
+    // SetDefaultAllocator (X360 @0x82BBC490) overwrites the slot.
+    static ::rw::IResourceAllocator* GetDefaultAllocator();
+    static void SetDefaultAllocator(::rw::IResourceAllocator* lpAllocator);
 };
 RW_SIZE_ASSERT(rw::ResourceAllocatorRegistry, 1);
 
