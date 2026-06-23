@@ -69,5 +69,22 @@ public:
     Vector4 RandomiseXYZW(CgsNumeric::Random &lrRandom);
 };
 
+// =============================================================================
+// Namespace-scoped VMX helpers (the Hex-Rays "BrnEffects::Utils::*" free functions).
+// Both are hand-vectorised VMX128 pipelines over undecoded rodata -- KEYSTONES, defined
+// (as honest non-fabricated stubs) in BrnEffectsUtils.cpp. See the .cpp for the per-op
+// pipeline breakdown and the floor rationale.
+// =============================================================================
+
+// 0x822781E0 -- build the 4 UV-corner vectors for a quad. Reads a wrap/flag bit and three
+// input vectors from the quad descriptor (lpQuad), writes four Vector4 UV vectors to
+// lpaUVsOut[0..3]. (X360 ABI: lpQuad in r3, lpaUVsOut in r4.)
+void BuildUVs(const Vector4* lpQuad, Vector4* lpaUVsOut);
+
+// 0x8227E7A8 -- build a 3x3 rotation matrix from packed Euler XYZ angles, via a polynomial
+// sin/cos approximation (the angle vector arrives in a SIMD register). Writes the three rows
+// to *lpMatrixOut. (X360 ABI: lpMatrixOut in r3, angles in v1.)
+void FastMatrix33FromEulerXYZ(Matrix33* lpMatrixOut, Vector3 lv3EulerAngles);
+
 } // namespace Utils
 } // namespace BrnEffects

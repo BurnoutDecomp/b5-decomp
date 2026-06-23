@@ -106,5 +106,58 @@ Vector4 Vector4Randomiser::RandomiseXYZW(CgsNumeric::Random &lrRandom)
     return lvResult;
 }
 
+// =============================================================================
+// BrnEffects::Utils::BuildUVs @ 0x822781E0  -- KEYSTONE, NOT reconstructed.
+//
+// The X360 body is a multi-stage hand-vectorised VMX128 pipeline over two undecoded rodata
+// permute tables (unk_82CDA400 / unk_82CDA3C0) and two rodata constant vectors
+// (unk_82FABA60 / unk_82FAB880). It branches on a wrap bit (quad +0x40 & 1):
+//   - wrapped path: lvx128 the three input vectors, vrfim (floor) + vcmpgefp + vsel to take
+//     fractional parts, a vmulfp128 / vrfim / vsubfp tiling cascade, then four
+//     vperm + vsldoi lane-weaves through the rodata permute tables, stvx128 x4 to the out;
+//   - unwrapped path: vcfsx a 1.0, stvx128 a rodata constant + two splats + a second rodata
+//     constant as the four UV corners.
+// The vperm/vsldoi weaves are driven by rodata permute selectors that are not decoded here;
+// inventing the per-lane UV math would be fabrication. Honest non-corrupting stub: the four
+// out vectors are zero-initialised (defined output) pending a VMX-aware lowering pass that
+// decodes the permute tables. Operands referenced so the signature stays honest.
+//
+// BrnEffects::Utils::FastMatrix33FromEulerXYZ @ 0x8227E7A8  -- KEYSTONE, NOT reconstructed.
+//
+// The X360 body is a hand-vectorised VMX128 polynomial sin/cos matrix builder over six
+// undecoded rodata constant vectors (unk_8307A590/680/3C0/560/3B0/670/5F0): vmrghw/vspltw
+// splat the Euler lanes, two vmaddfp range-reduce them, vrfim/vsubfp wrap to a base period,
+// vminfp folds the quadrant, two vmaddfp stages evaluate the sin/cos polynomial, then a long
+// vspltw + vmulfp128 + vaddfp/vsubfp + vslw/vxor cascade assembles the nine matrix entries and
+// stvx128 writes the three rows. The polynomial coefficients live in the undecoded rodata, so a
+// scalar reconstruction cannot be written without fabricating them. Honest stub: write an
+// identity 3x3 (a defined, non-corrupting rotation) pending the rodata decode + VMX lowering.
+// =============================================================================
+
+void BuildUVs(const Vector4* lpQuad, Vector4* lpaUVsOut)
+{
+    // KEYSTONE STUB: VMX UV-weave pipeline over undecoded rodata permute tables not
+    // reconstructed (see header above). Zero the four out corners (defined output).
+    (void)lpQuad;
+    if (lpaUVsOut != nullptr)
+    {
+        lpaUVsOut[0].SetZero();
+        lpaUVsOut[1].SetZero();
+        lpaUVsOut[2].SetZero();
+        lpaUVsOut[3].SetZero();
+    }
+}
+
+void FastMatrix33FromEulerXYZ(Matrix33* lpMatrixOut, Vector3 lv3EulerAngles)
+{
+    // KEYSTONE STUB: VMX polynomial sin/cos matrix builder over undecoded rodata coefficients
+    // not reconstructed (see header above). Write an identity rotation (defined, non-corrupting).
+    (void)lv3EulerAngles;
+    if (lpMatrixOut != nullptr)
+    {
+        lpMatrixOut->SetIdentity();
+    }
+}
+
 } // namespace Utils
 } // namespace BrnEffects

@@ -56,6 +56,13 @@ public:
     // _savefpr/_restfpr prologue hides the register args; the asm register usage --
     // r3=state, r4=dst, r5=src, r6=coeffs -- is authoritative.)
     static void Filter(Iir2State *state, f32 *dst, const f32 *src, const Iir2Coeffs *coeffs);
+
+    // Reset one channel's direct-form-I history to zero. A leaf the asm never gives its
+    // own export (folded into its call sites by the linker): every filter shape's
+    // Initialize<T> clears its 6 state slots through this, and each Process clears the
+    // running channels when the filter turns inactive. Stride between slots is
+    // sizeof(Iir2State) == 0x10 in every caller, matching the per-channel state array.
+    static void ClearBuffer(Iir2State *state);
 };
 
 } // namespace core

@@ -71,6 +71,22 @@ namespace BrnNetwork
 
     namespace BrnNetworkModuleIO
     {
+        // ------------------------------------------------------------------------
+        // NetworkEvent<N> -- the BrnNetwork module-IO event spine.
+        //   DWARF: struct NetworkEvent<N> : public BrnNetwork::Event { int32_t GetEventType() const; }
+        //   (references/DecFIGS/dwarfdump/.../BrnNetworkEvent.h:43). It carries NO data
+        //   members -- the empty Event base + a single GetEventType() that returns the
+        //   compile-time event-type tag N -- so every leaf event's first member lands at
+        //   offset 0 (confirmed by NetworkPlayerDisconnectedEvent::Construct @0x82581088,
+        //   whose first store is mNetworkPlayerID at +0x00). Modelled generic-first so any
+        //   NetworkEvent<N> leaf can reuse the base by name.
+        template <s32 N>
+        struct NetworkEvent : public Event
+        {
+            static const s32 KI_EVENT_TYPE = N;
+            s32 GetEventType() const { return N; }
+        };
+
         // FLAG (additive header grow): the Xbox-Live invite/join parameters block, homed here
         // because BrnGameStateInviteManager.cpp embeds one by value (mInviteOrJoinParams) and
         // needs its exact layout. Members + order are DWARF-authoritative

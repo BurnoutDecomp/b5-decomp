@@ -124,7 +124,7 @@ namespace renderengine
     }
 
     // 0x82B637D0 -- build the rw resource descriptor: four {size=0, align=1} entries seeded (plus one
-    // extra pass), then slot0 = {size = 4, align = 0x11 * validElements + 0x10}. The valid count is
+    // extra pass), then slot0 = {size = 0x11 * validElements + 0x10, align = 4}. The valid count is
     // the number of element records at a2 whose first dword (a2+4 +0x10*i) is not -1, over 16 records.
     u64* VertexDescriptor::GetResourceDescriptor(u64* lpDescriptorOut, int a2)
     {

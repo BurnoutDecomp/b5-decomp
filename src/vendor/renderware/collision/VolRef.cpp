@@ -1,0 +1,37 @@
+#include "vendor/renderware/collision/VolRef.hpp"
+
+// ===========================================================================
+// rw::collision::VolRef -- reconstructed from BURNOUT_X360_ARTIST.XEX.
+//
+//   VolRef::operator=  @ 0x82BB33E8
+//
+// A field-by-field copy. The asm copies, in this order: two words (+0,+4); four
+// 16-byte VMX vectors (+0x10,+0x20,+0x30,+0x40 via lvx128/stvx128); four 8-byte
+// quantities (+0x50,+0x58,+0x60,+0x68 via ld/std); a word (+0x70); a byte
+// (+0x74). The gap +0x08..+0x0F is not touched. See VolRef.hpp for the layout.
+// ===========================================================================
+
+namespace rw
+{
+namespace collision
+{
+
+VolRef& VolRef::operator=(const VolRef& rOther)
+{
+    muVolumePtr = rOther.muVolumePtr;   // +0x00
+    muTag       = rOther.muTag;         // +0x04
+    mRow0       = rOther.mRow0;         // +0x10
+    mRow1       = rOther.mRow1;         // +0x20
+    mRow2       = rOther.mRow2;         // +0x30
+    mRow3       = rOther.mRow3;         // +0x40
+    mu50        = rOther.mu50;          // +0x50
+    mu58        = rOther.mu58;          // +0x58
+    mu60        = rOther.mu60;          // +0x60
+    mu68        = rOther.mu68;          // +0x68
+    mu70        = rOther.mu70;          // +0x70
+    mu74        = rOther.mu74;          // +0x74
+    return *this;
+}
+
+} // namespace collision
+} // namespace rw

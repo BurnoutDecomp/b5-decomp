@@ -302,6 +302,15 @@ namespace Thread
         return static_cast<unsigned>(liReturn);
     }
 
+    // 0x82B42DC0 -- single `stw 0,0(this)`: no dynamic-data record attached yet.
+    // (Hex-Rays folds this body together with the identically-shaped
+    // rw::movie::VideoRenderable::~VideoRenderable; it is the Thread default ctor
+    // the JobThread ctor runs on its embedded Thread subobject.)
+    Thread::Thread()
+    {
+        mThreadData.mpData = 0;
+    }
+
     // 0x82B43E88
     Thread::~Thread()
     {

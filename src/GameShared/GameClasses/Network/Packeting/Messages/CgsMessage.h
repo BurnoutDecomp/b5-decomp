@@ -115,6 +115,17 @@ namespace CgsNetwork
     PackOrUnpackResult PackOrUnpackU16(Message* lpMessage, u16* lpu16Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackBool(Message* lpMessage, bool* lpbField);
     PackOrUnpackResult PackOrUnpackCgsID(Message* lpMessage, u64* lpu64Field);
+    //   PackOrUnpackFloat  -- sub_8288DF50: a quantised 32-bit float in [fMin, fMax] at a
+    //                        given resolution (the X360 success-message scores pass
+    //                        0.0f .. FLT_MAX at 0.005f). The field is passed by pointer; the
+    //                        return is the per-field status the callers OR together.
+    PackOrUnpackResult PackOrUnpackFloat(Message* lpMessage, f32* lpfField, f32 lfMin, f32 lfMax, f32 lfResolution);
+    //   PackOrUnpackBuffer -- the Message method that (de)serialises a raw byte buffer of a
+    //                        fixed length (used by the fixed-size bitset payloads). Declared
+    //                        here as a free helper mirroring the other primitives so the leaf
+    //                        messages can route a buffer field by name; body lives in its own
+    //                        bitstream TU. liNumBytes is the buffer length in bytes.
+    PackOrUnpackResult PackOrUnpackBuffer(Message* lpMessage, u8* lpu8Buffer, s32 liNumBytes);
 
     // CgsNetwork::MessageWithPlayerIDs and CgsNetwork::ReliableMessage are the next two
     // rungs of the message hierarchy. They now live in their proper home headers

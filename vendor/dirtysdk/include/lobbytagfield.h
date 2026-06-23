@@ -28,6 +28,13 @@ u32 TagFieldGetEpoch(const char* pData, u32 uDefval);
 // Read a packed structure field (pPat describes the byte pattern).
 s32 TagFieldGetStructure(const char* pData, void* pBuf, s32 iLen, const char* pPat);
 
+// Read a raw binary blob field (encoded in the record) into pBuf, up to iLen
+// bytes; returns the number of bytes decoded. pData points at the value text
+// (typically the result of TagFieldFind/strchr to the field marker). X360
+// __fastcall mirrors the DirtySDK C signature (source text, byte destination,
+// length).
+s32 TagFieldGetBinary(const char* pData, void* pBuf, s32 iLen);
+
 // Append a numeric field to the record.
 s32 TagFieldSetNumber(char* pRecord, s32 iReclen, const char* pName, s32 iValue);
 

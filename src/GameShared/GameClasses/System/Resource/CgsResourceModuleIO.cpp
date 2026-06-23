@@ -12,6 +12,14 @@
 // member (X360: this+4 for InputBuffer's queue, this+1 for OutputBuffer's status interface --
 // matches the DWARF member offsets, see CgsResourceModuleIO.h).
 //
+// ALSO (class:CgsResource::ResourceIO::OutputBuffer) -- the NON-const WRITE-lock-gated getter:
+//   CgsResource::ResourceIO::OutputBuffer::GetFileSystemStatusInterface() @ 0x828E1238
+// The X360 body tests the IOBuffer write-lock bit (status bit 3, eStatusLockedForWrite) and
+// asserts "Not locked for writing\n" at CgsResourceModuleIO.h:111, then returns the embedded
+// status interface (X360 this+1). The producing module write-locks its OutputBuffer while
+// filling it, so the mutable accessor gates on the write lock (vs. the const reader's read
+// lock). Called by CgsResource::ResourceModule::Update (@0x82907948).
+//
 // Also folded in here (already reconstructed earlier from the XEX):
 //   CgsResource::ResourceIO::FileSystemStatusInterface::Construct @ 0x82676600
 //   CgsResource::ResourceIO::OutputBuffer::Construct              @ 0x828EC978
@@ -68,11 +76,21 @@ namespace CgsResource
             return &mResourceQueue;
         }
 
-        // -------- OutputBuffer::GetFileSystemStatusInterface() const @ 0x82663BE0 (THIS TU) --------
+        // -------- OutputBuffer::GetFileSystemStatusInterface() const @ 0x82663BE0 --------
         // Read-lock gate, then return the embedded status interface (X360 this+1).
         const FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface() const
         {
             CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+            return &mFileSystemStatusInterface;
+        }
+
+        // -------- OutputBuffer::GetFileSystemStatusInterface() @ 0x828E1238 (THIS TU) --------
+        // Non-const, WRITE-lock gate (X360 tests status bit 3), then return the embedded status
+        // interface (X360 this+1) so the producing module can fill it. Asserts "Not locked for
+        // writing\n" at CgsResourceModuleIO.h:111 when the buffer is not write-locked.
+        FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface()
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
             return &mFileSystemStatusInterface;
         }
     }

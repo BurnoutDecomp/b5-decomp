@@ -1,0 +1,52 @@
+#pragma once
+
+// Queue-element homes for the CgsPhysics::PhysicsSimulationIO input/output event queues.
+// Each event is the payload stored in a CgsModule::EventQueue<EventT, N> member of the
+// PhysicsSimulationIO::InputBuffer / OutputBuffer aggregates (X360
+// PhysicsSimulationIO::InputBuffer::Construct @ 0x828A71B8 wires one queue per event type
+// at fixed byte offsets). This header exists so the per-instantiation Construct TUs can see
+// a COMPLETE element type (the queue embeds EventT maEvents[N] inline).
+//
+// No DecFIGS DWARF hint covers these event payloads, so their internal field layout is
+// NOT recovered. What IS X360-attested is each event's STRIDE, read off the
+// InputBuffer::Construct offset map (the byte gap between consecutive queues, minus the
+// 16-byte EventQueue base, divided by the queue capacity):
+//   InAddPotentialContact : (189280 - 107344 - 16) / 1024 =  80 bytes
+//   InAddJoint            : (196208 - 189280  - 16) /   36 = 192 bytes
+//   InAddDrive            : (203632 - 203472  - 16) /    1 = 144 bytes
+// Each event is therefore modelled as an opaque, correctly-sized, 16-byte-aligned byte span
+// (alignas(16) forces the 12-byte BaseEventQueue base to pad to +0x10 before maEvents,
+// exactly the asm's `addi r30, r31, 0x10`; the span size makes sizeof(EventQueue<EventT,N>)
+// match the InputBuffer gap). The Construct bodies only take &maEvents[0], store the
+// capacity N and clear the count, so they are store-for-store faithful regardless of the
+// span's internal (unrecovered) field layout. Field names are intentionally NOT invented.
+#include "types.hpp"
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"
+
+namespace CgsPhysics
+{
+namespace PhysicsSimulationIO
+{
+    // Empty per-module event base (CgsModule event-queue convention; the queue stores
+    // events by byte image), matching the other PhysicsSimulationIO IO event payloads.
+    struct Event {};
+
+    // Add a potential narrow-phase contact pair. Stride 80 bytes (X360-attested, see above).
+    struct alignas(16) InAddPotentialContact : public Event
+    {
+        u8 macOpaquePayload[80];  // internal layout not recovered (no DWARF/source)
+    };
+
+    // Add a constraint joint. Stride 192 bytes (X360-attested, see above).
+    struct alignas(16) InAddJoint : public Event
+    {
+        u8 macOpaquePayload[192];  // internal layout not recovered (no DWARF/source)
+    };
+
+    // Add a vehicle drive. Stride 144 bytes (X360-attested, see above).
+    struct alignas(16) InAddDrive : public Event
+    {
+        u8 macOpaquePayload[144];  // internal layout not recovered (no DWARF/source)
+    };
+}
+}

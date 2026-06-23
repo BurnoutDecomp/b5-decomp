@@ -83,6 +83,15 @@ public:
         return miNumEntries;
     }
 
+    // ADDITIVE (member fn, no storage). The serialised dictionary's total stored byte
+    // size (miDictionarySize @+4). DictionaryResourceTypeBase::GetSerialisedResourceDescriptor
+    // (X360 0x828158E0) reads this `*(resource+4)` to size the main resource block; exposed
+    // by name so that handler does not reach the protected field via raw-offset arithmetic.
+    s32 GetDictionarySize() const
+    {
+        return miDictionarySize;
+    }
+
 protected:
     s32        miNumEntries;     // :99   @+0
     s32        miDictionarySize; // :100  @+4

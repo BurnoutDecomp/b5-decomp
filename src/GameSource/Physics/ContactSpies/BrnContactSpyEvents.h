@@ -55,5 +55,17 @@ namespace BrnPhysics
             Vector3  mPointOnA;
             Vector3  mPointOnB;
         };
+
+        // A resolved contact involving a traffic vehicle. The X360
+        // BaseEventQueue<TrafficContact>::AddEventSafe @ 0x825A33F8 copies each element as
+        // exactly twelve 64-bit block moves (ctr = 12, std loop) at a 96-byte (0x60) stride
+        // (`v4*3*32`, `slwi ..,5`), i.e. sizeof(TrafficContact) == 96 -- identical to
+        // BaseContact (EntityId@0 + EntityId@4 + CollisionTag@8, then five 16-byte Vector3s
+        // @16/32/48/64/80, alignas(16) => 96). The contact carries the same resolved-contact
+        // fields as BaseContact and adds no members of its own, so it is modelled as a
+        // BaseContact specialisation (no extra storage; sizeof stays 96).
+        struct alignas(16) TrafficContact : public BaseContact
+        {
+        };
     }
 }

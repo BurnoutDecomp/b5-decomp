@@ -3,6 +3,7 @@
 #include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
+//   BrnResource::StreamedDeformationSpecResourceType::GetSerialisedResourceDescriptor @ 0x8267B020
 //   BrnResource::StreamedDeformationSpecResourceType::Serialise @ 0x82677680
 //   BrnResource::StreamedDeformationSpecResourceType::FixUp     @ 0x826776F0
 //   BrnResource::StreamedDeformationSpecResourceType::GetTypeID @ 0x82675608
@@ -52,6 +53,30 @@ namespace BrnResource
     uint32_t StreamedDeformationSpecResourceType::GetTypeID() const
     {
         return KU_STREAMED_DEFORMATION_SPEC_RESOURCE_TYPE_ID;
+    }
+
+    // GetSerialisedResourceDescriptor @ 0x8267B020 (store-for-store). The serialised payload is a
+    // StreamedDeformationSpec; the X360 computes the byte span from the spec base to the end of the
+    // last (mLightTags) locator-point array:
+    //   r8 = *(a3 + 56) (mLightTags.mpaLocatorPoints); r9 = *(a3 + 52) (mLightTags.muNumLocators)
+    //   r11 = 80 * r9 + r8 - a3   -> entry0 size = mLightTags.mpaLocatorPoints + 80*muNumLocators - base
+    // This is exactly CalculateSizeOfResource (each LocatorPointSpec is KU_LOCATOR_POINT_SPEC_SIZE = 80
+    // bytes; mLightTags is the highest-addressed sub-array). entry0 align = 16; entry1..4 = {0,1}.
+    CgsResource::ResourceDescriptor
+    StreamedDeformationSpecResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        const StreamedDeformationSpec* lpSpec = static_cast<const StreamedDeformationSpec*>(lpResource);
+        const u32 luSize = CalculateSizeOfResource(lpSpec);
+
+        CgsResource::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;   // entry0 size
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16u;      // entry0 align
+        for (u32 luBlock = 1; luBlock < 5u; ++luBlock)
+        {
+            lDescriptor.m_baseResourceDescriptors[luBlock].m_size      = 0u;   // entry1..4 {0,1}
+            lDescriptor.m_baseResourceDescriptors[luBlock].m_alignment = 1u;
+        }
+        return lDescriptor;
     }
 
     void StreamedDeformationSpecResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const

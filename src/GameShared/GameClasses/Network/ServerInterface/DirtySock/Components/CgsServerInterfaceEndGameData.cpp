@@ -16,12 +16,30 @@
 // Reproduced member-by-name as a zero-fill of maResultWords[16], which spans exactly
 // that range (the base vptr occupies this+0x00).
 
+// ---------------------------------------------------------------------------------------
+// CgsNetwork::ServerInterfaceEndGameDataBase::`scalar deleting destructor' @ 0x82558ED8
+//   (duplicate emit @ 0x82541168 -- X360 emits one per using-TU; this single home covers both)
+//
+// The asm is the compiler's deleting-destructor thunk for the virtual base destructor:
+//     *this = &ServerInterfaceEndGameDataBase_vtable;   // restore the base vptr
+//     if (flags & 1) operator delete(this);             // scalar `delete this` variant
+//     return this;
+// In C++ this thunk is generated automatically from the virtual `~ServerInterfaceEndGameDataBase()`
+// below (the vptr restore is implicit in the destructor prologue; the conditional
+// operator delete is MSVC's `vector deleting destructor` flag-bit-0 path). Modelling the
+// base destructor as `virtual` makes the compiler emit exactly this thunk, so the ledger
+// function @0x82558ED8 is realised by the virtual destructor here -- no hand-written
+// reinterpret of the vtable pointer is needed (and none is allowed).
+// ---------------------------------------------------------------------------------------
+
 namespace CgsNetwork
 {
     ServerInterfaceEndGameDataBase::ServerInterfaceEndGameDataBase()
     {
     }
 
+    // Virtual; emitting it as virtual makes the compiler synthesise the scalar deleting
+    // destructor thunk at the X360 @0x82558ED8 (vptr restore + conditional operator delete).
     ServerInterfaceEndGameDataBase::~ServerInterfaceEndGameDataBase()
     {
     }

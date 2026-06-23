@@ -1,16 +1,24 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevice.h"   // canonical CgsFileSystem::Device
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsFileSystem::RemapDevice::Close @ 0x828DE920
-//   CgsFileSystem::RemapDevice::Init  @ 0x828DE658
-//   CgsFileSystem::RemapDevice::Read  @ 0x828DE938
-//   CgsFileSystem::RemapDevice::Seek  @ 0x828DE968
-//   CgsFileSystem::RemapDevice::Write @ 0x828DE950
+//   CgsFileSystem::RemapDevice::Close       @ 0x828DE920
+//   CgsFileSystem::RemapDevice::Init        @ 0x828DE658
+//   CgsFileSystem::RemapDevice::Read        @ 0x828DE938
+//   CgsFileSystem::RemapDevice::Seek        @ 0x828DE968
+//   CgsFileSystem::RemapDevice::Write       @ 0x828DE950
+//   CgsFileSystem::RemapDevice::GetFileSize @ 0x828DE980
 //
 // A pass-through file device that forwards every operation to the device it wraps
 // (mpWrappedDevice). Init only prints a debug trace. The forwarders are plain
 // virtual dispatches in the original (the X360 build inlines them to vtable
-// thunks, e.g. mpWrappedDevice->vtable[2] == Close).
+// thunks, e.g. mpWrappedDevice->vtable[2] == Close). GetFileSize forwards through
+// the wrapped device's vtable slot +0x18 (asm 0x828DE988: lwz r11, 0x18(r11)).
+//
+// Derives from the single canonical CgsFileSystem::Device (CgsDevice.h): it overrides
+// the five pure per-operation virtuals plus GetFileSize, and inherits the base's
+// default Open/Close/ReadDirectory "Not implemented" bodies. mpWrappedDevice is
+// accessed by name, so its exact in-object offset is immaterial here.
 
 namespace CgsDev
 {
@@ -20,27 +28,15 @@ namespace CgsDev
 
 namespace CgsFileSystem
 {
-    // Abstract file device. The X360 vtable order is: Close(2), Read(3), Write(4),
-    // Seek(5), so they are declared in that slot order here.
-    class Device
-    {
-    public:
-        virtual ~Device() {}
-        virtual int Init(int liMode, int liArg) = 0;
-        virtual int Close() = 0;
-        virtual int Read() = 0;
-        virtual int Write() = 0;
-        virtual int Seek() = 0;
-    };
-
     class RemapDevice : public Device
     {
     public:
         int Init(int liMode, int liArg) override;
-        int Close() override { return mpWrappedDevice->Close(); }
-        int Read()  override { return mpWrappedDevice->Read(); }
-        int Write() override { return mpWrappedDevice->Write(); }
-        int Seek()  override { return mpWrappedDevice->Seek(); }
+        int Close()       override { return mpWrappedDevice->Close(); }
+        int Read()        override { return mpWrappedDevice->Read(); }
+        int Write()       override { return mpWrappedDevice->Write(); }
+        int Seek()        override { return mpWrappedDevice->Seek(); }
+        int GetFileSize() override { return mpWrappedDevice->GetFileSize(); }
 
     private:
         Device* mpWrappedDevice;

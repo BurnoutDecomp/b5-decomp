@@ -12,6 +12,7 @@
 namespace rw
 {
     struct Resource;
+    struct IResourceAllocator;
     template <uint32_t Count> struct BaseResourceDescriptors;
 }
 
@@ -61,6 +62,14 @@ namespace CgsResource
 
         bool     GetCachedCanDefrag() const;
         uint32_t GetCachedId() const;
+
+        // Placement-new override that carves a Type out of a RenderWare resource allocator.
+        // X360 0x82666180: builds a five-entry resource descriptor whose first entry is
+        // {m_size = luSize, m_alignment = 4} (the remaining four entries are {0,1}) and
+        // allocates through the allocator's resource-allocation virtual, returning the
+        // main-memory base pointer of the carved resource. Modelled here via the engine's
+        // rw::IResourceAllocator::DoAllocate (semantic parity, not byte-match).
+        static void* operator new(size_t luSize, rw::IResourceAllocator* lpAllocator);
 
     protected:
         void ReBaseTechniqueFixupWithOffset(void* lpResource, rw::Resource& lrSource, rw::Resource& lrDest, ResourceDescriptor& lrSize, s32 liMemType) const;

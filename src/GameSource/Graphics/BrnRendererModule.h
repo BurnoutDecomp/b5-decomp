@@ -9,6 +9,7 @@
 #include "GameSource/Game/BrnLoadingScreenRenderer.h"                // BrnGame::LoadingScreenRenderer
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"                // BrnGraphics::EffectsArbitrator
+#include "GameSource/Graphics/BrnSunCorona.h"                        // BrnSunCorona (mSunCorona, embedded by value)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (real base)
 
 // EA::Jobs::Job is still an off-path placeholder (the renderer's sort/dispatch jobs do not run
@@ -161,9 +162,8 @@ struct BrnSkyDomeManager
 {
 };
 
-struct BrnSunCorona
-{
-};
+// BrnSunCorona is the real type (BrnSunCorona.h, included below) - it owns the sun-flare vertex
+// descriptor + shader programs and is embedded by value as mSunCorona.
 
 // LoadingScreenRenderer is the real type (BrnGame::LoadingScreenRenderer).
 

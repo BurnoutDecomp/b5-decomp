@@ -1,6 +1,7 @@
 #include "SharedClasses/World/BrnEnvironmentKeyframeResourceType.h"
 
 #include "types.hpp"
+#include "rw/rwcore_structs.h"   // rw::BaseResourceDescriptors<5> for the descriptor
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace BrnWorld
@@ -28,6 +29,31 @@ static const s32 KI_KEYFRAME_VERSION = 8;
 uint32_t KeyframeResourceType::GetTypeID() const
 {
     return 65554;
+}
+
+// FLAG: fixed serialised size 0x240 (576) bytes, taken verbatim from the X360
+// `li r9, 0x240` immediate. The on-disk keyframe payload is a fixed-size record;
+// the descriptor does not depend on the resource contents (lpResource unused).
+static const u32 KU_KEYFRAME_SERIALISED_SIZE = 0x240;
+
+// GetSerialisedResourceDescriptor @ 0x8267D220. Returns the five-entry serialised
+// resource descriptor with a fixed first-entry size of 0x240 and alignment 16;
+// the remaining four entries are {size = 0, alignment = 1}. Returned by value
+// (X360 sret in r3); lpResource is not read.
+CgsResource::ResourceDescriptor
+KeyframeResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+{
+    (void)lpResource;
+
+    CgsResource::ResourceDescriptor lDescriptor;
+    lDescriptor.m_baseResourceDescriptors[0].m_size      = KU_KEYFRAME_SERIALISED_SIZE;
+    lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+    for (u32 luIndex = 1; luIndex < 5; ++luIndex)
+    {
+        lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0;
+        lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;
+    }
+    return lDescriptor;
 }
 
 // FixUp @ 0x82678C40. The X360 signature is FixUp(this, lpResource); the
