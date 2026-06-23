@@ -46,4 +46,28 @@ namespace CgsInput
             u8 maOpaque[116]; // 0x74 -- attested by the AddEvent memcpy stride @0x828EA820
         };
     }
+
+    namespace Device
+    {
+        // CgsInput::Device::WheelFFSpring - the wheel force-feedback "spring" centring
+        // parameters the post-world input pass copies out of the vehicle output interface
+        // and republishes for the rumble/FFB driver.
+        //
+        // SIZE FROM ASM: PostWorldInputBuffer::Set/GetWheelFFSpring (X360 0x823B0F80 / 0x828E6C80)
+        // and the InputModule::PostWorldUpdate consumer (0x828F8478) move exactly two 32-bit
+        // words (`lwz`/`stw` pairs at +0 and +4) -- so the record is 8 bytes. The producer is the
+        // vehicle output interface (DoUpdate_InputPostWorld passes `Veh + 2164`).
+        //
+        // FLAGGED: the two words are copied as raw 32-bit words (the X360 compiler emitted integer
+        // load/store for this trivially-copyable POD), so the asm does not prove float vs int. The
+        // FFB "spring" domain (a centring force + its strength/damping coefficient) makes a
+        // {coefficient, saturation} float pair the most likely intent; modelled as two f32 with
+        // inferred names. Promote names/types when the vehicle-output WheelFFSpring producer TU
+        // (the +2164 sub-record of BrnVehicleOutputInterface) lands. Size must stay 8 bytes.
+        struct WheelFFSpring
+        {
+            f32 mfSpringCoefficient;   // +0x00  (inferred; raw word copied @ buffer+632)
+            f32 mfSpringSaturation;    // +0x04  (inferred; raw word copied @ buffer+636)
+        };
+    }
 }

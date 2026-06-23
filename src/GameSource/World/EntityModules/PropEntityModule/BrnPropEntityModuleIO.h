@@ -61,6 +61,27 @@ namespace PropEntityIO
     };
 
     // ========================================================================
+    // BrnWorld::PropEntityIO::BrokenPropEvent -- a "this prop broke" notification
+    // published by the prop entity module's post-physics output buffer and drained
+    // by BrnWorld::PropEntityModule::ProcessBrokenProps.
+    //
+    // SIZE (X360, authoritative): sizeof == 1. Pinned by
+    // BaseEventQueue<BrokenPropEvent>::AddEvent @ 0x822C9838, which copies the event
+    // with `lbz r10, 0(src); stbx r10, miLength, mpEvents` -- a single byte at
+    // stride 1 (no index scaling). EventQueue<BrokenPropEvent,50>::Construct
+    // @ 0x822E5060 places the inline maEvents[50] at +0xC (base mpEvents@0,
+    // miMaxLength@4, miLength@8, maEvents@12 -- no alignment pad, confirming the
+    // element's alignment is 1), with miMaxLength = 50 (0x32).
+    //
+    // The single byte is the broken prop's index/id (the consumer's asserts speak of
+    // "luPartIndex < (1U << KU_NUM_BITS_FOR_PART...)"). Named muPropIndex; this is the
+    // only field and the type is exactly one byte wide as the asm attests.
+    struct BrokenPropEvent
+    {
+        u8 muPropIndex;   // +0x00  broken prop index (single-byte payload)
+    };
+
+    // ========================================================================
     // BrnWorld::PropEntityIO::OutputBuffer_PreScene (DWARF BrnPropEntityModuleIO.h:676).
     // ADDITIVE GROW: this slice homes ONLY the IO-OutputBuffers group's X360-emitted
     // accessors of the pre-scene output buffer:
