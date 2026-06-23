@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 
 // SmallResource / SmallResourceDescriptor method bodies.
 //
@@ -19,5 +20,29 @@ namespace CgsResource
     {
         lrResource.m_baseResources[0] = m_baseResources[0];   // main
         lrResource.m_baseResources[2] = m_baseResources[1];   // graphics
+    }
+
+    // rw -> small (0x828EB6E8): take the two populated rw slots (main=0, graphics=2) into the
+    // compact 3-pool form; the other serialised categories must be empty. [X360 also asserts rw
+    // slot 4 -- the 5th, BaseResources<5> form; our rw::Resource is <4> so that slot is omitted.]
+    void SmallResource::CreateFromRWResource(const rw::Resource& lrResource)
+    {
+        CGS_ASSERT(lrResource.m_baseResources[1] == 0, "Can not convert from rw resource with unitialized memory\n");
+        CGS_ASSERT(lrResource.m_baseResources[3] == 0, "Can not convert from rw resource with unitialized memory\n");
+        m_baseResources[0] = lrResource.m_baseResources[0];   // main      <- rw[0]
+        m_baseResources[1] = lrResource.m_baseResources[2];   // graphics  <- rw[2]
+        m_baseResources[2] = 0;                               // graphics-local unused (X360: caller zero-inits)
+    }
+
+    // rw -> small descriptor (0x826661F8): map the serialised 5-entry resource descriptor's
+    // populated categories (main=0, videomapped=2) into the 3-pool runtime descriptor; entries
+    // 1/3/4 must be unused (size <= 1).
+    void SmallResourceDescriptor::CreateFromRWDescriptor(const ResourceDescriptor& lrDescriptor)
+    {
+        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[1].m_size <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
+        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[3].m_size <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
+        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[4].m_size <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
+        m_baseResourceDescriptors[0] = lrDescriptor.m_baseResourceDescriptors[0];   // main     <- serialised[0]
+        m_baseResourceDescriptors[1] = lrDescriptor.m_baseResourceDescriptors[2];   // graphics <- serialised[2]
     }
 }

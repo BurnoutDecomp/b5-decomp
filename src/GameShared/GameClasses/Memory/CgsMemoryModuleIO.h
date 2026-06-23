@@ -261,8 +261,16 @@ namespace MemoryIO
     struct CreateResourceResponse : public MemoryResponse
     {
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
-        { MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RESOURCE); }
+        {
+            MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RESOURCE);
+            for (s32 lt = 0; lt < 4; ++lt) mResource.m_baseResources[lt] = 0;   // null on failure paths
+            mpAllocator = 0;
+        }
         void SetAllocator(rw::LinearResourceAllocator* lpA) { mpAllocator = lpA; }
+        void SetDescriptor(const rw::ResourceDescriptor* lpD) { mDescriptor = *lpD; }
+        void SetResourceData(s32 liType, void* lpData)    { mResource.m_baseResources[liType] = lpData; }
+        const rw::Resource&           GetResource() const   { return mResource; }
+        const rw::ResourceDescriptor& GetDescriptor() const { return mDescriptor; }
     private:
         rw::Resource                 mResource;
         rw::ResourceDescriptor       mDescriptor;

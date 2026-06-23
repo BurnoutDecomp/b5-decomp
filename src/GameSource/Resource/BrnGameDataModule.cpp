@@ -8,6 +8,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"     // ResolveResourceType (bridge)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"             // Pool::InitOptions (CreatePools)
 #include "GameShared/GameClasses/Memory/CgsMemoryBank.h"                        // MemoryBank::Params (CreatePoolBank)
+#include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"                    // MemoryIO Input/OutputBuffer (async pump)
+#include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"       // SendCreatePoolMemoryRequest / DoCreatePoolRequest
 #include "GameSource/Resource/BrnMemoryMapData.h"                               // KAC_MEMORY_MAP_POOLS (the 27 real pools)
 #include <cstring>                                                              // memset
 
@@ -106,7 +108,23 @@ namespace BrnResource
         CgsMemory::MemoryModule&  lrMemoryModule = mResourceModule.GetMemoryModule();
         const u32 KU_BLOCK = 0x10000u;   // 64 KB -- the MemoryModule root-bank block granularity
 
-        s32 lNumCreated = 0, lNumFromBank = 0, lNumFromHeap = 0;
+        s32 lNumCreated = 0, lNumFromBank = 0, lNumFromHeap = 0, lNumDepsWired = 0, lNumViaAsync = 0;
+
+        // Scratch MemoryIO buffers driving the async pool-create dispatch (one request/response cycle per
+        // pool). Static so the (large) embedded queues are constructed once + reused across the loop. The
+        // faithful X360 transport is PoolIO::OutputBuffer -> ResourceModule shuttle -> MemoryModule input;
+        // those types are not yet reconstructed, so the pump writes the request straight to the MemoryModule
+        // input and drains its response directly. [marked transport deviation -- the memory request/response
+        // dispatch itself (MemoryModule::Update -> ProcessCreateResourceRequest) is faithful.]
+        static CgsMemory::MemoryIO::InputBuffer  s_memInput;
+        static CgsMemory::MemoryIO::OutputBuffer s_memOutput;
+        static bool s_ioConstructed = false;
+        if (!s_ioConstructed) { s_memInput.Construct(); s_memOutput.Construct(); s_ioConstructed = true; }
+        // id -> created Pool*, so each pool's import dependencies (referenced by pool id) resolve to real
+        // pointers in this one pass: the memory-map order lists every dependency target before its
+        // dependents (deps reference ids 10/25 @ idx 8/23; all dependents are at later indices).
+        CgsResource::Pool* lapPoolById[64];
+        memset(lapPoolById, 0, sizeof(lapPoolById));
         for (s32 li = 0; li < KI_NUM_MEMORY_MAP_POOLS; ++li)
         {
             const MemoryMapPoolDef& lrDef = KAC_MEMORY_MAP_POOLS[li];
@@ -119,8 +137,21 @@ namespace BrnResource
             lOpt.muMaxImports           = static_cast<u32>(lrDef.miMaxImports);
             lOpt.miRefCountThreshold    = 0;
             lOpt.miBankId               = -1;
-            lOpt.miNumDependencies      = 0;   // import deps resolved later (not needed to create)
             lOpt.mbAllowDefragmentation = lrDef.mbAllowDefrag;
+
+            // Resolve this pool's import dependencies to the (earlier-created) pools by id. The dependency
+            // graph drives cross-pool import resolution (e.g. OpenWorldGr/VFX/Environment import from Global
+            // Textures; CarPool/Traffic also from CarSharedPool).
+            s32 lNumDeps = 0;
+            for (s32 ld = 0; ld < lrDef.miNumDeps && lNumDeps < 16; ++ld)
+            {
+                const s32 lDepId = lrDef.maiDeps[ld];
+                CgsResource::Pool* lpDep = (lDepId >= 0 && lDepId < 64) ? lapPoolById[lDepId] : 0;
+                if (lpDep != 0)
+                    lOpt.mapDependencies[lNumDeps++] = lpDep;
+            }
+            lOpt.miNumDependencies = lNumDeps;
+            lNumDepsWired += lNumDeps;
 
             // Per-type region = heap budget + (type 0) a margin >= the pool overhead (entry arrays / hash /
             // heap nodes Pool::InitPool Mallocs from the region), rounded up to the 64 KB block size so the
@@ -151,78 +182,128 @@ namespace BrnResource
                 lauRegion[lt] = (luHeapSize + luMargin + (KU_BLOCK - 1u)) & ~(KU_BLOCK - 1u);
             }
 
-            // [#2] Source the pool memory from the MemoryModule banks: carve a leaf bank (parent = root
-            // bank 0) sized to the per-type regions. The faithful X360 path is async (SendCreatePoolMemory
-            // Request -> MemoryModule -> response -> DoCreatePoolRequest); this drives it synchronously via
-            // the reconstructed CreateBank. Falls back to the root debug allocator if the bank carve fails,
-            // so the pool set always comes up (and the log reports how many used each source).
-            CgsMemory::MemoryBank::Params lParams;
-            memset(&lParams, 0, sizeof(lParams));
-            for (s32 lc = 0; lc < 31 && lrDef.mpcName[lc]; ++lc)
-                lParams.macName[lc] = lrDef.mpcName[lc];
-            lParams.mnParentBankId       = 0;            // root bank
-            lParams.mnBankId             = 100 + li;     // unique leaf-bank id (pool ids occupy 0..26)
-            lParams.mbIsLeaf             = true;
-            lParams.mbAllowFragmentation = lrDef.mbAllowDefrag;
-            bool lbAnyType = false;
+            bool lbAnyType = (lauRegion[0] | lauRegion[1] | lauRegion[2]) != 0;
+
+            // Carry the pool's resource descriptor through the async pending FIFO into CreatePool (the async
+            // path fills mResource from the memory response; mDescriptor is set here from the carved regions).
             for (s32 lt = 0; lt < 3; ++lt)
             {
                 if (lauRegion[lt] == 0)
                     continue;
-                lbAnyType = true;
-                lParams.mauBankSize[lt]   = lauRegion[lt];
-                lParams.mauBankBlocks[lt] = lauRegion[lt] / KU_BLOCK;
-            }
-
-            rw::Resource lMem;
-            for (s32 lr = 0; lr < 4; ++lr)
-                lMem.m_baseResources[lr] = 0;
-            const bool lbFromBank = lbAnyType && lrMemoryModule.CreatePoolBank(&lParams, lMem);
-
-            bool lbAllocOk = true;
-            for (s32 lt = 0; lt < 3; ++lt)
-            {
-                if (lauRegion[lt] == 0)
-                    continue;
-                void* lpMem = lbFromBank ? lMem.m_baseResources[lt] : 0;
-                if (!lbFromBank)
-                {
-                    rw::ResourceDescriptor lDesc;
-                    for (u32 lu = 0; lu < 4; ++lu)
-                    {
-                        lDesc.m_baseResourceDescriptors[lu].m_size      = 0;
-                        lDesc.m_baseResourceDescriptors[lu].m_alignment = 1;
-                    }
-                    lDesc.m_baseResourceDescriptors[0].m_size      = lauRegion[lt];
-                    lDesc.m_baseResourceDescriptors[0].m_alignment = lauAlign[lt];
-                    rw::Resource lFb = lpAllocator->DoAllocate(lDesc, lrDef.mpcName);
-                    lpMem = lFb.m_baseResources[0];
-                }
-                if (lpMem == 0)
-                {
-                    lbAllocOk = false;
-                    break;
-                }
-                lOpt.mResource.m_baseResources[lt] = lpMem;
                 lOpt.mDescriptor.m_baseResourceDescriptors[lt].m_size      = lauRegion[lt];
                 lOpt.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = lauAlign[lt];
             }
 
-            if (!lbAllocOk)
-            {
-                *CgsDev::Log::gpDebugPrint << "[5b POOLS] alloc FAILED for pool " << lrDef.mpcName << "\n";
-                continue;
-            }
-            if (lbFromBank) ++lNumFromBank; else ++lNumFromHeap;
+            const s32 liBankId = 100 + li;   // unique leaf-bank id (pool ids occupy 0..26)
+            CgsResource::Pool* lpPool = 0;
+            bool lbViaAsync = false;
 
-            CgsResource::Pool* lpPool = lrPoolModule.CreatePool(&lOpt);
+            // ---- [Async path] faithful X360 memory dispatch: SendCreatePoolMemoryRequest publishes a
+            // CREATE_RESOURCE event; MemoryModule::Update -> ProcessCreateResourceRequest carves the pool
+            // bank (parent = root bank 0) + replies with its per-type data pointers; DoCreatePoolRequest
+            // adopts that memory + CreatePool's. Each pool runs a complete request/response cycle so the
+            // dependency order (lapPoolById) is preserved exactly as the synchronous path had it.
+            if (lbAnyType)
+            {
+                // fresh scratch queues for this pool's cycle
+                s_memInput.LockForWrite();  s_memInput.GetMemoryRequestQueue()->Clear();   s_memInput.UnlockForWrite();
+                s_memOutput.LockForWrite(); s_memOutput.GetMemoryResponseQueue()->Clear(); s_memOutput.UnlockForWrite();
+
+                lrPoolModule.SendCreatePoolMemoryRequest(lOpt, liBankId, /*parent=root bank*/0,
+                                                         lauRegion, lauAlign, &s_memInput);
+                lrMemoryModule.Update(0, 0, &s_memInput, &s_memOutput);
+
+                s_memOutput.LockForRead();
+                const CgsModule::Event* lpEvent = 0; s32 liEvtSize = 0;
+                // const ref so the read path picks the const GetMemoryResponseQueue (asserts read-locked);
+                // the non-const overload asserts write-locked and would fire here.
+                const CgsMemory::MemoryIO::OutputBuffer& lrOutRead = s_memOutput;
+                const CgsMemory::MemoryIO::OutputBuffer::MemoryResponseQueue* lpRespQ = lrOutRead.GetMemoryResponseQueue();
+                const s32 liEvtId = lpRespQ->GetFirstEvent(&lpEvent, &liEvtSize);
+                const CgsMemory::MemoryIO::CreateResourceResponse* lpResp =
+                    (liEvtId != -1 && lpEvent != 0)
+                        ? static_cast<const CgsMemory::MemoryIO::CreateResourceResponse*>(lpEvent) : 0;
+                s_memOutput.UnlockForRead();
+
+                if (lpResp != 0)
+                {
+                    lpPool = lrPoolModule.DoCreatePoolRequest(lpResp);   // pops the pending opts + CreatePool
+                    if (lpPool != 0) { lbViaAsync = true; ++lNumViaAsync; ++lNumFromBank; }
+                }
+            }
+
+            // ---- [Fallback] synchronous bank carve, if the async memory dispatch did not deliver. Carve a
+            // leaf bank directly, else allocate from the root debug allocator, fill mResource, CreatePool.
+            if (!lbViaAsync)
+            {
+                CgsMemory::MemoryBank::Params lParams;
+                memset(&lParams, 0, sizeof(lParams));
+                for (s32 lc = 0; lc < 31 && lrDef.mpcName[lc]; ++lc)
+                    lParams.macName[lc] = lrDef.mpcName[lc];
+                lParams.mnParentBankId       = 0;            // root bank
+                lParams.mnBankId             = liBankId;
+                lParams.mbIsLeaf             = true;
+                lParams.mbAllowFragmentation = lrDef.mbAllowDefrag;
+                for (s32 lt = 0; lt < 3; ++lt)
+                {
+                    if (lauRegion[lt] == 0)
+                        continue;
+                    lParams.mauBankSize[lt]   = lauRegion[lt];
+                    lParams.mauBankBlocks[lt] = lauRegion[lt] / KU_BLOCK;
+                }
+
+                rw::Resource lMem;
+                for (s32 lr = 0; lr < 4; ++lr)
+                    lMem.m_baseResources[lr] = 0;
+                const bool lbFromBank = lbAnyType && lrMemoryModule.CreatePoolBank(&lParams, lMem);
+
+                bool lbAllocOk = true;
+                for (s32 lt = 0; lt < 3; ++lt)
+                {
+                    if (lauRegion[lt] == 0)
+                        continue;
+                    void* lpMem = lbFromBank ? lMem.m_baseResources[lt] : 0;
+                    if (!lbFromBank)
+                    {
+                        rw::ResourceDescriptor lDesc;
+                        for (u32 lu = 0; lu < 4; ++lu)
+                        {
+                            lDesc.m_baseResourceDescriptors[lu].m_size      = 0;
+                            lDesc.m_baseResourceDescriptors[lu].m_alignment = 1;
+                        }
+                        lDesc.m_baseResourceDescriptors[0].m_size      = lauRegion[lt];
+                        lDesc.m_baseResourceDescriptors[0].m_alignment = lauAlign[lt];
+                        rw::Resource lFb = lpAllocator->DoAllocate(lDesc, lrDef.mpcName);
+                        lpMem = lFb.m_baseResources[0];
+                    }
+                    if (lpMem == 0)
+                    {
+                        lbAllocOk = false;
+                        break;
+                    }
+                    lOpt.mResource.m_baseResources[lt] = lpMem;
+                }
+
+                if (!lbAllocOk)
+                {
+                    *CgsDev::Log::gpDebugPrint << "[5b POOLS] alloc FAILED for pool " << lrDef.mpcName << "\n";
+                    continue;
+                }
+                if (lbFromBank) ++lNumFromBank; else ++lNumFromHeap;
+                lpPool = lrPoolModule.CreatePool(&lOpt);
+            }
+
             if (lpPool != 0 && lpPool->IsValid())
                 ++lNumCreated;
+            if (lpPool != 0 && lrDef.miId >= 0 && lrDef.miId < 64)
+                lapPoolById[lrDef.miId] = lpPool;   // so later pools can depend on this one
         }
         *CgsDev::Log::gpDebugPrint << "[5b POOLS] created " << (s32)lNumCreated << " of "
                                   << (s32)KI_NUM_MEMORY_MAP_POOLS << " pools ("
+                                  << (s32)lNumViaAsync << " via async memory dispatch, "
                                   << (s32)lNumFromBank << " from MemoryModule banks, "
-                                  << (s32)lNumFromHeap << " from debug heap)\n";
+                                  << (s32)lNumFromHeap << " from debug heap), "
+                                  << (s32)lNumDepsWired << " dependencies wired\n";
         return true;
     }
 

@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/rwcore_structs.h"                        // rw::IResourceAllocator / Resource (CreatePool test driver)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [5b TEST] trace
+#include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"  // CreateResourceRequest/Response + MemoryIO buffers (async dispatch)
 
 // CgsResource::PoolModule - see the header. This pass reconstructs the rw-allocator-
 // INDEPENDENT spine (GetPoolIndex / FindResourceType / Prepare / Release / Destruct).
@@ -197,4 +198,72 @@ namespace CgsResource
     bool PoolModule::Update(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return false; }
     void PoolModule::ProcessReceiverQueue(void* /*lpOutputBuffer*/) {}
     void PoolModule::ProcessInputBuffer(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) {}
+
+    // @ 0x828F3A50 - queue the pending pool options and emit the CreateResource memory request that makes
+    // the MemoryModule carve the pool's backing bank. Faithful to the X360 core: push the request onto the
+    // CreatePoolRequest_128 FIFO, build the resource descriptor (here per-type {size,align} from the carved
+    // region), then publish a type-6 CREATE_RESOURCE event. [transport deviation -- see the header: the
+    // event is written straight to the MemoryModule input buffer instead of through PoolIO::OutputBuffer +
+    // the ResourceModule shuttle, which are not yet reconstructed.]
+    void PoolModule::SendCreatePoolMemoryRequest(const Pool::InitOptions& lrOptions, s32 liBankId, s32 liParentBankId,
+                                                 const u32 lauRegion[3], const u32 lauAlign[3],
+                                                 CgsMemory::MemoryIO::InputBuffer* lpMemInput)
+    {
+        CGS_ASSERT(lpMemInput != 0, "lpMemInput");
+        CGS_ASSERT(miPendingCount < KI_MAX_PENDING_CREATE, "CreatePoolRequest FIFO overflow");
+        if (lpMemInput == 0 || miPendingCount >= KI_MAX_PENDING_CREATE)
+            return;
+
+        // Push the pending pool options (FIFO) so DoCreatePoolRequest can match the memory response.
+        maPendingCreate[miPendingTail] = lrOptions;
+        miPendingTail = (miPendingTail + 1) % KI_MAX_PENDING_CREATE;
+        ++miPendingCount;
+
+        // Build the CreateResource request describing the bank the MemoryModule must allocate.
+        CgsMemory::MemoryIO::CreateResourceRequest lRequest;
+        lRequest.Construct(0, lrOptions.miId);          // reply target unused (pump drains the response directly)
+        lRequest.SetBankName(lrOptions.mpcName);
+        lRequest.SetBankId(liBankId);
+        lRequest.SetParentBankId(liParentBankId);
+
+        rw::ResourceDescriptor lDesc;                   // <4>; pool uses memory types 0..2 (type 3 unused)
+        for (s32 lt = 0; lt < 4; ++lt)
+        {
+            lDesc.m_baseResourceDescriptors[lt].m_size      = (lt < 3) ? lauRegion[lt] : 0u;
+            lDesc.m_baseResourceDescriptors[lt].m_alignment = (lt < 3) ? lauAlign[lt]  : 1u;
+        }
+        lRequest.SetDescriptor(&lDesc);
+
+        lpMemInput->LockForWrite();
+        lpMemInput->GetMemoryRequestQueue()->AddEvent(&lRequest, lRequest.GetEventType(),
+                                                      static_cast<s32>(sizeof(lRequest)));
+        lpMemInput->UnlockForWrite();
+    }
+
+    // @ 0x82905000 - pop the matching pending options (FIFO), adopt the memory the MemoryModule allocated
+    // (the response's per-type rw::Resource data pointers), and stand up the pool. [deviation -- see the
+    // header: reached directly from the pump with the memory response rather than via the receiver queue.]
+    Pool* PoolModule::DoCreatePoolRequest(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse)
+    {
+        CGS_ASSERT(lpResponse != 0, "lpResponse");
+        CGS_ASSERT(miPendingCount > 0, "CreatePoolRequest FIFO underflow");
+        if (lpResponse == 0 || miPendingCount <= 0)
+            return 0;
+
+        // Pop the pending options (the X360 stores the raw request; we carry the resolved InitOptions).
+        Pool::InitOptions lOptions = maPendingCreate[miPendingHead];
+        miPendingHead = (miPendingHead + 1) % KI_MAX_PENDING_CREATE;
+        --miPendingCount;
+
+        if (lpResponse->GetResult() != CgsMemory::MemoryIO::E_RESULT_OK)
+            return 0;
+
+        // Adopt the carved bank's per-type memory into the pool options (dense 0..2 runtime types -- the
+        // memory backend returns the bank GetData(type) in the same indices it was requested in).
+        const rw::Resource& lrResource = lpResponse->GetResource();
+        for (s32 lt = 0; lt < 3; ++lt)
+            lOptions.mResource.m_baseResources[lt] = lrResource.m_baseResources[lt];
+
+        return CreatePool(&lOptions);
+    }
 }
