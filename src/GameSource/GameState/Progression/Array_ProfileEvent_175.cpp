@@ -23,3 +23,13 @@ BrnProgression::ProfileEvent& Array<BrnProgression::ProfileEvent, 175>::GetItem(
     CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Array index out of bounds");
     return maElements[luIndex];                            // X360: return 8 * a2 + a1
 }
+
+// X360 Array<BrnProgression::ProfileEvent,175>::Append(const ProfileEvent&) @0x8235CB40.
+// The X360 body is the generic Array<T,N>::Append (committed inline in CgsArray.h): the
+// constructed-assert (miCount != -1, "Array used before Construct/Clear was called",
+// CgsArray.h:225), the room assert (miCount < 175, "Array container out of space",
+// CgsArray.h:226), then the two-dword element copy (`*v13 = *a2; v13[1] = a2[1]` with
+// v13 = &maElements[miCount] via the 8-byte stride) and `++miCount`. Emitted as an explicit
+// instantiation of that generic body. The element-buffer count word miCount lives at +1400
+// (175 * 8B stride). Called by BrnGameState::GameStateModule::ProcessGameEvents.
+template void Array<BrnProgression::ProfileEvent, 175>::Append(const BrnProgression::ProfileEvent&);

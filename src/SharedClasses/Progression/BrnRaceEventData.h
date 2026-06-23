@@ -21,8 +21,8 @@
 namespace BrnProgression
 {
 
-// Forward decl for the event-junction event pointers (complete RaceEventData lives in its own
-// owning slice; the junction only stores it by pointer).
+// Forward decl for the event-junction event pointers (complete RaceEventData is defined below;
+// the junction only stores it by pointer).
 struct RaceEventData;
 
 // Per-junction record that links an offline event to an online event. DWARF BrnRaceEventData.h:
@@ -67,6 +67,59 @@ private:
     f32 mfMaxAggression;   // 0x04 (DWARF :138)
     f32 mfSkill;           // 0x08 (DWARF :139)
     f32 mfSpeed;           // 0x0C (DWARF :140)
+};
+
+// ----------------------------------------------------------------------------
+// BrnProgression::RaceEventData -- one serialised offline/online race event record. DWARF home
+// SharedClasses/Progression/BrnRaceEventData.h. The X360 proves a 248-byte (0xF8) record (see
+// ProgressionData::FixDown @0x8267F220, which strides the event table by 248 and rebases the
+// checkpoint pointer at +0x18). This is a MINIMAL OWNING SLICE: only the members the accessors
+// bodied in this batch touch are named at their X360-proven offsets; the remaining bytes are
+// explicit named padding so the touched members keep their exact offsets WITHOUT fabricating
+// member names for the not-yet-recovered fields. Grow in place (replace a pad with the real
+// DWARF member) when a future caller needs it -- do not fork a second definition.
+// ----------------------------------------------------------------------------
+struct RaceEventData
+{
+    // Per-checkpoint record carried by the event (40-byte / 0x28 stride; PROVEN by
+    // GetCheckpointData's `return 40 * index + mpaCheckpoints`). Distinct from
+    // BrnGameState::CheckpointData (44-byte). GetCheckpointData only returns a pointer, so the
+    // element's internal layout is not needed here -- declared-only/incomplete.
+    struct CheckpointData;
+
+    // Number of rank thresholds (the rank-score / rank-time tables are sized to this; the X360
+    // bounds-checks the rank arg against 6 in GetRankScore @0x823543D0 / GetRankTime @0x8230F748).
+    static const u32 KU_NUM_RANKS = 6;
+
+    // X360 0x8230F808. Returns &mpaCheckpoints[liCheckpointIndex] (asserts 0 <= index <
+    // miCheckpointCount, BrnRaceEventData.h:953). 40-byte stride.
+    const CheckpointData* GetCheckpointData(s32 liCheckpointIndex) const;
+
+    // X360 0x823543D0. Returns the target score for rank luRank (asserts luRank < 6,
+    // BrnRaceEventData.h:883). maiRankScores lives at +0x28.
+    s32 GetRankScore(u32 luRank) const;
+
+    // X360 0x8230F748. Returns the target time (seconds, f32) for rank luRank (asserts luRank < 6,
+    // BrnRaceEventData.h:898). mafRankTimes lives at +0x40.
+    f32 GetRankTime(u32 luRank) const;
+
+    // ---- Remaining X360-attested API (bodies + the backing members land in their own TUs) ----
+    // The number of rivals on the start grid / added during the event. RaceMode::Start reads both.
+    // Declared-only here (their backing fields are not in this minimal slice -- a future TU grows
+    // this single owner with the proven offsets). Previously a competing 2-method stub
+    // BrnProgression::RaceEventData lived in BrnGameModeParams.h; that stub is retired and that
+    // header now defers to this single owner (ODR).
+    u8 GetStartRivalCount() const;
+    u8 GetAddRivalCount() const;
+
+private:
+    u8                    maPad_00[0x18];                 // 0x00..0x17 (id / car id / leading scalars -- not in this slice)
+    const CheckpointData* mpaCheckpoints;                 // 0x18  checkpoint table base (X360 GetCheckpointData base)
+    s32                   miCheckpointCount;              // 0x1C  live checkpoint count
+    u8                    maPad_20[0x08];                 // 0x20..0x27 (not in this slice)
+    s32                   maiRankScores[KU_NUM_RANKS];    // 0x28  rank target scores (6 * 4 == 0x18 -> 0x40)
+    f32                   mafRankTimes[KU_NUM_RANKS];     // 0x40  rank target times  (6 * 4 == 0x18 -> 0x58)
+    u8                    maPad_58[0xA0];                 // 0x58..0xF7 (remaining record -- not in this slice; sizeof == 0xF8)
 };
 
 }

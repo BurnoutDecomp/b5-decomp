@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Sound/CgsMemBase.h"
+#include "SDKs/EATech/include/Nicotine/DMixIO.hpp" // Nicotine::DMixIO (mpDynamicMixIo)
 
 // =============================================================================
 // CgsSound::Logic effect-base family
@@ -164,7 +165,18 @@ private:
     Module*      mpLogicModule;      // CgsEffectBase.h:752  (+0x28 X360)
     bool         mbEnabled;          // CgsEffectBase.h:753
     bool         mbHasLoadedData;    // CgsEffectBase.h:754
-    void*        mpDynamicMixIo;     // CgsEffectBase.h:757  (Nicotine::DMixIO*, opaque here)
+    Nicotine::DMixIO* mpDynamicMixIo; // CgsEffectBase.h:757  (+0x30 X360)
+
+public:
+    // @ 0x826808D8. Latch the dynamic-mix I/O handle (asserts the supplied handle
+    // is non-null, "lpDmixIO", CgsEffectBase.h:916). Stored at +0x30 by name.
+    void SetDMixIOPtr(Nicotine::DMixIO* apDmixIO);
+
+    // @ 0x82680720. Read a single dynamic-mixer output value through the latched
+    // DMixIO handle. Returns 0.0f when no handle is connected; otherwise reads the
+    // mixer-output slot (aiSlot) under preset aiPreset via DMixIO::GetDMixOutput and
+    // converts that signed integer result to an f32 (X360 extsw -> fcfid -> frsp).
+    f32 GetMixerOutputValue(int aiSlot, int aiPreset);
 };
 
 // CgsEffectBase.h:736 (DWARF): the controlling State carries a back-link to its

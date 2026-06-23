@@ -2,10 +2,12 @@
 // CgsEffectBase.cpp -- CgsSound::Logic effect-base runtime bodies.
 //
 // Bodied from BURNOUT_X360_ARTIST.XEX:
-//   EffectBase::Attach()             @ 0x826A1138
-//   EffectBase::Prepare(State*)      @ 0x8268CEC8
-//   EffectControl::GetTypeName()     @ 0x8268CEB8
-//   EffectObject::GetTypeName()      @ 0x8268CE98
+//   EffectBase::Attach()              @ 0x826A1138
+//   EffectBase::Prepare(State*)       @ 0x8268CEC8
+//   EffectBase::GetMixerOutputValue() @ 0x82680720
+//   EffectBase::SetDMixIOPtr()        @ 0x826808D8
+//   EffectControl::GetTypeName()      @ 0x8268CEB8
+//   EffectObject::GetTypeName()       @ 0x8268CE98
 //
 // The GetTypeName() pair return interned type-name string literals (the X360 loads
 // them straight from rodata: off_82F2FA74 == "EffectControl", off_82F2FA64 ==
@@ -86,6 +88,38 @@ bool EffectBase::Prepare(State* apState)
     mpState       = apState;                          // stw r4, 8(this)
     mpLogicModule = apState->GetOwner()->mpLogicModule; // 0x24 then 0x2C deref
     return true;                                      // li r3, 1
+}
+
+// ---------------------------------------------------------------------------
+// EffectBase::GetMixerOutputValue(slot, preset)  @ 0x82680720
+//   if (!mpDynamicMixIo) return 0.0f;
+//   return (f32)(s32)mpDynamicMixIo->GetDMixOutput(slot, preset);
+// (asm: lwz r3,0x30(this); cmplwi; beq -> lfs f1, flt_82001CC0 [== 0.0]; else
+//  bl GetDMixOutput; extsw r11,r3; std; lfd; fcfid; frsp f1 -- signed-int -> f32.)
+// ---------------------------------------------------------------------------
+f32 EffectBase::GetMixerOutputValue(int aiSlot, int aiPreset)
+{
+    if (mpDynamicMixIo == nullptr) // lwz r3,0x30(this); cmplwi cr6,r3,0; beq
+    {
+        return 0.0f;               // lfs f1, flt_82001CC0
+    }
+
+    // extsw r11,r3 -> the GetDMixOutput result is a SIGNED 32-bit value; fcfid/frsp
+    // convert it to single precision.
+    const s32 liOutput = mpDynamicMixIo->GetDMixOutput(aiSlot, aiPreset);
+    return static_cast<f32>(liOutput);
+}
+
+// ---------------------------------------------------------------------------
+// EffectBase::SetDMixIOPtr(apDmixIO)  @ 0x826808D8
+//   if (!apDmixIO) <assert "lpDmixIO">;  mpDynamicMixIo = apDmixIO;
+// (asm: the non-null guard (cmplwi cr6,r31,0; bne skip) fires the assert; the store
+//  stw r31,0x30(this) [mpDynamicMixIo] runs unconditionally afterwards.)
+// ---------------------------------------------------------------------------
+void EffectBase::SetDMixIOPtr(Nicotine::DMixIO* apDmixIO)
+{
+    CGS_ASSERT(apDmixIO != nullptr, "lpDmixIO");
+    mpDynamicMixIo = apDmixIO; // stw r31,0x30(this)
 }
 
 // ---------------------------------------------------------------------------

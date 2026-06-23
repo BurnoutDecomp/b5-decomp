@@ -61,15 +61,9 @@ namespace AIModuleIO
     struct AICarOutputInterface
     {
         // X360 0x827644F0 ("liAICarIndex >= 0 && liAICarIndex < KI_MAX_OUT_OF_RANGE_RACE_CARS"
-        //                  + "The lfDistToRouteEnd is less than 0! Mental!"). Self-contained.
-        void SetAICarDistanceToCheckpoint(s32 liAICarIndex, f32 lfDistanceToCheckpoint)
-        {
-            CGS_ASSERT(liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
-                       "liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS");
-            CGS_ASSERT(lfDistanceToCheckpoint >= 0.0f,
-                       "The lfDistToRouteEnd  is less than 0! Mental!");
-            mafDistanceToCheckpoint[liAICarIndex] = lfDistanceToCheckpoint;
-        }
+        //                  + "The lfDistToRouteEnd is less than 0! Mental!"). Out-of-line in the
+        // X360 build -> defined in BrnAICarOutputInterface.cpp (this type's .cpp home).
+        void SetAICarDistanceToCheckpoint(s32 liAICarIndex, f32 lfDistanceToCheckpoint);
 
         // X360 (companion getter; read by UpdateRacePositions @0x8232A668 as
         // *(4*(idx+1283)+iface), with the same index-bound assert). Self-contained.
@@ -81,13 +75,9 @@ namespace AIModuleIO
         }
 
         // X360 0x8230F888 ("liAICarIndex >= 0 && liAICarIndex < KI_MAX_OUT_OF_RANGE_RACE_CARS",
-        //                  return *(2*(idx+2636)+this)). Self-contained.
-        u16 GetAISectionIndex(s32 liAICarIndex) const
-        {
-            CGS_ASSERT(liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
-                       "liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS");
-            return mauAISections[liAICarIndex];
-        }
+        //                  return *(2*(idx+2636)+this)). Out-of-line in the X360 build -> defined
+        // in BrnAICarOutputInterface.cpp (this type's .cpp home).
+        u16 GetAISectionIndex(s32 liAICarIndex) const;
 
         // Companion setter (DWARF BrnAICarOutputInterface.h:71). Self-contained.
         void SetAISectionIndex(s32 liAICarIndex, u16 luAISectionIndex)
