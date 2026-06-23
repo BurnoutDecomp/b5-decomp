@@ -62,6 +62,15 @@ public:
     // its low bit is set.
     virtual ~CMassiveRecordImpression();
 
+    // Additive accessor (FLAG: not its own X360 function -- the impression has no
+    // standalone Reset symbol). CMassiveRecord::Reset @ 0x82BDD7A8 zeros every
+    // accumulator slot of each embedded impression IN PLACE while preserving
+    // mnParentRecord (it reads +0x14 then writes it back unchanged). This exposes
+    // that exact field-reset to the owning record BY NAME instead of having the
+    // record reach into these private members. The float slots reset to 0.0f
+    // (flt_82001CC0), every integer/u16 slot to 0.
+    void Reset();
+
 private:
     int           mnParentRecord; // +0x14 (a2)
     int           mnField18;      // +0x18

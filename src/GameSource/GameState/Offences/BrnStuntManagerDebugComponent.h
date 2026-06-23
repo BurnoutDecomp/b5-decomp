@@ -15,15 +15,14 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // CgsDev::DebugComponent (real base)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"        // CgsDev::SimpleStrStream (committed home)
 #include "BrnCommonTypes.h"                                         // Vector3
+#include "SharedClasses/World/BrnWorldRegion.h"                     // BrnWorld::WorldRegion (GetTriggerWorldRegion return)
 
 namespace CgsDev { struct Debug2DImmediateRender; struct Debug3DImmediateRender; }
 
 namespace BrnGameState
 {
-    struct StuntManager;          // pointer member only; full def in (not-yet-committed) BrnStuntManager.h
+    struct StuntManager;          // pointer member only; full def in BrnStuntManager.h
     enum  StuntElementType;       // used only by declared-only CompleteAllStuntTypeButOne; home TBD
-    struct GenericRegion;         // declared-only GetTriggerWorldRegion param
-    enum  WorldRegion;            // declared-only GetTriggerWorldRegion return
 
     class StuntManagerDebugComponent : public CgsDev::DebugComponent
     {
@@ -49,7 +48,15 @@ namespace BrnGameState
         void        CompleteAllJumpsButOneCallback(void* lpData);
         void        CompleteAllSmashesButOneCallback(void* lpData);
         void        CompleteAllBillboardsButOneCallback(void* lpData);
-        WorldRegion GetTriggerWorldRegion(const GenericRegion* lpRegion);
+
+        // @ 0x8236F070. Sample the StuntManager's 2D district map at a trigger's
+        // world position and return the resulting world region. The X360 reads
+        // the position as three floats (a3[0..2]); a w lane of 0 is filled before
+        // the WorldMap2D::GetValue(Vector3) sample. Returns a WorldRegion clamped
+        // to (E_DISTRICT_INVALID -> DistrictToCounty(E_DISTRICT_INVALID)) when the
+        // sample is off-map (KU_INVALID_WORLD_MAP_VALUE == 255); otherwise the
+        // region Construct()ed from the sampled district byte.
+        BrnWorld::WorldRegion GetTriggerWorldRegion(const Vector3& lrTriggerPosition);
 
         // DWARF member layout (BrnStuntManagerDebugComponent.h:86-88), declared order:
         StuntManager*           mpStuntManager;     // +0x0C (set by Construct, NOT the ctor)

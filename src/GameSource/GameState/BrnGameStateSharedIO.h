@@ -215,6 +215,11 @@ namespace BrnGameState
                 s32 GetEventID() const      { return miEventID; }
                 s32 GetNumLandmarks() const { return miNumLandmarks; }
 
+                // Inline read of this event's traffic-light trigger id (the X360 reads the
+                // +0x20 field directly; e.g. GuiEventNetworkCreateGame::SetFromGameParams
+                // @0x82481FC8 forwards it into a destination Event::Construct).
+                u32 GetTrafficLightTriggerId() const { return mTrafficLightTriggerId; }
+
             private:
                 LandmarkIndex maLandmarkIndices[KI_MAX_LANDMARKS_IN_MODE]; // 0x00
                 u32           mTrafficLightTriggerId;                      // 0x20 (LightTriggerId)

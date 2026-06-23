@@ -384,6 +384,13 @@ public:
     //                 it carries no real message.
     static IRealmcMessage* EMPTY_MESSAGE();
 
+    // Additive accessor (FLAG: not its own X360 function). Returns the held message
+    // by NAME so callers that copy-build a new MessagePtr from this one (e.g.
+    // MessageFilter::FilterMessage's by-value return, which AddRefs the held message
+    // into the result) reach mpMessage through MessagePtr rather than a raw offset.
+    // No layout change.
+    IRealmcMessage* Get() const { return mpMessage; }
+
     // slot +0 -- backs the X360 `scalar deleting destructor' @ 0x82C45FC0
     //            (restore vtable, Release mpMessage, null it; then operator delete
     //            8 bytes when the delete flag bit0 is set).
@@ -396,5 +403,87 @@ private:
 // The shared empty-message singleton (X360 off_832BE1F0). Installed by another
 // Realmc TU at boot; declared here for compile/link. EMPTY_MESSAGE() returns it.
 extern IRealmcMessage* g_pRealmcEmptyMessage;
+
+// ---------------------------------------------------------------------------
+// WAVE-EXTENSION (additive). RealmcCore::MessageFilter -- a Realmc message-filter
+// object: it holds one handler/owner pointer and one MessagePtr, and FilterMessage()
+// lets an incoming message apply itself to the filter and yields the filter's held
+// message. Reconstructed from BURNOUT_X360_ARTIST.XEX (no source / DWARF). Per-function
+// X360 addresses:
+//
+//     RealmcCore::MessageFilter::MessageFilter   @ 0x82C45F08
+//     RealmcCore::MessageFilter::~MessageFilter  @ 0x82C45F68
+//     RealmcCore::MessageFilter::FilterMessage   @ 0x82C462A8
+//     RealmcCore::MessageFilter::`vector deleting destructor' @ 0x82C46240
+//
+// LAYOUT (from the ctor / dtor / FilterMessage asm):
+//   +0x00  vtable pointer  (base IRealmcMessageFilter vtable off_82148660 then the
+//                           final MessageFilter vtable off_821BA310 -- MSVC's base-
+//                           then-final ctor sequence)
+//   +0x04  mpHandler       (the owner/target pointer the ctor stores from its arg; e.g.
+//                           the RealmcCore::MemcardState that creates the filter, X360
+//                           0x82C47328, passes itself here)
+//   +0x08  maMessage       (an embedded RealmcCore::MessagePtr -- own vtable off_821BA2F4
+//                           installed at +8, held message at +0xC. Bound in the ctor to
+//                           the default/empty message obtained from the global at
+//                           off_832BE1F4, and rebound in FilterMessage.)
+//
+// sizeof(MessageFilter) == 16 (vtable + handler + the 8-byte MessagePtr) -- the deleting
+// destructor frees 0x10 bytes. The shared base vtable off_82148660 is the same abstract
+// base RealmcIface::GameCallbackProcessor derives from (X360 0x82B54340), so MessageFilter
+// derives from the abstract filter base IRealmcMessageFilter below.
+// ---------------------------------------------------------------------------
+
+class MessageFilter;
+
+// IRealmcFilterableMessage -- the incoming message FilterMessage() applies to the filter.
+// FilterMessage dispatches into the incoming message's vtable slot +4 (byte offset 0x04),
+// passing the MessageFilter as the argument (the X360 reads the incoming message's
+// vtable+4 and calls it with (message, filter)); modelled here as the virtual
+// ApplyToFilter. The dispatched method ultimately stores the message the filter should
+// carry into the filter's MessagePtr (+0xC).
+class IRealmcFilterableMessage
+{
+public:
+    virtual ~IRealmcFilterableMessage() {}         // vtable slot +0
+    // vtable slot +0x04 -- "apply yourself to this filter".
+    virtual int ApplyToFilter(MessageFilter* pFilter) = 0;
+};
+
+// The abstract Realmc message-filter base (X360 base vtable off_82148660). MessageFilter
+// (and RealmcIface::GameCallbackProcessor) derive from it; its sole declared virtual is the
+// destructor in slot +0 (the bodies of the other slots live with their own TUs).
+class IRealmcMessageFilter
+{
+public:
+    virtual ~IRealmcMessageFilter() {}             // vtable slot +0
+};
+
+class MessageFilter : public IRealmcMessageFilter
+{
+public:
+    // @ 0x82C45F08 -- store mpHandler = pHandler; construct the embedded MessagePtr
+    //                 bound to the default/empty message (the global at off_832BE1F4),
+    //                 AddRefing it (the inlined interrupt-masked increment).
+    explicit MessageFilter(void* pHandler);
+
+    // @ 0x82C462A8 -- rebind the held MessagePtr to the default message, let the
+    //                 incoming message apply itself to this filter (virtual dispatch
+    //                 into the incoming message's vtable slot +4), then return a
+    //                 MessagePtr copy of the filter's now-held message (AddRefing it).
+    //                 The X360 returns the MessagePtr by value via the hidden out param.
+    MessagePtr FilterMessage(IRealmcFilterableMessage* pIncoming);
+
+    // slot +0 -- backs the X360 `vector deleting destructor' @ 0x82C46240 (run the dtor,
+    //            then free 0x10 bytes through the Realmc backend when the delete flag is set).
+    ~MessageFilter() override;
+
+    void* mpHandler;    // +0x04 (owner/target pointer)
+    MessagePtr maMessage; // +0x08 (embedded MessagePtr; vtable @ +8, message @ +0xC)
+};
+
+// The global default-message holder (X360 off_832BE1F4) and the default-message source
+// (off_832BE1F8) the filter binds its MessagePtr to. Installed by another Realmc TU at
+// boot; declared here for compile/link. Modelled via the empty-message singleton.
 
 } // namespace RealmcCore

@@ -101,6 +101,16 @@ namespace BrnGameState
 
         bool              IsStuntElement(const BrnTrigger::GenericRegion*, StuntElementType*); // :209
 
+    public:
+        // Additive accessor (FLAG: not its own X360 function -- inlined at the
+        // call site). StuntManagerDebugComponent::GetTriggerWorldRegion
+        // @ 0x8236F070 samples this manager's district map directly via
+        // `mpStuntManager + 880` (== &mWorldMap2D). This exposes that one member
+        // BY NAME so the debug component does not reach into the private layout.
+        const CgsWorld::WorldMap2D& GetDistrictMap() const { return mWorldMap2D; }
+
+    private:
+
         // ---- data members ----
         // Explicit padding for every member preceding mWorldMap2D so it lands at
         // its X360 offset 880 (0x370). The real ordered members (DWARF) are, in
