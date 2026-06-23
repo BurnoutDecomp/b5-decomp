@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N> (mChannelData / meChannels)
 
 // CgsGui::AnimChannelData - one keyframed animation channel for the APT (gui movie)
 // interface: a start/end time pair, a start/end value pair, and the interpolation /
@@ -40,5 +41,43 @@ namespace CgsGui
         void Construct();
         void SetData(Time lStartTime, Time lEndTime, f32 lfStartValue, f32 lfEndValue,
                      InterpolateType leInterpolator, AnimationType leAnimType);
+    };
+
+    // CgsGui::AnimData - a single APT animation: up to six keyframed channel-data
+    // entries (one per animatable property) plus the list of which animator channels
+    // are driven. Recovered from the X360 spine:
+    //   AnimData::AnimData            @ 0x824E8FC8  (ctor: stores the -1 unconstructed
+    //                                                sentinel into the two embedded
+    //                                                Array count words @ +0x90 / +0xAC)
+    //   AnimData::AnimatorChan        @ 0x8284D940  (Array<AnimatorChannel,6>::operator[]:
+    //                                                array-local count @ +0x18, stride 4)
+    //   Array<AnimData,2>::Append     @ 0x824E5BD0  (outer container memcpy's 0xB0 == 176)
+    // Member set / order / names and the AnimatorChannel enum are from the DecFIGS
+    // DWARF (CgsAptAnimData.h):
+    //   mChannelData  [+0x00]  Array<AnimChannelData,6>   (h:137; 6*0x18 buf + count @ +0x90)
+    //   meChannels    [+0x94]  Array<AnimatorChannel,6>   (h:138; 6*4 buf + count @ +0xAC)
+    // sizeof == 0xB0 (176): 0x94 (Array<AnimChannelData,6>) + 0x1C (Array<AnimatorChannel,6>),
+    // matching the Array<AnimData,2>::Append element memcpy size of 176.
+    struct AnimData
+    {
+        // CgsAptAnimData.h:104 - which screen-property channel a keyframe track drives.
+        enum AnimatorChannel
+        {
+            ANIMATOR_CHANNEL_X        = 0,
+            ANIMATOR_CHANNEL_Y        = 1,
+            ANIMATOR_CHANNEL_WIDTH    = 2,
+            ANIMATOR_CHANNEL_HEIGHT   = 3,
+            ANIMATOR_CHANNEL_ROTATION = 4,
+            ANIMATOR_CHANNEL_ALPHA    = 5,
+            ANIMATOR_CHANNEL_MAX      = 6,
+        };
+
+        Array<AnimChannelData, 6> mChannelData;  // [+0x00] keyframe payload per active channel (h:137)
+        Array<AnimatorChannel, 6> meChannels;    // [+0x94] which channels this animation drives (h:138)
+
+        // The AnimData methods (AnimData ctor / Construct / Clear / AddAnimationChannel /
+        // GetChannelData / AnimatorChan) are homed by their own ledger TUs; declared
+        // there. This slice models the layout so the Array<AnimData,N> container
+        // instantiations have a complete element type.
     };
 }

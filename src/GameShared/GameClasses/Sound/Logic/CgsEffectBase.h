@@ -209,6 +209,12 @@ struct EffectControl : public EffectBase
     static ClassTypeInfo<EffectControl>* GetStaticTypeInfo();
 
     static const u16 KU_SIZEOF_CLASS_ARRAY = 64; // CgsEffectBase.h:765 (DWARF)
+
+    // CgsEffectBase.h:363 (DWARF) @ 0x8268DD48. Register a per-class RTTI descriptor
+    // into this class's static ClassTypeInfo array. Scans for the first empty slot
+    // (cap KU_SIZEOF_CLASS_ARRAY); asserts "Too Many Class registations" only past
+    // 0x100. Returns the registered descriptor.
+    static ClassTypeInfo<EffectControl>* AddToClassTypeInfoArray(ClassTypeInfo<EffectControl>* apTypeInfo);
 };
 
 // CgsEffectBase.h:772 (DWARF): EffectObject : public EffectBase.
@@ -228,6 +234,11 @@ struct EffectObject : public EffectBase
     static ClassTypeInfo<EffectObject>* GetStaticTypeInfo();
 
     static const u16 KU_SIZEOF_CLASS_ARRAY = 64; // CgsEffectBase.h:774 (DWARF)
+
+    // CgsEffectBase.h:363 (DWARF) @ 0x8268DE28. Register a per-class RTTI descriptor
+    // into this class's static ClassTypeInfo array (separate array from EffectControl's).
+    // Same scan/assert logic as EffectControl::AddToClassTypeInfoArray.
+    static ClassTypeInfo<EffectObject>* AddToClassTypeInfoArray(ClassTypeInfo<EffectObject>* apTypeInfo);
 };
 
 } // namespace Logic

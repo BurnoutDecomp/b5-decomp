@@ -5,11 +5,12 @@
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// THIS TU (GameShared/.../PoolModuleStates/CgsBaseDefragPoolModuleState.cpp) -- the three
-// pure-logic spine functions of the shared defrag base state:
+// THIS TU (GameShared/.../PoolModuleStates/CgsBaseDefragPoolModuleState.cpp) -- the pure-logic
+// spine functions of the shared defrag base state:
 //   CgsResource::BaseDefragPoolModuleState::Begin                   @ 0x828DA090
 //   CgsResource::BaseDefragPoolModuleState::FindNextFreeNode        @ 0x828DA248
 //   CgsResource::BaseDefragPoolModuleState::BuildFinalRelocationData@ 0x828DA2E8
+//   CgsResource::BaseDefragPoolModuleState::AddRelocateRequest      @ 0x828D8010
 // Each is bodied store-for-store against the X360 asm; members are referenced by name
 // (offsets verified in the owning header). The X360 asserts that stream a formatted message
 // into the debug buffer (BasePriorityQueue::Clear + StrStream machinery) are expressed through
@@ -112,5 +113,24 @@ namespace CgsResource
         }
 
         return liTotalSize;
+    }
+
+    // -------- AddRelocateRequest @ 0x828D8010 --------
+    // Append one relocate request (a linear-heap node index + its destination offset) to the
+    // mpRelocateRequests array, returning the index it was written at and advancing the count.
+    // Asserts the array is not already full (muRelocationCount < muMaxRelocateRequests). The X360
+    // walks to the slot with an 8-byte stride (slwi r11,r11,3) from mpRelocateRequests; we index
+    // by element. The u16 node is stored at +0 (sthx) and the u32 dest offset at +4 (stw).
+    u32 BaseDefragPoolModuleState::AddRelocateRequest(u16 luNode, u32 luDestOffset)
+    {
+        CGS_ASSERT(muRelocationCount < muMaxRelocateRequests, "Out of relocation space\n");  // :205
+
+        RelocateRequest& lRequest = mpRelocateRequests[muRelocationCount];   // 8 * count + mpRelocateRequests
+        lRequest.muNode       = luNode;        // sthx r27, ... (u16 @ +0)
+        lRequest.muDestOffset = luDestOffset;  // stw  r26, 4   (u32 @ +4)
+
+        u32 luIndex = muRelocationCount;       // result = *(a1+0x40)
+        muRelocationCount = luIndex + 1;       // *(a1+0x40) = result + 1
+        return luIndex;
     }
 }

@@ -66,7 +66,7 @@ namespace CgsResource
 
         // ---- request builders / accessors --------------------------------------------
         u32  AddAddressedAllocRequest(u32 luSize, u32 luOffset, void* lpOwner);  // :181 (deferred)
-        u32  AddRelocateRequest(u16 luNode, u32 luDestOffset);                   // :203 (deferred)
+        u32  AddRelocateRequest(u16 luNode, u32 luDestOffset);                   // :203 (THIS PASS @ 0x828D8010)
         Pool*           GetPool();                                               // :217 (deferred)
         PoolModule*     GetPoolModule();                                         // :223 (deferred)
         EBatchAllocResult GetAllocationResult(s32 liIndex);                      // :229 (deferred)
