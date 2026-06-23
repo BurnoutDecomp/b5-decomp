@@ -164,8 +164,16 @@ namespace CgsNetwork
         // CgsServerInterfaceDirtySock.h:724
         s32 GetMessageBufferLength() const;
 
+        // ADDITIVE GROW (flagged by cgs-scene-net group): inline accessor for the
+        // lobby-login ref handle (the +0x7C member). ServerInterfaceConnection::GetLogi
+        // (X360 0x82876F18) reads mpServerInterface->mpLobbyLoginRef to poll the login
+        // module; the X360 component is a friend of the server interface and touches the
+        // field directly. We expose a read accessor instead of widening friendship, so
+        // the member stays private and the layout is unchanged.
+        DirtySock::LobbyLoginRefT* GetLobbyLoginRef() const { return mpLobbyLoginRef; }
+
     protected:
-        // CgsServerInterfaceDirtySock.cpp:826
+        // ConvertError: map a DirtySock error to an EServerInterfaceError via the table.
         virtual EServerInterfaceError ConvertError(int liError,
                                                    const DSErrorToServerInterfaceError* lpTable,
                                                    int liCount) const;
@@ -186,7 +194,7 @@ namespace CgsNetwork
         bool                         mbWaitingToSuspend;                // :487
         s32                          miSuspendUpdateFlags;              // :488
         char*                        mpacMessageBuffer;                 // :490 (this+148 on X360)
-        // CgsServerInterfaceDirtySock.cpp:107 -- mpMemoryBlock (CgsMemory::HeapMalloc*):
+        // mpMemoryBlock (CgsMemory::HeapMalloc*):
         // FLAGGED opaque; modelled as void* to avoid pulling an un-homed allocator.
         void*                        mpMemoryBlock;
         const char*                  mpcCurrentAction;                  // :496
@@ -198,7 +206,7 @@ namespace CgsNetwork
         const char*                  mpcSLUS;                           // :506
         s32                          miLanguage;                        // :507
         bool                         mbRecreateDirtySock;               // :509
-        // CgsServerInterfaceDirtySock.cpp:113 -- mNetStreamLogChannelOutput
+        // mNetStreamLogChannelOutput
         // (CgsDev::Log::LogChannelOutput): FLAGGED opaque; modelled by storage so the
         // trailing member offset (miCgsNetworkServerInterfacePM1) is preserved. Two
         // pointers wide is sufficient for the named-member contract on this TU.

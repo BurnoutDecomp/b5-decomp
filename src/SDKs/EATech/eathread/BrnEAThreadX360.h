@@ -229,7 +229,21 @@ namespace Thread
             kStatusEnded   = 2
         };
 
+        // @ 0x82B42DC0 -- default ctor: start with no attached dynamic-data record
+        // (mThreadData.mpData = 0). The X360 body is a single `stw 0,0(this)`; it is
+        // the construction JobThread runs on its embedded Thread subobject at +0xC.
+        Thread();
+
         ~Thread();
+
+        // Block until the started thread ends (then optionally returns its value via
+        // pThreadReturnValue) but give up after pTimeoutAbsolute. Reconstructed
+        // OUT-OF-GROUP: the body lives in the (separate, not-yet-homed) EA::Thread
+        // object TU; this is a forward declaration so callers (e.g.
+        // EA::Jobs::LocalBackend::JobThread::WaitForEnd) compile and link against the
+        // canonical symbol. FLAGGED -- declared here, defined in its own TU.
+        Status WaitForEnd(intptr_t* pThreadReturnValue = 0,
+                          const int* pTimeoutAbsolute  = 0);
 
         // Start a thread running pFunction(pContext), per pParameters. Returns
         // the new thread's HANDLE (ThreadId) or 0 on failure. (0x82B43F80)

@@ -85,6 +85,15 @@ public:
     //                 asm shows (lwz r11,0(r3); li r4,1; lwz r11,0(r11); bctr).
     static RefCount* Unreferenced(RefCount* pThis);
 
+    // Additive accessor (FLAG: not its own X360 function). Every Realmc smart-
+    // pointer over a RefCount object bumps the count with the same interrupt-
+    // masked lwarx/addi+1/stwcx. idiom inlined at its construction / assignment
+    // site (e.g. MessagePtr::MessagePtr @ 0x82C45778 increments *(msg + 4)).
+    // Exposed here by NAME so those sites raise the count through RefCount rather
+    // than reaching the +4 field via a raw offset. Atomic increment, no layout
+    // change.
+    void AddRef();
+
     // slot +0 -- backs the X360 `vector deleting destructor' @ 0x82C450C0
     //            (restore base vtable, then operator delete if flag bit0 set).
     virtual ~RefCount();
@@ -311,5 +320,81 @@ private:
     std::uint32_t muId;    // +8
     RealmcString  maText;  // +0xC
 };
+
+// ---------------------------------------------------------------------------
+// WAVE-EXTENSION (additive). RealmcCore::MessagePtr -- a small intrusive smart
+// pointer / refcount wrapper over a RefCount-derived "message" object (the X360
+// MessagePtr family). Reconstructed from BURNOUT_X360_ARTIST.XEX (no leak /
+// DWARF). Per-function X360 addresses:
+//
+//     RealmcCore::MessagePtr::MessagePtr   @ 0x82C45778  (ctor; AddRef the msg)
+//     RealmcCore::MessagePtr::~MessagePtr  @ 0x82C457B0  (Release the msg, null it)
+//     RealmcCore::MessagePtr::operator=    @ 0x82C45838  (rebind: Release old, AddRef new)
+//     RealmcCore::MessagePtr::Apply        @ 0x82C44C38  (dispatch into msg vtable +8)
+//     RealmcCore::MessagePtr::EMPTY_MESSAGE@ 0x82C44C28  (shared empty-message singleton)
+//     RealmcCore::MessagePtr::`scalar deleting destructor' @ 0x82C45FC0
+//
+// LAYOUT (from the ctor / dtor / operator= asm):
+//   +0x00  vtable pointer  (off_821BA2F4 -- MessagePtr's own vtable; the virtual
+//                           dtor below models the install. MessagePtr's only
+//                           virtual is the destructor.)
+//   +0x04  mpMessage       (the held IRealmcMessage*; AddRef'd on bind, Release'd
+//                           on rebind/teardown)
+//
+// sizeof(MessagePtr) == 8 (vtable ptr + mpMessage) -- the scalar deleting
+// destructor frees 8 bytes.
+// ---------------------------------------------------------------------------
+
+// IRealmcMessage -- the object a MessagePtr holds. It IS a RefCount (MessagePtr
+// AddRef's / Release's it through the RefCount count at +4), and it exposes one
+// extra virtual at vtable slot +8 (byte offset 0x08) that Apply() dispatches
+// into. RefCount pins slots +0 (deleting dtor) and +4 (OnUnreferenced); Process
+// is the next slot (+8), exactly the entry Apply()'s `lwz r11, 8(vtable)` reads.
+class IRealmcMessage : public RefCount
+{
+public:
+    // vtable slot +0x08 -- "apply / process this message". Apply() tail-calls it
+    // with the held message as the implicit `this` (the X360 reads vtable+8 of
+    // mpMessage and branches to it with r3 = mpMessage).
+    virtual int Process() = 0;
+};
+
+class MessagePtr
+{
+public:
+    // @ 0x82C45778 -- install MessagePtr's vtable, AddRef the message (the X360
+    //                 inlines the interrupt-masked lwarx/addi+1/stwcx. increment
+    //                 of *(msg + 4) == the RefCount count), store mpMessage.
+    explicit MessagePtr(IRealmcMessage* pMessage);
+
+    // @ 0x82C45838 -- rebind to rhs.mpMessage: when it differs from the current
+    //                 message, Release the old one, store the new one, then
+    //                 AddRef it (the same inlined atomic increment). Returns
+    //                 this. (No-op when both already point at the same message.)
+    MessagePtr& operator=(const MessagePtr& rOther);
+
+    // @ 0x82C44C38 -- dispatch into the held message's vtable slot +8:
+    //                 return mpMessage->Process(). (Static thunk: the X360 takes
+    //                 the MessagePtr in r3, loads mpMessage, then mpMessage's
+    //                 vtable+8.)
+    static int Apply(MessagePtr* pThis);
+
+    // @ 0x82C44C28 -- return the shared empty-message singleton (X360
+    //                 off_832BE1F0), the placeholder a MessagePtr points at when
+    //                 it carries no real message.
+    static IRealmcMessage* EMPTY_MESSAGE();
+
+    // slot +0 -- backs the X360 `scalar deleting destructor' @ 0x82C45FC0
+    //            (restore vtable, Release mpMessage, null it; then operator delete
+    //            8 bytes when the delete flag bit0 is set).
+    virtual ~MessagePtr();
+
+private:
+    IRealmcMessage* mpMessage;  // +0x04 (held, AddRef'd message)
+};
+
+// The shared empty-message singleton (X360 off_832BE1F0). Installed by another
+// Realmc TU at boot; declared here for compile/link. EMPTY_MESSAGE() returns it.
+extern IRealmcMessage* g_pRealmcEmptyMessage;
 
 } // namespace RealmcCore

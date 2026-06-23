@@ -22,6 +22,24 @@ namespace EA
 {
 namespace Jobs
 {
+    // The process-wide Jobs allocator (the off_8327F280 object SetAllocator
+    // installs). Only the Free virtual the SDK's scalar-deleting destructors
+    // dispatch into is committed (the X360 asm proves the call site: allocator
+    // vtable slot +0x0C, called as Free(this, ptr, 0)). The concrete allocator is
+    // installed by the host and lives outside this group; this is the minimal
+    // abstract surface the SDK calls BY NAME.
+    class Allocator
+    {
+    public:
+        virtual ~Allocator() {}
+        // vtable slot +0x0C: release a block this allocator handed out.
+        virtual void Free(void* pBlock, int iSize) = 0;
+    };
+
+    // @ 0x82BC9830 sibling -- typed view of the installed allocator (off_8327F280),
+    // for the SDK's scalar-deleting destructors. Null until SetAllocator runs.
+    Allocator* GetAllocator();
+
     // @ 0x82BCC6E8 -- atomically store uValue into *puLocation. On X360 this masks
     // interrupts (mfmsr/mtmsree) around a lwarx/stwcx. reservation pair, retrying
     // until the store-conditional succeeds. Returns puLocation (the X360 leaves the
