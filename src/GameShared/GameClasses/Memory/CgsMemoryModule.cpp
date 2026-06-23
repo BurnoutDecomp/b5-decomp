@@ -397,12 +397,101 @@ namespace CgsMemory
         lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lResponse.GetEventType(),
                                                      static_cast<s32>(sizeof(lResponse)));
     }
-    // @ 0x8286CDB8 - [DEFERRED with the rwcore allocator middleware] see the note above
-    // ProcessCreateLinearAllocatorRequest. Real body builds a CreateBankRequest from the request's
-    // rw::ResourceDescriptor (rw::LinearResourceAllocator::GetResourceDescriptor), CreateBank's it, then
-    // Initialize's the rw allocator over the new bank and returns it. Inert stub until rwcore.lib + that
-    // rw::allocator factory layer are in the build.
-    void MemoryModule::ProcessCreateResourceRequest(const MemoryIO::MemoryRequest*, MemoryIO::OutputBuffer*) {}
+    // @ 0x8286CDB8 - create a multi-type resource bank (the backing memory for a resource Pool) and reply
+    // with the new bank's per-type data pointers. For every memory type in the request's resource
+    // descriptor: round the requested size up to the parent bank's block granule (block size in 1KB units
+    // -> <<10) and compute the block count; build a one bank Params covering all types; CreateBank; then
+    // gather the created bank's GetData(type) into the response's rw::Resource. This is the async/message-
+    // driven equivalent of the synchronous GameDataModule pool-bank carve (CreatePoolBank); the sizing +
+    // field accessors are faithful to the X360. [VERIFY: the X360 serialised descriptor is
+    // rw::BaseResourceDescriptors<5> and the X360 loops 5 types; our request carries rw::ResourceDescriptor
+    // (<4>, the PC rwcore form) and pools use <=3 memory types, so the 4-entry loop is sufficient.]
+    void MemoryModule::ProcessCreateResourceRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
+    {
+        const MemoryIO::CreateResourceRequest* lpReq = static_cast<const MemoryIO::CreateResourceRequest*>(lpRequest);
+        MemoryIO::CreateResourceResponse lResponse;
+        lResponse.Construct(lpRequest->GetUser(), lpRequest->GetEventId());
+
+        const s32 liBankId   = lpReq->GetBankId();
+        const s32 liParentId = lpReq->GetParentBankId();
+        const rw::ResourceDescriptor* lpDesc = lpReq->GetDescriptor();
+        lResponse.SetDescriptor(lpDesc);
+
+        MemoryBank::Params lParams;
+        for (s32 lt = 0; lt < 6; ++lt) { lParams.mauBankSize[lt] = 0; lParams.mauBankBlocks[lt] = 0; }
+
+        const s32 kiNumTypes = 4;   // rw::ResourceDescriptor entry count [VERIFY: X360 loops 5]
+        MemoryIO::ResultCodes leResult = MemoryIO::E_RESULT_OK;
+
+        const u32 luParentIdx = GetBankIndexFromId(static_cast<u32>(liParentId));
+        if (liParentId < 0 || liParentId >= static_cast<s32>(muMaxBanks))
+        {
+            CGS_ASSERT(false, "Parent bank id out of range");
+            leResult = MemoryIO::E_RESULT_BANK_OUT_OF_RANGE;
+        }
+        else if (luParentIdx == MemoryBank::KU_INVALID_BANK)
+        {
+            CGS_ASSERT(false, "Parent bank does not exist");
+            leResult = MemoryIO::E_RESULT_BANK_ID_NOT_FOUND;
+        }
+        else
+        {
+            const MemoryBank& lrParent = mpBanks[luParentIdx];
+            for (s32 lt = 0; lt < kiNumTypes; ++lt)
+            {
+                const u32 luReqSize  = lpDesc->m_baseResourceDescriptors[lt].m_size;
+                const u32 luReqAlign = lpDesc->m_baseResourceDescriptors[lt].m_alignment;
+                const u32 luGranule  = static_cast<u32>(lrParent.GetBlockSize(lt)) << 10;   // 1KB units
+                if (luReqSize != 0)
+                {
+                    if (luGranule == 0)   // parent bank has no blocks for this memory type (X360 traps here)
+                    {
+                        CGS_ASSERT(false, "Parent bank has no blocks for the requested resource memory type");
+                        leResult = MemoryIO::E_RESULT_BLOCK_SIZES_DONT_MATCH;
+                        break;
+                    }
+                    if (luGranule < luReqAlign)   // parent granule cannot satisfy the requested alignment
+                    {
+                        CGS_ASSERT(false, "Parent bank granule too small for requested resource alignment");
+                        leResult = MemoryIO::E_RESULT_INVALID_ALIGNMENT;
+                        break;
+                    }
+                    const u32 luBankSize = ((luReqSize - 1) / luGranule + 1) * luGranule;   // round up to granule
+                    lParams.mauBankSize[lt]   = luBankSize;
+                    lParams.mauBankBlocks[lt] = luBankSize / luGranule;
+                }
+                else
+                {
+                    lParams.mauBankSize[lt]   = 0;
+                    lParams.mauBankBlocks[lt] = 0;
+                }
+            }
+
+            if (leResult == MemoryIO::E_RESULT_OK)
+            {
+                const char* lpcName = lpReq->GetBankName();
+                s32 li = 0;
+                for (; li < MemoryBank::KI_NAME_SIZE - 1 && lpcName[li] != 0; ++li) lParams.macName[li] = lpcName[li];
+                lParams.macName[li]          = 0;
+                lParams.mnBankId             = liBankId;
+                lParams.mnParentBankId       = liParentId;
+                lParams.mbIsLeaf             = true;    // a pool owns its internal sub-allocation
+                lParams.mbAllowFragmentation = false;
+
+                leResult = static_cast<MemoryIO::ResultCodes>(CreateBank(&lParams));
+                if (leResult == MemoryIO::E_RESULT_OK)
+                {
+                    MemoryBank& lrNew = mpBanks[GetBankIndexFromId(static_cast<u32>(liBankId))];
+                    for (s32 lt = 0; lt < kiNumTypes; ++lt)
+                        lResponse.SetResourceData(lt, lrNew.GetData(lt));
+                }
+            }
+        }
+
+        lResponse.SetResult(leResult);
+        lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lResponse.GetEventType(),
+                                                     static_cast<s32>(sizeof(lResponse)));
+    }
 
     // @ 0x8286ACA8 - one-time construction: carve a single backing block from the resource allocator,
     // lay a bump-allocator (mScratchSpace) over it, and sub-allocate the bank / block / id-map / name
