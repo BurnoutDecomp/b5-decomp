@@ -13,9 +13,9 @@
 // memory pointer). Construct allocates its 1.75 MB "ICE Debug Memory" block from
 // the global debug allocator and builds the ICE edit heap over it.
 //
-// Shape recovered from references/Feb-2007/.../GameSource/Resource/BrnResourceAllocator.h
-// (HeapResourceAllocator : rw::IResourceAllocator with a public Allocate() that
-// forwards to the virtual DoAllocate) and from the X360 asm of ICEMemory::Construct
+// Shape recovered from the DWARF (HeapResourceAllocator : rw::IResourceAllocator
+// with a public Allocate() that forwards to the virtual DoAllocate) and from the
+// X360 asm of ICEMemory::Construct
 // (a DoAllocate vtable call on Allocators::mGlobalDebugAllocator returning a
 // Resource, whose first base pointer is read back). The full allocator hierarchy
 // (rw::IResourceAllocator's C++ helper layer, the LinearResourceAllocator family,
@@ -39,6 +39,24 @@ public:
     // rw::IResourceAllocator interface: the resource modules allocate their backing memory through
     // this (virtual) entry point; it just forwards to Allocate.
     rw::Resource DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName) override;
+};
+
+// The Burnout linear (bump) RenderWare resource allocator. Sub-allocates from a fixed
+// region by advancing a cursor; frees happen en masse (re-Construct). Like
+// HeapResourceAllocator it IS-A rw::IResourceAllocator, so the resource modules can carve
+// memory through the virtual DoAllocate. MINIMAL SLICE -- only the polymorphic surface and
+// the rw allocator interface are modelled here; Construct (@0x82661A60), DoAllocate
+// (@0x82664800), DoFree (@0x82661CF8) and DoFreeDisposable (@0x82661D88) land when those
+// TUs are reconstructed (GROW this class then, do NOT fork it elsewhere). The X360 emits a
+// scalar deleting destructor for it (@0x82666948) because it is deleted polymorphically.
+// It inherits the rw::IResourceAllocator virtual surface (DoAllocate / virtual dtor); the
+// concrete overrides land with the allocator-leaf TUs. The out-of-line (defaulted) virtual
+// destructor anchors the vtable in BrnResourceAllocator.cpp so the X360's polymorphic-delete
+// thunk (`scalar deleting destructor' @0x82666948) is emitted there.
+class DefaultLinearAllocator : public rw::IResourceAllocator
+{
+public:
+    ~DefaultLinearAllocator() override;
 };
 
 // Accessor for the global debug allocator (asserts the backing allocator exists).

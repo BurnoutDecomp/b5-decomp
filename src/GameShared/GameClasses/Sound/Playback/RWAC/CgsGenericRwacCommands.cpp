@@ -4,10 +4,13 @@
 // Definition home for the fixed-size generic-RWAC command records dispatched
 // through GenericRwacFactory::HandlePluginEvent. Bodied from
 // BURNOUT_X360_ARTIST.XEX:
+//   RwacCommandPluginEvent::ctor                   @ 0x826813B8
+//   RwacCommandPluginGetAttribute::ctor            @ 0x826814C8
 //   RwacCommandPlayerPlayParameters::ctor          @ 0x826AD578
 //   RwacCommandPlayerIsRequestDoneParameters::ctor @ 0x82681570
 //   RwacCommandApplyReverbIRFile::ctor             @ 0x826816A0
 //   RwacCommandGinsuAttachDataParameters::ctor     @ 0x82681738
+//   RwacCommandQueue::GetCommand                   @ 0x82681888
 //
 // Each constructor copy-constructs a command record from a source record of the
 // same shape (X360: a chain of lwz N(r5) / stw N(r3) over the record's words),
@@ -38,6 +41,71 @@ namespace CgsSound
 {
 namespace Playback
 {
+
+// ---------------------------------------------------------------------------
+// RwacCommandPluginEvent::ctor  @ 0x826813B8
+//   build a 4-word record: tag 3 to word 0, the plugin pointer to word 1, and two
+//   operands to words 2,3; assert the plugin pointer is non-null.
+//
+//   X360 store order (r31 == this): stw r4,4(this) [plugin]; stw r11(=3),0(this)
+//   [tag]; stw r5,8(this) [op1]; stw r6,0xC(this) [op2]; the plugin non-null guard
+//   (cmplwi cr6,r4,0; bne skip) fires the "mpPlugin" assert when arg r4 is zero.
+// ---------------------------------------------------------------------------
+RwacCommandPluginEvent::RwacCommandPluginEvent(
+        uintptr_t apPlugin, uintptr_t auOperand1, uintptr_t auOperand2)
+{
+    mpPlugin      = apPlugin;                       // stw r4,4(this)
+    muCommandType = E_RWAC_COMMAND_PLUGIN_EVENT;    // li r11,3; stw r11,0(this)
+    maOperand1    = auOperand1;                      // stw r5,8(this)
+    maOperand2    = auOperand2;                      // stw r6,0xC(this)
+
+    CGS_ASSERT(mpPlugin != 0, "mpPlugin");
+}
+
+// ---------------------------------------------------------------------------
+// RwacCommandPluginGetAttribute::ctor  @ 0x826814C8
+//   copy 4 words (tag + 3 operands) from arSource; assert count == 4, tag == 5.
+//
+//   X360 copies words 0..3 (lwz N(r5)/stw N(r31) for N=0,4,8,0xC) BEFORE the two
+//   asserts; the count check (cmplwi cr6,r4,4) precedes the tag check (cmpwi r11,5
+//   on the just-stored 0(this)), matching the instruction order here.
+// ---------------------------------------------------------------------------
+RwacCommandPluginGetAttribute::RwacCommandPluginGetAttribute(
+        u32 luCommandCount, const RwacCommandPluginGetAttribute& arSource)
+{
+    muCommandType = arSource.muCommandType; // lwz r11,0(r5); stw r11,0(r31)
+    maOperand1    = arSource.maOperand1;    // lwz r11,4(r5); stw r11,4(r31)
+    maOperand2    = arSource.maOperand2;    // lwz r11,8(r5); stw r11,8(r31)
+    maOperand3    = arSource.maOperand3;    // lwz r11,0xC(r5); stw r11,0xC(r31)
+
+    CGS_ASSERT(luCommandCount == 4u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE,
+               "E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE == GetCommandType()");
+}
+
+// ---------------------------------------------------------------------------
+// RwacCommandQueue::GetCommand  @ 0x82681888
+//   pop one command word into *apOutWord, advancing the read cursor (wrap & 0xFFF).
+//
+//   X360 (r28 == this, r27 == apOutWord):
+//     lwz r11,0x4000(this) [read]; lwz r10,0x4004(this) [write]; cmplw -- if read
+//     == write the ring is empty -> the "Reading whent there's nothing to Read."
+//     assert (the original streamed it via StrStream into gpcMessageBuffer; the
+//     house CGS_ASSERT forwards the plain string). Then: read the word at
+//     queue[read] (lwz r11,0x4000(this); slwi r11,r11,2; lwzx r11,r11,this),
+//     store it to *apOutWord (stw r11,0(r27)), and advance read =
+//     (read + 1) & 0xFFF (addi r11,r11,1; clrlwi r11,r11,20; stw r11,0x4000(this)).
+//   Returns `this` (r3 holds the queue pointer on the normal path).
+// ---------------------------------------------------------------------------
+RwacCommandQueue* RwacCommandQueue::GetCommand(uintptr_t* apOutWord)
+{
+    CGS_ASSERT(mu32Read != mu32Write, "Reading whent there's nothing to Read.");
+
+    *apOutWord = mauCommandQueue[mu32Read];
+    mu32Read   = (mu32Read + 1u) & 0xFFFu;
+
+    return this;
+}
 
 // ---------------------------------------------------------------------------
 // RwacCommandPlayerPlayParameters::ctor  @ 0x826AD578

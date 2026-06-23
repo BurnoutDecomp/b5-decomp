@@ -21,9 +21,9 @@ namespace CgsLanguage
         // CgsLanguageManager TU. (CgsLanguage::ELanguage modelled as s32; 0 = English.)
         s32 GetCurrentLanguage() const;
 
-        // Localised value -> string formatters. Signatures for the overlapping ones are from the
-        // Feb-2007 partial source CgsLanguageManager.h (target buffer, value(s), buffer size); the X360
-        // ARTIST build adds the XoverY / Date / *AndHundreds variants (version drift over the leak).
+        // Localised value -> string formatters. The overlapping signatures (target buffer, value(s),
+        // buffer size) are grounded in the DWARF; the X360 ARTIST build adds the XoverY / Date /
+        // *AndHundreds variants.
         // The DWARF types the buffer as CgsUnicode::CgsUtf8* (== u8); modelled here as char*
         // since callers (e.g. the debug HUD) pass a plain byte buffer straight to the text renderer.
         // Bodies link from the CgsLanguageManager TU.

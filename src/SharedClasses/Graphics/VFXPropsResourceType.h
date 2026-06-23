@@ -13,11 +13,12 @@ namespace BrnParticle
 class VFXPropCollectionResourceType : public CgsResource::Type
 {
 public:
-    uint32_t GetTypeID() const override;
-    bool     DeSerialise(void* lpResource) const override;
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void     GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
-    virtual void* Serialise(const void* lpResource, const rw::Resource& lrDest) const;
+    uint32_t                        GetTypeID() const override;
+    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    bool                            DeSerialise(void* lpResource) const override;
+    void                            FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    void                            GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
+    virtual void*                   Serialise(const void* lpResource, const rw::Resource& lrDest) const;
 };
 }
 

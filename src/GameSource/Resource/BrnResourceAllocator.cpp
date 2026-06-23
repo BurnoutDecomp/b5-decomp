@@ -50,6 +50,12 @@ namespace BrnResource
         return &s_DebugResourceAllocator;
     }
 
+    // Out-of-line defaulted destructor: anchors the DefaultLinearAllocator vtable in this TU so
+    // the compiler emits its polymorphic-delete thunk (the X360 `scalar deleting destructor'
+    // @0x82666948). The underlying object teardown is trivial (only the rw::IResourceAllocator
+    // base) -- the X360 thunk just rewrites the vptr and conditionally operator-deletes.
+    DefaultLinearAllocator::~DefaultLinearAllocator() = default;
+
     // rw::IResourceAllocator virtual entry point -> forward to Allocate.
     rw::Resource HeapResourceAllocator::DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName)
     {
