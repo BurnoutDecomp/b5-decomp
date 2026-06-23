@@ -123,6 +123,12 @@ namespace Playback
     // The single bodied function this TU owns lives on this instantiation.
     template struct VoiceProfilingData<128u>;
 
+    // Explicit instantiation emitted for the <16> window (SubmitNewTime @0x8268EE28,
+    // called by BrnSound::Debug::Statistics::RenderHUD). N==16 => history result[0..15],
+    // mfMaximumTime=result[16], mfMinimumTime=result[17], mfAverageTime=result[18],
+    // mfMostRecentTime=result[19]; window mean multiply is the X360 literal 0.0625f==1/16.
+    template struct VoiceProfilingData<16u>;
+
 } // namespace Playback
 } // namespace CgsSound
 
