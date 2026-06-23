@@ -80,7 +80,7 @@ namespace renderengine
         static VertexDescriptorData* GetParameters(VertexDescriptorData* lpData, u32* lpParamsOut);
 
         // 0x82B637D0 -- build the rw resource descriptor (four {size=0, align=1} seeded entries, then
-        // slot0 = {size=4, align = 0x11*validElements + 0x10}). Returns lpDescriptorOut.
+        // slot0 = {size = 0x11*validElements + 0x10, align = 4}). Returns lpDescriptorOut.
         static u64* GetResourceDescriptor(u64* lpDescriptorOut, int a2);
 
         // 0x82B63060 -- parse the RenderWare vertex-format parameters at a2 into the element table,

@@ -112,6 +112,28 @@ namespace CgsDev
         mpRenderBuffer = lpRenderBuffer;
     }
 
+    // X360 0x82818838 -- screen-bounds test for a virtual-screen point. The asm runs four
+    // sequential single-lane vcmpgefp. compares, each short-circuiting to a 0 return on
+    // failure, and returns 1 only if all four pass:
+    //   1) point.x >= 0            (vcmpgefp v12[=splat point.x], 0)
+    //   2) point.y >= 0            (vcmpgefp splat point.y, 0)
+    //   3) mfVirtualScreenWidth  >= point.x   (member @0x34 vs point.x)
+    //   4) mfVirtualScreenHeight >= point.y   (member @0x38 vs point.y)
+    // The two compared members are the virtual-screen extents, reached here by name
+    // (mfVirtualScreenWidth / mfVirtualScreenHeight) rather than by the X360 0x34/0x38 offsets.
+    bool Debug2DImmediateRender::Is2DPointOnScreen(Vector2 lv2Point) const
+    {
+        if (!(lv2Point.x >= 0.0f))
+            return false;
+        if (!(lv2Point.y >= 0.0f))
+            return false;
+        if (!(mfVirtualScreenWidth >= lv2Point.x))
+            return false;
+        if (!(mfVirtualScreenHeight >= lv2Point.y))
+            return false;
+        return true;
+    }
+
     // Faithful port of X360 0x823B13A8 -- the debug-font handoff. The game's GamePrepare loads the
     // "Language\Fonts\Default.font" bundle, calls Font::CreateTextureState on the resolved font, then
     // DebugManager::SetDebugFont -> here. Storing a non-null handle flips DrawText off the vector-font

@@ -26,9 +26,39 @@
 #include "GameShared/GameClasses/Containers/CgsDictionaryResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h" // E_RESOURCETYPE_ICE_TAKE_DICTIONARY
 #include "SDKs/Packages/ICE/ICEData.hpp"  // ICE::ICETakeData (FixUp/FixDown declarations for the instantiation)
+#include "rw/rwcore_structs.h"            // rw::BaseResourceDescriptors<5> (CgsResource::ResourceDescriptor)
 
 namespace CgsContainers
 {
+
+// DictionaryResourceTypeBase::GetSerialisedResourceDescriptor @0x828158E0 -- the
+// type-independent descriptor builder shared by every DictionaryResourceType<T>. The
+// serialised dictionary is one main-memory block sized by its stored DictionaryBase
+// miDictionarySize (`*(resource+4)`); FixUp relocates the entry index inside that block.
+//
+// Faithful to the asm (a single 5-entry rw::BaseResourceDescriptors<5> built in the
+// return buffer): entry 0 = { m_size = miDictionarySize, m_alignment = 8 } and the
+// remaining four entries = { m_size = 0, m_alignment = 1 }. (The asm forms entry 0's
+// 8-byte {size,align} pair via the std of a 64-bit value whose high word is the dict
+// size and low word is 8 -> big-endian +0 = size, +4 = 8.) Build-time sizing only --
+// the load path uses each bundle entry's stored descriptor, not this.
+CgsResource::ResourceDescriptor
+DictionaryResourceTypeBase::GetSerialisedResourceDescriptor(const void* lpResource) const
+{
+    const DictionaryBase* lpDictionary = static_cast<const DictionaryBase*>(lpResource);
+
+    CgsResource::ResourceDescriptor lDescriptor;
+    rw::BaseResourceDescriptor* lpEntries = lDescriptor.m_baseResourceDescriptors;
+
+    lpEntries[0].m_size      = static_cast<u32>(lpDictionary->GetDictionarySize());
+    lpEntries[0].m_alignment = 8u;
+    for (u32 luEntry = 1u; luEntry < 5u; ++luEntry)
+    {
+        lpEntries[luEntry].m_size      = 0u;
+        lpEntries[luEntry].m_alignment = 1u;
+    }
+    return lDescriptor;
+}
 
 // GetTypeID @0x826659E0 -- `li r3, 0x41; blr`. The ICE Take Dictionary registry id.
 template <>

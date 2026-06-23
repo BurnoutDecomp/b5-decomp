@@ -84,8 +84,9 @@ namespace Detail
 {
     // EA::Jobs::Detail::BucketListNode<T,N> -- a fixed-capacity append-only bucket
     // that chains to an overflow node once full. Used by Job to hold its events,
-    // dependencies and dependents. Only the Event instantiations (N=10, N=16) are
-    // reconstructed here (the ones referenced by the X360 .XEX TUs in this group).
+    // dependencies and dependents. The Event (N=10/16), Job::Dependency (N=10)
+    // and Job* dependents (N=6) instantiations are emitted in bucket_list_node.cpp
+    // (the X360 .XEX TUs in this group).
     //
     // X360 layout (bucket_list_node.h DWARF + Add @ 0x82BCADD0 asm):
     //   +0              mBucket[N]              (N * sizeof(T) bytes)

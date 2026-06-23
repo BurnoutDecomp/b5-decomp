@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"     // base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"   // mReceiverQueue
 #include "GameShared/GameClasses/Containers/CgsPriorityQueue.h"        // load/unload priority queues
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // LoadBundleRequest (RunningLoad element)
 
 // CgsResource::BundleLoaderModule - the asynchronous bundle streamer (X360 CgsBundleLoaderModule.cpp).
 // It owns a set of in-flight "stream slots", a load and an unload priority queue, and an EA job/
@@ -31,6 +32,15 @@
 // the bundle parse path are DEFERRED (rw allocator / FileSystem / job system) as inert marked stubs.
 namespace CgsResource
 {
+    // CgsBundleLoaderModule.h:43 -- one in-flight bundle load record. The DWARF shows it
+    // wraps a single LoadBundleRequest; the loader keeps a FifoQueue<RunningLoad,4> of
+    // these (BundleLoaderModule::RunningLoadQueue mQueuedLoads). sizeof == 148 (the
+    // LoadBundleRequest element stride the X360 RunningLoad,4>::Pop memcpys).
+    struct RunningLoad
+    {
+        Events::LoadBundleRequest mLoadRequest;   // CgsBundleLoaderModule.h:45
+    };
+
     class BundleLoaderModule : public CgsModule::ModuleSingleBuffered
     {
     public:

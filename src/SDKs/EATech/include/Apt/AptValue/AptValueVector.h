@@ -62,6 +62,24 @@ class AptValueVector
 {
 public:
 
+    // ADDITIVE GROW (FLAGGED, non-breaking): an explicit construct-with-capacity
+    // factory mirroring the X360 ctor @ 0x82AE1548 (IDA `AptValue>`):
+    //   mnTop=0; mnCapacity=nCap; mppItems=0; mppItems=Allocate(pool, 4*nCap).
+    // Provided as a static initialiser (NOT a real constructor) so AptValueVector
+    // stays an aggregate -- existing default-constructed uses keep working. Inline
+    // (header-only) so embedding owners (AptIntervalTimer::mParams, capacity 6)
+    // need no extra link symbol. No layout change.
+    static AptValueVector ConstructWithCapacity(int32_t nCapacity)
+    {
+        AptValueVector lvVec;
+        lvVec.mnTop      = 0;
+        lvVec.mnCapacity = nCapacity;
+        lvVec.mppItems   = nullptr;
+        lvVec.mppItems   = static_cast<AptValue**>(
+            gpAptOperandStackPool->Allocate(4 * nCapacity));
+        return lvVec;
+    }
+
     // PopAndPush @ 0x82ADBAB8 -- if at least nCount values are live, produce a
     // new value, Release the top nCount values, and replace them with the new
     // one (net stack delta = 1 - nCount).

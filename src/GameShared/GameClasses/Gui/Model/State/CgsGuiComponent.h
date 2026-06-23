@@ -28,7 +28,9 @@ namespace CgsGui
 
     protected:
         void SetName(const char* lpacName, const char* lpacParentName);
-        void SetStateInterface(StateInterface* lpStateInterface) { mpStateInterface = lpStateInterface; }
+        // @ 0x82847030 - out-of-line: asserts the interface is non-null before
+        // storing it at mpStateInterface (+0x88). Defined in CgsGuiComponent.cpp.
+        void SetStateInterface(StateInterface* lpStateInterface);
 
         char            macName[KU_MAX_COMPONENT_NAME_LEN];
         u32             muHashedName;

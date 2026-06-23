@@ -34,6 +34,8 @@ namespace PoolIO
     // Inbound pool-request buffer: carries the create/destroy/acquire/etc. requests the ResourceModule
     // shuttle (ProcessResourceRequests) routes from the resource input to the pool module. PoolModule::
     // Update read-locks it and ProcessInputBuffer drains it. Single embedded request queue (VEQ<8192,16>).
+    // [merge: kept the pool-streaming branch's form -- Construct + const getter are used by the shuttle;
+    // the wave-side write-only/_AssertLayoutInput variant is unreferenced.]
     struct InputBuffer : public CgsModule::IOBuffer
     {
         typedef CgsModule::VariableEventQueue<8192, 16> PoolInputQueue;

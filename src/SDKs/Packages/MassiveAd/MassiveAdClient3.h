@@ -324,6 +324,13 @@ public:
     // or 0 when the cursor is null.
     void* GetCurrData();
 
+    // Additive accessor (FLAG: not its own X360 function). The MassiveAd record-
+    // teardown loop (CMassiveRecord::RemoveInteractionRecords @ 0x82BDD568) reads
+    // the cursor node directly (`while ( *(list + 8) )`, i.e. mpCurrent != 0) to
+    // decide whether to keep walking. This exposes that cursor BY NAME so the
+    // owning record does not reach into the private link member.
+    CMassiveListNode* GetCurrent() const { return mpCurrent; }
+
 private:
     CMassiveListNode* mpHead;    // +0x00
     CMassiveListNode* mpTail;    // +0x04

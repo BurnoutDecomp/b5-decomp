@@ -60,5 +60,34 @@ namespace CgsContainers
             }
             return result;
         }
+
+        // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x828154F0
+        //   (CgsContainers::CgsHash::CalculatePathHash)
+        //
+        // Case- and separator-normalising path hash. NUL-terminated input (no
+        // length arg); the same reflected CRC-32 inner loop as CalculateHash over
+        // the SAME .rdata table (dword_82F310C0), but each character is normalised
+        // first so file paths hash identically regardless of case or slash style:
+        //   * lowercase a-z (0x61..0x7A) are upper-cased  (byte -= 0x20)   -- the
+        //     asm compares the SIGN-EXTENDED byte, so bytes >= 0x80 skip this.
+        //   * backslash '\\' (0x5C) is folded to forward slash '/' (0x2F).
+        // Then result = T[(result & 0xFF) ^ ch] ^ (result >> 8), init 0xFFFFFFFF,
+        // NO final inversion. An empty string returns 0xFFFFFFFF (the `beqlr`
+        // early-out on the first byte being NUL).
+        unsigned int CalculatePathHash(unsigned char* a1)
+        {
+            u32 result = 0xFFFFFFFFu;
+            for (const unsigned char* p = a1; *p != 0; ++p)
+            {
+                s32 ch = static_cast<s8>(*p);                    // extsb: signed byte
+                if (ch >= 0x61 && ch <= 0x7A)                    // 'a'..'z' -> upper
+                    ch -= 0x20;
+                if (ch == 0x5C)                                  // '\\' -> '/'
+                    ch = 0x2F;
+                const u32 idx = (result & 0xFFu) ^ static_cast<u32>(ch);
+                result = kCrc32.entry[idx & 0xFFu] ^ (result >> 8);
+            }
+            return result;
+        }
     }
 }

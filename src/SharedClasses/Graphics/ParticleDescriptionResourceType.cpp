@@ -39,6 +39,31 @@ namespace BrnParticle
         return KU_PARTICLE_DESCRIPTION_COLLECTION_RESOURCE_TYPE_ID;
     }
 
+    // GetSerialisedResourceDescriptor @ 0x8267C1C8. The collection serialises to one
+    // main block: a 16-byte header followed by a count-pointer table of `count`
+    // dwords (count == lpSrc[1]), padded up to a 16-byte boundary. So slot0 =
+    // { 16 + ((4*count + 15) & ~15), align 16 }; the remaining four slots carry no
+    // sub-allocation ({size 0, align 1}). The X360 packs slot0 as a single qword
+    // store (LODWORD=16 align, HIDWORD=size) after the size arithmetic; reproduced
+    // field-for-field here.
+    CgsResource::ResourceDescriptor
+    ParticleDescriptionCollectionResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        const u32* lpSrc  = reinterpret_cast<const u32*>(lpResource);
+        u32        luCount = lpSrc[1];
+        u32        luTableBytes = ((4u * luCount + 15u) & 0xFFFFFFF0u) + 16u;
+
+        CgsResource::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = luTableBytes;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16u;
+        for (uint32_t luIndex = 1; luIndex < 5; ++luIndex)
+        {
+            lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0u;
+            lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1u;
+        }
+        return lDescriptor;
+    }
+
     // The table pointer is stored file-relative; FixUp rebases it to the loaded
     // address (the resource's own base); the rw::Resource argument is unused.
     void ParticleDescriptionCollectionResourceType::FixUp(void* lpResource, const rw::Resource&) const

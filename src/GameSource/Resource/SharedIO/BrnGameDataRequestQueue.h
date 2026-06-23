@@ -92,6 +92,48 @@ namespace GameDataIO
         // X360 0x822F1E88. meType == E_ASSETSET_PHYSICS, mId == baked world-collision id.
         bool LoadWorldCollision(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
                                 s32 liEventId, s32 liPoolId);
+
+        // ---- additive sibling request-builders (bodied by the per-N instance TUs) ----
+        // All share the generic event-builder shape: stack-build a typed GameData event
+        // (members set BY NAME in the X360 store order), then queue.AddEvent<EventT>(...).
+        // The generic body lives once in BrnGameDataRequestQueueImpl.h; each N's .cpp
+        // explicitly instantiates RequestInterface<N>.
+
+        // Push a GetGameDataEvent (type 49) requesting the AI lane data.
+        // X360 0x822563C0 (<512>). meType == E_ASSETSET_DATA, mId == baked ai-lane id.
+        bool GetAILanes(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                        s32 liEventId, s32 liPoolId);
+
+        // Push a GetICEListRequest (type 49) requesting the in-game-camera-editor list.
+        // X360 0x82256358 (<512>). miPoolId == 5, meType == E_ASSETSET_DATA, mId baked.
+        bool GetICEList(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                        s32 liEventId);
+
+        // Push a LoadGameDataEvent (type 26) requesting the PVS (potentially-visible-set)
+        // data. X360 0x822FD250 (<512>). meType == E_ASSETSET_DATA, mId == baked pvs id.
+        bool LoadPVS(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                     s32 liEventId, s32 liPoolId);
+
+        // Push a GetGameDataEvent (type 49) requesting the prop instances for a numbered
+        // prop-instance group. X360 0x82303E08 (<1024>). The id is built at runtime by
+        // SPrintf("PRP_INST_%d", liInstanceIndex) + CgsIDCompress; meType == PHYSICS.
+        bool GetPropInstances(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                              s32 liEventId, s32 liInstanceIndex, s32 liPoolId);
+
+        // Push a LoadGameDataEvent (type 26) requesting the prop physics data.
+        // X360 0x82303DA0 (<1024>). meType == E_ASSETSET_PHYSICS, mId == baked id.
+        bool LoadPropPhysics(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                             s32 liEventId, s32 liPoolId);
+
+        // Push a GetWheelListRequest (type 49) requesting the wheel list.
+        // X360 0x822FD380 (<8192>). miPoolId == 5, meType == E_ASSETSET_DATA, mId baked.
+        bool GetWheelList(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                          s32 liEventId);
+
+        // Push a GetFreeburnChallengeListRequest (type 49) requesting the freeburn
+        // challenge list. X360 0x8250BBE0 (<32768>). miPoolId == 5, meType == DATA, mId baked.
+        bool GetFreeburnChallengeList(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                                      s32 liEventId);
     };
 }
 }

@@ -45,6 +45,14 @@ namespace Jobs
         spAllocator = pAllocator;
     }
 
+    // Typed view of the installed allocator (off_8327F280) for the SDK's
+    // scalar-deleting destructors. The stored object is the polymorphic Jobs
+    // allocator; the host installs it via SetAllocator.
+    Allocator* GetAllocator()
+    {
+        return static_cast<Allocator*>(spAllocator);
+    }
+
     // @ 0x82BC9988 -- ticks -> seconds, caching 1.0/freq on first use.
     f32 TicksToSeconds(u64 uTicks)
     {

@@ -19,7 +19,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // full InGamePlayerStatusData/Interface
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"   // CgsModule::BaseEventQueue<T>::Append (operator= bodies)
-#include <cstring>                                             // std::memcpy (OutputBuffer::operator= + the CompletedFburnChallengesData queue append)
+#include <cstring>                                             // std::memcpy (OutputBuffer::operator= + the CompletedFburnChallengesData queue append) / std::strncpy (SetGameName)
 //
 // NOTE: the CompletedFburnChallengesData queue inside PostSimulationInputBuffer::operator= is
 // appended with a hand-inlined memcpy (the exact lowering of CgsModule::BaseEventQueue<T>::Append)
@@ -205,6 +205,20 @@ namespace BrnNetworkModuleIO
         miNumPlayers        = lOther.miNumPlayers;          // +2532
         mbLocalPlayerIsHost = lOther.mbLocalPlayerIsHost;   // +2536
         return *this;
+    }
+
+    // X360 0x82580F10 (ledger TU class:...::InGamePlayerStatusInterface, SetGameName).
+    // Copies the game-name string into the interface's fixed 36-char buffer macGameName (+0x9C0
+    // == +2496). The X360 first computes strlen(lpcName) inline and asserts it is < 36 (the
+    // "String too long: <name>" assert at the shared CgsStringUtils.h site), then issues
+    // strncpy(macGameName, lpcName, 36) -- the Count, Source and Dest are the asm-confirmed
+    // r5=0x24(36) / r4=source / r3=this+0x9C0 register setup at 0x82580FF4. The streamed
+    // assert message is reduced to CGS_ASSERT per project convention; behaviour (length guard
+    // + bounded copy) is identical.
+    void InGamePlayerStatusInterface::SetGameName(const char* lpcName)
+    {
+        CGS_ASSERT(std::strlen(lpcName) < 36, "String too long");
+        std::strncpy(macGameName, lpcName, 36);
     }
 
     // ========================================================================

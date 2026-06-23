@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
+//   BrnParticle::VFXPropCollectionResourceType::GetSerialisedResourceDescriptor @ 0x8267C488
 //   BrnParticle::VFXPropCollectionResourceType::DeSerialise      @ 0x826757D8
 //   BrnParticle::VFXPropCollectionResourceType::FixUp            @ 0x82678588
 //   BrnParticle::VFXPropCollectionResourceType::GetImportPointer @ 0x826759A8
@@ -58,9 +59,49 @@ namespace BrnParticle
         E_VERSION                   = 12
     };
 
+    static u32 Align16(u32 luValue) { return (luValue + 15u) & ~static_cast<u32>(15); }
+
     uint32_t VFXPropCollectionResourceType::GetTypeID() const
     {
         return KU_VFX_PROP_COLLECTION_RESOURCE_TYPE_ID;
+    }
+
+    // GetSerialisedResourceDescriptor @ 0x8267C488 (store-for-store). The serialised payload is a
+    // VFXPropCollection; entry0's size accumulates one 16-byte-aligned sub-array per table, plus a
+    // 64-byte 16-aligned header, then re-aligns the total to 16. The X360 reads the per-table COUNT
+    // words from the serialised header and multiplies by each table's record stride:
+    //   align16(16 * VFXProp count)             [a3[1],  stride 16]
+    // + align16(16 * VFXPropState count)        [a3[3],  stride 16]
+    // + align16(12 * VFXMaterial count)         [a3[5],  stride 12]
+    // + align16(80 * VFXLocator table size)     [a3[7],  stride 80]
+    // + align16(80 * VFXCoronaType count)       [a3[9],  stride 80]
+    // + align16(32 * VFXCoronaTypeData count)   [a3[11], stride 32]
+    // + 64 (the 16-aligned collection header)
+    // then align16 of the running total. entry0 align = 16; entry1..4 = {0,1}. Counts are read by
+    // their serialised dword index (the EVFXPropCollectionDword header layout shared with FixUp).
+    CgsResource::ResourceDescriptor
+    VFXPropCollectionResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        const u32* lpHeader = static_cast<const u32*>(lpResource);
+
+        u32 luSize = Align16(16u * lpHeader[E_VFXPROP_COUNT]);
+        luSize    += Align16(16u * lpHeader[E_VFXPROPSTATE_COUNT]);
+        luSize    += Align16(12u * lpHeader[E_VFXMATERIAL_COUNT]);
+        luSize    += Align16(80u * lpHeader[E_VFXLOCATOR_TABLE_SIZE]);
+        luSize    += Align16(80u * lpHeader[E_VFXCORONATYPE_COUNT]);
+        luSize    += Align16(32u * lpHeader[E_VFXCORONATYPEDATA_COUNT]);
+        luSize    += 64u;                 // the 16-byte-aligned VFXPropCollection header
+        luSize     = Align16(luSize);
+
+        CgsResource::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;   // entry0 size
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16u;      // entry0 align
+        for (u32 luBlock = 1; luBlock < 5u; ++luBlock)
+        {
+            lDescriptor.m_baseResourceDescriptors[luBlock].m_size      = 0u;   // entry1..4 {0,1}
+            lDescriptor.m_baseResourceDescriptors[luBlock].m_alignment = 1u;
+        }
+        return lDescriptor;
     }
 
     // X360 passes `this` (the resource type) to Content::DoOnPostLoad in the folded

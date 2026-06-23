@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer
+#include "eathread/eathread_futex.h"                                          // EA::Thread::Futex (CRITICAL_SECTION-backed lock)
 
 // FFmpeg backend (PC decode substitution) -- forward-declared so this header stays light.
 struct AVFormatContext;
@@ -17,8 +18,8 @@ namespace CgsGraphics
 {
     // CgsGraphics::MoviePlayer -- the full-screen boot/front-end movie player. Interface + state machine
     // reconstructed from the X360 ARTIST build (the EA-chunk + On2 VP6 architecture; DecFIGS
-    // GameShared/.../Graphics/MoviePlayer/CgsMoviePlayer.{h,cpp} for the method shape, and the Feb-2007
-    // source header for the public surface). Driven SetMovieFile -> Prepare -> Play -> (Update per game
+    // GameShared/.../Graphics/MoviePlayer/CgsMoviePlayer.{h,cpp} for the method shape, and the DWARF
+    // dossier for the public surface). Driven SetMovieFile -> Prepare -> Play -> (Update per game
     // tick / Render per frame) -> Release.
     //
     // [PC DECODE SUBSTITUTION] The X360 player streams an EA-chunk container through StreamDeviceDiskRead
@@ -30,9 +31,15 @@ namespace CgsGraphics
     class MoviePlayer
     {
     public:
+        // X360 @0x827DD390: initializes the per-player lock (RtlInitializeCriticalSection on
+        // console; mLock's Futex ctor on PC), installs the vtable, and zeroes the playback +
+        // decode-stream state. The state-zeroing is shared with Construct(), which the
+        // constructor delegates to.
+        MoviePlayer();
+
         void Construct();
 
-        // SetMovieFile records the file name (Feb-2007 signature); Prepare opens + readies the stream for
+        // SetMovieFile records the file name (DWARF-attested signature); Prepare opens + readies the stream for
         // it (the X360 PrepareResources, which on console allocated chunk buffers + spun the decode job).
         // Release/Destruct tear the stream down. lbPreload prepares immediately instead of lazily at Play.
         bool SetMovieFile(const char* lpMovieFileName, bool lbPreload = false);
@@ -74,6 +81,11 @@ namespace CgsGraphics
         f32  ComputeCrossfadeAlpha(f64 lfElapsedSec) const;
 
         // ---- faithful player state ------------------------------------------------------
+        // Per-player lock. The X360 ctor initializes a Win32 CRITICAL_SECTION at this slot
+        // (RtlInitializeCriticalSection); the committed EA::Thread::Futex is that exact
+        // CRITICAL_SECTION-backed mutex, reused BY NAME, so its ctor performs the init.
+        EA::Thread::Futex mLock;
+
         PlayerStateType mePlayerState;
         char            mcMovieFileName[256];
         bool            mbIsOkToPlay;             // stream prepared, ready to Play

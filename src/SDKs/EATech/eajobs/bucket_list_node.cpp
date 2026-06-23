@@ -1,15 +1,19 @@
 #include "SDKs/EATech/eajobs/event.h"
+#include "SDKs/EATech/eajobs/job.h" // EA::Jobs::Job::Dependency (BucketListNode payload)
 
 #include <cstring> // std::memset (raw zero-init mirrors the asm dword stores)
 
-// EA::Jobs::Detail::BucketListNode<Event,N> generic, reconstructed once and
-// explicitly instantiated for the N the X360 .XEX actually emits in this group:
+// EA::Jobs::Detail::BucketListNode<T,N> generic, reconstructed once and explicitly
+// instantiated for the (T,N) the X360 .XEX actually emits in this group:
 //   BucketListNode<Event,10> -- Job::mEvents element (mNext@0xA0, mSize@0xA4)
 //        scalar deleting destructor @ 0x82BCAFC0
 //   BucketListNode<Event,16> -- LocalBackend::JobInstance event list (mNext@0x100,
 //        mSize@0x104, sizeof 0x110). Add @ 0x82BCADD0, scalar deleting dtor @ 0x82BCB040
+//   BucketListNode<Job::Dependency,10> -- Job::mDependencies. Element stride 0x20
+//        (slwi r11,r11,5), mNext@0x140, mSize@0x144, sizeof 0x150 (the li r4,0x150
+//        allocation request). Add @ 0x82BCAC20, ListSize @ 0x82BCA030.
 //
-// The X360 emits a fresh template instance per using-TU; this one .cpp covers both.
+// The X360 emits a fresh template instance per using-TU; this one .cpp covers all.
 // All member bodies are reconstructed store-for-store from the matching X360 asm.
 
 namespace EA
@@ -129,9 +133,19 @@ namespace Detail
         return lpNode->mBucket[liIndex];
     }
 
-    // Explicit instantiations -- the two the X360 .XEX emits for this group.
+    // Explicit instantiations -- the (T,N) the X360 .XEX emits for this group.
     template struct BucketListNode<EA::Jobs::Event, 10>;
     template struct BucketListNode<EA::Jobs::Event, 16>;
+    // Job::mDependencies: Add @ 0x82BCAC20 (sizeof 0x150 == 10*0x20 + 0x10),
+    // ListSize @ 0x82BCA030.
+    template struct BucketListNode<EA::Jobs::Job::Dependency, 10>;
+    // Job::mDependents (the IDA `*,6>` TU): a bucket list of Job* back-pointers,
+    // 6 per node. Add @ 0x82BCAD18 (EA::Jobs::Job::DependsOn; X360 alloc size 0x30
+    // == 6*4 + 8-byte trailer, 4-byte Job* stride slwi r11,r11,2), ListSize @
+    // 0x82BCA0A0 (GetNumDependents), operator[] @ 0x82BCA0E8 (GetDependent). On the
+    // 64-bit host the Job* element is 8 bytes wide; the request size is
+    // sizeof(BucketListNode) for whichever pointer width is in effect.
+    template struct BucketListNode<EA::Jobs::Job*, 6>;
 }
 }
 }

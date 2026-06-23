@@ -60,6 +60,20 @@ void Iir2::Filter(Iir2State *state, f32 *dst, const f32 *src, const Iir2Coeffs *
     state->mfY2 = y2;
 }
 
+// -------------------------------------------------------------------------------------
+// rw::audio::core::Iir2::ClearBuffer
+// Zero one channel's biquad history. No standalone X360 export exists (the call name
+// rw::audio::core::Iir2::ClearBuffer is folded into its call sites); it clears the
+// 4-float Iir2State the Filter() difference equation threads.
+// -------------------------------------------------------------------------------------
+void Iir2::ClearBuffer(Iir2State *state)
+{
+    state->mfX1 = 0.0f;
+    state->mfX2 = 0.0f;
+    state->mfY1 = 0.0f;
+    state->mfY2 = 0.0f;
+}
+
 } // namespace core
 } // namespace audio
 } // namespace rw

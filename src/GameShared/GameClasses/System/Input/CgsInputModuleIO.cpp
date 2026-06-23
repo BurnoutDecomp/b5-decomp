@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h" // CgsModule::EventQueue<T,N>
 
 #include <cstddef>   // offsetof
+#include <cstring>   // std::memcpy (models the X360 inlined field-by-field block copy)
 
 // Pin the X360-proven PadOutputInformation field offsets (the controller bridges read these by
 // name; the record must stay 932 bytes so OutputBuffer::maPadOutputInformation[7] does not move).
@@ -15,6 +16,10 @@ static_assert(offsetof(PadOutputInformation, muConnectionWord)== 0x398, "connect
 static_assert(offsetof(PadOutputInformation, meControllerState)==0x39C, "controller state @ +0x39C");
 static_assert(offsetof(PadOutputInformation, mbDisconnected)  == 0x3A0, "disconnected flag @ +0x3A0");
 static_assert(sizeof(ActionInfo) == 8, "ActionInfo must be 8 bytes");
+
+// Pin the sizes of the two record types the Set/Get accessors below copy.
+static_assert(sizeof(CgsInput::Device::WheelFFSpring) == 8, "WheelFFSpring must be 8 bytes");
+static_assert(sizeof(CgsSystem::TimerStatusInterface) == 48, "TimerStatusInterface must be 48 bytes");
 } }
 
 // =============================================================================
@@ -47,6 +52,26 @@ const PostWorldInputBuffer::PadMappingQueue* PostWorldInputBuffer::GetPadMapping
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
     return reinterpret_cast<const PadMappingQueue*>(&mPadMappingQueueStorage);
+}
+
+// X360 0x828E6C80 - read-lock accessor returning the published wheel FFB spring (this+632).
+// Caller: CgsInput::InputModule::PostWorldUpdate (copies the two spring words into its module state).
+const CgsInput::Device::WheelFFSpring* PostWorldInputBuffer::GetWheelFFSpring() const
+{
+    // Member scope grants access to pin the modelled PC offset (matches the X360 this+632 stride;
+    // the gap in the header is sized off the PC member sizes -- see the header note on pointer width).
+    static_assert(offsetof(PostWorldInputBuffer, mWheelFFSpring) == 632, "mWheelFFSpring kept at the X360 +632 stride");
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mWheelFFSpring;
+}
+
+// X360 0x823B0F80 - write-lock accessor that copies a WheelFFSpring into the buffer (this+632).
+// Caller: BrnGame::BrnGameModule::DoUpdate_InputPostWorld (passes the vehicle output interface's
+// WheelFFSpring sub-record). The X360 body copies the two source words verbatim into this+632/+636.
+void PostWorldInputBuffer::SetWheelFFSpring(const CgsInput::Device::WheelFFSpring& lSpring)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    mWheelFFSpring = lSpring;
 }
 
 // =====================  OutputBuffer  =====================
@@ -109,6 +134,29 @@ const PreWorldInputBuffer::PlayJoltEffectEventQueue* PreWorldInputBuffer::GetPla
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
     return &mPlayJoltEffectEventQueue;
+}
+
+// X360 0x828E69E0 - read-lock accessor returning the published timer snapshot (this+868).
+// Caller: CgsInput::InputModule::ProcessRumbleRequests. (DWARF abbreviates the name to
+// "GetTimerStatusInt"; it returns the TimerStatusInterface pointer at this+868.)
+const CgsSystem::TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInt() const
+{
+    // Member scope grants access to pin the modelled PC offset (matches the X360 this+868 stride).
+    static_assert(offsetof(PreWorldInputBuffer, mTimerStatusInterface) == 868, "mTimerStatusInterface kept at the X360 +868 stride");
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mTimerStatusInterface;
+}
+
+// X360 0x82362418 - write-lock accessor copying a TimerStatusInterface into the buffer (this+868).
+// Caller: BrnGameState::RumbleManager::BridgeRumbleToInput. The X360 body copies the source
+// interface's two 24-byte TimerStatus blocks (game then sim) field-by-field into this+868; a
+// block copy reproduces that store-for-store. (TimerStatusInterface user-declares its operator=
+// as a separate, not-yet-recovered TU, so this copies the 48 trivially-copyable bytes directly --
+// the same effect as the X360 inlined field stores, without depending on that other TU's body.)
+void PreWorldInputBuffer::SetTimerStatusInterface(const CgsSystem::TimerStatusInterface& lTimerStatus)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    std::memcpy(&mTimerStatusInterface, &lTimerStatus, sizeof(CgsSystem::TimerStatusInterface));
 }
 
 }
