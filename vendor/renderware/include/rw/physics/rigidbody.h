@@ -36,6 +36,22 @@ namespace physics
         rw::math::vpu::Vector3        GetLinearVelocity() const;   // mVel
         rw::math::vpu::Vector3        GetAngularVelocity() const;  // mOmega
 
+        // ADDITIVE GROW (rw-collision-physics group): the two RigidBody methods
+        // the X360 binary defines as their own TU. Declared here so the canonical
+        // home owns them; defined in the SDK reconstruction
+        // (src/vendor/renderware/physics/RigidBody.cpp).
+        //
+        //   operator=      @ 0x825E3410 -- full 176-byte field copy. BODIED.
+        //   DynamicUpdate  @ 0x82BC2B78 -- the per-body integrator. NOT BODIED:
+        //     it is a keystone (see RigidBody.cpp / the group's still_unbodied
+        //     note) -- it reaches unrecovered .rdata permutation masks
+        //     (unk_82CDA3D0/410/450, rw::math::vpu::detail::gSqrt2s) and reads
+        //     this+0x1C / this+0x4C as POINTERS, which conflicts with the
+        //     committed float-lane members mVel.w / mUp.w. Declared-only so
+        //     callers (Simulation::BatchIntegrator) can resolve the name.
+        RigidBody& operator=(const RigidBody& rOther);   // @ 0x825E3410
+        RigidBody* DynamicUpdate();                      // @ 0x82BC2B78 (declared-only)
+
     private:
         // Member SEQUENCE per the DWARF (rigidbody.h:419..459). Each Vector field is a 16-byte
         // SIMD register whose w-lane carries the adjacent scalar in the console packing; here
