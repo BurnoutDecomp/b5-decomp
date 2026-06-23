@@ -62,6 +62,13 @@ public:
     // max(|start|,|end|) * KF_ABS_EPSILON (flt_820AD47C). See the .cpp.
     AALineClipper(const Vec4& rStart, const Vec4& rEnd, const Aabb* lpBox);
 
+    // ADDITIVE GROW (rw-physics-collision group): a trivial default ctor so the
+    // clipper can be embedded by value in query objects (KdTreeLineQuery) that seed
+    // it post-construction via Init. The X360 leaves the rows uninitialised before
+    // Init runs; this matches that (no zeroing). Purely additive -- no member or
+    // existing ctor changes.
+    AALineClipper() = default;
+
     // @ 0x828AED60 -- fill the per-axis clip parameters. Returns this. The asm
     // takes r3=this, r4=lpBox and the segment in the VMX argument registers
     // (rStart=v1, rEnd=v2, rDir=v3).

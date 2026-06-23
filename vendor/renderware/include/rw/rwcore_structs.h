@@ -73,6 +73,11 @@ RW_SIZE_ASSERT(rw::ResourceDescriptor, 32);
 
 struct DefaultSystemAllocatorInitializer {  // sizeof = 1 (rwcore.pdb, x64)
     uint8_t _pad0[1];  // +0
+
+    // ADDITIVE (member fn, no storage): the X360 lazy installer @0x82BBD160 that points
+    // ResourceAllocatorRegistry::s_defaultAllocator at the static SystemAllocatorGeneric
+    // the first time it runs. Declaring it does not change sizeof (no data members added).
+    DefaultSystemAllocatorInitializer();
 };
 RW_SIZE_ASSERT(rw::DefaultSystemAllocatorInitializer, 1);
 
@@ -225,8 +230,16 @@ struct RGBA {  // sizeof = 4 (rwcore.pdb, x64)
 };
 RW_SIZE_ASSERT(rw::RGBA, 4);
 
+struct IResourceAllocator;  // fwd (defined above)
+
 struct ResourceAllocatorRegistry {  // sizeof = 1 (rwcore.pdb, x64)
     uint8_t _pad0[1];  // +0
+
+    // ADDITIVE (static -> does not affect sizeof): the process-wide default resource
+    // allocator slot. rw::DefaultSystemAllocatorInitializer's ctor (X360 @0x82BBD160)
+    // points this at the static SystemAllocatorGeneric instance the first time
+    // rw::ResourceAllocatorRegistry::GetDefaultAllocator runs, if it is still null.
+    static ::rw::IResourceAllocator* s_defaultAllocator;
 };
 RW_SIZE_ASSERT(rw::ResourceAllocatorRegistry, 1);
 

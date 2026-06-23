@@ -63,7 +63,17 @@ public:
     u64  mu68;            // +0x68  8-byte field
     u32  mu70;            // +0x70  word
     u8   mu74;            // +0x74  byte
+
+    // ADDITIVE GROW (rw-physics-collision group): pad VolRef to its true 0x80
+    // stride. The X360 collision query objects (VolumeBBoxQuery / VolumeVolumeQuery)
+    // index their result pool and embed a "current" VolRef using `idx << 7` (0x80)
+    // -- so the on-object stride is 0x80, not the 0x78 the written fields imply.
+    // This trailing pad makes sizeof(VolRef)==0x80 so embedded/strided VolRefs land
+    // at the observed offsets. Purely additive: no existing member moves.
+    u8   mPad75[11];      // +0x75..+0x7F  (unwritten tail; stride padding)
 };
+
+static_assert(sizeof(VolRef) == 0x80, "VolRef on-object stride must be 0x80");
 
 } // namespace collision
 } // namespace rw
