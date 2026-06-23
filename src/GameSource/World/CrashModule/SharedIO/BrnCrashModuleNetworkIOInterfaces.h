@@ -54,5 +54,33 @@ namespace CrashIO
         ActiveRaceCarBitArray      mActiveRaceCars;
         CrashingTrafficUpdateQueue maCrashingTrafficUpdateQueues[KI_MAX_ACTIVE_RACE_CARS];
     };
+
+    // Network OUTPUT view of locally-owned crashing traffic. A single fixed-capacity (24)
+    // crashing-traffic update queue (the same EventQueue<CrashingTrafficUpdateEvent, 24>
+    // type the input interface uses per car). Layout and member names from the DecFIGS DWARF
+    // (BrnCrashModuleNetworkIOInterfaces.h:125-150): the lone queue lives at offset 0, so the
+    // X360 AddOwnedTrafficUpdate passes `this` straight to the queue's AddEvent.
+    struct NetworkOutputInterface
+    {
+        typedef CgsModule::EventQueue<CrashingTrafficUpdateEvent,
+                                      KI_MAX_NETWORK_TRAFFIC_UPDATES_PER_PLAYER> CrashingTrafficUpdateQueue;
+
+        // (Re)construct the queue against its inline storage.
+        void Construct();
+
+        // Drop all queued updates (queue length reset).
+        void Clear();
+
+        // Build a CrashingTrafficUpdateEvent{ (u16)luVehicleIndex, lTransform } and append it
+        // to the queue. The X360 body asserts the vehicle index is in range and that the
+        // transform is valid (both non-gating tripwires), then forwards to the queue's AddEvent.
+        void AddOwnedTrafficUpdate(u32 luVehicleIndex, Matrix44Affine lTransform);
+
+        // Read-only access to the queued updates.
+        const CrashingTrafficUpdateQueue* GetCrashingTrafficUpdateQueue() const;
+
+    private:
+        CrashingTrafficUpdateQueue mCrashingTrafficUpdateQueue;
+    };
 }
 }

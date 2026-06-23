@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Passby ctor range tripwire)
 
 // =============================================================================
 // BrnSound::Logic::Passby::PassbyStateManager::DynamicPropByCache -- out-of-line
@@ -60,6 +61,55 @@ void PassbyStateManager::DynamicPropByCache::Update( f32 lfCurrentTime )
             lrItem.mbActive = false;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Passby::Passby( const Cgs3dEffectControl*, f32, EePassbyTypes, bool, f32 )
+//   @ 0x826832F0
+//
+// Build a posted-passby record from a live 3D effect control. Recovered store-
+// for-store from the X360 asm (offsets are this struct's field offsets, all
+// reached BY NAME here):
+//   stw    a2,  0x10(this)   ; mp3dControl                  = lp3dControl
+//   stfs   f1,  0x14(this)   ; mfRelativeVelocityMagnitude  = lfRelativeVelocityMagnitude
+//   stw    a6,  0x18(this)   ; meType                       = leType
+//   stfs   f2,  0x1C(this)   ; mfVolumeModifier             = lfVolumeModifier
+//   stvx128 v0(=vspltisw 0), this  ; mStaticPos (16B Vector3) = {0,0,0,(pad)}
+//   stb    a7,  0x20(this)   ; mbSuppressBoostBys           = lbSuppressBoostBys
+//   if (leType >= MaxPassbyTypes)
+//       assert("leType < ...MaxPassbyTypes", BrnPassbyStateManager.h:94)
+//   return this
+//
+// mStaticPos is zeroed: the 3D-control form derives its position live from
+// mp3dControl, so the cached static position is unused. The X360 wrote it with a
+// single 16-byte stvx128 of a vspltisw-0 vector; reproduced here as value-init of
+// the whole Vector3 (same observable all-zero bytes), reached BY NAME rather than
+// via a raw 16-byte store. The trailing range check is the CGS_ASSERT-vacuous
+// tripwire (leType < MaxPassbyTypes); it is non-gating.
+//
+// ABI NOTE (Hex-Rays register order vs declared source order): the X360 layout
+// places leType in r6 and lbSuppressBoostBys in r7 (the two float args go to f1
+// /f2 independently). The committed header declares the scalar parameters in
+// source order (lp3dControl, lfRelativeVelocityMagnitude, leType,
+// lbSuppressBoostBys, lfVolumeModifier). This body assigns each NAMED parameter
+// to its named field, so the reconstruction is order-independent and faithful
+// regardless of the host compiler's own register assignment.
+// ---------------------------------------------------------------------------
+PassbyStateManager::Passby::Passby(
+        const CgsSound::Logic::Cgs3dEffectControl* lp3dControl,
+        f32 lfRelativeVelocityMagnitude,
+        EePassbyTypes leType,
+        bool lbSuppressBoostBys,
+        f32 lfVolumeModifier )
+    : mStaticPos()                                                // 16B zero (stvx128 v0)
+    , mp3dControl( lp3dControl )                                  // @0x10
+    , mfRelativeVelocityMagnitude( lfRelativeVelocityMagnitude )  // @0x14
+    , meType( leType )                                            // @0x18
+    , mfVolumeModifier( lfVolumeModifier )                        // @0x1C
+    , mbSuppressBoostBys( lbSuppressBoostBys )                    // @0x20
+{
+    CGS_ASSERT( leType < AttribSys::Enums::ePassbyTypes::MaxPassbyTypes,
+                "leType < AttribSys::Enums::ePassbyTypes::MaxPassbyTypes" );
 }
 
 } // namespace Passby

@@ -78,6 +78,41 @@ namespace Events
     {
     };
 
+    // CgsResourceIOEvents.h -- the request to unload a previously-loaded bundle. Structurally a
+    // BundleLoaderEvent (no extra payload fields): the X360 BaseEventQueue<UnloadBundleRequest>::
+    // AddEvent @ 0x828E9F50 memcpys whole elements at stride 0x90 == 144 bytes, exactly the
+    // BundleLoaderEvent base size (mpUser 4 + miEventId 4 + mbLiveUpdateReplace 1 [+3 pad] +
+    // macFileName[128] + miPoolId 4 == 144 on the 32-bit ARTIST target). It is the queued element
+    // of CgsModule::BaseEventQueue<UnloadBundleRequest> (drained by
+    // CgsResource::ResourceModule::ProcessResourceRequests).
+    struct UnloadBundleRequest : public BundleLoaderEvent
+    {
+    };
+
+    // CgsResourceIOEvents.h -- the request to open a streaming handle on a file. Recovered from
+    // CgsResource::Events::OpenStreamRequest::SetFileName @ 0x82680278 (called by
+    // CgsSound::Playback::Module::DoOpenStream and CgsResource::BundleLoaderModule::CheckForLoads).
+    // SetFileName copies a NUL-terminated path into the inline macFileName[128] buffer at +8 via
+    // the inlined CgsStringUtils.h:65 bounded-copy helper (asserting length < 128, the buffer size:
+    // "String <name> is too long. Buffer size = 128"); a null source clears macFileName[0] to '\0'.
+    // Field offsets are X360-store-confirmed against SetFileName / the DoOpenStream call site:
+    //   +0   miField0   (caller-written leading field)   stw into 0(request)
+    //   +4   miField4   (caller-written leading field)   stw into 4(request)
+    //   +8   macFileName[128] (NUL-terminated path)       SetFileName stbx loop into request+8
+    // The two leading fields are typed s32 (the only attestation is their 32-bit store width at the
+    // DoOpenStream call site); they are named by offset pending a richer DWARF/caller signature.
+    struct OpenStreamRequest : public Event
+    {
+        s32  miField0;            // +0    (caller-written)
+        s32  miField4;            // +4    (caller-written)
+        char macFileName[128];    // +8    NUL-terminated path to stream
+
+        // X360 0x82680278. Copy a NUL-terminated path into macFileName (bounded by the 128-byte
+        // buffer); a null source clears the buffer. Returns this (the X360 SetFileName returns its
+        // incoming `result`).
+        OpenStreamRequest* SetFileName(const char* lpcFileName);
+    };
+
     // Base of every pool-targeted event (CgsResourceIOEvents.h:221). Carries the user
     // queue to notify, the per-request event id, and the target pool id. On the X360 the
     // ID members of derived requests are 8-byte aligned, so this base occupies 12 bytes.
@@ -129,5 +164,7 @@ namespace Events
 // 32-bit ARTIST target; they are NOT asserted here because this gate compiles x64 -- 8-byte
 // pointers + u64 alignment widen each struct, and the generic FifoQueue<T,N> uses sizeof(T)):
 //   LoadBundleRequest           == 148  (RunningLoad,4>::Pop @ 0x828DF7C8, stride 148)
+//   LoadBundleResponse          == 148  (BaseEventQueue<LoadBundleResponse>::AddEvent @ 0x828EA098, stride 0x94)
+//   UnloadBundleRequest         == 144  (BaseEventQueue<UnloadBundleRequest>::AddEvent @ 0x828E9F50, stride 0x90)
 //   CreatePoolRequest           == 172  (CreatePoolRequest,128>::Push/Pop @ 0x828DFB28/0x828DFBB8)
 //   AllocateResourceListRequest ==  48  (AllocateResourceListRequest,4>::Push/Pop @ 0x828DFC48/0x828DFCC0)

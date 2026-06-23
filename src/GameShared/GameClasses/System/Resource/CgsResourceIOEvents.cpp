@@ -90,5 +90,45 @@ AddPatchRequest* AddPatchRequest::Construct(s32 liField0, s32 liField4, const ch
     return this;
 }
 
+// CgsResource::Events::OpenStreamRequest::SetFileName @ 0x82680278
+//
+// Stores a NUL-terminated file path into the request's inline macFileName[128] buffer (at +8). The
+// X360 build inlines the CgsStringUtils.h:65 bounded string-copy helper: when the source is non-
+// null it measures the source length, asserts it fits the destination buffer (length < 128), then
+// byte-copies the path (including the NUL terminator) into macFileName. A null source clears the
+// buffer's first byte to '\0' (X360 `stb 0, 8(request)`). Returns `this` (the X360 SetFileName
+// returns its incoming `result`).
+OpenStreamRequest* OpenStreamRequest::SetFileName(const char* lpcFileName)
+{
+    if (lpcFileName != nullptr)
+    {
+        // Inlined CgsStringUtils.h:65 bounded copy -- measure source length for the bounds assert.
+        const char* pcScan = lpcFileName;
+        while (*pcScan)
+            ++pcScan;
+        const s32 liLength = static_cast<s32>(pcScan - lpcFileName);
+
+        CGS_ASSERT(liLength < static_cast<s32>(sizeof(macFileName)),
+                   "String is too long. Buffer size = 128");
+
+        // Copy the path verbatim into macFileName, NUL terminator included.
+        char* pcDest = macFileName;
+        const char* pcSrc = lpcFileName;
+        char lcChar;
+        do
+        {
+            lcChar = *pcSrc++;
+            *pcDest++ = lcChar;
+        }
+        while (lcChar != '\0');
+    }
+    else
+    {
+        macFileName[0] = '\0';
+    }
+
+    return this;
+}
+
 }
 }

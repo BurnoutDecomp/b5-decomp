@@ -52,6 +52,73 @@ struct PatchMonitor
     s32         miPerfmon;    // CgsAemsFactory.h:73
 };
 
+// =============================================================================
+// CSIS command structures (CgsAemsFactory.h). These are the fixed-size command
+// records queued through the AEMS CsisCommandQueue (a CommandQueue<uintptr_t>). Each
+// record is a run of pointer-width words; the leading word holds the ECsisCommandType
+// tag (so GetCommandType() == the first word). The per-command constructors copy a
+// source record word-for-word, then assert (a) the source's command-count matches
+// this record's word count (sizeof(*this)/sizeof(uintptr_t) == luCommandCount) and
+// (b) the copied type tag matches the expected ECsisCommandType for the class.
+//
+// Reconstructed from BURNOUT_X360_ARTIST.XEX:
+//   CsisSetClassHandleCommand::ctor @ 0x826819E0  (5 words, type == 0)
+//   CsisCreateCommand::ctor         @ 0x82681A90  (4 words, type == 1)
+//   CsisReleaseCommand::ctor        @ 0x82681B38  (2 words, type == 2)
+//
+// X360 stores prove the word counts: the ctors copy lwz/stw at 0,4,8,0xC[,0x10]
+// (Create/SetClassHandle copy 4/5 words; Release copies 2). Word 0 is the type tag.
+// The payload words past the tag are command-specific operands; their per-field
+// meaning beyond "carried verbatim through the queue" is not recovered from the ctor
+// alone, so they are modelled as named pointer-width operand slots. Member access is
+// BY NAME; no raw-offset cast.
+//
+// luCommandCount is the source-supplied word count the ctor validates against the
+// record's own size. It is modelled as u32 (the X360 passes it in r4 and compares as
+// a 32-bit immediate). On the X360 a "word" is a 4-byte uintptr_t; the queue element
+// type is uintptr_t, so the operand slots are typed uintptr_t to track the queue's
+// element width by name (absolute X360 offsets are documentation only, not asserted).
+// =============================================================================
+
+// CgsAemsFactory.h:80 (DWARF). The shared command base: the leading type-tag word.
+struct CsisCommand
+{
+    // GetCommandType() reads the leading tag word (X360 lwz 0(this)).
+    ECsisCommandType GetCommandType() const { return static_cast<ECsisCommandType>(muCommandType); }
+
+    uintptr_t muCommandType; // word 0 -- ECsisCommandType tag
+};
+
+// CgsAemsFactory.h:130 (DWARF). Set-class-handle command: 5 words (tag + 4 operands).
+// Type tag E_CSIS_COMMAND_SET_CLASS_HANDLE (== 0).
+struct CsisSetClassHandleCommand : public CsisCommand
+{
+    // @ 0x826819E0. Copy-construct from a source record of luCommandCount words.
+    CsisSetClassHandleCommand(u32 luCommandCount, const CsisSetClassHandleCommand& arSource);
+
+    uintptr_t maOperands[4]; // words 1..4 -- carried verbatim through the queue
+};
+
+// CgsAemsFactory.h:160 (DWARF). Create command: 4 words (tag + 3 operands).
+// Type tag E_CSIS_COMMAND_CREATE (== 1).
+struct CsisCreateCommand : public CsisCommand
+{
+    // @ 0x82681A90. Copy-construct from a source record of luCommandCount words.
+    CsisCreateCommand(u32 luCommandCount, const CsisCreateCommand& arSource);
+
+    uintptr_t maOperands[3]; // words 1..3 -- carried verbatim through the queue
+};
+
+// CgsAemsFactory.h:186 (DWARF). Release command: 2 words (tag + 1 operand).
+// Type tag E_CSIS_COMMAND_RELEASE (== 2).
+struct CsisReleaseCommand : public CsisCommand
+{
+    // @ 0x82681B38. Copy-construct from a source record of luCommandCount words.
+    CsisReleaseCommand(u32 luCommandCount, const CsisReleaseCommand& arSource);
+
+    uintptr_t maOperand; // word 1 -- carried verbatim through the queue
+};
+
 const u32 KU_MAX_PATCH_MONITORS = 16; // CgsAemsFactory.h:373 (DWARF)
 
 // CgsAemsFactory.h:291 (DWARF): AemsFactory : public AemsRWSampleFactory.
@@ -61,13 +128,13 @@ const u32 KU_MAX_PATCH_MONITORS = 16; // CgsAemsFactory.h:373 (DWARF)
 class AemsFactory
 {
 public:
-    // CgsAemsFactory.cpp:397 @ 0x8268A018. Debug-prints lpcText through the engine
+    // CgsAemsFactory.cpp @ 0x8268A018. Debug-prints lpcText through the engine
     // log front-end when the log-category filter is enabled; returns lpcText so it
     // can chain. (X360 returns "<NULLSTRING>" when handed a null pointer.)
     const char* CsisPrint(const char* lpcText);
 
 protected:
-    // CgsAemsFactory.cpp:333 @ 0x82689E98. Linear-search the patch-monitor table
+    // CgsAemsFactory.cpp @ 0x82689E98. Linear-search the patch-monitor table
     // for the monitor whose mpName matches lpcName; returns it, or null if none.
     PatchMonitor* FindPatchMonitor(const char* lpcName);
 
