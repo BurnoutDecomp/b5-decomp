@@ -26,6 +26,26 @@
 //   * Message base/derived vtables (X360 off_821BA2CC / off_821BA2E8) -- the C++
 //     vtables MSVC emits for RealmcCore::Message. They are produced by the
 //     compiler from the class definition below, not hand-authored data.
+//
+// ---------------------------------------------------------------------------
+// WAVE-EXTENSION (additive). The following Realmc-core primitives share this
+// home (same vendor library boundary, same off_821BA2CC base vtable installed
+// first in every ctor and restored in every deleting destructor):
+//
+//     RealmcCore::RefCount::Release                       @ 0x82C45108
+//     RealmcCore::RefCount::Unreferenced                  @ 0x82C44D18
+//     RealmcCore::RefCount::`vector deleting destructor'  @ 0x82C450C0
+//     RealmcCore::Response::Response                      @ 0x82C458B0
+//     RealmcCore::Response::Apply                         @ 0x82C44D38
+//     RealmcCore::Response::`vector deleting destructor'  @ 0x82C458F0
+//     RealmcCore::MessageString::MessageString            @ 0x82C46338
+//     RealmcCore::MessageString::~MessageString           @ 0x82C46028
+//     RealmcCore::MessageString::`scalar deleting destructor' @ 0x82C463C0
+//
+// off_821BA2CC is the base RefCount vtable (slot +0 = deleting dtor, slot +4 =
+// the OnUnreferenced hook Release() fires when the count hits zero); Response
+// and MessageString each install their own final vtable (off_821BA2FC /
+// off_821BA370) after the base, exactly as MSVC emits for a derived ctor.
 // ===========================================================================
 
 #include <cstddef>
@@ -33,6 +53,80 @@
 
 namespace RealmcCore
 {
+
+// ---------------------------------------------------------------------------
+// RefCount -- the shared, atomically-refcounted Realmc base object (X360 base
+// vtable off_821BA2CC). It is the base of Response and MessageString below.
+//
+// LAYOUT (from asm):
+//   +0  vtable pointer (off_821BA2CC for a bare RefCount)
+//   +4  miRefCount -- the 32-bit reference count, decremented under the X360
+//                     interrupt-masked lwarx/stwcx. idiom in Release().
+//
+// VTABLE (from the asm dispatch sites):
+//   slot +0  the (scalar/vector deleting) destructor. The free function
+//            Unreferenced(p) calls p->vtable[+0](p, 1) -- "delete this".
+//   slot +4  OnUnreferenced() -- Release() fires this when the count hits 0.
+//            The bare-RefCount default routes to the deleting destructor.
+// ---------------------------------------------------------------------------
+class RefCount
+{
+public:
+    RefCount() : miRefCount(0) {}
+
+    // @ 0x82C45108 -- atomically decrement miRefCount; when it reaches 0, fire
+    //                 the virtual OnUnreferenced() hook (vtable slot +4). Returns
+    //                 the post-decrement count.
+    int Release(RefCount* pThis);
+
+    // @ 0x82C44D18 -- if pThis != null, invoke its deleting destructor via
+    //                 vtable slot +0 with the delete flag (this, 1). Modelled
+    //                 as the static "delete through the vtable" forwarder the
+    //                 asm shows (lwz r11,0(r3); li r4,1; lwz r11,0(r11); bctr).
+    static RefCount* Unreferenced(RefCount* pThis);
+
+    // slot +0 -- backs the X360 `vector deleting destructor' @ 0x82C450C0
+    //            (restore base vtable, then operator delete if flag bit0 set).
+    virtual ~RefCount();
+
+    // slot +4 -- the "count reached zero" hook fired by Release().
+    virtual void OnUnreferenced() = 0;
+
+protected:
+    std::int32_t miRefCount;  // +4
+};
+
+// ---------------------------------------------------------------------------
+// RealmcString -- the small Realmc string the X360 keeps inside MessageString.
+//
+// LAYOUT (from MessageString's ctor/dtor + the assign/reserve helpers):
+//   +0  mpBegin  -- start of the character buffer (or the shared empty
+//                   singleton when the string is empty)
+//   +4  mpEnd    -- one past the last character (points at the NUL terminator)
+//   +8  mpCapEnd -- one past the end of the allocated buffer
+//
+// The buffer is heap-owned only when (mpCapEnd - mpBegin) > 1 and mpBegin is
+// non-null; otherwise mpBegin aliases a shared 1-byte empty singleton and must
+// NOT be freed -- exactly the guard the X360 destructor evaluates.
+// ---------------------------------------------------------------------------
+class RealmcString
+{
+public:
+    RealmcString() : mpBegin(nullptr), mpEnd(nullptr), mpCapEnd(nullptr) {}
+
+    // Assign from a [pBegin, pEnd) character range (X360 sub_82B562A0): reserve
+    // (pEnd - pBegin + 1) bytes, copy the range, NUL-terminate. Declared here;
+    // the reserve/copy machinery lives in the shared Realmc string TU.
+    void Assign(const char* pBegin, const char* pEnd);
+
+    // Release the heap buffer if it is owned (the MessageString-dtor guard).
+    void Free();
+
+private:
+    char* mpBegin;   // +0
+    char* mpEnd;     // +4
+    char* mpCapEnd;  // +8
+};
 
 // ---------------------------------------------------------------------------
 // IRealmcAllocatorBackend -- the abstract allocator object reached through the
@@ -126,6 +220,96 @@ public:
     virtual void Reserved17() = 0;  virtual void Reserved18() = 0;  // +0x44 +0x48
     virtual void Reserved19() = 0;  virtual void Reserved20() = 0;  // +0x4C +0x50
     virtual int  ApplyMessage(Message* pMessage) = 0;               // +0x54
+};
+
+// ---------------------------------------------------------------------------
+// Response -- a Realmc response object (derives RefCount; final vtable
+// off_821BA2FC). It carries one target/payload pointer and dispatches itself
+// onto a target object via that target's vtable slot +0x50.
+//
+// LAYOUT (from the ctor asm):
+//   +0  vtable pointer (base off_821BA2CC then final off_821BA2FC)
+//   +4  miRefCount (inherited from RefCount, atomically zeroed in the ctor)
+//   +8  mpPayload  -- the pointer/value passed to the ctor (stw r4, 8(r3))
+//
+// sizeof == 0xC (12) -- the deleting destructor frees 12 bytes.
+// ---------------------------------------------------------------------------
+class Response : public RefCount
+{
+public:
+    // @ 0x82C458B0 -- install the final vtable, atomically zero the refcount,
+    //                 store the payload pointer at +8.
+    explicit Response(void* pPayload);
+
+    // @ 0x82C44D38 -- dispatch this response onto pTarget via pTarget's vtable
+    //                 slot +0x50 (80): pTarget->vtable[+0x50](pTarget, this).
+    //                 (IDA lists (a1=this, a2=target); the asm swaps r3/r4 so
+    //                 the target is `this` for the dispatch.)
+    static int Apply(Response* pThis, class IRealmcResponseTarget* pTarget);
+
+    void OnUnreferenced() override {}  // slot +4 (final vtable)
+
+    // slot +0 -- backs the X360 `vector deleting destructor' @ 0x82C458F0.
+    ~Response() override;
+
+private:
+    void* mpPayload;  // +8
+};
+
+// ---------------------------------------------------------------------------
+// IRealmcResponseTarget -- the object Response::Apply() dispatches into. Its
+// vtable slot +0x50 (80) accepts a Response and applies it. The padding
+// virtuals pin the dispatched method to byte offset 0x50 (slot 20 for 4-byte
+// X360 pointers: slot 0 == dtor at +0, so +0x50 == 0x50/4 == slot 20).
+// ---------------------------------------------------------------------------
+class IRealmcResponseTarget
+{
+public:
+    virtual ~IRealmcResponseTarget() {}              // +0x00
+    virtual void Reserved01() = 0;  virtual void Reserved02() = 0;  // +0x04 +0x08
+    virtual void Reserved03() = 0;  virtual void Reserved04() = 0;  // +0x0C +0x10
+    virtual void Reserved05() = 0;  virtual void Reserved06() = 0;  // +0x14 +0x18
+    virtual void Reserved07() = 0;  virtual void Reserved08() = 0;  // +0x1C +0x20
+    virtual void Reserved09() = 0;  virtual void Reserved10() = 0;  // +0x24 +0x28
+    virtual void Reserved11() = 0;  virtual void Reserved12() = 0;  // +0x2C +0x30
+    virtual void Reserved13() = 0;  virtual void Reserved14() = 0;  // +0x34 +0x38
+    virtual void Reserved15() = 0;  virtual void Reserved16() = 0;  // +0x3C +0x40
+    virtual void Reserved17() = 0;  virtual void Reserved18() = 0;  // +0x44 +0x48
+    virtual void Reserved19() = 0;                                  // +0x4C
+    virtual int  ApplyResponse(Response* pResponse) = 0;            // +0x50
+};
+
+// ---------------------------------------------------------------------------
+// MessageString -- a Realmc message that carries one id word and one owned
+// string (derives RefCount; final vtable off_821BA370).
+//
+// LAYOUT (from the ctor/dtor asm):
+//   +0    vtable pointer (base off_821BA2CC then final off_821BA370)
+//   +4    miRefCount (inherited from RefCount, atomically zeroed in the ctor)
+//   +8    muId      -- the id word passed to the ctor (stw r4, 8(r3))
+//   +0xC  maText    -- a RealmcString (begin/end/capEnd), assigned in the ctor
+//                      from the source range and freed (if owned) in the dtor.
+//
+// sizeof == 0x1C (28) -- the scalar deleting destructor frees 28 bytes.
+// ---------------------------------------------------------------------------
+class MessageString : public RefCount
+{
+public:
+    // @ 0x82C46338 -- install the final vtable, atomically zero the refcount,
+    //                 store muId at +8, assign maText from the source's
+    //                 [begin,end) character range (X360 sub_82B562A0).
+    MessageString(std::uint32_t uId, const char* const* ppSourceRange);
+
+    void OnUnreferenced() override {}  // slot +4 (final vtable)
+
+    // @ 0x82C46028 -- restore the base vtable, free the owned string buffer,
+    //                 restore the RefCount base vtable. Backs the X360 `scalar
+    //                 deleting destructor' @ 0x82C463C0 (which frees 28 bytes).
+    ~MessageString() override;
+
+private:
+    std::uint32_t muId;    // +8
+    RealmcString  maText;  // +0xC
 };
 
 } // namespace RealmcCore
