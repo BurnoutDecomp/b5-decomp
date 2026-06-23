@@ -5,12 +5,15 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"        // CgsResource::ID (64-bit hash)
 #include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"     // SmallResourceDescriptor (Entry::ResourceDescriptor form)
+#include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"   // BundleV2 (struct) + nested ResourceEntry
 
 namespace CgsModule { class BaseEventReceiverQueue; }   // referenced by pointer only
 
 namespace CgsResource
 {
-namespace BundleV2 { struct ResourceEntry; }   // referenced by pointer only
+// [merge fix] BundleV2 is a struct (CgsResourceBundle2.h) with nested ResourceEntry; the prior wave-side
+// `namespace BundleV2 { struct ResourceEntry; }` forward-decl clashed (C2869) whenever a TU also pulled in
+// struct BundleV2 (e.g. via CgsResourcePool.h -> CgsResourceBundle2.h). Include the real header instead.
 
 namespace Events
 {
