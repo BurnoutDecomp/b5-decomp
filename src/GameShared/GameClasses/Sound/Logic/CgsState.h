@@ -48,6 +48,32 @@ struct Module;
 // CgsState.h:57 (DWARF).
 const s32 MAX_NUM_SFXOBJS_PER_STATE = 32;
 
+// CgsState.h:313 (DWARF). Per-class RTTI descriptor, templated on the leaf class;
+// holds the object id, type name, base descriptor and a factory hook. Same shape as
+// the EffectBase-family descriptor (CgsEffectBase.h:313); declared here too because
+// CgsState.h is never co-included with CgsEffectBase.h in the same TU (each home is
+// included only by its own .cpp), so there is no ODR clash. State's RTTI-registration
+// (AddToClassTypeInfoArray @ 0x8268DF08) registers ClassTypeInfo<State> descriptors.
+template <typename T>
+struct ClassTypeInfo
+{
+    ClassTypeInfo(s32 aiObjectID,
+                  const char* apcTypeName,
+                  ClassTypeInfo<T>* apBaseTypeInfo,
+                  T* (*apfnCreateObject)(u32))
+        : ObjectID(aiObjectID)
+        , typeName(apcTypeName)
+        , baseTypeInfo(apBaseTypeInfo)
+        , createObject(apfnCreateObject)
+    {
+    }
+
+    s32               ObjectID;     // CgsState.h:316
+    const char*       typeName;     // CgsState.h:317
+    ClassTypeInfo<T>* baseTypeInfo; // CgsState.h:318
+    T* (*createObject)(u32);        // CgsState.h:319
+};
+
 // CgsState.h:132 (DWARF). The sound-logic state base.
 struct State : public CgsSound::MemBase
 {
@@ -82,6 +108,12 @@ struct State : public CgsSound::MemBase
 
     // CgsState.h:245 @ 0x826916D8. True when apv is this state's attachment.
     virtual bool IsAttachedToThis(void* apvAttachment);
+
+    // CgsState.h:363 (DWARF) @ 0x8268DF08. Register a per-class RTTI descriptor into
+    // State's static ClassTypeInfo<State> array. Scans for the first empty slot
+    // (cap KU_SIZEOF_CLASS_ARRAY == 16); only asserts "Too Many Class registations"
+    // once the 16-bit slot counter reaches 4*KU. Returns the registered descriptor.
+    static ClassTypeInfo<State>* AddToClassTypeInfoArray(ClassTypeInfo<State>* apTypeInfo);
 
     // --- members (DWARF order; X360 offsets in comments) ---
     s32           miInstNum;                // +4   CgsState.h:284

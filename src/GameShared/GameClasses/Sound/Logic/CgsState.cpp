@@ -17,6 +17,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cstring> // std::memset
 
@@ -24,6 +25,42 @@ namespace CgsSound
 {
 namespace Logic
 {
+
+// ---------------------------------------------------------------------------
+// State::AddToClassTypeInfoArray  @ 0x8268DF08  (static array dword_82FFBC18)
+//
+// Identical RTTI-registration routine to the EffectBase family
+// (CgsEffectBase.cpp), here templated on CgsSound::Logic::State. The X360 scans
+// the per-class static array for the first NULL slot, capped at the class-array
+// size (loop bound 0x10 == KU_SIZEOF_CLASS_ARRAY for State); on finding a NULL
+// slot it stores the descriptor there. If no slot is free within the cap it falls
+// through WITHOUT storing -- the "Too Many Class registations" assert
+// (CgsState.h:363) only fires once the (16-bit) slot counter reaches 4*KU (0x40),
+// which the 0x10-bounded loop never reaches. Reproduced generically by array NAME;
+// no raw-offset cast.
+// ---------------------------------------------------------------------------
+ClassTypeInfo<State>* State::AddToClassTypeInfoArray(ClassTypeInfo<State>* apTypeInfo)
+{
+    static ClassTypeInfo<State>* saClassTypeInfoArray[KU_SIZEOF_CLASS_ARRAY] = { 0 };
+
+    // Scan for the first empty slot, capped at the class-array size (0x10).
+    u32 lu32Index = 0;
+    for (lu32Index = 0; lu32Index < KU_SIZEOF_CLASS_ARRAY; ++lu32Index)
+    {
+        if (saClassTypeInfoArray[lu32Index] == 0)
+        {
+            saClassTypeInfoArray[lu32Index] = apTypeInfo;
+            return apTypeInfo;
+        }
+    }
+
+    // No empty slot within the cap. The X360 only asserts once the (16-bit) counter
+    // reaches 4*KU (0x40); the 0x10-bounded loop above stops at KU, so the counter is
+    // < 0x40 here and the assert does not fire. Modelled with the same predicate.
+    CGS_ASSERT(lu32Index < (4u * KU_SIZEOF_CLASS_ARRAY),
+               "Too Many Class registations. Increase KU_SIZEOF_CLASS_ARRAY");
+    return apTypeInfo;
+}
 
 // CgsState.h:370. Zero/seed the State base members. This mirrors the inline base
 // init the derived ctors emit (X360 stores 0 across +4..+80, with mfCurTime /

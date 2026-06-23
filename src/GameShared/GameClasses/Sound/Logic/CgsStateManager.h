@@ -46,15 +46,52 @@ namespace CgsSound
 namespace Logic
 {
 
+// CgsStateManager.h:313 (DWARF). Per-class RTTI descriptor for the StateManager
+// family, templated on the leaf class. Same shape as the EffectBase/State-family
+// descriptor; declared here too because CgsStateManager.h is never co-included with
+// the other RTTI homes in a single TU, so there is no ODR clash. StateManager's
+// RTTI-registration (AddToClassTypeInfoArray @ 0x8268DFE8) registers
+// ClassTypeInfo<StateManager> descriptors into a separate static array.
+template <typename T>
+struct ClassTypeInfo
+{
+    ClassTypeInfo(s32 aiObjectID,
+                  const char* apcTypeName,
+                  ClassTypeInfo<T>* apBaseTypeInfo,
+                  T* (*apfnCreateObject)(u32))
+        : ObjectID(aiObjectID)
+        , typeName(apcTypeName)
+        , baseTypeInfo(apBaseTypeInfo)
+        , createObject(apfnCreateObject)
+    {
+    }
+
+    s32               ObjectID;     // CgsStateManager.h:316
+    const char*       typeName;     // CgsStateManager.h:317
+    ClassTypeInfo<T>* baseTypeInfo; // CgsStateManager.h:318
+    T* (*createObject)(u32);        // CgsStateManager.h:319
+};
+
 class StateManager : public CgsSound::MemBase
 {
 public:
+    // CgsStateManager.h:135 (DWARF). Static class-array capacity (matches the X360
+    // scan bound 0x10 in AddToClassTypeInfoArray @ 0x8268DFE8).
+    static const u16 KU_SIZEOF_CLASS_ARRAY = 16;
+
     // Returns true when this manager's map-state equals liState. Recovered from
     // the X360 leaf accessor at 0x82680D48 (member access by name; no offset cast).
     virtual bool IsStateAlias(s32 liState) const
     {
         return meMapState == liState;
     }
+
+    // CgsStateManager.h:363 (DWARF) @ 0x8268DFE8. Register a per-class RTTI
+    // descriptor into StateManager's static ClassTypeInfo<StateManager> array.
+    // Scans for the first empty slot (cap KU_SIZEOF_CLASS_ARRAY == 16); only asserts
+    // "Too Many Class registations" once the 16-bit slot counter reaches 4*KU.
+    // Returns the registered descriptor.
+    static ClassTypeInfo<StateManager>* AddToClassTypeInfoArray(ClassTypeInfo<StateManager>* apTypeInfo);
 
 protected:
     // Leading scalar members (DWARF CgsStateManager.h:335..341). Modelled by name
