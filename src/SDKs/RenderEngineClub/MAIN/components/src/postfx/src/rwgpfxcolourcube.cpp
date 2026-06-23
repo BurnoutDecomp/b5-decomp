@@ -1,6 +1,7 @@
 #include "types.hpp"
 
 #include "rw/rwcore_structs.h"  // rw::BaseResourceDescriptors<5>
+#include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxcolourcube.h"  // rw::graphics::postfx::ColourCube
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   rw::graphics::postfx::ColourCube::GetResourceDescriptor @ 0x82402C48
@@ -17,28 +18,12 @@
 // low 32 bits in result[1] (m_alignment), so m_size = 3*N^3 + 16 and m_alignment = 16. (Hex-Rays'
 // LODWORD/HIDWORD framing is little-endian; the big-endian image stores {size, align} = {3N^3+16, 16}.)
 //
-// rw::graphics::postfx is the committed post-fx namespace (see RwVignetteParameters.h). No project
-// home models ColourCube yet, so per the vendor-TU convention this file homes the minimal slice the
-// function needs: the Parameters block (its first u32 is the cube edge length) and the ColourCube
-// class declaration carrying GetResourceDescriptor.
+// rw::graphics::postfx is the committed post-fx namespace (see RwVignetteParameters.h). The ColourCube
+// class declaration carrying GetResourceDescriptor now lives in the shared header rwgpfxcolourcube.h
+// so the game-side resource-type handler (CgsRwColourCubeResourceType.cpp) can share it.
 
 namespace rw::graphics::postfx
 {
-    class ColourCube
-    {
-    public:
-        // The colour-cube build parameters. Only the leading edge-length word is read here (X360
-        // *a2); the remaining fields are opaque to GetResourceDescriptor and modelled as a tail.
-        struct Parameters
-        {
-            u32 muEdgeLength;   // +0x00 N: the cube is N x N x N RGB cells
-        };
-
-        // X360 0x82402C48 -- size the rw resource for the colour cube.
-        static rw::BaseResourceDescriptors<5>* GetResourceDescriptor(rw::BaseResourceDescriptors<5>* lpResult,
-                                                                     const Parameters* lpParameters);
-    };
-
     // X360 0x82402C48.
     rw::BaseResourceDescriptors<5>* ColourCube::GetResourceDescriptor(rw::BaseResourceDescriptors<5>* lpResult,
                                                                       const Parameters* lpParameters)

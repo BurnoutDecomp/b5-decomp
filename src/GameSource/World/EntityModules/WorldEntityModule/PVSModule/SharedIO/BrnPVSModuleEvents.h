@@ -46,6 +46,34 @@ struct GetZoneRequest
     u8      maPad25[0x0B];    // +0x25  opaque padding up to the vector
     Vector4 mVelocity;        // +0x30  velocity hint (lvx128 0x30)
 };
+
+// ============================================================================
+// BrnWorld::PVSIO::GetZoneResponse -- the PVS module's per-zone visibility reply.
+//
+// SIZE (X360, authoritative): sizeof == 736 (0x2E0). Pinned two independent ways:
+//   * BaseEventQueue<GetZoneResponse>::AddEvent @ 0x822C9E28 block-copies the
+//     event with `memcpy(736 * miLength + mpEvents, src, 736)` -- element stride
+//     736.
+//   * OutputBuffer::Construct @ 0x822EE658 places the next member (a
+//     VariableEventQueue<512,16>) at +0x1718, immediately after the
+//     EventQueue<GetZoneResponse,8> sub-object: base 16 + 8*736 = 0x1710,
+//     rounded up to the 16-aligned 0x1718.
+// 736 == 46*16, and EventQueue<...,8>::Construct @ 0x822E51B0 lays the inline
+// maEvents[8] at the 16-aligned +0x10 -- so GetZoneResponse is 16-aligned (it
+// carries a 16-aligned vector/matrix payload).
+//
+// FLAG (opaque payload): no getter for GetZoneResponse was recovered in this
+// slice and there is no DWARF for the type, so its 736 internal bytes are NOT
+// individually named. They are modelled as one correctly-sized, 16-aligned
+// opaque byte span so the queue element stride (736) and the owning buffer's
+// member offsets are byte-exact. Grow this ADDITIVELY into named fields when a
+// later PVS-module TU (a GetZoneResponse accessor) attests them. Nothing here is
+// fabricated as X360 fact -- only the size/alignment are pinned by asm.
+struct alignas(16) GetZoneResponse
+{
+    // +0x000 .. +0x2DF  opaque response payload (deferred; see FLAG above).
+    u8 maPayload[736];
+};
 }
 }
 

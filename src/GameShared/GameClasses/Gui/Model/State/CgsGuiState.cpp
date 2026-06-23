@@ -1,8 +1,15 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"   // CgsGui::State (+ ScriptedState base, StateInterface fwd, sResourceTuple fwd)
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+
 // CgsGui::State base bodies. The X360 keeps these out-of-line in CgsGuiState.cpp; the GUI virtuals are
 // no-op defaults (derived states override OnEnter/OnLeave/Update/GetResourcesToLoad) and the setters just
 // store the channel/queue. Reconstructed minimally to close the link for the boot HUD-flow states.
+//
+// SetStateInterface @ 0x82846838 is the X360-emitted out-of-line setter for this class (its own ledger
+// TU): assert the incoming interface is non-null, then store it to mpStateInterface (this+0x1C, the
+// `stw r28, 0x1C(r27)` tail store). The original streamed the d:\p4-baked file/line via CgsDev::Assert;
+// under CGS_ASSERT the failure path forwards the plain condition string (file/line dropped per policy).
 
 namespace CgsGui
 {
@@ -35,8 +42,11 @@ namespace CgsGui
         *lpuNumberOfResources = 0;
     }
 
+    // X360 0x82846838. Validate the interface pointer, then store it (this+0x1C).
     void State::SetStateInterface(StateInterface* lpStateInterface)
     {
+        CGS_ASSERT(lpStateInterface != 0,
+                   "Invalid state interface sent to State::SetStateInterface");
         mpStateInterface = lpStateInterface;
     }
 

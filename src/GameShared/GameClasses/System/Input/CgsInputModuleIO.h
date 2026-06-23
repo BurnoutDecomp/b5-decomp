@@ -5,9 +5,12 @@
 // per-module Event base (the CgsModule event-queue convention — see e.g.
 // BrnContactSpyEvents.h).
 #include "types.hpp"
-#include "GameShared/GameClasses/System/Input/CgsInputTypes.h"   // CgsInput::EBindResult, EUnbindResult
+#include "GameShared/GameClasses/System/Input/CgsInputTypes.h"   // CgsInput::EBindResult, EUnbindResult, Device::WheelFFSpring
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"           // CgsModule::IOBuffer (lock state; status byte @ +0)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"         // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (PreWorld timer snapshot @ +868)
+
+#include <cstddef>   // offsetof (the X360-pinned member-offset static_asserts in the .cpp)
 
 namespace CgsInput
 {
@@ -92,8 +95,10 @@ namespace InputIO
     struct PadMapping;
 
     // ---- PostWorldInputBuffer (DWARF CgsInputModuleIO.h:776) ----------------
-    //   GetBindRequestQueue() const -> X360 0x828E6A88, read-lock, this+4
-    //   GetPadMappingQueue()  const -> X360 0x828E6BD8, read-lock, this+156
+    //   GetBindRequestQueue() const -> X360 0x828E6A88, read-lock,  this+4
+    //   GetPadMappingQueue()  const -> X360 0x828E6BD8, read-lock,  this+156
+    //   GetWheelFFSpring()    const -> X360 0x828E6C80, read-lock,  this+632
+    //   SetWheelFFSpring()          -> X360 0x823B0F80, write-lock, this+632 (copies 2 words)
     struct PostWorldInputBuffer : public CgsModule::IOBuffer
     {
         typedef CgsModule::EventQueue<BaseInputEvent, 8> BindRequestQueue;    // 76B
@@ -104,13 +109,32 @@ namespace InputIO
         const UnBindRequestQueue* GetUnBindRequestQueue() const; // declared-only
         const PadMappingQueue*    GetPadMappingQueue() const;    // 0x828E6BD8
 
+        // X360 0x828E6C80 - read-lock accessor returning the published wheel FFB spring (this+632).
+        const CgsInput::Device::WheelFFSpring* GetWheelFFSpring() const;      // 0x828E6C80
+        // X360 0x823B0F80 - write-lock accessor that copies a WheelFFSpring into the buffer (this+632).
+        void SetWheelFFSpring(const CgsInput::Device::WheelFFSpring& lSpring); // 0x823B0F80
+
+        // X360 member offsets are this+4 / +80 / +156 / +632 (the WheelFFSpring at +632 = 0x278). The
+        // PC model's byte offsets differ from the X360's because BaseEventQueue::mpEvents is a pointer:
+        // 4 bytes on the 32-bit X360, 8 on PC x64 -- so each queue is wider here (80B vs the X360's 76B,
+        // align 8 vs 4) and the trailing members sit a few bytes later. These buffers are engine-internal
+        // (allocated/exchanged via CgsModule::IOBufferStack, never serialised), so the load-bearing
+        // contract is the typed member each accessor returns under the asserted lock direction, NOT a
+        // byte-exact offset (which the pointer-width difference makes unattainable without an ABI hack).
+        // The gap below is therefore sized from the preceding PC layout so the wheel-spring member keeps
+        // the X360-mandated relative position (after the three queues, ahead of the untouched tail).
     private:
-        BindRequestQueue   mBindRequestQueue;    // @ +4   .. +80
-        UnBindRequestQueue mUnBindRequestQueue;  // @ +80  .. +156
-        // PadMappingQueue mPadMappingQueue @ +156 -- raw storage (PadMapping un-homed; last
-        // modelled member, so its exact size does not affect the offsets above).
-        u8                 mPadMappingQueueStorage[12 + 7 * (sizeof(BaseInputEvent) + 4)]; // @ +156
-        // CgsInput::Device::WheelFFSpring mWheelFFSpring; // tail member -- own TU
+        BindRequestQueue   mBindRequestQueue;    // X360 this+4
+        UnBindRequestQueue mUnBindRequestQueue;  // X360 this+80
+        // PadMappingQueue mPadMappingQueue -- raw storage (PadMapping un-homed via this struct's
+        // forward decl; X360 this+156).
+        u8                 mPadMappingQueueStorage[12 + 7 * (sizeof(BaseInputEvent) + 4)]; // 96B
+        // Unmodelled span: the remaining PadMapping/output members this slice does not touch. Sized so
+        // the struct keeps the X360 632-byte stride from the buffer head to the wheel-spring member,
+        // measured off the PC preceding-member sizes (queues are 8-byte-pointer-wider here).
+        u8                 maGapToWheelFFSpring[632 - (8 + 2 * sizeof(BindRequestQueue)
+                                                          + (12 + 7 * (sizeof(BaseInputEvent) + 4)))];
+        CgsInput::Device::WheelFFSpring mWheelFFSpring; // X360 this+632 (=0x278); PC offset documented above
     };
 
     // ------------------------------------------------------------------------
@@ -195,17 +219,34 @@ namespace InputIO
     };
 
     // ---- PreWorldInputBuffer (DWARF CgsInputModuleIO.h:603) -----------------
-    //   GetPlayJoltEffectEventQueue() const -> X360 0x828E6740, read-lock, this+4
+    //   GetPlayJoltEffectEventQueue() const  -> X360 0x828E6740, read-lock,  this+4
+    //   GetTimerStatusInt()           const  -> X360 0x828E69E0, read-lock,  this+868
+    //   SetTimerStatusInterface()            -> X360 0x82362418, write-lock, this+868 (copies 48B)
     struct PreWorldInputBuffer : public CgsModule::IOBuffer
     {
         typedef CgsModule::EventQueue<PlayJoltEffectEvent, 4> PlayJoltEffectEventQueue; // PlayJoltEffectEvent=60B
 
         const PlayJoltEffectEventQueue* GetPlayJoltEffectEventQueue() const; // 0x828E6740
 
+        // X360 0x828E69E0 - read-lock accessor returning the published timer snapshot (this+868).
+        // (DWARF abbreviates the spelling to "GetTimerStatusInt"; it returns the interface pointer.)
+        const CgsSystem::TimerStatusInterface* GetTimerStatusInt() const;    // 0x828E69E0
+        // X360 0x82362418 - write-lock accessor copying a TimerStatusInterface into the buffer (this+868).
+        void SetTimerStatusInterface(const CgsSystem::TimerStatusInterface& lTimerStatus); // 0x82362418
+
+        // X360 member offsets are this+4 (jolt queue) and this+868 (timer snapshot, =0x364). As with
+        // PostWorldInputBuffer the PC byte offsets differ (8-byte BaseEventQueue::mpEvents on PC x64 vs
+        // 4 on X360, so the queue is wider and align-8). The buffer is engine-internal/never serialised;
+        // the load-bearing contract is the typed member + lock direction, not a byte-exact offset.
     private:
-        PlayJoltEffectEventQueue mPlayJoltEffectEventQueue; // @ +4
-        // remaining rumble queues (PlayRumble/ChangeVolume/Stop), TimerStatusInterface,
-        // mbPauseRumble, mbEnableRumble, mbForceFeedback -- own TU.
+        PlayJoltEffectEventQueue mPlayJoltEffectEventQueue; // X360 this+4
+        // ADDITIVE GROW: the remaining rumble queues (PlayRumble/ChangeVolume/Stop) and the rumble bool
+        // flags live between the jolt queue and the timer snapshot; this slice does not touch them, so
+        // they are explicit padding sized from the preceding PC member layout so the struct keeps the
+        // X360 868-byte stride from the buffer head to the timer-snapshot member.
+        u8 maGapToTimerStatus[868 - (8 + sizeof(PlayJoltEffectEventQueue))];
+        CgsSystem::TimerStatusInterface mTimerStatusInterface; // X360 this+868 (=0x364); PC offset per note
+        // mbPauseRumble, mbEnableRumble, mbForceFeedback (tail bool flags) -- own TU.
     };
 }
 }

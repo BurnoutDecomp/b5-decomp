@@ -3,8 +3,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // CgsGui::StateMachine, reconstructed from BURNOUT_X360_ARTIST.XEX. This home bodies
-// the two X360-emitted StateMachine functions split across the GUI state-machine TUs:
+// the X360-emitted StateMachine functions split across the GUI state-machine TUs:
 //
+//   SetStateInterface() @ 0x824ECAC0 (CgsGuiStateMachine.h -- wires the shared interface)
 //   GetState(i)  @ 0x827DDDB0  (CgsGuiStateMachine.h -- the ScriptedFsm virtual override)
 //   SetStates()  @ 0x82848700  (CgsGuiStateMachine.cpp -- installs the state table)
 //
@@ -15,6 +16,16 @@
 
 namespace CgsGui
 {
+    // X360 0x824ECAC0. Validate the incoming interface pointer, then store it to
+    // mpStateInterface (the `stw r28, 0x218(r27)` tail store, this+0x218). SetStates later
+    // wires every owned state to this interface, so it must be non-null first.
+    void StateMachine::SetStateInterface(StateInterface* lpStateInterface)
+    {
+        CGS_ASSERT(lpStateInterface != 0,
+                   "Invalid state interface in StateMachine::SetStateInterface");
+        mpStateInterface = lpStateInterface;
+    }
+
     // X360 0x827DDDB0. Bounds-check the index against miNumStates (this+0x14), then assert
     // the slot is populated, and return mapGuiStates[liIndex] (this+0x18). Covariant return
     // (CgsGui::State* refines CgsFsm::ScriptedState*).
