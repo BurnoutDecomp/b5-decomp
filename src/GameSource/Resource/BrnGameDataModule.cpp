@@ -10,6 +10,8 @@
 #include "GameShared/GameClasses/Memory/CgsMemoryBank.h"                        // MemoryBank::Params (CreatePoolBank)
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"                    // MemoryIO Input/OutputBuffer (async pump)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"       // SendCreatePoolMemoryRequest / DoCreatePoolRequest
+#include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"             // PoolIO::OutputBuffer (request transport)
+#include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"         // ResourceIO::InputBuffer (CreatePool request input)
 #include "GameSource/Resource/BrnMemoryMapData.h"                               // KAC_MEMORY_MAP_POOLS (the 27 real pools)
 #include <cstring>                                                              // memset
 
@@ -110,16 +112,12 @@ namespace BrnResource
 
         s32 lNumCreated = 0, lNumFromBank = 0, lNumFromHeap = 0, lNumDepsWired = 0, lNumViaAsync = 0;
 
-        // Scratch MemoryIO buffers driving the async pool-create dispatch (one request/response cycle per
-        // pool). Static so the (large) embedded queues are constructed once + reused across the loop. The
-        // faithful X360 transport is PoolIO::OutputBuffer -> ResourceModule shuttle -> MemoryModule input;
-        // those types are not yet reconstructed, so the pump writes the request straight to the MemoryModule
-        // input and drains its response directly. [marked transport deviation -- the memory request/response
-        // dispatch itself (MemoryModule::Update -> ProcessCreateResourceRequest) is faithful.]
-        static CgsMemory::MemoryIO::InputBuffer  s_memInput;
-        static CgsMemory::MemoryIO::OutputBuffer s_memOutput;
+        // The ResourceModule input buffer CreatePools publishes CreatePool requests to; ResourceModule::
+        // Update (the streaming shuttle) owns the pool/memory scratch buffers internally. Static so the
+        // (large) embedded request queue is constructed once + reused across the loop.
+        static CgsResource::ResourceIO::InputBuffer s_resIn;
         static bool s_ioConstructed = false;
-        if (!s_ioConstructed) { s_memInput.Construct(); s_memOutput.Construct(); s_ioConstructed = true; }
+        if (!s_ioConstructed) { s_resIn.Construct(); s_ioConstructed = true; }
         // id -> created Pool*, so each pool's import dependencies (referenced by pool id) resolve to real
         // pointers in this one pass: the memory-map order lists every dependency target before its
         // dependents (deps reference ids 10/25 @ idx 8/23; all dependents are at later indices).
@@ -198,38 +196,32 @@ namespace BrnResource
             CgsResource::Pool* lpPool = 0;
             bool lbViaAsync = false;
 
-            // ---- [Async path] faithful X360 memory dispatch: SendCreatePoolMemoryRequest publishes a
-            // CREATE_RESOURCE event; MemoryModule::Update -> ProcessCreateResourceRequest carves the pool
-            // bank (parent = root bank 0) + replies with its per-type data pointers; DoCreatePoolRequest
-            // adopts that memory + CreatePool's. Each pool runs a complete request/response cycle so the
-            // dependency order (lapPoolById) is preserved exactly as the synchronous path had it.
+            // ---- [Faithful async path] publish a CreatePool request to the ResourceModule input and pump
+            // ResourceModule::Update -- the real streaming shuttle: ProcessResourceRequests -> pool input;
+            // PoolModule::Update (ProcessInputBuffer -> SendCreatePoolMemoryRequest); ProcessPoolResource
+            // Requests -> MemoryModule input; MemoryModule::Update -> ProcessCreateResourceRequest carves the
+            // bank; ProcessMemoryResponses -> the pool receiver queue; (next frame) ProcessReceiverQueue ->
+            // DoCreatePoolRequest -> CreatePool. The request carries the resolved InitOptions so cross-pool
+            // dependency order (lapPoolById) is preserved exactly. Pool create is 2-frame, so pump a few times.
             if (lbAnyType)
             {
-                // fresh scratch queues for this pool's cycle
-                s_memInput.LockForWrite();  s_memInput.GetMemoryRequestQueue()->Clear();   s_memInput.UnlockForWrite();
-                s_memOutput.LockForWrite(); s_memOutput.GetMemoryResponseQueue()->Clear(); s_memOutput.UnlockForWrite();
+                CgsResource::CreatePoolRequestEvent lReqEvent;
+                lReqEvent.mOptions       = lOpt;
+                lReqEvent.miBankId       = liBankId;
+                lReqEvent.miParentBankId = 0;                 // root bank
+                for (s32 lt = 0; lt < 3; ++lt) { lReqEvent.mauRegion[lt] = lauRegion[lt]; lReqEvent.mauAlign[lt] = lauAlign[lt]; }
 
-                lrPoolModule.SendCreatePoolMemoryRequest(lOpt, liBankId, /*parent=root bank*/0,
-                                                         lauRegion, lauAlign, &s_memInput);
-                lrMemoryModule.Update(0, 0, &s_memInput, &s_memOutput);
+                s_resIn.LockForWrite();
+                s_resIn.GetResourceQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReqEvent),
+                                                     0 /*CreatePool*/, static_cast<s32>(sizeof(lReqEvent)));
+                s_resIn.UnlockForWrite();
 
-                s_memOutput.LockForRead();
-                const CgsModule::Event* lpEvent = 0; s32 liEvtSize = 0;
-                // const ref so the read path picks the const GetMemoryResponseQueue (asserts read-locked);
-                // the non-const overload asserts write-locked and would fire here.
-                const CgsMemory::MemoryIO::OutputBuffer& lrOutRead = s_memOutput;
-                const CgsMemory::MemoryIO::OutputBuffer::MemoryResponseQueue* lpRespQ = lrOutRead.GetMemoryResponseQueue();
-                const s32 liEvtId = lpRespQ->GetFirstEvent(&lpEvent, &liEvtSize);
-                const CgsMemory::MemoryIO::CreateResourceResponse* lpResp =
-                    (liEvtId != -1 && lpEvent != 0)
-                        ? static_cast<const CgsMemory::MemoryIO::CreateResourceResponse*>(lpEvent) : 0;
-                s_memOutput.UnlockForRead();
-
-                if (lpResp != 0)
+                for (s32 lf = 0; lf < 4 && lpPool == 0; ++lf)
                 {
-                    lpPool = lrPoolModule.DoCreatePoolRequest(lpResp);   // pops the pending opts + CreatePool
-                    if (lpPool != 0) { lbViaAsync = true; ++lNumViaAsync; ++lNumFromBank; }
+                    mResourceModule.Update(&s_resIn, 0);
+                    lpPool = lrPoolModule.GetPool(lrDef.miId);
                 }
+                if (lpPool != 0 && lpPool->IsValid()) { lbViaAsync = true; ++lNumViaAsync; ++lNumFromBank; }
             }
 
             // ---- [Fallback] synchronous bank carve, if the async memory dispatch did not deliver. Carve a

@@ -10,6 +10,7 @@
 
 // Async pool-create dispatch (CreateResourceRequest -> MemoryModule -> CreateResourceResponse).
 namespace CgsMemory { namespace MemoryIO { struct InputBuffer; struct CreateResourceResponse; } }
+namespace CgsResource { namespace PoolIO { struct OutputBuffer; } }   // SendCreatePoolMemoryRequest target
 
 // CgsResource::PoolModule - the resource-pool manager module (X360 CgsPoolModule.cpp). It
 // owns the game's fixed bank of 128 resource Pools and a registry of resource Types, and
@@ -39,6 +40,21 @@ namespace CgsMemory { namespace MemoryIO { struct InputBuffer; struct CreateReso
 // nothing drives them until the GameDataModule runs.
 namespace CgsResource
 {
+    // The CreatePool request payload CreatePools publishes to the ResourceModule input (event id 0).
+    // ProcessResourceRequests routes it to the pool input; PoolModule::ProcessInputBuffer dispatches it to
+    // SendCreatePoolMemoryRequest. [x64 payload deviation: carries the resolved InitOptions + bank/sizing.
+    // The X360 carries the raw 172B pool def and derives these via ConvertPoolRequestOptions /
+    // GetRequiredResourceDescriptor, whose byte counts are x360-width-specific -- so the resolved form is
+    // the faithful x64 choice; see the gamedatamodule-scoping notes.]
+    struct CreatePoolRequestEvent
+    {
+        Pool::InitOptions mOptions;
+        s32               miBankId;
+        s32               miParentBankId;
+        u32               mauRegion[3];
+        u32               mauAlign[3];
+    };
+
     class PoolModule : public CgsModule::ModuleSingleBuffered
     {
     public:
@@ -100,20 +116,28 @@ namespace CgsResource
 
         // ---- async pool-create dispatch -----------------------------------------------
         // @ 0x828F3A50 - SendCreatePoolMemoryRequest: queue the pending pool options (FIFO) and emit a
-        // CreateResource memory request so the MemoryModule carves the pool's backing bank. The X360
-        // routes the request through PoolIO::OutputBuffer's resource-request queue and the ResourceModule
-        // shuttle into the MemoryModule input; here the request is written straight to the MemoryModule
-        // input buffer (the PoolIO ResourceRequestQueue type + the ResourceModule shuttle are not yet
-        // reconstructed). [marked transport deviation] miBankId/region/align/parentBankId describe the bank.
+        // CreateResource memory request (onto this module's PoolIO::OutputBuffer resource-request queue) so
+        // the ResourceModule shuttle forwards it to the MemoryModule, which carves the pool's backing bank.
+        // miBankId/region/align/parentBankId describe the bank. The output buffer must be write-locked by
+        // the caller (the X360 holds it locked across PoolModule::Update's ProcessInputBuffer).
         void SendCreatePoolMemoryRequest(const Pool::InitOptions& lrOptions, s32 liBankId, s32 liParentBankId,
                                          const u32 lauRegion[3], const u32 lauAlign[3],
-                                         CgsMemory::MemoryIO::InputBuffer* lpMemInput);
+                                         PoolIO::OutputBuffer* lpPoolOutput);
 
         // @ 0x82905000 - DoCreatePoolRequest: pop the matching pending options (FIFO), adopt the memory
-        // the MemoryModule allocated (the response's rw::Resource data pointers), and CreatePool. The X360
-        // reaches this via the receiver queue (event id 10); here the pump calls it directly with the
-        // memory response (the receiver queue's full event API is not yet reconstructed). [marked deviation]
+        // the MemoryModule allocated (the response's rw::Resource data pointers), and CreatePool. Reached
+        // via the receiver queue (event id 10) from ProcessReceiverQueue.
         Pool* DoCreatePoolRequest(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse);
+
+        // Per-response part of the ResourceModule memory-response shuttle: forward a CreateResource memory
+        // response onto its originating receiver queue (the request's reply target) as a CreatePool event
+        // (id 10), so ProcessReceiverQueue dispatches it to DoCreatePoolRequest. [the full multi-submodule
+        // ProcessMemoryResponses shuttle is still deferred -- this is its pool-create slice.]
+        void ProcessMemoryResponse(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse);
+
+        // Look up a created pool by id (null if absent). Lets the CreatePools driver fetch the pool the
+        // receiver-queue path stood up (for cross-pool dependency wiring).
+        Pool* GetPool(s32 liPoolId);
 
         // ---- dispatch (deferred) ------------------------------------------------------
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
@@ -127,7 +151,7 @@ namespace CgsResource
         EPoolPrepareStage mePoolPrepareStage;        // +0x1A2C (a1[1675])
         EPoolReleaseStage mePoolReleaseStage;        // +0x1A30 (a1[1676])
         Pool              maPools[KI_MAX_POOLS];      // +0x1A38 the 128 resource pools (464B X360 stride)
-        CgsModule::BaseEventReceiverQueue mReceiverQueue; // +0x158C4 (a1[22033]) create/delete-pool events
+        CgsModule::EventReceiverQueue<16384, 16> mReceiverQueue; // +0x158C4 (a1[22033]) create/delete-pool events (DWARF CgsPoolModule.h:217)
         ScratchPool       mScratchPool;              // +0x198C0 (a1+104576) defrag staging (Construct'd; InitPool deferred)
         s32               mProcessState;             // +0x19B30 defrag/alloc state machine (0..6)
 

@@ -51,6 +51,15 @@ namespace CgsResource
             mFileSystemStatusInterface.Construct();
         }
 
+        // -------- InputBuffer::Construct / Destruct --------
+        // Construct the IOBuffer base (sets the constructed status bit) + the embedded request queue.
+        void InputBuffer::Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mResourceQueue.Construct();
+        }
+        void InputBuffer::Destruct() { mResourceQueue.Clear(); }
+
         // -------- InputBuffer::GetResourceQueue() const @ 0x828E1190 (THIS TU) --------
         // Read-lock gate, then return the embedded request queue (X360 this+4).
         const ResourceRequestQueue<16384>* InputBuffer::GetResourceQueue() const

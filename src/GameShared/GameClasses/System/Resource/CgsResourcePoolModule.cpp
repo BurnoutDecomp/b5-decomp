@@ -3,6 +3,7 @@
 #include "rw/rwcore_structs.h"                        // rw::IResourceAllocator / Resource (CreatePool test driver)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [5b TEST] trace
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"  // CreateResourceRequest/Response + MemoryIO buffers (async dispatch)
+#include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"  // PoolIO::OutputBuffer (request target)
 
 // CgsResource::PoolModule - see the header. This pass reconstructs the rw-allocator-
 // INDEPENDENT spine (GetPoolIndex / FindResourceType / Prepare / Release / Destruct).
@@ -183,6 +184,10 @@ namespace CgsResource
         // the scratch overhead from the allocator) stays DEFERRED -- nothing defragments yet.
         mScratchPool.Construct();
 
+        // Bind the receiver queue's backing buffer (create/delete-pool events land here via
+        // ProcessMemoryResponse, drained by ProcessReceiverQueue).
+        mReceiverQueue.Construct();
+
         // (The real pool set is created by GameDataModule::CreatePools, which drives CreatePool over the
         // extracted memory-map table -- not here. The earlier single [5b TEST] pool was retired once that
         // data-driven loader landed.)
@@ -195,9 +200,100 @@ namespace CgsResource
         // resource regions through the allocator (:130/131/164-168); (4) Relocator::Construct + two
         // ID::HashString-keyed defrag sub-objects; (5) zeroing the defrag-state cluster.
     }
-    bool PoolModule::Update(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return false; }
-    void PoolModule::ProcessReceiverQueue(void* /*lpOutputBuffer*/) {}
-    void PoolModule::ProcessInputBuffer(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) {}
+    // @ 0x829076D8 - per-frame pool dispatch (pool-create slice): write-lock the output + read-lock the
+    // input, drain the input requests (ProcessInputBuffer), unlock the input, drain the receiver queue
+    // (ProcessReceiverQueue -> DoCreatePoolRequest), unlock the output. [The defrag state machine + the
+    // per-pool Pool::Update loop are deferred -- nothing defragments during pool bring-up.]
+    bool PoolModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
+    {
+        PoolIO::InputBuffer*  lpIn  = static_cast<PoolIO::InputBuffer*>(lpInputBuffer);
+        PoolIO::OutputBuffer* lpOut = static_cast<PoolIO::OutputBuffer*>(lpOutputBuffer);
+
+        lpOut->LockForWrite();
+        lpIn->LockForRead();
+        ProcessInputBuffer(lpIn, lpOut);
+        lpIn->UnlockForRead();
+        ProcessReceiverQueue(lpOut);
+        lpOut->UnlockForWrite();
+        return false;
+    }
+
+    // @ 0x82906FD0 - drain the receiver queue: dispatch each event by id (10 = CreatePool ->
+    // DoCreatePoolRequest, 13 = DeletePool -> deferred), then Clear. The events are the memory responses
+    // ProcessMemoryResponse forwarded here.
+    void PoolModule::ProcessReceiverQueue(void* /*lpOutputBuffer*/)
+    {
+        if (mReceiverQueue.GetCount() > 0)
+        {
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            s32 liId = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            while (liId != -1 && lpEvent != 0)
+            {
+                if (liId == 10)        // CreatePool
+                    DoCreatePoolRequest(reinterpret_cast<const CgsMemory::MemoryIO::CreateResourceResponse*>(lpEvent));
+                else if (liId == 13)   // DeletePool (DoDeletePoolRequest -- deferred)
+                    {}
+                else
+                    CGS_ASSERT(false, "Invalid Event Id.\n");
+
+                const CgsModule::Event* lpNext = 0;
+                liId = mReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
+                lpEvent = lpNext;
+            }
+        }
+        mReceiverQueue.Clear();
+    }
+
+    // Drain the pool input buffer: each CreatePool request (id 0) -> SendCreatePoolMemoryRequest (queue
+    // the pending options + emit the backing-memory request onto the output). The caller (Update) holds
+    // the input read-locked + the output write-locked. [Acquire/Validate/Invalidate/etc. (ids 4..8) are
+    // deferred -- not used during pool bring-up.]
+    void PoolModule::ProcessInputBuffer(void* lpInputBuffer, void* lpOutputBuffer)
+    {
+        PoolIO::InputBuffer*  lpIn  = static_cast<PoolIO::InputBuffer*>(lpInputBuffer);
+        PoolIO::OutputBuffer* lpOut = static_cast<PoolIO::OutputBuffer*>(lpOutputBuffer);
+        const PoolIO::InputBuffer::PoolInputQueue* lpQ =
+            static_cast<const PoolIO::InputBuffer&>(*lpIn).GetPoolInputQueue();
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpQ->GetFirstEvent(&lpEvent, &liSize);
+        while (liId != -1 && lpEvent != 0)
+        {
+            if (liId == 0)   // CreatePool
+            {
+                const CreatePoolRequestEvent* lpReq = reinterpret_cast<const CreatePoolRequestEvent*>(lpEvent);
+                SendCreatePoolMemoryRequest(lpReq->mOptions, lpReq->miBankId, lpReq->miParentBankId,
+                                            lpReq->mauRegion, lpReq->mauAlign, lpOut);
+            }
+            const CgsModule::Event* lpNext = 0;
+            liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+    }
+
+    // Forward one CreateResource memory response onto its originating receiver queue as a CreatePool
+    // event (id 10). This is the pool-create slice of the ResourceModule's ProcessMemoryResponses shuttle
+    // (which routes each memory response to response->GetUser()); here driven per-response by the pump.
+    void PoolModule::ProcessMemoryResponse(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse)
+    {
+        CGS_ASSERT(lpResponse != 0, "lpResponse");
+        if (lpResponse == 0)
+            return;
+        CgsModule::BaseEventReceiverQueue* lpReceiver = lpResponse->GetUser();
+        CGS_ASSERT(lpReceiver != 0, "memory response has no receiver queue");
+        if (lpReceiver != 0)
+            lpReceiver->AddEvent(reinterpret_cast<const CgsModule::Event*>(lpResponse), 10 /*CreatePool*/,
+                                 static_cast<s32>(sizeof(*lpResponse)));
+    }
+
+    // Look up a created pool by id (null if absent).
+    Pool* PoolModule::GetPool(s32 liPoolId)
+    {
+        const s32 li = GetPoolIndex(liPoolId);
+        return (li >= 0) ? &maPools[li] : 0;
+    }
 
     // @ 0x828F3A50 - queue the pending pool options and emit the CreateResource memory request that makes
     // the MemoryModule carve the pool's backing bank. Faithful to the X360 core: push the request onto the
@@ -207,11 +303,11 @@ namespace CgsResource
     // the ResourceModule shuttle, which are not yet reconstructed.]
     void PoolModule::SendCreatePoolMemoryRequest(const Pool::InitOptions& lrOptions, s32 liBankId, s32 liParentBankId,
                                                  const u32 lauRegion[3], const u32 lauAlign[3],
-                                                 CgsMemory::MemoryIO::InputBuffer* lpMemInput)
+                                                 PoolIO::OutputBuffer* lpPoolOutput)
     {
-        CGS_ASSERT(lpMemInput != 0, "lpMemInput");
+        CGS_ASSERT(lpPoolOutput != 0, "lpOutputBuffer");
         CGS_ASSERT(miPendingCount < KI_MAX_PENDING_CREATE, "CreatePoolRequest FIFO overflow");
-        if (lpMemInput == 0 || miPendingCount >= KI_MAX_PENDING_CREATE)
+        if (lpPoolOutput == 0 || miPendingCount >= KI_MAX_PENDING_CREATE)
             return;
 
         // Push the pending pool options (FIFO) so DoCreatePoolRequest can match the memory response.
@@ -219,9 +315,11 @@ namespace CgsResource
         miPendingTail = (miPendingTail + 1) % KI_MAX_PENDING_CREATE;
         ++miPendingCount;
 
-        // Build the CreateResource request describing the bank the MemoryModule must allocate.
+        // Build the CreateResource request describing the bank the MemoryModule must allocate. The reply
+        // target is this module's receiver queue: when the memory response returns, ProcessMemoryResponse
+        // routes it there (event 10) and ProcessReceiverQueue -> DoCreatePoolRequest stands the pool up.
         CgsMemory::MemoryIO::CreateResourceRequest lRequest;
-        lRequest.Construct(0, lrOptions.miId);          // reply target unused (pump drains the response directly)
+        lRequest.Construct(&mReceiverQueue, lrOptions.miId);
         lRequest.SetBankName(lrOptions.mpcName);
         lRequest.SetBankId(liBankId);
         lRequest.SetParentBankId(liParentBankId);
@@ -234,10 +332,11 @@ namespace CgsResource
         }
         lRequest.SetDescriptor(&lDesc);
 
-        lpMemInput->LockForWrite();
-        lpMemInput->GetMemoryRequestQueue()->AddEvent(&lRequest, lRequest.GetEventType(),
-                                                      static_cast<s32>(sizeof(lRequest)));
-        lpMemInput->UnlockForWrite();
+        // Emit onto the pool module's resource-request output queue (the caller holds the write lock).
+        // Queue tag 10 (CreatePool) is the routing id ProcessPoolResourceRequests forwards on (distinct
+        // from the embedded request's meEventType=CREATE_RESOURCE, which the MemoryModule dispatches on).
+        lpPoolOutput->GetPoolResourceRequestQueue()->AddEvent(&lRequest, 10 /*CreatePool*/,
+                                                              static_cast<s32>(sizeof(lRequest)));
     }
 
     // @ 0x82905000 - pop the matching pending options (FIFO), adopt the memory the MemoryModule allocated

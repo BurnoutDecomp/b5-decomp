@@ -20,10 +20,37 @@ namespace CgsResource
 {
 namespace PoolIO
 {
+    // InputBuffer lifecycle + accessors (mirror of OutputBuffer; one embedded request queue at +4).
+    void InputBuffer::Construct() { CgsModule::IOBuffer::Construct(); mPoolInputQueue.Construct(); }
+    void InputBuffer::Destruct()  { mPoolInputQueue.Clear(); }
+    const InputBuffer::PoolInputQueue* InputBuffer::GetPoolInputQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mPoolInputQueue;
+    }
+    InputBuffer::PoolInputQueue* InputBuffer::GetPoolInputQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mPoolInputQueue;
+    }
+
     void OutputBuffer::_AssertLayout()
     {
         static_assert(offsetof(OutputBuffer, mPoolOutputQueue)          == 0x0004, "mPoolOutputQueue @0x0004");
         static_assert(offsetof(OutputBuffer, mPoolResourceRequestQueue) == 0x2014, "mPoolResourceRequestQueue @0x2014");
+    }
+
+    // Construct the IOBuffer base (sets the constructed status bit) + both embedded event queues.
+    void OutputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mPoolOutputQueue.Construct();
+        mPoolResourceRequestQueue.Construct();
+    }
+    void OutputBuffer::Destruct()
+    {
+        mPoolOutputQueue.Clear();
+        mPoolResourceRequestQueue.Clear();
     }
 
     // X360 0x828E1AA8: read-lock; return this + 4.
