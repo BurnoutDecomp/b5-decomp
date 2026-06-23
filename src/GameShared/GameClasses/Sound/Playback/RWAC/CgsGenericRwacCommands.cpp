@@ -10,6 +10,9 @@
 //   RwacCommandPlayerIsRequestDoneParameters::ctor @ 0x82681570
 //   RwacCommandApplyReverbIRFile::ctor             @ 0x826816A0
 //   RwacCommandGinsuAttachDataParameters::ctor     @ 0x82681738
+//   RwacCommandVoiceCreateInstance::ctor           @ 0x82681170
+//   RwacCommandVoiceRelease::ctor                  @ 0x82681320
+//   RwacCommandSendConnectParameters::ctor         @ 0x82681608
 //   RwacCommandQueue::GetCommand                   @ 0x82681888
 //
 // Each constructor copy-constructs a command record from a source record of the
@@ -171,6 +174,65 @@ RwacCommandGinsuAttachDataParameters::RwacCommandGinsuAttachDataParameters(
     CGS_ASSERT(luCommandCount == 2u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
     CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS,
                "E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS == GetCommandType()");
+}
+
+// ---------------------------------------------------------------------------
+// RwacCommandVoiceCreateInstance::ctor  @ 0x82681170
+//   build a 6-word record: the playback voice to word 1, tag 1 to word 0, the
+//   voice pointer-slot to word 2, the plugin pointer-slot to word 3, the config to
+//   word 4 and a trailing operand to word 5; assert the first four pointers non-null.
+//
+//   X360 store order (r31 == this): stw r4,4(this) [mpPlaybackVoice]; li r11,1 /
+//   stw r11,0(this) [tag]; stw r5,8(this) [mppVoice]; stw r6,0xC(this) [mpppPlugin];
+//   stw r7,0x10(this) [mpConfig]; stw r8,0x14(this) [trailing operand]. Then four
+//   non-null guards in order (cmplwi cr6,arg,0; bne skip) fire the "mpPlaybackVoice"
+//   / "mppVoice" / "mpppPlugin" / "mpConfig" asserts. The 6th word carries no check.
+// ---------------------------------------------------------------------------
+RwacCommandVoiceCreateInstance::RwacCommandVoiceCreateInstance(
+        uintptr_t apPlaybackVoice, uintptr_t appVoice, uintptr_t apppPlugin,
+        uintptr_t apConfig, uintptr_t auOperand)
+{
+    mpPlaybackVoice = apPlaybackVoice;                  // stw r4,4(this)
+    muCommandType   = E_RWAC_COMMAND_VOICE_CREATE_INSTANCE; // li r11,1; stw r11,0(this)
+    mppVoice        = appVoice;                          // stw r5,8(this)
+    mpppPlugin      = apppPlugin;                        // stw r6,0xC(this)
+    mpConfig        = apConfig;                          // stw r7,0x10(this)
+    maOperand       = auOperand;                         // stw r8,0x14(this)
+
+    CGS_ASSERT(mpPlaybackVoice != 0, "mpPlaybackVoice");
+    CGS_ASSERT(mppVoice != 0, "mppVoice");
+    CGS_ASSERT(mpppPlugin != 0, "mpppPlugin");
+    CGS_ASSERT(mpConfig != 0, "mpConfig");
+}
+
+// ---------------------------------------------------------------------------
+// RwacCommandVoiceRelease::ctor  @ 0x82681320
+//   copy 2 words (tag + 1 operand) from arSource; assert count == 2 and tag == 2.
+// ---------------------------------------------------------------------------
+RwacCommandVoiceRelease::RwacCommandVoiceRelease(
+        u32 luCommandCount, const RwacCommandVoiceRelease& arSource)
+{
+    muCommandType = arSource.muCommandType; // lwz r11,0(r5); stw r11,0(this)
+    maOperand     = arSource.maOperand;     // lwz r11,4(r5); stw r11,4(this)
+
+    CGS_ASSERT(luCommandCount == 2u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_VOICE_RELEASE,
+               "E_RWAC_COMMAND_VOICE_RELEASE == GetCommandType()");
+}
+
+// ---------------------------------------------------------------------------
+// RwacCommandSendConnectParameters::ctor  @ 0x82681608
+//   copy 2 words (tag + 1 operand) from arSource; assert count == 2 and tag == 8.
+// ---------------------------------------------------------------------------
+RwacCommandSendConnectParameters::RwacCommandSendConnectParameters(
+        u32 luCommandCount, const RwacCommandSendConnectParameters& arSource)
+{
+    muCommandType = arSource.muCommandType; // lwz r11,0(r5); stw r11,0(this)
+    maOperand     = arSource.maOperand;     // lwz r11,4(r5); stw r11,4(this)
+
+    CGS_ASSERT(luCommandCount == 2u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_SEND_CONNECT_PARAMETERS,
+               "E_RWAC_COMMAND_SEND_CONNECT_PARAMETERS == GetCommandType()");
 }
 
 } // namespace Playback

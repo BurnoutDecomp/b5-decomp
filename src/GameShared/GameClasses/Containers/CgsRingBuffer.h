@@ -15,11 +15,10 @@
 // Methods attested by the DWARF: RingBuffer Construct/Push/Grow/Pop/Peek/GetLength/
 //   GetMaxLength/GetSpace/IsFull/Clear/operator[](const&)/operator[](&); FixedRingBuffer Construct().
 //
-// BODY (verbatim from the original CgsRingBuffer.h preserved in the Feb-2007 reference
-// tree, references/Feb-2007/.../Containers/CgsRingBuffer.h -- authoritative source):
+// BODY (grounded in the DWARF method set + the X360 asm of the RingBuffer using sites):
 // the read/write-position wrap arithmetic, the full-buffer read-pos advance, and the
 // operator[] (miReadPos + index) % miMaxLength addressing are reproduced exactly. The
-// two original CgsDev::Assert::PrintStringed + `tw 31,1,1` sites are ported to CGS_ASSERT.
+// two original assert sites (PrintStringed + `tw 31,1,1`) are ported to CGS_ASSERT.
 //
 // StuntModeScoring embeds FixedRingBuffer<Vector3,256> (mRecentJumpSet) and
 // FixedRingBuffer<u16,64> (mRecentPropSet) BY VALUE; its bodies call Construct (in

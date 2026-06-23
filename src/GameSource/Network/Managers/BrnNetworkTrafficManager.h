@@ -28,11 +28,37 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Containers/CgsRingBuffer.h"   // CgsContainers::RingBuffer<TrafficHashEntry> (TrafficHash ring)
 
 namespace BrnNetwork
 {
 namespace TrafficManager
 {
+
+    // ------------------------------------------------------------------------
+    // BrnNetwork::TrafficManager::TrafficHash element. The TrafficHash ring is a
+    // CgsContainers::RingBuffer<TrafficHashEntry>; its Push @ 0x8254DC90 copies each entry
+    // as exactly two halfwords (`lhz/sth` @ entry+0 and entry+2) at a 4-byte stride
+    // (`slwi r11, r11, 2`), i.e. sizeof(TrafficHashEntry) == 4. Only the two u16 lanes are
+    // attested by the asm; their finer meaning is not recoverable from the Push body alone,
+    // so they are modelled as offset-pinned halfwords (the producer BrnTrafficHashMessage
+    // pairs a synced-frame index with a 16-bit traffic-determinism hash, which is the
+    // plausible {frame, hash} pairing this ring records -- but the names below are kept
+    // neutral to avoid asserting an unverified field semantics).
+    // ------------------------------------------------------------------------
+    struct TrafficHashEntry
+    {
+        u16 mu16Lane0;   // +0x00  (lhz/sth head halfword copied per Push)
+        u16 mu16Lane1;   // +0x02  (lhz/sth second halfword copied per Push)
+    };
+    static_assert(sizeof(TrafficHashEntry) == 4, "TrafficHash ring entry stride (4 bytes)");
+
+    // The TrafficHash ring records the recent traffic-determinism hashes. Push @ 0x8254DC90
+    // is the generic CgsContainers::RingBuffer<Type>::Push (CgsRingBuffer.h): the layout the
+    // asm walks is exactly RingBuffer<Type> -- mpData@+0, miMaxLength@+4, miReadPos@+8,
+    // miWritePos@+0xC, miLength@+0x10 -- and the full-buffer invariant assert it fires is
+    // CgsRingBuffer.h:137 ("Read pos should equal write pos if buffer is full").
+    typedef CgsContainers::RingBuffer<TrafficHashEntry> TrafficHash;
     // ------------------------------------------------------------------------
     // One 80-byte (0x50) buffered-message body record. The copy reads a u16 head
     // (@ +0) and then copies the 64-byte body @ +0x10..+0x50 as a block; +0x02..+0x10

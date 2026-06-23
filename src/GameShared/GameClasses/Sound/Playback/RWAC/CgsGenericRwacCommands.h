@@ -50,18 +50,24 @@ namespace Playback
 // CgsGenericRwacFactory.h (DWARF). The generic-RWAC command tags. The values
 // exercised by the command ctors in this home are confirmed against the X360 asm
 // (the remaining gaps are other RWAC commands not homed here):
+//   E_RWAC_COMMAND_VOICE_CREATE_INSTANCE             == 1  (li r11,1; stw 0(this) @0x82681194)
+//   E_RWAC_COMMAND_VOICE_RELEASE                     == 2  (cmpwi r11,2 @0x82681378 site)
 //   E_RWAC_COMMAND_PLUGIN_EVENT                      == 3  (li r11,3; stw 0(this) @0x826813CC)
 //   E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE              == 5  (cmpwi r11,5 @0x82681530 site)
 //   E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS            == 6  (cmpwi r11, 6 @0x826AD5EC)
 //   E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS == 7  (cmpwi r11, 7 @0x82681570 site)
+//   E_RWAC_COMMAND_SEND_CONNECT_PARAMETERS           == 8  (cmpwi r11,8 @0x82681660 site)
 //   E_RWAC_COMMAND_REVERBIR_APPLY_IR_DATA            == 9  (cmpwi r11, 9 @0x826816A0 site)
 //   E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS      == 10 (cmpwi r11, 10 @0x82681738 site)
 enum ERwacCommandType
 {
+    E_RWAC_COMMAND_VOICE_CREATE_INSTANCE             = 1,
+    E_RWAC_COMMAND_VOICE_RELEASE                     = 2,
     E_RWAC_COMMAND_PLUGIN_EVENT                      = 3,
     E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE              = 5,
     E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS            = 6,
     E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS = 7,
+    E_RWAC_COMMAND_SEND_CONNECT_PARAMETERS           = 8,
     E_RWAC_COMMAND_REVERBIR_APPLY_IR_DATA            = 9,
     E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS      = 10,
 };
@@ -130,6 +136,59 @@ struct RwacCommandGinsuAttachDataParameters : public RwacCommand
     // @ 0x82681738. Copy-construct from a source record of luCommandCount words.
     RwacCommandGinsuAttachDataParameters(u32 luCommandCount,
                                          const RwacCommandGinsuAttachDataParameters& arSource);
+
+    uintptr_t maOperand; // word 1 -- carried verbatim through the queue
+};
+
+// Voice-create-instance command: 6 words (tag + 5 operands). Tag == 1.
+// X360 building ctor @0x82681170: builds the record from individual arguments
+// rather than copying a source record. Store order (r31 == this): stw r4,4(this)
+// [mpPlaybackVoice]; li r11,1 / stw r11,0(this) [tag]; stw r5,8(this) [mppVoice];
+// stw r6,0xC(this) [mpppPlugin]; stw r7,0x10(this) [mpConfig]; stw r8,0x14(this)
+// [trailing operand]. It then asserts FOUR pointers non-null (the X360 cmplwi each
+// against 0): mpPlaybackVoice (CgsGenericRwacFactory.h:173), mppVoice (:174),
+// mpppPlugin (:175), mpConfig (:176). The 6th word (word 5, +0x14) carries no
+// assert. Like RwacCommandPluginEvent this carries no luCommandCount/tag self-check.
+struct RwacCommandVoiceCreateInstance : public RwacCommand
+{
+    // @ 0x82681170. Build from a playback voice, a voice pointer-slot, a plugin
+    // pointer-slot, a config pointer and one trailing operand.
+    RwacCommandVoiceCreateInstance(uintptr_t apPlaybackVoice, uintptr_t appVoice,
+                                   uintptr_t apppPlugin, uintptr_t apConfig,
+                                   uintptr_t auOperand);
+
+    uintptr_t mpPlaybackVoice; // word 1 -- asserted non-null ("mpPlaybackVoice")
+    uintptr_t mppVoice;        // word 2 -- asserted non-null ("mppVoice")
+    uintptr_t mpppPlugin;      // word 3 -- asserted non-null ("mpppPlugin")
+    uintptr_t mpConfig;        // word 4 -- asserted non-null ("mpConfig")
+    uintptr_t maOperand;       // word 5 -- carried verbatim through the queue
+};
+
+// Voice-release command: 2 words (tag + 1 operand). Tag == 2.
+// X360 copy ctor @0x82681320: copies words 0,1 from arSource, then asserts
+// (a) luCommandCount == 2 ("sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
+//     CgsGenericRwacFactory.h:252; X360 cmplwi cr6,r4,2) and
+// (b) the copied tag == 2 ("E_RWAC_COMMAND_VOICE_RELEASE == GetCommandType()",
+//     CgsGenericRwacFactory.h:253; X360 cmpwi r11,2 against the just-stored 0(this)).
+struct RwacCommandVoiceRelease : public RwacCommand
+{
+    // @ 0x82681320. Copy-construct from a source record of luCommandCount words.
+    RwacCommandVoiceRelease(u32 luCommandCount, const RwacCommandVoiceRelease& arSource);
+
+    uintptr_t maOperand; // word 1 -- carried verbatim through the queue
+};
+
+// Send-connect-parameters command: 2 words (tag + 1 operand). Tag == 8.
+// X360 copy ctor @0x82681608: copies words 0,1 from arSource, then asserts
+// (a) luCommandCount == 2 ("sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
+//     CgsGenericRwacFactory.h:532; X360 cmplwi cr6,r4,2) and
+// (b) the copied tag == 8 ("E_RWAC_COMMAND_SEND_CONNECT_PARAMETERS == GetCommandType()",
+//     CgsGenericRwacFactory.h:533; X360 cmpwi r11,8 against the just-stored 0(this)).
+struct RwacCommandSendConnectParameters : public RwacCommand
+{
+    // @ 0x82681608. Copy-construct from a source record of luCommandCount words.
+    RwacCommandSendConnectParameters(u32 luCommandCount,
+                                     const RwacCommandSendConnectParameters& arSource);
 
     uintptr_t maOperand; // word 1 -- carried verbatim through the queue
 };

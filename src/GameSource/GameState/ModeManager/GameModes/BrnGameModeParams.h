@@ -6,6 +6,7 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"        // GameStateModuleIO::EGameModeType
 #include "GameSource/GameState/BrnCheckpointData.h"           // BrnGameState::CheckpointData (real, single owner)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
+#include "SharedClasses/Progression/BrnRaceEventData.h"       // BrnProgression::RaceEventData (real, single owner)
 
 // =============================================================================
 // BrnGameModeParams.h  (MERGED OWNING HEADER)
@@ -56,13 +57,10 @@ public:
 };
 
 // Per-event progression record. RaceMode::Start reads the start/add rival counts out of it.
-// Real home: SharedClasses/Progression/BrnRaceEventData.{h,cpp}.
-class RaceEventData
-{
-public:
-    u8 GetStartRivalCount() const;
-    u8 GetAddRivalCount() const;
-};
+// The former 2-method stub here is RETIRED: BrnProgression::RaceEventData now has a single
+// complete owner (SharedClasses/Progression/BrnRaceEventData.h, included above), which declares
+// GetStartRivalCount/GetAddRivalCount among its attested API. (ODR -- one owner; same pattern as
+// the retired CheckpointData stub above.)
 }
 
 // Forward decl for StartGameModeParams::mpPlayerCarVehicleListEntry / SetPlayerVehicleGamePlayData.
