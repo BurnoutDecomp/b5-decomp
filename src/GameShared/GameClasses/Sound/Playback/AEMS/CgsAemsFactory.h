@@ -119,6 +119,17 @@ struct CsisReleaseCommand : public CsisCommand
     uintptr_t maOperand; // word 1 -- carried verbatim through the queue
 };
 
+// CgsAemsFactory.h:212 (DWARF). Update command: 3 words (tag + 2 operands).
+// Type tag E_CSIS_COMMAND_UPDATE (== 3). X360 ctor @ 0x82681BD0 copies words
+// 0,4,8 (lwz/stw 0/4/8) and asserts count == 3 and tag == 3.
+struct CsisUpdateCommand : public CsisCommand
+{
+    // @ 0x82681BD0. Copy-construct from a source record of luCommandCount words.
+    CsisUpdateCommand(u32 luCommandCount, const CsisUpdateCommand& arSource);
+
+    uintptr_t maOperands[2]; // words 1..2 -- carried verbatim through the queue
+};
+
 const u32 KU_MAX_PATCH_MONITORS = 16; // CgsAemsFactory.h:373 (DWARF)
 
 // CgsAemsFactory.h:291 (DWARF): AemsFactory : public AemsRWSampleFactory.

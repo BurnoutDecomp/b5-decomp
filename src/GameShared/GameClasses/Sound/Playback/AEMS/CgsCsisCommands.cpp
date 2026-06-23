@@ -6,6 +6,7 @@
 //   CsisSetClassHandleCommand::CsisSetClassHandleCommand  @ 0x826819E0
 //   CsisCreateCommand::CsisCreateCommand                  @ 0x82681A90
 //   CsisReleaseCommand::CsisReleaseCommand                @ 0x82681B38
+//   CsisUpdateCommand::CsisUpdateCommand                  @ 0x82681BD0
 //
 // Each constructor copy-constructs a command record from a source record of the same
 // shape (X360: a chain of lwz N(r5) / stw N(r3) over the record's words), then runs
@@ -77,6 +78,21 @@ CsisReleaseCommand::CsisReleaseCommand(u32 luCommandCount, const CsisReleaseComm
     CGS_ASSERT(luCommandCount == 2u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
     CGS_ASSERT(GetCommandType() == E_CSIS_COMMAND_RELEASE,
                "E_CSIS_COMMAND_RELEASE == GetCommandType()");
+}
+
+// ---------------------------------------------------------------------------
+// CsisUpdateCommand::CsisUpdateCommand  @ 0x82681BD0
+//   copy 3 words (tag + 2 operands) from arSource; assert count == 3 and tag == 3.
+// ---------------------------------------------------------------------------
+CsisUpdateCommand::CsisUpdateCommand(u32 luCommandCount, const CsisUpdateCommand& arSource)
+{
+    muCommandType = arSource.muCommandType; // stw r11, 0(this)
+    maOperands[0] = arSource.maOperands[0]; // stw r11, 4(this)
+    maOperands[1] = arSource.maOperands[1]; // stw r11, 8(this)
+
+    CGS_ASSERT(luCommandCount == 3u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(GetCommandType() == E_CSIS_COMMAND_UPDATE,
+               "E_CSIS_COMMAND_UPDATE == GetCommandType()");
 }
 
 } // namespace Playback
