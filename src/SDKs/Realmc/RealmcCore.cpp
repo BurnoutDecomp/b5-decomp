@@ -151,6 +151,23 @@ RefCount* RefCount::Unreferenced(RefCount* pThis)
 }
 
 // ---------------------------------------------------------------------------
+// RefCount::AddRef  (the inlined Realmc reference-bump idiom)
+//
+// Every Realmc smart-pointer over a RefCount object raises the count with the
+// X360 interrupt-masked reservation increment inlined at its bind site:
+//   addi r10, msg, 4                          -> &miRefCount
+//   <mfmsr/mtmsree/lwarx r9/addi r9,+1/stwcx./mtmsree/bne>
+//                                             -> atomically miRefCount += 1
+// (see MessagePtr::MessagePtr @ 0x82C45778 and operator= @ 0x82C45838). The
+// interrupt-masked lwarx/stwcx. atomic increment is modelled portably with
+// _InterlockedIncrement, the mirror of Release's _InterlockedDecrement.
+// ---------------------------------------------------------------------------
+void RefCount::AddRef()
+{
+    _InterlockedIncrement(reinterpret_cast<volatile long*>(&miRefCount));
+}
+
+// ---------------------------------------------------------------------------
 // RefCount::~RefCount
 //
 // Backs the X360 `vector deleting destructor' @ 0x82C450C0:
@@ -317,6 +334,102 @@ MessageString::MessageString(std::uint32_t uId, const char* const* ppSourceRange
 MessageString::~MessageString()
 {
     maText.Free();
+}
+
+// ===========================================================================
+// MessagePtr -- intrusive refcount wrapper over an IRealmcMessage (own vtable
+// off_821BA2F4). Reconstructed from the X360 asm; see RealmcCore.h for layout.
+// ===========================================================================
+
+// The shared empty-message singleton (X360 off_832BE1F0). Defined here as a
+// null-initialised pointer; another Realmc TU installs the real empty-message
+// object at boot. (Owning definition for the `extern` in the header.)
+IRealmcMessage* g_pRealmcEmptyMessage = nullptr;
+
+// ---------------------------------------------------------------------------
+// MessagePtr::MessagePtr @ 0x82C45778
+//
+//   stw off_821BA2F4, 0(r3)                   -> install MessagePtr vtable
+//   addi r10, r4, 4                           -> &mpMessage->miRefCount
+//   <mfmsr/mtmsree/lwarx/addi +1/stwcx./mtmsree/bne>  -> AddRef the message
+//   stw r4, 4(r3)                             -> mpMessage = pMessage
+//
+// The vtable store is MSVC's ctor prologue (emitted from the class definition);
+// the inlined atomic increment is RefCount::AddRef on the held message.
+// ---------------------------------------------------------------------------
+MessagePtr::MessagePtr(IRealmcMessage* pMessage)
+    : mpMessage(pMessage)
+{
+    mpMessage->AddRef();
+}
+
+// ---------------------------------------------------------------------------
+// MessagePtr::~MessagePtr @ 0x82C457B0
+//
+//   stw off_821BA2F4, 0(r3)                   -> (re)install MessagePtr vtable
+//   lwz r3, 4(r31) ; bl RefCount::Release     -> Release(mpMessage)
+//   li r11, 0 ; stw r11, 4(r31)               -> mpMessage = 0
+//
+// Backs the X360 `scalar deleting destructor' @ 0x82C45FC0, which (when its
+// delete flag bit0 is set) frees 8 bytes through the Realmc backend afterwards.
+// ---------------------------------------------------------------------------
+MessagePtr::~MessagePtr()
+{
+    // RefCount::Release takes the target object explicitly (the X360 thunk reads
+    // r3 == the object, ignoring any implicit this), so it is invoked through the
+    // message itself; the committed Release signature is left untouched.
+    mpMessage->Release(mpMessage);
+    mpMessage = nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// MessagePtr::operator= @ 0x82C45838
+//
+//   v4 = this->mpMessage ; if (v4 == rOther.mpMessage) return this  (no-op)
+//   bl RefCount::Release(v4)                   -> drop the old message
+//   v5 = rOther.mpMessage ; stw v5, 4(this)    -> mpMessage = new
+//   addi r8, v5, 4 ; <atomic increment>        -> AddRef the new message
+//   return this
+//
+// The rebind only churns the refcounts when the target actually changes, exactly
+// as the X360 cr6 compare guards.
+// ---------------------------------------------------------------------------
+MessagePtr& MessagePtr::operator=(const MessagePtr& rOther)
+{
+    if (mpMessage != rOther.mpMessage)
+    {
+        mpMessage->Release(mpMessage);  // Release takes the target explicitly (see ~MessagePtr)
+        mpMessage = rOther.mpMessage;
+        mpMessage->AddRef();
+    }
+    return *this;
+}
+
+// ---------------------------------------------------------------------------
+// MessagePtr::Apply @ 0x82C44C38
+//
+//   lwz r3, 4(r3)                             -> r3 = mpMessage
+//   lwz r11, 0(r3) ; lwz r11, 8(r11)          -> mpMessage vtable slot +8
+//   mtctr r11 ; bctr                          -> tail-call (mpMessage)
+//
+// i.e. return mpMessage->Process(). The X360 dispatches into the held message's
+// own vtable (+8), not MessagePtr's vtable.
+// ---------------------------------------------------------------------------
+int MessagePtr::Apply(MessagePtr* pThis)
+{
+    return pThis->mpMessage->Process();
+}
+
+// ---------------------------------------------------------------------------
+// MessagePtr::EMPTY_MESSAGE @ 0x82C44C28
+//
+//   lis r11, off_832BE1F0@ha ; lwz r3, off_832BE1F0@l(r11) ; blr
+//
+// Returns the shared empty-message singleton pointer.
+// ---------------------------------------------------------------------------
+IRealmcMessage* MessagePtr::EMPTY_MESSAGE()
+{
+    return g_pRealmcEmptyMessage;
 }
 
 } // namespace RealmcCore

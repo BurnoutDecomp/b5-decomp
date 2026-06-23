@@ -55,10 +55,44 @@ namespace Jobs
         JOB_PRIORITY_NUM_BITS = 8
     };
 
-    // Forward declarations for the scheduler backend (an opaque .cpp-local type in
-    // the SDK) and the Job class (defined in job.h, not reconstructed in this group).
-    namespace Detail { class SchedulerBackend; }
+    // Forward declarations for the scheduler backend and the Job class (defined in
+    // job.h, not reconstructed in this group).
     struct Job;
+    struct JobInstanceHandle;
+
+    namespace Detail
+    {
+        // The user yield-predicate JobInstanceHandle::WaitOn threads through to
+        // WaitOnYieldHelper (declared in detail.h; redeclared here so the handle
+        // surface does not pull detail.h). Nonzero == keep waiting.
+        typedef int (*WaitOnYieldCallbackArg)(int iContext);
+
+        // SchedulerBackend -- the polymorphic owner of submitted job-instance slots.
+        // Only the two virtual entry points JobInstanceHandle dispatches into are
+        // committed here (the X360 asm proves the call sites: vtable slot +0x30 for
+        // the completion query, slot +0x38 for adding a barrier). The full backend
+        // (LocalBackend etc.) is reconstructed elsewhere; this is the minimal
+        // abstract surface the handle calls BY NAME. The polymorphic interface keeps
+        // the named virtual dispatch the binary performs without committing the rest
+        // of the backend's (out-of-group) vtable/layout.
+        class SchedulerBackend
+        {
+        public:
+            virtual ~SchedulerBackend() {}
+
+            // vtable slot +0x30: is the instance identified by (uSubmissionId,
+            // uHandleQword==packed backend+index) finished? Nonzero == complete.
+            // (X360 passes the submission id and the packed +0x8 qword as a 64-bit
+            // handle key.)
+            virtual int IsJobComplete(u64 uSubmissionId, u64 uHandleQword) = 0;
+
+            // vtable slot +0x38: establish a barrier so the dependent job-instance handle
+            // waits on the instance keyed by (uSubmissionId, uHandleQword). The X360
+            // dispatches this through the *dependency's* backend vtable, handing it the
+            // dependent handle, the backend, and the dependency's submission key.
+            virtual void AddBarrier(JobInstanceHandle* pDependentHandle, u64 uSubmissionId, u64 uHandleQword) = 0;
+        };
+    }
 
     // job_instance_handle.h:21 -- the lightweight handle to a submitted job
     // instance living in a scheduler backend's slot table.
@@ -72,6 +106,24 @@ namespace Jobs
     {
         JobInstanceHandle();
         JobInstanceHandle(Detail::SchedulerBackend* pBackend, u16 uIndex, u64 uSubmissionId);
+
+        // @ 0x82BC9A50 -- make THIS handle's instance wait on the dependency instance
+        // (the argument). The X360 reads the backend + submission key from the DEPENDENCY
+        // handle (a2), then dispatches that backend's vtable slot +0x38 with this handle
+        // as the dependent. Returns *this.
+        JobInstanceHandle& AddBarrier(const JobInstanceHandle& lrDependency);
+
+        // @ 0x82BCA470 -- block until this submitted job instance has completed (or a
+        // watchdog budget gives up). Each spin: ask the backend whether the instance
+        // is complete (vtable slot +0x30); if not, run one WaitOnYieldHelper pass
+        // (optional user predicate / sleep / elapsed-time budget). Returns nonzero
+        // while it should keep waiting; 0 once the wait is satisfied/abandoned.
+        //   pYieldCallback : optional predicate run each spin (nonzero == keep waiting)
+        //   iYieldContext  : argument forwarded to pYieldCallback
+        //   lYieldSleepMs  : if >= 0, ms to sleep each spin
+        int WaitOn(Detail::WaitOnYieldCallbackArg pYieldCallback,
+                   int                            iYieldContext,
+                   s32                            lYieldSleepMs);
 
         u64                       mSubmissionId;     // +0x0
         Detail::SchedulerBackend* mSchedulerBackend; // +0x8

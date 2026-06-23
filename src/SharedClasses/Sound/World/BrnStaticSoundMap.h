@@ -8,12 +8,24 @@ namespace BrnSound
 {
 namespace World
 {
-// The two element types are pointer-only here; their full layouts (and their own
-// FixUp methods) are deferred to their own TUs. Forward-declaration is the correct
-// choice — StaticSoundMap holds them only via const pointers.
-// FLAG: SubRegionDescriptor / StaticSoundEntity element types are DEFERRED.
-struct SubRegionDescriptor;
+// StaticSoundEntity stays pointer-only here; its full layout (and its own FixUp)
+// is deferred to its own TU. Forward-declaration is the correct choice — the map
+// holds it only via a const pointer.
+// FLAG: StaticSoundEntity element type is DEFERRED.
 struct StaticSoundEntity;
+
+// SubRegionDescriptor — the per-cell descriptor of the XZ sub-region grid.
+// ADDITIVE GROW (was a deferred forward-decl): GetSubRegionDescrip @ 0x8267AF10
+// returns &mpSubRegions[miNumSubRegionsX * iz + ix], and the X360 indexing
+// scales the cell index by 4 (`slwi r11, r11, 2`), proving a 4-byte element
+// stride. Modelled here as a single 4-byte opaque cell so the accessor can return
+// a real element pointer by index without a raw-offset cast. FLAG: only the
+// 4-byte stride is X360-attested; the cell's internal field layout is still
+// DEFERRED to the SubRegionDescriptor TU — grow this struct additively there.
+struct SubRegionDescriptor
+{
+    u32 muData;   // opaque 4-byte cell (stride proven by 0x8267AF10 `slwi …,2`)
+};
 
 // The serialised StaticSoundMap DATA type. Shape recovered from the DecFIGS DWARF
 // (struct BrnSound::World::StaticSoundMap, BrnStaticSoundMap.h:365-380). Minimal
@@ -30,6 +42,14 @@ struct StaticSoundMap
         E_ROOT_TYPE_EMITTER = 1,
         E_ROOT_TYPE_COUNT   = 2
     };
+
+    // GetSubRegionDescrip @ 0x8267AF10 — XZ-plane grid lookup. Returns the
+    // descriptor for the cell containing lrPosition, or nullptr when the point is
+    // outside the [mMin, mMax) extents (compared per the X360 `>= max` /
+    // `< min` half-open tests) or maps to an out-of-range cell. The map grid lives
+    // in the world XZ plane: the X360 reads the query's X (lane 0) and Z (lane 2)
+    // and compares them against mMin/mMax, whose .x/.y lanes hold the X/Z bounds.
+    const SubRegionDescriptor* GetSubRegionDescrip(const Vector3& lrPosition) const;
 
     // The resource-type handler relocates mpSubRegions/mpEntities and validates
     // mpEntities/miNumEntities during FixUp. Grant it friendship rather than
