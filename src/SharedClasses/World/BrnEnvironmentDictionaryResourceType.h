@@ -14,9 +14,15 @@ namespace EnvironmentSettings
 // are concrete, so overriding just these three keeps the type concrete.
 struct DictionaryResourceType : public CgsResource::Type
 {
-    uint32_t GetTypeID() const override;
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void     FixDown(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t                       GetTypeID() const override;
+    // ADDITIVE: the type's serialised-size descriptor. The X360 ARTIST build emits
+    // this override (GetSerialised... @ 0x8267D310) returning a five-entry
+    // BaseResourceDescriptors<5> whose first entry's size is derived from two header
+    // fields of the resource (muField4 @+4, muField12 @+12); entries 1..4 are {0,1}.
+    // Body in the .cpp.
+    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    void                           FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    void                           FixDown(void* lpResource, const rw::Resource& lrResource) const override;
 };
 }
 }

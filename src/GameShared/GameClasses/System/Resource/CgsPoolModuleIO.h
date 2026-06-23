@@ -31,6 +31,27 @@ namespace CgsResource
 {
 namespace PoolIO
 {
+    // ------------------------------------------------------------------------------------------
+    // CgsResource::PoolIO::InputBuffer (DWARF CgsPoolModuleIO.h). The pool's input payload buffer:
+    // a single PoolInputQueue at +4 over the CgsModule::IOBuffer base. The X360 write accessor
+    // GetPoolInputQueue() @ 0x828E1A00 tests the write-lock bit (((*a1 >> 3) & 1)) and returns
+    // this + 4 (CgsPoolModuleIO.h:234, "Not locked for writing"). Modelled by name; the queue's
+    // foreign type is opaque, correctly-placed at +4.
+    struct InputBuffer : public CgsModule::IOBuffer
+    {
+        // PoolInputQueue: the pool's request-input queue. Same VariableEventQueue family as the
+        // output side; reconstructed by name with the prior-wave PoolQueueTemplate generic.
+        typedef CgsModule::VariableEventQueue<8192, 16> PoolInputQueue;
+
+        PoolInputQueue* GetPoolInputQueue();   // +4, write-lock
+
+        static void _AssertLayoutInput();
+
+    private:
+        u8             maStatusPadIn[3];   // +1..+3 (force +4 placement)
+        PoolInputQueue mPoolInputQueue;    // +4
+    };
+
     struct OutputBuffer : public CgsModule::IOBuffer
     {
         // PoolQueueTemplate<8192> : VariableEventQueue<8192,16> (DWARF CgsPoolModuleIO.h:222/128).

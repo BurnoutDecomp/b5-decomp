@@ -51,5 +51,21 @@ namespace BrnNetworkModuleIO
                    "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
         mNetworkPlayerID = lNetworkPlayerID;
     }
+
+    // X360 0x82581088: NetworkPlayerDisconnectedEvent::Construct
+    //   (called by BrnNetwork::BrnNetworkManager::PlayerManagerEventCallback).
+    // Asserts the incoming id is not the invalid sentinel, then stores the three fields
+    // by name. The X360 stores the arguments in MEMBER order (id @+0, status @+4,
+    // race-car index @+8) rather than argument order -- reproduced via the named members.
+    void NetworkPlayerDisconnectedEvent::Construct(NetworkPlayerID lNetworkPlayerID,
+                                                   EActiveRaceCarIndex leActiveRaceCarIndex,
+                                                   EDisconnectStatus leDisconnectStatus)
+    {
+        CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
+                   "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        mNetworkPlayerID     = lNetworkPlayerID;
+        meDisconnectStatus   = leDisconnectStatus;
+        meActiveRaceCarIndex = leActiveRaceCarIndex;
+    }
 }
 }
