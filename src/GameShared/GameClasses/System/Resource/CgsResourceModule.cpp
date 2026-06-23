@@ -1,5 +1,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"  // PoolIO::Input/OutputBuffer (shuttle)
+#include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h" // ResourceIO::InputBuffer (module input)
+#include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"         // MemoryIO buffers + MemoryResponse
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // receiver-queue forward target
 #include <cstring>                                    // memset (InitOptions zero-init)
 
 // CgsResource::ResourceModule - see the header. This pass reconstructs the lifecycle
@@ -135,5 +139,134 @@ namespace CgsResource
     // Update (0x82907948) pumps each sub-module + shuttles requests; Destruct (0x828EC6B0) tears them
     // down. Deferred.
     void ResourceModule::Destruct() {}
-    bool ResourceModule::Update(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return false; }
+
+    // @ 0x82907268 - route inbound resource requests to the sub-module inputs. Pool-create slice: a
+    // CreatePool request (id 0) is forwarded to the pool input queue. [The bundle/file/memory request
+    // routes (ids 2/3/9..0xD) are deferred -- pool bring-up only sends CreatePool. X360 forwards size 172;
+    // we use the recorded event size so the x64-width CreatePoolRequestEvent copies whole.]
+    void ResourceModule::ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn, PoolIO::InputBuffer* lpPoolIn)
+    {
+        const ResourceIO::ResourceRequestQueue<16384>* lpQ =
+            static_cast<const ResourceIO::InputBuffer&>(*lpResIn).GetResourceQueue();
+        PoolIO::InputBuffer::PoolInputQueue* lpPoolQ = lpPoolIn->GetPoolInputQueue();
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpQ->GetFirstEvent(&lpEvent, &liSize);
+        while (liId != -1 && lpEvent != 0)
+        {
+            if (liId == 0)   // CreatePool -> pool input
+                lpPoolQ->AddEvent(lpEvent, 0, liSize);
+            const CgsModule::Event* lpNext = 0;
+            liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+    }
+
+    // @ 0x82907948 - the per-frame streaming shuttle (pool-create slice): route inbound resource requests
+    // to the pool, run the pool module (CreatePool -> memory requests; receiver -> DoCreatePoolRequest),
+    // forward pool memory requests to the MemoryModule, run it (allocate the banks), then route the memory
+    // responses back to the pool's receiver queue. Multi-frame: a CreatePool sent in frame N has its bank
+    // allocated + response queued the same frame, but the receiver is drained at the START of the pool
+    // update, so DoCreatePoolRequest (the actual CreatePool) runs frame N+1. The scratch sub-module IO
+    // buffers are function-static (the X360 creates them on an IOBufferStack each frame). [The bundle-loader
+    // + file-system sub-shuttles + ProcessResourceResponses are deferred -- not exercised by pool creation.]
+    bool ResourceModule::Update(void* lpInputBuffer, void* /*lpOutputBuffer*/)
+    {
+        ResourceIO::InputBuffer* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
+        if (lpResIn == 0)
+            return false;
+
+        static PoolIO::InputBuffer               s_poolIn;
+        static PoolIO::OutputBuffer              s_poolOut;
+        static CgsMemory::MemoryIO::InputBuffer  s_memIn;
+        static CgsMemory::MemoryIO::OutputBuffer s_memOut;
+        static bool s_ctor = false;
+        if (!s_ctor) { s_poolIn.Construct(); s_poolOut.Construct(); s_memIn.Construct(); s_memOut.Construct(); s_ctor = true; }
+
+        // clear the scratch sub-module queues for this frame
+        s_poolIn.LockForWrite();  s_poolIn.GetPoolInputQueue()->Clear();            s_poolIn.UnlockForWrite();
+        s_poolOut.LockForWrite(); s_poolOut.GetPoolResourceRequestQueue()->Clear(); s_poolOut.GetPoolOutputQueue()->Clear(); s_poolOut.UnlockForWrite();
+        s_memIn.LockForWrite();   s_memIn.GetMemoryRequestQueue()->Clear();         s_memIn.UnlockForWrite();
+        s_memOut.LockForWrite();  s_memOut.GetMemoryResponseQueue()->Clear();       s_memOut.UnlockForWrite();
+
+        // [1] inbound resource requests -> pool input, then consume the resource input.
+        lpResIn->LockForRead(); s_poolIn.LockForWrite();
+        ProcessResourceRequests(lpResIn, &s_poolIn);
+        s_poolIn.UnlockForWrite(); lpResIn->UnlockForRead();
+        lpResIn->LockForWrite(); lpResIn->GetResourceQueue()->Clear(); lpResIn->UnlockForWrite();
+
+        // [2] pool module: CreatePool requests -> memory requests; drain receiver -> DoCreatePoolRequest.
+        mPoolModule.Update(&s_poolIn, &s_poolOut);
+
+        // [3] pool memory requests -> MemoryModule input.
+        s_poolOut.LockForRead(); s_memIn.LockForWrite();
+        ProcessPoolResourceRequests(&s_memIn, &s_poolOut);
+        s_memIn.UnlockForWrite(); s_poolOut.UnlockForRead();
+
+        // [4] MemoryModule: allocate the requested banks.
+        mMemoryModule.Update(0, 0, &s_memIn, &s_memOut);
+
+        // [5] memory responses -> their receiver queues (drained next frame by the pool module).
+        s_memOut.LockForRead();
+        ProcessMemoryResponses(&s_memOut);
+        s_memOut.UnlockForRead();
+
+        return false;
+    }
+
+    // @ 0x829019F0 - forward the pool module's emitted resource-memory requests into the MemoryModule
+    // input queue. Each pool output event tagged 10 (CreatePool) / 13 (DeletePool) becomes a memory
+    // request (queue tag 1). [X360 hardcodes the per-type size 92/16; we use the recorded event size so
+    // the x64-width CreateResourceRequest copies whole.]
+    void ResourceModule::ProcessPoolResourceRequests(CgsMemory::MemoryIO::InputBuffer* lpMemInput,
+                                                     PoolIO::OutputBuffer* lpPoolOutput)
+    {
+        const PoolIO::OutputBuffer::PoolResourceRequestQueue* lpQ =
+            static_cast<const PoolIO::OutputBuffer&>(*lpPoolOutput).GetPoolResourceRequestQueue();
+        CgsMemory::MemoryIO::InputBuffer::MemoryRequestQueue* lpMemQ = lpMemInput->GetMemoryRequestQueue();
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpQ->GetFirstEvent(&lpEvent, &liSize);
+        while (liId != -1 && lpEvent != 0)
+        {
+            if (liId == 10 || liId == 13)   // CreatePool / DeletePool memory requests
+                lpMemQ->AddEvent(lpEvent, 1, liSize);
+            else
+                CGS_ASSERT(false, "Unexpected request from bundle loader\n");
+
+            const CgsModule::Event* lpNext = 0;
+            liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+    }
+
+    // @ 0x828EC6F0 - route each MemoryModule response to its originating receiver queue (the request's
+    // reply target, response->GetUser()) tagged for that response type. The X360 indexes a static table
+    // dword_820F71D0[meEventType]; the pool-create flow carries only CREATE_RESOURCE(6) -> CreatePool(10).
+    void ResourceModule::ProcessMemoryResponses(CgsMemory::MemoryIO::OutputBuffer* lpMemOutput)
+    {
+        const CgsMemory::MemoryIO::OutputBuffer::MemoryResponseQueue* lpQ =
+            static_cast<const CgsMemory::MemoryIO::OutputBuffer&>(*lpMemOutput).GetMemoryResponseQueue();
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpQ->GetFirstEvent(&lpEvent, &liSize);
+        while (liId != -1 && lpEvent != 0)
+        {
+            const CgsMemory::MemoryIO::MemoryResponse* lpResp =
+                static_cast<const CgsMemory::MemoryIO::MemoryResponse*>(lpEvent);
+            CgsModule::BaseEventReceiverQueue* lpReceiver = lpResp->GetUser();
+            if (lpReceiver != 0)
+            {
+                const s32 liReceiverTag =
+                    (lpResp->GetEventType() == CgsMemory::MemoryIO::E_EVENT_TYPE_CREATE_RESOURCE) ? 10 : 0;
+                lpReceiver->AddEvent(lpEvent, liReceiverTag, liSize);
+            }
+            const CgsModule::Event* lpNext = 0;
+            liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+    }
 }

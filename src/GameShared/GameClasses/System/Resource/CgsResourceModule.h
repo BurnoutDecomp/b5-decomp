@@ -39,6 +39,8 @@ namespace CgsResource
     };
 
     struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
+    namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
+    namespace ResourceIO { struct InputBuffer; }                    // the module's request input
 
     // CgsResource::DebugComponentParams (DWARF CgsResourceDebugComponent.h:57) - the debug-component
     // bring-up params carried in ResourceModule::InitOptions. The X360 callback signature is
@@ -93,6 +95,20 @@ namespace CgsResource
         bool Release();    // 0x82906570
         void Destruct();   // deferred
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);        // deferred
+
+        // ---- request/response shuttle steps (the pool-create slice of ResourceModule::Update) ---------
+        // @ 0x829019F0 - forward the pool module's resource-memory requests (its PoolIO::OutputBuffer
+        // resource-request queue) into the MemoryModule input queue. Caller holds memInput write-locked +
+        // poolOutput read-locked (as ResourceModule::Update does).
+        void ProcessPoolResourceRequests(CgsMemory::MemoryIO::InputBuffer* lpMemInput,
+                                         PoolIO::OutputBuffer* lpPoolOutput);
+        // @ 0x828EC6F0 - forward each MemoryModule response to its originating receiver queue
+        // (response->GetUser()) tagged for that response type. Caller holds memOutput read-locked.
+        void ProcessMemoryResponses(CgsMemory::MemoryIO::OutputBuffer* lpMemOutput);
+
+        // @ 0x82907268 - route the module's inbound resource requests to the sub-module inputs. Pool-create
+        // slice: CreatePool (id 0) -> pool input. Caller holds resIn read-locked + poolIn write-locked.
+        void ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn, PoolIO::InputBuffer* lpPoolIn);
 
         // Accessor so the GameDataModule's CreatePools/CreateBanks can drive the embedded PoolModule
         // (the X360 reaches it through the resource-module vtable; here a by-name accessor).

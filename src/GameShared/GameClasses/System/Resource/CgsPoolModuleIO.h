@@ -31,29 +31,51 @@ namespace CgsResource
 {
 namespace PoolIO
 {
+    // Inbound pool-request buffer: carries the create/destroy/acquire/etc. requests the ResourceModule
+    // shuttle (ProcessResourceRequests) routes from the resource input to the pool module. PoolModule::
+    // Update read-locks it and ProcessInputBuffer drains it. Single embedded request queue (VEQ<8192,16>).
+    struct InputBuffer : public CgsModule::IOBuffer
+    {
+        typedef CgsModule::VariableEventQueue<8192, 16> PoolInputQueue;
+
+        void Construct();
+        void Destruct();
+
+        const PoolInputQueue* GetPoolInputQueue() const;   // read-locked
+        PoolInputQueue*       GetPoolInputQueue();          // write-locked
+
+    private:
+        u8             maStatusPad[3];     // +1..+3 (force +4 placement)
+        PoolInputQueue mPoolInputQueue;    // +4
+    };
+
     struct OutputBuffer : public CgsModule::IOBuffer
     {
         // PoolQueueTemplate<8192> : VariableEventQueue<8192,16> (DWARF CgsPoolModuleIO.h:222/128).
         typedef CgsModule::VariableEventQueue<8192, 16> PoolOutputQueue;
 
-        // FLAG: ResourceRequestQueue<8192> (foreign home). 8208 bytes (+8212..+...).
-        struct PoolResourceRequestQueueStorage
-        {
-            unsigned char maBytes[8208];
-        };
+        // ResourceRequestQueue<8192> : VariableEventQueue<8192,16> (DWARF CgsPoolModuleIO.h:67/230). The
+        // X360 SendCreatePoolMemoryRequest AddEvents to it as VariableEventQueue<8192,16>; sizeof == 8208,
+        // identical to the previous opaque byte storage, so the +8212 member offset is preserved.
+        typedef CgsModule::VariableEventQueue<8192, 16> PoolResourceRequestQueue;
+        typedef PoolResourceRequestQueue                PoolResourceRequestQueueStorage;  // back-compat alias
+
+        // ---- lifecycle -----------------------------------------------------------------
+        void Construct();    // construct the IOBuffer base + both embedded queues
+        void Destruct();
 
         // ---- accessors owned/bodied by this group --------------------------------------
-        const PoolOutputQueue*                 GetPoolOutputQueue() const;          // +4,    read
-        const PoolResourceRequestQueueStorage* GetPoolResourceRequestQueue() const; // +8212, read
-        PoolOutputQueue*                       GetPoolOutputQueue();                // +4,    write
-        PoolResourceRequestQueueStorage*       GetPoolResourceRequestQueue();       // +8212, write
+        const PoolOutputQueue*           GetPoolOutputQueue() const;          // +4,    read
+        const PoolResourceRequestQueue*  GetPoolResourceRequestQueue() const; // +8212, read
+        PoolOutputQueue*                 GetPoolOutputQueue();                // +4,    write
+        PoolResourceRequestQueue*        GetPoolResourceRequestQueue();       // +8212, write
 
         static void _AssertLayout();
 
     private:
-        u8                              maStatusPad[3];            // +1..+3 (force +4 placement)
-        PoolOutputQueue                 mPoolOutputQueue;          // +4    (DWARF :268)
-        PoolResourceRequestQueueStorage mPoolResourceRequestQueue; // +8212 (DWARF :269)
+        u8                       maStatusPad[3];            // +1..+3 (force +4 placement)
+        PoolOutputQueue          mPoolOutputQueue;          // +4    (DWARF :268)
+        PoolResourceRequestQueue mPoolResourceRequestQueue; // +8212 (DWARF :269)
     };
 }
 }
