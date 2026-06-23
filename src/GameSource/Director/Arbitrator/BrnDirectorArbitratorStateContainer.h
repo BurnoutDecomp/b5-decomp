@@ -63,9 +63,22 @@ namespace BrnDirector
             E_NUM_STATES               = 11
         };
 
+        // X360 0x827E2D18. The constructor default-constructs each embedded state and
+        // the shared playlists (the source build's synthesized ctor writes each embedded
+        // ArbitratorState subobject's vtable pointer + initialises its members to the -1
+        // sentinel at the subobject's interior offsets, and runs SharedPlaylists' ctor).
+        // By-name parity: each ArbStateXxx member runs ArbitratorState() and mSharedPlaylists
+        // default-constructs; the pointer table / mpCurrentState are seeded later by
+        // ConstructAll (the source ctor leaves them untouched too).
+        ArbitratorStateContainer();
+
         void ConstructAll();
         void UpdateAll(ArbStateSharedInfo& lrSharedInfo);
         void ReleaseAll(ArbStateSharedInfo& lrSharedInfo);
+
+        // X360 0x821F5A60. Returns the active state, asserting it is non-null
+        // ("mpCurrentState != NULL"). mpCurrentState is the source build's +0x35CC word.
+        ArbitratorState* GetCurrentState() const;
 
     private:
         // Embedded BY VALUE, in the DWARF member order (which is the source build's

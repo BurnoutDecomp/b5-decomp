@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 
+#include <cstdint> // std::uintptr_t
+
 // ============================================================================
 // GameShared/GameClasses/Sound/Playback/Rwac/CgsGenericRwacCommands.h
 //
@@ -45,15 +47,19 @@ namespace CgsSound
 namespace Playback
 {
 
-// CgsGenericRwacFactory.h (DWARF). The generic-RWAC command tags. Only the four
-// values exercised by the command ctors in this home are confirmed against the
-// X360 asm (the gaps 0..5/8 are other RWAC commands not homed here):
+// CgsGenericRwacFactory.h (DWARF). The generic-RWAC command tags. The values
+// exercised by the command ctors in this home are confirmed against the X360 asm
+// (the remaining gaps are other RWAC commands not homed here):
+//   E_RWAC_COMMAND_PLUGIN_EVENT                      == 3  (li r11,3; stw 0(this) @0x826813CC)
+//   E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE              == 5  (cmpwi r11,5 @0x82681530 site)
 //   E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS            == 6  (cmpwi r11, 6 @0x826AD5EC)
 //   E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS == 7  (cmpwi r11, 7 @0x82681570 site)
 //   E_RWAC_COMMAND_REVERBIR_APPLY_IR_DATA            == 9  (cmpwi r11, 9 @0x826816A0 site)
 //   E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS      == 10 (cmpwi r11, 10 @0x82681738 site)
 enum ERwacCommandType
 {
+    E_RWAC_COMMAND_PLUGIN_EVENT                      = 3,
+    E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE              = 5,
     E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS            = 6,
     E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS = 7,
     E_RWAC_COMMAND_REVERBIR_APPLY_IR_DATA            = 9,
@@ -126,6 +132,61 @@ struct RwacCommandGinsuAttachDataParameters : public RwacCommand
                                          const RwacCommandGinsuAttachDataParameters& arSource);
 
     uintptr_t maOperand; // word 1 -- carried verbatim through the queue
+};
+
+// Plugin-event command: 4 words (tag + 3 operands). Tag == 3.
+// X360 building ctor @0x826813B8: stores tag 3 to word 0, the plugin pointer (arg)
+// to word 1, then two further operands to words 2,3. It asserts the plugin pointer
+// is non-null ("mpPlugin", CgsGenericRwacFactory.h:289). Unlike the copy ctors this
+// one builds the record from individual arguments rather than copying a source
+// record, and carries no luCommandCount/tag self-check (only the mpPlugin non-null
+// guard), matching the X360 asm (cmplwi cr6,r4,0 -- the plugin pointer, not a count).
+struct RwacCommandPluginEvent : public RwacCommand
+{
+    // @ 0x826813B8. Build from a (non-null) plugin pointer and two operands.
+    RwacCommandPluginEvent(uintptr_t apPlugin, uintptr_t auOperand1, uintptr_t auOperand2);
+
+    uintptr_t mpPlugin;   // word 1 -- the target plugin (asserted non-null)
+    uintptr_t maOperand1; // word 2 -- carried verbatim through the queue
+    uintptr_t maOperand2; // word 3 -- carried verbatim through the queue
+};
+
+// Plugin-get-attribute command: 4 words (tag + 3 operands). Tag == 5.
+// X360 copy ctor @0x826814C8: copies words 0..3 from arSource, then asserts
+// (a) luCommandCount == 4 ("sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
+//     CgsGenericRwacFactory.h:408; X360 cmplwi cr6,r4,4) and
+// (b) the copied tag == 5 ("E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE == GetCommandType()",
+//     CgsGenericRwacFactory.h:409; X360 cmpwi r11,5 against the just-stored 0(this)).
+struct RwacCommandPluginGetAttribute : public RwacCommand
+{
+    // @ 0x826814C8. Copy-construct from a source record of luCommandCount words.
+    RwacCommandPluginGetAttribute(u32 luCommandCount,
+                                  const RwacCommandPluginGetAttribute& arSource);
+
+    uintptr_t maOperand1; // word 1 -- carried verbatim through the queue
+    uintptr_t maOperand2; // word 2 -- carried verbatim through the queue
+    uintptr_t maOperand3; // word 3 -- carried verbatim through the queue
+};
+
+// CgsGenericRwacFactory.h:737 (DWARF region). The RWAC-side command ring: a
+// fixed-capacity single-producer/single-consumer ring of E_QUEUE_LENGTH command
+// words. X360 GetCommand @0x82681888 proves the layout: the read cursor lives at
+// byte +0x4000 and the write cursor at +0x4004 (lwz 0x4000/0x4004(this)), i.e. the
+// ring is 4096 (0x1000) uintptr_t words at +0, followed by the two u32 cursors. The
+// read cursor advances with wrap mask 0xFFF (clrlwi r11,r11,20 == & 0xFFF), so the
+// capacity is 0x1000 words.
+struct RwacCommandQueue
+{
+    static const unsigned int E_QUEUE_LENGTH = 0x1000u; // 4096 command words
+
+    uintptr_t mauCommandQueue[E_QUEUE_LENGTH]; // +0x0000  the command-word ring
+    u32       mu32Read;                        // +0x4000  consumer cursor
+    u32       mu32Write;                       // +0x4004  producer cursor
+
+    // @ 0x82681888. Pop one command word into *apOutWord and advance the read
+    // cursor (with wrap). Asserts the ring is non-empty before reading. Returns
+    // `this` (the X360 leaves the queue pointer in r3 on the normal path).
+    RwacCommandQueue* GetCommand(uintptr_t* apOutWord);
 };
 
 } // namespace Playback

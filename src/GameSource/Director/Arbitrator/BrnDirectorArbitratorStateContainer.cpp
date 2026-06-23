@@ -16,6 +16,29 @@
 
 namespace BrnDirector
 {
+    // X360 0x827E2D18. The source build's synthesized constructor: it default-constructs
+    // every embedded subobject -- writing each ArbitratorState subobject's vtable pointer
+    // (the off_820C... loads) and initialising its interior members to the -1 sentinel
+    // (the `stw -1, <subobject-offset>(this)` stores), and running mSharedPlaylists' ctor
+    // (the inlined sub_827DC838 + the playlist vtable stores). Those are per-subobject
+    // interior writes at the source build's absolute offsets, which our by-name layout
+    // reproduces by letting each member run its own constructor: every ArbStateXxx runs
+    // ArbitratorState(), and mSharedPlaylists default-constructs. The constructor does NOT
+    // touch mArrayOfStatePointers / mpCurrentState (ConstructAll seeds those), matching the
+    // asm -- so the body is the implicit member-wise construction with nothing further.
+    ArbitratorStateContainer::ArbitratorStateContainer()
+    {
+    }
+
+    // X360 0x821F5A60. Return the active state, asserting it has been set
+    // (BrnDirectorArbitratorStateContainer.h:131 "mpCurrentState != NULL"). The source
+    // reads/returns the +0x35CC word; here that is mpCurrentState, accessed by name.
+    ArbitratorState* ArbitratorStateContainer::GetCurrentState() const
+    {
+        CGS_ASSERT(mpCurrentState != 0, "mpCurrentState != NULL");
+        return mpCurrentState;
+    }
+
     void ArbitratorStateContainer::ConstructAll()
     {
         mSharedPlaylists.Construct();
