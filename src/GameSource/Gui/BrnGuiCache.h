@@ -85,5 +85,14 @@ namespace BrnGui
 
         f32 GetTime() const;
         f32 GetTimeStep() const;
+
+        // ADDITIVE GROW (BrnOnlinePreEventMessages TU): the cache holds the active game-mode
+        // type the GUI reads to pick mode-specific apt key-frames (the X360 reads it as a far
+        // member; e.g. the online pre-event messages select the "anim1_StuntRun" key-frame for
+        // the online fugitive / free-burn / showtime-end modes). Returned as the raw
+        // BrnGameState::GameStateModuleIO::EGameModeType value (s32) so this boundary header
+        // does not need to pull in the heavy game-state enum header. Body links from the
+        // GuiCache TU.
+        s32 GetCurrentGameModeType() const;
     };
 }

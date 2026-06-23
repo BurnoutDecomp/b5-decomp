@@ -49,6 +49,39 @@ namespace EnvironmentSettings
         return KU_ENVIRONMENT_DICTIONARY_RESOURCE_TYPE_ID;
     }
 
+    // GetSerialisedResourceDescriptor @ 0x8267D310. Builds the five-entry serialised
+    // resource descriptor. The first entry's size is computed from two header fields
+    // of the on-disk dictionary; the remaining four are {size = 0, alignment = 1}.
+    // The descriptor is returned by value (X360 sret in r3).
+    //
+    // Store-for-store from the X360:
+    //   field4  = *(lpResource + 4)        (muField4)
+    //   field12 = *(lpResource + 12)       (muField12)
+    //   size    = ((((field4 << 8) + 47) & ~0xF) + (field12 << 6) + 15) & ~0xF
+    //   entry[0] = { size, 16 }            entry[1..4] = { 0, 1 }
+    // (47 == 0x2F; 15 == 0xF; <<8 == * 256; <<6 == * 64; & ~0xF == round up after +.)
+    CgsResource::ResourceDescriptor
+    DictionaryResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        const Dictionary* lpDictionary = static_cast<const Dictionary*>(lpResource);
+
+        const u32 luField4  = lpDictionary->muField4;    // *(a3 + 4)
+        const u32 luField12 = lpDictionary->muField12;   // *(a3 + 12)
+
+        const u32 luSize =
+            ((((luField4 << 8) + 0x2F) & ~0xFu) + (luField12 << 6) + 0xF) & ~0xFu;
+
+        CgsResource::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        for (u32 luIndex = 1; luIndex < 5; ++luIndex)
+        {
+            lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0;
+            lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;
+        }
+        return lDescriptor;
+    }
+
     // FixUp @ 0x8267E278. Validate version, then rebase the two load-relative
     // pointers. The X360 `result` is the EndAssert() artifact (return value of the
     // assert path); the function is void by contract.

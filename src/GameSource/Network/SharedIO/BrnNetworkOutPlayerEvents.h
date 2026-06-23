@@ -27,12 +27,53 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"  // BrnNetwork::NetworkPlayerID
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"  // BrnNetwork::NetworkPlayerID, EActiveRaceCarIndex, NetworkEvent<N>
 
 namespace BrnNetwork
 {
 namespace BrnNetworkModuleIO
 {
+    // ------------------------------------------------------------------------
+    // NetworkPlayerDisconnectedEvent : public NetworkEvent<22>
+    //   DWARF references/DecFIGS/dwarfdump/.../BrnNetworkOutEventTypeDefs.h:123 (struct
+    //   shape + member order) -- the event the network manager raises when a player
+    //   drops. The NetworkEvent<22> base is empty (no data members), so the three words
+    //   start at offset 0, matching Construct @0x82581088's three stores.
+    //
+    // Member order (DWARF h:151-153) -- authoritative; NOT the Construct argument order:
+    //   +0x00  mNetworkPlayerID     (NetworkPlayerID, s32)
+    //   +0x04  meDisconnectStatus   (EDisconnectStatus)
+    //   +0x08  meActiveRaceCarIndex (EActiveRaceCarIndex)
+    // Construct(NetworkPlayerID, EActiveRaceCarIndex, EDisconnectStatus) stores its 1st
+    // arg to +0, its 3rd (status) to +4, and its 2nd (race-car index) to +8 -- the asm
+    // stw r30,0 / stw r28,4 / stw r29,8 with r30=arg1, r29=arg2, r28=arg3.
+    struct NetworkPlayerDisconnectedEvent : public NetworkEvent<22>
+    {
+        // DWARF BrnNetworkOutEventTypeDefs.h:126.
+        enum EDisconnectStatus
+        {
+            E_DISCONNECT_STATUS_CONNECTED    = 0,
+            E_DISCONNECT_STATUS_LOST_CONTACT = 1,
+            E_DISCONNECT_STATUS_DISCONNECTED = 2,
+            E_DISCONNECT_STATUS_COUNT        = 3,
+        };
+
+        // @ 0x82581088 -- store the three fields, asserting the id is not the invalid sentinel.
+        void Construct(NetworkPlayerID lNetworkPlayerID,
+                       EActiveRaceCarIndex leActiveRaceCarIndex,
+                       EDisconnectStatus leDisconnectStatus);
+
+        // DWARF h:142/145/148 -- declared-only inline accessors (own TUs; here so the
+        // class shape is complete and consumers can read the fields by name).
+        EActiveRaceCarIndex GetActiveRaceCarIndex() const { return meActiveRaceCarIndex; }
+        NetworkPlayerID     GetNetworkPlayerID()    const { return mNetworkPlayerID; }
+        EDisconnectStatus   GetDisconnectStatus()   const { return meDisconnectStatus; }
+
+    private:
+        NetworkPlayerID     mNetworkPlayerID;     // +0x00 (DWARF h:151)
+        EDisconnectStatus   meDisconnectStatus;   // +0x04 (DWARF h:152)
+        EActiveRaceCarIndex meActiveRaceCarIndex; // +0x08 (DWARF h:153)
+    };
     // ------------------------------------------------------------------------
     // NetworkOutPlayerAddedEvent -- event-type 0x10, 40-byte AddEvent payload.
     // SetNetworkPlayerID stores the id at +0x10.
