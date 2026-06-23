@@ -193,6 +193,14 @@ class BrnEffectsFrame
 public:
     void Construct();
 
+    // Read accessors used by BrnGraphics::EffectsArbitrator's per-frame eval passes
+    // (additive, inline -- do not change the layout). The X360 EvalTint @0x823FD570
+    // reads mbUseTint (frame byte +4), mfTintWeight (f32 +0x18) and
+    // mTintData.muColourCube (u32 +0x110).
+    bool                       GetUseTint() const        { return mbUseTint; }
+    f32                        GetTintWeight() const      { return mfTintWeight; }
+    const BrnEffects::TintData& GetTintData() const       { return mTintData; }
+
 private:
     bool mbUseBloom;
     bool mbUseVignette;

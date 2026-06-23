@@ -139,6 +139,13 @@ namespace Detail
     // Job::mDependencies: Add @ 0x82BCAC20 (sizeof 0x150 == 10*0x20 + 0x10),
     // ListSize @ 0x82BCA030.
     template struct BucketListNode<EA::Jobs::Job::Dependency, 10>;
+    // Job::mDependents (the IDA `*,6>` TU): a bucket list of Job* back-pointers,
+    // 6 per node. Add @ 0x82BCAD18 (EA::Jobs::Job::DependsOn; X360 alloc size 0x30
+    // == 6*4 + 8-byte trailer, 4-byte Job* stride slwi r11,r11,2), ListSize @
+    // 0x82BCA0A0 (GetNumDependents), operator[] @ 0x82BCA0E8 (GetDependent). On the
+    // 64-bit host the Job* element is 8 bytes wide; the request size is
+    // sizeof(BucketListNode) for whichever pointer width is in effect.
+    template struct BucketListNode<EA::Jobs::Job*, 6>;
 }
 }
 }
