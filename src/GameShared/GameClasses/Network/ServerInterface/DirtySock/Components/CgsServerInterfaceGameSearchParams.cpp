@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameSearchParams.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "lobbytagfield.h"                            // DirtySDK TagFieldSet*
-#include <cstring>                                    // std::strlen
+#include <cstring>                                    // std::strlen, std::memset
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::ServerInterfaceGameSearchParamsBase::SerialiseToString @ 0x82878898
@@ -30,6 +30,20 @@ namespace CgsNetwork
 
 namespace CgsNetwork
 {
+
+ServerInterfaceGameSearchParamsBase::ServerInterfaceGameSearchParamsBase()
+{
+}
+
+ServerInterfaceGameSearchParamsBase::~ServerInterfaceGameSearchParamsBase()
+{
+}
+
+bool ServerInterfaceGameSearchParamsBase::Prepare()
+{
+    // Base virtual; the X360 leaf override below is the one bodied in this group.
+    return false;
+}
 
 void ServerInterfaceGameSearchParamsBase::SerialiseToString(char* lpcRecord, s32 liRecLen) const
 {
@@ -68,6 +82,31 @@ void ServerInterfaceGameSearchParamsBase::SerialiseToString(char* lpcRecord, s32
                       static_cast<s32>(GetCustomFlagsMask()));
     TagFieldSetNumber(lpcRecord, liRecLen, "CUSTFLAGS",
                       static_cast<s32>(GetCustomFlagsValue()));
+}
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX
+//   CgsNetwork::ServerInterfaceGameSearchParamsX360::Prepare @ 0x82878B20
+//       (called by BrnNetwork::GameSearchParamsBase::Prepare)
+//
+// Seeds the base fields then zeroes the X360-only payload. The asm store order:
+//   stw 0   @+0x0C (muGameFlagsMask)   stw 10  @+0x04 (miNumGames)
+//   stw -1  @+0x08 (miRoomID)          stw 0   @+0x10 (muGameFlagsValue)
+//   stb 0   @+0x14 (mbReturnPlayers)   stw 0   @+0x68 (muX360Field_68)
+//   memset(this+0x18, 0, 80)           return 1
+ServerInterfaceGameSearchParamsX360::ServerInterfaceGameSearchParamsX360()
+{
+}
+
+bool ServerInterfaceGameSearchParamsX360::Prepare()
+{
+    muGameFlagsMask  = 0;       // stw 0  @+0x0C
+    miNumGames       = 10;      // stw 10 @+0x04
+    miRoomID         = -1;      // stw -1 @+0x08
+    muGameFlagsValue = 0;       // stw 0  @+0x10
+    mbReturnPlayers  = false;   // stb 0  @+0x14
+    muX360Field_68   = 0;       // stw 0  @+0x68
+    std::memset(maX360Payload, 0, sizeof(maX360Payload));   // memset(this+0x18, 0, 80)
+    return true;
 }
 
 }

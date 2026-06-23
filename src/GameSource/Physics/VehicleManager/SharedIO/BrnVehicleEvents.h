@@ -208,6 +208,15 @@ namespace Vehicle
         BrnPhysics::Deformation::DeformationResetType meBaseDeformationType;
         bool                   mbDisablePhysicsStateReset;
         s32                    miCarStrengthStat;
+
+        // operator= @0x822AE040: a pure bitwise, field-for-field copy of the whole event (the
+        // X360 body is an 8-byte head copy + four 16-byte VMX matrix-row copies + two more
+        // 16-byte vector copies + an 8-byte + word/float/byte/word scalar tail -- i.e. a flat
+        // memberwise copy of every field in declaration order). CreateRaceCarEvent is trivially
+        // copyable, so a defaulted assignment reproduces it exactly; kept out-of-line (bodied in
+        // the CreateRaceCarEvent ledger TU) so this ledger func has a definition site. Declared
+        // only here (ADDITIVE GROW -- no field reordered/retyped).
+        CreateRaceCarEvent& operator=(const CreateRaceCarEvent&);
     };
 
     struct RemoveRaceCarEvent
