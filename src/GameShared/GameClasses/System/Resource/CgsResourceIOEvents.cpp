@@ -50,5 +50,45 @@ BundleLoaderEvent& BundleLoaderEvent::SetFileName(const char* pcFileName)
     return *this;
 }
 
+// CgsResource::Events::AddPatchRequest::Construct @ 0x82661200
+//
+// Initialise the patch request in place. The X360 build stores the two leading 32-bit fields,
+// then inlines the CgsStringUtils.h:65 bounded string-copy helper to copy the NUL-terminated
+// path into macFileName (asserting the measured length < 256, the buffer size), then stores the
+// trailing 32-bit field. Returns `this` (the X360 Construct returns its incoming `result`).
+//
+// Note the X360 copy is UNCONDITIONAL on a non-null source (the path is always provided by the
+// GameDataModule::Prepare call site): the helper measures the length for the assert, then byte-
+// copies the source including its NUL terminator into macFileName.
+AddPatchRequest* AddPatchRequest::Construct(s32 liField0, s32 liField4, const char* lpcFileName, s32 liField264)
+{
+    miField0 = liField0;
+    miField4 = liField4;
+
+    // Inlined CgsStringUtils.h:65 bounded copy -- measure source length for the bounds assert.
+    const char* pcScan = lpcFileName;
+    while (*pcScan)
+        ++pcScan;
+    const s32 liLength = static_cast<s32>(pcScan - lpcFileName);
+
+    CGS_ASSERT(liLength < static_cast<s32>(sizeof(macFileName)),
+               "String is too long. Buffer size = 256");
+
+    // Copy the path verbatim into macFileName, NUL terminator included.
+    char* pcDest = macFileName;
+    const char* pcSrc = lpcFileName;
+    char lcChar;
+    do
+    {
+        lcChar = *pcSrc++;
+        *pcDest++ = lcChar;
+    }
+    while (lcChar != '\0');
+
+    miField264 = liField264;
+
+    return this;
+}
+
 }
 }
