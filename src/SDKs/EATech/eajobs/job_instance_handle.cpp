@@ -29,6 +29,21 @@ namespace EA
 {
 namespace Jobs
 {
+    // @ 0x82BC9A08 -- Detail::SchedulerBackend base scalar-deleting destructor. The
+    // X360 thunk stores the SchedulerBackend vtable (off_82182408) into *this
+    // (stw r11, 0(r31)), then for the deleting variant conditionally
+    // operator-delete's (clrlwi. r10, r4, 31; beq skip; bl operator_delete) and
+    // returns this. SchedulerBackend is an abstract base with no members and no base
+    // subobject, so the body is empty: defining it out-of-line emits exactly the
+    // vtable store + conditional operator-delete tail. (Adjacent in the .text to
+    // JobInstanceHandle::AddBarrier @ 0x82BC9A50, which dispatches into this backend.)
+    namespace Detail
+    {
+        SchedulerBackend::~SchedulerBackend()
+        {
+        }
+    }
+
     // Reassemble the 64-bit value the X360 reads with `ld 8(handle)`: on the
     // big-endian X360 the qword at +0x8 is { mSchedulerBackend@+0x8 (4B, high),
     // mIndex@+0xC (2B), mPadding@+0xE (2B, low) }. Built from named members.
