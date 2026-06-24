@@ -20,6 +20,13 @@
 // GetShowtimeDeformationScale @0x827E24E8 and IsCounterSteeringAtLowSpeed @0x825BFEF0 -- so the
 // two methods (and the single velocity member IsCounterSteeringAtLowSpeed reads) are ADDED to
 // the same struct. The pre-existing nested structs are untouched; nothing is reordered/retyped.
+//
+// ADDITIVE GROW (Vehicle-physics class TU): three out-of-line scalar predicates -- bodied in
+// VehiclePhysics.cpp -- are ADDED to the struct: GetNumberOfWheelsOnTheGround @0x825B2FE0,
+// IsBeingSlamedOrShunted @0x825E6D50 and IsBeingSlamedOrShuntedByRaceCar @0x82615290, together
+// with the slam/shunt state they read (mfSlamLife @+0x111C, mShuntEffect @+0x1130,
+// mi8SlammingRaceCarId @+0x13E0), each pinned BY NAME. The pre-existing members/methods are
+// untouched; nothing is reordered/retyped/removed.
 #include "BrnCommonTypes.h"   // Vector3, Vector3Plus, Vector4
 #include "types.hpp"          // f32, s8
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"   // Wheel + Wheel::RoadContact
@@ -89,6 +96,21 @@ namespace Vehicle
             void SetSpeedIncreaseToQuit(f32);
         };
 
+        // ----- Vehicle-physics group (class TU): three scalar predicates (bodies in VehiclePhysics.cpp) -----
+
+        // @0x825B2FE0: the number of driven wheels currently on the ground (counts the per-wheel
+        // road-contact on-ground flags maWheels[i].GetRoadContact().mbIsOnGround). The X360 reads the
+        // four flags at +0x158/+0x238/+0x318/+0x3F8 (= maWheels stride 0xE0, RoadContact +0x28).
+        s32 GetNumberOfWheelsOnTheGround() const;
+
+        // @0x825E6D50: true while the vehicle is being slammed (mfSlamLife > 0) OR shunted
+        // (mShuntEffect.IsActive()).
+        bool IsBeingSlamedOrShunted() const;
+
+        // @0x82615290: true when this vehicle is being slammed/shunted specifically by the race car
+        // with the queried id (mi8SlammingRaceCarId == liRaceCarId AND IsBeingSlamedOrShunted()).
+        bool IsBeingSlamedOrShuntedByRaceCar(s8 li8RaceCarId) const;
+
         // ----- Vehicle-physics group: two header-homed methods (bodies inline below) -----
 
         // @0x827E24E8: returns the showtime deformation scale. On X360 this is a leaf returning a
@@ -145,6 +167,23 @@ namespace Vehicle
         // NAME, not reproduced as padding.
         Vector3 mUpAxis;
         Wheel   maWheels[eNumDrivenWheels];
+
+        // ----- Vehicle-physics group (class TU): slam/shunt state read by the out-of-line
+        //       Is{...}Slamed-or-Shunted predicates (bodied in VehiclePhysics.cpp) -----
+
+        // @+0x111C: remaining time of the in-progress slam impulse (the asm reads `lfs f13,0x111C(r3)`
+        // and tests `> 0.0`). Positive while a slam is active. Pinned BY NAME (the ~0x1100 bytes of
+        // base + engine/drift/boost state that precede it are not reproduced as padding).
+        f32        mfSlamLife;
+
+        // @+0x1130: the embedded shunt effect; IsBeingSlamedOrShunted consults mShuntEffect.IsActive()
+        // (asm: `addi r3,r3,0x1130 ; bl ShuntEffect::IsActive`). Pinned BY NAME.
+        ShuntEffect mShuntEffect;
+
+        // @+0x13E0: the id of the race car currently slamming/shunting this vehicle, used by
+        // IsBeingSlamedOrShuntedByRaceCar to filter (asm: `lbz r11,0x13E0(r3) ; extsb` then compared
+        // sign-extended against the queried id). Pinned BY NAME.
+        s8         mi8SlammingRaceCarId;
     };
 }
 }

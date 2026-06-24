@@ -209,6 +209,16 @@ protected:
             return 2 * sizeof(struct _OutsideAllocationT*);
         }
 
+        // GetStruc @ 0x82AD4930 : `addi r3, r3, -8; blr` -- step a returned
+        // pointer back by the fixed 8-byte (2 * sizeof(ptr)) node overhead to
+        // reach the owning node. Same arithmetic as
+        // GetStructPointerFromReturnedPointer; the X360 emits it as its own
+        // out-of-line accessor (overhead folded to the literal -8).
+        static struct _OutsideAllocationT* GetStruc(const void* pReturned)
+        {
+            return (struct _OutsideAllocationT*)(((uint8_t*)pReturned) - GetStructOverHead());
+        }
+
         static struct _OutsideAllocationT* GetStructPointerFromReturnedPointer(const void* pReturned)
         {
             return (struct _OutsideAllocationT*)(((uint8_t*)pReturned) - GetStructOverHead());

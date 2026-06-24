@@ -242,4 +242,36 @@ CMassiveThread::~CMassiveThread()
     // ~CMassiveBaseObject() runs next (compiler-chained).
 }
 
+// ===========================================================================
+// CFlag -- a bare named CMassiveBaseObject.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// CFlag::CFlag
+//
+// The X360 has no standalone CFlag ctor symbol in this TU; the only recovered
+// CFlag function is the vector deleting destructor (0x82BCC758). The ctor is
+// modelled as a base-chaining ctor (the MassiveAd leaf objects are always built
+// with a name); the virtual dtor declaration installs CFlag's vftable
+// (off_82183CA0). No fields of its own.
+// ---------------------------------------------------------------------------
+CFlag::CFlag(const char* pcName)
+    : CMassiveBaseObject(pcName)
+{
+}
+
+// ---------------------------------------------------------------------------
+// CFlag::~CFlag @ 0x82BCC758 (vector deleting destructor body)
+//
+// X360 store order: stw off_82183CA0, 0(r31) (install CFlag vftable), then
+// bl ~CMassiveBaseObject (chain base dtor), then -- when (a2 & 1) -- bl
+// CMassiveBaseObject::operator delete (conditional free); return this. The
+// vftable rewrite + base-dtor chain are the compiler-emitted virtual-dtor body;
+// the conditional free is the deleting-destructor thunk MSVC synthesises around
+// it. Nothing of CFlag's own is torn down (it has no fields).
+// ---------------------------------------------------------------------------
+CFlag::~CFlag()
+{
+}
+
 } // namespace MassiveAdClient3

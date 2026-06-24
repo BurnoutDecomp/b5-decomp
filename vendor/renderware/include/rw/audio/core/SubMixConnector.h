@@ -53,7 +53,9 @@ class SubMix
 public:
     char mHeader00[0x21];          // +0x00 .. +0x20 -- opaque SubMix header
     char mbNumChannels;            // +0x21
-    char mGap22[0x28 - 0x22];      // +0x22 .. +0x27 -- opaque
+    char mGap22[0x24 - 0x22];      // +0x22 .. +0x23 -- opaque
+    int mField24;                  // +0x24 -- copied into a connecting connector's mField08
+                                   //          (Route::ConnectByPointerHandler: lwz 0x24)
     SubMixConnector *mpConnectorHead; // +0x28
     char mGap2C[0x34 - 0x2C];      // +0x2C .. +0x33 -- opaque
     f32 mafChannelGain[(0x8D - 0x34) / 4]; // +0x34 .. -- per-channel gain accumulators
