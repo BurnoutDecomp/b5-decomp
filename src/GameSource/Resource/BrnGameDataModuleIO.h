@@ -4,6 +4,9 @@
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                 // CgsModule::IOBuffer base + IsBufferLockedFor{Reading,Writing}()
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"      // BrnResource::GameDataIO::RequestInterface<N>
+#include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // BrnResource::GameDataIO::AllocatorList (OutputBuffer member)
+
+namespace rw { namespace core { struct GeneralResourceAllocator; } }   // OutputBuffer::GetAllocator return type
 
 // BrnResource::GameDataIO::InputBuffer / OutputBuffer -- the per-frame IO payload buffers the
 // game-data streaming module (BrnResource::GameDataModule) exchanges with the rest of the game.
@@ -66,6 +69,38 @@ namespace GameDataIO
         // mAttribSysRequestInterface (h:127) + mpDebug2dRenderBuffer (h:130) are DEFERRED (see header
         // note); the +4 offset is implied by the base size, not asserted byte-exactly here.
         RequestInterface<knRequestInterfaceQueueSize> mRequestInterface;
+    };
+
+    // BrnResource::GameDataIO::OutputBuffer : public IOBuffer -- the GameData module's per-frame output
+    // payload. It owns the AllocatorList (the bank->allocator registry that GameDataModule::Create-
+    // Allocators populates) and the FileSystemStatusInterface. The loading-screen module loads read the
+    // module's RW general allocator through OutputBuffer::GetAllocator (e.g. LoadSoundModule @0x823E75A8:
+    // `GameDataIO::OutputBuffer::GetAllocator(outputBuffer)` -> passes it to SoundModule::Construct).
+    //
+    // STRUCTURAL SLICE: the type + the AllocatorList member + GetAllocator are defined here so the module
+    // loads can name them; mFileSystemStatusInterface (DWARF, deferred) is omitted (minimal slice). The
+    // AllocatorList stays EMPTY (every bank unregistered) until GameDataModule::CreateAllocators (still a
+    // stub) populates it + the module gives Prepare a real output-buffer instance (currently Prepare(0,0)
+    // -- null buffers) -- that boot-critical population is the next slice. GROW additively; do NOT fork.
+    struct OutputBuffer : public CgsModule::IOBuffer
+    {
+        void Construct() { mAllocatorList.Construct(); }
+
+        // Return the module's RW general resource allocator. X360: OutputBuffer::GetAllocator(this)
+        // returns the GameData general allocator the module loads construct from. The bank is the
+        // GameData root general-heap bank; pinned to bank 0 here pending the CreateAllocators memory-map
+        // population (which assigns the real bank ids). Asserts (via the AllocatorList accessor) until
+        // CreateAllocators registers that bank -- so this must not be called before the population slice.
+        rw::core::GeneralResourceAllocator* GetAllocator() const
+        {
+            return mAllocatorList.GetRWGeneralResourceAllocator(0);
+        }
+
+        AllocatorList& GetAllocatorList() { return mAllocatorList; }
+
+    private:
+        AllocatorList mAllocatorList;
+        // FileSystemStatusInterface mFileSystemStatusInterface;  // DWARF -- deferred (minimal slice)
     };
 }
 }
