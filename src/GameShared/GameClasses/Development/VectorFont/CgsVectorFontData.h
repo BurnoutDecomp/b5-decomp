@@ -3,7 +3,7 @@
 #include "types.hpp"
 
 // CgsDev VectorFont glyph data - CARVED from BURNOUT_X360_ARTIST (decrypted XEX) by
-// tools/_carve_vectorfont.py. KA_CHARSET 0x82F31FF0 / KAN_LINECOUNT 0x82F32190 /
+// tools/assets/fonts/carve_vectorfont.py. KA_CHARSET 0x82F31FF0 / KAN_LINECOUNT 0x82F32190 /
 // KAN_CHARWIDTH 0x82F321F8. Each glyph is a list of CharLine strokes (start/end in a
 // 0..KF_CHARWIDTH x 0..KF_CHARHEIGHT cell). Chars KI_FIRST_CHAR(32)..KI_LAST_CHAR(135).
 namespace CompressedFontData
