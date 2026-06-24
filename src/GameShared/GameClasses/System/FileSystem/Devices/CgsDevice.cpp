@@ -44,32 +44,71 @@ namespace CgsFileSystem
         return liResult;
     }
 
-    // @0x828DDE50 (CgsDevice.cpp:91)
-    int Device::GetFileSize()
+    // ---- base "Not implemented" defaults for the worker-dispatched op interface --------
+    // A device that does not support an op inherits these (assert + generic -2 failure). The
+    // X360 base supplied this same default-body shape (e.g. GetFileSize @0x828DDE50,
+    // CgsDevice.cpp:91); concrete devices override the ops they implement.
+    int Device::Connect()
+    {
+        return 0;   // worker-start / op8 hook: base no-op (a device with no connect step)
+    }
+
+    int Device::Open(const char* /*lpcPath*/, int /*liMode*/, int* /*lpiOutHandle*/)
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
     }
 
-    // @0x828DDEE0 (CgsDevice.cpp:103)
-    int Device::OpenDirectory()
+    int Device::Close(int /*liHandle*/)
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
     }
 
-    // @0x828DDF70 (CgsDevice.cpp:111)
-    int Device::CloseDirectory()
+    int Device::Read(int /*liHandle*/, u64 /*lu64Offset*/, u32 /*luSize*/, void* /*lpBuffer*/, int* /*lpiOutResult*/)
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
     }
 
-    // @0x828DE000 (CgsDevice.cpp:122)
-    int Device::ReadDirectory()
+    int Device::Write(int /*liHandle*/, u64 /*lu64Offset*/, u32 /*luSize*/, const void* /*lpBuffer*/, int* /*lpiOutResult*/)
     {
         CGS_ASSERT(false, "Not implemented\n");
         return -2;
+    }
+
+    int Device::CheckOp(int /*liHandle*/, u64 /*lu64Offset*/, void* /*lpOut*/)
+    {
+        return 0;   // default pre-check: OK to proceed
+    }
+
+    int Device::GetFileSize(int /*liHandle*/, u64* /*lpu64OutSize*/)   // @0x828DDE50 (default)
+    {
+        CGS_ASSERT(false, "Not implemented\n");
+        return -2;
+    }
+
+    int Device::OpenEx(const char* /*lpcPath*/, u32 /*luA*/, u32 /*luB*/, int* /*lpiOutC*/, int* /*lpiOutResult*/)
+    {
+        CGS_ASSERT(false, "Not implemented\n");
+        return -2;
+    }
+
+    int Device::Op7(int /*liHandle*/)
+    {
+        CGS_ASSERT(false, "Not implemented\n");
+        return -2;
+    }
+
+    int Device::Seek(int /*liHandle*/, u64 /*lu64Offset*/, int* /*lpiOutResult*/)
+    {
+        CGS_ASSERT(false, "Not implemented\n");
+        return -2;
+    }
+
+    int Device::Shutdown()
+    {
+        return 0;   // worker-exit hook: base no-op
     }
 
 } // namespace CgsFileSystem

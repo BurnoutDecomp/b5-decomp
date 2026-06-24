@@ -14,9 +14,29 @@
 // in <windows.h>.
 extern "C" void RtlEnterCriticalSection(void* lpCriticalSection);
 extern "C" void RtlLeaveCriticalSection(void* lpCriticalSection);
+extern "C" long RtlInitializeCriticalSection(void* lpCriticalSection);
+extern "C" long RtlDeleteCriticalSection(void* lpCriticalSection);
 
 namespace CgsFileSystem
 {
+    // Construct/Destruct — the X360 split this pool's bring-up between the DeviceManager ctor
+    // (RtlInitializeCriticalSection on mFutex + the Semaphore subobject ctor) and Add-
+    // PhysicalDevice (zero the used-flags + Semaphore::Init count 0). Here it is consolidated:
+    // init the lock, clear the slot table + sequence counter. mOperationCount (the vendor
+    // EA::Thread::Semaphore subobject) is created count-0 by its own member ctor.
+    void OperationPool::Construct()
+    {
+        RtlInitializeCriticalSection(&mFutex);
+        for (s32 liIndex = 0; liIndex < KI_MAX_OPERATIONS; ++liIndex)
+            mabUsedOperations[liIndex] = false;
+        muNextOperationNumber = 0;
+    }
+
+    void OperationPool::Destruct()
+    {
+        RtlDeleteCriticalSection(&mFutex);
+    }
+
     // The absolute-deadline argument the X360 hands Semaphore::Wait (unk_820F6FD8). A
     // blocking ReadOperation must wait until an operation is posted, so this is the
     // wait-forever (INFINITE) sentinel the Semaphore::Wait contract documents as -1.

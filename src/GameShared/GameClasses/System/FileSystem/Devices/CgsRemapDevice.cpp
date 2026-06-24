@@ -31,21 +31,29 @@ namespace CgsFileSystem
     class RemapDevice : public Device
     {
     public:
-        int Init(int liMode, int liArg) override;
-        int Close()       override { return mpWrappedDevice->Close(); }
-        int Read()        override { return mpWrappedDevice->Read(); }
-        int Write()       override { return mpWrappedDevice->Write(); }
-        int Seek()        override { return mpWrappedDevice->Seek(); }
-        int GetFileSize() override { return mpWrappedDevice->GetFileSize(); }
+        // Init @0x828DE658 mapped to the worker-start Connect() hook (prints a debug trace).
+        int Connect() override;
+        // The forwarders pass straight through to the wrapped device (X360: vtable thunks,
+        // e.g. mpWrappedDevice->vtable[2] == Close; GetFileSize via the wrapped vtable +0x18).
+        int Close(int liHandle) override
+            { return mpWrappedDevice->Close(liHandle); }
+        int Read(int liHandle, u64 lu64Offset, u32 luSize, void* lpBuffer, int* lpiOutResult) override
+            { return mpWrappedDevice->Read(liHandle, lu64Offset, luSize, lpBuffer, lpiOutResult); }
+        int Write(int liHandle, u64 lu64Offset, u32 luSize, const void* lpBuffer, int* lpiOutResult) override
+            { return mpWrappedDevice->Write(liHandle, lu64Offset, luSize, lpBuffer, lpiOutResult); }
+        int Seek(int liHandle, u64 lu64Offset, int* lpiOutResult) override
+            { return mpWrappedDevice->Seek(liHandle, lu64Offset, lpiOutResult); }
+        int GetFileSize(int liHandle, u64* lpu64OutSize) override
+            { return mpWrappedDevice->GetFileSize(liHandle, lpu64OutSize); }
 
     private:
         Device* mpWrappedDevice;
     };
 
-    int RemapDevice::Init(int /*liMode*/, int liArg)
+    int RemapDevice::Connect()
     {
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            CgsDev::Log::DebugPrint("Remap device initialized\n", liArg);
+            CgsDev::Log::DebugPrint("Remap device initialized\n", 0);
         return 0;
     }
 }

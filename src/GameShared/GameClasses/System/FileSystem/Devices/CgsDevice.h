@@ -1,36 +1,33 @@
 #pragma once
 
-// CgsDevice.h — canonical home for CgsFileSystem::Device, the abstract base of
-// every file device in the resource file-I/O subsystem (the physical X360
-// device, the in-memory device, the remap/pass-through device, ...).
+// CgsDevice.h — CgsFileSystem::Device, the abstract base of every file device in the resource
+// file-I/O subsystem (physical disk device, in-memory device, remap/pass-through device, ...).
 //
 // SOURCES (X360 ARTIST):
-//   Device::CallErrorCallback @ 0x828D65F0  (invokes the registered error
-//                                             callback, then yields the thread)
-//   Device::GetFileSize       @ 0x828DDE50  ("Not implemented" default, returns -2)
-//   Device::OpenDirectory     @ 0x828DDEE0  ("Not implemented" default, returns -2)
-//   Device::CloseDirectory    @ 0x828DDF70  ("Not implemented" default, returns -2)
-//   Device::ReadDirectory     @ 0x828DE000  ("Not implemented" default, returns -2)
-//   (default-body source line cites CgsDevice.cpp:91/103/111/122)
+//   Device::CallErrorCallback @ 0x828D65F0  (run the registered error callback, then yield 5ms)
+//   the per-op virtual interface is recovered from the DeviceManager worker thread
+//   (PhysicalDeviceThread @0x828F1EA8), which dispatches each queued Operation to the device's
+//   virtual op and fires the op's completion callback. The worker's opcode->vtable mapping is:
+//     op0 READ  -> CheckOp then Read      op1 WRITE -> CheckOp then Write
+//     op2 OPEN  -> Open                   op3 CLOSE -> Close
+//     op4 GETFILESIZE -> GetFileSize      op5 OPENEX -> OpenEx
+//     op6 SEEK  -> Seek                   op7 -> Op7
+//     op8 -> Connect (also called once at worker start)   op9 -> Shutdown (worker exits)
 //
-// The four directory/size entry points are NON-pure virtuals: the base supplies a
-// default body that fires CGS_ASSERT(false, "Not implemented\n") and returns -2 so
-// a device that does not support the operation reports a generic failure. Concrete
-// devices (PhysicalX360Device, DeviceMemFileSystem) override the ones they
-// implement. CallErrorCallback is a non-virtual base helper.
+// The X360 dispatched by raw vtable byte-offset (4-byte PPC slots); that is physically
+// impossible on PC (8-byte x64 vtable slots), so the worker here dispatches by NAMED virtual
+// and this interface declares those names in the X360 vtable order. Every op has a base default
+// ("Not implemented": assert + return -2) so concrete devices override only what they support.
 //
-// LAYOUT NOTE (from the asm): CallErrorCallback reads the error-callback fn-ptr at
-// this+8 (the asm does `lwz r11, 8(r3)`), so the base carries an
-// ErrorCallback member named mpfErrorCallback that every concrete device inherits;
-// PhysicalX360Device::Seek/CloseDirectory call CallErrorCallback(this, ...) and the
-// base reads that inherited slot. Members are accessed strictly by name.
+// LAYOUT NOTE (asm): CallErrorCallback reads the error-callback fn-ptr at this+8, so the base
+// carries mpfErrorCallback (set by DeviceManager::AddPhysicalDevice). Members are by name.
 
 #include "types.hpp"
 
 namespace CgsFileSystem
 {
-    // A device-level error callback: it receives the device-specific error code and
-    // returns the (possibly remapped) result the failing operation should report.
+    // A device-level error callback: receives the device error code, returns the (possibly
+    // remapped) result the failing op should report.
     typedef int (*ErrorCallback)(int liError);
 
     class Device
@@ -38,33 +35,32 @@ namespace CgsFileSystem
     public:
         virtual ~Device() {}
 
-        // ---- the per-operation virtual interface (vtable slots 1..5) ----------
-        // Pure here: every concrete device must supply them.
-        virtual int Init(int liMode, int liArg) = 0;
-        virtual int Close() = 0;
-        virtual int Read() = 0;
-        virtual int Write() = 0;
-        virtual int Seek() = 0;
+        // ---- the worker-dispatched async op interface (X360 vtable order) -------------
+        // Base defaults are "Not implemented" (assert + -2); concrete devices override.
+        virtual int Connect();                                                       // op8 + worker start
+        virtual int Open(const char* lpcPath, int liMode, int* lpiOutHandle);        // op2
+        virtual int Close(int liHandle);                                             // op3
+        virtual int Read(int liHandle, u64 lu64Offset, u32 luSize, void* lpBuffer, int* lpiOutResult);        // op0
+        virtual int Write(int liHandle, u64 lu64Offset, u32 luSize, const void* lpBuffer, int* lpiOutResult); // op1
+        virtual int CheckOp(int liHandle, u64 lu64Offset, void* lpOut);              // op0/op1 pre-check
+        virtual int GetFileSize(int liHandle, u64* lpu64OutSize);                    // op4
+        virtual int OpenEx(const char* lpcPath, u32 luA, u32 luB, int* lpiOutC, int* lpiOutResult); // op5
+        virtual int Op7(int liHandle);                                              // op7
+        virtual int Seek(int liHandle, u64 lu64Offset, int* lpiOutResult);          // op6
+        virtual int Shutdown();                                                     // op9
 
-        // ---- default-implemented virtuals (vtable slots 6..9) -----------------
-        // The base supplies a "Not implemented" body (CgsDevice.cpp); concrete
-        // devices override the operations they support.
-        virtual int GetFileSize();      // 0x828DDE50
-        virtual int OpenDirectory();    // 0x828DDEE0
-        virtual int CloseDirectory();   // 0x828DDF70
-        virtual int ReadDirectory();    // 0x828DE000
-
-        // ---- non-virtual helper ----------------------------------------------
-        // @0x828D65F0. If an error callback is registered, invoke it with liError
-        // and remember its result; then yield the calling thread for 5ms (the X360
-        // build sleeps so a hammering retry loop does not starve the I/O thread)
-        // and return the callback's result (0 when no callback is set).
+        // ---- non-virtual helpers ----
+        // @0x828D65F0. If an error callback is registered, invoke it with liError and remember
+        // its result; then yield the calling thread 5ms (so a hammering retry loop does not
+        // starve the I/O thread) and return the callback's result (0 when none is set).
         int CallErrorCallback(int liError);
 
+        // DeviceManager::AddPhysicalDevice installs the device's error callback (X360: *(dev+8)
+        // = callback, *(dev+4) = 0).
+        void SetErrorCallback(ErrorCallback lpfErrorCallback) { mpfErrorCallback = lpfErrorCallback; }
+
     protected:
-        // The registered per-device error callback (asm: 8(this) in
-        // CallErrorCallback). 0 when no callback is installed.
-        ErrorCallback mpfErrorCallback;
+        ErrorCallback mpfErrorCallback;  // asm 8(this) in CallErrorCallback; 0 when none installed
     };
 
 } // namespace CgsFileSystem
