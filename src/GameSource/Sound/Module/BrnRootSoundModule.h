@@ -2,7 +2,8 @@
 #define BRN_SOUND_MODULE_BRN_ROOT_SOUND_MODULE_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (base)
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"      // CgsModule::ModuleSingleBuffered (base)
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"    // CgsModule::EventReceiverQueue (mEventQueue)
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }  // Prepare's allocator arg
 
@@ -46,6 +47,9 @@ namespace Module
         bool                                mbConstructed;   // X360 *(this+4) constructed flag
         bool                                mbPrepared;
         rw::core::GeneralResourceAllocator* mpAllocator;     // captured from Prepare for the grow-in audio engine
+        // X360 this+0x13900: the module's event-receiver queue (capacity 0x1400 = 5120, align 16).
+        // Real + faithful with existing types; Construct() does the X360 capacity/align/Clear sequence.
+        CgsModule::EventReceiverQueue<5120, 16> mEventQueue;
     };
 }
 }

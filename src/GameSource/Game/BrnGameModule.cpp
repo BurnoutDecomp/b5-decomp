@@ -73,6 +73,12 @@ namespace BrnGame
         // module type; the real resource bring-up (banks/pools/allocators) lands in step 5b.
         mGameDataModule.Construct(0);
 
+        // Construct the owned RootSoundModule (the loading flow's stage 4 then Prepares this same
+        // instance via BrnGame::GetMainSoundModule()). The X360 dispatches RootSoundModule::Construct
+        // (0x826AF350) via the module list; here it is constructed directly with the other engine
+        // modules. (The audio engine -- Playback/Logic sub-modules -- grows on top of Prepare.)
+        mSoundModule.Construct();
+
         // Per-frame IO buffer stacks the update spine pushes/pops GUI+director buffers on. The
         // full Construct owns these via the module IO system + the hardware memory arena; for
         // the boot/loading path they are backed by fixed scratch blocks here.
