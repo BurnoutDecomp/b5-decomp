@@ -2,10 +2,68 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"     // Pool, NewResource, Entry
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"  // BundleV2
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"     // Type
+#include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"  // [B4] async FS engine (ReadWholeFile)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // [B4] gpDebugPrint (which read path)
 
-#include <cstdio>    // fopen / fread / fseek / ftell / fclose
+#include <cstdio>    // fopen / fread / fseek / ftell / fclose (early-boot fallback)
 #include <cstdlib>   // malloc / free
 #include <cstring>   // memcpy
+
+namespace CgsResource
+{
+    // [B4] Read a whole bundle file. Prefers the LIVE async file-system engine (the DeviceManager
+    // worker thread + OperationPool, brought up by FileSystem::Prepare); falls back to the
+    // synchronous CRT leaf during early boot, BEFORE FileSystem::Prepare runs at the GameData
+    // stage-8 prepare (the movie/debug-font bootstrapping loads bundles before then). Returns a
+    // malloc'd buffer (caller free()s) + its size, or null. The CRT fallback is a marked
+    // bootstrapping accommodation; the faithful end-state brings the FS up before any load.
+    static char* ReadBundleFile(const char* lpcFileName, long* lpOutSize)
+    {
+        CgsFileSystem::DeviceManager* lpManager = CgsFileSystem::DeviceManager::GetIfInitialized();
+        if (lpManager)
+        {
+            u32   luSize = 0;
+            void* lpBuf  = lpManager->ReadWholeFile(lpcFileName, &luSize);
+            if (lpBuf)
+            {
+                if (CgsDev::Log::gpDebugPrint)
+                    *CgsDev::Log::gpDebugPrint << "[bundle] '" << lpcFileName
+                                               << "' via async-FS (" << static_cast<s32>(luSize) << " bytes)\n";
+                *lpOutSize = static_cast<long>(luSize);
+                return static_cast<char*>(lpBuf);
+            }
+            return 0;   // engine is up but the open/read failed -- do not silently fall back
+        }
+
+        // ---- early-boot CRT fallback (FS engine not yet live) ----
+        FILE* lpFile = fopen(lpcFileName, "rb");
+        if (lpFile == 0)
+            return 0;
+        fseek(lpFile, 0, SEEK_END);
+        const long llFileSize = ftell(lpFile);
+        fseek(lpFile, 0, SEEK_SET);
+        if (llFileSize <= 0)
+        {
+            fclose(lpFile);
+            return 0;
+        }
+        char* lpcBundle = static_cast<char*>(malloc(static_cast<size_t>(llFileSize)));
+        if (lpcBundle == 0)
+        {
+            fclose(lpFile);
+            return 0;
+        }
+        const size_t lnRead = fread(lpcBundle, 1, static_cast<size_t>(llFileSize), lpFile);
+        fclose(lpFile);
+        if (lnRead != static_cast<size_t>(llFileSize))
+        {
+            free(lpcBundle);
+            return 0;
+        }
+        *lpOutSize = llFileSize;
+        return lpcBundle;
+    }
+}
 
 // The PC bundle loader. Read CgsResourceBundleLoader.h for how this relates to the X360
 // streaming BundleLoaderModule (this is the synchronous PC IO form). The header validation
@@ -17,29 +75,12 @@ namespace CgsResource
 {
     s32 BundleLoader::LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType)
     {
-        // ---- read the whole bundle file (PC IO) ---------------------------------------
-        FILE* lpFile = fopen(lpcFileName, "rb");
-        if (lpFile == 0)
-            return -1;
-
-        fseek(lpFile, 0, SEEK_END);
-        const long llFileSize = ftell(lpFile);
-        fseek(lpFile, 0, SEEK_SET);
-        if (llFileSize <= static_cast<long>(sizeof(BundleV2)))
-        {
-            fclose(lpFile);
-            return -1;
-        }
-
-        char* lpcBundle = static_cast<char*>(malloc(static_cast<size_t>(llFileSize)));
+        // ---- read the whole bundle file (through the live async FS engine; CRT leaf early) --
+        long  llFileSize = 0;
+        char* lpcBundle  = ReadBundleFile(lpcFileName, &llFileSize);
         if (lpcBundle == 0)
-        {
-            fclose(lpFile);
             return -1;
-        }
-        const size_t lnRead = fread(lpcBundle, 1, static_cast<size_t>(llFileSize), lpFile);
-        fclose(lpFile);
-        if (lnRead != static_cast<size_t>(llFileSize))
+        if (llFileSize <= static_cast<long>(sizeof(BundleV2)))
         {
             free(lpcBundle);
             return -1;
@@ -158,26 +199,11 @@ namespace CgsResource
     // form -- the X360 async unload uses the DeAllocate state machine + tracks loaded bundles.]
     s32 BundleLoader::UnloadBundle(const char* lpcFileName, Pool* lpPool)
     {
-        FILE* lpFile = fopen(lpcFileName, "rb");
-        if (lpFile == 0)
-            return -1;
-        fseek(lpFile, 0, SEEK_END);
-        const long llFileSize = ftell(lpFile);
-        fseek(lpFile, 0, SEEK_SET);
-        if (llFileSize <= static_cast<long>(sizeof(BundleV2)))
-        {
-            fclose(lpFile);
-            return -1;
-        }
-        char* lpcBundle = static_cast<char*>(malloc(static_cast<size_t>(llFileSize)));
+        long  llFileSize = 0;
+        char* lpcBundle  = ReadBundleFile(lpcFileName, &llFileSize);
         if (lpcBundle == 0)
-        {
-            fclose(lpFile);
             return -1;
-        }
-        const size_t lnRead = fread(lpcBundle, 1, static_cast<size_t>(llFileSize), lpFile);
-        fclose(lpFile);
-        if (lnRead != static_cast<size_t>(llFileSize))
+        if (llFileSize <= static_cast<long>(sizeof(BundleV2)))
         {
             free(lpcBundle);
             return -1;

@@ -251,6 +251,18 @@ namespace CgsFileSystem
             lpComp->miHandle = liHandle;
             lpComp->mpDone->Post(1);
         }
+
+        // Fill in the op's completion callback/context, enqueue it on the device's pool, and block
+        // until the worker thread posts completion; returns the op result.
+        int EnqueueAndWait(OperationPool* lpPool, Operation* lpOp, SyncCompletion* lpComp)
+        {
+            lpOp->mpfCallback = SyncOpCallback;
+            lpOp->mpContext   = lpComp;
+            lpPool->AddOperation(lpOp);
+            const u32 luWaitForever = 0xFFFFFFFFu;
+            lpComp->mpDone->Wait(&luWaitForever);
+            return lpComp->miResult;
+        }
     }
 
     s32 DeviceManager::ReadFileSync(const char* lpcPath, void* lpBuffer, u32 luMaxSize)
@@ -313,6 +325,86 @@ namespace CgsFileSystem
         lDone.Wait(&luWaitForever);
 
         return liBytes;
+    }
+
+    void* DeviceManager::ReadWholeFile(const char* lpcPath, u32* lpuOutSize)
+    {
+        if (lpuOutSize) *lpuOutSize = 0;
+
+        // Route through the first registered physical device.
+        PhysicalDeviceSlot* lpSlot = nullptr;
+        for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
+            if (maPhysicalDevices[liIndex].mpDevice) { lpSlot = &maPhysicalDevices[liIndex]; break; }
+        if (!lpSlot)
+            return nullptr;
+
+        Device*        lpDevice = lpSlot->mpDevice;
+        OperationPool* lpPool   = &lpSlot->mOperations;
+
+        EA::Thread::Semaphore lDone;
+        SyncCompletion lComp;
+        lComp.mpDone   = &lDone;
+        lComp.miResult = 0;
+        lComp.miHandle = -1;
+
+        Operation lOp;
+
+        // OPEN (read mode == 1). The worker delivers the file handle in the callback's result.
+        memset(&lOp, 0, sizeof(lOp));
+        lOp.miType   = E_OP_OPEN;
+        lOp.mpDevice = lpDevice;
+        strncpy(lOp.macPath, lpcPath, sizeof(lOp.macPath) - 1);
+        lOp.macPath[sizeof(lOp.macPath) - 1] = 0;
+        lOp.miHandle = 1;
+        const int liHandle = EnqueueAndWait(lpPool, &lOp, &lComp);
+        if (liHandle < 0)
+            return nullptr;
+
+        // GETFILESIZE (the worker passes the size as the callback result).
+        memset(&lOp, 0, sizeof(lOp));
+        lOp.miType   = E_OP_GETFILESIZE;
+        lOp.mpDevice = lpDevice;
+        lOp.miHandle = liHandle;
+        const int liSize = EnqueueAndWait(lpPool, &lOp, &lComp);
+
+        void* lpBuffer = nullptr;
+        u32   luBytes  = 0;
+        if (liSize > 0)
+        {
+            lpBuffer = malloc(static_cast<size_t>(liSize));   // PC IO leaf; caller free()s
+            if (lpBuffer)
+            {
+                // READ the whole file.
+                memset(&lOp, 0, sizeof(lOp));
+                lOp.miType     = E_OP_READ;
+                lOp.mpDevice   = lpDevice;
+                lOp.miHandle   = liHandle;
+                lOp.mu64Offset = 0;
+                lOp.muSize     = static_cast<u32>(liSize);
+                lOp.mpBuffer   = lpBuffer;
+                const int liRead = EnqueueAndWait(lpPool, &lOp, &lComp);
+                if (liRead == liSize)
+                {
+                    luBytes = static_cast<u32>(liSize);
+                }
+                else
+                {
+                    free(lpBuffer);   // short / failed read -> the whole-file read failed
+                    lpBuffer = nullptr;
+                }
+            }
+        }
+
+        // CLOSE.
+        memset(&lOp, 0, sizeof(lOp));
+        lOp.miType   = E_OP_CLOSE;
+        lOp.mpDevice = lpDevice;
+        lOp.miHandle = liHandle;
+        EnqueueAndWait(lpPool, &lOp, &lComp);
+
+        if (lpBuffer && lpuOutSize)
+            *lpuOutSize = luBytes;
+        return lpBuffer;
     }
 
 } // namespace CgsFileSystem

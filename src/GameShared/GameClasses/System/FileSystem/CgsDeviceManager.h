@@ -76,6 +76,12 @@ namespace CgsFileSystem
         // through the first registered physical device; returns bytes read, or -1 on failure.
         s32 ReadFileSync(const char* lpcPath, void* lpBuffer, u32 luMaxSize);
 
+        // Open a file, read it WHOLE into a freshly malloc'd buffer (the caller frees it with
+        // free()), and close — all through the async engine (open -> getfilesize -> read ->
+        // close, blocking on each). Returns the buffer (and its size via *lpuOutSize), or null
+        // on failure. This is the bundle loader's replacement for the synchronous CRT leaf.
+        void* ReadWholeFile(const char* lpcPath, u32* lpuOutSize);
+
         // The per-physical-device worker thread (step 2). Drains mOperations and dispatches
         // each op to the slot's device. lpSlotContext is the PhysicalDeviceSlot*.
         static intptr_t PhysicalDeviceThread(void* lpSlotContext); // 0x828F1EA8
