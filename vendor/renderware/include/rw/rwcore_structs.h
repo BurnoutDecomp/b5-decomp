@@ -764,6 +764,13 @@ struct OSGlobalManager {  // sizeof = 72 (rwcore.pdb, x64)
     uint8_t mRefCount[4];  // +24  was: EA::Thread::AtomicInt<unsigned int>
     uint8_t _pad0[4];  // +28
     uint8_t mcsLock[40];  // +32  was: Win32Mutex
+
+    // ADDITIVE (member fn, no storage): the X360 ctor @ 0x82BBC878 that the
+    // boot trace executes. Declaring it does not change sizeof (no data members
+    // added). Body in renderware/src/rw/OSGlobalManager.cpp. The X360 ctor makes
+    // mOSGlobalList an empty circular intrusive list (next=prev=this), zeroes the
+    // atomic mRefCount, then RtlInitializeCriticalSection(&mcsLock).
+    OSGlobalManager();
 };
 RW_SIZE_ASSERT(rw::shared_globals::internal::OSGlobalManager, 72);
 

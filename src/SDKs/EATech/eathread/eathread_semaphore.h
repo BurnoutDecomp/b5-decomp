@@ -22,8 +22,8 @@
 //     EA::Thread::Semaphore::Wait       @ 0x82B42A40  (int; acquire one permit)
 //     EA::Thread::Semaphore::GetCount   @ 0x82B42CB0  (int; clamped available count)
 //
-// There is no Feb-2007 leak source for this TU; the SHAPE and bodies come from
-// the X360 asm (per-addr exports under .ida-exports/BURNOUT_X360_ARTIST.XEX/).
+// The SHAPE and bodies come purely from the X360 asm (per-addr exports under
+// .ida-exports/BURNOUT_X360_ARTIST.XEX/).
 // `EA::Thread` is a vendor library boundary, so its identifiers (EA, Thread,
 // Semaphore, Init, Wait, Post, GetCount) are preserved verbatim per the naming
 // convention.
@@ -94,6 +94,13 @@ public:
     // @ 0x82B42CB0 -- return mnCount clamped at zero (a negative count means there
     // are waiters, which GetCount reports as 0 available permits).
     int GetCount() const;
+
+    // Release permits: increment the available count by iCount and wake waiters as
+    // needed (via the data half's UpdateCancelCount). Declared here as the canonical
+    // home; the body is its own (not-yet-reconstructed) X360 TU and is resolved at link
+    // time. Callers (e.g. CgsFileSystem::OperationPool::AddOperation @0x828E9828) post a
+    // single permit per queued item.
+    int Post(int iCount = 1);
 
 private:
     EASemaphoreData mSemaphoreData;  // +0x00 (the only member; offset-0 data half)

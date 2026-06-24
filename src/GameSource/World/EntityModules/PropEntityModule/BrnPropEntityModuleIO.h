@@ -171,5 +171,101 @@ namespace PropEntityIO
         unsigned char                   maSceneInputAndPad[819824 - 5]; // ...    :648
         PropInputInterfaceStorage       mPropInputInterface;        // +819824 :649
     };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::OutputBuffer_Prepare (DWARF BrnPropEntityModuleIO.h:588).
+    // ADDITIVE GROW: homes the IO-OutputBuffers group's X360-emitted accessors of the
+    // prepare-phase output buffer. The three the X360 emitted out-of-line for this slice:
+    //   GetResourceRequestInterface()  @ 0x822B9690  write-lock (bit 3) -> +4      (asm-line 613)
+    //   GetPropInputInterface() const  @ 0x827A1778  read-lock  (bit 4) -> +819824 (asm-line 607)
+    //   GetPropInputInterface()        @ 0x822B95E8  write-lock (bit 3) -> +819824 (asm-line 610)
+    //
+    // LAYOUT (DWARF :588 member order + X360 getter return-offsets, authoritative; identical
+    // shape to OutputBuffer_PreScene):
+    //   base     CgsModule::IOBuffer                                       (1-byte status; +1..+3 pad)
+    //   +4       ResourceRequestInterface mResourceRequestInterface (RequestInterface<1024>) :609
+    //   +...     SceneInputInterface      mSceneInputInterface      (InSceneUpdateInterface)  :610
+    //   +819824  PropInputInterface       mPropInputInterface       (PropInputInterface)      :611
+    //
+    // FLAG (foreign types): the three interface members have their own owning homes elsewhere
+    // and are NOT reconstructed here; the region between the +4 member start and the +819824
+    // member start is modelled as correctly-sized opaque storage so the two X360-pinned return
+    // offsets (+4, +819824) are exact (same folding as OutputBuffer_PreScene). Adopt the named
+    // interface types additively when their homes land.
+    class OutputBuffer_Prepare : public CgsModule::IOBuffer
+    {
+    public:
+        // Opaque foreign-type storages (see FLAG above).
+        struct ResourceRequestInterfaceStorage { unsigned char maBytes[1]; };
+        struct PropInputInterfaceStorage       { unsigned char maBytes[1]; };
+
+        // X360 0x822B9690: write-lock handle, returns this + 4 (mResourceRequestInterface).
+        ResourceRequestInterfaceStorage* GetResourceRequestInterface();
+        // X360 0x827A1778: read-lock handle, returns this + 819824 (mPropInputInterface).
+        const PropInputInterfaceStorage* GetPropInputInterface() const;
+        // X360 0x822B95E8: write-lock handle, returns this + 819824 (mPropInputInterface).
+        PropInputInterfaceStorage* GetPropInputInterface();
+
+        static void _AssertLayout();
+
+    private:
+        u8                              maStatusPad[3];             // +1..+3 (force +4 placement)
+        ResourceRequestInterfaceStorage mResourceRequestInterface;  // +4      :609
+        // mSceneInputInterface (:610) is folded into this padding (see FLAG).
+        unsigned char                   maSceneInputAndPad[819824 - 5]; // ...    :610
+        PropInputInterfaceStorage       mPropInputInterface;        // +819824 :611
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::OutputBuffer_PostPhysics (DWARF BrnPropEntityModuleIO.h:714).
+    // ADDITIVE GROW: homes the IO-OutputBuffers group's X360-emitted accessors of the
+    // post-physics output buffer. The three the X360 emitted out-of-line for this slice:
+    //   GetPropInputInterface() const  @ 0x827A2000  read-lock  (bit 4) -> +833008 (asm-line 739)
+    //   GetSceneInputInterface()       @ 0x822B9BD0  write-lock (bit 3) -> +820912 (asm-line 742)
+    //   GetPropInputInterface()        @ 0x822B9FC0  write-lock (bit 3) -> +833008 (asm-line 748)
+    // (The const+non-const GetPropInputInterface pair both return the same +833008 member; the
+    // write-lock GetSceneInputInterface returns the lower +820912 member -- DWARF :752/:753 place
+    // mSceneInputInterface before mPropInputInterface, so Scene is the lower offset. The Hex-Rays
+    // recovered names were truncated; the lock bit + return offset + DWARF member order pin them.)
+    //
+    // LAYOUT (DWARF :714 member order + X360 getter return-offsets, authoritative):
+    //   base     CgsModule::IOBuffer  (1-byte status)
+    //   ...      mPropBecamePhysicalEventQueue / mRecordHitPropQueue / mHitOverheadSignQueue /
+    //            mBrokenPropQueue  (the leading event-queue members; :748-:751)
+    //   +820912  SceneInputInterface mSceneInputInterface  (InSceneUpdateInterface)  :752
+    //   +833008  PropInputInterface  mPropInputInterface   (PropInputInterface)      :753
+    //   ...      mPropVFXLocatorQueue (:754) / mbShouldRequestProgression (:755)
+    //
+    // FLAG (foreign types / opaque interior): only the two interface members are pinned by this
+    // slice's X360 getters (return offsets +820912 / +833008). The leading event queues, the
+    // trailing VFX queue, and the trailing bool are NOT reconstructed here; the storage up to the
+    // +820912 SceneInputInterface start and the SceneInputInterface span up to +833008 are modelled
+    // as correctly-sized opaque storage so the two pinned return offsets are exact. The interface
+    // members and queues have their own homes; adopt them additively when those land.
+    class OutputBuffer_PostPhysics : public CgsModule::IOBuffer
+    {
+    public:
+        // Opaque foreign-type storages (see FLAG above).
+        struct SceneInputInterfaceStorage { unsigned char maBytes[1]; };
+        struct PropInputInterfaceStorage  { unsigned char maBytes[1]; };
+
+        // X360 0x827A2000: read-lock handle, returns this + 833008 (mPropInputInterface).
+        const PropInputInterfaceStorage* GetPropInputInterface() const;
+        // X360 0x822B9BD0: write-lock handle, returns this + 820912 (mSceneInputInterface).
+        SceneInputInterfaceStorage* GetSceneInputInterface();
+        // X360 0x822B9FC0: write-lock handle, returns this + 833008 (mPropInputInterface).
+        PropInputInterfaceStorage* GetPropInputInterface();
+
+        static void _AssertLayout();
+
+    private:
+        // Leading event-queue members (:748-:751) folded into opaque storage up to the
+        // +820912 SceneInputInterface start (status byte at +0 is the IOBuffer base subobject).
+        unsigned char               maLeadingQueuesAndPad[820912 - 1]; // ...     :748-:751
+        SceneInputInterfaceStorage  mSceneInputInterface;              // +820912 :752
+        // mSceneInputInterface span (:752) folded into this padding up to the +833008 start.
+        unsigned char               maSceneInputAndPad[833008 - 820912 - 1]; // ... :752
+        PropInputInterfaceStorage   mPropInputInterface;               // +833008 :753
+    };
 }
 }
