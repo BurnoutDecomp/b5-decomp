@@ -58,11 +58,13 @@ namespace CgsMemory
         void Construct(s32 liMaxCommands, s32 liCommandSize, void* lpCommandBuffer,
                        s32 liMaxResults, s32 liResultSize, void* lpResultBuffer);
 
-        // Declared-only (not reconstructed in this TU pass).
-        void GetRequiredBufferSizes(s32 liMaxCommands, s32 liCommandSize,
-                                    s32 liMaxResults, s32 liResultSize,
-                                    s32* lpiOutCommandBufferSize,
-                                    s32* lpiOutResultBufferSize);
+        // Reconstructed in this pass (X360 0x8280FFF0). Static helper: the asm
+        // takes all six arguments in r3-r8 with no `this` pointer (r3 is used as
+        // the numeric liMaxCommands operand), so this is a static class method.
+        static void GetRequiredBufferSizes(s32 liMaxCommands, s32 liCommandSize,
+                                           s32 liMaxResults, s32 liResultSize,
+                                           u32* lpuOutCommandBufferSize,
+                                           u32* lpuOutResultBufferSize);
         void Begin();
         void End();
         s32  AddCommand(void* lpCommand);

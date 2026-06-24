@@ -23,8 +23,18 @@
 // +8; the remaining members follow the DWARF declaration order on a 32-bit ABI.)
 namespace CgsMemory
 {
+    // The command reader plays back commands the poster appended: it holds a
+    // pointer to this poster and CAS-advances the poster's packed nextCommand
+    // field while copying out each fixed-stride record (see CgsDataStreamCommandReader).
+    struct DataStreamCommandReader;
+
     struct DataStreamCommandPoster
     {
+        // The reader reads the poster's command buffer and CAS-updates its packed
+        // status word; it needs access to the private members below. (Additive:
+        // layout/sizeof unchanged.)
+        friend struct DataStreamCommandReader;
+
         // Packed-status bit layout (CgsDataStreamCommandPoster.h:44-51). Verbatim
         // from DWARF; the encode/decode helpers (EncodeStatus / DecodeStatus,
         // declared below) are the only users and are not reconstructed in this
