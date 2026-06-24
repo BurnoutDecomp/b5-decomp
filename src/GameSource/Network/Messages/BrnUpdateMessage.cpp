@@ -1,4 +1,5 @@
 #include "GameSource/Network/Messages/BrnUpdateMessage.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (UpdateMessage validity guards)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::UpdateData::operator=   @ 0x82579CD0
@@ -39,6 +40,48 @@ namespace BrnNetwork
         mbIsInCarSelect            = lOther.mbIsInCarSelect;          // +0x8A (lbz/stb)
         mbReceivingPlayerCrashedUs = lOther.mbReceivingPlayerCrashedUs; // +0x8B (lbz/stb)
 
+        return *this;
+    }
+
+    // BrnNetwork::UpdateMessage::GetUpdateData  @ 0x82580BA0
+    //   (BrnNetwork::BrnNetworkPlayer::CheckForNewMessages, ::Update)
+    // Asserts the message is valid (mx8Flags VALID bit @ +0x19), then returns &mUpdateData
+    // (the embedded payload at +0x20, i.e. `this + 0x20`).
+    const UpdateData* UpdateMessage::GetUpdateData()
+    {
+        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0, "IsMessageValid()");
+        return &mUpdateData;
+    }
+
+    // BrnNetwork::UpdateMessage::GetU16FramesSinceStart  @ 0x82580C00
+    //   (BrnNetwork::BrnNetworkPlayer::CheckForNewMessages)
+    // Asserts valid, then returns the payload's mu16FramesSinceStart (lhz +0x22 == mUpdateData+2).
+    u16 UpdateMessage::GetU16FramesSinceStart()
+    {
+        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0, "IsMessageValid()");
+        return mUpdateData.mu16FramesSinceStart;
+    }
+
+    // BrnNetwork::UpdateMessage::operator=  @ 0x82588CE8
+    //   (BrnNetwork::BrnNetworkPlayer::RemoveBufferedMessage)
+    // Memberwise copy of the CgsNetwork::Message base scalar fields (NOT the vptr at +0x00),
+    // matching the asm store widths exactly: the lifecycle word + the four bitstream cursor
+    // words (lwz/stw +0x04..+0x14), the three status bytes (lbz/stb +0x18/+0x19/+0x1A), the
+    // frame halfword (lhz/sth +0x1C), then the embedded UpdateData payload via its own
+    // operator= (UpdateData::operator=(this+0x20, lOther+0x20)).
+    UpdateMessage& UpdateMessage::operator=(const UpdateMessage& lOther)
+    {
+        mePackOrUnpack     = lOther.mePackOrUnpack;       // +0x04 (lwz/stw)
+        muBitstreamCursor0 = lOther.muBitstreamCursor0;   // +0x08 (lwz/stw)
+        muBitstreamCursor1 = lOther.muBitstreamCursor1;   // +0x0C (lwz/stw)
+        muBitstreamCursor2 = lOther.muBitstreamCursor2;   // +0x10 (lwz/stw)
+        muBitstreamCursor3 = lOther.muBitstreamCursor3;   // +0x14 (lwz/stw)
+        mu8GameID          = lOther.mu8GameID;            // +0x18 (lbz/stb)
+        mx8Flags           = lOther.mx8Flags;             // +0x19 (lbz/stb)
+        mi8Type            = lOther.mi8Type;              // +0x1A (lbz/stb)
+        mu16Frame          = lOther.mu16Frame;            // +0x1C (lhz/sth)
+
+        mUpdateData        = lOther.mUpdateData;          // +0x20 (UpdateData::operator=)
         return *this;
     }
 } // namespace BrnNetwork

@@ -100,6 +100,12 @@ namespace BrnNetwork
         u16           GetU16FramesSinceStart();         // DWARF :136 (sibling .cpp)
         u16           GetU16SentFrame();                // DWARF :143 (sibling .cpp)
 
+        // Memberwise copy assignment @ 0x82588CE8 (called by
+        // BrnNetwork::BrnNetworkPlayer::RemoveBufferedMessage). Copies the CgsNetwork::Message
+        // base scalar fields (NOT the vptr) then the embedded UpdateData; body in
+        // BrnUpdateMessage.cpp. (Additive grow: the X360 emits this operator= as its own member.)
+        UpdateMessage& operator=(const UpdateMessage& lOther);
+
         // LEDGER func @ 0x827DDED8 -- bodied inline below (DWARF BrnUpdateMessage.h:150).
         virtual const char* GetName() const;
 
