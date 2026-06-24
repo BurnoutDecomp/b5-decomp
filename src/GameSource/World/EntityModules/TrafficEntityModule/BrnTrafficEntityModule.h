@@ -89,4 +89,29 @@ namespace BrnTraffic
         f32                      mfDistanceSq;  // :162  +0x04
         CgsGraphics::Model::State mLOD;         // :163  +0x08  (4-byte enum -> 12)
     };
+
+    // One predicted race-car-hull change record: the module keeps a list of pending hull
+    // (collision-shape) swaps to apply to nearby race cars (producers:
+    // TrafficEntityModule::AddPredictedHullChange / ::UpdateRaceCarHulls; consumer/debug dump
+    // TrafficEntityModule::DEBUGDumpHullPredictions). sizeof == 8 (X360-authoritative): the
+    // Array<HullChangeInfo,400> instantiations put their live-count word at byte N*8 and copy
+    // each element as two dwords --
+    //   Array<HullChangeInfo,400>::Append   @ 0x8270ACA8 stores `stw r10,0(slot)` then
+    //     `stw r10,4(slot)`, count word @ +0xC80 == 400*8;
+    //   Array<HullChangeInfo,400>::EraseFast @ 0x8270ADD0 overwrites slot[index] with the last
+    //     live element via a two-dword copy at an 8-byte stride (`slwi r,count,3`);
+    //   Array<HullChangeInfo,400>::GetItem   @ 0x8270CE00 returns 8*index + base.
+    //
+    // FLAG (opaque interior): the 8-byte record's internal field split is not recovered by this
+    // slice -- every observed body (Append/EraseFast/GetItem) treats the element only as two
+    // 4-byte words. Modelled as exactly two 4-byte words so the asm-attested 8-byte stride and the
+    // +0xC80 inline-buffer offset are exact; the interior (the use sites suggest a target race-car
+    // entity index plus a frame/hull-state word, but that is not asm-attested) is honestly opaque.
+    // Grow this struct in place (never redefine/reorder) when the BrnTrafficHullRuntime slice
+    // recovers the field names.
+    struct HullChangeInfo
+    {
+        u32 muWord0; // +0x00  (interior opaque -- see FLAG)
+        u32 muWord1; // +0x04  (-> 8)
+    };
 }

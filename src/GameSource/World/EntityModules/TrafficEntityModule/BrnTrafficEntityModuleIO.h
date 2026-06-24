@@ -60,5 +60,69 @@ namespace BrnTrafficIO
         TrafficAIInterface                  mTrafficAIInterface;                   // :264 (offset 16416)
         TrafficToRaceCarInterface_PostScene mTrafficToRaceCarInterface_PostScene;  // :265
     };
+
+    // ============================================================================
+    // OutputBuffer_PostPhysics  (DWARF BrnTrafficEntityModuleIO.h, post-physics output buffer)
+    // ============================================================================
+    // ADDITIVE GROW: this slice homes the post-physics output buffer's four X360-emitted
+    // lock-guarded handle accessors (the producer/consumer is TrafficEntityModule::
+    // PostPhysicsUpdate / ::GenerateVehicleCrashedEvents, drained by WorldModule::
+    // BridgeEntityModulesToOutput_PostPhysics):
+    //
+    //   <write member @ +8>      @ 0x82711A48  write-lock (bit 3) -> this + 8       (asm-line 392)
+    //   <write member @ +834784> @ 0x82711D90  write-lock (bit 3) -> this + 834784  (asm-line 407)
+    //   <read  handle  @ +834828>@ 0x827A0E18  read-lock  (bit 4) -> this + 834828  (asm-line 418)
+    //   <write handle  @ +834828>@ 0x82712030  write-lock (bit 3) -> this + 834828  (asm-line 419)
+    //
+    // The const (read) handle tests the read-lock bit (((*a1 >> 4) & 1), `extrwi r11,r11,1,27`);
+    // the three non-const (write) handles test the write-lock bit (((*a1 >> 3) & 1),
+    // `extrwi r11,r11,1,28`) -- matching CgsModule::IOBuffer's IsBufferLockedForReading()/
+    // IsBufferLockedForWriting(). The X360 asserts the lock state (streaming "Not locked for
+    // reading/writing\n", a non-gating tripwire at asm-lines 392/407/418/419), then returns the
+    // member address via `addi this,8` (+8) / `addis this,0xD; addi this,-0x4320` (+834784) /
+    // `addis this,0xD; addi this,-0x42F4` (+834828).
+    //
+    // The +834828 read-lock and write-lock handles return the SAME member (the const/non-const
+    // overload pair, adjacent asm-lines 418/419 in the same header). The +8 and +834784 write-lock
+    // handles return two distinct earlier members.
+    //
+    // FLAG (truncated names / foreign types / opaque interior): the Hex-Rays method names were
+    // truncated (G / Ge / GetGuiE / GetR) and not fully recoverable; the lock bit + return offset
+    // pin each accessor's identity, so they are named here by offset role with the recoverable name
+    // stems documented. The returned members are foreign interface types with their own owning
+    // homes elsewhere and are NOT reconstructed here; the storage up to each pinned offset is
+    // modelled as correctly-sized opaque storage so the three pinned return offsets (+8, +834784,
+    // +834828) are exact. Adopt the named interface types additively when their homes land.
+    class OutputBuffer_PostPhysics : public CgsModule::IOBuffer
+    {
+    public:
+        // Opaque foreign-type storages (see FLAG above).
+        struct InterfaceAt8Storage      { unsigned char maBytes[1]; };
+        struct InterfaceAt834784Storage { unsigned char maBytes[1]; };
+        struct InterfaceAt834828Storage { unsigned char maBytes[1]; };
+
+        // X360 0x82711A48 (asm-line 392): write-lock handle, returns this + 8.
+        InterfaceAt8Storage*      GetWriteInterfaceAt8();
+        // X360 0x82711D90 (asm-line 407): write-lock handle, returns this + 834784. (name stem "GetR...")
+        InterfaceAt834784Storage* GetWriteInterfaceAt834784();
+        // X360 0x827A0E18 (asm-line 418): read-lock handle, returns this + 834828.
+        const InterfaceAt834828Storage* GetReadInterfaceAt834828() const;
+        // X360 0x82712030 (asm-line 419): write-lock handle, returns this + 834828. (name stem "GetGui...")
+        InterfaceAt834828Storage* GetWriteInterfaceAt834828();
+
+        static void _AssertLayout();
+
+    private:
+        // The IOBuffer base subobject's 1-byte status sits at +0; the first handle's member is at
+        // +8, so 7 bytes follow the status (the X360 places this member 4-aligned/8-aligned right
+        // after the status, matching `addi this,8`). The members between the pinned offsets are
+        // folded into correctly-sized opaque storage (see FLAG).
+        u8                        maStatusPad[7];                          // +1..+7 (force +8 placement)
+        InterfaceAt8Storage       mInterfaceAt8;                           // +8
+        unsigned char             maPad8To834784[834784 - 8 - 1];          // span +9..+834783
+        InterfaceAt834784Storage  mInterfaceAt834784;                      // +834784
+        unsigned char             maPad834784To834828[834828 - 834784 - 1];// span up to +834828
+        InterfaceAt834828Storage  mInterfaceAt834828;                      // +834828
+    };
 }
 }

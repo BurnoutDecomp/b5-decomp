@@ -24,7 +24,8 @@
 // element carries no host-widening members (pure byte storage), so its 80-byte stride holds.
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray
 
 namespace BrnPhysics
 {
@@ -59,6 +60,62 @@ namespace Deformation
         // 0x825B3678 -- checked sensor accessor. Asserts luSensorIndex < mu8NumSensors,
         // then returns the sensor record at maSensors[luSensorIndex].
         CarSensorState& GetSensor(u8 luSensorIndex);
+    };
+
+    // ========================================================================
+    // BrnPhysics::Deformation::DeformationState -- the deformation manager's shared-IO state:
+    // a fixed pool of up to KU_MAX_DEFORMATION_MODELS per-car deformation records, a parallel
+    // table of the car id each live slot belongs to, and a BitArray marking which slots are
+    // live. DWARF home BrnDeformationState.h (same file as CarState). The slice modelled here
+    // is the one GetCarStateF reaches; the per-car record interior is opaque (no DWARF; the
+    // only TU reaching this state is the lookup below, which only takes a record's address).
+    //
+    // X360 ground truth (DeformationState::GetCarStateF @ 0x822CC340, authoritative):
+    //   - the per-car record array base is the DeformationState object itself (this+0), with a
+    //     1712-byte (0x6B0) per-record stride (`mulli r11,liCarLoop,0x6B0; add r3,r11,this`).
+    //   - the per-slot car-id table is at this + 47936 (0xBB40): the asm loads the candidate id
+    //     as a 32-bit word at `4*(liCarLoop + 11984) + this` == this + 47936 + 4*liCarLoop
+    //     (`addi r11,liCarLoop,0x2ED0; slwi r11,r11,2; lwzx r11,r11,this`; 0x2ED0 == 11984).
+    //   - the live-slot BitArray is at this + 48048 (0xBBB0) -- immediately after the 28-entry
+    //     car-id table (47936 + 28*4 == 48048). The asm forms the base as
+    //     `addis r19,this,1; addi r19,r19,-0x4450` (this + 0x10000 - 0x4450 == this + 0xBBB0)
+    //     and only ever indexes field 0 (it caps `bitIndex>>6 < 1`), confirming BitArray<28>
+    //     occupies a single 64-bit field.
+    //   - the loop variable is asserted `< (int32_t)KU_MAX_DEFORMATION_MODELS` (baked
+    //     BrnDeformationState.h:109), pinning the pool capacity at 28.
+    //
+    // LAYOUT (X360 offsets, authoritative):
+    //   +0      CarStateRecord maCarStates[28]   (1712-byte stride per car)         (47936 bytes)
+    //   +47936  u32            maCarIds[28]      (the car id owning each live slot)  (112 bytes)
+    //   +48048  BitArray<28>   mxLiveSlots       (which slots are live)             (8 bytes)
+    //
+    // FLAG (opaque element): the 1712-byte CarStateRecord interior is not recovered by this
+    // slice (no DWARF; GetCarStateF only takes a record's address). It is modelled as an
+    // honestly-FLAGGED opaque 1712-byte POD so the per-record stride and the derived table
+    // offsets are exact; GROW it into named members when a record-producing/consuming TU lands.
+    static const u32 KU_MAX_DEFORMATION_MODELS = 28;
+
+    // One per-car deformation record. FLAG (opaque element): 1712-byte (0x6B0) stride is
+    // asm-attested (GetCarStateF return math); its interior is not recovered in this pass.
+    struct CarStateRecord
+    {
+        u8 maOpaque[0x6B0];   // 1712 bytes (asm-attested per-record stride)
+    };
+
+    struct DeformationState
+    {
+        // 0x822CC340 -- look up the live deformation record owning car id luCarId. Scans the
+        // live-slot BitArray; for each live slot whose maCarIds[slot] equals luCarId, returns
+        // &maCarStates[slot]. Returns nullptr when no live slot owns that car id. Each visited
+        // slot index is asserted < KU_MAX_DEFORMATION_MODELS (a non-gating tripwire).
+        CarStateRecord* GetCarStateF(u32 luCarId);
+
+        static void _AssertLayout();
+
+    private:
+        CarStateRecord                      maCarStates[KU_MAX_DEFORMATION_MODELS]; // +0      (1712 stride)
+        u32                                 maCarIds[KU_MAX_DEFORMATION_MODELS];    // +47936
+        CgsContainers::BitArray<KU_MAX_DEFORMATION_MODELS> mxLiveSlots;             // +48048
     };
 }
 }

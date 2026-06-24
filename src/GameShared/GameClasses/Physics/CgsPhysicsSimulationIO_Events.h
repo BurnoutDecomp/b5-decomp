@@ -158,5 +158,34 @@ namespace PhysicsSimulationIO
     {
         u8 macOpaquePayload[64];  // stride 64B X360-attested (AddEvent @ 0x828A1D90); fields not recovered
     };
+
+    // An output "spy" report of a resolved constraint joint, drained from the simulation back to the
+    // game. Queued with capacity 64 in PhysicsSimulationIO::OutputBuffer (X360
+    // EventQueue<OutJointSpy,64>::Construct @ 0x828A6928, capacity 0x40). The event STRIDE *is*
+    // X360-attested here: the matching BaseEventQueue<OutJointSpy>::AddEvent @ 0x828A1C30 copies each
+    // element as exactly six 64-bit block moves (ctr == 6, ld/std loop == 48 bytes) at a 48-byte
+    // stride (`slwi r7,r11,1; add r11,r11,r7` == miLength*3, `slwi r11,r11,4` == *16 == miLength*48),
+    // i.e. sizeof(OutJointSpy) == 48. So this payload is sized to that attested 48-byte stride.
+    // Internal field layout is still NOT recovered (no DWARF/source), so it is modelled as an opaque,
+    // 16-byte-aligned byte span; the Construct/AddEvent bodies remain store-for-store faithful
+    // regardless of the span's internal layout.
+    struct alignas(16) OutJointSpy : public Event
+    {
+        u8 macOpaquePayload[48];  // stride 48B X360-attested (AddEvent @ 0x828A1C30); fields not recovered
+    };
+
+    // Remove a previously-added constraint joint from the simulation, addressed by its 8-byte joint
+    // id/handle. Queued in PhysicsSimulationIO::InputBuffer. The event STRIDE *is* X360-attested: the
+    // matching BaseEventQueue<InRemoveJoint>::AddEvent @ 0x825E4208 stores each element as a SINGLE
+    // 64-bit store (`stdx r10,r11,r9`) at an 8-byte stride (`slwi r11,r11,3` == miLength*8), and Append
+    // @ 0x825A3B58 block-copies at the same 8-byte stride (`slwi r5,r29,3` == count*8,
+    // `slwi r11,r11,3` == miLength*8), i.e. sizeof(InRemoveJoint) == 8. So this payload is exactly an
+    // 8-byte id. The id's semantic interpretation (a JointId/handle) is not field-named here (no
+    // DWARF/source), so it is modelled as an opaque 8-byte span; the AddEvent/Append bodies remain
+    // store-for-store faithful regardless.
+    struct InRemoveJoint : public Event
+    {
+        u8 macOpaquePayload[8];  // stride 8B X360-attested (AddEvent @ 0x825E4208 stdx); fields not recovered
+    };
 }
 }

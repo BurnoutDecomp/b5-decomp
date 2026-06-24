@@ -267,5 +267,69 @@ namespace PropEntityIO
         unsigned char               maSceneInputAndPad[833008 - 820912 - 1]; // ... :752
         PropInputInterfaceStorage   mPropInputInterface;               // +833008 :753
     };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::InputBuffer_Dispatch (DWARF BrnPropEntityModuleIO.h:~290).
+    // ADDITIVE GROW: homes the six scalar accessors the X360 emitted out-of-line for the
+    // prop-entity module's generate-dispatch-lists input buffer (the buffer the world module's
+    // BridgeWorldModuleToEntityModules_Render fills and BrnWorld::PropEntityModule::
+    // GenerateDispatchLists drains):
+    //   GetDispatchFrame() const          @ 0x822B8EA8  read-lock  (bit 4) -> u32 *(this+4)      (asm-line 295)
+    //   SetDispatchFrame(u32)             @ 0x827A1180  write-lock (bit 3) ->     *(this+4) = v   (asm-line 296)
+    //   GetShadowMap() const              @ 0x822B8F50  read-lock  (bit 4) -> u32 *(this+8)      (asm-line 301)
+    //   SetShadowMap(u32)                 @ 0x827A1228  write-lock (bit 3) ->     *(this+8) = v   (asm-line 302)
+    //   GetCoronaSubmissionInterface()    @ 0x822B8FF8  read-lock  (bit 4) -> u32 *(this+0x801C) (asm-line 304)
+    //   SetCoronaSubmissionInterface(u32) @ 0x827A12D0  write-lock (bit 3) ->     *(this+0x801C)=v(asm-line 305)
+    //
+    // The getters test the read-lock bit (`lbz r11,0(this); extrwi r11,r11,1,27` == bit 4 ==
+    // IsBufferLockedForReading()) and fire "Not locked for reading\n"; the setters test the
+    // write-lock bit (`extrwi r11,r11,1,28` == bit 3 == IsBufferLockedForWriting()) and fire
+    // "Not locked for writing\n". All three accessed fields are 32-bit words: GetDispatchFrame
+    // `lwz r3,4(this)`, GetShadowMap `lwz r3,8(this)`, GetCoronaSubmissionInterface
+    // `ori r11,0,0x801C; lwzx r3,this,r11`; the setters mirror them (`stw 4`, `stw 8`,
+    // `stwx ...,0x801C`).
+    //
+    // LAYOUT (X360 accessor offsets, authoritative):
+    //   base    CgsModule::IOBuffer       (1-byte status; +1..+3 pad)
+    //   +4      u32 muDispatchFrame       dispatch-frame index
+    //   +8      u32 muShadowMap           shadow-map handle
+    //   +...    (intervening dispatch-list payload region; not recovered by this slice)
+    //   +0x801C u32 muCoronaSubmissionInterface   corona-submission interface handle
+    //
+    // FLAG (foreign type / opaque interior): the region between muShadowMap (+8) and
+    // muCoronaSubmissionInterface (+0x801C) is the buffer's other dispatch-list payload (its
+    // own members are not recovered by this slice) and is modelled as correctly-sized opaque
+    // storage so the three X360-pinned accessor offsets (+4, +8, +0x801C) are exact. The
+    // corona-submission handle is the address/handle of a foreign corona-submission interface
+    // whose own home lands elsewhere; the asm treats this slot as a single 32-bit word.
+    class InputBuffer_Dispatch : public CgsModule::IOBuffer
+    {
+    public:
+        // X360 0x822B8EA8: read-lock; return the dispatch-frame index (this+4).
+        u32  GetDispatchFrame() const;
+        // X360 0x827A1180: write-lock; set the dispatch-frame index (this+4).
+        void SetDispatchFrame(u32 luDispatchFrame);
+        // X360 0x822B8F50: read-lock; return the shadow-map handle (this+8).
+        u32  GetShadowMap() const;
+        // X360 0x827A1228: write-lock; set the shadow-map handle (this+8).
+        void SetShadowMap(u32 luShadowMap);
+        // X360 0x822B8FF8: read-lock; return the corona-submission interface handle (this+0x801C).
+        u32  GetCoronaSubmissionInterface() const;
+        // X360 0x827A12D0: write-lock; set the corona-submission interface handle (this+0x801C).
+        void SetCoronaSubmissionInterface(u32 luCoronaSubmissionInterface);
+
+        static void _AssertLayout();
+
+    private:
+        // The IOBuffer base is a single status byte; the X360 places muDispatchFrame at this+4,
+        // so pad bytes +1..+3 explicitly.
+        u8            maStatusPad[3];                    // +1..+3 (force +4)
+        u32           muDispatchFrame;                   // +4
+        u32           muShadowMap;                       // +8
+        // Intervening dispatch-list payload (opaque; see FLAG). Spans from +0xC up to the
+        // +0x801C start of muCoronaSubmissionInterface.
+        unsigned char maPayloadAndPad[0x801C - 0xC];     // +0xC..+0x801B
+        u32           muCoronaSubmissionInterface;       // +0x801C
+    };
 }
 }
