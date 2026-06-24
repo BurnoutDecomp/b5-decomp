@@ -34,4 +34,19 @@ namespace BrnAI
         CGS_ASSERT(lfValue >= 0.0f && lfValue <= 1.0f, "Bad speed match time is ");
         mfTimeForSpeedMatch = lfValue;
     }
+
+    // @0x82766A80 -- return the cached aggression level (mfAggressionLevel, this+0x00).
+    // The X360 asserts the level has been set first: it reads mbAggressionLevelSet
+    // (lbz 4(r28)) and, when clear, streams "Aggression levels need to be set up\n" into
+    // the assert buffer (CgsDev::StrStream into gpcMessageBuffer) and fires the baked
+    // assert (BrnAIAggressiveness.cpp:86). Then it loads and returns the float at +0x00
+    // (lfs f1, 0(r28)) regardless. CGS_ASSERT folds the Begin/Stream/Fire/End sequence and
+    // forwards the message directly (dropping the StrStream and the baked d:\p4 file/line).
+    // Called by AIAggression::DecideToAttack / GetMaxOvertakeSpeed / StopAttacking and the
+    // AIDebugComponent state-table draws.
+    f32 Aggressiveness::GetAggressionLevel() const
+    {
+        CGS_ASSERT(mbAggressionLevelSet, "Aggression levels need to be set up\n");
+        return mfAggressionLevel;
+    }
 }

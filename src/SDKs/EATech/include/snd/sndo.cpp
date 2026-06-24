@@ -4,6 +4,8 @@
 // Out-of-line definitions for the minimal Snd9 sndo.h surface:
 //   - Snd9::IAemsSamplePlayer::~IAemsSamplePlayer  (base scalar-deleting dtor)
 //       reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82681950
+//   - Snd9::IAemsSamplePlayerFactory::~IAemsSamplePlayerFactory  (base vector-deleting dtor)
+//       reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82681998
 //   - Snd9::AemsPlayerInputAccessor::GetValueByType
 //       reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82B6FE00
 //
@@ -20,6 +22,16 @@ namespace Snd9
     // no base, so the destructor body is empty: defining it out-of-line emits exactly
     // the vtable store + (for the deleting variant) the operator-delete tail.
     IAemsSamplePlayer::~IAemsSamplePlayer()
+    {
+    }
+
+    // 0x82681998. The base polymorphic destructor for the player-FACTORY interface.
+    // The X360 vector-deleting thunk stores the IAemsSamplePlayerFactory vtable
+    // (off_820AB168) into the object, then -- for the deleting variant -- conditionally
+    // calls operator delete. The interface holds no members, so the destructor body is
+    // empty: defining it out-of-line emits exactly the vtable store + the (deleting)
+    // operator-delete tail.
+    IAemsSamplePlayerFactory::~IAemsSamplePlayerFactory()
     {
     }
 

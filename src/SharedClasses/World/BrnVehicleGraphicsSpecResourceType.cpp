@@ -57,6 +57,66 @@ namespace BrnVehicle
         return KU_VEHICLE_GRAPHICS_SPEC_RESOURCE_TYPE_ID;
     }
 
+    // Round a running size up to a 16-byte boundary after adding the next sub-block's
+    // requirement: the X360 emits `addi N,0xF ; clrrwi N,4` for each step
+    // (== (size + 15) & ~0xF).
+    static u32 AlignUp16(u32 luSize)
+    {
+        return (luSize + 0xFu) & ~0xFu;
+    }
+
+    // GetSerialisedResourceDescriptor @ 0x8267D380 (store-for-store). The vehicle
+    // graphics-spec serialises into one 16-byte-aligned block whose size accumulates
+    // several sub-allocations, each rounded up to 16 bytes. The X360 reads:
+    //   v3 = miCount (a3[1], +4) ; muField3 (a3[3], +12) ; mpField7 (a3[7], +0x1C, a byte array).
+    // Running size (each `& ~0xF` is a 16-byte align-up of the accumulated total):
+    //   s  = (4*miCount + 0x3F) & ~0xF             ; pointer table + slack
+    //   s  = (s + 12*muField3 + 0xF) & ~0xF
+    //   s  = (s + (miCount << 6) + 0xF) & ~0xF
+    //   s  = (s + miCount + 0xF) & ~0xF
+    //   s  = (s + miCount + 0xF) & ~0xF
+    //   s  = (s + 4*miCount + 0xF) & ~0xF
+    //   for (i = 0; i < miCount; ++i)            // skipped entirely when miCount == 0
+    //       if (mpField7 && mpField7[i]) s += mpField7[i] << 6;
+    //   size = (s + 0xF) & ~0xF
+    // entry0 = {size, align = 0x10}; entries 1..4 = {0,1}.
+    CgsResource::ResourceDescriptor
+    GraphicsSpecResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        const GraphicsSpec* lpSpec = static_cast<const GraphicsSpec*>(lpResource);
+
+        const u32 luCount = static_cast<u32>(lpSpec->miCount);   // v3 (a3[1])
+
+        u32 luSize = (4u * luCount + 0x3Fu) & ~0xFu;             // (4*v3 + 63) & ~0xF
+        luSize = AlignUp16(luSize + 12u * lpSpec->muField3);     // + 12*a3[3]
+        luSize = AlignUp16(luSize + (luCount << 6));             // + (v3 << 6)
+        luSize = AlignUp16(luSize + luCount);                    // + v3
+        luSize = AlignUp16(luSize + luCount);                    // + v3
+        luSize = AlignUp16(luSize + 4u * luCount);               // + 4*v3
+
+        if (luCount != 0u)
+        {
+            const u8* lpBytes = PointerFromU32<u8>(lpSpec->mpField7);   // a3[7]
+            for (u32 luEntry = 0; luEntry < luCount; ++luEntry)
+            {
+                if (lpBytes != nullptr && lpBytes[luEntry] != 0u)
+                    luSize += static_cast<u32>(lpBytes[luEntry]) << 6;  // byte << 6
+            }
+        }
+
+        luSize = AlignUp16(luSize);                              // final (s + 15) & ~0xF
+
+        CgsResource::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;  // entry0 size
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10u;   // entry0 align
+        for (u32 luBlock = 1; luBlock < 5u; ++luBlock)
+        {
+            lDescriptor.m_baseResourceDescriptors[luBlock].m_size      = 0u;   // entry1..4 {0,1}
+            lDescriptor.m_baseResourceDescriptors[luBlock].m_alignment = 1u;
+        }
+        return lDescriptor;
+    }
+
     // FixUp @ 0x8267E3E8. Validate version, then add the load-base delta to each
     // load-relative pointer field and to every entry of the +32 array.
     // The X360 `result` is the EndAssert() artifact (return value of the assert

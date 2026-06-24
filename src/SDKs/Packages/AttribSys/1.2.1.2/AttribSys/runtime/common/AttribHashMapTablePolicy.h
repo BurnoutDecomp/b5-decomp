@@ -40,6 +40,19 @@ namespace Attrib
         // X360 r3 is a 32-bit pointer).
         static void* Free(void* lpBlock, size_t liSize);
 
+        // The bare census-and-free sequence the AttribSys deleting destructors
+        // inline at their `operator delete` sites (Attrib::Database @ 0x828057A8,
+        // Attrib::ClassExportPolicy @ 0x82808018, CollectionExportPolicy @ 0x82808098,
+        // DatabaseExportPolicy @ 0x82807F98). Those sites touch the very same two
+        // file-scope counters this policy owns (dword_83011BFC / dword_83011BF8) and
+        // call the same GetAttribS()->Free(block, size, tag) inner free, but with the
+        // census update done UNCONDITIONALLY (they are already inside the should-free
+        // branch) and a caller-supplied diagnostic tag (NULL at those object-delete
+        // sites, vs the "Attrib::HashMapTable" tag the bucket-array Free above passes).
+        // Exposed here so the census counters stay defined exactly once; the helper is
+        // additive (no data members, layout/sizeof unchanged). Returns lpBlock.
+        static void* FreeWithCensus(void* lpBlock, size_t liSize, const char* lpcTag);
+
         // The malloc-side counterpart (bumps smCurrentMemory / smPeakMemory the other
         // way and forwards onto AttribSysPackageAllocator::Malloc). Body in its own TU.
         static void* Allocate(size_t liSize, size_t liAlignment, size_t liOffset, int liFlags);

@@ -2,18 +2,18 @@
 
 // AttribSys runtime — Attrib::Instance and the Collection it handles.
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2). The Feb-2007 leak
-// ships attribsys.h at v1.0.8.5, which drifts from the X360 spine: a 64-bit Key and a
-// different Instance layout (mOwner@0/mCollection@4/mLayoutPtr@8). The X360 build is
-// the target, so this header carries the X360 shapes (32-bit Key; the 16-byte Instance
-// the recovered bodies use) and declares ONLY the methods the X360 ledger attests as
-// real functions — the rich generated-class accessor API is inlined away in X360.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2). An earlier SDK
+// revision drifts from the X360 spine: a 64-bit Key and a different Instance layout
+// (mOwner@0/mCollection@4/mLayoutPtr@8). The X360 build is the target, so this header
+// carries the X360 shapes (32-bit Key; the 16-byte Instance the recovered bodies use)
+// and declares ONLY the methods the X360 ledger attests as real functions — the rich
+// generated-class accessor API is inlined away in X360.
 // Method bodies live in attribinstance.cpp; Collection internals are owned by the SDK.
 #include "types.hpp"
 
 namespace Attrib
 {
-    typedef u32 Key;   // X360: 32-bit class/attribute key (Feb-2007 was 64-bit).
+    typedef u32 Key;   // X360: 32-bit class/attribute key (an earlier SDK rev was 64-bit).
 
     // Partial Attrib::Collection layout (the fields Instance touches).
     struct Collection

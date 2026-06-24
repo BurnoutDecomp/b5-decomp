@@ -4,7 +4,7 @@
 // part index into a single 32-bit EntityId word. Reconstructed from the DecFIGS DWARF
 // (member name) + the X360 ARTIST spine (bit layout + accessor bodies, authoritative).
 //
-// BIT LAYOUT (X360 retail, authoritative — OVERRIDES the Feb-2007 leak):
+// BIT LAYOUT (X360 retail, asm-authoritative):
 //   The asm for the out-of-line accessors fixes the packed layout as
 //       owner       : bits [24..31]  (8 bits)   high byte; E_ENTITYTYPE_PROP == 3
 //       entityIndex : bits [10..23]  (14 bits)
@@ -14,9 +14,9 @@
 //     GetPartIndex   @ 0x822B7B68  `clrlwi r3,r11,22`     -> muValue & 0x3FF
 //     SetEntityIndex @ 0x822B79D0  mask 0xFF0003FF | (idx<<10), idx < 0x4000 (14 bits)
 //     SetPartIndex   @ 0x822B7A70  `clrrwi r11,r11,10`    & idx, idx < 0x400 (10 bits)
-//   The Feb-2007 leak's CgsEntityId.h declared 12/12 entity/part bits; the shipped
+//   An earlier CgsEntityId.h revision used a 12/12 entity/part split; the shipped
 //   X360 build uses 14/10. The shipped binary is the source of truth here, so the
-//   masks/shifts below match the asm exactly (NOT the leaked 12/12 layout).
+//   masks/shifts below match the asm exactly (NOT the 12/12 layout).
 //
 // The owner-byte assert ("mEntityId.GetOwner() == E_ENTITYTYPE_PROP", baked
 // ..\\..\\..\\SharedClasses\\Physics/Props/BrnPropEntityID.h:278) reads the high byte
@@ -77,6 +77,18 @@ namespace BrnWorld
         // CgsSceneManager::EntityId is the same packed handle the project aliases as EntityId
         // (BrnCommonTypes.h struct EntityId { u32 muValue; }), so the operator yields it.
         operator EntityId() const;              // 0x822B78E8
+
+        // ADDITIVE GROW (Array<PropEntityID,N> group): the explicit class instantiations
+        // Array<BrnWorld::PropEntityID, 15> / <,30> (CgsArrayPropEntityID15.cpp /
+        // CgsArrayPropEntityID30.cpp) force the generic Array<T,N> equality-based members
+        // (FindFirstInstanceOf / Contains / CountInstancesOf / EraseInstancesOf) to
+        // instantiate, which need an element operator==. The packed handle compares by its
+        // single 32-bit word (the only state of the type), so equality is muValue equality.
+        // Pure addition: no layout/sizeof/offset change (sizeof remains the one EntityId word).
+        bool operator==(const PropEntityID& lrOther) const
+        {
+            return mEntityId.muValue == lrOther.mEntityId.muValue;
+        }
 
         EntityId mEntityId;
     };

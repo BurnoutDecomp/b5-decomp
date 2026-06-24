@@ -600,4 +600,30 @@ void SharedPlaylists::Construct()
     muCurrentPausePlaylist = 0;
 }
 
+
+
+// ----------------------------------------------------------------------------
+// BrnDirector::SharedPlaylists::GetPausePlaylist @0x821F59F8
+//
+//   lwz   r11, 0x1888(this)   ; muCurrentPausePlaylist
+//   cmplwi r11, 3             ; < KU_NUM_PAUSE_PLAYLISTS -> assert on >=
+//   ...assert...
+//   lwz   r11, 0x1888(this)   ; reload muCurrentPausePlaylist
+//   addi  r11, r11, 2         ; skip mRaceIntroPlaylist (0) + mPostRacePlaylist (1)
+//   mulli r11, r11, 0x4E8     ; * sizeof(ICEMoviePlaylist) (1256)
+//   add   r3,  r11, this      ; &maPausePlaylists[muCurrentPausePlaylist]
+//
+// The (index + 2) * 0x4E8 + this address is exactly &maPausePlaylists[index]: the two
+// skipped playlists are mRaceIntroPlaylist (+0x0000) and mPostRacePlaylist (+0x04E8), so
+// maPausePlaylists[0] sits at +0x09D0 == 2 * 0x4E8 and each pause slot is one 0x4E8-byte
+// playlist further on.
+// ----------------------------------------------------------------------------
+const ICEMoviePlaylist&
+SharedPlaylists::GetPausePlaylist() const
+{
+    CGS_ASSERT(muCurrentPausePlaylist < KU_NUM_PAUSE_PLAYLISTS,
+               "muCurrentPausePlaylist < KI_NUM_PAUSE_PLAYLISTS");
+    return maPausePlaylists[muCurrentPausePlaylist];
+}
+
 } // namespace BrnDirector

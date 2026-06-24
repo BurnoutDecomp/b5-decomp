@@ -82,6 +82,50 @@ namespace PropEntityIO
     };
 
     // ========================================================================
+    // BrnWorld::PropEntityIO::TrafficLightKnockDownEvent -- a "this traffic light has been
+    // knocked down" notification queued by the prop entity module's pre-physics input/output
+    // buffers (the producers OutputBuffer_PrePhysics::Construct / BrnTrafficIO::
+    // InputBuffer_PrePhysics::Construct build EventQueue<TrafficLightKnockDownEvent,32>).
+    //
+    // SIZE (X360, authoritative): sizeof == 4. Pinned by
+    // BaseEventQueue<TrafficLightKnockDownEvent>::AddEvent @ 0x822C8D78, which copies the event
+    // with `slwi r11,miLength,2; stwx r10,r11,mpEvents` -- a single 4-byte store at stride 4
+    // (no two-half split, no index scaling beyond *4). EventQueue<...,32>::Construct
+    // @ 0x822E4CE0 places the inline maEvents[32] at +0xC (base mpEvents@0, miMaxLength@4,
+    // miLength@8, maEvents@12 -- no alignment pad, confirming 4-byte element alignment) with
+    // miMaxLength = 32 (0x20).
+    //
+    // FLAG (opaque interior): the 4-byte payload's internal field layout is not recovered by
+    // this slice -- every observed body (the queue Construct/AddEvent/Append) treats the
+    // element only as a 4-byte blob (single stwx / 4*count XMemCpy). Modelled as exactly one
+    // 4-byte word so the asm-attested stride and the +0xC inline-buffer offset are exact; the
+    // interior (likely a traffic-light/junction id or packed index) is honestly opaque.
+    struct TrafficLightKnockDownEvent
+    {
+        u32 muPayload;   // +0x00  4-byte payload (interior opaque -- see FLAG)
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::TrafficLightRestoreEvent -- the paired "restore this knocked-down
+    // traffic light" notification, queued alongside TrafficLightKnockDownEvent by the same
+    // producers (EventQueue<TrafficLightRestoreEvent,80>).
+    //
+    // SIZE (X360, authoritative): sizeof == 4. Pinned by
+    // BaseEventQueue<TrafficLightRestoreEvent>::AddEvent (@ 0x822C8F.., `slwi r11,miLength,2;
+    // stwx r10,r11,mpEvents`) and ::Append (XMemCpy with `slwi count,miLength,2` == 4*count) --
+    // a single 4-byte element at stride 4. EventQueue<...,80>::Construct @ 0x822E4D50 places
+    // the inline maEvents[80] at +0xC (base mpEvents@0, miMaxLength@4, miLength@8, maEvents@12 --
+    // no alignment pad, confirming 4-byte element alignment) with miMaxLength = 80 (0x50).
+    //
+    // FLAG (opaque interior): as TrafficLightKnockDownEvent above -- the 4-byte payload's
+    // internal field layout is not recovered by this slice; modelled as one 4-byte word so the
+    // asm-attested stride and +0xC inline-buffer offset are exact.
+    struct TrafficLightRestoreEvent
+    {
+        u32 muPayload;   // +0x00  4-byte payload (interior opaque -- see FLAG)
+    };
+
+    // ========================================================================
     // BrnWorld::PropEntityIO::OutputBuffer_PreScene (DWARF BrnPropEntityModuleIO.h:676).
     // ADDITIVE GROW: this slice homes ONLY the IO-OutputBuffers group's X360-emitted
     // accessors of the pre-scene output buffer:
@@ -126,6 +170,166 @@ namespace PropEntityIO
         // the end of mResourceRequestInterface (+5) to the +819824 start of mPropInputInterface.
         unsigned char                   maSceneInputAndPad[819824 - 5]; // ...    :648
         PropInputInterfaceStorage       mPropInputInterface;        // +819824 :649
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::OutputBuffer_Prepare (DWARF BrnPropEntityModuleIO.h:588).
+    // ADDITIVE GROW: homes the IO-OutputBuffers group's X360-emitted accessors of the
+    // prepare-phase output buffer. The three the X360 emitted out-of-line for this slice:
+    //   GetResourceRequestInterface()  @ 0x822B9690  write-lock (bit 3) -> +4      (asm-line 613)
+    //   GetPropInputInterface() const  @ 0x827A1778  read-lock  (bit 4) -> +819824 (asm-line 607)
+    //   GetPropInputInterface()        @ 0x822B95E8  write-lock (bit 3) -> +819824 (asm-line 610)
+    //
+    // LAYOUT (DWARF :588 member order + X360 getter return-offsets, authoritative; identical
+    // shape to OutputBuffer_PreScene):
+    //   base     CgsModule::IOBuffer                                       (1-byte status; +1..+3 pad)
+    //   +4       ResourceRequestInterface mResourceRequestInterface (RequestInterface<1024>) :609
+    //   +...     SceneInputInterface      mSceneInputInterface      (InSceneUpdateInterface)  :610
+    //   +819824  PropInputInterface       mPropInputInterface       (PropInputInterface)      :611
+    //
+    // FLAG (foreign types): the three interface members have their own owning homes elsewhere
+    // and are NOT reconstructed here; the region between the +4 member start and the +819824
+    // member start is modelled as correctly-sized opaque storage so the two X360-pinned return
+    // offsets (+4, +819824) are exact (same folding as OutputBuffer_PreScene). Adopt the named
+    // interface types additively when their homes land.
+    class OutputBuffer_Prepare : public CgsModule::IOBuffer
+    {
+    public:
+        // Opaque foreign-type storages (see FLAG above).
+        struct ResourceRequestInterfaceStorage { unsigned char maBytes[1]; };
+        struct PropInputInterfaceStorage       { unsigned char maBytes[1]; };
+
+        // X360 0x822B9690: write-lock handle, returns this + 4 (mResourceRequestInterface).
+        ResourceRequestInterfaceStorage* GetResourceRequestInterface();
+        // X360 0x827A1778: read-lock handle, returns this + 819824 (mPropInputInterface).
+        const PropInputInterfaceStorage* GetPropInputInterface() const;
+        // X360 0x822B95E8: write-lock handle, returns this + 819824 (mPropInputInterface).
+        PropInputInterfaceStorage* GetPropInputInterface();
+
+        static void _AssertLayout();
+
+    private:
+        u8                              maStatusPad[3];             // +1..+3 (force +4 placement)
+        ResourceRequestInterfaceStorage mResourceRequestInterface;  // +4      :609
+        // mSceneInputInterface (:610) is folded into this padding (see FLAG).
+        unsigned char                   maSceneInputAndPad[819824 - 5]; // ...    :610
+        PropInputInterfaceStorage       mPropInputInterface;        // +819824 :611
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::OutputBuffer_PostPhysics (DWARF BrnPropEntityModuleIO.h:714).
+    // ADDITIVE GROW: homes the IO-OutputBuffers group's X360-emitted accessors of the
+    // post-physics output buffer. The three the X360 emitted out-of-line for this slice:
+    //   GetPropInputInterface() const  @ 0x827A2000  read-lock  (bit 4) -> +833008 (asm-line 739)
+    //   GetSceneInputInterface()       @ 0x822B9BD0  write-lock (bit 3) -> +820912 (asm-line 742)
+    //   GetPropInputInterface()        @ 0x822B9FC0  write-lock (bit 3) -> +833008 (asm-line 748)
+    // (The const+non-const GetPropInputInterface pair both return the same +833008 member; the
+    // write-lock GetSceneInputInterface returns the lower +820912 member -- DWARF :752/:753 place
+    // mSceneInputInterface before mPropInputInterface, so Scene is the lower offset. The Hex-Rays
+    // recovered names were truncated; the lock bit + return offset + DWARF member order pin them.)
+    //
+    // LAYOUT (DWARF :714 member order + X360 getter return-offsets, authoritative):
+    //   base     CgsModule::IOBuffer  (1-byte status)
+    //   ...      mPropBecamePhysicalEventQueue / mRecordHitPropQueue / mHitOverheadSignQueue /
+    //            mBrokenPropQueue  (the leading event-queue members; :748-:751)
+    //   +820912  SceneInputInterface mSceneInputInterface  (InSceneUpdateInterface)  :752
+    //   +833008  PropInputInterface  mPropInputInterface   (PropInputInterface)      :753
+    //   ...      mPropVFXLocatorQueue (:754) / mbShouldRequestProgression (:755)
+    //
+    // FLAG (foreign types / opaque interior): only the two interface members are pinned by this
+    // slice's X360 getters (return offsets +820912 / +833008). The leading event queues, the
+    // trailing VFX queue, and the trailing bool are NOT reconstructed here; the storage up to the
+    // +820912 SceneInputInterface start and the SceneInputInterface span up to +833008 are modelled
+    // as correctly-sized opaque storage so the two pinned return offsets are exact. The interface
+    // members and queues have their own homes; adopt them additively when those land.
+    class OutputBuffer_PostPhysics : public CgsModule::IOBuffer
+    {
+    public:
+        // Opaque foreign-type storages (see FLAG above).
+        struct SceneInputInterfaceStorage { unsigned char maBytes[1]; };
+        struct PropInputInterfaceStorage  { unsigned char maBytes[1]; };
+
+        // X360 0x827A2000: read-lock handle, returns this + 833008 (mPropInputInterface).
+        const PropInputInterfaceStorage* GetPropInputInterface() const;
+        // X360 0x822B9BD0: write-lock handle, returns this + 820912 (mSceneInputInterface).
+        SceneInputInterfaceStorage* GetSceneInputInterface();
+        // X360 0x822B9FC0: write-lock handle, returns this + 833008 (mPropInputInterface).
+        PropInputInterfaceStorage* GetPropInputInterface();
+
+        static void _AssertLayout();
+
+    private:
+        // Leading event-queue members (:748-:751) folded into opaque storage up to the
+        // +820912 SceneInputInterface start (status byte at +0 is the IOBuffer base subobject).
+        unsigned char               maLeadingQueuesAndPad[820912 - 1]; // ...     :748-:751
+        SceneInputInterfaceStorage  mSceneInputInterface;              // +820912 :752
+        // mSceneInputInterface span (:752) folded into this padding up to the +833008 start.
+        unsigned char               maSceneInputAndPad[833008 - 820912 - 1]; // ... :752
+        PropInputInterfaceStorage   mPropInputInterface;               // +833008 :753
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::InputBuffer_Dispatch (DWARF BrnPropEntityModuleIO.h:~290).
+    // ADDITIVE GROW: homes the six scalar accessors the X360 emitted out-of-line for the
+    // prop-entity module's generate-dispatch-lists input buffer (the buffer the world module's
+    // BridgeWorldModuleToEntityModules_Render fills and BrnWorld::PropEntityModule::
+    // GenerateDispatchLists drains):
+    //   GetDispatchFrame() const          @ 0x822B8EA8  read-lock  (bit 4) -> u32 *(this+4)      (asm-line 295)
+    //   SetDispatchFrame(u32)             @ 0x827A1180  write-lock (bit 3) ->     *(this+4) = v   (asm-line 296)
+    //   GetShadowMap() const              @ 0x822B8F50  read-lock  (bit 4) -> u32 *(this+8)      (asm-line 301)
+    //   SetShadowMap(u32)                 @ 0x827A1228  write-lock (bit 3) ->     *(this+8) = v   (asm-line 302)
+    //   GetCoronaSubmissionInterface()    @ 0x822B8FF8  read-lock  (bit 4) -> u32 *(this+0x801C) (asm-line 304)
+    //   SetCoronaSubmissionInterface(u32) @ 0x827A12D0  write-lock (bit 3) ->     *(this+0x801C)=v(asm-line 305)
+    //
+    // The getters test the read-lock bit (`lbz r11,0(this); extrwi r11,r11,1,27` == bit 4 ==
+    // IsBufferLockedForReading()) and fire "Not locked for reading\n"; the setters test the
+    // write-lock bit (`extrwi r11,r11,1,28` == bit 3 == IsBufferLockedForWriting()) and fire
+    // "Not locked for writing\n". All three accessed fields are 32-bit words: GetDispatchFrame
+    // `lwz r3,4(this)`, GetShadowMap `lwz r3,8(this)`, GetCoronaSubmissionInterface
+    // `ori r11,0,0x801C; lwzx r3,this,r11`; the setters mirror them (`stw 4`, `stw 8`,
+    // `stwx ...,0x801C`).
+    //
+    // LAYOUT (X360 accessor offsets, authoritative):
+    //   base    CgsModule::IOBuffer       (1-byte status; +1..+3 pad)
+    //   +4      u32 muDispatchFrame       dispatch-frame index
+    //   +8      u32 muShadowMap           shadow-map handle
+    //   +...    (intervening dispatch-list payload region; not recovered by this slice)
+    //   +0x801C u32 muCoronaSubmissionInterface   corona-submission interface handle
+    //
+    // FLAG (foreign type / opaque interior): the region between muShadowMap (+8) and
+    // muCoronaSubmissionInterface (+0x801C) is the buffer's other dispatch-list payload (its
+    // own members are not recovered by this slice) and is modelled as correctly-sized opaque
+    // storage so the three X360-pinned accessor offsets (+4, +8, +0x801C) are exact. The
+    // corona-submission handle is the address/handle of a foreign corona-submission interface
+    // whose own home lands elsewhere; the asm treats this slot as a single 32-bit word.
+    class InputBuffer_Dispatch : public CgsModule::IOBuffer
+    {
+    public:
+        // X360 0x822B8EA8: read-lock; return the dispatch-frame index (this+4).
+        u32  GetDispatchFrame() const;
+        // X360 0x827A1180: write-lock; set the dispatch-frame index (this+4).
+        void SetDispatchFrame(u32 luDispatchFrame);
+        // X360 0x822B8F50: read-lock; return the shadow-map handle (this+8).
+        u32  GetShadowMap() const;
+        // X360 0x827A1228: write-lock; set the shadow-map handle (this+8).
+        void SetShadowMap(u32 luShadowMap);
+        // X360 0x822B8FF8: read-lock; return the corona-submission interface handle (this+0x801C).
+        u32  GetCoronaSubmissionInterface() const;
+        // X360 0x827A12D0: write-lock; set the corona-submission interface handle (this+0x801C).
+        void SetCoronaSubmissionInterface(u32 luCoronaSubmissionInterface);
+
+        static void _AssertLayout();
+
+    private:
+        // The IOBuffer base is a single status byte; the X360 places muDispatchFrame at this+4,
+        // so pad bytes +1..+3 explicitly.
+        u8            maStatusPad[3];                    // +1..+3 (force +4)
+        u32           muDispatchFrame;                   // +4
+        u32           muShadowMap;                       // +8
+        // Intervening dispatch-list payload (opaque; see FLAG). Spans from +0xC up to the
+        // +0x801C start of muCoronaSubmissionInterface.
+        unsigned char maPayloadAndPad[0x801C - 0xC];     // +0xC..+0x801B
+        u32           muCoronaSubmissionInterface;       // +0x801C
     };
 }
 }

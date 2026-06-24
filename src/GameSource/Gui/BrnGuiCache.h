@@ -94,5 +94,12 @@ namespace BrnGui
         // does not need to pull in the heavy game-state enum header. Body links from the
         // GuiCache TU.
         s32 GetCurrentGameModeType() const;
+
+        // ADDITIVE GROW (BrnFriendsList TU): FriendsListComponent::SetGuiCachePointer
+        // (X360 @0x82473580) latches the cache pointer, then caches a single u32 the
+        // cache exposes at a far member (X360 lwzx r,this,0xAC74). The component reads it
+        // once at attach time and stores it locally; its exact semantic is not recovered,
+        // so it is exposed by name as an opaque u32. Body links from the GuiCache TU.
+        u32 GetFriendsListCachedField() const;   // X360 far member @0xAC74
     };
 }

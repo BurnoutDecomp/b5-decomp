@@ -2,10 +2,9 @@
 
 // AttribSys runtime â€” Attrib::Database, the process-wide attribute database singleton.
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2). The Feb-2007 leak
-// ships attribsys.h at v1.0.8.5 with a 64-bit Key; the X360 spine is 32-bit, so this
-// header reuses the committed `typedef u32 Key` (Attrib::Key / Attribute::Key) rather
-// than re-forking it.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2). An earlier SDK
+// revision used a 64-bit Key; the X360 spine is 32-bit, so this header reuses the
+// committed `typedef u32 Key` (Attrib::Key / Attribute::Key) rather than re-forking it.
 //
 // Database is a vtbl'd object holding a single reference to its DatabasePrivate impl
 // (mPrivates) and a private static self-pointer (sThis). Only the boot-traced slice is
@@ -19,7 +18,7 @@
 namespace Attrib
 {
     // X360: 32-bit class/attribute key. Reuse the committed runtime typedef instead of
-    // re-forking the Feb-2007 64-bit Key. (Attribute::Key is the generated-code spelling;
+    // re-forking the older 64-bit Key. (Attribute::Key is the generated-code spelling;
     // the heavy query API below is typed in those Attribute:: aliases, grown in AttributeKey.h.)
     typedef u32 Key;
 

@@ -163,13 +163,25 @@ public:
     // zero when there is not yet a previous sample. @0x82205F70.
     rw::math::vpu::Vector3 GetImplicitVelocity() const;
 
+    // The implicit acceleration = (newest linear velocity - previous linear velocity) /
+    // newest timestep, or zero when there is not yet a previous linear-velocity sample.
+    // @0x82206178 (called by BrnDirector::ArbStateCarSelect::Update). The velocity-journal
+    // analogue of GetImplicitVelocity; the console body does the divide as a VMX reciprocal
+    // broadcast over the lanes (vrefp + Newton refinement), folded here to the scalar lane
+    // divide (operator/(Vector3, f32)) per the rw vpu reconstruction precedent.
+    rw::math::vpu::Vector3 GetImplicitAcceleration() const;
+
     // Read-only journal access for the camera behaviours.
     const Vector3Journal& GetPositionJournal() const       { return mPositionJournal; }
     const Vector3Journal& GetLinearVelocityJournal() const { return mLinearVelocityJournal; }
     const FloatJournal&   GetMphJournal() const             { return mMphJournal; }
 
     f32                   GetMPHLastFrame() const            { return mMphJournal.GetPrevious(); }
-    rw::math::vpu::Vector3 GetLinearVelocityLastFrame() const { return mLinearVelocityJournal.GetPrevious(); }
+    // @0x82218CC0 (called by BrnDirector::MainDirector::Update). The asm guards via the
+    // indexed GetPrevious overload (asserts miSize > 0 at DataJournal.h:115 and
+    // lIndex < miSize-1 at :116 -- the liIndex >= 0 check at :114 folds away for the constant
+    // 0), then returns the journal's [1] entry: the linear velocity sampled last frame.
+    rw::math::vpu::Vector3 GetLinearVelocityLastFrame() const { return mLinearVelocityJournal.GetPrevious(0); }
 
     void SetVehicleIndex(s32 liVehicleIndex) { miVehicleIndex = liVehicleIndex; }
 
@@ -210,6 +222,31 @@ VehicleTracker::GetImplicitVelocity() const
         CGS_ASSERT(!rw::math::vpu::IsZero(rw::math::vpu::Vector3{ mTimestepJournal[0], 0.0f, 0.0f, 0.0f }),
                    "!rw::math::fpu::IsZero(mTimestepJournal[0])");
         return (mPositionJournal[0] - mPositionJournal[1]) / mTimestepJournal[0];
+    }
+    else
+    {
+        return rw::math::vpu::Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+    }
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::VehicleTracker::GetImplicitAcceleration @0x82206178
+//   When fewer than two linear-velocity samples exist (mLinearVelocityJournal.miSize <= 1),
+//   returns zero. Otherwise asserts the newest timestep is non-zero and returns
+//   (linearVelocity[0] - linearVelocity[1]) / timestep[0]. The console body does the divide
+//   as a VMX reciprocal broadcast over the lanes (vrefp estimate + one Newton refinement step
+//   then vmulfp128); the reconstructed rw math home folds that to the scalar lane divide
+//   (operator/(Vector3, f32)). The newest-vs-previous element pair is read out of the journal
+//   ring as [0]/[1] (the asm's (writeIndex)%8 and (writeIndex+1)%8 slots).
+// ----------------------------------------------------------------------------
+inline rw::math::vpu::Vector3
+VehicleTracker::GetImplicitAcceleration() const
+{
+    if (mLinearVelocityJournal.GetSize() > 1)
+    {
+        CGS_ASSERT(!rw::math::vpu::IsZero(rw::math::vpu::Vector3{ mTimestepJournal[0], 0.0f, 0.0f, 0.0f }),
+                   "!rw::math::fpu::IsZero(mTimestepJournal[0])");
+        return (mLinearVelocityJournal[0] - mLinearVelocityJournal[1]) / mTimestepJournal[0];
     }
     else
     {

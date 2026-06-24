@@ -59,9 +59,19 @@ namespace EventInterpreterModuleIO
         const GuiEventQueueLarge* GetViewEventQueue() const;
         GuiEventQueueLarge*       GetViewEventQueue();
 
+        // Byte-offset pin (mGuiOutEvents @+4). Bodied in CgsEventInterpreterModuleIO_OutputBuffer.cpp.
+        static void _AssertLayout();
+
     private:
         u8                 maStatusPad[3];  // +0x01..+0x03
-        GuiEventQueue      mGuiOutEvents;   // +0x04    (DWARF :123)
+        // FLAG: the X360 OutputBuffer getter return-offsets (GetResourceEventQueue @0x8284E5D0
+        // returns this+0x4814, GetViewEventQueue @0x8284E720 returns this+0x5824) prove
+        // mGuiOutEvents has sizeof 18448 -> its inline buffer is 18432, so the X360 type is
+        // VariableEventQueue<18432,16> (the same 18432-vs-16384 GUI-queue drift resolved with a
+        // FLAG in CgsGuiModuleIO.h / CgsGuiResourceModuleIO.h). Retype 16384 -> 18432 to make
+        // the +0x4814/+0x5824 member offsets exact. Left as 16384 here pending consolidation
+        // (non-additive committed-type change -- flagged, not applied).
+        GuiEventQueue      mGuiOutEvents;   // +0x04    (DWARF :123) -- X360 size 18432 (see FLAG)
         GuiEventQueueSmall mGuiOutResource; // (DWARF :124)
         GuiEventQueueLarge mGuiOutView;     // (DWARF :125)
     };

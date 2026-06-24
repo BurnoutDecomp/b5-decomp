@@ -22,8 +22,8 @@
 //     EA::Thread::Semaphore::Wait       @ 0x82B42A40  (int; acquire one permit)
 //     EA::Thread::Semaphore::GetCount   @ 0x82B42CB0  (int; clamped available count)
 //
-// There is no Feb-2007 leak source for this TU; the SHAPE and bodies come from
-// the X360 asm (per-addr exports under .ida-exports/BURNOUT_X360_ARTIST.XEX/).
+// The SHAPE and bodies come purely from the X360 asm (per-addr exports under
+// .ida-exports/BURNOUT_X360_ARTIST.XEX/).
 // `EA::Thread` is a vendor library boundary, so its identifiers (EA, Thread,
 // Semaphore, Init, Wait, Post, GetCount) are preserved verbatim per the naming
 // convention.
@@ -95,8 +95,41 @@ public:
     // are waiters, which GetCount reports as 0 available permits).
     int GetCount() const;
 
+    // Release permits: increment the available count by iCount and wake waiters as
+    // needed (via the data half's UpdateCancelCount). Declared here as the canonical
+    // home; the body is its own (not-yet-reconstructed) X360 TU and is resolved at link
+    // time. Callers (e.g. CgsFileSystem::OperationPool::AddOperation @0x828E9828) post a
+    // single permit per queued item.
+    int Post(int iCount = 1);
+
 private:
     EASemaphoreData mSemaphoreData;  // +0x00 (the only member; offset-0 data half)
+};
+
+// ---------------------------------------------------------------------------
+// EA::Thread::SemaphoreFactory -- placement construction helper for Semaphore.
+//
+// The EAThread SemaphoreFactory lets a Semaphore be built into caller-supplied
+// memory (rather than through global operator new). Only one of its functions
+// is reached by the boot trace and recovered from the X360 ARTIST.XEX:
+//     EA::Thread::SemaphoreFactory::ConstructSemaphore @ 0x82B43A30
+// modelled here as the canonical home (header declares, .cpp defines). The other
+// factory entry points (CreateSemaphore / DestroySemaphore / GetSemaphoreSize /
+// DestructSemaphore) are not in this TU and are left out until recovered.
+// `EA::Thread` is a vendor library boundary, so its identifiers are preserved
+// verbatim per the naming convention.
+// ---------------------------------------------------------------------------
+class SemaphoreFactory
+{
+public:
+    // @ 0x82B43A30 -- placement-construct a Semaphore into pMemory:
+    //   cmplwi r3,0; beq -> return 0       (null memory short-circuits to null)
+    //   li r5,1; li r4,0; b Semaphore::Semaphore(pMemory, 0, 1)  (tail-call ctor)
+    // i.e. `return pMemory ? new (pMemory) Semaphore() : 0;` -- the ctor runs
+    // with its defaults (pParameters = 0, bInitialize = true), matching the
+    // (a1, 0, 1) argument set the asm sets up. Returns the constructed object
+    // (== pMemory), or null when pMemory is null.
+    static Semaphore* ConstructSemaphore(void* pMemory);
 };
 
 } // namespace Thread

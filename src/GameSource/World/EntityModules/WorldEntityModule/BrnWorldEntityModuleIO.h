@@ -24,6 +24,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityRequestInterface.h" // RequestInterface
 
 namespace BrnWorld
 {
@@ -48,6 +49,153 @@ namespace WorldEntityIO
         // PropEntityIO::OutputBuffer_PreScene layout.
         u8                              maStatusPad[3];              // +1..+3 (force +4)
         ResourceRequestInterfaceStorage mResourceRequestInterface;   // :80, at offset +4
+    };
+
+    // ========================================================================
+    // BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics (DWARF BrnWorldEntityModuleIO.h:~240).
+    // ADDITIVE GROW: this slice homes ONLY the IO-OutputBuffers group's single X360-emitted
+    // accessor of the post-physics output buffer:
+    //   Get() @ 0x822BA8B8  write-lock (bit 3) -> this + 822896 (0xC8E70)  (asm-line 249)
+    //
+    // The X360 Get() tests the write-lock bit (`lbz r11,0(this); extrwi r11,r11,1,28` ==
+    // bit 3 == IsBufferLockedForWriting()), and on failure fires the streamed
+    // "Not locked for writing\n" assert against
+    // ..\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h:249,
+    // then returns the embedded output-payload member's address (this + 0xC8E70 == 822896,
+    // computed by the asm as `addis r3,this,0xD; addi r3,r3,-0x7190`). Called by
+    // WorldEntityModule::UpdateCollisionValidation / PostPhysicsUpdate /
+    // WorldModule::UpdateForBootUpVideo.
+    //
+    // LAYOUT (X360 getter return-offset, authoritative):
+    //   base    CgsModule::IOBuffer                 (1-byte status; +1..+0xC8E6F is the
+    //                                                preceding payload region)
+    //   +822896 (foreign payload member)            the post-physics output payload Get() returns
+    //
+    // FLAG (foreign type): the returned post-physics output payload has its own owning home
+    // elsewhere and is NOT reconstructed here; the region from the status byte to the
+    // +822896 member start is modelled as correctly-sized opaque storage so the single
+    // X360-pinned return offset (this + 822896) is exact. Sized only to the asm-attested
+    // offset; the intervening member split is not recoverable from this slice. The returned
+    // member's interior is honestly opaque (the asm only takes its address).
+    struct OutputBuffer_PostPhysics : public CgsModule::IOBuffer
+    {
+        // Opaque foreign-type storage (see FLAG above): first byte at this + 822896.
+        struct OutputPayloadStorage { unsigned char maBytes[1]; };
+
+        // X360 0x822BA8B8: write-lock tripwire ("Not locked for writing"); return this + 822896.
+        OutputPayloadStorage* Get();
+
+        static void _AssertLayout();
+
+    private:
+        // The IOBuffer base is a single status byte; the X360 build places the returned
+        // output-payload member at this + 822896, so the intervening bytes (the preceding
+        // payload region, not recovered by this slice) are modelled as opaque padding.
+        unsigned char        maPrecedingPayload[822896 - 1];   // +1..+822895
+        OutputPayloadStorage mOutputPayload;                   // +822896
+    };
+
+    // ========================================================================
+    // BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists
+    // (DWARF BrnWorldEntityModuleIO.h:~278). ADDITIVE GROW: homes the four scalar
+    // accessors the X360 emitted out-of-line for the generate-dispatch-lists input buffer.
+    //   GetDispatchFrame() const @ 0x822BAA08  read-lock  (bit 4) -> u32 *(this+4)      (asm-line 278)
+    //   SetDispatchFrame(u32)    @ 0x827A2FC8  write-lock (bit 3) ->     *(this+4) = v   (asm-line 279)
+    //   GetShadowMap() const     @ 0x822BAAB0  read-lock  (bit 4) -> u32 *(this+0x8018)  (asm-line 281)
+    //   SetShadowMap(u32)        @ 0x827A3070  write-lock (bit 3) ->     *(this+0x8018)=v (asm-line 282)
+    //
+    // The getters test the read-lock bit (`lbz r11,0(this); extrwi r11,r11,1,27` == bit 4 ==
+    // IsBufferLockedForReading()) and fire "Not locked for reading\n"; the setters test the
+    // write-lock bit (`extrwi r11,r11,1,28` == bit 3 == IsBufferLockedForWriting()) and fire
+    // "Not locked for writing\n". Both accessed fields are 32-bit words (`lwz`/`stw` /
+    // `lwzx`/`stwx`): the dispatch-frame index at this+4 and the shadow-map handle at
+    // this+0x8018.
+    //
+    // LAYOUT (X360 accessor offsets, authoritative):
+    //   base    CgsModule::IOBuffer            (1-byte status; +1..+3 pad)
+    //   +4      u32 muDispatchFrame            dispatch-frame index
+    //   +...    (intervening payload region; not recovered by this slice)
+    //   +0x8018 u32 muShadowMap               shadow-map handle
+    //
+    // FLAG (opaque interior): the region between muDispatchFrame (+4) and muShadowMap (+0x8018)
+    // is the buffer's other dispatch-list payload (its own members are not recovered by this
+    // slice) and is modelled as correctly-sized opaque storage so the two X360-pinned accessor
+    // offsets (+4, +0x8018) are exact.
+    struct InputBuffer_GenerateDispatchLists : public CgsModule::IOBuffer
+    {
+        // X360 0x822BAA08: read-lock; return the dispatch-frame index (this+4).
+        u32  GetDispatchFrame() const;
+        // X360 0x827A2FC8: write-lock; set the dispatch-frame index (this+4).
+        void SetDispatchFrame(u32 luDispatchFrame);
+        // X360 0x822BAAB0: read-lock; return the shadow-map handle (this+0x8018).
+        u32  GetShadowMap() const;
+        // X360 0x827A3070: write-lock; set the shadow-map handle (this+0x8018).
+        void SetShadowMap(u32 luShadowMap);
+
+        static void _AssertLayout();
+
+    private:
+        // The IOBuffer base is a single status byte; the X360 places muDispatchFrame at this+4,
+        // so pad bytes +1..+3 explicitly.
+        u8            maStatusPad[3];                     // +1..+3 (force +4)
+        u32           muDispatchFrame;                    // +4
+        // Intervening dispatch-list payload (opaque; see FLAG). Spans from +8 up to the
+        // +0x8018 start of muShadowMap.
+        unsigned char maPayloadAndPad[0x8018 - 8];        // +8..+0x8017
+        u32           muShadowMap;                        // +0x8018
+    };
+
+    // ========================================================================
+    // BrnWorld::WorldEntityIO::InputBuffer_PreScene (DWARF BrnWorldEntityModuleIO.h:~95).
+    // ADDITIVE GROW: homes the three accessors the X360 emitted out-of-line for the
+    // world-entity module's pre-scene input buffer (the buffer the race-car module's
+    // BridgeRaceCarModuleToWorldModule_PreScene + the GUI->world BridgeInputToEntityModules
+    // fill, and BrnWorld::WorldEntityModule::PreSceneUpdate drains):
+    //   GetRequestInterface() const  @ 0x822BA2D0  read-lock  (bit 4) -> &member(this+10496) (asm-line 100)
+    //   AppendRequestInterface(...)  @ 0x827A2888  write-lock (bit 3) -> mRequestInterface.Append(rOther) (asm-line 99)
+    //   SetActiveRaceCarInterface(.) @ 0x827A27D0  write-lock (bit 3) -> XMemCpy(this+16, src, 10480) (asm-line 97)
+    //
+    // The const getter tests the read-lock bit (`lbz r11,0(this); extrwi r11,r11,1,27` == bit 4 ==
+    // IsBufferLockedForReading()) and fires "Not locked for reading\n"; the two mutators test the
+    // write-lock bit (`extrwi r11,r11,1,28` == bit 3 == IsBufferLockedForWriting()) and fire
+    // "Not locked for writing\n". After the tripwire:
+    //   - GetRequestInterface returns `this + 10496` (0x2900) -- the address of mRequestInterface.
+    //   - AppendRequestInterface tail-calls RequestInterface::Append on `this + 10496` with the
+    //     caller's RequestInterface (the OR-merge of the two collision-world request flags).
+    //   - SetActiveRaceCarInterface block-copies 10480 (0x28F0) bytes from the source into the
+    //     member at `this + 16` (`li r5,0x28F0; addi r3,this,0x10; bl XMemCpy`).
+    //
+    // LAYOUT (X360 accessor offsets, authoritative):
+    //   base    CgsModule::IOBuffer            (1-byte status; +1..+15 pad to the 16-byte member)
+    //   +16     ActiveRaceCarInterface mActiveRaceCarInterface   (10480-byte foreign payload) :~96
+    //   +10496  RequestInterface       mRequestInterface         (collision-world request flags) :~98
+    //
+    // FLAG (foreign type): mActiveRaceCarInterface is a foreign per-race-car input payload whose
+    // own home lands elsewhere; it is modelled as correctly-sized opaque storage (the X360 only
+    // block-copies it as 10480 bytes, never naming its interior) so the +16 member start and the
+    // derived +10496 RequestInterface offset are exact. mRequestInterface is the committed 2-byte
+    // BrnWorld::WorldEntityIO::RequestInterface (home BrnWorldEntityRequestInterface.h); its
+    // Append is reused, not redefined.
+    struct InputBuffer_PreScene : public CgsModule::IOBuffer
+    {
+        // Foreign per-race-car input payload (see FLAG): the 10480-byte block the setter copies.
+        // First byte at this+16; alignas(16) keeps the IOBuffer status byte padded out to the
+        // 16-byte boundary the X360 `addi this,0x10` member start implies.
+        struct alignas(16) ActiveRaceCarInterfaceStorage { unsigned char maBytes[10480]; };
+
+        // X360 0x822BA2D0: read-lock handle, returns &mRequestInterface (this + 10496).
+        const RequestInterface* GetRequestInterface() const;
+        // X360 0x827A2888: write-lock handle, merges lrOther into mRequestInterface.
+        void AppendRequestInterface(const RequestInterface& lrOther);
+        // X360 0x827A27D0: write-lock handle, block-copies the 10480-byte race-car input payload
+        // into mActiveRaceCarInterface (this + 16).
+        void SetActiveRaceCarInterface(const ActiveRaceCarInterfaceStorage& lrInterface);
+
+        static void _AssertLayout();
+
+    private:
+        ActiveRaceCarInterfaceStorage mActiveRaceCarInterface;   // +16     (10480 bytes)
+        RequestInterface              mRequestInterface;         // +10496  (16+10480)
     };
 }
 }

@@ -47,6 +47,47 @@ namespace BrnTraffic
         u32 muStateB;
     };
 
+    // -------------------------------------------------------------------------
+    // BrnTraffic::TrafficLightRuntimeState  -- the per-traffic-light runtime record.
+    //
+    // ADDITIVE GROW (flagged by the brn-traffic2 bodies group). This is the real,
+    // field-attested 8-byte record that TrafficLightRuntimeState::Update mutates
+    // (X360 Update @ 0x827515D8). Its fields are now pinned by the asm:
+    //   +0  f32 mfTimer       (lfs/fsubs/stfs at 0(this))   -- countdown seconds
+    //   +4  u8  muState       (lbz/stb at 4(this))          -- light phase
+    //   +5  u8  muFlags       (lbz/stb at 5(this))          -- low 3 bits = sub-state
+    //   +6  u8  maPad6[2]     (8-byte record; +6/+7 untouched by Update)
+    //
+    // FLAG (committed-type convergence, NOT applied here): this is the same 8-byte
+    // record TrafficLightManager::maLightStates[] holds (GetLightState's << 3 stride);
+    // the older `TrafficLightState` above is the honest placeholder this supersedes.
+    // Converging maLightStates' element type from TrafficLightState to
+    // TrafficLightRuntimeState is a non-additive retype of a committed member, so it
+    // is left to the maintainer (see flagged_type_changes); the placeholder is kept
+    // untouched so this slice stays additive.
+    struct TrafficLightRuntimeState
+    {
+        // Phase values asserted by Update (X360: byte at +4; >=3 fires "Unknown light state").
+        enum E_State : u8
+        {
+            E_STATE_IDLE       = 0,  // no countdown running
+            E_STATE_COUNTDOWN  = 1,  // mfTimer ticking down toward the next phase
+            E_STATE_HOLD       = 2,  // active hold; Update leaves it alone
+            E_STATE_COUNT      = 3   // first invalid value (>=3 asserts)
+        };
+
+        f32 mfTimer;     // +0
+        u8  muState;     // +4
+        u8  muFlags;     // +5  (low 3 bits carry the post-countdown sub-state)
+        u8  maPad6[2];   // +6  (rounds the record to the 8-byte GetLightState stride)
+
+        // Update @ 0x827515D8
+        // Advance the light by lfTimeDelta. When counting down, subtract the delta from
+        // mfTimer; once it reaches <= 0, clamp the timer to 0, drop to E_STATE_IDLE, and
+        // set the low sub-state bits of muFlags to 1. Unknown phases (>=3) assert.
+        void Update(f32 lfTimeDelta);
+    };
+
     class TrafficLightManager
     {
     public:

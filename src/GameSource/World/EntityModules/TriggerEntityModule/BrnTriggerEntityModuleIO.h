@@ -47,5 +47,42 @@ namespace TriggerEntityModuleIO
     private:
         SceneInputInterface mSceneInputInterface;   // :94  (+16, alignas(16))
     };
+
+    // ========================================================================
+    // BrnWorld::TriggerEntityModuleIO::InputBuffer_PreScene (DWARF BrnTriggerEntityModuleIO.h:~116).
+    // ADDITIVE GROW: homes the single accessor the X360 emitted out-of-line for the trigger
+    // entity module's pre-scene INPUT buffer -- the buffer the GUI->world BridgeInputToEntityModules
+    // fills with the frame's trigger-management input:
+    //   GetInputInterface() @ 0x827A3270  write-lock (bit 3) -> &member(this+4)  (asm-line 119)
+    //
+    // The getter tests the write-lock bit (`lbz r11,0(this); extrwi r11,r11,1,28` == bit 3 ==
+    // IsBufferLockedForWriting()) and on failure fires "Not locked for writing\n"; it then returns
+    // `this + 4` (`addi r3,this,4`) -- the address of the embedded input-interface member.
+    //
+    // LAYOUT (X360 getter return-offset, authoritative):
+    //   base  CgsModule::IOBuffer       (1-byte status; +1..+3 pad)
+    //   +4    InputInterface mInputInterface   (trigger-management input aggregate) :~118
+    //
+    // FLAG (foreign type): mInputInterface is the trigger-management input aggregate whose own
+    // home (BrnTriggerEntityModuleInputInterface.h) lands elsewhere; it is modelled as
+    // correctly-positioned opaque storage so the single X360-pinned return offset (this + 4) is
+    // exact. Adopt the named aggregate additively when its home lands.
+    class InputBuffer_PreScene : public CgsModule::IOBuffer
+    {
+    public:
+        // Opaque foreign-type storage (see FLAG above): first byte at this + 4.
+        struct InputInterfaceStorage { unsigned char maBytes[1]; };
+
+        // X360 0x827A3270: write-lock handle, returns &mInputInterface (this + 4).
+        InputInterfaceStorage* GetInputInterface();
+
+        static void _AssertLayout();
+
+    private:
+        // The IOBuffer base is a single status byte; the X360 places mInputInterface at this+4,
+        // so pad bytes +1..+3 explicitly (the 1-byte storage would otherwise pack at +1).
+        u8                    maStatusPad[3];      // +1..+3 (force +4)
+        InputInterfaceStorage mInputInterface;     // +4
+    };
 }
 }

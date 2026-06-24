@@ -3,9 +3,8 @@
 // ===========================================================================
 // EATech Apt -- DOGMA pool allocator.
 //
-// Reconstructed from the Feb-2007 partial source (SDKs/Packages/Apt/2.00.00/include/Apt/
-// DogmaAllocator.h) for SHAPE, and from the X360 ARTIST.XEX pseudocode for the
-// method BODIES that the leak only declared:
+// SHAPE from the DWARF-attested DOGMA pool layout; method BODIES reconstructed from the
+// X360 ARTIST.XEX disassembly:
 //     DOGMA_PoolManager::DOGMA_PoolManager           @ 0x82ADB850
 //     DOGMA_PoolManager::~DOGMA_PoolManager          @ 0x82ADB950
 //     DOGMA_PoolManager::`scalar deleting destructor'@ 0x82ADD1D8
@@ -207,6 +206,16 @@ protected:
         static size_t GetStructOverHead()
         {
             return 2 * sizeof(struct _OutsideAllocationT*);
+        }
+
+        // GetStruc @ 0x82AD4930 : `addi r3, r3, -8; blr` -- step a returned
+        // pointer back by the fixed 8-byte (2 * sizeof(ptr)) node overhead to
+        // reach the owning node. Same arithmetic as
+        // GetStructPointerFromReturnedPointer; the X360 emits it as its own
+        // out-of-line accessor (overhead folded to the literal -8).
+        static struct _OutsideAllocationT* GetStruc(const void* pReturned)
+        {
+            return (struct _OutsideAllocationT*)(((uint8_t*)pReturned) - GetStructOverHead());
         }
 
         static struct _OutsideAllocationT* GetStructPointerFromReturnedPointer(const void* pReturned)

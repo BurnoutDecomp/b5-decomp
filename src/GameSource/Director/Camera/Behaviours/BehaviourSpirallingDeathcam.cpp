@@ -1,28 +1,48 @@
-#include "types.hpp"
-
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x821FB3F8
-//   (BrnDirector::Camera::BehaviourSpirallingDeathcam::Prepare)
+// ============================================================================
+// GameSource/Director/Camera/Behaviours/BehaviourSpirallingDeathcam.cpp
 //
-// Behaviour-faithful to the X360 pseudocode:
-//     *(this + 8) = 0;          // reset a state field
-//     return 1;                 // prepared OK
+// Compilation home for the BrnDirector::Camera::BehaviourSpirallingDeathcam slices this TU set
+// owns:
+//   - BehaviourSpirallingDeathcam::Prepare @0x821FB3F8  (resets a state field, returns true)
+//   - BehaviourSpirallingDeathcam::Start   @0x821F5620  (latches mbStarted)
 //
-// (Replacement TU for the blocked Zone::IsPointInZone, to keep the batch at 50.)
+// Prepare is run when the behaviour is installed; Start is run by the crashing/testbed
+// arbitrator states (BrnDirector::ArbStateCrashing::Update / ArbStateTestbed::Update) when the
+// spiralling deathcam first goes active.
+// ============================================================================
 
-namespace BrnDirector { namespace Camera {
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h"
 
-    struct BehaviourSpirallingDeathcam
-    {
-        u8   mPad[8];           // [0x00] opaque (base Behaviour fields)
-        u32  muField8;          // [0x08] reset on Prepare
+namespace BrnDirector
+{
+namespace Camera
+{
 
-        bool Prepare();
-    };
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::BehaviourSpirallingDeathcam::Prepare @0x821FB3F8
+//   Behaviour-faithful: reset the per-activation state field and report prepared OK.
+//     *(this + 8) = 0;   // muStateField = 0
+//     return 1;
+// ----------------------------------------------------------------------------
+bool BehaviourSpirallingDeathcam::Prepare()
+{
+    muStateField = 0;            // stw 0, 8(this)
+    return true;
+}
 
-    bool BehaviourSpirallingDeathcam::Prepare()
-    {
-        muField8 = 0;
-        return true;
-    }
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::BehaviourSpirallingDeathcam::Start @0x821F5620
+//   lbz  r11, 0x2F4(this)      ; mbStarted
+//   cmplwi r11, 0              ; assert it is clear (!mbStarted)
+//   ... on failure: Begin/Fire/End assert ...
+//   li   r11, 1
+//   stb  r11, 0x2F4(this)      ; mbStarted = 1
+// ----------------------------------------------------------------------------
+void BehaviourSpirallingDeathcam::Start()
+{
+    CGS_ASSERT(!mbStarted, "!mbStarted");   // lbz 0x2F4; assert clear
+    mbStarted = 1;                          // stb 1, 0x2F4(this)
+}
 
-}}
+} // namespace Camera
+} // namespace BrnDirector

@@ -196,10 +196,17 @@ namespace CgsGraphics
     }
 
     // ---- Im2dTransform -----------------------------------------------------------
+    // X360 @0x823DB448 is NOT a no-op: it folds the display aspect ratio into the transform
+    // basis -- builds a Matrix33, runs rw::math Mult with aspect-correction constants, and
+    // writes the corrected mOriginXYZ (+0x00) and mRightUp (+0x10) back via VMX stvx128. A
+    // faithful reconstruction of that VMX matrix fold is a deferred keystone (the ledger TU
+    // class:CgsGraphics::Im2dTransform stays BLOCKED). The PC Im2d backend below maps logical
+    // 1280x720 coordinates straight onto the back buffer, so on THIS PC path the fold is a
+    // deliberate no-op divergence -- it is NOT a reconstruction of the X360 body.
     void Im2dTransform::TransformByAspectRatio()
     {
-        // The PC Im2d::Render maps logical 1280x720 coordinates straight onto the back
-        // buffer, so the aspect-ratio fold is a no-op here (kept for API parity).
+        // PC backend: coordinates are already in back-buffer space; the X360 VMX aspect fold
+        // (see note above) is intentionally not applied on this path.
     }
 
     // ---- Im2dBase<V> (template) --------------------------------------------------

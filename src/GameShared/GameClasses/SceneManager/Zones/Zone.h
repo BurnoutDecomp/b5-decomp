@@ -42,19 +42,27 @@ namespace CgsSceneManager
             E_NEIGHBOURFLAG_IMMEDIATE = 0x02
         };
 
-        // DECLARE-ONLY: Set/FixUp/FixDown bodies live in Zone.cpp (separate TUs).
+        // DECLARE-ONLY: Set/FixUp/FixDown and the two X360-emitted out-of-line accessors
+        // (GetZone @0x828AC430, IsFlagSet @0x828AC438) are homed by Zone.cpp.
         void Set(Zone* lpZone, u32 luFlags);
         void FixUp(void* lpBaseAddress);
         void FixDown(void* lpBaseAddress);
 
-        const Zone* GetZone() const { return mpZone; }
-        u8 IsFlagSet(eNeighbourFlags lxNeighbourFlag) const
-        {
-            return (muFlags & static_cast<u32>(lxNeighbourFlag)) != 0;
-        }
+        // @0x828AC430. Returns the neighbouring zone pointer (mpZone @ +0). Out-of-line in Zone.cpp.
+        const Zone* GetZone() const;
+
+        // @0x828AC438. Returns whether ALL bits of the flag mask are set in muFlags -- the X360
+        // tests `flag == (muFlags & flag)`, not a !=0 / any-bit test. Out-of-line in Zone.cpp.
+        u8 IsFlagSet(eNeighbourFlags lxNeighbourFlag) const;
+
         u32 GetFlags() const { return muFlags; }
 
     private:
+        // Zone::FixUp/FixDown rebase the embedded neighbour arrays' mpZone pointers inline (the
+        // X360 inlines the per-element pointer fixup into Zone::FixDown rather than calling
+        // Neighbour::FixDown); grant Zone access for that rebase.
+        friend class Zone;
+
         Zone* mpZone;   // Zone.h:63
         u32   muFlags;  // Zone.h:64
     };

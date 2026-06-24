@@ -19,10 +19,9 @@
 // (@0x82AE2338) and by the eight per-channel float stores in the float-array /
 // uint32 copy paths (@0x82AD5C60 / @0x82ADC340).
 //
-// NOTE: this is the X360/PC revision of the type. The Feb-2007 PS3 leak carried
-// an OLDER AptColorHelper that packed all four channels into a single uint32_t
-// (mnVal); that revision is 16 bytes and does NOT match this binary. The
-// float-per-channel DWARF layout is the one shipped here.
+// NOTE: this is the X360/PC revision of the type: AptColorHelper stores four separate
+// float channels (the float-per-channel DWARF layout attested by this binary), NOT an
+// older single-uint32 (mnVal) packing that would be only 16 bytes.
 // ===========================================================================
 
 #include "types.hpp"
@@ -64,6 +63,14 @@ struct AptColorHelper
 
     f32 GetValuef(AptColorValue eColor) const { return mfVal[eColor]; }
 
+    // X360 @0x82AD4938 -- MSVC `vector deleting destructor` for the base
+    // AptColorHelper. The thunk restores the AptColorHelper vtable (off_82145590)
+    // at +0x00 and, when bit0 of the hidden flags arg is set, frees the block via
+    // the GLOBAL operator delete (the channels are plain floats, so the trivial
+    // destructor itself does no member work). Returns `this`.
+    //   flags: hidden MSVC second parameter (bit0 = also free the block).
+    void* VectorDeletingDestructor(char flags);
+
 protected:
     // [+0x04] four channels, ARGB order (mfVal[0]=Alpha .. mfVal[3]=Blue).
     f32 mfVal[4];
@@ -84,10 +91,18 @@ struct AptColorHelperTemplate : public AptColorHelper
 
 struct AptColorHelperScale : public AptColorHelperTemplate<255>
 {
+    // X360 @0x82AE1818 -- MSVC `scalar deleting destructor`. Restores the same
+    // base vtable (off_82145590) at +0x00 (the derived helpers add no data and
+    // no member cleanup), then conditionally frees the block via the GLOBAL
+    // operator delete. Returns `this`.
+    void* ScalarDeletingDestructor(char flags);
 };
 
 struct AptColorHelperTranslate : public AptColorHelperTemplate<255>
 {
+    // X360 @0x82AE1860 -- MSVC `scalar deleting destructor`. Same shape as the
+    // AptColorHelperScale thunk (shared base vtable + conditional global delete).
+    void* ScalarDeletingDestructor(char flags);
 };
 
 // Flat ARGB-as-floats source: eight contiguous floats, scale[4] then

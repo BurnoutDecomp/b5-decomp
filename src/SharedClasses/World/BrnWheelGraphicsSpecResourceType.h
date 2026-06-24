@@ -8,8 +8,9 @@ namespace BrnWheel
 class GraphicsSpecResourceType : public CgsResource::Type
 {
 public:
-    uint32_t GetTypeID() const override;
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t                   GetTypeID() const override;
+    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    void                       FixUp(void* lpResource, const rw::Resource& lrResource) const override;
 };
 }
 

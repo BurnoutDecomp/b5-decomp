@@ -46,7 +46,7 @@ are:
 | Record the review result | `work review <tu> --verdict pass|fail` |
 | Check vendor SDK bodies before decompiling | `python tools/work/check_vendor_lib.py <tu>` |
 | Look up wiki type names | `python tools/work/wiki_index.py --lookup <Type>` |
-| Regenerate RenderWare type headers | `python tools/gen_rwcore_headers.py` |
+| Regenerate RenderWare type headers | `python tools/renderware/generate_headers.py` |
 
 See the parent [`tools/README.md`](../tools/README.md) and
 [`progress/README.md`](../progress/README.md) for the full inventory.

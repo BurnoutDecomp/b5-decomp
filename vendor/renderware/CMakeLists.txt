@@ -1,5 +1,5 @@
 # Renderware 4 core `rw::` type vocabulary (generated, header-only).
-# See README.md. Regenerate with: python tools/gen_rwcore_headers.py (repo root).
+# See README.md. Regenerate with: python tools/renderware/generate_headers.py (repo root).
 add_library(renderware STATIC IMPORTED)
 
 set_target_properties(renderware PROPERTIES

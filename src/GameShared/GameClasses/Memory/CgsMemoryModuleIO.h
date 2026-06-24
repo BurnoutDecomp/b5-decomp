@@ -75,10 +75,12 @@ namespace MemoryIO
     // consumed by MemoryModule::ProcessCreateBankRequest -> CreateBank.
     struct CreateBankRequest : public MemoryRequest
     {
-        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
-        {
-            MemoryRequest::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_BANK);
-        }
+        // X360 0x82663A68 (defined in CgsMemoryModuleIO.cpp): chains the base
+        // request Construct (sets reply target / event id / E_EVENT_TYPE_CREATE_BANK)
+        // and initialises the embedded Params to their request defaults
+        // (name "Unnamed", parent/bank id = -1, zeroed per-type size/block arrays,
+        // not-leaf, allow-fragmentation = true).
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId);
 
         const CgsMemory::MemoryBank::Params* GetParams() const { return &mParams; }
         void SetBankId(s32 liBankId)                 { mParams.mnBankId = liBankId; }

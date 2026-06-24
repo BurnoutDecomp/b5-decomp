@@ -92,7 +92,13 @@ struct IAllocator
     virtual void  Free(void* apData, size_t anSize) = 0;
     virtual s32   AddRef() = 0;
     virtual s32   Release() = 0;
-    virtual ~IAllocator() {}
+
+    // Polymorphic base destructor. Defined OUT-OF-LINE in iallocator.cpp so the
+    // interface owns a real .cpp definition home -- the X360 base vector-deleting
+    // destructor @ 0x82277E80 (stores the IAllocator vtable, then for the deleting
+    // variant conditionally operator-delete's). The body is empty (no members, no
+    // base to tear down); the vtable store + delete-tail is what the compiler emits.
+    virtual ~IAllocator();
 };
 
 }  // namespace Allocator

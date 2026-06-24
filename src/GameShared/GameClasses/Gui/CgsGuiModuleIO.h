@@ -69,6 +69,9 @@ namespace CgsGuiModuleIO
         // ---- accessors owned/bodied by this group --------------------------------------
         // X360 0x8284F388: write-lock (bit 3) handle to the resource-request queue.
         GuiResourceRequestQueueStorage* GetGuiResourceRequestQueue();
+        // X360 0x8284F2E0: const overload -- read-lock (bit 4) handle to the resource-request
+        // queue at this+4. Bodied in CgsGuiModuleIO_OutputBuffer_Getters.cpp.
+        const GuiResourceRequestQueueStorage* GetGuiResourceRequestQueue() const;
         // X360 0x8285AFB0: write-lock (bit 3); asserts the source ptr is non-null, then
         // bulk-appends it into mResourceRequestQueue (VariableEventQueue<2048,16>::
         // Append<2048,16>). Returns the Append result (int/bool).
@@ -78,6 +81,11 @@ namespace CgsGuiModuleIO
         // X360 0x8250C718: write-lock (bit 3); asserts the source queue ptr is non-null,
         // then bulk-appends it into mOutEvents. Returns the Append result (int/bool).
         int AddGuiOutEvents(const GuiEventQueueSmall* lpSourceQueue);
+        // X360 0x823B41D8: const overload -- read-lock (bit 4) handle to the trailing game-action
+        // queue at this+0x5024 (20516). X360 0x824F7968: non-const overload -- write-lock (bit 3)
+        // handle to the same member. Both bodied in CgsGuiModuleIO_OutputBuffer_Getters.cpp.
+        const GameActionQueueStorage* GetGameActionQueue() const;
+        GameActionQueueStorage*       GetGameActionQueue();
 
         // Byte-offset pins (compiled in the embed check).
         static void _AssertLayout();

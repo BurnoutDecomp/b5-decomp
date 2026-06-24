@@ -61,7 +61,7 @@ Do **not** hand-edit these files. After re-exporting rwcore (e.g. annotations ch
 from the repo root:
 
 ```
-python tools/gen_rwcore_headers.py
+python tools/renderware/generate_headers.py
 ```
 
-Generator: `tools/gen_rwcore_headers.py`.
+Generator: `tools/renderware/generate_headers.py`.

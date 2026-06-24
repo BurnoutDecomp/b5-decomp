@@ -11,7 +11,7 @@
 //     CAddressIndexPair  -- an (index byte, owned address-string) pair
 //     CMassiveThread     -- a thin wrapper around one OS thread HANDLE
 //
-// There is NO Feb-2007 leak source and NO DecFIGS dwarfdump for this subsystem;
+// There is NO reference source and NO DecFIGS dwarfdump for this subsystem;
 // SHAPE and BODIES are both reconstructed from the X360 ARTIST.XEX pseudocode +
 // disassembly. Per-function X360 addresses:
 //     MassiveAdClient3::CLog::Initialize                            @ 0x82BD4A68
@@ -221,6 +221,41 @@ public:
 
 private:
     MassiveThreadHandle mhThread;  // +0x14 (OS thread HANDLE, 0 until started)
+};
+
+// ---------------------------------------------------------------------------
+// CFlag -- a bare named CMassiveBaseObject (a MassiveAd boolean/flag object).
+//
+// Reconstructed from the X360 ARTIST.XEX (no leak / DecFIGS):
+//     MassiveAdClient3::CFlag::`vector deleting destructor' @ 0x82BCC758
+//
+// The vector deleting destructor (the only recovered CFlag function) installs
+// CFlag's own vftable (off_82183CA0), chains ~CMassiveBaseObject, and -- when
+// the low bit of the delete flag is set -- frees the object through
+// CMassiveBaseObject::operator delete:
+//     *a1 = &off_82183CA0;                            // install CFlag vftable
+//     CMassiveBaseObject::~CMassiveBaseObject(a1);    // chain base dtor
+//     if ( (a2 & 1) != 0 )
+//         CMassiveBaseObject::operator delete(a1);    // conditional free
+//     return a1;
+// The vftable rewrite + base-dtor chain are the compiler-emitted virtual-dtor
+// body; the conditional free is the deleting-destructor thunk synthesised around
+// it. CFlag tears down nothing of its own -- it adds no fields (like CLog), so
+// it is just the polymorphic base with its own vftable.
+// ---------------------------------------------------------------------------
+class CFlag : public CMassiveBaseObject
+{
+public:
+    // The X360 has no standalone CFlag ctor symbol in this TU; the recovered
+    // function is the vector deleting destructor, which the virtual dtor models.
+    // A name-taking ctor chains the base (the MassiveAd objects are always
+    // constructed with a name); no name is asserted from the asm of this TU.
+    CFlag(const char* pcName);
+
+    // @ 0x82BCC758 (vector deleting destructor). Rewrites the vftable
+    // (off_82183CA0) and chains the base dtor; the deleting-destructor thunk
+    // frees via the base operator delete when its low bit is set. No own teardown.
+    virtual ~CFlag();
 };
 
 } // namespace MassiveAdClient3
