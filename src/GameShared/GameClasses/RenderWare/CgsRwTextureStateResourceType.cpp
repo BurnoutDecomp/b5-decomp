@@ -1,6 +1,5 @@
 #include "GameShared/GameClasses/RenderWare/CgsRwTextureStateResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"
 #include "rw/rwcore_structs.h"                   // rw::Resource, rw::BaseResourceDescriptors<5>
 #include "pc/gcm/renderengine/renderstates.h"   // renderengine::TextureState
 
@@ -92,11 +91,5 @@ namespace CgsResource
     EDebugResourceCategory RwTextureStateResourceType::GetDebugResourceCategory() const
     {
         return E_DEBUGRESOURCECATEGORY_TEXTURE;
-    }
-
-    void RegisterRwTextureStateResourceType()
-    {
-        static RwTextureStateResourceType sRwTextureStateResourceType;
-        TypeRegistry::Register(&sRwTextureStateResourceType);
     }
 }

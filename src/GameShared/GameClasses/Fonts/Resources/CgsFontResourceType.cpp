@@ -1,7 +1,6 @@
 #include "GameShared/GameClasses/Fonts/Resources/CgsFontResourceType.h"
 #include "GameShared/GameClasses/Fonts/CgsFont.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::BaseResourceDescriptors<5>
 
 #include <cstdint>   // uintptr_t
@@ -122,11 +121,5 @@ namespace CgsResource
             *lppValue = lpFont->mpapTextures[luIndex];
         if (lpuOffset != 0)
             *lpuOffset = static_cast<u32>(reinterpret_cast<const u8*>(&lpFont->mpapTextures[luIndex]) - reinterpret_cast<const u8*>(lpFont));
-    }
-
-    void RegisterFontResourceType()
-    {
-        static FontResourceType sFontResourceType;
-        TypeRegistry::Register(&sFontResourceType);
     }
 }

@@ -33,9 +33,6 @@ namespace CgsResource
         virtual bool                   DebugValidate(const void* lpResource) const;
         virtual EDebugResourceCategory GetDebugResourceCategory() const;
     };
-
-    // Construct the singleton handler and register it (type id 0xE). Call once at bring-up.
-    void RegisterRwTextureStateResourceType();
 }
 
 #endif

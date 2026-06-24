@@ -33,10 +33,6 @@ namespace CgsResource
         virtual void                   GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const;
         virtual EDebugResourceCategory GetDebugResourceCategory() const;
     };
-
-    // Construct the singleton handler and register it in the resource-type registry (so the
-    // bundle loader resolves type id 0 to it). Call once during resource-system bring-up.
-    void RegisterRwRasterResourceType();
 }
 
 #endif

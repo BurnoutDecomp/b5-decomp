@@ -2,7 +2,6 @@
 
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"             // Pool, InitOptions, Entry
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h"     // BundleLoader
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"     // ResolveResourceType
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistration.h" // RegisterAllResourceTypes
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"          // E_RESOURCETYPE_FONT
 #include "GameShared/GameClasses/Fonts/CgsFont.h"                               // Font, SafeResourceHandle
@@ -13,6 +12,7 @@
 
 #include <cstdlib>   // malloc
 #include <cstdio>    // snprintf (diagnostics)
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"   // ResolveResourceType
 
 namespace CgsDev
 {

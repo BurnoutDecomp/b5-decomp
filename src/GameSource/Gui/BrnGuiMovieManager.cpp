@@ -1,6 +1,5 @@
 #include "GameSource/Gui/BrnGuiMovieManager.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h"      // BundleLoader (PC sync loader)
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"      // ResolveResourceType
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistration.h"  // RegisterAllResourceTypes
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"           // E_RESOURCETYPE_VIDEODATA
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -8,6 +7,7 @@
 
 #include <cstdlib>   // malloc / free
 #include <cstdio>    // snprintf (boot-video diagnostics)
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"   // ResolveResourceType
 
 // BrnGui::MovieManager -- faithful reconstruction from the X360 ARTIST build (Construct 0x824F9598,
 // Prepare 0x82514780, Update 0x82507A98, RecvEvent 0x824F9688, QueueNextMovie 0x824FF898). The real

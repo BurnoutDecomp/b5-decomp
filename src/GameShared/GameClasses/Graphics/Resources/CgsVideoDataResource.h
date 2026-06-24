@@ -57,8 +57,6 @@ namespace CgsResource
         ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
         void               FixUp(void* lpResource, const rw::Resource& lrResource) const override;
     };
-
-    void RegisterVideoDataResourceType();
 }
 
 #endif
