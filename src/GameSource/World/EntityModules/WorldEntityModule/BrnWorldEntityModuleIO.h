@@ -24,6 +24,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityRequestInterface.h" // RequestInterface
 
 namespace BrnWorld
 {
@@ -142,6 +143,59 @@ namespace WorldEntityIO
         // +0x8018 start of muShadowMap.
         unsigned char maPayloadAndPad[0x8018 - 8];        // +8..+0x8017
         u32           muShadowMap;                        // +0x8018
+    };
+
+    // ========================================================================
+    // BrnWorld::WorldEntityIO::InputBuffer_PreScene (DWARF BrnWorldEntityModuleIO.h:~95).
+    // ADDITIVE GROW: homes the three accessors the X360 emitted out-of-line for the
+    // world-entity module's pre-scene input buffer (the buffer the race-car module's
+    // BridgeRaceCarModuleToWorldModule_PreScene + the GUI->world BridgeInputToEntityModules
+    // fill, and BrnWorld::WorldEntityModule::PreSceneUpdate drains):
+    //   GetRequestInterface() const  @ 0x822BA2D0  read-lock  (bit 4) -> &member(this+10496) (asm-line 100)
+    //   AppendRequestInterface(...)  @ 0x827A2888  write-lock (bit 3) -> mRequestInterface.Append(rOther) (asm-line 99)
+    //   SetActiveRaceCarInterface(.) @ 0x827A27D0  write-lock (bit 3) -> XMemCpy(this+16, src, 10480) (asm-line 97)
+    //
+    // The const getter tests the read-lock bit (`lbz r11,0(this); extrwi r11,r11,1,27` == bit 4 ==
+    // IsBufferLockedForReading()) and fires "Not locked for reading\n"; the two mutators test the
+    // write-lock bit (`extrwi r11,r11,1,28` == bit 3 == IsBufferLockedForWriting()) and fire
+    // "Not locked for writing\n". After the tripwire:
+    //   - GetRequestInterface returns `this + 10496` (0x2900) -- the address of mRequestInterface.
+    //   - AppendRequestInterface tail-calls RequestInterface::Append on `this + 10496` with the
+    //     caller's RequestInterface (the OR-merge of the two collision-world request flags).
+    //   - SetActiveRaceCarInterface block-copies 10480 (0x28F0) bytes from the source into the
+    //     member at `this + 16` (`li r5,0x28F0; addi r3,this,0x10; bl XMemCpy`).
+    //
+    // LAYOUT (X360 accessor offsets, authoritative):
+    //   base    CgsModule::IOBuffer            (1-byte status; +1..+15 pad to the 16-byte member)
+    //   +16     ActiveRaceCarInterface mActiveRaceCarInterface   (10480-byte foreign payload) :~96
+    //   +10496  RequestInterface       mRequestInterface         (collision-world request flags) :~98
+    //
+    // FLAG (foreign type): mActiveRaceCarInterface is a foreign per-race-car input payload whose
+    // own home lands elsewhere; it is modelled as correctly-sized opaque storage (the X360 only
+    // block-copies it as 10480 bytes, never naming its interior) so the +16 member start and the
+    // derived +10496 RequestInterface offset are exact. mRequestInterface is the committed 2-byte
+    // BrnWorld::WorldEntityIO::RequestInterface (home BrnWorldEntityRequestInterface.h); its
+    // Append is reused, not redefined.
+    struct InputBuffer_PreScene : public CgsModule::IOBuffer
+    {
+        // Foreign per-race-car input payload (see FLAG): the 10480-byte block the setter copies.
+        // First byte at this+16; alignas(16) keeps the IOBuffer status byte padded out to the
+        // 16-byte boundary the X360 `addi this,0x10` member start implies.
+        struct alignas(16) ActiveRaceCarInterfaceStorage { unsigned char maBytes[10480]; };
+
+        // X360 0x822BA2D0: read-lock handle, returns &mRequestInterface (this + 10496).
+        const RequestInterface* GetRequestInterface() const;
+        // X360 0x827A2888: write-lock handle, merges lrOther into mRequestInterface.
+        void AppendRequestInterface(const RequestInterface& lrOther);
+        // X360 0x827A27D0: write-lock handle, block-copies the 10480-byte race-car input payload
+        // into mActiveRaceCarInterface (this + 16).
+        void SetActiveRaceCarInterface(const ActiveRaceCarInterfaceStorage& lrInterface);
+
+        static void _AssertLayout();
+
+    private:
+        ActiveRaceCarInterfaceStorage mActiveRaceCarInterface;   // +16     (10480 bytes)
+        RequestInterface              mRequestInterface;         // +10496  (16+10480)
     };
 }
 }
