@@ -30,6 +30,18 @@ namespace BrnNetwork
         u16 muHull;                 // +0x00
         u16 muFramesSinceStart;     // +0x02
         u16 muTrafUpdateToActivate; // +0x04
+
+        // Additive memberwise equality. The X360 only emitted Ge/Grow for the
+        // Array<HullToActivateInfo,7> instance, but forcing the explicit class
+        // instantiation (CgsArrayHullToActivateInfo7.cpp) pulls in the generic
+        // equality-based members (FindFirstInstanceOf/Contains), which need a plain
+        // operator== over the three u16 lanes. Does not change layout/sizeof.
+        bool operator==(const HullToActivateInfo& lrOther) const
+        {
+            return muHull == lrOther.muHull
+                && muFramesSinceStart == lrOther.muFramesSinceStart
+                && muTrafUpdateToActivate == lrOther.muTrafUpdateToActivate;
+        }
     };
 
     // DWARF BrnHullSyncMessage.h:45 (typedef Array<HullToActivateInfo,7u>).
