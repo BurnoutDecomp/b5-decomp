@@ -36,4 +36,32 @@ namespace CgsSceneManager
         // muNumQueries). No field is skipped; semantic parity == a complete struct copy.
         FrustumJobQueryInfo& operator=(const FrustumJobQueryInfo& lrSource);
     };
+
+    // CgsSceneManager::FrustumTestJobData — the full per-job payload the FrustumTest job
+    // copies in CgsSceneManager::FrustumTestJob::Execute: a small job-control header, the
+    // embedded per-frame query batch (FrustumJobQueryInfo), and three trailing result/state
+    // words.
+    //
+    // Byte layout validated against FrustumTestJobData::operator= @0x82BDFC48, which copies
+    // EXACTLY these regions (and nothing in the +0x18 alignment gap):
+    //   +0x000  u32                  mau32Header[6]   ; 6 lwz/stw word copies (+0x00..+0x14)
+    //   +0x018  (8 bytes pad)                         ; alignment so mQueryInfo aligns to 0x20
+    //   +0x020  FrustumJobQueryInfo  mQueryInfo       ; delegated operator=(this+0x20)
+    //   +0x7D0  u32                  mau32Trailer[3]  ; 3 lwz/stw word copies (+0x7D0..+0x7D8)
+    // sizeof == 0x7E0 (0x7DC rounded up to 16-byte alignment of the embedded query lanes).
+    //
+    // The 6 header words and 3 trailer words are job-control/result scalars whose individual
+    // meanings are not attested by this assignment-only TU; they are modelled as u32 arrays
+    // at the asm-exact offsets (see dep_flags). mQueryInfo sits at +0x20 (asm addi r,+0x20).
+    struct FrustumTestJobData
+    {
+        u32                 mau32Header[6];  // +0x000  (asm: 6 word copies +0x00..+0x14)
+        u32                 mau32Pad[2];     // +0x018  alignment gap (NOT copied by operator=)
+        FrustumJobQueryInfo mQueryInfo;      // +0x020  (asm: delegated operator= at +0x20)
+        u32                 mau32Trailer[3]; // +0x7D0  (asm: 3 word copies +0x7D0..+0x7D8)
+
+        // operator= @ 0x82BDFC48 — copies the 6 header words, delegates the embedded
+        // FrustumJobQueryInfo copy, then copies the 3 trailer words. Returns *this.
+        FrustumTestJobData& operator=(const FrustumTestJobData& lrSource);
+    };
 }

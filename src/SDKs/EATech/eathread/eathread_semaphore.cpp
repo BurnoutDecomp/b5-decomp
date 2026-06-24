@@ -7,6 +7,7 @@
 #include <Windows.h>  // CreateSemaphoreA / WaitForSingleObject / CloseHandle / GetTickCount
 #include <intrin.h>   // _InterlockedDecrement -- portable stand-in for the X360
                       // interrupt-masked lwarx/stwcx. reservation idiom.
+#include <new>        // placement new (SemaphoreFactory::ConstructSemaphore)
 
 #include "SDKs/EATech/eathread/eathread_semaphore.h"
 
@@ -224,6 +225,24 @@ int Semaphore::GetCount() const
     if (iCount > 0)
         return iCount;
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// SemaphoreFactory::ConstructSemaphore @ 0x82B43A30
+//
+//   cmplwi cr6, r3, 0 ; beq cr6, +     -> if (pMemory == 0) return 0;
+//   li r5, 1 ; li r4, 0 ; b Semaphore::Semaphore   (tail-call the ctor with
+//                                                    pParameters = 0, bInitialize = 1)
+//
+// Placement-construct a Semaphore into the caller's memory; the ctor runs with
+// its defaults (no parameters, initialize = true). A null memory pointer
+// short-circuits to null without constructing.
+// ---------------------------------------------------------------------------
+Semaphore* SemaphoreFactory::ConstructSemaphore(void* pMemory)
+{
+    if (pMemory == 0)
+        return 0;
+    return new (pMemory) Semaphore();  // Semaphore(pParameters = 0, bInitialize = true)
 }
 
 } // namespace Thread

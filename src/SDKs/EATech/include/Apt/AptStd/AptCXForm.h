@@ -64,6 +64,14 @@ struct AptColorHelper
 
     f32 GetValuef(AptColorValue eColor) const { return mfVal[eColor]; }
 
+    // X360 @0x82AD4938 -- MSVC `vector deleting destructor` for the base
+    // AptColorHelper. The thunk restores the AptColorHelper vtable (off_82145590)
+    // at +0x00 and, when bit0 of the hidden flags arg is set, frees the block via
+    // the GLOBAL operator delete (the channels are plain floats, so the trivial
+    // destructor itself does no member work). Returns `this`.
+    //   flags: hidden MSVC second parameter (bit0 = also free the block).
+    void* VectorDeletingDestructor(char flags);
+
 protected:
     // [+0x04] four channels, ARGB order (mfVal[0]=Alpha .. mfVal[3]=Blue).
     f32 mfVal[4];
@@ -84,10 +92,18 @@ struct AptColorHelperTemplate : public AptColorHelper
 
 struct AptColorHelperScale : public AptColorHelperTemplate<255>
 {
+    // X360 @0x82AE1818 -- MSVC `scalar deleting destructor`. Restores the same
+    // base vtable (off_82145590) at +0x00 (the derived helpers add no data and
+    // no member cleanup), then conditionally frees the block via the GLOBAL
+    // operator delete. Returns `this`.
+    void* ScalarDeletingDestructor(char flags);
 };
 
 struct AptColorHelperTranslate : public AptColorHelperTemplate<255>
 {
+    // X360 @0x82AE1860 -- MSVC `scalar deleting destructor`. Same shape as the
+    // AptColorHelperScale thunk (shared base vtable + conditional global delete).
+    void* ScalarDeletingDestructor(char flags);
 };
 
 // Flat ARGB-as-floats source: eight contiguous floats, scale[4] then

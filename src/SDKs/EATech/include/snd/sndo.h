@@ -95,6 +95,36 @@ namespace Snd9
     // 0xC and reads value at +8); lock the reconstructed layout to that.
     static_assert(sizeof(AemsPlayerInputAccessor::Input) == 12,
                   "AemsPlayerInputAccessor::Input must match the 12-byte X360 stride");
+
+    // sndo.h. Abstract sample-player FACTORY interface. A platform/middleware backend
+    // (e.g. the game's Snd9::AemsStandardSamplePlayerFactory / AemsRWSampleFactory)
+    // derives from this and creates IAemsSamplePlayer instances. This is a separate
+    // polymorphic interface from IAemsSamplePlayer above (its own vtable, off_820AB168).
+    //
+    // MINIMAL home: the ONLY recovered function for this interface is its vector-
+    // deleting destructor thunk @ 0x82681998 (lis/addi off_820AB168 -> stw 0(this);
+    // if (a2 & 1) operator delete(this); return this). That thunk resets the object to
+    // THIS interface's OWN vtable as the last step of a derived player-factory's
+    // teardown, so the destructor must be virtual and out-of-line (defined in sndo.cpp)
+    // to give MSVC a home to emit the destructor + the 1-entry vtable.
+    //
+    // FLAG (DEFERRED virtual surface): the factory's create/release pure-virtual hooks
+    // (DoCreateVoice / DoCreateContent / Create / ... -- exact signatures and vtable
+    // slot order) are implemented by Snd9::AemsStandardSamplePlayerFactory and are NOT
+    // recovered here. Only the destructor slot is attested by 0x82681998, so only it is
+    // modelled (the project rule forbids fabricating the unverified virtual signatures).
+    // The full factory surface is reconstructed when a TU that touches it is decompiled.
+    struct IAemsSamplePlayerFactory
+    {
+    protected:
+        // Subclass-only construction (abstract interface base).
+        IAemsSamplePlayerFactory() {}
+        // 0x82681998. Polymorphic base destructor; defined OUT-OF-LINE in sndo.cpp so
+        // it owns a real .cpp definition home. Empty body (the interface holds no
+        // members); the compiler emits the off_820AB168 vtable store + (for the
+        // deleting variant) the operator-delete tail.
+        virtual ~IAemsSamplePlayerFactory();
+    };
 } // namespace Snd9
 
 #endif // SDKS_EATECH_SND_SNDO_H

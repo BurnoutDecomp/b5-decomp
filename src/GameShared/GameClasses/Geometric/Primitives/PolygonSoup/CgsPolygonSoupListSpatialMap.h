@@ -47,5 +47,12 @@ namespace CgsGeometric
         const PolygonSoupList* GetPolySoupList(s32 liPolySoupListIndex) const;
         // AddList @0x82839680 — bump the active list count (the X360 body ignores its argument).
         void AddList(const PolygonSoupList* lpPolySoupList);
+
+        // GetNumLeafNodes @0x82917018 — return the leaf-node count (result[19] / +0x4C).
+        s32 GetNumLeafNodes() const;
+        // GetPolygonSoup @0x8280FFD0 — return &mpLeafNodes[index] (base +0x48, asm element
+        // stride 0x30). The leaf-node element type is declared-only, so the 0x30 stride is
+        // honoured explicitly (opaque-element-stride precedent; see dep_flags).
+        PolygonSoupLeafNode* GetPolygonSoup(s32 liIndex) const;
     };
 }

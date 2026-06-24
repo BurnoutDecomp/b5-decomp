@@ -95,4 +95,25 @@ namespace CgsGeometric
         (void)lpPolySoupList; // unused — the X360 AddList only bumps the count
         ++miNumSoupLists;
     }
+
+    // GetNumLeafNodes @0x82917018 — X360: `return *(a1 + 0x4C);`
+    //   stw r3,arg; lwz r11,arg; lwz r3,0x4C(r11); blr
+    // +0x4C is miLeafNodeCount (result[19]); a plain word-load accessor.
+    s32 PolygonSoupListSpatialMap::GetNumLeafNodes() const
+    {
+        return miLeafNodeCount;
+    }
+
+    // GetPolygonSoup @0x8280FFD0 — X360: `return *(a1 + 0x48) + 0x30 * a2;`
+    //   slwi r10,r4,1 ; add r10,r4,r10 (=> 3*index) ; slwi r10,r10,4 (=> 48*index)
+    //   lwz r11,0x48(r3) ; add r3,r11,r10 ; blr
+    // Base pointer is mpLeafNodes (+0x48); the asm element stride is 0x30 (48) bytes.
+    // PolygonSoupLeafNode is a declared-only element here, so the stride is honoured by
+    // an explicit byte step over the (opaque) element (opaque-element-stride precedent).
+    PolygonSoupLeafNode* PolygonSoupListSpatialMap::GetPolygonSoup(s32 liIndex) const
+    {
+        static const u32 KU_LEAF_NODE_STRIDE = 0x30; // asm: 48 * index (3<<4)
+        u8* lpBase = reinterpret_cast<u8*>(mpLeafNodes);
+        return reinterpret_cast<PolygonSoupLeafNode*>(lpBase + KU_LEAF_NODE_STRIDE * static_cast<u32>(liIndex));
+    }
 }

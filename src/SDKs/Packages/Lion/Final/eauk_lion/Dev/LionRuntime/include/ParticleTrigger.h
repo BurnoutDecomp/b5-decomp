@@ -23,21 +23,27 @@
 // tail-call (b cParticleTrigger__Update keeps r4/r5 live).
 //
 // HONEST PLACEHOLDER (flagged -- see dep_flags): cTime is the engine time stamp.
-// Modelled opaque here (mirrors the sibling ParticleBucket.h placeholder); not
-// dereferenced by this TU's bodied shim. Replace with / collapse onto the real
-// cTime home when it lands.
+// cParticleTrigger::Update @0x82908808 reads/writes it as a SINGLE 32-bit word
+// (lwz/stw, signed cmpw), and the three trigger time stamps sit at +0x00/+0x04/
+// +0x08 with mbEnabled at +0x0C -- so in THIS header cTime is the 4-byte form.
+// (The sibling ParticleBucket.h cTime is an independent local placeholder.)
+// Replace with / collapse onto the real cTime home when it lands.
 // ============================================================================
 
 #include "types.hpp"
 
 // ----------------------------------------------------------------------------
-// HONEST PLACEHOLDER: engine time stamp. Opaque (8 bytes); only referenced by
-// const-reference here and not dereferenced by the bodied shim. Mirrors the
-// sibling placeholder in ParticleBucket.h -- collapse both onto the real home.
+// HONEST PLACEHOLDER: engine time stamp. The cParticleTrigger::Update asm
+// (@0x82908808) is authoritative for the WIDTH here: each of the trigger's three
+// time stamps is loaded/stored as one 32-bit word (lwz/stw) and signed-compared
+// (cmpw/blt), and mbEnabled lands at +0x0C -- which only fits if each stamp is
+// 4 bytes. So cTime is modelled as a single 32-bit value (NOT the 8-byte form);
+// it is only ever read as one word by the bodied Update. Collapse onto the real
+// cTime home (and reconcile widths) when it lands.
 // ----------------------------------------------------------------------------
 struct cTime
 {
-    u64 muTicks;
+    s32 mi32Ticks;
 };
 
 // ParticleTrigger.h:21
