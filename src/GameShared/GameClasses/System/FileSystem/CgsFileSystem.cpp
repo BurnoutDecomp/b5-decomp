@@ -1,8 +1,9 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
+#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalPC.h"
 
-// CgsFileSystem::FileSystem - see the header. Prepare brings up the async device engine; the rw
-// filesys layer + BaseFile stream machinery are follow-on. Release/Destruct stay light for now.
+// CgsFileSystem::FileSystem - see the header. The async device engine bring-up lives in
+// EnsureDeviceManagerUp(); the rw filesys layer + BaseFile stream machinery are follow-on.
 namespace CgsFileSystem
 {
     // Marked PC sentinel allocator. The X360 passed the GameData allocator to
@@ -11,20 +12,27 @@ namespace CgsFileSystem
     // the real GameData allocator is deferred.
     static char gcPcAllocatorSentinel;
 
-    void FileSystem::Construct() {}
+    // The single PC physical device. A process-static (rather than a FileSystem member) so its
+    // lifetime spans the whole run and the worker thread that references it never dangles, and so
+    // a lazy bring-up from the bundle loader (before the FileSystem object prepares) has a device
+    // to register.
+    static DevicePhysicalPC gPhysicalDevice;
 
-    bool FileSystem::Prepare()
+    void EnsureDeviceManagerUp()
     {
-        // Initialise the device manager once (spawns nothing yet), then register the PC physical
-        // device under "p_dvd" — AddPhysicalDevice spawns that device's worker thread, making the
-        // async file engine LIVE.
         if (!DeviceManager::GetIfInitialized())
             DeviceManager::InitializeDeviceManager(&gcPcAllocatorSentinel);
 
         DeviceManager* lpManager = GetDeviceManager();
         if (lpManager && !lpManager->FindDevice("p_dvd"))
-            lpManager->AddPhysicalDevice(&mPhysicalDevice, "p_dvd", 0);
+            lpManager->AddPhysicalDevice(&gPhysicalDevice, "p_dvd", 0);
+    }
 
+    void FileSystem::Construct() {}
+
+    bool FileSystem::Prepare()
+    {
+        EnsureDeviceManagerUp();
         return true;
     }
 
