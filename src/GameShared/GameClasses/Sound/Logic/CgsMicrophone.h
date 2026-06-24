@@ -129,6 +129,14 @@ public:
         // BOTH the current and the previous halves of the two-frame matrix with it.
         void SetMicrophoneMatrix(const rw::math::vpu::Matrix44Affine& lrMatrix);
 
+        // @ 0x826ABAE8. Read accessor for the current microphone matrix. Validates that
+        // every row of the current matrix is finite (per-row rw::math::vpu::IsValid: each
+        // row's x/y/z lanes self-compare equal -- the vcmpeqfp NaN test), asserting
+        // rw::math::IsValid( mMicrophoneMatrix ) (DWARF cites CgsMicrophone.h:155), then
+        // returns the current matrix by const reference. The X360 body returns `this`
+        // unchanged (the current matrix half lives at this+0x00, so &GetCurrent() == this).
+        const rw::math::vpu::Matrix44Affine& GetMicrophoneMatrix() const;
+
     private:
         Utils::DataPoint<rw::math::vpu::Matrix44Affine> mMicrophoneMatrix;
         rw::math::vpu::Vector3 mDirection;
