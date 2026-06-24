@@ -173,20 +173,9 @@ public:
 
     u64  GetUserId( s32 liIndex ) const { return mpCurrentEntryList[liIndex].muUserId; }
 
-    // BrnBaseStreamer.h:390 (DWARF / ground-truth source).
-    bool IsAssetLoaded( CgsID lId, u64 luUserData ) const
-    {
-        for( s32 liIndex = 0; liIndex < miStreamListLength; liIndex++ )
-        {
-            if( ( mpCurrentEntryList[liIndex].mResourceId == lId ) &&
-                ( mpCurrentEntryList[liIndex].muUserId    == luUserData ) &&
-                ( mpCurrentEntryList[liIndex].meStatus    == StreamerCurrentEntry::E_STATUS_READY ) )
-            {
-                return true;
-            }
-        }
-        return false;
-    }
+    // BrnBaseStreamer.h:390 (DWARF / ground-truth source). X360 @0x822A1300.
+    // Defined out-of-line in BrnBaseStreamer.cpp (this TU's real .cpp home).
+    bool IsAssetLoaded( CgsID lId, u64 luUserData ) const;
 
     bool IsStreamComplete() const;
 
@@ -209,12 +198,9 @@ protected:
     virtual void OnLoadFail( const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent, s32 liListIndex ) {}
 
     // BrnBaseStreamer.h:390/391 (DWARF / ground-truth source). The exact target
-    // of WorldGraphicsStreamer::IsListLoaded (asm @ 0x827B0D00 tail-call).
-    bool IsEntryReady( s32 liIndex ) const
-    {
-        CGS_ASSERT( liIndex < miStreamListLength, "liIndex < miStreamListLength" );
-        return mpCurrentEntryList[liIndex].meStatus == StreamerCurrentEntry::E_STATUS_READY;
-    }
+    // of WorldGraphicsStreamer::IsListLoaded (asm @ 0x827B0D00 tail-call). X360
+    // @0x827B0258. Defined out-of-line in BrnBaseStreamer.cpp (this TU's .cpp home).
+    bool IsEntryReady( s32 liIndex ) const;
 
 private:
     StreamerTargetEntry*       mpTargetEntryList;     // BrnBaseStreamer.h:233

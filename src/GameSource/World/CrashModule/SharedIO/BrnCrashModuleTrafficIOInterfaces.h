@@ -7,6 +7,7 @@
 // against the X360 ARTIST queue Construct/AddEvent spine.
 #include "BrnCommonTypes.h"                                            // EntityId
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"               // CgsModule::EventQueue<T, N>
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h"         // CgsContainers::FastBitArray<N>
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"   // CgsSceneManager::VolumeInstanceId
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"     // BrnPhysics::Vehicle::eCrashTrafficType
 
@@ -61,6 +62,49 @@ namespace CrashIO
     struct RemoveSlammedTrafficEvent
     {
         u16 muVehicleId;
+    };
+
+    // Crash-module traffic INPUT interface (DWARF home BrnCrashModuleTrafficIOInterfaces.h:148;
+    // member layout :187-192). The crash module's per-frame view of traffic state: three
+    // EventQueue<...,160> input queues plus three FastBitArray<601> per-traffic-vehicle bit
+    // masks. The X360 layout (Construct @0x827609F0, operator= @0x827AA4E8) is:
+    //   mAddCrashingTrafficEventQueue   @ 0x000  EventQueue<AddCrashingTrafficEvent,160>
+    //                                            (16-byte element + 12-byte base, 16-aligned ->
+    //                                             next member at 0xA10)
+    //   mRemoveSlammedTrafficEventQueue @ 0xA10  EventQueue<RemoveSlammedTrafficEvent,160>
+    //                                            (u16 element, 12-byte base -> 332 bytes,
+    //                                             next member at 0xB5C)
+    //   mRemoveCrashedTrafficEventQueue @ 0xB5C  EventQueue<RemoveCrashedTrafficEvent,160>
+    //                                            (u16 element -> 332 bytes, next at 0xCA8)
+    //   mRenderingBits                  @ 0xCA8  FastBitArray<601> (10 u64 fields == 80 bytes)
+    //   mFarFromCameraBits              @ 0xCF8  FastBitArray<601> (80 bytes)
+    //   mPhysicalBits                   @ 0xD48  FastBitArray<601> (80 bytes; ends at 0xD98)
+    // The three 80-byte bit masks at 0xCA8/0xCF8/0xD48 are exactly the 30 qwords Construct
+    // zeroes and the 30 qwords operator= copies (3 loops of 10), confirming FastBitArray<601>
+    // == 80 bytes (ceil(601/64) == 10 u64 fields).
+    struct TrafficInputInterface
+    {
+        typedef CgsModule::EventQueue<AddCrashingTrafficEvent,  160> AddCrashingTrafficEventQueue;   // :66
+        typedef CgsModule::EventQueue<RemoveSlammedTrafficEvent, 160> RemoveSlammedTrafficEventQueue; // :82
+        typedef CgsModule::EventQueue<RemoveCrashedTrafficEvent, 160> RemoveCrashedTrafficEventQueue; // :98
+        typedef CgsContainers::FastBitArray<601>                      TrafficVehicleBits;             // :135
+
+        // Point each input queue at its inline storage (maxLength 160, length 0) and zero the
+        // three traffic-vehicle bit masks (X360 Construct @0x827609F0).
+        void Construct();
+
+        // Per-instance copy: clear each destination queue's length and Append every live event
+        // from the matching source queue, then copy the three bit masks (X360 operator=
+        // @0x827AA4E8).
+        TrafficInputInterface& operator=(const TrafficInputInterface& lOther);
+
+    private:
+        AddCrashingTrafficEventQueue   mAddCrashingTrafficEventQueue;    // :187 @0x000
+        RemoveSlammedTrafficEventQueue mRemoveSlammedTrafficEventQueue;  // :188 @0xA10
+        RemoveCrashedTrafficEventQueue mRemoveCrashedTrafficEventQueue;  // :189 @0xB5C
+        TrafficVehicleBits             mRenderingBits;                   // :190 @0xCA8
+        TrafficVehicleBits             mFarFromCameraBits;               // :191 @0xCF8
+        TrafficVehicleBits             mPhysicalBits;                    // :192 @0xD48
     };
 }
 }
