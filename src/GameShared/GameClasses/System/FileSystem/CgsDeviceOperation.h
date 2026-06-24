@@ -21,7 +21,9 @@ namespace CgsFileSystem
 
     // The worker fires this after an op completes: callback(device, handle, result, context).
     // (X360: the `v22(HIDWORD(v17), v17, result, v23)` indirect call in PhysicalDeviceThread.)
-    typedef void (*OperationCallback)(Device* lpDevice, s32 liHandle, s32 liResult, s32 liContext);
+    // The context was a 32-bit value on the X360; here it is a void* (x64 callers pass an
+    // object pointer, e.g. a sync-wait completion record) — marked PC divergence.
+    typedef void (*OperationCallback)(Device* lpDevice, s32 liHandle, s32 liResult, void* lpContext);
 
     // miType values — the worker's switch(opcode) arms (PhysicalDeviceThread cases 0..9).
     enum OperationType
@@ -48,7 +50,7 @@ namespace CgsFileSystem
         u32               muSize;        // byte count
         void*             mpBuffer;      // read destination / write source
         OperationCallback mpfCallback;   // completion callback
-        s32               miContext;     // callback context
+        void*             mpContext;     // callback context (x64 pointer; X360 was a 32-bit value)
         s32               miPriority;    // scheduler priority (X360 Operation+0x12C)
 
         // The OperationPool scheduler picks the highest-priority queued op.
