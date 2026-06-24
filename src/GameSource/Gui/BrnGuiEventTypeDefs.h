@@ -141,4 +141,52 @@ struct GuiEventUpdateSatNav
     static s32 SatNavI(const GuiEventUpdateSatNav* lpThis);
 };
 
+// ===================================================================================
+// BrnGui::GuiEventDrawEventIcons -- the "draw event icons" GUI event payload.
+//   Home: this header (Gui/BrnGuiEventTypeDefs.h; the X360 asserts reference it:
+//   Construct @0x824EB218 -> BrnGuiEventTypeDefs.h:2785; GetIgnoreIcons @0x82443518 ->
+//   :2815/:2816). Reconstructed from BURNOUT_X360_ARTIST.XEX.
+//
+// Construct populates the event from an icon-set descriptor: a per-event float, two
+// ids, a flag byte, and an "icons to ignore" list (up to KI_MAX_ICONS_TO_IGNORE = 10
+// entries) copied in from a caller-supplied source array. GetIgnoreIcons reads the
+// list back out (count + the entries).
+//
+// X360 layout (stores authoritative on width / offset):
+//   maIgnoreIcons[10]    @0x00..0x27  (the copied list; Construct loop / GetIgnoreIcons)
+//   mfDisplayTime        @0x28        (stfs f1)
+//   muIconSetId          @0x2C        (stw a3)
+//   miNumIconsToIgnore   @0x30        (stw count -- read by both methods)
+//   mbFlag               @0x34        (stb a2)
+// ===================================================================================
+class GuiEventDrawEventIcons
+{
+public:
+    // BrnGuiEventTypeDefs.h:2785 guard bound -- max entries in the ignore list.
+    static const s32 KI_MAX_ICONS_TO_IGNORE = 10;
+
+    // @0x824EB218 -- populate the event. lbFlag/luIconSetId/lfDisplayTime are stored
+    // verbatim; the ignore list (lpuIconsToIgnore[0..liNumIconsToIgnore-1]) is copied
+    // into maIgnoreIcons. Asserts the list is empty OR (non-NULL and within bound).
+    // Returns `this`.
+    GuiEventDrawEventIcons* Construct(u8 lbFlag,
+                                      u32 luIconSetId,
+                                      f32 lfDisplayTime,
+                                      s32 liUnused,
+                                      const u32* lpuIconsToIgnore,
+                                      s32 liNumIconsToIgnore);
+
+    // @0x82443518 -- copy the ignore list back out. Asserts both pointers non-NULL,
+    // writes the count to *lpiNumIconsToIgnore, copies the entries to lpuIconsToIgnore.
+    // Returns `this`.
+    GuiEventDrawEventIcons* GetIgnoreIcons(u32* lpuIconsToIgnore, s32* lpiNumIconsToIgnore) const;
+
+private:
+    u32 maIgnoreIcons[KI_MAX_ICONS_TO_IGNORE]; // @0x00 -- the copied "icons to ignore" list
+    f32 mfDisplayTime;                         // @0x28
+    u32 muIconSetId;                           // @0x2C
+    s32 miNumIconsToIgnore;                    // @0x30 -- entry count
+    u8  mbFlag;                                // @0x34
+};
+
 } // namespace BrnGui

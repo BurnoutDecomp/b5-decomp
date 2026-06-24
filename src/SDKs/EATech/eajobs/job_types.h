@@ -78,7 +78,14 @@ namespace Jobs
         class SchedulerBackend
         {
         public:
-            virtual ~SchedulerBackend() {}
+            // Polymorphic base destructor. Defined OUT-OF-LINE in
+            // job_instance_handle.cpp so the interface owns a real .cpp definition
+            // home -- the X360 base scalar-deleting destructor @ 0x82BC9A08 (stores
+            // the SchedulerBackend vtable off_82182408 into *this, then for the
+            // deleting variant conditionally operator-delete's). The body is empty
+            // (no members, no base); the vtable store + delete-tail is what the
+            // compiler emits.
+            virtual ~SchedulerBackend();
 
             // vtable slot +0x30: is the instance identified by (uSubmissionId,
             // uHandleQword==packed backend+index) finished? Nonzero == complete.

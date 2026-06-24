@@ -1,7 +1,8 @@
 #pragma once
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"   // Vector2 (rw::math::vpu::Vector2 - alignas(16) {x,y,z,w})
+#include "BrnCommonTypes.h"        // Vector2 (rw::math::vpu::Vector2 - alignas(16) {x,y,z,w})
+#include "GameSource/Gui/BrnGuiTextField.h"   // BrnGui::TextField (CrashNavMapIcon::mIconText, copied by operator=)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Layout from the DecFIGS dwarfdump
 // (GameSource/Gui/SatNav/BrnSatNavIcon.h): both icon classes derive from BrnGui::MapIconBrnBase,
@@ -164,11 +165,33 @@ namespace BrnGui
         f32 GetAlpha() const { return mfAlpha; }        // @ 0x827DD... (BrnSatNavIcon.h:511)
         f32 GetRotation() const { return mfRotationInRadians; }
 
+        // @ 0x827DD... -- the icon's full constructor. A separate, not-yet-reconstructed
+        // TU; declared-only here so the @0x827DD610 adjustor thunk can forward to it.
+        CrashNavMapIcon* Construct(s32 liA, s32 liB, s32 liC);
+
+        // @ 0x827DD610 (Construct`adjustor{144}') -- a compiler-emitted base-adjusting
+        // thunk: shifts `this` back by 0x90 to the full object, then forwards to Construct.
+        // This is the reconstructed TU; Construct (above) is out of scope.
+        CrashNavMapIcon* ConstructAdjustor144(s32 liA, s32 liB, s32 liC);
+
+        // @ 0x8244BA18 -- copy-assign from lrSource. The X360 byte-copies the icon EXCEPT
+        // the +0x00 vtable slot (copy anchor is this+0x04), copies the embedded TextField
+        // via TextField::operator=, then the two trailing dirty flags. Reconstructed as a
+        // member-by-name copy of the modelled fields (the +0x00 vtable is not assigned --
+        // matching the X360, and matching C++ copy-assign of a polymorphic object).
+        CrashNavMapIcon& operator=(const CrashNavMapIcon& lrSource);
+
     private:
-        // [BrnGui::TextField mIconText (X360 +48): real by-value member; type not yet
-        //  reconstructed - omitted from this partial layout]
-        bool mbIsDirty;          // X360 +348
-        bool mbDirtyIconState;   // X360 +349
+        // ADDITIVE GROW (brn-gui group, CrashNavMapIcon operator= @0x8244BA18): the icon's
+        // by-value TextField, previously a comment-placeholder, is now a REAL member so
+        // operator= can copy it (X360: TextField::operator=(this+0xC4, src+0xC4); the
+        // 0x128-byte field then places the two dirty flags at +0x1EC/+0x1ED, exactly after
+        // it). Adding it does not reorder/retype/remove any pre-existing REAL member (the
+        // prior layout modelled only base fields + muId + the two dirty bytes).
+        TextField mIconText;     // X360 +0xC4 (copied by operator= via TextField::operator=)
+
+        bool mbIsDirty;          // X360 +0x1EC (raised by the Set* mutators / copied by operator=)
+        bool mbDirtyIconState;   // X360 +0x1ED (copied by operator=)
     };
 
     // Sat-nav map icon. State changes drive the hosting Flapt component's animation.

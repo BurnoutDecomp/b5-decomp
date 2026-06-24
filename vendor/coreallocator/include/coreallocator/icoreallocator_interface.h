@@ -51,7 +51,14 @@ namespace Allocator
     class ICoreAllocator
     {
     public:
-        virtual ~ICoreAllocator() {}
+        // Polymorphic base destructor. Defined OUT-OF-LINE in
+        // coreallocator/source/icoreallocator_interface.cpp so the interface owns a
+        // real .cpp definition home -- the X360 base scalar-deleting destructor
+        // @ 0x82276820 (stores the ICoreAllocator vtable off_8200F5B4 into *this,
+        // then for the deleting variant conditionally operator-delete's). The body is
+        // empty (no members, no base); the vtable store + delete-tail is what the
+        // compiler emits.
+        virtual ~ICoreAllocator();
 
         /// Allocate `nSize` bytes. `pName` is an optional debug tag, `nFlags` an AllocFlags value.
         virtual void* Alloc(size_t nSize, const char* pName, unsigned int nFlags) = 0;
