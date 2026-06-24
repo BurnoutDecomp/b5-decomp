@@ -1,5 +1,6 @@
 #include "GameSource/Resource/BrnResourceAllocator.h"
 #include "ppmalloc/EAGeneralAllocator.h"   // the backing EA general allocator
+#include "rw/rwcore_general_alloc.h"       // rw::core::GeneralResourceAllocator (GetGameDataGeneralAllocator)
 #include <cstdlib>                          // malloc
 
 // BrnResource::Allocators / HeapResourceAllocator - the engine's root debug resource allocator,
@@ -48,6 +49,46 @@ namespace BrnResource
     {
         EnsureDebugHeapBacked();
         return &s_DebugResourceAllocator;
+    }
+
+    namespace
+    {
+        // The single GameData general allocator (allocator-gate leaf). 64 MB carved from the debug
+        // heap, lazily on first use. [PC-LEAF] stands in for the per-bank rw general allocators the
+        // X360's GameDataModule::CreateAllocators builds from the memory map; the loading-screen
+        // module loads (e.g. SoundModule) carve their module memory from it.
+        const size_t                       KN_GAMEDATA_GENERAL_SIZE = 64u * 1024u * 1024u;
+        rw::core::GeneralResourceAllocator s_GameDataGeneralAllocator;   // EA allocator members ctor at static init
+        bool                               s_bGameDataGeneralInit = false;
+    }
+
+    rw::core::GeneralResourceAllocator* GetGameDataGeneralAllocator()
+    {
+        if (!s_bGameDataGeneralInit)
+        {
+            EnsureDebugHeapBacked();
+            void* lpRegion = s_DebugGeneralAllocator.MallocAligned(KN_GAMEDATA_GENERAL_SIZE, 16);
+            if (lpRegion)
+            {
+                rw::Resource lResource;
+                for (uint32_t lu = 0; lu < 4; ++lu)
+                    lResource.m_baseResources[lu] = 0;
+                lResource.m_baseResources[0] = lpRegion;
+
+                rw::ResourceDescriptor lCapacity;
+                for (uint32_t lu = 0; lu < 4; ++lu)
+                {
+                    lCapacity.m_baseResourceDescriptors[lu].m_size      = 0;
+                    lCapacity.m_baseResourceDescriptors[lu].m_alignment = 1;
+                }
+                lCapacity.m_baseResourceDescriptors[0].m_size      = KN_GAMEDATA_GENERAL_SIZE;
+                lCapacity.m_baseResourceDescriptors[0].m_alignment = 16;
+
+                s_GameDataGeneralAllocator.Initialize(lResource, lCapacity);
+            }
+            s_bGameDataGeneralInit = true;
+        }
+        return &s_GameDataGeneralAllocator;
     }
 
     // Out-of-line defaulted destructor: anchors the DefaultLinearAllocator vtable in this TU so

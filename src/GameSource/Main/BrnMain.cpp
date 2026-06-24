@@ -14,6 +14,8 @@ static BrnGame::BrnGameModule gGameModule;
 
 // The loading flow (case 8) prepares the game's one GameDataModule through this accessor.
 namespace BrnGame { BrnResource::GameDataModule* GetMainGameDataModule() { return &gGameModule.GetGameDataModule(); } }
+// The loading flow (stage 4) loads the game's one RootSoundModule through this accessor.
+namespace BrnGame { BrnSound::Module::RootSoundModule* GetMainSoundModule() { return &gGameModule.GetSoundModule(); } }
 
 void LoadConfig()
 {
