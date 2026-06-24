@@ -31,7 +31,10 @@ namespace CgsResource
             mHashTable.AddEntry(lID.GetHash(), &liIndex);
         }
 
-        void RemoveEntry(ID lID);                                             // :61
+        void RemoveEntry(ID lID)                                              // :61
+        {
+            mHashTable.RemoveEntry(lID.GetHash());
+        }
 
         s32 FindEntry(ID lID)                                                  // :64
         {

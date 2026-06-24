@@ -81,8 +81,42 @@ namespace CgsContainers
             return 0;
         }
 
-        // :302 - declared; reconstructed with the unload path.
-        bool RemoveEntry(Key luKey);
+        // :302 - remove luKey: find its slot, empty it, then re-insert the contiguous run that follows
+        // (wrapping) so open-addressing probe chains stay intact. Returns true iff the key was present.
+        // (No X360 out-of-line body -- it was inlined/unused there; reconstructed as the standard
+        // linear-probe delete-with-reinsert, using the same probe order as FindEntry/AddEntry. Re-adds
+        // always move an entry backward into the moving gap or leave it in place, never forward past the
+        // cursor, so a single forward pass repairs the cluster.)
+        bool RemoveEntry(Key luKey)
+        {
+            if (luKey == miInvalidKey)
+                return false;
+
+            // locate the slot holding luKey (probe from its hash position, wrapping)
+            Key luFound = miInvalidKey;
+            for (Key luc = 0; luc < miLength; ++luc)
+            {
+                const Key luPos = (luKey % miLength + luc) % miLength;
+                if (mpEntries[luPos].miKey == luKey)        { luFound = luPos; break; }
+                if (mpEntries[luPos].miKey == miInvalidKey) break;   // empty slot reached -> absent
+            }
+            if (luFound == miInvalidKey)
+                return false;
+
+            mpEntries[luFound].miKey = miInvalidKey;   // open the gap
+
+            // re-insert the run after the gap until an empty slot (repairs probe chains)
+            for (Key luPos = (luFound + 1) % miLength;
+                 mpEntries[luPos].miKey != miInvalidKey;
+                 luPos = (luPos + 1) % miLength)
+            {
+                const Key   luRehashKey = mpEntries[luPos].miKey;
+                const Value lRehashVal  = mpEntries[luPos].mValue;
+                mpEntries[luPos].miKey  = miInvalidKey;
+                AddEntry(luRehashKey, &lRehashVal);
+            }
+            return true;
+        }
 
         // :434 - probe from luKey's hash position (wrapping) for luKey; returns
         // &slot.mValue, or null if an empty slot is reached first (key absent).

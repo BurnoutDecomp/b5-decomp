@@ -151,4 +151,59 @@ namespace CgsResource
         free(lpcBundle);
         return liLoaded;
     }
+
+    // Unload a bundle's resources from a pool (the inverse of LoadBundle). Re-read the bundle's resource
+    // id list and ref-count-release each one; Pool::RemoveReference frees a resource's heap memory + slot
+    // when its ref count reaches zero (so a resource still imported elsewhere survives). [PC synchronous
+    // form -- the X360 async unload uses the DeAllocate state machine + tracks loaded bundles.]
+    s32 BundleLoader::UnloadBundle(const char* lpcFileName, Pool* lpPool)
+    {
+        FILE* lpFile = fopen(lpcFileName, "rb");
+        if (lpFile == 0)
+            return -1;
+        fseek(lpFile, 0, SEEK_END);
+        const long llFileSize = ftell(lpFile);
+        fseek(lpFile, 0, SEEK_SET);
+        if (llFileSize <= static_cast<long>(sizeof(BundleV2)))
+        {
+            fclose(lpFile);
+            return -1;
+        }
+        char* lpcBundle = static_cast<char*>(malloc(static_cast<size_t>(llFileSize)));
+        if (lpcBundle == 0)
+        {
+            fclose(lpFile);
+            return -1;
+        }
+        const size_t lnRead = fread(lpcBundle, 1, static_cast<size_t>(llFileSize), lpFile);
+        fclose(lpFile);
+        if (lnRead != static_cast<size_t>(llFileSize))
+        {
+            free(lpcBundle);
+            return -1;
+        }
+
+        BundleV2* lpHeader = reinterpret_cast<BundleV2*>(lpcBundle);
+        if (lpHeader->muVersion != BundleV2::KU_VERSION || lpHeader->muPlatform != BundleV2::KU_PLATFORM)
+        {
+            free(lpcBundle);
+            return -1;
+        }
+
+        const u32 luEntryCount = lpHeader->muResourceEntriesCount;
+        BundleV2::ResourceEntry* lpEntries =
+            reinterpret_cast<BundleV2::ResourceEntry*>(lpcBundle + lpHeader->muResourceEntriesOffset);
+
+        s32 liUnloaded = 0;
+        for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
+        {
+            // find the resource by id (any in-use status; ignore the ref-count gate), then release a ref.
+            const s32 liSlot = lpPool->FindResourceIndex(lpEntries[luIndex].mResourceId, true, 0xFF);
+            if (liSlot >= 0 && lpPool->RemoveReference(static_cast<u32>(liSlot)))
+                ++liUnloaded;
+        }
+
+        free(lpcBundle);
+        return liUnloaded;
+    }
 }

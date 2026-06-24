@@ -33,5 +33,12 @@ namespace CgsResource
         // read / format error. If lpfnResolveType is null (or a resource's type is unknown),
         // that resource is created and its data copied, but it is not fixed up.
         s32 LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType);
+
+        // Unload lpcFileName's resources from lpPool: re-read the bundle's resource id list and
+        // ref-count-release each (Pool::RemoveReference -> frees memory + slot at refcount 0). Returns the
+        // number of resources unloaded, or -1 on a read/format error. [The X360 async unload tracks loaded
+        // bundles + drives the DeAllocate state machine; this PC synchronous form re-derives the id list
+        // from the file and releases directly.]
+        s32 UnloadBundle(const char* lpcFileName, Pool* lpPool);
     };
 }

@@ -161,6 +161,8 @@ namespace CgsResource
                 lpPoolQ->AddEvent(lpEvent, 0, liSize);
             else if (liId == 2)   // LoadBundle -> bundle loader's load-request intake
                 mBundleLoaderModule.EnqueueLoadRequest(*reinterpret_cast<const Events::LoadBundleRequest*>(lpEvent));
+            else if (liId == 3)   // UnloadBundle -> bundle loader's unload-request intake
+                mBundleLoaderModule.EnqueueUnloadRequest(*reinterpret_cast<const Events::UnloadBundleRequest*>(lpEvent));
             else if (liId == 4)   // AcquireResource -> pool input (X360 routes id 4 -> pool tag 4)
                 lpPoolQ->AddEvent(lpEvent, 4, liSize);
             const CgsModule::Event* lpNext = 0;
@@ -250,6 +252,7 @@ namespace CgsResource
         // created) pool via the PC synchronous BundleLoader, replying with a LoadBundleResponse. [The X360
         // async streaming FSM + FileSystem are the deferred remainder; see BundleLoaderModule.]
         mBundleLoaderModule.ProcessLoadRequests(&mPoolModule, ResolveResourceType);
+        mBundleLoaderModule.ProcessUnloadRequests(&mPoolModule);
 
         return false;
     }

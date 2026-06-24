@@ -324,6 +324,15 @@ namespace BrnResource
             *CgsDev::Log::gpDebugPrint << "[stream] Fonts pool (id 0) font resource via shuttle: "
                                       << (lpFontEntry ? "FOUND" : "absent") << "\n";
 
+            // The font bundle carries 2 resources: the Font (0x21) + its atlas Texture (RwRaster, 0x0).
+            // Confirm the texture resource streamed too -- proving the system handles the most platform-
+            // divergent resource type (textures), not just the font, through the same shuttle.
+            s32 liTexIdx = -1;
+            CgsResource::Entry* lpTexEntry = lpFonts
+                ? lpFonts->FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_TEXTURE, &liTexIdx) : 0;
+            *CgsDev::Log::gpDebugPrint << "[stream] Fonts pool texture resource (RwRaster) via shuttle: "
+                                      << (lpTexEntry ? "FOUND" : "absent") << "\n";
+
             // [acquire bring-up] prove the consumer path: AcquireResource by id through the shuttle. The
             // streamed font is already at status 2 (loaded) from BundleLoader's load-completion pass, so it
             // is acquirable directly. Publish an AcquireResourceRequest (id 4) -> ProcessResourceRequests ->
@@ -360,6 +369,29 @@ namespace BrnResource
                                         && lpAcqResp->mpSourceEntry == lpFontEntry;
                 *CgsDev::Log::gpDebugPrint << "[stream] AcquireResource(font) via shuttle: "
                                           << (lbAcquired ? "handle OK" : "FAILED") << "\n";
+            }
+
+            // [unload bring-up] prove the load/unload pair: publish an UnloadBundleRequest (id 3) for the
+            // font -> ProcessResourceRequests -> bundle loader -> UnloadBundle (ref-count-release each
+            // resource; frees heap memory + slot at refcount 0). Confirm the font is then gone from the pool.
+            if (lpFonts != 0)
+            {
+                CgsResource::Events::UnloadBundleRequest lUnload;
+                memset(&lUnload, 0, sizeof(lUnload));
+                lUnload.SetFileName("Language/Fonts/Default.font");
+                lUnload.miPoolId = 0;
+
+                s_resIn.LockForWrite();
+                s_resIn.GetResourceQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lUnload),
+                                                     3 /*UnloadBundle*/, static_cast<s32>(sizeof(lUnload)));
+                s_resIn.UnlockForWrite();
+                mResourceModule.Update(&s_resIn, 0);
+
+                s32 liGoneIdx = -1;
+                CgsResource::Entry* lpGone =
+                    lpFonts->FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_FONT, &liGoneIdx);
+                *CgsDev::Log::gpDebugPrint << "[stream] after UnloadBundle, Fonts pool font resource: "
+                                          << (lpGone ? "STILL PRESENT (bug)" : "gone (freed)") << "\n";
             }
         }
         return true;

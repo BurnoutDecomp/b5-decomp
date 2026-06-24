@@ -333,6 +333,49 @@ namespace CgsResource
         ++muNumFreeResources;
     }
 
+    // 0x828F5C08 - free the resource's per-memory-type heap allocations (Heap::Free each) and clear its
+    // memory state. The X360 loops the 3 in-memory pools, Heap::Free'ing any allocated one then zeroing
+    // the resource pointer + heap node index.
+    void Pool::FreeMemoryForResource(Entry* lpEntry)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :687
+        for (s32 lt = 0; lt < E_MEMTYPE_NUMTYPES; ++lt)
+        {
+            if (lpEntry->mResource.m_baseResources[lt] != 0)
+            {
+                maHeaps[lt].Free(lpEntry->mauHeapIndices[lt]);
+                lpEntry->mResource.m_baseResources[lt] = 0;
+                lpEntry->mauHeapIndices[lt]            = 0;
+            }
+        }
+    }
+
+    // Ref-counted acquire: bump the entry's ref count and return it. (The X360 AddReference/RemoveReference
+    // are the live-update ref-counting around a resource's lifetime; CreateEntry seeds the count at 1.)
+    Entry* Pool::AddReference(u32 luIndex)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        IncEntryRefCount(static_cast<s32>(luIndex));
+        return &mpResourceEntries[luIndex];
+    }
+
+    // Ref-counted release: decrement the entry's ref count; when it hits zero, remove the resource from
+    // the id hash, free its heap memory, and release its slot. Returns true iff the resource was freed.
+    bool Pool::RemoveReference(u32 luIndex)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        DecEntryRefCount(static_cast<s32>(luIndex));
+        if (GetEntryRefCount(static_cast<s32>(luIndex)) <= 0)
+        {
+            Entry* lpEntry = &mpResourceEntries[luIndex];
+            mHashTable.RemoveEntry(lpEntry->mID);
+            FreeMemoryForResource(lpEntry);
+            FreeResourceEntry(static_cast<s16>(luIndex));
+            return true;
+        }
+        return false;
+    }
+
     // 0x82902388 - reserve a free slot then fill it (CreateEntryInSlot). Returns
     // CREATERESULT_OUTOFENTRIES if the pool has no free slots.
     Pool::ECreateResult Pool::CreateEntry(const NewResource* lpNewResource, Entry** lppOutEntry, s32* lpiOutIndex, bool lbAllocateMemory)
