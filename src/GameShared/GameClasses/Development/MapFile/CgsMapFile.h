@@ -5,7 +5,7 @@
 // CgsDev::MapFile - the function map the assert/exception callstack resolver reads (DWARF
 // GameShared/GameClasses/Development/MapFile/CgsMapFile.h). A map is a binary file: a 16-byte header
 // followed by an array of fixed-size Records, each naming one function + its address range. The build
-// pipeline generates it from the linker's .map (tools/_make_cgsmap.py); the reader streams it to turn
+// pipeline generates it from the linker's .map (tools/build/make_cgsmap.py); the reader streams it to turn
 // a captured return address into "the function it lies inside".
 //
 // X360 note: TargetPtr is the target's 32-bit (big-endian) pointer. On the PC x64 build the records

@@ -47,5 +47,20 @@ ClassTypeInfo<StateManager>* StateManager::AddToClassTypeInfoArray(ClassTypeInfo
     return apTypeInfo;
 }
 
+// ---------------------------------------------------------------------------
+// StateManager::GetStaticTypeInfo()  @ 0x8268D798  -> &unk_82F2FAA0 ("StateManager")
+//   The X360 body returns the address of StateManager's static ClassTypeInfo
+//   descriptor (lis/addi unk_82F2FAA0; blr). The sibling StateManager::GetTypeName
+//   @0x8268D7A8 reads the descriptor's typeName ("StateManager") from +4. Mirrors the
+//   EffectControl/EffectObject GetStaticTypeInfo accessors: a function-local static
+//   descriptor seeded with the recovered type name, so the observable return (the
+//   descriptor carrying typeName "StateManager") matches byte-for-byte.
+// ---------------------------------------------------------------------------
+ClassTypeInfo<StateManager>* StateManager::GetStaticTypeInfo()
+{
+    static ClassTypeInfo<StateManager> sTypeInfo(0, "StateManager", nullptr, nullptr);
+    return &sTypeInfo;
+}
+
 } // namespace Logic
 } // namespace CgsSound

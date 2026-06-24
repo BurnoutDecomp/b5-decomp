@@ -84,5 +84,29 @@ void MicrophoneSystem::Microphone::SetMicrophoneMatrix(const rw::math::vpu::Matr
     mMicrophoneMatrix.Set(lrMatrix);
 }
 
+// ---------------------------------------------------------------------------
+// MicrophoneSystem::Microphone::GetMicrophoneMatrix()  @ 0x826ABAE8
+//   Validate that the CURRENT microphone matrix is finite, then return it by const
+//   reference. The asm loads the four rows of the current matrix (this+0x00, +0x10,
+//   +0x20, +0x30) and, per row, splats the x/y/z lanes and self-compares them
+//   (vspltw + vcmpeqfp.) -- the per-lane NaN test that is rw::math::vpu::IsValid.
+//   The four row-validity flags are AND'd; when the product is 0 it fires the assert
+//   "rw::math::IsValid( mMicrophoneMatrix )" (DWARF CgsMicrophone.h:155). It then
+//   returns r3 == this unchanged: the current matrix half lives at this+0x00, so the
+//   returned reference is &mMicrophoneMatrix.GetCurrent().
+// ---------------------------------------------------------------------------
+const rw::math::vpu::Matrix44Affine& MicrophoneSystem::Microphone::GetMicrophoneMatrix() const
+{
+    const rw::math::vpu::Matrix44Affine& lrCurrent = mMicrophoneMatrix.GetCurrent();
+
+    const bool lbValid = rw::math::vpu::IsValid(lrCurrent.xAxis)
+                      && rw::math::vpu::IsValid(lrCurrent.yAxis)
+                      && rw::math::vpu::IsValid(lrCurrent.zAxis)
+                      && rw::math::vpu::IsValid(lrCurrent.wAxis);
+    CGS_ASSERT(lbValid, "rw::math::IsValid( mMicrophoneMatrix )");
+
+    return lrCurrent;
+}
+
 } // namespace Logic
 } // namespace CgsSound

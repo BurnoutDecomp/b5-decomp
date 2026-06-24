@@ -219,14 +219,22 @@ namespace InputIO
     };
 
     // ---- PreWorldInputBuffer (DWARF CgsInputModuleIO.h:603) -----------------
-    //   GetPlayJoltEffectEventQueue() const  -> X360 0x828E6740, read-lock,  this+4
-    //   GetTimerStatusInt()           const  -> X360 0x828E69E0, read-lock,  this+868
-    //   SetTimerStatusInterface()            -> X360 0x82362418, write-lock, this+868 (copies 48B)
+    //   GetPlayJoltEffectEventQueue()   const -> X360 0x828E6740, read-lock,  this+4
+    //   GetPlayRumbleEffectEventQueue() const -> X360 0x828E67E8, read-lock,  this+256
+    //   GetTimerStatusInt()             const -> X360 0x828E69E0, read-lock,  this+868
+    //   SetTimerStatusInterface()             -> X360 0x82362418, write-lock, this+868 (copies 48B)
     struct PreWorldInputBuffer : public CgsModule::IOBuffer
     {
-        typedef CgsModule::EventQueue<PlayJoltEffectEvent, 4> PlayJoltEffectEventQueue; // PlayJoltEffectEvent=60B
+        typedef CgsModule::EventQueue<PlayJoltEffectEvent, 4>   PlayJoltEffectEventQueue;   // PlayJoltEffectEvent=60B
+        typedef CgsModule::EventQueue<PlayRumbleEffectEvent, 4> PlayRumbleEffectEventQueue; // PlayRumbleEffectEvent=68B
 
-        const PlayJoltEffectEventQueue* GetPlayJoltEffectEventQueue() const; // 0x828E6740
+        const PlayJoltEffectEventQueue*   GetPlayJoltEffectEventQueue() const;   // 0x828E6740
+
+        // X360 0x828E67E8 - read-lock accessor returning the play-rumble-effect event queue (this+256).
+        // The X360 queue ordering after the jolt queue (jolt 60B*4 + 12B header = 252B spans this+4..+256,
+        // so the play-rumble queue begins at exactly this+256) plus the read-lock + line-927 assert
+        // (CgsInputModuleIO.h:927) identify it. Caller: CgsInput::InputModule::ProcessRumbleRequests.
+        const PlayRumbleEffectEventQueue* GetPlayRumbleEffectEventQueue() const; // 0x828E67E8
 
         // X360 0x828E69E0 - read-lock accessor returning the published timer snapshot (this+868).
         // (DWARF abbreviates the spelling to "GetTimerStatusInt"; it returns the interface pointer.)
@@ -234,17 +242,22 @@ namespace InputIO
         // X360 0x82362418 - write-lock accessor copying a TimerStatusInterface into the buffer (this+868).
         void SetTimerStatusInterface(const CgsSystem::TimerStatusInterface& lTimerStatus); // 0x82362418
 
-        // X360 member offsets are this+4 (jolt queue) and this+868 (timer snapshot, =0x364). As with
-        // PostWorldInputBuffer the PC byte offsets differ (8-byte BaseEventQueue::mpEvents on PC x64 vs
-        // 4 on X360, so the queue is wider and align-8). The buffer is engine-internal/never serialised;
-        // the load-bearing contract is the typed member + lock direction, not a byte-exact offset.
+        // X360 member offsets are this+4 (jolt queue), this+256 (play-rumble queue) and this+868 (timer
+        // snapshot, =0x364). As with PostWorldInputBuffer the PC byte offsets differ (8-byte
+        // BaseEventQueue::mpEvents on PC x64 vs 4 on X360, so each queue is wider and align-8). The buffer
+        // is engine-internal/never serialised; the load-bearing contract is the typed member + lock
+        // direction, not a byte-exact offset.
     private:
-        PlayJoltEffectEventQueue mPlayJoltEffectEventQueue; // X360 this+4
-        // ADDITIVE GROW: the remaining rumble queues (PlayRumble/ChangeVolume/Stop) and the rumble bool
-        // flags live between the jolt queue and the timer snapshot; this slice does not touch them, so
-        // they are explicit padding sized from the preceding PC member layout so the struct keeps the
-        // X360 868-byte stride from the buffer head to the timer-snapshot member.
-        u8 maGapToTimerStatus[868 - (8 + sizeof(PlayJoltEffectEventQueue))];
+        PlayJoltEffectEventQueue   mPlayJoltEffectEventQueue;   // X360 this+4
+        // ADDITIVE GROW: the play-rumble queue at X360 this+256 (now modelled by name so the read-lock
+        // accessor returns it without a raw-offset cast). It sits immediately after the jolt queue on
+        // both the X360 (this+256) and PC layouts.
+        PlayRumbleEffectEventQueue mPlayRumbleEffectEventQueue; // X360 this+256
+        // The remaining rumble queues (ChangeVolume/Stop) and the rumble bool flags live between the
+        // play-rumble queue and the timer snapshot; this slice does not touch them, so they are explicit
+        // padding sized from the preceding PC member layout so the struct keeps the X360 868-byte stride
+        // from the buffer head to the timer-snapshot member.
+        u8 maGapToTimerStatus[868 - (8 + sizeof(PlayJoltEffectEventQueue) + sizeof(PlayRumbleEffectEventQueue))];
         CgsSystem::TimerStatusInterface mTimerStatusInterface; // X360 this+868 (=0x364); PC offset per note
         // mbPauseRumble, mbEnableRumble, mbForceFeedback (tail bool flags) -- own TU.
     };

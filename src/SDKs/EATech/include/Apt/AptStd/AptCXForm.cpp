@@ -1,6 +1,7 @@
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"
 
 #include <cstring>   // memcpy
+#include <new>       // ::operator delete
 
 // ===========================================================================
 // AptCXForm copy / construction.
@@ -120,4 +121,54 @@ AptCXForm::AptCXForm(AptUint32CXForm* pUintCXForm)
     , translate()
 {
     AptUint32CXFormCopy(pUintCXForm);
+}
+
+// ===========================================================================
+// Compiler-generated deleting-destructor thunks.
+//
+// Each is the MSVC `... deleting destructor` for one ColorHelper type. The
+// X360 bodies are byte-identical in shape (only the address and the MSVC
+// "vector" vs "scalar" spelling differ):
+//
+//     *this = off_82145590;        // restore the AptColorHelper base vtable
+//     if (flags & 1)               // hidden second arg, bit0
+//         operator delete(this);   // GLOBAL operator delete
+//     return this;
+//
+// off_82145590 is the shared AptColorHelper vtable; all three thunks restore
+// the SAME vtable because the derived helpers add no data and no member
+// cleanup -- the four float channels are trivial, so the destructor proper
+// does no work and only the conditional free remains. Modeled here as the
+// trivial destruct (a no-op for plain floats) followed by the conditional
+// `::operator delete(this)`.
+// ===========================================================================
+
+// AptColorHelper::`vector deleting destructor' @ 0x82AD4938.
+void* AptColorHelper::VectorDeletingDestructor(char flags)
+{
+    if (flags & 1)              // clrlwi. r10, r4, 31; beq ...
+    {
+        ::operator delete(this);
+    }
+    return this;
+}
+
+// AptColorHelperScale::`scalar deleting destructor' @ 0x82AE1818.
+void* AptColorHelperScale::ScalarDeletingDestructor(char flags)
+{
+    if (flags & 1)
+    {
+        ::operator delete(this);
+    }
+    return this;
+}
+
+// AptColorHelperTranslate::`scalar deleting destructor' @ 0x82AE1860.
+void* AptColorHelperTranslate::ScalarDeletingDestructor(char flags)
+{
+    if (flags & 1)
+    {
+        ::operator delete(this);
+    }
+    return this;
 }

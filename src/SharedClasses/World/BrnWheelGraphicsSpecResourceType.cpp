@@ -1,6 +1,7 @@
 #include "SharedClasses/World/BrnWheelGraphicsSpecResourceType.h"
 
 #include "types.hpp"
+#include "rw/rwcore_structs.h"   // rw::BaseResourceDescriptors<5> complete for the descriptor body
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace BrnWheel
@@ -25,6 +26,27 @@ static const uint32_t KU_WHEEL_GRAPHICS_SPEC_RESOURCE_TYPE_ID = 65546;
 uint32_t GraphicsSpecResourceType::GetTypeID() const
 {
     return KU_WHEEL_GRAPHICS_SPEC_RESOURCE_TYPE_ID;
+}
+
+// GetSerialisedResourceDescriptor @ 0x8267D478 (store-for-store). A constant
+// descriptor: the wheel graphics-spec serialises into a single 16-byte-aligned
+// block of fixed size 0xC (the std at +0 packs {size=0xC, align=0x10} on the big-endian
+// image: back_chain+0=0xC -> result+0=m_size, back_chain+4=0x10 -> result+4=m_alignment;
+// entries 1..4 are {0,1}). lpResource is unread by the X360 body.
+CgsResource::ResourceDescriptor
+GraphicsSpecResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+{
+    (void)lpResource;
+
+    CgsResource::ResourceDescriptor lDescriptor;
+    lDescriptor.m_baseResourceDescriptors[0].m_size      = 0x0Cu;  // entry0 m_size @result+0 (back_chain+0 = 0xC)
+    lDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10u;  // entry0 m_alignment @result+4 (back_chain+4 = 0x10)
+    for (u32 luBlock = 1; luBlock < 5u; ++luBlock)
+    {
+        lDescriptor.m_baseResourceDescriptors[luBlock].m_size      = 0u;   // entry1..4 {0,1}
+        lDescriptor.m_baseResourceDescriptors[luBlock].m_alignment = 1u;
+    }
+    return lDescriptor;
 }
 
 // FixUp @ 0x82678CF0. The X360 signature is FixUp(this, lpResource); the

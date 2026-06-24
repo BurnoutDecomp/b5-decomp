@@ -80,6 +80,32 @@ public:
     const T& GetCurrent() const  { return (*this)[0]; }
     const T& GetPrevious() const { return (*this)[1]; }
 
+    // Indexed "previous" accessor: the sample one frame older than `liIndex`
+    // ( GetPrevious(i) == (*this)[i+1] ). The X360 emits this out-of-line (e.g.
+    // @0x82210C50, attributed to BrnDirector::Camera::ImpactSlomoController::Update):
+    // it asserts liIndex >= 0 (BrnDirectorDataJournal.h:114), miSize > 0 (:115) and
+    // liIndex < miSize-1 (:116, so liIndex+1 is still live), then returns
+    // operator[](liIndex + 1). ADDITIVE GROW (flagged): new overload distinct from
+    // the parameterless GetPrevious() above; no layout/sizeof change.
+    const T& GetPrevious(int liIndex) const
+    {
+        CGS_ASSERT(liIndex >= 0, "lIndex >= 0");
+        CGS_ASSERT(miSize > 0, "miSize > 0");
+        CGS_ASSERT(liIndex < miSize - 1, "lIndex < miSize-1");
+        return (*this)[liIndex + 1];
+    }
+
+    // Mutable accessor for the newest sample ([0]). The X360 emits this as an out-of-line
+    // method (e.g. @0x821FBB80, attributed by the linker to BrnDirector::GameState): it
+    // asserts the journal is non-empty and returns &maEntries[miWriteIndex] (the current
+    // slot). Unlike operator[] (which asserts liIndex < miSize), this guards directly on
+    // miSize > 0. ADDITIVE GROW (flagged): new non-const overload, no layout change.
+    T& GetCurrent()
+    {
+        CGS_ASSERT(miSize > 0, "miSize > 0");
+        return maEntries[miWriteIndex];
+    }
+
     int GetSize() const { return miSize; }
 
 private:

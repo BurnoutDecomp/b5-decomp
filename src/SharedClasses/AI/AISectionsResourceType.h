@@ -25,6 +25,11 @@ struct AISection
     u8            mu8eDistrict;     // +22  :472
     u8            mx8Flags;         // +23  :473
     Vector3 GetMiddle() const;      // :343 (defined in the AISection TU)
+
+    // True when this section must not be used as a reset-on-track link target. X360
+    // @0x8276AC18 (BrnAI::ResetOnTrackManager::UpdateResetOnTrackSectionUsingCurrentSection):
+    // reads mx8Flags @+23 and returns true if either bit 0x01 or bit 0x40 is set, false otherwise.
+    bool IsUnsuitableForResetOnTrackLink() const;
 };
 
 // BrnAI::AISectionsData -- DWARF AISectionsData.h:568 (members :637-650); 64 bytes.

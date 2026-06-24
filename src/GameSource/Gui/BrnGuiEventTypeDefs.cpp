@@ -13,6 +13,7 @@
 // condition matches the X360 assert message text.
 
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf
 
 #include <cstring>  // std::memcpy -- the DoWorstCase compaction is a 0x30-byte block move.
 
@@ -175,6 +176,69 @@ GuiEventUpdateSatNav* GuiEventUpdateSatNav::DoWorstCase()
 
     miNumIcons = 8;
     return this;
+}
+
+// ===================================================================================
+// BrnGui::GuiOverlayRequest -- the three out-of-line parameter accessors.
+//
+// Each copies one overlay parameter (id + text) into a caller-supplied output record:
+// it SPrintf's the parameter text through "%s" into the output's 64-byte text buffer
+// (output+0x04), then copies the parameter id into the output's leading dword
+// (output+0x00, in that order, matching the X360 store sequence).
+//
+// RETURN-VALUE NOTE: the X360 functions return r3 == the char-count result of
+// CgsCore::SPrintf. The committed CgsCore::SPrintf is declared `void` (it does not
+// surface the printf char-count), so the count is not propagated here; the accessors
+// return 0. The load-bearing behaviour is the copy side-effect, which is reproduced
+// exactly. (See flagged_type_changes re: CgsCore::SPrintf's return type.)
+// ===================================================================================
+
+// @0x824EB948 -- copy message param liIndex into *lpOut.
+//   guard: liIndex >= *(this+0x118)  -> "Index isn't used in Overlay." (h:7508)
+//   guard: liIndex <  0              -> "Index isn't valid."           (h:7509)
+//   entry = this + 0x44*liIndex; SPrintf(out+4, 64, "%s", entry+0x0C); *out = *(entry+0x08)
+s32 GuiOverlayRequest::GetMessageParam(ParamOut* lpOut, s32 liIndex) const
+{
+    // X360-pinned member offsets (validated from a member context where the private
+    // members are visible to offsetof): the two button records at +0x88/+0xCC, the count
+    // at +0x118 and the two guard bytes at +0x11C/+0x11D.
+    static_assert(__builtin_offsetof(GuiOverlayRequest, mButton1) == 0x88, "button1 record @+0x88");
+    static_assert(__builtin_offsetof(GuiOverlayRequest, mButton2) == 0xCC, "button2 record @+0xCC");
+    static_assert(__builtin_offsetof(GuiOverlayRequest, miNumMessages) == 0x118, "count @+0x118");
+    static_assert(__builtin_offsetof(GuiOverlayRequest, mbButton1Used) == 0x11C, "button1 guard @+0x11C");
+    static_assert(__builtin_offsetof(GuiOverlayRequest, mbButton2Used) == 0x11D, "button2 guard @+0x11D");
+
+    CGS_ASSERT( liIndex < miNumMessages, "Index isn't used in Overlay." );
+    CGS_ASSERT( liIndex >= 0,            "Index isn't valid." );
+
+    const ParamInfo& lParam = maMessages[liIndex]; // this + 0x44*liIndex
+    CgsCore::SPrintf( lpOut->macText, sizeof(lpOut->macText), "%s", lParam.macText );
+    lpOut->muId = lParam.muId;                      // *a2 = *(entry+0x08)
+    return 0;
+}
+
+// @0x824EBA78 -- copy button-1 param into *lpOut.
+//   guard: *(this+0x11C) == 0 -> "button 1 param isn't used in Overlay." (h:7528)
+//   SPrintf(out+4, 64, "%s", this+0x94); *out = *(this+0x90)
+s32 GuiOverlayRequest::GetButton1Param(ParamOut* lpOut) const
+{
+    CGS_ASSERT( mbButton1Used != 0, "button 1 param isn't used in Overlay." );
+
+    CgsCore::SPrintf( lpOut->macText, sizeof(lpOut->macText), "%s", mButton1.macText );
+    lpOut->muId = mButton1.muId;
+    return 0;
+}
+
+// @0x824EBB38 -- copy button-2 param into *lpOut.
+//   guard: *(this+0x11D) == 0 -> "button 2 param isn't used in Overlay." (h:7547)
+//   SPrintf(out+4, 64, "%s", this+0xD8); *out = *(this+0xD4)
+s32 GuiOverlayRequest::GetButton2Param(ParamOut* lpOut) const
+{
+    CGS_ASSERT( mbButton2Used != 0, "button 2 param isn't used in Overlay." );
+
+    CgsCore::SPrintf( lpOut->macText, sizeof(lpOut->macText), "%s", mButton2.macText );
+    lpOut->muId = mButton2.muId;
+    return 0;
 }
 
 } // namespace BrnGui

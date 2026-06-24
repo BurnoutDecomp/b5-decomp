@@ -91,8 +91,23 @@ struct Stack
     s32  GetLength() const   { return miLength; }
     s32  GetMaxLength() const { return N; }
 
+    // X360 0x8246E520 (Grow, <CgsGraphics::Im2dTransform,33>). Assert constructed +
+    // !full, then claim the current top slot, advance the count, and hand back a
+    // pointer to that slot (`(miLength << log2(sizeof Type)) + this` == &maData[old]).
+    // The caller fills the returned slot in place (the X360 Push copies its argument
+    // into exactly this slot via VMX quad-word stores; Grow hands the slot back so the
+    // caller can construct in place instead). Additive: only the <...,33> instance
+    // instantiates Grow; the other Stack instances (e.g. <ICE::ActionRef,20>) do not.
+    Type* Grow()
+    {
+        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+        CGS_ASSERT(miLength != N, "!IsFull()");
+        s32 liSlot = miLength;
+        ++miLength;
+        return &maData[liSlot];
+    }
+
     // Declared-only: not part of this TU (other instances / other call sites supply bodies).
-    Type*       Grow();
     bool        Contains(const Type& lrEntry) const;
     Type&       operator[](s32 liIndex);
     const Type& operator[](s32 liIndex) const;
