@@ -83,7 +83,7 @@ namespace CgsResource
     // CheckForLoads (0x828FB758) / CheckForUnloads (0x828FB308) and the bundle parse path read
     // .BUNDLE files off disk through the FileSystem, decompress via the job system, and create
     // resources through the PoolModule + rw allocator. All inert until the GameDataModule runs.
-    void BundleLoaderModule::Construct() { mLoadRequests.Construct(); }
+    void BundleLoaderModule::Construct() { mLoadRequests.Construct(); mUnloadRequests.Construct(); }
     bool BundleLoaderModule::Update(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return false; }
     void BundleLoaderModule::ProcessReceiverQueue() {}
 
@@ -133,5 +133,38 @@ namespace CgsResource
                                            static_cast<s32>(sizeof(lResponse)));
         }
         mLoadRequests.Clear();
+    }
+
+    void BundleLoaderModule::EnqueueUnloadRequest(const Events::UnloadBundleRequest& lrRequest)
+    {
+        mUnloadRequests.AddEvent(lrRequest);
+    }
+
+    // Drain the queued UnloadBundleRequests: resolve each request's pool and unload its bundle's resources
+    // (BundleLoader::UnloadBundle -> ref-count-release each), then reply with an UnloadBundleResponse.
+    void BundleLoaderModule::ProcessUnloadRequests(PoolModule* lpPoolModule)
+    {
+        const s32 liCount = mUnloadRequests.GetLength();
+        for (s32 li = 0; li < liCount; ++li)
+        {
+            const Events::UnloadBundleRequest& lrRequest = mUnloadRequests.GetEvent(li);
+
+            Pool* lpPool = (lpPoolModule != 0) ? lpPoolModule->GetPool(lrRequest.miPoolId) : 0;
+            if (lpPool != 0)
+            {
+                BundleLoader lLoader;
+                const s32 liUnloaded = lLoader.UnloadBundle(lrRequest.macFileName, lpPool);
+                *CgsDev::Log::gpDebugPrint << "[stream] UnloadBundle '" << lrRequest.macFileName
+                                          << "' <- pool " << (s32)lrRequest.miPoolId
+                                          << ": " << (s32)liUnloaded << " resources\n";
+            }
+
+            Events::UnloadBundleResponse lResponse;
+            static_cast<Events::BundleLoaderEvent&>(lResponse) = static_cast<const Events::BundleLoaderEvent&>(lrRequest);
+            if (lrRequest.mpUser != 0)
+                lrRequest.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse), 3,
+                                           static_cast<s32>(sizeof(lResponse)));
+        }
+        mUnloadRequests.Clear();
     }
 }

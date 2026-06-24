@@ -76,7 +76,7 @@ namespace CgsResource
         // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
         // Construct the load-request queue here (embedded-member ctor) so it is ready even though the
         // full BundleLoaderModule::Construct -- the allocator/job bring-up -- is still deferred.
-        BundleLoaderModule() { mbIsNewModule = true; mLoadRequests.Construct(); }
+        BundleLoaderModule() { mbIsNewModule = true; mLoadRequests.Construct(); mUnloadRequests.Construct(); }
 
         // ---- lifecycle ----------------------------------------------------------------
         void Construct();   // deferred (embeds the GeneralAllocator + jobs)
@@ -101,6 +101,12 @@ namespace CgsResource
         // at the leaf; the faithful request/response + per-resource pool create/FixUp are preserved.]
         void ProcessLoadRequests(PoolModule* lpPoolModule, FTypeResolver lpfnResolveType);
 
+        // The unload counterparts (resource request id 3): queue an UnloadBundleRequest, then drain them --
+        // resolve each pool + BundleLoader::UnloadBundle (ref-count-release the bundle's resources) + emit
+        // an UnloadBundleResponse.
+        void EnqueueUnloadRequest(const Events::UnloadBundleRequest& lrRequest);
+        void ProcessUnloadRequests(PoolModule* lpPoolModule);
+
     private:
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EStage            mePrepareStage;     // +0x228 (a1[138])
@@ -119,6 +125,7 @@ namespace CgsResource
 
         // The load-request intake (the X360 keeps an EventQueue<LoadBundleRequest,256> in its input
         // buffer; modelled as a module member for the focused synchronous load path).
-        CgsModule::EventQueue<Events::LoadBundleRequest, 256> mLoadRequests;
+        CgsModule::EventQueue<Events::LoadBundleRequest, 256>   mLoadRequests;
+        CgsModule::EventQueue<Events::UnloadBundleRequest, 256> mUnloadRequests;
     };
 }
