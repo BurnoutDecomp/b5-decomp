@@ -51,6 +51,21 @@ struct StaticSoundMap
     // and compares them against mMin/mMax, whose .x/.y lanes hold the X/Z bounds.
     const SubRegionDescriptor* GetSubRegionDescrip(const Vector3& lrPosition) const;
 
+    // GetEntity @ 0x82675578 — returns the entity at liEntityIndex. The X360 asm
+    // asserts mpEntities != 0 and liEntityIndex < miNumEntities, then returns
+    // &mpEntities[liEntityIndex] with a 16-byte element stride (`16 * index`).
+    // FLAG: StaticSoundEntity stays a forward-decl element type; the 16-byte stride
+    // is the only X360-attested size, so the body indexes by that stride (declared-
+    // only opaque-element stride precedent) rather than by a complete-type subscript.
+    const StaticSoundEntity& GetEntity(s32 liEntityIndex) const;
+
+    // IsInRange @ 0x82677570 — half-open XZ overlap test between a radius-inflated
+    // query point and a packed bounds rect. lrPackedMinAndMax holds {minX, minZ,
+    // maxX, maxZ} in lanes x/y/z/w. The X360 body does not dereference `this`
+    // (operates purely on its arguments); kept a member to match the DWARF decl.
+    bool IsInRange(const Vector3& lrPosition, f32 lfRadius,
+                   const Vector4& lrPackedMinAndMax) const;
+
     // The resource-type handler relocates mpSubRegions/mpEntities and validates
     // mpEntities/miNumEntities during FixUp. Grant it friendship rather than
     // exposing the private data. FLAG: friend-access choice (vs public fields).

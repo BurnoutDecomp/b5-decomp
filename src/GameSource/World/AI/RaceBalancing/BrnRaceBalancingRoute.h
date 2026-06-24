@@ -74,7 +74,13 @@ private:
     s32  miTakenDownCount;                            // :110  (+0xA04)
     s32  miCurrentCheckpointIndex;                    // :111  (+0xA08)
     f32  mfDistance;                                  // :112  (+0xA0C)
-    bool mbValid;                                     // :113
+    bool mbValid;                                     // :113  (+0xA10)
+    // Trailing pad: the X360 lays this class out at stride 0xA18 (2584) -- the
+    // Array<RaceBalancingRoute,7> element stride and count offset (+0x46A8 ==
+    // 7*0xA18) read directly by the indexed-accessor asm (@0x8276A7F8 /
+    // @0x8276A900) attest sizeof==0xA18. Additive only; mbValid stays at +0xA10
+    // and every earlier offset / static_assert is preserved.
+    u8   maPad0xA11[7];                               // +0xA11 .. +0xA17
 };
 }
 

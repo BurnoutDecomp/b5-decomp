@@ -1,7 +1,8 @@
 #include "SharedClasses/Sound/World/BrnStaticSoundMap.h"
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"   // Vector3
+#include "BrnCommonTypes.h"   // Vector3, Vector4
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 namespace BrnSound
 {
@@ -70,6 +71,64 @@ const SubRegionDescriptor* StaticSoundMap::GetSubRegionDescrip(const Vector3& lr
     }
 
     return &mpSubRegions[liNumX * liZ + liX];
+}
+
+// GetEntity @ 0x82675578
+//
+//   if (!mpEntities)                 ASSERT("mpEntities");
+//   if (liEntityIndex >= miNumEntities) ASSERT("liEntityIndex < miNumEntities");
+//   return &mpEntities[liEntityIndex];   // 16-byte stride (asm: 16 * index + mpEntities)
+//
+// The X360 asm reads mpEntities @ +0x30, miNumEntities @ +0x34, and forms the result
+// as `16 * liEntityIndex + mpEntities` (`slwi r11, r29, 4; add`). StaticSoundEntity is a
+// forward-declared element type, so the 16-byte stride (its only X360-attested size) is
+// applied by byte arithmetic rather than a complete-type subscript.
+const StaticSoundEntity& StaticSoundMap::GetEntity(s32 liEntityIndex) const
+{
+    CGS_ASSERT(mpEntities != 0, "mpEntities");
+    CGS_ASSERT(liEntityIndex < miNumEntities, "liEntityIndex < miNumEntities");
+
+    static const s32 KI_ENTITY_STRIDE = 16;   // asm `slwi …, 4`
+    const u8* lpEntity =
+        reinterpret_cast<const u8*>(mpEntities) + (KI_ENTITY_STRIDE * liEntityIndex);
+    return *reinterpret_cast<const StaticSoundEntity*>(lpEntity);
+}
+
+// IsInRange @ 0x82677570
+//
+// Half-open XZ overlap test between a radius-inflated query point (lrPosition's X = lane 0,
+// Z = lane 2) and a packed bounds rectangle (lrPackedMinAndMax = {minX, minZ, maxX, maxZ}
+// in lanes x/y/z/w). Recovered store-for-store:
+//   if (pos.x <  packed.x - radius) return false;   // minX
+//   if (pos.x >= packed.z + radius) return false;   // maxX
+//   if (pos.z <  packed.y - radius) return false;   // minZ
+//   if (pos.z >= packed.w + radius) return false;   // maxZ
+//   return true;
+// The X360 body never touches `this`; it works purely on its arguments.
+bool StaticSoundMap::IsInRange(const Vector3& lrPosition, f32 lfRadius,
+                               const Vector4& lrPackedMinAndMax) const
+{
+    const f32 lfX = lrPosition.x;
+    if (lfX < (lrPackedMinAndMax.x - lfRadius))
+    {
+        return false;
+    }
+    if (lfX >= (lrPackedMinAndMax.z + lfRadius))
+    {
+        return false;
+    }
+
+    const f32 lfZ = lrPosition.z;
+    if (lfZ < (lrPackedMinAndMax.y - lfRadius))
+    {
+        return false;
+    }
+    if (lfZ >= (lrPackedMinAndMax.w + lfRadius))
+    {
+        return false;
+    }
+
+    return true;
 }
 
 }
