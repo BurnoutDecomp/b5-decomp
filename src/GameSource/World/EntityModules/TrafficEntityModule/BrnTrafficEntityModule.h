@@ -30,6 +30,7 @@
 
 #include "types.hpp"        // u8/u32/s32/u64
 #include "BrnCommonTypes.h" // EntityId, CgsID
+#include "GameShared/GameClasses/Graphics/CgsModel.h" // CgsGraphics::Model::State (VehicleRenderInfo::mLOD)
 
 namespace BrnTraffic
 {
@@ -59,5 +60,33 @@ namespace BrnTraffic
     {
         u64 mKillZoneId;            // :241  +0x00  (TrafficData::KillZoneId == uint64_t)
         s32 miFramesLeftToRemember; // :242  +0x08  (+4 trailing pad -> 16)
+    };
+
+    // DWARF home BrnTrafficMiscRuntimeClasses.h:94 -- one purgatory-list record: a vehicle
+    // index plus a countdown of decision frames left. sizeof == 4 (X360-authoritative: the
+    // Array<PurgatoryInfo,N> instantiations put their live-count word at byte N*4 and copy
+    // each element as two halfwords -- Array<PurgatoryInfo,1>::Append @ 0x8270AAC0 stores
+    // `sth muIndex@+0` then `sth muDecisionFramesLeft@+2`, count word @ +0x4 == 1*4;
+    // Array<PurgatoryInfo,400> count word @ +0x640 == 400*4 (Erase @ 0x8270A770);
+    // Array<PurgatoryInfo,1>::GetItem @ 0x8270CA28 returns 4*index + base). Homed here with
+    // the module's other small record types; grow this header (never redefine) when the
+    // BrnTrafficMiscRuntimeClasses slice lands.
+    struct PurgatoryInfo
+    {
+        u16 muIndex;              // :96  +0x00
+        u16 muDecisionFramesLeft; // :97  +0x02  (-> 4)
+    };
+
+    // DWARF home BrnTrafficVehicle.h:159 -- one per-frame vehicle-render record (the dispatch
+    // list the module hands the renderer). sizeof == 12 (X360-authoritative:
+    // Array<VehicleRenderInfo,64>::Append @ 0x8270A148 copies three dwords (`stw` x3) at a
+    // 12-byte stride (index*12 == `slwi r,1; add; slwi r,2`), count word @ +0x300 == 64*12;
+    // ::Get @ 0x827BA2A0 returns 12*index + base). mLOD is CgsGraphics::Model::State (a
+    // 4-byte enum, committed in CgsModel.h). Homed here with the module's other record types.
+    struct VehicleRenderInfo
+    {
+        u32                      muEntityIndex; // :161  +0x00
+        f32                      mfDistanceSq;  // :162  +0x04
+        CgsGraphics::Model::State mLOD;         // :163  +0x08  (4-byte enum -> 12)
     };
 }
