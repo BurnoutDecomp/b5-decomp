@@ -79,6 +79,66 @@ struct EaTraxData
 };
 
 } // namespace MusicEffect
+
+// =============================================================================
+// BrnSound::Logic::MusicStream  (additively added; shares this BrnMusicEffect.h
+//   DWARF/assert home with MusicEffect::EaTraxData. Bodied in BrnMusicStream.cpp.)
+//
+// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
+// MusicStream is the streaming-music playback object MusicEffect drives. It tracks
+// whether the next song is queued (mbSongQueued) and exposes a sub-object that
+// lives at +0x0C (returned by-address from GetCre*).
+//
+// This class bodies TWO ledger functions (both touch this struct by name):
+//   GetCre         @ 0x82687368   (returns &member @ +0x0C)
+//   SetSongQueued  @ 0x82683208   (BrnMusicEffect.h:1080 assert site)
+//
+// LAYOUT (recovered from the asm; offsets are this struct's field offsets, all
+// reached BY NAME in the .cpp):
+//   addi r3, r3, 0xC          -> GetCre returns the address of the member @ +0x0C
+//   lbz/stb 0x5A              -> mbSongQueued (u8 bool)
+//
+// FLAG (un-DWARF'd member names/types): no DecFIGS DWARF hint exists, so the
+// members are modelled as HONEST named fields at the asm-observed offsets/widths.
+// Only the +0x0C address-of and the +0x5A byte read/write are X360 facts; the
+// sub-object's element TYPE at +0x0C is UNVERIFIED and modelled as an opaque
+// byte-sized-and-aligned reserved region (GetCre only takes its address). The gaps
+// are other MusicStream state not touched by these two functions.
+// =============================================================================
+namespace MusicStream
+{
+
+// The sub-object MusicStream::GetCre* returns the address of, at +0x0C. Its real
+// type is UNVERIFIED (the X360 only does `addi r3, r3, 0xC` -- take-address); it is
+// modelled as an opaque region whose size/alignment are unknown, so the only X360
+// fact preserved is the +0x0C offset of its first byte. Declared as a 1-byte
+// honest placeholder element.
+struct Cre;   // opaque; only its address @ +0x0C is taken (size/layout DEFERRED)
+
+// BrnMusicEffect.h (DWARF home). Streaming-music playback object.
+struct Stream
+{
+    // BrnMusicEffect.h (region). Return the address of the sub-object @ +0x0C.
+    // @ 0x82687368.
+    Cre* GetCre();
+
+    // BrnMusicEffect.h:1080 (assert site). Set the "next song queued" flag. Asserts
+    // the new value actually differs from the current (lbSongQueued != mbSongQueued).
+    // @ 0x82683208.
+    void SetSongQueued( bool lbSongQueued );
+
+    // -- FLAGGED layout (offsets/widths are X360 facts; field names descriptive) --
+
+    u8  maReserved0x00[0x0C];   // @0x00..0x0B: state untouched by these fns
+
+    u8  maCre[1];               // @0x0C: GetCre returns &maCre[0]; element type DEFERRED
+
+    u8  maReserved0x0D[0x4D];   // @0x0D..0x59: state untouched by these fns
+
+    u8  mbSongQueued;           // @0x5A: "next song queued" flag (lbz/stb)
+};
+
+} // namespace MusicStream
 } // namespace Logic
 } // namespace BrnSound
 

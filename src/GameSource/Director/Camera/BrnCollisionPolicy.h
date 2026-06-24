@@ -13,6 +13,10 @@
 //       (CollisionPolicy.h:206 assert -> mbWillCollide)
 //   - BrnDirector::Camera::CollisionPolicyAttachedToVehicle::SetDesiredHeight @0x821F3950
 //       (CollisionPolicy.h:489 assert -> lfDesiredHeight > 0.0f)
+//   - BrnDirector::Camera::VisibilityTest::GetOffscreenTime @0x821F3718
+//       (BrnCollisionPolicy.h:248 assert -> mbTestLookingAt)
+//   - BrnDirector::Camera::VisibilityTest::IsOnScreen @0x821F3770
+//       (BrnCollisionPolicy.h:269 assert -> mbTestLookingAt)
 //
 // Each function bodies in its own .cpp next to this header. Only the members each function
 // touches are modelled, BY NAME, at their asm-attested offsets; the full policy rigs land with
@@ -73,6 +77,43 @@ private:
     f32 mfDesiredHeight;                      // +0x210            desired camera height (stored)
     u8  maReserved214[0x24B - 0x214];         // +0x214 .. +0x24A  rig members not modelled here
     u8  mbHaveDesiredHeight;                  // +0x24B            desired-height override active flag
+};
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::VisibilityTest
+//
+// The per-frame visibility result the visibility collision policy produces from a scene query:
+// whether the tracked subject is currently on screen and, if not, for how long it has been
+// off screen. Both reads are guarded by mbTestLookingAt (the policy only publishes these when
+// it was actually asked to test line-of-sight); VisibilityCollisionPolicy::ProcessSceneQueryResults
+// reads them after the query completes.
+// ----------------------------------------------------------------------------
+class VisibilityTest
+{
+public:
+    // Return how long (seconds) the subject has been off screen. @0x821F3718: asserts the
+    // looking-at test was enabled (mbTestLookingAt), then returns mfOffscreenTime.
+    f32 GetOffscreenTime() const;
+
+    // Return whether the subject is currently on screen. @0x821F3770: asserts the looking-at
+    // test was enabled (mbTestLookingAt), then returns mbOnScreen.
+    bool IsOnScreen() const;
+
+private:
+    // FLAG: only the members the two getters touch are modelled at their asm-attested offsets;
+    //   the rest of the visibility-test rig lands with its full TU.
+    //     +0x000 .. +0x0A3  rig members not modelled here
+    //     +0x0A4            mfOffscreenTime  (lfs f1, 0xA4 in GetOffscreenTime)
+    //     +0x0A5 .. +0x0AF  rig members not modelled here
+    //     +0x0B0            mbTestLookingAt  (lbz 0xB0; asserted set by both getters)
+    //     +0x0B1            rig member not modelled here
+    //     +0x0B2            mbOnScreen       (lbz 0xB2 in IsOnScreen)
+    u8  maReserved000[0xA4];                 // +0x000 .. +0x0A3  rig members not modelled here
+    f32 mfOffscreenTime;                     // +0x0A4            time spent off screen (returned)
+    u8  maReserved0A8[0xB0 - 0xA8];          // +0x0A8 .. +0x0AF  rig members not modelled here
+    u8  mbTestLookingAt;                     // +0x0B0            line-of-sight test enabled (asserted)
+    u8  maReserved0B1;                       // +0x0B1            rig member not modelled here
+    u8  mbOnScreen;                          // +0x0B2            subject currently on screen (returned)
 };
 
 } // namespace Camera
