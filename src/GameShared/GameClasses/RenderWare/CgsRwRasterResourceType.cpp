@@ -1,6 +1,5 @@
 #include "GameShared/GameClasses/RenderWare/CgsRwRasterResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"
 #include "rw/rwcore_structs.h"               // rw::Resource, rw::BaseResourceDescriptors<5>
 #include "pc/gcm/renderengine/texture.h"     // renderengine::Texture (the runtime resource)
 
@@ -96,11 +95,5 @@ namespace CgsResource
     EDebugResourceCategory RwRasterResourceType::GetDebugResourceCategory() const
     {
         return E_DEBUGRESOURCECATEGORY_TEXTURE;
-    }
-
-    void RegisterRwRasterResourceType()
-    {
-        static RwRasterResourceType sRwRasterResourceType;
-        TypeRegistry::Register(&sRwRasterResourceType);
     }
 }

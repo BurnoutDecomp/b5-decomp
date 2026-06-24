@@ -1,6 +1,5 @@
 #include "GameShared/GameClasses/RenderWare/CgsMaterialStateResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"
 #include "rw/rwcore_structs.h"                   // rw::Resource, rw::BaseResourceDescriptors<5>
 #include "pc/gcm/renderengine/renderstates.h"   // renderengine::MaterialState
 
@@ -93,11 +92,5 @@ namespace CgsResource
             *lpuOffset = 0;
         if (lppValue != 0)
             *lppValue = 0;
-    }
-
-    void RegisterMaterialStateResourceType()
-    {
-        static MaterialStateResourceType sMaterialStateResourceType;
-        TypeRegistry::Register(&sMaterialStateResourceType);
     }
 }

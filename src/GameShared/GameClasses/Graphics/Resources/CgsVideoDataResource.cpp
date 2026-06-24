@@ -1,6 +1,5 @@
 #include "GameShared/GameClasses/Graphics/Resources/CgsVideoDataResource.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"        // E_RESOURCETYPE_VIDEODATA
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"   // TypeRegistry::Register
 #include "rw/rwcore_structs.h"                                                // rw::Resource
 
 #include <cstring>   // strlen
@@ -102,11 +101,5 @@ namespace CgsResource
     void VideoDataResourceType::FixUp(void* lpResource, const rw::Resource&) const
     {
         static_cast<VideoDataResource*>(lpResource)->FixUp();
-    }
-
-    void RegisterVideoDataResourceType()
-    {
-        static VideoDataResourceType sVideoDataResourceType;
-        TypeRegistry::Register(&sVideoDataResourceType);
     }
 }
