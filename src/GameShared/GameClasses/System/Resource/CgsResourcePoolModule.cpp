@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [5b TEST] trace
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"  // CreateResourceRequest/Response + MemoryIO buffers (async dispatch)
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"  // PoolIO::OutputBuffer (request target)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // AcquireResourceRequest/Response
 
 // CgsResource::PoolModule - see the header. This pass reconstructs the rw-allocator-
 // INDEPENDENT spine (GetPoolIndex / FindResourceType / Prepare / Release / Destruct).
@@ -261,11 +262,15 @@ namespace CgsResource
         s32 liId = lpQ->GetFirstEvent(&lpEvent, &liSize);
         while (liId != -1 && lpEvent != 0)
         {
-            if (liId == 0)   // CreatePool
+            if (liId == 0)        // CreatePool
             {
                 const CreatePoolRequestEvent* lpReq = reinterpret_cast<const CreatePoolRequestEvent*>(lpEvent);
                 SendCreatePoolMemoryRequest(lpReq->mOptions, lpReq->miBankId, lpReq->miParentBankId,
                                             lpReq->mauRegion, lpReq->mauAlign, lpOut);
+            }
+            else if (liId == 4)   // AcquireResource
+            {
+                DoAcquireResourceRequest(reinterpret_cast<const Events::AcquireResourceRequest*>(lpEvent), lpOut);
             }
             const CgsModule::Event* lpNext = 0;
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
@@ -293,6 +298,36 @@ namespace CgsResource
     {
         const s32 li = GetPoolIndex(liPoolId);
         return (li >= 0) ? &maPools[li] : 0;
+    }
+
+    // @ 0x828FCD48 - acquire a single resource by id from its pool and reply with its handle. Find the pool
+    // (GetPoolIndex), look up the resource (Pool::FindResource with status mask 2 = loaded), build the
+    // resolved ResourceHandle pair (mpResourceMemory -> the entry's main-memory slot; mpSourceEntry -> the
+    // entry) -- or both null if absent -- echo the request's reply target/ids, and post the response on the
+    // pool output queue (tag 6). The X360 routes that response back to the requester via the shuttle.
+    void PoolModule::DoAcquireResourceRequest(const Events::AcquireResourceRequest* lpRequest, PoolIO::OutputBuffer* lpOutput)
+    {
+        CGS_ASSERT(lpOutput != 0, "lpOutputBuffer");
+
+        Events::AcquireResourceResponse lResponse;
+        static_cast<Events::PoolEvent&>(lResponse) = static_cast<const Events::PoolEvent&>(*lpRequest);   // echo user/id/pool
+        lResponse.mpResourceMemory = 0;
+        lResponse.mpSourceEntry    = 0;
+
+        const s32 liPoolIndex = GetPoolIndex(lpRequest->miPoolId);
+        if (liPoolIndex >= 0)
+        {
+            s32 liIndex = -1;
+            Entry* lpEntry = maPools[liPoolIndex].FindResource(lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+            if (lpEntry != 0)
+            {
+                lResponse.mpResourceMemory = &lpEntry->mResource.m_baseResources[E_MEMTYPE_MAINMEMORY];
+                lResponse.mpSourceEntry    = lpEntry;
+            }
+        }
+
+        lpOutput->GetPoolOutputQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse), 6,
+                                                 static_cast<s32>(sizeof(lResponse)));
     }
 
     // @ 0x828F3A50 - queue the pending pool options and emit the CreateResource memory request that makes

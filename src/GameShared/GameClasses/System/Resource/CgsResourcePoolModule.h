@@ -11,6 +11,7 @@
 // Async pool-create dispatch (CreateResourceRequest -> MemoryModule -> CreateResourceResponse).
 namespace CgsMemory { namespace MemoryIO { struct InputBuffer; struct CreateResourceResponse; } }
 namespace CgsResource { namespace PoolIO { struct OutputBuffer; } }   // SendCreatePoolMemoryRequest target
+namespace CgsResource { namespace Events { struct AcquireResourceRequest; } }   // DoAcquireResourceRequest
 
 // CgsResource::PoolModule - the resource-pool manager module (X360 CgsPoolModule.cpp). It
 // owns the game's fixed bank of 128 resource Pools and a registry of resource Types, and
@@ -138,6 +139,12 @@ namespace CgsResource
         // Look up a created pool by id (null if absent). Lets the CreatePools driver fetch the pool the
         // receiver-queue path stood up (for cross-pool dependency wiring).
         Pool* GetPool(s32 liPoolId);
+
+        // @ 0x828FCD48 - acquire a single resource by id: GetPoolIndex(poolId) -> Pool::FindResource(
+        // resourceId, checkRefCount, statusMask=2) -> reply with an AcquireResourceResponse carrying the
+        // resolved handle (or null if absent) on the pool output queue (tag 6). Dispatched by
+        // ProcessInputBuffer for resource request id 4.
+        void DoAcquireResourceRequest(const Events::AcquireResourceRequest* lpRequest, PoolIO::OutputBuffer* lpOutput);
 
         // ---- dispatch (deferred) ------------------------------------------------------
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);

@@ -12,6 +12,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"       // SendCreatePoolMemoryRequest / DoCreatePoolRequest
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"             // PoolIO::OutputBuffer (request transport)
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"         // ResourceIO::InputBuffer (CreatePool request input)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"         // Events::LoadBundleRequest/AcquireResourceRequest (streaming)
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"          // E_RESOURCETYPE_FONT (stream validation)
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"            // EventReceiverQueue (acquire response receiver)
 #include "GameSource/Resource/BrnMemoryMapData.h"                               // KAC_MEMORY_MAP_POOLS (the 27 real pools)
 #include <cstring>                                                              // memset
 
@@ -296,6 +299,69 @@ namespace BrnResource
                                   << (s32)lNumFromBank << " from MemoryModule banks, "
                                   << (s32)lNumFromHeap << " from debug heap), "
                                   << (s32)lNumDepsWired << " dependencies wired\n";
+
+        // [resource streaming bring-up] prove the full faithful streaming path now that the pools exist:
+        // publish a LoadBundle request (event id 2) for the debug font to the ResourceModule input and pump
+        // Update -> ProcessResourceRequests routes it to the bundle loader -> ProcessLoadRequests loads it
+        // into the real Fonts pool (id 0) via BundleLoader -> resources created + fixed up. Confirms
+        // request -> shuttle -> bundle loader -> pool end-to-end.
+        {
+            CgsResource::Events::LoadBundleRequest lReq;
+            memset(&lReq, 0, sizeof(lReq));
+            lReq.SetFileName("Language/Fonts/Default.font");
+            lReq.miPoolId = 0;   // the Fonts pool
+
+            s_resIn.LockForWrite();
+            s_resIn.GetResourceQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReq),
+                                                 2 /*LoadBundle*/, static_cast<s32>(sizeof(lReq)));
+            s_resIn.UnlockForWrite();
+            mResourceModule.Update(&s_resIn, 0);
+
+            CgsResource::Pool* lpFonts = lrPoolModule.GetPool(0);
+            s32 liFontIdx = -1;
+            CgsResource::Entry* lpFontEntry = lpFonts
+                ? lpFonts->FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_FONT, &liFontIdx) : 0;
+            *CgsDev::Log::gpDebugPrint << "[stream] Fonts pool (id 0) font resource via shuttle: "
+                                      << (lpFontEntry ? "FOUND" : "absent") << "\n";
+
+            // [acquire bring-up] prove the consumer path: AcquireResource by id through the shuttle. The
+            // streamed font is already at status 2 (loaded) from BundleLoader's load-completion pass, so it
+            // is acquirable directly. Publish an AcquireResourceRequest (id 4) -> ProcessResourceRequests ->
+            // pool input -> DoAcquireResourceRequest -> Pool::FindResource (gates on status & 2) -> response
+            // on the pool output queue -> ProcessPoolOutputResponses routes it back to our receiver.
+            if (lpFontEntry != 0 && lpFonts != 0)
+            {
+                const CgsResource::ID lFontId = lpFontEntry->mID;
+
+                static CgsModule::EventReceiverQueue<4096, 16> s_acqReceiver;
+                static bool s_acqRecvCtor = false;
+                if (!s_acqRecvCtor) { s_acqReceiver.Construct(); s_acqRecvCtor = true; }
+                s_acqReceiver.Clear();
+
+                CgsResource::Events::AcquireResourceRequest lAcq;
+                memset(&lAcq, 0, sizeof(lAcq));
+                lAcq.mpUser          = &s_acqReceiver;
+                lAcq.miPoolId        = 0;
+                lAcq.mResourceId     = lFontId;
+                lAcq.mbCheckRefCount = true;
+
+                s_resIn.LockForWrite();
+                s_resIn.GetResourceQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAcq),
+                                                     4 /*AcquireResource*/, static_cast<s32>(sizeof(lAcq)));
+                s_resIn.UnlockForWrite();
+                mResourceModule.Update(&s_resIn, 0);
+
+                const CgsModule::Event* lpResp = 0; s32 liRespSize = 0;
+                const s32 liRespId = s_acqReceiver.GetFirstEvent(&lpResp, &liRespSize);
+                const CgsResource::Events::AcquireResourceResponse* lpAcqResp =
+                    (liRespId != -1 && lpResp != 0)
+                        ? reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpResp) : 0;
+                const bool lbAcquired = lpAcqResp != 0 && lpAcqResp->mpSourceEntry != 0
+                                        && lpAcqResp->mpSourceEntry == lpFontEntry;
+                *CgsDev::Log::gpDebugPrint << "[stream] AcquireResource(font) via shuttle: "
+                                          << (lbAcquired ? "handle OK" : "FAILED") << "\n";
+            }
+        }
         return true;
     }
 

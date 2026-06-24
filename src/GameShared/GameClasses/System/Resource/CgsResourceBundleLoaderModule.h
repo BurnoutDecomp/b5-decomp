@@ -3,8 +3,10 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"     // base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"   // mReceiverQueue
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"               // EventQueue<LoadBundleRequest,256> (load intake)
 #include "GameShared/GameClasses/Containers/CgsPriorityQueue.h"        // load/unload priority queues
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // LoadBundleRequest (RunningLoad element)
+#include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h" // BundleLoader + FTypeResolver (the load leaf)
 
 // CgsResource::BundleLoaderModule - the asynchronous bundle streamer (X360 CgsBundleLoaderModule.cpp).
 // It owns a set of in-flight "stream slots", a load and an unload priority queue, and an EA job/
@@ -32,6 +34,8 @@
 // the bundle parse path are DEFERRED (rw allocator / FileSystem / job system) as inert marked stubs.
 namespace CgsResource
 {
+    class PoolModule;   // ProcessLoadRequests resolves a request's pool id via the PoolModule
+
     // CgsBundleLoaderModule.h:43 -- one in-flight bundle load record. The DWARF shows it
     // wraps a single LoadBundleRequest; the loader keeps a FifoQueue<RunningLoad,4> of
     // these (BundleLoaderModule::RunningLoadQueue mQueuedLoads). sizeof == 148 (the
@@ -70,7 +74,9 @@ namespace CgsResource
         };
 
         // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
-        BundleLoaderModule() { mbIsNewModule = true; }
+        // Construct the load-request queue here (embedded-member ctor) so it is ready even though the
+        // full BundleLoaderModule::Construct -- the allocator/job bring-up -- is still deferred.
+        BundleLoaderModule() { mbIsNewModule = true; mLoadRequests.Construct(); }
 
         // ---- lifecycle ----------------------------------------------------------------
         void Construct();   // deferred (embeds the GeneralAllocator + jobs)
@@ -81,6 +87,19 @@ namespace CgsResource
         // ---- dispatch / streaming (deferred) ------------------------------------------
         bool Update(void* lpInputBuffer, void* lpOutputBuffer);
         void ProcessReceiverQueue();
+
+        // ---- focused synchronous load path (the resource-streaming bring-up) -----------
+        // Queue a LoadBundleRequest the ResourceModule shuttle routed here (id 2). The X360 lands it on
+        // the bundle loader's input-buffer LoadBundleRequest queue via the IOBufferStack; modelled here as
+        // a module-member EventQueue for the focused path.
+        void EnqueueLoadRequest(const Events::LoadBundleRequest& lrRequest);
+
+        // Drain the queued LoadBundleRequests: resolve each request's pool (by id, via lpPoolModule) and
+        // load its bundle into that pool through the PC synchronous BundleLoader (the load leaf), then emit
+        // a LoadBundleResponse to the request's reply target. [The X360 async streaming FSM -- FileSystem +
+        // EA Jobs + chunked StreamHeader/EntryList/Data reads -- is collapsed to the sync BundleLoader load
+        // at the leaf; the faithful request/response + per-resource pool create/FixUp are preserved.]
+        void ProcessLoadRequests(PoolModule* lpPoolModule, FTypeResolver lpfnResolveType);
 
     private:
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
@@ -97,5 +116,9 @@ namespace CgsResource
         u32               muNumStreamSlots;   // +0xA184 (a1[10337])
         // (the EA GeneralAllocator / jobs / IO buffers / RW mutexes / bundle+stream data
         //  are added with the Construct + streaming passes that use them.)
+
+        // The load-request intake (the X360 keeps an EventQueue<LoadBundleRequest,256> in its input
+        // buffer; modelled as a module member for the focused synchronous load path).
+        CgsModule::EventQueue<Events::LoadBundleRequest, 256> mLoadRequests;
     };
 }

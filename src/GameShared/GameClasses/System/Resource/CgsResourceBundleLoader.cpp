@@ -135,6 +135,18 @@ namespace CgsResource
                 lpPool->PostFixUpEntry(lpEntry);
         }
 
+        // ---- pass 5: mark each fully-loaded resource LOADED (status 2) so it is acquirable.
+        // Resource status lifecycle: 0 = free, 1 = created/loading (CreateEntry), 2 = loaded/ready.
+        // The X360 async streamer sets a resource to "loaded" at stream-done; the PC synchronous load --
+        // being the complete load -- sets it here at completion. Pool::FindResource (and thus
+        // AcquireResource) gates on status & 2, so this is what makes a streamed resource acquirable.
+        for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
+        {
+            const s32 liSlot = lpiSlots[luIndex];
+            if (liSlot < 0) continue;
+            lpPool->SetEntryStatus(liSlot, 2);
+        }
+
         free(lpiSlots);
         free(lpcBundle);
         return liLoaded;
