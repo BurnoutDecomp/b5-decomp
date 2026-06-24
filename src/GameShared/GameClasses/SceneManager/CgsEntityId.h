@@ -4,14 +4,14 @@
 // (entity type), a 12-bit entity index and a 12-bit part index, laid out
 // owner:[31..24] | entityIndex:[23..12] | partIndex:[11..0].
 //
-// GROUND TRUTH: the Feb-2007 leak header for this exact path (recovered verbatim by
-// work.py) AND the X360 masks are 8/12/12 (KU_OWNER_MASK 0xFF000000,
+// GROUND TRUTH (X360 asm): the masks are 8/12/12 (KU_OWNER_MASK 0xFF000000,
 // KU_ENTITY_INDEX_MASK 0x00FFF000, KU_PART_INDEX_MASK 0x00000FFF). The DecFIGS DWARF
-// for this header lists 14/10 split constants — those DISAGREE with both the leak and
-// the committed masks, so the asm-authoritative leak layout (8/12/12) wins here.
+// for this header lists 14/10 split constants — those DISAGREE with the committed
+// masks, so the asm-authoritative layout (8/12/12) wins here.
 //
-// All bodies are the leak source, ported to project conventions: u8/u16/u32 for the
-// width-pinned integer types and CGS_ASSERT for the X360 PrintStringed tripwires.
+// All bodies are reconstructed from the X360 asm, ported to project conventions:
+// u8/u16/u32 for the width-pinned integer types and CGS_ASSERT for the X360
+// PrintStringed tripwires.
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 

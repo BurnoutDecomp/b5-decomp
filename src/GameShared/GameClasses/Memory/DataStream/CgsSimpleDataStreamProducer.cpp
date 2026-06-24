@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+
 namespace CgsMemory
 {
     // X360 0x8286A3B0.
@@ -43,5 +45,33 @@ namespace CgsMemory
         mResultIterator.mpParent = this;
         mbIsStreaming            = false;
         miNumAddedCommands       = 0;
+    }
+
+    // X360 0x8280FFF0.
+    // Computes the two backing-buffer sizes a producer needs for the requested
+    // geometry, both rounded up to a 128-byte boundary:
+    //   *lpuOutCommandBufferSize = round128(liMaxCommands * liCommandSize)
+    //   *lpuOutResultBufferSize  = round128(round128(liResultSize) * liMaxResults)
+    // The command size must be a positive multiple of 16; otherwise the assert
+    // tripwire fires ("Invalid command size:" + the offending value).
+    //
+    // Asm: r29=liCommandSize validated as (liCommandSize % 16 == 0 && liCommandSize > 0);
+    // command size = ((liMaxCommands*liCommandSize)+0x7F) & ~0x7F stored to r24;
+    // result size = (((liResultSize+0x7F)&~0x7F)*liMaxResults + 0x7F) & ~0x7F stored to r23.
+    void SimpleDataStreamProducer::GetRequiredBufferSizes(
+            s32 liMaxCommands, s32 liCommandSize,
+            s32 liMaxResults, s32 liResultSize,
+            u32* lpuOutCommandBufferSize, u32* lpuOutResultBufferSize)
+    {
+        CGS_ASSERT(liCommandSize % 16 == 0 && liCommandSize > 0,
+                   "Invalid command size: \n");
+
+        const u32 luAlignedResultSize =
+            (static_cast<u32>(liResultSize) + 0x7Fu) & ~0x7Fu;
+
+        *lpuOutCommandBufferSize =
+            (static_cast<u32>(liMaxCommands * liCommandSize) + 0x7Fu) & ~0x7Fu;
+        *lpuOutResultBufferSize =
+            (luAlignedResultSize * static_cast<u32>(liMaxResults) + 0x7Fu) & ~0x7Fu;
     }
 }

@@ -54,4 +54,19 @@ namespace CgsMemory
 
         return ++miNumCommands;
     }
+
+    // X360 0x82867790.
+    // Returns the packed 64-bit status word, but only while streaming is in progress:
+    // asserts mbStreaming (offset 40) is set, then loads and returns the raw 64-bit
+    // value at offset 0 (mEncodedStatus).
+    //
+    // Asm: lbz r11,0x28(this)=mbStreaming; on zero, fire the assert; then
+    // ld r3,0(this)=mEncodedStatus and return it.
+    u64 DataStreamCommandPoster::GetEncodedStatus() const
+    {
+        CGS_ASSERT(mbStreaming,
+                   "Encoded status is only valid during stream\n");
+
+        return mEncodedStatus.GetValue();
+    }
 }

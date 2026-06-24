@@ -73,26 +73,28 @@ namespace CgsGraphics
 
     // ---------------------------------------------------------------------------
     // FLAG: minimal slice of the (NOT committed) CgsModel. Only the two members
-    // PostFixUp reads are modelled, at their X360 dword offsets:
-    //   muLodRadii  @ dword 8  = +0x20 (*(LODWORD(v6) + 8)), load-relative u32 -> const f32* table
-    //   muNumLods   @ dword 18 = +0x48 (*(LODWORD(v6) + 18))
+    // PostFixUp reads are modelled, at their X360 BYTE offsets -- the asm loads are
+    // byte-displacement, NOT dword-scaled (the Hex-Rays `*(LODWORD(v6)+8/+18)` render
+    // is a byte-pointer index, so the bytes are +0x08 and +0x12, not +0x20/+0x48):
+    //   muLodRadii  @ +0x08 (asm `lwz r11,8(r31)`)  load-relative u32 -> const f32* radius table
+    //   muNumLods   @ +0x12 (asm `lbz r11,0x12(r31)`) 8-bit LOD count
     // The X360 inlines GetNumLods()/GetLodRadius(); modelled here as inline accessors
     // over those fields (the radius table is itself an on-disk u32 ptr -> PointerFromU32).
-    // Padding/field names INFERRED; offsets verified.
+    // Padding/field names INFERRED; offsets verified vs the asm.
     // ---------------------------------------------------------------------------
     struct CgsModel
     {
-        u8  maPad0[32];     // +0x00..+0x20
-        u32 muLodRadii;     // +0x20  (dword 8) coarsest-first radius table (u32 ptr)
-        u8  maPad36[36];    // +0x24..+0x48
-        u32 muNumLods;      // +0x48  (dword 18) number of LODs
+        u8  maPad0[8];      // +0x00..+0x08
+        u32 muLodRadii;     // +0x08  (lwz 8) coarsest-first radius table (u32 ptr)
+        u8  maPad12[6];     // +0x0C..+0x12
+        u8  muNumLods;      // +0x12  (lbz 0x12) number of LODs (BYTE)
 
         u32 GetNumLods() const { return muNumLods; }
         f32 GetLodRadius(u32 luIndex) const { return PointerFromU32<f32>(muLodRadii)[luIndex]; }
     };
 
-    static_assert(offsetof(CgsModel, muLodRadii) == 32, "muLodRadii must be at +0x20 (dword 8)");
-    static_assert(offsetof(CgsModel, muNumLods) == 72, "muNumLods must be at +0x48 (dword 18)");
+    static_assert(offsetof(CgsModel, muLodRadii) == 8,  "muLodRadii must be at +0x08 (lwz 8)");
+    static_assert(offsetof(CgsModel, muNumLods)  == 18, "muNumLods must be at +0x12 (lbz 0x12)");
 
     // GetTypeID @ 0x827E6EE8 (EXECUTED): return 35.
     static const uint32_t KU_INSTANCE_LIST_RESOURCE_TYPE_ID = 35;   // 0x23
@@ -100,6 +102,35 @@ namespace CgsGraphics
     uint32_t InstanceListResourceType::GetTypeID() const
     {
         return KU_INSTANCE_LIST_RESOURCE_TYPE_ID;
+    }
+
+    // GetSerialisedResourceDescriptor @ 0x827F09B0 (store-for-store). Builds the
+    // five-entry serialised descriptor (rw::BaseResourceDescriptors<5>):
+    //   entry0 = { size = 80*muArraySize + 16, align = 16 }
+    //   entry1..4 = { size = 0, align = 1 }
+    // muArraySize is *(resource + 4) (the InstanceList's total entry count); the block
+    // is the 16-byte InstanceList header plus muArraySize * 80-byte Instance records.
+    // The asm writes all five alignments (four 1's via stw, entry0's 16 via the 64-bit
+    // store) and the four trailing zero sizes, then the single std of {size, 16} sets
+    // entry0. (Hex-Rays renders the 8-byte {size,align} entry stride as a spurious
+    // 12-byte stride via the HIDWORD/LODWORD qword-half misread; the asm offsets prove
+    // a flat 8-byte stride: +0/+4, +8/+12, +16/+20, +24/+28, +32/+36.)
+    CgsResource::ResourceDescriptor
+    InstanceListResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        const InstanceList* lpList = static_cast<const InstanceList*>(lpResource);
+
+        CgsResource::ResourceDescriptor lDescriptor;
+        rw::BaseResourceDescriptor* lpEntries = lDescriptor.m_baseResourceDescriptors;
+
+        lpEntries[0].m_size      = KU_INSTANCE_STRIDE * lpList->muArraySize + 16u; // 80*n + header
+        lpEntries[0].m_alignment = 16u;
+        for (u32 luEntry = 1u; luEntry < 5u; ++luEntry)
+        {
+            lpEntries[luEntry].m_size      = 0u;
+            lpEntries[luEntry].m_alignment = 1u;
+        }
+        return lDescriptor;
     }
 
     // FixDown @ 0x827F94C8. The X360 is `return CgsGraphics::InstanceList::FixDown(a2, *a3)`

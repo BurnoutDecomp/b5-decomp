@@ -38,4 +38,25 @@ void* HashMapTablePolicy::Free(void* lpBlock, size_t liSize)
 
     return lpResult;
 }
+
+// The shared census-and-free body the AttribSys object deleting destructors inline.
+// Store-for-store from those sites (e.g. Attrib::Database @ 0x828057A8): decrement the
+// live-byte census by liSize, refresh the peak against the post-decrement total (the
+// X360 leaves the high-water store in on the free path), then hand the block back to
+// the AttribSys package allocator under the caller-supplied tag. Unlike the bucket-array
+// Free above, the census update is unconditional (the call sites are already inside the
+// object's should-free branch) and the tag is whatever the site passed (NULL there).
+void* HashMapTablePolicy::FreeWithCensus(void* lpBlock, size_t liSize, const char* lpcTag)
+{
+    const u32 luNewCurrent = smCurrentMemory - static_cast<u32>(liSize);
+    smCurrentMemory = luNewCurrent;
+    if (smCurrentMemory > smPeakMemory)
+        smPeakMemory = luNewCurrent;
+
+    CgsAttribSys::AttribSysPackageAllocator* lpAllocator =
+        CgsAttribSys::AttribSysMemoryManager::GetAttribSysAllocator();
+    lpAllocator->Free(lpBlock, static_cast<s32>(liSize), lpcTag);
+
+    return lpBlock;
+}
 }

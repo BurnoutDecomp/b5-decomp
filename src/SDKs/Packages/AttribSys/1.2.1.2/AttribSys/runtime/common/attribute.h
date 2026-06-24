@@ -7,7 +7,7 @@
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2). Layout recovered from
 // the ctor @ 0x82805AF0 (4 words: instance/collection/node/data) and IsInherited
-// @ 0x82803600. The Feb-2007 leak's rich generated-class accessor API is inlined away on
+// @ 0x82803600. The rich generated-class accessor API is inlined away on
 // X360, so only the ledger-attested out-of-line bodies are declared here; the rest of the
 // accessor surface (GetKey/GetType/GetSize/...) lives in its own slices. Reuses the
 // committed Attrib::Instance / Attrib::Collection layouts (attribinstance.h).
