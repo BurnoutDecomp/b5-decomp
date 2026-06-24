@@ -15,6 +15,8 @@ namespace CgsResource
 // `namespace BundleV2 { struct ResourceEntry; }` forward-decl clashed (C2869) whenever a TU also pulled in
 // struct BundleV2 (e.g. via CgsResourcePool.h -> CgsResourceBundle2.h). Include the real header instead.
 
+struct Entry;   // AcquireResourceResponse carries the found pool Entry* (by pointer only)
+
 namespace Events
 {
     struct Event {};
@@ -159,6 +161,25 @@ namespace Events
         bool                                mbLiveUpdateReplace; // +44
         bool                                mbAllowFailiure;     // +45
         bool                                mbCompressedBundle;  // +46
+    };
+
+    // Acquire a single already-loaded resource by id from a pool (resource request id 4 -> pool input).
+    // PoolModule::DoAcquireResourceRequest (X360 0x828FCD48) resolves it via Pool::FindResource and replies
+    // with an AcquireResourceResponse carrying the resolved handle. [X360 element size 24 on the 32-bit
+    // target; x64-widened here.]
+    struct AcquireResourceRequest : public PoolEvent
+    {
+        ID   mResourceId;      // +16 (8-byte aligned) the resource to acquire
+        bool mbCheckRefCount;  // FindResource ref-count gate (X360 a2[4])
+    };
+
+    // Reply to an AcquireResourceRequest (pool output queue, tag 6): the resolved resource handle -- the
+    // ResourceHandle pair (mpResourceMemory -> the entry's main-memory SmallResource slot; mpSourceEntry ->
+    // the entry), or both null if the resource is absent.
+    struct AcquireResourceResponse : public PoolEvent
+    {
+        void*  mpResourceMemory;   // &Entry.mResource.m_baseResources[E_MEMTYPE_MAINMEMORY] (null if absent)
+        Entry* mpSourceEntry;      // the found entry (null if absent)
     };
 }
 }

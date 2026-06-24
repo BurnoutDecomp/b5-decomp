@@ -4,6 +4,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h" // ResourceIO::InputBuffer (module input)
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"         // MemoryIO buffers + MemoryResponse
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // receiver-queue forward target
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h" // ResolveResourceType (bundle FixUp resolver)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"     // Events::PoolEvent (pool response routing)
 #include <cstring>                                    // memset (InitOptions zero-init)
 
 // CgsResource::ResourceModule - see the header. This pass reconstructs the lifecycle
@@ -155,8 +157,34 @@ namespace CgsResource
         s32 liId = lpQ->GetFirstEvent(&lpEvent, &liSize);
         while (liId != -1 && lpEvent != 0)
         {
-            if (liId == 0)   // CreatePool -> pool input
+            if (liId == 0)        // CreatePool -> pool input
                 lpPoolQ->AddEvent(lpEvent, 0, liSize);
+            else if (liId == 2)   // LoadBundle -> bundle loader's load-request intake
+                mBundleLoaderModule.EnqueueLoadRequest(*reinterpret_cast<const Events::LoadBundleRequest*>(lpEvent));
+            else if (liId == 4)   // AcquireResource -> pool input (X360 routes id 4 -> pool tag 4)
+                lpPoolQ->AddEvent(lpEvent, 4, liSize);
+            const CgsModule::Event* lpNext = 0;
+            liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+    }
+
+    // Drain the pool module's output queue (DoAcquireResourceRequest etc. responses) and forward each to
+    // its requester's receiver queue (response->mpUser). The pool-response slice of ProcessResourceResponses.
+    void ResourceModule::ProcessPoolOutputResponses(PoolIO::OutputBuffer* lpPoolOut)
+    {
+        const PoolIO::OutputBuffer::PoolOutputQueue* lpQ =
+            static_cast<const PoolIO::OutputBuffer&>(*lpPoolOut).GetPoolOutputQueue();
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpQ->GetFirstEvent(&lpEvent, &liSize);
+        while (liId != -1 && lpEvent != 0)
+        {
+            CgsModule::BaseEventReceiverQueue* lpUser =
+                reinterpret_cast<const Events::PoolEvent*>(lpEvent)->mpUser;
+            if (lpUser != 0)
+                lpUser->AddEvent(lpEvent, liId, liSize);
             const CgsModule::Event* lpNext = 0;
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
@@ -196,8 +224,14 @@ namespace CgsResource
         s_poolIn.UnlockForWrite(); lpResIn->UnlockForRead();
         lpResIn->LockForWrite(); lpResIn->GetResourceQueue()->Clear(); lpResIn->UnlockForWrite();
 
-        // [2] pool module: CreatePool requests -> memory requests; drain receiver -> DoCreatePoolRequest.
+        // [2] pool module: CreatePool requests -> memory requests; AcquireResource -> pool output;
+        //     drain receiver -> DoCreatePoolRequest.
         mPoolModule.Update(&s_poolIn, &s_poolOut);
+
+        // [2b] route pool output responses (AcquireResource etc.) back to their requesters.
+        s_poolOut.LockForRead();
+        ProcessPoolOutputResponses(&s_poolOut);
+        s_poolOut.UnlockForRead();
 
         // [3] pool memory requests -> MemoryModule input.
         s_poolOut.LockForRead(); s_memIn.LockForWrite();
@@ -211,6 +245,11 @@ namespace CgsResource
         s_memOut.LockForRead();
         ProcessMemoryResponses(&s_memOut);
         s_memOut.UnlockForRead();
+
+        // [6] bundle loader: drain the LoadBundleRequests routed in [1] and load each into its (already
+        // created) pool via the PC synchronous BundleLoader, replying with a LoadBundleResponse. [The X360
+        // async streaming FSM + FileSystem are the deferred remainder; see BundleLoaderModule.]
+        mBundleLoaderModule.ProcessLoadRequests(&mPoolModule, ResolveResourceType);
 
         return false;
     }
