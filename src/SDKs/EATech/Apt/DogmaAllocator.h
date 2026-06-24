@@ -3,9 +3,8 @@
 // ===========================================================================
 // EATech Apt -- DOGMA pool allocator.
 //
-// Reconstructed from the LegacySrc partial source
-// for SHAPE, and from the X360 ARTIST.XEX pseudocode for the
-// method BODIES that the reference only declared:
+// SHAPE from the DWARF-attested DOGMA pool layout; method BODIES reconstructed from the
+// X360 ARTIST.XEX disassembly:
 //     DOGMA_PoolManager::DOGMA_PoolManager           @ 0x82ADB850
 //     DOGMA_PoolManager::~DOGMA_PoolManager          @ 0x82ADB950
 //     DOGMA_PoolManager::`scalar deleting destructor'@ 0x82ADD1D8

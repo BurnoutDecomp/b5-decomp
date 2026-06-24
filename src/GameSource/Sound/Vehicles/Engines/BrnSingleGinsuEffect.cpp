@@ -13,6 +13,34 @@ namespace Vehicles
 namespace Engines
 {
 
+// ---------------------------------------------------------------------------
+// ~SingleGinsuEffect  @ 0x826AFAF0  (the X360 `scalar deleting destructor')
+//
+//   stw  &off_820AE9BC, 0(this)   ; primary vptr settle (SingleGinsuEffect vtable)
+//   stw  &off_820AE988, 4(this)   ; IResourceRequester sub-object vptr (intermediate)
+//   stw  3,            0x28(this)  ; meDetachState = E_DETACH_STATE_FINISHED
+//   stw  &off_820AA820, 4(this)   ; IResourceRequester sub-object vptr (final settle,
+//                                    the shared BrnEffectObject base vtable)
+//   stb  0,            0x31(this)  ; mbResourcesReady = false
+//   stw  0,            0x24(this)  ; meAttachState = E_ATTACH_STATE_NONE
+//   if (a2 & 1) { deallocate via off_82FFB954 (the global sound allocator) }
+//   return this
+//
+// The dual-vptr settle (+0/+4) and the attach/detach/resources-ready member clears
+// (+0x24/+0x28/+0x31) are the inherited BrnEffectObject teardown the compiler emits
+// (identical store-for-store to the sibling LoopModelEffect dtor @ 0x826AFBA0 and the
+// committed BrnEffectObject dtor @ 0x826AF4C8); this leaf destructor body adds nothing
+// of its own. The X360 asm writes NO +0x34 store, so mpHybridControl is left
+// untouched by the destructor.
+// FLAG: the (a2 & 1) tail invokes the global sound allocator (off_82FFB954) to free
+// the object; that allocator is not homed here, so operator-delete dispatch is left to
+// the host toolchain (the `delete` half of the X360 deleting destructor) rather than
+// reproducing the raw allocator vtable call.
+// ---------------------------------------------------------------------------
+SingleGinsuEffect::~SingleGinsuEffect()
+{
+}
+
 // The controller-class test in AttachController. The X360 masks the controller's
 // object-id (`*(controller+0x14) & 0x7F0`) and compares it to the HybridExhaust
 // controller-class tag (0x50). FLAG: the mask/tag are the raw X360 class-id magic;
