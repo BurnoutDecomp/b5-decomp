@@ -10,7 +10,7 @@
 // from the PC RW4 rw::RGBA in the generated rwcore_structs.h (that is a 4-byte packed
 // integer colour; this is four floating-point channels, 16 bytes). The PC rwcore.pdb does
 // NOT expose RwRGBAReal (it lives only in the X360 rwcore.lib), so the data-driven
-// generator cannot emit it -- hence this hand-maintained header. tools/gen_rwcore_headers.py
+// generator cannot emit it -- hence this hand-maintained header. tools/renderware/generate_headers.py
 // only writes rw/rwcore_enums.h / rw/rwcore_structs.h / rw/rwcore.h and never touches
 // rw/core/, so (like the sibling rw/math/vpu/ headers) this file is immune to regeneration.
 //

@@ -29,7 +29,7 @@
 //   * rw::math::vpu::QueryRotateDegenerateUnitAxis @0x82203768 -- rotation/axis helper (matrix domain)
 //   * rw::math::vpu::Inverse              @0x825B2628  -- 4x4 Matrix44 inverse (matrix domain)
 //
-// gen-tool note: tools/gen_rwcore_headers.py only writes rwcore_enums.h/rwcore_structs.h/
+// gen-tool note: tools/renderware/generate_headers.py only writes rwcore_enums.h/rwcore_structs.h/
 // rwcore.h under include/rw/; it never touches rw/math/vpu/, so this hand-maintained header
 // (like its sibling types.h) is immune to regeneration.
 
