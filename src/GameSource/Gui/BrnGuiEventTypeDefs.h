@@ -189,4 +189,98 @@ private:
     u8  mbFlag;                                // @0x34
 };
 
+// ===================================================================================
+// BrnGui::GuiOverlayRequest -- the "show an overlay" GUI request payload.
+//   Home: this header. The X360 asserts reference it:
+//     GetMessageParam @0x824EB948 -> BrnGuiEventTypeDefs.h:7508/7509
+//     GetButton1Param @0x824EBA78 -> :7528
+//     GetButton2Param @0x824EBB38 -> :7547
+//   (Hex line numbers are the X360-baked assert lines; the strings below match the
+//   X360 assert message text. Reconstructed from BURNOUT_X360_ARTIST.XEX.)
+//
+// The request carries a small array of "message" parameters plus two fixed "button"
+// parameters. Each parameter is an id + a printf-formatted text string. The three
+// accessors copy a parameter into a caller-supplied output record: they SPrintf the
+// parameter's text (via "%s") into the output's text buffer and copy the parameter's
+// id into the output's leading dword.
+//
+// X360 layout (stores/loads authoritative on width / offset). Each parameter is a
+// 0x44-byte ParamInfo record { ...head 8B...; u32 muId @+0x08; char macText[56] @+0x0C }:
+//   maMessages[2]   @0x00..0x87  (2 message params; GetMessageParam indexes 0x44*idx)
+//   mButton1        @0x88        (id @0x90, text @0x94 == record+0x08 / record+0x0C)
+//   mButton2        @0xCC        (id @0xD4, text @0xD8 == record+0x08 / record+0x0C)
+//   ...reserved...  @0x110..0x117
+//   miNumMessages   @0x118       (GetMessageParam bound: assert idx < miNumMessages)
+//   mbButton1Used   @0x11C       (GetButton1Param guard byte: assert non-zero)
+//   mbButton2Used   @0x11D       (GetButton2Param guard byte: assert non-zero)
+//
+// LAYOUT NOTE: only the offsets touched by the three accessors are X360-pinned (the
+// message stride 0x44 + the +0x08/+0x0C sub-fields, the two button records at
+// +0x88/+0xCC, the count at +0x118 and the two guard bytes at +0x11C/+0x11D). The two
+// message slots are sized to exactly reach the first button record (+0x88 == 2*0x44);
+// the 8 bytes between the last button record and the count are an explicitly-reserved
+// span, not a fabricated member.
+// ===================================================================================
+class GuiOverlayRequest
+{
+public:
+    // One overlay parameter: a 0x44-byte record holding an id and a text string. The
+    // X360 stride between message params is 0x44 (GetMessageParam: r31 = 0x44*idx+this),
+    // with the id read at record+0x08 and the text formatted from record+0x0C.
+    struct ParamInfo
+    {
+        u8   maHead[0x08];   // +0x00..+0x07 (head; not touched by the accessors)
+        u32  muId;           // +0x08  (copied into the output record's leading dword)
+        char macText[0x38];  // +0x0C..+0x43  (SPrintf "%s" source; 56 bytes to the 0x44 stride)
+    };
+
+    // The output record the accessors fill: a leading id dword then a 64-byte text
+    // buffer (SPrintf writes into output+0x04 with length 64; the id is stored at
+    // output+0x00).
+    struct ParamOut
+    {
+        u32  muId;            // +0x00  (*a2 = param.muId)
+        char macText[0x40];   // +0x04  (SPrintf(out+4, 64, "%s", param.macText))
+    };
+
+    // Message param slots. GetMessageParam asserts the index is in [0, miNumMessages);
+    // the first button record sits immediately after these two slots (+0x88).
+    static const s32 KI_MAX_MESSAGES = 2;
+
+    // @0x824EB948 -- copy message param liIndex into lOut. Asserts liIndex < miNumMessages
+    // ("Index isn't used in Overlay.") and liIndex >= 0 ("Index isn't valid."). Returns the
+    // SPrintf result (the X360 returns r3 from CgsCore::SPrintf).
+    s32 GetMessageParam(ParamOut* lpOut, s32 liIndex) const;
+
+    // @0x824EBA78 -- copy button-1 param into lOut. Asserts mbButton1Used != 0
+    // ("button 1 param isn't used in Overlay."). Returns the SPrintf result.
+    s32 GetButton1Param(ParamOut* lpOut) const;
+
+    // @0x824EBB38 -- copy button-2 param into lOut. Asserts mbButton2Used != 0
+    // ("button 2 param isn't used in Overlay."). Returns the SPrintf result.
+    s32 GetButton2Param(ParamOut* lpOut) const;
+
+private:
+    ParamInfo maMessages[KI_MAX_MESSAGES];  // @0x00..0x87 (message params 0,1)
+    ParamInfo mButton1;                     // @0x88 (id @0x90, text @0x94)
+    ParamInfo mButton2;                     // @0xCC (id @0xD4, text @0xD8)
+    u8        maReserved[0x118 - 0x110];    // @0x110..0x117 (unrecovered span before the count)
+    s32       miNumMessages;                // @0x118 (message-param count)
+    u8        mbButton1Used;                // @0x11C (button-1 present guard)
+    u8        mbButton2Used;                // @0x11D (button-2 present guard)
+
+    // X360-pinned sub-field guards on the parameter records (the loads/stores that index
+    // them: id @+0x08, text @+0x0C, 0x44 stride; the output's text buffer at +0x04).
+    static_assert(sizeof(ParamInfo) == 0x44, "ParamInfo stride 0x44 (GetMessageParam: 0x44*idx)");
+    static_assert(__builtin_offsetof(ParamInfo, muId) == 0x08, "param id @+0x08");
+    static_assert(__builtin_offsetof(ParamInfo, macText) == 0x0C, "param text @+0x0C");
+    static_assert(__builtin_offsetof(ParamOut, macText) == 0x04, "out text @+0x04 (SPrintf out+4)");
+};
+
+// X360-pinned member offsets (the two button records and the count / guard bytes). At
+// namespace scope after the complete type; the members are non-public so these are
+// validated indirectly via the reserved-span construction documented above. (The button
+// records land at +0x88 / +0xCC == 2*0x44 / 3*0x44, the count at +0x118, the guards at
+// +0x11C / +0x11D, matching GetButton1Param/GetButton2Param/GetMessageParam.)
+
 } // namespace BrnGui

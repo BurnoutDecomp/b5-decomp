@@ -2,9 +2,19 @@
 // GameSource/Director/SharedIO/EventQueue_NewVehicleEvent_50.cpp
 //
 // Per-instantiation compilation home for the CgsModule::BaseEventQueue<BrnDirector::
-// NewVehicleEvent> member bodies this TU owns:
+// NewVehicleEvent> / EventQueue<BrnDirector::NewVehicleEvent,50> member bodies this TU owns:
+//   - EventQueue<NewVehicleEvent,50>::Construct @0x8222D998 (base Construct inlined; asserts
+//       lpEventBuffer!=NULL at CgsBaseEventQueue.h:160)
 //   - AddEvent @0x822C7308   (CgsBaseEventQueue.h:312/313 asserts)
 //   - Append   @0x823C2CB8   (CgsBaseEventQueue.h:413/414/486 asserts)
+//
+// Construct @0x8222D998: the EventQueue<T,N>::Construct that points the base queue at its own
+// inline maEvents buffer. The asm (`addi r30,r31,0x10` -> lpEventBuffer = this+0x10) confirms
+// maEvents lands at +0x10 (12B base padded to 16 for the alignas(16) NewVehicleEvent element),
+// asserts r30!=0 ("lpEventBuffer != NULL"), then `stw r30,0(r31)` mpEvents=maEvents,
+// `stw 0x32,4(r31)` miMaxLength=50, `stw 0,8(r31)` miLength=0. Matches EventQueue<T,N>::Construct
+// forwarding to BaseEventQueue<T>::Construct(maEvents, KI_LENGTH==50). Called by the SharedIO
+// InputBuffer/OutputBuffer Construct chains that embed the queue.
 //
 // The X360 build emits one out-of-line copy of these base-queue methods per using-TU; they
 // are the generic inline bodies in CgsBaseEventQueue.h forced out-of-line via explicit member
@@ -32,6 +42,7 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
 #include "GameSource/Director/SharedIO/BrnDirectorEvents.h"  // BrnDirector::NewVehicleEvent (16B element)
 
+template void CgsModule::EventQueue<BrnDirector::NewVehicleEvent, 50>::Construct();
 template bool CgsModule::BaseEventQueue<BrnDirector::NewVehicleEvent>::AddEvent(
     const BrnDirector::NewVehicleEvent&);
 template bool CgsModule::BaseEventQueue<BrnDirector::NewVehicleEvent>::Append(
