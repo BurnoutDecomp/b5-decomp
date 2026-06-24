@@ -19,11 +19,21 @@ namespace BrnTraffic
         return BrnResource::E_BRN_TRAFFIC_GFX_STUB_RESOURCE_TYPE;
     }
 
+    // GetSerialisedResourceDescriptor @ 0x82760708 (store-for-store). A constant
+    // descriptor: the stub serialises into one block of {size = 8, align = 4} (the
+    // `std` at +0 packs {size = 8, align = 4}); entries 1..4 are {0,1}. The size is
+    // the X360 serialised footprint — two 4-byte (load-relative) graphics pointers —
+    // so it is the literal 8, NOT host sizeof(GraphicsStub) (16 with 64-bit pointers).
     CgsResource::ResourceDescriptor GraphicsStubResourceType::GetSerialisedResourceDescriptor(const void*) const
     {
-        CgsResource::ResourceDescriptor lDescriptor = {};
-        lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(GraphicsStub);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+        CgsResource::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = 8u;   // entry0 size  (two 4-byte pointers)
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4u;   // entry0 align
+        for (uint32_t luBlock = 1; luBlock < 5u; ++luBlock)
+        {
+            lDescriptor.m_baseResourceDescriptors[luBlock].m_size      = 0u;   // entry1..4 {0,1}
+            lDescriptor.m_baseResourceDescriptors[luBlock].m_alignment = 1u;
+        }
         return lDescriptor;
     }
 

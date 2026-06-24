@@ -48,5 +48,34 @@ namespace PhysicsSimulationIO
     {
         u8 macOpaquePayload[144];  // internal layout not recovered (no DWARF/source)
     };
+
+    // Add a rigid body to the simulation. Queued with capacities 1 / 50 / 200 across the
+    // input/output buffers (X360 Construct @ 0x825A8228 / 0x825A7C78 / 0x825A7AB8). The
+    // per-instantiation Construct bodies are store-for-store faithful regardless of the
+    // event's internal layout (they only take &maEvents[0]==this+0x10, store N and clear the
+    // count). The event STRIDE is NOT X360-attested by any function reachable here -- the
+    // InputBuffer::Construct offset map @ 0x828A71B8 (which would pin it) is not in scope --
+    // so the payload is sized only to the 16-byte alignment class the asm proves
+    // (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT invented.
+    struct alignas(16) InAddRigidBody : public Event
+    {
+        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+    };
+
+    // Apply a force to a body. Queued with capacity 250 in PhysicsSimulationIO::InputBuffer
+    // (X360 Construct @ 0x828A6068). Same recovery caveat as InAddRigidBody: stride NOT
+    // X360-attested in scope, payload sized only to the attested 16-byte alignment class.
+    struct alignas(16) InApplyForce : public Event
+    {
+        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+    };
+
+    // Change a rigid body's inertia tensor. Queued with capacity 200 across the input/output
+    // buffers (X360 Construct @ 0x825A7B28). Same recovery caveat as InAddRigidBody: stride
+    // NOT X360-attested in scope, payload sized only to the attested 16-byte alignment class.
+    struct alignas(16) InChangeRigidBodyInertia : public Event
+    {
+        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+    };
 }
 }
