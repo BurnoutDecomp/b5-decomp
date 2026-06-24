@@ -44,5 +44,8 @@ namespace BrnWorld
     {
         static_assert(offsetof(RaceCarCrash, mRaceCarVolumeInstanceId) == 0,    "mRaceCarVolumeInstanceId @0");
         static_assert(offsetof(RaceCarCrash, mfSecondsBeforeCleanup)   == 0xC,  "mfSecondsBeforeCleanup @0xC");
+        // sizeof pin: the Array<RaceCarCrash,8> stride asm (index*24, count word @ +0xC0 == 8*24)
+        // proves the element is 24 bytes wide (see BrnRaceCarCrash.h SIZE banner).
+        static_assert(sizeof(RaceCarCrash) == 24, "sizeof RaceCarCrash == 24 (Array<,8> stride)");
     }
 }

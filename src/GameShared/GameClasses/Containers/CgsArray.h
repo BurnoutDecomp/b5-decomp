@@ -160,6 +160,20 @@ public:
         return lpNewElement;
     }
 
+    // Grow - the DWARF (CgsArray.h:279) spells the reserve-next-free-slot accessor Grow(); same
+    // body as AddNew (constructed-assert + out-of-space-assert, return &maElements[miCount] then
+    // post-increment). The X360 emitted it out-of-line for the Array<RaceCarCrash,8>
+    // instantiation (Grow @ 0x827B52F8: asserts constructed + count < 8, returns 24*count + base,
+    // count++). Additive alias over AddNew; no layout/sizeof change.
+    T* Grow()
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
+        T* lpNewElement = &maElements[miCount];
+        ++miCount;
+        return lpNewElement;
+    }
+
     // Remove the element at luIndex, shifting the tail down one slot (order-preserving).
     void Erase(u32 luIndex)
     {
