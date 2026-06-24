@@ -2,66 +2,38 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"     // Pool, NewResource, Entry
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"  // BundleV2
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"     // Type
-#include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"  // [B4] async FS engine (ReadWholeFile)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // [B4] gpDebugPrint (which read path)
+#include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"  // async FS engine (ReadWholeFile)
+#include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"     // EnsureDeviceManagerUp
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // gpDebugPrint (read trace)
 
-#include <cstdio>    // fopen / fread / fseek / ftell / fclose (early-boot fallback)
 #include <cstdlib>   // malloc / free
 #include <cstring>   // memcpy
 
 namespace CgsResource
 {
-    // [B4] Read a whole bundle file. Prefers the LIVE async file-system engine (the DeviceManager
-    // worker thread + OperationPool, brought up by FileSystem::Prepare); falls back to the
-    // synchronous CRT leaf during early boot, BEFORE FileSystem::Prepare runs at the GameData
-    // stage-8 prepare (the movie/debug-font bootstrapping loads bundles before then). Returns a
-    // malloc'd buffer (caller free()s) + its size, or null. The CRT fallback is a marked
-    // bootstrapping accommodation; the faithful end-state brings the FS up before any load.
+    // Read a whole bundle file through the LIVE async file-system engine (the DeviceManager worker
+    // thread + OperationPool + Win32 DevicePhysicalPC leaf). EnsureDeviceManagerUp brings the
+    // engine up if it is not already, so EVERY bundle load goes through it — including the early
+    // movie/debug-font bootstrapping that runs before FileSystem::Prepare (no CRT fallback).
+    // Returns a malloc'd buffer (caller free()s) + its size, or null on failure.
     static char* ReadBundleFile(const char* lpcFileName, long* lpOutSize)
     {
-        CgsFileSystem::DeviceManager* lpManager = CgsFileSystem::DeviceManager::GetIfInitialized();
-        if (lpManager)
-        {
-            u32   luSize = 0;
-            void* lpBuf  = lpManager->ReadWholeFile(lpcFileName, &luSize);
-            if (lpBuf)
-            {
-                if (CgsDev::Log::gpDebugPrint)
-                    *CgsDev::Log::gpDebugPrint << "[bundle] '" << lpcFileName
-                                               << "' via async-FS (" << static_cast<s32>(luSize) << " bytes)\n";
-                *lpOutSize = static_cast<long>(luSize);
-                return static_cast<char*>(lpBuf);
-            }
-            return 0;   // engine is up but the open/read failed -- do not silently fall back
-        }
+        CgsFileSystem::EnsureDeviceManagerUp();
 
-        // ---- early-boot CRT fallback (FS engine not yet live) ----
-        FILE* lpFile = fopen(lpcFileName, "rb");
-        if (lpFile == 0)
+        CgsFileSystem::DeviceManager* lpManager = CgsFileSystem::DeviceManager::GetIfInitialized();
+        if (!lpManager)
+            return 0;   // engine could not be brought up (catastrophic)
+
+        u32   luSize = 0;
+        void* lpBuf  = lpManager->ReadWholeFile(lpcFileName, &luSize);
+        if (!lpBuf)
             return 0;
-        fseek(lpFile, 0, SEEK_END);
-        const long llFileSize = ftell(lpFile);
-        fseek(lpFile, 0, SEEK_SET);
-        if (llFileSize <= 0)
-        {
-            fclose(lpFile);
-            return 0;
-        }
-        char* lpcBundle = static_cast<char*>(malloc(static_cast<size_t>(llFileSize)));
-        if (lpcBundle == 0)
-        {
-            fclose(lpFile);
-            return 0;
-        }
-        const size_t lnRead = fread(lpcBundle, 1, static_cast<size_t>(llFileSize), lpFile);
-        fclose(lpFile);
-        if (lnRead != static_cast<size_t>(llFileSize))
-        {
-            free(lpcBundle);
-            return 0;
-        }
-        *lpOutSize = llFileSize;
-        return lpcBundle;
+
+        if (CgsDev::Log::gpDebugPrint)
+            *CgsDev::Log::gpDebugPrint << "[bundle] '" << lpcFileName
+                                       << "' via async-FS (" << static_cast<s32>(luSize) << " bytes)\n";
+        *lpOutSize = static_cast<long>(luSize);
+        return static_cast<char*>(lpBuf);
     }
 }
 
