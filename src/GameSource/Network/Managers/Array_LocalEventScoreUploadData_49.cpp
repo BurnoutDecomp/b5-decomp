@@ -1,0 +1,41 @@
+// Per-instantiation .cpp for Array<BrnNetwork::LocalEventScoreUploadData, 49>.
+//
+//   Array<BrnNetwork::LocalEventScoreUploadData,49>::Append    @ 0x8254E0A8
+//     (called by CgsContainers::AppendArray<..>(Array<LocalEventScoreUploadData,49>&) )
+//   Array<BrnNetwork::LocalEventScoreUploadData,49>::Erase     @ 0x8254D370
+//     (called by BrnNetwork::EventScoresManager::_UploadEventScoreCallback)
+//   Array<BrnNetwork::LocalEventScoreUploadData,49>::EraseFast @ 0x8235C378
+//     (called by BrnProgression::Profile::RemoveEventScoreToUpload)
+//
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. The generic Array<T,N>::Append/Erase/EraseFast
+// bodies are fully inline in CgsArray.h, so this TU is just the explicit member
+// instantiations (the X360 emits one out-of-line copy per using-TU). The element type is the
+// committed BrnNetwork::LocalEventScoreUploadData (16-byte record), reused by name.
+//
+// Layout / byte-parity check against the X360 bodies:
+//   miCount lives at +0x310 (== 49 * 16 == N * sizeof(T)), i.e. immediately after the inline
+//   maElements[49] buffer, exactly as the committed generic Array<T,N> places it.
+//     lwz r11, 0x310(this); cmpwi -1   -> "Array used before Construct/Clear was called"
+//                                          (KI_UNCONSTRUCTED sentinel guard)
+//     cmplwi 0x31 / cmplw miCount       -> capacity-49 / index bounds guards (unsigned, so the
+//                                          -1 sentinel also fails them)
+//     Append:    two `std` of the 16-byte element at 16*miCount + this, then ++miCount
+//     Erase:     --miCount, then shift the 16-byte tail down one slot (order-preserving)
+//     EraseFast: copy maElements[miCount-1] over maElements[index] (16 bytes), then --miCount
+// The X360 Append streams the dynamic "Array container out of space, Length/Capacity" message
+// via the StrStream/BasePriorityQueue::Clear path; the committed generic Append keeps that as
+// the static CGS_ASSERT string -- the documented generic-body parity gap (fixing the dynamic
+// form must GROW the shared CgsArray.h body so every instantiation re-verifies; deliberately
+// not specialised in this thin TU).
+//
+// The element is a plain aggregate (no user-declared copy-assignment), so its element copy is
+// the compiler-generated member-wise copy -- matching the X360's 16-byte block move. Only the
+// three emitted members are instantiated (NOT a whole-class `template class`, which would
+// force the equality-based members FindFirstInstanceOf/Contains that require T::operator==;
+// LocalEventScoreUploadData has none and the X360 never emits those for it).
+#include "GameShared/GameClasses/Containers/CgsArray.h"
+#include "GameSource/Network/Managers/BrnEventScoresManager.h"  // BrnNetwork::LocalEventScoreUploadData (16B element)
+
+template void Array<BrnNetwork::LocalEventScoreUploadData, 49>::Append(const BrnNetwork::LocalEventScoreUploadData&);
+template void Array<BrnNetwork::LocalEventScoreUploadData, 49>::Erase(u32);
+template void Array<BrnNetwork::LocalEventScoreUploadData, 49>::EraseFast(u32);

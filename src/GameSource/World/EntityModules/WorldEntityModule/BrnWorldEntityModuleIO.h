@@ -93,5 +93,55 @@ namespace WorldEntityIO
         unsigned char        maPrecedingPayload[822896 - 1];   // +1..+822895
         OutputPayloadStorage mOutputPayload;                   // +822896
     };
+
+    // ========================================================================
+    // BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists
+    // (DWARF BrnWorldEntityModuleIO.h:~278). ADDITIVE GROW: homes the four scalar
+    // accessors the X360 emitted out-of-line for the generate-dispatch-lists input buffer.
+    //   GetDispatchFrame() const @ 0x822BAA08  read-lock  (bit 4) -> u32 *(this+4)      (asm-line 278)
+    //   SetDispatchFrame(u32)    @ 0x827A2FC8  write-lock (bit 3) ->     *(this+4) = v   (asm-line 279)
+    //   GetShadowMap() const     @ 0x822BAAB0  read-lock  (bit 4) -> u32 *(this+0x8018)  (asm-line 281)
+    //   SetShadowMap(u32)        @ 0x827A3070  write-lock (bit 3) ->     *(this+0x8018)=v (asm-line 282)
+    //
+    // The getters test the read-lock bit (`lbz r11,0(this); extrwi r11,r11,1,27` == bit 4 ==
+    // IsBufferLockedForReading()) and fire "Not locked for reading\n"; the setters test the
+    // write-lock bit (`extrwi r11,r11,1,28` == bit 3 == IsBufferLockedForWriting()) and fire
+    // "Not locked for writing\n". Both accessed fields are 32-bit words (`lwz`/`stw` /
+    // `lwzx`/`stwx`): the dispatch-frame index at this+4 and the shadow-map handle at
+    // this+0x8018.
+    //
+    // LAYOUT (X360 accessor offsets, authoritative):
+    //   base    CgsModule::IOBuffer            (1-byte status; +1..+3 pad)
+    //   +4      u32 muDispatchFrame            dispatch-frame index
+    //   +...    (intervening payload region; not recovered by this slice)
+    //   +0x8018 u32 muShadowMap               shadow-map handle
+    //
+    // FLAG (opaque interior): the region between muDispatchFrame (+4) and muShadowMap (+0x8018)
+    // is the buffer's other dispatch-list payload (its own members are not recovered by this
+    // slice) and is modelled as correctly-sized opaque storage so the two X360-pinned accessor
+    // offsets (+4, +0x8018) are exact.
+    struct InputBuffer_GenerateDispatchLists : public CgsModule::IOBuffer
+    {
+        // X360 0x822BAA08: read-lock; return the dispatch-frame index (this+4).
+        u32  GetDispatchFrame() const;
+        // X360 0x827A2FC8: write-lock; set the dispatch-frame index (this+4).
+        void SetDispatchFrame(u32 luDispatchFrame);
+        // X360 0x822BAAB0: read-lock; return the shadow-map handle (this+0x8018).
+        u32  GetShadowMap() const;
+        // X360 0x827A3070: write-lock; set the shadow-map handle (this+0x8018).
+        void SetShadowMap(u32 luShadowMap);
+
+        static void _AssertLayout();
+
+    private:
+        // The IOBuffer base is a single status byte; the X360 places muDispatchFrame at this+4,
+        // so pad bytes +1..+3 explicitly.
+        u8            maStatusPad[3];                     // +1..+3 (force +4)
+        u32           muDispatchFrame;                    // +4
+        // Intervening dispatch-list payload (opaque; see FLAG). Spans from +8 up to the
+        // +0x8018 start of muShadowMap.
+        unsigned char maPayloadAndPad[0x8018 - 8];        // +8..+0x8017
+        u32           muShadowMap;                        // +0x8018
+    };
 }
 }
