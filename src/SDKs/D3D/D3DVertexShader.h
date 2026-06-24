@@ -6,7 +6,7 @@
 //
 //     D3D::CVertexShader::GetDebuggerHint  @ 0x829436A8
 //
-// There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE below
+// There is no reference source and no DWARF for this TU, so the SHAPE below
 // is reconstructed from the X360 asm of the single method. `D3D` is the X360
 // graphics-SDK boundary, so its identifiers (CVertexShader, GetDebuggerHint)
 // are preserved verbatim per the naming convention.

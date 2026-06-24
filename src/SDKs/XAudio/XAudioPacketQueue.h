@@ -8,7 +8,7 @@
 //     XAUDIO::CPacketQueue::CPacketQueue  @ 0x8296C4A8  (constructor)
 //     XAUDIO::CPacketQueue::Initialize    @ 0x8296C3E8
 //
-// There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE below
+// There is no reference source and no DWARF for this TU, so the SHAPE below
 // is reconstructed from the X360 asm. `XAUDIO` is an external middleware
 // boundary, so its identifiers are preserved verbatim per the naming
 // convention.

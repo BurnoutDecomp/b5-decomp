@@ -7,7 +7,7 @@
 //
 //     XGRAPHICS::IRFetch::InstType  @ 0x82C2B8A0
 //
-// There is no Feb-2007 leak source and no DWARF for this TU. The single method
+// There is no reference source and no DWARF for this TU. The single method
 // is a leaf string accessor that returns the literal "fetch" -- the human-
 // readable instruction-type tag for a texture/vertex fetch IR node. The class
 // is declared minimally here (only what this TU defines); the full IRFetch node

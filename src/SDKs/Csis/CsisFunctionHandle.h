@@ -9,7 +9,7 @@
 //
 //     Csis::FunctionHandle::SetFast  @ 0x82B0FB10   (bind to an InterfaceId)
 //
-// There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE below
+// There is no reference source and no DWARF for this TU, so the SHAPE below
 // is reconstructed purely from the X360 asm. `Csis` is a vendor library
 // boundary, so its identifiers (Csis, FunctionHandle, SetFast, SetHandle,
 // InterfaceId, Result, CsisDef::FunctionDesc) are preserved verbatim per the

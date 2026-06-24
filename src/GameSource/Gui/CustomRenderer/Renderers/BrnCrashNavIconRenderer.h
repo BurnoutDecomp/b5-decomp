@@ -32,8 +32,8 @@ private:
     u32             mGroupC[5];         // guest index 63
     u32             mGroupD[5];         // guest index 69
     s32             mState81;           // guest index 81 (initialised to -1)
-    u64             mAnimField0;        // guest +336
-    u64             mAnimField1;        // guest +344
+    u64             mAnimField0;        // guest +336 (std doubleword, cleared to 0)
+    u64             mAnimField1;        // guest +344 (std doubleword, cleared to 0)
     u32             mField352;          // guest +352
     u32             mField356;          // guest +356
     u32             mMode436;           // guest +436

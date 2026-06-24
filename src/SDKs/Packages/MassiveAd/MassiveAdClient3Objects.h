@@ -11,7 +11,7 @@
 //     CAddressIndexPair  -- an (index byte, owned address-string) pair
 //     CMassiveThread     -- a thin wrapper around one OS thread HANDLE
 //
-// There is NO Feb-2007 leak source and NO DecFIGS dwarfdump for this subsystem;
+// There is NO reference source and NO DecFIGS dwarfdump for this subsystem;
 // SHAPE and BODIES are both reconstructed from the X360 ARTIST.XEX pseudocode +
 // disassembly. Per-function X360 addresses:
 //     MassiveAdClient3::CLog::Initialize                            @ 0x82BD4A68

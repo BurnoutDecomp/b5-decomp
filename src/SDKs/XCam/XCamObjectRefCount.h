@@ -8,7 +8,7 @@
 //     XCAM::CObjectRefCount::Release                       @ 0x82980A30
 //     XCAM::CObjectRefCount::`vector deleting destructor'   @ 0x82980970
 //
-// There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE below
+// There is no reference source and no DWARF for this TU, so the SHAPE below
 // is reconstructed from the X360 asm of the two methods. `XCAM` is an X360 SDK
 // boundary, so its identifiers (CObjectRefCount, Release) are preserved
 // verbatim per the naming convention.

@@ -1,7 +1,7 @@
 // ===========================================================================
 // XAUDIO::CPacketQueue -- member bodies reconstructed from
 // BURNOUT_X360_ARTIST.XEX. The PowerPC asm is authoritative for every store; see
-// XAudioPacketQueue.h for the reconstructed layout. No Feb-2007 leak source and
+// XAudioPacketQueue.h for the reconstructed layout. No reference source and
 // no DWARF exist for this TU.
 // ===========================================================================
 

@@ -14,7 +14,7 @@
 // marshalling classes.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (AddArgument @ 0x8297DC68). There is
-// no Feb-2007 leak source and no DWARF for this TU; the SHAPE below is grounded
+// no reference source and no DWARF for this TU; the SHAPE below is grounded
 // purely on the X360 asm of AddArgument. These are Microsoft-XDK-style C-prefixed
 // marshalling classes, so the identifiers (CArgumentList, AddArgument) are kept
 // verbatim per the naming convention's external/platform-API carve-out.

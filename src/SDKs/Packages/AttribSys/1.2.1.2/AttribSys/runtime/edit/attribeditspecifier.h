@@ -16,7 +16,7 @@
 // (The TU id's trailing `>` is the demangler artefact of the comparator's
 // template-instance spelling; the operator() is the only entry point.)
 //
-// There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE below
+// There is no reference source and no DWARF for this TU, so the SHAPE below
 // is reconstructed purely from the X360 asm of the comparator. The comparator
 // reads four key fields and nothing else, so EditSpecifier is modelled with
 // exactly those fields at the asm-attested offsets (member-by-name access):

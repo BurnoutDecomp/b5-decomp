@@ -19,10 +19,9 @@
 // (@0x82AE2338) and by the eight per-channel float stores in the float-array /
 // uint32 copy paths (@0x82AD5C60 / @0x82ADC340).
 //
-// NOTE: this is the X360/PC revision of the type. The Feb-2007 PS3 leak carried
-// an OLDER AptColorHelper that packed all four channels into a single uint32_t
-// (mnVal); that revision is 16 bytes and does NOT match this binary. The
-// float-per-channel DWARF layout is the one shipped here.
+// NOTE: this is the X360/PC revision of the type: AptColorHelper stores four separate
+// float channels (the float-per-channel DWARF layout attested by this binary), NOT an
+// older single-uint32 (mnVal) packing that would be only 16 bytes.
 // ===========================================================================
 
 #include "types.hpp"

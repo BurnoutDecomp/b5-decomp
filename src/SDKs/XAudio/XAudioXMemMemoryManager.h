@@ -8,7 +8,7 @@
 //     XAUDIO::CXMemMemoryManager::XMemAlloc  @ 0x82964D78
 //     XAUDIO::CXMemMemoryManager::XMemFree   @ 0x82964D88
 //
-// There is no Feb-2007 leak source and no DWARF for this TU. Both methods are
+// There is no reference source and no DWARF for this TU. Both methods are
 // thin forwarders: the X360 asm tail-branches (`b XMemAlloc` / `b XMemFree`)
 // to the platform XMem free functions after dropping the `this` argument and
 // shifting (a2, a3) into the first two argument registers. `XAUDIO` is an
@@ -47,5 +47,17 @@ public:
     // @ 0x82964D88 -- forward to the platform XMemFree, dropping `this`.
     void  XMemFree(void* pAddress, u32 uAttributes);
 };
+
+// The XAudio-wide singleton memory-manager instance. The X360 image references
+// it by the fixed data address &unk_83222C40: every XAudio class-specific
+// allocate/free routes through `gXMemMemoryManager.XMemAlloc/XMemFree(...)`
+// (e.g. the scalar/vector deleting destructors of XAudio objects pass
+// `(&unk_83222C40, this, 0x61820000)` to XMemFree). Declared here as the shared
+// owning home; defined once in XAudioBatchAllocatedObject.cpp.
+extern CXMemMemoryManager gXMemMemoryManager;
+
+// The attribute word the X360 free sites bake in (`lis r5, 0x6182` -> r5 =
+// 0x61820000) when releasing XAudio batch-allocated objects through XMemFree.
+static const u32 KU_XMEM_FREE_ATTRIBUTES = 0x61820000u;
 
 } // namespace XAUDIO

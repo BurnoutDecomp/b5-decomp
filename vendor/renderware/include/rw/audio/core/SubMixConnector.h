@@ -6,7 +6,7 @@
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm of
 // SubMixConnector::Disconnect @0x82B9C3C0 is authoritative. There is NO matching TU in
-// the Feb-2007 PS3 leak and no DecFIGS DWARF for this type, so every offset below is
+// the reference dump and no DecFIGS DWARF for this type, so every offset below is
 // grounded directly in the disassembly of the bodied member function.
 //
 // Disconnect unlinks this connector from its SubMix's doubly-linked connector list

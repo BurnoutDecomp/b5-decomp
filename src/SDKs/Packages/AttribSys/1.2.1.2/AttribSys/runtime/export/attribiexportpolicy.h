@@ -11,7 +11,7 @@
 // This header is the canonical OWNING home for:
 //     Attrib::IExportPolicy::`scalar deleting destructor'  @ 0x82805760
 //
-// There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE is
+// There is no reference source and no DWARF for this TU, so the SHAPE is
 // reconstructed from the X360 asm of that deleting-destructor thunk:
 //
 //   mflr/stw/std/stwu              ; standard frame

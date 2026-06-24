@@ -13,7 +13,7 @@
 // CArgumentList / CMarshaller / CConformanceList.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (LookupConstantFromTable @
-// 0x8297F280). There is no Feb-2007 leak source and no DWARF for this TU; the
+// 0x8297F280). There is no reference source and no DWARF for this TU; the
 // SHAPE below is grounded purely on the X360 asm. These are Microsoft-XDK-style
 // C-prefixed marshalling classes, so the identifiers (CSchemaData,
 // LookupConstantFromTable) are kept verbatim per the naming convention's

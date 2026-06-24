@@ -11,7 +11,7 @@
 //
 //     XAUDIO::XAUDIOPACKETCTX_::GetNextEntry  @ 0x829646E0
 //
-// There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE below
+// There is no reference source and no DWARF for this TU, so the SHAPE below
 // is reconstructed from the X360 asm. `XAUDIO` is an external middleware
 // boundary, so its identifiers are preserved verbatim per the naming
 // convention.

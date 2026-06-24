@@ -9,7 +9,7 @@
 //     XGRAPHICS::DListNode::InsertBefore  @ 0x82C288A8
 //     XGRAPHICS::DListNode::Remove        @ 0x82C288E8
 //
-// There is no Feb-2007 leak source and no DWARF for this TU, so the SHAPE
+// There is no reference source and no DWARF for this TU, so the SHAPE
 // below is reconstructed purely from the X360 asm of these three methods.
 // `XGRAPHICS` is an X360 graphics-SDK boundary, so its identifiers
 // (DListNode, InsertAfter/InsertBefore/Remove) are preserved verbatim per the

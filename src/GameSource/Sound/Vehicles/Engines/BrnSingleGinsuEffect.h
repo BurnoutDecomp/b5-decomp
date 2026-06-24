@@ -55,7 +55,15 @@ struct HybridExhaustControl : public CgsSound::Logic::EffectBase
 struct SingleGinsuEffect : public BrnSound::Logic::BrnEffectObject
 {
     SingleGinsuEffect() : mpHybridControl(nullptr) {}
-    virtual ~SingleGinsuEffect() {}
+
+    // @ 0x826AFAF0 — the X360 `scalar deleting destructor'. Bodied out-of-line in
+    // BrnSingleGinsuEffect.cpp. Its teardown is the inherited BrnEffectObject
+    // dual-base settle (both vptr stores + the attach/detach/resources-ready member
+    // clears); the leaf adds nothing of its own (same shape as the sibling
+    // LoopModelEffect dtor @ 0x826AFBA0 and the committed BrnEffectObject dtor
+    // @ 0x826AF4C8). mpHybridControl is NOT cleared by this destructor (the X360 asm
+    // writes only +0/+4/+0x24/+0x28/+0x31 — no +0x34 store).
+    virtual ~SingleGinsuEffect();
 
     // — per-class RTTI. DEFERRED bodies (declared for
     // the effect vtable shape; the sTypeInfo static-init lives in its own slice).
