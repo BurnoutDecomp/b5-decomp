@@ -4,6 +4,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"   // DebugManager::Update during load
 #include "GameSource/Resource/BrnGameDataModule.h"   // GameDataModule + BrnGame::GetMainGameDataModule()
+#include "GameSource/Sound/Module/BrnRootSoundModule.h"   // RootSoundModule + BrnGame::GetMainSoundModule() (stage 4)
+#include "GameSource/Resource/BrnResourceAllocator.h"     // BrnResource::GetGameDataGeneralAllocator() (stage 4)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -149,9 +151,23 @@ void MainGameFlowStateInitialLoadingScreen::Update()
             AdvanceLoadingStage(E_LOADINGSTAGE_SOUND_MODULE);
         break;
     case E_LOADINGSTAGE_SOUND_MODULE:
-        // X360: LoadSoundModule (0x823E75A8). [stub]
-        if (StageDwellElapsed())
-            AdvanceLoadingStage(E_LOADINGSTAGE_NETWORK);
+        // X360: LoadSoundModule (0x823E75A8) -> RootSoundModule::Prepare (vtable+64) with the GameData
+        // general allocator + the Root IO buffers. Now a REAL load: drive RootSoundModule::Prepare each
+        // frame until it reports prepared, then advance. [minimal] the X360 LoadSoundModule also creates
+        // RootInput/RootOutput IO buffers via the IOBufferStack + forwards the module's resource requests
+        // into the GameData input on the still-preparing path; those are grown when Prepare consumes them
+        // (Prepare currently reports prepared immediately).
+        {
+            static bool s_bLoggedSoundLoad = false;
+            if (!s_bLoggedSoundLoad)
+            {
+                s_bLoggedSoundLoad = true;
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading stage 4 (SoundModule) -- real load\n";
+            }
+            if (BrnGame::GetMainSoundModule()->Prepare(BrnResource::GetGameDataGeneralAllocator(), 0, 0, 0, 0))
+                AdvanceLoadingStage(E_LOADINGSTAGE_NETWORK);
+        }
         break;
     case E_LOADINGSTAGE_NETWORK:
         // X360: LoadNetworkModule. [stub]

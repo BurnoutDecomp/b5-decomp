@@ -4,6 +4,8 @@
 #include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::ResourceDescriptor
 
+namespace rw { namespace core { struct GeneralResourceAllocator; } }   // GetGameDataGeneralAllocator return type
+
 // ============================================================================
 // GameSource/Resource/BrnResourceAllocator.h
 //
@@ -62,6 +64,14 @@ public:
 // Accessor for the global debug allocator (asserts the backing allocator exists).
 // X360: returns &Allocators::mGlobalDebugAllocator. DECLARATION-ONLY here.
 HeapResourceAllocator* GetDebugAllocator();
+
+// The GameData general resource allocator the loading-screen module loads carve from (SoundModule
+// etc.). [PC-LEAF / allocator gate] The X360 builds one allocator per bank in GameDataModule::
+// CreateAllocators (memory-map-driven) and vends it via GameDataIO::OutputBuffer::GetAllocator;
+// pending that per-bank population, this returns a single real rw::core::GeneralResourceAllocator
+// lazily Initialize'd over a region carved from the debug heap. (The full per-bank CreateAllocators
+// population is the faithful follow-on; see the allocator-gate memory.)
+rw::core::GeneralResourceAllocator* GetGameDataGeneralAllocator();
 
 // Owns the engine's named global allocators. Construct asserts the debug
 // allocator's backing general allocator exists before carving the ICE debug

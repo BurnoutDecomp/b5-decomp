@@ -199,6 +199,22 @@ namespace Io
         }
     };
 
+    // BrnSound::Module::Io::RootOutputBuffer (DWARF BrnRootSoundModuleIo.h:270) -- the root sound
+    // module's output payload the load path forwards into the GameData input queue. DWARF shape:
+    //   RequestInterface<4096>          mResourceRequestInterface   @ +0x04 (X360 ::G  0x823B8A68)
+    //   AttribSysRequestInterface<2048> mAttribSysRequestInterface  @ +0x1014 (X360 ::RootOutp 0x823B8B10)
+    //   RequestInterface                mReplayRequestInterface     (trailing)
+    //
+    // MINIMAL SLICE: only what LoadSoundModule needs of it RIGHT NOW -- it must be a complete,
+    // default-constructible CgsModule::IOBuffer subclass so CgsModule::IOBufferStack::CreateIOBuffer<
+    // RootOutputBuffer> can Alloc(sizeof) + placement-new it (the only requirement CreateIOBuffer
+    // imposes). The request-interface members + their read-locked getters (GetResourceRequest-
+    // Interface / GetAttribSysRequestInterface) + the "still preparing" request-forwarding wiring are
+    // GROWN here when RootSoundModule::Prepare consumes them (S6). Derives IOBuffer (status byte @ 0).
+    struct RootOutputBuffer : public CgsModule::IOBuffer
+    {
+    };
+
 } // namespace Io
 } // namespace Module
 } // namespace BrnSound

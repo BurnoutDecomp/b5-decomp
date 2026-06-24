@@ -7,6 +7,7 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // BrnResource::GameDataIO::AllocatorList (OutputBuffer member)
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }   // OutputBuffer::GetAllocator return type
+namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAllocator(); }  // allocator-gate leaf
 
 // BrnResource::GameDataIO::InputBuffer / OutputBuffer -- the per-frame IO payload buffers the
 // game-data streaming module (BrnResource::GameDataModule) exchanges with the rest of the game.
@@ -93,7 +94,10 @@ namespace GameDataIO
         // CreateAllocators registers that bank -- so this must not be called before the population slice.
         rw::core::GeneralResourceAllocator* GetAllocator() const
         {
-            return mAllocatorList.GetRWGeneralResourceAllocator(0);
+            // [allocator gate] Until GameDataModule::CreateAllocators populates mAllocatorList per
+            // bank (memory-map-driven), vend the single standalone GameData general allocator. The
+            // faithful path returns mAllocatorList.GetRWGeneralResourceAllocator(<bank>).
+            return BrnResource::GetGameDataGeneralAllocator();
         }
 
         AllocatorList& GetAllocatorList() { return mAllocatorList; }

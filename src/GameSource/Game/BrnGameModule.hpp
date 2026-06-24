@@ -62,7 +62,7 @@ namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleB
 // BrnGui::GuiModule is now the REAL module (hosts the MovieManager) -- included above (BrnGuiModule.h),
 // no longer the opaque stub.
 namespace BrnEffects   { class EffectsModule   : public CgsModule::ModuleSingleBuffered {}; }
-namespace BrnSound { namespace Module { class RootSoundModule : public CgsModule::ModuleSingleBuffered {}; } }
+#include "GameSource/Sound/Module/BrnRootSoundModule.h"   // BrnSound::Module::RootSoundModule (real class)
 namespace BrnReplays   { class ReplayModule    : public CgsModule::ModuleSingleBuffered {}; }
 namespace BrnNetwork   { class BrnNetworkModule : public CgsModule::ModuleSingleBuffered {}; }
 
@@ -83,6 +83,7 @@ namespace BrnGame
         // The game module owns the GameDataModule; the loading flow (case 8) prepares it through here
         // (and via BrnGame::GetMainGameDataModule()) so there's ONE instance, not a parallel copy.
         BrnResource::GameDataModule& GetGameDataModule() { return mGameDataModule; }
+        BrnSound::Module::RootSoundModule& GetSoundModule() { return mSoundModule; }
 
         enum EGameUpdateStage   // h:248
         {
