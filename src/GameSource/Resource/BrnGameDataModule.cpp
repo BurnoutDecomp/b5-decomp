@@ -13,7 +13,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"             // PoolIO::OutputBuffer (request transport)
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"         // ResourceIO::InputBuffer (CreatePool request input)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"         // Events::LoadBundleRequest/AcquireResourceRequest (streaming)
-#include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"          // [B3] DeviceManager::ReadFileSync (async-FS self-test)
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"          // E_RESOURCETYPE_FONT (stream validation)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"            // EventReceiverQueue (acquire response receiver)
 #include "GameSource/Resource/BrnMemoryMapData.h"                               // KAC_MEMORY_MAP_POOLS (the 27 real pools)
@@ -393,27 +392,6 @@ namespace BrnResource
                     lpFonts->FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_FONT, &liGoneIdx);
                 *CgsDev::Log::gpDebugPrint << "[stream] after UnloadBundle, Fonts pool font resource: "
                                           << (lpGone ? "STILL PRESENT (bug)" : "gone (freed)") << "\n";
-            }
-        }
-
-        // [B3 async-FS self-test] Read a real file through the LIVE async device engine
-        // (FileSystem::Prepare brought up the DeviceManager + spawned the PC device's worker
-        // thread). This proves the open->read->close round-trip through OperationPool + the worker
-        // before the bundle loader is routed through it (B4).
-        {
-            CgsFileSystem::DeviceManager* lpDm = CgsFileSystem::DeviceManager::GetIfInitialized();
-            if (lpDm)
-            {
-                static char s_acFsTestBuf[4096];
-                const s32 liBytes = lpDm->ReadFileSync("Language/Fonts/Default.font",
-                                                       s_acFsTestBuf, sizeof(s_acFsTestBuf));
-                *CgsDev::Log::gpDebugPrint
-                    << "[fs-async] ReadFileSync('Language/Fonts/Default.font') via DeviceManager worker = "
-                    << liBytes << " bytes\n";
-            }
-            else
-            {
-                *CgsDev::Log::gpDebugPrint << "[fs-async] DeviceManager not initialized\n";
             }
         }
         return true;
