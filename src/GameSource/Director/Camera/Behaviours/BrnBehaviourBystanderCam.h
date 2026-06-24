@@ -1,0 +1,163 @@
+#ifndef GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_BYSTANDER_CAM_H
+#define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_BYSTANDER_CAM_H
+
+#include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert + SetTarget index assert)
+
+// ============================================================================
+// GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h
+//
+// BrnDirector::Camera::BehaviourBystanderCam -- the "bystander cam" camera behaviour (the
+// dramatic third-party camera that frames a chosen race car from a roadside vantage; the
+// "bystander sees action" moment + the testbed arbitrator state install it). HOME for the
+// three BehaviourBystanderCam class slices this TU bodies:
+//   - GetCol        @0x821F9B28  (return &mCollisionPolicy at +0xD0; one-liner addi)
+//   - SetParameters @0x821F3F10  (adopt a bystander-cam param block; type tag == 5)
+//   - SetTarget     @0x821F3F80  (point the camera at a race car index)
+// The full behaviour (Construct/Prepare/Update/the virtual GetCollisionPolicy and the rest of
+// the rig) and the Behaviour base land with their own TUs; this header models only the members
+// these three functions touch, BY NAME, at their asm-attested offsets. Reserved byte spans
+// place them exactly.
+//
+// Class layout cross-checked against the DecFIGS DWARF (BehaviourBystanderCam.h:107): the
+// private members run mTransform, mPositionFinder, mShake, mLooker, mCollisionPolicy
+// (VisibilityCollisionPolicy, the +0xD0 sub-object GetCol returns), mRandom, mTarget
+// (Behaviour::VehicleRef, the block SetTarget writes), mpParameters, then the two distance
+// scalars and the mbSetup/mbGotPosition flags.
+// ----------------------------------------------------------------------------
+
+namespace BrnDirector
+{
+namespace Camera
+{
+
+// FLAG: minimal slice of the camera-behaviour type tag. Each behaviour carries a type id in the
+//   leading word of its Parameters block; SetParameters asserts the block's id is the
+//   bystander-cam one. The console value for eBehaviourBystanderCam is 5 (the asm at 0x821F3F30
+//   compares the block's first word against 5). Replace with the real EBehaviourType enum when
+//   the Behaviour base TU lands; the enumerator's VALUE (5) is asm.
+enum EBehaviourTypeBystanderCam
+{
+    eBehaviourBystanderCam = 5
+};
+
+// FLAG: the upper bound the SetTarget index assert enforces. The console value for
+//   BrnPhysics::Vehicle::ku8MaxNumRaceCars is 8 (the asm at 0x821F3FA0 compares meRaceCarIndex
+//   against 8). Replace with the real BrnPhysics::Vehicle constant when that TU lands; the
+//   VALUE (8) is asm.
+enum { KU_MAX_NUM_RACE_CARS = 8 };
+
+class BehaviourBystanderCam
+{
+public:
+
+    // The bystander-cam parameter block: a type tag in its leading word plus behaviour-specific
+    // data. GetType returns the tag SetParameters asserts on.
+    class Parameters
+    {
+    public:
+        EBehaviourTypeBystanderCam GetType() const
+        {
+            return static_cast<EBehaviourTypeBystanderCam>(meType);
+        }
+
+        s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
+        s32 miParamWord1;  // +0x04  first behaviour-specific word (cached by SetParameters)
+    };
+
+    // FLAG: the +0xD0 sub-object GetCol exposes is mCollisionPolicy
+    //   (BrnDirector::Camera::VisibilityCollisionPolicy, DWARF :162). Its concrete type lands
+    //   with the full behaviour TU; modelled here as an opaque embedded sub-object so the
+    //   accessor returns a typed pointer at the asm-attested offset.
+    class CollisionPolicy;
+
+    // Return the address of the embedded collision policy at +0xD0. @0x821F9B28 (a single
+    // `addi r3, r3, 0xD0; blr`).
+    CollisionPolicy* GetCol();
+
+    // Adopt a bystander-cam parameter block: assert it carries the bystander-cam type tag, then
+    // cache its first word at +0x10 and store the pointer at +0x350. @0x821F3F10.
+    void SetParameters(const Parameters* lpParameters);
+
+    // Point the bystander camera at a race car: record the target index, mark the target set /
+    // setup active, assert the index is in range, and flag the camera for re-acquisition.
+    // @0x821F3F80. meRaceCarIndex is an EActiveRaceCarIndex (modelled as s32 here).
+    void SetTarget(s32 meRaceCarIndex);
+
+private:
+
+    // FLAG: only the members these three functions touch are modelled at their asm-attested
+    //   offsets; the rest of the bystander-cam rig lands with the full behaviour TU. Reserved
+    //   byte spans place them exactly.
+    void*             mpVTable;                       // +0x000  behaviour vtable (opaque base head)
+    u8                maReserved004[0x10 - 0x04];     // +0x004 .. +0x00F (rig members not modelled here)
+    s32               mParamWord1;                    // +0x010  cached lpParameters->miParamWord1
+    u8                maReserved014[0xD0 - 0x14];     // +0x014 .. +0x0CF (rig members not modelled here)
+    u8                maCollisionPolicy[0x340 - 0xD0]; // +0x0D0  mCollisionPolicy (opaque, &-of by GetCol)
+
+    // --- mTarget (Behaviour::VehicleRef) sub-block SetTarget writes, +0x340 .. +0x34F ---
+    s32               miTargetSet;                    // +0x340  target-set / setup flag (= 1)
+    s32               meTargetRaceCarIndex;           // +0x344  the target race car index
+    s32               miTargetField348;               // +0x348  cleared to 0 by SetTarget
+    u8                mbTargetField34C;               // +0x34C  flag set (= 1) by SetTarget
+    u8                maReserved34D[0x350 - 0x34D];   // +0x34D .. +0x34F (VehicleRef tail not modelled)
+
+    const Parameters* mpParameters;                   // +0x350  the adopted parameter block
+    u8                maReserved354[0x35C - 0x354];   // +0x354 .. +0x35B (rig members not modelled here)
+    u8                mbField35C;                      // +0x35C  flag set (= 1) by SetTarget (re-acquire)
+};
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::BehaviourBystanderCam::GetCol @0x821F9B28
+//   addi r3, r3, 0xD0        ; &this->mCollisionPolicy
+//   blr
+// ----------------------------------------------------------------------------
+inline BehaviourBystanderCam::CollisionPolicy*
+BehaviourBystanderCam::GetCol()
+{
+    return reinterpret_cast<CollisionPolicy*>(maCollisionPolicy);   // this + 0xD0
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::BehaviourBystanderCam::SetParameters @0x821F3F10
+//   lwz  r11, 0(r4)          ; lpParameters->meType
+//   cmplwi r11, 5            ; == eBehaviourBystanderCam
+//   ... assert on mismatch (BehaviourBystanderCam.h:215) ...
+//   lwz  r11, 4(r4)          ; lpParameters->miParamWord1
+//   stw  r4,  0x350(r3)      ; mpParameters = lpParameters
+//   stw  r11, 0x10(r3)       ; mParamWord1  = lpParameters->miParamWord1
+// ----------------------------------------------------------------------------
+inline void
+BehaviourBystanderCam::SetParameters(const Parameters* lpParameters)
+{
+    CGS_ASSERT(lpParameters->GetType() == eBehaviourBystanderCam,
+               "lpParameters->GetType() == eBehaviourBystanderCam");
+    mpParameters = lpParameters;                  // stw r4,  0x350(this)
+    mParamWord1  = lpParameters->miParamWord1;     // lwz r11,4(lp); stw r11, 0x10(this)
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::BehaviourBystanderCam::SetTarget @0x821F3F80
+//   stw  r4,  0x344(r3)      ; meTargetRaceCarIndex = meRaceCarIndex
+//   stb  1,   0x34C(r3)      ; mbTargetField34C     = 1
+//   stw  1,   0x340(r3)      ; miTargetSet          = 1
+//   stw  0,   0x348(r3)      ; miTargetField348     = 0
+//   cmpwi r4, 8 ; blt skip   ; assert meRaceCarIndex < ku8MaxNumRaceCars (BrnVehicleRef.h:222)
+//   stb  1,   0x35C(r3)      ; mbField35C           = 1  (issued AFTER the assert)
+// ----------------------------------------------------------------------------
+inline void
+BehaviourBystanderCam::SetTarget(s32 meRaceCarIndex)
+{
+    meTargetRaceCarIndex = meRaceCarIndex;        // stw r4,  0x344(this)
+    mbTargetField34C     = 1;                     // stb r30(=1), 0x34C(this)
+    miTargetSet          = 1;                     // stw r30(=1), 0x340(this)
+    miTargetField348     = 0;                     // stw r11(=0), 0x348(this)
+    CGS_ASSERT(meRaceCarIndex < KU_MAX_NUM_RACE_CARS,
+               "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars");
+    mbField35C           = 1;                     // stb r30(=1), 0x35C(this)
+}
+
+} // namespace Camera
+} // namespace BrnDirector
+
+#endif // GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_BYSTANDER_CAM_H

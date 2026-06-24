@@ -80,6 +80,17 @@ public:
     const T& GetCurrent() const  { return (*this)[0]; }
     const T& GetPrevious() const { return (*this)[1]; }
 
+    // Mutable accessor for the newest sample ([0]). The X360 emits this as an out-of-line
+    // method (e.g. @0x821FBB80, attributed by the linker to BrnDirector::GameState): it
+    // asserts the journal is non-empty and returns &maEntries[miWriteIndex] (the current
+    // slot). Unlike operator[] (which asserts liIndex < miSize), this guards directly on
+    // miSize > 0. ADDITIVE GROW (flagged): new non-const overload, no layout change.
+    T& GetCurrent()
+    {
+        CGS_ASSERT(miSize > 0, "miSize > 0");
+        return maEntries[miWriteIndex];
+    }
+
     int GetSize() const { return miSize; }
 
 private:

@@ -53,6 +53,11 @@ namespace ModelIO
         // (this+4). (CgsModelModuleIO.cpp:235 in the X360 build.)
         const GuiResourceRequestQueue* GetGuiResourceRequestQueue() const;
 
+        // X360 0x8285B370 (CgsModelModuleIO.h:122). write-lock (bit 3) + null-assert, then
+        // bulk-appends the supplied source queue's events into mGuiResourceRequests via
+        // VariableEventQueue<2048,16>::Append<2048,16>. Homed by CgsModelModuleIO.cpp.
+        void SetGuiResourceRequestQueue(const GuiResourceRequestQueue* lpResourceRequestQueue);
+
         // X360 0x823B1590: read-lock (bit 4) const handle to the GUI out-event queue (this+0x814).
         const GuiEventQueue* GetGuiOutEvents() const;
         // X360 0x8284E148: read-lock (bit 4) const handle to the view-event queue (this+0x5024).
@@ -89,6 +94,16 @@ namespace ModelIO
         typedef CgsGui::GuiEventQueueBase<32768, 16> GuiEventInputQueue;
         // CgsModelModuleIO.h:91 -- the small load-request queue.
         typedef CgsGui::GuiEventQueueSmall           GuiEventQueueSmall;
+
+        // CgsModelModuleIO.h:70 (DWARF, const overload). X360 0x8284F7F0: asserts this buffer
+        // is locked-for-reading (status bit 4, "Not locked for reading\n"), returns the const
+        // handle to the GUI-event queue at this+4 (&mGuiEvents). Homed by CgsModelModuleIO.cpp.
+        const GuiEventInputQueue* GetEventQueue() const;
+
+        // CgsModelModuleIO.h:74 (DWARF, non-const overload). X360 0x8284F898: asserts this buffer
+        // is locked-for-writing (status bit 3, "Not locked for writing\n"), returns the handle to
+        // the GUI-event queue at this+4 (&mGuiEvents). Homed by CgsModelModuleIO.cpp.
+        GuiEventInputQueue* GetEventQueueNonConst();
 
         // CgsModelModuleIO.h:79 (DWARF). X360 0x8250C658: asserts this buffer is
         // locked-for-writing (status bit 3, "Not locked for writing\n"), then pushes the

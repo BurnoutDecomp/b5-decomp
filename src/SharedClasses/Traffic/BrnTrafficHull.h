@@ -110,12 +110,55 @@ struct Hull
     // X360 @ 0x821F52E0. Bounds-asserts luIndex against muNumSections, then
     // returns &mpaSections[luIndex] (stride 48, proven by the asm index math).
     inline const Section* GetSection(u32 luIndex) const;
+
+    // --- attested standalone accessors (brn-traffic3 group) ------------------
+    // FLAG (opaque-element stride): Neighbour / StaticTrafficVehicle / the
+    // stop-line index element are forward-declared-only in this slice (their real
+    // record layouts belong to the not-yet-reconstructed BrnTrafficSection.h /
+    // BrnTrafficStopLine.h homes). The three accessors below are bodied store-for-
+    // store off the X360 asm, which uses an EXPLICIT element stride per accessor:
+    //   GetNeighbour      stride 4   (`slwi r11, r29, 2`)        @ 0x821F5358
+    //   GetStaticVehicle  stride 80  (`(idx*5)<<4` = 80*idx)     @ 0x82705C90
+    //   GetStopLine       stride 2   (`slwi r10, r30, 1`)        @ 0x82705C20
+    // The returned address is computed by raw byte arithmetic over the matching
+    // pointer member, exactly as the asm does; the pointer-target types stay opaque.
+
+    // X360 @ 0x821F5358. asm: assert(mpaNeighbourData != 0); assert(luIndex <
+    // muNumNeighbours); return mpaNeighbourData + 4*luIndex.
+    inline const void* GetNeighbour(u32 luIndex) const;
+
+    // X360 @ 0x82705C90. asm: assert(luIndex < muNumStaticTraffic);
+    // return mpaStaticTrafficVehicles + 80*luIndex.
+    inline const void* GetStaticVehicle(u32 luIndex) const;
+
+    // X360 @ 0x82705C20. asm: assert(luIndex < muNumStoplines);
+    // return mpaStopLines + 2*luIndex.
+    inline const void* GetStopLine(u32 luIndex) const;
 };
 
 inline const Section* Hull::GetSection(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muNumSections, "luIndex < muNumSections");
     return &mpaSections[luIndex];
+}
+
+inline const void* Hull::GetNeighbour(u32 luIndex) const
+{
+    CGS_ASSERT(mpaNeighbourData != nullptr, "mpaNeighbourData");
+    CGS_ASSERT(luIndex < muNumNeighbours, "luIndex < muNumNeighbours");
+    return reinterpret_cast<const u8*>(mpaNeighbourData) + 4u * luIndex;
+}
+
+inline const void* Hull::GetStaticVehicle(u32 luIndex) const
+{
+    CGS_ASSERT(luIndex < muNumStaticTraffic, "luIndex < muNumStaticTraffic");
+    return reinterpret_cast<const u8*>(mpaStaticTrafficVehicles) + 80u * luIndex;
+}
+
+inline const void* Hull::GetStopLine(u32 luIndex) const
+{
+    CGS_ASSERT(luIndex < muNumStoplines, "luIndex < muNumStoplines");
+    return reinterpret_cast<const u8*>(mpaStopLines) + 2u * luIndex;
 }
 
 }
