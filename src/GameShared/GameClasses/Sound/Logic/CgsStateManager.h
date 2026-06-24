@@ -93,6 +93,14 @@ public:
     // Returns the registered descriptor.
     static ClassTypeInfo<StateManager>* AddToClassTypeInfoArray(ClassTypeInfo<StateManager>* apTypeInfo);
 
+    // @ 0x8268D798. Returns the address of StateManager's static ClassTypeInfo
+    // descriptor (the X360 returns &unk_82F2FAA0; the sibling GetTypeName @0x8268D7A8
+    // reads "StateManager" from that descriptor's typeName at +4). Same shape as the
+    // EffectControl/EffectObject GetStaticTypeInfo accessors -- a function-local static
+    // descriptor seeded with the recovered type name, so the observable return (the
+    // descriptor whose typeName is "StateManager") matches.
+    static ClassTypeInfo<StateManager>* GetStaticTypeInfo();
+
 protected:
     // Leading scalar members (DWARF CgsStateManager.h:335..341). Modelled by name
     // so meMapState can be read without a raw-offset cast; the trailing keystone

@@ -33,14 +33,15 @@ namespace BrnGui
         // One queued/playing video request (DecFIGS BrnGui::MovieManager::VideoDefinition).
         struct VideoDefinition
         {
-            f32  mafRectangle[4];                 // +0x00 mv4Rectangle (left/top/right/bottom, logical 1280x720)
+            f32  mafRectangle[4];                 // +0x00 mv4Rectangle (left/top/right/bottom)
             u32  mVideoResourceId;                // +0x10 VideoDataResource id (0 = none)
             u32  mSoundStreamName;                // +0x14 mSoundStreamName [stub: CgsSound::Playback::Name -> id]
-            s32  miCrossfadeInFrames;
-            s32  miCrossfadeOutFrames;
-            bool mbPreload;
-            bool mbKeepMemoryWhenFinished;
-            bool mbDisableCustomSoundtracks;
+            s32  miCrossfadeInFrames;             // +0x18 (Prepare seeds from dword_830082A8 default)
+            s32  miCrossfadeOutFrames;            // +0x1C
+            u32  muField20;                       // +0x20 (Prepare zeroes / Copy copies; @0x82472990/@0x824EAFD8)
+            bool mbPreload;                       // +0x24
+            bool mbKeepMemoryWhenFinished;        // +0x25
+            bool mbDisableCustomSoundtracks;      // +0x26
 
             void Construct();
             void Prepare();                       // X360 VideoDefinition::Prepare = reset to defaults

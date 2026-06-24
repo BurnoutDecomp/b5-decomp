@@ -119,12 +119,28 @@ namespace CgsGui
             // is locked-for-reading (status bit 4), returns the const handle to the
             // resource-request queue at this+4. (Const overload -- read lock.)
             const GuiResourceRequestQueue* GetResourceRequestQueue() const;
-            // CgsGuiResourceModuleIO.h:256 (DWARF). Non-const overload (write lock) --
-            // declared for completeness; not attested in this batch.
+            // CgsGuiResourceModuleIO.h:256 (DWARF). Non-const overload (write lock). X360
+            // @0x8284DF50: asserts this buffer is locked-for-writing (status bit 3), returns
+            // the handle to the resource-request queue at this+4. Bodied in
+            // CgsGuiResourceModuleIO_OutputBuffer.cpp.
             GuiResourceRequestQueue* GetResourceRequestQueue();
 
+            // The notification pushers. Each asserts this buffer is locked-for-writing
+            // (status bit 3), then records a fixed-type / fixed-size notification event onto
+            // mLoadNotifications (this+0x814) via VariableEventQueue<18432,16>::AddEvent(
+            // lpEvent, type, size). The (type, size) literals are the X360 AddEvent arguments.
+            // Returns the AddEvent result. Bodied in CgsGuiResourceModuleIO_OutputBuffer.cpp.
+            //   AddLoadNotification          @0x8285AA98 : type 14, size 16
+            //   AddUnloadNotification        @0x8285AB50 : type 16, size 12
+            //   AddUnloadRequestNotification @0x8285AC08 : type 15, size 12
+            bool AddLoadNotification(const CgsModule::Event* lpEvent);
+            bool AddUnloadNotification(const CgsModule::Event* lpEvent);
+            bool AddUnloadRequestNotification(const CgsModule::Event* lpEvent);
+
             // CgsGuiResourceModuleIO.h:248 (DWARF). Read-lock handle to the load
-            // notifications. Declared-only (own TU; not attested here).
+            // notifications. X360 @0x8284DFF8: asserts this buffer is locked-for-reading
+            // (status bit 4), returns the handle at this+0x814 (== &mLoadNotifications).
+            // Bodied in CgsGuiResourceModuleIO_OutputBuffer.cpp.
             const GuiEventQueue* GetLoadNotifications() const;
 
             // Byte-offset pin (mRequestQueue at this+4).

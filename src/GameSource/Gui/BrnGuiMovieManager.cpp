@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistration.h"  // RegisterAllResourceTypes
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"           // E_RESOURCETYPE_VIDEODATA
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (VideoDefinition::Copy)
 
 #include <cstdlib>   // malloc / free
 #include <cstdio>    // snprintf (boot-video diagnostics)
@@ -36,14 +37,23 @@ namespace BrnGui
     // ---- VideoDefinition -----------------------------------------------------------------------------
     void MovieManager::VideoDefinition::Construct() { Prepare(); }
 
-    void MovieManager::VideoDefinition::Prepare()   // X360 VideoDefinition::Prepare = reset to defaults
+    // VideoDefinition::Prepare -- X360 ARTIST @0x82472990 (boot-trace executed).
+    //   stvx128 v0 -> +0x00 : rectangle = {0.0, 0.0, 1.0, 1.0} (flt_82001CC0=0.0f, flt_82001C98=1.0f)
+    //   std r3   -> +0x10 : CgsResource::ID::HashString(&unk_820046A7) -- a default video-name hash.
+    //                       The literal string at 0x820046A7 is not in the export (address only), so the
+    //                       hash argument is an honest placeholder; the call structure is faithful.
+    //   stw      -> +0x18 : miCrossfadeInFrames = dword_830082A8 (a .data crossfade-default global)
+    //   stw 0    -> +0x1C, +0x20 ; stb 0 -> +0x24, +0x25, +0x26
+    void MovieManager::VideoDefinition::Prepare()
     {
-        mafRectangle[0] = 0.0f;    mafRectangle[1] = 0.0f;
-        mafRectangle[2] = 1280.0f; mafRectangle[3] = 720.0f;
-        mVideoResourceId = 0;
-        mSoundStreamName = 0;
-        miCrossfadeInFrames = 0;
+        mafRectangle[0] = 0.0f; mafRectangle[1] = 0.0f;
+        mafRectangle[2] = 1.0f; mafRectangle[3] = 1.0f;
+        mVideoResourceId = static_cast<u32>(CgsResource::ID::HashString(
+            reinterpret_cast<const u8*>("")));   // [unrecoverable: literal @0x820046A7]
+        mSoundStreamName = 0;                     // high dword of the +0x10 std (32-bit hasher -> 0)
+        miCrossfadeInFrames = 0;                  // dword_830082A8 default (.data; value not in export)
         miCrossfadeOutFrames = 0;
+        muField20 = 0;
         mbPreload = false;
         mbKeepMemoryWhenFinished = false;
         mbDisableCustomSoundtracks = false;
@@ -51,9 +61,25 @@ namespace BrnGui
 
     void MovieManager::VideoDefinition::Release() { mVideoResourceId = 0; }
 
+    // VideoDefinition::Copy -- X360 ARTIST @0x824EAFD8. Asserts src non-null, then copies the
+    // VMX rectangle (+0x00, 16B), the 64-bit id (+0x10, std), +0x18/+0x1C/+0x20 (stw), and the
+    // 3 bool bytes (+0x24/+0x25/+0x26). Member-by-name; equivalent to a full memberwise copy.
     void MovieManager::VideoDefinition::Copy(const VideoDefinition* lpOther)
     {
-        if (lpOther != 0) *this = *lpOther;
+        CGS_ASSERT(lpOther != 0, "null src defined");
+        if (lpOther == 0) return;
+        mafRectangle[0] = lpOther->mafRectangle[0];
+        mafRectangle[1] = lpOther->mafRectangle[1];
+        mafRectangle[2] = lpOther->mafRectangle[2];
+        mafRectangle[3] = lpOther->mafRectangle[3];
+        mVideoResourceId = lpOther->mVideoResourceId;
+        mSoundStreamName = lpOther->mSoundStreamName;
+        miCrossfadeInFrames = lpOther->miCrossfadeInFrames;
+        miCrossfadeOutFrames = lpOther->miCrossfadeOutFrames;
+        muField20 = lpOther->muField20;
+        mbPreload = lpOther->mbPreload;
+        mbKeepMemoryWhenFinished = lpOther->mbKeepMemoryWhenFinished;
+        mbDisableCustomSoundtracks = lpOther->mbDisableCustomSoundtracks;
     }
 
     // ---- lifecycle (ARTIST Construct 0x824F9598 / Prepare 0x82514780) --------------------------------
