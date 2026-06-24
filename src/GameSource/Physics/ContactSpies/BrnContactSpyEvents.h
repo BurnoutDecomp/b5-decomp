@@ -33,6 +33,16 @@ namespace BrnPhysics
             Vector3      mPointOnB;
         };
 
+        // A resolved contact involving a race car. Adds no members of its own over
+        // BaseContact (DWARF BrnContactSpyEvents.h:101 `struct RaceCarContact : public
+        // BaseContact {}`). The X360 BaseEventQueue<RaceCarContact>::AddEventSafe @ 0x825A3338
+        // copies each element as exactly twelve 64-bit block moves (ctr = 12) at a 96-byte
+        // (0x60) stride (`v4*3*32`, `slwi ..,5`), i.e. sizeof(RaceCarContact) == 96 -- identical
+        // to BaseContact, so no extra storage; sizeof stays 96.
+        struct alignas(16) RaceCarContact : public BaseContact
+        {
+        };
+
         struct alignas(16) HingedPartContact : public BaseContact
         {
             EBodyParts meType;
@@ -43,6 +53,23 @@ namespace BrnPhysics
             Vector3    mVelocity;
             EBodyParts meType;
             bool       mbIsHinged;
+        };
+
+        // A resolved contact involving a smashable prop (DWARF BrnContactSpyEvents.h:165).
+        // The X360 BaseEventQueue<PropContact>::AddEventSafe @ 0x825A3570 copies each element
+        // as exactly fourteen 64-bit block moves (ctr = 14) at a 112-byte (0x70) stride
+        // (`v4*0x70`), i.e. sizeof(PropContact) == 112: BaseContact(96) + the four trailing
+        // small fields below, alignas(16) => 112.
+        struct alignas(16) PropContact : public BaseContact
+        {
+            static const u16 KU_UNKNOWN_PROP_TYPE = 65535;   // BrnContactSpyEvents.h:167
+            static const u8  KU_FLAG_SMASH_GATE   = 1;       // BrnContactSpyEvents.h:169
+            static const u8  KU_FLAG_BILLBOARD    = 2;       // BrnContactSpyEvents.h:170
+
+            u16 muType;        // @96
+            u8  muState;       // @98
+            u8  muFlags;       // @99
+            u8  muBeganMoving; // @100
         };
 
         // A contact that was rejected before becoming a full BaseContact.

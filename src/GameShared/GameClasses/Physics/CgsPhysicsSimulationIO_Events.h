@@ -77,5 +77,30 @@ namespace PhysicsSimulationIO
     {
         u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
     };
+
+    // Push an external (non-simulation) body's updated state into the simulation. Queued with
+    // capacities 1 / 60 / 200 across the input/output buffers (X360 Construct @ 0x828A6538 /
+    // 0x825A8370 / 0x828A6688). The event STRIDE *is* X360-attested here: the matching
+    // EventQueue<InUpdateExternalBody>::Append @ 0x825A41D8 block-copies at a 112-byte stride
+    // (`mulli r5,r29,0x70`, `mulli r11,r11,0x70` == count*0x70 == count*112). So this payload is
+    // sized to that attested 112-byte stride. Internal field layout is still NOT recovered
+    // (no DWARF/source), so it is modelled as an opaque, 16-byte-aligned byte span; the Construct
+    // bodies only take &maEvents[0]==this+0x10, store N and clear the count, so they remain
+    // store-for-store faithful regardless of the span's internal layout.
+    struct alignas(16) InUpdateExternalBody : public Event
+    {
+        u8 macOpaquePayload[112];  // stride 112B X360-attested (Append @ 0x825A41D8); fields not recovered
+    };
+
+    // Push updated per-frame vehicle drive state into the simulation. Queued with capacity 1
+    // in PhysicsSimulationIO (X360 Construct @ 0x828A6538). Same recovery caveat as
+    // InAddRigidBody: no Append/AddEvent for this type is in scope to pin the stride, and the
+    // InputBuffer::Construct offset map @ 0x828A71B8 that would pin it is not in scope either,
+    // so the payload is sized only to the 16-byte alignment class the asm proves
+    // (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT invented.
+    struct alignas(16) InUpdateDriveFrames : public Event
+    {
+        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+    };
 }
 }

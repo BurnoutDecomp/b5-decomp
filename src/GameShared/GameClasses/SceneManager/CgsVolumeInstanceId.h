@@ -52,6 +52,17 @@ namespace CgsSceneManager
         // 0x822B0E70 — set the 14-bit entity index of the embedded entity word.
         VolumeInstanceId* SetEntityIDEntityIndex(u32 luEntityIndex);
 
+        // Read the 14-bit entity index back out of the embedded entity word. ADDITIVE inline
+        // accessor (header-only; no out-of-line symbol). The X360 inlines this read at its call
+        // sites: take the HIGH dword (entity word, `ld; srdi r,r,32`) and extract the 14-bit
+        // field at bit 10 (`extrwi r,r,14,8` -- 14 bits starting at the big-endian bit 8 == the
+        // low-endian field [10..23]). e.g. inlined into BrnWorld::RaceCarCrash::GetOwner
+        // @ 0x827B1538.
+        u32 GetEntityIDEntityIndex() const
+        {
+            return static_cast<u32>(muId >> (32 + KU_ENTITY_INDEX_BASE)) & 0x3FFFu;
+        }
+
         u64 muId;
     };
 }
