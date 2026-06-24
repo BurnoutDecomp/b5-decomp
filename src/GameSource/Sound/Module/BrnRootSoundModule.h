@@ -29,7 +29,21 @@ namespace Module
     class RootSoundModule : public CgsModule::ModuleSingleBuffered
     {
     public:
-        RootSoundModule() : mbConstructed(false), mbPrepared(false), mpAllocator(0) {}
+        RootSoundModule() : mbConstructed(false), mbPrepared(false), mpAllocator(0), mePrepareStage(0) {}
+
+        // The resumable Prepare stages (X360 mePrepareStage @ this+0x14D20). Prepare runs forward
+        // from the persisted stage each frame until a stage reports "still preparing" (returns false)
+        // or all complete. X360 case order is 0,1,2,3,6,4,7 (the registry between playback and logic).
+        enum EPrepareStage
+        {
+            E_PREPSTAGE_PERFMON = 0,  // X360 0 -- PerfMon "Sound Logic" monitor          [grow-in]
+            E_PREPSTAGE_BASE,         // X360 1 -- ModuleSingleBuffered::Prepare           [real]
+            E_PREPSTAGE_AUDIOSYSTEM,  // X360 2 -- rw::audio::core::System + Csis::System   [grow-in]
+            E_PREPSTAGE_PLAYBACK,     // X360 3 -- CgsSound::Playback::Module::Prepare      [grow-in]
+            E_PREPSTAGE_REGISTRY,     // X360 6 -- RootSoundModule::RegistryLoad            [grow-in]
+            E_PREPSTAGE_LOGIC,        // X360 4 -- SoundLogicModule::Prepare + BridgeLogicToRoot [grow-in]
+            E_PREPSTAGE_DONE          // X360 7 -- fully prepared
+        };
 
         // 0x826AF350 -- bring the module to the constructed state.
         void Construct();
@@ -47,6 +61,7 @@ namespace Module
         bool                                mbConstructed;   // X360 *(this+4) constructed flag
         bool                                mbPrepared;
         rw::core::GeneralResourceAllocator* mpAllocator;     // captured from Prepare for the grow-in audio engine
+        s32                                 mePrepareStage;  // X360 this+0x14D20 -- resumable Prepare stage
         // X360 this+0x13900: the module's event-receiver queue (capacity 0x1400 = 5120, align 16).
         // Real + faithful with existing types; Construct() does the X360 capacity/align/Clear sequence.
         CgsModule::EventReceiverQueue<5120, 16> mEventQueue;
