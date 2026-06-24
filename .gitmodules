@@ -1,6 +1,6 @@
 [submodule "vendor/EAThread"]
 	path = vendor/EAThread
-	url = https://github.com/ProjectReversio/EAThread
+	url = https://github.com/BPDecomp/EAThread
 [submodule "vendor/EABase"]
 	path = vendor/EABase
 	url = https://github.com/electronicarts/EABase.git

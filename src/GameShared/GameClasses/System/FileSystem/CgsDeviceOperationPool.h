@@ -1,7 +1,11 @@
 #pragma once
 
 #include "types.hpp"
-#include "SDKs/EATech/eathread/eathread_semaphore.h"   // EA::Thread::Semaphore (mOperationCount)
+// Forked-vendor EA::Thread::Semaphore (mOperationCount). Per the eathread-strategy decision
+// the FileSystem device layer links the (forked) vendor EAThread, not the reconstructed X360
+// set; the vendor Semaphore carries an added X360-aligned Wait(const u32*) overload that
+// ReadOperation calls. (Was SDKs/EATech/eathread/eathread_semaphore.h — now reference-only.)
+#include "eathread/eathread_semaphore.h"   // EA::Thread::Semaphore (mOperationCount)
 
 // CgsFileSystem::OperationPool — the lock-guarded, priority-ordered pool of pending
 // file-system operations a physical device's worker thread drains. Producers
