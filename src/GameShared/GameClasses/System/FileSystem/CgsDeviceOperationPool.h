@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/FileSystem/CgsDeviceOperation.h"  // CgsFileSystem::Operation
 // Forked-vendor EA::Thread::Semaphore (mOperationCount). Per the eathread-strategy decision
 // the FileSystem device layer links the (forked) vendor EAThread, not the reconstructed X360
 // set; the vendor Semaphore carries an added X360-aligned Wait(const u32*) overload that
@@ -32,22 +33,10 @@ namespace CgsFileSystem
 {
     static const s32 KI_MAX_OPERATIONS = 64;
 
-    // One queued file-system operation. The pool moves it around whole (a 304-byte
-    // memcpy) and the scheduler only inspects its priority field (+0x12C / +300). The
-    // full Operation layout is owned by the device layer (CgsDevice.h); modelled here as
-    // an opaque 304-byte payload with a named priority accessor at the asm-attested
-    // offset so the pool can pick the highest-priority operation without depending on
-    // that layout.
-    struct Operation
-    {
-        s32 GetPriority() const
-        {
-            return *reinterpret_cast<const s32*>(
-                reinterpret_cast<const u8*>(this) + 0x12C);
-        }
-
-        u8 maPayload[304];
-    };
+    // One queued file-system operation. The pool moves it around whole (a struct memcpy)
+    // and the scheduler only inspects its priority (Operation::GetPriority). The full
+    // Operation layout now lives in CgsDeviceOperation.h (named fields, x64 widths — was an
+    // opaque 304-byte payload with a raw +0x12C priority offset).
 
     // Opaque storage for the embedded OS critical section (the Futex's lock). The X360
     // RTL_CRITICAL_SECTION is 28 bytes; a host-sized reservation keeps the pool
