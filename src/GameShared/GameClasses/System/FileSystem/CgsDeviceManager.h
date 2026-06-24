@@ -58,12 +58,23 @@ namespace CgsFileSystem
         void InitInternal();                                   // 0x828E9788
         static bool InitializeDeviceManager(void* lpAllocator);// 0x828F91E0
 
+        // The singleton if already created (null otherwise) — lets a one-time bring-up (e.g.
+        // FileSystem::Prepare) avoid re-initialising without tripping GetDeviceManager's assert.
+        static DeviceManager* GetIfInitialized() { return mpDeviceManager; }
+
         // ---- device registry ----
         // Return the physical/virtual device registered under lpcPrefix, or null.
         Device* FindDevice(const char* lpcPrefix);
 
         // Register a physical device under lpcPrefix and spawn its worker thread (step 2).
         bool AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback); // 0x828F9320
+
+        // Synchronously read a whole file through the async engine (open -> read -> close,
+        // blocking on each op's completion). The X360 had no single sync path — callers chained
+        // async ops waiting on per-op completion callbacks; this reproduces that wait with a
+        // count-0 EAThread Semaphore the completion callback posts (marked PC convenience). Routes
+        // through the first registered physical device; returns bytes read, or -1 on failure.
+        s32 ReadFileSync(const char* lpcPath, void* lpBuffer, u32 luMaxSize);
 
         // The per-physical-device worker thread (step 2). Drains mOperations and dispatches
         // each op to the slot's device. lpSlotContext is the PhysicalDeviceSlot*.

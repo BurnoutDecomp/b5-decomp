@@ -1,33 +1,36 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalPC.h"  // DevicePhysicalPC
 
 // CgsFileSystem::FileSystem - the resource file-I/O subsystem embedded by value inside
-// CgsResource::ResourceModule. It owns the rw::core::filesys device manager, a bank of
-// per-stream Win32 critical sections, a FileLog, and the async open/read/close stream
-// machinery the BundleLoaderModule reads .BUNDLE files through.
+// CgsResource::ResourceModule. It owns the device manager (DeviceManager singleton) and, on the
+// real X360, the rw::core::filesys layer, per-stream critical sections, a FileLog, and the
+// async open/read/close stream machinery the BundleLoaderModule reads .BUNDLE files through.
 //
 // SOURCES (X360 ARTIST): ctor 0x827DF320, Construct 0x829033C0, Prepare 0x828F04E8,
-// Release 0x82903880, Destruct 0x828E8A88, + the OpenReadStream/Read/Close internals.
+// Release 0x82903880, Destruct 0x828E8A88.
 //
-// DEFER STATUS: unlike the other resource sub-modules this is NOT a ModuleSingleBuffered,
-// and its real Prepare/Release ARE the rw::core::filesys::Manager + DeviceManager + Win32
-// critical-section bring-up (platform + rw-filesys gated). This pass lands only the TYPE so
-// ResourceModule can embed it and chain its lifecycle; the bodies are inert marked stubs
-// (Prepare/Release report success so the ResourceModule stage machine advances) until the
-// rw-filesys layer is reconstructed. The real layout (16+8 critical sections, FileLog, the
-// device table and stream slots) is added then; this is a placeholder.
+// B3 STATUS: Prepare now brings the async device engine LIVE — it initialises the DeviceManager
+// and registers a concrete PC physical device (DevicePhysicalPC, the Win32 IO leaf), which spawns
+// that device's worker thread. (X360 split this: Prepare did InitializeDeviceManager + the rw
+// filesys Manager; the physical devices p_dvd/p_hdd were added in Construct. Consolidated here for
+// the PC bring-up; the rw::core::filesys layer + the 16-slot BaseFile stream machinery remain
+// follow-on work.) The bundle loader is routed through this engine in B4.
 namespace CgsFileSystem
 {
     class FileSystem
     {
     public:
-        void Construct();   // 0x829033C0 (deferred - rw-filesys/Win32)
-        bool Prepare();     // 0x828F04E8 (deferred - rw::core::filesys::Manager + devices)
-        bool Release();     // 0x82903880 (deferred)
-        void Destruct();    // 0x828E8A88 (deferred)
+        void Construct();   // 0x829033C0
+        bool Prepare();     // 0x828F04E8 — brings up the DeviceManager + registers the PC device
+        bool Release();     // 0x82903880
+        void Destruct();    // 0x828E8A88
 
     private:
-        u32 muPlaceholder;  // real layout added with the rw-filesys bring-up
+        // The concrete PC physical device (Win32 leaf), registered with the DeviceManager in
+        // Prepare. Owned by value so its lifetime matches the FileSystem (and the worker thread
+        // that references it).
+        DevicePhysicalPC mPhysicalDevice;
     };
 }

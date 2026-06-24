@@ -171,7 +171,7 @@ namespace CgsFileSystem
                 char lacCheck[8] = { 0 };
                 if (lpDevice->CheckOp(lOp.miHandle, lOp.mu64Offset, lacCheck) == 0)
                     lpDevice->Read(lOp.miHandle, lOp.mu64Offset, lOp.muSize, lOp.mpBuffer, &liResult);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.miContext);
+                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.mpContext);
                 break;
             }
             case E_OP_WRITE:
@@ -180,44 +180,44 @@ namespace CgsFileSystem
                 char lacCheck[8] = { 0 };
                 if (lpDevice->CheckOp(lOp.miHandle, lOp.mu64Offset, lacCheck) == 0)
                     lpDevice->Write(lOp.miHandle, lOp.mu64Offset, lOp.muSize, lOp.mpBuffer, &liResult);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.miContext);
+                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.mpContext);
                 break;
             }
             case E_OP_OPEN:
             {
                 int liResult = 0;
                 lpDevice->Open(lOp.macPath, lOp.miHandle, &liResult);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.miContext);
+                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.mpContext);
                 break;
             }
             case E_OP_CLOSE:
                 lpDevice->Close(lOp.miHandle);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, 0, lOp.miContext);
+                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, 0, lOp.mpContext);
                 break;
             case E_OP_GETFILESIZE:
             {
                 u64 lu64Size = 0;
                 lpDevice->GetFileSize(lOp.miHandle, &lu64Size);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, static_cast<int>(lu64Size), lOp.miContext);
+                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, static_cast<int>(lu64Size), lOp.mpContext);
                 break;
             }
             case E_OP_OPENEX:
             {
                 int liResult = 0, liC = 0;
                 lpDevice->OpenEx(lOp.macPath, lOp.muSize, static_cast<u32>(lOp.miHandle), &liC, &liResult);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.miContext);
+                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.mpContext);
                 break;
             }
             case E_OP_SEEK:
             {
                 int liResult = 0;
                 lpDevice->Seek(lOp.miHandle, lOp.mu64Offset, &liResult);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.miContext);
+                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.mpContext);
                 break;
             }
             case E_OP_OP7:
                 lpDevice->Op7(lOp.miHandle);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, 0, lOp.miContext);
+                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, 0, lOp.mpContext);
                 break;
             case E_OP_DISCONNECT:
                 lpDevice->Connect();   // X360 op8 -> vtable[0] (no completion callback)
@@ -230,6 +230,89 @@ namespace CgsFileSystem
                 break;
             }
         }
+    }
+
+    // ---- ReadFileSync — PC synchronous convenience over the async device engine ----------
+    namespace
+    {
+        // A per-op completion record: the worker fires SyncOpCallback, which records the result
+        // + handle and posts the count-0 semaphore the waiting caller blocks on.
+        struct SyncCompletion
+        {
+            EA::Thread::Semaphore* mpDone;
+            int                    miResult;
+            int                    miHandle;
+        };
+
+        void SyncOpCallback(Device* /*lpDevice*/, s32 liHandle, s32 liResult, void* lpContext)
+        {
+            SyncCompletion* lpComp = static_cast<SyncCompletion*>(lpContext);
+            lpComp->miResult = liResult;
+            lpComp->miHandle = liHandle;
+            lpComp->mpDone->Post(1);
+        }
+    }
+
+    s32 DeviceManager::ReadFileSync(const char* lpcPath, void* lpBuffer, u32 luMaxSize)
+    {
+        // Route through the first registered physical device.
+        PhysicalDeviceSlot* lpSlot = nullptr;
+        for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
+            if (maPhysicalDevices[liIndex].mpDevice) { lpSlot = &maPhysicalDevices[liIndex]; break; }
+        if (!lpSlot)
+            return -1;
+
+        Device*        lpDevice = lpSlot->mpDevice;
+        OperationPool* lpPool   = &lpSlot->mOperations;
+
+        EA::Thread::Semaphore lDone;   // count 0 (default ctor)
+        SyncCompletion lComp;
+        lComp.mpDone   = &lDone;
+        lComp.miResult = 0;
+        lComp.miHandle = -1;
+        const u32 luWaitForever = 0xFFFFFFFFu;
+
+        // OPEN (read mode == 1). The worker delivers the file handle in the callback's result.
+        Operation lOp;
+        memset(&lOp, 0, sizeof(lOp));
+        lOp.miType   = E_OP_OPEN;
+        lOp.mpDevice = lpDevice;
+        strncpy(lOp.macPath, lpcPath, sizeof(lOp.macPath) - 1);
+        lOp.macPath[sizeof(lOp.macPath) - 1] = 0;
+        lOp.miHandle    = 1;
+        lOp.mpfCallback = SyncOpCallback;
+        lOp.mpContext   = &lComp;
+        lpPool->AddOperation(&lOp);
+        lDone.Wait(&luWaitForever);
+        const int liHandle = lComp.miResult;
+        if (liHandle < 0)
+            return -1;
+
+        // READ the first luMaxSize bytes.
+        memset(&lOp, 0, sizeof(lOp));
+        lOp.miType     = E_OP_READ;
+        lOp.mpDevice   = lpDevice;
+        lOp.miHandle   = liHandle;
+        lOp.mu64Offset = 0;
+        lOp.muSize     = luMaxSize;
+        lOp.mpBuffer   = lpBuffer;
+        lOp.mpfCallback = SyncOpCallback;
+        lOp.mpContext   = &lComp;
+        lpPool->AddOperation(&lOp);
+        lDone.Wait(&luWaitForever);
+        const int liBytes = lComp.miResult;
+
+        // CLOSE.
+        memset(&lOp, 0, sizeof(lOp));
+        lOp.miType      = E_OP_CLOSE;
+        lOp.mpDevice    = lpDevice;
+        lOp.miHandle    = liHandle;
+        lOp.mpfCallback = SyncOpCallback;
+        lOp.mpContext   = &lComp;
+        lpPool->AddOperation(&lOp);
+        lDone.Wait(&luWaitForever);
+
+        return liBytes;
     }
 
 } // namespace CgsFileSystem
