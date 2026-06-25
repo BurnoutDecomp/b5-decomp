@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Sound/BrnResourceRegistrar.h"   // BrnSound::Logic::IResourceRequester + ResourceRegistrar (canonical home)
 
 // =============================================================================
 // BrnSound::Logic::BrnEffectControl
@@ -127,29 +128,9 @@ namespace BrnSound
 namespace Logic
 {
 
-struct IResourceRequester;
-
-// BrnResourceRegistrar.h:42 (DWARF). Sound-logic resource registrar. Only the
-// entry point the control hierarchy routes through is declared here; the full type
-// is reconstructed in its own home (GameSource/Sound/BrnResourceRegistrar.{h,cpp}).
-// FLAG: minimal forward-declared surface — resolved at link time against the
-// BrnResourceRegistrar TU; the body is NOT defined here.
-class ResourceRegistrar
-{
-public:
-    void RemoveRequests(IResourceRequester* pRequester);
-};
-
-// BrnResourceRegistrar.h:337 (DWARF). The resource-requester interface that
-// BrnEffectControl implements as its second base (sub-object vptr @ this+4 on
-// X360). The same interface BrnEffectObject implements; the X360 dtor stores the
-// identical IResourceRequester sub-object vtable (off_820AA820).
-struct IResourceRequester
-{
-    virtual ~IResourceRequester() {}
-    virtual void               ResourcesAreReady() = 0;
-    virtual ResourceRegistrar& GetResourceRegistrar() = 0;
-};
+// IResourceRequester + ResourceRegistrar now live in their canonical home
+// (GameSource/Sound/BrnResourceRegistrar.h, included above) -- folded out of here to resolve the
+// cross-header ODR.
 
 // BrnEffectControl.h:56 (DWARF). Multiply inherits the engine effect-control base
 // (primary vptr @ this+0) and IResourceRequester (sub-object vptr @ this+4).

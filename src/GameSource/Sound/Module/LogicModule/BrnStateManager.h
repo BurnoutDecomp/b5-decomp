@@ -2,6 +2,7 @@
 #define BRN_SOUND_LOGIC_BRN_STATE_MANAGER_H
 
 #include "types.hpp"
+#include "GameSource/Sound/BrnResourceRegistrar.h"   // BrnSound::Logic::IResourceRequester + ResourceRegistrar (canonical home)
 
 // =============================================================================
 // BrnSound::Logic::BrnStateManager
@@ -61,20 +62,9 @@ namespace BrnSound
 namespace Logic
 {
 
-class ResourceRegistrar;
-
-// BrnResourceRegistrar.h:337 (DWARF). The resource-requester interface that
-// BrnStateManager implements as its second base. Declared minimally here; the
-// full type is reconstructed in its own home.
-// FLAG: minimal forward-declared surface — the GetResourceRegistrar return type
-// (ResourceRegistrar) is only forward-declared; this TU does not body either
-// interface method.
-struct IResourceRequester
-{
-    virtual ~IResourceRequester() {}
-    virtual void               ResourcesAreReady()      = 0;
-    virtual ResourceRegistrar& GetResourceRegistrar()   = 0;
-};
+// IResourceRequester + ResourceRegistrar now live in their canonical home
+// (GameSource/Sound/BrnResourceRegistrar.h, included above) -- folded out of here to resolve the
+// cross-header ODR.
 
 // BrnStateManager.h:59 (DWARF): BrnStateManager : public StateManager (primary,
 // RTTI hooks) + public IResourceRequester (sub-object). GetTypeName() is bodied
