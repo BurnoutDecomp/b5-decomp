@@ -62,6 +62,13 @@ struct Environment
     // Returns true (the X360 returns li r3,1 on every path).
     bool AddStateManager(StateManager* apStateManager);
 
+    // @ 0x8268D1C0. Fetch the StateManager registered for state id liStateManId
+    // (the X360 indexes mapStateManagers[liStateManId + 1], same +1 reserved-slot
+    // convention as AddStateManager). Asserts liStateManId < KI_MAX_NUMBER_OF_STATES
+    // (CgsEnvironment.cpp:481). Returns the slot (may be null if nothing registered).
+    // Callers: DynamicMixer::GetStateCount/ConnectDMixIO, Environment::Notify.
+    StateManager* GetStateManager(s32 liStateManId) const;
+
     // The X360 indexes the array at [GetStateType()+1] (the (stateType+1)*4-byte
     // displacement off `this`); slot 0 of the map is reserved. The array is sized
     // KI_MAX_NUMBER_OF_STATES+1 so the highest valid state index (15) lands in-bounds.
