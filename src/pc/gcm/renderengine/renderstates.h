@@ -59,7 +59,17 @@ public:
         u32      muField13;       // 0
         u32      muField14;       // 0
         u32      muField15;       // 0
-        Texture* mpTexture;       // the raster to sample (atlas page 0)
+        // Five trailing state-flag bytes the post-fx Tint texture-state build sets at +0x40..+0x44
+        // (0,0,0,1,1); the X360 marshals them into the sampler/state descriptor alongside the words
+        // above. Modelled explicitly so they can be set by name (the font path leaves them default).
+        // Their presence pushes mpTexture to +0x48 (X360 stores the raster there, not at +0x40).
+        u8       mu8Field40;      // +0x40 (0)
+        u8       mu8Field41;      // +0x41 (0)
+        u8       mu8Field42;      // +0x42 (0)
+        u8       mu8Field43;      // +0x43 (1)
+        u8       mu8Field44;      // +0x44 (1)
+        u8       mau8Pad45[3];    // +0x45 align to +0x48
+        Texture* mpTexture;       // +0x48 the raster to sample (atlas page 0 / the tint lookup map)
     };
 
     // Size the texture-state resource (X360 0x82B635C8 builds the rw::BaseResourceDescriptors<5>).
