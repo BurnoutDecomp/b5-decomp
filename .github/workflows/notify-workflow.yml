@@ -7,7 +7,9 @@ name: Notify workflow repo
 #
 # Setup (one-time):
 #   1. Create a fine-grained PAT (or classic token with `repo` scope) that can send
-#      repository_dispatch to Adriwin06/BP-Decomp_Workflow.
+#      repository_dispatch to BurnoutDecomp/BP-Decomp_Workflow. For a fine-grained
+#      PAT, its resource owner must be BurnoutDecomp and it needs access to the
+#      workflow repo with repository Contents write permission.
 #   2. Add it to THIS repo's secrets as WORKFLOW_DISPATCH_TOKEN.
 # Without the secret the step is skipped, so this file is harmless until configured.
 # The workflow repo also runs hourly, so this is a latency optimization, not required.
@@ -21,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+      WORKFLOW_REPO: ${{ github.repository_owner }}/BP-Decomp_Workflow
     steps:
       - name: Trigger reconcile in BP-Decomp_Workflow
         if: ${{ env.GH_TOKEN != '' }}
@@ -29,7 +32,7 @@ jobs:
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
-            /repos/Adriwin06/BP-Decomp_Workflow/dispatches \
+            "/repos/${WORKFLOW_REPO}/dispatches" \
             -f event_type=b5-decomp-push \
             -F "client_payload[sha]=${GITHUB_SHA}"
           echo "dispatched b5-decomp-push for ${GITHUB_SHA} (workflow repo will reconcile)"
