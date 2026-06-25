@@ -224,6 +224,7 @@ struct LinearResourceAllocator_vtbl {  // sizeof = 72 (rwcore.pdb, x64)
 RW_SIZE_ASSERT(rw::LinearResourceAllocator_vtbl, 72);
 
 struct RGBA {  // sizeof = 4 (rwcore.pdb, x64)
+    RGBA() : m_rgba(0) {}
     RGBA(uint8_t lu8Red, uint8_t lu8Green, uint8_t lu8Blue, uint8_t lu8Alpha);
 
     uint32_t m_rgba;  // +0

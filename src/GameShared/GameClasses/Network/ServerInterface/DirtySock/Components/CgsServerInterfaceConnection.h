@@ -80,6 +80,8 @@ namespace CgsNetwork
         // @ X360 0x82876F18 (DWARF GetLoginStatus, cpp:736). Reached from
         // BrnNetwork::LoginManagerBase::UpdateLoggingIn.
         ELoginStatus GetLoginStatus();
+        bool IsLoggedIn() const;
+        void DisconnectFromServer();
 
     private:
         ServerInterfaceDirtySock* mpServerInterface;   // +0x10

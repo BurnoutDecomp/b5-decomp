@@ -1,7 +1,7 @@
 #ifndef BRN_VEHICLE_SOA_DATA_H
 #define BRN_VEHICLE_SOA_DATA_H
 
-#include "types.hpp"
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 
 namespace BrnTraffic
 {
@@ -11,23 +11,20 @@ namespace BrnTraffic
 // BrnTraffic::VehicleSoaData): eight FastBitArray<601> sets, each 0x50 bytes,
 // covering up to 601 active traffic vehicles. Layout (8 x 0x50 = 0x280) verified
 // against the X360 pseudocode's quadword clears.
-class VehicleSoaData
+struct VehicleSoaData
 {
-public:
-    VehicleSoaData* Construct();
+    static const u32 KU_MAX_VEHICLES = 601;
 
-private:
-    // FastBitArray<601> — 601 vehicle bits in a 0x50-byte block (10 quadwords).
-    typedef u64 FastBitArray601[10];
+    CgsContainers::FastBitArray<KU_MAX_VEHICLES> mAliveVehicles;
+    CgsContainers::FastBitArray<KU_MAX_VEHICLES> mVehiclesWithEntities;
+    CgsContainers::FastBitArray<KU_MAX_VEHICLES> mCollidableVehicles;
+    CgsContainers::FastBitArray<KU_MAX_VEHICLES> mPhysicalVehicles;
+    CgsContainers::FastBitArray<KU_MAX_VEHICLES> mArticulatedVehicles;
+    CgsContainers::FastBitArray<KU_MAX_VEHICLES> mVehiclesRenderedLastFrame;
+    CgsContainers::FastBitArray<KU_MAX_VEHICLES> mPhysicalVehiclesFarFromPlayer;
+    CgsContainers::FastBitArray<KU_MAX_VEHICLES> mPhysicalVehiclesTryingToRecover;
 
-    FastBitArray601 mAliveVehicles;                   // 0x000
-    FastBitArray601 mVehiclesWithEntities;            // 0x050
-    FastBitArray601 mCollidableVehicles;              // 0x0A0
-    FastBitArray601 mPhysicalVehicles;                // 0x0F0
-    FastBitArray601 mArticulatedVehicles;             // 0x140
-    FastBitArray601 mVehiclesRenderedLastFrame;       // 0x190
-    FastBitArray601 mPhysicalVehiclesFarFromPlayer;   // 0x1E0
-    FastBitArray601 mPhysicalVehiclesTryingToRecover; // 0x230
+    void Construct();
 };
 }
 

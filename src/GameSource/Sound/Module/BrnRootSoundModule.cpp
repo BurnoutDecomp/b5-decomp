@@ -8,6 +8,25 @@ namespace BrnSound
 {
 namespace Module
 {
+    // 0x827E4808. The X360 constructor, with the base ctor inlined by Hex-Rays:
+    //   *a1 = &off_820CE500                      -> base ModuleSingleBuffered subobject ctor:
+    //   RWMutex(a1 + 4,  0, 1)                      installs the base vtable and default-constructs
+    //   RWMutex(a1 + 70, 0, 1)                      mInputMutex (+0x10) and mOutputMutex (+0x118)
+    //                                               with RWMutex(NULL, true).
+    //   *a1 = off_820D1100                       -> our own vtable (emitted implicitly).
+    //   SoundLogicModule(a1 + 160)               -> mLogicModule   (embedded @ +0x280).
+    //   DebugComponent(a1 + 21326)               -> mDebugComponent (embedded @ +0x14D38).
+    // The two mutexes and both vtable stores are produced by the base subobject + member
+    // construction; only the bookkeeping fields below (used by the grown Construct/Prepare path)
+    // are seeded here.
+    RootSoundModule::RootSoundModule()
+        : mbConstructed(false)
+        , mbPrepared(false)
+        , mpAllocator(nullptr)
+        , mePrepareStage(E_PREPSTAGE_PERFMON)
+    {
+    }
+
     // 0x826AF350. The X360 ctor-path: base ModuleSingleBuffered::Construct, zero a block of state
     // fields, init two embedded sub-objects (+0x4B8 / +0x280), build + register a Debug component,
     // construct an event-receiver queue (+0x13900), and set the constructed flag *(this+4)=1.

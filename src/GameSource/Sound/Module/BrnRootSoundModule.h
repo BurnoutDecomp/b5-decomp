@@ -7,6 +7,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"    // SoundLogicModule (embedded sub-module)
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"               // Io::LogicInputBuffer (logic Prepare input scratch)
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModuleIo.h"  // Io::LogicOutputBuffer (logic Prepare output scratch)
+#include "GameSource/Sound/BrnDebugComponent.h"
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }  // Prepare's allocator arg
 
@@ -32,7 +33,7 @@ namespace Module
     class RootSoundModule : public CgsModule::ModuleSingleBuffered
     {
     public:
-        RootSoundModule() : mbConstructed(false), mbPrepared(false), mpAllocator(0), mePrepareStage(0) {}
+        RootSoundModule();
 
         // The resumable Prepare stages (X360 mePrepareStage @ this+0x14D20). Prepare runs forward
         // from the persisted stage each frame until a stage reports "still preparing" (returns false)
@@ -74,6 +75,7 @@ namespace Module
         // Construct() brings it up (which brings up its embedded ResourceRegistrar); the LOGIC
         // Prepare stage drives its Prepare with the scratch IO buffers below.
         SoundLogicModule mLogicModule;
+        BrnSound::Debug::DebugComponent mDebugComponent;
 
         // Scratch IO buffers the LOGIC Prepare stage hands to mLogicModule.Prepare. The X360
         // creates these per Prepare call on the IOBufferStack -- CreateIOBuffer<LogicOutputBuffer>

@@ -23,7 +23,16 @@ namespace vpu
     struct alignas(16) Vector2 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };
     struct alignas(16) Vector3 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };   // w: unused 4th lane
     struct alignas(16) Vector4 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };
-    struct alignas(16) Vector3Plus { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } }; // w: the "plus" lane
+    struct alignas(16) Vector3Plus
+    {
+        float x, y, z, w;
+
+        void SetZero() { x = y = z = w = 0.0f; }
+        Vector3 GetVector3() const { return Vector3{ x, y, z, 0.0f }; }
+        void SetVector3(Vector3 lVector) { x = lVector.x; y = lVector.y; z = lVector.z; }
+        float GetPlus() const { return w; }
+        void SetPlus(float lfValue) { w = lfValue; }
+    }; // w: the "plus" lane
 
     // Row-major; the last row of an affine is implicit (0,0,0,1) but still stored.
     struct alignas(16) Matrix44
@@ -45,6 +54,16 @@ namespace vpu
             xAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; yAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
             zAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; wAxis = { 0.0f, 0.0f, 0.0f, 0.0f };
         }
+
+        Vector3& Right() { return xAxis; }
+        Vector3& Up() { return yAxis; }
+        Vector3& At() { return zAxis; }
+        Vector3& Pos() { return wAxis; }
+
+        const Vector3& Right() const { return xAxis; }
+        const Vector3& Up() const { return yAxis; }
+        const Vector3& At() const { return zAxis; }
+        const Vector3& Pos() const { return wAxis; }
     };
 
     // ADDITIVE GROW (flagged by BrnPhysics-bodies group): a 3x3 rotation/inertia matrix,

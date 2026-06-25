@@ -19,6 +19,19 @@ namespace BrnDirector
 // (the inlines below only call its methods through a pointer; a using-TU includes the
 // full home GameSource/Director/BrnDirectorICEWrapper.h before instantiating them).
 class ICEWrapper;
+class DirectorResourceManager;
+
+class ICEResourceMgr : public ICE::IResourceManager
+{
+public:
+    void Construct(DirectorResourceManager* lpResourceManager);
+
+    const ICE::ICETakeData* GetTakeData(CgsResource::ID lId) const override;
+    const ICE::ICETakeData* GetTakeData(s32 liIndex) const override;
+
+private:
+    DirectorResourceManager* mpResourceManager;
+};
 
 }
 
@@ -50,19 +63,28 @@ public:
 
     inline ICE::ICETakeData* GetKeyAnim( const char* lpacKeyAnimName) const
     {
-        return mpIceWrapper->GetICETakeData(BrnResource::MakeICEMovieId( lpacKeyAnimName ));
+        return mpICEWrapper->GetICETakeData(BrnResource::MakeICEMovieId( lpacKeyAnimName ));
     }
 
     inline ICE::ICEGroup* GetShakeTakes() const
     {
-        return mpIceWrapper->GetShakeGroup();
+        return mpICEWrapper->GetShakeGroup();
+    }
+
+    const ICE::IResourceManager* GetIceResourceManager() const
+    {
+        return &mICEResourceMgr;
     }
 
     DirectorResourceManager(int a1);
 
 private:
-    ICEWrapper* mpIceWrapper;
-    uint8_t pad[1628];
+    // X360 members preceding mICEResourceMgr occupy 552 bytes. Their concrete
+    // resource queue/handle types are owned by their respective TUs.
+    u8 maPaddingBeforeICEResourceMgr[552];
+    ICEResourceMgr mICEResourceMgr;
+    ICEWrapper* mpICEWrapper;
+    u8 maPaddingAfterICEWrapper[1064];
 };
 
 inline DirectorResourceManager::DirectorResourceManager(int a1)

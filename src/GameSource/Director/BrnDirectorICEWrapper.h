@@ -10,6 +10,7 @@
 #include "SDKs/Packages/ICE/ICEData.hpp"                          // ICE::ICETakeData (GetICETakeData return)
 #include "GameSource/Director/Camera/ICECameraMover.h"            // ICE::ICECameraMover (embedded by value)
 #include "GameSource/Director/Camera/Camera.h"                    // BrnDirector::Camera::Camera (GetCamera return)
+#include "GameSource/Director/Camera/Utils/BrnDebugController.h"  // Camera::Utils::DebugController
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h" // CgsResource::ID (PlayMovie take id / mCurrentMovieID)
 #include "GameSource/Director/Utils/BrnVehicleRef.h"              // BrnDirector::VehicleRef (mVehicleRef + EType)
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex (PlayMovie race car)
@@ -86,30 +87,6 @@ namespace BrnDirector
 class DirectorResourceManager;
 
 // ----------------------------------------------------------------------------
-// FLAG: minimal slice of the dev-tools debug controller. UpdateAction reads, per
-// control index, the just-pressed / is-pressed / just-released state and the
-// control's analog value. No reconstructed home yet -- modelled with exactly the
-// named accessors UpdateAction touches (the analog value sits at controller+4*index,
-// i.e. a per-index float). Replace with the real home when the camera-utils dev-tools
-// TU lands; the accessor NAMES are stable.
-// ----------------------------------------------------------------------------
-namespace Camera
-{
-namespace Utils
-{
-    class DebugController
-    {
-    public:
-        bool GetJustPressed(s32 liControl) const;
-        bool GetIsPressed(s32 liControl) const;
-        bool GetJustReleased(s32 liControl) const;
-        // The control's current analog value (controller+4*liControl).
-        f32  GetControlValue(s32 liControl) const;
-    };
-}
-}
-
-// ----------------------------------------------------------------------------
 // ICEPlayingMovie -- the snapshot GetCurrentMovie returns: the playing take's id, its
 // normalised playback position, and whether a take is actually playing.
 // ----------------------------------------------------------------------------
@@ -145,8 +122,8 @@ public:
     void EditorOff();
 
     // Rebuild the camera mover for this frame from the manager's currently-active
-    // take. liContext is the per-call director context the mover blends against.
-    void ReconstructCameraMover(s32 liContext);
+    // take and the director's ICE resource manager.
+    void ReconstructCameraMover(const ICE::IResourceManager* lpResourceManager);
 
     // Start playing a recorded ICE take. Signature order: the take id, then the
     // normalised start position, then the vehicle-ref type the take is anchored to,
@@ -163,6 +140,14 @@ public:
     // input is accepted). Press / held / release controls map through the converter
     // tables to queued ICE ActionRefs.
     void UpdateAction(const Camera::Utils::DebugController& lrController);
+
+    bool IsEditorActive() const { return mICEManager.GetEditor().AreMenusActive(); }
+    void SetAcceptInput(bool lbAcceptInput) { mbAcceptInput = lbAcceptInput; }
+    bool WasEditorActive() const { return mbWasEditorActive; }
+    void SetWasEditorActive(bool lbWasEditorActive)
+    {
+        mbWasEditorActive = lbWasEditorActive;
+    }
 
     // Snapshot the currently-playing movie (id + playback position + validity).
     ICEPlayingMovie GetCurrentMovie();
@@ -231,6 +216,10 @@ private:
 
     // +0x12108  Dev-tools input gate -- UpdateAction only queues actions while this is set.
     bool mbAcceptInput;
+    u8 maAcceptInputPadding[7];
+
+    // +0x12110  Previous-frame editor state used to detect editor activation.
+    bool mbWasEditorActive;
 };
 
 } // namespace BrnDirector

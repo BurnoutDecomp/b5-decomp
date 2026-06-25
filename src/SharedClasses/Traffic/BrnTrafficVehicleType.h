@@ -14,6 +14,19 @@ namespace BrnTraffic
         E_VEHICLECLASS_COUNT  = 4
     };
 
+    // BrnTrafficVehicleType.h:107 (DecFIGS) -- the per-frame values derived from
+    // a vehicle type's physics and graphics attributes.
+    struct VehicleTypeUpdateData
+    {
+        f32 mfWheelRadius;
+        f32 mfSuspensionRoll;
+        f32 mfSuspensionPitch;
+        f32 mfSuspensionTravel;
+        f32 mfMass;
+
+        void EndianSwap();
+    };
+
     // BrnTrafficVehicleType.h:135 (DWARF) -- one serialised vehicle-type record. sizeof == 8
     // (X360-authoritative: TrafficData::GetVehicleTraitsForVehicleType @ 0x82705DF0 indexes the
     // mpaVehicleTypes table at an 8-byte stride (`slwi r10,r29,3`) and reads the traits id at

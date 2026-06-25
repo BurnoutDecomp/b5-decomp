@@ -43,7 +43,7 @@ Vector4 VehicleTypeRuntime::PickPaintColourForVehicle(u32 luSeed,
     const u32 luCount = static_cast<u32>(miNumPaintColours);   // (s8)->extsb, then unsigned
     const u32 luWhich = luSeed % luCount;
 
-    s32 liIndex = maPaintColourIndices[luWhich];               // (s8)->extsb sign-extend
+    s32 liIndex = maiPaintColours[luWhich];                    // (s8)->extsb sign-extend
     const s32 liMaxIndex = liNumAvailableColours - 1;
     if (liIndex > liMaxIndex)
     {

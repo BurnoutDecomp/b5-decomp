@@ -109,19 +109,14 @@ void ICEWrapper::EditorOff()
 //   anchor's leading member -- the two pointers address the same bytes. Bridge the
 //   types with a reinterpret_cast (layout-coincident head), not an offset poke; the
 //   mover only reads the anchor's car-to-world (its mSpace).
-// FLAG: liContext (an s32) flows into Construct's trailing context slot, which the
-//   mover's Construct body ignores; the recovered declaration types that slot as const
-//   IResourceManager* (version drift -- the recorded caller passes the int context there).
 // ---------------------------------------------------------------------------
-void ICEWrapper::ReconstructCameraMover(s32 liContext)
+void ICEWrapper::ReconstructCameraMover(const ICE::IResourceManager* lpResourceManager)
 {
     ICE::ICETake* lpCameraTake = mICEManager.GetCameraTake();
 
     mCameraMover.Construct(1,
                            reinterpret_cast<ICE::ICECameraAnchor*>(&mCameraSpaceHandler),
-                           &mICECamera, lpCameraTake, 0,
-                           reinterpret_cast<const ICE::IResourceManager*>(
-                               static_cast<intptr_t>(liContext)));
+                           &mICECamera, lpCameraTake, 0, lpResourceManager);
 }
 
 } // namespace BrnDirector

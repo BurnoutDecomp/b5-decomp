@@ -115,6 +115,7 @@ public:
     // `this`). Exposed BY NAME here (not an offset poke).
     // ====================================================================
     ICEController& GetEditor() { return mController; }
+    const ICEController& GetEditor() const { return mController; }
 
     // Cancel any in-progress movie playback (the editor takes over the camera).
     // EditorOn clears the manager's playback flag (this+0x1CE0) before entering
