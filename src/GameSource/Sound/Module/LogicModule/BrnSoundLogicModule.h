@@ -61,8 +61,42 @@ struct SoundLogicModule : public BrnSound::Logic::IResourceRequester
     // BrnSoundLogicModule.h:58 (DWARF).
     static const s32 KI_MAX_SOUND_TRIGGER_ACTIONS = 16;
 
-    SoundLogicModule() {}
+    // The Prepare resumable-stage machine (X360 0x82703C18, stage word @ this+19775).
+    // Stage order mirrors the X360 switch: AddMonitor -> base Module::Prepare ->
+    // construct+connect the 3 Voices + LoadAsset(BurnoutGlobalData) -> ResourceBridging ->
+    // CreateStateManagers -> PrepareStateManagersOnBoot -> done.
+    enum EPrepareStage
+    {
+        E_PREPSTAGE_PERFMON       = 0,  // case 0: CgsDev::PerfMonCpu::AddMonitor("Resource Registrar")
+        E_PREPSTAGE_BASE          = 1,  // case 1: CgsSound::Logic::Module::Prepare (base)
+        E_PREPSTAGE_VOICES        = 2,  // case 2: Voice::Construct/Connect x3 + IResourceRequester::LoadAsset
+        E_PREPSTAGE_BRIDGE        = 3,  // case 3: ResourceBridging (under IOBuffer lock)
+        E_PREPSTAGE_STATEMANAGERS = 4,  // case 4: CreateStateManagers
+        E_PREPSTAGE_BOOTPREPARE   = 5,  // case 5: PrepareStateManagersOnBoot(4)
+        E_PREPSTAGE_DONE          = 6,  // case 6: prepared
+    };
+
+    SoundLogicModule()
+        : mpBrnLogicInputBuffer(0)
+        , mpBrnLogicOutputBuffer(0)
+        , mePrepareStage(E_PREPSTAGE_PERFMON)
+        , mbConstructed(false)
+        , mbPrepared(false)
+    {
+    }
     virtual ~SoundLogicModule() {}
+
+    // Bring-up (X360 ctor 0x827E3DA8 + the registrar bring-up 0x826B0470). MINIMAL-THEN-GROW:
+    // clear the trigger table + Construct the embedded ResourceRegistrar so the broker's
+    // queues/pools are live; the 3 Voices, the CgsSound::Logic::Module base, the state
+    // managers and the ~79KB IO/state tail are grown on top. Mark constructed.
+    void Construct();
+
+    // Prepare (X360 0x82703C18, via vtable+0x58). MINIMAL-THEN-GROW resumable stage machine:
+    // runs forward from mePrepareStage; every stage is a clearly-FLAGged grow-in stub that
+    // advances (Voice / CreateStateManagers / PrepareStateManagersOnBoot / ResourceBridging /
+    // base Module::Prepare all deferred), reporting prepared when the machine completes.
+    bool Prepare(void* lpParentModule, void* lpInputBuffer, void* lpOutputBuffer);
 
     // BrnSoundLogicModule.cpp:964 (DWARF). Linear-search the per-frame trigger-action
     // table for the entry that matches (leEntityId, leType), returning it (or null).
@@ -94,6 +128,13 @@ private:
     Array<BrnGameState::GameStateModuleIO::SoundTriggerAction, 16> maTriggerActions; // h:372 (X360 this+0x4CA0)
 
     BrnSound::Logic::ResourceRegistrar mResourceRegistrar; // h:383 (X360 this+0x588)
+
+    // Prepare-machine bookkeeping (X360 stage word @ this+19775 + the constructed/prepared
+    // flags near it). Pinned by name; the omitted ~79KB of Voice/state-manager/IO members
+    // sit between maTriggerActions and these in the real layout (grow-in).
+    s32  mePrepareStage;
+    bool mbConstructed;
+    bool mbPrepared;
 };
 
 } // namespace Module
