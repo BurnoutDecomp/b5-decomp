@@ -155,8 +155,16 @@ public:
     // ---- RTTI hooks (declared for home completeness; bodied in this TU's .cpp). ----
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
-    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();          // h:47
-    CgsSound::Logic::StateManager* CreateObject( u32 luType );
+    // STATIC: GetStaticTypeInfo returns the function-local static RTTI descriptor and
+    // CreateObject is the factory the descriptor stores as a free-function pointer
+    // (StateManager*(*)(u32)). The X360 CreateObject @ 0x82702030 never touches an
+    // instance -- its int arg is the operator-new flavour selector, not `this` -- so it
+    // is a static class function; it MUST be static for &CreateObject to be storable in
+    // ClassTypeInfo<StateManager>::mpfnCreateObject (a pointer-to-member is not a
+    // free-function pointer). (Grown from the committed non-static decls to match the
+    // X360 ABI + the in-tree RTTI registration shape.)
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();          // h:47
+    static CgsSound::Logic::StateManager* CreateObject( u32 luType );
 
     PassbyStateManager();
     virtual ~PassbyStateManager();
@@ -178,6 +186,15 @@ public:
     // is modelled as a NAME-only opaque placeholder of unverified size below.
     const ContentPlaceholder& GetSplicerBank() const { return mSplicerBank; } // h:67
     virtual void ResourcesAreReady();
+
+    // BrnStateManager (the committed base) inherits BrnSound::Logic::IResourceRequester,
+    // whose two pure virtuals are ResourcesAreReady() (above) + GetResourceRegistrar().
+    // BrnStateManager declares but does NOT body GetResourceRegistrar(), so the leaf must
+    // override+body it to be a CONCRETE (constructible) type -- required because CreateObject
+    // below `new`s a PassbyStateManager. @ recovered semantically from the sibling
+    // BrnEffectObject::GetResourceRegistrar @ 0x82696850 (route through the owning logic
+    // module's embedded ResourceRegistrar). Bodied in this TU's .cpp.
+    virtual ResourceRegistrar& GetResourceRegistrar();
 
     // BrnPassbyStateManager.h:206 (DWARF: `bool PostPassby(const Passby&)`).
     // @ 0x82683488 -- append rPassby to maPostedPassbys[muPostedPassbyCount] when

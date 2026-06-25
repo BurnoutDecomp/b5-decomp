@@ -38,6 +38,33 @@
 // base-forwarding + pool-teardown semantics are load-bearing.
 // =============================================================================
 
+namespace CgsSound
+{
+namespace Logic
+{
+
+// Per-class RTTI descriptor for the StateManager family (the shape the factory
+// CreateStateMan @ 0x826A5B60 matches on: ObjectID + the createObject free-function
+// pointer). Declared minimally here -- this TU pulls the RegisteredContent partial
+// view of StateManager (CgsStateManagerRegisteredContent.h), which (unlike the full
+// CgsStateManager.h view) does NOT declare ClassTypeInfo, and the two StateManager
+// views are never co-included in one TU, so there is no ODR clash. Same shape as the
+// committed BrnState.h / BrnStateManager.h minimal descriptor.
+// FLAG: minimal -- the owning RTTI registry (StateManager::AddToClassTypeInfoArray,
+// the full view) is not reachable from this TU's view; this is the descriptor shape
+// needed to declare EmitterStateManager's RTTI hooks + factory.
+template <typename T>
+struct ClassTypeInfo
+{
+    s32               ObjectID;
+    const char*       mpcTypeName;
+    ClassTypeInfo<T>* mpBaseTypeInfo;
+    T* (*mpfnCreateObject)(u32);
+};
+
+} // namespace Logic
+} // namespace CgsSound
+
 namespace BrnSound
 {
 namespace Logic
@@ -58,6 +85,25 @@ public:
     // pool and re-installs the MemBase sub-object vtable before freeing. Virtual so
     // the teardown is reached through the vtable exactly as the X360 dispatches it.
     virtual ~EmitterStateManager();
+
+    // ---- RTTI hooks + factory (grown so EmitterStateManager is a registrable leaf the
+    // StateManager factory CreateStateMan @ 0x826A5B60 can construct). STATIC
+    // GetStaticTypeInfo / CreateObject so &CreateObject is storable in
+    // ClassTypeInfo<StateManager>::mpfnCreateObject (the X360 CreateObject @ 0x82701518
+    // never touches an instance -- its int arg is the operator-new flavour selector,
+    // not `this`). ----
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;                                            // @ 0x826867B8
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
+    static CgsSound::Logic::StateManager* CreateObject( u32 luType );                   // @ 0x82701518
+
+    // @ 0x826F5AC0 (vtable +0x0C). The per-manager boot bring-up state machine.
+    // NOTE: in this TU's RegisteredContent view the base StateManager declares NO
+    // virtuals, so this is EmitterStateManager's first explicit virtual (it does NOT
+    // align with the engine StateManager vtable slot +0x0C in this gated view -- the
+    // committed home is intentionally not layout-faithful, see the header LAYOUT NOTE).
+    // The conductor wires Prepare through the real vtable at integration.
+    virtual bool Prepare();
 
 private:
     // +0x30: the registered-content pool destructed by ~EmitterStateManager (its
