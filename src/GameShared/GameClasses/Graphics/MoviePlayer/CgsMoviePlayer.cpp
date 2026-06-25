@@ -115,7 +115,7 @@ namespace CgsGraphics
             return false;
         }
 
-        const AVCodec* lpCodec = 0;
+        AVCodec* lpCodec = 0;
         miVideoStream = av_find_best_stream(mpFormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, &lpCodec, 0);
         if (miVideoStream < 0 || lpCodec == 0)
         {

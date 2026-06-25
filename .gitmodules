@@ -9,4 +9,4 @@
 	url = https://github.com/electronicarts/EASTL.git
 [submodule "vendor/FFmpeg"]
 	path = vendor/FFmpeg
-	url = https://github.com/FFmpeg/FFmpeg
+	url = https://github.com/Adriwin06/FFmpeg-Xenia.git
