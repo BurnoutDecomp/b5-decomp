@@ -35,6 +35,11 @@ namespace Module
         //   faithful: Construct() performs the X360 capacity/alignment/Clear sequence.
         mEventQueue.Construct();
 
+        // [steps 4-5, partial] bring up the embedded SoundLogicModule -- the X360 virtual-inits its
+        //   sub-objects (+0x4B8/+0x280) as part of RootSoundModule::Construct. This runs the embedded
+        //   ResourceRegistrar's bring-up (its request queues + requested/queued pools go live).
+        mLogicModule.Construct();
+
         // [steps 2,9] GROW-IN: trailing state fields at X360 +0x14D18 / +0x14D1C..+0x14D2C (one
         //   seeded to 7) -- no PC members for them in the minimal layout yet.
 

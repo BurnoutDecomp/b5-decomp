@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"      // CgsModule::ModuleSingleBuffered (base)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"    // CgsModule::EventReceiverQueue (mEventQueue)
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"    // SoundLogicModule (embedded sub-module)
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }  // Prepare's allocator arg
 
@@ -65,6 +66,12 @@ namespace Module
         // X360 this+0x13900: the module's event-receiver queue (capacity 0x1400 = 5120, align 16).
         // Real + faithful with existing types; Construct() does the X360 capacity/align/Clear sequence.
         CgsModule::EventReceiverQueue<5120, 16> mEventQueue;
+
+        // The embedded sound-logic sub-module (X360: SoundLogicModule lives inside RootSoundModule;
+        // its sub-objects @ +0x4B8/+0x280 are the ones RootSoundModule::Construct virtual-inits).
+        // Construct() brings it up (which brings up its embedded ResourceRegistrar); the LOGIC
+        // Prepare stage will drive its Prepare once the IO buffers are wired.
+        SoundLogicModule mLogicModule;
     };
 }
 }

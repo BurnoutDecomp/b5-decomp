@@ -111,6 +111,12 @@ struct SoundLogicModule : public BrnSound::Logic::IResourceRequester
     // embedded registrar by reference. X360 0x826838C0: &mResourceRegistrar.
     virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar();
 
+    // IResourceRequester override (makes the class concrete). FLAG: minimal stub -- the
+    // X360 dumped no standalone SoundLogicModule::ResourcesAreReady; the real body lives in
+    // the un-modeled CgsSound::Logic::Module base (this slice inherits only IResourceRequester).
+    // The broker does not drive it on the minimal path; grown with the Voice/LoadAsset path.
+    virtual void ResourcesAreReady() {}
+
     // BrnSoundLogicModule.h:423 (DWARF). Hand out the sound logic input buffer the
     // module reads each frame, asserting it has been attached. X360 0x82682518:
     // loads mpBrnLogicInputBuffer (this+0x4C94), fires the "mpBrnLogicInputBuffer"
