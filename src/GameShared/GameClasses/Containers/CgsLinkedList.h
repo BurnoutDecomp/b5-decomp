@@ -33,6 +33,14 @@ namespace CgsContainers
     {
         friend struct BaseLinkedList;
 
+    public:
+        // CgsLinkedList.h:64 (DWARF). Public next accessor used to walk a sublist by hand.
+        // The X360 LinkedListHelper iteration (e.g. ResourceRegistrar::UpdateRequests
+        // @0x826B0560 / UpdateQueued @0x82702108 / GetResource @0x826B0B08) walks the live
+        // list by chasing each node's mpNext directly (Hex-Rays `Head = *Head`); this exposes
+        // that load without un-protecting the raw pointer pair.
+        BaseLinkedListNode* GetNextNode() const { return mpNext; }
+
     protected:
         // CgsLinkedList.h:60
         BaseLinkedListNode* mpNext;
@@ -130,6 +138,23 @@ namespace CgsContainers
     public:
         typedef LinkedListNode<T> Node;
 
+        // Seed the two sublists from the embedded node pool: the free list owns every node,
+        // the live list starts empty. Generic body shared by every instantiation; recovered
+        // from the X360 ResourceRegistrar::Construct (0x826B0470), which drives a pair of
+        // InternalInit calls per helper -- e.g. for the loading-queued list:
+        //   InternalInit( free, &maNodePool[0], miNumNodes(==N), sizeof(Node)/*336*/ );
+        //   InternalInit( live, 0, 0, sizeof(Node) );
+        // The X360 reads the count from a stored member (`*a1`); here it is the template
+        // parameter N (kept also as miNumNodes below for the faithful member sequence).
+        // InternalInit chains the pool by BYTE stride sizeof(Node) (matching the X360 336/316
+        // strides for the QueuedResource/RequestedResource pools).
+        void Construct()
+        {
+            miNumNodes = static_cast<s32>(N);
+            maFreeList.InternalInit(maNodePool, static_cast<s32>(N), static_cast<s32>(sizeof(Node)));
+            maLiveList.InternalInit(0, 0, static_cast<s32>(sizeof(Node)));
+        }
+
         // Append a value to the live list. Generic body shared by every instantiation
         // (X360 0x826A5E88 = a BrnSound::Logic::ResourceRegistrar AddTail, CgsLinkedList.h:307):
         // pull a node off the free list, assert the pool was not exhausted, copy the value
@@ -143,18 +168,61 @@ namespace CgsContainers
             return lpNode;
         }
 
+        // Push a value at the HEAD of the live list (the X360 ClearUnreferancedFiles path
+        // appends recycled unloading items via AddHead, asserting the pool was not exhausted:
+        // "mUnLoadingQueuedResourceList.AddHead( lUnloadingItem )" @ BrnResourceRegistrar.cpp:320).
+        // Pull a node off the free list, copy the payload, chain onto the live-list head.
+        Node* AddHead(const T& lrElement)
+        {
+            Node* lpNode = static_cast<Node*>(maFreeList.InternalRemoveHead());
+            CGS_ASSERT(lpNode != 0, "We've run out of nodes.");
+            lpNode->mData = lrElement;
+            maLiveList.InternalAddHead(lpNode);
+            return lpNode;
+        }
+
+        // First live node (0 when empty). Callers chase node->GetNextNode() to walk the list
+        // (the X360 InternalGetHead + `Head = *Head` iteration shape).
+        Node*       GetHead()       { return static_cast<Node*>(maLiveList.InternalGetHead()); }
+        const Node* GetHead() const { return static_cast<const Node*>(maLiveList.InternalGetHead()); }
+
+        // Cached live-element count (BaseLinkedList::CountElements @ 0x821F0E48 on the live list).
+        s32 CountElements() const { return maLiveList.CountElements(); }
+
+        // Recycle one live node back to the free list (the X360 live->free move:
+        // InternalRemoveNode(live,n) ; InternalAddHead(free,n), e.g. UpdateQueued @0x82702108
+        // promoting/recycling QueuedResource nodes). The node must currently be in the live list.
+        void RecycleNode(Node* lpNode)
+        {
+            maLiveList.InternalRemoveNode(lpNode);
+            maFreeList.InternalAddHead(lpNode);
+        }
+
     private:
         // The Internal* surgery is protected on BaseLinkedList; a thin subclass re-exposes
-        // exactly the two operations AddTail needs so the helper can drive them.
+        // exactly the operations the helper drives (the grow-in adds InternalInit /
+        // InternalGetHead / InternalAddHead / InternalRemoveNode; InternalRemoveHead /
+        // InternalAddTail were already exposed for AddTail).
         struct Sublist : public BaseLinkedList
         {
         public:
             using BaseLinkedList::InternalRemoveHead;
             using BaseLinkedList::InternalAddTail;
+            using BaseLinkedList::InternalInit;
+            using BaseLinkedList::InternalGetHead;
+            using BaseLinkedList::InternalAddHead;
+            using BaseLinkedList::InternalRemoveNode;
         };
 
+        // X360 member SEQUENCE (recovered from ResourceRegistrar::Construct 0x826B0470, which
+        // reads the count as `*a1` then passes `a1+2` as the pool base -- i.e. the count word
+        // precedes the node pool): the live node count N, then the backing node pool, then the
+        // free/live sublists. LAYOUT NOTE: X360 byte gaps (count word + pool alignment) are
+        // 4-byte-pointer artifacts; members are pinned by name+sequence only, not asserted on
+        // the 64-bit host.
+        s32     miNumNodes;      // +0   - capacity (== N); X360 reads it as the InternalInit count
         Node    maNodePool[N];   // backing storage handed out to the two sublists
-        Sublist maFreeList;      // +0xC4 - nodes available to hand out
-        Sublist maLiveList;      // +0xD0 - nodes currently in use
+        Sublist maFreeList;      // nodes available to hand out
+        Sublist maLiveList;      // nodes currently in use
     };
 }

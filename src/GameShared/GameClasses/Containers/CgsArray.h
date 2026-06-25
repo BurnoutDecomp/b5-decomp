@@ -196,6 +196,27 @@ public:
         --miCount;
     }
 
+    // Append every live element of another (same-instantiation) Array onto this one. X360
+    // Array<T,N>::AppendArray<N> (generic template body shared by every instantiation; e.g.
+    // Array<BrnGui::OverheadSignScore,32>::AppendArray<32> @ 0x822E5348 and
+    // Array<unsigned short,32>::AppendArray<32> @ 0x82374258, CgsArray.h:245/246). Asserts both
+    // arrays were Construct/Clear'd (this @ line 245, source GetLength @ line 336) and that the
+    // combined live count fits N (line 246, "Array container out of space appending an array"),
+    // then Appends source[0..GetLength()-1] in order. Used by ResourceRegistrar::Clear-
+    // UnreferancedFiles (0x826E2080) to push the un-GC'd removal candidates back into the map.
+    void AppendArray(const Array<T, N>& lrSource)
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT(lrSource.miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT((lrSource.GetLength() + static_cast<u32>(miCount)) <= N,
+                   "Array container out of space appending an array");
+        const u32 luSourceCount = lrSource.GetLength();
+        for (u32 luIndex = 0; luIndex < luSourceCount; ++luIndex)
+        {
+            Append(lrSource[luIndex]);
+        }
+    }
+
     // In-place sort of the live elements via a caller-supplied C-style comparator (X360 used the
     // C library qsort). Returns the buffer base (the X360 void return is the this-register artifact).
     T* QSort(int (*lpfComparator)(const void* lpA, const void* lpB))
