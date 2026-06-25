@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"      // CgsModule::ModuleSingleBuffered (base)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"    // CgsModule::EventReceiverQueue (mEventQueue)
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"    // SoundLogicModule (embedded sub-module)
+#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"               // Io::LogicInputBuffer (logic Prepare input scratch)
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModuleIo.h"  // Io::LogicOutputBuffer (logic Prepare output scratch)
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }  // Prepare's allocator arg
 
@@ -70,8 +72,19 @@ namespace Module
         // The embedded sound-logic sub-module (X360: SoundLogicModule lives inside RootSoundModule;
         // its sub-objects @ +0x4B8/+0x280 are the ones RootSoundModule::Construct virtual-inits).
         // Construct() brings it up (which brings up its embedded ResourceRegistrar); the LOGIC
-        // Prepare stage will drive its Prepare once the IO buffers are wired.
+        // Prepare stage drives its Prepare with the scratch IO buffers below.
         SoundLogicModule mLogicModule;
+
+        // Scratch IO buffers the LOGIC Prepare stage hands to mLogicModule.Prepare. The X360
+        // creates these per Prepare call on the IOBufferStack -- CreateIOBuffer<LogicOutputBuffer>
+        // (..,"SoundLogic") for the output (v42/v15); the input is the caller's lpSoundModuleInputBuffer
+        // (a5). The minimal boot caller (BrnGameMainFlowStates LoadSoundModule) passes null IO buffers,
+        // so the module owns its own constructed scratch buffers to satisfy SoundLogicModule::Prepare's
+        // non-null input/output asserts. FLAG: owned-scratch stand-in -- the faithful path routes
+        // per-frame buffers through the IOBufferStack + the playback->logic bridge (grow-in, stages 2-3),
+        // and destroys them per call (X360 LABEL_24/26); the owned buffers stay live across frames here.
+        Io::LogicInputBuffer  mLogicInputScratch;
+        Io::LogicOutputBuffer mLogicOutputScratch;
     };
 }
 }

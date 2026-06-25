@@ -97,11 +97,25 @@ void SoundLogicModule::Construct()
 // guarded grow-in stub that advances until its subsystem (Voice / state managers / the engine
 // base) is reconstructed; the machine completes and reports prepared so a future
 // RootSoundModule LOGIC stage can drive it.
-bool SoundLogicModule::Prepare(void* /*lpParentModule*/, void* lpInputBuffer, void* lpOutputBuffer)
+bool SoundLogicModule::Prepare(void* lpParentModule, void* lpInputBuffer, void* lpOutputBuffer)
 {
+    // X360 line 1 (0x82703C18): store the parent/allocator handle (a1[19777] = a2). The X360
+    // stage-4 caller passes the logic RW allocator here.
+    mpParentModule = lpParentModule;
+
     // X360 asserts both IO buffers are attached (BrnSoundLogicModule.cpp:200-201).
     CGS_ASSERT(lpInputBuffer, "lpInputBuffer");
     CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
+
+    // X360 line 450: (*(*a1 + 80))(a1, a3, a4) -- the vtable+0x50 call that ATTACHES the per-frame
+    // input/output IO buffers into the module so GetBrnInputStructure() and the logic stages can
+    // reach them. The exact vtable+0x50 method is not separately modelled by this minimal slice; its
+    // effect -- pinning mpBrnLogicInputBuffer/mpBrnLogicOutputBuffer to the passed buffers -- is
+    // reproduced here (Construct() zeroes them; Prepare attaches them, matching the X360 ctor->Prepare
+    // ordering). FLAG: attach-by-store inferred from the member usage (GetBrnInputStructure returns
+    // mpBrnLogicInputBuffer @ X360 this+0x4C94); the call's other side effects are grow-in.
+    mpBrnLogicInputBuffer  = (Io::LogicInputBuffer*)lpInputBuffer;
+    mpBrnLogicOutputBuffer = (Io::LogicOutputBuffer*)lpOutputBuffer;
 
     switch (mePrepareStage)
     {
