@@ -135,8 +135,11 @@ bool SoundLogicModule::Prepare(void* lpParentModule, void* lpInputBuffer, void* 
         mePrepareStage = E_PREPSTAGE_BRIDGE;
         // fall through
     case E_PREPSTAGE_BRIDGE:
-        // [grow-in] X360 case 3: SoundLogicModule::ResourceBridging under the output-buffer lock.
-        //   Deferred. Advance.
+        // X360 case 3: SoundLogicModule::ResourceBridging (under the output-buffer lock). The
+        //   registrar Update now runs FOR REAL here (the X360 wraps it in IOBuffer LockForWrite/
+        //   UnlockForWrite on the output buffer; the lock is skipped in this minimal slice since the
+        //   queue-bridge Appends it guards are deferred -- see ResourceBridging). Advance.
+        ResourceBridging();
         mePrepareStage = E_PREPSTAGE_STATEMANAGERS;
         // fall through
     case E_PREPSTAGE_STATEMANAGERS:
@@ -160,6 +163,25 @@ bool SoundLogicModule::Prepare(void* lpParentModule, void* lpInputBuffer, void* 
         *CgsDev::Log::gpDebugPrint << "[Sound] SoundLogicModule::Prepare: stage machine complete "
                                       "(voices/state-managers/base grow-in) -> prepared\n";
     return true;
+}
+
+// X360 0x82702E80. Bridge the broker's per-frame resource traffic:
+//   ResourceRegistrar::Update(this+21016);                                    // <- real, runs now
+//   VariableEventQueue<4096,16>::Append(*(this+19608)+2068, this+74952);      // <- grow-in
+//   VariableEventQueue<2048,16>::Append(*(this+19608)+4,    this+72888);      // <- grow-in
+// MINIMAL-THEN-GROW: the registrar Update is REAL (drains the request queues, resolves requested
+// resources to handles, promotes queued->requested, GCs unreferenced files). On the freshly-
+// Construct'd empty registrar at boot it is a safe no-op (empty queues/pools), but this is what
+// actually exercises the reconstructed broker Update path at runtime.
+void SoundLogicModule::ResourceBridging()
+{
+    mResourceRegistrar.Update();
+
+    // [grow-in] FLAG: the two VariableEventQueue Appends that bridge the registrar's request
+    //   interfaces (X360 this+74952 = mResourceRequestInterface, this+72888 = mAttribSysRequest-
+    //   Interface) into the logic output buffer (*(this+19608)+2068 / +4) are deferred -- they need
+    //   the output-buffer VEQ layout + access to the registrar's private request interfaces. The
+    //   X360 also brackets this in the output buffer's LockForWrite/UnlockForWrite.
 }
 
 // X360 0x82682518. Return the attached sound logic input buffer, asserting it is

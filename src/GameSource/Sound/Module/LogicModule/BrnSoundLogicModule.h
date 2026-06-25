@@ -99,6 +99,12 @@ struct SoundLogicModule : public BrnSound::Logic::IResourceRequester
     // base Module::Prepare all deferred), reporting prepared when the machine completes.
     bool Prepare(void* lpParentModule, void* lpInputBuffer, void* lpOutputBuffer);
 
+    // X360 0x82702E80. Per-frame resource bridge: drive the embedded ResourceRegistrar's Update
+    // (drain its request queues, resolve handles, GC unreferenced files), then bridge its two
+    // request-interface queues into the logic output buffer. Called from Prepare stage 3 + the
+    // per-frame update.
+    void ResourceBridging();
+
     // BrnSoundLogicModule.cpp:964 (DWARF). Linear-search the per-frame trigger-action
     // table for the entry that matches (leEntityId, leType), returning it (or null).
     // X360 0x826AFF88: walks maTriggerActions[0..count), comparing element.mEntityId
