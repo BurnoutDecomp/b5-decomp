@@ -115,7 +115,10 @@ namespace CgsGraphics
             return false;
         }
 
-        AVCodec* lpCodec = 0;
+        // const AVCodec*: the FFmpeg submodule is now the Xenia fork (libavformat 59+ / FFmpeg 5.0+),
+        // where av_find_best_stream / avcodec_alloc_context3 / avcodec_open2 all take a const AVCodec*
+        // (the "Replace FFmpeg submodule with Xenia fork" change; this call site predates it).
+        const AVCodec* lpCodec = 0;
         miVideoStream = av_find_best_stream(mpFormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, &lpCodec, 0);
         if (miVideoStream < 0 || lpCodec == 0)
         {
