@@ -42,5 +42,12 @@ namespace CgsDev
                 mpWindow->Append(lpcText);
             return *this;
         }
+
+        // FLAG: MINIMAL STUBS FOR LINK (not decompiled). The LogWindow render/update protocol + the
+        // line-ring push are grown when the DebugUI window stack lands; Append is a guarded no-op
+        // (the ring buffer mpLinesArray is unallocated in this minimal slice).
+        void LogWindow::Update(f32 /*lfTimeStep*/, InputEvent /*leEvent*/) {}
+        void LogWindow::Render(Debug2DImmediateRender* /*lpRender*/) {}
+        void LogWindow::Append(const char* /*lpcText*/) {}
     }
 }
