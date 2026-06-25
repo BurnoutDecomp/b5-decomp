@@ -96,6 +96,16 @@ public:
         return *mpObject;
     }
 
+    // FLAG (additive grow, by-name): raw owned-pointer accessor. The sound-LOGIC
+    // wrappers (e.g. CgsSound::Logic::Voice) read the handle's owned pointer
+    // DIRECTLY as `*(this+4)` on X360 -- both to null-check ("Voice not yet
+    // created!") WITHOUT dereferencing and to step its ref count / reach into the
+    // Playback::Voice fields. This getter exposes mpObject BY NAME so dependents
+    // don't reach past the access boundary; it matches the raw `lwz r11, 4(r3)`
+    // load and adds no layout or behaviour. No own X360 address (the load is
+    // inlined at every call site).
+    T* GetObject() const { return mpObject; }
+
 private:
     // CgsHandle.h:321 / 332. Ref-counting helpers. Declared-only.
     void AcquireObject() const;
