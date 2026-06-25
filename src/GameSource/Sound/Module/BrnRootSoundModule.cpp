@@ -40,6 +40,13 @@ namespace Module
         //   ResourceRegistrar's bring-up (its request queues + requested/queued pools go live).
         mLogicModule.Construct();
 
+        // Bring up the scratch logic IO buffers (CgsModule::IOBuffer requires Construct before use).
+        // These back the LOGIC Prepare stage's non-null input/output -- the boot caller passes null
+        // (see the scratch-buffer note in the header). X360: the equivalent buffers are CreateIOBuffer'd
+        // on the IOBufferStack inside Prepare; the minimal model constructs owned buffers up front.
+        mLogicInputScratch.Construct();
+        mLogicOutputScratch.Construct();
+
         // [steps 2,9] GROW-IN: trailing state fields at X360 +0x14D18 / +0x14D1C..+0x14D2C (one
         //   seeded to 7) -- no PC members for them in the minimal layout yet.
 
@@ -55,15 +62,16 @@ namespace Module
 
     // 0x826FABF8 (vtable+64). The X360 stage machine constructs the playback + logic audio modules
     // from the allocator, wires the IO buffers, and returns false until fully prepared. [minimal]
-    // capture the allocator for the grow-in engine and report prepared immediately so the
-    // loading-screen Sound stage advances (no real audio engine yet).
-    // 0x826FABF8 (vtable+64). Faithful resumable stage machine: each frame it runs forward from the
+    // capture the allocator for the grow-in engine; the audio-system/playback/registry stages still
+    // advance immediately, while the LOGIC stage now drives the embedded SoundLogicModule::Prepare.
+    // Faithful resumable stage machine: each frame it runs forward from the
     // persisted mePrepareStage, falling through the stages until one reports "still preparing"
     // (returns false -> the loading screen retries next frame) or all complete (returns true). The
     // X360 also brackets each call with three scratch IO buffers (LogicOutputBuffer + Playback In/Out)
-    // used by the playback/logic stages; those are added with stages 2-4. Stage order mirrors the
-    // X360 (0,1,2,3,6,4,7). Stages 2/3/4/6 are guarded GROW-IN stubs that advance immediately until
-    // their engines (rw::audio::core::System, the Playback module, the SoundLogicModule) are built.
+    // used by the playback/logic stages; the logic input/output pair is modelled as owned scratch
+    // buffers (see header). Stage order mirrors the X360 (0,1,2,3,6,4,7). Stages 2/3/6 are guarded
+    // GROW-IN stubs that advance immediately until their engines (rw::audio::core::System, the Playback
+    // module, RegistryLoad) are built; stage 4 (LOGIC) now drives the real SoundLogicModule::Prepare.
     bool RootSoundModule::Prepare(rw::core::GeneralResourceAllocator* lpAllocator,
                                   void* /*lpRootInputBuffer*/, void* /*lpRootOutputBuffer*/,
                                   void* /*lpInputData*/, void* /*lpOutputData*/)
@@ -108,8 +116,23 @@ namespace Module
             // fall through
 
         case E_PREPSTAGE_LOGIC:
-            // [grow-in] X360 stage 4: SoundLogicModule::Prepare (0x82703C18, via vtable+0x58) +
-            //   BridgeLogicToRoot + the playback +0x48 step. The Logic engine is deferred. Advance.
+            // X360 stage 4 (LABEL_22): SoundLogicModule::Prepare (0x82703C18, via vtable+0x58) with the
+            //   logic RW allocator + the input buffer (a5) + the scratch LogicOutputBuffer (v15), then
+            //   BridgeLogicToRoot under the output lock. Now REAL: drive the embedded module's Prepare
+            //   with the captured allocator + the owned scratch IO buffers (the boot caller's buffers are
+            //   null). The X360 treats the bool result as resumable -- `if (!v35) goto LABEL_26` returns
+            //   0 (still preparing) so the loading screen retries next frame; only a true result advances
+            //   the stage. The minimal SoundLogicModule::Prepare completes in one call and reports
+            //   prepared, so this advances immediately; the stall path is honoured for when its stage
+            //   machine grows resumable (Voice / state-manager build).
+            // [grow-in] the per-stage logic allocator carve (GetRWGeneralResource(a2,0x19) + SetAllocator)
+            //   and BridgeLogicToRoot (LogicOutputBuffer -> RootOutputBuffer, under the IOBuffer write lock)
+            //   are deferred until the bridge + RootOutputBuffer paths land.
+            if (!mLogicModule.Prepare(mpAllocator, &mLogicInputScratch, &mLogicOutputScratch))
+            {
+                // Still preparing -- persist at the LOGIC stage and retry next frame (X360 `goto LABEL_26`).
+                return false;
+            }
             mePrepareStage = E_PREPSTAGE_DONE;
             // fall through
 

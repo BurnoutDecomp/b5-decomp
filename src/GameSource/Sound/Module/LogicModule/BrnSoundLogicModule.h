@@ -79,6 +79,7 @@ struct SoundLogicModule : public BrnSound::Logic::IResourceRequester
     SoundLogicModule()
         : mpBrnLogicInputBuffer(0)
         , mpBrnLogicOutputBuffer(0)
+        , mpParentModule(0)
         , mePrepareStage(E_PREPSTAGE_PERFMON)
         , mbConstructed(false)
         , mbPrepared(false)
@@ -130,6 +131,10 @@ private:
     // from this slice (see header note).
     Io::LogicInputBuffer*  mpBrnLogicInputBuffer;   // BrnSoundLogicModule.h:365
     Io::LogicOutputBuffer* mpBrnLogicOutputBuffer;  // BrnSoundLogicModule.h:366
+
+    // The parent/allocator handle Prepare captures first (X360 a1[19777] = a2 -- the logic RW
+    // allocator the stage-4 caller passes). Pinned by name; not byte-offset-asserted.
+    void* mpParentModule;                           // X360 this+19777
 
     Array<BrnGameState::GameStateModuleIO::SoundTriggerAction, 16> maTriggerActions; // h:372 (X360 this+0x4CA0)
 
