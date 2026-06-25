@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "pc/gcm/renderengine/VertexDescriptor.h"
 
 namespace rw { struct Resource; }   // TextureState::Initialize backing memory (rwcore_structs.h)
 
@@ -138,46 +139,4 @@ private:
     MeshData* mpData;
 };
 
-class VertexDescriptor
-{
-public:
-    // The parsed-element parameter block the resource-type handlers marshal: 16 element records
-    // (16 bytes each) + 16 trailing per-element flag bytes. A freshly constructed block seeds every
-    // record's offset to -1 (the "no element" sentinel GetSerialisedResourceDescriptor counts).
-    class Parameters
-    {
-    public:
-        Parameters();
-
-        struct Element
-        {
-            u16 mu16Stream;
-            u16 mu16Pad0;
-            s32 miOffset;
-            u8  mu8Type;
-            u8  mu8Pad1;
-            u8  mu8Usage;
-            u8  mu8UsageIndex;
-            u8  mu8Enabled;
-            u8  maPad2[3];
-        };
-
-        Element maElements[16];
-        u8      maElementFlags[16];
-    };
-
-    // 0x82B61260 -- read the serialised descriptor's element table out into a Parameters block,
-    // padding the unused tail records with the "no element" sentinel. lpData is the serialised
-    // RenderWare vertex-descriptor object (its u16 element-count is at +0x08, its element table at
-    // +0x10). [Companion data-model home pc/gcm/renderengine/VertexDescriptor.cpp owns the
-    // VertexDescriptorData-typed overload; this Parameters-typed overload is the resource-type
-    // handler's call surface.]
-    static void GetParameters(const void* lpData, Parameters* lpParamsOut);
-
-    // 0x82B637D0 -- size the rw resource from a filled Parameters block: count the records whose
-    // offset is not the sentinel (-1), then write the five-entry serialised descriptor (slot0 =
-    // {size = 0x11*validElements + 0x10, alignment = 4}; the other four entries are {size = 0,
-    // alignment = 1}). lpDescriptorOut is rw::BaseResourceDescriptors<5> (10 dwords).
-    static void GetResourceDescriptor(void* lpDescriptorOut, const Parameters* lpParams);
-};
 }

@@ -8,28 +8,15 @@
 
 namespace BrnTraffic
 {
-namespace
+void VehicleSoaData::Construct()
 {
-    void ClearBitArray(u64* lpaBits)
-    {
-        for (int i = 0; i < 10; ++i) // 0x50-byte FastBitArray<601> block
-        {
-            lpaBits[i] = 0;
-        }
-    }
-}
-
-VehicleSoaData* VehicleSoaData::Construct()
-{
-    ClearBitArray(mAliveVehicles);
-    ClearBitArray(mVehiclesWithEntities);
-    ClearBitArray(mCollidableVehicles);
-    ClearBitArray(mPhysicalVehicles);
-    ClearBitArray(mArticulatedVehicles);
-    ClearBitArray(mVehiclesRenderedLastFrame);
-    ClearBitArray(mPhysicalVehiclesFarFromPlayer);
-    ClearBitArray(mPhysicalVehiclesTryingToRecover);
-
-    return this;
+    mAliveVehicles.Construct();
+    mVehiclesWithEntities.Construct();
+    mCollidableVehicles.Construct();
+    mPhysicalVehicles.Construct();
+    mArticulatedVehicles.Construct();
+    mVehiclesRenderedLastFrame.Construct();
+    mPhysicalVehiclesFarFromPlayer.Construct();
+    mPhysicalVehiclesTryingToRecover.Construct();
 }
 }

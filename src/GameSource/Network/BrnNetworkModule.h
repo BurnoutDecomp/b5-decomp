@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Network/BrnNetworkManager.h"
 
 namespace BrnGameState
 {
@@ -17,11 +18,6 @@ namespace GameStateModuleIO
 
 namespace BrnNetwork
 {
-    struct BrnNetworkManager
-    {
-        u8 maOpaque[827300];
-    };
-
     struct GuiEventQueueSmall
     {
         u8 maOpaque[16];

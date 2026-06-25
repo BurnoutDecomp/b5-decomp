@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<N> (mUsedRaceCars)
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"    // BrnDirector::Camera::VehicleInfo (committed, 1264 bytes)
+#include "GameSource/Director/Camera/Utils/BrnDebugController.h"
 
 // BrnDirector::DirectorIO::InputBuffer -- the Director module's per-frame INPUT payload buffer.
 // Like every CgsModule IO buffer it derives the shared CgsModule::IOBuffer (status-flag-guarded
@@ -58,6 +59,12 @@ namespace BrnDirector
 {
 namespace DirectorIO
 {
+    struct ControlInput
+    {
+        u8 maPad[48];
+        BrnDirector::Camera::Utils::DebugController mDebugController;
+    };
+
     struct InputBuffer : public CgsModule::IOBuffer
     {
         // --- queries (getters): all const, all read-lock-asserted ---
@@ -75,6 +82,7 @@ namespace DirectorIO
         const void*                                        GetHookEnumeration() const;
         EActiveRaceCarIndex                                GetPlayerCarIndex() const;
         bool                                               GetShortcutMenuState() const;
+        const ControlInput*                                GetControll() const;
 
         bool HasGotHookEnumeration() const;
         bool HasGotShortcutMenuEvent() const;

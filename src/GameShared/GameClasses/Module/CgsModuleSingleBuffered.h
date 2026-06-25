@@ -2,6 +2,7 @@
 
 #include "CgsModule.h"
 #include "CgsDataBuffer.h"
+#include <eathread/eathread_rwmutex.h>
 
 namespace CgsModule
 {
@@ -29,6 +30,9 @@ namespace CgsModule
 
         EManagerPrepareStage mePrepareStage;
         EManagerReleaseStage meReleaseStage;
+
+        EA::Thread::RWMutex mInputMutex;
+        EA::Thread::RWMutex mOutputMutex;
 
         DataBuffer mInputBuffer;
         DataBuffer mOutputBuffer;

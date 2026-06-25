@@ -81,6 +81,7 @@ namespace BrnDirector
                 bool GetIsPressed(EControl leControl) const;
                 bool GetJustPressed(EControl leControl) const;
                 bool GetJustReleased(EControl leControl) const;
+                f32 GetControlValue(s32 liControl) const;
 
                 // Remaining DWARF-declared accessors (BrnDebugController.h:145..170).
                 // DECLARATION-ONLY -- bodies land with their own ledger entries; the
