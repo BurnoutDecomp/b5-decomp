@@ -8,6 +8,7 @@
 // lock/unlock upload path. Matches the renderengine resource-descriptor convention
 // used by renderstates.h.
 struct IDirect3DBaseTexture9;
+namespace rw { struct Resource; }   // backing resource memory for the rw-resource create path
 
 namespace renderengine
 {
@@ -57,6 +58,11 @@ namespace renderengine
         // the PC raster instead creates the D3D texture). Destroy is the matching FixDown body.
         static void Create(Texture* lpTexture, const Parameters* lpParams, const void* lpPixelData);
         static void Destroy(Texture* lpTexture);
+
+        // 0x82403D-region create path: build the texture object into the rw resource memory from the
+        // serialised parameters and return it (the rw-resource sibling of TextureState::Initialize;
+        // the post-fx Tint lookup-texture create calls this). Body lives in its own renderengine TU.
+        static Texture* Initialize(rw::Resource* lpResourceMemory, const Parameters* lpParams);
 
         // --- Burnout PC raster header (wiki page "Texture/Burnout Paradise/PC"; field order is
         // the wiki's, offsets are the x64 target's). mpD3DTexture is the wiki +0 "texture data"
