@@ -177,6 +177,39 @@ namespace CgsContainers
         return lpNode;
     }
 
+    // InternalRemoveTail - unlink and return the tail node. The exact mirror of
+    // InternalRemoveHead (0x82814F70): walk back from mpLast instead of forward
+    // from mpFirst.
+    // FLAG: RECONSTRUCTED BY SYMMETRY, not decompiled. The X360 build emits no
+    // standalone InternalRemoveTail body (ICF folded/inlined it; only the out-of-
+    // line call from InternalRemoveNode @ 0x828157B0 survives, with no per-function
+    // export). This is the structurally-forced tail counterpart of InternalRemoveHead.
+    BaseLinkedListNode* BaseLinkedList::InternalRemoveTail()
+    {
+        CGS_ASSERT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised");
+
+        BaseLinkedListNode* lpNode = mpLast;
+        if (mpLast)
+        {
+            BaseLinkedListNode* lpPrev = lpNode->mpPrev;
+            mpLast = lpPrev;
+            if (lpPrev)
+            {
+                lpPrev->mpNext = 0;
+            }
+        }
+        if (--miCount == 0)
+        {
+            mpFirst = 0;
+        }
+        if (lpNode)
+        {
+            lpNode->mpPrev = 0;
+            lpNode->mpNext = 0;
+        }
+        return lpNode;
+    }
+
     // 0x82815708 - unlink an arbitrary node, fixing up the head/tail or its
     // neighbours. Forwards to RemoveHead/RemoveTail at the ends.
     void BaseLinkedList::InternalRemoveNode(BaseLinkedListNode* lpNode)
