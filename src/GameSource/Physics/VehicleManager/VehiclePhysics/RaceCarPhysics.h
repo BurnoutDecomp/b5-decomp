@@ -19,7 +19,7 @@
 //     here BY NAME through the VehiclePhysics accessors, not by absolute offset.
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"   // Vector3
+#include "BrnCommonTypes.h"   // Vector3, EntityId
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"   // base + Wheel
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::{Dot, Subtract}
 
@@ -61,6 +61,22 @@ namespace Vehicle
         // dot(position - contactPoint, normal). The on-ground threshold (0.5) and the seed "max"
         // value are the values the X360 decompiler resolved for the inlined constants.
         Vector3 GetHeightAboveRoad() const;
+
+        // ----- ADDITIVE GROW (Deformation car-car-impulse group): two bounce-state methods the
+        //       car-car shunt path calls. DECLARE-ONLY -- their bodies are owned by a separate
+        //       showtime/bounce RaceCarPhysics TU; ApplyCarCarImpulse only needs the declarations
+        //       to compile under the per-TU `cl /c` gate. Signatures are DWARF-authoritative
+        //       (references/DecFIGS/dwarfdump/.../RaceCarPhysics.h:331 / :382). -----
+
+        // @ DWARF :382. True while this race car is currently bounce-boosting (showtime bounce).
+        // The car-car bounce shaping picks a different boost-scale vector depending on this.
+        bool IsBounceBoosting() const;
+
+        // @ DWARF :331. Record that this race car just bounced off another body this frame: the
+        // bounce impulse direction, whether this is the first/chained bounce, whether the impact
+        // exceeded the minimum bounce stress, and the other entity's id. Declare-only.
+        void SetJustBounced(Vector3 lvBounceDirection, bool lbFirstBounce, bool lbOverMinStress,
+                            EntityId lOtherEntityId);
 
     private:
         bool mbPlayerCarInShowtime;   // +0x140C (pinned BY NAME)

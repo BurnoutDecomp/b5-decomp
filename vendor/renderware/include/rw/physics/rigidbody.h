@@ -27,6 +27,16 @@ namespace physics
         STATE_ENABLED  = 2
     };
 
+    // The frame a force/impulse/position argument is expressed in (rigidbody.h:98 DWARF).
+    // ADDITIVE GROW (Deformation car-car-impulse group): ImpulseParams::mePositionSpace embeds
+    // this enum BY VALUE, so it needs the real type here (not an opaque blob). Values are
+    // DWARF-authoritative (rw::physics::InputSpace { WORLD_SPACE=0, BODY_SPACE=1 }).
+    enum InputSpace
+    {
+        WORLD_SPACE = 0,
+        BODY_SPACE  = 1
+    };
+
     struct RigidBody
     {
         // Read the world transform: orientation basis (mRi/mUp/mAt) as the upper 3x3 plus the

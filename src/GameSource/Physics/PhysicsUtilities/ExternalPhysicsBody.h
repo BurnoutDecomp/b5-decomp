@@ -24,6 +24,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3, Matrix33, VecFloat
+#include "rw/physics/rigidbody.h"   // rw::physics::InputSpace
 #include "GameSource/Physics/PhysicsUtilities/ExternallySimulatedBody.h"
 
 namespace BrnPhysics
@@ -68,6 +69,14 @@ namespace BrnPhysics
             const ExternalPhysicsBody& lBody2, Vector3 lPoint1, Vector3 lPoint2,
             Vector3 lImpactVel, Vector3 lCollisionNormal, VecFloat lvfRestitution,
             Vector3* lpImpulseOut, VecFloat* lpfInvInertiaAOut, VecFloat* lpfInvInertiaBOut) const;
+
+        // ADDITIVE GROW (Deformation car-car-impulse group): DECLARE-ONLY sibling. The velocity of a
+        // body point given relative to the centre of mass, in the requested input frame
+        // (= mLinearVelocity + mAngularVelocity x r). DeformableObject::ApplyCarCarImpulse calls it
+        // BY NAME to get each car's contact-point velocity; its body is a separate TU, so only the
+        // declaration is needed for the per-TU gate. Signature from the DecFIGS DWARF
+        // (ExternalPhysicsBody::GetLocalVelocity(Vector3, rw::physics::InputSpace) const -> Vector3).
+        Vector3 GetLocalVelocity(Vector3 lPoint, rw::physics::InputSpace leSpace) const;
 
         // Damp the angular velocity. DampenAngularVelocity applies one isotropic damping
         // curve; DampPitchYawRoll applies a separate per-axis (pitch/yaw/roll) curve. Both

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                              // Vector3
+#include "GameSource/Physics/ContactSpies/BrnContactId.h"  // BrnPhysics::ContactId
 
 // Reconstructed slice of BrnPhysics::Deformation::DeformationSensor, homed at its mirrored
 // DWARF path. The full sensor derives CollidableBody and carries the spec pointer, point
@@ -40,6 +42,39 @@ namespace Deformation
 	// reads as the sphere's leading Vector4, so a forward declaration suffices here and we
 	// avoid forking the real type.
 	struct Sphere;
+
+	// The two-vehicle deformation system passes contacts between cars by pointer, so the
+	// contact record references the *other* car and its sensor only by pointer -- forward
+	// declarations suffice and avoid a header cycle (DeformableObject embeds DeformationSensor
+	// by value, and DeformableObject itself is reconstructed in BrnDeformableObject.h which
+	// includes THIS header).
+	struct DeformableObject;
+	struct DeformationSensor;
+
+	// ADDITIVE GROW (car-car-impulse group): one stored CAR-ON-CAR impulse contact record --
+	// distinct from StoredContact above (which is the post-physics scratch contact). This is the
+	// record DeformableObject::ApplyCarCarImpulse consumes: the two contact points (one on each
+	// body), the shared surface normal, the other vehicle + its sensor, the sub-frame impact time
+	// and the packed contact id. The member SEQUENCE + names + types are DWARF-authoritative
+	// (references/DecFIGS/dwarfdump/.../BrnDeformationSensor.h:57, struct StoredImpulseContact,
+	// offsets mPointOnA/mPointOnB/mNormal/mpOtherVehicle/mpOtherSensor/mfImpactTimeInFrame/
+	// mContactId). GetInverse swaps the A/B roles (point-on-A<->point-on-B, negated normal) so the
+	// SAME impulse can be applied to the other car with the contact reversed.
+	struct StoredImpulseContact
+	{
+		Vector3               mPointOnA;            // contact point on this body
+		Vector3               mPointOnB;            // contact point on the other body
+		Vector3               mNormal;              // shared surface normal
+		DeformableObject*     mpOtherVehicle;       // the other car
+		DeformationSensor*    mpOtherSensor;        // the other car's sensor that owns the contact
+		f32                   mfImpactTimeInFrame;  // sub-frame time of impact (0..1)
+		BrnPhysics::ContactId mContactId;           // packed contact identity
+
+		// DWARF :68. Produce the role-swapped contact (A<->B, normal reversed) used to apply the
+		// equal-and-opposite impulse to the other vehicle. Owned by the StoredImpulseContact TU --
+		// declared-only (ApplyCarCarImpulse calls it BY NAME; the per-TU gate needs only the decl).
+		void GetInverse(StoredImpulseContact& lrInverse) const;
+	};
 
 	// One stored contact record. ClearNonWorldContacts copies it as eight 64-bit words
 	// (a 64-byte blob) and tests the "non-world" flag at byte +0x34 within the record; no
