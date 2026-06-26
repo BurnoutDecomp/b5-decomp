@@ -333,7 +333,8 @@ speed threshold), `flt_82FB8298/829C` + `flt_82FB7F18` (stationary thresholds), 
 |---|---|
 | `CheckForAllTypesOfImpacts` | **bodied** (`BrnVehicleManager.cpp`) |
 | `InstantTakedown` | **bodied** |
-| the 8 sub-classifiers + `HasRaceCarHadRecentImpact` | mapped (this doc); bodyable next — geometric/state tests against the §7 layout |
-| `SetRaceCarCrashing`, `HandleRaceCarRaceCarContact` | mapped; large functions (Hex-Rays local-alloc failure) — body against asm/DWARF, not the pseudocode |
+| the 8 sub-classifiers | **bodied** (`BrnVehicleManager.cpp`); `HasRaceCarHadRecentImpact` declare-only |
+| `SetRaceCarCrashing` | **bodied** (`BrnVehicleManager.cpp`) — reconstructed from the asm/blueprint (Hex-Rays local-alloc failure), not the pseudocode. Suppression gates → id remap → proximity-gated `RaceCarPhysics::SetCrashing` → record stamps + `AddRaceCarCrashEvent` + IO queue push → `maRaceCarCrashData[32]` slot alloc → secondary remapped-id event |
+| `HandleRaceCarRaceCarContact` | **bodied** (`BrnVehicleManager.cpp`) — reconstructed from the asm/blueprint. Decode + gate → populate `RaceCarResponseInfo` (the A/B-swap + `mfAngleBetweenCars`) → grind pre-pass → classifier ladder → `SetRaceCarCrashing` commits → slam/shunt + last-attacker/revenge bookkeeping. FLAG: the VMX speed/velocity lanes (per-car velocity in the unmodelled RaceCarPhysics layout) are zero-init; the `+4176/+4432` slam-state in-record writes are deferred to the RaceCarPhysics layout pass |
 | crash-state machine (`*::SetCrashing`) | mapped; belongs to the RaceCarPhysics/VehiclePhysics home pass |
 | downstream ripples (boost / scoring / AI `OnTakedown`) | mapped; separate subsystems |

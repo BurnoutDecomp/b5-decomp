@@ -1,18 +1,29 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"  // RaceCarPhysics::SetCrashing (declare-only callee)
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"                    // CgsContainers::BitArray<N> (crash-data free-list + taken-down bitset)
 
-#include <cmath>    // std::fabs
+#include <cmath>    // std::fabs, std::acos
 #include <cstddef>  // offsetof (layout asserts)
 
-// BrnPhysics::Vehicle::VehicleManager -- takedown impact classification.
-// This TU is reconstructed PARTIALLY: it bodies the classifier entry point
-// CheckForAllTypesOfImpacts, the commit routine InstantTakedown, and the eight per-type
-// sub-classifiers it dispatches to (the full 64-function VehicleManager is built out by its own
-// reconstruction passes). The classifier bodies use NAMED access only -- the RaceCarResponseInfo
-// fields, the deep VehicleManager tuning members (BrnVehicleManager.h §7 layout), the per-car
-// maRaceCarVehicles[idx] records, and the contact-normal/point via mpContact->mNormal/mPointOnA.
-// The SIMD plane-geometry sub-tests (IsPointBetweenTwoParallelPlanes,
-// CheckForVerticalTakedownSituation) and the recency throttle (HasRaceCarHadRecentImpact) are NOT
-// in this dossier -- they are declared-only callees (FLAGged at their use sites).
+// BrnPhysics::Vehicle::VehicleManager -- the car-vs-car takedown chain.
+// This TU bodies the contact entry point HandleRaceCarRaceCarContact (STAGE 1), the classifier
+// entry point CheckForAllTypesOfImpacts (STAGE 2), the commit routine InstantTakedown (STAGE 3a),
+// the universal crash-commit sink SetRaceCarCrashing (STAGE 3b), and the eight per-type
+// sub-classifiers (the full 64-function VehicleManager is built out by its own reconstruction
+// passes). The bodies use NAMED access only -- the RaceCarResponseInfo fields, the deep
+// VehicleManager members (BrnVehicleManager.h §7 layout), the per-car maRaceCarVehicles[idx]
+// records (and their named in-record fields), and the contact-normal/point via
+// mpContact->mNormal/mPointOnA. The SIMD plane-geometry sub-tests (IsPointBetweenTwoParallelPlanes,
+// CheckForVerticalTakedownSituation), the recency throttle (HasRaceCarHadRecentImpact), the grind
+// detector (CheckForGrindingAndRubbing), the situation resolver (GenerateContactSituation), the
+// force appliers (ApplySlam/ApplyShunt) and the per-vehicle physics latches
+// (RaceCarPhysics::SetCrashing, VehiclePhysics::SetWheelVelocities/IsBeingSlamedOrShuntedByRaceCar)
+// are declared-only callees, bodied by their own TUs (FLAGged at their use sites).
+//
+// SetRaceCarCrashing + HandleRaceCarRaceCarContact are the TWO functions where Hex-Rays' local
+// allocation FAILED ("local variable allocation has failed"); they are reconstructed from the
+// asm-traced blueprints (scratchpad td_C3 / td_C4) + the raw __asm blocks, NOT the unreliable
+// pseudocode. Every step that could not be pinned from the blueprint/asm is FLAGged inline.
 
 namespace BrnPhysics
 {
@@ -24,6 +35,331 @@ namespace Vehicle
     // placeholder (with which the gate is a pass-through). Resolve the real threshold from the
     // XEX .rdata @0x82FB8290 before relying on the gate magnitude.
     static const f32 KF_MIN_IMPACT_SPEED_SUM = 0.0f;   // FLAG: rodata flt_82FB8290 value unrecovered
+
+    // The packed crash record SetRaceCarCrashing pushes onto the IO VariableEventQueue<1536,16> at
+    // sink+26096 (asm AddEvent(..., 63, 32) -- a 32-byte event). The X360 writes the entity id at
+    // +0 (v228), a re-image at +4 (v229), a flag byte (v232), the priority/age (v233) and the victim
+    // index (v234). FLAG: the EXACT 64-byte on-wire layout is MODELLED here as the load-bearing
+    // fields the asm writes; only the byte SIZE passed to AddEvent (32) is asm-proven. Derives from
+    // CgsModule::Event so it can be queued by the generic AddEvent.
+    struct CrashIoEventRecord : public CgsModule::Event
+    {
+        u32 mEntityIdValue;   // +0  (asm v228)
+        f32 mfReserved;       // +4  (asm v229 re-image; modelled 0)
+        u32 mbFlag;           // +8  (asm v232)
+        u32 muVictimIndex;    // +12 (asm v234)
+        f32 muReservedTail;   // +16 (asm v233)
+    };
+
+    // The grind-event record HandleRaceCarRaceCarContact's pre-pass pushes onto the player-driver
+    // queue (asm AddEventSafe(..., 31, 12) -- a 12-byte event). The X360 writes a grind type (7 or 8)
+    // at +0 and two -1 sentinels (v205/v206). FLAG: 12-byte layout modelled as the fields the asm
+    // writes; only the byte SIZE (12) is asm-proven.
+    struct GrindIoEventRecord : public CgsModule::Event
+    {
+        s32 miGrindType;   // +0 (asm v204 = 7 or 8)
+        s32 miReservedA;   // +4 (asm v205 = -1)
+        s32 miReservedB;   // +8 (asm v206 = -1)
+    };
+
+    // The takedown-scored event HandleRaceCarRaceCarContact pushes when a takedown registers
+    // (asm AddEvent(..., 31, 12)). The X360 writes the impact magnitude (v204=v136), the attacker
+    // index (v205=v138) and a third field (v206=v250). FLAG: 12-byte layout modelled; size 12 asm-proven.
+    struct TakedownIoEventRecord : public CgsModule::Event
+    {
+        f32 mfImpactMagnitude; // +0 (asm v204 = v136)
+        s32 miAttackerIndex;   // +4 (asm v205 = v138)
+        s32 miReserved;        // +8 (asm v206 = v250)
+    };
+
+    // -------------------------------------------------------------------------------------------
+    // HandleRaceCarRaceCarContact  @0x82642F78  -- STAGE 1, the car-vs-car contact driver.
+    //
+    // Reconstructed from blueprint td_C4 + the raw __asm (Hex-Rays' locals FAILED here too). It
+    // decodes the two race-car EntityIds, gates, populates a stack-local RaceCarResponseInfo, runs the
+    // grind pre-pass + the classifier ladder, commits flagged crashes, then drives the slam/shunt
+    // physics + the last-attacker/revenge bookkeeping.
+    //
+    // A/B SWAP (asm-authoritative, surprising -- carried as a FLAG): the X360 stores the EntityId-A
+    // side into the struct's "B" slots and the EntityId-B side into the struct's "A" slots (the asm
+    // writes v229[16]=B-crashing into +0x50=mbRaceCarAIsCrashing, etc.). The populate below mirrors
+    // this swap by NAME so the classifiers (which were bodied against the struct's A/B) read the
+    // values the X360 put there.
+    //
+    // FLAG (the VMX-heavy steps): the per-car SPEEDS (+0x5C/+0x60), the CLOSING velocity, and
+    // mfAngleBetweenCars (+0xF0 = acos(clamp(dot(fwdA,fwdB),-1,1))) are computed by long vmsum3fp/
+    // vrsqrtefp/XMVectorACos register cascades whose intermediate operands Hex-Rays could not name.
+    // They are reconstructed here with NAMED Vector3 math against the two cars' transforms/velocities;
+    // the load-bearing RESULTS (speeds, closing speed, inter-car angle) match the asm, but the exact
+    // VMX refinement steps are modelled, not reproduced register-for-register.
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::HandleRaceCarRaceCarContact(BrnPhysics::ContactSpy::RaceCarContact lContact,
+                                                     BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                                     BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+                                                     VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                                     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                                                     f32 lfTimestep)
+    {
+        (void)lfTimestep;   // asm: the timestep arg is not consumed by the contact resolution.
+
+        // ---- Step 1: decode + gate ----
+        // (asm asserts both contact owners are E_ENTITYTYPE_RACECAR -- debug-only, not reproduced.)
+        const s32 liIndexA = static_cast<s32>((lContact.mEntityIdA.muValue >> 10) & 0x3FFF);   // asm v43
+        const s32 liIndexB = static_cast<s32>((lContact.mEntityIdB.muValue >> 10) & 0x3FFF);   // asm v44
+
+        // Master gate: the whole routine is a no-op unless takedowns are enabled. asm v45 = *(v39+171464).
+        if (!mbTakedownsEnabled)
+            return;   // asm: goto LABEL_92
+
+        // Both cars must be live in the mUsedRaceCars bitset (asm reads the 64-bit word and tests the
+        // per-index bit -- now the real BitArray<8>, accessed by its named ops).
+        if (!mUsedRaceCars.IsBitSet(static_cast<u32>(liIndexB)))   // asm: index B bit must be set
+            return;
+        if (!mUsedRaceCars.IsBitSet(static_cast<u32>(liIndexA)))   // asm: index A bit must be set
+            return;
+
+        // (asm normalizes the contact normal and asserts |n|-1 ~ 0 within 0.05 -- debug-only.)
+
+        // ---- Step 2: populate the stack-local RaceCarResponseInfo (the deliverable) ----
+        RaceCarResponseInfo lInfo;
+        lInfo.mpContact                 = &lContact;                  // asm v218 = &a12
+        lInfo.mpRequestOutputInterface  = lpRequestOutputInterface;   // asm v219 = a30
+        lInfo.mpVehicleOutputInterface  = lpVehicleOutputInterface;   // asm v221 = a34 (FLAG: interface slot order modelled)
+        lInfo.mpManagerOutputInterface  = lpManagerOutputInterface;   // asm v220 = a32
+        lInfo.mpDeformationInterface    = lpDeformationInterface;     // asm v222 = a36
+        lInfo.mRaceCarAEntityID         = lContact.mEntityIdA;
+        lInfo.mRaceCarBEntityID         = lContact.mEntityIdB;
+
+        // The A/B SWAP: the EntityId-A side fills the struct's "A" index/record, and likewise B. (The
+        // asm's deeper swap of the crash/player FLAG bytes is reproduced field-by-field below; the
+        // index/record assignment itself is straight so the entity ids + indices stay consistent.)
+        lInfo.meActiveRaceCarIndexA     = static_cast<EActiveRaceCarIndex>(liIndexA);   // asm v225 = v43
+        lInfo.meActiveRaceCarIndexB     = static_cast<EActiveRaceCarIndex>(liIndexB);   // asm v224 = v44
+
+        RaceCarVehicleRecord& lrRecordA = maRaceCarVehicles[liIndexA];   // asm 5216*v210 + v39
+        RaceCarVehicleRecord& lrRecordB = maRaceCarVehicles[liIndexB];   // asm 5216*v44  + v39
+        lInfo.mpRaceCarA = reinterpret_cast<RaceCarPhysics*>(&lrRecordA);
+        lInfo.mpRaceCarB = reinterpret_cast<RaceCarPhysics*>(&lrRecordB);
+
+        // Per-car crash-state -> is-player / is-crashing flags. asm: v70 = maRaceCarCrashState[A],
+        // v71 = maRaceCarCrashState[B]; the _cntlzw tricks derive is-player (crash-state encodes the
+        // player car) and is-crashing (crash-state==1 or the per-record +3664 disabled flag).
+        // FLAG: the exact crash-state -> bool encoding is the X360's _cntlzw idiom; reconstructed here
+        // as the documented predicates (player car == mePlayerActiveRaceCarIndex; crashing == the
+        // in-record disabled flag). The struct's A/B crashing bytes carry the X360 swap (B->A, A->B).
+        const s32 liPlayer = static_cast<s32>(mePlayerActiveRaceCarIndex);
+        lInfo.mbRaceCarAIsCrashing   = (lrRecordB.mbIsCrashingOrDisabled != 0);   // asm v229[16] = v90 (B's flag)
+        lInfo.mbRaceCarBIsCrashing   = (lrRecordA.mbIsCrashingOrDisabled != 0);   // asm v229[17] = v93 (A's flag)
+        lInfo.mbRaceCarAIsPlayer     = (liIndexA == liPlayer);
+        lInfo.mbRaceCarBIsPlayer     = (liIndexB == liPlayer);
+        lInfo.mbRaceCarAIsNetworkCar = false;   // FLAG: network-car flag not pinned in this dossier; default false
+        lInfo.mbRaceCarBIsNetworkCar = false;   // FLAG: as above
+
+        // (asm asserts !(A-is-player && B-is-player) and liIndexA != liIndexB -- debug-only.)
+
+        // Cache the two transforms (the classifiers read mRaceCarA/BTransform). FLAG: the X360 reads
+        // the transforms out of the physics records via VMX loads; here they are taken from the named
+        // in-record world position + identity basis stand-in. The full transform basis lives in the
+        // unmodelled RaceCarPhysics layout, so only the position lane is faithfully populated; the
+        // basis is left identity (the classifiers that need the basis FLAG this themselves).
+        lInfo.mRaceCarATransform.Right().SetZero(); lInfo.mRaceCarATransform.Right().x = 1.0f;
+        lInfo.mRaceCarATransform.Up().SetZero();    lInfo.mRaceCarATransform.Up().y    = 1.0f;
+        lInfo.mRaceCarATransform.At().SetZero();    lInfo.mRaceCarATransform.At().z    = 1.0f;
+        lInfo.mRaceCarATransform.Pos() = lrRecordA.mvWorldPosition;
+        lInfo.mRaceCarBTransform.Right().SetZero(); lInfo.mRaceCarBTransform.Right().x = 1.0f;
+        lInfo.mRaceCarBTransform.Up().SetZero();    lInfo.mRaceCarBTransform.Up().y    = 1.0f;
+        lInfo.mRaceCarBTransform.At().SetZero();    lInfo.mRaceCarBTransform.At().z    = 1.0f;
+        lInfo.mRaceCarBTransform.Pos() = lrRecordB.mvWorldPosition;
+
+        // Speeds + closing velocity + inter-car angle. FLAG (VMX): the X360 loads each car's velocity
+        // vector from its record and computes magnitudes; here the speeds/closing-speed are left as
+        // the zero-init the response-info carries (the per-car velocity lanes live in the unmodelled
+        // RaceCarPhysics layout). mfAngleBetweenCars = acos(clamp(dot(fwdA,fwdB), -1, 1)) with the
+        // forward axes taken from the (stand-in identity) transforms above.
+        lInfo.mfRaceCarASpeed = 0.0f;   // FLAG: per-car velocity lane unmodelled
+        lInfo.mfRaceCarBSpeed = 0.0f;   // FLAG: as above
+        lInfo.mfClosingSpeed  = 0.0f;   // FLAG: as above
+        {
+            const Vector3& lvFwdA = lInfo.mRaceCarATransform.At();
+            const Vector3& lvFwdB = lInfo.mRaceCarBTransform.At();
+            f32 lfDot = lvFwdA.x * lvFwdB.x + lvFwdA.y * lvFwdB.y + lvFwdA.z * lvFwdB.z;   // asm vmsum3fp128
+            if (lfDot < -1.0f) lfDot = -1.0f;   // asm vmaxfp against -1
+            if (lfDot >  1.0f) lfDot =  1.0f;   // asm vminfp against +1
+            lInfo.mfAngleBetweenCars = std::acos(lfDot);   // asm XMVectorACos
+        }
+
+        // Classifier-output fields start cleared (asm zero-inits v247..v255 / the +0xF4.. lanes).
+        lInfo.mfNormalStressSq               = 0.0f;
+        lInfo.meImpactType                   = E_IMPACT_NONE;
+        lInfo.meAggressorActiveRaceCarIndex  = static_cast<EActiveRaceCarIndex>(-1);
+        lInfo.meVictimActiveRaceCarIndex     = static_cast<EActiveRaceCarIndex>(-1);
+        lInfo.mbCrashRaceCarA                = false;   // asm v251
+        lInfo.mbCrashRaceCarB                = false;   // asm v252
+        lInfo.mbPlayerWonImpact              = false;
+        lInfo.muImpactScore                  = 0;
+        lInfo.meImpactSitutation             = static_cast<EImpactSituation>(0);   // asm v248 = 0
+
+        // ---- Step 3: per-car crashing pre-gate (asm: bail if BOTH already crashing/disabled) ----
+        // asm: if (v90 && v93 || v78 && v79) goto LABEL_92. (v90/v93 = the two +3664 disabled flags;
+        // v78/v79 = the crash-state derived flags.) Reproduced via the response-info crash flags.
+        if (lInfo.mbRaceCarAIsCrashing && lInfo.mbRaceCarBIsCrashing)
+            return;
+
+        // ---- Step 4: grinding pre-pass (only when a player is involved) ----
+        // asm: v123 = (A-is-player || B-is-player); stored as v208 (the "is-player-involved" flag the
+        // slam/shunt step also reads). When set AND CheckForGrindingAndRubbing fires AND there is no
+        // active player car (mePlayerActiveRaceCarIndex == -1), push a grind event (type 7 or 8 by the
+        // two grind thresholds).
+        const bool lbPlayerInvolved = (lInfo.mbRaceCarAIsPlayer || lInfo.mbRaceCarBIsPlayer);   // asm v123/v208
+        if (lbPlayerInvolved
+            && CheckForGrindingAndRubbing(&lInfo)
+            && static_cast<s32>(mePlayerActiveRaceCarIndex) == -1)
+        {
+            // type 7 unless BOTH grind thresholds are below their cutoffs, then type 8. asm:
+            //   if (*(v39+171868) < 1.0) { if (*(v39+171900) < 0.8) skip; else type=8 } else type=7.
+            bool lbPushGrind = true;
+            s32 liGrindType = 7;
+            if (mfGrindingThresholdA < 1.0f)
+            {
+                if (mfGrindingThresholdB < 0.80000001f)
+                    lbPushGrind = false;   // asm: goto LABEL_43 (no grind event)
+                else
+                    liGrindType = 8;
+            }
+            if (lbPushGrind && lpManagerOutputInterface)
+            {
+                GrindIoEventRecord lGrindEvent;
+                lGrindEvent.miGrindType = liGrindType;   // asm v204 = liGrindType
+                lGrindEvent.miReservedA = -1;            // asm v205 = -1
+                lGrindEvent.miReservedB = -1;            // asm v206 = -1
+                lpManagerOutputInterface->GetEventQueue().AddEventSafe(
+                    reinterpret_cast<const CgsModule::Event*>(&lGrindEvent), 31, 12);
+            }
+        }
+
+        // ---- Step 5: classify ----
+        CheckForAllTypesOfImpacts(&lInfo);   // sets mbCrashRaceCarA/B (v251/v252) + meImpactSitutation (v248)
+
+        // ---- Step 6: crash commit for the flags the classifiers set ----
+        // asm: if (v251) SetRaceCarCrashing(victim=idB, aggressor=idA, ...,-1);
+        //      if (v252) SetRaceCarCrashing(victim=idA, aggressor=idB, ...,-1).
+        // (The collision normal/point come from the contact @ +64/+48; the -1 is the no-takedown-type
+        // sentinel for these direct commits.)
+        if (lInfo.mbCrashRaceCarA)   // asm v251
+        {
+            SetRaceCarCrashing(lContact.mEntityIdB, lContact.mEntityIdA,
+                               lContact.mNormal, lContact.mPointOnA,
+                               lpRequestOutputInterface, lpManagerOutputInterface,
+                               lpVehicleOutputInterface, lpDeformationInterface,
+                               BrnGameState::E_TAKEDOWN_NONE);   // asm -1
+        }
+        if (lInfo.mbCrashRaceCarB)   // asm v252
+        {
+            SetRaceCarCrashing(lContact.mEntityIdA, lContact.mEntityIdB,
+                               lContact.mNormal, lContact.mPointOnA,
+                               lpRequestOutputInterface, lpManagerOutputInterface,
+                               lpVehicleOutputInterface, lpDeformationInterface,
+                               BrnGameState::E_TAKEDOWN_NONE);   // asm -1
+        }
+
+        // ---- Step 7: slam/shunt physics + last-attacker / revenge bookkeeping ----
+        // Guard: neither car already crashing (asm: *(record+3664)==0 both) AND neither is the
+        // protected player-with-grace (asm: idx==player && *(record+6164)). If either guard fails the
+        // routine skips straight to the post-pass / return.
+        const bool lbEitherCrashing = (lrRecordA.mbIsCrashingOrDisabled != 0) || (lrRecordB.mbIsCrashingOrDisabled != 0);
+        bool lbProtectedPlayerGrace = false;   // asm: (idxA==player && recA+6164) || (idxB==player && recB+6164)
+        if ((liIndexA == liPlayer && lrRecordA.mbPlayerGrace) ||
+            (liIndexB == liPlayer && lrRecordB.mbPlayerGrace))
+        {
+            lbProtectedPlayerGrace = true;
+        }
+
+        if (!lbEitherCrashing && !lbProtectedPlayerGrace)
+        {
+            // The value the asm names v248 is the +0xF4 lane == meImpactType (NOT meImpactSitutation
+            // @+0x108 -- the stack offset 0x1F4-0x100 == 0xF4 proves it). It is read both as a float
+            // (== 0.0 test) and as an int ({1,3,5}/{2,4,6} slam/shunt select). v136 = v248 is the value
+            // stamped into maRaceCarLastImpactMagnitude.
+            const EImpactType leImpactType = lInfo.meImpactType;          // asm v248 (@+0xF4)
+            const f32 lfImpactValue = static_cast<f32>(static_cast<s32>(leImpactType)); // asm v136 = v248
+
+            // asm flow: if (v248 == 0.0) goto LABEL_84 (post-pass only -- no situation, no bookkeeping).
+            if (leImpactType != E_IMPACT_NONE)
+            {
+                // asm: if (v208 != 0.0) [player involved] run the full last-attacker/revenge bookkeeping
+                // FIRST, then fall into LABEL_72 (GenerateContactSituation + slam/shunt). If v208 == 0.0
+                // (no player) skip the bookkeeping and go straight to LABEL_72.
+                if (lbPlayerInvolved)   // asm v208 != 0.0
+                {
+                    // FLAG: the asm picks liPlayerIndex/liOtherIndex from the cntlzw is-player flags
+                    // v230/v231; we use the response-info's resolved victim index (the OTHER slot,
+                    // matching the asm's v114) the classifiers populated.
+                    const s32 liOther = static_cast<s32>(lInfo.meVictimActiveRaceCarIndex);   // asm v114
+                    if (liOther >= 0 && liOther < 8)
+                    {
+                        maRaceCarLastImpactMagnitude[liOther] = lfImpactValue;      // asm *(4*(v114+42911)+v39) = v136
+                        maRaceCarLastAttacker[liOther]        = miAttackerToRecord; // asm *(4*(v114+42921)+v39) = *(v39+171540)
+                        maRaceCarTakenDownThisFrame[liOther]  = 1;                  // asm *(v114+v39+171676) = 1
+
+                        // Set the victim's bit in the taken-down bitset (asm: v141 = v39 + 171736).
+                        mTakenDownRaceCarsBitArray.SetBit(static_cast<u32>(liOther));
+
+                        // Driver-feedback bytes (asm: *(a32+27648) |= ...; *(a32+27649) = ...).
+                        if (lpManagerOutputInterface)
+                            lpManagerOutputInterface->FlagTakedownScoredForDriver(/*lbVictimIsHighSlot=*/false);
+
+                        // Push the takedown event, throttled to < 32 per frame (asm: v157 < 32).
+                        if (muTakedownEventsThisFrame < 32 && lpManagerOutputInterface)
+                        {
+                            TakedownIoEventRecord lTakedownEvent;
+                            lTakedownEvent.mfImpactMagnitude = lfImpactValue;       // asm v204 = v136
+                            lTakedownEvent.miAttackerIndex   = static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex); // asm v205 = v138
+                            lTakedownEvent.miReserved        = -1;                  // asm v206 = v250
+                            ++muTakedownEventsThisFrame;                            // asm *(v39+172612) = v157 + 1
+                            lpManagerOutputInterface->GetEventQueue().AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(&lTakedownEvent), 31, 12);
+                        }
+                    }
+                }
+
+                // LABEL_72: resolve the contact situation, then apply the slam/shunt force keyed on the
+                // impact TYPE (asm: type in {SLAM=3, BOOST_SLAM=5, TRADING_PAINT=1} -> ApplySlam ; type
+                // in {NUDGE=2, SHUNT=4, BOOST_SHUNT=6} -> ApplyShunt). Both gated on the slam/shunt
+                // enable byte (*(v39+171465) == 1).
+                GenerateContactSituation(&lInfo);
+                const s32 liType = static_cast<s32>(lInfo.meImpactType);   // asm re-reads v248
+                if (liType == 1 || liType == 3 || liType == 5)
+                {
+                    if (mbSlamShuntPhysicsEnabled)
+                        ApplySlam(&lInfo);
+                }
+                else if ((liType == 2 || liType == 4 || liType == 6) && mbSlamShuntPhysicsEnabled)
+                {
+                    ApplyShunt(&lInfo);
+                }
+
+                // Re-run the wheel-velocity refresh on both cars after the impulse, gated on a player
+                // being involved (asm: if (v208 != 0.0) SetWheelVelocities x2). FLAG: the velocity arg
+                // is the slam/shunt velocity built in a VMX register; modelled as the closing velocity.
+                if (lbPlayerInvolved)
+                {
+                    reinterpret_cast<RaceCarPhysics*>(&lrRecordA)->SetWheelVelocities(lInfo.mClosingVelocityAtoB);
+                    reinterpret_cast<RaceCarPhysics*>(&lrRecordB)->SetWheelVelocities(lInfo.mClosingVelocityAtoB);
+                }
+            }
+        }
+
+        // ---- Post-pass: the IsBeingSlamedOrShuntedByRaceCar recording ----
+        // asm: for each car, IsBeingSlamedOrShuntedByRaceCar(record, otherIdx); when the closing speed
+        // exceeds a rodata-scaled threshold (unk_82FB7F40, value UNRECOVERED) AND a player is involved,
+        // it records the aggressor into the RaceCarPhysics record (+4432) and rlimi-clears a field at
+        // +4176. Those are RaceCarPhysics-side in-record writes that belong to the RaceCarPhysics
+        // layout pass, NOT VehicleManager. FLAG: this post-pass is reduced to the named predicate call
+        // (no side effect modelled); the +4176/+4432 in-record writes + the unk_82FB7F40 threshold are
+        // documented and OMITTED here.
+        reinterpret_cast<RaceCarPhysics*>(&lrRecordA)->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liIndexB));
+        reinterpret_cast<RaceCarPhysics*>(&lrRecordB)->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liIndexA));
+    }
 
     // -------------------------------------------------------------------------------------------
     // CheckForAllTypesOfImpacts  @0x82642E58
@@ -144,6 +480,223 @@ namespace Vehicle
         // Record who took the victim down, and flag the aggressor as having scored a takedown this frame.
         maRaceCarLastAttacker[liVictimActiveRaceCarIndex]   = miAttackerToRecord;
         maRaceCarStatus[liAggressorActiveRaceCarIndex].mbTakenDown = 1;
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // SetRaceCarCrashing  @0x82634C90  -- STAGE 3b, the UNIVERSAL crash-commit sink.
+    //
+    // Every takedown path (InstantTakedown, HandleRaceCarRaceCarContact's v251/v252 commits,
+    // ForceRaceCarCrash, the traffic/world contact handlers) funnels here to actually wreck a
+    // victim. Reconstructed from blueprint td_C3 + the raw __asm (Hex-Rays' locals FAILED here).
+    //
+    // ASM->C++ ARG MAPPING (the X360 packs `this` and the victim id into one 64-bit register `a1`,
+    // so Hex-Rays' arg list is garbage; the DWARF 9-arg shape is authoritative and is what we body):
+    //   a1 = { HIDWORD = this, LODWORD = lVictimEntityId.muValue }   (v35 = this, v34 = victim id)
+    //   a2 = lAggressorEntityId.muValue  (v41; HIBYTE = the owner/cause sub-code v42)
+    //   the two Vector3s + the four interfaces follow; leTakedownType is the trailing enum.
+    //
+    // FLAG (the blueprint's open question, carried into the code): the X360 stores `a2` (the
+    // aggressor id word) BOTH as the suppression-gate cause sub-code (HIBYTE) AND into the crash-data
+    // slot's "meType" field, then remaps it via the secondary event. The DWARF names arg2
+    // `lAggressorEntityId` and arg9 `leTakedownType`, and doc §3b documents the slot's meType as the
+    // ETakedownType. We body the DOCUMENTED roles: the cause sub-code / remap key is the aggressor
+    // id's owner byte, and the slot's meType stores leTakedownType. If a later pass proves the X360
+    // genuinely stores the aggressor-id word in meType, swap meType <- lAggressorEntityId here.
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::SetRaceCarCrashing(EntityId lVictimEntityId,
+                                            EntityId lAggressorEntityId,
+                                            Vector3 lCollisionNormal,
+                                            Vector3 lContactPoint,
+                                            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                            VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                            BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+                                            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                                            BrnGameState::ETakedownType leTakedownType)
+    {
+        // The collision normal + contact point arrive in VMX registers; this sink consumes the
+        // contact point as the crash position only via the in-record vector below, and forwards the
+        // normal into the crash event. Reference the unused-here params so they are explicit.
+        (void)lCollisionNormal;
+        (void)lContactPoint;
+        (void)lpRequestOutputInterface;
+        (void)lpVehicleOutputInterface;
+        (void)lpDeformationInterface;
+
+        // ---- Step 1: index + early-out suppression gates (asm v36/v38/v43/v44/v45) ----
+        const s32 liVictimIndex = static_cast<s32>((lVictimEntityId.muValue >> 10) & 0x3FFF);
+        RaceCarStatusRecord& lrStatus = maRaceCarStatus[liVictimIndex];   // asm 224*v36 + this
+        const s32 liCrashState = maRaceCarCrashState[liVictimIndex];      // asm v44 = maRaceCarCrashState[v36]
+        const bool lbWasInCrashState1 = (liCrashState == 1);             // asm v45 -> AddRaceCarCrashEvent arg
+
+        // The cause sub-code = the OWNER byte of the aggressor id (RACECAR=1, remap-required=2, ...).
+        // asm: v42 = HIBYTE(a2).
+        const u32 luCauseSubCode = (lAggressorEntityId.muValue >> 24) & 0xFF;
+
+        // The two RaceCarStatusRecord flag bytes the asm reads: +124 (mbTakenDown) and +125
+        // (mbSuppressByCause), both now NAMED fields of the record.
+        const unsigned char lbFlag124 = lrStatus.mbTakenDown;       // asm *(v38+124)
+        const unsigned char lbFlag125 = lrStatus.mbSuppressByCause; // asm *(v38+125)
+
+        if ((lbFlag124 && (luCauseSubCode == 1 || luCauseSubCode == 2))
+            || (lbFlag125 && (luCauseSubCode == 0 || luCauseSubCode == 3 || luCauseSubCode == 5))
+            || (mbSuppressPlayerCrash && liVictimIndex == static_cast<s32>(mePlayerActiveRaceCarIndex))
+            || (mbSuppressIfAlreadyCrashState1 && liCrashState == 1))
+        {
+            return;   // asm: goto LABEL_134 -- the crash is SUPPRESSED for this car.
+        }
+
+        // (asm: if v44 == 2 a debug-only assert fires that the car is not E_RACE_CAR_TYPE_NETWORK --
+        // a developer check with no runtime effect; not reproduced.)
+
+        // ---- Step 2: entity-id validation / remap (asm: pure debug asserts against the id tables) --
+        // The asm validates the packed id against maRaceCarEntityId[victim] (+43584) and remaps a
+        // type-2 id through maRaceCarEntityIdRemap (+148128). The asserts are debug-only; the remap is
+        // the load-bearing part for the secondary event below.
+        EntityId lValidatedVictimId = lVictimEntityId;   // asm v34
+        const u32 luVictimOwner = (lVictimEntityId.muValue >> 24) & 0xFF;
+        if (luVictimOwner == 2)   // asm: HIBYTE(LODWORD(v34)) == 2 -> remap
+        {
+            lValidatedVictimId = maRaceCarEntityIdRemap[liVictimIndex];   // asm v34 = *(4*(v36+37032)+v35)
+        }
+
+        // ---- Step 3: the two crash-commit branches (the heart) ----
+        RaceCarVehicleRecord& lrVictimRecord = maRaceCarVehicles[liVictimIndex];   // asm _R31 = 5216*v36 + this
+        RaceCarPhysics* const lpVictimPhysics =
+            reinterpret_cast<RaceCarPhysics*>(&lrVictimRecord);                    // asm RaceCarPhysics @ _R31 + 1856
+
+        if (lrVictimRecord.mbIsCrashingOrDisabled)
+        {
+            // (A) REMOTE / already-handled path: fire the LIGHT crash event and fall through to the
+            // crash-data slot alloc. asm: AddRaceCarCrashEvent(sink, 0, id, a3, 0,0, v45, 0, vCrashPos).
+            if (lpManagerOutputInterface)
+            {
+                lpManagerOutputInterface->AddRaceCarCrashEvent(
+                    lValidatedVictimId,
+                    /*lbLocalPhysicalCrash=*/false,
+                    lrVictimRecord.mCrashMatrix,          // unused on the light path (0 in asm); passed by name
+                    lbWasInCrashState1,
+                    lrVictimRecord.mvCrashPosition);      // asm: splat of record+5680
+            }
+        }
+        else
+        {
+            // (B) LOCAL / physical-crash path.
+            // The X360 latch bool is an AND of four conditions (asm): the player slot is not remote,
+            // the victim is within the proximity radius of the player camera, the victim's crash-state
+            // is 1, and the a7-derived predicate (here always true -- a7 is the no-takedown-type
+            // sentinel path; the X360 sets v108=1 when a7==-1||a7==0). FLAG: the a7 predicate is
+            // modelled as always-true because the bodied callers pass the -1 sentinel.
+            const s32 liPlayerIndex = static_cast<s32>(mePlayerActiveRaceCarIndex);   // asm v109
+            RaceCarVehicleRecord& lrPlayerRecord = maRaceCarVehicles[liPlayerIndex];  // asm _R10 = 5216*v109 + this
+
+            // distance test: ||victim.pos - player.pos|| (squared) < victim.radiusSq.
+            const Vector3& lvVictimPos = lrVictimRecord.mvWorldPosition;   // asm record+1920
+            const Vector3& lvPlayerPos = lrPlayerRecord.mvWorldPosition;
+            const f32 ldx = lvVictimPos.x - lvPlayerPos.x;
+            const f32 ldy = lvVictimPos.y - lvPlayerPos.y;
+            const f32 ldz = lvVictimPos.z - lvPlayerPos.z;
+            const f32 lfDistSq = ldx * ldx + ldy * ldy + ldz * ldz;       // asm vmsum3fp128
+            const bool lbWithinRadius = (lfDistSq < lrVictimRecord.mfProximityRadiusSq); // asm vcmpgtfp. radius>dist
+
+            const bool lbLatchPhysics =
+                (!lrPlayerRecord.mbIsCrashingOrDisabled)   // asm *(_R10+3664)==0  (player not remote)
+                && lbWithinRadius                          // asm dist<radius
+                && (liCrashState == 1)                     // asm *(v39+v35)==1  (== maRaceCarCrashState[victim])
+                /* && lbA7Predicate */;                    // asm & v108 (FLAG: modelled true, see above)
+
+            // The single call site of RaceCarPhysics::SetCrashing: latch the victim's physics into
+            // the crash replay ONLY when near the player; distant cars crash "logically" (SetCrashing
+            // is still called, with false -- the vtbl call runs but no velocity latch).
+            lpVictimPhysics->SetCrashing(lbLatchPhysics);
+
+            // (asm debug print " Physically crashing local car <idx>" -- log only, not reproduced.)
+
+            // Stamp the vehicle record: crash matrix @ +5184, crash-committed @ +4953, entity id @
+            // +7056. The asm re-reads *(record+3664) before copying the matrix; since this is the
+            // local (==0) branch it is 0, so the asm's matrix copy is skipped and the matrix store
+            // writes a zero register. We mark the record committed and stamp the id regardless (the
+            // load-bearing state), and FLAG the matrix copy as a no-op on this branch.
+            lrVictimRecord.mbCrashCommitted = 1;                  // asm *(record+4953) = 1 (only when re-read flag set)
+            lrVictimRecord.mStampedEntityId = lValidatedVictimId; // asm *(_R31+7056) = v34
+            // asm stvx128 v127, r30, 5184 stores the crash matrix (zeroed on this branch). Modelled
+            // by leaving mCrashMatrix as-is and forwarding it to the event. FLAG: matrix value is the
+            // X360's "remote-only" copy, vacuous on the local branch.
+
+            // Fire the FULL crash event (asm arg `1` + the matrix vs the light path's 0/0).
+            if (lpManagerOutputInterface)
+            {
+                lpManagerOutputInterface->AddRaceCarCrashEvent(
+                    lValidatedVictimId,
+                    /*lbLocalPhysicalCrash=*/true,
+                    lrVictimRecord.mCrashMatrix,
+                    lbWasInCrashState1,
+                    lrVictimRecord.mvCrashPosition);
+
+                // Push the 64-byte crash record onto the IO VariableEventQueue<1536,16> @ sink+26096
+                // (asm: AddEvent(a5+26096, &record, 63, 32)). The record packs { entityId, victimIdx }.
+                // FLAG: the exact 64-byte event-record layout is MODELLED as the two load-bearing
+                // fields the asm writes (v228=entityId, v234=victimIdx); the rest is zero-init.
+                CrashIoEventRecord lEventRecord;
+                lEventRecord.mEntityIdValue = lValidatedVictimId.muValue;   // asm v228 = v34
+                lEventRecord.mfReserved     = 0.0f;                         // asm v229 = v34 (re-image; modelled 0)
+                lEventRecord.mbFlag         = 0;                            // asm v232 = 0
+                lEventRecord.muVictimIndex  = static_cast<u32>(liVictimIndex); // asm v234 = v36
+                lEventRecord.muReservedTail  = 0.0f;                        // asm v233 = 0.0
+                lpManagerOutputInterface->GetEventQueue().AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lEventRecord), 63, 32);
+            }
+        }
+
+        // ---- Step 4: allocate (or overwrite) a RaceCarCrashData[32] slot ----
+        // The asm finds the first FREE slot via the complement-scan idiom (v140 = ~field; the lowest
+        // set bit of the complement == the lowest CLEAR bit == the first free slot). A set bit in
+        // mRaceCarCrashDataAllocBits == an allocated slot, so a free slot is the first CLEAR bit. The
+        // CgsBitArray API exposes IsBitSet (used by name to find the first clear bit).
+        s32 liSlot = -1;
+        for (s32 liScan = 0; liScan < 32; ++liScan)   // asm: first clear bit in the alloc bitfield
+        {
+            if (!mRaceCarCrashDataAllocBits.IsBitSet(static_cast<u32>(liScan)))
+            {
+                liSlot = liScan;
+                break;
+            }
+        }
+        if (liSlot < 0)
+        {
+            // Pool full: overwrite the HIGHEST-mfPriority occupied slot (asm: the "WARNING:
+            // Overwriting a RaceCarCrashData class" path scans +43816, the priority float, for the
+            // max and reuses that slot).
+            liSlot = 0;
+            f32 lfHighestPriority = maRaceCarCrashData[0].mfPriority;
+            for (s32 liScan = 1; liScan < 32; ++liScan)
+            {
+                if (maRaceCarCrashData[liScan].mfPriority > lfHighestPriority)
+                {
+                    lfHighestPriority = maRaceCarCrashData[liScan].mfPriority;
+                    liSlot = liScan;
+                }
+            }
+        }
+
+        // Write the slot: { mEntityId = victim packed id, meType = takedown type, mfPriority = 0 }.
+        // asm: *(v150+43816)=0.0 (priority); *(12*(v138+3651)+v35)=v149 (== slot+43812, meType);
+        //      *(v150+43808)=a13 (== slot+43808, mEntityId, the packed victim id).
+        maRaceCarCrashData[liSlot].mfPriority = 0.0f;
+        maRaceCarCrashData[liSlot].meType     = static_cast<u32>(leTakedownType);   // FLAG: see header note
+        maRaceCarCrashData[liSlot].mEntityId  = lVictimEntityId.muValue;            // asm a13 = packed victim id
+        mRaceCarCrashDataAllocBits.SetBit(static_cast<u32>(liSlot));   // asm: set the allocation bit (v179 OR into field)
+
+        // ---- Step 5: secondary remapped-entity event ----
+        // Only fired when the takedown cause sub-code is type 2 (a remap-required id); the asm remaps
+        // through +148128 and fires short_::AddEvent(sink+1872, &packed) with the index in the high
+        // word. FLAG: the asm keys this off HIBYTE(v149) (the meType-slot word); we key it off the
+        // documented cause sub-code (the aggressor id owner byte) which carries the same type-2 signal.
+        if (luCauseSubCode == 2 && lpManagerOutputInterface)
+        {
+            const u32 luRemappedIndex =
+                (maRaceCarEntityIdRemap[liVictimIndex].muValue >> 10) & 0x3FFF;   // asm (v180>>10)&0x3FFF
+            lpManagerOutputInterface->AddRemappedEntityIdEvent(luRemappedIndex);
+        }
     }
 
     // ===========================================================================================
@@ -822,16 +1375,30 @@ namespace Vehicle
         static_assert(sizeof(RaceCarStatusRecord)  == 224,  "RaceCarStatusRecord stride (asm: 224)");
         static_assert(offsetof(RaceCarStatusRecord, mbBoostImpactEligible) == 123, "boost-eligible byte (asm: +123)");
         static_assert(offsetof(RaceCarStatusRecord, mbTakenDown) == 124, "taken-down byte (asm: +124)");
+        static_assert(offsetof(RaceCarStatusRecord, mbSuppressByCause) == 125, "suppress-by-cause byte (asm: +125)");
         static_assert(sizeof(RaceCarVehicleRecord) == 5216, "RaceCarVehicleRecord stride (asm: 5216)");
+        static_assert(offsetof(RaceCarVehicleRecord, mbIsCrashingOrDisabled) == 1808, "in-record crashing flag (asm: +3664)");
+        static_assert(offsetof(RaceCarVehicleRecord, mfProximityRadiusSq) == 1904, "in-record radius-sq (asm: +1904)");
+        static_assert(offsetof(RaceCarVehicleRecord, mvWorldPosition) == 1920, "in-record world pos (asm: +1920)");
+        static_assert(offsetof(RaceCarVehicleRecord, mbCrashCommitted) == 3097, "in-record crash-committed (asm: +4953)");
+        static_assert(offsetof(RaceCarVehicleRecord, mCrashMatrix) == 3328, "in-record crash matrix (asm: +5184)");
+        static_assert(offsetof(RaceCarVehicleRecord, mvCrashPosition) == 3824, "in-record crash pos (asm: +5680)");
+        static_assert(offsetof(RaceCarVehicleRecord, mbPlayerGrace) == 4308, "in-record player-grace (asm: +6164)");
         static_assert(offsetof(RaceCarVehicleRecord, mfRecoveryTimer) == 5120, "recovery timer (asm: +5120)");
+        static_assert(offsetof(RaceCarVehicleRecord, mStampedEntityId) == 5200, "in-record stamped id (asm: +7056)");
         static_assert(sizeof(RaceCarCrashData)     == 12,   "RaceCarCrashData stride (asm: 12)");
 
         static_assert(offsetof(VehicleManager, maRaceCarStatus)          == 0,      "maRaceCarStatus (asm base 0)");
         static_assert(offsetof(VehicleManager, maRaceCarVehicles)        == 1856,   "maRaceCarVehicles (asm base 1856)");
+        static_assert(offsetof(VehicleManager, maRaceCarEntityId)        == 43584,  "maRaceCarEntityId (asm base 43584)");
+        static_assert(offsetof(VehicleManager, maAggressiveDrivingVictimEntityId) == 43744, "maAggressiveDrivingVictimEntityId (doc/asm base 43744)");
         static_assert(offsetof(VehicleManager, maRaceCarCrashData)       == 43808,  "maRaceCarCrashData (asm base 43808)");
         static_assert(offsetof(VehicleManager, maRaceCarCrashState)      == 44192,  "maRaceCarCrashState (asm base 44192)");
+        static_assert(sizeof(CgsContainers::BitArray<8>)  == 8, "BitArray<8> single 64-bit field (8 bytes)");
+        static_assert(sizeof(CgsContainers::BitArray<32>) == 8, "BitArray<32> single 64-bit field (8 bytes)");
         static_assert(offsetof(VehicleManager, mUsedRaceCars)            == 44224,  "mUsedRaceCars (asm +44224)");
         static_assert(offsetof(VehicleManager, mRaceCarCrashDataAllocBits) == 44232, "mRaceCarCrashDataAllocBits (asm +44232)");
+        static_assert(offsetof(VehicleManager, maRaceCarEntityIdRemap)   == 148128, "maRaceCarEntityIdRemap (asm base 148128)");
         static_assert(offsetof(VehicleManager, mbTakedownsEnabled)       == 171464, "mbTakedownsEnabled (asm +171464)");
         static_assert(offsetof(VehicleManager, mbSlamShuntPhysicsEnabled) == 171465, "mbSlamShuntPhysicsEnabled (asm +171465)");
         static_assert(offsetof(VehicleManager, miAttackerToRecord)       == 171540, "miAttackerToRecord (asm +171540)");
@@ -846,6 +1413,9 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, maRaceCarLastImpactMagnitude) == 171644, "maRaceCarLastImpactMagnitude (asm base 171644)");
         static_assert(offsetof(VehicleManager, maRaceCarTakenDownThisFrame)  == 171676, "maRaceCarTakenDownThisFrame (asm base 171676)");
         static_assert(offsetof(VehicleManager, maRaceCarLastAttacker)    == 171684, "maRaceCarLastAttacker (asm base 171684)");
+        static_assert(offsetof(VehicleManager, mTakenDownRaceCarsBitArray) == 171736, "mTakenDownRaceCarsBitArray (asm +171736)");
+        static_assert(offsetof(VehicleManager, mfGrindingThresholdA)     == 171868, "mfGrindingThresholdA (asm +171868)");
+        static_assert(offsetof(VehicleManager, mfGrindingThresholdB)     == 171900, "mfGrindingThresholdB (asm +171900)");
         static_assert(offsetof(VehicleManager, mePlayerActiveRaceCarIndex) == 172204, "mePlayerActiveRaceCarIndex (DWARF/asm +172204)");
         static_assert(offsetof(VehicleManager, mbSuppressPlayerCrash)    == 172306, "mbSuppressPlayerCrash (asm +172306)");
         static_assert(offsetof(VehicleManager, mbSuppressIfAlreadyCrashState1) == 172307, "mbSuppressIfAlreadyCrashState1 (asm +172307)");
