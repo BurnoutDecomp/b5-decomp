@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEmitterStateManager.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // =============================================================================
 // BrnSound::Logic::World::EmitterStateManager — out-of-line bodies.
@@ -42,7 +43,7 @@ namespace World
 // construction (maContentPool).
 // ---------------------------------------------------------------------------
 EmitterStateManager::EmitterStateManager()
-    : CgsSound::Logic::StateManager()
+    : BrnSound::Logic::BrnStateManager()
 {
 }
 
@@ -77,17 +78,17 @@ EmitterStateManager::~EmitterStateManager()
 // GetTypeInfo / GetStaticTypeInfo were NOT individually exported; reconstructed
 // from the established in-tree RTTI pattern (CgsStateManager.cpp GetStaticTypeInfo).
 //
-// FLAG (IResourceRequester sub-object deferred -- committed-home modelling choice):
-// the X360 EmitterStateManager ALSO carries a BrnSound::Logic::IResourceRequester
-// sub-object (ctor @ 0x826FE290 installs secondary vtables @ +0x90/+0x98; it has an
-// IResourceRequester completion callback ResourcesAreReady @ 0x826867C8 setting the
-// prepare-state, and Prepare's real body calls IResourceRequester::LoadAsset(this+
-// 0x90, ...)). The committed home (see header) derives ONLY CgsSound::Logic::
-// StateManager (the RegisteredContent partial view, which has no IResourceRequester
-// and no pure virtuals -- so this leaf is already concrete). Adding IResourceRequester
-// here would force the full-vs-minimal StateManager ODR fork into this TU; it is left
-// deferred to preserve the committed base/ctor/dtor. Consequence: ResourcesAreReady /
-// LoadAsset are NOT modelled in this slice (boot only needs Prepare()==true).
+// ODR FOLD (2026-06-25): Emitter now derives the canonical BrnSound::Logic::
+// BrnStateManager (-> the FULL CgsSound::Logic::StateManager + IResourceRequester),
+// the same base the eight sibling managers use, instead of the RegisteredContent
+// partial view of CgsSound::Logic::StateManager. The X360 EmitterStateManager DOES
+// carry a BrnSound::Logic::IResourceRequester sub-object (ctor @ 0x826FE290 installs
+// secondary vtables @ +0x90/+0x98; its completion callback ResourcesAreReady
+// @ 0x826867C8 sets the prepare-state, and Prepare's real body calls
+// IResourceRequester::LoadAsset(this+0x90, ...)), so this leaf now overrides the two
+// IResourceRequester pure virtuals (ResourcesAreReady / GetResourceRegistrar) to stay
+// CONCRETE -- consistent with the siblings. Their deep bodies (the world-emitter
+// scene + the resolved Content) remain deferred (boot only needs Prepare()==true).
 // =============================================================================
 
 // ---------------------------------------------------------------------------
@@ -133,13 +134,13 @@ CgsSound::Logic::StateManager* EmitterStateManager::CreateObject( u32 /*luType*/
 // replaced with the real id at integration -- the id is this manager's slot in the
 // CreateStateManagers 0..8 sequence (@ 0x826AFEF8).
 //
-// FLAG (registry hookup deferred): this TU's RegisteredContent StateManager view does
-// NOT declare AddToClassTypeInfoArray (that lives in the full CgsStateManager.h view,
-// ODR-incompatible with the RegisteredContent view used here for the content pool, so
-// not co-includable). The descriptor is produced here but its insertion into the
-// static registry (dword_82FFBC58) must be done by a registration site using the full
-// StateManager view (the conductor-owned CreateStateMan TU). &CreateObject is an
-// ABI-compatible StateManager*(*)(u32) across both views.
+// FLAG (registry hookup deferred): the full CgsSound::Logic::StateManager view (now
+// the base via BrnStateManager.h) DOES declare AddToClassTypeInfoArray, but the
+// per-leaf static-init that calls it with this leaf's ObjectID is not wired here (it
+// is the conductor-owned registration step). The descriptor is produced here; its
+// insertion into the static registry (StateManager::AddToClassTypeInfoArray) is done
+// at the wiring step. &CreateObject is the StateManager*(*)(u32) the canonical
+// ClassTypeInfo::createObject stores.
 // ---------------------------------------------------------------------------
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* EmitterStateManager::GetStaticTypeInfo()
 {
@@ -183,8 +184,8 @@ const char* EmitterStateManager::GetTypeName() const
 //
 // FLAG (stub -- domain cascade): the real body cascades into
 //   * BrnSound::Logic::World::SoundWorldScene::Prepare (the world emitter scene),
-//   * BrnSound::Logic::IResourceRequester::LoadAsset (the streaming-resource broker;
-//     the IResourceRequester sub-object is itself deferred -- see the TU-level FLAG),
+//   * BrnSound::Logic::IResourceRequester::LoadAsset (the streaming-resource broker,
+//     reached through the now-inherited IResourceRequester sub-object),
 //   * CgsDev::PerfMonCpu::AddMonitor (the CPU perf monitor), and
 //   * CgsSound::Logic::StateManager::PrepareStates @ 0x826EAD30 (the State machine,
 //     a declared-only stub in the foundation).
@@ -196,6 +197,48 @@ const char* EmitterStateManager::GetTypeName() const
 bool EmitterStateManager::Prepare()
 {
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// EmitterStateManager::ResourcesAreReady()  @ 0x826867C8  (IResourceRequester completion callback)
+//
+// X360 body: once the emitter splicer-bank bundle resolves, it advances the +0x24
+// prepare-state and seeds the world-emitter Content. It is invoked by the resource
+// broker only AFTER Prepare's LoadAsset resolves.
+//
+// FLAG (stub -- world/Content cascade): the real body cascades into the world-emitter
+// scene + the resolved CgsSound::Logic::Content, neither reconstructed in this slice;
+// and it is never reached on boot (this slice's Prepare stub issues no LoadAsset).
+// Bodied as a no-op so the leaf is concrete; NOT X360-faithful. Deferred with the
+// world emitter audio domain.
+// ---------------------------------------------------------------------------
+void EmitterStateManager::ResourcesAreReady()
+{
+}
+
+// ---------------------------------------------------------------------------
+// EmitterStateManager::GetResourceRegistrar()  (IResourceRequester slot 1)
+//
+// Recovered semantically from the sibling BrnEffectObject::GetResourceRegistrar
+// @ 0x82696850: load this->mpLogicModule (+0x2C), tail-call the IResourceRequester
+// slot-1 of the module's embedded ResourceRegistrar. The state-manager leaves share
+// the +0x2C module back-pointer (stamped by CreateStateMan).
+//
+// FLAG (module opaque): the canonical CgsSound::Logic::StateManager exposes
+// mpLogicModule by name, but the SoundLogicModule home is not reconstructed in this
+// slice, so this cannot be bodied faithfully here. Provided as a non-cascading stub
+// that abort-asserts if ever reached on boot (PrepareStateManagersOnBoot does NOT call
+// it; it is only used on the per-frame attach/detach path this slice never exercises).
+// Returns a TU-local empty registrar purely to satisfy the non-void signature; NOT a
+// faithful body. Body via the module once the SoundLogicModule is available.
+// ---------------------------------------------------------------------------
+BrnSound::Logic::ResourceRegistrar& EmitterStateManager::GetResourceRegistrar()
+{
+    CGS_ASSERT( false,
+                "EmitterStateManager::GetResourceRegistrar reached without a homed "
+                "SoundLogicModule (boot path does not call this)" );
+    static BrnSound::Logic::ResourceRegistrar sUnhomedRegistrar;
+    return sUnhomedRegistrar;
 }
 
 } // namespace World
