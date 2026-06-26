@@ -190,6 +190,12 @@ public:
 
         void Construct();
 
+        // @0x825CF278: stream the engine tuning out of a loaded `physicsvehicleengineattribs` data
+        // wrapper into the packed lanes (bodied out-of-line below). FLAG: the source wrapper member
+        // offsets are recovered from the asm but its type is un-homed -- modelled as a byte-addressed
+        // source. Returns the InterpedParam3::Prepare result (an int on X360; void here).
+        void InitializeFromAttribs(const void* lpSourceWrapper);
+
         void SetDifferential(rw::math::vpu::VecFloat lValue)
         {
             mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.SetX(lValue);
@@ -360,6 +366,92 @@ void VehicleAttribs::EngineAttribs::Construct()
     SetMaxRPM(rw::math::vpu::VecFloat(KF_DEFAULT_MAX_RPM));
     SetFlyWheelFriction(rw::math::vpu::VecFloat(KF_DEFAULT_FLYWHEEL_FRICTION));
     SetGearChangeTime(rw::math::vpu::VecFloat(KF_DEFAULT_GEAR_CHANGE_TIME));
+}
+
+// @0x825CF278  BrnPhysics::Vehicle::VehicleAttribs::EngineAttribs::InitializeFromAttribs
+//
+// A pure data-marshalling lane-scatter: it streams the engine tuning out of a loaded
+// `physicsvehicleengineattribs` data wrapper (the X360 reaches it via *(a2+4)) into this packed
+// EngineAttribs. The X360 does it with lvsl/vperm/vrlimi single-lane inserts; de-SIMD'd, each
+// insert is one scalar copy. The source-wrapper byte offsets are EXACT (asm-confirmed); the
+// wrapper's own type is un-homed, so it is read here as a byte-addressed float source.
+//
+// Source -> destination map (asm-confirmed):
+//   per-gear ratio  (gear[g].x): src+0x50 lanes -> gears 0,1,2 ; src+0x40 lanes -> gears 3,4,5
+//   per-gear up-RPM (gear[g].z): src+0x30 lanes -> gears 0,1,2 ; src+0x20 lanes -> gears 3,4,5
+//   per-gear torque (gear[g].y): src+0x10 lanes -> gears 0,1,2 ; src+0x00 lanes -> gears 3,4,5
+//   scalars:  src+0x8C -> Differential(@+0x10.x)             (lvlx r9=0x8C -> lane0/.x)
+//             src+0x60 -> TransmissionEfficiency(@+0x10.y)    (lvlx r8=0x60 -> lane1/.y)
+//             src+0x80 -> EngineResistance(@+0x10.z)          (lvlx r7=0x80 -> lane2/.z)
+//             src+0x68 -> GearDownRPM(@+0x10.w)               (lvlx r6=0x68 -> lane0 store, mask8)
+//             src+0x64 -> MaxTorque(@+0x20.x)                 (lvlx r5=0x64 -> lane1)
+//             src+0x84 -> MaxRPM(@+0x20.z)  [drives torque-curve domain = MaxRPM*0.5]
+//             src+0x6C -> (@+0x20.z scatter, lane2)           src+0x70 -> (@+0x20.w, lane3? mask1)
+//             src+0x78 -> FlyWheelInertia(@+0x30.x)           src+0x7C -> FlyWheelFriction(@+0x30.y)
+//             src+0x74 -> GearChangeTime(@+0x30.z)
+//   then mTorqueCurve.Prepare(domainMin, domainMax) with the data-driven domain derived from
+//   src+0x84 (MaxRPM) scaled by 0.5 (flt_82001DA0) and 2.0 (flt_82001D9C) -- the InterpedParam3
+//   input domain. (flt_82001D9C=2.0 / flt_82001DA0=0.5 are resolved .rdata literals.)
+//
+// FLAG: the lvsl/vperm element-within-block selection picks one of the four floats inside each
+// 16-byte source block; the per-gear scalar->lane assignment is reproduced exactly as the asm
+// indexes it. The findings doc flags the gear lane semantics as "unresolved"; this body matches
+// the asm reads literally and does not reinterpret them.
+void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWrapper)
+{
+    const f32* lpSrc = static_cast<const f32*>(lpSourceWrapper);
+    // byte-offset helper (offset is in BYTES; the source floats are 4-byte).
+    #define BP_SRC_F(byteOff) (lpSrc[(byteOff) >> 2])
+
+    using rw::math::vpu::VecFloat;
+
+    // --- per-gear gear ratios (gear[g].x) : src+0x50 -> 0,1,2 ; src+0x40 -> 3,4,5 ---
+    SetGearRatio(0, VecFloat(BP_SRC_F(0x50)));
+    SetGearRatio(1, VecFloat(BP_SRC_F(0x54)));
+    SetGearRatio(2, VecFloat(BP_SRC_F(0x58)));
+    SetGearRatio(3, VecFloat(BP_SRC_F(0x40)));
+    SetGearRatio(4, VecFloat(BP_SRC_F(0x44)));
+    SetGearRatio(5, VecFloat(BP_SRC_F(0x48)));
+
+    // --- inline scalar lanes streamed before the torque-curve prepare ---
+    SetDifferential(VecFloat(BP_SRC_F(0x8C)));            // @+0x10.x
+    SetTransmissionEfficiency(VecFloat(BP_SRC_F(0x60)));  // @+0x10.y
+    SetEngineResistance(VecFloat(BP_SRC_F(0x80)));        // @+0x10.z
+    SetGearDownRPM(VecFloat(BP_SRC_F(0x68)));             // @+0x10.w
+    SetMaxTorque(VecFloat(BP_SRC_F(0x64)));               // @+0x20.x
+
+    // --- torque-curve domain (InterpedParam3::Prepare). Domain derived from src+0x84 (MaxRPM):
+    //     the asm forms  domainHi = MaxRPM * 0.5  and feeds (domainLo, domainHi) to Prepare. ---
+    static const f32 KF_TORQUE_DOMAIN_SCALE = 0.5f;       // flt_82001DA0 (resolved)
+    const f32 lfMaxRPM       = BP_SRC_F(0x84);
+    const f32 lfDomainHigh   = lfMaxRPM * KF_TORQUE_DOMAIN_SCALE;
+    const f32 lfDomainLow    = 0.0f;                      // zeroed scratch (stw r28=0 cascade)
+    mTorqueCurve.Prepare(lfDomainLow, lfDomainHigh, 0.0f);
+
+    // --- per-gear torque scales (gear[g].y) : src+0x30 -> 0,1,2 ; src+0x20 -> 3,4,5 ---
+    SetTorqueScale(0, VecFloat(BP_SRC_F(0x30)));
+    SetTorqueScale(1, VecFloat(BP_SRC_F(0x34)));
+    SetTorqueScale(2, VecFloat(BP_SRC_F(0x38)));
+    SetTorqueScale(3, VecFloat(BP_SRC_F(0x20)));
+    SetTorqueScale(4, VecFloat(BP_SRC_F(0x24)));
+    SetTorqueScale(5, VecFloat(BP_SRC_F(0x28)));
+
+    // --- per-gear up-RPMs (gear[g].z) : src+0x10 -> 0,1,2 ; src+0x00 -> 3,4,5 ---
+    SetGearUpRPM(0, VecFloat(BP_SRC_F(0x10)));
+    SetGearUpRPM(1, VecFloat(BP_SRC_F(0x14)));
+    SetGearUpRPM(2, VecFloat(BP_SRC_F(0x18)));
+    SetGearUpRPM(3, VecFloat(BP_SRC_F(0x00)));
+    SetGearUpRPM(4, VecFloat(BP_SRC_F(0x04)));
+    SetGearUpRPM(5, VecFloat(BP_SRC_F(0x08)));
+
+    // --- trailing scalar lanes (@+0x20.z/.w and @+0x30.x/.y/.z) ---
+    SetMaxRPM(VecFloat(BP_SRC_F(0x6C)));                  // @+0x20.z (lvlx r9=0x6C, mask2)
+    SetLSDMSpeedToAllowGearChanges(VecFloat(BP_SRC_F(0x70)));  // @+0x20.w (lvlx r10=0x70, mask1)
+    SetFlyWheelInertia(VecFloat(BP_SRC_F(0x78)));        // @+0x30.x (lvlx r8=0x78, mask8)
+    SetFlyWheelFriction(VecFloat(BP_SRC_F(0x7C)));       // @+0x30.y (lvlx r7=0x7C, mask4)
+    SetGearChangeTime(VecFloat(BP_SRC_F(0x74)));         // @+0x30.z (lvlx r6=0x74, mask2)
+
+    #undef BP_SRC_F
 }
 
 void VehicleAttribs::SetupAttribsForDonutAI()
