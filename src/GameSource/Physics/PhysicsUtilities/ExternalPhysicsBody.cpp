@@ -118,6 +118,81 @@ namespace BrnPhysics
     }
 
     // ---------------------------------------------------------------------------------------
+    // CalculateCollisionImpulseWithBody  @0x8259CAE8
+    //
+    // The two-body collision impulse (the car-on-car shunt solver). Identical in shape to the
+    // inanimate version above, but the effective inverse mass in the denominator sums BOTH
+    // bodies' linear (1/m) and angular (n.((I^-1(r x n)) x r)) terms. The recovered asm computes,
+    // per body, the I^-1 row-combination of (r x n), crosses it back with r, dots with n, adds
+    // the two reciprocal masses, takes the reciprocal of the sum (vrefp + a Newton refinement)
+    // and multiplies by the numerator -(1+e)(vRel.n). It stores each body's inverse
+    // effective-mass term separately (asm: `1/mA + (lApart.n)` -> lpfInvInertiaAOut at r31,
+    // `1/mB + (lBpart.n)` -> lpfInvInertiaBOut at r29) so the caller (ApplyCarCarImpulse) can
+    // split the impulse application between the two cars; j*n -> lpImpulseOut (r27); and returns
+    // the impulse magnitude (r28). The DecFIGS body hint (ExternalPhysicsBody.cpp:585-618) names
+    // lvfNumerator/lvfDenominator/lvfMassA/lvfMassB/lvfOneOverMassA/lvfOneOverMassB/lApart/lBpart.
+    //
+    // FLAG (modelled, not bit-verified): the VMX `vrefp` reciprocal + its Newton-Raphson
+    // refinement (vnmsubfp/vmaddfp) is reproduced as a plain `1.0f / x` (same modelling as the
+    // inanimate solver above); the per-lane permute/select machinery is de-SIMD'd to scalar/
+    // Vector3 arithmetic. The data flow, output set and the two asserts match the asm.
+    // ---------------------------------------------------------------------------------------
+    VecFloat ExternalPhysicsBody::CalculateCollisionImpulseWithBody(
+        const ExternalPhysicsBody& lBody2, Vector3 lPoint1, Vector3 lPoint2,
+        Vector3 lImpactVel, Vector3 lCollisionNormal, VecFloat lvfRestitution,
+        Vector3* lpImpulseOut, VecFloat* lpfInvInertiaAOut, VecFloat* lpfInvInertiaBOut) const
+    {
+        CGS_ASSERT(lpfInvInertiaAOut != nullptr, "lpfInvInertiaAOut != NULL");
+        CGS_ASSERT(lpfInvInertiaBOut != nullptr, "lpfInvInertiaBOut != NULL");
+
+        const f32 lfRestitution = lvfRestitution.x;   // broadcast VecFloat -> scalar
+
+        // Numerator: -(1 + e)(vRel . n).
+        const f32 lfClosingSpeed = vpu::Dot(lImpactVel, lCollisionNormal);
+        const f32 lfNumerator    = -(1.0f + lfRestitution) * lfClosingSpeed;
+
+        // Body A angular coupling: n . ( (Ia^-1 (rA x n)) x rA ),  rA = lPoint1, Ia^-1 = this body.
+        const Vector3 lvRAxN = vpu::Cross(lPoint1, lCollisionNormal);
+        const Vector3 lvAngularA = vpu::Add(
+            vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lvRAxN.x),
+                     vpu::Mult(mWorldInverseInertia.yAxis, lvRAxN.y)),
+            vpu::Mult(mWorldInverseInertia.zAxis, lvRAxN.z));
+        const Vector3 lApart = vpu::Cross(lvAngularA, lPoint1);
+        const f32 lfAngularA = vpu::Dot(lCollisionNormal, lApart);
+
+        // Body B angular coupling: rB = lPoint2, Ib^-1 = lBody2's world inverse inertia.
+        const Vector3 lvRBxN = vpu::Cross(lPoint2, lCollisionNormal);
+        const Vector3 lvAngularB = vpu::Add(
+            vpu::Add(vpu::Mult(lBody2.mWorldInverseInertia.xAxis, lvRBxN.x),
+                     vpu::Mult(lBody2.mWorldInverseInertia.yAxis, lvRBxN.y)),
+            vpu::Mult(lBody2.mWorldInverseInertia.zAxis, lvRBxN.z));
+        const Vector3 lBpart = vpu::Cross(lvAngularB, lPoint2);
+        const f32 lfAngularB = vpu::Dot(lCollisionNormal, lBpart);
+
+        // Inverse masses (m stored as VecFloat, broadcast).
+        const f32 lfOneOverMassA = (mfMass.x != 0.0f)        ? (1.0f / mfMass.x)        : 0.0f;
+        const f32 lfOneOverMassB = (lBody2.mfMass.x != 0.0f) ? (1.0f / lBody2.mfMass.x) : 0.0f;
+
+        // Effective inverse mass (both bodies) -> impulse magnitude.
+        const f32 lfDenominator    = lfOneOverMassA + lfOneOverMassB + lfAngularA + lfAngularB;
+        const f32 lfInvDenominator = (lfDenominator != 0.0f) ? (1.0f / lfDenominator) : 0.0f;
+        const f32 lfImpVal         = lfNumerator * lfInvDenominator;
+
+        // Outputs: each body's inverse effective-mass term, then the impulse vector j*n.
+        const f32 lfInvInertiaA = lfOneOverMassA + lfAngularA;
+        const f32 lfInvInertiaB = lfOneOverMassB + lfAngularB;
+        VecFloat lvfInvInertiaA; lvfInvInertiaA.x = lvfInvInertiaA.y = lvfInvInertiaA.z = lvfInvInertiaA.w = lfInvInertiaA;
+        VecFloat lvfInvInertiaB; lvfInvInertiaB.x = lvfInvInertiaB.y = lvfInvInertiaB.z = lvfInvInertiaB.w = lfInvInertiaB;
+        *lpfInvInertiaAOut = lvfInvInertiaA;
+        *lpfInvInertiaBOut = lvfInvInertiaB;
+        if (lpImpulseOut != nullptr)
+            *lpImpulseOut = vpu::Mult(lCollisionNormal, lfImpVal);
+
+        VecFloat lvfResult; lvfResult.x = lvfResult.y = lvfResult.z = lvfResult.w = lfImpVal;
+        return lvfResult;
+    }
+
+    // ---------------------------------------------------------------------------------------
     // DampenAngularVelocity  @0x825B2CD8   /   DampPitchYawRoll  @0x825BE210
     //
     // Both scale mAngularVelocity in place (asm `addi r11,this,0x50` -> mAngularVelocity load,
