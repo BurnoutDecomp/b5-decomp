@@ -186,9 +186,22 @@ namespace Thread
     typedef intptr_t (*RunnableFunctionUserWrapper)(RunnableFunction pFunction, void* pContext);
     typedef intptr_t (*RunnableClassUserWrapper)(IRunnable* pRunnable, void* pContext);
 
-    // 0x82B42660-ish: ThreadParameters POD (EATech DWARF eathread_thread.h:335).
+    // 0x82B42D58: ThreadParameters POD (EATech DWARF eathread_thread.h:404).
     // Only mnStackSize/mnPriority/mnProcessor/mpName are read by Begin (a4[1],
     // a4[2], a4[3], a4[5]); the X360 build threads them through unchanged.
+    //
+    // X360 default-ctor store order (@ 0x82B42D58):
+    //   +0x0C mnProcessor = -1                (li r9,-1;            stw 0xC)
+    //   +0x14 mpName      = &unk_821473E3      (lis/addi r10;       stw 0x14)
+    //   +0x00 mpStack     = 0                  (stw r11(=0),0)
+    //   +0x04 mnStackSize = 0                  (stw r11,4)
+    //   +0x08 mnPriority  = 0                  (stw r11,8)
+    //   +0x10 mbSuspended = 0                  (stb r11,0x10)
+    // The mpName store targets a fixed pooled string constant at the unaligned
+    // .rodata address 0x821473E3 -- the EA SDK empty-name literal "" (an odd,
+    // char-pool-only address; the trailing-NUL slot of the string pool). The
+    // X360 ctor therefore initializes mpName to a non-null pointer-to-"" rather
+    // than to NULL.
     struct ThreadParameters
     {
         void*       mpStack;        // a4[0]
@@ -198,9 +211,9 @@ namespace Thread
         bool        mbSuspended;    // a4[4]
         const char* mpName;         // a4[5]  (-> Thread::SetName)
 
-        ThreadParameters()
-          : mpStack(0), mnStackSize(0), mnPriority(0), mnProcessor(-1),
-            mbSuspended(false), mpName(0) {}
+        // Defined out-of-line in BrnEAThreadX360.cpp (the X360 ctor @ 0x82B42D58
+        // is a real, called out-of-line function -- 12 call sites).
+        ThreadParameters();
     };
 
     // ---- The Thread object (this TU) ---------------------------------------

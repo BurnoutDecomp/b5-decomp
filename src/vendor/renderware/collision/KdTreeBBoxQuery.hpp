@@ -37,12 +37,22 @@ namespace collision
 
 // Minimal view of the KD-tree the query descends. Only the two header words the
 // BBoxQuery ctor reads are named; the remainder of the KD-tree layout is not
-// recovered by this TU. (FLAG: KdTree layout opaque beyond the two read words.)
+// recovered by this TU. (FLAG: KdTree layout opaque beyond the named fields.)
+//
+// ADDITIVE GROW (rw-physics-collision group): the KdTreeLineQuery ctor
+// @0x828AEE80 also reads this tree's overall AABB. It passes (a2+0x10) to
+// AALineClipper::Init as the clip box, and its slab-clip loads the box-min row
+// from (a2+0x10) and the box-max row from (a2+0x20). Those two 16-byte rows are
+// added here at the asm-attested offsets; the three header words above are
+// unchanged (same offsets/widths) so existing BBoxQuery code is unaffected.
 struct KdTree
 {
-    u32 muReserved0;     // +0x00  not read by the BBoxQuery ctor
+    u32 muReserved0;      // +0x00  not read by the BBoxQuery ctor
     u32 muNumBranchNodes; // +0x04  nonzero => interior nodes exist
     u32 muLeafNodeIndex;  // +0x08  seeds the cursor for a leaf-only tree
+    u32 muReserved0C;     // +0x0C  unread padding (aligns mBoxMin to +0x10)
+    f32 maBoxMin[4];      // +0x10  tree AABB lower corner (xyzw) -- LineQuery box-min
+    f32 maBoxMax[4];      // +0x20  tree AABB upper corner (xyzw) -- LineQuery box-max
 };
 
 class KdTreeBBoxQuery

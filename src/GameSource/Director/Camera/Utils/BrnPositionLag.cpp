@@ -8,6 +8,8 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Utils/BrnPositionLag.h"
+#include "rw/math/vpu/vector3_operation.h"        // rw::math::vpu Vector3 Mult / Lerp / operator+
+#include "rw/math/vpu/matrix44affine_operation.h" // InverseOfMatrixWithOrthonormal3x3 / TransformPoint / TransformVector
 
 namespace BrnDirector
 {
@@ -50,52 +52,63 @@ void PositionLag::Construct()
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::Utils::PositionLag::Update @0x821F8F08
 //
-// KEYSTONE -- DOCUMENTED FLOOR (body intentionally NOT reconstructed).
+// Ease the transform's translation toward its lagged position this frame. The console body
+// is a hand-vectorised VMX cascade; reconstructed here as the faithful per-lane rw::math::vpu
+// matrix/vector ops it computes (every lane verified against the vmrglw/vmrghw/vmaddfp/vsubfp
+// stream). The stages, in asm order:
 //
-// The console body is a multi-stage hand-vectorised VMX/AltiVec pipeline that does NOT lower
-// to a faithful per-lane scalar formula:
-//
-//   1. InverseOfMatrixWithOrthonormal3x3(lrTransform): the 3x3 rotation is inverted by a
-//      register TRANSPOSE built from vmrglw/vmrghw lane-merge permutes (v8..v11), and the
-//      translation is inverse-transformed via `vsubfp v13, 0, pos` then a vmaddfp dot-chain
-//      against the transposed rows. There is no scalar transpose-permute equivalent that
-//      reproduces the lane traffic store-for-store.
-//   2. On the first frame it seeds mLastWorldPosition / mLastLocalOffset from the transformed
-//      target (the vmaddfp accumulate of the transposed rows against the position).
-//   3. It builds a per-axis ease vector from (1 - mfSmoothing) and the X/Y/Z response fields,
-//      TransformPoints the last world position into the inverted local frame, eases the new
-//      local offset toward the carried one by that vector (vmaddfp lerp), then TransformVector
-//      / Pos-accumulates the eased offset back onto the transform's translation.
-//
-// Stages (1) and (3) are exactly the "multi-stage VMX pipeline" the reconstruction rules say
-// must NOT be paraphrased or given an invented per-lane formula. Faithfully reproducing them
-// needs the rw::math VMX matrix-operation vocabulary (InverseOfMatrixWithOrthonormal3x3,
-// TransformPoint, TransformVector, the broadcast-VecFloat Lerp) which is not modelled in the
-// reconstructed rw math home (rw/math/vpu has only the flat Vector3 op set). Rather than
-// fabricate the matrix inverse / strided transforms, this is left as an honest floor: the
-// carried state is seeded and the assert is reproduced, but the transform is passed through
-// UNCHANGED (the zero-lag identity). This is NOT the console behaviour for the easing math.
-//
-// Re-home this with the real body when the rw::math VMX Matrix44Affine operation vocabulary
-// (matrix inverse + TransformPoint/TransformVector + broadcast Lerp) is reconstructed; the
-// member layout and the Parameters fields the pipeline reads are pinned and stable.
+//   1. lInverseTransform = InverseOfMatrixWithOrthonormal3x3(lrTransform). The 3x3 transpose
+//      is the vmrglw/vmrghw lane-merge permute block @0x821F8F7C..94; the inverse translation
+//      is `vsubfp v13,0,Pos` (@0x821F8F70) then the vmaddfp dot-chain @0x821F8FA4..AC, whose
+//      lanes are exactly -(Pos . xAxis), -(Pos . yAxis), -(Pos . zAxis).
+//   2. First frame only (mbFirstFrame, lbz 0x20(r31)): seed the carried state -- store the
+//      current Pos into mLastWorldPosition (stvx128 v12,r31,0x10) and the inverse-transformed
+//      Pos into mLastLocalOffset (the vmaddfp accumulate @0x821F8FC4..D8, which is identically
+//      the origin), then clear the latch (stb 0,0x20(r31)).
+//   3. Steady state (always): TransformPoint the OLD mLastWorldPosition into the inverted local
+//      frame (vmaddfp cascade @0x821F900C..28 against the carried world position read at
+//      0x821F8FF0 BEFORE it is overwritten at 0x821F8FF8 with the current Pos), then ease the
+//      carried local offset toward it by (1 - mfSmoothing) -- the scalar `1.0 - mfSmoothing`
+//      (flt_82001C98 = 1.0f @0x821F9010, fsubs @0x821F9014) broadcast (lvlx/vspltw @0x821F901C)
+//      and folded into the vmaddfp lerp @0x821F9030. Store back to mLastLocalOffset.
+//   4. Scale the eased local offset component-wise by the per-axis response vector
+//      (mfXResponse/mfYResponse/mfZResponse staged @0x821F9038..50 with a 0 in the 4th lane,
+//      vmulfp128 @0x821F9068), TransformVector it by the rotation back to world space (vmaddfp
+//      cascade @0x821F907C..84 over the original xAxis/yAxis/zAxis rows reloaded at
+//      0x821F9058..60), and add onto the transform's translation (vaddfp @0x821F9088;
+//      stvx128 @0x821F908C writes lrTransform.Pos()). lfTimestep (a3/r5) is unused by the body.
 // ----------------------------------------------------------------------------
 void PositionLag::Update(const Parameters& lrParameters, f32 lfTimestep, rw::math::vpu::Matrix44Affine& lrTransform)
 {
+    using namespace rw::math::vpu;
+
     CGS_ASSERT(mbConstructed, "mbConstructed");
 
-    // FLOOR: seed the carried state on the first frame so a later faithful body has correct
-    // carry-in, and clear the first-frame latch (this much of the console body IS recovered).
+    // (1) Inverse of the orthonormal affine: transpose the 3x3, inverse-transform the position.
+    const Matrix44Affine lInverseTransform = InverseOfMatrixWithOrthonormal3x3(lrTransform);
+
+    // (2) First frame: seed the carried world position and the inverse-transformed offset.
     if (mbFirstFrame)
     {
-        mLastWorldPosition = lrTransform.wAxis;   // the transform's translation row
-        mbFirstFrame = false;
+        mLastWorldPosition = lrTransform.Pos();
+        mLastLocalOffset   = TransformPoint(lInverseTransform, lrTransform.Pos());
+        mbFirstFrame       = false;
     }
 
-    // KEYSTONE FLOOR: the per-axis eased lag (matrix-inverse -> TransformPoint -> per-axis
-    // Lerp -> TransformVector -> Pos accumulate) is NOT reconstructed. The transform is left
-    // unchanged (zero-lag). See the header note above. Do not treat this as the console math.
-    (void)lrParameters;
+    // (3) Project the previous world position into the current inverted local frame, then
+    //     swap the carried world position to the current Pos (asm reads the old value first).
+    const Vector3 lLocalOffset = TransformPoint(lInverseTransform, mLastWorldPosition);
+    mLastWorldPosition = lrTransform.Pos();
+
+    // Ease the carried local offset toward the freshly projected one by (1 - mfSmoothing).
+    mLastLocalOffset = Lerp(mLastLocalOffset, lLocalOffset, 1.0f - lrParameters.mfSmoothing);
+
+    // (4) Scale by the per-axis response, rotate the eased offset back to world space, and
+    //     add it onto the transform's translation.
+    const Vector3 lResponse{ lrParameters.mfXResponse, lrParameters.mfYResponse, lrParameters.mfZResponse, 0.0f };
+    const Vector3 lScaledOffset = Mult(mLastLocalOffset, lResponse);
+    lrTransform.Pos() = lrTransform.Pos() + TransformVector(lrTransform, lScaledOffset);
+
     (void)lfTimestep;
 }
 
