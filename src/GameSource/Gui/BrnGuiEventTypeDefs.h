@@ -247,6 +247,13 @@ public:
     // the first button record sits immediately after these two slots (+0x88).
     static const s32 KI_MAX_MESSAGES = 2;
 
+    // @0x823B1CC8 -- initialise the request from an overlay-id string. Asserts the string
+    // is non-NULL ("Invalid Overlay Id", BrnGuiEventTypeDefs.h:7404), compresses it to the
+    // leading CgsID (stored over the first param record's 8-byte head at +0x00), and clears
+    // the message count + the two button-present guards. Returns the compressed id (the X360
+    // returns r3 == the CgsIDCompress result). Called by ~45 overlay-request sites.
+    CgsID Construct(const char* lpcOverlayId);
+
     // @0x824EB948 -- copy message param liIndex into lOut. Asserts liIndex < miNumMessages
     // ("Index isn't used in Overlay.") and liIndex >= 0 ("Index isn't valid."). Returns the
     // SPrintf result (the X360 returns r3 from CgsCore::SPrintf).
