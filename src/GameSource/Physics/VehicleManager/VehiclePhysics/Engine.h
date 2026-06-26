@@ -40,14 +40,45 @@ namespace Vehicle
     // (the 0xA0 size + Construct() signature already match). Members are intentionally an opaque
     // 0xA0 byte block here (the attribs' internal lanes are not read by Construct/Prepare).
     class VehicleAttribsEngineSliceTag;  // doc anchor only
+
+    // A 4-point RPM->torque lookup curve (BrnPhysics::InterpedParam3). The Engine TU only needs
+    // it as a 16-byte leading member of EngineAttribs (it is not sampled by ComputeGear /
+    // GetMaxWheelAngularVelocity, which read the scalar gearing lanes); declared opaque here so
+    // the slice's sizeof + member offsets match the committed VehicleAttribs::EngineAttribs.
+    struct EngineTorqueCurve
+    {
+        Vector4 mvParams;   // BrnPhysics::InterpedParam3::mvParams
+    };
+
     struct EngineAttribs
     {
         // Build the default engine attributes (gear ratios/torque curve/flywheel). Owned by
         // VehicleAttribs.cpp -- declared only here.
         void Construct();
 
+        // ----- ADDITIVE GROW (engine/drivetrain group): the gearing lanes ComputeGear and
+        //       GetMaxWheelAngularVelocity read BY NAME. The console EngineAttribs is a 0xA0 block
+        //       (InterpedParam3 + 3 Vector4 + 6 Vector3); these accessors expose the lanes those two
+        //       Engine methods index (Differential, MaxRPM, per-gear ratio/torqueScale/gearUpRPM).
+        //       The member SEQUENCE/sizes mirror the committed VehicleAttribs::EngineAttribs exactly
+        //       (same lvx128 offsets); sizeof stays 0xA0. When VehicleAttribs gets a real header this
+        //       whole slice is replaced by an include of that type. -----
+        f32 GetDifferential() const  { return mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.x; }
+        f32 GetMaxRPM() const        { return mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges.z; }
+        f32 GetGearRatio(s32 liGear) const   { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].x; }
+        f32 GetGearUpRPM(s32 liGear) const   { return mavGearRatios_TorqueScales_GearUpRPMs[liGear].z; }
+
     private:
-        u8 mOpaque[0xA0];   // 160 bytes; sizeof must match the committed VehicleAttribs::EngineAttribs
+        // @+0x00 mTorqueCurve (InterpedParam3, 16B)
+        EngineTorqueCurve mTorqueCurve;
+        // @+0x10 (.x=Differential .y=TransmissionEfficiency .z=EngineResistance .w=GearDownRPM)
+        Vector4 mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM;
+        // @+0x20 (.x=MaxTorque .y=TorqueFallOffRPM .z=MaxRPM .w=LSDMSpeedToAllowGearChanges)
+        Vector4 mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges;
+        // @+0x30 (.x=FlyWheelInertia .y=FlyWheelFriction .z=GearChangeTime)
+        Vector4 mvFlyWheelInertia_FlyWheelFriction_GearChangeTime;
+        // @+0x40 per-gear (.x=gearRatio .y=torqueScale .z=gearUpRPM), 6 gears * 16B = 0x60 -> ends @0xA0
+        Vector3 mavGearRatios_TorqueScales_GearUpRPMs[6];
     };
     // Gear-index constants (DWARF Engine.h:55-57). ku8ReverseGear is the sentinel below first
     // gear (0); first gear is 1; highest is 5. Declared here as the shared engine vocabulary.
@@ -67,6 +98,25 @@ namespace Vehicle
         // @0x825F3F38: (re)prepare from a supplied attribs block -- copy the attribs in, seed the
         // clutch factor + RPM lane, select first gear, and Reset() the running state. Returns true.
         bool Prepare(const EngineAttribs* lpAttribs);
+
+        // --- ADDITIVE GROW (engine/drivetrain group): two clean gearbox leaves (bodied in Engine.cpp) ---
+
+        // @0x825CF010: the automatic-gearbox selector. Given the current engine drive (lfEngineDrive,
+        // passed in v1 = mvEngineDrive lane0 by the caller), returns the highest gear 1..5 whose
+        // gear-up RPM threshold is exceeded by `engineDrive * Differential * gearRatio[g] *
+        // KF_RPM_GEAR_METRIC`, or 0 (reverse/neutral) when engineDrive < -0.0099999998.
+        s32 ComputeGear(f32 lfEngineDrive) const;
+
+        // @0x825BFDA0: the rev limiter mapped through the current gearing --
+        //   maxWheelOmega = MaxRPM / (Differential * gearRatio[mu8CurrentGear])
+        // with a div-by-zero guard on the denominator. Returns the magnitude broadcast across a
+        // Vector4 (the X360 stores it via stvx128 into the caller's result buffer).
+        Vector4 GetMaxWheelAngularVelocity() const;
+
+        // @0x825CB288: integrate the flywheel + recompute RPM + ComputeGear. Ships on X360 as a
+        // debug Opt-vs-Unopt assert harness (degenerate pseudocode) -- owned/BLOCKED by this group's
+        // ledger, declared only here so ApplyEngineForces can call it without an ODR clash.
+        void Update(/* dt + control/contact args; see ApplyEngineForces call site */);
 
         // --- Remaining Engine API: owned by separate future TUs -- declared only (no body). ---
         // Reset seeds the running-state registers from a wheel angular velocity; it is called by
