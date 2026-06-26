@@ -41,6 +41,19 @@ namespace Passby
 static const f32 KF_PROP_BY_CACHE_LIFETIME = 5.0f;
 
 // ---------------------------------------------------------------------------
+// DynamicPropByCache::Item::Item  -- default ctor for a cache slot. The cache's
+// maItems[] array default-constructs each Item; an empty slot starts inactive with a
+// zeroed timestamp/id. (X360/PS3 inline this per-element zero-init; reconstructed as the
+// obvious POD-clearing default ctor.)
+// ---------------------------------------------------------------------------
+PassbyStateManager::DynamicPropByCache::Item::Item()
+    : mbActive( false )
+    , mfTimeStamp( 0.0f )
+{
+    mId.muValue = 0;
+}
+
+// ---------------------------------------------------------------------------
 // DynamicPropByCache::Update  @ 0x82683360
 //   For every entry: if it is active and has aged past KF_PROP_BY_CACHE_LIFETIME
 //   relative to the supplied current time, deactivate it. Inactive entries and
