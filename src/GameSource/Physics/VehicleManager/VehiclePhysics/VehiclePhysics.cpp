@@ -112,5 +112,97 @@ namespace Vehicle
         mNormLinearVelocityMag.SetVector3(lvDirection);   // unit direction -> xyz lanes
         mNormLinearVelocityMag.SetPlus(lfSpeed);          // speed magnitude -> w / "plus" lane
     }
+
+    // @0x825D0840  BrnPhysics::Vehicle::VehiclePhysics::GetDownForce
+    //   The textbook aerodynamic quadratic: F = 0.5 * rho * CdA * |mLinearVelocity|^2 * coeff.
+    //   asm: |v|^2 via vmsum3fp128 of mLinearVelocity(+0x50); coeff = mpAttribs(+0x720)->mvAeroParams
+    //        (+0xB0) lane .w (vspltw v11,v11,3); 0.5 from vcfsx(1, scale 1); rho/CdA lazily cached
+    //        (g_AeroConstInitMask) into g_vAero_Rho / g_vAero_CdA from the .rdata seeds
+    //        kAero_Rho_Scalar / kAero_CdA_Scalar. The product order in the asm is
+    //        ((0.5*CdA)*|v|^2)*coeff*rho; multiplication is commutative so the grouping is free.
+    //
+    //   FLAG (rodata): the rho/CdA seed scalars are un-homed .rdata absent from the function
+    //   exports -- carried as honest flagged-0 placeholders (faithful-but-inert). The formula, the
+    //   v^2 dependence and the attrib-coeff lane are EXACT; the numeric output stays 0 until the
+    //   seeds are recovered from the XEX .rdata. NEVER fabricated. (The X360 also caches an unrelated
+    //   third aero constant flt_8200D57C -> unk_82FBA0B0 for a SIBLING aero function; it does not
+    //   enter this product and is not modelled here.)
+    Vector3 VehiclePhysics::GetDownForce() const
+    {
+        static const f32 KF_AERO_RHO = 0.0f;   // FLAG: un-homed kAero_Rho_Scalar (.rdata) -> g_vAero_Rho
+        static const f32 KF_AERO_CDA = 0.0f;   // FLAG: un-homed kAero_CdA_Scalar (.rdata) -> g_vAero_CdA
+        static const f32 KF_HALF     = 0.5f;   // vcfsx v0=1, scale 1 -> 0.5
+
+        const f32 lfSpeedSquared = vpu::MagnitudeSquared(mLinearVelocity);
+        const f32 lfCoeff        = mpAttribs->mvAeroParams.w;   // .w lane of the aero params register
+
+        const f32 lfDownForce = KF_HALF * KF_AERO_RHO * KF_AERO_CDA * lfSpeedSquared * lfCoeff;
+
+        return Vector3{ lfDownForce, lfDownForce, lfDownForce, lfDownForce };
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Surface-response group: GetSurfaceGrip / GetSurfaceRoughness / GetSurfaceLinearDrag
+    //   @0x825D51B8 / @0x825D5328 / @0x825D50A8. Each derives a 6-bit surface id from a
+    //   RoadContact CollisionTag and looks up a global per-surface property table, blended with a
+    //   lane of mpAttribs->mvSurfaceBlend.
+    //   FLAG (runtime data): the per-surface tables (grip unk_82FB8890, drag unk_82FB8BD0,
+    //   roughness unk_82FB8DE0, global roughness scale unk_82FB9220, wet multiplier unk_82FB9EC0)
+    //   are RUNTIME-LOADED scratch globals not present in the exports -> honest flagged-0
+    //   placeholders (faithful-but-inert): the surface-id extraction, the lerp/scale math and the
+    //   attrib lanes are EXACT; the looked-up property stays 0 until the tables are recovered.
+    //   NEVER fabricated. The debug "properties loaded" + surface-id-bound asserts are elided.
+    // ---------------------------------------------------------------------------------------
+
+    // luSurfaceId = (tag.muValue >> 12) & 0x3F. The X360 reads byte+2 of the CollisionTag (the low
+    // byte of the material tag) then >>4 &0x3F; expressed against the numeric muValue that is the
+    // endian-independent >>12 &0x3F.
+    static inline s32 SurfaceIdFromTag(CollisionTag lTag)
+    {
+        return static_cast<s32>((lTag.muValue >> 12) & 0x3Fu);
+    }
+
+    // FLAG: the per-surface property tables are runtime-loaded scratch globals (un-homed); the
+    // looked-up value is carried as a flagged-0 placeholder until the table is recovered.
+    static inline f32 SurfacePropertyPlaceholder(s32 /*liSurfaceId*/)
+    {
+        return 0.0f;
+    }
+
+    // @0x825D51B8  GetSurfaceGrip: result = 1 - (1 - gripTable[id]) * blend  (a lerp toward 1.0).
+    Vector3 VehiclePhysics::GetSurfaceGrip(EVehicleDrivenWheel leWheel) const
+    {
+        const s32 liSurfaceId = SurfaceIdFromTag(GetWheel(leWheel).GetRoadContact().mCollisionTag);
+        const f32 lfGrip = SurfacePropertyPlaceholder(liSurfaceId);   // unk_82FB8890[id]
+
+        // FRONT wheels (index < eRearLeftWheel) use lane .x, REAR wheels lane .y (asm: if a3<2).
+        const f32 lfBlend = (leWheel < eRearLeftWheel) ? mpAttribs->mvSurfaceBlend.x
+                                                       : mpAttribs->mvSurfaceBlend.y;
+        const f32 lfResult = 1.0f - (1.0f - lfGrip) * lfBlend;
+        // (optional wet/condition multiplier unk_82FB9EC0 gated by byte_82FB7DF2 -- FLAG: that gate
+        // defaults off here; the wet path stays inert until the table is recovered.)
+        return Vector3{ lfResult, lfResult, lfResult, lfResult };
+    }
+
+    // @0x825D5328  GetSurfaceRoughness = roughTable[id] * globalRoughScale * blend.z.
+    Vector3 VehiclePhysics::GetSurfaceRoughness(EVehicleDrivenWheel leWheel) const
+    {
+        const s32 liSurfaceId = SurfaceIdFromTag(GetWheel(leWheel).GetRoadContact().mCollisionTag);
+        const f32 lfRoughness = SurfacePropertyPlaceholder(liSurfaceId);     // unk_82FB8DE0[id]
+        static const f32 KF_GLOBAL_ROUGHNESS_SCALE = 0.0f;                   // FLAG: un-homed unk_82FB9220
+
+        const f32 lfResult = lfRoughness * KF_GLOBAL_ROUGHNESS_SCALE * mpAttribs->mvSurfaceBlend.z;
+        return Vector3{ lfResult, lfResult, lfResult, lfResult };
+    }
+
+    // @0x825D50A8  GetSurfaceLinearDrag = dragTable[id] * blend.w  (single representative contact).
+    Vector3 VehiclePhysics::GetSurfaceLinearDrag() const
+    {
+        const s32 liSurfaceId = SurfaceIdFromTag(mRepresentativeContactTag);
+        const f32 lfDrag = SurfacePropertyPlaceholder(liSurfaceId);   // unk_82FB8BD0[id]
+
+        const f32 lfResult = lfDrag * mpAttribs->mvSurfaceBlend.w;
+        return Vector3{ lfResult, lfResult, lfResult, lfResult };
+    }
 }
 }
