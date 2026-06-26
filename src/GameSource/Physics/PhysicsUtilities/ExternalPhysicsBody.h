@@ -55,6 +55,20 @@ namespace BrnPhysics
             Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
             VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut);
 
+        // Solve the collision impulse between THIS body and another movable body -- the two-body
+        // form used for car-on-car shunts (DeformableObject::ApplyCarCarImpulse calls it). Same
+        // formula as the inanimate case but the effective inverse mass sums BOTH bodies' terms:
+        //   j = -(1+e)(vRel . n) / ( 1/mA + 1/mB + n.((Ia^-1(rA x n)) x rA) + n.((Ib^-1(rB x n)) x rB) )
+        // rA = lPoint1 (relative to this body's COM), rB = lPoint2 (relative to lBody2's COM),
+        // vRel = lImpactVel, n = lCollisionNormal. Writes j*n to lpImpulseOut, and EACH body's
+        // inverse effective-mass term to lpfInvInertiaAOut / lpfInvInertiaBOut (the caller splits
+        // the impulse application between the two cars by these). Returns the impulse magnitude.
+        // @0x8259CAE8. (Signature from the DecFIGS DWARF; X360 Hex-Rays dropped the arg list.)
+        VecFloat CalculateCollisionImpulseWithBody(
+            const ExternalPhysicsBody& lBody2, Vector3 lPoint1, Vector3 lPoint2,
+            Vector3 lImpactVel, Vector3 lCollisionNormal, VecFloat lvfRestitution,
+            Vector3* lpImpulseOut, VecFloat* lpfInvInertiaAOut, VecFloat* lpfInvInertiaBOut) const;
+
         // Damp the angular velocity. DampenAngularVelocity applies one isotropic damping
         // curve; DampPitchYawRoll applies a separate per-axis (pitch/yaw/roll) curve. Both
         // scale mAngularVelocity in place by pow(dampPerSecond, dt)-style factors built from a
