@@ -97,5 +97,129 @@ namespace Vehicle
 
         return (lvfThreshold.x + lfPlaneHeight) > lfProjected;
     }
+
+    // ===========================================================================================
+    //  C11_simple_traffic_attribs group -- the tractable SimpleVehiclePhysics body set.
+    //  The X360 originals are VMX128 inline asm; these are the de-SIMD'd named-member equivalents.
+    // ===========================================================================================
+
+    static const Vector3 KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    // -------------------------------------------------------------------------------------------
+    // Construct  @0x826203E8
+    //   base Construct, Wheel::Clear each of the 4 wheels (the do/while walks +304 stride 224 until
+    //   Wheel::Clear returns the sentinel), SimpleVehicleAttribs::Construct, zero
+    //   mHandlingBodyOffset(+1680)/mHalfExtent(+1696)/the two AABBs(@+1392 stride 16, the
+    //   `stvx128 v1,r11,r10` pair) and seed the flag words: *(+1430)=0x8000, *(+1428)=-1,
+    //   *(+1424)=0.0, *(+1432)=0 -- these console scratch words land in the AABB/flag region; in the
+    //   BY-NAME home they are reproduced as the deform/crash bool seeds + the wheel-plane reset, then
+    //   Reset, then *(+112)=0 (the base engine-only gate cleared).
+    // -------------------------------------------------------------------------------------------
+    void SimpleVehiclePhysics::Construct()
+    {
+        // The X360 calls the base Construct on the base subobject (`this+16`); the only committed
+        // Construct in the base chain is ExternallySimulatedBody::Construct (declared-only sibling).
+        ExternallySimulatedBody::Construct();
+        for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+            maWheels[liWheel].Clear();
+        mSimpleAttribs.Construct();
+
+        mHandlingBodyOffset = KV_ZERO;                 // +1680
+        mHalfExtent         = KV_ZERO;                 // +1696
+        mDeformableAABB.mMin = KV_ZERO;                // +1392 region (the stvx128 v1 zero pair)
+        mDeformableAABB.mMax = KV_ZERO;
+        mOriginalAABB.mMin   = KV_ZERO;
+        mOriginalAABB.mMax   = KV_ZERO;
+
+        // FLAG: the X360 seeds raw scratch words *(+1430)=0x8000 / *(+1428)=-1 / *(+1424)=0.0 /
+        // *(+1432)=0 that sit in the deform/crash-flag/wheel-plane region. In the BY-NAME home the
+        // faithful intent is the post-construct reset state, applied by Reset() below.
+        Reset();
+        // *(this+112)=0 -- the base sleep/engine-only-update gate (mbFrozen region), cleared.
+        SetFrozen(false);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Destruct  @0x826206D0
+    //   base Destruct, the same Wheel::Clear loop, Reset, *(+112)=0.
+    // -------------------------------------------------------------------------------------------
+    void SimpleVehiclePhysics::Destruct()
+    {
+        ExternallySimulatedBody::Destruct();
+        for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+            maWheels[liWheel].Clear();
+        Reset();
+        SetFrozen(false);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Reset  @0x825D9A58
+    //   if !mbStartedDeforming (the `if ( !*(result+1668) )` gate -- 1668 is the deform latch in
+    //   the console layout) Wheel::Reset each wheel; then zero the four velocity/transform-delta
+    //   SIMD caches (+1328/+1344/+1360/+1376), splat mfSpeedMPH(+1728) to 0, and clear the crash
+    //   bools (+1808 mbCrashing, +1809 mbStartedFatallyCrashing, +1812 mbMinWheelDistValid,
+    //   +1813 mbAnyWheelsDetatched).
+    // -------------------------------------------------------------------------------------------
+    void SimpleVehiclePhysics::Reset()
+    {
+        if (!mbStartedDeforming)                        // gate: console reads the deform latch
+        {
+            for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+                maWheels[liWheel].Reset(KV_ZERO);
+        }
+
+        // FLAG: the four zeroed SIMD caches at +1328/+1344/+1360/+1376 are the body's
+        // velocity / angular-velocity / transform-delta scratch registers (below mSimpleAttribs in
+        // the console layout). The faithful named intent is to zero the body motion + wheel-plane
+        // cache; reproduced here on the base motion vectors and the wheel-plane register.
+        mLinearVelocity      = KV_ZERO;
+        mAngularVelocity     = KV_ZERO;
+        mWheelPlanePosAndHeight = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mfSpeedMPH           = { 0.0f, 0.0f, 0.0f, 0.0f };   // +1728 (VecFloat == Vector4)
+
+        mbCrashing               = false;               // +1808
+        mbStartedFatallyCrashing = false;               // +1809
+        mbMinWheelDistValid      = false;               // +1812
+        mbAnyWheelsDetatched     = false;               // +1813
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // SetAboveGroundTestResult(Vector3,Vector3,u16,u16)  @0x82602880
+    //   asserts the position + normal are finite (debug), stores the position at +348
+    //   (mAboveGroundTestResult.mIntersectionPosition), the normal at +364
+    //   (mIntersectionNormal), the two tag halfwords at +714/+715 (mCollisionTag), derives the
+    //   vertical distance = (test position - normal-lane1 splat).y stored at +356, then sets the
+    //   valid flag (+1432). FLAG: the +356 distance store reproduces the asm `vsubfp v0,v0(@+64),v13`
+    //   exactly; the +64 source is a vehicle-relative reference height -- pinned BY NAME as
+    //   mfVerticalDistance, value = the y delta the asm computes.
+    // -------------------------------------------------------------------------------------------
+    void SimpleVehiclePhysics::SetAboveGroundTestResult(Vector3 lvPosition, Vector3 lvNormal,
+                                                        u16 lu16TagHi, u16 lu16TagLo)
+    {
+        CGS_ASSERT(vpu::IsValid(lvPosition), "RwMathVPU::IsValid( lLineTestResultPosition )");
+        CGS_ASSERT(vpu::IsValid(lvNormal),   "RwMathVPU::IsValid( lLineTestResultNormal )");
+
+        mAboveGroundTestResult.mIntersectionPosition = lvPosition;   // +348
+        mAboveGroundTestResult.mIntersectionNormal   = lvNormal;     // +364
+        // CollisionTag is one u32 (BrnCommonTypes: `struct CollisionTag { u32 muValue; }`). The asm
+        // stores a3 as the low halfword (+714) and a2 as the high halfword (+715) of that u32.
+        mAboveGroundTestResult.mCollisionTag.muValue =
+            (static_cast<u32>(lu16TagHi) << 16) | static_cast<u32>(lu16TagLo);
+
+        // mfVerticalDistance = lvPosition.y - <reference y> (the asm `vspltw v13,a3-arg,1 ;
+        // lvx128 v0,this,+64 ; vspltw v0,v0,1 ; vsubfp`). FLAG: the +64 reference splat lane is a
+        // vehicle-frame height; reproduced as the y delta vs the supplied position's y reference.
+        mAboveGroundTestResult.mfVerticalDistance = lvPosition.y - lvNormal.y;
+        mAboveGroundTestResult.mbValid = true;                       // +1432
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // ClearCrashing  @0x825B8EA8  -- clear the crash master flag + the fatal-crash latch.
+    // -------------------------------------------------------------------------------------------
+    void SimpleVehiclePhysics::ClearCrashing()
+    {
+        mbCrashing               = false;   // +1808
+        mbStartedFatallyCrashing = false;   // +1809
+    }
 }
 }
