@@ -62,7 +62,11 @@ static const CgsResource::ID MakeCGSId(IceMovie::EIceGroup leGroup, u32 luTakeIn
         break;
     case IceMovie::E_ICE_GROUP_WORLD_SIGNATURE:
         CGS_ASSERT(static_cast<s32>(luTakeIndex) != -1, "luTakeIndex > 0");
-        CgsCore::SPrintf(lacName, sizeof(lacName), "World_Signature_%i", luDisplayIndex);
+        // World-signature is the ONE group that formats the RAW 0-based take index, not the
+        // +1 display index: the X360 computes (luTakeIndex + 1) - 1 == luTakeIndex here
+        // (XEX MakeCGSId @0x821F79F8 `v8 - 1`; PS3 DecFIGS @0x4D390 `World_Signature_%i,
+        // luTakeIndex`). All other groups use luDisplayIndex.
+        CgsCore::SPrintf(lacName, sizeof(lacName), "World_Signature_%i", luTakeIndex);
         break;
     case IceMovie::E_ICE_GROUP_VEHICLE_CAR:
         CgsCore::SPrintf(lacName, sizeof(lacName), "Vehicle_Car_%i", luDisplayIndex);

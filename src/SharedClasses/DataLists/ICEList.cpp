@@ -9,12 +9,16 @@
 // X360 export; bodies recovered from the DecFIGS DWARF + the sibling ChallengeList
 // pattern).
 //
-// The two lookup methods each loop all KI_MAX_ICE_LISTS slots and SKIP a slot whose
-// ResourcePtr is the invalid/null handle. In the binary that skip is an inline
-// 3-dword (12-byte) compare of the ResourcePtr against the &dword_82FFB248 sentinel
-// (mpResourceMemory/mpNext/mpPrev == the null-handle image); the DecFIGS DWARF
-// renders the pre-inline source as ResourcePtr::operator!=(...), so it is restored
-// as `maTakeDictionary[i] != skInvalidHandle`. For a valid slot the X360 inlined the
+// The two lookup methods each loop the KI_MAX_ICE_LISTS slots and STOP at the first
+// slot whose ResourcePtr is the invalid/null handle (the lists are packed from 0 by
+// AddListResource, so the first empty slot is the end of the loaded set). In the
+// binary that test is an inline 3-dword (12-byte) compare of the ResourcePtr against
+// the &dword_82FFB248 sentinel (mpResourceMemory/mpNext/mpPrev == the null-handle
+// image): the X360 returns 0 the moment a slot equals the sentinel
+// (GetICETakeData/GetICETakeDataFromGuid @ 0x8267BDF0/0x8267BEC0 -> goto LABEL_6),
+// matching the PS3 DecFIGS `if (NULLResourcePtr == slot) break;` (0x814C48/0x8197DC).
+// It is restored as an early `return 0` on the first invalid slot. For a valid slot
+// the X360 inlined the
 // take-dictionary linear scan (Find / GetAt over mpaIndex); those are restored to
 // the logical Dictionary accessors (dict->Find / dict->GetNumEntries / dict->GetAt),
 // which is exact semantic parity.
@@ -90,19 +94,21 @@ const ICE::ICETakeData* ICEList::GetICETakeData(CgsContainers::DictEntry::Dictio
 {
     for ( s32 liIndex = 0; liIndex < KI_MAX_ICE_LISTS; ++liIndex )
     {
-        // X360: 12-byte compare of the ResourcePtr against the null sentinel -- skip
-        // empty slots.
-        if ( maTakeDictionary[ liIndex ] != skInvalidHandle )
+        // X360: 12-byte compare of the ResourcePtr against the null sentinel -- the
+        // first empty slot ends the loaded set, so bail out (return null) here.
+        if ( maTakeDictionary[ liIndex ] == skInvalidHandle )
         {
-            const CgsContainers::Dictionary<ICE::ICETakeData>* lpTakeDictionary =
-                maTakeDictionary[ liIndex ].GetMemoryResource();
+            return 0;
+        }
 
-            // X360: inlined linear scan over mpaIndex matching the key -> entry mpData.
-            const ICE::ICETakeData* lpTakeData = lpTakeDictionary->Find(lKey);
-            if ( lpTakeData )
-            {
-                return lpTakeData;
-            }
+        const CgsContainers::Dictionary<ICE::ICETakeData>* lpTakeDictionary =
+            maTakeDictionary[ liIndex ].GetMemoryResource();
+
+        // X360: inlined linear scan over mpaIndex matching the key -> entry mpData.
+        const ICE::ICETakeData* lpTakeData = lpTakeDictionary->Find(lKey);
+        if ( lpTakeData )
+        {
+            return lpTakeData;
         }
     }
 
@@ -116,23 +122,25 @@ const ICE::ICETakeData* ICEList::GetICETakeDataFromGuid(s32 liGuid) const
 {
     for ( s32 liDicIndex = 0; liDicIndex < KI_MAX_ICE_LISTS; ++liDicIndex )
     {
-        // X360: 12-byte compare of the ResourcePtr against the null sentinel -- skip
-        // empty slots.
-        if ( maTakeDictionary[ liDicIndex ] != skInvalidHandle )
+        // X360: 12-byte compare of the ResourcePtr against the null sentinel -- the
+        // first empty slot ends the loaded set, so bail out (return null) here.
+        if ( maTakeDictionary[ liDicIndex ] == skInvalidHandle )
         {
-            const CgsContainers::Dictionary<ICE::ICETakeData>* lpTakeDictionary =
-                maTakeDictionary[ liDicIndex ].GetMemoryResource();
+            return 0;
+        }
 
-            // X360: iterate all miNumEntries entries (GetAt asserts the index bound);
-            // return the first take whose miGuid == liGuid.
-            const s32 liNumTakes = lpTakeDictionary->GetNumEntries();
-            for ( s32 liTakeIndex = 0; liTakeIndex < liNumTakes; ++liTakeIndex )
+        const CgsContainers::Dictionary<ICE::ICETakeData>* lpTakeDictionary =
+            maTakeDictionary[ liDicIndex ].GetMemoryResource();
+
+        // X360: iterate all miNumEntries entries (GetAt asserts the index bound);
+        // return the first take whose miGuid == liGuid.
+        const s32 liNumTakes = lpTakeDictionary->GetNumEntries();
+        for ( s32 liTakeIndex = 0; liTakeIndex < liNumTakes; ++liTakeIndex )
+        {
+            const ICE::ICETakeData* lpTakeData = lpTakeDictionary->GetAt(liTakeIndex);
+            if ( lpTakeData->miGuid == liGuid )
             {
-                const ICE::ICETakeData* lpTakeData = lpTakeDictionary->GetAt(liTakeIndex);
-                if ( lpTakeData->miGuid == liGuid )
-                {
-                    return lpTakeData;
-                }
+                return lpTakeData;
             }
         }
     }

@@ -43,8 +43,10 @@ SingleGinsuEffect::~SingleGinsuEffect()
 
 // The controller-class test in AttachController. The X360 masks the controller's
 // object-id (`*(controller+0x14) & 0x7F0`) and compares it to the HybridExhaust
-// controller-class tag (0x50). FLAG: the mask/tag are the raw X360 class-id magic;
-// the controller-class enum that produces them is not yet homed.
+// controller-class tag (0x50). PS3 DecFIGS confirms this: AttachController (0x8297FC)
+// tests `((controller->+0x14 >> 4) & 0x7F) == 5`, i.e. the same class-tag 5 (0x50 in
+// the unshifted band). FLAG: the mask/tag are the raw X360 class-id magic; the
+// controller-class enum that produces them is not yet homed.
 static const s32 KI_CONTROLLER_CLASS_MASK         = 0x7F0;
 static const s32 KI_HYBRID_EXHAUST_CONTROLLER_TAG = 0x50;
 

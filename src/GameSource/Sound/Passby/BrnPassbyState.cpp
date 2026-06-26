@@ -26,10 +26,13 @@ namespace Passby
 // Returns the address of PassbyState's per-class static RTTI descriptor. The
 // X360 builds this descriptor in rodata (at 0x82F2F95C). Here it is a
 // function-local static, seeded with the canonical type name "PassbyState" and
-// HONEST placeholder fields for the parts not recoverable from this leaf:
-//   ObjectID        = 0        (FLAG: real registration id is DEFERRED)
+// the real registration id recovered from the PS3 DecFIGS build:
+//   ObjectID        = 0x40000  (PS3 __static_initialization_and_destruction_0
+//                               @ 0x85FA1C: PassbyState::sTypeInfo.ObjectID = 0x40000)
 //   mpcTypeName     = "PassbyState"
-//   mpBaseTypeInfo  = nullptr  (FLAG: BrnState's descriptor chain is DEFERRED)
+//   mpBaseTypeInfo  = nullptr  (FLAG: BrnState's descriptor chain is DEFERRED;
+//                               PS3 sets baseTypeInfo = &BrnState::sTypeInfo, but
+//                               BrnState's descriptor is not homed in this TU)
 //   mpfnCreateObject= nullptr  (CreateObject @ 0x826D4978 is its own DEFERRED slice)
 // This mirrors the committed CgsEffectBase.cpp GetStaticTypeInfo precedent: the
 // observable return — a stable &sTypeInfo whose typeName is the recovered class
@@ -43,7 +46,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetStaticTy
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo =
     {
-        0,             // ObjectID        (DEFERRED — real registration id)
+        0x40000,       // ObjectID        (PS3 0x85FA1C: PassbyState id = 0x40000)
         "PassbyState", // mpcTypeName
         nullptr,       // mpBaseTypeInfo  (DEFERRED — BrnState descriptor chain)
         nullptr,       // mpfnCreateObject(DEFERRED — CreateObject @ 0x826D4978)

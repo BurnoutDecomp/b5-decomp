@@ -456,12 +456,13 @@ namespace
     // X360 ClearData (0x8232A4A8) seeds the race distance-to-finish scalars (mfTotalRaceDistance
     // @ss+0x5CE4 and mfPlayerDistanceToFinishLastFrame @ss+0x5CE8) with the rodata float
     // flt_82CDB7D0 -- a "no valid distance yet" sentinel (the same constant another scoring body
-    // compares against as `v != flt_82CDB7D0` for distances already > 200000.0). The EXACT magnitude
-    // is NOT recoverable from this dossier (no rodata word dump was exported), so it is FLAGGED: the
-    // reset is structurally faithful (both scalars get the large-distance sentinel), but the literal
-    // below is a stand-in pending the rodata value. RaceCarPositioningData's own distances are seeded
-    // with the same sentinel via its Construct() (kept named, not hard-coded here).
-    const f32 KF_INVALID_RACE_DISTANCE = 1.0e9f;   // FLAG: flt_82CDB7D0 magnitude unrecovered
+    // compares against as `v != flt_82CDB7D0` for distances already > 200000.0). The exact magnitude
+    // is recovered from the PS3 DecFIGS ScoringSystem::ClearData (0x1E364C, same source): both
+    // scalars (and the per-car positioning scratch) are seeded with 3.4028235e38 == FLT_MAX. The
+    // X360 0x8232A4A8 confirms the same flt_82CDB7D0 store path; the PS3 supplies the literal value.
+    // RaceCarPositioningData's own distances are seeded with the same sentinel via its Construct()
+    // (kept named, not hard-coded here).
+    const f32 KF_INVALID_RACE_DISTANCE = 3.4028235e38f;   // flt_82CDB7D0 == FLT_MAX (PS3 0x1E364C)
 }
 
 // X360 0x8232A4A8. Full scoring-state reset. NAMED-MEMBER semantic-parity reconstruction (NOT a
@@ -531,7 +532,7 @@ void ScoringSystem::ClearData(bool lbResetCarData)
     SetCheckPointDistancesToFinishReady(false);                // ASM stb r30,0x5CE0
 
     // ---- race / player distance + timing scalars ----
-    mfTotalRaceDistance                = KF_INVALID_RACE_DISTANCE;  // ASM stfs f0(flt_82CDB7D0),0x5CE4
+    mfTotalRaceDistance                = KF_INVALID_RACE_DISTANCE;  // ASM stfs f0(flt_82CDB7D0==FLT_MAX),0x5CE4
     mfPlayerDistanceToFinishLastFrame  = KF_INVALID_RACE_DISTANCE;  // ASM stfs f0,0x5CE8
     mfPlayerTimeHeadingTheWrongWay     = 0.0f;                      // ASM stfs f31,0x5CEC
     mfPlayerTimeStationary             = 0.0f;                      // ASM stfs f31,0x5CF0

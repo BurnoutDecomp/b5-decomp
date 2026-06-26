@@ -18,12 +18,15 @@
 //                                                   words); exact inverse of
 //                                                   AddBits.
 //
-// AddBits and GetBits were reconstructed from the decoded algorithm rather than
-// the X360 pseudocode: Hex-Rays emitted both with "local variable allocation has
-// failed, the output may be wrong!" (register-mangled). They are verified bitwise
-// inverses — GetBits returns exactly (luValue & mask) for the field AddBits wrote
-// from a matching cursor position. Prepare's pseudocode was clean and is matched
-// directly.
+// The X360 emitted AddBits/GetBits register-mangled ("local variable allocation
+// has failed"); the bodies here are now reconciled against the clean PS3 DecFIGS
+// decompilations (same source, B5_FIGS): BitStream::AddBits @ 0xBD9A0C,
+// BitStream::GetBits @ 0xBD9B64, BitStream::Prepare @ 0xBD9D0C. GetBits matches
+// the prior reconstruction exactly; AddBits's two-word case was corrected to the
+// PS3's BLIND second-word store (a forward-only writer, no read-modify-write).
+// They remain verified bitwise inverses. The safe 64-bit mask guard
+// (liNumBits >= 64 ? ~0) is a PC reconstruction: PPC `1<<64` wraps mod-64 to a
+// 0 mask, which is UB on x64. (FLAG: PC-impossible shift behaviour.)
 
 namespace CgsNetwork
 {
@@ -75,19 +78,19 @@ namespace CgsNetwork
             // every shift below is well defined.
             s32 liBitsInSecondWord = liNumBits - liBitsInFirstWord;
 
+            // Top liBitsInSecondWord bits of the NEXT word take the BOTTOM bits of
+            // the value. The PS3 DecFIGS body (BitStream::AddBits, 0xBD9A0C) stores
+            // the next word here BLIND -- value << (64 - liBitsInSecondWord) -- with
+            // no read-modify-write: this is a forward-only serial writer, so the next
+            // word has no bits of its own to preserve yet. (PS3 `*(v21+8) = v15`.)
+            mpuBuffer[liWordNum + 1] = luMaskedValue << (64 - liBitsInSecondWord);
+
             // Low liBitsInFirstWord bits of the current word take the TOP bits of
-            // the value.
+            // the value (read-modify-write -- the high bits of this word were already
+            // written). (PS3 `*v21 = *v21 & ~((1<<v8)-1) | v14`, v14 = value >> v9.)
             u64 luFirstMask = (1ull << liBitsInFirstWord) - 1ull;
             mpuBuffer[liWordNum] =
                 (mpuBuffer[liWordNum] & ~luFirstMask) | (luMaskedValue >> liBitsInSecondWord);
-
-            // Top liBitsInSecondWord bits of the next word take the BOTTOM bits of
-            // the value. liBitsInSecondWord is in [1,63] here.
-            s32 liShift2     = 64 - liBitsInSecondWord;
-            u64 luSecondBits = luMaskedValue & ((1ull << liBitsInSecondWord) - 1ull);
-            u64 luSecondMask = ((1ull << liBitsInSecondWord) - 1ull) << liShift2;
-            mpuBuffer[liWordNum + 1] =
-                (mpuBuffer[liWordNum + 1] & ~luSecondMask) | (luSecondBits << liShift2);
         }
 
         return true;

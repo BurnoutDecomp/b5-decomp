@@ -38,8 +38,11 @@
 //
 // FLAGGED / UNPROVEN (honest placeholders -- see structured report):
 //   * The two VMX constants unk_82FAF0E0 (compare threshold) and unk_82FAEFB0 (additive bias)
-//     are anonymous data blobs with no per-address export; their exact float contents are
-//     unknown. They are represented below as named, clearly-flagged placeholder vectors.
+//     are NAMED by the PS3 DecFIGS DWARF (AddShadow @ PS3 0x3522BC): the threshold is
+//     kfAmbientShadowFadeDistance, the bias is kvShadowOffset (added to the transform's
+//     translation row at +0x48). Their float CONTENTS are still un-exported data blobs (no
+//     per-address value), so they remain clearly-flagged placeholder vectors below; only their
+//     names/roles are now recovered.
 //   * The exact destination-field mapping is partially ambiguous: the asm writes vectors at
 //     slot offsets +0x10/+0x20/+0x30 (relative to `this + 0x40*count`) plus one store at
 //     `this + 0x40*(count+1)`, while the incoming VMX vector registers v1/v2/v3 are set up by
@@ -54,12 +57,13 @@
 
 namespace
 {
-    // PLACEHOLDER: the AddShadow VMX visibility/magnitude compare threshold (unk_82FAF0E0).
-    // Contents not exported; zero-initialised so the reject test is structurally present but
-    // does not silently drop shadows. Replace once the data blob is recovered.
+    // PLACEHOLDER: the AddShadow compare threshold (X360 unk_82FAF0E0 == PS3 DWARF
+    // kfAmbientShadowFadeDistance). Contents not exported; zero-initialised so the reject test is
+    // structurally present but does not silently drop shadows. Replace once the data blob is recovered.
     const Vector4 KV_BLOBBY_SHADOW_REJECT_THRESHOLD = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-    // PLACEHOLDER: the additive bias applied to the front/rear/axle vector (unk_82FAEFB0).
+    // PLACEHOLDER: the additive bias (X360 unk_82FAEFB0 == PS3 DWARF kvShadowOffset), added to the
+    // transform translation row at +0x48 in the asm.
     const Vector4 KV_BLOBBY_SHADOW_EXTENT_BIAS = { 0.0f, 0.0f, 0.0f, 0.0f };
 }
 

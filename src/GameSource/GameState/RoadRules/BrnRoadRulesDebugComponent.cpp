@@ -33,12 +33,11 @@ namespace BrnGameState
     const f32 RoadRulesDebugComponent::KF_PLAYER_SCORES_X = 300.0f;   // flt_82020F08
     const f32 RoadRulesDebugComponent::KF_NET_SCORES_X    = 350.0f;   // flt_82021398
     const f32 RoadRulesDebugComponent::KF_SCORES_Y        =  50.0f;   // flt_820138DC
-    // FLAGGED: the row-label (road index) column X is loaded from flt_820049E0 in the X360
-    // binary (asm: `lfs f1, 0x49E0(r11)` with r11 = 0x82000000). The float's exact .rdata
-    // bits are not recoverable from the available IDA exports (no raw .rdata dump); modelled
-    // here as the natural left-of-Par column position. This is a screen-position layout
-    // constant only -- it has no ABI/behaviour effect -- but the precise value is unverified.
-    const f32 RoadRulesDebugComponent::KF_ROAD_NAME_X     = 200.0f;   // flt_820049E0 (FLAGGED value)
+    // The row-label column X. The X360 loads it from a .rdata float (asm: `lfs f1, *(0x82010000+18912)`)
+    // whose raw bits are not in the available X360 exports; recovered from the PS3 DecFIGS build, where
+    // the identical row-label DrawText passes the literal 100.0
+    // (sub_12970(v2, ..., 100.0, v15, 14.0, -1) @ PS3 0x1F5B5C). Same source -> the X360 value is 100.0.
+    const f32 RoadRulesDebugComponent::KF_ROAD_NAME_X     = 100.0f;   // PS3 DecFIGS 0x1F5B5C (row-label X)
 
     namespace
     {
@@ -186,8 +185,11 @@ namespace BrnGameState
 
                 const BrnStreetData::StreetData* lpStreetData = mpRoadRulesManager->mpStreetManager->GetStreetData();
 
-                // Row label: the road index, drawn at the road-name column.
-                lCellStream << liRoad;
+                // Row label: the road's debug name, drawn at the road-name column. The X360 emits this
+                // through an obscured SimpleStrStream vtable append; the PS3 DecFIGS build (0x1F5B5C)
+                // shows the appended value plainly -- it streams the Road debug-name string
+                // (GetRoad(liRoad) name @ Road+40), NOT the integer row index.
+                lCellStream << lpStreetData->GetRoad( liRoad )->GetDebugName();
                 lpRender->DrawText( lCellStream.GetBuffer(), KF_ROAD_NAME_X, lfRowY, 14.0f, 0xFFFFFFFFu );
                 lCellStream.Reset();
 

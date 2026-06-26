@@ -106,15 +106,18 @@ void OnlineShowtimeMode::Start(const StartGameModeParams* /*lpStartGameModeParam
 
     lpGameModeParams->Construct(GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
 
-    // Crash/showtime traffic density loaded from .data @0x82005548 (see CrashMode::Start note: bytes
-    // not in references/, provably not 0.0f, modelled as a named estimate; INTEGRATOR resolves from XEX).
-    static const f32 KF_CRASH_TRAFFIC_DENSITY_SCALE = 2.0f; // .data @0x82005548 (value UNRESOLVED; estimate, not 0.0f)
+    // Crash/showtime traffic density loaded from .rdata flt_82005548 (see CrashMode::Start note).
+    // RESOLVED from the PS3 DecFIGS build (OnlineShowtimeMode::Start 0x1D6CA4), where the same store
+    // reads the literal 2.5 (`*(v4 + 48) = 2.5`). Same source -> the X360 value is 2.5.
+    static const f32 KF_CRASH_TRAFFIC_DENSITY_SCALE = 2.5f; // PS3 DecFIGS 0x1D6CA4 (mfTrafficDensityScale)
     lpGameModeParams->SetTrafficDensityScale(KF_CRASH_TRAFFIC_DENSITY_SCALE);
 
     lpGameModeParams->SetLargeVehicleProbability(1.3f);
     lpGameModeParams->mbIsOnline = true;        // X360 *(a3+148)=1 (mbIsOnline is a public member; no SetIsOnline exists)
 
-    // muFlags |= 0x1042139E (low-word crash mask; high dword 0x82000000 is the data-base artifact).
+    // muFlags |= 0x1_1042139E (full 64-bit X360 crash mask: li r12,1; sldi 32; oris 0x1042; ori 0x139E
+    // @ X360 0x82322278). The 0x1_00000000 bit is a genuine flag (KU_FLAG_DISABLE_PROP_PROGRESSION),
+    // NOT a data-base artifact. PS3 DecFIGS 0x1D6CA4 confirms the literal: `|= 0x11042139ELL`.
     lpGameModeParams->SetFlag(
         GameModeParams::KU_FLAG_REMOVE_RIVALS_FROM_WORLD
       | GameModeParams::KU_FLAG_DISABLE_CRASH_CLEAN_UP
@@ -126,7 +129,8 @@ void OnlineShowtimeMode::Start(const StartGameModeParams* /*lpStartGameModeParam
       | GameModeParams::KU_FLAG_HARDCORE_TRAFFIC_SWERVING
       | GameModeParams::KU_FLAG_DISABLE_TRAFFIC_RESET
       | GameModeParams::KU_FLAG_DISABLE_ALL_TDS
-      | GameModeParams::KU_FLAG_EASY_SMASH_PROPS);
+      | GameModeParams::KU_FLAG_EASY_SMASH_PROPS
+      | GameModeParams::KU_FLAG_DISABLE_PROP_PROGRESSION);
 
     // Copy the eight per-player network ids from the start event (v5 words 30..37 == bytes 120..148
     // == StartNetworkGameEvent::maNetworkPlayerID[8]) into the mode params

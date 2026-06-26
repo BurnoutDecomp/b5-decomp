@@ -31,7 +31,7 @@ namespace CgsGuiModuleIO
     // ((*a1 >> 3) & 1) == write-lock bit; returns this + 4.
     OutputBuffer::GuiResourceRequestQueueStorage* OutputBuffer::GetGuiResourceRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mResourceRequestQueue;
     }
 
@@ -39,7 +39,7 @@ namespace CgsGuiModuleIO
     // read-lock bit; returns this + 2068.
     const OutputBuffer::GuiEventQueue* OutputBuffer::GetOutEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return &mOutEvents;
     }
 
@@ -48,7 +48,7 @@ namespace CgsGuiModuleIO
     // asserts before the Append call, then returns the Append result.
     int OutputBuffer::AddGuiOutEvents(const GuiEventQueueSmall* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         CGS_ASSERT(lpSourceQueue != 0,
                    "Invalid event queue pointer sent to OutputBuffer::AddGuiOutEvents");
         return mOutEvents.Append(*lpSourceQueue) ? 1 : 0;

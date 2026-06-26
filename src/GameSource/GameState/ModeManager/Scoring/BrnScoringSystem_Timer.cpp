@@ -293,12 +293,12 @@ void ScoringSystem::StopModeTimer(const CgsSystem::Time& lTime, EActiveRaceCarIn
     CGS_ASSERT(lfRoundEndDistance > -1.0f,
                "Bad distance in scoring system #1, dist from finish at round end");
     // #2: a finite distance must not exceed 200000.0 unless it is the round-end-not-reached
-    // sentinel the per-car record is cleared to. FLAG: that sentinel is the X360 rodata float
-    // flt_82CDB7D0 (ScoringSystem::ClearData @ 0x8232A4A8 stores it into the per-car distance slot);
-    // its exact bit pattern is NOT recovered from the available exports, so the magnitude guard is
-    // reproduced but the sentinel-exclusion term is omitted rather than fabricated with a wrong
-    // value (a wrong sentinel would only mis-fire a debug assert, never alter data flow).
-    CGS_ASSERT(lpScoreData->GetDistanceToFinish() <= 200000.0f,
+    // sentinel the per-car record is cleared to. That sentinel is flt_82CDB7D0 == FLT_MAX
+    // (3.4028235e38), recovered from the PS3 DecFIGS StopModeTimer (0x1FE7C8, same source):
+    // the assert fires on `dist > 200000.0 && dist != 3.4028235e38`. The X360 0x8231F590 carries
+    // the identical flt_82CDB7D0 compare. Asserted here as the negated (good) condition.
+    CGS_ASSERT(lpScoreData->GetDistanceToFinish() <= 200000.0f ||
+                   lpScoreData->GetDistanceToFinish() == 3.4028235e38f,
                "Bad distance in scoring system #2, dist from finish at round end");
 
     if (lbForce)

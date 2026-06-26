@@ -8,7 +8,15 @@
 // live, it posts a CsisReleaseCommand carrying that handle onto the owning
 // factory's CsisCommandQueue, clears the handle, and reports that it stopped.
 //
-// Cited by X360 address only -- no leaked-source provenance.
+// Provenance reconciled against the PS3 DecFIGS body
+// (._ZN8CgsSound8Playback15AemsPlayerVoice4StopEv @ PS3 0x85C5E8): the function is
+// inlined-defined in CgsAemsFactory.h (PS3 FireAssert cites
+// ".../Sound/Playback/Aems/CgsAemsFactory.h":248 for the "Possibly need to increase
+// CsisCommandQueue::E_QUEUE_LENGTH" overflow assert) -- CgsCommandQueue.cpp is a
+// home of convenience for the queue family, not the source home. The PS3 confirms
+// E_CSIS_COMMAND_RELEASE == 2 (the `{2, handle}` command pair pushed) and the
+// 0xFF-modulo ring wraparound; the abstracted operator<< below stands in for the
+// inlined PostCommand ring push (file home cited per project policy; not moved).
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/CgsCommandQueue.h"

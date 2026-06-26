@@ -44,12 +44,16 @@ namespace BrnPhysics
         // Solve the collision impulse for a hit against an immovable object:
         //   j = -(1+e)(vRel . n) / ( 1/m + n . ((I^-1 (r x n)) x r) )
         // writes the impulse vector, the inverse effective mass scalar, and j*n out-params.
-        // @0x8259C978 (DWARF: VecFloat CalculateCollisionImpulseWithInanimateObject(
-        //   Vector3 lvNormal, Vector3 lvContactPointRel, Vector3 lvRelativeVelocity,
-        //   VecFloat lvfRestitution, Vector3* lpvImpulseOut, VecFloat* lpvfInvInertiaOut)).
+        // @0x8259C978. The X360 Hex-Rays dropped the arg list (rendered `int(...)`); the
+        // parameter names/order below are recovered from the PS3 DecFIGS DWARF prototype
+        // (._ZN10BrnPhysics19ExternalPhysicsBody44CalculateCollisionImpulseWithInanimateObject...
+        //  @ PS3 0x68B130): (Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
+        //  VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut). lPoint
+        // is the contact point relative to the centre of mass (the cross-product `r`),
+        // lPointVel the point's relative velocity, lCollisionNormal the surface normal `n`.
         VecFloat CalculateCollisionImpulseWithInanimateObject(
-            Vector3 lvNormal, Vector3 lvContactPointRel, Vector3 lvRelativeVelocity,
-            VecFloat lvfRestitution, Vector3* lpvImpulseOut, VecFloat* lpvfInvInertiaOut);
+            Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
+            VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut);
 
         // Damp the angular velocity. DampenAngularVelocity applies one isotropic damping
         // curve; DampPitchYawRoll applies a separate per-axis (pitch/yaw/roll) curve. Both

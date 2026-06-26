@@ -98,11 +98,13 @@ void ICEWrapper::EditorOff()
 // Rebuild the camera mover for this frame: ask the manager for the take currently
 // driving the camera, then construct the mover against it.
 //
-// Arg order to ICECameraMover::Construct (RECONCILED against the real mover layout the
-// 11 reconstructed mover functions prove -- the second arg is stored at mover+0x00 as
-// its ICECameraAnchor* mpCar, the third at +0x04 as mpICECamera, the fourth at +0x110
-// as mpTake):
-//   (mover, viewIndex=1, &mCameraSpaceHandler, &mICECamera, cameraTake, 0, context)
+// Arg order to ICECameraMover::Construct -- CONFIRMED against the PS3 DecFIGS prototype
+// (0x5BC428): Construct(int liViewIndex, ICECameraAnchor* lpCar, ICECamera* lpCamera,
+// ICETake* lpTake, ICEGroup* lpShakeGroup, const IResourceManager* lpResourceMgr). The
+// 5th arg is the shake group (ICEGroup*), passed null here. (The 11 reconstructed mover
+// functions show the second arg stored at mover+0x00 as its ICECameraAnchor* mpCar, the
+// third at +0x04 as mpICECamera, the fourth at +0x110 as mpTake):
+//   (mover, viewIndex=1, &mCameraSpaceHandler, &mICECamera, cameraTake, shakeGroup=0, context)
 //
 // FLAG: the mover's anchor (ICE::ICECameraAnchor) is the layout `{ CameraSpaceHandler
 //   mSpace; }`, so the wrapper's reference-space cache &mCameraSpaceHandler IS the

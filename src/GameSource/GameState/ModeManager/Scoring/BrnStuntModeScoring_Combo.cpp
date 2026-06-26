@@ -39,17 +39,20 @@
 //                                       NOT rename/retype the committed member; we name it
 //                                       verbatim and annotate the combo role here.)
 //
-// RESIDUAL FLAG -- EndCombo (0x823215D8) calls
+// RESIDUAL FLAG -- EndCombo (0x823215D8) issues a virtual call on the member at this+0x22C0.
+// The X360 Hex-Rays decodes it as
 //   CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct(*(this + 0x22C0))
-// on a member at this+0x22C0 whose type has NO committed home (there is no CgsSceneManager /
-// CgsCollision TU in b5-decomp), and whose byte offset additionally COLLIDES with the
-// committed mpAchievementManager pointer (Construct 0x8232C080 stores its arg at this same
-// byte 0x22C0 via a1[2224]). That collision is unresolved in the minimal slice. Per the
-// "isolate that one call + flag; land the rest" rule, the Destruct call is the SOLE part of
-// EndCombo left UN-EMITTED (flagged inline); every other EndCombo store maps to a committed,
-// named member and IS emitted. FLAG: home the BaseCollisionGenerator member + type (and
-// disambiguate the 0x22C0 / mpAchievementManager offset) when the full StuntModeScoring TU
-// + the CgsCollision subsystem land, then drop the one call in.
+// but that is an ICF-folded mis-symbol: the PS3 DecFIGS (EndCombo 0x1D217C, demangled DWARF)
+// shows the SAME call is actually
+//   AchievementManager::OnStuntRunMultiplier(mpAchievementManager, miComboMultiplier).
+// There is therefore NO 0x22C0 collision: the member at this+0x22C0 IS mpAchievementManager
+// (Construct 0x8232C080 stores its arg there via a1[2224]), and the call is its
+// OnStuntRunMultiplier(s32) (AchievementManagerBase.h:185, DWARF :148). The call is still left
+// UN-EMITTED here only to avoid pulling the AchievementManager header (mpAchievementManager is
+// forward-declared incomplete in the keystone) into this partial TU -- it is a clean drop-in
+// (mpAchievementManager->OnStuntRunMultiplier(miComboMultiplier)) once the full StuntModeScoring
+// TU includes that header. Every other EndCombo store maps to a committed, named member and IS
+// emitted.
 // ============================================================================
 
 namespace BrnGameState
@@ -139,13 +142,12 @@ void StuntModeScoring::EndCombo()
         mfTimeDelayBeforeModeEnd = KF_TIME_DELAY_BEFORE_MODE_END;       // X360 stfs flt_82CDB7B0, 0x60
     }
 
-    // FLAG (sole isolated call -- see file header): X360
-    //   r3 = *(this + 0x22C0);
-    //   CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct(r3);
-    // The member at this+0x22C0 and the BaseCollisionGenerator type have no committed home, and
-    // 0x22C0 additionally collides with mpAchievementManager. Left UN-EMITTED until the
-    // CgsCollision subsystem + the full StuntModeScoring layout land.
-    // result = CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct(mpCollisionGenerator);
+    // FLAG (sole isolated call -- see file header): the X360 virtual call on *(this + 0x22C0),
+    // which Hex-Rays mis-symbols as BaseCollisionGenerator::Destruct, is really (per the PS3
+    // DecFIGS EndCombo 0x1D217C) mpAchievementManager->OnStuntRunMultiplier(miComboMultiplier).
+    // Left UN-EMITTED only to keep this partial TU from including the AchievementManager header
+    // (mpAchievementManager is forward-declared incomplete in the keystone).
+    // mpAchievementManager->OnStuntRunMultiplier(miComboMultiplier);
 
     // X360 0x10 += (s32)0x20 * 0x24  (mfComboScore re-read + fctiwz; mullw; add to miCurrentScore).
     miCurrentScore += miComboMultiplier * static_cast<s32>(mfComboScore);

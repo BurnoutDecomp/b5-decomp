@@ -117,7 +117,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* AIVehicleStateMan
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
         2,                          // ObjectID (PS3 DecFIGS static-init 0x85FA1C: AIVehicleStateManager=2)
         "AIVehicleStateManager",    // typeName
-        0,                          // baseTypeInfo     -- StateManager base descriptor (deferred)
+        CgsSound::Logic::StateManager::GetStaticTypeInfo(), // baseTypeInfo (PS3 0x85FA1C: =StateManager::GetStaticTypeInfo())
         &AIVehicleStateManager::CreateObject // createObject
     );
     return &sTypeInfo;
@@ -130,11 +130,10 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* AIVehicleStateMan
 // find it by ObjectID. AddToClassTypeInfoArray is the canonical StateManager
 // registration entry (@ 0x8268DFE8), reached through the BrnStateManager base.
 //
-// FLAG (ObjectID arbitrary-unique): the exact X360 ObjectID was not exported
-// (CreateObject @ 0x82702358 has no xrefs_to). Assigned 2 here as a unique-among-the-9
-// placeholder; the real id is this manager's slot in the CreateStateManagers 0..8 loop
-// (@ 0x826AFEF8) -- pin at integration. This TU is OUT of the build, so dormant until
-// the conductor adds it.
+// ObjectID RESOLVED (PS3 DecFIGS static-init 0x85FA1C): AIVehicleStateManager::sTypeInfo
+// .ObjectID = 2. The descriptor comes from GetStaticTypeInfo() (seeded with that id and
+// baseTypeInfo = StateManager::GetStaticTypeInfo()), so this registration lands the real
+// id. This TU is OUT of the build, so dormant until the conductor adds it.
 // ---------------------------------------------------------------------------
 static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
     gpAIVehicleStateManagerReg =

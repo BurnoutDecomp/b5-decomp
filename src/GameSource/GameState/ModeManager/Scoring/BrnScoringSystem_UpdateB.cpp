@@ -467,7 +467,10 @@ namespace BrnGameState
     {
         const u32 luNumberOfActiveRaceCars = lpOutput->maCarsInTheRace.GetLength();
         CGS_ASSERT(luNumberOfActiveRaceCars >= 1, "liNumberOfActiveRaceCars >= 1");
-        CGS_ASSERT(luNumberOfActiveRaceCars <= 8, "Amount of active race cars is too many");
+        // PS3 DecFIGS (BrnScoringSystem.cpp:2022) bakes the verbatim stream-assert prefix
+        // "Amount of active race cars is: " (the count is streamed after it); the prior
+        // "...is too many" message was a placeholder guess. Prefix matched to the real source.
+        CGS_ASSERT(luNumberOfActiveRaceCars <= 8, "Amount of active race cars is: ");
 
         // ---- (1) lead / last time-in-place (online only) ----
         if (lbOnline)
