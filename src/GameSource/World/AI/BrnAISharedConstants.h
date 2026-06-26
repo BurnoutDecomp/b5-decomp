@@ -20,4 +20,31 @@ namespace BrnAI
         E_RESET_TYPE_AWAY_FROM_PLAYER         = 7,
         E_RESET_TYPE_COUNT                    = 8,
     };
+
+    // DWARF BrnAISharedConstants.h:100 -- the route-finding/game-mode discriminator an AI car
+    // runs under. AICar stores this at AICar+0x14C0; the aggression state machine reads it to
+    // decide RACE vs ROAD_RAGE vs PURSUIT vs MARKED_MAN behaviour (BrnAIAggression bodies
+    // compare it to 1/2/3/6).
+    enum ERouteFindingStyle
+    {
+        E_ROUTE_FINDING_FREE_ROAM       = 0,
+        E_ROUTE_FINDING_RACE            = 1,
+        E_ROUTE_FINDING_ROAD_RAGE       = 2,
+        E_ROUTE_FINDING_PURSUIT         = 3,
+        E_ROUTE_FINDING_AVOID_PLAYER    = 4,
+        E_ROUTE_FINDING_ALWAYS_STRAIGHT = 5,
+        E_ROUTE_FINDING_MARKED_MAN      = 6,
+        E_ROUTE_FINDING_COUNT           = 7,
+    };
+
+    // DWARF BrnAISharedConstants.h:92 -- whether an AI car is currently active and in range of
+    // the player. Stored at AICar+0x14C8; the aggression machine treats any non-IN_RANGE state
+    // as "not suitable for aggression".
+    enum EAICarState
+    {
+        E_AI_CAR_STATE_IN_RANGE     = 0,
+        E_AI_CAR_STATE_OUT_OF_RANGE = 1,
+        E_AI_CAR_STATE_INACTIVE     = 2,
+        E_AI_CAR_STATE_COUNT        = 3,
+    };
 }
