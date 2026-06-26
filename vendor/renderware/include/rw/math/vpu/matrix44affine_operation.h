@@ -69,6 +69,31 @@ namespace vpu
         return lvResult;
     }
 
+    // -- composition --------------------------------------------------------------------
+
+    // Mult(m, b) / operator*(m, b): the affine matrix product `m * b` (row-major). Each
+    // output row i is m.row_i transformed by b: the rotation rows are
+    //   out.row_i = m.row_i.x * b.xAxis + m.row_i.y * b.yAxis + m.row_i.z * b.zAxis
+    // and the translation row additionally adds b.wAxis (m.wAxis is a point, so its w==1
+    // contribution is the +b.wAxis term). X360 shape (matrix44affine_operation_platform_inline.h
+    // :84-90): the source rows are vspltw128-broadcast component-by-component (sp0..sp3) and
+    // accumulated with a vmaddfp cascade over the loaded b rows (ma0..ma3 / bx/by/bz), the
+    // translation row seeded with b.wAxis (the `zero`/w handling). Per-lane f32 math gives exact
+    // semantic parity with that broadcast+FMA accumulation.
+    inline Matrix44Affine Mult(const Matrix44Affine& lrLhs, const Matrix44Affine& lrRhs)
+    {
+        Matrix44Affine lResult;
+        lResult.xAxis = TransformVector(lrRhs, lrLhs.xAxis);
+        lResult.yAxis = TransformVector(lrRhs, lrLhs.yAxis);
+        lResult.zAxis = TransformVector(lrRhs, lrLhs.zAxis);
+        lResult.wAxis = TransformPoint(lrRhs, lrLhs.wAxis);
+        return lResult;
+    }
+    inline Matrix44Affine operator*(const Matrix44Affine& lrLhs, const Matrix44Affine& lrRhs)
+    {
+        return Mult(lrLhs, lrRhs);
+    }
+
     // -- inverse ------------------------------------------------------------------------
 
     // InverseOfMatrixWithOrthonormal3x3(m): the affine inverse when the upper 3x3 is
