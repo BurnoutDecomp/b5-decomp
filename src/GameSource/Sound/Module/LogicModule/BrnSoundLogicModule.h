@@ -5,7 +5,14 @@
 #include "BrnCommonTypes.h"                              // EntityId
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>
 #include "GameSource/GameState/BrnGameActions.h"         // BrnGameState::GameStateModuleIO::SoundTriggerAction (element home)
-#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h" // BrnSound::Logic::IResourceRequester / ResourceRegistrar (committed base + member type)
+// IResourceRequester (base) + ResourceRegistrar (member) from their CANONICAL home
+// (BrnResourceRegistrar.h), NOT BrnEffectObject.h: the latter ALSO defines a
+// CgsSound::Logic::ClassTypeInfo template that would clash with the canonical one in
+// CgsStateManager.h (pulled in via CgsEnvironment.h below) once both land in this TU.
+// BrnSoundLogicModule only needs IResourceRequester/ResourceRegistrar, so it takes the
+// canonical home directly and avoids the ODR-split template entirely.
+#include "GameSource/Sound/BrnResourceRegistrar.h"               // BrnSound::Logic::IResourceRequester (base) + ResourceRegistrar (member)
+#include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"   // CgsSound::Logic::Environment (embedded by value) + canonical CgsSound::Logic::StateManager (the 9-slot map + the CreateStateMan factory)
 
 // =============================================================================
 // BrnSound::Module::SoundLogicModule
@@ -61,6 +68,11 @@ struct SoundLogicModule : public BrnSound::Logic::IResourceRequester
     // BrnSoundLogicModule.h:58 (DWARF).
     static const s32 KI_MAX_SOUND_TRIGGER_ACTIONS = 16;
 
+    // The fixed bank of sound-logic state managers. Proven by CreateStateManagers
+    // (X360 0x826AFEF8) iterating i=0..8 over mapStateManagers (this+79064) and by
+    // PrepareStateManagersOnBoot (0x826837F8) iterating the same 9 slots.
+    static const s32 KI_NUM_STATE_MANAGERS = 9;
+
     // The Prepare resumable-stage machine (X360 0x82703C18, stage word @ this+19775).
     // Stage order mirrors the X360 switch: AddMonitor -> base Module::Prepare ->
     // construct+connect the 3 Voices + LoadAsset(BurnoutGlobalData) -> ResourceBridging ->
@@ -105,6 +117,21 @@ struct SoundLogicModule : public BrnSound::Logic::IResourceRequester
     // per-frame update.
     void ResourceBridging();
 
+    // X360 0x826AFEF8 (Prepare stage 4). Create the 9 sound-logic state managers: loop
+    // i=0..8 -> mapStateManagers[i] = StateManager::CreateStateMan(i, this); when the
+    // factory returns a manager (i.e. a leaf is registered for that id), register it into
+    // the embedded Environment (lEnvironment.AddStateManager). Null slots (no leaf
+    // registered) are skipped, so this is a safe no-op while the manager TUs are out of
+    // the build (the registry is empty -> every CreateStateMan returns null).
+    void CreateStateManagers();
+
+    // X360 0x826837F8 (Prepare stage 5, boot mask = 4). Drive each created manager's
+    // Prepare() (vtable +0x0C), skipping the slots whose bit is set in luSkipMask; if any
+    // manager's Prepare() returns false, return false (the boot stage retries). Then the
+    // mapStateManagers[0] child-prepare special-case (its GetChildStateManager(0), vtable
+    // +0x14 -> if non-null, the child's Prepare(), vtable +0x0C). Returns true on success.
+    bool PrepareStateManagersOnBoot(s32 luSkipMask);
+
     // BrnSoundLogicModule.cpp:964 (DWARF). Linear-search the per-frame trigger-action
     // table for the entry that matches (leEntityId, leType), returning it (or null).
     // X360 0x826AFF88: walks maTriggerActions[0..count), comparing element.mEntityId
@@ -145,6 +172,18 @@ private:
     Array<BrnGameState::GameStateModuleIO::SoundTriggerAction, 16> maTriggerActions; // h:372 (X360 this+0x4CA0)
 
     BrnSound::Logic::ResourceRegistrar mResourceRegistrar; // h:383 (X360 this+0x588)
+
+    // The sound-logic Environment, embedded BY VALUE (X360 this+10576). CreateStateManagers
+    // registers each created manager into it (lEnvironment.AddStateManager). By-value embed
+    // matches the X360 (it lives inline in the module, not behind a pointer) and the existing
+    // mResourceRegistrar by-value pattern. Pinned by name; offset NOT asserted (host vs X360
+    // pointer widths differ -- see header LAYOUT NOTE).
+    CgsSound::Logic::Environment lEnvironment;             // X360 this+10576
+
+    // The fixed bank of 9 sound-logic state managers (X360 this+79064). Each slot is filled
+    // by CreateStateManagers via StateManager::CreateStateMan(i, this) (null when no leaf is
+    // registered for that id). Pinned by name; offset NOT asserted.
+    CgsSound::Logic::StateManager* mapStateManagers[KI_NUM_STATE_MANAGERS]; // X360 this+79064
 
     // Prepare-machine bookkeeping (X360 stage word @ this+19775 + the constructed/prepared
     // flags near it). Pinned by name; the omitted ~79KB of Voice/state-manager/IO members

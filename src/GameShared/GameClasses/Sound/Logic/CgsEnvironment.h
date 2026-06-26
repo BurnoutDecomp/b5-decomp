@@ -2,6 +2,7 @@
 #define CGS_SOUND_LOGIC_CGSENVIRONMENT_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"  // CgsSound::Logic::StateManager (CANONICAL)
 
 // =============================================================================
 // CgsSound::Logic::Environment
@@ -24,14 +25,20 @@
 // :476 (GetStateType() < KI_MAX_NUMBER_OF_STATES) and
 // :477 (mapStateManagers[GetStateType()] == NULL).
 //
-// FLAG (minimal, ODR-safe partial view): StateManager has a large owning keystone
-// home (CgsStateManager.{h,cpp}); to keep this Environment home self-contained and
-// avoid pulling that keystone in, only the GetStateType() accessor StateManager
-// exposes here is modelled, BY NAME. This mirrors the existing partial-view pattern
-// (CgsStateManagerRegisteredContent.h) -- the views never share a TU. Absolute
-// member offsets are deliberately NOT static_asserted (the host 64-bit pointer
-// differs in width from the X360 32-bit pointer); only the by-name semantics are
-// reproduced.
+// ODR FOLD (2026-06-25): this header previously declared its OWN minimal
+// `struct CgsSound::Logic::StateManager { s32 GetStateType(); s32 miStateType; }`
+// -- a placeholder that would clash with the canonical CgsSound::Logic::StateManager
+// (CgsStateManager.h) the moment a TU needed both (which the SoundLogicModule wiring
+// now does: BrnSoundLogicModule embeds Environment BY VALUE *and* calls
+// StateManager::CreateStateMan, returning the canonical StateManager*). That minimal
+// struct is now DELETED; this header includes the canonical CgsStateManager.h and
+// Environment stores canonical CgsSound::Logic::StateManager*. The fold is clean
+// because AddStateManager/GetStateManager only ever call GetStateType(), which the
+// canonical class already exposes (returning meMapState @ +0x14) -- the exact member
+// the old minimal view modelled. Same fold pattern already applied to
+// BrnStateManager.h. Absolute member offsets remain NOT static_asserted (host 64-bit
+// pointer width differs from the X360 32-bit pointer); only the by-name semantics
+// (indexing mapStateManagers[GetStateType()+1]) are load-bearing.
 // =============================================================================
 
 namespace CgsSound
@@ -40,15 +47,6 @@ namespace Logic
 {
 
 const s32 KI_MAX_NUMBER_OF_STATES = 16; // CgsEnvironment.h (DWARF): asserted bound
-
-// Minimal by-name view of the sound-logic StateManager. The full surface lives in
-// the owning keystone home; AddStateManager only reads GetStateType().
-struct StateManager
-{
-    s32 GetStateType() const { return miStateType; } // X360 reads at +0x14 (meMapState)
-
-    s32 miStateType;
-};
 
 struct Environment
 {

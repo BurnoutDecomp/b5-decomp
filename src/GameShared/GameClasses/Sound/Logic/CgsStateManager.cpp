@@ -12,7 +12,7 @@
 //   StateManager::Prepare()                  vtable +0x0C         (stub -- see FLAG)
 //   StateManager::GetChildStateManager(s32)  vtable +0x14         (stub -- see FLAG)
 //   StateManager::PrepareStates(...)         shared helper        @ 0x826EAD30  (stub -- see FLAG)
-//   StateManager::CreateStateMan(u32, void*) factory              @ 0x826A5B60  (stub -- see FLAG)
+//   StateManager::CreateStateMan(u32, void*) factory              @ 0x826A5B60  (real -- scans the registry)
 //
 // The minimal slice this file used to be (just IsStateAlias against an opaque
 // mPad[20]) is superseded by the DWARF-named owning layout in the header; the
@@ -23,6 +23,29 @@ namespace CgsSound
 {
 namespace Logic
 {
+
+// ===========================================================================
+// The per-class RTTI descriptor registry  (X360 global dword_82FFBC58 .. dword_82FFBC98)
+//
+// The X360 keeps a single static array of ClassTypeInfo<StateManager>* at
+// dword_82FFBC58 (scanned by both AddToClassTypeInfoArray @ 0x8268DFE8 and
+// CreateStateMan @ 0x826A5B60: the scan upper bound dword_82FFBC98 is 0x40 bytes
+// past the base == 16 4-byte slots, i.e. KU_SIZEOF_CLASS_ARRAY entries). Both
+// routines live in THIS TU, so the registry is modelled as a single
+// translation-unit-scope definition here (NOT a function-local static), exactly
+// reproducing the X360's one shared global. Each leaf manager's file-scope
+// registration static-init (in its own TU) calls AddToClassTypeInfoArray to land
+// its descriptor in this array; CreateStateMan then scans it by ObjectID.
+//
+// FLAG (faithful, not byte-identical): this is a host pointer array (8-byte
+// entries) rather than the X360's 4-byte-slot region; only the by-name semantics
+// (a single shared, zero-initialised, KU_SIZEOF_CLASS_ARRAY-capacity registry the
+// two routines share) are load-bearing. Zero-initialised at load (static storage
+// duration), so before any leaf registers (e.g. when the 8 manager TUs are out of
+// the build) every slot is null and CreateStateMan's scan finds no match -> returns
+// null, exactly the safe no-op the boot orchestration relies on.
+// ---------------------------------------------------------------------------
+static ClassTypeInfo<StateManager>* gapClassTypeInfoArray[StateManager::KU_SIZEOF_CLASS_ARRAY] = { 0 };
 
 // ---------------------------------------------------------------------------
 // StateManager::StateManager()  @ 0x826FAA18
@@ -165,20 +188,85 @@ bool StateManager::PrepareStates(s32 /*liStateMask*/,
 //       result->meMapState    (+0x14) = descriptor->ObjectID;
 //   return result;   // null when no descriptor matched
 //
-// FLAG (stub): the registered-descriptor array (dword_82FFBC58) is the static RTTI
-// registry that each leaf manager's class-registration populates (via
-// AddToClassTypeInfoArray with an explicit per-manager ObjectID). That registry +
-// the per-leaf createObject factories are NOT modelled in this view (they live with
-// the leaf managers and their RegisterClass sites), so this factory cannot be bodied
-// faithfully here without pulling all nine leaves + their registration in. Returning
-// null is a safe placeholder (the caller guards `if (result)`); it does NOT create
-// any manager. CONDUCTOR: body this once the leaf registration + factory set is
-// reconstructed (see PART B for the per-leaf createObject addresses). The index->type
-// mapping is driven by the per-leaf ObjectID values, NOT a switch.
+// X360 store-for-store (a1 == liStateManId, a2 == apModule):
+//   v4 = 0;                              ; the matched descriptor (null until found)
+//   v6 = &dword_82FFBC58; v5 = 0;        ; scan cursor + slot index
+//   do {
+//       if ( !*v6 ) break;               ; first null slot ends the scan
+//       if ( dword_82FFBC58[v5]->ObjectID == a1 ) {   ; **first dword of descriptor == ObjectID
+//           if ( v4 ) <assert "There are two StateManagers registered to the same ID."  // :436>
+//           else      v4 = dword_82FFBC58[v5];
+//       }
+//       ++v6; ++v5;
+//   } while ( v6 < &dword_82FFBC98 );    ; bound == base + 16 slots
+//   result = 0;
+//   if ( v4 ) {
+//       result = v4->createObject(0);    ; v4[3] == ClassTypeInfo::createObject
+//       *(result+44) = a2;               ; mpLogicModule (+0x2C) = apModule
+//       *(result+20) = v4->ObjectID;     ; meMapState   (+0x14) = descriptor->ObjectID (v10 = *v4)
+//   }
+//   return result;
+//
+// The registry (gapClassTypeInfoArray) is the single shared file-scope array above
+// (X360 dword_82FFBC58). The descriptor's first member is ObjectID, so the X360's
+// `*v4` (== v10, stored to +0x14) is descriptor->ObjectID, matched against the index.
+// meMapState (+0x14) and mpLogicModule (+0x2C) are reached BY NAME on the new manager
+// (this static member of StateManager may touch its protected fields). createObject is
+// invoked through the descriptor's stored StateManager*(*)(u32) hook with arg 0,
+// exactly as the factory CreateStateManagers (0x826AFEF8) calls CreateStateMan(i,this).
+//
+// SAFE NO-OP when the registry is empty (the 8 leaf manager TUs out of the build):
+// the scan hits a null slot immediately (or matches nothing), v4 stays null, and the
+// function returns null -- precisely the guard CreateStateManagers (`if (result)`)
+// relies on, so boot's CreateStateManagers/PrepareStateManagersOnBoot run as no-ops.
+//
+// FLAG (createObject allocator gate -- inherited, not introduced here): each leaf's
+// createObject currently allocates via the host `new` rather than the sound allocator
+// (off_82FFB954), since CgsSound::MemBase::operator new is not yet homed (see each
+// leaf's CreateObject FLAG). The factory dispatch itself is faithful; the allocation
+// flavour the descriptor's hook uses is the leaf's concern.
 // ---------------------------------------------------------------------------
-StateManager* StateManager::CreateStateMan(u32 /*liStateManId*/, void* /*apModule*/)
+StateManager* StateManager::CreateStateMan(u32 liStateManId, void* apModule)
 {
-    return 0;
+    ClassTypeInfo<StateManager>* lpMatch = 0;
+
+    // Scan the shared registry for the descriptor whose ObjectID == liStateManId.
+    // The X360 stops at the first null slot (the registry is densely packed from the
+    // front by AddToClassTypeInfoArray) and never reads past KU_SIZEOF_CLASS_ARRAY.
+    for (u32 luSlot = 0; luSlot < KU_SIZEOF_CLASS_ARRAY; ++luSlot)
+    {
+        ClassTypeInfo<StateManager>* lpDescriptor = gapClassTypeInfoArray[luSlot];
+        if (lpDescriptor == 0)
+        {
+            break;
+        }
+        if (static_cast<u32>(lpDescriptor->ObjectID) == liStateManId)
+        {
+            // A second match for the same id is the "two StateManagers registered to
+            // the same ID" programmer error the X360 asserts (CgsStateManager.cpp:436).
+            CGS_ASSERT(lpMatch == 0,
+                       "There are two StateManagers registered to the same ID.");
+            if (lpMatch == 0)
+            {
+                lpMatch = lpDescriptor;
+            }
+        }
+    }
+
+    if (lpMatch == 0)
+    {
+        return 0;   // no descriptor for this id -> null (the caller guards `if (result)`)
+    }
+
+    // Construct the leaf via its registered factory hook, then stamp the two fields the
+    // X360 sets on the fresh manager.
+    StateManager* lpManager = lpMatch->createObject(0);
+    if (lpManager != 0)
+    {
+        lpManager->mpLogicModule = apModule;          // +0x2C (X360 *(result+44) = a2)
+        lpManager->meMapState    = lpMatch->ObjectID; // +0x14 (X360 *(result+20) = descriptor->ObjectID)
+    }
+    return lpManager;
 }
 
 // ---------------------------------------------------------------------------
@@ -195,15 +283,15 @@ StateManager* StateManager::CreateStateMan(u32 /*liStateManId*/, void* /*apModul
 // ---------------------------------------------------------------------------
 ClassTypeInfo<StateManager>* StateManager::AddToClassTypeInfoArray(ClassTypeInfo<StateManager>* apTypeInfo)
 {
-    static ClassTypeInfo<StateManager>* saClassTypeInfoArray[KU_SIZEOF_CLASS_ARRAY] = { 0 };
-
+    // The single shared registry (X360 dword_82FFBC58) defined at file scope above;
+    // CreateStateMan scans the SAME array.
     // Scan for the first empty slot, capped at the class-array size (0x10).
     u32 lu32Index = 0;
     for (lu32Index = 0; lu32Index < KU_SIZEOF_CLASS_ARRAY; ++lu32Index)
     {
-        if (saClassTypeInfoArray[lu32Index] == 0)
+        if (gapClassTypeInfoArray[lu32Index] == 0)
         {
-            saClassTypeInfoArray[lu32Index] = apTypeInfo;
+            gapClassTypeInfoArray[lu32Index] = apTypeInfo;
             return apTypeInfo;
         }
     }
