@@ -12,26 +12,25 @@
 // BrnVehicleRef.cpp, which should now #include this header instead of redeclaring the
 // struct) and for its EType enum.
 //
-// FLAG: the EType enumerator set is a minimal slice -- the only values the ICE
-//   movie-player family needs are the two it seeds (0 and 1). The remaining enumerators
-//   (and the rest of VehicleRef's method/member set) land when VehicleRef's own type TU
-//   recovers them; this header is the place to GROW them. The enumerator names below are
-//   placeholders pending that recovery (the two seeded values are E_TYPE_0 / E_TYPE_1).
+// The EType enumerator set is recovered from the PS3 DecFIGS DWARF and independently
+//   confirmed by the Feb-2007 BrnEntityModuleUnity reference header (identical names +
+//   values). The X360 target seeds slot 0 (player) and 1 (race car); the remaining
+//   enumerators (RACE_CAR_NEAREST_PLAYER, TRAFFIC_VEHICLE) complete the set.
 // ============================================================================
 
 namespace BrnDirector
 {
     struct VehicleRef
     {
-        // FLAG: minimal/placeholder enumerator set (see header note). Two values are
-        // evidenced by the SharedPlaylists seed data; INVALID/COUNT sentinels added per
-        // convention. Grow with the real names when VehicleRef's type TU is recovered.
+        // Enumerator names from PS3 DecFIGS DWARF + Feb-2007 reference header (Get()/Set()
+        // switch over these). X360 seeds E_PLAYER_CAR (0) and E_RACE_CAR (1).
         enum EType
         {
-            E_TYPE_INVALID = -1,
-            E_TYPE_0       = 0,
-            E_TYPE_1       = 1,
-            E_TYPE_COUNT   = 2
+            E_PLAYER_CAR              = 0,
+            E_RACE_CAR                = 1,
+            E_RACE_CAR_NEAREST_PLAYER = 2,
+            E_TRAFFIC_VEHICLE         = 3,
+            E_NUM_TYPES               = 4
         };
 
         u8    mPad0[12];   // +0x00  opaque

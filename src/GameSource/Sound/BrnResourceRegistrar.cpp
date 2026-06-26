@@ -188,7 +188,7 @@ namespace Logic
         mAttribSysRequestInterface.Clear();
 
         // The three pools: free list seeded with the node pool, live list empty (helper Construct does both).
-        mLoadingRequestedResourceList.Construct();
+        mLoadedResourceList.Construct();
         mLoadingQueuedResourceList.Construct();
         mUnLoadingQueuedResourceList.Construct();
 
@@ -237,7 +237,7 @@ namespace Logic
         // data lives at node+8, so Head[18] (node byte 72) == data +0x40 == miResourceType (keyed by the
         // resource-name hash) and Head[19] (node byte 76) == data +0x44 == muBundleNameHash. Match both:
         //   while (Head[19] != bundleHash || Head[18] != resourceHash) Head = Head->next;
-        RequestedNode* lpNode = mLoadingRequestedResourceList.GetHead();
+        RequestedNode* lpNode = mLoadedResourceList.GetHead();
         while (lpNode)
         {
             if (lpNode->mData.miResourceType == static_cast<s32>(luResourceHash) &&
@@ -273,7 +273,7 @@ namespace Logic
             CgsDev::Assert::EndAssert();
         }
 
-        for (RequestedNode* lpNode = mLoadingRequestedResourceList.GetHead();
+        for (RequestedNode* lpNode = mLoadedResourceList.GetHead();
              lpNode;
              lpNode = static_cast<RequestedNode*>(lpNode->GetNextNode()))
         {
@@ -345,7 +345,7 @@ namespace Logic
             bool lbAdvanceQueued = true;
 
             // Inner: find the matching requested node (data +0x40 == type, +0x44 == bundle hash).
-            RequestedNode* lpRequested = mLoadingRequestedResourceList.GetHead();
+            RequestedNode* lpRequested = mLoadedResourceList.GetHead();
             while (lpRequested)
             {
                 if (lpRequested->mData.miResourceType == liResType &&
@@ -424,7 +424,7 @@ namespace Logic
                 //   the copy never executes; kept as the faithful structural shape. A future in-place
                 //   "AddTailConstruct(src)" helper would remove the divergence.
                 RequestedResource lRequested(lpNode->mData);
-                mLoadingRequestedResourceList.AddTail(lRequested);
+                mLoadedResourceList.AddTail(lRequested);
             }
         }
 
@@ -482,7 +482,7 @@ namespace Logic
             }
 
             // Retire the requested node (live -> free) now that it is unloading.
-            mLoadingRequestedResourceList.RecycleNode(lpNode);
+            mLoadedResourceList.RecycleNode(lpNode);
 
             // Batch cap: stop GC'ing once the unloading list has reached 18 in flight.
             if (mUnLoadingQueuedResourceList.CountElements() == 18)

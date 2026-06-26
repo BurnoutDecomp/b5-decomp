@@ -30,21 +30,43 @@ const char* BrnStateManager::GetTypeName() const
 }
 
 // ---------------------------------------------------------------------------
-// GetTypeInfo  @ PS3 DecFIGS 0x822BF8  (`return &BrnStateManager::sTypeInfo;`)
+// CreateObject  @ X360 0x826FB5F0  (PS3 sTypeInfo.createObject = &CreateObject)
+//
+// The descriptor's factory hook: X360 allocates a 152-byte StateManager via
+// CgsSound::MemBase::operator new (the int arg is the operator-new flavour
+// selector, NOT `this` -- the function never reads an instance), runs the
+// StateManager ctor, then patches the BrnStateManager vptrs. The C++ `new`
+// expression performs exactly that sequence (allocate + ctor + vptr setup), so
+// the faithful PC equivalent is `new BrnStateManager`. STATIC class function so
+// its address is storable as the descriptor's free-function createObject pointer.
+// ---------------------------------------------------------------------------
+CgsSound::Logic::StateManager* BrnStateManager::CreateObject( u32 /*luType*/ )
+{
+    return new BrnStateManager();
+}
+
+// ---------------------------------------------------------------------------
+// GetStaticTypeInfo / GetTypeInfo  @ PS3 DecFIGS 0x822BF8  (`return &sTypeInfo;`)
 //
 // PS3 static-init (0x85FA1C): BrnStateManager::sTypeInfo = { ObjectID=-1,
 // "BrnStateManager", baseTypeInfo=&StateManager::sTypeInfo, createObject=&CreateObject }.
 // The 8 concrete leaves OVERRIDE this with their own descriptor; BrnStateManager's own
 // version is a vtable-filler -- a bare BrnStateManager is never created (ObjectID -1, so
 // CreateStateMan's 0..8 loop never matches it). Modelled as a function-local static
-// descriptor (ObjectID -1, name, canonical base). FLAG: createObject elided (null) -- the
-// base is never factory-instantiated, so its factory hook is unused here.
+// descriptor (ObjectID -1, name, canonical base, &CreateObject). createObject is now
+// wired to the real factory (X360 0x826FB5F0 confirms the body), matching the PS3
+// descriptor field.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* BrnStateManager::GetTypeInfo() const
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* BrnStateManager::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        -1, "BrnStateManager", CgsSound::Logic::StateManager::GetStaticTypeInfo(), 0);
+        -1, "BrnStateManager", CgsSound::Logic::StateManager::GetStaticTypeInfo(), &BrnStateManager::CreateObject);
     return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* BrnStateManager::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
 }
 
 // ---------------------------------------------------------------------------

@@ -21,14 +21,14 @@ namespace BrnFlapt
 {
 
 // ---- GetKeyframeForFrame @ 0x8246B098 ------------------------------------
-// Bound-check the requested frame against mu16NumFrames (lhz 8(this)), then map it
+// Bound-check the requested frame against muNumFramesInTimeline (lhz 8(this)), then map it
 // through the optional keyframe-remap table at +0x10: if present, return the u16
 // entry mpau16KeyframeRemap[luFrame] (lhzx, zero-extended); otherwise the frame
 // index passes through unchanged.
 u32 MovieClip::GetKeyframeForFrame(u32 luFrame) const
 {
-    CGS_ASSERT(luFrame < mu16NumFrames,
-        "luFrame < muNumFrames");
+    CGS_ASSERT(luFrame < muNumFramesInTimeline,
+        "luFrame < muNumFramesInTimeline");
 
     if (mpau16KeyframeRemap != 0)
     {

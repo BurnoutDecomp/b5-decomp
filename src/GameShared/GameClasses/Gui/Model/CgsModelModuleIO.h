@@ -27,7 +27,7 @@ namespace ModelIO
     // CgsModule::IOBuffer (1-byte FlagSet status base: bit 3 == locked-for-write, bit 4 ==
     // locked-for-read). Layout pinned by the X360 OutputBuffer accessor/pusher return-offsets:
     //   +0x0000  CgsModule::IOBuffer            (1-byte status; +1..+3 pad)
-    //   +0x0004  mGuiResourceRequests          ResourceRequestQueue<2048>  (sizeof 2064)
+    //   +0x0004  mResourceRequestQueue         ResourceRequestQueue<2048>  (sizeof 2064)
     //   +0x0814  mGuiOutEvents                 VariableEventQueue<18432,16> (sizeof 18448)
     //   +0x5024  mViewOutEvents                VariableEventQueue<65536,16> (sizeof 65552)
     //   +0x15034 mLoadNotifications            VariableEventQueue<4096,16>
@@ -54,7 +54,7 @@ namespace ModelIO
         const GuiResourceRequestQueue* GetGuiResourceRequestQueue() const;
 
         // X360 0x8285B370 (CgsModelModuleIO.h:122). write-lock (bit 3) + null-assert, then
-        // bulk-appends the supplied source queue's events into mGuiResourceRequests via
+        // bulk-appends the supplied source queue's events into mResourceRequestQueue via
         // VariableEventQueue<2048,16>::Append<2048,16>. Homed by CgsModelModuleIO.cpp.
         void SetGuiResourceRequestQueue(const GuiResourceRequestQueue* lpResourceRequestQueue);
 
@@ -81,7 +81,7 @@ namespace ModelIO
 
     private:
         u8                     maStatusPad[3];        // +0x0001..+0x0003 (force +0x0004 placement)
-        GuiResourceRequestQueue mGuiResourceRequests; // +0x0004
+        GuiResourceRequestQueue mResourceRequestQueue; // +0x0004 (DWARF CgsModelModuleIO.h:159)
         GuiEventQueue           mGuiOutEvents;        // +0x0814
         GuiViewEventQueue       mViewOutEvents;       // +0x5024
         GuiNotificationQueue    mLoadNotifications;   // +0x15034

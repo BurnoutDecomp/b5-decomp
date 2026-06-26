@@ -145,7 +145,7 @@ public:
             Item();                 // h:141
         };
 
-        void  Update( f32 lfTimeStep );                       // h:146
+        void  Update( f32 lfCurrentTime );                    // h:146
         Item* Insert( f32 lfTimeStamp, const EntityId& lId ); // h:160
         Item* Find( const EntityId& lId );                    // h:180
 

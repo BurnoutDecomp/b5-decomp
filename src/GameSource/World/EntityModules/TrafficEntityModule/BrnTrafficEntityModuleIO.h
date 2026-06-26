@@ -93,6 +93,18 @@ namespace BrnTrafficIO
     // homes elsewhere and are NOT reconstructed here; the storage up to each pinned offset is
     // modelled as correctly-sized opaque storage so the three pinned return offsets (+8, +834784,
     // +834828) are exact. Adopt the named interface types additively when their homes land.
+    //
+    // PS3-RECONCILE SKIP (branch divergence): the PS3 DecFIGS (B5_FIGS) OutputBuffer_PostPhysics
+    // has 9 named members (mCrashTrafficInputInterface, mNetworkInterface, mTrafficSoundOutput-
+    // Interface, mTrafficDirectorOutputInterface, mGameEventQueue, mSceneInputInterface,
+    // mTrafficTypeResponseQueue, mResourceRequestInterface, mGuiEventQueue) while the Feb-2007
+    // b5_main leak (same branch as our X360 target, path d:/P4/B5_main/) has only 6 (and NO
+    // Gui queue). Our X360 (a later b5_main) emits accessors for only 3 members and the recovered
+    // return offsets (+8, +834784, +834828 -- the last two only 44 bytes apart) do NOT reconcile
+    // with the PS3 member sizes/order. The branch layouts diverge, so PS3 names cannot be safely
+    // mapped onto these three offsets -- the only X360-clear fact is GetGuiE @ +834828 returns a
+    // GuiEventQueue. Names left as offset-role placeholders per the "X360 target wins / do not
+    // blind-apply PS3" rule.
     class OutputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
     public:
