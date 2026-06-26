@@ -35,6 +35,27 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    // ----- ADDITIVE GROW (aero/downforce group): a MINIMAL OWNING SLICE of the per-car
+    //       VehicleAttribs block, reconstructed only far enough for GetDownForce to read its
+    //       aerodynamic coefficient. The full VehicleAttribs (masses, wheel positions, tyre/
+    //       steering/drift/engine/suspension/boost lanes) is owned by a separate future TU and
+    //       has NO committed header yet; when it lands this slice should be REPLACED by an include
+    //       of the real type (same as the EngineAttribs minimal slice in Engine.h). Per project
+    //       rule the member is pinned BY NAME at its console offset, not reproduced as padding.
+    struct VehicleAttribs
+    {
+        // @+0xB0 (BY NAME). The aero parameter register; GetDownForce reads its .w lane as the
+        // per-vehicle downforce/drag coefficient (asm: `lwz mpAttribs ; addi r11,r11,0xB0 ;
+        // lvx128 ; vspltw v11,v11,3`). The other lanes belong to the full VehicleAttribs TU.
+        Vector4 mvAeroParams;
+
+        // @+0xD0 (BY NAME). The per-vehicle surface-response blend register read by the three
+        // GetSurface* accessors (asm: `lwz mpAttribs ; addi r11,r11,0xD0 ; lvx128 ; vspltw`).
+        // Lane .x = grip blend (FRONT wheels), .y = grip blend (REAR wheels), .z = roughness
+        // scale, .w = linear-drag scale. (mvAeroParams + 0x20 = +0xD0.)
+        Vector4 mvSurfaceBlend;
+    };
+
     // Minimal VehiclePhysics: only the nested SlamEffect / ShuntEffect are reconstructed.
     struct VehiclePhysics
     {
@@ -128,6 +149,48 @@ namespace Vehicle
         // car's own vertical extent when it is upside down. Spelled f64 to match the X360 ABI (the
         // value comes back in f1 as a double; the source return type is float32_t).
         f64 GetCarGroundDistanceCheck() const;
+
+        // ----- ADDITIVE GROW (aero/downforce group) -----
+        // @0x825D0840: the aerodynamic down/drag force magnitude, the textbook quadratic
+        //   F = 0.5 * rho * CdA * |mLinearVelocity|^2 * coeff
+        // where rho (air density) and CdA (drag-area) are process-wide constants lazily cached
+        // into g_vAero_Rho / g_vAero_CdA from un-homed .rdata seeds (kAero_Rho_Scalar /
+        // kAero_CdA_Scalar), and coeff is the .w lane of mpAttribs->mvAeroParams (@+0xB0). The
+        // X360 broadcasts the scalar across a VMX register; here a flat Vector3 with the magnitude
+        // in every lane. There is NO speed-curve table -- downforce grows purely with v^2.
+        // FLAG (rodata): the rho/CdA seed scalars are un-homed .rdata not present in the function
+        // exports; carried as honest flagged-0 placeholders (faithful-but-inert) per project rule
+        // -- the formula + offsets are exact, the numeric output stays 0 until the seeds are
+        // recovered from the XEX .rdata. NEVER fabricated.
+        Vector3 GetDownForce() const;
+
+        // ----- ADDITIVE GROW (surface-response group): the per-surface grip/drag/roughness
+        //       lookups. Each reads a 6-bit surface id from a RoadContact CollisionTag
+        //       (luSurfaceId = (mCollisionTag.muValue >> 12) & 0x3F -- the X360 reads byte+2 of the
+        //       tag then >>4 &0x3F; expressed here against the numeric muValue so it is endian-
+        //       independent), indexes a global per-surface property table, and blends with a lane
+        //       of mpAttribs->mvSurfaceBlend.
+        //       FLAG (runtime data): the per-surface tables (grip unk_82FB8890, drag unk_82FB8BD0,
+        //       roughness unk_82FB8DE0, the global roughness scale unk_82FB9220 and the optional
+        //       wet/condition multiplier unk_82FB9EC0) are RUNTIME-LOADED scratch globals, not
+        //       .rdata in the function exports -- carried as honest flagged-0 placeholders
+        //       (faithful-but-inert): the surface-id extraction, the lerp/scale math and the
+        //       attrib lanes are EXACT; the looked-up property stays 0 until the tables are
+        //       recovered. NEVER fabricated. The debug "properties loaded" / surface-id-bound
+        //       asserts are elided (debug-build guards, no effect on output).
+
+        // @0x825D51B8: per-wheel surface grip multiplier. result = 1 - (1 - gripTable[id]) * blend,
+        //   blend = mvSurfaceBlend lane .x (FRONT, leWheel<2) or .y (REAR); optional global wet
+        //   multiplier when enabled. A lerp toward 1.0 by (1 - blend).
+        Vector3 GetSurfaceGrip(EVehicleDrivenWheel leWheel) const;
+
+        // @0x825D5328: per-wheel surface roughness = roughTable[id] * globalRoughScale *
+        //   mvSurfaceBlend lane .z. Feeds UpdateRoadNoise.
+        Vector3 GetSurfaceRoughness(EVehicleDrivenWheel leWheel) const;
+
+        // @0x825D50A8: vehicle linear-drag from a single representative contact (NOT per-wheel) =
+        //   dragTable[id] * mvSurfaceBlend lane .w. Reads the representative-contact tag below.
+        Vector3 GetSurfaceLinearDrag() const;
 
         // @0x825B2EF8: the transform delta from the previous frame to the current frame, expressed
         // in the previous frame's local space:
@@ -230,8 +293,22 @@ namespace Vehicle
 
         // The world-space linear velocity, owned by the ExternallySimulatedBody base @+0x50.
         // UpdateLinearVelocityMagnitude reads this (`addi r9,r3,0x50 ; lvx128`) and normalizes it.
-        // Pinned BY NAME.
+        // Pinned BY NAME. Also the v^2 source for GetDownForce (`lvx128 v0,r4,0x50 ; vmsum3fp128`).
         Vector3        mLinearVelocity;
+
+        // @+0x720: the live per-car attribute/tuning block (player vs AI set is reconciled each
+        // frame by Update via SwitchAttribs). GetDownForce reads mpAttribs->mvAeroParams (asm:
+        // `lwz r11,0x720(r4)`). Pinned BY NAME (the intervening handling state is not reproduced as
+        // padding; mpAttribs points at one of the two embedded VehicleAttribs sets owned by the
+        // full VehiclePhysics TU). Typed against the minimal VehicleAttribs slice above.
+        const VehicleAttribs* mpAttribs;
+
+        // @+0x596 (BY NAME). The single representative-contact CollisionTag GetSurfaceLinearDrag
+        // reads (asm: `*(a2 + 1430) >> 4 & 0x3F`). Unlike grip/roughness this is NOT a per-wheel
+        // tag (1430 lies past the 4-wheel array) -- it is a separate vehicle-level contact tag;
+        // FLAG: the source member is not named in the DWARF slice, pinned BY NAME with a proposed
+        // name. Used only for the linear-drag surface id.
+        CollisionTag mRepresentativeContactTag;
 
         // @+0x6A4: the car's vertical extent used by GetCarGroundDistanceCheck when the car is
         // inverted (read as a scalar float: `lfs f13,0x6A4(r3)`). Pinned BY NAME (the intervening
