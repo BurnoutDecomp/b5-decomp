@@ -80,6 +80,12 @@ void SoundLogicModule::Construct()
     // The streaming-resource broker: bring up its request queues + requested/queued pools.
     mResourceRegistrar.Construct();
 
+    // The 9 state-manager slots start empty; CreateStateManagers (stage 4) fills them via
+    // StateManager::CreateStateMan (null where no leaf is registered). Nulling here keeps
+    // PrepareStateManagersOnBoot's `*v5 != 0` guard honest even if a stage runs early.
+    for (s32 liIndex = 0; liIndex < KI_NUM_STATE_MANAGERS; ++liIndex)
+        mapStateManagers[liIndex] = 0;
+
     // [grow-in] X360 ctor also constructs the 3 Voices (Submix/Master/GlobalReverb) and the
     //   CgsSound::Logic::Module base; not modelled by this minimal slice.
 
@@ -93,10 +99,13 @@ void SoundLogicModule::Construct()
 // X360 0x82703C18 (vtable+0x58). MINIMAL-THEN-GROW resumable stage machine. The real body
 // runs the base Module::Prepare, constructs+connects the 3 Voices, LoadAsset's
 // BurnoutGlobalData, bridges resources, then creates + boot-prepares the state managers,
-// reporting prepared only when PrepareStateManagersOnBoot completes. Each stage here is a
-// guarded grow-in stub that advances until its subsystem (Voice / state managers / the engine
-// base) is reconstructed; the machine completes and reports prepared so a future
-// RootSoundModule LOGIC stage can drive it.
+// reporting prepared only when PrepareStateManagersOnBoot completes. Stages 0-3 (PerfMon /
+// base Module::Prepare / Voices / partial ResourceBridging) are still guarded grow-in stubs;
+// stages 4 (CreateStateManagers) and 5 (PrepareStateManagersOnBoot(4)) are now REAL -- stage 5
+// retries (returns false WITHOUT advancing) until the boot managers report ready, exactly like
+// the X360. With the 8 manager TUs out of the build the state-manager registry is empty, so
+// stage 4 creates nothing and stage 5 returns true immediately (safe no-op) -- the machine
+// still completes and reports prepared so the RootSoundModule LOGIC stage drives it.
 bool SoundLogicModule::Prepare(void* lpParentModule, void* lpInputBuffer, void* lpOutputBuffer)
 {
     // X360 line 1 (0x82703C18): store the parent/allocator handle (a1[19777] = a2). The X360
@@ -143,12 +152,21 @@ bool SoundLogicModule::Prepare(void* lpParentModule, void* lpInputBuffer, void* 
         mePrepareStage = E_PREPSTAGE_STATEMANAGERS;
         // fall through
     case E_PREPSTAGE_STATEMANAGERS:
-        // [grow-in] X360 case 4: SoundLogicModule::CreateStateManagers. Deferred. Advance.
+        // X360 case 4: SoundLogicModule::CreateStateManagers -- create the 9 managers from
+        //   the RTTI registry + register them in lEnvironment, then advance. Safe no-op when
+        //   the manager TUs are out of the build (the registry is empty -> all slots null).
+        CreateStateManagers();
         mePrepareStage = E_PREPSTAGE_BOOTPREPARE;
         // fall through
     case E_PREPSTAGE_BOOTPREPARE:
-        // [grow-in] X360 case 5: PrepareStateManagersOnBoot(4) (loops until the boot state
-        //   managers report ready). Deferred. Advance.
+        // X360 case 5: PrepareStateManagersOnBoot(4). If a manager is not ready it returns
+        //   false; the X360 STAYS on this stage and retries next Prepare() tick, so return
+        //   false WITHOUT advancing. Otherwise advance. With no managers (empty slots) it
+        //   returns true immediately -> advances. (boot mask = 4.)
+        if (!PrepareStateManagersOnBoot(4))
+        {
+            return false;   // stay on E_PREPSTAGE_BOOTPREPARE; retried next tick
+        }
         mePrepareStage = E_PREPSTAGE_DONE;
         // fall through
     case E_PREPSTAGE_DONE:
@@ -182,6 +200,102 @@ void SoundLogicModule::ResourceBridging()
     //   Interface) into the logic output buffer (*(this+19608)+2068 / +4) are deferred -- they need
     //   the output-buffer VEQ layout + access to the registrar's private request interfaces. The
     //   X360 also brackets this in the output buffer's LockForWrite/UnlockForWrite.
+}
+
+// X360 0x826AFEF8. Create the 9 sound-logic state managers and register them in the
+// embedded Environment. X360 store-for-store (a1 == this):
+//   v2 = a1 + 10576;            ; &lEnvironment
+//   v3 = 0;  v4 = a1 + 79064;   ; slot index + &mapStateManagers[0]
+//   do {
+//       result = StateManager::CreateStateMan(v3, a1);   ; factory(i, this)
+//       *v4 = result;                                    ; mapStateManagers[i] = result
+//       if ( result ) {
+//           result = Environment::AddStateManager(v2);   ; lEnvironment.AddStateManager(result)
+//           if ( !result ) <assert "lEnvironment.AddStateManager( mapStateManagers[ i ] )"  // :753>
+//       }
+//       ++v3; ++v4;
+//   } while ( v3 < 9 );
+//
+// Reproduced BY NAME: the loop fills mapStateManagers[i] from the factory (which scans
+// the RTTI registry by id), and every non-null manager is registered in lEnvironment.
+// The X360 guards the AddStateManager call with `if (result)` -- a null slot (no leaf
+// registered for that id) is skipped. So with the 8 manager TUs OUT of the build the
+// registry is empty, every CreateStateMan returns null, every slot is set null, and
+// AddStateManager is never called -> a safe no-op exactly as the X360 degrades.
+//
+// FLAG (faithful guard): the X360 asserts the AddStateManager *return* (it returns 1 on
+// every path -- see CgsEnvironment.cpp -- so the assert is a vacuous tripwire). The
+// embedded Environment's AddStateManager itself asserts the manager is non-null, its
+// state-type is in range, and the slot is free; those are the real registration guards.
+void SoundLogicModule::CreateStateManagers()
+{
+    for (s32 liIndex = 0; liIndex < KI_NUM_STATE_MANAGERS; ++liIndex)
+    {
+        mapStateManagers[liIndex] =
+            CgsSound::Logic::StateManager::CreateStateMan(static_cast<u32>(liIndex), this);
+
+        if (mapStateManagers[liIndex] != 0)
+        {
+            // The X360 asserts this returns true (it always does); kept as the faithful
+            // registration call. AddStateManager itself fires the real registration asserts.
+            bool lbRegistered = lEnvironment.AddStateManager(mapStateManagers[liIndex]);
+            CGS_ASSERT(lbRegistered,
+                       "lEnvironment.AddStateManager( mapStateManagers[ i ] )");
+            (void)lbRegistered;
+        }
+    }
+}
+
+// X360 0x826837F8. Boot-prepare the created state managers (boot caller passes mask 4).
+// X360 store-for-store (a1 == this, a2 == luSkipMask):
+//   v3 = a1 + 79064; v4 = 0; v5 = a1 + 79064;          ; &mapStateManagers[0]
+//   do {
+//       if ( ((1 << v4) & a2) == 0 && *v5 && !(*(**v5 + 12))(*v5) )   ; skip-bit / null-guard / Prepare()
+//           return 0;                                                  ; a manager not ready -> retry boot
+//       ++v4; ++v5;
+//   } while ( v4 < 9 );
+//   if ( *v3 ) {                                          ; mapStateManagers[0]
+//       v6 = (*(**v3 + 20))(*v3, 0);                      ; GetChildStateManager(0)  (vtable +0x14)
+//       if ( v6 ) (*(*v6 + 12))(v6, 0);                   ; child->Prepare()         (vtable +0x0C)
+//   }
+//   return 1;
+//
+// Reproduced BY NAME: for each slot not masked out and non-null, call its Prepare()
+// (the per-manager bring-up state machine, overridden by each leaf); a false return
+// aborts (returns false so the boot stage stays and retries). Then the
+// mapStateManagers[0] child special-case: fetch its child via GetChildStateManager(0)
+// and, if present, Prepare() the child. The null-guard `*v5 != 0` means empty slots
+// (no registered leaf) are skipped -> with the managers out of the build this returns
+// true immediately (safe no-op), matching the X360's degenerate behaviour.
+//
+// NOTE (skip-mask sense): the X360 SKIPS Prepare when `((1<<i) & mask) != 0`; mask 4 ==
+// bit 2, so on boot slot 2's Prepare is skipped here (faithful to the boot call).
+bool SoundLogicModule::PrepareStateManagersOnBoot(s32 luSkipMask)
+{
+    for (s32 liIndex = 0; liIndex < KI_NUM_STATE_MANAGERS; ++liIndex)
+    {
+        const bool lbSkip = (((1 << liIndex) & luSkipMask) != 0);
+        if (!lbSkip && mapStateManagers[liIndex] != 0)
+        {
+            if (!mapStateManagers[liIndex]->Prepare())   // vtable +0x0C
+            {
+                return false;   // not ready yet -> the boot stage retries
+            }
+        }
+    }
+
+    // The mapStateManagers[0] child-prepare special-case.
+    if (mapStateManagers[0] != 0)
+    {
+        CgsSound::Logic::StateManager* lpChild =
+            mapStateManagers[0]->GetChildStateManager(0);   // vtable +0x14
+        if (lpChild != 0)
+        {
+            lpChild->Prepare();                             // vtable +0x0C
+        }
+    }
+
+    return true;
 }
 
 // X360 0x82682518. Return the attached sound logic input buffer, asserting it is

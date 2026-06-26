@@ -152,15 +152,32 @@ CgsSound::Logic::StateManager* PlayerVehicleStateManager::CreateObject( u32 /*lu
 // ---------------------------------------------------------------------------
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* PlayerVehicleStateManager::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo =
-    {
-        0,                              // ObjectID         -- FLAG UNRESOLVED (placeholder 0)
-        "PlayerVehicleStateManager",    // mpcTypeName
-        0,                              // mpBaseTypeInfo   -- StateManager base descriptor (deferred)
-        &PlayerVehicleStateManager::CreateObject // mpfnCreateObject
-    };
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
+        7,                              // ObjectID         -- FLAG: arbitrary-unique (slot 7)
+        "PlayerVehicleStateManager",    // typeName
+        0,                              // baseTypeInfo     -- StateManager base descriptor (deferred)
+        &PlayerVehicleStateManager::CreateObject // createObject
+    );
     return &sTypeInfo;
 }
+
+// ---------------------------------------------------------------------------
+// File-scope registration (Part D): land this leaf's descriptor in the shared
+// StateManager RTTI registry (CgsStateManager.cpp gapClassTypeInfoArray, X360
+// dword_82FFBC58) at load time, so StateManager::CreateStateMan (0x826A5B60) can
+// find it by ObjectID. AddToClassTypeInfoArray is the canonical StateManager
+// registration entry (@ 0x8268DFE8), reached through the BrnStateManager base.
+//
+// FLAG (ObjectID arbitrary-unique): the exact X360 ObjectID was not exported
+// (CreateObject @ 0x827022D8 has no xrefs_to). Assigned 7 here as a unique-among-the-9
+// placeholder; the real id is this manager's slot in the CreateStateManagers 0..8 loop
+// (@ 0x826AFEF8) -- pin at integration. This TU is OUT of the build, so dormant until
+// the conductor adds it.
+// ---------------------------------------------------------------------------
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
+    gpPlayerVehicleStateManagerReg =
+        CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
+            PlayerVehicleStateManager::GetStaticTypeInfo());
 
 // ---------------------------------------------------------------------------
 // PlayerVehicleStateManager::GetTypeInfo() const  (vtable RTTI hook)
