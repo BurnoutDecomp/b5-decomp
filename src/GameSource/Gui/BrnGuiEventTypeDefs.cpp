@@ -14,6 +14,7 @@
 
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf
+#include "GameShared/GameClasses/Core/CgsID.h"           // CgsID / CgsIDCompress
 
 #include <cstring>  // std::memcpy -- the DoWorstCase compaction is a 0x30-byte block move.
 
@@ -192,6 +193,34 @@ GuiEventUpdateSatNav* GuiEventUpdateSatNav::DoWorstCase()
 // return 0. The load-bearing behaviour is the copy side-effect, which is reproduced
 // exactly. (See flagged_type_changes re: CgsCore::SPrintf's return type.)
 // ===================================================================================
+
+// @0x823B1CC8 -- initialise the request from an overlay-id string.
+//   guard: a2 == 0 -> "Invalid Overlay Id" (BrnGuiEventTypeDefs.h:7404)
+//   result = CgsIDCompress(a2)
+//   std r3, 0(this)        -> the 8-byte CgsID over the leading param record head (+0x00)
+//   stw 0,   0x118(this)   -> miNumMessages = 0
+//   stb 0,   0x11C(this)   -> mbButton1Used = 0
+//   stb 0,   0x11D(this)   -> mbButton2Used = 0
+//   return result
+//
+// The X360 stores the compressed id at this+0x00 (`std r3,0(r27)`), i.e. over the first
+// 8 bytes of maMessages[0] (its 8-byte maHead). Reproduced as an 8-byte block write to the
+// head so the on-object id sits at the proven offset; sizeof(CgsID) == 8 matches the std.
+CgsID GuiOverlayRequest::Construct(const char* lpcOverlayId)
+{
+    CGS_ASSERT(lpcOverlayId != 0, "Invalid Overlay Id");
+
+    const CgsID lId = CgsIDCompress(lpcOverlayId);
+
+    static_assert(sizeof(CgsID) == sizeof(maMessages[0].maHead),
+                  "overlay id (std r3,0) overlays the first param record's 8-byte head");
+    std::memcpy(&maMessages[0].maHead[0], &lId, sizeof(CgsID)); // std r3, 0(this)
+
+    miNumMessages = 0;   // stw 0, 0x118(this)
+    mbButton1Used = 0;   // stb 0, 0x11C(this)
+    mbButton2Used = 0;   // stb 0, 0x11D(this)
+    return lId;
+}
 
 // @0x824EB948 -- copy message param liIndex into *lpOut.
 //   guard: liIndex >= *(this+0x118)  -> "Index isn't used in Overlay." (h:7508)
