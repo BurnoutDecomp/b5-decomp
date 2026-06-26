@@ -141,6 +141,13 @@ namespace Vehicles
 {
     // 0x826C9E70. Clear the embedded RaceCarState, then seed the tail fields to
     // 0 / 0.0 (the X360 zeros each, with mf1312 loaded from the 0.0 constant).
+    //
+    // PS3-RECONCILE NO-ACTION (branch divergence): the PS3 DecFIGS (B5_FIGS branch)
+    // VehicleState is restructured -- it derives BrnSound::Logic::BrnState and holds a
+    // VehicleData mVehiclePhysicsData (cleared via VehicleData::Clear), with NO embedded
+    // RaceCarState. The X360 TARGET (b5_main) instead embeds BrnPhysics::Vehicle::RaceCarState
+    // at +96 and clears it directly: the ctor asm calls RaceCarState::Clear(a1+96), not a
+    // VehicleState::Clear(this). The X360 target wins -> mRaceCarState.Clear() is kept.
     VehicleState::VehicleState()
         : CgsSound::Logic::State()
         , mi1216(0)

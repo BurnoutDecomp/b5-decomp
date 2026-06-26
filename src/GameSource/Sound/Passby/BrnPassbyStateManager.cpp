@@ -12,15 +12,14 @@
 // once an entry has been live for >= 5 seconds it is cleared so the prop becomes
 // eligible to trigger again.
 //
-// SIGNATURE NOTE: the committed declaration is `void Update(f32 lfTimeStep)`, but
-// the X360 asm at 0x82683360 (and its sole call site inside UpdateDynamicPropBys
+// SIGNATURE NOTE: the parameter is named lfCurrentTime (header + body agree). The
+// X360 asm at 0x82683360 (and its sole call site inside UpdateDynamicPropBys
 // @ 0x826A0E48..0x826A0E58, which loads `lfs f28, 4(rThis)` -- the manager's
 // running game clock -- and passes it as the argument) shows the argument is the
 // CURRENT game time, NOT a per-frame delta: each entry's expiry test is
-// `(currentTime - entry.mfTimeStamp) >= 5.0`. The parameter is therefore named
-// lfCurrentTime here. FLAG: the committed header parameter name `lfTimeStep` is
-// misleading; rename it to `lfCurrentTime` when that home is next grown (the type
-// f32 already matches the single-precision load at the call site).
+// `(currentTime - entry.mfTimeStamp) >= 5.0`. (The PS3 DecFIGS DWARF records only
+// the float32_t type for this inlined accessor, not a name; the name is confirmed
+// by the X360 body/call-site role above.)
 //
 // LAYOUT (recovered from the asm): maItems is processed at a 12-byte stride
 // (Item = bool mbActive @+0 padded to 4, f32 mfTimeStamp @+4, EntityId mId @+8),

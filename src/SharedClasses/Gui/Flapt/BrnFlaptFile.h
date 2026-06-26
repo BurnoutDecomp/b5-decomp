@@ -36,7 +36,7 @@ namespace BrnFlapt
     //
     // Attested offsets (X360 ARTIST):
     //   +0x05  mu8NumLabels          (lbz 5(this); FindLabelledFrameIndex loop bound)
-    //   +0x08  mu16NumFrames         (lhz 8(this);  GetKeyframeForFrame bound check)
+    //   +0x08  muNumFramesInTimeline (lhz 8(this);  GetKeyframeForFrame bound check)
     //   +0x10  mpau16KeyframeRemap   (lwz 0x10(this); u16[] keyframe-remap, lhzx)
     //   +0x38  mpaLabels             (lwz 0x38(this); MovieClipLabel[])
     //   +0x3C  mpau16LabelledFrameIds(lwz 0x3C(this); u16[] frame ids, lhzx)
@@ -54,7 +54,7 @@ namespace BrnFlapt
         u8  mau8Opaque00[5];          // +0x00..0x04  (interior not attested here)
         u8  mu8NumLabels;             // +0x05
         u8  mau8Opaque06[2];          // +0x06..0x07  pad to +0x08
-        u16 mu16NumFrames;            // +0x08
+        u16 muNumFramesInTimeline;    // +0x08 (DWARF BrnFlaptFile.h:384)
         u8  mau8Opaque0A[6];          // +0x0A..0x0F  pad to +0x10
         u16* mpau16KeyframeRemap;     // +0x10  (0 => identity mapping)
         u8  mau8Opaque14[0x24];       // +0x14..0x37  pad to +0x38

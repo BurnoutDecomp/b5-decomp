@@ -75,6 +75,16 @@ struct BrnStateManager : public CgsSound::Logic::StateManager,
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const;
     virtual const char*                                                   GetTypeName() const;
 
+    // BrnStateManager.h:61 (DWARF) -- the static RTTI descriptor + factory the
+    // sTypeInfo descriptor stores as its createObject hook. CreateObject @ X360
+    // 0x826FB5F0 allocates a 152-byte StateManager via CgsSound::MemBase::operator
+    // new and patches the BrnStateManager vptrs; its int arg is the operator-new
+    // flavour selector, NOT `this` (the function never reads an instance), so it is
+    // a STATIC class function -- required for &CreateObject to be storable as the
+    // descriptor's free-function pointer (a pointer-to-member is not one).
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
+    static CgsSound::Logic::StateManager*                                 CreateObject( u32 luType );
+
     // IResourceRequester overrides — declared for home completeness; not bodied
     // by this group (outside this TU's func set).
     virtual void               ResourcesAreReady();

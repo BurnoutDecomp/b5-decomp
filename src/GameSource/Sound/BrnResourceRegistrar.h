@@ -256,10 +256,12 @@ namespace Logic
         //   (Array<T,N> is the global-namespace fixed array from CgsArray.h.)
         ::Array<RequestedNode*, 124> mapRemovalCandidates;
 
-        // @+0x3174 mLoadingRequestedResourceList -- resolved/in-use resources (free@+0x9914 /
+        // @+0x3174 mLoadedResourceList -- resolved/in-use (loaded) resources (free@+0x9914 /
         //   live@+0x9920, stride 316). N=124: pool base byte 12664 (a1+3166), free head byte 51848
-        //   (a1+12962) -> 39184 bytes / 316-byte stride == 124 nodes.
-        CgsContainers::LinkedListHelper<RequestedResource, 124> mLoadingRequestedResourceList;
+        //   (a1+12962) -> 39184 bytes / 316-byte stride == 124 nodes. Name from PS3 DecFIGS DWARF
+        //   (BrnResourceRegistrar.h:319); same type/N/position as ours (RequestedResource x124,
+        //   the 4th data structure) -- NOT branch-divergent, a pure name reconcile.
+        CgsContainers::LinkedListHelper<RequestedResource, 124> mLoadedResourceList;
 
         // @+0xCAA0 mAttribSysRequestInterface -- VariableEventQueue<2048,16> (the X360 a1+12968).
         CgsModule::VariableEventQueue<2048, 16> mAttribSysRequestInterface;

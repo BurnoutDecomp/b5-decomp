@@ -9,7 +9,7 @@
 // X360-emitted OutputBuffer functions -- four lock-checked handle accessors and three bulk
 // appenders:
 //
-//   GetGuiResourceRequestQueue() const @ 0x8284F940 -> read-lock  (bit 4), &mGuiResourceRequests (this+4)
+//   GetGuiResourceRequestQueue() const @ 0x8284F940 -> read-lock  (bit 4), &mResourceRequestQueue (this+4)
 //   GetGuiOutEvents() const            @ 0x823B1590 -> read-lock  (bit 4), &mGuiOutEvents        (this+0x814)
 //   GetViewOutEvents() const           @ 0x8284E148 -> read-lock  (bit 4), &mViewOutEvents       (this+0x5024)
 //   GetLoadNotifications() const       @ 0x824F7538 -> read-lock  (bit 4), &mLoadNotifications   (this+0x15034)
@@ -25,7 +25,7 @@
 //                         eStatusLockedForWrite ("Not locked for writing\n").
 //     -> CgsModule::IOBuffer::IsBufferLockedForReading()/IsBufferLockedForWriting().
 //   - Accessor return-offsets:
-//       0x8284F940 : `addi r3, this, 4`                       == this+4      == &mGuiResourceRequests
+//       0x8284F940 : `addi r3, this, 4`                       == this+4      == &mResourceRequestQueue
 //       0x823B1590 : `addi r3, this, 0x814`                   == this+2068   == &mGuiOutEvents
 //       0x8284E148 : `addi r3, this, 0x5024`                  == this+20516  == &mViewOutEvents
 //       0x824F7538 : `addis r3,this,1; addi r3,r3,0x5034`     == this+0x15034 == this+86068 == &mLoadNotifications
@@ -47,7 +47,7 @@ namespace ModelIO
 {
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mGuiResourceRequests) == 0x00004, "mGuiResourceRequests @0x0004");
+        static_assert(offsetof(OutputBuffer, mResourceRequestQueue) == 0x00004, "mResourceRequestQueue @0x0004");
         static_assert(offsetof(OutputBuffer, mGuiOutEvents)        == 0x00814, "mGuiOutEvents @0x0814 (2068)");
         static_assert(offsetof(OutputBuffer, mViewOutEvents)       == 0x05024, "mViewOutEvents @0x5024 (20516)");
         static_assert(offsetof(OutputBuffer, mLoadNotifications)   == 0x15034, "mLoadNotifications @0x15034 (86068)");
@@ -57,7 +57,7 @@ namespace ModelIO
     const OutputBuffer::GuiResourceRequestQueue* OutputBuffer::GetGuiResourceRequestQueue() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return &mGuiResourceRequests;
+        return &mResourceRequestQueue;
     }
 
     // X360 0x823B1590: read-lock (bit 4) const handle to the GUI out-event queue (this+0x814).

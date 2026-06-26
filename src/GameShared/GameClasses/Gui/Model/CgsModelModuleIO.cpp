@@ -10,7 +10,7 @@
 //   InputBuffer::GetEventQueue() const          @ 0x8284F7F0 -> read-lock  (bit 4), &mGuiEvents (this+4)
 //   InputBuffer::GetEventQueueNonConst()        @ 0x8284F898 -> write-lock (bit 3), &mGuiEvents (this+4)
 //   OutputBuffer::SetGuiResourceRequestQueue(src)@ 0x8285B370 -> write-lock (bit 3) + null-assert,
-//                                                  then mGuiResourceRequests.Append(*src)
+//                                                  then mResourceRequestQueue.Append(*src)
 //
 // X360 store-for-store notes:
 //   - GetEventQueue (const): `lbz 0(this); extrwi r11,r11,1,27` -> PPC MSB0 bit 27 == LSB bit 4 ==
@@ -21,7 +21,7 @@
 //     &mGuiEvents -> IsBufferLockedForWriting().
 //   - SetGuiResourceRequestQueue: tests the write-lock bit (3) and fires "Not locked for writing\n"
 //     when clear, then null-asserts the source ("lpResourceRequestQueue != NULL"), then calls
-//     VariableEventQueue<2048,16>::Append<2048,16>(this+4, src) -- i.e. mGuiResourceRequests (the
+//     VariableEventQueue<2048,16>::Append<2048,16>(this+4, src) -- i.e. mResourceRequestQueue (the
 //     ResourceRequestQueue<2048> at this+4, an IS-A VariableEventQueue<2048,16>) bulk-appends the
 //     source queue's events. The X360 returns the Append result in r3; the declared return is void.
 //   - The X360-baked CgsModelModuleIO.cpp file/line cites (122/139/218/219) are discarded per
@@ -46,12 +46,12 @@ namespace ModelIO
     }
 
     // X360 0x8285B370: write-lock (bit 3) + null-assert, then bulk-append the source queue's
-    // events into mGuiResourceRequests (VariableEventQueue<2048,16>::Append<2048,16>).
+    // events into mResourceRequestQueue (VariableEventQueue<2048,16>::Append<2048,16>).
     void OutputBuffer::SetGuiResourceRequestQueue(const GuiResourceRequestQueue* lpResourceRequestQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         CGS_ASSERT(lpResourceRequestQueue != nullptr, "lpResourceRequestQueue != NULL");
-        mGuiResourceRequests.Append(*lpResourceRequestQueue);
+        mResourceRequestQueue.Append(*lpResourceRequestQueue);
     }
 }
 }

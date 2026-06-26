@@ -158,7 +158,7 @@ void ICEMoviePlaylist::DebugMenuNewMovie(void* /*lpContext*/)
     IceMovie lNewMovie;
     lNewMovie.SetMovie(IceMovie::E_ICE_GROUP_GENERIC_ALL, 31u);
     lNewMovie.SetStartPosition(0.0f);
-    lNewMovie.SetVehicle(VehicleRef::E_TYPE_1, 0u);
+    lNewMovie.SetVehicle(VehicleRef::E_RACE_CAR, 0u);
     lNewMovie.SetShouldFlash(true);
     InsertMovieBefore(miDebugMenuNewMovieIndex - 1, lNewMovie);
 
@@ -534,9 +534,10 @@ void SharedPlaylists::Construct()
         bool                mbFlash;
     };
 
-    // Every seeded row uses vehicle ref type 0; muVehicleIndex is 0 throughout. The only
-    // per-row variation is group / take / flash (pause-1 rows fire the flash hook).
-    const VehicleRef::EType leVeh0 = VehicleRef::E_TYPE_0;
+    // Every seeded row uses vehicle ref type 0 (player car); muVehicleIndex is 0
+    // throughout. The only per-row variation is group / take / flash (pause-1 rows fire
+    // the flash hook).
+    const VehicleRef::EType leVeh0 = VehicleRef::E_PLAYER_CAR;
 
     const SeedEntry laSeeds[] =
     {

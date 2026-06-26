@@ -75,7 +75,7 @@ void GameState::Clear()
 
     miEventSpecificShotGroup            = -1;     // stw -1, 0x134
     meTargetRaceCarIndex                = E_ACTIVE_RACE_CAR_INDEX_0;  // stw 0, 0x140
-    meTargetVehicleRefType              = VehicleRef::E_TYPE_0;       // stw 0, 0x144
+    meTargetVehicleRefType              = VehicleRef::E_PLAYER_CAR;   // stw 0, 0x144
     mfPadInactiveTime                   = 0.0f;   // stfs 0.0, 0x148
     mfPlayerInactiveTime                = 0.0f;   // stfs 0.0, 0x14C
     mbPlayerBeenActive                  = false;  // stb 0, 0x150

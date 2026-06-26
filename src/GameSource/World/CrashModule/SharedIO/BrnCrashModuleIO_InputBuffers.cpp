@@ -10,7 +10,7 @@
 //   InputBuffer_PreScene::GetReadInterface             @ 0x827BB3D8  this + 0x3CD0  (line 81)
 //   InputBuffer_HandleGameActions::GetReadInterface    @ 0x827BB528  this + 0x7A70  (line 87)
 //   InputBuffer_PostPhysics::GetReadInterface          @ 0x827BB918  this + 0x79B0  (line 174)
-//   OutputBuffer_PostPhysics_ReadView::GetReadInterface@ 0x827A2680  this + 0x7A0   (line 210)
+//   OutputBuffer_PostPhysics_ReadView::GetGameEventQueue @ 0x827A2680  this + 0x7A0 (line 210)
 //
 // The streamed-message asserts map to the house CGS_ASSERT (the trailing "\n" is dropped from
 // the stringized condition). The getter method names and the returned members' names are not
@@ -59,14 +59,15 @@ namespace CrashIO
 
     void OutputBuffer_PostPhysics_ReadView::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_PostPhysics_ReadView, mReadInterface) == 0x7A0,
-                      "OutputBuffer_PostPhysics_ReadView::mReadInterface @0x7A0");
+        static_assert(offsetof(OutputBuffer_PostPhysics_ReadView, mGameEventQueue) == 0x7A0,
+                      "OutputBuffer_PostPhysics_ReadView::mGameEventQueue @0x7A0");
     }
-    const OutputBuffer_PostPhysics_ReadView::ReadInterfaceStorage*
-    OutputBuffer_PostPhysics_ReadView::GetReadInterface() const   // 0x827A2680
+    // PS3 DecFIGS: OutputBuffer_PostPhysics::GetGameEventQueue (BrnCrashModuleIO.h:210).
+    const OutputBuffer_PostPhysics_ReadView::GameEventQueueStorage*
+    OutputBuffer_PostPhysics_ReadView::GetGameEventQueue() const   // 0x827A2680
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return &mReadInterface;
+        return &mGameEventQueue;
     }
 }
 }

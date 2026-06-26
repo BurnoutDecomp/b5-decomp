@@ -51,20 +51,25 @@ namespace CrashIO
     // modelled here as a self-contained buffer whose preceding region (the network-output
     // payload, owned by GetNetworkOutputInterface above) is opaque padding up to the +0x7A0
     // read member. The getter tests the read-lock bit (`extrwi r11,r11,1,27` == bit 4) and on
-    // failure fires "Not locked for reading\n". The getter method name and the returned
-    // member's name are not recoverable from the truncated symbol.
+    // failure fires "Not locked for reading\n".
+    //
+    // NAME (PS3 DecFIGS reconcile): the PS3 DWARF (BrnCrashModuleIO.h:210/216) identifies this
+    // second OutputBuffer_PostPhysics accessor as GetGameEventQueue() returning the member
+    // mGameEventQueue. Names adopted here; the slice is kept as a separate read-view struct
+    // (NOT restructured into OutputBuffer_PostPhysics) so the +0x7A0 offset stays exact without
+    // depending on the foreign NetworkOutputInterface sizeof.
     struct OutputBuffer_PostPhysics_ReadView : public CgsModule::IOBuffer
     {
-        struct ReadInterfaceStorage { unsigned char maBytes[1]; };
+        struct GameEventQueueStorage { unsigned char maBytes[1]; };
 
-        // 0x827A2680 -- read-lock tripwire; returns this + 0x7A0.
-        const ReadInterfaceStorage* GetReadInterface() const;
+        // 0x827A2680 -- read-lock tripwire; returns this + 0x7A0 (PS3: GetGameEventQueue).
+        const GameEventQueueStorage* GetGameEventQueue() const;
 
         static void _AssertLayout();
 
     private:
-        unsigned char        maPrecedingPayload[0x7A0 - 1];   // +1..+0x79F
-        ReadInterfaceStorage mReadInterface;                  // +0x7A0
+        unsigned char         maPrecedingPayload[0x7A0 - 1];   // +1..+0x79F
+        GameEventQueueStorage mGameEventQueue;                 // +0x7A0
     };
 
     // ========================================================================
@@ -128,13 +133,13 @@ namespace CrashIO
     };
 
     // ========================================================================
-    // BrnWorld::CrashIO::OutputBuffer_PreScene (DWARF BrnCrashModuleIO.h:~130). Homes the six
+    // BrnWorld::CrashIO::OutputBuffer_PreScene (DWARF BrnCrashModuleIO.h:118). Homes the six
     // accessors the X360 emitted out-of-line for the crash module's pre-scene output buffer.
     // Three embedded interface members, each exposed via a const (read-lock) and a non-const
     // (write-lock) getter that return the SAME member address:
-    //   mTrafficInterface  @ +0x8      read 0x827A23E0 (line 130) / write 0x827BB5D0 (line 131)
-    //   mVehicleInterface  @ +0x670    read 0x827A2488 (line 133) / write 0x827BB678 (line 134)
-    //   mRaceCarInterface  @ +0x231D0  read 0x827A2530 (line 136) / write 0x827BB720 (line 137)
+    //   mTrafficOutputInterface @ +0x8     read 0x827A23E0 (line 130) / write 0x827BB5D0 (line 131)
+    //   mVehicleInputInterface  @ +0x670   read 0x827A2488 (line 133) / write 0x827BB678 (line 134)
+    //   mRaceCarOutputInterface @ +0x231D0 read 0x827A2530 (line 136) / write 0x827BB720 (line 137)
     //
     // The const getters test the read-lock bit (`extrwi r11,r11,1,27` == bit 4) and fire
     // "Not locked for reading\n"; the non-const getters test the write-lock bit
@@ -142,38 +147,40 @@ namespace CrashIO
     // the same `this + offset` (the read/write overloads of one member accessor; the +0x231D0
     // offset is computed by the asm as `addis r3,this,2; addi r3,r3,0x31D0`).
     //
-    // FLAG (foreign types): the three interface members have their own owning homes elsewhere
-    // and are NOT reconstructed here; the regions between member starts are modelled as
-    // correctly-sized opaque storage so the three X360-pinned return offsets (+0x8, +0x670,
-    // +0x231D0) are exact. The getter method names beyond the lock direction are not
-    // recoverable from the truncated symbols; named descriptively by member.
+    // NAMES (PS3 DecFIGS reconcile, X360-confirmed): member + accessor names are from the PS3
+    // DWARF (BrnCrashModuleIO.h:141-143 / 130-137) and corroborated by the X360 truncated
+    // symbol stems (GetTr.. / GetV.. / GetRa..) plus the matching member ORDER + offsets
+    // (Traffic@+0x8, Vehicle@+0x670, RaceCar@+0x231D0). FLAG (foreign types): the three
+    // interface members have their own owning homes elsewhere and are NOT reconstructed here;
+    // the regions between member starts are modelled as correctly-sized opaque storage so the
+    // three X360-pinned return offsets are exact.
     struct OutputBuffer_PreScene : public CgsModule::IOBuffer
     {
-        struct TrafficInterfaceStorage { unsigned char maBytes[1]; };
-        struct VehicleInterfaceStorage { unsigned char maBytes[1]; };
-        struct RaceCarInterfaceStorage { unsigned char maBytes[1]; };
+        struct TrafficOutputInterfaceStorage { unsigned char maBytes[1]; };
+        struct VehicleInputInterfaceStorage  { unsigned char maBytes[1]; };
+        struct RaceCarOutputInterfaceStorage { unsigned char maBytes[1]; };
 
         // +0x8 (line 130/131).
-        const TrafficInterfaceStorage* GetTrafficInterface() const;   // 0x827A23E0 read-lock
-        TrafficInterfaceStorage*       GetTrafficInterface();         // 0x827BB5D0 write-lock
+        const TrafficOutputInterfaceStorage* GetTrafficOutputInterface() const;   // 0x827A23E0 read-lock
+        TrafficOutputInterfaceStorage*       GetTrafficOutputInterface();         // 0x827BB5D0 write-lock
         // +0x670 (line 133/134).
-        const VehicleInterfaceStorage* GetVehicleInterface() const;   // 0x827A2488 read-lock
-        VehicleInterfaceStorage*       GetVehicleInterface();         // 0x827BB678 write-lock
+        const VehicleInputInterfaceStorage*  GetVehicleInputInterface() const;    // 0x827A2488 read-lock
+        VehicleInputInterfaceStorage*        GetVehicleInputInterface();          // 0x827BB678 write-lock
         // +0x231D0 (line 136/137).
-        const RaceCarInterfaceStorage* GetRaceCarInterface() const;   // 0x827A2530 read-lock
-        RaceCarInterfaceStorage*       GetRaceCarInterface();         // 0x827BB720 write-lock
+        const RaceCarOutputInterfaceStorage* GetRaceCarOutputInterface() const;   // 0x827A2530 read-lock
+        RaceCarOutputInterfaceStorage*       GetRaceCarOutputInterface();         // 0x827BB720 write-lock
 
         static void _AssertLayout();
 
     private:
-        // The IOBuffer base is a single status byte; the X360 places mTrafficInterface at
+        // The IOBuffer base is a single status byte; the X360 places mTrafficOutputInterface at
         // this+0x8, so pad bytes +1..+7 explicitly.
-        u8                      maStatusPad[7];                      // +1..+7 (force +0x8)
-        TrafficInterfaceStorage mTrafficInterface;                   // +0x8
-        unsigned char           maTrafficPad[0x670 - 0x8 - 1];       // +0x9..+0x66F
-        VehicleInterfaceStorage mVehicleInterface;                   // +0x670
-        unsigned char           maVehiclePad[0x231D0 - 0x670 - 1];   // ...
-        RaceCarInterfaceStorage mRaceCarInterface;                   // +0x231D0
+        u8                            maStatusPad[7];                      // +1..+7 (force +0x8)
+        TrafficOutputInterfaceStorage mTrafficOutputInterface;            // +0x8
+        unsigned char                 maTrafficPad[0x670 - 0x8 - 1];      // +0x9..+0x66F
+        VehicleInputInterfaceStorage  mVehicleInputInterface;            // +0x670
+        unsigned char                 maVehiclePad[0x231D0 - 0x670 - 1];  // ...
+        RaceCarOutputInterfaceStorage mRaceCarOutputInterface;           // +0x231D0
     };
 }
 }
