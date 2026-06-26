@@ -141,6 +141,11 @@ namespace Vehicle
         // @+0x180 (384, BY NAME). ApplyDriftLatForce reads lane .z (the lateral-force final scale).
         Vector4 mvDriftParams7;
 
+        // @+0x280 (640, BY NAME). ApplyCrashedContactImpulse scales the post-contact ANGULAR impulse
+        // by lane .y of this register (asm: `*(this+1824)+640 ; vspltw v13,v13,1`). A logical by-name
+        // pin (this slice is not offset-faithful); the other lanes belong to the full VehicleAttribs TU.
+        Vector4 mvCrashImpulseScale;
+
         // ----- ADDITIVE GROW (C07 boost/speed-match group): the per-car BOOST attrib sub-block. The
         //       three boost appliers (UpdateBoost / ApplyNormalBoostForce / ApplyBoostKickForce) sample
         //       it via mpAttribs (+0x720) at +0x290..+0x2B0. Reproduced as the DWARF-named nested
@@ -743,6 +748,16 @@ namespace Vehicle
         // base + engine/drift/boost state that precede it are not reproduced as padding).
         f32        mfSlamLife;
 
+        // ----- ADDITIVE GROW (C09 group): the standalone slam scalars the slam pipeline touches,
+        //       pinned BY NAME flat (consistent with the standalone mfSlamLife above -- the committed
+        //       home pins the slam scalars flat, not as an embedded SlamEffect instance). -----
+        f32        mfSlamSteering;          // @+0x1114  current slam steering offset (env-shaped)
+        f32        mfSlamOriginalSteering;  // @+0x1118  the entry slam steering magnitude
+        f32        mfTotalSlamTime;         // @+0x1120  the slam's total duration (envelope denominator)
+        f32        mfRecoveryTime;          // @+0x1124  post-slam recovery window
+        s8         mi8SlamNumber;           // @+0x1128  chained-slam counter (saturated at 2)
+        bool       mbSlamActive;            // @+0x135D  set by AddSlam, cleared by UpdateSlam path
+
         // @+0x1130: the embedded shunt effect; IsBeingSlamedOrShunted consults mShuntEffect.IsActive()
         // (asm: `addi r3,r3,0x1130 ; bl ShuntEffect::IsActive`). Pinned BY NAME.
         ShuntEffect mShuntEffect;
@@ -961,6 +976,44 @@ namespace Vehicle
         // (asm: `addi r11,r4,0x1370 ; lvx128` of the four rows, whose orthonormal 3x3 is inverted
         // inline). Pinned BY NAME.
         Matrix44Affine mPreviousTransform;
+
+        // ===== ADDITIVE GROW (C03 suspension/downforce/weight group) =====
+        // @+0xE10 (3600), stride 0x30: the four 1-D damped suspension springs (one per driven wheel).
+        // SuspensionSpring is the already-committed namespace-scope slice (sizeof 0x30 = 3*Vector4).
+        SuspensionSpring maSprings[eNumDrivenWheels];
+
+        // @+0xEE0 (3808)/@+0xEE8 (3816): the dynamic load-transfer force CalculateWeightTransfer builds
+        // and distributes to the springs (SetExternalForce). UpdateSuspension mirrors the +0x50 weight
+        // register to a +4912 snapshot first. FLAG: the member names + the +4912 mirror are inferred.
+        Vector3 mWeightTransfer;        // +0xEE0 (packed; .x/.y/.z load-transfer per body axis)
+        Vector4 mWeightTransferMirror;  // +0x1330 (4912): the +0x50 weight register snapshot
+
+        // ----- C03 suspension phases (bodies in VehiclePhysics.cpp) -----
+        void SetupSuspension(f64 lfTimeStep);               // @0x825CF718 BLOCKED (VMX permute scatter)
+        void ApplyWheelWeight();                            // @0x825F7898 PARTIAL
+        void CalculateWeightTransfer();                     // @0x825F9DD0 PARTIAL (units 0.10193679)
+        void ApplySuspensionForces();                       // @0x825D1EE8 PARTIAL
+        void UpdateSuspension(f64 lfTimeStep);              // @0x8261F698 CLEAN (the virtual spine)
+        void UpdateSuspensionSprings();                     // @0x825F7AF0 BLOCKED (degenerate VMX)
+        void UpdateSuspensionPostSimulation();              // @0x825F6BB0 BLOCKED (degenerate VMX giant)
+        void StabiliseAfterHardLanding();                   // @0x825D1890 PARTIAL (powf settle blocked)
+
+        // ===== ADDITIVE GROW (C09 crash/contact-impulse group) =====
+        // The contact-impulse handlers + the slam enqueue/tick. (SetCrashing override + UpdateShunt +
+        // UpdateCrashing are already declared above / left declare-only.) The base off-centre-impulse
+        // kernel GetImpulsesFromLocalImpulse is declare-only (owned by ExternalPhysicsBody).
+        void ApplyCarContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition);        // @0x825D4C10
+        void ApplyCrashedContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition,
+                                        bool lbZeroResponse);                                                // @0x825D4D50
+        void ApplyWallContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactNormal,
+                                     bool lbContactPositionNotWorldSpace);                                   // @0x825FEA18
+        void ApplyShowtimeContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition,
+                                         bool lbZeroResponse);                                               // @0x825D4E00
+        void AddSlam(bool lbTaper, f32 lfDuration, f32 lfSteer, f32 lfRecoveryTime, s8 li8RaceCarId);        // @0x825D4870
+        void AddShunt(s8 li8RaceCarId);                                                                      // @0x825FC630
+        void UpdateSlam(f32* lpControlsCopy, f32 lfFrameTime);                                               // @0x825D4950
+        void GetImpulsesFromLocalImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition,
+                                         Vector3& lrJWorld, Vector3& lrAngularJWorld) const;  // declare-only (base)
     };
 }
 }
