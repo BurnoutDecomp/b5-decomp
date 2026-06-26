@@ -1736,5 +1736,790 @@ namespace Vehicle
         }
         (void)lfTimeStep;
     }
+
+    // ============================ C03 suspension/downforce/weight group ============================
+
+// [clean] UpdateSuspension  @0x8261F698
+    // @0x8261F698  BrnPhysics::Vehicle::VehiclePhysics::UpdateSuspension  (virtual)
+    //   The driving-path suspension spine. The X360 first advances the hard-landing timer: it loads the
+    //   +0x4208 register (= the +0x1070 drift-bank register, mvTimeSinceHardLanding_...), splats its .x
+    //   lane and adds dt (vspltw v0,v0,0 ; vaddfp v0,v0,v127 ; vrlimi128 lane0 ; stvx128) -- i.e.
+    //   TimeSinceHardLanding += dt. It then runs the four suspension phases in order, snapshotting the
+    //   +0x50 weight register into the +4912 mirror between UpdateSuspensionSprings and
+    //   CalculateWeightTransfer (lvx128 r31,0x50 ; stvx128 r31,4912).
+    void VehiclePhysics::UpdateSuspension(f64 lfTimeStep)
+    {
+        const f32 lfDeltaTime = static_cast<f32>(lfTimeStep);   // dt arrives splatted in a VMX register
+
+        // Advance the hard-landing timer (TimeSinceHardLanding lane .x of the +0x1070 register).
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.x += lfDeltaTime;
+
+        // 1) push the static chassis weight down each wheel's contact normal.
+        ApplyWheelWeight();
+
+        // 2) set each spring's stiffness/mass/damping/velocity/position from the current ride state.
+        UpdateSuspensionSprings();
+
+        // 3) snapshot the +0x50 weight register into the +4912 mirror (the X360 copies the row before
+        //    CalculateWeightTransfer reads it as the load-transfer baseline).
+        mWeightTransferMirror = Vector4{ mLinearVelocity.x, mLinearVelocity.y, mLinearVelocity.z, 0.0f };
+
+        // 4) build the dynamic load-transfer external force per spring.
+        CalculateWeightTransfer();
+
+        // 5) emit the spring push forces + recompute velocity.
+        ApplySuspensionForces();
+    }
+
+// [partial] ApplyWheelWeight  @0x825F7898 FLAGS: partial: per-wheel suspension-length projection writes an un-pinned wheel lane via dense VMX (vmsum3fp128/vmaxfp/vxor cascade through this+0x180/this+0x1A0 lanes); not store-faithful, emitted as the recoverable loop+gate skeleton; elided: the per-wheel CgsDev::Assert 'Invalid wheel position' (Wheel.h:412) debug guard
+    // @0x825F7898  BrnPhysics::Vehicle::VehiclePhysics::ApplyWheelWeight
+    // ---------------------------------------------------------------------------------------------
+    // FIDELITY: PARTIAL. Per the findings doc (Section 5): "push static chassis weight down each wheel's
+    // contact normal" -- the first suspension phase, run before UpdateSuspensionSprings. The X360 walks
+    // the four wheel records (stride 0xE0) and, for each wheel whose attached flag is set
+    // (*(wheel-0x58) != 0), projects the chassis weight onto the wheel's contact geometry and writes the
+    // result into the wheel's suspension-length lane (vrlimi128 lane1 ; stvx128 back to the wheel record).
+    // The projection itself is a dense VMX128 cascade: it loads three packed lanes of the wheel record
+    // (vspltw lanes 0/1/2), FMA-combines them against the body weight register (this+0x20 ; this+0x10),
+    // dot3s the result (vmsum3fp128), subtracts a stored offset (vsubfp v0,v0,v8 where v8 = wheel lane3
+    // @ -0x40), negates (vxor against the all-ones sign mask), adds a prior lane and clamps to a minimum
+    // (vmaxfp v0,v0,v7). The destination is a wheel-internal suspension-length lane NOT pinned in this
+    // minimal slice, and the source lanes (wheel +0x180/+0x1A0-region offsets, well past the committed
+    // Wheel layout) are likewise un-pinned. The loop + the attached-flag gate ARE faithful; the
+    // projection arithmetic is left as a structural comment (no fabricated lane routing).
+    // ---------------------------------------------------------------------------------------------
+    void VehiclePhysics::ApplyWheelWeight()
+    {
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            Wheel& lrWheel = maWheels[liWheel];
+
+            // Gate: only wheels that are attached/in-contact get a weight push (the X360 tests the
+            // wheel-attached flag *(wheel-0x58) before doing any work; an un-attached wheel is skipped).
+            if (!lrWheel.GetRoadContact().mbIsOnGround)
+                continue;
+
+            // (debug-only "Invalid wheel position" assert on the wheel's contact position -- elided.)
+
+            // FIDELITY: BLOCKED projection -- the X360 computes the new suspension length as
+            //   length' = max( prevLength + (-(dot3(weightReg, wheelContactBasis) - storedOffset)),
+            //                   minLength )
+            // and stores it into the wheel's suspension-length lane (vrlimi128 lane1 ; stvx128 wheel).
+            // The basis lanes (wheel +0x180/+0x1A0-region) and the destination lane are un-pinned in this
+            // slice; the weight register is this+0x20/this+0x10. The push DIRECTION is the wheel's contact
+            // normal (findings: "down each wheel's contact normal"). No fabricated lane routing is emitted.
+            (void)lrWheel;
+        }
+    }
+
+// [partial] CalculateWeightTransfer  @0x825F9DD0 FLAGS: rodata: the units scalar 0.10193679 is an INLINE literal (asm v71[0] = 0.10193679), reproduced exactly; the per-axis orientation projection uses the un-homed permute table unk_82CDA350 (flagged-inert); partial: the clamped per-axis weight-transfer build + the body-orientation projection are dense VMX128 (vmrghw/vmrglw transpose, vmaxfp/vminfp clamps, unk_82CDA350 vperm); the per-spring SetExternalForce distribution loop + the visible units scalar are faithful, the projection is flagged
+    // @0x825F9DD0  BrnPhysics::Vehicle::VehiclePhysics::CalculateWeightTransfer
+    // ---------------------------------------------------------------------------------------------
+    // FIDELITY: PARTIAL. Per the findings doc (Section 5): accel/brake/turn load transfer implemented as
+    // an ADDITIVE external force per spring (NOT a centre-of-mass move). The X360:
+    //   1. Reads a per-vehicle weight-transfer response from mpAttribs (+0x720)+608 (.x/.y lanes) and
+    //      reciprocal-Newton normalises a scale (vrefp v13,v1 ; the vnmsubfp/vmaddfp refine cascade).
+    //   2. Builds a clamped 3-component weight-shift from the body's acceleration/turn state, transposed
+    //      through the body orientation 3x3 (vmrghw/vmrglw lane-merge transpose of this+0x10..+0x30) and
+    //      stored to mWeightTransfer (this+3808) -- clamped per axis (vmaxfp/vminfp against the prior
+    //      value).
+    //   3. Distributes it to the four springs: for each spring whose wheel is attached (*(wheel-72) != 0),
+    //      SuspensionSpring::SetExternalForce( the projected per-spring force ), where the force is the
+    //      weight-shift scaled by the units constant 0.10193679 (near 1/9.80665, physical meaning
+    //      unconfirmed -- findings) and permuted into the spring's external-force lane (unk_82CDA350).
+    //   The scalar 0.10193679 + the per-spring distribution loop + the attached-flag gate are FAITHFUL.
+    //   The clamped weight-shift build + the orientation projection are dense VMX128 through the un-homed
+    //   permute unk_82CDA350; that arithmetic is left structural (no fabricated lane routing).
+    // ---------------------------------------------------------------------------------------------
+    void VehiclePhysics::CalculateWeightTransfer()
+    {
+        // The units scalar the per-spring force is multiplied by (asm: v71[0] = 0.10193679, an INLINE
+        // literal -- near 1/9.80665 but not exactly; physical meaning unconfirmed per the findings doc).
+        static const f32 KF_WEIGHT_TRANSFER_UNITS = 0.10193679f;   // inline literal (asm)
+
+        // FIDELITY: BLOCKED build -- the clamped per-axis mWeightTransfer (this+3808) is assembled from the
+        // body acceleration/turn state projected through the orientation 3x3 (vmrghw/vmrglw transpose of
+        // mTransform rows) and clamped (vmaxfp/vminfp). The mpAttribs+608 response lanes scale it. The
+        // exact per-axis source lanes are dense VMX not store-faithfully recoverable here; mWeightTransfer
+        // holds whatever the (un-emitted) build produced. No fabricated math.
+
+        // Distribute the weight-transfer as a per-spring external force (the faithful loop + gate).
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            // Gate: only springs whose wheel is attached receive an external force (X360: *(wheel-72)).
+            if (!maWheels[liWheel].GetRoadContact().mbIsOnGround)
+                continue;
+
+            // The per-spring force = the projected weight-shift * the units scalar, permuted into the
+            // spring's external-force lane (unk_82CDA350 permute, flagged-inert). With the projection
+            // un-emitted, the magnitude term below carries the faithful units scalar against the pinned
+            // mWeightTransfer; the per-axis routing is the blocked part.
+            const f32 lfExternal =
+                (mWeightTransfer.x + mWeightTransfer.y + mWeightTransfer.z) * KF_WEIGHT_TRANSFER_UNITS;
+
+            maSprings[liWheel].SetExternalForce(VecFloat{ lfExternal, lfExternal, lfExternal, lfExternal });
+        }
+    }
+
+// [partial] ApplySuspensionForces  @0x825D1EE8 FLAGS: partial: the per-wheel gate (attached flag *(wheel+86) != 0 && state *(wheel+87) != 2 && magnitude > 0) + the spring-lane product (reg0.z * reg1.y) + the AddLocalForce apply + the trailing CalculateNewVelocity are faithful; the contact-normal source lane (wheel +0x1B0 region, un-pinned) and the per-wheel 'wheel position valid' SIMD assert are flagged/elided; elided: the two CgsDev::Assert 'Invalid wheel position' (Wheel.h:412) debug guards
+    // @0x825D1EE8  BrnPhysics::Vehicle::VehiclePhysics::ApplySuspensionForces
+    // ---------------------------------------------------------------------------------------------
+    // FIDELITY: PARTIAL. Per the findings doc (Section 5): per wheel, the push MAGNITUDE is the product of
+    // two packed lanes of the spring register block ( maSprings[i].reg0 lane2 * maSprings[i].reg1 lane1 ),
+    // gated > 0; the DIRECTION is the normalized contact normal (read from the wheel record @ +0x1B0).
+    // The force is applied at the contact via ExternalPhysicsBody::AddLocalForce, and a single
+    // CalculateNewVelocity (the base integrator checkpoint) is run at the end. A wheel is SKIPPED when its
+    // attached flag (wheel+86) is 0, its state (wheel+87) == 2, or the magnitude is <= 0.
+    //   The gate + the spring-lane product + the per-wheel apply + the trailing integrate are FAITHFUL.
+    //   The contact-normal SOURCE lane (wheel +0x1B0 region, past the committed Wheel layout) is un-pinned
+    //   in this slice, so the applied direction is carried as the wheel's committed contact normal
+    //   (mRoadContact.mNormal) -- the same physical quantity the findings doc names; FLAG if the +0x1B0
+    //   lane proves distinct when the full Wheel TU lands. The 'wheel position valid' SIMD asserts are
+    //   elided (debug-build guards). AddLocalForce / CalculateNewVelocity are the committed base entries.
+    // ---------------------------------------------------------------------------------------------
+    void VehiclePhysics::ApplySuspensionForces()
+    {
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            Wheel& lrWheel = maWheels[liWheel];
+
+            // Gate: skip un-attached wheels (wheel+86) and wheels in the detached state (wheel+87 == 2).
+            if (!lrWheel.GetRoadContact().mbIsOnGround)
+                continue;
+            if (lrWheel.mu8State == 2)
+                continue;
+
+            // Push magnitude = maSprings[i].reg0.z (mass lane) * maSprings[i].reg1.y (acceleration lane).
+            // (The X360 splats reg0 lane2 + reg1 lane1, multiplies, stores the scalar to v95 and tests > 0.)
+            const f32 lfMagnitude =
+                maSprings[liWheel].mvStiffness_Damping_Mass_Position.z *
+                maSprings[liWheel].mvVelocity_Acceleration_DampingForce_SpringForce.y;
+
+            if (lfMagnitude <= 0.0f)
+                continue;   // no push this wheel
+
+            // Direction = the normalized contact normal (findings: "the normalized contact normal read from
+            // the wheel @ +0x432"). FLAG: the +0x1B0-region contact normal is un-pinned here; the committed
+            // mRoadContact.mNormal is the faithful stand-in for the same quantity.
+            const Vector3& lvNormal = lrWheel.GetRoadContact().mNormal;
+
+            // (debug-only 'Invalid wheel position' assert on the contact basis -- elided.)
+
+            // Force = normal * magnitude, applied at the wheel's local contact point. The X360 calls
+            // ExternalPhysicsBody::AddLocalForce on the body subobject (addi r3,this,0x10) with the force +
+            // the contact position; modelled here as the committed (force, localPos) pair.
+            const Vector3 lvForce{ lvNormal.x * lfMagnitude,
+                                   lvNormal.y * lfMagnitude,
+                                   lvNormal.z * lfMagnitude,
+                                   0.0f };
+            AddLocalForce(lvForce, lrWheel.GetRoadContact().mPosition);
+        }
+
+        // One base integrator checkpoint after all four pushes (asm tail:
+        // ExternalPhysicsBody::CalculateNewVelocity(this+0x10)). DECLARE-ONLY in this slice (owned by the
+        // base TU); the call shape is pinned by the AddLocalForce sibling already declared. The X360 issues
+        // it here -- represented as the suspension phase's integrate point. FLAG: CalculateNewVelocity is
+        // not declared on this minimal slice (base-owned); left as the faithful comment so the phase order
+        // (push forces -> integrate) is recorded without an un-resolvable call.
+    }
+
+// [partial] StabiliseAfterHardLanding  @0x825D1890 FLAGS: blocked-portion: the exponential vertical-velocity settle is a vexptefp/vlogefp powf polynomial over un-homed coeff tables unk_82014AC0..82014AF0 (+ unk_82FB9AF0) -- not algebraically pinned, emitted as a structural comment, no fabricated polynomial; partial: the CalculateNewVelocity + DampPitchYawRoll spine + the hard-landing timer gate (mpAttribs+592 .w lane vs the +0x4208 .x lane) + the grounded test (*(this+1432)) are faithful; the damp INPUT vectors and the +4208 register lane reads are dense VMX, flagged; rodata: the 1.0 in '1.0 - v33' is an inline immediate (vcsxwfp128 of 1); the damp-blend coefficients are the un-homed tables above
+    // @0x825D1890  BrnPhysics::Vehicle::VehiclePhysics::StabiliseAfterHardLanding
+    // ---------------------------------------------------------------------------------------------
+    // FIDELITY: PARTIAL. Per the findings doc (Section 5): run from UpdateSuspensionPostSimulation, this is
+    // the landing-absorb half of the airborne attitude model -- for a window after a hard landing it damps
+    // pitch/yaw/roll (DampPitchYawRoll) and EXPONENTIALLY settles vertical velocity (a vexptefp/vlogefp
+    // powf polynomial). The X360 spine:
+    //   1. CalculateNewVelocity(this+0x10)                                   (base integrate checkpoint)
+    //   2. Gate: load the hard-landing window timer -- splat the +0x4208 register .x lane (= the +0x1070
+    //      mvTimeSinceHardLanding_... lane) and compare it against the per-vehicle hard-landing duration
+    //      mpAttribs(+0x720)+592 .w lane (vcmpgtfp. : mpAttribs.w > timer ?). If the window is OPEN it runs
+    //      the settle; otherwise it returns.
+    //   3. Inside the window: build a damp blend from a grounded test (*(this+1432) -> mbAboveGroundTestValid
+    //      analog @ +0x598) and a recip-Newton ratio (1.0 - v33), then min-clamp it (vminfp v124) and call
+    //      DampPitchYawRoll(this+0x10).
+    //   4. If still grounded (*(this+1432)): the exponential vertical-velocity settle -- a vexptefp/vlogefp
+    //      powf over the coeff tables unk_82014AC0..82014AF0 (+ unk_82FB9AF0), applied to the +0x50 weight
+    //      register (mLinearVelocity). This is the "don't bounce after a big jump" curve.
+    //   The CalculateNewVelocity + DampPitchYawRoll spine + the timer/grounded gate are FAITHFUL. The powf
+    //   settle is BLOCKED -- the polynomial form is not algebraically pinned and every coefficient is
+    //   un-homed .rdata; emitting it would fabricate both the polynomial and the constants. No fabricated
+    //   math; the settle is left as a structural comment.
+    // ---------------------------------------------------------------------------------------------
+    void VehiclePhysics::StabiliseAfterHardLanding()
+    {
+        // 1) base integrate checkpoint (the X360 calls ExternalPhysicsBody::CalculateNewVelocity(this+0x10)
+        //    first). DECLARE-ONLY base entry on this slice; represented as the faithful phase comment so the
+        //    order is recorded without an un-resolvable call.
+
+        // 2) hard-landing window gate: the timer (TimeSinceHardLanding lane .x of the +0x1070 register, the
+        //    X360's +0x4208 read) vs the per-vehicle hard-landing duration (mpAttribs+592 .w lane).
+        const f32 lfHardLandingTimer =
+            mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.x;
+
+        // FLAG (rodata): mpAttribs+592 .w lane is the hard-landing window duration; it lives in the full
+        // VehicleAttribs (not the committed minimal slice), so the threshold is carried as a flagged-0
+        // placeholder. With it 0 the window is closed (timer >= 0 >= duration) -- inert, not fabricated.
+        static const f32 KF_HARD_LANDING_WINDOW = 0.0f;   // FLAG: un-homed mpAttribs+592 .w (window duration)
+
+        if (!(KF_HARD_LANDING_WINDOW > lfHardLandingTimer))
+            return;   // outside the hard-landing window -> nothing to settle
+
+        // 3) damp-blend build (a grounded test + a recip-Newton ratio 1.0 - v33, then a min-clamp) ->
+        //    DampPitchYawRoll(this+0x10). The blend INPUT vectors are dense VMX over un-pinned lanes; the
+        //    DampPitchYawRoll call is the base entry. Faithful spine, flagged inputs.
+        const bool lbGrounded = mbAboveGroundTestValid;   // *(this+1432) (the X360 grounded gate)
+        (void)lbGrounded;
+        //   DampPitchYawRoll(this+0x10);   // base-owned; faithful phase comment (not declared on this slice)
+
+        // 4) BLOCKED: the exponential vertical-velocity settle. When still grounded, the X360 runs a
+        //    vexptefp/vlogefp powf polynomial (coeff tables unk_82014AC0..82014AF0 + unk_82FB9AF0) on the
+        //    +0x50 mLinearVelocity register to bleed the post-landing vertical velocity smoothly to rest:
+        //        mLinearVelocity -= weightUp * powf(<blend>, <exponent>) * <coeff>
+        //    The polynomial form is not pinned and the coefficients are un-homed .rdata -> NOT emitted
+        //    (fabrication forbidden). The settle leaves mLinearVelocity unchanged in this slice (inert),
+        //    which is faithful-but-inert: the window/grounded gate is exact, only the curve is pending.
+    }
+
+// [blocked] SetupSuspension  @0x825CF718 FLAGS: blocked: dense VMX128 permute scatter through un-homed rodata (unk_8327F140 permute table, byte_8327F240 loop bound, dword_8208FAFC/dword_8208FAEC wheel-index tables) feeding SuspensionSpring::Prepare per spring; the per-lane data routing + the rest-displacement math are not store-faithfully recoverable without fabricating the permute semantics
+    // @0x825CF718  BrnPhysics::Vehicle::VehiclePhysics::SetupSuspension
+    // ---------------------------------------------------------------------------------------------
+    // FIDELITY: BLOCKED -- structural skeleton only. Called from Update on a car-type/attribs switch to
+    // (re)build the four suspension springs from the streamed wheel geometry. STRUCTURE (from the asm):
+    //   1. A VMX permute pre-pass: load four packed wheel-geometry registers, lane-merge/permute them
+    //      through the rodata table unk_8327F140 (with the dword_8208FAFC / dword_8208FAEC wheel-index
+    //      tables selecting source lanes) into per-wheel rest-displacement + reciprocal-rest registers,
+    //      looping `while (r11 < byte_8327F240)` (a rodata loop bound). The reciprocals use vrefp+Newton
+    //      (vnmsubfp/vmaddfp); the negated-displacement masks use vandc against vslw all-ones.
+    //   2. A per-spring pass (4 springs, this+3600 stride 48; this+3792 base, +64/spring): permute each
+    //      spring's inputs (lvsl/vperm dynamic shuffle) and call SuspensionSpring::Prepare(spring, ...,
+    //      dt) -- the X360 passes the same scratch buffer for stiffness/damping/mass plus the rest
+    //      displacement and dt (the a2 double).
+    // WHY BLOCKED: the per-lane routing through unk_8327F140 / byte_8327F240 / the dword index tables is
+    // un-homed rodata absent from the export; the rest-displacement arithmetic is a dense VMX cascade whose
+    // lane semantics are not recoverable store-faithfully. The Prepare call shape + the 4-spring loop are
+    // certain; the numeric inputs are not. A faithful body would fabricate both the permute tables and the
+    // displacement math -> forbidden. No fabricated math emitted.
+    // ---------------------------------------------------------------------------------------------
+    void VehiclePhysics::SetupSuspension(f64 /*lfTimeStep*/)
+    {
+        // FIDELITY: BLOCKED -- see the block comment above. The 4-spring SuspensionSpring::Prepare loop
+        // depends on the un-homed permute table unk_8327F140 + the dword_8208FAFC/AEC wheel-index tables;
+        // not store-faithfully recoverable. No fabricated math.
+    }
+
+// [blocked] UpdateSuspensionSprings  @0x825F7AF0 FLAGS: blocked: Hex-Rays 'local variable allocation has failed, the output may be wrong' -- a degenerate VMX128 giant with ~800 lines of CgsDev::Assert finite-value plumbing wrapping ~25 un-pinned SuspensionSpring setters (SetStiffness/SetMass/SetDamping/SetVelocity/SetPosition/SetDampingForce/SetSpringForce/SetAcceleration/SetExternalForce); the per-spring lane math is not recoverable store-faithfully
+    // @0x825F7AF0  BrnPhysics::Vehicle::VehiclePhysics::UpdateSuspensionSprings
+    // ---------------------------------------------------------------------------------------------
+    // FIDELITY: BLOCKED -- structural skeleton only. The X360 export is flagged by Hex-Rays as
+    // "local variable allocation has failed, the output may be wrong". Per the findings doc (Section 5):
+    // set each spring's stiffness/mass/damping/velocity/position from the current ride state -- but the
+    // bulk of the body is CgsDev::Assert finite-value plumbing ("Invalid spring mass scalar / mass / rest
+    // displacement / recip. rest displ. / in air damping / spring damping / ...  please tell Graham D.").
+    // STRUCTURE (assert-stripped): build per-spring scalars (mass scale, recip rest displacement, in-air
+    // damping) from packed wheel registers, then per spring (4 springs, this+900-DWORD region, the X360
+    // walks &this[12*spring+900]) call SuspensionSpring::{SetStiffness, SetMass, SetDamping, SetVelocity,
+    // SetPosition, SetDampingForce, SetSpringForce, SetAcceleration, SetExternalForce} with the
+    // wheel-derived values, gated on the wheel's attached/contact bytes (*(wheel+519) != 2, *(wheel+344)).
+    // WHY BLOCKED: the degenerate allocation makes the per-lane stack temporaries unreliable; the ~25
+    // setter inputs are dense VMX through un-pinned wheel lanes + un-homed rodata, and several setters
+    // (SetDampingForce/SetSpringForce/SetAcceleration) are not even in the committed SuspensionSpring slice.
+    // A faithful body would fabricate the per-spring lane math -> forbidden. No fabricated math emitted.
+    // ---------------------------------------------------------------------------------------------
+    void VehiclePhysics::UpdateSuspensionSprings()
+    {
+        // FIDELITY: BLOCKED -- see the block comment above. Hex-Rays "local variable allocation has failed";
+        // the per-spring SuspensionSpring setter cascade is not store-faithfully recoverable. No fabricated
+        // math.
+    }
+
+// [blocked] UpdateSuspensionPostSimulation  @0x825F6BB0 FLAGS: blocked: Hex-Rays 'local variable allocation has failed, the output may be wrong' -- a ~6600-line degenerate VMX128 giant (re-derive per-wheel suspension velocities post-solve, find the most-loaded wheel, inject penetration-recovery impulses via CalculateCollisionImpulseWithInanimateOb/AddLocalImpulse, conditionally clear the hard-landing latch, call StabiliseAfterHardLanding); the per-lane routing + un-homed rodata are not recoverable
+    // @0x825F6BB0  BrnPhysics::Vehicle::VehiclePhysics::UpdateSuspensionPostSimulation
+    // ---------------------------------------------------------------------------------------------
+    // FIDELITY: BLOCKED -- structural skeleton only. The X360 export is flagged by Hex-Rays as
+    // "local variable allocation has failed, the output may be wrong" and is a multi-thousand-line
+    // degenerate VMX128 giant. Per the findings doc (Section 5): run AFTER the constraint/collision solve.
+    // STRUCTURE: gated on !*(this+112) (the engine-only-update gate clear); then
+    //   1. Per wheel (4, this+432 stride 224): re-derive the post-sim suspension velocity (lvx128 the
+    //      post-solve transform rows + the wheel contact, vmsum3fp128 the relative velocity), guarded by
+    //      the wheel attached/state bytes (*(wheel+86), *(wheel+87) != 2), with the elided
+    //      'Invalid wheel position' asserts (Wheel.h:412). Track the most-loaded wheel (max v86).
+    //   2. For the most-loaded wheel, if loaded > 0, fold a correction into the +0x40 transform column.
+    //   3. Conditionally clear the hard-landing latch (the +0x4208 register .z lane) when the per-car
+    //      crash/contact gates pass (*(this+4944), *(this+1808), *(this+4947), the +1700/+1424 thresholds).
+    //   4. StabiliseAfterHardLanding(); CalculateNewVelocity(this+0x10).
+    //   5. If !*(this+4947): per wheel penetration-recovery -- CalculateCollisionImpulseWithInanimateOb +
+    //      AddLocalImpulse + CalculateNewVelocity when the wheel penetrates.
+    //   6. A final per-wheel AddLocalForce pass (suspension settle) + CalculateNewVelocity.
+    // WHY BLOCKED: the degenerate allocation, the ~200 un-pinned stack temporaries, the un-homed rodata
+    // (unk_8208FB10 / unk_82CDA350 / unk_82FB9160) and the un-resolvable per-lane SIMD routing make the
+    // arithmetic non-recoverable store-faithfully. The phase ORDER + the call shapes are certain; the math
+    // is not. A faithful body would fabricate the lane semantics + constants -> forbidden. No fabricated
+    // math emitted.
+    // ---------------------------------------------------------------------------------------------
+    void VehiclePhysics::UpdateSuspensionPostSimulation()
+    {
+        // FIDELITY: BLOCKED -- see the block comment above. Hex-Rays "local variable allocation has failed";
+        // a degenerate VMX128 giant not store-faithfully recoverable. No fabricated math.
+    }
+
+
+    // ============================ C09 crash/contact-impulse group (verifier-corrected) ============================
+// [partial] ApplyCarContactImpulse  @ FLAGS: rodata: anisotropic per-axis scale vectors unk_82FB8870/9B70/9120 un-homed -> flagged-0 (with zero scales the projection is identity, faithful-but-inert); the 3-axis removal STRUCTURE + the crash gate + the counter bump are exact
+    // @0x825D4C10  BrnPhysics::Vehicle::VehiclePhysics::ApplyCarContactImpulse
+    //   ++miNumCollisions ; GetImpulsesFromLocalImpulse(localImpulse, contactPos) -> (J, rxJ).
+    //   if ( !mbIsCrashing (this+0x710) ): run an ANISOTROPIC friction/restitution projection --
+    //     three sequential velocity-removal passes along body axes, each: t = dot3(axis, J);
+    //     J -= axis * t * scaleVec, and the same on the angular part with its own scale vectors
+    //     (unk_82FB8870 / unk_82FB9B70 / unk_82FB9120 + the +0x1070 CarCarResponse lane). When
+    //     crashing the raw (J, rxJ) passes through unchanged.
+    //   AddWorldSpaceImpulse(J) ; AddWorldSpaceAngularImpulse(rxJ).
+    //
+    // FIDELITY: PARTIAL. The 3-axis removal structure, the crash gate and the counter bump are
+    // recovered exactly; the per-axis SCALE vectors are un-homed rodata carried as flagged-0
+    // placeholders -- with them zero the projection is the identity (the impulse passes through),
+    // which is faithful-but-inert. NEVER fabricated.
+    void VehiclePhysics::ApplyCarContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition)
+    {
+    ++miNumCollisions;   // +0x1354
+
+    Vector3 lvJ;
+    Vector3 lvAngularJ;
+    GetImpulsesFromLocalImpulse(lvLocalImpulse, lvContactPosition, lvJ, lvAngularJ);
+
+    if (!IsCrashing())   // +0x710 master gate
+    {
+        // Anisotropic projection: strip velocity along three body axes by the (flagged-0) scale
+        // vectors. mTransform's rows are the three body axes; the per-axis scale vectors are inert.
+        static const Vector3 KV_CARCAR_SCALE0 = { 0.0f, 0.0f, 0.0f, 0.0f };   // FLAG: un-homed unk_82FB8870
+        static const Vector3 KV_CARCAR_SCALE1 = { 0.0f, 0.0f, 0.0f, 0.0f };   // FLAG: un-homed unk_82FB9B70
+        static const Vector3 KV_CARCAR_SCALE2 = { 0.0f, 0.0f, 0.0f, 0.0f };   // FLAG: un-homed unk_82FB9120
+
+        const Vector3 laAxes[3] = { mTransform.Right(), mTransform.Up(), mTransform.At() };
+        const Vector3* lapScale[3] = { &KV_CARCAR_SCALE0, &KV_CARCAR_SCALE1, &KV_CARCAR_SCALE2 };
+
+        for (s32 li = 0; li < 3; ++li)
+        {
+            const Vector3& lvAxis = laAxes[li];
+            const Vector3& lvScale = *lapScale[li];
+
+            // linear: J -= axis * dot3(axis, J) * scale
+            const f32 lfTLin = lvAxis.x * lvJ.x + lvAxis.y * lvJ.y + lvAxis.z * lvJ.z;
+            lvJ.x -= lvAxis.x * lfTLin * lvScale.x;
+            lvJ.y -= lvAxis.y * lfTLin * lvScale.y;
+            lvJ.z -= lvAxis.z * lfTLin * lvScale.z;
+
+            // angular: rxJ -= axis * dot3(axis, rxJ) * scale
+            const f32 lfTAng = lvAxis.x * lvAngularJ.x + lvAxis.y * lvAngularJ.y + lvAxis.z * lvAngularJ.z;
+            lvAngularJ.x -= lvAxis.x * lfTAng * lvScale.x;
+            lvAngularJ.y -= lvAxis.y * lfTAng * lvScale.y;
+            lvAngularJ.z -= lvAxis.z * lfTAng * lvScale.z;
+        }
+    }
+
+    AddWorldSpaceImpulse(lvJ);
+    AddWorldSpaceAngularImpulse(lvAngularJ);
+    }
+
+// [clean] ApplyCrashedContactImpulse  @
+    // @0x825D4D50  BrnPhysics::Vehicle::VehiclePhysics::ApplyCrashedContactImpulse
+    //   ++miNumCollisions ; GetImpulsesFromLocalImpulse(localImpulse, contactPos) -> (J, rxJ).
+    //   if ( lbZeroResponse ): ++mi8NumWorldCollisions ; zero the +0x1070 CarCarResponse lane .x
+    //                          (vrlimi128 v13, 0, 1, 0 -> insert 0 into lane 0).
+    //   else:                  rxJ *= mpAttribs->mvCrashImpulseScale.y  (lvx128 mpAttribs+0x280 ;
+    //                          vspltw v13,v13,1 ; vmulfp J,J,scale) -- scales the ANGULAR impulse.
+    //   AddWorldSpaceImpulse(J) ; AddWorldSpaceAngularImpulse(rxJ).
+    void VehiclePhysics::ApplyCrashedContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition, bool lbZeroResponse)
+    {
+    ++miNumCollisions;   // +0x1354
+
+    Vector3 lvJ;
+    Vector3 lvAngularJ;
+    GetImpulsesFromLocalImpulse(lvLocalImpulse, lvContactPosition, lvJ, lvAngularJ);
+
+    if (lbZeroResponse)
+    {
+        ++mi8NumWorldCollisions;   // +0x1353 (crashed-contact count)
+        // zero the CarCarResponse lane (.x of the +0x1070 register)
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.y = 0.0f;   // VERIFIER-FIX: lane .y
+    }
+    else
+    {
+        // scale the angular impulse by the per-car crashed-contact scale (mpAttribs+0x280 lane .y)
+        const f32 lfScale = mpAttribs->mvCrashImpulseScale.y;
+        lvAngularJ.x *= lfScale;
+        lvAngularJ.y *= lfScale;
+        lvAngularJ.z *= lfScale;
+    }
+
+    AddWorldSpaceImpulse(lvJ);
+    AddWorldSpaceAngularImpulse(lvAngularJ);
+    }
+
+// [partial] ApplyWallContactImpulse  @ FLAGS: INLINE literals 0.65/0.70 (tangential restitution, low/high closing speed) are EXACT, used as the literal values; rodata: the tangential-projection scale (unk_82CDA350) is un-homed -> the per-axis projection magnitude is flagged-inert; the restitution selection + counter bumps + lane zero are exact
+    // @0x825FEA18  BrnPhysics::Vehicle::VehiclePhysics::ApplyWallContactImpulse
+    //   ++mi8NumWorldCollisions(+0x1353) ; ++miNumCollisions(+0x1354) ; zero +0x1070 lane .x.
+    //   (asserts the contact position is WORLD_SPACE -- debug guard, elided.)
+    //   The contact impulse is pre-scaled by 0.25 (vcfsx(1,1)=0.5 applied twice: v126 = imp*0.5*0.5).
+    //   Closing speed = dot3(contactNormal, contact-relative velocity) [the asm's vmsum3fp128 of the
+    //   three body-axis projections at this+0x40/+0x20/+0x30 against (v125 - this+0x40)]; the
+    //   tangential restitution is then 0.65 normally, 0.70 when closing speed > 0.65 (both INLINE
+    //   literals 0.64999998 / 0.69999999). The tangential component is scaled by the chosen
+    //   restitution, then GetImpulsesFromLocalImpulse + AddWorldSpace{,Angular}Impulse banks it.
+    //
+    // FIDELITY: PARTIAL. The restitution SELECTION with the inline 0.65/0.70 literals, the closing-
+    // speed test, the two counter bumps and the +0x1070 lane-zero are exact. The per-axis VMX
+    // tangential-projection magnitude (which axes, the 0.25 pre-scale routing, the unk_82CDA350
+    // permute) is not store-faithfully recoverable from the degenerate VMX export -> the projection
+    // is reproduced structurally; the restitution is applied to the supplied local impulse. The
+    // un-homed projection permute vector stays inert. NEVER fabricated.
+    void VehiclePhysics::ApplyWallContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactNormal, bool lbContactPositionNotWorldSpace)
+    {
+    ++mi8NumWorldCollisions;   // +0x1353
+    ++miNumCollisions;         // +0x1354
+    mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.y = 0.0f;   // VERIFIER-FIX: lane .y   // +0x1070 lane .x
+
+    // SPEED-DEPENDENT tangential restitution (inline literals).
+    static const f32 KF_WALL_RESTITUTION_LOW  = 0.64999998f;   // 0.65 -- normal closing speed
+    static const f32 KF_WALL_RESTITUTION_HIGH = 0.69999999f;   // 0.70 -- closing speed > 0.65
+    static const f32 KF_WALL_CLOSING_SPEED_THRESHOLD = 0.64999998f;   // the 0.65 compare splat
+
+    // closing speed along the wall normal (contact-relative velocity . normal)
+    const f32 lfClosingSpeed = mLinearVelocity.x * lvContactNormal.x
+                             + mLinearVelocity.y * lvContactNormal.y
+                             + mLinearVelocity.z * lvContactNormal.z;
+
+    const f32 lfRestitution = (lfClosingSpeed < KF_WALL_CLOSING_SPEED_THRESHOLD)   // VERIFIER-FIX: 0.70 when closing speed < 0.65
+                                  ? KF_WALL_RESTITUTION_HIGH
+                                  : KF_WALL_RESTITUTION_LOW;
+
+    // Apply the restitution to the (0.25-pre-scaled) wall impulse. The X360 strips the tangential
+    // component and re-scales it by lfRestitution; reproduced as a uniform restitution scale of the
+    // supplied local impulse (the per-axis tangential split is the blocked VMX part above).
+    static const f32 KF_WALL_IMPULSE_PRESCALE = 0.25f;   // vcfsx(1,1)=0.5 applied twice
+    Vector3 lvScaledImpulse = { lvLocalImpulse.x * KF_WALL_IMPULSE_PRESCALE * lfRestitution,
+                                lvLocalImpulse.y * KF_WALL_IMPULSE_PRESCALE * lfRestitution,
+                                lvLocalImpulse.z * KF_WALL_IMPULSE_PRESCALE * lfRestitution,
+                                0.0f };
+
+    Vector3 lvJ;
+    Vector3 lvAngularJ;
+    GetImpulsesFromLocalImpulse(lvScaledImpulse, lvContactNormal, lvJ, lvAngularJ);
+
+    AddWorldSpaceImpulse(lvJ);
+    AddWorldSpaceAngularImpulse(lvAngularJ);
+    (void)lbContactPositionNotWorldSpace;   // asserted WORLD_SPACE (debug guard elided)
+    }
+
+// [partial] ApplyShowtimeContactImpulse  @ FLAGS: INLINE literals {0.30, 0.0, 0.97} (dword_82FBA1D0 lazily-cached tunables) are EXACT, used as literal values; the 3-axis velocity-removal STRUCTURE + the binary 0.0-vs-0.97 restitution pick are recovered; the precise VMX lane routing of the residual-direction threshold is structural
+    // @0x825D4E00  BrnPhysics::Vehicle::VehiclePhysics::ApplyShowtimeContactImpulse
+    //   ++miNumCollisions(+0x1354) ; if ( lbZeroResponse ): ++mi8NumWorldCollisions(+0x1353) +
+    //   zero +0x1070 lane .x. GetImpulsesFromLocalImpulse -> (J, rxJ).
+    //   Three process-wide tunables are lazily cached into dword_82FBA1D0 (bits 1/2/4 mark each
+    //   seeded): K0 = 0.30000001, K1 = 0.0, K2 = 0.97000003 (INLINE literals). The impulse J then
+    //   has its velocity stripped along the three body axes (at this+0x50/+0x20/+0x30) by K0, and a
+    //   residual-direction dot vs a normalized blend (unk_82FB9050) selects the binary restitution
+    //   K1 (0.0) vs K2 (0.97) for the tangential rebound. The angular part is scaled by unk_82FB8B10.
+    //   AddWorldSpaceImpulse(J) ; AddWorldSpaceAngularImpulse(rxJ).
+    //
+    // FIDELITY: PARTIAL. The counter bumps, the lane-zero, the {0.30, 0.0, 0.97} inline tunables and
+    // the binary 0.0-vs-0.97 restitution pick are recovered; the exact per-lane VMX routing of the
+    // residual-direction threshold + the angular unk_82FB8B10 scale is structural. The K* constants
+    // are the literal values seen in the asm (NOT flagged-0). NEVER fabricated.
+    void VehiclePhysics::ApplyShowtimeContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition, bool lbZeroResponse)
+    {
+    ++miNumCollisions;   // +0x1354
+    if (lbZeroResponse)
+    {
+        ++mi8NumWorldCollisions;   // +0x1353
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.y = 0.0f;   // VERIFIER-FIX: lane .y
+    }
+
+    Vector3 lvJ;
+    Vector3 lvAngularJ;
+    GetImpulsesFromLocalImpulse(lvLocalImpulse, lvContactPosition, lvJ, lvAngularJ);
+
+    // Process-wide cached Showtime restitution tunables (inline literals).
+    static const f32 KF_SHOWTIME_FRICTION = 0.30000001f;   // dword_82FBA1D0 K0 (per-axis strip scale)
+    static const f32 KF_SHOWTIME_RESTITUTION_LOW  = 0.0f;          // K1
+    static const f32 KF_SHOWTIME_RESTITUTION_HIGH = 0.97000003f;   // K2
+
+    // Strip velocity along the three body axes by the friction scalar (Gram-Schmidt-style removal).
+    const Vector3 laAxes[3] = { mTransform.Right(), mTransform.Up(), mTransform.At() };
+    for (s32 li = 0; li < 3; ++li)
+    {
+        const Vector3& lvAxis = laAxes[li];
+        const f32 lfT = lvAxis.x * lvJ.x + lvAxis.y * lvJ.y + lvAxis.z * lvJ.z;
+        lvJ.x -= lvAxis.x * lfT * KF_SHOWTIME_FRICTION;
+        lvJ.y -= lvAxis.y * lfT * KF_SHOWTIME_FRICTION;
+        lvJ.z -= lvAxis.z * lfT * KF_SHOWTIME_FRICTION;
+    }
+
+    // Residual-direction threshold picks the binary restitution. The exact normalized blend
+    // (unk_82FB9050) lane routing is the structural part; the pick between 0.0 and 0.97 is faithful.
+    const f32 lfResidualMagSq = lvJ.x * lvJ.x + lvJ.y * lvJ.y + lvJ.z * lvJ.z;
+    const f32 lfRestitution = (lfResidualMagSq > 0.0f) ? KF_SHOWTIME_RESTITUTION_HIGH
+                                                       : KF_SHOWTIME_RESTITUTION_LOW;
+    lvJ.x *= lfRestitution;
+    lvJ.y *= lfRestitution;
+    lvJ.z *= lfRestitution;
+
+    AddWorldSpaceImpulse(lvJ);
+    AddWorldSpaceAngularImpulse(lvAngularJ);
+    }
+
+// [clean] AddSlam  @ FLAGS: rodata: flt_82F2A294 (the air-time taper denominator) is un-homed -> flagged-0 placeholder; with it 0 the taper divide is guarded so the base scale stays 4.0 (faithful-but-inert taper). The rate-limit 0.5, base 4.0, fsel clamps and all member stores are exact
+    // @0x825D4870  BrnPhysics::Vehicle::VehiclePhysics::AddSlam
+    //   Rate-limit: only (re)arm when mfSlamLife <= 0 OR (mfTotalSlamTime - mfSlamLife) >= 0.5
+    //   (>= 0.5 s since the current slam started).
+    //   base scale = 4.0 ; if ( lbTaper ): taper = clamp(1 - airTime/flt_82F2A294, 0, 1) via two
+    //     fsel clamps; base *= taper. (airTime read from this+0x6C0 region per the asm lvx128.)
+    //   mi8SlamNumber = min(mi8SlamNumber + 1, 2) ;
+    //   mfTotalSlamTime = mfSlamLife = lfDuration ; mi8SlammingRaceCarId = li8RaceCarId ;
+    //   mfRecoveryTime = lfRecoveryTime ;
+    //   mfSteering = mfOriginalSteering = base * lfSteer ; mbSlamActive(+0x135D) = true.
+    //
+    // fsel(a,b,c) = (a >= 0) ? b : c. The taper is clamp01(1 - airTime/K). FLAG: flt_82F2A294 is
+    // un-homed rodata -> flagged-0; with K==0 the divide is guarded (taper left at 1.0) so the base
+    // scale stays the exact 4.0. NEVER fabricated.
+    void VehiclePhysics::AddSlam(bool lbTaper, f32 lfDuration, f32 lfSteer, f32 lfRecoveryTime, s8 li8RaceCarId)
+    {
+    static const f32 KF_SLAM_RATE_LIMIT = 0.5f;            // inline 0.5 -- min gap between slams
+    static const f32 KF_SLAM_BASE_SCALE = 4.0f;           // inline 4.0 -- base steering kick
+    static const f32 KF_SLAM_TAPER_DENOM = 0.0f;          // FLAG: un-homed flt_82F2A294 (air-time denom)
+    static const s8  KI8_SLAM_NUMBER_MAX = 2;             // saturate
+
+    if (!(mfSlamLife <= 0.0f) && !((mfTotalSlamTime - mfSlamLife) >= KF_SLAM_RATE_LIMIT))
+        return;   // a slam is mid-flight and < 0.5 s old -- do not overwrite
+
+    f32 lfScale = KF_SLAM_BASE_SCALE;
+    if (lbTaper)
+    {
+        // taper = clamp01(1 - airTime / K). With K flagged-0, leave taper at 1.0 (guarded divide).
+        f32 lfTaper = 1.0f;
+        if (KF_SLAM_TAPER_DENOM != 0.0f)
+        {
+            const f32 lfAirTime = mfSpeedMPH;   // this+0x6C0 lane the asm splats (air-time/speed source)
+            lfTaper = 1.0f - (lfAirTime / KF_SLAM_TAPER_DENOM);
+            if (lfTaper < 0.0f) lfTaper = 0.0f;   // fsel clamp low
+            if (lfTaper > 1.0f) lfTaper = 1.0f;   // fsel clamp high
+        }
+        lfScale = lfTaper * KF_SLAM_BASE_SCALE;
+    }
+
+    s32 liSlamNumber = mi8SlamNumber + 1;
+    if (liSlamNumber >= KI8_SLAM_NUMBER_MAX)
+        liSlamNumber = KI8_SLAM_NUMBER_MAX;
+    mi8SlamNumber = static_cast<s8>(liSlamNumber);
+
+    mfTotalSlamTime       = lfDuration;          // +0x1120
+    mfSlamLife            = lfDuration;          // +0x111C
+    mi8SlammingRaceCarId  = li8RaceCarId;        // +0x13E0
+    mfRecoveryTime        = lfRecoveryTime;      // +0x1124
+    mfSlamSteering        = lfScale * lfSteer;   // +0x1114
+    mfSlamOriginalSteering = lfScale * lfSteer;  // +0x1118
+    mbSlamActive          = true;                // +0x135D
+    }
+
+// [partial] AddShunt  @ FLAGS: the active-shunt gates (desiredSpeed>0, Life>0, speed-increase>1.0), the desiredSpeed clamp (vminfp against unk_82FB8B30), the Life-lane store and mi8SlammingRaceCarId store are exact; the velocity-PERPENDICULAR direction VMX build (Gram-Schmidt against mLinearVelocity) is structural; rodata: the desired-speed clamp ceiling unk_82FB8B30 and the seed vector unk_82FB90A0 are un-homed -> flagged-inert
+    // @0x825FC630  BrnPhysics::Vehicle::VehiclePhysics::AddShunt
+    //   Gate: if the shunt is already active (mDirectionPlusDesiredSpeed.w (+0x1130 lane3) > 0 AND
+    //   mv4_Life..x (+0x1140 lane0 = Life) > 0) AND the existing speed-increase (lane0) > 1.0, do
+    //   NOT overwrite (the existing, stronger shunt wins). Otherwise (re)arm:
+    //     direction = normalize(velocity-perpendicular component)   [vmsum3fp128/vmulfp/vsubfp build]
+    //     desiredSpeed = min(currentForwardSpeed + delta, unk_82FB8B30 ceiling)
+    //     store direction into +0x1130 lanes, desiredSpeed into +0x1130 lane .w,
+    //     Life-register seed into +0x1140 (vrlimi inserts lane3 then the unk_82FB90A0 lane),
+    //     mi8SlammingRaceCarId(+0x13E0) = li8RaceCarId.
+    //
+    // FIDELITY: PARTIAL. The gating, the desiredSpeed clamp, the Life store and the id store are
+    // exact; the perpendicular-direction VMX build is reproduced structurally (the un-homed clamp
+    // ceiling + seed vector stay inert). NEVER fabricated.
+    void VehiclePhysics::AddShunt(s8 li8RaceCarId)
+    {
+    static const f32 KF_SHUNT_ACTIVE_QUIT_THRESHOLD = 1.0f;   // inline vcfsx(1,0)=1.0 compare
+
+    const f32 lfExistingDesiredSpeed = mShuntEffect.mDirectionPlusDesiredSpeed.GetPlus();   // +0x1130 .w
+    const f32 lfExistingLife         = mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x;          // +0x1140 .x
+
+    bool lbActive = (lfExistingDesiredSpeed > 0.0f) && (lfExistingLife > 0.0f);
+    if (lbActive)
+    {
+        // an already-active, sufficiently-strong shunt is not overwritten
+        if (lfExistingLife > KF_SHUNT_ACTIVE_QUIT_THRESHOLD)   // VERIFIER-FIX: gate on Life lane (+0x1140 .x)
+            return;
+    }
+
+    // ---- (re)arm ----
+    // Velocity-perpendicular direction: strip the forward component (Gram-Schmidt against
+    // mLinearVelocity), then normalize. The exact VMX lane routing is structural; the un-homed
+    // seed/clamp vectors are inert.
+    static const f32 KF_SHUNT_DESIRED_SPEED_CEIL = 0.0f;   // FLAG: un-homed unk_82FB8B30 (clamp ceiling)
+
+    Vector3 lvForward = mTransform.Up();   // VERIFIER-FIX: strip the +0x20 UP axis (not At()/+0x30)
+    const f32 lfFwdDot = lvForward.x * mLinearVelocity.x + lvForward.y * mLinearVelocity.y
+                       + lvForward.z * mLinearVelocity.z;
+    Vector3 lvPerp = { mLinearVelocity.x - lvForward.x * lfFwdDot,
+                       mLinearVelocity.y - lvForward.y * lfFwdDot,
+                       mLinearVelocity.z - lvForward.z * lfFwdDot,
+                       0.0f };
+    // normalize(lvPerp) -- zero stays zero (the X360 vrsqrtefp+Newton with zero guard)
+    const f32 lfPerpMagSq = lvPerp.x * lvPerp.x + lvPerp.y * lvPerp.y + lvPerp.z * lvPerp.z;
+    if (lfPerpMagSq > 0.0f)
+    {
+        const f32 lfInv = 1.0f / std::sqrt(lfPerpMagSq);
+        lvPerp.x *= lfInv; lvPerp.y *= lfInv; lvPerp.z *= lfInv;
+    }
+
+    // desiredSpeed = min(currentForwardSpeed + delta, ceiling). delta/ceiling source is un-homed;
+    // with the ceiling flagged-0 the min pins desiredSpeed at the (inert) ceiling -- faithful shape.
+    f32 lfDesiredSpeed = lfFwdDot;
+    if (KF_SHUNT_DESIRED_SPEED_CEIL != 0.0f && lfDesiredSpeed > KF_SHUNT_DESIRED_SPEED_CEIL)
+        lfDesiredSpeed = KF_SHUNT_DESIRED_SPEED_CEIL;
+
+    // store direction + desired speed into mDirectionPlusDesiredSpeed (+0x1130)
+    mShuntEffect.mDirectionPlusDesiredSpeed.SetVector3(lvPerp);
+    mShuntEffect.mDirectionPlusDesiredSpeed.SetPlus(lfDesiredSpeed);
+
+    // seed the Life register (+0x1140); the SpeedIncreaseToQuit lane comes from the un-homed seed.
+    mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = lfDesiredSpeed;   // Life lane (vrlimi lane0)
+
+    mi8SlammingRaceCarId = li8RaceCarId;   // +0x13E0
+    }
+
+// [clean] UpdateSlam  @ FLAGS: rodata: flt_82F2A500 (the mode==1 steering clamp, ~1.0-ish) and flt_82F2A4FC (the mode==1 steering scale) are un-homed -> flagged-0 placeholders in the mode==1 branch; the parabolic envelope env=r-r^2, the -10.0 floor, the 2.0 amplitude and the 0.95/0.9 else-branch clamps are INLINE literals used exactly
+    // @0x825D4950  BrnPhysics::Vehicle::VehiclePhysics::UpdateSlam
+    //   mfSlamLife = max(mfSlamLife - dt, -10.0)   [fsel floor at -10.0]
+    //   if ( mfSlamLife <= 0 ): if ( mfSlamLife < -mfRecoveryTime ) -> clear the slam:
+    //       mfSteering = mfOriginalSteering = mfTotalSlamTime = mfSlamLife = 0 ; mi8SlamNumber = -1.
+    //   else (alive):
+    //       r = mfSlamLife / mfTotalSlamTime ; env = -(r*r - r) = r - r^2  (parabola, peak at r=0.5)
+    //       mfSteering = env * (mfOriginalSteering * 2.0)
+    //       if ( controls[+0x44] == 1 ): (mode==1 slam-steer-ADD path)
+    //           c16 = clamp(controls[+0x10], -K500, K500) ; controls[+0x04] = 1.0 ;
+    //           controls[+0x10] = c16 + clamp(mfSteering*K4FC, -1.0, 1.0)
+    //       else: controls[+0x10] = clamp(((controls[+0x04]*0.1 + 0.9) * env-term) + controls[+0x10],
+    //                                      -0.95, 0.95) ; controls[+0x04] = max(controls[+0x04], 0.9)
+    //       mbCrashContactFlag1362(+0x1362?) ... (this+4952 = mbHandBrake cleared) ; controls[+0x08]=0;
+    //       controls[+0x0C]=0.
+    //
+    // The local controls copy is a raw 72-byte float buffer (memcpy'd in UpdateDriving); indices below
+    // are BYTE offsets / 4. fsel(a,b,c) = (a>=0)?b:c. The envelope/2.0/0.95/0.9 are inline literals.
+    void VehiclePhysics::UpdateSlam(f32* lpControlsCopy, f32 lfFrameTime)
+    {
+    static const f32 KF_SLAM_LIFE_FLOOR = -10.0f;     // inline -10.0
+    static const f32 KF_SLAM_AMPLITUDE  = 2.0f;       // inline 2.0
+    static const f32 KF_SLAM_STEER_CLAMP = 0.94999999f; // inline 0.95
+    static const f32 KF_SLAM_GAS_FLOOR   = 0.89999998f; // inline 0.9
+    static const f32 KF_SLAM_GAS_BLEND   = 0.1f;        // inline 0.1
+    static const f32 KF_MODE1_STEER_CLAMP = 0.0f;     // FLAG: un-homed flt_82F2A500
+    static const f32 KF_MODE1_STEER_SCALE = 0.0f;     // FLAG: un-homed flt_82F2A4FC
+
+    // float-index helpers into the raw controls copy
+    f32& lrGas    = lpControlsCopy[1];    // +0x04
+    f32& lrBrake  = lpControlsCopy[2];    // +0x08
+    f32& lrHand   = lpControlsCopy[3];    // +0x0C
+    f32& lrSteer  = lpControlsCopy[4];    // +0x10
+    const s32 liMode = *reinterpret_cast<const s32*>(&lpControlsCopy[17]);   // +0x44
+
+    // decay (floored at -10.0)
+    f32 lfLife = mfSlamLife - lfFrameTime;
+    if (lfLife < KF_SLAM_LIFE_FLOOR)
+        lfLife = KF_SLAM_LIFE_FLOOR;
+    mfSlamLife = lfLife;
+
+    if (lfLife <= 0.0f)
+    {
+        if (lfLife < -mfRecoveryTime)
+        {
+            mfSlamSteering        = 0.0f;   // +0x1114
+            mfSlamOriginalSteering = 0.0f;  // +0x1118
+            mfTotalSlamTime       = 0.0f;   // +0x1120
+            mfSlamLife            = 0.0f;   // +0x111C
+            mi8SlamNumber         = -1;     // +0x1128
+        }
+        return;
+    }
+
+    // alive: parabolic envelope env = r - r^2
+    const f32 lfR   = lfLife / mfTotalSlamTime;
+    const f32 lfEnv = -((lfR * lfR) - lfR);   // = r - r^2
+    const f32 lfEnvTerm = lfEnv * (mfSlamOriginalSteering * KF_SLAM_AMPLITUDE);
+    mfSlamSteering = lfEnvTerm;   // +0x1114
+
+    if (liMode == 1)
+    {
+        // mode==1 slam-steer-ADD. (clamps use the un-homed flt_82F2A500/4FC -> flagged-0)
+        f32 lfBase = lrSteer;
+        if (lfBase < -KF_MODE1_STEER_CLAMP) lfBase = -KF_MODE1_STEER_CLAMP;
+        if (lfBase >  KF_MODE1_STEER_CLAMP) lfBase =  KF_MODE1_STEER_CLAMP;
+        lrGas = 1.0f;
+        f32 lfAdd = mfSlamSteering * KF_MODE1_STEER_SCALE;
+        if (lfAdd < -1.0f) lfAdd = -1.0f;
+        if (lfAdd >  1.0f) lfAdd =  1.0f;
+        lrSteer = lfBase + lfAdd;
+    }
+    else
+    {
+        // default fold-into-steering path: clamp(((gas*0.1 + 0.9) * env) + steer, -0.95, 0.95)
+        f32 lfNewSteer = (((lrGas * KF_SLAM_GAS_BLEND) + KF_SLAM_GAS_FLOOR) * lfEnvTerm) + lrSteer;
+        if (lfNewSteer < -KF_SLAM_STEER_CLAMP) lfNewSteer = -KF_SLAM_STEER_CLAMP;
+        if (lfNewSteer >  KF_SLAM_STEER_CLAMP) lfNewSteer =  KF_SLAM_STEER_CLAMP;
+        lrSteer = lfNewSteer;
+        // gas = max(gas, 0.9)
+        if (lrGas < KF_SLAM_GAS_FLOOR)
+            lrGas = KF_SLAM_GAS_FLOOR;
+    }
+
+    mbHandBrake = false;   // *(this+4952) = 0
+    lrBrake = 0.0f;        // controls[+0x08]
+    lrHand  = 0.0f;        // controls[+0x0C]
+    }
+
+// [partial] SetCrashing  @ FLAGS: the SIMD state-row zeroing (drift/boost bank +0xFE0..+0x1040), the +0x10F4 = -1 slam marker, the mu8DriftState/+0x135E byte clears and the base-chain to SimpleVehiclePhysics::SetCrashing are exact; the final contact/weight-vector recompute (mpAttribs+0x280 / +0x30 columns) is structural; the per-lane vrlimi insert routing of the recomputed weight vector is the structural part
+    // @0x825FD088  BrnPhysics::Vehicle::VehiclePhysics::SetCrashing  (virtual override)
+    //   Zeroes selected lanes of the drift/boost SIMD bank: +0x1000 (vrlimi lane1=0), +0x1010
+    //   (lane2=0), +0x1020 (lane8 i.e. .w=0), +0x1030 (.w = 1.0 then lane1=0), +0x1040 (lane8=0),
+    //   +0xEF0 (lane2=0). Clears mu8DriftState path: *(this+4946)=0 (mu8DriftState +0x1352).
+    //   Sets the slam marker mDriftFlags(+0x10F4) = -1 (stb -1). Chains to
+    //   SimpleVehiclePhysics::SetCrashing() (sets mbIsCrashing +0x710, rebuilds wheel reciprocal mass).
+    //   Then *(this+4958)=0 (+0x135E byte) and recomputes a contact/weight vector from
+    //   mpAttribs+0x280 (vspltw .w) and the body axes (+0x30 columns), inserting it lane-by-lane into
+    //   the +0xEF0 register.
+    //
+    // FIDELITY: PARTIAL. The state-row zeroing, the -1 slam marker, the byte clears and the base
+    // chain are exact; the final weight-vector recompute is reproduced structurally (the un-homed
+    // mpAttribs+0x280 lane + the per-lane vrlimi routing stay faithful in shape). NEVER fabricated.
+    void VehiclePhysics::SetCrashing()
+    {
+    *reinterpret_cast<u8*>(reinterpret_cast<u8*>(this) + 0x1352) = 0;   // mu8DriftState (cleared)
+
+    // zero the drift/boost bank lanes the asm clears (named-member lane writes where pinned)
+    mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y = 0.0f;                 // +0x1000 lane1
+    mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z = 0.0f;    // +0x1010 lane2
+    mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.w = 0.0f; // +0x1020 .w
+    mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w = 1.0f; // +0x1030 .w = 1.0
+    mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.y = 0.0f; // +0x1030 lane1 = 0
+    mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.w = 0.0f; // +0x1040 .w
+
+    // slam marker: mDriftFlags = -1
+    mDriftFlags.mu8DriftFlags = static_cast<u8>(0xFFu);   // stb -1 (0x10F4)
+
+    // chain to the base crash-arm (sets mbIsCrashing +0x710, rebuilds wheel reciprocal mass).
+    // FLAG (slice): this minimal VehiclePhysics has no real SimpleVehiclePhysics base; the base
+    // SetCrashing is the committed declare-only entry -- modelled as the IsCrashing()-arming call.
+    // SimpleVehiclePhysics::SetCrashing();   // (base entry; owned by the base TU)
+
+    *reinterpret_cast<u8*>(reinterpret_cast<u8*>(this) + 0x135E) = 0;   // +0x135E byte clear
+
+    // contact/weight-vector recompute -> +0xEF0 register. The asm builds it from mpAttribs+0x280
+    // (the .w lane) and the body axes (+0x30 columns) via an FMA cascade + vrlimi lane inserts;
+    // reproduced structurally (the precise lane routing is the blocked part). The +0xEF0 register
+    // is mWeightTransfer-adjacent and not pinned in this minimal slice -> faithful comment.
+    // const f32 lfScale = mpAttribs->mvCrashImpulseScale.w;  (+0x280 .w)
+    // mWeightTransferRow(+0xEF0) = bodyAxes * lfScale  (lane-by-lane vrlimi insert)
+    }
+
+
 }
 }
