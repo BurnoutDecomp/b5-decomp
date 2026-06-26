@@ -2,8 +2,9 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/math/vpu/types.h"
 
-// CgsNetwork::Message  (CgsMessage.h:99 in the leak)
+// CgsNetwork::Message
 //
 // Canonical class home for the network-message base. The X360 layout is taken
 // from the FULL dwarfdump struct cross-checked against the per-function asm
@@ -89,10 +90,28 @@ namespace CgsNetwork
         // is at vtable+0x10 (4th entry) and returns a PackOrUnpackResult.
         bool Pack(s32 liA, s32 liB, s32 liC, s32* lpiBitsWritten);
         Message* UnPack(s32 liA, s32 liB, s32 liC, s32* lpiBitsRead);
+
+        // (De)serialise a raw byte buffer through the message's SmartBitStream:
+        // mePackOrUnpack == 0 packs (AddRawData), == 1 unpacks (GetRawData),
+        // anything else asserts. Returns true on success.
+        bool PackOrUnpackBuffer(char* lpcBuffer, s32 liNumBytes);
+
+        // (De)serialise one quantised signed-byte field in [liMin, liMax] through
+        // the message's bitstream (@0x82880F50). mePackOrUnpack == 0 packs (quantise
+        // via IntQuantiser::Pack, write via BitStream::AddBits), == 1 unpacks (read
+        // the quantised bits back into the field), anything else asserts. Returns
+        // true on success.
+        bool PackOrUnpack(s8* lpi8Field, s32 liMin, s32 liMax);
+
+        // Build a scaled direction vector from two angles: the X360 build computes
+        // (cos(B)*cos(A), sin(B), cos(B)*sin(A), 0) and scales it by lfMagnitude.
+        // Static helper (writes the result through the output vector pointer).
+        static void GetVectorFromAngles(rw::math::vpu::Vector3* lpvOut,
+                                        f32 lfAngleA, f32 lfAngleB, f32 lfMagnitude);
     };
 
     // 16-bit frame-ring helpers (homed in CgsMessageFrameUtils.cpp; declared in
-    // CgsMessage.h in the leak). Declared here so the rest of the Message hierarchy
+    // CgsMessageFrameUtils.h). Declared here so the rest of the Message hierarchy
     // -- e.g. HostMigrationManager::IsHostAlive -- can call them by name.
     bool UInt16IsLargerWrapped(u16 lu16A, u16 lu16B);
     bool UInt16IsLargerOrEqualWrapped(u16 lu16A, u16 lu16B);

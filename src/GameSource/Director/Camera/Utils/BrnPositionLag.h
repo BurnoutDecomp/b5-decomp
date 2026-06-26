@@ -61,8 +61,9 @@ public:
     void Construct();
 
     // Ease the transform's translation toward its lagged position this frame. @0x821F8F08.
-    // KEYSTONE: a multi-stage hand-vectorised VMX pipeline -- NOT faithfully reconstructed
-    // here (see the .cpp's documented floor).
+    // The hand-vectorised VMX cascade is reconstructed in the .cpp as the rw::math::vpu
+    // matrix/vector ops it computes (inverse-affine -> TransformPoint -> per-axis Lerp ->
+    // response-scale -> TransformVector -> Pos accumulate), verified lane-for-lane vs the asm.
     void Update(const Parameters& lrParameters, f32 lfTimestep, rw::math::vpu::Matrix44Affine& lrTransform);
 
 private:

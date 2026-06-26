@@ -112,6 +112,27 @@ namespace Thread
         }
     }
 
+    // 0x82B42D58 -- ThreadParameters default ctor.
+    // X360 store-for-store (@ 0x82B42D58):
+    //   stw r9(=-1),0xC                -> mnProcessor = -1
+    //   stw r10(=&unk_821473E3),0x14   -> mpName      = "" (pooled empty-name)
+    //   stw r11(=0),0                  -> mpStack     = 0
+    //   stw r11,4                      -> mnStackSize = 0
+    //   stw r11,8                      -> mnPriority  = 0
+    //   stb r11,0x10                   -> mbSuspended = false
+    // The mpName store targets the fixed unaligned .rodata pool constant
+    // 0x821473E3 -- the EA SDK empty-name literal ""; faithfully a non-null
+    // pointer-to-empty-string (NOT NULL, matching the asm's stw of a real addr).
+    ThreadParameters::ThreadParameters()
+    {
+        mnProcessor = -1;   // +0x0C  li r9,-1;            stw 0xC
+        mpName      = "";    // +0x14  lis/addi r10,&"";    stw 0x14
+        mpStack     = 0;    // +0x00  stw r11(=0),0
+        mnStackSize = 0;    // +0x04  stw r11,4
+        mnPriority  = 0;    // +0x08  stw r11,8
+        mbSuspended = false;// +0x10  stb r11,0x10
+    }
+
     // 0x82B43CF8
     // Claims the first free slot in the fixed 24-entry pool (busy flag flipped
     // 0->1 atomically). If all 24 are taken, heap-allocates a fresh 68-byte
