@@ -22,6 +22,10 @@
 #include "BrnCommonTypes.h"   // Vector3, EntityId
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"   // base + Wheel
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::{Dot, Subtract}
+// BrnPlayerDriverControls has ONE definition -- the canonical owning home in SharedIO. (A prior
+// duplicate minimal slice lived here and clashed (ODR) with that home; removed. The typed control
+// accessors the showtime/aftertouch bodies call are declared on the canonical struct.)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"
 
 namespace BrnPhysics
 {
@@ -87,8 +91,207 @@ namespace Vehicle
         //       separate RaceCarPhysics crash-state TU. Signature DWARF-authoritative (int/char). -----
         void SetCrashing(bool lbCrash);
 
+        // =====================================================================================
+        // ADDITIVE GROW (C10 showtime / aftertouch / target-assist / bounce-boost group).
+        // These methods make up the player/AI race-car superpowers layered on top of the driving
+        // sim. Almost every one asserts mbPlayerCarInShowtime first and then reads/writes the
+        // MODULE-STATIC showtime singleton msPlayerParams (see PlayerParameters below) -- only one
+        // car can be in showtime at a time, so the showtime state is NOT per-instance. The single
+        // per-instance bits these add are mbUsingAftertouch (+0x140D) and mPropCollisionImpulseSum
+        // (+0x13F0), both pinned BY NAME.
+        // =====================================================================================
+
+        // @0x826415E8: the per-frame entry point. Maintains mfSlamSteering (a stick-driven extra
+        // steer scalar, deadzone 0.1, decay 0.95/frame, clamp +/-10), flushes accumulated prop-hit
+        // impulses via ApplyPropCollisionImpulseSum, chains to VehiclePhysics::Update (+ a follow-up
+        // UpdateSteering on the engine-only path), then decays the showtime/uncapped-speed timers in
+        // the singleton and latches mbUsingAftertouch. lpControls is the driver-control block.
+        void Update(s32 a2, const BrnPlayerDriverControls* lpControls, bool lbApplyAftertouch,
+                    s32 a5, s32 a6, s32 a7);
+
+        // @0x825FFBD8: the showtime bounce-boost state machine, run each frame from UpdateAftertouch
+        // while in showtime. Decides if the car is airborne/slow enough to bounce, runs the latch
+        // (latch armed externally by SetJustBounced; chain counter muBounceChainCount), on a valid
+        // bounce applies a spin AddWorldSpaceAngularImpulse + an AddAirRam boost along
+        // normalize(mAimDirection + worldUp); when mfTimeUntilPush expires fires a launch pop + spin
+        // and sets mbBounceBoosting; finally CapShowtimeVelocities. lfTimeStep is the frame dt
+        // (passed in a VMX lane), lvAimSpin / lvLaunchSpin the spin-impulse vectors.
+        void UpdateShowtimePhysics(const Vector3& lvLaunchSpin, const Vector3& lvAimSpin,
+                                   f32 lfTimeStep);
+
+        // @0x825D7940: derive the per-frame bounce deformation modifiers from the live deformation
+        // state (per-sensor crush magnitudes -> a clamped bounce-strength array), and the global
+        // deformation scale flt_82FB84B4 = sqrt(totalCrush) / numSensors. lpDeformationState is a
+        // BrnDeformationState*.
+        void UpdateShowtimeBounceModifiers(const void* lpDeformationState);
+
+        // @0x825D7600: clamp the showtime velocity each frame -- speed to one of two caps (boosting
+        // vs not) and the vertical component separately, UNLESS IsPlayerVehicleWithUncappedShowtimeSpeed
+        // lets a fresh launch briefly exceed the vertical cap.
+        void CapShowtimeVelocities();
+
+        // @0x825B8BC0: the showtime player-car "strength" (damage budget), stored in the singleton.
+        f32 GetShowtimePlayerCarStrength() const;
+
+        // @0x825D7B68: true while the player car is in showtime AND not in the brief post-bounce
+        // disable window (msPlayerParams.mbDisableShowtime) AND past the launch-push delay.
+        bool IsPlayerVehicleInShowtime() const;
+
+        // @0x825B8C18: true during the brief window (mfUncappedSpeedTimer > 0) when a fresh launch
+        // may exceed the vertical showtime speed cap.
+        bool IsPlayerVehicleWithUncappedShowtimeSpeed() const;
+
+        // @0x826000F8: enter (or refresh) showtime. Resets the singleton, gives the car a double
+        // impulse launch (overwrites mLinearVelocity with a scaled push AND fires an AddAirRam --
+        // input-space 5130 rising / 3082 falling), seeds mfTimeUntilPush and a deformation/damage
+        // budget. lfPlayerCarStrength is stored verbatim; lfPlayerCarDamageLimit scales the budget.
+        void SetPlayerVehicleInShowtime(bool lbInShowtime, f32 lfPlayerCarStrength,
+                                        f32 lfPlayerCarDamageLimit);
+
+        // @0x825B8AF0: stash the showtime aim direction (a single VMX register) into the singleton.
+        void SetShowtimeAimDirection(const Vector3& lvAimDirection);
+
+        // @0x8262EBE8: camera-relative air-steer. Normalizes the camera matrix's X and Z axes, reads
+        // stick deflection via GetAftertouchValues (yaw/pitch/scalar, + optional SIXAXIS tilt), and
+        // applies (1) a world-space lateral force along camera-X, (2) a world-space roll angular
+        // impulse, (3) local pitch impulses. Magnitudes differ for showtime vs normal flight, with an
+        // extra IsBounceBoosting multiplier. From showtime it chains UpdateTargetAssist +
+        // UpdateShowtimePhysics. Gated on the car being airborne (mbIsCrashing here means in-air-ish).
+        void UpdateAftertouch(const BrnPlayerDriverControls* lpControls,
+                              const Matrix44Affine* lpCameraMatrix,
+                              bool lbDoForceAdditiveAftertouch, bool lbUseSixaxis);
+
+        // @0x825B8C88: trivial getter -- true while aftertouch air-steer is active this frame.
+        bool IsUsingAftertouch() const { return mbUsingAftertouch; }
+
+        // @0x8261FF50: showtime auto-aim. Argmin over a GLOBAL candidate target list
+        // (msTargetPositions / msNumTargets), score weight = (2 - alignmentDot) * (1/distance) with a
+        // stickiness bonus for last frame's target, only while moving upward; lerps an aim direction
+        // and, when aligned, pulls velocity toward a ballistic intercept (ComputeIdealVelocity).
+        void UpdateTargetAssist(const BrnPlayerDriverControls* lpControls);
+
+        // @0x82600558: solve a projectile arc to a target. Flattens the target-relative vector; if
+        // horizontal distance >= 1.0, horizontal = dir/(2t), vertical = t^2 * 9.81, with
+        // t = horizDist / (KF_IDEAL_T_BASE - lfInputSpeed); else returns the target's own velocity.
+        // Writes the result to *lpResult (return is lpResult). lfInputSpeed = the car's 2D speed.
+        Vector3* ComputeIdealVelocity(Vector3* lpResult, f32 lfInputSpeed) const;
+
+        // @0x825B8B08: copy out the recent-bounce report (chain count / over-min-stress / car-bounce /
+        // good-impact flags, the other entity id, and the bounce direction vector) and consume the
+        // bounce latch. Returns the "bounced this frame" flag and clears it + the per-frame flags.
+        bool GetRecentBounce(s32* lpChainCount, bool* lpOverMinStress, bool* lpCarBounce,
+                             bool* lpGoodImpact, bool* lpExtraFlag, s32* lpOtherEntityId,
+                             Vector3* lpBounceDirection);
+
+        // @0x825B8CE0: true if the next impact should bounce-boost (the latched ShouldBounceBoost bit).
+        bool ShouldBounceBoostNextImpact() const;
+
+        // @0x825B3928: copy out the collision normal that caused the crash (asserts mbIsCrashing).
+        // Writes to *lpNormal (return is lpNormal).
+        Vector3* GetNormalCausingCrash(Vector3* lpNormal) const;
+
+        // @0x82600780: flush the accumulated per-frame prop-collision impulse (mPropCollisionImpulseSum)
+        // into the body, soft-clamping its magnitude (against the car's mass/speed) so props can't
+        // catapult the car, then zeroing the accumulator.
+        void ApplyPropCollisionImpulseSum();
+
+        // @0x825FFAE8: record a wheel/surface traction point. Chains to the base
+        // SimpleVehiclePhysics::AddTractionPoint, then -- if the showtime push timer has elapsed --
+        // snapshots the wheel's road-contact record and flags it.
+        void AddTractionPoint(s32 leWheel, u32 luSurfaceTag);
+
     private:
         bool mbPlayerCarInShowtime;   // +0x140C (pinned BY NAME)
+
+        // ----- ADDITIVE GROW (C10): per-instance race-car state the C10 functions touch. -----
+
+        // @+0x140D (BY NAME). Latched each frame by Update; read by IsUsingAftertouch. The asm
+        // stores the aftertouch-enable bool to this+0x140D (`stb r11,0x140D(r31)`) and the getter
+        // returns `lbz r3,0x140D(r3)`.
+        bool mbUsingAftertouch;
+
+        // @+0x13F0 (BY NAME). The accumulated prop-collision impulse summed across the frame, flushed
+        // by ApplyPropCollisionImpulseSum (asm: `addi r31,this,0x13F0`). Read/written as a single VMX
+        // register. The ~0x13F0 bytes of base+VehiclePhysics state before it are not padded here.
+        Vector3 mPropCollisionImpulseSum;
+
+        // @+0x1404 (BY NAME). The stick-driven extra-steer scalar Update maintains (mfSlamSteering;
+        // the asm reads/writes `this->float1404`). Decays 0.95/frame, deadzone 0.1, clamp +/-10.
+        f32 mfSlamSteering;
+
+        // @+0x1430 (BY NAME). A short-lived slam/steer envelope scalar Update also drives on the
+        // engine-only path (the asm's `this->float1430`).
+        f32 mfSlamSteerEnvelope;
     };
+
+    // =========================================================================================
+    // PlayerParameters -- the MODULE-STATIC showtime singleton (X360 msPlayerParams, base symbol
+    // lbBounceBoosting @0x82FB8480). Only ONE car can be in showtime, so all of showtime's mutable
+    // state lives here, not on the instance. Reconstructed BY NAME from PlayerParameters::Reset
+    // @0x825B89B8 (the exact store offsets) + the named globals the C10 functions reference. The
+    // members are pinned at their console byte offsets; intervening bytes that no C10 function reads
+    // are reproduced as named reserved fields ONLY where needed to hold a later member's offset.
+    //
+    // FLAG: several of these are written from un-homed .rdata seeds (flt_82F2A2xx); those numeric
+    // SEEDS are placeholders (see the .cpp), but the singleton LAYOUT and the member roles are exact.
+    // =========================================================================================
+    struct PlayerParameters
+    {
+        // ---- +0x00..+0x10 : bounce report + latch scalars ----
+        bool  mbBounceBoosting;        // +0x00  lbBounceBoosting
+        bool  mbJustBounced;           // +0x01  byte_82FB8481 (SetJustBounced latch)
+        bool  mbBouncedThisFrame;      // +0x02  byte_82FB8482 (GetRecentBounce return + consume)
+        bool  mbCarBounce;             // +0x03  byte_82FB8483
+        bool  mbGoodImpact;            // +0x04  byte_82FB8484
+        u8    mu8Reserved05;           // +0x05  (alignment hole before the u16)
+        u16   muBounceChainCount;      // +0x06  word_82FB8486
+        bool  mbShouldBounceBoost;     // +0x08  byte_82FB8488
+        bool  mbBounceBoostPending;    // +0x09  byte_82FB8489 (ShouldBounceBoostNextImpact)
+        bool  mbSixaxisTiltApplied;    // +0x0A  byte_82FB848A
+        bool  mbGoodImpactReport;      // +0x0B  byte_82FB848B (GetRecentBounce flag 5)
+        s32   miOtherEntityId;         // +0x0C  dword_82FB848C (SetJustBounced a4)
+
+        // ---- +0x10 : bounce / aim direction (one VMX register) ----
+        Vector3 mBounceDirection;      // +0x10  (SetJustBounced/SetShowtimeAimDirection VMX @ +0x10)
+
+        // ---- +0x20..+0x30 : unread interior (a 16B VMX scratch the asm does not read by name) ----
+        u8    maReserved20[0x30 - 0x20];
+
+        // ---- +0x30..+0x4C : showtime launch/timer block (Reset zeroes / seeds these) ----
+        bool  mbDisableShowtime;       // +0x30  byte_82FB84B0 (IsPlayerVehicleInShowtime gate)
+        bool  mbBounceWasGood;         // +0x31  byte_82FB84B1
+        bool  mbLaunchActive;          // +0x32  byte_82FB84B2 (CapShowtimeVelocities gate)
+        bool  mbLaunchSpin;            // +0x33  byte_82FB84B3
+        f32   mfDeformationScale;      // +0x34  flt_82FB84B4 (UpdateShowtimeBounceModifiers result)
+        f32   mfDamageBudget;          // +0x38  flt_82FB84B8 (= seed * lfPlayerCarDamageLimit)
+        f32   mfUncappedSpeedTimer;    // +0x3C  flt_82FB84BC (>0 -> uncapped vertical speed window)
+        f32   mfReserved40;            // +0x40
+        f32   mfTimeUntilPush;         // +0x44  flt_82FB84C4 (launch-push delay countdown)
+        f32   mfPlayerCarStrength;     // +0x48  lfShowtimePlayerCarStrength
+
+        // ---- +0x50..+0xD0 : showtime aim/timer scratch the asm splats (not read by name here) ----
+        u8    maReserved4C[0xD0 - 0x4C];   // +0x4C..+0xD0 (incl. unk_82FB84D0 target-pos list base)
+
+        // ---- +0xD0..+0x110 : target-assist candidate list (filled by a game-side TU) ----
+        s32   maTargetIds[8];          // +0xD0  dword_82FB8550 (per-candidate id, 8 slots)
+        s32   miNumTargets;            // +0xF0  dword_82FB8570
+        s32   miCurrentTargetId;       // +0xF4  dword_82FB8574 (Reset -> -1)
+        u8    maReservedF8[0x110 - 0xF8];  // +0xF8..+0x110
+
+        // ---- +0x110.. : bounce-sensor count ----
+        u8    mu8NumBounceSensors;     // +0x110 byte_82FB8590 (Reset -> 0)
+
+        // @0x825B89B8: zero/seed the singleton on showtime entry. Bodied in RaceCarPhysics.cpp.
+        void Reset();
+    };
+    // The +0x00..+0x4C scalar block and the +0xD0.. target block are ONE contiguous singleton
+    // (0x4C < 0xD0, no overlap). The maReserved* gaps bridge the unread interior so every named
+    // member lands at its true console offset; verified by offsetof asserts in RaceCarPhysics.cpp's
+    // never-called _AssertPlayerParamsLayout(). The X360 also keeps per-candidate target POSITIONS
+    // at +0x50 (unk_82FB84D0, 16B stride) inside maReserved4C -- read there by UpdateTargetAssist via
+    // a raw offset rather than a named member (the position array is parallel to maTargetIds).
+
+    // The single process-wide showtime singleton (X360 msPlayerParams; base = lbBounceBoosting).
+    extern PlayerParameters msPlayerParams;
 }
 }

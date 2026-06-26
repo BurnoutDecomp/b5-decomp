@@ -22,3 +22,23 @@ bool RaceCarPhysics_embed_check(const RaceCarPhysics& lrCar)
     const Vector3 lHeight = lrCar.GetHeightAboveRoad();
     return lbShowtime && lbNormal && (lHeight.x < 1.0e30f);
 }
+
+// ----- C10 group coverage: exercise the showtime/aftertouch/target-assist read-side methods + the
+//       module-static singleton so the gate type-checks the new declarations. -----
+bool RaceCarPhysics_c10_embed_check(RaceCarPhysics& lrCar)
+{
+    using namespace BrnPhysics::Vehicle;
+    const bool lbInShowtime = lrCar.IsPlayerVehicleInShowtime();
+    const bool lbUncapped   = lrCar.IsPlayerVehicleWithUncappedShowtimeSpeed();
+    const bool lbBoosting   = lrCar.IsBounceBoosting();
+    const bool lbUsingAT    = lrCar.IsUsingAftertouch();
+    const bool lbShouldBoost = lrCar.ShouldBounceBoostNextImpact();
+    const f32  lfStrength   = lrCar.GetShowtimePlayerCarStrength();
+
+    // singleton reset + a couple of fields (the showtime home).
+    msPlayerParams.Reset();
+    const bool lbDisabled = msPlayerParams.mbDisableShowtime;
+
+    return lbInShowtime && lbUncapped && lbBoosting && lbUsingAT && lbShouldBoost
+        && (lfStrength >= 0.0f) && !lbDisabled;
+}

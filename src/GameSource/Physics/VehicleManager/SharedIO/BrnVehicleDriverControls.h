@@ -78,6 +78,24 @@ namespace Vehicle
         // The remaining members are owned by future TUs (no X360 address in this ledger):
         // ctor @ BrnVehicleDriverControls.h:63, Clear :67, ResetType :70, GetType :74.
         E_DRIVER_TYPE GetType() const { return meDriverType; }
+
+        // ----- ADDITIVE GROW (physics-implementation campaign): the typed control accessors the
+        //       VehiclePhysics / RaceCarPhysics bodies call. DECLARE-ONLY (bodied by the
+        //       BrnPlayerDriverControls TU) so this header stays the SINGLE definition of the class
+        //       (RaceCarPhysics.h previously carried a conflicting duplicate -> ODR; removed). The
+        //       trailing-byte accessors (GetMode @+0x44, GetFlag78 @+0x4E, GetCarType @+0x41,
+        //       GetButton63 @+0x3F) read members past this minimal DWARF slice and are left
+        //       declare-only so no offset is fabricated here. Comments give the console byte each
+        //       reads. -----
+        f32  GetSteer() const;             // *(controls + 0x10)  steering axis [-1,1] (== mfSteering)
+        f32  GetAftertouchEnable() const;  // *(controls + 0x20)  aftertouch-enable scalar (>0 active)
+        f32  GetSixaxisTilt() const;       // *(controls + 0x18)  SIXAXIS tilt axis (aftertouch pitch)
+        s8   GetCarType() const;           // *(controls + 0x41)  car-type byte
+        bool GetButton63() const;          // *(controls + 0x3F)  per-frame button/bounce request
+        s32  GetMode() const;              // *(controls + 0x44)  control mode (==1 -> slam-steer add)
+        bool GetFlag78() const;            // *(controls + 0x4E)  slam-steer enable flag
+        // overload the X360 standalone leaf takes; reads the aftertouch stick deflection.
+        bool GetAftertouchValues(f32* lpYaw, f32* lpPitch, f32* lpScalar) const;
     };
 }
 }
