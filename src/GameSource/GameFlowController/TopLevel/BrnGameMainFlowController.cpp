@@ -23,7 +23,10 @@ namespace BrnGameMainFlowController
         maStates.GetItem(E_MGS_COMPLETE_LOADING)       = &mCompleteLoading;
         maStates.GetItem(E_MGS_IN_GAME)                = &mInGame;
 
-        meCurrentState  = E_MGS_INVALID;
+        // FLAG: ARTIST 0x823C6500-0x6508 stores 0 (E_MGS_INITIAL_LOADING_SCREEN) into +0x50, NOT -1
+        // (DecFIGS 0x2E2408 confirms *(this+80)=0). Construct leaves the controller already in state 0,
+        // so the first SendEvent's "meCurrentState in [0,7)" assert holds before any explicit SetState.
+        meCurrentState  = E_MGS_INITIAL_LOADING_SCREEN;
         mbSaveLoadState = false;
         mbVideoState    = false;
         mbInGameState   = false;

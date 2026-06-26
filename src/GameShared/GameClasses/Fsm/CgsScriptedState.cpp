@@ -1,38 +1,36 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/FSM/CgsScriptedState.h"  // CgsFsm::ScriptedState (committed layout)
+#include "GameShared/GameClasses/FSM/CgsScriptedFsm.h"     // CgsFsm::ScriptedFsm (complete arg type)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82835FF0
 //   (CgsFsm::ScriptedState::Construct)
 //
-// The X360 pseudocode is mangled by a Hex-Rays ABI artifact: it models the object
-// pointer as the high half of a 64-bit `a1` (PPC register pairing), so the body
-// reads:
-//     *(HIDWORD(a1) + 8)  = a1;     // store the object pointer back-reference
-//     *(HIDWORD(a1) + 16) = a2;     // store the second argument
-//     return HIDWORD(a1);           // return `this`
+// FLAG (silent-bug fix): the previous reconstruction misread the X360 Hex-Rays
+// 64-bit `a1` ABI artifact and stored `this` (a self/back-reference) at +8 and a
+// 32-bit argument at +0x10. That was wrong on BOTH counts.
 //
-// Recovered intent: a Construct that takes `this` plus one argument, writes a
-// self/back-reference at +8 and the argument at +16, and returns `this`. The
-// stores are 32-bit (pointer-width on the X360 32-bit ABI).
+// The mangled DecFIGS name is the ground truth for the signature:
+//   _ZN6CgsFsm13ScriptedState9ConstructEyPNS_11ScriptedFsmE
+//     == CgsFsm::ScriptedState::Construct(unsigned long long, CgsFsm::ScriptedFsm*)
+// i.e. Construct(CgsID lId, ScriptedFsm* lpFsm)  (CgsID == u64).
 //
-// NOTE: low confidence on the +8 store — the artifact collapses `this` and the
-// stored value into one 64-bit `a1`. Flagged for review.
+// ARTIST asm (0x82835FF0), authoritative:
+//     std  r4, 8(r3)      ; *(this + 8)    = lId      <- 8-byte store of arg1 (the CgsID)
+//     stw  r5, 0x10(r3)   ; *(this + 0x10) = lpFsm    <- 4-byte store of arg2 (the ptr)
+//     blr
+// DecFIGS asm (0xB526DC) confirms the same two stores (source order reversed):
+//     stw  lpFsm, 0x10(this)
+//     std  lId,   8(this)
+//
+// So: arg1 (the CgsID) -> mId (+0x08, 8 bytes); arg2 (the ScriptedFsm*) -> mpFsm
+// (+0x10, 4 bytes on the 32-bit ABI). No self-reference is ever stored. With the
+// committed CgsScriptedState layout (State vptr @ +0, CgsID mId @ +0x08,
+// ScriptedFsm* mpFsm @ +0x10) the offsets land exactly on the asm stores.
 
 namespace CgsFsm
 {
-    struct ScriptedState
+    void ScriptedState::Construct(CgsID liId, ScriptedFsm* lpFsm)
     {
-        u8             mPad0[8];     // [0x00] opaque
-        ScriptedState* mpSelf;       // [0x08] self/back-reference
-        u8             mPad1[4];     // [0x0C] opaque
-        s32            miArg;        // [0x10] second constructor argument
-
-        ScriptedState* Construct(s32 liArg);
-    };
-
-    ScriptedState* ScriptedState::Construct(s32 liArg)
-    {
-        mpSelf = this;
-        miArg  = liArg;
-        return this;
+        mId   = liId;   // std  r4, 8(this)
+        mpFsm = lpFsm;  // stw  r5, 0x10(this)
     }
 }

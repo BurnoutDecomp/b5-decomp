@@ -33,6 +33,9 @@ void BrnShaderConstantsFrame::Construct()
 
     mfCloudDistanceCurve = 0.0f;
     mGameTime = 0.0f;
-    mfWhiteLevel = 0.0f;
+    // FLAG: ARTIST 0x823F7478 stores flt_82001C98 (== 1.0) to mfWhiteLevel (this+0x318),
+    // then 0 to mbLockedForWriting (this+0x31C). DecFIGS 0x352004 confirms *(this+792)=1.0.
+    // (Was 0.0f.) White level is a multiplier; 0.0f would black out everything.
+    mfWhiteLevel = 1.0f;
     mbLockedForWriting = false;
 }

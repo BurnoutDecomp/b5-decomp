@@ -151,7 +151,12 @@ GuiEventUpdateSatNav* GuiEventUpdateSatNav::DoWorstCase()
 
     // ---- phase 3: synthesise the 7-icon ring (icons[1..7]) ----
     const SatNavIconInfo& lPlayer = maIconInfo[0];
-    f32 lfRingZ = KF_WORST_CASE_PHASE_LIMIT; // v17 starts at 100.0, += 50 each entry
+    // FLAG (ARTIST 0x823B1980): the ring-Z accumulator (f31) is seeded to
+    // player.z - 100.0 (lvx128 this; vspltw lane 2 -> player.z; vsubfp 100.0;
+    // lfs f31, var_A0), NOT the bare constant 100.0. Each entry then does f31 += 50
+    // before the store, giving icon[i].z = player.z - 100 + 50*i. The earlier
+    // "starts at 100.0" reading was a misread of the vsubfp pre-step.
+    f32 lfRingZ = lPlayer.mv4Position.z - KF_WORST_CASE_PHASE_LIMIT;
     for ( s32 liIndex = 1; liIndex < 8; ++liIndex )
     {
         SatNavIconInfo& lIcon = maIconInfo[liIndex];

@@ -22,7 +22,12 @@ CgsID CgsIDCompress(const char* lpcString)
     s32 liI;
     for (liI = 0; liI < KI_CGSID_STRING_LEN - 1; ++liI)
     {
-        const s32 liChar = static_cast<u8>(lpcString[liI]);
+        // FLAG: ARTIST 0x82815A40 `extsb r11` sign-extends the byte (DecFIGS
+        // 0xB171E0 reads it as `char v5` and uses signed compares vs 'a'/'A'/'0'/
+        // '/'/'-'). Must be a SIGNED char so bytes >= 0x80 go negative and fall to
+        // slot 0, not into the 'a'..'z' branch. (Was static_cast<u8>, a silent
+        // sign mismatch for non-ASCII input.)
+        const s32 liChar = static_cast<s8>(lpcString[liI]);
         if (liChar == 0)
             break;
 

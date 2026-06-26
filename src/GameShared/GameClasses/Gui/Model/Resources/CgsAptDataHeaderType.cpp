@@ -56,7 +56,11 @@ namespace CgsResource
                         if (reinterpret_cast<u32*>(*lpImport)[1])
                             ++luCount;
                         --luImports;
-                        lpImport += 4;
+                        // FLAG: ARTIST 0x8284BB60 `addi r10,r10,4` advances the import-table
+                        // cursor by 4 BYTES (one serialised 32-bit entry), not 4 entries.
+                        // lpImport is a u32* so a single ++ == +4 bytes (DecFIGS 0xB73748:
+                        // `4 * v6++ + importTable`).
+                        ++lpImport;
                     } while (luImports);
                 }
                 --luMovies;
@@ -90,14 +94,23 @@ namespace CgsResource
                 u32 luImport = 0;
                 do
                 {
-                    u32* lpImportTable = reinterpret_cast<u32*>(luChar + 8);
-                    if (reinterpret_cast<u32*>(*reinterpret_cast<u32*>(lpImportTable))[1])
+                    // FLAG: ARTIST 0x8284BBC8 reads `*(importTable[luImport])[1]` -- the import
+                    // table (lpChar[2], the WORD at luChar+8) is indexed by the running entry
+                    // index, the slot value (entry pointer) is dereferenced, then its [1] field
+                    // is tested. The prior reconstruction tested a fixed importTable[1] without
+                    // indexing/derefing. DecFIGS 0xB737DC: `v15 = 4*v13 + importTable; v17 = *v15;
+                    // if (*(v17 + 4))`.
+                    u32* lpImportTable = *reinterpret_cast<u32**>(luChar + 8);
+                    u32 luEntry = lpImportTable[luImport];
+                    if (reinterpret_cast<u32*>(luEntry)[1])
                     {
                         if (luSeen == luIndex)
                         {
-                            u32 luEntry = *reinterpret_cast<u32*>(4 * luImport + *reinterpret_cast<u32*>(luChar + 8));
+                            // FLAG: ARTIST 0x8284BC20-28 computes *lpuOffset from the ENTRY
+                            // POINTER (the value loaded from the slot), not the slot address:
+                            // `entryPtr - lpResource + 12`. DecFIGS: `*v7 = v17 + 12 - lpResource`.
                             *lppValue = reinterpret_cast<const void*>(reinterpret_cast<u32*>(luEntry)[3]);
-                            *lpuOffset = 4 * luImport + *reinterpret_cast<u32*>(luChar + 8) - static_cast<u32>(lRes) + 12;
+                            *lpuOffset = luEntry - static_cast<u32>(lRes) + 12;
                             return;
                         }
                         ++luSeen;

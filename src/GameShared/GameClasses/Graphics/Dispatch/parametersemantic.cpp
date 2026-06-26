@@ -1,6 +1,6 @@
 #include "types.hpp"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x... (Shader::ParameterSemanticBlock)
+// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x827F7958 (Shader::ParameterSemanticBlock)
 // First-pass reconstruction: behaviour-faithful to the X360 pseudocode; struct
 // layout is inferred (field roles named by use, padding offsets are from the
 // 32-bit source and not byte-matched on a 64-bit host).
@@ -38,13 +38,17 @@ namespace Shader
                 total += (semanticSizes[i] + 15) & ~15u;
         }
 
-        // Region 0 carries the 16-byte header offset; the rest start at 0.
-        result->entries[0] = 16;
-        result->entries[1] = total;
+        // FLAG: corrected to match ARTIST 0x827F7958. The descriptor is five
+        // (size,alignment) pairs: pair 0 = (total, 16) (written via the trailing `std`
+        // of the (total:16) qword to entries[0]/[1]); pairs 1..4 = (0, 1). The previous
+        // fill (entries[0]=16, entries[1]=total, entries[2i]=0, entries[2i+1]=total)
+        // had entries[0]/[1] swapped and put `total` where the alignment 1 belongs.
+        result->entries[0] = total;
+        result->entries[1] = 16;
         for (int i = 1; i < 5; ++i)
         {
             result->entries[2 * i]     = 0;
-            result->entries[2 * i + 1] = total;
+            result->entries[2 * i + 1] = 1;
         }
         return result;
     }

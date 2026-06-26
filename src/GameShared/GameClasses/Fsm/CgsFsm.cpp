@@ -6,17 +6,24 @@
 // no-op when there is no current state. Behaviour-faithful to the X360 pseudocode,
 // which reads mpCurrentState and dispatches the three State virtuals through its
 // vtable. Reuses the committed CgsFsm::State (CgsState.h) by name.
+//
+// FLAG: mpCurrentState is RE-READ from the member before EACH of the three calls.
+// ARTIST asm (0x82835CE0) reloads `lwz r3, 0(r31)` before every dispatch, and the
+// DecFIGS asm (0xB52500) does the same (calls 2/3 do `lwz r11, 0(this)`). The
+// original source therefore writes `mpCurrentState->...` each time, NOT a cached
+// local -- a state transition triggered inside PreUpdate/Update must affect the
+// subsequent calls. Caching in a local (the previous reconstruction) was a silent
+// behavioural bug.
 
 namespace CgsFsm
 {
     void Fsm::Update()
     {
-        State* lpState = mpCurrentState;
-        if (lpState)
+        if (mpCurrentState)
         {
-            lpState->PreUpdate();
-            lpState->Update();
-            lpState->PostUpdate();
+            mpCurrentState->PreUpdate();
+            mpCurrentState->Update();
+            mpCurrentState->PostUpdate();
         }
     }
 }

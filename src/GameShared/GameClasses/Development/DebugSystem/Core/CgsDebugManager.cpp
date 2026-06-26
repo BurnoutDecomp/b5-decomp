@@ -249,8 +249,11 @@ namespace CgsDev
         CGS_ASSERT(!IsComponentRegistered(lpComponent), "!IsComponentRegistered(lpDebugComponent)");
         CGS_ASSERT(lpcName, "lpcName");
 
+        // FLAG: ARTIST 0x8282E29C-0x8282E2A0 defaults a null path to "Debug/Components"
+        // (off_82F31990), NOT "" -- a simple component registers under the Debug/Components menu
+        // section when no path is given.
         if (!lpcPath)
-            lpcPath = "";
+            lpcPath = "Debug/Components";
 
         mComponentList.Add(lpComponent);
         lpComponent->mbActive = false;
@@ -267,6 +270,10 @@ namespace CgsDev
     {
         CGS_ASSERT(lpComponent, "lpComponent");
         if (!lpComponent)
+            return;
+        // FLAG: ARTIST 0x8283213C-0x82832160 guards the whole activation on "if (mbActive == 0)" --
+        // re-activating an already-active component is a no-op (it must NOT fire OnActivate again).
+        if (lpComponent->IsActive())
             return;
         lpComponent->mbActive = true;
         lpComponent->OnActivate();

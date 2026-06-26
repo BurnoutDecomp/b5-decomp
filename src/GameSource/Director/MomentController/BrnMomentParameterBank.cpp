@@ -90,7 +90,10 @@ void MomentParameterBank::Construct()
     mParamsBystanderCloseTakedownOnly.mbTakedown = false;
     mParamsBystanderCloseTakedownOnly.mbCrash = true;
 
-    mParamsBystanderFarCrashOnly.mbClose = true;
+    // FLAG: ARTIST @0x82209EAC stores 0 to +0xB (mbClose=false); our prior value
+    // (true) disagreed with the X360 asm. (DecFIGS pseudocode set close=1 but ARTIST
+    // wins -- merge-window delta; asm last-write to +0xB is r10=0.)
+    mParamsBystanderFarCrashOnly.mbClose = false;
     mParamsBystanderFarCrashOnly.mbTakedown = true;
     mParamsBystanderFarCrashOnly.mbCrash = false;
 
@@ -98,8 +101,11 @@ void MomentParameterBank::Construct()
     mParamsTumblingTruckingSideCrashOnly.mbTakedown = true;
     mParamsTumblingTruckingSideCrashOnly.mbCrash = false;
 
+    // FLAG: ARTIST @0x82209EF4 stores 0 to +0x1C (mbTakedown=false); our prior value
+    // (true) disagreed. Final ARTIST state for this entry: cam=0, td=0, crash=1
+    // (asm last-write to +0x1C is r10=0, +0x1D is r11=1).
     mParamsTumblingTruckingSideTakedownOnly.meCameraType = 0;
-    mParamsTumblingTruckingSideTakedownOnly.mbTakedown = true;
+    mParamsTumblingTruckingSideTakedownOnly.mbTakedown = false;
     mParamsTumblingTruckingSideTakedownOnly.mbCrash = true;
 
     mParamsTumblingTruckingFrontCrashOnly.meCameraType = 1;

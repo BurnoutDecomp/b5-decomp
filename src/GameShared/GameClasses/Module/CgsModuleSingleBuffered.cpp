@@ -31,7 +31,10 @@ bool CgsModule::ModuleSingleBuffered::Prepare()
                 mInputBuffer.Prepare();
             }
         case EManagerPrepareStage::E_MANAGERPREPARESTAGE_ALLOCINPUT:
-            mePrepareStage = EManagerPrepareStage::E_MANAGERPREPARESTAGE_ALLOCOUTPUT;
+            // FLAG: ARTIST Prepare @ 0x8286E824 sets the stage to ALLOCINPUT(2) here (li r11,2;
+            // stw r11,8(r31)) before CreateInputDataStructure (DecFIGS LABEL_5: v1[2]=2). Was
+            // mistakenly ALLOCOUTPUT(4), which corrupted the resume point on a partial Prepare.
+            mePrepareStage = EManagerPrepareStage::E_MANAGERPREPARESTAGE_ALLOCINPUT;
             if (!mbIsNewModule)
             {
                 CgsModule::DataStructure *lpDataStructure = CreateInputDataStructure();
