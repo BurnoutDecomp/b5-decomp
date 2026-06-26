@@ -22,6 +22,18 @@ namespace Vehicle
         E_IMPACT_COUNT        = 9
     };
 
+    // Who-hit-whom classification of a race-car-vs-race-car impact (DWARF BrnVehicleConstants.h).
+    // Used by the takedown classifier (VehicleManager::RaceCarResponseInfo::meImpactSitutation).
+    enum EImpactSituation
+    {
+        E_IMPACT_SITUATION_INVALID     = -1,
+        E_IMPACT_SITUATION_PLAYER_ON_AI = 0,
+        E_IMPACT_SITUATION_AI_ON_PLAYER = 1,
+        E_IMPACT_SITUATION_AI_ON_AI    = 2,
+        E_IMPACT_SITUATION_NETWORK     = 3,
+        E_IMPACT_SITUATION_COUNT       = 4,
+    };
+
     // Lifecycle state of a traffic vehicle.
     enum ETrafficType : s32
     {
