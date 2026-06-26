@@ -159,7 +159,7 @@ CgsSound::Logic::StateManager* CollisionStateManager::CreateObject( u32 /*luType
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* CollisionStateManager::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        5,                          // ObjectID         -- FLAG: arbitrary-unique (slot 5)
+        5,                          // ObjectID (PS3 DecFIGS static-init 0x85FA1C: CollisionStateManager=5)
         "CollisionStateManager",    // typeName
         0,                          // baseTypeInfo     -- StateManager base descriptor (deferred)
         &CollisionStateManager::CreateObject // createObject

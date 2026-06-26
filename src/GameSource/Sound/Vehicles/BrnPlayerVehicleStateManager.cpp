@@ -153,7 +153,7 @@ CgsSound::Logic::StateManager* PlayerVehicleStateManager::CreateObject( u32 /*lu
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* PlayerVehicleStateManager::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        7,                              // ObjectID         -- FLAG: arbitrary-unique (slot 7)
+        1,                              // ObjectID (PS3 DecFIGS static-init 0x85FA1C: PlayerVehicleStateManager=1)
         "PlayerVehicleStateManager",    // typeName
         0,                              // baseTypeInfo     -- StateManager base descriptor (deferred)
         &PlayerVehicleStateManager::CreateObject // createObject

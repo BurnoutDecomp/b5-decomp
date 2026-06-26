@@ -115,7 +115,7 @@ CgsSound::Logic::StateManager* AIVehicleStateManager::CreateObject( u32 /*luType
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* AIVehicleStateManager::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        2,                          // ObjectID         -- FLAG: arbitrary-unique (slot 2)
+        2,                          // ObjectID (PS3 DecFIGS static-init 0x85FA1C: AIVehicleStateManager=2)
         "AIVehicleStateManager",    // typeName
         0,                          // baseTypeInfo     -- StateManager base descriptor (deferred)
         &AIVehicleStateManager::CreateObject // createObject

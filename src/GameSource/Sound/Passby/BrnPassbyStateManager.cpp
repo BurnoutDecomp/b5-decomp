@@ -223,7 +223,7 @@ CgsSound::Logic::StateManager* PassbyStateManager::CreateObject( u32 /*luType*/ 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* PassbyStateManager::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        1,                       // ObjectID         -- FLAG: arbitrary-unique (slot 1)
+        4,                       // ObjectID (PS3 DecFIGS static-init 0x85FA1C: PassbyStateManager=4)
         "PassbyStateManager",    // typeName
         0,                       // baseTypeInfo     -- StateManager base descriptor (deferred)
         &PassbyStateManager::CreateObject // createObject
