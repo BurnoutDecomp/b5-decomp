@@ -26,8 +26,10 @@ namespace CgsLanguage
         const u32 KU_BACKGROUND_COLOUR = 0xFF000000u;   // X360 -16777216
 
         // The HUD picks the small vs large distance string when (scale * distance) drops below this
-        // threshold (X360 flt_82001C98). The exact .rdata bits are not recoverable here; modelled as
-        // the natural unit boundary 1.0 (the test is a magnitude check). FLAGGED: value unverified.
+        // threshold. The X360 RenderHUD (0x82863930) inlines the literal compare `< 1.0` directly
+        // (the immediate is the natural unit boundary, not a .rdata word), so the value is verified.
+        // NOTE: the PS3 DecFIGS build (B5_FIGS) instead emits a single FormatAutoDistanceString call
+        // here; the X360 b5_main target uses this scale*distance threshold branch -- kept per target.
         const f32 KF_SMALLEST_DISTANCE_THRESHOLD = 1.0f;
     }
 
@@ -37,12 +39,13 @@ namespace CgsLanguage
         mbShowKeys                 = false;
         mbShowLocalisedTextAsStars = false;
 
-        // Star strings indexed by GetStarString(digitCount). The longer entries are recovered .rdata
-        // literals; the two shortest (X360 unk_820D15B0 / unk_820E6318) are not readable from the
-        // available exports - FLAGGED: their exact contents are unverified, modelled as the natural
-        // one/two-star strings that continue the sequence.
-        mapStars[0] = "*";          // unk_820D15B0 (FLAGGED, unverified)
-        mapStars[1] = "**";         // unk_820E6318 (FLAGGED, unverified)
+        // Star strings indexed by GetStarString(digitCount). [2]/[3]/[4] are recovered .rdata
+        // literals (X360 + PS3 agree). [1] is confirmed "**" by the PS3 DecFIGS Construct (0xBB81F8,
+        // *(this+24)="**"; the X360 0x82860A68 shows it as the unk_820E6318 pointer artifact). [0] is
+        // a pointer artifact in BOTH builds (X360 unk_820D15B0 / PS3 &byte_100C85A8) with no readable
+        // contents - FLAGGED: modelled as the natural one-star string that continues the sequence.
+        mapStars[0] = "*";          // X360 unk_820D15B0 / PS3 &byte_100C85A8 (FLAGGED, pointer artifact)
+        mapStars[1] = "**";         // PS3 0xBB81F8 confirms "**"
         mapStars[2] = "***";
         mapStars[3] = "****";
         mapStars[4] = "********";

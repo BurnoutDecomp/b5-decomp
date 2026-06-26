@@ -15,6 +15,11 @@
 // The const (read) handles test the read-lock bit (((*a1 >> 4) & 1)); the non-const (write)
 // handles test the write-lock bit (((*a1 >> 3) & 1)) -- matching CgsModule::IOBuffer's
 // IsBufferLockedForReading()/IsBufferLockedForWriting(). Each returns the member's address.
+//
+// PS3 DecFIGS confirms (via the one accessor it did NOT inline,
+// CgsResource::PoolIO::InputBuffer::GetPoolInputQueue @0xD175EC): the write-lock test is
+// (*this & 8) == 0 and the exact assert message is "Not locked for writing\n"
+// (FireAssert path CgsPoolModuleIO.h:234) -- hence the trailing '\n' on the messages below.
 
 namespace CgsResource
 {
@@ -25,12 +30,14 @@ namespace PoolIO
     void InputBuffer::Destruct()  { mPoolInputQueue.Clear(); }
     const InputBuffer::PoolInputQueue* InputBuffer::GetPoolInputQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return &mPoolInputQueue;
     }
     InputBuffer::PoolInputQueue* InputBuffer::GetPoolInputQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        // PS3 DecFIGS CgsResource::PoolIO::InputBuffer::GetPoolInputQueue (0xD175EC):
+        // exact assert message is "Not locked for writing\n" (CgsPoolModuleIO.h:234).
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mPoolInputQueue;
     }
 
@@ -56,28 +63,28 @@ namespace PoolIO
     // X360 0x828E1AA8: read-lock; return this + 4.
     const OutputBuffer::PoolOutputQueue* OutputBuffer::GetPoolOutputQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return &mPoolOutputQueue;
     }
 
     // X360 0x828E1B50: read-lock; return this + 8212.
     const OutputBuffer::PoolResourceRequestQueueStorage* OutputBuffer::GetPoolResourceRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return &mPoolResourceRequestQueue;
     }
 
     // X360 0x828E1BF8: write-lock; return this + 4.
     OutputBuffer::PoolOutputQueue* OutputBuffer::GetPoolOutputQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mPoolOutputQueue;
     }
 
     // X360 0x828E1CA0: write-lock; return this + 8212.
     OutputBuffer::PoolResourceRequestQueueStorage* OutputBuffer::GetPoolResourceRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mPoolResourceRequestQueue;
     }
 }

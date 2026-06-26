@@ -130,10 +130,13 @@ bool ScoringSystem::Release()
     return true;
 }
 
-// :333. The mode-end hook has no out-of-line work in the recovered build (the DecFIGS dwarfdump
-// body is empty); the per-mode teardown lives in the callers.
-void ScoringSystem::OnModeEnd(bool /*lbAbort*/)
+// :333. The mode-end hook resets all scoring state. PS3 DecFIGS
+// (ScoringSystem::OnModeEnd, ELF 0x1E395C) decompiles as a thunk straight into
+// ClearData(lbAbort) -- restored here (the prior "body is empty" note was a misread of the
+// DWARF; the PS3 export carries the real one-line body).
+void ScoringSystem::OnModeEnd(bool lbAbort)
 {
+    ClearData(lbAbort);
 }
 
 // X360 0x8231F140. Per-car cumulative-data reset across all eight slots, then clear the per-event

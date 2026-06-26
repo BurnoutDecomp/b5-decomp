@@ -18,23 +18,26 @@ namespace BrnWorld
 {
 namespace EnvironmentSettings
 {
-    // The environment-settings Dictionary resource layout is not committed; the
-    // DecFIGS DWARF gives no member names for this slice. Only the relocation slice
-    // is modelled — the two pointer fields the FixUp/FixDown rebase arithmetic
-    // touches (a2[2] @+8, a2[4] @+16), stored as load-relative u32 offsets rebased
-    // by += / -= delta (like VehicleGraphicsSpec / EnvironmentTimeLine).
+    // The environment-settings Dictionary relocation slice. Member SEMANTICS are
+    // recovered from the PS3 DecFIGS DWARF (same source as the X360): FixUp @
+    // PS3 0x81A008 rebases a2[2] via rw::RwPtrAddBasePtr<Dictionary::SeasonData>
+    // and a2[4] via rw::RwPtrAddBasePtr<Dictionary::LocationData>; and
+    // GetSerialisedResourceDescriptor @ PS3 0x813E00 reads *(+4)<<8 (SeasonData
+    // entry stride 256) and *(+12)<<6 (LocationData entry stride 64) for the
+    // payload size. So +8 = SeasonData pointer, +16 = LocationData pointer, +4 =
+    // season count, +12 = location count.
     //
-    // FLAG: every member name except muVersion is INFERRED from the rebase pattern;
-    //       muField4 (+4) and muField12 (+12) are NOT touched by either function
-    //       (non-rebased values, modelled only to place mpField8/mpField16 at their
-    //       offsets). The true semantics of the two pointers are deferred.
+    // The fields are kept as load-relative u32 offsets (not typed pointers): the
+    // X360 target (b5_main FixUp @ 0x8267E278 / FixDown @ 0x8267E250) rebases them
+    // with raw += / -= delta arithmetic — RwPtrAddBasePtr was inlined away on the
+    // X360 — and this TU faithfully follows the X360 (the rebase TARGET).
     struct Dictionary
     {
-        u32 muVersion;   // +0   on-disk version == 2
-        u32 muField4;    // +4   not rebased — FLAG
-        u32 mpField8;    // +8   rebased pointer (a2[2] += *a3)
-        u32 muField12;   // +12  not rebased — FLAG
-        u32 mpField16;   // +16  rebased pointer (a2[4] = v8 + *a3)
+        u32 muVersion;       // +0   on-disk version == 2
+        u32 muSeasonCount;   // +4   SeasonData entry count (size = count<<8)
+        u32 mpSeasonData;    // +8   rebased pointer (a2[2] += delta)
+        u32 muLocationCount; // +12  LocationData entry count (size = count<<6)
+        u32 mpLocationData;  // +16  rebased pointer (a2[4] = v8 + delta)
     };
 
     // FLAG: value 2 taken from the X360 `*a2 != 2` version check in FixUp.
@@ -55,9 +58,9 @@ namespace EnvironmentSettings
     // The descriptor is returned by value (X360 sret in r3).
     //
     // Store-for-store from the X360:
-    //   field4  = *(lpResource + 4)        (muField4)
-    //   field12 = *(lpResource + 12)       (muField12)
-    //   size    = ((((field4 << 8) + 47) & ~0xF) + (field12 << 6) + 15) & ~0xF
+    //   seasonCount   = *(lpResource + 4)
+    //   locationCount = *(lpResource + 12)
+    //   size = ((((seasonCount << 8) + 47) & ~0xF) + (locationCount << 6) + 15) & ~0xF
     //   entry[0] = { size, 16 }            entry[1..4] = { 0, 1 }
     // (47 == 0x2F; 15 == 0xF; <<8 == * 256; <<6 == * 64; & ~0xF == round up after +.)
     CgsResource::ResourceDescriptor
@@ -65,11 +68,11 @@ namespace EnvironmentSettings
     {
         const Dictionary* lpDictionary = static_cast<const Dictionary*>(lpResource);
 
-        const u32 luField4  = lpDictionary->muField4;    // *(a3 + 4)
-        const u32 luField12 = lpDictionary->muField12;   // *(a3 + 12)
+        const u32 luSeasonCount   = lpDictionary->muSeasonCount;    // *(a3 + 4)
+        const u32 luLocationCount = lpDictionary->muLocationCount;  // *(a3 + 12)
 
         const u32 luSize =
-            ((((luField4 << 8) + 0x2F) & ~0xFu) + (luField12 << 6) + 0xF) & ~0xFu;
+            ((((luSeasonCount << 8) + 0x2F) & ~0xFu) + (luLocationCount << 6) + 0xF) & ~0xFu;
 
         CgsResource::ResourceDescriptor lDescriptor;
         lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;
@@ -96,9 +99,9 @@ namespace EnvironmentSettings
 
         const u32 luDelta = CgsResource::GetLoadBase(lrResource);
 
-        const u32 luField16 = lpDictionary->mpField16;   // v8 = a2[4] (read before)
-        lpDictionary->mpField8  += luDelta;               // a2[2] += *a3
-        lpDictionary->mpField16  = luField16 + luDelta;   // a2[4] = v8 + *a3
+        const u32 luLocationData = lpDictionary->mpLocationData;   // v8 = a2[4] (read before)
+        lpDictionary->mpSeasonData   += luDelta;                    // a2[2] += *a3
+        lpDictionary->mpLocationData  = luLocationData + luDelta;   // a2[4] = v8 + *a3
     }
 
     // FixDown @ 0x8267E250. The inverse rebase: un-rebase the two pointers (+16
@@ -109,9 +112,9 @@ namespace EnvironmentSettings
 
         const u32 luDelta = CgsResource::GetLoadBase(lrResource);
 
-        const u32 luField8 = lpDictionary->mpField8;      // v2 = *(result + 8) (read before)
-        lpDictionary->mpField16 -= luDelta;               // *(result + 16) -= *a2
-        lpDictionary->mpField8   = luField8 - luDelta;    // *(result + 8) = v2 - *a2
+        const u32 luSeasonData = lpDictionary->mpSeasonData;   // v2 = *(result + 8) (read before)
+        lpDictionary->mpLocationData -= luDelta;                // *(result + 16) -= *a2
+        lpDictionary->mpSeasonData    = luSeasonData - luDelta; // *(result + 8) = v2 - *a2
     }
 }
 }

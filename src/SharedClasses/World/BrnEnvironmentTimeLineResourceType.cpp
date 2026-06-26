@@ -26,29 +26,37 @@ namespace EnvironmentSettings
     }
 
     // The environment-settings TimeLine resource layout is not committed; the
-    // DecFIGS DWARF gives no member names for this slice. Only the relocation
+    // X360 ARTIST DWARF gives no member names for this slice. Only the relocation
     // slice is modelled here — the fields the FixUp/FixDown rebase arithmetic
     // touches, with pointers stored as load-relative u32 offsets (rebased by
     // += / -= delta like VehicleList::mpEntries / VehicleGraphicsSpec).
     //
-    // FLAG: every member name except muVersion/miCount is INFERRED from the
-    //       rebase pattern (a2[2]/+8 = entry array; per 12-byte entry: +0 element
-    //       count read as an int, +4 and +8 rebased pointers, +8 then zeroed).
-    //       The true semantics of mpField4 (+4) and the +8 element sub-array are
-    //       deferred.
-    struct TimeLineEntry
+    // The entry is the guest's BrnWorld::EnvironmentSettings::TimeLine::LocationData
+    // (12-byte stride); the field TYPES below are recovered from the DecFIGS PS3
+    // FixUp/FixDown, which carries the real templated relocation helpers:
+    //   rw::RwPtrAddBasePtr<float>(*(v12 + 4), ...)            -> +4 is float*
+    //   rw::RwPtrAddBasePtr<TimeLine::Keyframe*>(*(v12 + 8), ) -> +8 is Keyframe**
+    //   rw::RwPtrAddBasePtr<TimeLine::LocationData>(*(v3 + 8)) -> +8 of TimeLine is the entry array
+    // (PS3 0x819E34 FixUp / 0x80E7B8 FixDown). The pointers are kept as load-relative
+    // u32 offsets here because the rebase is plain pointer arithmetic on PC.
+    //
+    // FLAG: member NAMES are inferred (the DWARF names the relocation templates, not
+    //       the struct fields); the TYPES are the PS3-recovered ones above. The
+    //       Keyframe element struct and the keyframe-times array contents are not
+    //       otherwise modelled (only the rebase slice matters for FixUp/FixDown).
+    struct TimeLineEntry   // guest TimeLine::LocationData
     {
-        s32 miElementCount;   // +0   element count (read before rebase; v13 = *v11)
-        u32 mpField4;         // +4   rebased pointer (v11[1] = v12 + *a3) — FLAG
-        u32 mpElements;       // +8   rebased pointer (v11[2] += *a3), then the
-                              //      FixUp zero-loop clears miElementCount u32s here
+        s32 miElementCount;   // +0   element count (read before rebase; v16 = *v12)
+        u32 mpKeyframeTimes;  // +4   rebased float* array (RwPtrAddBasePtr<float>)
+        u32 mpElements;       // +8   rebased Keyframe** array (RwPtrAddBasePtr<Keyframe*>),
+                              //      then the FixUp zero-loop clears miElementCount u32s here
     };
 
     struct TimeLine
     {
         u32 muVersion;        // +0   on-disk version == 1
         s32 miCount;          // +4   number of TimeLineEntry in mpEntries
-        u32 mpEntries;        // +8   rebased pointer -> TimeLineEntry[miCount]
+        u32 mpEntries;        // +8   rebased TimeLine::LocationData* -> TimeLineEntry[miCount]
     };
 
     // FLAG: value 1 taken from the X360 `*a2 != 1` version check in FixUp.
@@ -87,11 +95,11 @@ namespace EnvironmentSettings
             {
                 TimeLineEntry* lpEntry = &lpEntries[li];        // v11 = a2[2] + v9
 
-                const s32 liElementCount = lpEntry->miElementCount;  // v13 = *v11   (read before)
-                const u32 luField4       = lpEntry->mpField4;        // v12 = v11[1] (read before)
+                const s32 liElementCount = lpEntry->miElementCount;     // v13 = *v11   (read before)
+                const u32 luKeyframeTimes = lpEntry->mpKeyframeTimes;   // v12 = v11[1] (read before)
 
-                lpEntry->mpElements += luDelta;                 // v11[2] += *a3
-                lpEntry->mpField4    = luField4 + luDelta;       // v11[1] = v12 + *a3
+                lpEntry->mpElements     += luDelta;                 // v11[2] += *a3
+                lpEntry->mpKeyframeTimes = luKeyframeTimes + luDelta; // v11[1] = v12 + *a3
 
                 if (liElementCount != 0)                        // if (!v14), v14 = (*v11 == 0)
                 {
@@ -119,9 +127,9 @@ namespace EnvironmentSettings
             TimeLineEntry* lpEntries = PointerFromU32<TimeLineEntry>(lpTimeLine->mpEntries);
             for (s32 li = 0; li < lpTimeLine->miCount; ++li)   // do/while v2, v3 stride 12
             {
-                TimeLineEntry* lpEntry = &lpEntries[li];        // v4 = v3 + *(result + 8)
-                lpEntry->mpField4   -= luDelta;                 // *(v4 + 4) -= *a2
-                lpEntry->mpElements -= luDelta;                 // *(v4 + 8) -= *a2
+                TimeLineEntry* lpEntry = &lpEntries[li];        // v8 = v7 + *(result + 8)
+                lpEntry->mpKeyframeTimes -= luDelta;            // *(v8 + 4) -= *a2 (RwPtrSubtractBasePtr<float>)
+                lpEntry->mpElements      -= luDelta;            // *(v8 + 8) -= *a2 (RwPtrSubtractBasePtr<Keyframe*>)
             }
         }
 

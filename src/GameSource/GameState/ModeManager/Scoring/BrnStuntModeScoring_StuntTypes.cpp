@@ -37,8 +37,10 @@
 // anonymous-namespace tuning block, BrnStuntModeScoring.cpp:40-71). They have NO committed
 // home yet (the full TU owns the canonical anonymous-namespace block) and their concrete
 // rodata magnitudes are UNRECOVERED in the dossier. They are defined file-local below with
-// their DWARF-attested names + PLACEHOLDER values, mapped from the flt_ addresses by the
-// per-method semantics. This is the established sibling pattern (cf. KF_INVALID_RACE_DISTANCE
+// their names + PLACEHOLDER values, mapped from the flt_ addresses by the per-method semantics.
+// The names are now recovered VERBATIM from the PS3 DecFIGS DWARF (BrnGameState:: globals;
+// 0x1E15F0/0x1E1F60/0x1E2140/0x1E24E4) -- e.g. KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_AIR,
+// _DRIFTING, _OF_BOOST, _PER_BURNOUT_CHAINED, _OF_REVERSING, _PER_HANDBRAKE_TURN. This is the established sibling pattern (cf. KF_INVALID_RACE_DISTANCE
 // in BrnScoringSystem_UpdateA.cpp): the names + their positions in the store-for-store body
 // are faithful; the magnitudes are placeholders for the gate ONLY. When the full
 // BrnStuntModeScoring.cpp is reconstructed it owns the real block -- delete these and let the
@@ -81,6 +83,8 @@ namespace BrnGameState
         // from the X360 flt_ rodata addresses by per-method semantics. Not load-bearing.
 
         // Air / spin / barrel-roll rating thresholds (UpdateAirStunts).
+        // NB: names recovered VERBATIM from the PS3 DecFIGS DWARF (BrnGameState:: globals;
+        // 0x1E15F0 UpdateAirStunts) -- they replace the round-1 role-guessed spellings.
         const f32 KF_STUNT_ATTACK_MIN_AIR_TIME            = 0.0f;  // flt_82CDB76C : air gate + AIR-rating input
         const f32 KF_STUNT_ATTACK_GOOD_SECONDS_OF_AIR     = 0.0f;  // flt_82CDB74C : AIR "good" target
         const f32 KF_STUNT_ATTACK_AWESOME_SECONDS_OF_AIR  = 0.0f;  // flt_82CDB758 : AIR "awesome" target
@@ -91,23 +95,25 @@ namespace BrnGameState
         const f32 KF_STUNT_ATTACK_GOOD_DEGREES_ROLLED     = 0.0f;  // flt_82CDB754 : roll "good" target
         const f32 KF_STUNT_ATTACK_AWESOME_DEGREES_ROLLED  = 0.0f;  // flt_82CDB760 : roll "awesome" target
         const f32 KF_STUNT_ATTACK_JUMP_REPETITION_RADIUS  = 0.0f;  // flt_82CDB77C : jump-repeat radius
-        const f32 KF_AIR_SCORE_PER_SECOND                 = 0.0f;  // flt_82CDB730 : air score rate
+        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_AIR = 0.0f;  // flt_82CDB730 : air score rate (PS3 DWARF name)
         const f32 KF_STUNT_ATTACK_REVERSE_TAKEOFF_SCORE_MULTIPLIER = 0.0f; // flt_82CDB780 : reverse-takeoff bonus mult
+        // (X360 0x8232C640 uses this inline flt_82CDB780 multiplier; the PS3 branch refactored
+        //  it into a GetTakeOffMultiplier() method -- we keep the X360-faithful inline form.)
 
         // Drift (UpdateDriftStunts).
-        const f32 KF_STUNT_ATTACK_MIN_DRIFT_TIME          = 0.0f;  // flt_82CDB770 : drift gate
-        const f32 KF_DRIFT_SCORE_PER_SECOND               = 0.0f;  // flt_82CDB734 : drift score rate
+        const f32 KF_STUNT_ATTACK_MIN_DRIFT_TIME              = 0.0f;  // flt_82CDB770 : drift gate
+        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_DRIFTING  = 0.0f;  // flt_82CDB734 : drift score rate (PS3 DWARF name)
 
         // Boost / burnout (UpdateBoostStunts).
-        const f32 KF_STUNT_ATTACK_MIN_BOOST_TIME          = 0.0f;  // flt_82CDB774 : boost-time gate
-        const f32 KF_BURNOUT_SCORE_PER_CHAIN              = 0.0f;  // flt_82CDB724 : burnout (chain) score rate
-        const f32 KF_BOOST_SCORE_PER_SECOND               = 0.0f;  // flt_82CDB738 : boost score rate
+        const f32 KF_STUNT_ATTACK_MIN_BOOST_TIME             = 0.0f;  // flt_82CDB774 : boost-time gate
+        const f32 KF_STUNT_ATTACK_SCORE_PER_BURNOUT_CHAINED  = 0.0f;  // flt_82CDB724 : burnout (chain) score rate (PS3 DWARF name)
+        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST  = 0.0f;  // flt_82CDB738 : boost score rate (PS3 DWARF name)
 
         // Driving / reverse / handbrake (UpdateDrivingStunts).
-        const f32 KF_MIN_SPEED_FOR_REVERSING_STUNT        = 0.0f;  // flt_82CDB7A4 : reverse-gear speed cap
-        const f32 KF_HANDBRAKE_TURN_MIN_ANGLE             = 0.0f;  // flt_82CDB7A8 : handbrake-turn angle gate
-        const f32 KF_REVERSE_DRIVING_SCORE_PER_SECOND     = 0.0f;  // flt_82CDB740 : reverse-driving score rate
-        const f32 KF_HANDBRAKE_TURN_SCORE                 = 0.0f;  // flt_82CDB72C : handbrake-turn flat award
+        const f32 KF_MIN_SPEED_FOR_REVERSING_STUNT             = 0.0f;  // flt_82CDB7A4 : reverse-gear speed cap
+        const f32 KF_HANDBRAKE_TURN_MIN_ANGLE                  = 0.0f;  // flt_82CDB7A8 : handbrake-turn angle gate
+        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_REVERSING = 0.0f; // flt_82CDB740 : reverse-driving score rate (PS3 DWARF name)
+        const f32 KF_STUNT_ATTACK_SCORE_PER_HANDBRAKE_TURN     = 0.0f;  // flt_82CDB72C : handbrake-turn flat award (PS3 DWARF name)
 
         // Reverse-takeoff direction test (UpdateAirStunts; the X360 VMX block normalises the
         // player velocity, then dots it with the car forward direction and compares vs a cos
@@ -144,12 +150,12 @@ namespace BrnGameState
     //           // KVF_REVERSE_TAKEOFF_MIN_VELOCITY gate, then dot(unitVel, playerDir) vs
     //           // KVF_REVERSE_TAKEOFF_COS_MAX_ANGLE -- if a reverse takeoff, set the
     //           // REVERSE_TAKEOFF bit in muStuntTypesInProgress.
-    //           UpdateScore(AIR, takeoffMult*KF_AIR_SCORE_PER_SECOND*KF_STUNT_ATTACK_MIN_AIR_TIME)
+    //           UpdateScore(AIR, takeoffMult*KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_AIR*KF_STUNT_ATTACK_MIN_AIR_TIME)
     //           // jump-repetition: for each Vector3 in mRecentJumpSet, if the player is within
     //           // KF_STUNT_ATTACK_JUMP_REPETITION_RADIUS of it, this jump is a repeat -> clear
     //           // the per-jump valid flag and set the repetition-error bit; else Push() it.
     //       }
-    //       UpdateScore(AIR, takeoffMult*KF_AIR_SCORE_PER_SECOND*airTime)   // per-frame air score
+    //       UpdateScore(AIR, takeoffMult*KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_AIR*airTime)   // per-frame air score
     //       UpdateStuntRating(AIR, airTime, GOOD_SECONDS_OF_AIR, AWESOME_SECONDS_OF_AIR)
     //       lbReturn = true;
     //   }
@@ -202,14 +208,17 @@ namespace BrnGameState
                         ? KF_STUNT_ATTACK_REVERSE_TAKEOFF_SCORE_MULTIPLIER
                         : 1.0f;
 
-                UpdateScore(lfTakeOffMultiplier * KF_AIR_SCORE_PER_SECOND * KF_STUNT_ATTACK_MIN_AIR_TIME,
+                UpdateScore(lfTakeOffMultiplier * KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_AIR * KF_STUNT_ATTACK_MIN_AIR_TIME,
                             E_STUNT_TYPE_AIR, false);
 
                 // --- jump-repetition check against the recent-jump ring buffer ---
                 const Vector3 lPlayerPosition = lpActiveRaceCarInterface->GetPlayerPosition();
-                // Per-jump fresh-jump decision is a LOCAL (the X360 uses a register flag here; it does
-                // NOT write the mbValidStunt member true in this function -- that member is set elsewhere).
-                bool lbFreshJump = true;
+                // The X360 (0x8232C640) drives the fresh-jump decision off the mbValidStunt
+                // member (byte +0x2B): on a repeat it CLEARS mbValidStunt (`*(v6+43)=0`) + sets
+                // the repetition bit, and the Push is gated on mbValidStunt still being set
+                // (`if (*(v6+43)) Push(...)`). Both the X360 and the PS3 DecFIGS (0x1E15F0)
+                // agree on the member + the gate; the round-1 local `lbFreshJump` flag was a
+                // misreconstruction (it never wrote the member). Reached BY NAME.
                 const s32 liJumpCount = mRecentJumpSet.GetLength();
                 for (s32 liJumpSetIndex = 0; liJumpSetIndex < liJumpCount; ++liJumpSetIndex)
                 {
@@ -218,12 +227,12 @@ namespace BrnGameState
                     if (lfDistSq <= (KF_STUNT_ATTACK_JUMP_REPETITION_RADIUS
                                      * KF_STUNT_ATTACK_JUMP_REPETITION_RADIUS))
                     {
-                        // Already jumped from here -- not a fresh jump; flag the repetition.
-                        lbFreshJump = false;
-                        muStuntTypesInProgress |= 0x40000u;
+                        // Already jumped from here -- invalidate the stunt + flag the repetition.
+                        mbValidStunt = false;                  // X360 *(v6+43) = 0
+                        muStuntTypesInProgress |= 0x40000u;    // X360 *(v6+80) |= 0x40000
                     }
                 }
-                if (lbFreshJump)
+                if (mbValidStunt)                              // X360 if (*(v6+43)) Push(...)
                 {
                     mRecentJumpSet.Push(&lPlayerPosition);
                 }
@@ -235,7 +244,7 @@ namespace BrnGameState
                 ((muStuntTypesInProgress >> E_STUNT_TYPE_REVERSE_TAKEOFF) & 1u) != 0u
                     ? KF_STUNT_ATTACK_REVERSE_TAKEOFF_SCORE_MULTIPLIER
                     : 1.0f;
-            UpdateScore(lfTakeOffMultiplier * KF_AIR_SCORE_PER_SECOND * lfSimTimeStep,
+            UpdateScore(lfTakeOffMultiplier * KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_AIR * lfSimTimeStep,
                         E_STUNT_TYPE_AIR, false);
             UpdateStuntRating(E_STUNT_TYPE_AIR, lfAirTimeNow,
                               KF_STUNT_ATTACK_GOOD_SECONDS_OF_AIR,
@@ -310,8 +319,8 @@ namespace BrnGameState
     //   if ( lpPlayerRC->mfInProgressDriftTime <= KF_STUNT_ATTACK_MIN_DRIFT_TIME
     //        || !RegisterStunt() ) return false;
     //   if ( (muStuntTypesInProgress & (1<<E_STUNT_TYPE_DRIFT)) == 0 )       // first drift frame
-    //       UpdateScore(DRIFT, KF_DRIFT_SCORE_PER_SECOND * KF_STUNT_ATTACK_MIN_DRIFT_TIME)
-    //   UpdateScore(DRIFT, KF_DRIFT_SCORE_PER_SECOND * lfSimTimeStep)
+    //       UpdateScore(DRIFT, KF_STUNT_ATTACK_SCORE_PER_SECOND_DRIFTING * KF_STUNT_ATTACK_MIN_DRIFT_TIME)
+    //   UpdateScore(DRIFT, KF_STUNT_ATTACK_SCORE_PER_SECOND_DRIFTING * lfSimTimeStep)
     //   return true;
     bool StuntModeScoring::UpdateDriftStunts(f32 lfSimTimeStep,
                                              const ActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
@@ -339,10 +348,10 @@ namespace BrnGameState
         if ((muStuntTypesInProgress & (1u << E_STUNT_TYPE_DRIFT)) == 0u)
         {
             // First frame this drift scores -- the threshold catch-up award.
-            UpdateScore(KF_DRIFT_SCORE_PER_SECOND * KF_STUNT_ATTACK_MIN_DRIFT_TIME,
+            UpdateScore(KF_STUNT_ATTACK_SCORE_PER_SECOND_DRIFTING * KF_STUNT_ATTACK_MIN_DRIFT_TIME,
                         E_STUNT_TYPE_DRIFT, true);
         }
-        UpdateScore(KF_DRIFT_SCORE_PER_SECOND * lfSimTimeStep, E_STUNT_TYPE_DRIFT, true);
+        UpdateScore(KF_STUNT_ATTACK_SCORE_PER_SECOND_DRIFTING * lfSimTimeStep, E_STUNT_TYPE_DRIFT, true);
         return true;
     }
 
@@ -357,7 +366,7 @@ namespace BrnGameState
     //   const BoostOutputInfo* lpBoost = GetBoostOutputInfoN(GetPlayerActiveRaceCarIndex());
     //   if ( lpBoost->mbWasChainJustCompleted && RegisterStunt() )
     //   {
-    //       UpdateScore(BURNOUT, lpBoost->muNumChained * KF_BURNOUT_SCORE_PER_CHAIN)
+    //       UpdateScore(BURNOUT, lpBoost->muNumChained * KF_STUNT_ATTACK_SCORE_PER_BURNOUT_CHAINED)
     //       return true;
     //   }
     //   else if ( lpBoost->mbIsInAir
@@ -365,8 +374,8 @@ namespace BrnGameState
     //             && RegisterStunt() )
     //   {
     //       if ( (muStuntTypesInProgress & (1<<E_STUNT_TYPE_BOOST)) == 0 )
-    //           UpdateScore(BOOST, KF_BOOST_SCORE_PER_SECOND * KF_STUNT_ATTACK_MIN_BOOST_TIME)
-    //       UpdateScore(BOOST, KF_BOOST_SCORE_PER_SECOND * lfSimTimeStep)
+    //           UpdateScore(BOOST, KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST * KF_STUNT_ATTACK_MIN_BOOST_TIME)
+    //       UpdateScore(BOOST, KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST * lfSimTimeStep)
     //       return true;
     //   }
     //   return false;
@@ -384,7 +393,7 @@ namespace BrnGameState
 
         if (lpBoost->mbWasChainJustCompleted && RegisterStunt())
         {
-            UpdateScore(static_cast<f32>(lpBoost->muNumChained) * KF_BURNOUT_SCORE_PER_CHAIN,
+            UpdateScore(static_cast<f32>(lpBoost->muNumChained) * KF_STUNT_ATTACK_SCORE_PER_BURNOUT_CHAINED,
                         E_STUNT_TYPE_BURNOUT, true);
             return true;
         }
@@ -395,10 +404,10 @@ namespace BrnGameState
         {
             if ((muStuntTypesInProgress & (1u << E_STUNT_TYPE_BOOST)) == 0u)
             {
-                UpdateScore(KF_BOOST_SCORE_PER_SECOND * KF_STUNT_ATTACK_MIN_BOOST_TIME,
+                UpdateScore(KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST * KF_STUNT_ATTACK_MIN_BOOST_TIME,
                             E_STUNT_TYPE_BOOST, true);
             }
-            UpdateScore(KF_BOOST_SCORE_PER_SECOND * lfSimTimeStep, E_STUNT_TYPE_BOOST, true);
+            UpdateScore(KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST * lfSimTimeStep, E_STUNT_TYPE_BOOST, true);
             return true;
         }
         else
@@ -419,7 +428,7 @@ namespace BrnGameState
     //   if ( lbReverse && GetPlayerRaceCarState()->mfMaxSpeedMPH < KF_MIN_SPEED_FOR_REVERSING_STUNT
     //        && RegisterStunt() )
     //   {
-    //       UpdateScore(REVERSE_DRIVING, KF_REVERSE_DRIVING_SCORE_PER_SECOND * lfSimTimeStep)
+    //       UpdateScore(REVERSE_DRIVING, KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_REVERSING * lfSimTimeStep)
     //       return true;
     //   }
     //   else if ( GetPlayerRaceCarState()->mfInProgressHandbreakTurnAngle >= KF_HANDBRAKE_TURN_MIN_ANGLE
@@ -428,7 +437,7 @@ namespace BrnGameState
     //       if ( (muStuntTypesInProgress & (1<<E_STUNT_TYPE_HANDBRAKE_TURN)) != 0 )
     //           UpdateScore(HANDBRAKE_TURN, 0.0f)                 // already counted -- no double award
     //       else
-    //           UpdateScore(HANDBRAKE_TURN, KF_HANDBRAKE_TURN_SCORE)
+    //           UpdateScore(HANDBRAKE_TURN, KF_STUNT_ATTACK_SCORE_PER_HANDBRAKE_TURN)
     //       return true;
     //   }
     //   return false;
@@ -451,7 +460,7 @@ namespace BrnGameState
             && lpPlayerRC->mfMaxSpeedMPH < KF_MIN_SPEED_FOR_REVERSING_STUNT
             && RegisterStunt())
         {
-            UpdateScore(KF_REVERSE_DRIVING_SCORE_PER_SECOND * lfSimTimeStep,
+            UpdateScore(KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_REVERSING * lfSimTimeStep,
                         E_STUNT_TYPE_REVERSE_DRIVING, true);
             lbResult = true;
         }
@@ -465,7 +474,7 @@ namespace BrnGameState
             }
             else
             {
-                UpdateScore(KF_HANDBRAKE_TURN_SCORE, E_STUNT_TYPE_HANDBRAKE_TURN, true);
+                UpdateScore(KF_STUNT_ATTACK_SCORE_PER_HANDBRAKE_TURN, E_STUNT_TYPE_HANDBRAKE_TURN, true);
             }
             lbResult = true;
         }

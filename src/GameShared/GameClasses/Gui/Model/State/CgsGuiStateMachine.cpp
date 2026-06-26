@@ -48,7 +48,7 @@ namespace CgsGui
         CGS_ASSERT(mpStateInterface != 0,
                    "You must set a valid state interface before calling StateMachine::SetStates");
 
-        if (liNumStates >= KI_MAX_NUM_STATES)
+        if (liNumStates > KI_MAX_NUM_STATES)
             liNumStates = KI_MAX_NUM_STATES;
 
         for (s32 li = 0; li < liNumStates; ++li)

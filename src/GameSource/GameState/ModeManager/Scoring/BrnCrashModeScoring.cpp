@@ -229,21 +229,29 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     // DealWithCrashbreakerRequest  (X360 0x82320EB8)
     // Reset the event-idle timer; then a VMX compare of the request event's float field
-    // (event+0x18, magnitude-masked) against flt_82020B30 gates a car-destruction-bonus
-    // bump: when the value is NOT greater than the threshold, ++miCarDestructionBonus.
+    // (event+0x18) against the near-zero threshold gates a car-destruction-bonus bump: the
+    // X360 magnitude-masks the field (vandc clears the sign bit) and increments
+    // miCarDestructionBonus when |value| is NOT greater than the threshold (i.e. when the
+    // value is effectively zero).
+    //
+    // The threshold flt_82020B30 is rw::math::fpu::EPSILON: the PS3 unit (0x1CFF24) loads
+    // &rw::math::fpu::EPSILON for the identical |value| compare (vcmpgefp EPSILON >= |value|
+    // == the X360's !(|value| > EPSILON)). The compared field is the event's mfTimeUntilStart
+    // (PS3 reads &lpCrashbreakerEvent->mfTimeUntilStart at the same +0x18 the X360 uses).
     //
     // FLAG: TriggerCrashBreakerEvent is forward-declared (pointer-only) here -- its float
-    // field @+0x18 cannot be named until that event type is homed; read via a flagged
-    // reinterpret (mirrors DealWithVehicleLeaping). flt_82020B30 is unexported rodata,
-    // modelled as a 0.0f placeholder threshold (FLAG). Confirm both when they land.
+    // field mfTimeUntilStart @+0x18 cannot be named until that event type is homed; read via
+    // a flagged reinterpret (mirrors DealWithVehicleLeaping). Replace with the named accessor
+    // once TriggerCrashBreakerEvent lands.
     // ------------------------------------------------------------------------
     void CrashModeScoring::DealWithCrashbreakerRequest(const TriggerCrashBreakerEvent* lpEvent)
     {
         mfTimeSinceLastEvent = 0.0f;
-        const f32 KF_CRASHBREAKER_REQUEST_THRESHOLD = 0.0f; // FLAG: flt_82020B30 value unrecovered
+        const f32 KF_CRASHBREAKER_REQUEST_EPSILON = 1.1920929e-7f; // rw::math::fpu::EPSILON (PS3 0x1CFF24)
         const f32 lfRequestValue =
-            *reinterpret_cast<const f32*>(reinterpret_cast<const u8*>(lpEvent) + 0x18); // FLAG: un-homed event field
-        if (!(lfRequestValue > KF_CRASHBREAKER_REQUEST_THRESHOLD))
+            *reinterpret_cast<const f32*>(reinterpret_cast<const u8*>(lpEvent) + 0x18); // FLAG: un-homed mfTimeUntilStart
+        const f32 lfRequestMagnitude = (lfRequestValue < 0.0f) ? -lfRequestValue : lfRequestValue; // vandc sign-mask
+        if (!(lfRequestMagnitude > KF_CRASHBREAKER_REQUEST_EPSILON))
         {
             ++miCarDestructionBonus;   // *(this+0x328)
         }

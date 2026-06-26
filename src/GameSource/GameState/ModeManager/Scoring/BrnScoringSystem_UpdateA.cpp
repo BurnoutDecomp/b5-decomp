@@ -162,10 +162,11 @@ namespace BrnGameState
     {
         // "No valid distance yet" sentinel (X360 flt_82CDB7D0). RaceCarPositioningData::Construct() /
         // ClearData seed the scratch distances with it; UpdateRacePositions seeds the same value here and
-        // tests equality against it (AI-distance-missing / already-set guard). The EXACT rodata magnitude
-        // is unrecovered -- the sibling BrnScoringSystem_Lookup.cpp adopts 1.0e9f under the same FLAG, and
-        // this TU follows that convention so the seed/equality test is consistent across the two files.
-        const f32 KF_INVALID_RACE_DISTANCE = 1.0e9f;   // FLAG: flt_82CDB7D0 magnitude unrecovered
+        // tests equality against it (AI-distance-missing / already-set guard). The magnitude is recovered
+        // from the PS3 DecFIGS ScoringSystem::ClearData (0x1E364C, same source): flt_82CDB7D0 == FLT_MAX
+        // (3.4028235e38). The X360 0x8232A4A8 stores the same flt_82CDB7D0 along this path. The sibling
+        // BrnScoringSystem_Lookup.cpp uses the identical literal so the seed/equality test is consistent.
+        const f32 KF_INVALID_RACE_DISTANCE = 3.4028235e38f;   // flt_82CDB7D0 == FLT_MAX (PS3 0x1E364C)
 
         // qsort(3) comparator trampoline. The X360 build passes the address of
         // ScoringSystem::CompareRaceCarDistances straight to qsort -- the function provably never
@@ -341,11 +342,11 @@ namespace BrnGameState
     //   +0x20 mfDistanceToNextCheckpointLive (Get/SetDistanceToNextCheckpointLive)
     //   +0x44 mbRacePositionImproved        (Get/SetRacePositionImproved)
     //
-    // KF_INVALID_RACE_DISTANCE == flt_82CDB7D0, the "no valid distance yet" sentinel that
-    // RaceCarPositioningData::Construct() / ClearData seed the scratch distances with. The EXACT rodata
-    // magnitude is unrecovered (no rodata word dump exported); the sibling reset
-    // BrnScoringSystem_Lookup.cpp adopts 1.0e9f with the same FLAG, and this file follows that
-    // convention so the equality test against the seed is consistent across the two TUs.
+    // KF_INVALID_RACE_DISTANCE == flt_82CDB7D0 == FLT_MAX (3.4028235e38, recovered from the PS3
+    // DecFIGS ScoringSystem::ClearData 0x1E364C), the "no valid distance yet" sentinel that
+    // RaceCarPositioningData::Construct() / ClearData seed the scratch distances with. The sibling
+    // reset BrnScoringSystem_Lookup.cpp uses the identical literal so the equality test against the
+    // seed is consistent across the two TUs.
     // The 1.35f checkpoint-distance fudge factor is flt_82020F7C (X360-proven).
     void ScoringSystem::UpdateRacePositions(const ActiveRaceCarOutputInterface* lpActive,
                                             const GlobalRaceCarOutputInterface* lpGlobal,

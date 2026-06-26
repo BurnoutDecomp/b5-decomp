@@ -34,10 +34,14 @@ namespace BrnResource
 namespace
 {
     // X360: &dword_82FFB25C -- the invalid/default resource-handle sentinel used to
-    // reset each ResourcePtr to "no resource". Modeled as a file-local default
-    // (zero) ResourceHandle, matching the ChallengeList sibling's skInvalidHandle.
-    // FLAG: the exact .rodata bytes of dword_82FFB25C are not recovered; an all-zero
-    // / invalid handle is the modeled value.
+    // reset each ResourcePtr to "no resource". PS3 DecFIGS resolves this sentinel:
+    // WheelList::Construct/Destruct (0x811CA4 / 0x811B9C) call
+    // BaseResourcePtr::CreateFromHandle(slot, &CgsResource::NULLResourcePtr.mHandle),
+    // i.e. the X360 dword_82FFB25C IS CgsResource::NULLResourcePtr.mHandle -- the
+    // engine's canonical null/invalid ResourceHandle (same sentinel the ChallengeList
+    // sibling uses). Modeled here as a file-local default-constructed (zero)
+    // ResourceHandle, which is that null handle's value. (CgsResource::NULLResourcePtr
+    // is not yet a defined global in this port; reference it directly once it lands.)
     const CgsResource::ResourceHandle skInvalidHandle = {};
 }
 

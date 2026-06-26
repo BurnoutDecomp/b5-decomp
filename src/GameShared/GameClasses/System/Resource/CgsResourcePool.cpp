@@ -131,11 +131,13 @@ namespace CgsResource
     // and our Pool is compiler-laid-out (named members, NOT byte-matched), so this reproduces the
     // OBSERVABLE effect by named member rather than transcribing offsets: construct the 3 heaps and
     // zero the management state, with the id/bank sentinels set to -1 (the X360's two -1 stores) and
-    // the stages at their start/idle values. The X360 also sets one field (+308) to 1 that could not
-    // be byte-mapped to a named member; it is almost certainly mbAllowDefragmentation, which InitPool
-    // overwrites from InitOptions for any real pool, so it is left at the InitPool-supplied default
-    // here (no observable difference for an un-InitPool'd pool). mResource/mDescriptor/mHashTable are
-    // built by InitPool (the X360 Construct only zeroes them, which static-init already guarantees).
+    // the stages at their start/idle values.
+    // The X360 store of 1 to +308 is RESOLVED by the PS3 DecFIGS build (same source):
+    // CgsResource::Pool::Construct sets +304 (mePrepareStage) = 0 = START and +308 (meReleaseStage)
+    // = 1 = DONE -- i.e. +308 is meReleaseStage, NOT mbAllowDefragmentation as previously guessed.
+    // Construct thus arms the pool to its "released" baseline (the matching Prepare flips
+    // releaseStage back to START); reproduced below. mResource/mDescriptor/mHashTable are built by
+    // InitPool (the X360 Construct only zeroes them, which static-init already guarantees).
     void Pool::Construct()
     {
         for (s32 li = 0; li < 3; ++li)
@@ -154,8 +156,8 @@ namespace CgsResource
         miRefCountThreshold     = 0;
         miId                    = -1;   // X360 -1 sentinel: no id until InitPool assigns one
         macName[0]              = 0;
-        mePrepareStage          = E_PREPARESTAGE_START;
-        meReleaseStage          = E_RELEASESTAGE_START;
+        mePrepareStage          = E_PREPARESTAGE_START;   // X360/PS3 +304 = 0 (START)
+        meReleaseStage          = E_RELEASESTAGE_DONE;    // X360/PS3 +308 = 1 (DONE), per PS3 Pool::Construct
         meDefragStage           = DEFRAGSTAGE_IDLE;
         miNumDependencies       = 0;
         for (s32 li = 0; li < 16; ++li)   // mapDependencies[16]

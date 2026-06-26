@@ -71,44 +71,47 @@ namespace BrnPhysics
     //   * the impulse vector  j*n             -> *lpvImpulseOut        (asm r5)
     // and asserts `lpvfInvInertiaOut != NULL` before writing it.
     //
-    // FLAG (modelled, not bit-verified): Hex-Rays dropped the argument list (rendered `()`),
-    // so the exact arg->register threading and the inverse-inertia tensor application are
-    // reconstructed from the DWARF prototype + the standard formula above rather than proven
-    // lane-for-lane. The inverse inertia used is this body's mWorldInverseInertia. The data
-    // flow, output set and assert match the asm; the precise tensor multiply is the modelled
-    // I^-1 row-combination.
+    // FLAG (modelled, not bit-verified): the X360 Hex-Rays dropped the argument list (rendered
+    // `int(...)`), so the arg->register threading was recovered from the PS3 DecFIGS DWARF
+    // prototype (PS3 0x68B130): (Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
+    // VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut). The PS3 asm
+    // shows lPointVel is the relative velocity (it subtracts the body velocity at this+0x30:
+    // `vsubfp v2,v2,v0; lvx v0,this,0x30`), lPoint is the cross-product `r`, lCollisionNormal is
+    // the surface normal `n`. The inverse inertia used is this body's mWorldInverseInertia. The
+    // data flow, output set and assert match the asm; the precise VMX tensor multiply / reciprocal
+    // refinement is the modelled I^-1 row-combination, not proven lane-for-lane.
     // ---------------------------------------------------------------------------------------
     VecFloat ExternalPhysicsBody::CalculateCollisionImpulseWithInanimateObject(
-        Vector3 lvNormal, Vector3 lvContactPointRel, Vector3 lvRelativeVelocity,
-        VecFloat lvfRestitution, Vector3* lpvImpulseOut, VecFloat* lpvfInvInertiaOut)
+        Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
+        VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut)
     {
         CGS_ASSERT(lpvfInvInertiaOut != nullptr, "lpvfInvInertiaOut != NULL");
 
         const f32 lfRestitution = lvfRestitution.x;   // broadcast VecFloat -> scalar (de-modelled lane)
 
         // Angular term: I^-1 ( r x n ), then ( I^-1(rxn) ) x r, projected onto n.
-        const Vector3 lvRxN = vpu::Cross(lvContactPointRel, lvNormal);
+        const Vector3 lvRxN = vpu::Cross(lPoint, lCollisionNormal);
         const Vector3 lvAngular = vpu::Add(
             vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lvRxN.x),
                      vpu::Mult(mWorldInverseInertia.yAxis, lvRxN.y)),
             vpu::Mult(mWorldInverseInertia.zAxis, lvRxN.z));
-        const Vector3 lvAngularAtContact = vpu::Cross(lvAngular, lvContactPointRel);
+        const Vector3 lvAngularAtContact = vpu::Cross(lvAngular, lPoint);
 
         // Effective inverse mass: 1/m + n . (angular term). m is stored as VecFloat (broadcast).
         const f32 lfInvMass = (mfMass.x != 0.0f) ? (1.0f / mfMass.x) : 0.0f;
-        const f32 lfDenominator = lfInvMass + vpu::Dot(lvNormal, lvAngularAtContact);
+        const f32 lfDenominator = lfInvMass + vpu::Dot(lCollisionNormal, lvAngularAtContact);
         const f32 lfInvDenominator = (lfDenominator != 0.0f) ? (1.0f / lfDenominator) : 0.0f;
 
         // Impulse magnitude and the impulse vector j*n.
-        const f32 lfRelativeNormalSpeed = vpu::Dot(lvRelativeVelocity, lvNormal);
+        const f32 lfRelativeNormalSpeed = vpu::Dot(lPointVel, lCollisionNormal);
         const f32 lfImpulse = -(1.0f + lfRestitution) * lfRelativeNormalSpeed * lfInvDenominator;
-        const Vector3 lvImpulse = vpu::Mult(lvNormal, lfImpulse);
+        const Vector3 lvImpulse = vpu::Mult(lCollisionNormal, lfImpulse);
 
         // Stores (asm order): inverse-effective-mass scalar, then the impulse vector out.
         VecFloat lvfInvInertia; lvfInvInertia.x = lvfInvInertia.y = lvfInvInertia.z = lvfInvInertia.w = lfInvDenominator;
         *lpvfInvInertiaOut = lvfInvInertia;
-        if (lpvImpulseOut != nullptr)
-            *lpvImpulseOut = lvImpulse;
+        if (lpImpulseOut != nullptr)
+            *lpImpulseOut = lvImpulse;
 
         VecFloat lvfResult; lvfResult.x = lvfResult.y = lvfResult.z = lvfResult.w = lfImpulse;
         return lvfResult;

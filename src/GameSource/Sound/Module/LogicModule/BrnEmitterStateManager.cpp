@@ -126,13 +126,13 @@ CgsSound::Logic::StateManager* EmitterStateManager::CreateObject( u32 /*luType*/
 // baseTypeInfo, createObject) so CreateStateMan matches descriptor->ObjectID and
 // calls ->createObject.
 //
-// FLAG (ObjectID UNRESOLVED): the per-leaf registration static-init that calls
-// StateManager::AddToClassTypeInfoArray(@0x8268DFE8) with the explicit ObjectID was
-// NOT exported (CreateObject @ 0x82701518 has no xrefs_to) and no map-state enum
-// names the id in-tree. Per the established in-tree placeholder convention (every
-// committed GetStaticTypeInfo uses 0), the ObjectID is seeded 0 here and MUST be
-// replaced with the real id at integration -- the id is this manager's slot in the
-// CreateStateManagers 0..8 sequence (@ 0x826AFEF8).
+// ObjectID RESOLVED = 7: the PS3 DecFIGS __static_initialization_and_destruction_0
+// (0x85FA1C) sets BrnSound::Logic::World::EmitterStateManager::sTypeInfo.ObjectID = 7
+// (its slot in the CreateStateManagers 0..8 sequence; the other manager ids there are
+// PlayerVehicle=1, AIVehicle=2, Traffic=3, Passby=4, Collision=5, Streaming=6,
+// Emitter=7, GlobalStateManager=0). The X360 CreateObject @ 0x82701518 has no
+// xrefs_to so the id was not directly exported from the X360, but the PS3 (same source)
+// names it explicitly; used here.
 //
 // FLAG (registry hookup deferred): the full CgsSound::Logic::StateManager view (now
 // the base via BrnStateManager.h) DOES declare AddToClassTypeInfoArray, but the
@@ -145,7 +145,7 @@ CgsSound::Logic::StateManager* EmitterStateManager::CreateObject( u32 /*luType*/
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* EmitterStateManager::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        7,                       // ObjectID (PS3 DecFIGS static-init 0x85FA1C: EmitterStateManager=7)
+        7,                       // ObjectID (PS3 DecFIGS __static_init 0x85FA1C: EmitterStateManager::sTypeInfo.ObjectID = 7)
         "EmitterStateManager",   // typeName
         0,                       // baseTypeInfo     -- StateManager base descriptor (deferred)
         &EmitterStateManager::CreateObject // createObject
@@ -161,12 +161,12 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* EmitterStateManag
 // construct it. AddToClassTypeInfoArray is the canonical StateManager registration
 // entry (@ 0x8268DFE8), reached through the BrnStateManager base.
 //
-// FLAG (ObjectID arbitrary-unique): the exact X360 ObjectID was not exported
-// (CreateObject @ 0x82701518 has no xrefs_to and no map-state enum names the id
-// in-tree). Assigned 0 here as a unique-among-the-9 placeholder; the real id is this
-// manager's slot in the CreateStateManagers 0..8 loop (@ 0x826AFEF8) -- pin at
-// integration once the slot order is resolved. This TU is OUT of the build, so the
-// registration is dormant until the conductor adds it.
+// ObjectID = 7 (RESOLVED, see GetStaticTypeInfo above): the PS3 DecFIGS __static_init
+// (0x85FA1C) sets EmitterStateManager::sTypeInfo.ObjectID = 7 and appends &sTypeInfo to
+// CgsSound::Logic::StateManager::ClassTypeInfoArray -- exactly the registration this
+// static-init reproduces (the descriptor is seeded 7 by GetStaticTypeInfo, then inserted
+// here). This TU is OUT of the build, so the registration is dormant until the conductor
+// adds it.
 // ---------------------------------------------------------------------------
 static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
     gpEmitterStateManagerReg =

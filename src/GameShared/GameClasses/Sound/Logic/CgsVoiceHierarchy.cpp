@@ -16,43 +16,49 @@
 // is handed the owning resource (whose first word is that base address) and
 // rebases the node's two stored pointers, then validates its other-send array.
 //
-// Behaviour-faithful to the X360 asm (store-for-store):
+// Behaviour-faithful to the X360 asm (store-for-store), and reconciled against the
+// PS3 DecFIGS body (._ZN8CgsSound5Logic18VoiceHierarchyNode5FixUpERKN2rw8ResourceE
+// @ PS3 0x833624), which keeps the named `const rw::Resource&` parameter the X360
+// obscured to `int*a2`:
 //
-//   delta = *(Resource*)a2;                  // lwz r10, 0(r4)  -- the base addr
-//   if (mpcDebugName != 0)                    // lwz r11,0(r31); cmplwi 0; beq
-//       mpcDebugName += delta;                // add; stw r11,0(r31)
+//   delta = *(rw::Resource*)a2;              // lwz r11, 0(r4)  -- the base addr
+//   if (mpcDebugName != 0)                    // lwz r0,0(r31); cmpdi 0; beq
+//       mpcDebugName += delta;                // add; stw r0,0(r31)
 //   if (miNumOtherSends > 0)                  // lwz r9,0x14; cmpwi; ble
-//       mpOtherSends += delta;                // add; stw r11,0x10(r31)
-//   for (i = 0; i < miNumOtherSends; ++i)     // li r29,0; loop on r29 vs *(this+0x14)
 //   {
-//       // inlined GetOtherSend(i) guards (CgsVoiceHierarchy.h:764/765):
-//       if (i >= miNumOtherSends)  CGS_ASSERT(... "Requested other send number out of range")
-//       if (mpOtherSends == 0)     CGS_ASSERT(mpOtherSends, "mpOtherSends")
+//       mpOtherSends += delta;                // add; stw r0,0x10(r31)
+//       for (i = 0; i < miNumOtherSends; ++i) // li r31,0; loop on r31 vs *(this+0x14)
+//       {
+//           // inlined GetOtherSend(i) guards (CgsVoiceHierarchy.h:764/765); both
+//           // are evaluated every pass and only FIRE on failure:
+//           if (i >= miNumOtherSends)  CGS_ASSERT(... "Requested other send number out of range\n")  // :764
+//           if (mpOtherSends == 0)     CGS_ASSERT(mpOtherSends, "mpOtherSends")                      // :765
+//       }
 //   }
 //
-// The X360 reads the loop bound (this+0x14) and the pointer (this+0x10) FRESH on
-// every iteration (lwz r11,0x14(r31) / lwz r11,0x10(r31) inside the loop), so the
-// reconstruction re-reads the members each pass rather than caching them. The two
-// assert sites are the inlined accessor's range/non-null checks at .h lines 764
-// (0x2FC) and 765 (0x2FD); FireAssert's message + file are reproduced exactly.
+// The PS3 re-reads the loop bound (this+0x14) FRESH on every iteration (lwz r9,0x14
+// inside the loop), so the reconstruction re-reads miNumOtherSends each pass. The
+// two assert sites are the inlined accessor's range/non-null checks at .h lines 764
+// (0x2FC) and 765 (0x2FD); FireAssert's message + file are reproduced exactly (PS3
+// FireAssert cites CgsVoiceHierarchy.h:764/765 with these strings).
 //
 // The stored "pointers" are byte offsets pre-relocation, so the rebase is pointer
 // arithmetic on a byte delta -- modelled BY NAME on byte-addressed members. The
 // Resource is reached only for its base-address word; it is forward-modelled with
-// a single base accessor (the X360 `*a2` first-word read) rather than pulling in
-// the full CgsResource::Resource surface (deferred to its own TU).
+// a single base accessor (the `*a2` first-word read) rather than pulling in the full
+// rw::Resource surface (deferred to its own TU).
 // ============================================================================
 
-namespace CgsResource
+namespace rw
 {
     // The owning resource. FixUp reads only its first word -- the address of the
     // deserialised blob's base, against which the node's stored byte offsets are
-    // rebased into live pointers. Forward-modelled BY NAME (the X360 `lwz r10,0(r4)`
-    // is exactly this load); the full Resource (CgsResourceType.h) is another TU.
+    // rebased into live pointers. Forward-modelled BY NAME (the PS3 `lwz r11,0(r4)`
+    // is exactly this load); the full rw::Resource is another TU.
     struct Resource
     {
-        // The blob base address. The X360 stores it as the resource's first word and
-        // FixUp loads it as `*a2`.
+        // The blob base address. Stored as the resource's first word; FixUp loads it
+        // as `*a2`.
         uintptr_t muBaseAddress;
 
         // Read the relocation base. Named replacement for the raw first-word load.
@@ -86,8 +92,9 @@ struct VoiceHierarchyNode
 {
 public:
     // CgsVoiceHierarchy.h:267. Rebase the node's stored offsets against the owning
-    // resource's base, then validate the other-send array. @ 0x826A5C78.
-    void FixUp(const CgsResource::Resource& lrResource);
+    // resource's base, then validate the other-send array. @ X360 0x826A5C78 /
+    // PS3 0x833624.
+    void FixUp(const rw::Resource& lrResource);
 
 private:
     // CgsVoiceHierarchy.h:283 (+0x00). Debug name -- a stored byte offset before
@@ -110,9 +117,9 @@ private:
     s32 miNumOtherSends;
 };
 
-void VoiceHierarchyNode::FixUp(const CgsResource::Resource& lrResource)
+void VoiceHierarchyNode::FixUp(const rw::Resource& lrResource)
 {
-    // delta = base address of the deserialised blob (the X360 `*a2`).
+    // delta = base address of the deserialised blob (the PS3 `*a2`).
     const uintptr_t luDelta = lrResource.GetBaseAddress();
 
     // Relocate the debug-name offset into a live pointer (only if present).
@@ -122,27 +129,23 @@ void VoiceHierarchyNode::FixUp(const CgsResource::Resource& lrResource)
             reinterpret_cast<uintptr_t>(mpcDebugName) + luDelta);
     }
 
-    // Relocate the other-send array offset into a live pointer (only if non-empty).
+    // Relocate the other-send array offset and validate it, only when non-empty (the
+    // PS3 guards the whole block on miNumOtherSends > 0).
     if (miNumOtherSends > 0)
     {
         mpOtherSends = reinterpret_cast<const SendDescriptor*>(
             reinterpret_cast<uintptr_t>(mpOtherSends) + luDelta);
-    }
 
-    // Validate every other-send entry. The X360 re-reads miNumOtherSends and
-    // mpOtherSends from memory on each pass (the loads sit inside the loop), so the
-    // bound and pointer are re-evaluated each iteration. The two checks are the
-    // inlined GetOtherSend(i) guards (CgsVoiceHierarchy.h:764/765).
-    for (s32 liIndex = 0; liIndex < miNumOtherSends; ++liIndex)
-    {
-        if (liIndex >= miNumOtherSends)
+        // Validate every other-send entry. The PS3 re-reads miNumOtherSends from
+        // memory on each pass (lwz r9,0x14 sits inside the loop), so the bound is
+        // re-evaluated each iteration. The two checks are the inlined GetOtherSend(i)
+        // guards (CgsVoiceHierarchy.h:764/765): the range check and the non-null
+        // check are both evaluated every pass and only fire on failure.
+        for (s32 liIndex = 0; liIndex < miNumOtherSends; ++liIndex)
         {
             CGS_ASSERT(liIndex < miNumOtherSends,
-                       "Requested other send number out of range\n");
-        }
-        if (mpOtherSends == 0)
-        {
-            CGS_ASSERT(mpOtherSends, "mpOtherSends");
+                       "Requested other send number out of range\n");   // :764
+            CGS_ASSERT(mpOtherSends, "mpOtherSends");                    // :765
         }
     }
 }

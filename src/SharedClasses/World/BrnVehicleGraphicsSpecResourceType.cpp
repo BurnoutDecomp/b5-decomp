@@ -27,22 +27,25 @@ namespace BrnVehicle
     // FixUp/FixDown rebase arithmetic touches, named u32 (load-relative pointers
     // stored as u32 offsets, rebased by += / -= delta like VehicleList::mpEntries).
     //
-    // FLAG: every member name except muVersion/miCount is INFERRED from the
-    //       rebase pattern. The true semantics of the +8/+16/+20/+24/+28/+32
-    //       pointers (materials / meshes / parts tables) are deferred.
+    // FLAG: every member name is INFERRED from the rebase pattern; the X360 has
+    //       no DWARF. The PS3 DecFIGS build (BrnVehicle::GraphicsSpecResourceType::
+    //       FixUp/FixDown, demangled) DOES carry the rebase-pointer ELEMENT TYPES,
+    //       noted per field below; they are kept as u32 load-relative offsets here
+    //       (rebased by += / -= delta) since the layout header is not committed.
     // FLAG: muField3 (+12) is NOT rebased by either function — it is an inline
-    //       value, not a load-relative pointer.
+    //       value (count), not a load-relative pointer (PS3 only loops over it).
     struct GraphicsSpec
     {
         u32 muVersion;   // +0   on-disk version == 3
         s32 miCount;     // +4   number of entries in the mpArray (+32) table
-        u32 mpField2;    // +8   rebased pointer (stored as u32 offset)
-        u32 muField3;    // +12  NOT rebased (inline value) — FLAG
-        u32 mpField4;    // +16  rebased
-        u32 mpField5;    // +20  rebased
-        u32 mpField6;    // +24  rebased
-        u32 mpField7;    // +28  rebased
-        u32 mpArray;     // +32  rebased; points to miCount rebased u32 entries
+        u32 mpField2;    // +8   rebased; PS3 type CgsGraphics::Model**
+        u32 muField3;    // +12  NOT rebased (inline count) — FLAG
+        u32 mpField4;    // +16  rebased; PS3 type BrnVehicle::ShatteredGlassPart*
+        u32 mpField5;    // +20  rebased; PS3 type rw::math::vpu::Matrix44Affine*
+        u32 mpField6;    // +24  rebased (last, via a helper rebase fn in PS3)
+        u32 mpField7;    // +28  rebased (via a helper rebase fn in PS3)
+        u32 mpArray;     // +32  rebased; PS3 type rw::math::vpu::Matrix44Affine**
+                         //      (miCount rebased entries)
     };
 
     // FLAG: value 3 taken from the X360 `*a2 != 3` version check in FixUp.
