@@ -78,6 +78,15 @@ namespace Vehicle
         void SetJustBounced(Vector3 lvBounceDirection, bool lbFirstBounce, bool lbOverMinStress,
                             EntityId lOtherEntityId);
 
+        // ----- ADDITIVE GROW (takedown-chain group): the per-vehicle crash-state latch the
+        //       VehicleManager-level SetRaceCarCrashing calls (X360 RaceCarPhysics::SetCrashing
+        //       @0x825B8A70). When crashing it snapshots the live velocity/orientation vectors into
+        //       the crash-replay slots and zeroes the crash-blend scalar (it dispatches down the
+        //       VehiclePhysics/SimpleVehiclePhysics::SetCrashing chain via vtbl+8 first). The bool is
+        //       gated on PROXIMITY TO THE PLAYER CAMERA by the caller. DECLARE-ONLY -- bodied by a
+        //       separate RaceCarPhysics crash-state TU. Signature DWARF-authoritative (int/char). -----
+        void SetCrashing(bool lbCrash);
+
     private:
         bool mbPlayerCarInShowtime;   // +0x140C (pinned BY NAME)
     };

@@ -111,6 +111,13 @@ namespace Vehicle
         // with the queried id (mi8SlammingRaceCarId == liRaceCarId AND IsBeingSlamedOrShunted()).
         bool IsBeingSlamedOrShuntedByRaceCar(s8 li8RaceCarId) const;
 
+        // ----- ADDITIVE GROW (takedown-chain group): the post-slam/shunt wheel-velocity refresh the
+        //       car-car contact handler re-runs on both cars after applying a slam/shunt impulse
+        //       (X360 VehiclePhysics::SetWheelVelocities). DECLARE-ONLY -- bodied by its own TU. The
+        //       X360 passes the slam/shunt velocity in a VMX register; the scalar shape used here is
+        //       (the velocity vector). FLAG: arg shape inferred from the call site. -----
+        void SetWheelVelocities(Vector3 lvVelocity);
+
         // ----- Vehicle-physics group (class TU): three VMX128 funcs lowered to faithful scalar
         //       (bodies in VehiclePhysics.cpp) -----
 
