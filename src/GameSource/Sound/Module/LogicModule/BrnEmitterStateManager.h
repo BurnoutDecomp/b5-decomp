@@ -2,8 +2,7 @@
 #define BRN_SOUND_LOGIC_WORLD_BRN_EMITTER_STATE_MANAGER_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Containers/CgsObjectPool.h"           // CgsContainers::ObjectPool
-#include "GameShared/GameClasses/Sound/Logic/CgsStateManagerRegisteredContent.h" // CgsSound::Logic::StateManager(::RegisteredContent)
+#include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"   // BrnSound::Logic::BrnStateManager (canonical base) -> CgsSound::Logic::StateManager + IResourceRequester
 
 // =============================================================================
 // BrnSound::Logic::World::EmitterStateManager
@@ -16,54 +15,42 @@
 // The ctor @ 0x826FE290 forwards to the base CgsSound::Logic::StateManager ctor
 // (CgsSound::Logic::StateManager::StateManager @ 0x826FAA18, homed in its own TU) and
 // then installs this class's vtables (primary @ +0, two secondary sub-object vtables
-// @ +0x90 and +0x98). The `vector deleting destructor` @ 0x826FE2E0 destructs a member
+// @ +0x90 and +0x98). The `vector deleting destructor` @ 0x826FE2E0 destructs the base
 // ObjectPool<StateManager::RegisteredContent, 4, int> at +0x30 (calling its
-// ~ObjectPool @ 0x826EAC90, homed in ObjectPool_StateManagerRegisteredContent_4.cpp)
-// and then re-installs the shared MemBase sub-object vtable (off_820AA820) before
-// routing the storage back to the sound allocator.
+// ~ObjectPool @ 0x826EAC90) and then re-installs the shared MemBase sub-object vtable
+// (off_820AA820) before routing the storage back to the sound allocator.
 //
-// MODELLING (ODR coexistence — conductor please note): this TU includes the
-// CgsStateManagerRegisteredContent.h partial view of CgsSound::Logic::StateManager
-// because it needs the nested RegisteredContent element type for the pool member. Per
-// the documented one-view-per-TU rule (see CgsStateManagerRegisteredContent.h FLAG),
-// the alternate scalar+IsStateAlias view (CgsStateManager.h) is NOT included here. The
-// base ctor's real body lives in its own done TU; this view supplies the type so the
-// derivation and the pool teardown compile by name.
+// ODR FOLD (2026-06-25): Emitter previously derived CgsSound::Logic::StateManager
+// DIRECTLY via the CgsStateManagerRegisteredContent.h partial view (which declares a
+// SECOND, RegisteredContent-only CgsSound::Logic::StateManager) and carried its OWN
+// ObjectPool<RegisteredContent,4> member + its OWN minimal ClassTypeInfo template.
+// To collapse the StateManager ODR split, Emitter is reconciled to the SAME canonical
+// base the other eight managers use: it now derives BrnSound::Logic::BrnStateManager
+// (-> the FULL CgsSound::Logic::StateManager from CgsStateManager.h, which already
+// owns the +0x30 RegisteredContent content pool, AND BrnSound::Logic::
+// IResourceRequester). Consequences of the fold:
+//   * the local ClassTypeInfo template is DELETED (the canonical
+//     CgsSound::Logic::ClassTypeInfo from CgsStateManager.h is used);
+//   * the local maContentPool member is DROPPED (the canonical base already owns the
+//     content pool -- a second pool here would have been a non-faithful duplicate);
+//   * EmitterStateManager now ALSO inherits the IResourceRequester sub-object the
+//     X360 ctor installs at +0x90/+0x98 (the third sub-object vtable @ +0x98 is still
+//     not separately modelled -- see FLAG), so it must override the two
+//     IResourceRequester pure virtuals to stay CONCRETE (its CreateObject `new`s one).
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): the X360 stores the pool at +0x30 and the
 // secondary vtables at +0x90/+0x98 behind 4-byte pointers; on a 64-bit host those
-// offsets differ, so the member is pinned BY NAME only and the 0x440 size / absolute
-// offsets are NOT static_asserted. The two secondary vtables are reproduced
-// structurally (the class declares virtuals), not hand-stored. FLAG: only the
-// base-forwarding + pool-teardown semantics are load-bearing.
+// offsets differ, so all members are pinned BY NAME only and the 0x440 size / absolute
+// offsets are NOT static_asserted. The secondary vtables are reproduced structurally
+// (the class declares virtuals / inherits the second base), not hand-stored. FLAG:
+// only the base-forwarding + pool-teardown semantics are load-bearing.
+//
+// FLAG (third sub-object vtable @ +0x98 not separately modelled): the X360 ctor
+// installs a third vtable at +0x98 beyond the primary (+0) and IResourceRequester
+// (+0x90). That extra secondary base sub-object is not identified in this slice; the
+// shell derives only BrnStateManager (primary StateManager + IResourceRequester), so
+// the +0x98 base is absent. Boot (Prepare) does not exercise it.
 // =============================================================================
-
-namespace CgsSound
-{
-namespace Logic
-{
-
-// Per-class RTTI descriptor for the StateManager family (the shape the factory
-// CreateStateMan @ 0x826A5B60 matches on: ObjectID + the createObject free-function
-// pointer). Declared minimally here -- this TU pulls the RegisteredContent partial
-// view of StateManager (CgsStateManagerRegisteredContent.h), which (unlike the full
-// CgsStateManager.h view) does NOT declare ClassTypeInfo, and the two StateManager
-// views are never co-included in one TU, so there is no ODR clash. Same shape as the
-// committed BrnState.h / BrnStateManager.h minimal descriptor.
-// FLAG: minimal -- the owning RTTI registry (StateManager::AddToClassTypeInfoArray,
-// the full view) is not reachable from this TU's view; this is the descriptor shape
-// needed to declare EmitterStateManager's RTTI hooks + factory.
-template <typename T>
-struct ClassTypeInfo
-{
-    s32               ObjectID;
-    const char*       mpcTypeName;
-    ClassTypeInfo<T>* mpBaseTypeInfo;
-    T* (*mpfnCreateObject)(u32);
-};
-
-} // namespace Logic
-} // namespace CgsSound
 
 namespace BrnSound
 {
@@ -72,16 +59,18 @@ namespace Logic
 namespace World
 {
 
-// Sound-logic state manager specialised for world emitters. Owns a small fixed pool
-// of registered content slots.
-class EmitterStateManager : public CgsSound::Logic::StateManager
+// Sound-logic state manager specialised for world emitters. Derives the canonical
+// BrnStateManager (CgsSound::Logic::StateManager primary base -- which owns the
+// RegisteredContent content pool -- + BrnSound::Logic::IResourceRequester sub-object),
+// the same base the eight sibling managers use.
+class EmitterStateManager : public BrnSound::Logic::BrnStateManager
 {
 public:
-    // EmitterStateManager @ 0x826FE290 — forwards to the base StateManager ctor and
+    // EmitterStateManager @ 0x826FE290 — forwards to the base ctor chain and
     // installs this class's vtables (host-synthesised).
     EmitterStateManager();
 
-    // The X360 `vector deleting destructor' @ 0x826FE2E0 destructs the member content
+    // The X360 `vector deleting destructor' @ 0x826FE2E0 destructs the base content
     // pool and re-installs the MemBase sub-object vtable before freeing. Virtual so
     // the teardown is reached through the vtable exactly as the X360 dispatches it.
     virtual ~EmitterStateManager();
@@ -89,7 +78,7 @@ public:
     // ---- RTTI hooks + factory (grown so EmitterStateManager is a registrable leaf the
     // StateManager factory CreateStateMan @ 0x826A5B60 can construct). STATIC
     // GetStaticTypeInfo / CreateObject so &CreateObject is storable in
-    // ClassTypeInfo<StateManager>::mpfnCreateObject (the X360 CreateObject @ 0x82701518
+    // ClassTypeInfo<StateManager>::createObject (the X360 CreateObject @ 0x82701518
     // never touches an instance -- its int arg is the operator-new flavour selector,
     // not `this`). ----
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const;
@@ -98,17 +87,14 @@ public:
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );                   // @ 0x82701518
 
     // @ 0x826F5AC0 (vtable +0x0C). The per-manager boot bring-up state machine.
-    // NOTE: in this TU's RegisteredContent view the base StateManager declares NO
-    // virtuals, so this is EmitterStateManager's first explicit virtual (it does NOT
-    // align with the engine StateManager vtable slot +0x0C in this gated view -- the
-    // committed home is intentionally not layout-faithful, see the header LAYOUT NOTE).
-    // The conductor wires Prepare through the real vtable at integration.
     virtual bool Prepare();
 
-private:
-    // +0x30: the registered-content pool destructed by ~EmitterStateManager (its
-    // ~ObjectPool @ 0x826EAC90 runs the per-slot RegisteredContent reference drop).
-    CgsContainers::ObjectPool<CgsSound::Logic::StateManager::RegisteredContent, 4, int> maContentPool;
+    // ---- IResourceRequester overrides (pure in IResourceRequester; BrnStateManager
+    // declares but does not body them, so the concrete leaf must override+body them to
+    // be a CONCRETE (constructible) type -- required because CreateObject `new`s an
+    // EmitterStateManager). ----
+    virtual void                            ResourcesAreReady();    // @ 0x826867C8 (stub -- world/Content cascade)
+    virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar(); // (stub -- module not homed)
 };
 
 } // namespace World
