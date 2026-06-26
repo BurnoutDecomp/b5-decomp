@@ -205,7 +205,10 @@ namespace CgsFileSystem
             {
                 int liResult = 0, liC = 0;
                 lpDevice->OpenEx(lOp.macPath, lOp.muSize, static_cast<u32>(lOp.miHandle), &liC, &liResult);
-                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liResult, lOp.mpContext);
+                // FLAG: ARTIST 0x828F1EA8 case 5 reports OpenEx's FIRST out-param (r7=&liC,
+                // sign-extended: `extsw r5, lwz var_1E8`) as the callback result, NOT the
+                // second out-param. (Was passing liResult, which is the wrong out value.)
+                if (lOp.mpfCallback) lOp.mpfCallback(lpDevice, lOp.miHandle, liC, lOp.mpContext);
                 break;
             }
             case E_OP_SEEK:

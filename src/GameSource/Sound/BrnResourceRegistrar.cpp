@@ -123,6 +123,12 @@ namespace Logic
         miPad12C = 0;
         mState   = 5;
 
+        // FLAG (fix): the X360 ctor zeroes +0x140 (`stb r26,0x140(r28)`, r26=0) -- the
+        // mbResourceStillRequested flag UpdateRequests later reads. Previously omitted, leaving
+        // the flag uninitialised. ARTIST 0x82695768 confirms the zero-init. (Byte store on X360;
+        // zeroing the whole field is the faithful intent.)
+        mbResourceStillRequested = 0;
+
         // mResourceClass (+0x134) <- src miId12C (+0x12C); mpRequester (+0x138) = 0
         mResourceClass = lrSource.miId12C;
         mpRequester = 0;
@@ -362,8 +368,13 @@ namespace Logic
 
                     if (lpQueued->mData.mbResourceStillRequested) // data +0x140
                     {
-                        // Retire the requested node once it has no live refs.
-                        if (lpRequested->mData.GetNumberOfReferences() == 0)
+                        // FLAG (fix): the X360 guard is `FindFirstInstanceOf(lpRequested) == -1`
+                        //   (queue for removal only if NOT already a candidate), NOT a refcount
+                        //   check. ARTIST 0x826B0560 (`if (ResourceR(a1+12160,&v25) == -1)` with
+                        //   v25 = the requested node v8) then AddNodeToRemoveResourceCandidateList.
+                        //   The refcount==0 guard is enforced inside AddNode itself; the caller's
+                        //   guard is the not-contained test. Previously used GetNumberOfReferences()==0.
+                        if (mapRemovalCandidates.FindFirstInstanceOf(lpRequested) == -1)
                         {
                             AddNodeToRemoveResourceCandidateList(lpRequested);
                         }

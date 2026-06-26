@@ -76,7 +76,11 @@ namespace CgsResource
         usize     luSize = (2 * *reinterpret_cast<const u32*>(lSrc + 16)
                             + *reinterpret_cast<const u32*>(lSrc + 12)) - lSrc;
 
-        CgsSceneManager::ZoneList::FixDown(lpRes, 0);
+        // FLAG (ARTIST 0x828D1E08): the serialise-out FixDown rebases the SOURCE by its
+        // own address (delta == src), NOT by 0. ARTIST asm calls ZoneList::FixDown(r3=src,
+        // r4=src) -- r4 is never reloaded after entry so it still holds lpResource; DecFIGS
+        // confirms `ZoneList::FixDown(v5, v5)`. (Was erroneously passing 0.)
+        CgsSceneManager::ZoneList::FixDown(lpRes, static_cast<int>(lSrc));
         std::memcpy(lpDst, lpResource, luSize);
         CgsSceneManager::ZoneList::FixUp(lpDst, reinterpret_cast<int>(lpDst));
         CgsSceneManager::ZoneList::FixUp(lpRes, static_cast<int>(lSrc));

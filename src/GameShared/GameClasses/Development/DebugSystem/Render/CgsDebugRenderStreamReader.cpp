@@ -24,14 +24,18 @@ namespace CgsDev
         rw::ResourceDescriptor lResultDesc;
         lResultDesc.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(liResultBufferSize);
         lResultDesc.m_baseResourceDescriptors[0].m_alignment = 128;
-        rw::Resource lResultRes = lpAllocator->DoAllocate(lResultDesc, "DebugRenderStreamResults");
+        // FLAG: ARTIST 0x82820D40 passes r6=0 (NULL name) to DoAllocate, not a label string.
+        // The earlier "DebugRenderStreamResults" literal was fabricated; the X360 passes NULL.
+        rw::Resource lResultRes = lpAllocator->DoAllocate(lResultDesc, NULL);
         void* lpResultBuffer = lResultRes.m_baseResources[0];
 
         // Variable-size data buffer: liDataBufferSize bytes, 128-aligned.
         rw::ResourceDescriptor lDataDesc;
         lDataDesc.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(liDataBufferSize);
         lDataDesc.m_baseResourceDescriptors[0].m_alignment = 128;
-        rw::Resource lDataRes = lpAllocator->DoAllocate(lDataDesc, "DebugRenderStreamData");
+        // FLAG: ARTIST 0x82820D94 passes r6=0 (NULL name) to DoAllocate; "DebugRenderStreamData"
+        // was a fabricated label. The X360 passes NULL.
+        rw::Resource lDataRes = lpAllocator->DoAllocate(lDataDesc, NULL);
         void* lpDataBuffer = lDataRes.m_baseResources[0];
 
         CGS_ASSERT(lpResultBuffer != NULL && lpDataBuffer != NULL, "Failed to allocate buffers\n");

@@ -96,8 +96,13 @@ namespace CgsDev
     }
 
     // X360 0x828222C8. Component path followed by a leaf (a register group), inserting a single '/'
-    // separator unless the leaf already starts with one (the path produced by GetComponentPath never
-    // ends in a separator, so the X360's end-of-string scan always reaches that conclusion).
+    // separator unless the leaf already starts with one.
+    // FLAG: faithful to the ARTIST asm (0x82822328 lbzx r11, r10, r31 with r10 == strlen). The X360
+    // scans to one-past-the-null (while (*v8++)) then reads *(v8-1) -- which addresses lpcBuffer[len],
+    // i.e. the NUL terminator, NOT the last real char. So the "does the path already end in a
+    // separator?" guard always sees 0 (never '\\'/'/'') and the separator is effectively always
+    // appended. Previously we read lpcBuffer[len-1] (the last real char), which silently skipped the
+    // separator when the path ended in one (e.g. an empty GetName() -> "path/"). Match the target.
     void DebugComponent::MakeFullPath(char* lpcBuffer, s32 liBufferLen, const char* lpcLeaf)
     {
         GetComponentPath(lpcBuffer, liBufferLen);
@@ -110,7 +115,7 @@ namespace CgsDev
                 while (lpcBuffer[liLength])
                     ++liLength;
 
-                const char lcLast = (liLength > 0) ? lpcBuffer[liLength - 1] : '\0';
+                const char lcLast = lpcBuffer[liLength];   // X360: lpcBuffer[strlen] == the NUL byte
                 if (lcLast != '\\' && lcLast != '/')
                     GetUI().SafeStringCat(lpcBuffer, "/", liBufferLen);
             }

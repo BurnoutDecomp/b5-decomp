@@ -11,9 +11,12 @@
 // FixDown and GetImportPointer are "not at runtime" stubs (the X360 unconditionally
 // fires its assert). DebugValidate walks the serialised renderable by raw offset — the
 // renderable is an external rw serialised format with no named struct here, so members
-// are reached via reinterpret_cast<const u32*>(luData + offset). Field roles are
-// inferred from the asm: +72 mesh count, +80 mesh-pointer-array base, mesh+32 material
-// assembly, assembly+8 non-empty flag/count, assembly[0] first material pointer.
+// are reached via reinterpret_cast<const u16/u32*>(luData + offset). Field roles are
+// inferred from the asm: +18 mesh count (lhz, 16-bit), +20 mesh-pointer-array base (lwz),
+// mesh+32 material assembly, assembly+8 non-empty flag (lbz, byte), assembly[0] first
+// material pointer. NB: offsets are RAW BYTES — the Hex-Rays pseudocode renders them as
+// *(a2+18)/*(a2+20) in int* arithmetic (=72/80 bytes), but the ARTIST asm is lhz 0x12 /
+// lwz 0x14 = byte 18 / byte 20. Trust the asm.
 
 namespace CgsResource
 {
@@ -44,11 +47,13 @@ namespace CgsResource
     {
         const uintptr_t luData = reinterpret_cast<uintptr_t>(lpResource);
 
-        const u32 luNumMeshes = *reinterpret_cast<const u32*>(luData + 72);  // *(a2+18)
+        // FLAG: ARTIST `lhz r11,0x12(r29)` — byte offset 18, 16-bit zero-extended count.
+        const u32 luNumMeshes = *reinterpret_cast<const u16*>(luData + 18);  // lhz 0x12(a2)
         if (luNumMeshes == 0)
             return true;                                                     // LABEL_7: result = 1
 
-        const u32 luMeshArray = *reinterpret_cast<const u32*>(luData + 80);  // *(a2+20) — mesh-ptr array base
+        // FLAG: ARTIST `lwz r11,0x14(r29)` — byte offset 20, mesh-ptr array base.
+        const u32 luMeshArray = *reinterpret_cast<const u32*>(luData + 20);  // lwz 0x14(a2)
 
         for (u32 luI = 0; luI < luNumMeshes; ++luI)                          // v2 < *(a2+18); v3 += 4
         {
@@ -58,7 +63,8 @@ namespace CgsResource
             const u32 luAssembly = *reinterpret_cast<const u32*>(static_cast<uintptr_t>(luMesh) + 32);            // *(mesh+32) = v4
             if (luAssembly)
             {
-                if (*reinterpret_cast<const u32*>(static_cast<uintptr_t>(luAssembly) + 8) == 0)  // if (!*(v4+8))
+                // FLAG: ARTIST `lbz r11,8(r31)` — byte load at assembly+8 (not a word).
+                if (*reinterpret_cast<const u8*>(static_cast<uintptr_t>(luAssembly) + 8) == 0)  // lbz 8(v4)
                 {
                     CGS_ASSERT(false, "Mesh material assembly is empty");                 // line 1273
                     return false;                                                         // result = 0

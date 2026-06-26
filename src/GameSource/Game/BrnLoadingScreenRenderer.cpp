@@ -202,7 +202,11 @@ namespace BrnGame
         mbRenderInBackground = false;
         mfArrowRotation = 0.0f;
         mfArrowTranslation = 0.0f;
-        mfArrowDirection = 0.0f;
+        // FLAG: ARTIST 0x823CE208 stores 1.0 (flt_82001C98) to mfArrowDirection (this+0x28);
+        // mfFade is this+0x2C per the Render disasm at 0x823E7CE4. DecFIGS confirms
+        // *(this+48)=1.0. Direction is the +/-1 sign of the arrow-translation bounce; 0.0f
+        // would freeze the bounce. (Was 0.0f.)
+        mfArrowDirection = 1.0f;
         mfFade = 0.0f;
         mfBlackOverlayFade = 0.0f;
         mfTimeStep = 0.0f;

@@ -320,10 +320,12 @@ namespace BrnGame
 
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_TotalUpdate);
 
-        PerfMonCpu::StartMonitor(mCpuMonitors.miUT_RenderAll);
+        // FLAG: ARTIST 0x823CB498 brackets DebugManager::Update with the monitor at
+        // mCpuMonitors+0x48 (=miUT_DebugManager), not +0x4C (miUT_RenderAll). Fixed.
+        PerfMonCpu::StartMonitor(mCpuMonitors.miUT_DebugManager);
         mDebugManager.Update(mfDebugUpdateDeltaSeconds * mfDebugUpdateTimeScale);
         UpdateRequestDoStepFrame();
-        PerfMonCpu::StopMonitor(mCpuMonitors.miUT_RenderAll);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miUT_DebugManager);
 
         PerfMonCpu::StartMonitor(mCpuMonitors.miUT_TotalUpdate);
         PerfMonCpu::SetNumIterationsTaken(miNumSimFramesRequired);
@@ -333,10 +335,12 @@ namespace BrnGame
             s32 liStep = 0;
             do
             {
-                PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
+                // FLAG: ARTIST 0x823CB498 brackets Create/DestroyStaticIOBuffers with the
+                // monitor at mCpuMonitors+0x10 (=miUT_Network), not +0x14 (miUT_GameState). Fixed.
+                PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Network);
                 CreateStaticIOBuffers();
                 mFrameRateManager.miPrevNumSimulationStepsRequired = liStep + 1;
-                PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
+                PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Network);
 
                 PerfMonCpu::StartMonitor(mCpuMonitors.miUT_EachUpdate);
                 BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
@@ -352,9 +356,9 @@ namespace BrnGame
 
                 if (liStep != miNumSimFramesRequired - 1)
                 {
-                    PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
+                    PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Network);
                     DestroyStaticIOBuffers();
-                    PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
+                    PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Network);
                 }
 
                 ++liStep;
@@ -364,7 +368,9 @@ namespace BrnGame
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_TotalUpdate);
         sbSimUpdateComplete = 1;
 
-        PerfMonCpu::StartMonitor(mCpuMonitors.miUT_FrustumTesting);
+        // FLAG: ARTIST 0x823CB498 brackets the per-frame Render with the monitor at
+        // mCpuMonitors+0x4C (=miUT_RenderAll), not +0x50 (miUT_FrustumTesting). Fixed.
+        PerfMonCpu::StartMonitor(mCpuMonitors.miUT_RenderAll);
         {
             BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
             if (leState != BrnGameMainFlowController::E_MGS_INVALID)
@@ -380,7 +386,7 @@ namespace BrnGame
         mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::ViewIO::InputBuffer>(&mpGuiViewInputBuffer);
         mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::InputBuffer>(&mpGuiInputBuffer);
 
-        PerfMonCpu::StopMonitor(mCpuMonitors.miUT_FrustumTesting);
+        PerfMonCpu::StopMonitor(mCpuMonitors.miUT_RenderAll);
         return false;
     }
 

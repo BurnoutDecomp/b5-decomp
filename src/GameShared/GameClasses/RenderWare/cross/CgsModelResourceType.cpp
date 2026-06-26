@@ -52,14 +52,17 @@ namespace CgsResource
 
     uint32_t ModelResourceType::GetImportCount(const void* lpResource) const
     {
-        return *reinterpret_cast<const u16*>(reinterpret_cast<uintptr_t>(lpResource) + 16);
+        // FLAG: ARTIST 0x828A7D48 `lbz r3,0x10(r4)` (and DecFIGS 0xC44A00 `lbz`) -- the
+        // import count at +16 is a BYTE field (u8), not u16. Was incorrectly read as u16.
+        return *reinterpret_cast<const u8*>(reinterpret_cast<uintptr_t>(lpResource) + 16);
     }
 
     void ModelResourceType::GetImportPointer(const void* lpResource, uint32_t luIndex,
                                              uint32_t* lpuOffset, const void** lppValue) const
     {
         uintptr_t lBase = reinterpret_cast<uintptr_t>(lpResource);
-        u32 luCount = *reinterpret_cast<const u16*>(lBase + 16);
+        // FLAG: ARTIST 0x828A7D08 `lbz r11,0x10(r4)` -- count at +16 is a BYTE (u8), not u16.
+        u32 luCount = *reinterpret_cast<const u8*>(lBase + 16);
 
         if (luIndex >= luCount)
         {
@@ -78,8 +81,10 @@ namespace CgsResource
     {
         uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
 
-        u32 luField18   = *reinterpret_cast<const u16*>(lRes + 18);
-        u32 luField16x4 = RotL2(*reinterpret_cast<const u16*>(lRes + 16));
+        // FLAG: ARTIST 0x828A9418 `lbz r9,0x12(r5)` / `lbz r8,0x10(r5)` (DecFIGS 0xC4705C
+        // same) -- fields at +16 and +18 are BYTE fields (u8), not u16. Were read as u16.
+        u32 luField18   = *reinterpret_cast<const u8*>(lRes + 18);
+        u32 luField16x4 = RotL2(*reinterpret_cast<const u8*>(lRes + 16));
 
         // First entry: total rounded size (alignment 4); the remaining four empty.
         ResourceDescriptor lDescriptor;

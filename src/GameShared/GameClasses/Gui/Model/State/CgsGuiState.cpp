@@ -27,9 +27,11 @@ namespace CgsGui
     {
         mId = liId;     // CgsFsm::ScriptedState protected members
         mpFsm = lpFsm;
-        mpInGuiEventQueue = 0;
-        mpStateInterface = 0;
-        mbStateChangePending = false;
+        mpInGuiEventQueue = 0;       // ARTIST 0x82848508: stw 0,0x18
+        mpStateInterface = 0;        // stw 0,0x1C
+        mbIsSaveLoadState = false;   // stb 0,0x31  (FLAG: was missing -- ARTIST zeroes both bools here)
+        mbIsVideoState = false;      // stb 0,0x32
+        mbStateChangePending = false;// stb 0,0x20
     }
 
     void State::PreWorldUpdate() {}

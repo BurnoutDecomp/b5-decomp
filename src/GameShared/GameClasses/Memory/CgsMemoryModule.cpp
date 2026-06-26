@@ -184,9 +184,24 @@ namespace CgsMemory
             {
                 if (luBlockCount == 0 || luSize % luBlockCount != 0)
                     return 7;   // bank size is not a multiple of the block count
-                CGS_ASSERT(lrParent.GetBlockSize(lt) != 0, "Parent has no free blocks of this type");
+                // FLAG: ARTIST 0x8286C038 returns 4 when the parent has no blocks of this type
+                // (asm @0x8286C5xx: assert "Parent has no free blocks of type" then result=4; goto exit).
+                // Previously this only asserted and fell through to a divide-by-zero on luParentGranule.
+                if (lrParent.GetBlockSize(lt) == 0)
+                {
+                    CGS_ASSERT(false, "Parent has no free blocks of this type");
+                    return 4;
+                }
                 const u32 luNewBlockSize  = luSize / luBlockCount;                          // bytes per new block
                 const u32 luParentGranule = static_cast<u32>(lrParent.GetBlockSize(lt)) << 10;
+                // FLAG: ARTIST 0x8286C038 returns 7 when the bank size is not a multiple of the parent
+                // block granule (asm: assert "Bank size for resource X is not multiple of parent block
+                // size" then result=7; goto exit). Was previously a silent truncating divide.
+                if (luSize % luParentGranule != 0)
+                {
+                    CGS_ASSERT(false, "Bank size is not a multiple of parent block size");
+                    return 7;
+                }
                 lRequest.mau16Counts[lt]  = static_cast<u16>(luSize / luParentGranule);     // parent blocks needed
                 lRequest.mau16Sizes[lt]   = static_cast<u16>(luNewBlockSize >> 10);         // new block size (1KB units)
             }
