@@ -17,9 +17,11 @@
 // ones the CheckForAllTypesOfImpacts X360 asm reads (a2+92/+96/+80/+81).
 
 #include "types.hpp"
+#include <cstddef>                                                // offsetof (layout asserts)
 #include "BrnCommonTypes.h"                                       // Vector3, VecFloat, EntityId, Matrix44Affine
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h" // EImpactType, EImpactSituation
+#include "GameSource/GameState/BrnTakedownType.h"                 // BrnGameState::ETakedownType
 
 // Pointer-only collaborators in RaceCarResponseInfo -- forward-declared in their real namespaces
 // (homed by their own TUs; the classifier never dereferences them here).
@@ -94,6 +96,106 @@ namespace Vehicle
         bool CheckForShuntAndNudge(RaceCarResponseInfo* lpInfo);
         bool CheckForSlamAndTradingPaint(RaceCarResponseInfo* lpInfo);
         bool CheckForStationaryTargetTakedown(RaceCarResponseInfo* lpInfo);
+
+        // --- the takedown COMMIT routine the classifiers call once a takedown is decided ---
+        // (DWARF h:1257; X360 @0x82636108). Decodes the victim/aggressor EntityIds to active-car
+        // indices, crashes the victim via SetRaceCarCrashing (unless it is already in the fatal
+        // crash state), then stamps the per-car last-attacker / taken-down bookkeeping. lfNormalStressSq
+        // is consumed by the classifier but NOT forwarded to SetRaceCarCrashing.
+        void InstantTakedown(EntityId lVictimEntityId,
+                             EntityId lAggressorEntityId,
+                             Vector3 lCollisionNormal,
+                             Vector3 lContactPoint,
+                             f32 lfNormalStressSq,
+                             BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                             VehicleManagerOutputInterface* lpManagerOutputInterface,
+                             BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+                             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                             BrnGameState::ETakedownType leTakedownType);
+
+        // --- declare-only: the crash commit itself (DWARF h:1218; its body is a separate 9-param
+        // TU, X360 @0x82634C90). InstantTakedown forwards the victim/aggressor ids, the collision
+        // normal + contact point, the four output/deformation interfaces, and the takedown type. ---
+        void SetRaceCarCrashing(EntityId lVictimEntityId,
+                                EntityId lAggressorEntityId,
+                                Vector3 lCollisionNormal,
+                                Vector3 lContactPoint,
+                                BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+                                BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                                BrnGameState::ETakedownType leTakedownType);
+
+    private:
+        // ------------------------------------------------------------------------------------------
+        // Deep VehicleManager data members InstantTakedown touches, recovered by LAYOUT RECOVERY
+        // WITH PADDING from the X360 asm offsets (offsets are asm-authoritative; member NAMES marked
+        // "FLAG" are proposed by role -- only mePlayerActiveRaceCarIndex is DWARF-attested). The full
+        // VehicleManager is ~172 KB across many parallel per-car arrays; only the members this commit
+        // routine reads/writes are modelled here. Everything else is opaque padding so each named
+        // member lands at its proven byte offset (pinned by the offsetof asserts in _AssertLayout).
+        // CheckForAllTypesOfImpacts (above) reads none of these -- it only touches its argument -- so
+        // adding them does not disturb that body.
+        // ------------------------------------------------------------------------------------------
+
+        // Per-car STATUS record array @ class offset 0. Stride 224 (asm: 224*idx + 124). Only the
+        // "taken down this frame" byte at in-record +124 is named; the rest is opaque.
+        // FLAG: record/field names proposed; the 224-byte stride and +124 field offset are asm-proven.
+        struct RaceCarStatusRecord
+        {
+            unsigned char mPad0000[124];
+            unsigned char mbTakenDown;        // +124 (asm stores literal 1)
+            unsigned char mPad007D[224 - 125];
+        };
+
+        // Per-car VEHICLE/physics record array @ class offset 1856. Stride 5216 -- this is the
+        // BrnPhysics::Vehicle::RaceCarPhysics[8] array the DWARF attests at this slot
+        // (sizeof(RaceCarPhysics) ~= 5216). Modelled as an opaque 5216-byte blob because the full
+        // RaceCarPhysics layout is not reconstructed here; only the recovery/grace-timer float at
+        // in-record +5120 (asm: 5216*idx + 6976, and 6976-1856 == 5120) is named.
+        // FLAG: the stand-in record type + the mfRecoveryTimer field name are proposed; the 5216
+        // stride and the +5120 field offset are asm-proven (the same array IsRaceCarCrashing reads).
+        struct RaceCarVehicleRecord
+        {
+            unsigned char mPad0000[5120];
+            f32           mfRecoveryTimer;     // +5120 (asm stores 0.0f when the victim is the player)
+            unsigned char mPad1404[5216 - 5124];
+        };
+
+        RaceCarStatusRecord  maRaceCarStatus[8];     // +0       (224 * 8 = 1792)
+        unsigned char        mPad0700[1856 - sizeof(RaceCarStatusRecord) * 8];
+        RaceCarVehicleRecord maRaceCarVehicles[8];   // +1856    (5216 * 8 = 41728; ends at 43584)
+
+        unsigned char        mPadAA40[44192 - 43584];
+        // Per-car crash-state array @ +44192. Stride 4 (asm: 4*(idx+11048) == 4*idx+44192). The asm
+        // compares this != 2 to decide whether the victim still needs crashing (sentinel 2 == the
+        // fatal/active-crash state). FLAG: no recovered enum home for the crash-state values -- left
+        // as a plain s32 here and compared against the literal 2 in the body (see KI_RACECAR_CRASH_STATE_FATAL).
+        s32                  maRaceCarCrashState[8];  // +44192   (4 * 8 = 32; ends at 44224)
+
+        unsigned char        mPadACE0[171464 - 44224];
+        // Master "takedowns enabled" gate @ +171464 (asm: a non-zero byte gates the whole routine).
+        // FLAG: name proposed; offset asm-proven.
+        bool                 mbTakedownsEnabled;      // +171464
+
+        unsigned char        mPad29DA9[171540 - (171464 + 1)];
+        // The attacker value stamped into maRaceCarLastAttacker[victim] @ +171540 (asm copies
+        // *(this+171540) into the per-victim last-attacker slot). FLAG: name proposed; offset asm-proven.
+        s32                  miAttackerToRecord;      // +171540
+
+        unsigned char        mPad29DF8[171684 - (171540 + 4)];
+        // Per-car LAST-ATTACKER array @ +171684. Stride 4 (asm: 4*(victim+42921) == 4*victim+171684);
+        // written from miAttackerToRecord. FLAG: name proposed; offset asm-proven.
+        s32                  maRaceCarLastAttacker[8]; // +171684 (4 * 8 = 32; ends at 171716)
+
+        unsigned char        mPad29E84[172204 - (171684 + 32)];
+        // The local player's active-race-car slot @ +172204. DWARF-attested name (BrnVehicleManager.h:559).
+        EActiveRaceCarIndex  mePlayerActiveRaceCarIndex; // +172204
+
+        // Pin every recovered offset. Never called -- exists only so offsetof can see the private
+        // members (offsetof on a private member needs member-function context). The gate FAILS if any
+        // padding run is wrong, which is the intended signal.
+        static void _AssertLayout();
     };
 }
 }
