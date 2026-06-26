@@ -29,6 +29,14 @@
 
 namespace CgsFileSystem
 {
+    // A file handle as returned by an async Open and passed back to Read/Write/Close (X360: a plain
+    // 32-bit handle; see CgsDeviceOperation::miHandle).
+    typedef s32 Handle;
+
+    // Completion callback the async device ops invoke when an operation finishes: the result code,
+    // the file handle, the byte count, and the producer's context pointer (the issuing AsyncOp).
+    typedef void (*AsyncCompletionCallback)(s32 liResult, Handle lHandle, u64 luSize, void* lpContext);
+
     struct DeviceManager
     {
         // ---- static integral constants (DWARF CgsDeviceManager.h:50-54) ----
@@ -81,6 +89,17 @@ namespace CgsFileSystem
         // close, blocking on each). Returns the buffer (and its size via *lpuOutSize), or null
         // on failure. This is the bundle loader's replacement for the synchronous CRT leaf.
         void* ReadWholeFile(const char* lpcPath, u32* lpuOutSize);
+
+        // ---- async file operations (the AsyncOp producer API) ----
+        // Queue an async open/read/write/close onto the target device's OperationPool; the device's
+        // worker thread runs it and then invokes lpfCallback(result, handle, size, lpContext).
+        // Recovered from the X360 AsyncOp call sites (Open 0x828F2300 / Read 0x828F23D8 /
+        // Close 0x828F24C0). Declared-only here; the op-dispatch bodies land with the DeviceManager
+        // reconstruction.
+        void Open(const char* lpcFileName, u32 luFlags, AsyncCompletionCallback lpfCallback, void* lpContext, s32 liPriority);
+        void Read(Handle lHandle, u64 luPosition, void* lpBuffer, u32 luBufferSize, AsyncCompletionCallback lpfCallback, void* lpContext, s32 liPriority);
+        void Write(Handle lHandle, u64 luPosition, const void* lpBuffer, u32 luBufferSize, AsyncCompletionCallback lpfCallback, void* lpContext, s32 liPriority);
+        void Close(Handle lHandle, AsyncCompletionCallback lpfCallback, void* lpContext, s32 liPriority);
 
         // The per-physical-device worker thread (step 2). Drains mOperations and dispatches
         // each op to the slot's device. lpSlotContext is the PhysicalDeviceSlot*.

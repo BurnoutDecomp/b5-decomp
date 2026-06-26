@@ -62,6 +62,12 @@ namespace BrnNetwork
             return &mServerInterface;
         }
 
+        // The embedded NetworkServers sub-object (X360: the debug component reaches it as
+        // *(this+271820), i.e. an inlined accessor on the full manager). Declared-only here; the
+        // minimal manager slice does not yet materialise the storage (body lands with the full
+        // BrnNetworkManager TU).
+        NetworkServers* GetNetworkServers();
+
     private:
         CgsNetwork::VersionDisplay mVersionDisplay;
         CgsNetwork::NetworkAdapter mNetworkAdapter;

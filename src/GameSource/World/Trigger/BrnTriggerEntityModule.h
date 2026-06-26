@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include <eathread/eathread_rwmutex.h>
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<512> (mUsedTriggerList)
+#include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerTypes.h" // BrnWorld::Trigger
 
 namespace BrnWorld
 {
@@ -14,6 +16,14 @@ class TriggerEntityModule
 {
 public:
     TriggerEntityModule();
+
+    // Recovered accessors used by the debug component's RenderWorld (X360 inlined these as direct
+    // offset reads: the trigger array @ this+560 stride 128, the used-trigger bit set @ this+66096).
+    // Declared-only here -- the opaque working-set slice above does not yet materialise the storage,
+    // so the bodies land with the full module reconstruction; this avoids re-forking the padding
+    // layout just to name two members.
+    Trigger& GetTrigger(s32 liIndex);
+    const CgsContainers::BitArray<512>& GetUsedTriggerList() const;
 
 private:
     EA::Thread::RWMutex mReadWriteMutexA; // guest index 4
