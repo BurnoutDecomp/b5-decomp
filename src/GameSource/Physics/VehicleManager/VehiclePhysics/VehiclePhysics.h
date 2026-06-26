@@ -111,6 +111,32 @@ namespace Vehicle
         // with the queried id (mi8SlammingRaceCarId == liRaceCarId AND IsBeingSlamedOrShunted()).
         bool IsBeingSlamedOrShuntedByRaceCar(s8 li8RaceCarId) const;
 
+        // ----- Vehicle-physics group (class TU): three VMX128 funcs lowered to faithful scalar
+        //       (bodies in VehiclePhysics.cpp) -----
+
+        // @0x825C0100: a "ground distance" check used by UpdateInAirStats. Normally 0.5; but when
+        // the car is inverted (the vehicle up axis points down, mUpAxis.y < 0 -- the asm splats the
+        // up-axis .y lane and tests `0 > up.y` via vcmpgtfp.) it returns
+        // `mfCarGroundCheckExtent * KF_CAR_GROUND_DISTANCE_INVERTED_SCALE + 0.5`, accounting for the
+        // car's own vertical extent when it is upside down. Spelled f64 to match the X360 ABI (the
+        // value comes back in f1 as a double; the source return type is float32_t).
+        f64 GetCarGroundDistanceCheck() const;
+
+        // @0x825B2EF8: the transform delta from the previous frame to the current frame, expressed
+        // in the previous frame's local space:
+        //   result = InverseOfMatrixWithOrthonormal3x3(mPreviousTransform) * mTransform
+        // The X360 builds the inverse of mPreviousTransform inline (vmrglw/vmrghw transpose of the
+        // orthonormal 3x3 + the negated-position FMA cascade) and matrix-multiplies it by the
+        // current mTransform, storing the four affine rows into the return buffer.
+        Matrix44Affine GetTransformDelta() const;
+
+        // @0x825C0000: recompute the cached normalized linear velocity + speed. Reads the world-space
+        // linear velocity (mLinearVelocity, base +0x50), normalizes it (vmsum3fp128 |v|^2 +
+        // vrsqrtefp/Newton-refined reciprocal magnitude), and stores the unit direction in the xyz
+        // lanes and the speed magnitude in the "plus" (w) lane of mNormLinearVelocityMag. A zero-speed
+        // input leaves the direction zeroed (the asm's vsel/vcmpeqfp-against-zero guard).
+        void UpdateLinearVelocityMagnitude();
+
         // ----- Vehicle-physics group: two header-homed methods (bodies inline below) -----
 
         // @0x827E24E8: returns the showtime deformation scale. On X360 this is a leaf returning a
@@ -184,6 +210,37 @@ namespace Vehicle
         // IsBeingSlamedOrShuntedByRaceCar to filter (asm: `lbz r11,0x13E0(r3) ; extsb` then compared
         // sign-extended against the queried id). Pinned BY NAME.
         s8         mi8SlammingRaceCarId;
+
+        // ----- Vehicle-physics group (class TU): members read/written by the three VMX128 funcs
+        //       (GetCarGroundDistanceCheck / GetTransformDelta / UpdateLinearVelocityMagnitude) -----
+
+        // The physics-body world transform, owned by the ExternallySimulatedBody base @+0x10
+        // (Matrix44Affine, 64 bytes). GetTransformDelta reads this as the "current" matrix
+        // (asm: `addi r10,r4,0x10 ; lvx128` of the four rows). Pinned BY NAME (the vptr +
+        // ExternallySimulatedBody/ExternalPhysicsBody preamble that precedes it is not reproduced
+        // as padding; the full base is a separate TU).
+        Matrix44Affine mTransform;
+
+        // The world-space linear velocity, owned by the ExternallySimulatedBody base @+0x50.
+        // UpdateLinearVelocityMagnitude reads this (`addi r9,r3,0x50 ; lvx128`) and normalizes it.
+        // Pinned BY NAME.
+        Vector3        mLinearVelocity;
+
+        // @+0x6A4: the car's vertical extent used by GetCarGroundDistanceCheck when the car is
+        // inverted (read as a scalar float: `lfs f13,0x6A4(r3)`). Pinned BY NAME (the intervening
+        // attribs/spring/state block is not reproduced as padding). FLAG: the multiplier the asm
+        // applies to it (flt_82001D9C) is un-homed .rdata -- see the body's KF_* constant.
+        f32        mfCarGroundCheckExtent;
+
+        // @+0x1340: cached normalized linear velocity (xyz lanes) + speed magnitude (w/"plus" lane),
+        // written by UpdateLinearVelocityMagnitude (`addi r10,r3,0x1340 ; stvx128`) and read by
+        // GetLinearVelocityDirection / GetLinearVelocityMagnitude. Pinned BY NAME.
+        Vector3Plus mNormLinearVelocityMag;
+
+        // @+0x1370: the previous-frame physics transform, the "from" matrix of GetTransformDelta
+        // (asm: `addi r11,r4,0x1370 ; lvx128` of the four rows, whose orthonormal 3x3 is inverted
+        // inline). Pinned BY NAME.
+        Matrix44Affine mPreviousTransform;
     };
 }
 }

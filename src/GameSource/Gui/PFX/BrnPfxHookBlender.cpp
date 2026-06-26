@@ -130,6 +130,24 @@ TintData2dBlend* TintData2dBlend::Add(const BrnEffects::TintData2d* lpSrc, f32 l
     return this;
 }
 
+// ---- BlurBlend::Construct @ 0x824F6AD0 -----------------------------------
+// Seeds a fresh accumulator. The X360 body stores, store-for-store:
+//   mfOpacity@0x00, mfVelocity@0x04, mfSharpness@0x08, mfNoise@0x0C,
+//   mfAngle@0x10  -- the five BlurData scalar defaults (kfDefOpacity..kfDefAngle);
+//   mv2BlendAmount@0x20, mv2BlurAmount@0x30, mv2BlendCentre@0x40,
+//   mv2BlurCentre@0x50 -- the four 16-byte Vector2 defaults (kv2DefBlendAmount
+//   .. kv2DefBlurCentre); and finally 0.0f to mfWeight@0x60 and mfCount@0x64.
+// The 0..0x50 store set is exactly BrnEffects::BlurData::Construct's; delegate
+// to it so the payload defaults stay homed in one place, then zero the two
+// trailing bookkeeping fields. Returns this (the X360 body returns its result).
+BlurBlend* BlurBlend::Construct()
+{
+    mData.Construct();   // 5 scalar defaults @0..0x10 + 4 Vector2 defaults @0x20..0x50
+    mfWeight = 0.0f;     // +0x60
+    mfCount  = 0.0f;     // +0x64
+    return this;
+}
+
 // ---- BlurBlend::Add @ 0x824F6B70 -----------------------------------------
 // Blend path delegates to BrnEffects::BlurData::SetToBlend(dst, dst, lfWeight,
 // src, 1-lfWeight) [arg order matches the X360 call: result, _R4=dst, a3=lfWeight,

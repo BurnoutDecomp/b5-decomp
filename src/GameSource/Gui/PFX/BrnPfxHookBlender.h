@@ -85,6 +85,13 @@ namespace BrnGui
         f32                  mfWeight; // +0x60
         f32                  mfCount;  // +0x64
 
+        // Construct @ 0x824F6AD0 -- seed the payload with the BlurData defaults
+        // (the same 5 scalar @0..0x10 + 4 Vector2 @0x20/0x30/0x40/0x50 store set
+        // BrnEffects::BlurData::Construct writes) then zero the two bookkeeping
+        // fields mfWeight@0x60 / mfCount@0x64 (both 0.0f). Returns this (the X360
+        // body returns its result pointer).
+        BlurBlend* Construct();
+
         BlurBlend* Add(const BrnEffects::BlurData* lpSrc, f32 lfWeight);
     };
 }
