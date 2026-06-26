@@ -129,7 +129,7 @@ CgsSound::Logic::StateManager* StreamingStateManager::CreateObject( u32 /*luType
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* StreamingStateManager::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        4,                          // ObjectID         -- FLAG: arbitrary-unique (slot 4)
+        6,                          // ObjectID (PS3 DecFIGS static-init 0x85FA1C: StreamingStateManager=6)
         "StreamingStateManager",    // typeName
         0,                          // baseTypeInfo     -- StateManager base descriptor (deferred)
         &StreamingStateManager::CreateObject // createObject

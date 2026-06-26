@@ -145,7 +145,7 @@ CgsSound::Logic::StateManager* GlobalStateManager::CreateObject( u32 /*luType*/ 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GlobalStateManager::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        6,                          // ObjectID         -- FLAG: arbitrary-unique (slot 6)
+        0,                          // ObjectID (PS3 DecFIGS static-init 0x85FA1C: GlobalStateManager=0)
         "GlobalStateManager",       // typeName
         0,                          // baseTypeInfo     -- StateManager base descriptor (deferred)
         &GlobalStateManager::CreateObject // createObject

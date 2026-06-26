@@ -145,7 +145,7 @@ CgsSound::Logic::StateManager* EmitterStateManager::CreateObject( u32 /*luType*/
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* EmitterStateManager::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        0,                       // ObjectID         -- FLAG: arbitrary-unique (slot 0)
+        7,                       // ObjectID (PS3 DecFIGS static-init 0x85FA1C: EmitterStateManager=7)
         "EmitterStateManager",   // typeName
         0,                       // baseTypeInfo     -- StateManager base descriptor (deferred)
         &EmitterStateManager::CreateObject // createObject
