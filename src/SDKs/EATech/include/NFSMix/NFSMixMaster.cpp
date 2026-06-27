@@ -1,4 +1,5 @@
 #include "SDKs/EATech/include/NFSMix/NFSMixMaster.hpp"
+#include "SDKs/EATech/include/NFSMix/NFSMixMap.hpp" // complete type for the dtor's delete
 
 // ===========================================================================
 //  NFSMixMaster -- ctor/dtor bodies, store-for-store from BURNOUT_X360_ARTIST.XEX.
@@ -39,12 +40,8 @@ NFSMixMaster::NFSMixMaster()
 //   off_83250008 = 0;                          (clear the singleton)
 //   if (m_pMainMixMap) { (*vt[0])(m_pMainMixMap, 1); m_pMainMixMap = 0; }
 //     -- the X360 calls the main map's scalar-deleting destructor (vtable slot 0,
-//        deleting-flag = 1).
-// FLAG: the virtual destruction of m_pMainMixMap is deferred -- NFSMixMap is only
-// forward-declared in this slice (it is the 564-byte processor homed in a follow-on),
-// so `delete`/the virtual-dtor call cannot be expressed on the incomplete type yet.
-// The faithful effect (singleton cleared, pointer nulled) is reproduced; the map
-// teardown is wired in when NFSMixMap lands.
+//        deleting-flag = 1), i.e. `delete m_pMainMixMap`. NFSMixMap is now homed (with
+//        a virtual dtor), so the faithful virtual delete is expressed directly.
 // ---------------------------------------------------------------------------
 NFSMixMaster::~NFSMixMaster()
 {
@@ -52,7 +49,7 @@ NFSMixMaster::~NFSMixMaster()
 
     if (m_pMainMixMap)
     {
-        // (*m_pMainMixMap->vtable[0])(m_pMainMixMap, /*deleting=*/1);  // pending NFSMixMap
+        delete m_pMainMixMap;   // (*vt[0])(m_pMainMixMap, /*deleting=*/1)
         m_pMainMixMap = 0;
     }
 }
