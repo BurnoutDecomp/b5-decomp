@@ -40,4 +40,11 @@ namespace NFSMixShape
     };
     // Evaluate curve `liId` at position liPos [0,0x7FFF]; lbDb -> dB hundredths else Q15. @0x82B45160
     int   GetCurveOutput(int liId, int liPos, char lbDb);
+
+    // Pitch multiplier -> cents (inverse of GetPitchMultFromCents). @0x82B455B8
+    int   GetCentsFromPitchMult(float lfMult);
+    // GetCurveOutput with a [0,1] float position and return. @0x82B456E0
+    float GetFloatCurveOutput(int liId, float lfPos01);
+    // Blend two curve(liId) evaluations at lpPos[0]/lpPos[1] by liWeight. @0x82B45550
+    int   GetAzimShapeOutput(int liId, int liId2, int* lpPos, int liWeight);
 }
