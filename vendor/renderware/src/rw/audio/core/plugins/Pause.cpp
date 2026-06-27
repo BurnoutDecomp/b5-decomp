@@ -54,9 +54,9 @@ char **Pause::GetPlugInDescRunTime()
 // -------------------------------------------------------------------------------------
 // CreateInstance @0x82BA36B8 -- placement-init a Pause over `self`.
 //   if (self) self->mpVTable = off_8217F4C4;
-//   self->mpAttribute(+0x0C) = &self->mfPauseAmount(+0x28);
-//   self->mfPauseAmount = 0.0;  self->mfOne = 1.0;
-//   self->mState = 2;           self->mbActive = 0;
+//   self->mpAttribute(+0x0C) = &self->mAttribute[0](+0x28);
+//   self->mAttribute[0].mfValue = 0.0;  self->mGain = 1.0;
+//   self->mPauseState = 2;      self->mDiscontinuity = 0;
 //   return 1;
 // -------------------------------------------------------------------------------------
 int Pause::CreateInstance(Pause *self)
@@ -64,13 +64,13 @@ int Pause::CreateInstance(Pause *self)
     if (self)
         self->mpVTable = KPP_PauseVTable; // off_8217F4C4
 
-    // *(self+0x0C) = self+0x28 : point the base attribute-table slot at mfPauseAmount.
-    *reinterpret_cast<f32 **>(&self->mBase04[0x0C - 0x04]) = &self->mfPauseAmount;
+    // *(self+0x0C) = self+0x28 : point the base attribute-table slot at mAttribute[0].
+    *reinterpret_cast<f32 **>(&self->mBase04[0x0C - 0x04]) = &self->mAttribute[0].mfValue;
 
-    self->mfPauseAmount = KF_ZERO; // flt_82001CC0 @ +0x28
-    self->mState = 2;              // li r8,2; stb @ +0x37
-    self->mfOne = KF_ONE;          // flt_82001C98 @ +0x30
-    self->mbActive = 0;            // li r9,0; stb @ +0x38
+    self->mAttribute[0].mfValue = KF_ZERO; // flt_82001CC0 @ +0x28
+    self->mPauseState = 2;        // li r8,2; stb @ +0x37
+    self->mGain = KF_ONE;         // flt_82001C98 @ +0x30
+    self->mDiscontinuity = 0;     // li r9,0; stb @ +0x38
     return 1;
 }
 
@@ -87,32 +87,32 @@ int Pause::CreateInstance(Pause *self)
 // -------------------------------------------------------------------------------------
 int Pause::PreProcess(Pause *self, int /*a2*/, char force, int length)
 {
-    self->miLength = static_cast<s16>(length); // sth r6 @ +0x34
+    self->mOutputSamplesRequested = static_cast<u16>(length); // sth r6 @ +0x34
 
-    // if (force != 0) OR (mbActive != 0): latch the ramp state from the pause amount.
-    if ((force & 0xFF) != 0 || self->mbActive != 0)
+    // if (force != 0) OR (mDiscontinuity != 0): latch the ramp state from the pause amount.
+    if ((force & 0xFF) != 0 || self->mDiscontinuity != 0)
     {
-        self->mbActive = 1; // stb r10(1) @ +0x38
-        f32 amount = self->mfPauseAmount;
+        self->mDiscontinuity = 1; // stb r10(1) @ +0x38
+        f32 amount = self->mAttribute[0].mfValue;
         if (amount == KF_ONE) // fcmpu f0,f13(1.0)
         {
-            self->muOutLength = 0; // li r10,0; stb @ +0x36
-            self->mState = 0;      // stb r10(0) @ +0x37
+            self->mSamplesRemainingUntilStateChange = 0; // li r10,0; stb @ +0x36
+            self->mPauseState = 0;                        // stb r10(0) @ +0x37
         }
         else if (amount == KF_ZERO) // fcmpu f0,f12(0.0)
         {
-            self->muOutLength = 0; // li r9,0; stb @ +0x36
-            self->mState = 2;      // li r10,2; stb @ +0x37
+            self->mSamplesRemainingUntilStateChange = 0; // li r9,0; stb @ +0x36
+            self->mPauseState = 2;                        // li r10,2; stb @ +0x37
         }
     }
 
-    f32 amount = self->mfPauseAmount;
-    u8 state = self->mState;
+    f32 amount = self->mAttribute[0].mfValue;
+    u8 state = self->mPauseState;
 
     if (amount == KF_ZERO) // fully gated path
     {
         if (state == 0 || state == 1)
-            self->muOutLength = 0x40; // stb @ +0x36
+            self->mSamplesRemainingUntilStateChange = 0x40; // stb @ +0x36
         return length;                // mr r3,r6
     }
 
@@ -122,12 +122,12 @@ int Pause::PreProcess(Pause *self, int /*a2*/, char force, int length)
     if (state >= 4)
         return 0;       // muted: nothing
     if (state != 1)     // states 2..3: (re)arm the ramp length
-        self->muOutLength = 0x40;
+        self->mSamplesRemainingUntilStateChange = 0x40;
 
-    int out = self->muOutLength;
+    int out = self->mSamplesRemainingUntilStateChange;
     if (out > length)   // clamp to the requested length
         out = length;
-    self->miLength = static_cast<s16>(out); // sth r10 @ +0x34
+    self->mOutputSamplesRequested = static_cast<u16>(out); // sth r10 @ +0x34
     return out;                              // mr r3,r10
 }
 

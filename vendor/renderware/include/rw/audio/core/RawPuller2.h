@@ -85,15 +85,22 @@ public:
     static int PreProcess(int self, int a2, int a3, int a4);
     static int Process(int self, int a2);
 
-    void*            mpVTable;      // +0x00
-    System*          mpSystem;      // +0x04
+    // FLAG (rwaudio PDB reconcile): NFS ProStreet 08 X360 PDB confirms this exact layout
+    // (sizeof=56, field order matches). Member names below are the authoritative PDB names;
+    // the X360 ARTIST "+0xNN" offset comments are retained. The PlugIn base body (+0x08..0x23)
+    // is left opaque here -- PlugIn is reconciled in its own header. Note: the PDB declares the
+    // callback as `bool(*)(int, float*, float, void*)`; the typedef arg ORDER below
+    // (frames, dst, context, arg) is kept ASM-correct per the bctrl reg setup, so the .cpp call
+    // order is unchanged.
+    void*            mpVTable;          // +0x00
+    System*          mpSystem;          // +0x04
     char             mGap08[0x24 - 0x08]; // +0x08 .. +0x23 -- opaque PlugIn base body
-    RawPuller2FillFn mpCallback;    // +0x24
-    void*            mpContext;     // +0x28
-    f32              mfRate;        // +0x2C
-    u32              muFrameCount;  // +0x30
-    char             mbRestart;     // +0x34
-    char             mbNumChannels; // +0x35
+    RawPuller2FillFn mpPullCallback;    // +0x24 (PDB: mpPullCallback)
+    void*            mpContext;         // +0x28 (PDB: mpContext)
+    f32              mPlaySampleRate;   // +0x2C (PDB: mPlaySampleRate)
+    int              mSamplesRequested; // +0x30 (PDB: mSamplesRequested, int)
+    char             mFormatChanged;    // +0x34 (PDB: mFormatChanged)
+    char             mPlayNumChannels;  // +0x35 (PDB: mPlayNumChannels)
     char             mPad36[0x38 - 0x36]; // +0x36 .. +0x37 -- tail pad (sizeof == 0x38)
 };
 

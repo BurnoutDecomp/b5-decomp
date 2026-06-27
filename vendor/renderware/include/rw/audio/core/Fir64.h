@@ -46,18 +46,23 @@ public:
     enum { KI_NUM_TAPS = 64 };
 
     // ---- the 8-byte work-buffer header at +0x00 of a Fir64 instance ----
+    // FLAG (rwaudio PDB reconcile): names from the NFS ProStreet 08 X360 PDB
+    // (class rw::audio::core::Fir64 [sizeof = 8]); layout/order/offsets/types all match
+    // the ARTIST reconstruction. The "numTaps/numPhases" semantics in the asm map onto the
+    // PDB's filter-order/channels naming (mFilterOrder == numTaps, mChannels == numPhases,
+    // mHistoryBytesPerChannel == 4*numTaps, mInHistoryOffset == scratch-buffer offset).
     // CreateInstance writes:
-    //   +0x00  muBufferOffset = (alignedBuffer - self)   (relative byte offset)
-    //   +0x02  mu4xNumTaps    = 4 * numTaps              (one phase row's byte stride)
-    //   +0x04  muNumTaps      = numTaps
-    //   +0x06  mbNumPhases    = numPhases
-    // followed (at the 8-aligned offset recorded in muBufferOffset) by a scratch buffer of
+    //   +0x00  mInHistoryOffset        = (alignedBuffer - self)   (relative byte offset)
+    //   +0x02  mHistoryBytesPerChannel = 4 * numTaps              (one phase row's byte stride)
+    //   +0x04  mFilterOrder            = numTaps
+    //   +0x06  mChannels               = numPhases
+    // followed (at the 8-aligned offset recorded in mInHistoryOffset) by a scratch buffer of
     // (numPhases * numTaps) f32, zeroed by CreateInstance and re-zeroed by ClearBuffer.
-    u16 muBufferOffset; // +0x00 -- relative byte offset to the 8-aligned scratch buffer
-    u16 mu4xNumTaps;    // +0x02 -- 4 * numTaps (per-phase byte stride)
-    u16 muNumTaps;      // +0x04 -- tap count (== 64 for every shape)
-    u8  mbNumPhases;    // +0x06 -- phase count (the per-phase loop bound)
-    u8  mbPad07;        // +0x07 -- header padding to the 8-aligned buffer
+    u16 mInHistoryOffset;        // +0x00 -- relative byte offset to the 8-aligned scratch buffer
+    u16 mHistoryBytesPerChannel; // +0x02 -- 4 * numTaps (per-phase byte stride)
+    u16 mFilterOrder;            // +0x04 -- tap count (== 64 for every shape)
+    u8  mChannels;               // +0x06 -- phase count (the per-phase loop bound)
+    u8  mbPad07;                 // +0x07 -- header padding (PDB: 1 byte trailing padding)
 
     // -------------------------------------------------------------------------------------
     // Zero the (numPhases * numTaps) f32 scratch buffer. No standalone X360 export exists

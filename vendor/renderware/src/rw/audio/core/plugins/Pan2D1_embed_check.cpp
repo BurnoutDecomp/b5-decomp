@@ -12,7 +12,7 @@ void Pan2D1EmbedCheck()
 
     Pan2D1::Speaker spk = { 0.0f, 0.0f };
     spk.Set(0.5);
-    (void)spk.mfGainA;
-    (void)spk.mfGainB;
+    (void)spk.x; // FLAG (rwaudio PDB reconcile): mfGainA -> x
+    (void)spk.y; // FLAG (rwaudio PDB reconcile): mfGainB -> y
 }
 } // namespace

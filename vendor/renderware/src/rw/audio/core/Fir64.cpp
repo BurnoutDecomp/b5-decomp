@@ -79,11 +79,11 @@ Fir64 *Fir64::CreateInstance(int /*unused*/, int numPhases, int numTaps, Fir64 *
     char *buffer = reinterpret_cast<char *>(
         (reinterpret_cast<uintptr_t>(base) + 15u) & ~static_cast<uintptr_t>(7u));
 
-    self->muBufferOffset = static_cast<u16>(buffer - base);   // sth r,0(self)
+    self->mInHistoryOffset = static_cast<u16>(buffer - base);   // sth r,0(self)
     XMemSet(buffer, 0, 4u * numPhases * numTaps);             // zero numPhases*numTaps f32
-    self->muNumTaps   = static_cast<u16>(numTaps);            // sth r,4(self)
-    self->mbNumPhases = static_cast<u8>(numPhases);           // stb r,6(self)
-    self->mu4xNumTaps = static_cast<u16>(4 * numTaps);        // sth r,2(self)
+    self->mFilterOrder   = static_cast<u16>(numTaps);            // sth r,4(self)
+    self->mChannels = static_cast<u8>(numPhases);           // stb r,6(self)
+    self->mHistoryBytesPerChannel = static_cast<u16>(4 * numTaps);        // sth r,2(self)
     return self;
 }
 
@@ -94,8 +94,8 @@ Fir64 *Fir64::CreateInstance(int /*unused*/, int numPhases, int numTaps, Fir64 *
 // -------------------------------------------------------------------------------------
 void *Fir64::ClearBuffer(Fir64 *self)
 {
-    char *buffer = reinterpret_cast<char *>(self) + self->muBufferOffset;
-    XMemSet(buffer, 0, static_cast<u32>(self->mbNumPhases) * self->mu4xNumTaps);
+    char *buffer = reinterpret_cast<char *>(self) + self->mInHistoryOffset;
+    XMemSet(buffer, 0, static_cast<u32>(self->mChannels) * self->mHistoryBytesPerChannel);
     return buffer;
 }
 
@@ -140,7 +140,7 @@ void *Fir64::HammingWindow(void * /*unused*/, f32 *coeffs, int numTaps)
 //
 // Register mapping (IDA drops the trailing count): r3=self, r4=pOut, r5=pSamples (the a3
 // row), r6=pCoeffs (the a4 row), r7=count. The kernel derives, once:
-//   numTaps   = self->muNumTaps                          (lhz r11,4(r3))
+//   numTaps   = self->mFilterOrder                          (lhz r11,4(r3))
 //   pA3Window = pSamples - 39 floats   (a3 row window;   addi r9,r5,-0x9C; +1/output)
 //   pA4Group1 = pCoeffs  + 1 float     (a4 group-1 base; addi r3,r6,4)
 //   pA4Group2 = pCoeffs  + (numTaps-39) floats (a4 group-2 base; add r6,4*(numTaps-39),r6)
@@ -153,7 +153,7 @@ Fir64 *Fir64::MultiplyAccumulate(Fir64 *self, f32 *pOut, const f32 *pSamples,
     if (count <= 0)
         return reinterpret_cast<Fir64 *>(const_cast<f32 *>(pCoeffs) + 1); // r3 = pCoeffs+4
 
-    const int numTaps = self->muNumTaps; // lhz r11,4(r3)
+    const int numTaps = self->mFilterOrder; // lhz r11,4(r3)
 
     // The two operand rows (asm: r3=pOut/a2, r5=pA3, r6=pA4). Group-1 walks the a3 row
     // forward by 3 and the a4 row back by 3; group-2 walks both rows back by 8. The
@@ -223,7 +223,7 @@ Fir64 *Fir64::MultiplyAccumulate(Fir64 *self, f32 *pOut, const f32 *pSamples,
 //
 // Per-phase sample pointer into a channel node = node.base + 4*node.stride*phase (bytes,
 // i.e. base + stride*phase in f32). The scratch row stride is 4*numTaps bytes
-// (self->mu4xNumTaps == ROL(self->muNumTaps,2)).
+// (self->mHistoryBytesPerChannel == ROL(self->mFilterOrder,2)).
 // -------------------------------------------------------------------------------------
 Fir64 *Fir64::Filter(Fir64 *self, void *ctx, const f32 *coeffs)
 {
@@ -234,12 +234,12 @@ Fir64 *Fir64::Filter(Fir64 *self, void *ctx, const f32 *coeffs)
     ChannelNode *const dstNode = *dstSlot; // v14 (r29)
 
     f32 *const scratch = reinterpret_cast<f32 *>(
-        reinterpret_cast<char *>(self) + self->muBufferOffset); // v12 = self + *self
+        reinterpret_cast<char *>(self) + self->mInHistoryOffset); // v12 = self + *self
 
-    const u32 rowBytes  = self->mu4xNumTaps; // self[1] -- XMemCpy byte count per phase row
-    const int rowFloats = self->muNumTaps;   // ROL(self[2],2)/4 -- scratch advance per phase
-    const int numPhases = self->mbNumPhases; // self[6]
-    const int numTaps   = self->muNumTaps;   // self[4]
+    const u32 rowBytes  = self->mHistoryBytesPerChannel; // self[1] -- XMemCpy byte count per phase row
+    const int rowFloats = self->mFilterOrder;   // ROL(self[2],2)/4 -- scratch advance per phase
+    const int numPhases = self->mChannels; // self[6]
+    const int numTaps   = self->mFilterOrder;   // self[4]
 
     Fir64 *result = self;
 

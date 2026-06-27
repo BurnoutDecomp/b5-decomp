@@ -21,6 +21,23 @@ namespace audio
 namespace core
 {
 
+// FLAG (rwaudio PDB reconcile -- diverge): the NFS ProStreet 08 rwaudiocore PDB models
+// this differently. PDB ground truth (kept as-is, NOT applied, to preserve the ARTIST
+// layout + .cpp shape):
+//   class rw::audio::core::Iir2 [sizeof=16]  -- an INSTANCE class (no separate State
+//     struct); it directly holds the 4-float history split into TWO nested History
+//     members rather than one flat struct:
+//       +0x00 Iir2::History mInHistory  { float delay1; float delay2; }   (== mfX1, mfX2)
+//       +0x08 Iir2::History mOutHistory { float delay1; float delay2; }   (== mfY1, mfY2)
+//     struct Iir2::History [sizeof=8] { +0x00 float delay1; +0x04 float delay2; }
+//   The coefficient block below is PDB struct Iir2::FilterCoefficients [sizeof=20]
+//     { +0x00 a1; +0x04 a2; +0x08 b0; +0x0c b1; +0x10 b2; } -- field offsets MATCH this
+//     header's Iir2Coeffs exactly; only the names (a1/a2/b0/b1/b2) and the nested-vs-
+//     top-level shape differ.
+// Field OFFSETS all align; the divergence is structural (dataless class + flat top-level
+// state struct here vs. instance class + two nested History members in the PDB), so per
+// the reconcile rules the ARTIST modeling is preserved and no names/types are changed.
+//
 // Persistent filter state, direct-form-I history (4 floats, read at +0/+4/+8/+0xC):
 //   mfX1, mfX2 = input  history x[-1], x[-2]
 //   mfY1, mfY2 = output history y[-1], y[-2]

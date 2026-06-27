@@ -58,13 +58,13 @@ Butterworth *Butterworth::CreateInstance(int order, Butterworth *self)
     // semantics on the 64-bit gate host without truncating.)
     char *bufA = reinterpret_cast<char *>(
         (reinterpret_cast<uintptr_t>(base) + 55u) & ~static_cast<uintptr_t>(7u));
-    self->muOffsetA = static_cast<u16>(bufA - base);
-    self->mCount = order & 0xFF;   // asm clrlwi r11,r11,24 masks to the low 8 bits before stw
+    self->mInputHistoryOffset = static_cast<u16>(bufA - base);
+    self->mChannels = order & 0xFF;   // asm clrlwi r11,r11,24 masks to the low 8 bits before stw
 
     // Buffer B: 8-aligned address >= bufA + rowsBytes + 7.
     char *bufB = reinterpret_cast<char *>(
         (reinterpret_cast<uintptr_t>(bufA) + rowsBytes + 7u) & ~static_cast<uintptr_t>(7u));
-    self->muOffsetB = static_cast<u16>(bufB - base);
+    self->mOutputHistoryOffset = static_cast<u16>(bufB - base);
 
     XMemSet(bufA, 0, rowsBytes);
     XMemSet(bufB, 0, rowsBytes);
@@ -79,10 +79,10 @@ Butterworth *Butterworth::CreateInstance(int order, Butterworth *self)
 void Butterworth::ClearBuffer()
 {
     char *base = reinterpret_cast<char *>(this);
-    char *bufA = base + muOffsetA;
-    char *bufB = base + muOffsetB;
-    XMemSet(bufA, 0, 20u * mCount);
-    XMemSet(bufB, 0, 20u * mCount);
+    char *bufA = base + mInputHistoryOffset;
+    char *bufB = base + mOutputHistoryOffset;
+    XMemSet(bufA, 0, 20u * mChannels);
+    XMemSet(bufB, 0, 20u * mChannels);
 }
 
 // -------------------------------------------------------------------------------------
@@ -94,8 +94,8 @@ void Butterworth::ClearBuffer()
 //
 // Per output sample (the difference equation, fmadds/fsubs, +1e-18 denormal-flush bias
 // flt_8214B108, store-for-store):
-//   ff = mfB1*x1 + mfB0*x0 + mfB2*x2 + mfB3*x3 + mfB4*x4
-//   fb = mfA2*y1 + mfA1*y0h + mfA3*y2 + mfA4*y3
+//   ff = b[1]*x1 + b[0]*x0 + b[2]*x2 + b[3]*x3 + b[4]*x4
+//   fb = a[2]*y1 + a[1]*y0h + a[3]*y2 + a[4]*y3
 //   y  = ff - fb + 1e-18
 // with the input/output delay lines rotated each sample exactly as the asm shifts the
 // fp registers.
@@ -110,15 +110,15 @@ void Butterworth::Filter(AudioProcessContext *ctx)
     AudioChannelBuffer *dst = *dstSlot;               // r6 / channel descriptor (output)
 
     char *base = reinterpret_cast<char *>(this);
-    f32 *bufA = reinterpret_cast<f32 *>(base + muOffsetA); // input-history rows
-    f32 *bufB = reinterpret_cast<f32 *>(base + muOffsetB); // output-history rows
+    f32 *bufA = reinterpret_cast<f32 *>(base + mInputHistoryOffset); // input-history rows
+    f32 *bufB = reinterpret_cast<f32 *>(base + mOutputHistoryOffset); // output-history rows
 
-    if (mCount > 0)
+    if (mChannels > 0)
     {
         f32 *rowA = bufA; // per-channel input-history row (5 f32), advances +5 per channel
         f32 *rowB = bufB; // per-channel output-history row (5 f32), advances +5 per channel
 
-        for (s32 ch = 0; ch < mCount; ++ch)
+        for (s32 ch = 0; ch < static_cast<s32>(mChannels); ++ch)
         {
             // Input delay line x[n-1..n-4] (asm f12,f13,f0,f6 after the first shift);
             // the asm preloads rowA[0..3] which become x[n-1..n-4] once the first sample
@@ -146,18 +146,18 @@ void Butterworth::Filter(AudioProcessContext *ctx)
 
                 // Feedback A1*y[n-1] + A2*y[n-2] + A3*y[n-3] + A4*y[n-4]
                 // (asm accumulates A2*f9, then A1*f8, A3*f10, A4*f7).
-                f32 fb = mfA2 * y2;
-                fb = mfA1 * y1 + fb;
-                fb = mfA3 * y3 + fb;
-                fb = mfA4 * y4 + fb;
+                f32 fb = mCoefficients.a[2] * y2;
+                fb = mCoefficients.a[1] * y1 + fb;
+                fb = mCoefficients.a[3] * y3 + fb;
+                fb = mCoefficients.a[4] * y4 + fb;
 
                 // Feedforward B0*x[n] + B1*x[n-1] + B2*x[n-2] + B3*x[n-3] + B4*x[n-4]
                 // (asm: B1*f12, +B0*f11, +B2*f13, +B3*f0, +B4*f6).
-                f32 ff = mfB1 * x1;
-                ff = mfB0 * x0 + ff;
-                ff = mfB2 * x2 + ff;
-                ff = mfB3 * x3 + ff;
-                ff = mfB4 * x4 + ff;
+                f32 ff = mCoefficients.b[1] * x1;
+                ff = mCoefficients.b[0] * x0 + ff;
+                ff = mCoefficients.b[2] * x2 + ff;
+                ff = mCoefficients.b[3] * x3 + ff;
+                ff = mCoefficients.b[4] * x4 + ff;
 
                 const f32 y0 = (ff - fb) + KF_DENORMAL_FLUSH;
                 out[i] = y0;
