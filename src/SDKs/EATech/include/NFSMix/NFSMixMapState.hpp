@@ -47,7 +47,8 @@ public:
     NFSMixMapState();
     virtual ~NFSMixMapState();
 
-    void Initialize(NFSMixMap* lpMap, int liStateIndex, int liNumStateCopies, int liObjectIndex); // @0x82B4C6B0
+    // vtable slot 1 @0x82B4C6B0 (PDB: Initialize is virtual).
+    virtual void Initialize(NFSMixMap* lpMap, int liStateIndex, int liNumStateCopies, int liObjectIndex);
     int  GetStateRefCount();             // @0x82B4C718 -- m_pFirstInstance->m_ThisStateRefCnt
 
     // ---- proc accessors (ARTIST-verified base/bounds offsets) -- each indexes the

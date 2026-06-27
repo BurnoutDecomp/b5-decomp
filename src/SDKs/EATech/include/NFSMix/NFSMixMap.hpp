@@ -52,8 +52,13 @@ class NFSMixMap : public MixerMemBase
 public:
     NFSMixMap();           // @0x82B47E38 -- install vtable only
     virtual ~NFSMixMap();  // vtable slot 0 (scalar-deleting dtor reached from NFSMixMaster::~)
+    // vtable slot 1 @0x82B4C258 -- bind the loaded MixMap blob + zero the refcounts, then PreProcess.
+    virtual void InitMixMap(int* lpMixMap, NFSMixMap* lpMasterMixMap);
+    // vtable slot 2 @0x82B4C548 -- per-frame: advance delta-time + cam-state, run the mix graph.
+    virtual void ProcessMixMap(float lfDeltaTime, int liCamState);
 
     void Init(NFSMixMaster* lpMaster); // @0x82B47E48
+    void PreProcessMixMap();           // @0x82B48498 -- parse the blob -> counts (tail-called by InitMixMap)
 
     // ---- cursor / block-pointer helpers (ARTIST-verified) ----
     stMixCtlProc* GetProcessMixCtlPtr(char lbAdvance);     // @0x82B49500

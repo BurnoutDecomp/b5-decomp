@@ -49,6 +49,59 @@ NFSMixMap::~NFSMixMap()
 }
 
 // ---------------------------------------------------------------------------
+// NFSMixMap::InitMixMap @0x82B4C258 (vtable slot 1) -- bind the loaded MixMap blob.
+//   m_pMasterMixMap = lpMasterMixMap; (+0x8C)   m_pMixMap = lpMixMap; (+0x90)
+//   m_pMMHdr = lpMixMap; (+0x74, the blob start IS the header)
+//   m_MapType = lpMixMap[0]; (+0x78 = blob.MixMapID)
+//   for (i=0; i<m_pMMHdr->NumStates; ++i) m_StateRefCount[i] = 0;  (+0x08..)
+//   PreProcessMixMap();   (tail-call)
+// ---------------------------------------------------------------------------
+void NFSMixMap::InitMixMap(int* lpMixMap, NFSMixMap* lpMasterMixMap)
+{
+    m_pMasterMixMap = lpMasterMixMap;                              // +0x8C
+    m_pMixMap       = lpMixMap;                                    // +0x90
+    m_pMMHdr        = reinterpret_cast<stMixMapHeader*>(lpMixMap); // +0x74 (blob == header)
+    m_MapType       = lpMixMap[0];                                 // +0x78 = blob.MixMapID
+
+    for (int li = 0; li < m_pMMHdr->NumStates; ++li)              // *(blob+4) = NumStates
+        m_StateRefCount[li] = 0;
+
+    PreProcessMixMap();                                            // @0x82B48498
+}
+
+// ---------------------------------------------------------------------------
+// NFSMixMap::ProcessMixMap @0x82B4C548 (vtable slot 2) -- per-frame drive.
+// The delta-time / cam-state bookkeeping (head of the function) is reproduced faithfully.
+// FLAG (deferred, RODATA-BLOCKED): the per-frame mix graph below the bookkeeping (curve
+// eval over m_pCurveDataArray via NFSMixShape::GetCurveOutput, then mix-ctl/channel
+// accumulation via NFSMixShape::GetdBFromQ15) needs the NFSMixShape conversion tables,
+// which are not in the X360 export. flt_82F87958 (the delta-ratio divisor) is likewise an
+// unrecovered rodata const. The bookkeeping is faithful; the DSP loop is wired once the
+// NFSMixShape rodata is recovered (ProStreet .exe PE extraction).
+// ---------------------------------------------------------------------------
+void NFSMixMap::ProcessMixMap(float lfDeltaTime, int liCamState)
+{
+    m_fDeltaTimeRatio[1] = m_fDeltaTimeRatio[0];   // +0x230 = +0x22C (shift previous)
+    m_PrevCamState       = m_CurCamState;          // +0x7C  = old +0x80
+    m_fDeltaTimeRatio[0] = lfDeltaTime;            // +0x22C  FLAG: X360 = dt / flt_82F87958 (rodata)
+    m_CurCamState        = liCamState;             // +0x80
+    m_fDeltaTime         = lfDeltaTime;            // +0x84
+    m_msDeltaTime        = lfDeltaTime * 1000.0f;  // +0x88  (flt_82009E10 == 1000.0, ms/sec)
+
+    // FLAG: per-frame mix graph deferred (rodata-blocked NFSMixShape) -- see header note.
+}
+
+// ---------------------------------------------------------------------------
+// NFSMixMap::PreProcessMixMap @0x82B48498 -- FLAG (deferred): ~1.5KB blob-walk that
+// reads the MixMap section headers (state/ctl/3D/event/channel) and accumulates the
+// m_n* counts AllocateMixerMemory then sizes its blocks from. Bodied in the allocation
+// pass (it pairs with AllocateMixerMemory + the mixer allocator).
+// ---------------------------------------------------------------------------
+void NFSMixMap::PreProcessMixMap()
+{
+}
+
+// ---------------------------------------------------------------------------
 // Cursor / block-pointer helpers used by the allocate/assign passes.
 // Each returns the current slot and advances its allocation cursor. ARTIST-verified.
 // ---------------------------------------------------------------------------
