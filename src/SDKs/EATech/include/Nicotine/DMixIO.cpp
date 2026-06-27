@@ -1,4 +1,5 @@
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
+#include "SDKs/EATech/include/NFSMix/NFSMixShape.hpp" // GetIntPitchMultFromCents (now homed)
 
 // ===========================================================================
 //  Nicotine::DMixIO -- dynamic-mixer I/O accessor.
@@ -6,20 +7,12 @@
 //  Store-for-store reconstruction from BURNOUT_X360_ARTIST.XEX. See DMixIO.hpp
 //  for the per-function source addresses and the member-layout rationale.
 //  X360 asm is authoritative over the partial PC DecFIGS DWARF.
+//
+//  GetDMixOutput's DMX_PITCH branch (X360 @0x82B4496C: b NFSMixShape__Get...) now
+//  calls the real NFSMixShape::GetIntPitchMultFromCents (homed in NFSMix/NFSMixShape
+//  with its rodata pitch tables extracted from the ARTIST XEX) -- no longer an
+//  un-homed extern.
 // ===========================================================================
-
-// ---------------------------------------------------------------------------
-//  EXTERNAL DEPENDENCY (un-homed in this batch -- FLAGGED).
-//  NFSMixShape::GetIntPitchMultFromCents converts a signed "cents" pitch value
-//  into the engine's integer pitch multiplier. It is defined in another TU
-//  (the NFSMixShape family, which has no DecFIGS DWARF home). GetDMixOutput's
-//  DMX_PITCH branch tail-calls it (X360 @0x82B4496C: b NFSMixShape__Get...).
-//  Declared here so this TU compiles; NOT defined here.
-// ---------------------------------------------------------------------------
-namespace NFSMixShape
-{
-    int GetIntPitchMultFromCents(int iCents);
-}
 
 namespace Nicotine
 {
