@@ -1,5 +1,6 @@
 #include "SDKs/EATech/include/Nicotine/IDynamicMixer.hpp"
-#include "SDKs/EATech/include/NFSMix/NFSMixMaster.hpp" // the mix master this drives
+#include "SDKs/EATech/include/NFSMix/NFSMixMaster.hpp"   // the mix master this drives
+#include "SDKs/EATech/include/Nicotine/SnapshotMixer.hpp" // the snapshot mixer this drives
 
 // ===========================================================================
 //  Nicotine::IDynamicMixer -- bridge bodies (store-for-store from ARTIST). This is the
@@ -26,9 +27,9 @@ void IDynamicMixer::InitMap(int* lpMapData)
     {
         mMixMaster->CreateMainMainMap(lpMapData, 0);  // bodied (alloc+ctor+Init the map)
         // FLAG (deferred): NFSMixMaster::AssignSFXCallbacks + NFSMixMaster::InitMixMap
-        // (the latter needs AllocateMixerMemory) and SnapshotMixer::AttachToMixMap
-        // (SnapshotMixer not yet homed) are wired once those land. The map object is
-        // created + blob-bound (CreateMainMainMap -> NFSMixMap::Init) here.
+        // (the latter needs AllocateMixerMemory) are wired once those land.
+        if (mpSnapshot)
+            mpSnapshot->AttachToMixMap(mMixMaster->m_pMainMixMap); // homed (FLAG: body cascades to GetMasterMixChProc)
     }
 }
 
@@ -40,9 +41,10 @@ void IDynamicMixer::InitMap(int* lpMapData)
 // ---------------------------------------------------------------------------
 void IDynamicMixer::ProcessMixMap(int /*liUnused*/, float lfDeltaTime)
 {
-    // FLAG (deferred): the NFSLiveLink::ProcessLiveLink + SnapshotMixer::Update branches
-    // need NFSLiveLink / SnapshotMixer (not yet homed); mLiveLink/mpSnapshot are null
-    // until then, so the branches are no-ops. The mix-master drive below is live.
+    // FLAG (deferred): NFSLiveLink::ProcessLiveLink needs NFSLiveLink (a >6KB divergent
+    // object, not yet homed); mLiveLink is null until then, so that branch is a no-op.
+    if (mpSnapshot)
+        mpSnapshot->Update(lfDeltaTime);                   // homed (FLAG: DSP rodata-blocked)
     if (mMixMaster)
         mMixMaster->ProcessMixMap(lfDeltaTime, miCamState); // bodied (-> NFSMixMap::ProcessMixMap)
 }
