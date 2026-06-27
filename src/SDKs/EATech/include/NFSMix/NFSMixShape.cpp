@@ -338,4 +338,47 @@ int GetCurveOutput(int liId, int liPos, char lbDb)
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// GetCentsFromPitchMult @0x82B455B8 -- inverse of GetPitchMultFromCents: a pitch
+// multiplier -> cents, via dB. cents = GetdBFromQ15(scaledQ15) * +/-1.9931569 (==
+// 1200 cents / 602 hundredths-dB). flt_820AD310 == 32767.0 (Q15 full scale).
+// ---------------------------------------------------------------------------
+int GetCentsFromPitchMult(float lfMult)
+{
+    if (lfMult > 1.0f)   // higher pitch -> positive cents
+    {
+        const int liDb = GetdBFromQ15(static_cast<int>(32767.0f / lfMult));
+        return static_cast<int>(static_cast<float>(liDb) * -1.993156909942627f); // flt_821478D8
+    }
+    const int liDb = GetdBFromQ15(static_cast<int>(lfMult * 32767.0f));
+    return static_cast<int>(static_cast<float>(liDb) * 1.993156909942627f);      // flt_821478D4
+}
+
+// ---------------------------------------------------------------------------
+// GetFloatCurveOutput @0x82B456E0 -- GetCurveOutput with a [0,1] float position/return.
+//   q15 = (int)(pos01 * 32767); return GetCurveOutput(id, q15, 0) * (1/32767).
+// ---------------------------------------------------------------------------
+float GetFloatCurveOutput(int liId, float lfPos01)
+{
+    const int liR = GetCurveOutput(liId, static_cast<int>(lfPos01 * 32767.0f), 0);
+    return static_cast<float>(liR) * 3.0518509447574615e-05f; // flt_820AA8F8 == 1/32767
+}
+
+// ---------------------------------------------------------------------------
+// GetAzimShapeOutput @0x82B45550 -- blend two curve evaluations of the SAME shape at
+// lpPos[0]/lpPos[1] by liWeight: ((0x7FFF - 2w)*c0 + 2w*c1) >> 15. liWeight==0 -> c0
+// (c1 defaults to full scale and is unused). FLAG: the X360 ignores the 2nd eMIXTABLEID
+// arg (liId2) -- both curves use liId; kept in the signature to match the call shape.
+// ---------------------------------------------------------------------------
+int GetAzimShapeOutput(int liId, int /*liId2*/, int* lpPos, int liWeight)
+{
+    const int liC0 = GetCurveOutput(liId, lpPos[0], 0);
+    int liC1 = 0x7FFF;
+    if (liWeight != 0)
+        liC1 = GetCurveOutput(liId, lpPos[1], 0);
+    const int liW2 = liWeight * 2;
+    return (((0x7FFF - liW2) * liC0) >> 15) + ((liW2 * liC1) >> 15);
+}
+
 } // namespace NFSMixShape
