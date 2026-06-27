@@ -14,6 +14,30 @@
 
 namespace CgsResource
 {
+    // A plain binary-file resource has no pointers to relocate, so the ctor leaves the Type defaults
+    // and FixUp/FixDown are no-ops; concrete handlers (e.g. LuaCodeResourceType) add only GetTypeID.
+    // Defining the full override set here lets BinaryFileResourceType's vtable link once a concrete
+    // subclass is instantiated/registered.
+    BinaryFileResourceType::BinaryFileResourceType()
+        : Type()
+    {
+    }
+
+    // Base id sentinel -- every concrete handler overrides this with its registry id.
+    uint32_t BinaryFileResourceType::GetTypeID() const
+    {
+        return 0xFFFFFFFFu;
+    }
+
+    // Raw binary payloads carry no fix-up-able pointers -> both relocation passes are no-ops.
+    void BinaryFileResourceType::FixUp(void* /*lpResource*/, const rw::Resource& /*lrResource*/) const
+    {
+    }
+
+    void BinaryFileResourceType::FixDown(void* /*lpResource*/, const rw::Resource& /*lrResource*/) const
+    {
+    }
+
     ResourceDescriptor BinaryFileResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
         const u32* lpHeader = reinterpret_cast<const u32*>(lpResource);

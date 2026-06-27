@@ -9,7 +9,9 @@
 // (CgsScriptedState.h).
 namespace CgsFsm
 {
-    class ScriptedFsm;
+    struct ScriptedFsm;   // defined as `struct` in CgsScriptedFsm.h -- tag must match (MSVC mangles
+                          // `class T*` and `struct T*` differently -> a class/struct mismatch makes
+                          // ScriptedState/State::Construct callers fail to link against the definition).
 
     struct ScriptedState : public State
     {

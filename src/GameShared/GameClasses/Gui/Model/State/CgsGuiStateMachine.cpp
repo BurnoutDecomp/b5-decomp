@@ -16,6 +16,16 @@
 
 namespace CgsGui
 {
+    // The base ScriptedFsm() ctor (delegated to implicitly) runs ScriptedFsm::Construct (mpCurrentState=0,
+    // mLuaState.Construct, sequence=0); the StateMachine adds an empty table + no interface yet. SetStates/
+    // SetStateInterface populate them. (No standalone X360 export -- the ctor is inlined at the embedding
+    // sites, e.g. inside BrnBaseFlow.)
+    StateMachine::StateMachine()
+    {
+        miNumStates      = 0;
+        mpStateInterface = 0;
+    }
+
     // X360 0x824ECAC0. Validate the incoming interface pointer, then store it to
     // mpStateInterface (the `stw r28, 0x218(r27)` tail store, this+0x218). SetStates later
     // wires every owned state to this interface, so it must be non-null first.

@@ -1,8 +1,29 @@
 #include "GameSource/Gui/BrnGuiModule.h"
 
+#include <cstdio>                                                         // std::snprintf (probe logging)
+
+#include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"           // CgsGui::State
+#include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h"// CgsResource::BundleLoader
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"// CgsResource::ResolveResourceType
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"    // E_RESOURCETYPE_LUACODE / E_MEMTYPE_*
+#include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"      // CgsResource::LuaCodeResource
+
 // The initial loading-screen signal (MainGameFlowStateInitialLoadingScreen raises it on entry and drops it
 // at FinishLoading). The boot videos gate on its completion so the loading screen shows before the logos.
 extern bool gBrnLoadingScreenShouldShow;
+
+namespace
+{
+    // Backing for the boot FSM resource pool (3 mem types, like the MovieManager pool) + the Lua VM heap.
+    // The FSM scripts are tiny single-state bundles (~1.5 KB each); the pool reserves 64 KB for its own
+    // node/management structures (matching the MovieManager pool), so each backing buffer must comfortably
+    // exceed that. 256 KB/type is plenty and not large.
+    const u32 KU_FSM_POOL_BYTES = 256u * 1024u;
+    u8 s_fsmPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FSM_POOL_BYTES];
+    u8 s_bootLuaHeapBuffer[512u * 1024u];
+}
 
 // BrnGui::GuiModule -- the GUI module (minimal movie-hosting slice; see BrnGuiModule.h). X360
 // GuiModule::Construct (0x82518028) builds the whole GUI subsystem + the embedded MovieManager; this
@@ -18,11 +39,67 @@ namespace BrnGui
     // asserts ("new module type - can't lock/unlock") for a module that hasn't declared them -- and the movie
     // slice needs none of that IO. (The real X360 GuiModule is double-buffered with full IO; that's the
     // follow-on when the GUI runs under the real dispatch.)
+    // Load a single-state FSM bundle (one LuaCode resource, type 0x22) into lPool and return the
+    // compiled-or-source Lua chunk. [PC IO] the X360 streams these through the GuiFsmController's
+    // ModelIO resource requests; the PC port loads them synchronously via CgsResource::BundleLoader,
+    // the same leaf the MovieManager uses for VIDEOLIST.BUNDLE (see [[lua-system]]). Returns null if
+    // the bundle is missing/unreadable or carries no LuaCode resource.
+    static CgsResource::LuaCodeResource* LoadFsmLuaCode(CgsResource::Pool& lPool, const char* lpcBundlePath)
+    {
+        CgsResource::Pool::InitOptions lOptions;
+        lOptions.miId   = 2;
+        lOptions.mpcName = "BootFsm";
+        for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+        {
+            lOptions.maHeapInfo[lt].muMaxNodes       = 64u;
+            lOptions.maHeapInfo[lt].muHeapMemorySize = KU_FSM_POOL_BYTES - 64u * 1024u;
+            lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
+            lOptions.mResource.m_baseResources[lt]   = s_fsmPoolBacking[lt];
+            lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = KU_FSM_POOL_BYTES;
+            lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
+        }
+        lOptions.muMaxResources         = 64u;
+        lOptions.muMaxImports           = 64u;
+        lOptions.miRefCountThreshold    = 0;
+        lOptions.miNumDependencies      = 0;
+        lOptions.miBankId               = 0;
+        lOptions.mbAllowDefragmentation = false;
+        lPool.InitPool(&lOptions);
+
+        CgsResource::BundleLoader lLoader;
+        const s32 liLoaded = lLoader.LoadBundle(lpcBundlePath, &lPool, CgsResource::ResolveResourceType);
+        if (liLoaded <= 0)
+        {
+            CgsDev::Log::WriteToLog("[GuiModule] boot FSM bundle missing/unreadable.\n");
+            return 0;
+        }
+
+        s32 liIndex = -1;
+        CgsResource::Entry* lpEntry =
+            lPool.FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_LUACODE, &liIndex);
+        if (lpEntry == 0)
+        {
+            CgsDev::Log::WriteToLog("[GuiModule] boot FSM bundle has no LuaCode resource.\n");
+            return 0;
+        }
+        CgsResource::LuaCodeResource* lpLua = reinterpret_cast<CgsResource::LuaCodeResource*>(
+            lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY]);
+        if (lpLua != 0)
+        {
+            char lac[96];
+            std::snprintf(lac, sizeof(lac), "[GuiModule] FSM LuaCode resource loaded (%u bytes).\n",
+                          lpLua->GetSourceSize());
+            CgsDev::Log::WriteToLog(lac);
+        }
+        return lpLua;
+    }
+
     void GuiModule::Construct()
     {
         mMovieManager.Construct();
         mbBootStarted = false;
         mbLoadingHasShown = false;
+        mbBootFsmReady = false;
     }
 
     bool GuiModule::Prepare()
@@ -37,16 +114,54 @@ namespace BrnGui
         // input events from mBootInQueue (which this module feeds cache-ready + video-finished).
         mBootInQueue.Construct();
         mBootStateInterface.Construct();
-        mBootVideos.SetStateInterface(&mBootStateInterface);
-        mBootVideos.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mBootInQueue));
-        mBootVideos.OnEnter();
         mbBootStarted = false;
         mbLoadingHasShown = false;
+        mbBootFsmReady = false;
+
+        // FAITHFUL FLOW (first slice): drive BootVideos through a real CgsGui::StateMachine running the
+        // BRNVIDEOFSM Lua script. The script's SetState("BF_VIDEOS") activates the C++ BootVideos state;
+        // from then on the StateMachine ticks it (Fsm::Update) just as BrnHudFlow does. [PC IO] the FSM
+        // bundle is loaded synchronously (the X360 streams it via the GuiFsmController's ModelIO requests;
+        // see [[lua-system]]). If anything in this path fails, fall back to driving BootVideos directly so
+        // the boot videos still play (and log which path is active).
+        CgsResource::LuaCodeResource* lpLuaCode = LoadFsmLuaCode(mBootFsmPool, "FSM/BRNVIDEOFSM.BUNDLE");
+        if (lpLuaCode != 0)
+        {
+            mBootLuaHeap.Construct(s_bootLuaHeapBuffer, static_cast<s32>(sizeof(s_bootLuaHeapBuffer)));
+
+            mBootVideos.Construct(CgsIDCompress("BF_VIDEOS"), &mBootStateMachine);
+            mBootStateMachine.Construct();
+            mBootStateMachine.SetStateInterface(&mBootStateInterface);
+            CgsGui::State* lapStates[1] = { &mBootVideos };
+            mBootStateMachine.SetStates(lapStates, 1);
+            mBootStateMachine.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mBootInQueue));
+
+            // Compile + enter the script: ScriptedFsm::Prepare -> SetState("BF_VIDEOS") -> BootVideos::OnEnter.
+            mbBootFsmReady = mBootStateMachine.Prepare(lpLuaCode, &mBootLuaHeap, CgsIDCompress("BF_VIDEOS"));
+        }
+
+        CgsDev::Log::WriteToLog(mbBootFsmReady
+            ? "[GuiModule] boot videos driven through the real BRNVIDEOFSM Lua FSM.\n"
+            : "[GuiModule] boot FSM unavailable -> driving BootVideos directly (fallback).\n");
+
+        if (!mbBootFsmReady)
+        {
+            // Fallback: the prior direct-drive path (no Lua FSM).
+            mBootVideos.SetStateInterface(&mBootStateInterface);
+            mBootVideos.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mBootInQueue));
+            mBootVideos.OnEnter();
+        }
         return true;
     }
 
     bool GuiModule::Release()
     {
+        if (mbBootFsmReady)
+        {
+            mBootStateMachine.Release();   // ScriptedFsm::Release -> lua_close + clear
+            mBootLuaHeap.Destruct();
+            mbBootFsmReady = false;
+        }
         gpActiveMovieManager = 0;
         mMovieManager.Release();
         return true;
@@ -86,8 +201,13 @@ namespace BrnGui
             mbBootStarted = true;
         }
 
-        // 2. Tick the boot state (reads mBootInQueue, emits play/stop onto mBootStateInterface's output).
-        mBootVideos.Update();
+        // 2. Tick the boot state. Through the real Lua FSM (StateMachine drives the current state's
+        //    PreUpdate/Update/PostUpdate) when it came up, else directly (fallback). Either way it reads
+        //    mBootInQueue and emits play/stop onto mBootStateInterface's output.
+        if (mbBootFsmReady)
+            mBootStateMachine.CgsFsm::Fsm::Update();
+        else
+            mBootVideos.Update();
 
         // 3. Deliver the state's output play(508)/stop(509) to the MovieManager's receiver queue.
         CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue = mBootStateInterface.GetOutputEventQueue();

@@ -20,9 +20,9 @@ namespace CgsFsm
     {
     }
 
-    void ScriptedState::Construct(CgsID liId, ScriptedFsm* lpFsm)
-    {
-        mId = liId;
-        mpFsm = lpFsm;
-    }
+    // NOTE: ScriptedState::Construct is bodied (authoritatively, asm-verified @0x82835FF0) in
+    // CgsScriptedState.cpp -- not duplicated here. (It once lived here too, but the duplicate was
+    // masked only because a stale `class ScriptedFsm` forward decl mangled this TU's copy
+    // differently from CgsScriptedState.cpp's `struct` copy. With the tag unified to `struct`, the
+    // two collapsed to one symbol -> keep the single definition in CgsScriptedState.cpp.)
 }
