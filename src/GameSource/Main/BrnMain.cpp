@@ -3,6 +3,7 @@
 #endif
 
 #include <GameShared/GameClasses/System/CgsHardwareInit.h>
+#include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
 
 #include "pc/gcm/renderengine/device.h"
 #include "GameSource/Game/BrnGameModule.hpp"
@@ -93,6 +94,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         //lpValueName = "locale";
 
         CgsSystem::HardwareInit::InitializeHardware(lpCmdLine);
+
+        // STEP 1 audio bring-up: open the XAudio2 PC backend and play a diagnostic 440 Hz
+        // tone to prove the output path end-to-end (the rw::audio Dac pull replaces the
+        // tone fill once the engine is wired). FLAG: temporary boot-time test tone.
+        CgsSystem::AudioOutputPC::PlayTestTone(2.0f);
 
         EnginePrepare();
         EngineUpdate();
