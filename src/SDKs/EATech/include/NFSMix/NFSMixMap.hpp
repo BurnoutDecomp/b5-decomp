@@ -76,6 +76,8 @@ public:
     //  record with rodata float consts (flt_82001CC0..) not in the X360 export; and
     //  GetNextMapState @0x82B49210 -- a byte-offset cursor (X360 sizeof stride).)
 
+    void ResetMapData();   // @0x82B482B0 -- zero every runtime counter/offset + block ptr
+
     // vtable pointer occupies +0x00 (virtual dtor above).
     int                       mNumStates;                  // +0x04
     int                       m_StateRefCount[25];         // +0x08
