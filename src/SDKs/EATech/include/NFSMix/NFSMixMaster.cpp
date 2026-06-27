@@ -53,3 +53,35 @@ NFSMixMaster::~NFSMixMaster()
         m_pMainMixMap = 0;
     }
 }
+
+// ---------------------------------------------------------------------------
+// NFSMixMaster::CreateMainMainMap @0x82B45868 -- CreateMainMainMap(this, a2, a3)
+//   m_pMixMaster = this;        (+0x7C, stw r30)
+//   m_bMapReady  = 0;           (+0x70, stb)
+//   r3 = mixerSystem->Allocate(0x234, 0, "NFSMixMap");   (off_83250004 vtable+8)
+//   if (r3) NFSMixMap::NFSMixMap(r3);                     (placement ctor)
+//   m_pMainMixMap = r3;         (+0x00)
+//   NFSMixMap::Init(r3, this);                            (Init(map, this))
+//   m_pSBActiveMasks  = a3;     (+0x74)
+//   m_pMainMixMapData = a2;     (+0x04)
+//   return r3;                  (the new map)
+//
+// FLAG: the X360 allocates the 0x234-byte NFSMixMap from the EATech mixer-system heap
+// (off_83250004, a mixer System singleton; vtable slot 2 = Allocate). PC uses `new`
+// (allocate + ctor -- the faithful effect); it will route through MixerMemBase's
+// mixer-heap operator new once that allocator is wired. Marked PC-alloc boundary.
+// ---------------------------------------------------------------------------
+NFSMixMap* NFSMixMaster::CreateMainMainMap(int* lpMapData, int* lpSBActiveMasks)
+{
+    m_pMixMaster = this;        // +0x7C
+    m_bMapReady  = false;       // +0x70
+
+    NFSMixMap* lpMap = new NFSMixMap(); // X360: mixerSystem->Allocate(0x234,..) + ctor
+    m_pMainMixMap = lpMap;      // +0x00
+
+    lpMap->Init(this);          // NFSMixMap::Init(map, this)
+
+    m_pSBActiveMasks  = lpSBActiveMasks; // +0x74
+    m_pMainMixMapData = lpMapData;       // +0x04
+    return lpMap;
+}

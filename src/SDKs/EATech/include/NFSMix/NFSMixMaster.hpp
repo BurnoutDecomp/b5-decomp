@@ -29,8 +29,10 @@ public:
     NFSMixMaster();   // @0x82B45740 -- zero-init + install the global singleton
     ~NFSMixMaster();  // @0x82B45780 -- clear the singleton + destroy the main map
 
-    // ---- declared; bodied once NFSMixMap is homed (they construct/drive it) ----
-    //   NFSMixMap* CreateMainMainMap(int* lpMapData, int* lpSBActiveMasks); // @0x82B45868
+    // @0x82B45868 -- allocate + construct + Init the main NFSMixMap and record the blob.
+    NFSMixMap* CreateMainMainMap(int* lpMapData, int* lpSBActiveMasks);
+
+    // ---- declared; bodied next (the map-load / per-frame drive path) ----
     //   void InitMixMap(...);        // @0x82B45920
     //   void AssignSFXCallbacks(...);// @0x82B45A80
     //   void ProcessMixMap(...);     // @0x82B45A88
