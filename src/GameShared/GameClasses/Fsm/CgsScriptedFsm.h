@@ -8,6 +8,7 @@
 
 namespace CgsResource { struct LuaCodeResource; }
 namespace CgsMemory   { class  HeapMalloc; }
+namespace CgsFsm      { struct Event; }
 
 // CgsFsm::ScriptedFsm - an FSM whose transitions are driven by a Lua script (the "LuaCode"
 // resource). It extends CgsFsm::Fsm with an embedded CgsFsm::LuaState (which runs the script)
@@ -27,7 +28,9 @@ namespace CgsFsm
     {
         ScriptedFsm();
 
-        virtual void SendEvent(const State* lpEvent);
+        // @ 0x82836790 -- marshal the event's variables into Lua, then transition
+        // (mLuaState.NextState(event.id) -> GetCurrentState -> SetState).
+        virtual void SendEvent(const Event* lpEvent);
         // The script-FSM state table. Derived FSMs that own a fixed state array
         // (CgsGui::StateMachine) override these to index into it.
         virtual ScriptedState* GetState(s32 liIndex);

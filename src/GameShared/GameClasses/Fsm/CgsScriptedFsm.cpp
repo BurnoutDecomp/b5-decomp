@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/Fsm/CgsScriptedFsm.h"
 
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"  // CgsResource::LuaCodeResource
+#include "GameShared/GameClasses/Fsm/CgsEvent.h"                       // CgsFsm::Event
+#include "GameShared/GameClasses/Fsm/CgsVariable.h"                    // CgsFsm::Variable
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"              // CgsMemory::HeapMalloc
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress / CgsIDUnCompress
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT (flagged assert substitute)
@@ -102,15 +104,23 @@ s32 ScriptedFsm::GetCurrentStateIndex()
 ScriptedState* ScriptedFsm::GetState(s32 /*liIndex*/) { return nullptr; }
 s32            ScriptedFsm::GetStateCount()           { return 0; }
 
-// @ 0x82836790 -- FLAG (incomplete): the faithful body marshals each of the event's
-// variables into the Lua state (variable -> SetEventVariable) then runs the transition
-// (mLuaState.NextState(event.id) -> GetCurrentState -> SetState). It needs the CgsFsm event
-// type (event id @ +0x40, variable count @ +0x48, polymorphic variable objects) which is not
-// modelled yet -- reconstruct in the next pass. Kept as a checked no-op so the vtable is whole.
-void ScriptedFsm::SendEvent(const State* lpEvent)
+// @ 0x82836790 -- push the event's variables into the Lua state via "SetEventVariable",
+// then run the scripted transition: NextState(event.id) -> the script's new current state.
+void ScriptedFsm::SendEvent(const Event* lpEvent)
 {
     CGS_ASSERT(lpEvent != nullptr, "lpEvent != NULL");
     CGS_ASSERT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()");
+
+    const s32 liCount = lpEvent->GetVariableCount();
+    for (s32 li = 0; li < liCount; ++li)
+    {
+        const Variable* lpVariable = lpEvent->GetVariable(li);
+        if (lpVariable != nullptr)
+            lpVariable->ToLua(&mLuaState, "SetEventVariable");
+    }
+
+    mLuaState.NextState(lpEvent->GetId());
+    SetState(mLuaState.GetCurrentState());
 }
 
 } // namespace CgsFsm
