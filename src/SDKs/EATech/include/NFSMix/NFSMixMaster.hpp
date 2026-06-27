@@ -32,10 +32,12 @@ public:
     // @0x82B45868 -- allocate + construct + Init the main NFSMixMap and record the blob.
     NFSMixMap* CreateMainMainMap(int* lpMapData, int* lpSBActiveMasks);
 
-    // ---- declared; bodied next (the map-load / per-frame drive path) ----
+    // @0x82B45A88 -- per-frame: if the map is ready, drive NFSMixMap::ProcessMixMap.
+    void ProcessMixMap(float lfDeltaTime, int liCamState);
+
+    // ---- declared; bodied next (need AllocateMixerMemory / NFSMixMap::AssignSFXCallbacks) ----
     //   void InitMixMap(...);        // @0x82B45920
     //   void AssignSFXCallbacks(...);// @0x82B45A80
-    //   void ProcessMixMap(...);     // @0x82B45A88
 
     NFSMixMap*    m_pMainMixMap;       // +0x00  the owned main mix-map (564 B)
     int*          m_pMainMixMapData;   // +0x04  the loaded MixMap binary blob
