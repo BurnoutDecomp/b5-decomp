@@ -55,9 +55,15 @@ public:
 
     void Init(NFSMixMaster* lpMaster); // @0x82B47E48
 
+    // ---- cursor / block-pointer helpers (ARTIST-verified) ----
+    stMixCtlProc* GetProcessMixCtlPtr(char lbAdvance);     // @0x82B49500
+    int*          GetMasterChannelOutputArrayPtr(int liN); // @0x82B495F0
+    int*          GetMasterChannelInputPtr(int liN);       // @0x82B49618
+    int*          GetSubChannelInputPtr(int liN);          // @0x82B49638
+    int           GetMapStateCopies(int liState);          // @0x82B49658
+
     // (further methods -- ResetMapData/PreProcessMixMap/AllocateMixerMemory/
-    //  AssignMixCtlDataPtrs/GetNext*/CreateMainMapState/... -- bodied as the stXxx
-    //  records and the mixer allocator are homed.)
+    //  AssignMixCtlDataPtrs/GetNext*/CreateMainMapState/... -- bodied next.)
 
     // vtable pointer occupies +0x00 (virtual dtor above).
     int                       mNumStates;                  // +0x04
