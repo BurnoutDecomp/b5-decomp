@@ -71,9 +71,9 @@ SubMixConnector *SubMixConnector::Disconnect(SubMixConnector *self, const f32 *f
         }
 
         // ---- clear the owning-SubMix / cursor / flag fields ----
-        self->mpSubMix = 0;   // +0x0C
-        self->mField08 = 0;   // +0x08
-        self->mbField10 = 0;  // +0x10 (stb)
+        self->mpSubMix = 0;           // +0x0C
+        self->mpSubMixBuffer = 0;     // +0x08
+        self->mNumSubMixChannels = 0; // +0x10 (stb)
     }
     return self;
 }

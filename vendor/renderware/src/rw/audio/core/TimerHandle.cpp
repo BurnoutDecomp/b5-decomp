@@ -24,10 +24,10 @@ namespace core
 
 TimerHandle *TimerHandle::TimerHandle_ctor(TimerHandle *self)
 {
-    self->miField0 = 0;        // +0x00
+    self->mpItemHandleNode = 0; // +0x00
     self->mpName = "Unknown";  // +0x0C
-    self->miField10 = 0;       // +0x10
-    self->mbState = 3;         // +0x14 (stb)
+    self->mCpuTicks = 0;       // +0x10
+    self->mStage = 3;          // +0x14 (stb)
     return self;
 }
 

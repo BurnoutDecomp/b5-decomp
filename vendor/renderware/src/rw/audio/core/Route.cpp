@@ -46,9 +46,9 @@ int Route::CreateInstance(int a1)
     {
         Route* lpSelf = reinterpret_cast<Route*>(a1);
         lpSelf->mpVTable = skpRouteVTable;        // *a1 = off_8217F524
-        lpSelf->mConnector.mField08 = 0;          // stw 0, 0x2C(a1)
+        lpSelf->mConnector.mpSubMixBuffer = 0;    // stw 0, 0x2C(a1)
         lpSelf->mConnector.mpSubMix = 0;          // stw 0, 0x30(a1)
-        lpSelf->mConnector.mbField10 = 0;         // stb 0, 0x34(a1)
+        lpSelf->mConnector.mNumSubMixChannels = 0;// stb 0, 0x34(a1)
 
         // The X360 zeroes the 6-dword gain array (a1+0x38) AFTER the beq, i.e.
         // unconditionally; reproducing that literally through a null a1 would be a
@@ -161,8 +161,8 @@ int Route::ConnectByPointerHandler(int a1)
     if (lpSubMix)
     {
         lpConn->mpSubMix = lpSubMix;                                   // stw 0xC(v4)
-        lpConn->mField08 = lpSubMix->mField24;                         // lwz 0x24 -> stw 8
-        lpConn->mbField10 = static_cast<char>(lpSubMix->mbNumChannels);// lbz 0x21 -> stb 0x10
+        lpConn->mpSubMixBuffer = lpSubMix->mpSubMixBuffer;             // lwz 0x24 -> stw 8
+        lpConn->mNumSubMixChannels = static_cast<u8>(lpSubMix->mbNumChannels);// lbz 0x21 -> stb 0x10
 
         SubMixConnector* lpHead = lpSubMix->mpConnectorHead;           // lwz 0x28(v6)
         lpConn->mppPrev = 0;                                           // stw 0, 4(v4)
