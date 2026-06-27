@@ -9,10 +9,17 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"// CgsResource::ResolveResourceType
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"    // E_RESOURCETYPE_LUACODE / E_MEMTYPE_*
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"      // CgsResource::LuaCodeResource
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> (read the loading-event subtype)
+#include "GameShared/GameClasses/Fsm/CgsEvent.h"                          // CgsFsm::Event (drive BF_PROCEED through the FSM)
 
-// The initial loading-screen signal (MainGameFlowStateInitialLoadingScreen raises it on entry and drops it
-// at FinishLoading). The boot videos gate on its completion so the loading screen shows before the logos.
-extern bool gBrnLoadingScreenShouldShow;
+// The loading-screen visual signal (BrnRendererModule::Render shows the loading screen while it's set).
+// The GUI BF_LOADING state now OWNS this when its FSM is live: BootLoading::Update PlayLoadingScreen
+// (channel 40, GuiEventPlayAptLoadingMovie/19) raises it; BootLoading::OnLeave StopLoadingScreen
+// (channel 40, GuiEventStopAptLoadingMovie/20) drops it. The game-flow loading state defers to us via
+// gBrnGuiDrivesLoadingScreen and signals loading-done via gBrnInitialLoadingComplete.
+extern bool gBrnLoadingScreenShouldShow;   // defined in BrnGameMainFlowStates.cpp
+extern bool gBrnInitialLoadingComplete;    // set by the game-flow when the load stages finish
+extern bool gBrnGuiDrivesLoadingScreen;    // we set this when the BF_LOADING FSM is live
 
 namespace
 {
@@ -96,6 +103,36 @@ namespace BrnGui
         return lpLua;
     }
 
+    // Route the loading interface's emitted loading-screen events to the renderer's loading-screen signal.
+    // BootLoading emits them on channel 40 (GuiEventPlayAptLoadingMovie/19 = show; GuiEventStopAptLoadingMovie
+    // /20 = stop); the GuiEvent muEventType subtype tells them apart. This is what makes the GUI BF_LOADING
+    // state OWN the loading-screen visual (the faithful path); the game-flow defers to it.
+    static void RouteLoadingScreenEvents(CgsGui::StateInterface& lStateInterface)
+    {
+        CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue = lStateInterface.GetOutputEventQueue();
+        if (lpOutQueue == 0)
+            return;
+        CgsModule::VariableEventQueue<65536, 16>* lpOutBase = lpOutQueue;
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpOutBase->GetFirstEvent(&lpEvent, &liSize);
+        while (liId >= 0 && lpEvent != 0)
+        {
+            if (liId == 40)   // channel 40 = apt-movie events; BootLoading uses the loading-movie subtypes
+            {
+                const s32 liSubtype = reinterpret_cast<const CgsGui::GuiEvent<0>*>(lpEvent)->muEventType;
+                if (liSubtype == 19)        // GuiEventPlayAptLoadingMovie -> show the loading screen
+                    gBrnLoadingScreenShouldShow = true;
+                else if (liSubtype == 20)   // GuiEventStopAptLoadingMovie -> stop the loading screen
+                    gBrnLoadingScreenShouldShow = false;
+            }
+            const CgsModule::Event* lpNext = 0;
+            liId = lpOutBase->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+        lpOutBase->Clear();
+    }
+
     // Bring one boot FSM phase up: construct + wire the state into its StateMachine, then compile + enter
     // the Lua script (ScriptedFsm::Prepare -> SetState(id) -> state OnEnter). Returns true if the FSM came up.
     static bool SetupBootPhase(CgsGui::StateMachine& lStateMachine, CgsGui::State& lState,
@@ -121,6 +158,7 @@ namespace BrnGui
         mbLoadingHasShown = false;
         mbBootFsmReady = false;
         mbBootLoadingFsmReady = false;
+        mbBootLoadingCompleteFed = false;
         miBootPhase = 0;
     }
 
@@ -136,6 +174,7 @@ namespace BrnGui
         mbLoadingHasShown = false;
         mbBootFsmReady = false;
         mbBootLoadingFsmReady = false;
+        mbBootLoadingCompleteFed = false;
         miBootPhase = 0;
 
         // Shared Lua VM heap for both boot-phase FSMs (each gets its own lua_State from it).
@@ -155,6 +194,8 @@ namespace BrnGui
         mbBootLoadingFsmReady = SetupBootPhase(mBootLoadingStateMachine, mBootLoading, mBootLoadingStateInterface,
                                                mBootLoadingInQueue, lpLoadingLua, mBootLuaHeap,
                                                CgsIDCompress("BF_LOADING"));
+        // When BF_LOADING is live it owns the loading-screen visual; tell the game-flow to defer.
+        gBrnGuiDrivesLoadingScreen = mbBootLoadingFsmReady;
 
         // PHASE 1: BF_VIDEOS (the boot-logo state, run through its Lua FSM).
         mBootInQueue.Construct();
@@ -215,18 +256,14 @@ namespace BrnGui
     // runs BootVideos inside BrnHudFlow and routes via the EventObserver; this bridges the queues directly.]
     void GuiModule::UpdateBootVideoFlow()
     {
-        // Track the loading-screen lifecycle (the boot's gate). The game-flow loading screen sets
-        // gBrnLoadingScreenShouldShow during the InitialLoadingScreen stages and drops it at FinishLoading.
-        if (gBrnLoadingScreenShouldShow)
-            mbLoadingHasShown = true;
-        const bool lbLoadingComplete = mbLoadingHasShown && !gBrnLoadingScreenShouldShow;
-
         // ---- PHASE 0: BF_LOADING -----------------------------------------------------------------------
         // Run the BootLoading state through the BRNFLOADFSM Lua FSM while the loading screen is up. The boot
         // resources are already resident (loaded synchronously in Prepare), so feed cache-ready immediately;
-        // BootLoading shows its loading screen (event emitted, not yet routed to the visual -- the game-flow
-        // loading screen drives that) and waits. When the loading completes, feed loading-complete(137):
-        // BootLoading sends "BF_PROCEED", and the sequencer advances to BF_VIDEOS (the PC stand-in for the
+        // BootLoading shows the loading screen (PlayLoadingScreen -> channel-40/19), which RouteLoadingScreen
+        // Events turns into gBrnLoadingScreenShouldShow=true so the renderer draws it. When the game-flow's
+        // load stages finish (gBrnInitialLoadingComplete), feed loading-complete(137): BootLoading sends
+        // "BF_PROCEED"; we then Release the loading FSM so BootLoading::OnLeave -> StopLoadingScreen
+        // (channel-40/20) drops the loading screen, and advance to BF_VIDEOS (the PC stand-in for the
         // GuiFsmController loading the next single-state FSM).
         if (miBootPhase == 0)
         {
@@ -238,25 +275,51 @@ namespace BrnGui
                     mBootLoadingInQueue.AddEvent(&lReady, 64, static_cast<s32>(sizeof(lReady)));
                     mbBootStarted = true;
                 }
-                mBootLoadingStateMachine.CgsFsm::Fsm::Update();   // runs BootLoading through the Lua FSM
-
-                if (lbLoadingComplete)
+                // Deliver the loading-complete INPUT (137) once the game-flow's load stages finish; this is
+                // what the X360 loading system raises at BootLoading. BootLoading::Update then DECIDES to
+                // proceed (SendStateEvent "BF_PROCEED") -- the advance below is driven by THAT decision, not
+                // by gBrnInitialLoadingComplete directly.
+                if (gBrnInitialLoadingComplete && !mbBootLoadingCompleteFed)
                 {
                     CgsModule::Event lDone;
                     mBootLoadingInQueue.AddEvent(&lDone, 137, static_cast<s32>(sizeof(lDone)));
-                    mBootLoadingStateMachine.CgsFsm::Fsm::Update();   // process 137 -> SendStateEvent("BF_PROCEED")
-                    CgsDev::Log::WriteToLog("[GuiModule] BF_LOADING done -> advancing to BF_VIDEOS.\n");
+                    mbBootLoadingCompleteFed = true;
+                }
+
+                mBootLoadingStateMachine.CgsFsm::Fsm::Update();   // runs BootLoading through the Lua FSM
+                RouteLoadingScreenEvents(mBootLoadingStateInterface);  // BootLoading show/stop -> loading screen
+
+                // The state signalled a transition: run it through the FSM (the flow's mechanism --
+                // ScriptedFsm::SendEvent -> mLuaState.NextState -> SetState), then sequence to the next phase.
+                // For the single-state boot FSMs NextState is a no-op, so (faithful to the X360
+                // GuiFsmController) the controller advances by loading the next phase's FSM on the state event.
+                if (mBootLoading.IsStateChangePending())
+                {
+                    CgsFsm::Event lEvent;
+                    lEvent.Construct(CgsIDCompress(mBootLoading.GetPendingEventName()));
+                    mBootLoadingStateMachine.SendEvent(&lEvent);     // BF_PROCEED -> NextState (no-op for BF_LOADING)
+                    mBootLoading.ClearStateChange();
+
+                    mBootLoadingStateMachine.Release();              // OnLeave -> StopLoadingScreen (40/20)
+                    RouteLoadingScreenEvents(mBootLoadingStateInterface);  // ... -> loading screen off
+                    mbBootLoadingFsmReady = false;                   // FSM released; don't tick/release again
+                    CgsDev::Log::WriteToLog("[GuiModule] BF_LOADING signalled BF_PROCEED -> advancing to BF_VIDEOS.\n");
                     miBootPhase  = 1;
                     mbBootStarted = false;   // re-arm cache-ready for BF_VIDEOS
                 }
             }
-            else if (lbLoadingComplete)
+            else if (gBrnInitialLoadingComplete)
             {
                 miBootPhase  = 1;           // no BF_LOADING FSM -> go straight to the videos
                 mbBootStarted = false;
             }
             return;   // the MovieManager bridge below belongs to BF_VIDEOS (phase 1)
         }
+
+        // Entering BF_VIDEOS: the loading screen must be down (BootLoading::OnLeave dropped it; this is a
+        // belt-and-suspenders in case the stop event didn't route, so no loading screen lingers over the logos).
+        if (gBrnLoadingScreenShouldShow)
+            gBrnLoadingScreenShouldShow = false;
 
         // ---- PHASE 1: BF_VIDEOS ------------------------------------------------------------------------
         // 1. Feed cache-ready once so BootVideos starts playing the logos.
