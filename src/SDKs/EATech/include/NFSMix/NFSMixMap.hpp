@@ -62,8 +62,19 @@ public:
     int*          GetSubChannelInputPtr(int liN);          // @0x82B49638
     int           GetMapStateCopies(int liState);          // @0x82B49658
 
-    // (further methods -- ResetMapData/PreProcessMixMap/AllocateMixerMemory/
-    //  AssignMixCtlDataPtrs/GetNext*/CreateMainMapState/... -- bodied next.)
+    // ---- "next slot" allocators (return &m_p<X>[m_nAssigned<X>]; bump the count if
+    //      the advance flag is set). ARTIST-verified (member-name systematic mapping). ----
+    stEvtMixCtlProc*       GetNextEvtMixCtlProc(char lbAdvance);       // @0x82B48F88
+    stEvtMixCtlSharedData* GetNextEvtMixCtlShared(char lbAdvance);     // @0x82B48FB8
+    st3DMixCtlProc*        GetNext3DMixCtlProc(char lbAdvance);        // @0x82B49048
+    st3DMixCtlSharedData*  GetNext3DMixCtlShared(char lbAdvance);      // @0x82B49078
+    stMasterMixChProc*     GetNextMasterMixProc(char lbAdvance);       // @0x82B490E0
+    stMasterMixChSharedData* GetNextMasterMixShared(char lbAdvance);   // @0x82B49110
+    stSubMixChProc*        GetNextSubMixProc(char lbAdvance);          // @0x82B49178
+    stMixChSharedData*     GetNextSubMixShared(char lbAdvance);        // @0x82B491D8
+    // (deferred: GetNext*Unique @0x82B48FF0/0x82B49140/0x82B491A8 -- they init the new
+    //  record with rodata float consts (flt_82001CC0..) not in the X360 export; and
+    //  GetNextMapState @0x82B49210 -- a byte-offset cursor (X360 sizeof stride).)
 
     // vtable pointer occupies +0x00 (virtual dtor above).
     int                       mNumStates;                  // +0x04

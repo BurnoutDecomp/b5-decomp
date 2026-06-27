@@ -94,3 +94,59 @@ int NFSMixMap::GetMapStateCopies(int liState)
         return 0;
     return m_StateRefCount[liState];      // *(this + 8 + 4*liState)
 }
+
+// ---------------------------------------------------------------------------
+// "Next slot" allocators @0x82B48F88 / 0x48FB8 / 0x49048 / 0x49078 / 0x490E0 /
+// 0x49110 / 0x49178 / 0x491D8. Uniform: return &m_p<X>[m_nAssigned<X>]; if the
+// advance flag is set, ++m_nAssigned<X>. X360 indexes with the record's byte stride;
+// modelled as the real x64 array index. (Member-name mapping ARTIST-verified, e.g.
+// GetNextMasterMixProc: counter +0x154, array +0x1C0.)
+// ---------------------------------------------------------------------------
+stEvtMixCtlProc* NFSMixMap::GetNextEvtMixCtlProc(char lbAdvance)
+{
+    stEvtMixCtlProc* lp = &m_pEvtMixCtlProc[m_nAssignedEvtMixCtlProc];
+    if (lbAdvance) ++m_nAssignedEvtMixCtlProc;
+    return lp;
+}
+stEvtMixCtlSharedData* NFSMixMap::GetNextEvtMixCtlShared(char lbAdvance)
+{
+    stEvtMixCtlSharedData* lp = &m_pEvtMixCtlData_S[m_nAssignedEvtMixCtlShared];
+    if (lbAdvance) ++m_nAssignedEvtMixCtlShared;
+    return lp;
+}
+st3DMixCtlProc* NFSMixMap::GetNext3DMixCtlProc(char lbAdvance)
+{
+    st3DMixCtlProc* lp = &m_p3DMixCtlProc[m_nAssigned3DMixCtlProc];
+    if (lbAdvance) ++m_nAssigned3DMixCtlProc;
+    return lp;
+}
+st3DMixCtlSharedData* NFSMixMap::GetNext3DMixCtlShared(char lbAdvance)
+{
+    st3DMixCtlSharedData* lp = &m_p3DMixCtlData_S[m_nAssigned3DMixCtlShared];
+    if (lbAdvance) ++m_nAssigned3DMixCtlShared;
+    return lp;
+}
+stMasterMixChProc* NFSMixMap::GetNextMasterMixProc(char lbAdvance)
+{
+    stMasterMixChProc* lp = &m_pMasterChProc[m_nAssignedMasterMixProc]; // +0x1C0 / +0x154
+    if (lbAdvance) ++m_nAssignedMasterMixProc;
+    return lp;
+}
+stMasterMixChSharedData* NFSMixMap::GetNextMasterMixShared(char lbAdvance)
+{
+    stMasterMixChSharedData* lp = &m_pMasterChData_S[m_nAssignedMasterMixShared];
+    if (lbAdvance) ++m_nAssignedMasterMixShared;
+    return lp;
+}
+stSubMixChProc* NFSMixMap::GetNextSubMixProc(char lbAdvance)
+{
+    stSubMixChProc* lp = &m_pSubChProc[m_nAssignedSubMixProc];
+    if (lbAdvance) ++m_nAssignedSubMixProc;
+    return lp;
+}
+stMixChSharedData* NFSMixMap::GetNextSubMixShared(char lbAdvance)
+{
+    stMixChSharedData* lp = &m_pSubChData_S[m_nAssignedSubMixShared];
+    if (lbAdvance) ++m_nAssignedSubMixShared;
+    return lp;
+}
