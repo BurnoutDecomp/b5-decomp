@@ -2,7 +2,7 @@
 // rw::audio::core::PlugInRegistry -- member-function bodies.
 //
 // EARenderWare "rwaudio" plug-in registry: an intrusive singly-linked list of
-// PlugInInfo run-time-type records. Reconstructed from BURNOUT_X360_ARTIST.XEX; the
+// PlugInDescRunTime run-time-type records. Reconstructed from BURNOUT_X360_ARTIST.XEX; the
 // PowerPC asm is authoritative for every store/offset (see rw/audio/core/PlugIn.h).
 // No Feb-2007 leak source and no DecFIGS DWARF exist for this type.
 // =====================================================================================
@@ -16,20 +16,20 @@ namespace audio
 namespace core
 {
 
-// The intrusive list threads PlugInInfo records by their +0x24 link. The registry's
-// node handle is the address of a link slot; the owning PlugInInfo is (link - 0x24).
+// The intrusive list threads PlugInDescRunTime records by their +0x24 link. The registry's
+// node handle is the address of a link slot; the owning PlugInDescRunTime is (link - 0x24).
 // A small "link view" keeps the walk member-by-name: a link slot is {next, id}
-// laid over PlugInInfo at +0x24 (next) / +0x28 (id).
-struct PlugInInfoLink
+// laid over PlugInDescRunTime at +0x24 (next) / +0x28 (id).
+struct PlugInDescRunTimeLink
 {
-    void *mpNext; // +0x00 == PlugInInfo +0x24
-    u32 muId;     // +0x04 == PlugInInfo +0x28
+    void *mpNext; // +0x00 == PlugInDescRunTime +0x24
+    u32 muId;     // +0x04 == PlugInDescRunTime +0x28
 };
 
-static PlugInInfo *InfoFromLink(void *link)
+static PlugInDescRunTime *InfoFromLink(void *link)
 {
-    // link points at PlugInInfo::mpNext (+0x24); recover the owning record.
-    return reinterpret_cast<PlugInInfo *>(reinterpret_cast<char *>(link) - 0x24);
+    // link points at PlugInDescRunTime::mpNext (+0x24); recover the owning record.
+    return reinterpret_cast<PlugInDescRunTime *>(reinterpret_cast<char *>(link) - 0x24);
 }
 
 // -------------------------------------------------------------------------------------
@@ -44,8 +44,8 @@ PlugInRegistry *PlugInRegistry::CreateInstance(System *system)
     if (self)
     {
         self->mpSystem = system; // stw r31 -> 0x10
-        self->mField0C = 0;      // stw 0 -> 0x0C
-        self->mbNextSeq = 0;     // stb 0 -> 0x14
+        self->mpEnumerator = 0;      // stw 0 -> 0x0C
+        self->mCurrentRegistryIndex = 0;     // stb 0 -> 0x14
     }
     return self;
 }
@@ -53,7 +53,7 @@ PlugInRegistry *PlugInRegistry::CreateInstance(System *system)
 // -------------------------------------------------------------------------------------
 // PlugInRegistry::GetPlugInHandle @0x82B6A908
 // Walks the link list looking for the record whose id matches; returns the owning
-// PlugInInfo (as the opaque handle) or null.
+// PlugInDescRunTime (as the opaque handle) or null.
 // -------------------------------------------------------------------------------------
 void *PlugInRegistry::GetPlugInHandle(PlugInRegistry *self, int id)
 {
@@ -62,8 +62,8 @@ void *PlugInRegistry::GetPlugInHandle(PlugInRegistry *self, int id)
         return 0;
     for (;;)
     {
-        PlugInInfoLink *node = static_cast<PlugInInfoLink *>(link);
-        PlugInInfo *owner = InfoFromLink(link); // result = v2 - 9 (words) = link - 0x24
+        PlugInDescRunTimeLink *node = static_cast<PlugInDescRunTimeLink *>(link);
+        PlugInDescRunTime *owner = InfoFromLink(link); // result = v2 - 9 (words) = link - 0x24
         u32 nodeId = node->muId;                // v4[1]
         link = node->mpNext;                    // v2 = *v2
         if (nodeId == static_cast<u32>(id))
@@ -79,7 +79,7 @@ void *PlugInRegistry::GetPlugInHandle(PlugInRegistry *self, int id)
 // tail on first insert, bumps the count, and snapshots the running sequence byte into
 // the record. Returns the existing record on a duplicate id, else the new record.
 // -------------------------------------------------------------------------------------
-void *PlugInRegistry::RegisterPlugInRunTime(PlugInRegistry *self, PlugInInfo *info)
+void *PlugInRegistry::RegisterPlugInRunTime(PlugInRegistry *self, PlugInDescRunTime *info)
 {
     void *head = self->mpHead;
     void *link = self->mpHead;
@@ -87,8 +87,8 @@ void *PlugInRegistry::RegisterPlugInRunTime(PlugInRegistry *self, PlugInInfo *in
     {
         for (;;)
         {
-            PlugInInfoLink *node = static_cast<PlugInInfoLink *>(link);
-            PlugInInfo *owner = InfoFromLink(link);
+            PlugInDescRunTimeLink *node = static_cast<PlugInDescRunTimeLink *>(link);
+            PlugInDescRunTime *owner = InfoFromLink(link);
             u32 existingId = node->muId;       // v4[1]
             link = node->mpNext;               // v4 = *v4
             if (existingId == info->muId)      // *(a2+40) == info->muId
@@ -98,18 +98,18 @@ void *PlugInRegistry::RegisterPlugInRunTime(PlugInRegistry *self, PlugInInfo *in
         }
     }
 
-    // Insert at the head. The node handle is &info->mpNext (PlugInInfo +0x24).
+    // Insert at the head. The node handle is &info->mpNext (PlugInDescRunTime +0x24).
     void **newLink = &info->mpNext;            // r10 = a2 + 0x24
     info->mpNext = head;                       // *(a2+36) = old head link
 
     if (!self->mppTail)                        // if (!*(a1+4))
         self->mppTail = newLink;               //   *(a1+4) = newLink
 
-    char seq = self->mbNextSeq;                // lbz 0x14
+    char seq = self->mCurrentRegistryIndex;                // lbz 0x14
     self->muCount = self->muCount + 1;         // *(a1+8) += 1
     self->mpHead = newLink;                    // *a1 = newLink
     info->mbSeq = seq;                         // *(a2+0x32) = seq
-    ++self->mbNextSeq;                         // ++*(a1+0x14)
+    ++self->mCurrentRegistryIndex;                         // ++*(a1+0x14)
     return info;
 }
 
