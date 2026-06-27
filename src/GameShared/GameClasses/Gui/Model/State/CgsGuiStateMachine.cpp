@@ -60,4 +60,40 @@ namespace CgsGui
 
         miNumStates = liNumStates;
     }
+
+    // ScriptedFsm virtual override -- the table size SetState/SendEvent scan against. Inlined in
+    // the X360 (no standalone export); the count lives at this+0x14 (the SetStates final store).
+    s32 StateMachine::GetStateCount()
+    {
+        return miNumStates;
+    }
+
+    // The active state. ScriptedFsm::SetState stores the resolved CgsGui::State into the Fsm base
+    // mpCurrentState (covariant: every entry in mapGuiStates is a CgsGui::State), so the current
+    // state is that pointer narrowed back to CgsGui::State. Inlined in the X360 (no export).
+    State* StateMachine::GetCurrentState()
+    {
+        return static_cast<State*>(mpCurrentState);
+    }
+
+    // Bounds-checked const view of the table (the streaming/query helper). Mirrors GetState's
+    // checks. Inlined in the X360 (no standalone export).
+    const State* StateMachine::GetStateByIndex(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex >= 0 && liIndex < miNumStates,
+                   "Invalid index range in StateMachine::GetStateByIndex");
+        return mapGuiStates[liIndex];
+    }
+
+    // Hand the GUI input-event queue down to every owned state (the mirror of SetStates wiring
+    // the StateInterface): BrnBaseFlow::SetInEventQueue @0x827E28A8 forwards here. Reconstructed
+    // (inlined in the X360, no standalone export) from the SetStates per-state forwarding pattern.
+    void StateMachine::SetInEventQueue(InputBuffer::GuiEventQueue* lpInGuiEventQueue)
+    {
+        for (s32 li = 0; li < miNumStates; ++li)
+        {
+            if (mapGuiStates[li] != 0)
+                mapGuiStates[li]->SetInEventQueue(lpInGuiEventQueue);
+        }
+    }
 }
