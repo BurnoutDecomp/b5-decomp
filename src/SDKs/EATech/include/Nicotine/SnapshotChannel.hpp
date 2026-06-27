@@ -30,6 +30,15 @@
 
 #include "types.hpp"
 
+// FLAG (rwaudio/Nicotine PDB cross-check -- IDA Files/ProStreet08Milestone.pdb):
+// ProStreet's Nicotine::SnapshotChannel [sizeof=20, : public MixerMemBase] is a DIFFERENT
+// layout (mpChProc@0x00, mpCurrentTarget@0x04, mfTimeThroughLerp@0x08, mi16NicotineVolume@0x0C,
+// mi16SnapshotVolume@0x0E, mi16LerpStartVolume@0x10). That is a genuine cross-build VERSION
+// divergence -- NOT applicable here. Burnout's layout below is CONFIRMED by the ARTIST asm
+// (GetCurrentVolume @0x82B47200: lfs 0x10=mfElapsed / lfs 0x14=mfDuration / lhz 0x04=base /
+// lhz 0x00=target, then ratio = elapsed/duration interpolation). ARTIST wins; do NOT retrofit
+// the ProStreet shape.
+
 namespace Nicotine
 {
 
