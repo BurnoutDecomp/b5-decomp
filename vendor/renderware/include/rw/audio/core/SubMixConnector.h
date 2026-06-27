@@ -51,14 +51,20 @@ class SubMixConnector; // fwd
 class SubMix
 {
 public:
-    char mHeader00[0x21];          // +0x00 .. +0x20 -- opaque SubMix header
-    char mbNumChannels;            // +0x21
+    // FLAG (rwaudio PDB reconcile -- ProStreet08Milestone.pdb, rw::audio::core::SubMix):
+    // SubMix is a PlugIn-derived type; +0x21 is the PlugIn base's mOutputChannels and +0x24
+    // is float* mpSubMixBuffer (both ALIGN with ARTIST). Beyond +0x24 ProStreet DIVERGES
+    // from ARTIST (PDB: +0x28 mSendList, +0x2c mSubMixListNode, +0x34 mDeClickValueTotal[6]
+    // -- only 6 floats), so the ARTIST-derived layout below WINS for +0x28..+0x8D; names
+    // there stay ARTIST-grounded.
+    char mHeader00[0x21];          // +0x00 .. +0x20 -- PlugIn base (opaque here)
+    char mbNumChannels;            // +0x21 -- PlugIn base mOutputChannels
     char mGap22[0x24 - 0x22];      // +0x22 .. +0x23 -- opaque
-    int mField24;                  // +0x24 -- copied into a connecting connector's mField08
-                                   //          (Route::ConnectByPointerHandler: lwz 0x24)
-    SubMixConnector *mpConnectorHead; // +0x28
+    f32 *mpSubMixBuffer;           // +0x24 -- (PDB) copied into a connecting connector's
+                                   //          mpSubMixBuffer (Route::ConnectByPointerHandler: lwz 0x24)
+    SubMixConnector *mpConnectorHead; // +0x28 (ARTIST; PDB-divergent region)
     char mGap2C[0x34 - 0x2C];      // +0x2C .. +0x33 -- opaque
-    f32 mafChannelGain[(0x8D - 0x34) / 4]; // +0x34 .. -- per-channel gain accumulators
+    f32 mafChannelGain[(0x8D - 0x34) / 4]; // +0x34 .. -- per-channel gain accumulators (ARTIST)
     char mbDirty;                  // +0x8D
 };
 
@@ -73,11 +79,14 @@ public:
     // (IDA renders this as `int(int result, int a2)`; r3 = this, r4 = foldBackGains.)
     static SubMixConnector *Disconnect(SubMixConnector *self, const f32 *foldBackGains);
 
-    SubMixConnector *mpNext;   // +0x00
-    SubMixConnector **mppPrev; // +0x04
-    int mField08;              // +0x08
+    // FLAG (rwaudio PDB reconcile -- rw::audio::core::SubMixConnector [sizeof=20], offsets
+    // MATCH ARTIST): +0x00 is a ListDNode (pnext/pprev), +0x08 is float* mpSubMixBuffer (was
+    // an opaque int), +0x10 is mNumSubMixChannels (was mbField10). x64 widths.
+    SubMixConnector *mpNext;   // +0x00  ListDNode.pnext
+    SubMixConnector **mppPrev; // +0x04  ListDNode.pprev
+    f32 *mpSubMixBuffer;       // +0x08  (was mField08/int) -- the owning SubMix's buffer
     SubMix *mpSubMix;          // +0x0C
-    char mbField10;            // +0x10
+    u8 mNumSubMixChannels;     // +0x10  (was mbField10)
 };
 
 } // namespace core

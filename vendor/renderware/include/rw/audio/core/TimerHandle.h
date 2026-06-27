@@ -46,11 +46,17 @@ public:
     // so mbState is a single byte, not the word IDA's `*(result+20)=3` implies.)
     static TimerHandle *TimerHandle_ctor(TimerHandle *self);
 
-    int miField0;       // +0x00
-    char mGap04[0x0C - 0x04]; // +0x04 .. +0x0B -- opaque (untouched by ctor)
-    const char *mpName; // +0x0C
-    int miField10;      // +0x10
-    char mbState;       // +0x14
+    // FLAG (rwaudio PDB reconcile -- IDA Files/ProStreet08Milestone.pdb,
+    // rw::audio::core::TimerHandle [sizeof=24]): offsets match the ARTIST ctor; the PDB
+    // supplies authoritative names and fills the two ctor-untouched gaps (mpCallback @+0x04,
+    // mpContext @+0x08) the earlier recon left opaque. x64 widths; +0xNN are X360 offsets.
+    void *mpItemHandleNode;          // +0x00  Collection::ItemHandle.pNode (was miField0)
+    void (*mpCallback)(void *, f32); // +0x04  per-tick callback (was opaque gap)
+    void *mpContext;                 // +0x08  callback context (was opaque gap)
+    const char *mpName;              // +0x0C
+    u32 mCpuTicks;                   // +0x10  (was miField10)
+    u8 mStage;                       // +0x14  timer stage (was mbState)
+    u8 mTimerVisibility;             // +0x15
 };
 
 } // namespace core
