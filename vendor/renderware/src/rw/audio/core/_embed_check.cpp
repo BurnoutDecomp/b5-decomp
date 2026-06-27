@@ -10,7 +10,7 @@ void EmbedCheck()
 {
     using namespace rw::audio::core;
     sizeof(PlugIn);
-    sizeof(PlugInInfo);
+    sizeof(PlugInDescRunTime);
     sizeof(PlugInRegistry);
     sizeof(PlugInSetAttributeCommand);
     sizeof(System);

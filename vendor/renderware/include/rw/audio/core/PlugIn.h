@@ -3,8 +3,8 @@
 // =====================================================================================
 // Canonical RenderWare audio-core home for the plug-in family:
 //   rw::audio::core::PlugIn          -- abstract processing-graph node base
-//   rw::audio::core::PlugInInfo      -- per-plug-in registry record (run-time type)
-//   rw::audio::core::PlugInRegistry  -- intrusive singly-linked list of PlugInInfo
+//   rw::audio::core::PlugInDescRunTime      -- per-plug-in registry record (run-time type)
+//   rw::audio::core::PlugInRegistry  -- intrusive singly-linked list of PlugInDescRunTime
 //   rw::audio::core::Iir2            -- a 2nd-order (biquad) IIR filter kernel
 //   rw::audio::core::System          -- owning sub-system (only the surface this
 //                                       family touches is reconstructed here)
@@ -32,11 +32,10 @@ namespace core
 {
 
 class PlugIn;
-class PlugInInfo;
+class PlugInDescRunTime;  // rwaudio PDB name (the header's former "PlugInInfo") -- registry RTTI record
 class PlugInRegistry;
 class System;
 class Voice;              // rwaudio PDB: PlugIn::mpVoice (+0x08)
-struct PlugInDescRunTime; // rwaudio PDB: PlugIn::mpPlugInDescRunTime (+0x10)
 
 // -------------------------------------------------------------------------------------
 // PlugIn -- base class for a node in the audio processing graph.
@@ -44,7 +43,7 @@ struct PlugInDescRunTime; // rwaudio PDB: PlugIn::mpPlugInDescRunTime (+0x10)
 // Layout grounded in PlugIn::CreateInstance @0x82B6A818 (the placement-construct path):
 //   +0x00  vtable pointer            (virtual dispatch; vt[0]=dtor-ish, vt[3]=Destroy,
 //                                      vt[1]=Event handler reached via PlugIn::Event)
-//   +0x04  mpInfoVTable              (off_83271928: the PlugInInfo's secondary v-table /
+//   +0x04  mpInfoVTable              (off_83271928: the PlugInDescRunTime's secondary v-table /
 //                                      run-time-type record installed at construct time)
 //   +0x08  mpInput                   (a2: upstream PlugIn / input handle)
 //   +0x0C  mpAttributes              (float[2]-stride attribute table; set up elsewhere,
@@ -114,7 +113,7 @@ struct PlugInSetAttributeCommand
 };
 
 // -------------------------------------------------------------------------------------
-// PlugInInfo -- the run-time-type record for one registered plug-in. Forms an
+// PlugInDescRunTime -- the run-time-type record for one registered plug-in. Forms an
 // intrusive singly-linked list inside the registry. Layout grounded in
 // PlugInRegistry::GetPlugInHandle @0x82B6A908 and RegisterPlugInRunTime @0x82B6A938:
 //   ...                                  (object header / v-tables / construct hooks)
@@ -124,31 +123,44 @@ struct PlugInSetAttributeCommand
 //   +0x32  mbSeq    (byte; the registry's running id counter snapshotted here)
 //
 // The registry threads nodes by their +0x24 link; GetPlugInHandle walks links and
-// returns the owning PlugInInfo (link - 0x24).
+// returns the owning PlugInDescRunTime (link - 0x24).
 // -------------------------------------------------------------------------------------
-class PlugInInfo
+class PlugInDescRunTime
 {
 public:
     // Only the fields the bodied registry walks touch are modelled by name; the
     // gap before +0x24 is the (un-homed) object header / per-type hooks and is
     // preserved as opaque storage so offsets stay exact.
     char mHeader[0x24]; // +0x00 .. +0x23 -- opaque object header (un-homed here)
-    void *mpNext;       // +0x24 -- intrusive next link
-    u32 muId;           // +0x28 -- registration id
-    char mPad2C[0x32 - 0x2C]; // +0x2C .. +0x31 -- opaque
+    // FLAG (rwaudio PDB reconcile -- ProStreet08Milestone.pdb): PDB struct
+    // rw::audio::core::PlugInDescRunTime [sizeof=52] names the +0x00..+0x23 prefix this
+    // recon left opaque: +0x00 char* name; +0x04 GetSize(PlugInConfig*); +0x08
+    // CreateInstance(PlugIn*,void*); +0x0C pPreProcess; +0x10 pProcess; +0x14 pChannelMaps;
+    // +0x18 pParameterDescRunTime; +0x1C pEventDescRunTime; +0x20 pPlugInDescToolSide; then
+    // +0x24 listNode (== mpNext), +0x28 guid (== muId), +0x2C plugInType, +0x2D
+    // numConstructorParameters, +0x2E numAttributes... Kept opaque here (the registry walk
+    // only touches +0x24/+0x28); expand when a TU needs the descriptor body.
+    void *mpNext;       // +0x24 -- intrusive next link (PDB listNode)
+    u32 muId;           // +0x28 -- registration id (PDB guid)
+    char mPad2C[0x32 - 0x2C]; // +0x2C .. +0x31 -- opaque (PDB plugInType/numCtorParams/numAttributes..)
     char mbSeq;         // +0x32 -- registry sequence snapshot
 };
 
 // -------------------------------------------------------------------------------------
-// PlugInRegistry -- owns the linked list of PlugInInfo records. Layout grounded in
+// PlugInRegistry -- owns the linked list of PlugInDescRunTime records. Layout grounded in
 // CreateInstance @0x82B6DBC0, GetPlugInHandle @0x82B6A908, RegisterPlugInRunTime
 // @0x82B6A938:
-//   +0x00  mpHead    (pointer to the head node's +0x24 link, i.e. node->mpNext slot)
-//   +0x04  mppTail   (pointer to the tail link slot; set on first registration)
-//   +0x08  muCount   (number of registered plug-ins)
-//   +0x0C  mField0C  (int, init 0)
+// FLAG (rwaudio PDB reconcile -- rw::audio::core::PlugInRegistry [sizeof=24], offsets
+// MATCH): PDB models +0x00..+0x08 as a ListQueue mPlugInDescRunTimeList{phead,ptail,
+// entries}; +0x0C mpEnumerator; +0x10 mpSystem; +0x14 mCurrentRegistryIndex. Kept the flat
+// head/tail/count shape (ARTIST asm models it flat) and applied PDB names to the two
+// previously-guessed members.
+//   +0x00  mpHead    (ListQueue.phead -- head node's +0x24 link, i.e. node->mpNext slot)
+//   +0x04  mppTail   (ListQueue.ptail -- tail link slot; set on first registration)
+//   +0x08  muCount   (ListQueue.entries -- number of registered plug-ins)
+//   +0x0C  mpEnumerator (PDB; was mField0C; int/ListNode*, init 0)
 //   +0x10  mpSystem  (back-pointer to the owning System, set in CreateInstance)
-//   +0x14  mbNextSeq (byte; running sequence counter, post-incremented per register)
+//   +0x14  mCurrentRegistryIndex (PDB; was mbNextSeq; running index, post-inc per register)
 // Allocated 24 bytes (0x18), 16-aligned, via System::New2<PlugInRegistry>.
 // -------------------------------------------------------------------------------------
 class PlugInRegistry
@@ -156,14 +168,14 @@ class PlugInRegistry
 public:
     static PlugInRegistry *CreateInstance(System *system);
     static void *GetPlugInHandle(PlugInRegistry *self, int id);
-    static void *RegisterPlugInRunTime(PlugInRegistry *self, PlugInInfo *info);
+    static void *RegisterPlugInRunTime(PlugInRegistry *self, PlugInDescRunTime *info);
 
-    void *mpHead;     // +0x00
-    void **mppTail;   // +0x04
-    u32 muCount;      // +0x08
-    int mField0C;     // +0x0C
-    System *mpSystem; // +0x10
-    char mbNextSeq;   // +0x14
+    void *mpHead;                 // +0x00  ListQueue.phead
+    void **mppTail;               // +0x04  ListQueue.ptail
+    u32 muCount;                  // +0x08  ListQueue.entries
+    int mpEnumerator;             // +0x0C  (was mField0C)
+    System *mpSystem;             // +0x10
+    char mCurrentRegistryIndex;   // +0x14  (was mbNextSeq)
 };
 
 // -------------------------------------------------------------------------------------
