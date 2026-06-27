@@ -28,4 +28,16 @@ namespace NFSMixShape
     int   GetdBFromQ15(int liQ15);
     // dB (hundredths) -> Q15 gain (>=0 dB clamps to 0x7FFF). @0x82B44ED0
     int   GetQ15FromHundredthsdB(int liHundredthsDb);
+
+    // eMIXTABLEID curve shapes (0..9) for GetCurveOutput.
+    enum eMixTableId
+    {
+        SHAPE_DWN_EQPWR = 0, SHAPE_UP_EQPWR = 1,
+        SHAPE_DWN_EQPWR_SQ = 2, SHAPE_UP_EQPWR_SQ = 3,
+        SHAPE_DWN_ONE_MIN_EQPWR = 4, SHAPE_UP_ONE_MIN_EQPWR = 5,
+        SHAPE_DWN_ONE_MIN_EQPWR_SQ = 6, SHAPE_UP_ONE_MIN_EQPWR_SQ = 7,
+        SHAPE_DWN_LINEAR = 8, SHAPE_UP_LINEAR = 9, MAX_SHAPE_TYPES = 10,
+    };
+    // Evaluate curve `liId` at position liPos [0,0x7FFF]; lbDb -> dB hundredths else Q15. @0x82B45160
+    int   GetCurveOutput(int liId, int liPos, char lbDb);
 }
