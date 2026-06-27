@@ -6,6 +6,9 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnBootVideos.h"               // BrnGui::BootVideos (the boot-logo state)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"// CgsGui::StateInterface (BootVideos' channel)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // CgsModule::VariableEventQueue (BootVideos' in-queue)
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateMachine.h"  // CgsGui::StateMachine (runs the boot FSM Lua script)
+#include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"     // CgsResource::Pool (holds the loaded FSM bundle)
+#include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"               // CgsMemory::HeapMalloc (the boot FSM Lua VM heap)
 
 // BrnGui::GuiModule -- the GUI module (a dispatched CgsModule, like BrnRendererModule). The X360 module
 // (Construct 0x82518028 / Prepare 0x82518D68 / Update 0x82527A58 / Render 0x825146B8) builds the entire
@@ -47,6 +50,16 @@ namespace BrnGui
         CgsModule::VariableEventQueue<18432, 16> mBootInQueue;       // BootVideos' input queue (cache-ready/video-finished)
         bool                   mbBootStarted;                        // fed the initial cache-ready event yet?
         bool                   mbLoadingHasShown;                    // the initial loading screen has been displayed
+
+        // Boot through the REAL Lua FSM: a CgsGui::StateMachine runs the BRNVIDEOFSM Lua script (loaded
+        // from FSM/BRNVIDEOFSM.BUNDLE) which SetStates() the BF_VIDEOS state -> mBootVideos. This is the
+        // first slice of the faithful flow (the X360 runs this inside BrnHudFlow + the GuiFsmController,
+        // sequenced via ModelIO; see [[lua-system]]). If the bundle/script fails to come up, the module
+        // falls back to driving mBootVideos directly (mbBootFsmReady=false) so the boot videos still play.
+        CgsGui::StateMachine   mBootStateMachine;                    // runs the BRNVIDEOFSM Lua FSM
+        CgsResource::Pool      mBootFsmPool;                         // holds the loaded FSM LuaCode bundle
+        CgsMemory::HeapMalloc  mBootLuaHeap;                         // backing heap for the boot FSM's Lua VM
+        bool                   mbBootFsmReady;                       // the Lua FSM loaded + entered BF_VIDEOS
     };
 }
 

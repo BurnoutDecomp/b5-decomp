@@ -14,6 +14,7 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsSnrResourceType.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSchemaResourceType.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsAptDataHeaderType.h"
+#include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"   // CgsResource::LuaCodeResourceType (0x22)
 
 // ============================================================================================
 // Resource-type registration -- the faithful counterpart of the X360
@@ -99,5 +100,7 @@ namespace CgsResource
         TypeRegistry::Register(&sEntryList);
         static AptDataHeaderType           sAptDataHeader;     // 0x1E  AptData (GUI/Flash movie header)
         TypeRegistry::Register(&sAptDataHeader);
+        static LuaCodeResourceType         sLuaCode;           // 0x22  LuaCode (FSM scripts; loaded by the GUI flow)
+        TypeRegistry::Register(&sLuaCode);
     }
 }
