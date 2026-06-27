@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"      // CgsModule::ModuleSingleBuffered base
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
 #include "GameSource/Gui/Flow/HUD/States/BrnBootVideos.h"               // BrnGui::BootVideos (the boot-logo state)
+#include "GameSource/Gui/Flow/HUD/States/BrnBootLoading.h"              // BrnGui::BootLoading (the boot loading state)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"// CgsGui::StateInterface (BootVideos' channel)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // CgsModule::VariableEventQueue (BootVideos' in-queue)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateMachine.h"  // CgsGui::StateMachine (runs the boot FSM Lua script)
@@ -58,8 +59,22 @@ namespace BrnGui
         // falls back to driving mBootVideos directly (mbBootFsmReady=false) so the boot videos still play.
         CgsGui::StateMachine   mBootStateMachine;                    // runs the BRNVIDEOFSM Lua FSM
         CgsResource::Pool      mBootFsmPool;                         // holds the loaded FSM LuaCode bundle
-        CgsMemory::HeapMalloc  mBootLuaHeap;                         // backing heap for the boot FSM's Lua VM
+        CgsMemory::HeapMalloc  mBootLuaHeap;                         // backing heap for the boot FSM Lua VMs (shared)
         bool                   mbBootFsmReady;                       // the Lua FSM loaded + entered BF_VIDEOS
+
+        // Boot-phase sequencer: the boot runs BF_LOADING (BRNFLOADFSM) then BF_VIDEOS (BRNVIDEOFSM), each a
+        // single-state FSM in its own StateMachine, advancing at loading-complete (the PC stand-in for the
+        // X360 GuiFsmController, which sequences these via ModelIO; see [[lua-system]]). BF_LOADING runs the
+        // real BootLoading state through its Lua script; its show/stop-loading-screen events are emitted but
+        // not yet routed to the visual (the game-flow loading screen drives that) -- FLAG, routing is a
+        // follow-on. Phase 0 = BF_LOADING, phase 1 = BF_VIDEOS.
+        BootLoading            mBootLoading;                         // BF_LOADING state
+        CgsGui::StateMachine   mBootLoadingStateMachine;             // runs the BRNFLOADFSM Lua FSM
+        CgsGui::StateInterface mBootLoadingStateInterface;           // BootLoading's output channel
+        CgsModule::VariableEventQueue<18432, 16> mBootLoadingInQueue;// BootLoading's input queue (cache-ready/loading-complete)
+        CgsResource::Pool      mBootLoadingPool;                     // holds the BRNFLOADFSM LuaCode bundle
+        bool                   mbBootLoadingFsmReady;                // the BRNFLOADFSM Lua FSM loaded + entered BF_LOADING
+        s32                    miBootPhase;                          // 0 = BF_LOADING, 1 = BF_VIDEOS
     };
 }
 

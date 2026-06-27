@@ -21,7 +21,8 @@ namespace
     // node/management structures (matching the MovieManager pool), so each backing buffer must comfortably
     // exceed that. 256 KB/type is plenty and not large.
     const u32 KU_FSM_POOL_BYTES = 256u * 1024u;
-    u8 s_fsmPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FSM_POOL_BYTES];
+    // One backing set per concurrently-live boot FSM pool (BF_LOADING + BF_VIDEOS).
+    u8 s_fsmPoolBacking[2][CgsResource::E_MEMTYPE_NUMTYPES][KU_FSM_POOL_BYTES];
     u8 s_bootLuaHeapBuffer[512u * 1024u];
 }
 
@@ -44,7 +45,8 @@ namespace BrnGui
     // ModelIO resource requests; the PC port loads them synchronously via CgsResource::BundleLoader,
     // the same leaf the MovieManager uses for VIDEOLIST.BUNDLE (see [[lua-system]]). Returns null if
     // the bundle is missing/unreadable or carries no LuaCode resource.
-    static CgsResource::LuaCodeResource* LoadFsmLuaCode(CgsResource::Pool& lPool, const char* lpcBundlePath)
+    static CgsResource::LuaCodeResource* LoadFsmLuaCode(CgsResource::Pool& lPool, const char* lpcBundlePath,
+                                                        s32 liBackingSet)
     {
         CgsResource::Pool::InitOptions lOptions;
         lOptions.miId   = 2;
@@ -54,7 +56,7 @@ namespace BrnGui
             lOptions.maHeapInfo[lt].muMaxNodes       = 64u;
             lOptions.maHeapInfo[lt].muHeapMemorySize = KU_FSM_POOL_BYTES - 64u * 1024u;
             lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
-            lOptions.mResource.m_baseResources[lt]   = s_fsmPoolBacking[lt];
+            lOptions.mResource.m_baseResources[lt]   = s_fsmPoolBacking[liBackingSet][lt];
             lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = KU_FSM_POOL_BYTES;
             lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
         }
@@ -94,12 +96,32 @@ namespace BrnGui
         return lpLua;
     }
 
+    // Bring one boot FSM phase up: construct + wire the state into its StateMachine, then compile + enter
+    // the Lua script (ScriptedFsm::Prepare -> SetState(id) -> state OnEnter). Returns true if the FSM came up.
+    static bool SetupBootPhase(CgsGui::StateMachine& lStateMachine, CgsGui::State& lState,
+                               CgsGui::StateInterface& lStateInterface,
+                               CgsModule::VariableEventQueue<18432, 16>& lInQueue,
+                               CgsResource::LuaCodeResource* lpLuaCode, CgsMemory::HeapMalloc& lHeap, CgsID lId)
+    {
+        if (lpLuaCode == 0)
+            return false;
+        lState.Construct(lId, &lStateMachine);
+        lStateMachine.Construct();
+        lStateMachine.SetStateInterface(&lStateInterface);
+        CgsGui::State* lapStates[1] = { &lState };
+        lStateMachine.SetStates(lapStates, 1);
+        lStateMachine.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&lInQueue));
+        return lStateMachine.Prepare(lpLuaCode, &lHeap, lId);
+    }
+
     void GuiModule::Construct()
     {
         mMovieManager.Construct();
         mbBootStarted = false;
         mbLoadingHasShown = false;
         mbBootFsmReady = false;
+        mbBootLoadingFsmReady = false;
+        miBootPhase = 0;
     }
 
     bool GuiModule::Prepare()
@@ -110,43 +132,47 @@ namespace BrnGui
         mMovieManager.Prepare(0);
         gpActiveMovieManager = &mMovieManager;
 
-        // Stand up the boot-logo flow: BootVideos emits play/stop through mBootStateInterface and reads its
-        // input events from mBootInQueue (which this module feeds cache-ready + video-finished).
-        mBootInQueue.Construct();
-        mBootStateInterface.Construct();
         mbBootStarted = false;
         mbLoadingHasShown = false;
         mbBootFsmReady = false;
+        mbBootLoadingFsmReady = false;
+        miBootPhase = 0;
 
-        // FAITHFUL FLOW (first slice): drive BootVideos through a real CgsGui::StateMachine running the
-        // BRNVIDEOFSM Lua script. The script's SetState("BF_VIDEOS") activates the C++ BootVideos state;
-        // from then on the StateMachine ticks it (Fsm::Update) just as BrnHudFlow does. [PC IO] the FSM
-        // bundle is loaded synchronously (the X360 streams it via the GuiFsmController's ModelIO requests;
-        // see [[lua-system]]). If anything in this path fails, fall back to driving BootVideos directly so
-        // the boot videos still play (and log which path is active).
-        CgsResource::LuaCodeResource* lpLuaCode = LoadFsmLuaCode(mBootFsmPool, "FSM/BRNVIDEOFSM.BUNDLE");
-        if (lpLuaCode != 0)
-        {
-            mBootLuaHeap.Construct(s_bootLuaHeapBuffer, static_cast<s32>(sizeof(s_bootLuaHeapBuffer)));
+        // Shared Lua VM heap for both boot-phase FSMs (each gets its own lua_State from it).
+        mBootLuaHeap.Construct(s_bootLuaHeapBuffer, static_cast<s32>(sizeof(s_bootLuaHeapBuffer)));
 
-            mBootVideos.Construct(CgsIDCompress("BF_VIDEOS"), &mBootStateMachine);
-            mBootStateMachine.Construct();
-            mBootStateMachine.SetStateInterface(&mBootStateInterface);
-            CgsGui::State* lapStates[1] = { &mBootVideos };
-            mBootStateMachine.SetStates(lapStates, 1);
-            mBootStateMachine.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mBootInQueue));
+        // FAITHFUL BOOT FLOW: sequence the boot through the real Lua FSMs -- BF_LOADING (BRNFLOADFSM) then
+        // BF_VIDEOS (BRNVIDEOFSM), each a single-state FSM the X360 GuiFsmController loads in turn. [PC IO]
+        // the bundles are loaded synchronously (the X360 streams them via ModelIO; see [[lua-system]]); the
+        // boot advances BF_LOADING->BF_VIDEOS at loading-complete (the PC stand-in for the controller's
+        // load-complete sequencing). If a phase's FSM fails to come up, the boot still reaches the videos
+        // (BF_VIDEOS falls back to driving BootVideos directly), so the logos always play.
 
-            // Compile + enter the script: ScriptedFsm::Prepare -> SetState("BF_VIDEOS") -> BootVideos::OnEnter.
-            mbBootFsmReady = mBootStateMachine.Prepare(lpLuaCode, &mBootLuaHeap, CgsIDCompress("BF_VIDEOS"));
-        }
+        // PHASE 0: BF_LOADING (the boot loading state, run through its Lua FSM).
+        mBootLoadingInQueue.Construct();
+        mBootLoadingStateInterface.Construct();
+        CgsResource::LuaCodeResource* lpLoadingLua = LoadFsmLuaCode(mBootLoadingPool, "FSM/BRNFLOADFSM.BUNDLE", 0);
+        mbBootLoadingFsmReady = SetupBootPhase(mBootLoadingStateMachine, mBootLoading, mBootLoadingStateInterface,
+                                               mBootLoadingInQueue, lpLoadingLua, mBootLuaHeap,
+                                               CgsIDCompress("BF_LOADING"));
 
+        // PHASE 1: BF_VIDEOS (the boot-logo state, run through its Lua FSM).
+        mBootInQueue.Construct();
+        mBootStateInterface.Construct();
+        CgsResource::LuaCodeResource* lpVideosLua = LoadFsmLuaCode(mBootFsmPool, "FSM/BRNVIDEOFSM.BUNDLE", 1);
+        mbBootFsmReady = SetupBootPhase(mBootStateMachine, mBootVideos, mBootStateInterface,
+                                        mBootInQueue, lpVideosLua, mBootLuaHeap, CgsIDCompress("BF_VIDEOS"));
+
+        CgsDev::Log::WriteToLog(mbBootLoadingFsmReady
+            ? "[GuiModule] BF_LOADING running through the real BRNFLOADFSM Lua FSM.\n"
+            : "[GuiModule] BF_LOADING FSM unavailable -> skipping straight to BF_VIDEOS.\n");
         CgsDev::Log::WriteToLog(mbBootFsmReady
-            ? "[GuiModule] boot videos driven through the real BRNVIDEOFSM Lua FSM.\n"
-            : "[GuiModule] boot FSM unavailable -> driving BootVideos directly (fallback).\n");
+            ? "[GuiModule] BF_VIDEOS running through the real BRNVIDEOFSM Lua FSM.\n"
+            : "[GuiModule] BF_VIDEOS FSM unavailable -> driving BootVideos directly (fallback).\n");
 
         if (!mbBootFsmReady)
         {
-            // Fallback: the prior direct-drive path (no Lua FSM).
+            // Fallback: drive BootVideos directly (the pre-FSM path) so the logos still play.
             mBootVideos.SetStateInterface(&mBootStateInterface);
             mBootVideos.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mBootInQueue));
             mBootVideos.OnEnter();
@@ -156,12 +182,17 @@ namespace BrnGui
 
     bool GuiModule::Release()
     {
+        if (mbBootLoadingFsmReady)
+        {
+            mBootLoadingStateMachine.Release();   // ScriptedFsm::Release -> lua_close + clear
+            mbBootLoadingFsmReady = false;
+        }
         if (mbBootFsmReady)
         {
-            mBootStateMachine.Release();   // ScriptedFsm::Release -> lua_close + clear
-            mBootLuaHeap.Destruct();
+            mBootStateMachine.Release();
             mbBootFsmReady = false;
         }
+        mBootLuaHeap.Destruct();
         gpActiveMovieManager = 0;
         mMovieManager.Release();
         return true;
@@ -184,17 +215,52 @@ namespace BrnGui
     // runs BootVideos inside BrnHudFlow and routes via the EventObserver; this bridges the queues directly.]
     void GuiModule::UpdateBootVideoFlow()
     {
-        // 1. Feed cache-ready once -- but only after the initial loading screen has been shown AND completed.
-        //    This stands in for the boot FSM's BootPreload phase: in the real flow BootPreload runs first
-        //    (the loading screen is up while boot resources stream), and BootVideos only plays once the
-        //    cache is ready. The bundle itself loaded synchronously in Prepare, so the gate here is the
-        //    initial-loading-screen completion (MainGameFlowStateInitialLoadingScreen drops
-        //    gBrnLoadingScreenShouldShow at FinishLoading) -- so the user sees the loading screen first,
-        //    THEN the EA/Criterion logos. [follow-on: drive this off the real BootPreload state.]
+        // Track the loading-screen lifecycle (the boot's gate). The game-flow loading screen sets
+        // gBrnLoadingScreenShouldShow during the InitialLoadingScreen stages and drops it at FinishLoading.
         if (gBrnLoadingScreenShouldShow)
             mbLoadingHasShown = true;
         const bool lbLoadingComplete = mbLoadingHasShown && !gBrnLoadingScreenShouldShow;
-        if (!mbBootStarted && lbLoadingComplete)
+
+        // ---- PHASE 0: BF_LOADING -----------------------------------------------------------------------
+        // Run the BootLoading state through the BRNFLOADFSM Lua FSM while the loading screen is up. The boot
+        // resources are already resident (loaded synchronously in Prepare), so feed cache-ready immediately;
+        // BootLoading shows its loading screen (event emitted, not yet routed to the visual -- the game-flow
+        // loading screen drives that) and waits. When the loading completes, feed loading-complete(137):
+        // BootLoading sends "BF_PROCEED", and the sequencer advances to BF_VIDEOS (the PC stand-in for the
+        // GuiFsmController loading the next single-state FSM).
+        if (miBootPhase == 0)
+        {
+            if (mbBootLoadingFsmReady)
+            {
+                if (!mbBootStarted)
+                {
+                    CgsModule::Event lReady;
+                    mBootLoadingInQueue.AddEvent(&lReady, 64, static_cast<s32>(sizeof(lReady)));
+                    mbBootStarted = true;
+                }
+                mBootLoadingStateMachine.CgsFsm::Fsm::Update();   // runs BootLoading through the Lua FSM
+
+                if (lbLoadingComplete)
+                {
+                    CgsModule::Event lDone;
+                    mBootLoadingInQueue.AddEvent(&lDone, 137, static_cast<s32>(sizeof(lDone)));
+                    mBootLoadingStateMachine.CgsFsm::Fsm::Update();   // process 137 -> SendStateEvent("BF_PROCEED")
+                    CgsDev::Log::WriteToLog("[GuiModule] BF_LOADING done -> advancing to BF_VIDEOS.\n");
+                    miBootPhase  = 1;
+                    mbBootStarted = false;   // re-arm cache-ready for BF_VIDEOS
+                }
+            }
+            else if (lbLoadingComplete)
+            {
+                miBootPhase  = 1;           // no BF_LOADING FSM -> go straight to the videos
+                mbBootStarted = false;
+            }
+            return;   // the MovieManager bridge below belongs to BF_VIDEOS (phase 1)
+        }
+
+        // ---- PHASE 1: BF_VIDEOS ------------------------------------------------------------------------
+        // 1. Feed cache-ready once so BootVideos starts playing the logos.
+        if (!mbBootStarted)
         {
             CgsModule::Event lReadyEvent;
             mBootInQueue.AddEvent(&lReadyEvent, 64, static_cast<s32>(sizeof(lReadyEvent)));
