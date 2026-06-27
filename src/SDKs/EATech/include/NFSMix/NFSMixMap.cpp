@@ -1,5 +1,6 @@
 #include "SDKs/EATech/include/NFSMix/NFSMixMap.hpp"
 #include "SDKs/EATech/include/NFSMix/NFSMixMaster.hpp"
+#include "SDKs/EATech/include/NFSMix/NFSMixRecords.hpp" // stMixCtlProc / stMixMapHeader for the helpers
 
 // ===========================================================================
 //  NFSMixMap -- ctor / Init / dtor. Store-for-store from BURNOUT_X360_ARTIST.XEX.
@@ -45,4 +46,51 @@ void NFSMixMap::Init(NFSMixMaster* lpMaster)
 // ---------------------------------------------------------------------------
 NFSMixMap::~NFSMixMap()
 {
+}
+
+// ---------------------------------------------------------------------------
+// Cursor / block-pointer helpers used by the allocate/assign passes.
+// Each returns the current slot and advances its allocation cursor. ARTIST-verified.
+// ---------------------------------------------------------------------------
+
+// GetProcessMixCtlPtr @0x82B49500 -- next mix-ctl proc slot; bump the assigned count
+// only when lbAdvance != 0 (X360 stride 8 == sizeof stMixCtlProc -> x64 array index).
+stMixCtlProc* NFSMixMap::GetProcessMixCtlPtr(char lbAdvance)
+{
+    stMixCtlProc* lpProc = &m_pMixCtlProc[m_nAssignedMixCtlProc]; // r10*8 + (+0x190)
+    if (lbAdvance)
+        ++m_nAssignedMixCtlProc;                                  // *(+0x13C) += 1
+    return lpProc;
+}
+
+// GetMasterChannelOutputArrayPtr @0x82B495F0 -- &outputBlock[cursor]; cursor += liN*16.
+int* NFSMixMap::GetMasterChannelOutputArrayPtr(int liN)
+{
+    int* lpPtr = &m_pMasterChannelOutputArrayBlock[m_CurrentMasterOutputBlockOffset]; // off*4 + (+0x178)
+    m_CurrentMasterOutputBlockOffset += liN * 16;                                     // (+0x228) += 16*liN
+    return lpPtr;
+}
+
+// GetMasterChannelInputPtr @0x82B49618 -- &inputBlock[cursor]; cursor += liN.
+int* NFSMixMap::GetMasterChannelInputPtr(int liN)
+{
+    int* lpPtr = &m_pMasterChannelInputs[m_CurrentMasterInputBlockOffset]; // off*4 + (+0x204)
+    m_CurrentMasterInputBlockOffset += liN;                                // (+0x220) += liN
+    return lpPtr;
+}
+
+// GetSubChannelInputPtr @0x82B49638 -- &subInputBlock[cursor]; cursor += liN.
+int* NFSMixMap::GetSubChannelInputPtr(int liN)
+{
+    int* lpPtr = &m_pSubChannelInputs[m_CurrentSubInputBlockOffset]; // off*4 + (+0x208)
+    m_CurrentSubInputBlockOffset += liN;                             // (+0x224) += liN
+    return lpPtr;
+}
+
+// GetMapStateCopies @0x82B49658 -- the state's ref-count, or 0 if out of range.
+int NFSMixMap::GetMapStateCopies(int liState)
+{
+    if (liState >= m_pMMHdr->NumStates)   // *(+0x74) -> NumStates (+0x04)
+        return 0;
+    return m_StateRefCount[liState];      // *(this + 8 + 4*liState)
 }
