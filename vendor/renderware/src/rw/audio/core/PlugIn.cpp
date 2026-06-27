@@ -46,21 +46,21 @@ extern System g_PlugInSystem;
 // Placement-constructs a PlugIn over `self`, wires its links, and runs the factory's
 // begin hook; on failure it virtually destroys/cleans up and returns null.
 // -------------------------------------------------------------------------------------
-PlugIn *PlugIn::CreateInstance(PlugIn *self, PlugIn *input, System *factory,
+PlugIn *PlugIn::CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pDesc,
                                void *typeRecord, char flag)
 {
-    self->mfAttrib0 = 0.0f;                  // stfs flt(0) -> 0x14
-    self->mpInput = input;                    // stw a2 -> 0x08
-    self->mfAttrib1 = 0.0f;                   // stfs flt(0) -> 0x18
-    self->mpFactory = factory;                // stw a3 -> 0x10
-    self->mState = 0;                         // stw 0 -> 0x1C
-    self->mpSystem = &g_PlugInSystem;         // stw off_83271928 -> 0x04
-    self->mbFlag20 = flag;                    // stb a5 -> 0x20
+    self->mLatencyInSamples = 0.0f;          // stfs flt(0) -> 0x14
+    self->mpVoice = voice;                     // stw a2 -> 0x08
+    self->mDecaySamples = 0.0f;               // stfs flt(0) -> 0x18
+    self->mpPlugInDescRunTime = pDesc;        // stw a3 -> 0x10
+    self->mCpuTicks = 0;                      // stw 0 -> 0x1C
+    self->mpSystemUseGetSystemAccessor = &g_PlugInSystem; // stw off_83271928 -> 0x04
+    self->mInputChannels = flag;             // stb a5 -> 0x20
 
     PlugInCreateDesc *desc = static_cast<PlugInCreateDesc *>(typeRecord);
-    self->mbFlag21 = desc->mbInitFlag;        // lbz 8(a4) -> stb 0x21
+    self->mOutputChannels = desc->mbInitFlag; // lbz 8(a4) -> stb 0x21
 
-    PlugInFactory *fac = reinterpret_cast<PlugInFactory *>(factory);
+    PlugInFactory *fac = reinterpret_cast<PlugInFactory *>(pDesc);
     if (!fac->mpBegin(self, desc->mpContext)) // (*(a3+8))(self, *(a4))
     {
         // Begin failed: virtually destruct (vt[0]) then Destroy(0) (vt[3]) and bail.
@@ -85,7 +85,7 @@ int PlugIn::Event(PlugIn *self)
 // -------------------------------------------------------------------------------------
 PlugIn *PlugIn::GetAttribute(PlugIn *self, int index, f32 *outValue)
 {
-    *outValue = self->mpAttributes[index].mfValue; // *(8*a2 + *(self+0xC))
+    *outValue = self->mpAttribute[index].mfValue; // *(8*a2 + *(self+0xC))
     return self;
 }
 
@@ -96,7 +96,7 @@ PlugIn *PlugIn::GetAttribute(PlugIn *self, int index, f32 *outValue)
 // -------------------------------------------------------------------------------------
 PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
 {
-    System *system = self->mpSystem;                            // lwz 4(self)
+    System *system = self->mpSystemUseGetSystemAccessor;        // lwz 4(self)
     u32 cursor = system->muDeferredRingCursor;                  // lwz 0x10B8
     PlugInSetAttributeCommand *cmd =                            // *(self+0x20)+cursor
         reinterpret_cast<PlugInSetAttributeCommand *>(system->mpDeferredRingBase + cursor);
@@ -117,7 +117,7 @@ PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
 int PlugIn::SetAttributeHandler(void *cmd)
 {
     PlugInSetAttributeCommand *c = static_cast<PlugInSetAttributeCommand *>(cmd);
-    c->mpTarget->mpAttributes[c->miIndex].mfValue = c->mfValue; // *(8*idx + *(target+0xC)) = value
+    c->mpTarget->mpAttribute[c->miIndex].mfValue = c->mfValue; // *(8*idx + *(target+0xC)) = value
     return 16;
 }
 
