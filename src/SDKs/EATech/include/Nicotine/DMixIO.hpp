@@ -8,9 +8,9 @@
 //  and write a single dynamic-mixer (DMix) node's parameter slots. It carries
 //  a packed 32-bit state word (SFX id / instance / object-class flags) and two
 //  opaque parameter arrays:
-//    - the INPUT array  (mpiDMixInput,  this+0x08): game -> mixer values,
+//    - the INPUT array  (m_pDMixInputBlock,  this+0x08): game -> mixer values,
 //      indexed directly by slot (4*slot from the array base).
-//    - the OUTPUT array (mpiDMixOutput, this+0x0C): mixer -> game values,
+//    - the OUTPUT array (m_pDMixOutputBlock, this+0x0C): mixer -> game values,
 //      packed two 16-bit fields per int (slot/2 selects the int, slot&1
 //      selects the high/low half) plus an enable word at +0x3C.
 //
@@ -106,15 +106,20 @@ struct DMixIO
     // IsSFXObj @ 0x82B449E8: top 3 bits == 0b010 (object-class tag == SFX).
     int IsSFXObj();
 
+    // FLAG (Nicotine PDB reconcile -- ProStreet08Milestone.pdb, Nicotine::DMixIO [sizeof=16]):
+    // MATCHES exactly (vfptr/u32/int*/int*), so the PDB names are authoritative:
+    // muState->m_ID, mpiDMixInput->m_pDMixInputBlock, mpiDMixOutput->m_pDMixOutputBlock. The
+    // "enable word at +0x3C" is inside the output BLOCK (m_pDMixOutputBlock points to it), not
+    // a DMixIO member -- consistent with sizeof=16.
     // [+0x00] vptr (the virtual dtor above).
     // [+0x04] packed state word: bit0-7 stateId, bit4-10 sfxId,
     //         bit16-20 instanceNum, bit29-31 object-class tag.
-    u32  muState;
+    u32  m_ID;
     // [+0x08] input parameter array base (int per slot); null until allocated.
-    int* mpiDMixInput;
+    int* m_pDMixInputBlock;
     // [+0x0C] output parameter array base (two 16-bit fields per int, plus an
     //         enable word at +0x3C); null until allocated.
-    int* mpiDMixOutput;
+    int* m_pDMixOutputBlock;
 };
 
 } // namespace Nicotine

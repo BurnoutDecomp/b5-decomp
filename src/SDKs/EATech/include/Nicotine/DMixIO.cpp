@@ -27,20 +27,20 @@ namespace Nicotine
 // ctor @ 0x82B448B0
 //   result[2] = 0; *result = &vtable; result[3] = 0;
 DMixIO::DMixIO()
-    : muState(0)        // (X360 does not write +0x04 here; left at construction default)
-    , mpiDMixInput(0)   // result[2] @ +0x08
-    , mpiDMixOutput(0)  // result[3] @ +0x0C
+    : m_ID(0)        // (X360 does not write +0x04 here; left at construction default)
+    , m_pDMixInputBlock(0)   // result[2] @ +0x08
+    , m_pDMixOutputBlock(0)  // result[3] @ +0x0C
 {
     // vptr (+0x00) is installed by the compiler-generated prologue (the X360
     // ctor's `*result = &off_8214780C`), reproduced here by the virtual dtor.
-    (void)muState;
+    (void)m_ID;
 }
 
 // SetDMixInput @ 0x82B448D0
 //   v3 = *(result+8); if (v3) *(4*a2 + v3) = a3; return result;
 DMixIO* DMixIO::SetDMixInput(int iSlot, int iValue)
 {
-    int* lpiInput = mpiDMixInput;
+    int* lpiInput = m_pDMixInputBlock;
     if (lpiInput)
         lpiInput[iSlot] = iValue;
     return this;
@@ -49,14 +49,14 @@ DMixIO* DMixIO::SetDMixInput(int iSlot, int iValue)
 // SetDMixInputUnsafe (DWARF DMixIO.hpp:45): unchecked store (no null guard).
 void DMixIO::SetDMixInputUnsafe(int iSlot, int iValue)
 {
-    mpiDMixInput[iSlot] = iValue;
+    m_pDMixInputBlock[iSlot] = iValue;
 }
 
 // GetDMixInput @ 0x82B448E8
 //   v2 = *(a1+8); if (v2) return *(4*a2 + v2); else return 0;
 int DMixIO::GetDMixInput(int iSlot)
 {
-    int* lpiInput = mpiDMixInput;
+    int* lpiInput = m_pDMixInputBlock;
     if (lpiInput)
         return lpiInput[iSlot];
     return 0;
@@ -65,7 +65,7 @@ int DMixIO::GetDMixInput(int iSlot)
 // GetDMixInputPtr (DWARF DMixIO.hpp:59)
 int* DMixIO::GetDMixInputPtr()
 {
-    return mpiDMixInput;
+    return m_pDMixInputBlock;
 }
 
 // GetDMixOutput @ 0x82B44908
@@ -75,7 +75,7 @@ int* DMixIO::GetDMixInputPtr()
 //   switch (a3) { ... }
 int DMixIO::GetDMixOutput(int iSlot, int ePreset)
 {
-    int* lpiOutput = mpiDMixOutput;
+    int* lpiOutput = m_pDMixOutputBlock;
     if (!lpiOutput)
         return 0;
 
@@ -107,14 +107,14 @@ int DMixIO::GetDMixOutput(int iSlot, int ePreset)
 // GetDMixOutputPtr (DWARF DMixIO.hpp:60)
 int* DMixIO::GetDMixOutputPtr()
 {
-    return mpiDMixOutput;
+    return m_pDMixOutputBlock;
 }
 
 // TurnOffMixOutput @ 0x82B44988
 //   v1 = *(result+12); if (v1) *(v1+60) = 0; return result;
 DMixIO* DMixIO::TurnOffMixOutput()
 {
-    int* lpiOutput = mpiDMixOutput;
+    int* lpiOutput = m_pDMixOutputBlock;
     if (lpiOutput)
         lpiOutput[60 / sizeof(int)] = 0;  // enable word at byte +0x3C
     return this;
@@ -124,7 +124,7 @@ DMixIO* DMixIO::TurnOffMixOutput()
 //   v1 = *(result+12); if (v1) *(v1+60) = 1; return result;
 DMixIO* DMixIO::TurnOnMixOutput()
 {
-    int* lpiOutput = mpiDMixOutput;
+    int* lpiOutput = m_pDMixOutputBlock;
     if (lpiOutput)
         lpiOutput[60 / sizeof(int)] = 1;  // enable word at byte +0x3C
     return this;
@@ -134,29 +134,29 @@ DMixIO* DMixIO::TurnOnMixOutput()
 //   lhz r11,4(r3); clrlwi r3,r11,24  -> low 8 bits of the state word.
 int DMixIO::GetStateID()
 {
-    return muState & 0xFF;
+    return m_ID & 0xFF;
 }
 
 // GetSFX_ID @ 0x82B449C8
 //   (*(a1+4) >> 4) & 0x7F   (extrwi r3,r11,7,21 -> 7 bits starting at bit 4).
 int DMixIO::GetSFX_ID()
 {
-    return (muState >> 4) & 0x7F;
+    return (m_ID >> 4) & 0x7F;
 }
 
 // GetInstanceNum @ 0x82B449D8
-//   *(a1+4) ; extrwi r3,r11,5,16 -> 5 bits at PPC bit-offset 16 == (muState >> 11) & 0x1F
+//   *(a1+4) ; extrwi r3,r11,5,16 -> 5 bits at PPC bit-offset 16 == (m_ID >> 11) & 0x1F
 //   (PPC extrwi extracts 5 bits whose low bit lands at 31-(16+5-1)=11; bits [15:11]).
 int DMixIO::GetInstanceNum()
 {
-    return (muState >> 11) & 0x1F;
+    return (m_ID >> 11) & 0x1F;
 }
 
 // IsSFXObj @ 0x82B449E8
 //   (*(a1+4) & 0xE0000000) == 0x40000000  -> top-3-bit class tag == 0b010.
 int DMixIO::IsSFXObj()
 {
-    return (muState & 0xE0000000u) == 0x40000000u;
+    return (m_ID & 0xE0000000u) == 0x40000000u;
 }
 
 } // namespace Nicotine
