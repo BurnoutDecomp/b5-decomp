@@ -30,6 +30,21 @@
 //   +0x10  mpUsedHead    (Node*;      head of the in-use-node list)
 //   +0x14  miItemCount   (int;        number of in-use Nodes)
 //   +0x18  miCapacity    (int;        number of allocated (free+used) Node slots)
+//
+// FLAG (rwaudio PDB reconcile, NFS ProStreet 08 X360 PDB): authoritative names confirmed.
+//   PDB rw::audio::core::Collection [sizeof = 28]; offsets/order/sizeof MATCH this header.
+//   The PDB groups the head fields into intrusive-list sub-structs (kept flat here, as the
+//   ARTIST asm models the type flat; the sub-struct types ListQueue/ListDStack are other
+//   types and are intentionally not introduced):
+//     +0x00 ListQueue  mNodeBlocks { ListNode* phead; ListNode* ptail; int entries; }
+//                       -> this header's mpBlockHead / mpBlockTail / miBlockCount
+//     +0x0C ListDStack mFree       { ListDNode* phead; }  -> mpFreeHead
+//     +0x10 ListDStack mUsed       { ListDNode* phead; }  -> mpUsedHead
+//     +0x14 int        mSize                              -> renamed miItemCount->mSize
+//     +0x18 int        mCapacity                          -> miCapacity (already correct)
+//   Nested structs reconciled too (PDB names): Node->ItemNode, NodeBlock(header)->
+//   NodeBlockHeader; mppOwner's PDB type is ItemHandle* (a 1-field { ItemNode* pNode }),
+//   kept as void** here to preserve the ARTIST asm's untyped owner back-pointer stores.
 // =====================================================================================
 
 #include "types.hpp" // s32 / u32
@@ -45,24 +60,31 @@ class Collection
 {
 public:
     // A single 12-byte link record handed out by the Collection.
-    //   +0x00 mpNext  (Node*; next on the free or used list)
-    //   +0x04 mpPrev  (Node*; prev on the free or used list)
-    //   +0x08 mppOwner(void**; the caller's back-pointer slot while in use; 0 while free)
+    // FLAG (rwaudio PDB reconcile): PDB name = Collection::ItemNode [sizeof = 12]
+    //   { ListDNode node { ListDNode* pnext; ListDNode* pprev; }; ItemHandle* pHandle; }.
+    //   Kept as flat Node here (ARTIST asm shape); mppOwner is PDB pHandle (PDB type
+    //   ItemHandle* = { ItemNode* pNode }), kept void** to mirror the untyped asm stores.
+    //   +0x00 mpNext  (Node*; PDB node.pnext)
+    //   +0x04 mpPrev  (Node*; PDB node.pprev)
+    //   +0x08 mppOwner(void**; PDB pHandle)
     struct Node
     {
-        Node *mpNext;     // +0x00
-        Node *mpPrev;     // +0x04
-        void **mppOwner;  // +0x08
+        Node *mpNext;     // +0x00 (PDB node.pnext)
+        Node *mpPrev;     // +0x04 (PDB node.pprev)
+        void **mppOwner;  // +0x08 (PDB pHandle, type ItemHandle*)
     };
 
     // A pool block: an 8-byte header followed by miNodeCount Node records.
-    //   +0x00 mpNextBlock (NodeBlock*; next block in the owned chain)
-    //   +0x04 miNodeCount (int;        number of Node slots carved from this block)
+    // FLAG (rwaudio PDB reconcile): the 8-byte header is PDB Collection::NodeBlockHeader
+    //   [sizeof = 8] { ListNode node { ListNode* pnext; }; int size; }; the trailing
+    //   maNodes[] array is the ARTIST asm's carved Node slots (block + 8).
+    //   +0x00 mpNextBlock (NodeBlock*; PDB node.pnext)
+    //   +0x04 miNodeCount (int;        PDB size)
     //   +0x08 maNodes[]   (Node[];     the carved Node slots)
     struct NodeBlock
     {
-        NodeBlock *mpNextBlock; // +0x00
-        s32 miNodeCount;        // +0x04
+        NodeBlock *mpNextBlock; // +0x00 (PDB node.pnext)
+        s32 miNodeCount;        // +0x04 (PDB size)
         Node maNodes[1];        // +0x08 (flexible; miNodeCount entries)
     };
 
@@ -90,13 +112,14 @@ public:
     // Unlink `node` from the used list and push it back onto the free list.
     static Collection *RemoveNode(Collection *self, Node *node);
 
-    NodeBlock *mpBlockHead; // +0x00
-    NodeBlock *mpBlockTail; // +0x04
-    s32 miBlockCount;       // +0x08
-    Node *mpFreeHead;       // +0x0C
-    Node *mpUsedHead;       // +0x10
-    s32 miItemCount;        // +0x14
-    s32 miCapacity;         // +0x18
+    // FLAG (rwaudio PDB reconcile): mNodeBlocks{phead,ptail,entries} flattened here.
+    NodeBlock *mpBlockHead; // +0x00  (PDB mNodeBlocks.phead)
+    NodeBlock *mpBlockTail; // +0x04  (PDB mNodeBlocks.ptail)
+    s32 miBlockCount;       // +0x08  (PDB mNodeBlocks.entries)
+    Node *mpFreeHead;       // +0x0C  (PDB mFree.phead)
+    Node *mpUsedHead;       // +0x10  (PDB mUsed.phead)
+    s32 mSize;              // +0x14  (PDB mSize; was miItemCount)
+    s32 mCapacity;          // +0x18  (PDB mCapacity)
 };
 
 } // namespace core

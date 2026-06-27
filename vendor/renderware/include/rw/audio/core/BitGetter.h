@@ -39,8 +39,12 @@ public:
     // advance the cursor by `count`, and return them right-justified. count==0 -> 0.
     static u32 GetBits(BitGetter* self, u32 count);
 
-    const u8* mpBase; // +0x00 -- base of the bit stream
-    u32 muBitPos;     // +0x04 -- absolute bit cursor (bit index from mpBase)
+    // FLAG (rwaudio PDB reconcile): names from NFS ProStreet 08 X360 PDB
+    // (class rw::audio::core::BitGetter [sizeof=8]); layout MATCHES the ARTIST
+    // reconstruction exactly (+0x00 ptr, +0x04 u32). mpBase->mpBitBuffer,
+    // muBitPos->mBitPosition. Pointer kept at x64 width (REAL pointer).
+    const u8* mpBitBuffer; // +0x00 -- base of the bit stream
+    u32 mBitPosition;      // +0x04 -- absolute bit cursor (bit index from mpBitBuffer)
 };
 
 } // namespace core

@@ -44,9 +44,9 @@ int RawPuller2::CreateInstance(int self)
     {
         RawPuller2* lpSelf = reinterpret_cast<RawPuller2*>(self);
         lpSelf->mpVTable     = skpRawPuller2VTable; // *self = off_8217F4E4
-        lpSelf->mpCallback   = 0;                   // +0x24
-        lpSelf->muFrameCount = 0;                   // +0x30
-        lpSelf->mbRestart    = 1;                   // +0x34 (stb)
+        lpSelf->mpPullCallback   = 0;                   // +0x24
+        lpSelf->mSamplesRequested = 0;                   // +0x30
+        lpSelf->mFormatChanged    = 1;                   // +0x34 (stb)
     }
     return 1;
 }
@@ -119,13 +119,13 @@ int RawPuller2::PlayHandler(int lpCommand)
     const f32 lfChannelsF = *reinterpret_cast<const f32*>(&lpCmd->mPayload0); // *(a1+8)
     const char lbNumChannels = static_cast<char>(static_cast<long long>(lfChannelsF));
 
-    if (lpSelf->mfRate != lfRate || lpSelf->mbNumChannels != lbNumChannels)
-        lpSelf->mbRestart = 1; // *(v1+0x34) = 1
+    if (lpSelf->mPlaySampleRate != lfRate || lpSelf->mPlayNumChannels != lbNumChannels)
+        lpSelf->mFormatChanged = 1; // *(v1+0x34) = 1
 
-    lpSelf->mbNumChannels = lbNumChannels;       // *(v1+0x35) (stb)
-    lpSelf->mfRate        = lfRate;              // *(v1+0x2C) (stfs)
+    lpSelf->mPlayNumChannels = lbNumChannels;       // *(v1+0x35) (stb)
+    lpSelf->mPlaySampleRate        = lfRate;              // *(v1+0x2C) (stfs)
     lpSelf->mpContext     = reinterpret_cast<void*>(lpCmd->mPayload2);          // *(v1+0x28)
-    lpSelf->mpCallback    = reinterpret_cast<RawPuller2FillFn>(lpCmd->mPayload3); // *(v1+0x24)
+    lpSelf->mpPullCallback    = reinterpret_cast<RawPuller2FillFn>(lpCmd->mPayload3); // *(v1+0x24)
     return 24;
 }
 
@@ -137,7 +137,7 @@ int RawPuller2::PlayHandler(int lpCommand)
 int RawPuller2::StopHandler(int lpCommand)
 {
     RawPuller2PlayCommand* lpCmd = reinterpret_cast<RawPuller2PlayCommand*>(lpCommand);
-    reinterpret_cast<RawPuller2*>(lpCmd->mTarget)->mpCallback = 0; // *(*(a1+4)+0x24) = 0
+    reinterpret_cast<RawPuller2*>(lpCmd->mTarget)->mpPullCallback = 0; // *(*(a1+4)+0x24) = 0
     return 8;
 }
 
@@ -147,7 +147,7 @@ int RawPuller2::StopHandler(int lpCommand)
 // -------------------------------------------------------------------------------------
 int RawPuller2::PreProcess(int self, int /*a2*/, int /*a3*/, int a4)
 {
-    reinterpret_cast<RawPuller2*>(self)->muFrameCount = static_cast<u32>(a4); // *(self+0x30)
+    reinterpret_cast<RawPuller2*>(self)->mSamplesRequested = static_cast<u32>(a4); // *(self+0x30)
     return 0;
 }
 
@@ -216,18 +216,18 @@ namespace
 int RawPuller2::Process(int self, int a2)
 {
     RawPuller2* lpSelf = reinterpret_cast<RawPuller2*>(self);
-    if (!lpSelf->mpCallback)
+    if (!lpSelf->mpPullCallback)
         return 0;
 
     char* lpOut = reinterpret_cast<char*>(a2);
-    const char lbNumChannels = lpSelf->mbNumChannels; // v4 = *(self+0x35)
+    const char lbNumChannels = lpSelf->mPlayNumChannels; // v4 = *(self+0x35)
 
-    if (lpSelf->mbRestart)
+    if (lpSelf->mFormatChanged)
     {
         *reinterpret_cast<char*>(lpOut + KU_OUT_CHANNELS) = lbNumChannels; // stb
         *reinterpret_cast<u32*>(lpOut + KU_OUT_REQUEST) = 0;               // stw
-        *reinterpret_cast<f32*>(lpOut + KU_OUT_RATE) = lpSelf->mfRate;     // stfs
-        lpSelf->mbRestart = 0;
+        *reinterpret_cast<f32*>(lpOut + KU_OUT_RATE) = lpSelf->mPlaySampleRate;     // stfs
+        lpSelf->mFormatChanged = 0;
         return 1;
     }
 
@@ -238,15 +238,15 @@ int RawPuller2::Process(int self, int a2)
     *reinterpret_cast<char*>(lpOut + KU_OUT_CHANNELS) = lbNumChannels;     // stb
     *reinterpret_cast<u32*>(lpOut + KU_OUT_BUF_A) = luBufB;                // swap
     *reinterpret_cast<u32*>(lpOut + KU_OUT_BUF_B) = luBufA;                // swap
-    *reinterpret_cast<u32*>(lpOut + KU_OUT_REQUEST) = lpSelf->muFrameCount; // stw
-    *reinterpret_cast<f32*>(lpOut + KU_OUT_RATE) = lpSelf->mfRate;         // stfs
+    *reinterpret_cast<u32*>(lpOut + KU_OUT_REQUEST) = lpSelf->mSamplesRequested; // stw
+    *reinterpret_cast<f32*>(lpOut + KU_OUT_RATE) = lpSelf->mPlaySampleRate;         // stfs
 
     // r3 = muFrameCount, r4 = scratch, r6 = mpContext, f1 = lfPeek (the X360 bctrl regs).
-    if (lpSelf->mpCallback(lpSelf->muFrameCount, skScratchBuffer, lpSelf->mpContext, lfPeek))
+    if (lpSelf->mpPullCallback(lpSelf->mSamplesRequested, skScratchBuffer, lpSelf->mpContext, lfPeek))
     {
         const OutputChannelNode* lpNode =
             *reinterpret_cast<OutputChannelNode* const*>(lpOut + KU_OUT_BUF_A); // v9 = *v5
-        const u32 luFrames = lpSelf->muFrameCount;
+        const u32 luFrames = lpSelf->mSamplesRequested;
         for (u32 lu = 0; lu < static_cast<u32>(static_cast<unsigned char>(lbNumChannels)); ++lu)
         {
             char* lpDst = lpNode->mpBase + 4u * lpNode->mu16Stride * lu;

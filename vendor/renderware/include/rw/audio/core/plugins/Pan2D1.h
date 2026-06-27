@@ -34,10 +34,12 @@ public:
 
     // One output speaker's constant-power stereo gain pair. Two single-precision
     // floats; Set() writes cos(theta) to the first and sin(theta) to the second.
+    // FLAG (rwaudio PDB reconcile): Pan2D1::Speaker [sizeof=8] confirmed; PDB names
+    // the pair x/y (float +0x00, float +0x04); guessed mfGainA/mfGainB renamed to x/y.
     struct Speaker
     {
-        f32 mfGainA; // +0x00 -- cos(theta)
-        f32 mfGainB; // +0x04 -- sin(theta)
+        f32 x; // +0x00 -- cos(theta)
+        f32 y; // +0x04 -- sin(theta)
 
         // @ 0x82B986F0 -- set the pair from a pan angle `theta` (radians).
         // (r3=this, f1=theta; the asm computes cos into +0x00 and sin into +0x04,

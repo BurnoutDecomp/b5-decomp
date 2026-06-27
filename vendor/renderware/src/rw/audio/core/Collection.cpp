@@ -51,17 +51,17 @@ inline EA::Allocator::ICoreAllocator *Allocator()
 
 // -------------------------------------------------------------------------------------
 // AddCapacity @0x82B6C490
-// Allocate one NodeBlock sized for (miCapacity + count) Node slots [the asm sizes the
+// Allocate one NodeBlock sized for (mCapacity + count) Node slots [the asm sizes the
 // block by the *new total* capacity, not just `count`], thread it onto the owned block
-// chain, carve its Nodes onto the free list, and bump miCapacity by the new slot count.
+// chain, carve its Nodes onto the free list, and bump mCapacity by the new slot count.
 // Returns 0 on success, 1 if the allocation failed.
 // -------------------------------------------------------------------------------------
 int Collection::AddCapacity(Collection *self, int count)
 {
     int result = 1; // r29 = 1 (failure default)
 
-    // v4 (r30) = count + miCapacity -- the number of Node slots the new block holds.
-    const int slots = count + self->miCapacity;
+    // v4 (r30) = count + mCapacity -- the number of Node slots the new block holds.
+    const int slots = count + self->mCapacity;
 
     // 12 bytes per Node + 8-byte NodeBlock header; tag "rw::audio::core::Collection:
     // NodeBlock"; flags=1, align=16, offset=0 (vtable[1] Alloc-with-align).
@@ -102,7 +102,7 @@ int Collection::AddCapacity(Collection *self, int count)
                 ++node;                             // r11 += 0xC
             } while (remaining);
         }
-        self->miCapacity += slots; // *(self+0x18) += slots
+        self->mCapacity += slots; // *(self+0x18) += slots
     }
     return result;
 }
@@ -118,7 +118,7 @@ int Collection::AddItem(Collection *self, void **outOwner)
     int result = 0; // r29
 
     if (!self->mpFreeHead)
-        result = AddCapacity(self, self->miItemCount + 1);   // asm: lwz r11,0x14(r31)=miItemCount; addi r4,r11,1
+        result = AddCapacity(self, self->mSize + 1);   // asm: lwz r11,0x14(r31)=mSize; addi r4,r11,1
 
     if (!(result & 0xFF)) // clrlwi. r11,r3,24 -- the low byte of the AddCapacity result
     {
@@ -141,7 +141,7 @@ int Collection::AddItem(Collection *self, void **outOwner)
         if (self->mpUsedHead)
             self->mpUsedHead->mpPrev = node; // *(*(self+0x10)+4) = node
         self->mpUsedHead = node;             // *(self+0x10) = node
-        ++self->miItemCount;                 // ++*(self+0x14)
+        ++self->mSize;                       // ++*(self+0x14)
     }
     return result;
 }
@@ -150,7 +150,7 @@ int Collection::AddItem(Collection *self, void **outOwner)
 // Clear @0x82B6C580
 // Release every in-use Node back to the free list. For each used-list head node it first
 // severs the caller's back-pointer pair (owner slot value's +8 and the owner slot
-// itself) before unlinking via RemoveNode, then decrements miItemCount a second time
+// itself) before unlinking via RemoveNode, then decrements mSize a second time
 // (RemoveNode already decremented it once -- both stores target +0x14, reproduced as the
 // asm wrote them).
 // -------------------------------------------------------------------------------------
@@ -173,7 +173,7 @@ Collection *Collection::Clear(Collection *self)
                 node = stored;              // r4 carried into RemoveNode
             }
             result = RemoveNode(self, node);
-            --result->miItemCount;          // --*(self+0x14) (second decrement)
+            --result->mSize;                // --*(self+0x14) (second decrement)
         } while (self->mpUsedHead);
     }
     return result;
@@ -182,7 +182,7 @@ Collection *Collection::Clear(Collection *self)
 // -------------------------------------------------------------------------------------
 // Defragment @0x82B6E260
 // If the head NodeBlock's Node slots all fit within the remaining spare capacity
-// (miCapacity - miItemCount), migrate the block's live Nodes into the rest of the pool
+// (mCapacity - mSize), migrate the block's live Nodes into the rest of the pool
 // and free the head block. Returns 1 when the head block was reclaimed, 0 otherwise.
 //
 // Pass 1: drop the head block's *free* Nodes off the free list (so they will not be
@@ -191,7 +191,7 @@ Collection *Collection::Clear(Collection *self)
 //   it (returning it to the free list -- but it still lives in this block, so also unlink
 //   it from the block-local list view) and AddItem it afresh (re-homing it into a Node
 //   slot from a surviving block).
-// Then pop the head block off the owned block chain, shrink miCapacity by its slot count,
+// Then pop the head block off the owned block chain, shrink mCapacity by its slot count,
 // and Free it.
 // -------------------------------------------------------------------------------------
 int Collection::Defragment(Collection *self)
@@ -205,7 +205,7 @@ int Collection::Defragment(Collection *self)
         return result;
 
     // Only defragment when the block's slots fit in the spare capacity.
-    if (block->miNodeCount > (self->miCapacity - self->miItemCount))
+    if (block->miNodeCount > (self->mCapacity - self->mSize))
         return result;
 
     Node *base = block->maNodes; // r30 = block + 8
@@ -275,7 +275,7 @@ int Collection::Defragment(Collection *self)
         --self->miBlockCount;                             // --*(self+8)
     }
 
-    self->miCapacity -= block->miNodeCount; // *(self+0x18) -= block->miNodeCount
+    self->mCapacity -= block->miNodeCount; // *(self+0x18) -= block->miNodeCount
 
     Allocator()->Free(block, 0); // vtable[3] Free(allocator, block, 0)
     result = 1;
@@ -329,15 +329,15 @@ Collection *Collection::Release(Collection *self)
     self->mpBlockHead = 0;  // +0x00
     self->mpBlockTail = 0;  // +0x04
     self->miBlockCount = 0; // +0x08
-    self->miItemCount = 0;  // +0x14
-    self->miCapacity = 0;   // +0x18
+    self->mSize = 0;        // +0x14
+    self->mCapacity = 0;    // +0x18
     return result;
 }
 
 // -------------------------------------------------------------------------------------
 // RemoveNode @0x82B64BB0
 // Unlink `node` from the used list and push it onto the free list, decrementing
-// miItemCount.
+// mSize.
 // -------------------------------------------------------------------------------------
 Collection *Collection::RemoveNode(Collection *self, Node *node)
 {
@@ -355,7 +355,7 @@ Collection *Collection::RemoveNode(Collection *self, Node *node)
     if (self->mpFreeHead)
         self->mpFreeHead->mpPrev = node; // *(*(self+0xC)+4) = node
     self->mpFreeHead = node;             // *(self+0xC) = node
-    --self->miItemCount;                 // --*(self+0x14)
+    --self->mSize;                       // --*(self+0x14)
     return self;
 }
 

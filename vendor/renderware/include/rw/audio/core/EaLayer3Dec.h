@@ -15,6 +15,17 @@
 // is authoritative. No prior source and no DecFIGS DWARF exist for this TU.
 // Sibling to the committed rw::audio::core homes (Unpack0, PlugIn, BitGetter, ...).
 //
+// FLAG (rwaudio PDB reconcile): the NFS ProStreet 08 X360 PDB confirms all three class
+// names verbatim -- rw::audio::core::EaLayer3DecBase [sizeof=88] : public Decoder, and
+// the two concrete variants rw::audio::core::EaLayer31Dec [sizeof=88] and
+// rw::audio::core::EaLayer32PcmDec [sizeof=88], each : public EaLayer3DecBase. This
+// header models only the static thunk-forwarding entry points (no data members are
+// declared here), so there is nothing to rename/retype; names already match the PDB.
+// The full EaLayer3DecBase data layout (mpLoadedEALayer3Core @+0x34, mpEncodedSample
+// @+0x38, mppEaLayer3Core @+0x3c, mRemainingSamples @+0x40, mTotalChannels @+0x44,
+// mNumEaLayer3CoreInstances @+0x48, mLatency @+0x4c, mSkipSamples @+0x50, mVersion
+// @+0x54, mNewFeed @+0x55) remains intentionally un-homed in its own TU as noted below.
+//
 // EaLayer3DecBase::CreateInstance @0x82B953A0 is NOT homed here: it is a large
 // hand-written initializer that writes through ~a dozen still-un-homed member offsets
 // (a1+46, a1+56..85, the a1+88 EALayer3Core* array) and allocates an array of

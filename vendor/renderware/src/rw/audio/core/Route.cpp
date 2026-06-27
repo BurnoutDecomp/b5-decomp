@@ -46,16 +46,16 @@ int Route::CreateInstance(int a1)
     {
         Route* lpSelf = reinterpret_cast<Route*>(a1);
         lpSelf->mpVTable = skpRouteVTable;        // *a1 = off_8217F524
-        lpSelf->mConnector.mpSubMixBuffer = 0;    // stw 0, 0x2C(a1)
-        lpSelf->mConnector.mpSubMix = 0;          // stw 0, 0x30(a1)
-        lpSelf->mConnector.mNumSubMixChannels = 0;// stb 0, 0x34(a1)
+        lpSelf->mSubMixConnector.mpSubMixBuffer = 0;    // stw 0, 0x2C(a1)
+        lpSelf->mSubMixConnector.mpSubMix = 0;          // stw 0, 0x30(a1)
+        lpSelf->mSubMixConnector.mNumSubMixChannels = 0;// stb 0, 0x34(a1)
 
         // The X360 zeroes the 6-dword gain array (a1+0x38) AFTER the beq, i.e.
         // unconditionally; reproducing that literally through a null a1 would be a
         // host null-store. The only real caller always passes a valid buffer, so the
         // (semantically identical) guarded form is used.
         for (int li = 0; li < 6; ++li)
-            lpSelf->maChannelGain[li] = 0.0f;     // stw 0 -> +0x38 + 4*i
+            lpSelf->mDeClickValue[li] = 0.0f;     // stw 0 -> +0x38 + 4*i
     }
     return 1;
 }
@@ -112,10 +112,10 @@ int Route::ReleaseEvent(int a1)
 {
     Route* lpSelf = reinterpret_cast<Route*>(a1);
     SubMixConnector* lpResult =
-        SubMixConnector::Disconnect(&lpSelf->mConnector, lpSelf->maChannelGain); // r3 = a1+0x24, r4 = a1+0x38
+        SubMixConnector::Disconnect(&lpSelf->mSubMixConnector, lpSelf->mDeClickValue); // r3 = a1+0x24, r4 = a1+0x38
 
     for (int li = 0; li < 6; ++li)
-        lpSelf->maChannelGain[li] = 0.0f; // stw 0 -> +0x38 + 4*i
+        lpSelf->mDeClickValue[li] = 0.0f; // stw 0 -> +0x38 + 4*i
 
     return static_cast<int>(reinterpret_cast<uintptr_t>(lpResult));
 }
@@ -152,10 +152,10 @@ int Route::ConnectByPointerHandler(int a1)
     Route* lpRoute = reinterpret_cast<Route*>(lpCmd->mTarget); // v6/r6 = *(a1+4)
 
     SubMixConnector* lpConn =
-        SubMixConnector::Disconnect(&lpRoute->mConnector, lpRoute->maChannelGain); // v4 = r3
+        SubMixConnector::Disconnect(&lpRoute->mSubMixConnector, lpRoute->mDeClickValue); // v4 = r3
 
     for (int li = 0; li < 6; ++li)
-        lpRoute->maChannelGain[li] = 0.0f; // zero 6 dwords at route+0x38
+        lpRoute->mDeClickValue[li] = 0.0f; // zero 6 dwords at route+0x38
 
     SubMix* lpSubMix = reinterpret_cast<SubMix*>(lpCmd->mSubMix); // v6 = *(a1+8)
     if (lpSubMix)
@@ -174,9 +174,9 @@ int Route::ConnectByPointerHandler(int a1)
         const f32 lfGain0 = *reinterpret_cast<const f32*>(&lpCmd->mGain0); // lfs 0xC(a1)
         const f32 lfGain1 = *reinterpret_cast<const f32*>(&lpCmd->mGain1); // lfs 0x10(a1)
         const f32 lfGain2 = *reinterpret_cast<const f32*>(&lpCmd->mGain2); // lfs 0x14(a1)
-        lpRoute->mau8Gain[0] = static_cast<u8>(static_cast<long long>(lfGain0)); // stb 0x50
-        lpRoute->mau8Gain[1] = static_cast<u8>(static_cast<long long>(lfGain1)); // stb 0x51
-        lpRoute->mau8Gain[2] = static_cast<u8>(static_cast<long long>(lfGain2)); // stb 0x52
+        lpRoute->mSourceStartChannel = static_cast<u8>(static_cast<long long>(lfGain0)); // stb 0x50
+        lpRoute->mTargetStartChannel = static_cast<u8>(static_cast<long long>(lfGain1)); // stb 0x51
+        lpRoute->mNumChannels        = static_cast<u8>(static_cast<long long>(lfGain2)); // stb 0x52
     }
     return 24;
 }

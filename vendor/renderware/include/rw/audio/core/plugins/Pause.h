@@ -15,6 +15,7 @@
 // =====================================================================================
 
 #include "types.hpp" // f32, s16, u8
+#include "rw/audio/core/PlugIn.h" // PlugIn::Attribute_t (rwaudio PDB reconcile)
 
 namespace rw
 {
@@ -50,15 +51,20 @@ public:
     static int PreProcess(Pause *self, int a2, char force, int length); // @0x82B9A140
     static void *ScalarDeletingDestructor(Pause *self, char flags); // @0x82BA1B48
 
+    // FLAG (rwaudio PDB reconcile -- IDA Files/ProStreet08Milestone.pdb,
+    // rw::audio::core::Pause [sizeof=64] : public rw::audio::core::PlugIn): the ARTIST-asm
+    // offsets MATCH the PDB exactly (field order + sizeof 0x40 identical), so the PDB
+    // member NAMES/TYPES are authoritative and replace the earlier semantic guesses.
+    // +0x00..+0x21 is the PlugIn base body (kept opaque here; reconciled in PlugIn.h);
+    // the +0xNN are the X360 (32-bit) offsets, now PDB-verified.
     void *mpVTable;            // +0x00
     u8    mBase04[0x28 - 0x04]; // +0x04..+0x27 -- opaque PlugIn base body (mpAttribute @+0x0C lives here)
-    f32   mfPauseAmount;       // +0x28
-    u8    mPad2C[0x30 - 0x2C]; // +0x2C..+0x2F -- alignment pad
-    f32   mfOne;               // +0x30
-    s16   miLength;            // +0x34
-    u8    muOutLength;         // +0x36
-    u8    mState;              // +0x37
-    u8    mbActive;            // +0x38
+    PlugIn::Attribute_t mAttribute[1]; // +0x28  (was guessed mfPauseAmount/f32; PDB: Attribute_t[1], 8 bytes spanning +0x28..+0x2F -- the base attr ptr points here)
+    f32   mGain;               // +0x30  (was mfOne)
+    u16   mOutputSamplesRequested; // +0x34  (was miLength/s16; PDB: unsigned short)
+    u8    mSamplesRemainingUntilStateChange; // +0x36  (was muOutLength)
+    u8    mPauseState;         // +0x37  (was mState)
+    u8    mDiscontinuity;      // +0x38  (was mbActive)
     u8    mPad39[0x40 - 0x39]; // +0x39..+0x3F -- tail pad to sizeof 0x40
 };
 

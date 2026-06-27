@@ -10,6 +10,16 @@
 // @0x82B67188 and ClearBuffer @0x82B671F0.
 //
 // Lowercase rw::audio:: namespaces match the third-party middleware API.
+//
+// FLAG (rwaudio PDB reconcile 2026-06-27): names/types reconciled against the NFS
+// ProStreet 08 Milestone X360 PDB (class rw::audio::core::CompressorLimiter1,
+// sizeof=80 incl. 3 tail-pad bytes). Field order and all +0xNN offsets MATCH the
+// X360 ARTIST layout, so this is match-reconciled. Notable corrections the asm guess
+// got semantically wrong: +0x34 was guessed "ratio" but is mThresholdOff; +0x38 was
+// "makeup gain" but is mCompExponent; the two coeffs at +0x44/+0x48 are the
+// compressor-exponent step values; the +0x4C flag is mGroupChannels (channel link).
+// The +0x00 scratch is a History[6] array (per-channel {lpfDelay1, compExponentCurrent}),
+// not a flat f32[12] -- same 48 bytes, retyped to the PDB nested struct.
 // =====================================================================================
 
 #include "types.hpp" // f32, s32, u32, u8
@@ -27,22 +37,30 @@ namespace core
 // The leading +0x00..+0x2F span is the per-channel envelope/gain scratch the Process
 // kernel reads and writes (ClearBuffer zeroes exactly 0x30 bytes of it). The config
 // block starts at +0x30:
-//   +0x00..+0x2F  maEnvelope  (48 bytes; per-channel envelope/gain working state,
-//                              zeroed by ClearBuffer)
-//   +0x30  mfThreshold   (f32, Configure a2 -> threshold)
-//   +0x34  mfRatioParam  (f32, Configure a3 -> the ratio/knee parameter)
-//   +0x38  mfMakeupGain  (f32, Configure a4 -> the numerator of both time constants)
-//   +0x3C  miAttack      (s32, Configure a5 -> attack length in samples)
-//   +0x40  miRelease     (s32, Configure a6 -> release length in samples)
-//   +0x44  mfAttackCoeff (f32 = mfMakeupGain / miAttack)
-//   +0x48  mfReleaseCoeff(f32 = mfMakeupGain / miRelease)
-//   +0x4C  mbStereoLink  (u8  = (Configure a7 != 0); the "linked channels" flag the
-//                              Process kernel tests at +76)
-// (sizeof rounded up by the embedding plug-in; the type itself spans +0x00..+0x4C.)
+//   +0x00..+0x2F  mChannelHistory[6] (48 bytes; per-channel History working state,
+//                                     zeroed by ClearBuffer)
+//   +0x30  mThresholdOn        (f32, Configure a2 -> on threshold)
+//   +0x34  mThresholdOff       (f32, Configure a3 -> off threshold)
+//   +0x38  mCompExponent       (f32, Configure a4 -> the compressor exponent / numerator
+//                                    of both step constants)
+//   +0x3C  mAttackSamples      (s32, Configure a5 -> attack length in samples)
+//   +0x40  mReleaseSamples     (s32, Configure a6 -> release length in samples)
+//   +0x44  mCompExponentStepOn (f32 = mCompExponent / mAttackSamples)
+//   +0x48  mCompExponentStepOff(f32 = mCompExponent / mReleaseSamples)
+//   +0x4C  mGroupChannels      (u8  = (Configure a7 != 0); the "linked channels" flag the
+//                                    Process kernel tests at +76)
+// (PDB sizeof=80 incl. 3 tail-pad bytes; the named fields span +0x00..+0x4C.)
 // -------------------------------------------------------------------------------------
 class CompressorLimiter1
 {
 public:
+    // PDB-confirmed: per-channel envelope/gain history (mChannelHistory[6], 8 bytes each).
+    struct History
+    {
+        f32 lpfDelay1;            // +0x00
+        f32 compExponentCurrent;  // +0x04
+    };
+
     // @0x82B671F0 -- zero the 48-byte per-channel envelope/gain scratch.
     static void *ClearBuffer(CompressorLimiter1 *self);
 
@@ -60,15 +78,15 @@ public:
     // Declared here for the layout/ABI; intentionally NOT bodied (see CompressorLimiter1.cpp).
     static int Process(CompressorLimiter1 *self);
 
-    f32 maEnvelope[12];  // +0x00..+0x2F (48 bytes)
-    f32 mfThreshold;     // +0x30
-    f32 mfRatioParam;    // +0x34
-    f32 mfMakeupGain;    // +0x38
-    s32 miAttack;        // +0x3C
-    s32 miRelease;       // +0x40
-    f32 mfAttackCoeff;   // +0x44
-    f32 mfReleaseCoeff;  // +0x48
-    u8  mbStereoLink;    // +0x4C
+    History mChannelHistory[6];  // +0x00..+0x2F (48 bytes)
+    f32 mThresholdOn;            // +0x30
+    f32 mThresholdOff;           // +0x34
+    f32 mCompExponent;           // +0x38
+    s32 mAttackSamples;          // +0x3C
+    s32 mReleaseSamples;         // +0x40
+    f32 mCompExponentStepOn;     // +0x44
+    f32 mCompExponentStepOff;    // +0x48
+    u8  mGroupChannels;          // +0x4C
 };
 
 } // namespace core

@@ -97,12 +97,19 @@ public:
     // 64-bit host. Members are pinned BY NAME/ORDER only; the offset comments document
     // the X360 layout the asm walks. No absolute-offset gap arithmetic spans the
     // pointer-bearing subobject.
+    // FLAG (rwaudio PDB reconcile): rw::audio::core::Route [sizeof=84] confirmed by the
+    // ProStreet08 X360 PDB; field order + offsets MATCH this ARTIST layout exactly. Own
+    // members renamed to the PDB names; the +0x50 byte triple was a single guessed array
+    // (mau8Gain[3]) -- the PDB resolves it as three named per-channel bytes. The PlugIn
+    // base members (mpVTable/mpSystem/mGap08) belong to PlugIn and are left untouched.
     void*           mpVTable;         // +0x00 (X360)
     System*         mpSystem;         // +0x04 (X360)
     char            mGap08[0x24 - 0x08]; // +0x08 .. +0x23 (X360) -- opaque PlugIn base body
-    SubMixConnector mConnector;       // +0x24 (X360) -- embedded inbound connector subobject
-    f32             maChannelGain[6]; // +0x38 (X360) -- foldback gain array
-    u8              mau8Gain[3];      // +0x50 (X360) -- per-channel byte gains
+    SubMixConnector mSubMixConnector; // +0x24 (X360) -- embedded inbound connector subobject
+    f32             mDeClickValue[6]; // +0x38 (X360) -- foldback gain array
+    u8              mSourceStartChannel; // +0x50 (X360) -- per-channel byte gain (source)
+    u8              mTargetStartChannel; // +0x51 (X360) -- per-channel byte gain (target)
+    u8              mNumChannels;     // +0x52 (X360) -- per-channel byte gain (count)
 };
 
 } // namespace core

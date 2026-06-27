@@ -44,24 +44,27 @@ public:
     static Butterworth *CreateInstance(int order, Butterworth *self);     // @0x82B6C420
     static u32          GetSize(int order);                               // @0x82B6C408
 
+    // FLAG (rwaudio PDB reconcile): names/types from NFS ProStreet 08 X360 PDB
+    // (class rw::audio::core::Butterworth [sizeof=48]); layout MATCHES the ARTIST
+    // reconstruction exactly. The nine guessed mfB0..mfA4 floats + the "+0x14 pad"
+    // are really two f32[5] coefficient arrays inside a nested Coefficients struct:
+    //   b[0..4] @ +0x00..+0x10, a[0..4] @ +0x14..+0x24. (Filter uses b[0..4] and
+    //   a[1..4]; a[0] @ +0x14 is the slot the ARTIST reconstruction guessed as pad.)
+
     // ---- coefficient header (written by CalculateFilterCoefficients) ----
     // Filter() reads, per output sample:
-    //   feedforward = b0*x[n] + b1*x[n-1] + b2*x[n-2] + b3*x[n-3] + b4*x[n-4]
-    //   feedback    = a1*y[n-1] + a2*y[n-2] + a3*y[n-3] + a4*y[n-4]
+    //   feedforward = b[0]*x[n] + b[1]*x[n-1] + b[2]*x[n-2] + b[3]*x[n-3] + b[4]*x[n-4]
+    //   feedback    = a[1]*y[n-1] + a[2]*y[n-2] + a[3]*y[n-3] + a[4]*y[n-4]
     //   y[n] = feedforward - feedback + 1e-18
-    f32 mfB0;     // +0x00
-    f32 mfB1;     // +0x04
-    f32 mfB2;     // +0x08
-    f32 mfB3;     // +0x0C
-    f32 mfB4;     // +0x10
-    f32 mfPad14;  // +0x14 (unused by Filter)
-    f32 mfA1;     // +0x18
-    f32 mfA2;     // +0x1C
-    f32 mfA3;     // +0x20
-    f32 mfA4;     // +0x24
-    s32 mCount;   // +0x28 -- number of channels / rows processed
-    u16 muOffsetA;// +0x2C -- short relative offset (from `this`) to work-buffer A
-    u16 muOffsetB;// +0x2E -- short relative offset (from `this`) to work-buffer B
+    struct Coefficients
+    {
+        f32 b[5]; // +0x00 -- feedforward taps b[0..4]
+        f32 a[5]; // +0x14 -- feedback taps a[0..4] (a[0] unused by Filter)
+    };
+    Coefficients mCoefficients;       // +0x00 (sizeof 40)
+    u32 mChannels;                    // +0x28 -- number of channels / rows processed
+    u16 mInputHistoryOffset;          // +0x2C -- short relative offset (from `this`) to work-buffer A
+    u16 mOutputHistoryOffset;         // +0x2E -- short relative offset (from `this`) to work-buffer B
     // work buffers (A then B) follow at the 8-aligned offsets recorded above.
 };
 

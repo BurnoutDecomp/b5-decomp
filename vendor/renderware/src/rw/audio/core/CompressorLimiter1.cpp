@@ -29,15 +29,15 @@ void *CompressorLimiter1::ClearBuffer(CompressorLimiter1 *self)
 }
 
 // -------------------------------------------------------------------------------------
-// Configure @0x82B67188
-//   self->mfThreshold    = threshold;                 // stfs f1 @ +0x30
-//   self->mfRatioParam   = ratioParam;                // stfs f2 @ +0x34
-//   self->mfMakeupGain   = makeupGain;                // stfs f3 @ +0x38
-//   self->miAttack       = attack;                    // stw  r7 @ +0x3C
-//   self->miRelease      = release;                   // stw  r8 @ +0x40
-//   self->mbStereoLink   = (stereoLink != 0);         // cntlzw/extrwi/xori @ +0x4C
-//   self->mfAttackCoeff  = makeupGain / (f32)attack;  // fcfid/frsp/fdivs @ +0x44
-//   self->mfReleaseCoeff = makeupGain / (f32)release; // fcfid/frsp/fdivs @ +0x48
+// Configure @0x82B67188   (FLAG: rwaudio PDB reconcile 2026-06-27 -- member names)
+//   self->mThresholdOn        = threshold;                 // stfs f1 @ +0x30
+//   self->mThresholdOff       = ratioParam;                // stfs f2 @ +0x34
+//   self->mCompExponent       = makeupGain;                // stfs f3 @ +0x38
+//   self->mAttackSamples      = attack;                    // stw  r7 @ +0x3C
+//   self->mReleaseSamples     = release;                   // stw  r8 @ +0x40
+//   self->mGroupChannels      = (stereoLink != 0);         // cntlzw/extrwi/xori @ +0x4C
+//   self->mCompExponentStepOn = makeupGain / (f32)attack;  // fcfid/frsp/fdivs @ +0x44
+//   self->mCompExponentStepOff= makeupGain / (f32)release; // fcfid/frsp/fdivs @ +0x48
 //
 // The +0x4C byte is the asm's `cntlzw(stereoLink&0xFF); extrwi bit26; xori 1`, i.e. it
 // is set exactly when the low byte of `stereoLink` is nonzero. The attack/release
@@ -49,14 +49,14 @@ CompressorLimiter1 *CompressorLimiter1::Configure(CompressorLimiter1 *self, f32 
                                                   s32 attack, s32 release, s32 stereoLink,
                                                   u32 /*a8*/, u32 /*a9*/, u8 /*a10*/)
 {
-    self->mfThreshold = threshold;
-    self->mfRatioParam = ratioParam;
-    self->mfMakeupGain = makeupGain;
-    self->miAttack = attack;
-    self->miRelease = release;
-    self->mbStereoLink = static_cast<u8>((stereoLink & 0xFF) != 0 ? 1 : 0);
-    self->mfAttackCoeff = makeupGain / static_cast<f32>(static_cast<s64>(attack));
-    self->mfReleaseCoeff = makeupGain / static_cast<f32>(static_cast<s64>(release));
+    self->mThresholdOn = threshold;
+    self->mThresholdOff = ratioParam;
+    self->mCompExponent = makeupGain;
+    self->mAttackSamples = attack;
+    self->mReleaseSamples = release;
+    self->mGroupChannels = static_cast<u8>((stereoLink & 0xFF) != 0 ? 1 : 0);
+    self->mCompExponentStepOn = makeupGain / static_cast<f32>(static_cast<s64>(attack));
+    self->mCompExponentStepOff = makeupGain / static_cast<f32>(static_cast<s64>(release));
     return self;
 }
 
@@ -73,8 +73,9 @@ CompressorLimiter1 *CompressorLimiter1::Configure(CompressorLimiter1 *self, f32 
 // per-lane arithmetic the compile gate cannot verify. Per the no-fabrication rule it is
 // left unbodied and flagged. It did not execute in the boot-trace milestone.
 //
-// A scalar reimplementation grounded in the configured coefficients (mfThreshold,
-// mfRatioParam, mfMakeupGain, mfAttackCoeff, mfReleaseCoeff, mbStereoLink) is the
+// A scalar reimplementation grounded in the configured coefficients (mThresholdOn,
+// mThresholdOff, mCompExponent, mCompExponentStepOn, mCompExponentStepOff,
+// mGroupChannels) is the
 // follow-up once the VMX128 lane math is decoded; this stub keeps the type's layout/ABI
 // linkable in the meantime and never claims a fabricated result.
 // -------------------------------------------------------------------------------------

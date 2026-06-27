@@ -31,6 +31,8 @@ namespace audio
 namespace core
 {
 
+// FLAG (rwaudio PDB reconcile): PDB confirms `class rw::audio::core::Unpack0 [sizeof = 1] {}`
+// -- empty (static-only) class, zero data members. Type name + stateless shape match; nothing to rename.
 class Unpack0
 {
 public:

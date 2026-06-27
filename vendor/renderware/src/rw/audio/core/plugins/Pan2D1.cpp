@@ -28,8 +28,8 @@ namespace core
 // ---------------------------------------------------------------------------
 void Pan2D1::Speaker::Set(f64 theta)
 {
-    mfGainA = static_cast<f32>(cos(theta));
-    mfGainB = static_cast<f32>(sin(theta));
+    x = static_cast<f32>(cos(theta)); // FLAG (rwaudio PDB reconcile): mfGainA -> x
+    y = static_cast<f32>(sin(theta)); // FLAG (rwaudio PDB reconcile): mfGainB -> y
 }
 
 } // namespace core

@@ -46,6 +46,22 @@ void AllPassFilterFunc(s32 count, f32 g1, f32 g2, f32 *base, f32 *work,
 // -------------------------------------------------------------------------------------
 // AllPassFilter -- one all-pass reverb section.
 //
+// FLAG (rwaudio PDB reconcile -- DIVERGE, layout kept): the ProStreet-08 X360 PDB names
+// this type and reveals it derives from rw::audio::core::IFilter:
+//     class rw::audio::core::AllPassFilter [sizeof = 24] : public IFilter {
+//       base +0x00 [16] IFilter { mpApplyFunc(+0x00), mpResetFunc(+0x04),
+//                                  mReadLength(+0x08 int), mChannels(+0x0C int) }
+//       data +0x10 [4] float mG
+//       data +0x14 [4] float mScaleFactor }
+// sizeof MATCHES (0x18), and the two trailing floats align 1:1 (mfGain1==mG @+0x10,
+// mfGain2==mScaleFactor @+0x14). The +0x00..+0x0F region DIVERGES structurally: the PDB
+// has an IFilter base (the first two slots are FUNCTION POINTERS, not the ints this
+// ARTIST reconstruction guessed), and IFilter's members belong to a separate (not-yet-
+// modeled) base type. Per reconcile rules we keep the ARTIST flat-int layout untouched
+// (modeling the IFilter base as real x64 pointers would also break the 4-byte X360
+// widths this struct depends on) and do NOT rename, to leave the bodied .cpp intact.
+// PDB float names recorded above for when an IFilter base is introduced.
+//
 // Layout grounded in AllPassFilter::AllPassFilter @0x82B6C3D8 (and SetGains @0x82B64688,
 // AllPassFilterApplyFunc @0x82B64640):
 //   +0x00  miField00  (int,  init 0)
@@ -87,7 +103,28 @@ public:
 
 // -------------------------------------------------------------------------------------
 // CombFilter -- one feedback comb reverb section (a comb whose loop contains a damping
-// gain pair). Layout grounded in CombFilter::CombFilter @0x82B6C6B0, SetGains
+// gain pair).
+//
+// FLAG (rwaudio PDB reconcile -- DIVERGE, layout kept): the ProStreet-08 X360 PDB names
+// this type and reveals it derives from rw::audio::core::IFilter:
+//     class rw::audio::core::CombFilter [sizeof = 36] : public IFilter {
+//       base +0x00 [16] IFilter { mpApplyFunc(+0x00), mpResetFunc(+0x04),
+//                                  mReadLength(+0x08 int), mChannels(+0x0C int) }
+//       data +0x10 [4] float ma_1
+//       data +0x14 [4] float ma_M
+//       data +0x18 [4] float mb_MPlus1
+//       data +0x1c [4] float mScaleFactor
+//       data +0x20 [4] float mPrev }
+// sizeof MATCHES (0x24), and the five trailing floats align 1:1 by offset
+// (mfGain1==ma_1 @+0x10, mfGain2==ma_M @+0x14, mfGain3==mb_MPlus1 @+0x18,
+// mfGain4==mScaleFactor @+0x1C, mfState==mPrev @+0x20). The +0x00..+0x0F region
+// DIVERGES structurally (PDB IFilter base with two FUNCTION POINTERS vs the four guessed
+// ints here; IFilter's members belong to a separate base type). Per reconcile rules we
+// keep the ARTIST flat-int layout untouched (an x64 IFilter base would break the X360
+// 4-byte pointer widths) and do NOT rename, to leave the bodied .cpp intact. PDB float
+// names recorded above for when an IFilter base is introduced.
+//
+// Layout grounded in CombFilter::CombFilter @0x82B6C6B0, SetGains
 // @0x82B64D98, CombFilterResetFunc @0x82B64D88:
 //   +0x00  miField00  (int,  init 0)
 //   +0x04  miField04  (int,  init 0)
