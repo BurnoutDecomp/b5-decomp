@@ -150,3 +150,94 @@ stMixChSharedData* NFSMixMap::GetNextSubMixShared(char lbAdvance)
     if (lbAdvance) ++m_nAssignedSubMixShared;
     return lp;
 }
+
+// ---------------------------------------------------------------------------
+// NFSMixMap::ResetMapData @0x82B482B0 -- zero every runtime accumulator counter,
+// allocation cursor, and allocated-block pointer (called before (re)building the map).
+// Store-for-store in the ARTIST order (all writes are 0). Preserves the identity fields
+// (vtable / mNumStates / m_StateRefCount / mpMixerInterface / m_pNFSMixMaster / m_pMMHdr /
+//  m_MapType / m_fDeltaTime* / m_pMasterMixMap / m_pMixMap / m_nStateMapCount / DMixIO
+//  arrays / m_fDeltaTimeRatio).
+// ---------------------------------------------------------------------------
+void NFSMixMap::ResetMapData()
+{
+    m_nAssignedMixMapStates = 0;         // +0xC0
+    m_MixCtlsAdded = 0;                  // +0x1D0
+    m_SharedMixCtlCount = 0;             // +0xC4
+    m_nAssignedMixCtlProc = 0;           // +0x13C
+    m_AssignedMixCtlsShared = 0;         // +0x140
+    m_AssignedMixCtlsUnique = 0;         // +0x144
+    m_ScaleParamsAdded = 0;              // +0xD4
+    m_ScaleParamsIDCount = 0;            // +0xD8
+    for (int li = 0; li < 20; ++li)      // +0xDC loop: m_CurveProcsTotal[10][2]
+        reinterpret_cast<int*>(m_CurveProcsTotal)[li] = 0;
+    m_3DMixCtlsAdded = 0;                // +0x1D4
+    m_EventCtlsAdded = 0;               // +0x1E0
+    m_nAssignedDMixIOBlocks = 0;         // +0xB4
+    m_nAssignedDMix3DIOBlocks = 0;       // +0xB8
+    m_nAssignedInputBlocks = 0;          // +0xBC
+    m_nAssigned3DMixCtlProc = 0;         // +0x160
+    m_nAssigned3DMixCtlShared = 0;       // +0x164
+    m_nAssigned3DMixCtlUnique = 0;       // +0x168
+    m_nAssignedEvtMixCtlProc = 0;        // +0x16C
+    m_nAssignedEvtMixCtlShared = 0;      // +0x170
+    m_nAssignedEvtMixCtlUnique = 0;      // +0x174
+    m_PrevCamState = 0;                  // +0x7C
+    m_CurCamState = 0;                   // +0x80
+    m_Shared3DMixCtlCount = 0;           // +0x134
+    m_SharedEvtMixCtlCount = 0;          // +0x138
+    m_SubMixChannelsAdded = 0;           // +0x1D8
+    m_SharedSubMixCount = 0;             // +0x12C
+    m_nAssignedSubMixProc = 0;           // +0x148
+    m_nAssignedSubMixShared = 0;         // +0x14C
+    m_nAssignedSubMixUnique = 0;         // +0x150
+    m_MasterChannelsAdded = 0;           // +0x1DC
+    m_SharedMasterMixCount = 0;          // +0x130
+    m_nAssignedMasterMixProc = 0;        // +0x154
+    m_nAssignedMasterMixShared = 0;      // +0x158
+    m_nAssignedMasterMixUnique = 0;      // +0x15C
+    m_CurrentStateProcBlockOffset = 0;   // +0x20C
+    m_nTotalMasterChannelInputs = 0;     // +0x1E8
+    m_CurrentMasterInputBlockOffset = 0; // +0x220
+    m_CurrentSubInputBlockOffset = 0;    // +0x224
+    m_CurrentMasterOutputBlockOffset = 0;// +0x228
+    m_CurrentMasterChannelPtrBlockOffset = 0; // +0x21C
+    m_CurrentSubChannelPtrBlockOffset = 0;    // +0x218
+    m_Current3DMixCtlPtrBlockOffset = 0;      // +0x214
+    m_CurrentEvtMixCtlPtrBlockOffset = 0;     // +0x210
+    m_nTotalMasterChannel3DOutputs = 0;  // +0x1EC
+    m_nTotalSubChannelInputs = 0;        // +0x1F0
+    m_nTotalSubChannel3DOutputs = 0;     // +0x1F4
+    m_nTotalUniqueMasterChannels = 0;    // +0x1F8
+    m_SFXOBJsAdded = 0;                  // +0x1C4
+    m_SFXCTLsAdded = 0;                  // +0x1C8
+    m_DataProcsAdded = 0;               // +0x1CC
+    m_n3DCamStatesAdded = 0;             // +0x1E4
+    m_SharedMixCtlsAssigned = 0;         // +0xC8
+    m_UniqueMixCtlsAssigned = 0;         // +0xCC
+    m_CurveProcsAdded = 0;               // +0xD0
+    m_CurrentMasterInputOffset = 0;      // +0x1FC
+    m_CurrentSubInputOffset = 0;         // +0x200
+    m_pStateProcMemBlock = 0;            // +0x9C
+    m_pDynMixInputBlocks = 0;            // +0x17C
+    m_pScalePtrArray = 0;                // +0x180
+    m_pCurveDataArray = 0;               // +0x184
+    m_pMixCtlData_S = 0;                 // +0x188
+    m_pMixCtlData_U = 0;                 // +0x18C
+    m_pMixCtlProc = 0;                   // +0x190
+    m_pEvtMixCtlProc = 0;                // +0x194
+    m_pEvtMixCtlData_S = 0;              // +0x198
+    m_pEvtMixCtlData_U = 0;              // +0x19C
+    m_p3DMixCtlProc = 0;                 // +0x1A0
+    m_p3DMixCtlData_S = 0;               // +0x1A4
+    m_p3DMixCtlData_U = 0;               // +0x1A8
+    m_pSubChData_S = 0;                  // +0x1AC
+    m_pSubChData_U = 0;                  // +0x1B0
+    m_pSubChProc = 0;                    // +0x1B4
+    m_pMasterChData_S = 0;               // +0x1B8
+    m_pMasterChData_U = 0;               // +0x1BC
+    m_pMasterChProc = 0;                 // +0x1C0
+    m_pMasterChannelInputs = 0;          // +0x204
+    m_pSubChannelInputs = 0;             // +0x208
+    m_pMasterChannelOutputArrayBlock = 0;// +0x178
+}
