@@ -39,6 +39,13 @@ namespace CgsGui
         bool IsVideoState() const { return mbIsVideoState; }
         bool IsSaveLoadState() const { return mbIsSaveLoadState; }
 
+        // The state-event channel the owning flow/controller drains: SendStateEvent records a pending
+        // transition (mbStateChangePending + the event name in macEvent); the controller reads it to run
+        // the event through the FSM and, for the single-state boot FSMs, sequence to the next phase.
+        bool        IsStateChangePending() const { return mbStateChangePending; }
+        const char* GetPendingEventName()  const { return macEvent; }
+        void        ClearStateChange()           { mbStateChangePending = false; }
+
     protected:
         InputBuffer::GuiEventQueue* mpInGuiEventQueue;
         StateInterface*             mpStateInterface;

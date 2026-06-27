@@ -28,6 +28,17 @@ static bool g_bLoggedGameDataPrepare = false;
 // (off_830102D0 + 0x99FE38). BrnRendererModule::Render reads it to show the loading screen.
 bool gBrnLoadingScreenShouldShow = false;
 
+// The boot loading screen is owned by the GUI flow's BF_LOADING state (BrnGui::BootLoading), which
+// shows it (PlayLoadingScreen) and dismisses it (StopLoadingScreen) through its StateInterface -- the
+// faithful path (the X360 GUI flow drives the loading-screen APT movie). When BrnGui::GuiModule has
+// that FSM live it sets gBrnGuiDrivesLoadingScreen, and this game-flow state stops touching
+// gBrnLoadingScreenShouldShow (the GUI drives it); it only does the loading work and, once finished,
+// raises gBrnInitialLoadingComplete so the GUI flow advances BF_LOADING -> BF_VIDEOS. If the GUI FSM
+// is NOT live (gBrnGuiDrivesLoadingScreen false), this state keeps managing the screen itself (the
+// prior behaviour) so the boot never loses its loading screen.
+bool gBrnInitialLoadingComplete = false;
+bool gBrnGuiDrivesLoadingScreen = false;   // set by BrnGui::GuiModule when the BF_LOADING Lua FSM is live
+
 // --- MainGameFlowState (abstract base) --------------------------------------------------
 MainGameFlowState::MainGameFlowState() {}
 void MainGameFlowState::OnEnter() {}
@@ -62,16 +73,21 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
     meLoadingStateStage  = E_LOADINGSTATESTAGE_START;
     meLoadingScreenStage = E_LOADINGSTAGE_START;
     mbGuiPreloadDone     = false;
+    gBrnInitialLoadingComplete = false;
+    // Show the loading screen immediately (no first-frame gap). When the GUI BF_LOADING FSM is live it
+    // also shows + later dismisses the screen; here we only ensure it's up from frame 0.
     gBrnLoadingScreenShouldShow = true;
 
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: OnEnter - loading screen shown\n";
 }
 
-// @ 0x823AA9E8 - clear the loading-screen signal on exit.
+// @ 0x823AA9E8 - clear the loading-screen signal on exit (unless the GUI BF_LOADING state owns it,
+// in which case BootLoading::OnLeave -> StopLoadingScreen drops it).
 void MainGameFlowStateInitialLoadingScreen::OnLeave()
 {
-    gBrnLoadingScreenShouldShow = false;
+    if (!gBrnGuiDrivesLoadingScreen)
+        gBrnLoadingScreenShouldShow = false;
 }
 
 // @ 0x823EF688 - the scripted module-by-module load. The X360 body loads one module per stage
@@ -204,15 +220,19 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         break;
     case E_LOADINGSTAGE_DONE:
     default:
-        // Load complete (once): drop the renderer's loading-screen signal and advance the flow
-        // (FinishLoading -> SendEvent(STATEEND) -> MARKETING_SCREENS). Guarded so the held DONE
-        // stage doesn't re-fire every frame.
-        if (gBrnLoadingScreenShouldShow)
+        // Load complete (once): raise the completion signal + advance the flow (FinishLoading ->
+        // SendEvent(STATEEND) -> MARKETING_SCREENS). The GUI BF_LOADING state watches
+        // gBrnInitialLoadingComplete and dismisses the loading screen itself (StopLoadingScreen) as it
+        // proceeds to BF_VIDEOS; only when the GUI isn't driving do we drop the screen here. Guarded so
+        // the held DONE stage doesn't re-fire every frame.
+        if (!gBrnInitialLoadingComplete)
         {
             if (CgsDev::Message::gxMessageFilterFlags & 1)
                 *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading complete\n";
             FinishLoading();
-            gBrnLoadingScreenShouldShow = false;
+            gBrnInitialLoadingComplete = true;
+            if (!gBrnGuiDrivesLoadingScreen)
+                gBrnLoadingScreenShouldShow = false;
         }
         break;
     }

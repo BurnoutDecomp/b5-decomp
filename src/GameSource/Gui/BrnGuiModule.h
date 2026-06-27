@@ -74,6 +74,7 @@ namespace BrnGui
         CgsModule::VariableEventQueue<18432, 16> mBootLoadingInQueue;// BootLoading's input queue (cache-ready/loading-complete)
         CgsResource::Pool      mBootLoadingPool;                     // holds the BRNFLOADFSM LuaCode bundle
         bool                   mbBootLoadingFsmReady;                // the BRNFLOADFSM Lua FSM loaded + entered BF_LOADING
+        bool                   mbBootLoadingCompleteFed;             // fed BootLoading the loading-complete (137) input yet
         s32                    miBootPhase;                          // 0 = BF_LOADING, 1 = BF_VIDEOS
     };
 }
