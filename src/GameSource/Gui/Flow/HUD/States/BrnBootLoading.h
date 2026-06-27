@@ -12,8 +12,8 @@ namespace BrnGui
         virtual void OnEnter();
         virtual void OnLeave();
         virtual void Update();
-        virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
-                                        u32* lpuNumberOfResources) const;
+        // (no GetResourcesToLoad override -- the X360 BootLoading has none in its ledger; it inherits
+        //  the no-op CgsGui::State::GetResourcesToLoad default. It streams no per-state resources.)
 
     private:
         static const s32 maiEventToObserve[2];  // @ 0x8205ABF8 (.rdata)
