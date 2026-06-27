@@ -3,7 +3,6 @@
 #endif
 
 #include <GameShared/GameClasses/System/CgsHardwareInit.h>
-#include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
 
 #include "pc/gcm/renderengine/device.h"
 #include "GameSource/Game/BrnGameModule.hpp"
@@ -95,10 +94,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
         CgsSystem::HardwareInit::InitializeHardware(lpCmdLine);
 
-        // STEP 1 audio bring-up: open the XAudio2 PC backend and play a diagnostic 440 Hz
-        // tone to prove the output path end-to-end (the rw::audio Dac pull replaces the
-        // tone fill once the engine is wired). FLAG: temporary boot-time test tone.
-        CgsSystem::AudioOutputPC::PlayTestTone(2.0f);
+        // The XAudio2 PC backend (CgsSystem::AudioOutputPC) is now opened on demand by the
+        // first real audio source -- the boot-movie sound streams (BrnGui::MovieManager ->
+        // CgsSystem::MovieAudioPC). The temporary 440 Hz boot test tone has served its
+        // purpose (output path confirmed by ear) and is removed.
 
         EnginePrepare();
         EngineUpdate();
