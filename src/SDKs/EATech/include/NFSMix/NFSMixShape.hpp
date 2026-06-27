@@ -23,4 +23,9 @@ namespace NFSMixShape
     float GetPitchMultFromCents(int liCents);    // @0x82B44F30
     // GetPitchMultFromCents(sext16(liCents)) * 4096, truncated to int (fixed-point 1.0=4096).
     int   GetIntPitchMultFromCents(int liCents); // @0x82B45690
+
+    // Amplitude (Q15) -> dB in hundredths (<=0). @0x82B45060
+    int   GetdBFromQ15(int liQ15);
+    // dB (hundredths) -> Q15 gain (>=0 dB clamps to 0x7FFF). @0x82B44ED0
+    int   GetQ15FromHundredthsdB(int liHundredthsDb);
 }
