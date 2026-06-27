@@ -17,6 +17,33 @@
 
 namespace CgsFsm
 {
+    void Fsm::Construct()
+    {
+        mpCurrentState = 0;
+    }
+
+    // Swap the active state, running the leaving state's OnLeave and the entering state's
+    // OnEnter (the standard FSM transition; CgsFsm::ScriptedFsm uses its own id-based SetState).
+    // The X360 inlines these tiny base methods; reconstructed from the FSM semantics.
+    void Fsm::SetState(State* lpState)
+    {
+        if (lpState == mpCurrentState)
+            return;
+        if (mpCurrentState)
+            mpCurrentState->OnLeave();
+        mpCurrentState = lpState;
+        if (lpState)
+            lpState->OnEnter();
+    }
+
+    bool Fsm::Release()
+    {
+        if (mpCurrentState)
+            mpCurrentState->OnLeave();
+        mpCurrentState = 0;
+        return true;
+    }
+
     void Fsm::Update()
     {
         if (mpCurrentState)
@@ -25,5 +52,11 @@ namespace CgsFsm
             mpCurrentState->Update();
             mpCurrentState->PostUpdate();
         }
+    }
+
+    void Fsm::Render()
+    {
+        if (mpCurrentState)
+            mpCurrentState->Render();
     }
 }
