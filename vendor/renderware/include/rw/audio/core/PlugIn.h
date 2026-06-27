@@ -35,6 +35,8 @@ class PlugIn;
 class PlugInInfo;
 class PlugInRegistry;
 class System;
+class Voice;              // rwaudio PDB: PlugIn::mpVoice (+0x08)
+struct PlugInDescRunTime; // rwaudio PDB: PlugIn::mpPlugInDescRunTime (+0x10)
 
 // -------------------------------------------------------------------------------------
 // PlugIn -- base class for a node in the audio processing graph.
@@ -62,7 +64,8 @@ public:
     // The attribute slot pair the GetAttribute/SetAttribute helpers index into.
     // SetAttribute defers the actual write to SetAttributeHandler via the System's
     // deferred-command ring (see SetAttribute body), so this is the resolved table.
-    struct Attribute
+    // rwaudio PDB: rw::audio::core::PlugIn::Attribute_t (an 8-byte attribute slot).
+    struct Attribute_t
     {
         f32 mfValue; // +0x00 -- the attribute value (8-byte stride: value + pad/id)
         u32 muPad;   // +0x04
@@ -75,24 +78,28 @@ public:
     virtual void Destroy(int /*a*/) {}     // vt[3] -- reached through CreateInstance fail path
 
     // ---- bodied in PlugIn.cpp (offsets above are authoritative) ----
-    static PlugIn *CreateInstance(PlugIn *self, PlugIn *input, System *factory,
+    static PlugIn *CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pDesc,
                                   void *typeRecord, char flag);
     static int Event(PlugIn *self);
     static PlugIn *GetAttribute(PlugIn *self, int index, f32 *outValue);
     static PlugIn *SetAttribute(PlugIn *self, int index, f32 value);
     static int SetAttributeHandler(void *cmd);
 
-    void *mpVTable;        // +0x00
-    System *mpSystem;      // +0x04 (off_83271928: the shared System singleton that
-                           //         owns the deferred command ring SetAttribute uses)
-    PlugIn *mpInput;       // +0x08
-    Attribute *mpAttributes; // +0x0C
-    System *mpFactory;     // +0x10
-    f32 mfAttrib0;         // +0x14
-    f32 mfAttrib1;         // +0x18
-    int mState;            // +0x1C
-    char mbFlag20;         // +0x20
-    char mbFlag21;         // +0x21
+    // FLAG (rwaudio PDB reconcile -- IDA Files/ProStreet08Milestone.pdb,
+    // rw::audio::core::PlugIn [sizeof=36]): the ARTIST-asm-derived offsets below MATCH
+    // the PDB exactly (every field aligns), so the PDB member NAMES/TYPES are
+    // authoritative and replace the earlier semantic guesses. x64 widths (real pointers);
+    // the +0xNN are the X360 (32-bit) offsets, now PDB-verified.
+    void *mpVTable;                       // +0x00  vfptr
+    System *mpSystemUseGetSystemAccessor; // +0x04  (PDB name; access via GetSystem())
+    Voice *mpVoice;                       // +0x08  (was guessed mpInput/PlugIn*)
+    Attribute_t *mpAttribute;             // +0x0C  (was mpAttributes)
+    PlugInDescRunTime *mpPlugInDescRunTime; // +0x10 (was guessed mpFactory/System*)
+    f32 mLatencyInSamples;                // +0x14  (was mfAttrib0)
+    f32 mDecaySamples;                    // +0x18  (was mfAttrib1)
+    u32 mCpuTicks;                        // +0x1C  (was mState)
+    u8 mInputChannels;                    // +0x20  (was mbFlag20)
+    u8 mOutputChannels;                   // +0x21  (was mbFlag21)
 };
 
 // A queued SetAttribute command, pushed into the System command ring by

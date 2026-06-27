@@ -53,6 +53,16 @@ enum { KI_IIR2_MAX_CHANNELS = 6 };
 // inherited so the shapes' data offsets are not shifted by a compiler-inserted vptr,
 // since PlugIn is polymorphic with an explicit +0x00 vtable word.)
 // -------------------------------------------------------------------------------------
+// rwaudio PDB authoritative names (IDA Files/ProStreet08Milestone.pdb,
+// rw::audio::core::PlugIn) for each base slot -- this filter-local view keeps the
+// filter-semantic field names (the .cpp bodies use them; the generic base slots are
+// repurposed by the filter, e.g. +0x18 holds the cutoff), with the canonical mapping:
+//   mpSystem(+0x04)=mpSystemUseGetSystemAccessor  mpInput(+0x08)=mpVoice
+//   mpAttributes(+0x0C)=mpAttribute  mpFactory(+0x10)=mpPlugInDescRunTime
+//   mfAttrib0(+0x14)=mLatencyInSamples  mfAttrib1(+0x18)=mDecaySamples
+//   mState(+0x1C)=mCpuTicks  mbFlag20(+0x20)=mInputChannels
+//   mbChannelCount(+0x21)=mOutputChannels  (+0x22/+0x23 = PDB tail padding)
+// See PlugIn.h for the canonical reconciled type.
 struct PlugInBaseView
 {
     void *mpVTable;     // +0x00 -- the installed v-table pointer
