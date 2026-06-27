@@ -50,14 +50,13 @@ public:
     void Initialize(NFSMixMap* lpMap, int liStateIndex, int liNumStateCopies, int liObjectIndex); // @0x82B4C6B0
     int  GetStateRefCount();             // @0x82B4C718 -- m_pFirstInstance->m_ThisStateRefCnt
 
-    // ---- proc accessors (declared; bodied once the stXxx proc records are homed,
-    //      so the array stride is the real x64 sizeof rather than the X360 byte-8).
-    //   GetMixCtlProc      @0x82B4C728  base +0x08 (pMixCtlProcs)      bounds +0x48 (m_MixCtlsAdded)
-    //   Get3DMixCtlProc    @0x82B4C770  base +0x14 (p3DMixCtlProc)     bounds +0x4C (m_3DMixCtlsAdded)
-    //   GetEvtMixCtlProc   @0x82B4C7B8  base +0x18 (pEvtMixCtlProc)    bounds +0x50 (m_EvtMixCtlsAdded)
-    //   GetSubMixChProc    @0x82B4C800  base +0x0C (pSubMixChProcs)    bounds +0x54 (m_SubMixChannelsAdded)
-    //   GetMasterMixChProc @0x82B4C848  base +0x10 (pMasterMixChProcs) bounds +0x58 (m_MasterChannelsAdded)
-    //   (all: state = &m_pFirstInstance[copyIdx]; if (idx < boundsCount) return base[idx]; else 0)
+    // ---- proc accessors (ARTIST-verified base/bounds offsets) -- each indexes the
+    //   copy at m_pFirstInstance[copyIdx], bounds-checks procIdx, returns base[procIdx].
+    stMixCtlProc*      GetMixCtlProc(unsigned char procIdx, int copyIdx);      // @0x82B4C728 base+0x08 bnd+0x48
+    st3DMixCtlProc*    Get3DMixCtlProc(unsigned char procIdx, int copyIdx);    // @0x82B4C770 base+0x14 bnd+0x4C
+    stEvtMixCtlProc*   GetEvtMixCtlProc(unsigned char procIdx, int copyIdx);   // @0x82B4C7B8 base+0x18 bnd+0x50
+    stSubMixChProc*    GetSubMixChProc(unsigned char procIdx, int copyIdx);    // @0x82B4C800 base+0x0C bnd+0x54
+    stMasterMixChProc* GetMasterMixChProc(unsigned char procIdx, int copyIdx); // @0x82B4C848 base+0x10 bnd+0x58
 
     // vtable pointer occupies +0x00 (virtual dtor above).
     NFSMixMap*        m_pNFSMixMap;        // +0x04

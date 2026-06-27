@@ -1,8 +1,10 @@
 #include "SDKs/EATech/include/NFSMix/NFSMixMapState.hpp"
+#include "SDKs/EATech/include/NFSMix/NFSMixRecords.hpp" // complete proc records for the accessors
 
 // ===========================================================================
-//  NFSMixMapState -- ctor/dtor + the ARTIST-verified Initialize / GetStateRefCount.
-//  Store-for-store from BURNOUT_X360_ARTIST.XEX (see NFSMixMapState.hpp).
+//  NFSMixMapState -- ctor/dtor + the ARTIST-verified Initialize / GetStateRefCount
+//  and the GetXxxProc accessors. Store-for-store from BURNOUT_X360_ARTIST.XEX
+//  (see NFSMixMapState.hpp).
 // ===========================================================================
 
 NFSMixMapState::NFSMixMapState() {}   // vtable install (reproduced by the virtual dtor)
@@ -45,4 +47,50 @@ void NFSMixMapState::Initialize(NFSMixMap* lpMap, int liStateIndex,
 int NFSMixMapState::GetStateRefCount()
 {
     return m_pFirstInstance->m_ThisStateRefCnt;
+}
+
+// ---------------------------------------------------------------------------
+// GetXxxProc accessors @0x82B4C728 / 0x770 / 0x7B8 / 0x800 / 0x848.
+// Each: state = &m_pFirstInstance[copyIdx] (X360 stride 0x60); if the proc index is
+// within that copy's count, return &<paramBase>[procIdx]; else 0. The X360 stride for
+// the proc array is 8 (a {shared*,unique*} pair); modelled as the real x64 array index.
+// ---------------------------------------------------------------------------
+stMixCtlProc* NFSMixMapState::GetMixCtlProc(unsigned char procIdx, int copyIdx)
+{
+    NFSMixMapState* st = &m_pFirstInstance[copyIdx];
+    if (!st || static_cast<int>(procIdx) >= st->m_MixCtlsAdded)
+        return 0;
+    return &st->m_MixStateParams.pMixCtlProcs[procIdx];
+}
+
+st3DMixCtlProc* NFSMixMapState::Get3DMixCtlProc(unsigned char procIdx, int copyIdx)
+{
+    NFSMixMapState* st = &m_pFirstInstance[copyIdx];
+    if (!st || static_cast<int>(procIdx) >= st->m_3DMixCtlsAdded)
+        return 0;
+    return &st->m_MixStateParams.p3DMixCtlProc[procIdx];
+}
+
+stEvtMixCtlProc* NFSMixMapState::GetEvtMixCtlProc(unsigned char procIdx, int copyIdx)
+{
+    NFSMixMapState* st = &m_pFirstInstance[copyIdx];
+    if (!st || static_cast<int>(procIdx) >= st->m_EvtMixCtlsAdded)
+        return 0;
+    return &st->m_MixStateParams.pEvtMixCtlProc[procIdx];
+}
+
+stSubMixChProc* NFSMixMapState::GetSubMixChProc(unsigned char procIdx, int copyIdx)
+{
+    NFSMixMapState* st = &m_pFirstInstance[copyIdx];
+    if (!st || static_cast<int>(procIdx) >= st->m_SubMixChannelsAdded)
+        return 0;
+    return &st->m_MixStateParams.pSubMixChProcs[procIdx];
+}
+
+stMasterMixChProc* NFSMixMapState::GetMasterMixChProc(unsigned char procIdx, int copyIdx)
+{
+    NFSMixMapState* st = &m_pFirstInstance[copyIdx];
+    if (!st || static_cast<int>(procIdx) >= st->m_MasterChannelsAdded)
+        return 0;
+    return &st->m_MixStateParams.pMasterMixChProcs[procIdx];
 }
