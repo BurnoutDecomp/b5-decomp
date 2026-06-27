@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"           // E_RESOURCETYPE_VIDEODATA
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (VideoDefinition::Copy)
+#include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"                     // PC EA-XMA movie/stream audio
 
 #include <cstdlib>   // malloc / free
 #include <cstdio>    // snprintf (boot-video diagnostics)
@@ -32,6 +33,30 @@ namespace BrnGui
             for (u32 li = 0; lpcName[li] != 0 && lu < luBufferSize - 1u; ++li, ++lu) lpacBuffer[lu] = lpcName[li];
             lpacBuffer[lu] = 0;
         }
+
+        // Derive the movie's audio stream path "SOUND\STREAMS\<base>.SNS" from the video file name
+        // (e.g. "CRITERION.VP6" -> "SOUND\STREAMS\CRITERION.SNS"). The X360 looks the sound stream up via
+        // the GenericRwacWaveContent (SNR) header keyed by a hashed name; the PC path loads the named
+        // .SNS directly (staged like VIDEOS\*.VP6). See the movie-audio dossier.
+        void BuildSoundStreamPath(char* lpacBuffer, u32 luBufferSize, const char* lpcVideoName)
+        {
+            const char* lpcDir = "SOUND\\STREAMS\\";
+            u32 lu = 0;
+            for (; lpcDir[lu] != 0 && lu < luBufferSize - 1u; ++lu) lpacBuffer[lu] = lpcDir[lu];
+            // copy the base name, stopping at the extension dot
+            u32 liDot = 0;
+            for (u32 li = 0; lpcVideoName[li] != 0; ++li) if (lpcVideoName[li] == '.') liDot = li;
+            const u32 luNameLen = liDot ? liDot : 0xFFFFFFFFu;
+            for (u32 li = 0; lpcVideoName[li] != 0 && li < luNameLen && lu < luBufferSize - 5u; ++li, ++lu)
+                lpacBuffer[lu] = lpcVideoName[li];
+            const char* lpcExt = ".SNS";
+            for (u32 li = 0; lpcExt[li] != 0 && lu < luBufferSize - 1u; ++li, ++lu) lpacBuffer[lu] = lpcExt[li];
+            lpacBuffer[lu] = 0;
+        }
+
+        // The PC movie/stream audio player (single movie at a time -> file-static, no header churn).
+        CgsSystem::MovieAudioPC g_movieAudio;
+        char                    g_acSoundStreamPath[260] = { 0 };
     }
 
     // ---- VideoDefinition -----------------------------------------------------------------------------
@@ -87,6 +112,8 @@ namespace BrnGui
     {
         miMoveMemoryReleaseDelay = 0;
         mMoviePlayer.Construct();
+        g_movieAudio.Construct();           // [PC] EA-XMA movie/stream audio player
+        g_acSoundStreamPath[0] = 0;
         mPlayingMovie.Prepare();
         mQueuedMovie.Prepare();
         mReceiverQueue.Construct();
@@ -210,6 +237,7 @@ namespace BrnGui
     bool MovieManager::Release()
     {
         mMoviePlayer.Release();
+        g_movieAudio.Release();            // [PC] free the decoded movie-audio buffer
         mPlayingMovie.Release();
         mQueuedMovie.Release();
         mReceiverQueue.Release();
@@ -322,9 +350,17 @@ namespace BrnGui
 
         BuildMoviePath(macMovieNameBuffer, sizeof(macMovieNameBuffer), lpVideoFile->GetName());
         mMoviePlayer.SetMovieFile(macMovieNameBuffer, mPlayingMovie.mbPreload);
+        // [PC] derive the matching EA-XMA sound stream path (SOUND\STREAMS\<base>.SNS) and decode it
+        // NOW -- ahead of MoviePlayer::Play(). The player is wall-clock driven (Play() stamps
+        // muStartTick), so decoding between Play() and the audio Start() would let the video clock run
+        // on during the (heavy, synchronous) decode and leave the audio lagging the video by the decode
+        // time. Decoding here keeps the later Play()+Start() instant and frame-aligned.
+        BuildSoundStreamPath(g_acSoundStreamPath, sizeof(g_acSoundStreamPath), lpVideoFile->GetName());
+        g_movieAudio.Load(g_acSoundStreamPath);
         {
             char lac[300];
-            std::snprintf(lac, sizeof(lac), "[MovieManager] QueueNextMovie: file '%s'\n", macMovieNameBuffer);
+            std::snprintf(lac, sizeof(lac), "[MovieManager] QueueNextMovie: file '%s' (audio '%s')\n",
+                          macMovieNameBuffer, g_acSoundStreamPath);
             CgsDev::Log::WriteToLog(lac);
         }
         return true;
@@ -344,6 +380,7 @@ namespace BrnGui
 
         case E_MOVIEMANAGERSTATE_STOP_MOVIE:
             mMoviePlayer.Stop();
+            g_movieAudio.Stop();           // [PC] silence the movie sound stream
             meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
             break;
 
@@ -359,6 +396,7 @@ namespace BrnGui
         case E_MOVIEMANAGERSTATE_RELEASING_MOVIE_PLAYER:
             if (!mMoviePlayer.Release())
                 break;
+            g_movieAudio.Stop();           // [PC] the movie finished -> stop its sound stream
             DestroyMemoryResourceAndDescriptor();   // [stub: MovieAllocator Heap+Linear destruct]
             if (mbKeepMemoryWhenFinished)
             {
@@ -445,8 +483,13 @@ namespace BrnGui
                 else
                 {
                     mMoviePlayer.Play();
-                    // X360 goes -> REQUESTING_AUDIO(5) -> [504] WAITING_FOR_AUDIO(6) -> PLAYING(7).
-                    // [stub: audio] no sound subsystem yet, so skip straight to PLAYING.
+                    // X360 goes -> REQUESTING_AUDIO(5) -> [504] WAITING_FOR_AUDIO(6) -> PLAYING(7):
+                    // it requests the movie's EA sound stream, waits for it, then plays both together.
+                    // [PC] the stream was already decoded in QueueNextMovie; start it now in lock-step
+                    // with the video clock (Play() above). (The faithful SndStream/SndPlayer1 streaming
+                    // path + the SNR-by-id lookup are the deferred layers; see the movie-audio dossier.)
+                    if (g_movieAudio.IsLoaded())
+                        g_movieAudio.Start();
                     meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
                 }
             }

@@ -29,7 +29,7 @@ namespace
 typedef HRESULT (__stdcall *PFN_XAudio2Create)(IXAudio2**, UINT32, XAUDIO2_PROCESSOR);
 
 const int kBuffers = 3;
-const int kFrames  = 1024;          // frames per buffer (~21 ms @ 48 kHz)
+const int kFrames  = 256;           // frames per buffer (~5.3 ms @ 48 kHz; 3 -> ~16 ms total latency)
 const int kMaxChannels = 2;
 
 HMODULE                 g_hXAudioDll  = nullptr;
