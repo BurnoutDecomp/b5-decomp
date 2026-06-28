@@ -30,6 +30,7 @@
 #include <cstdint>
 
 struct AptCIH;
+struct AptDisplayListState;
 
 // The 4-byte pool-allocated head/sentinel node: its single dword is the first
 // listed entry (the AptCIH chain is then linked through the CIH display-list links).
@@ -58,4 +59,41 @@ struct AptDisplayList
     // dropping each one's GC-root + ClearCIH when bClearGCRoots). Body in
     // AptDisplayList.cpp (its own TU).
     void clear(bool bClearGCRoots);
+
+    // ---- removal (teardown core; bodies in AptDisplayList.cpp) -------------
+    // The head node's single AptCIH* head IS layout-identical to an
+    // AptDisplayListState (both are a lone AptCIH* head + the CIH-resident list
+    // links), so the list-mutation ops delegate to AptDisplayListState by
+    // reinterpreting mpHead. AsState() centralises that typed reinterpretation
+    // (NOT a raw-offset hack -- both are 1-pointer SDK head structures).
+    AptDisplayListState* AsState() const;
+
+    // removeObject @0x82AFD0B0 -- if pItem is a real placed node, drop its entry
+    // from the owning AS object's property hash (when it has a non-empty instance
+    // name registered there) then hand it to the list state's delayed-release
+    // list. Body in AptDisplayList.cpp.
+    void removeObject(AptCIH* pItem);
+
+    // removeClonedObject @0x82AFD198 -- find the node at pSource's depth in this
+    // list and removeObject it (used to drop a script-removed clone). Body in
+    // AptDisplayList.cpp.
+    void removeClonedObject(AptCIH* pSource);
 };
+
+// ===========================================================================
+// BLOCKED behavioural surface (NOT reconstructed here -- their own follow-on TUs):
+//   tick @0x82AD9BB8 / GeneralisedProcess @0x82AE01B0 / GetBoundingRect @0x82AD9B38
+//     -- need AptCIH::tick / GeneralisedProcess / GetBoundingRect bodies AND a
+//        named mapping of the AptCharacter type/depth-mask flags walked per node.
+//   AddToDisplayList @0x82B0B150 / ReplaceDisplyListItem @0x82B0B2B8 /
+//   mergeState @0x82B0B438 / instantiateCharacter @0x82B061D0 /
+//   placeObject @0x82B097D8 / placeObjectNCXForm @0x82B0AD28 /
+//   _addToSetCaches @0x82AF46B8
+//     -- need the un-homed AptCharacter frame/clip-event-mask layout, the module
+//        static dispatch arrays (off_8324E544 / dword_8324E548 the "to be ticked"
+//        list, off_8324E574, dword_8324E514), the unnamed local subs
+//        (sub_82B0B080 / sub_82B008B0 / sub_82AEE788), AptCharacterAnimation::
+//        ExecuteInitActions, AptActionInterpreter::setVariable,
+//        Burnout_X360_Artist_0040_0, and AptCXForm::AptUint32CXFormCopy's
+//        recovered signature. Reconstructed when those types/callees land.
+// ===========================================================================

@@ -76,6 +76,11 @@ struct AptCIH : public AptValueGC
     void SetDisplayListNext(AptCIH* p)     { mpDisplayListNext = p; }         // @0x7DF1BC
     void SetDisplayListParent(AptCIH* p)   { mpDisplayListParent = p; }       // @0x7DF1CC
 
+    // ClearCIH @0x82AC... (X360-attested behavioural follow-on; body in its own
+    // TU) -- tear down this node's character instance / placed state. Declared so
+    // the display-list teardown (AptDisplayList::clear) can call it by name.
+    void ClearCIH(bool bClearGCRoots);
+
     // ---- packed state / flags --------------------------------------------
     uint32_t GetCIHState() const;       void SetCIHState(uint32_t eState);    // @0x7DF12C/0x7DF110
     int16_t  GetZombieCount() const;    void IncZombieCount();  void DecZombieCount();  // @0x7DF160/0x7DF138/0x7FB648

@@ -48,4 +48,10 @@ struct AptDisplayListState
 
     // GC mark each listed CIH. @0x7E68FC
     void RegisterReferences(const AptValue* pOwner) const;
+
+    // AddToDelayReleaseList @0x82AFD... (X360-attested behavioural follow-on; body
+    // in its own TU) -- unlink pItem from the live list and queue it on the
+    // delayed-release list (so a node removed mid-tick is released safely after the
+    // walk). Declared so AptDisplayList::removeObject can call it by name.
+    AptCIH* AddToDelayReleaseList(AptCIH* pItem, bool bDelay);
 };
