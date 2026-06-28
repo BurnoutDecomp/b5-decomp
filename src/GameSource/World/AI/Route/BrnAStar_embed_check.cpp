@@ -10,11 +10,14 @@
 namespace BrnAI
 {
 // Befriend a probe so we can reference the private heuristics from outside.
+// The heuristics are static (context-free) members called through a plain function
+// pointer (mpDistanceFunction / KAP_DISTANCE_FUNCTIONS), so these are free function
+// pointers, not member-function pointers.
 struct AStarEmbedProbe
 {
     static void Touch()
     {
-        typedef f32 (AStar::*DistFn)(const AStarVector2&, const AStarVector2&);
+        typedef f32 (*DistFn)(const AStarVector2&, const AStarVector2&);
         // Casting through a local volatile prevents the optimizer from
         // discarding the references before the bodies are emitted.
         DistFn lpfns[3];
