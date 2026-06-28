@@ -3,6 +3,9 @@
 
 #include "types.hpp"
 
+namespace CgsGui { class StateInterface; }
+namespace BrnFlapt { struct FileRef; }
+
 // BrnGui::OnlineInviteMessageComponent - the permanent GUI component that shows the
 // "you've been invited" online message and runs its show / transition-out animation.
 //
@@ -37,6 +40,18 @@ namespace BrnGui
         // pending dismiss, value 4) latch the dismissed flag. Returns the X360 r3 result
         // (`this` on the non-assert path); kept as void* to mirror the guest _DWORD* return.
         void* DoTransitionComplete();
+
+        // --- Construct / Prepare exercised by the AlwaysAvailableComponentsManager ----
+        // Declared here (additive) so the manager TU compiles against the real home
+        // rather than forking the type; bodies live in this component's own TU.
+
+        // @0x824F3628 Construct site: r4="OnlineInvite_mc", r5=&StateInterface, r6=0.
+        void Construct(const char* lpcMovieClipName,
+                       CgsGui::StateInterface* lpStateInterface,
+                       s32 liFlags);
+
+        // PrepareFlapt site: r4="OnlineInvite_mc", r5=FileRef.
+        void Prepare(const char* lpcMovieClipName, const BrnFlapt::FileRef& lFile);
 
     private:
         // Guest +0x34: a secondary state the callback tests against 4. The match latches
