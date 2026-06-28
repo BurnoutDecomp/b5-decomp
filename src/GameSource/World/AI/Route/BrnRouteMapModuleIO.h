@@ -6,58 +6,296 @@
 // Each element type derives from the empty CgsModule::Event base (EBO -> 0 bytes)
 // and is stored by its byte image in a fixed-capacity CgsModule::EventQueue<T,N>.
 //
+// FIELD LAYOUT NOW FINALISED (was opaque). The member names/types/order come from
+// the DecFIGS DWARF (BrnRouteMapModuleIO.h); every byte offset is X360-attested by
+// the field reads/writes in RouteMapModule::ProcessRaceRoute (@0x8278C2E0) and
+// ProcessExtrapolatedRoute (@0x8278C4C8) and pinned with static_assert below.
+//
 // X360-attested element strides + queue offsets (all from BURNOUT_X360_ARTIST.XEX):
 //   * RaceRouteRequest         stride 128 (AddEventSafe @0x8277AF20: `slwi r,r,7`,
-//                              16 x `std` 8-byte stores) -> 8-byte aligned.
-//                              EventQueue<...,1>::Construct @0x82789FB8 puts maEvents
-//                              at this+0x10 (12-byte base + 4 pad for align-8), N=1.
+//                              16 x `std` 8-byte stores). EventQueue<...,1>::Construct
+//                              @0x82789FB8 puts maEvents at this+0x10, N=1.
 //   * ExtrapolatedRouteRequest stride 64  (AddEventSafe @0x8277AFD8: `slwi r,r,6`,
-//                              8 x `std` 8-byte stores) -> 8-byte aligned.
-//                              EventQueue<...,12>::Construct @0x8278A028 puts maEvents
-//                              at this+0x10, N=12 (`li r11,0xC`).
+//                              8 x `std` 8-byte stores). EventQueue<...,12>::Construct
+//                              @0x8278A028 puts maEvents at this+0x10, N=12.
 //   * RouteResponse            stride 5136 (AddEvent @0x8277B090: memcpy 5136 bytes;
-//                              Append @0x8277B668: XMemCpy 5136*count) -> 4-byte
-//                              aligned. EventQueue<...,16>::Construct @0x8278A098 puts
-//                              maEvents at this+0xC (12-byte base, element align 4),
-//                              N=16 (`li r11,0x10`).
+//                              Append @0x8277B668: XMemCpy 5136*count). EventQueue<...,16>
+//                              ::Construct @0x8278A098 puts maEvents at this+0xC, N=16.
 //
-// FLAG (no DWARF / no leak for these element internals): the field-level layout of
-// the three route-request/response records is NOT recoverable from the available
-// data -- only their X360-attested byte size and alignment are known (from the
-// element-stride arithmetic in the queue Construct/AddEvent/Append bodies). They are
-// modelled here as honest opaque byte payloads sized + aligned to match the X360
-// strides exactly, so the EventQueue<T,N> instantiations land maEvents at the
-// X360 offsets. The internal members must be filled in once a DWARF/decl source for
-// these types is homed; that does not change these sizes.
+// The two REQUEST records (RaceRouteRequest, ExtrapolatedRouteRequest) embed the rw
+// vpu Vector2/Vector3 lane registers (alignas(16)); the resulting natural offsets land
+// EXACTLY on the X360-attested offsets, so they are modelled as honest typed structs
+// (sizeof pinned to the 128/64 stride with static_assert).
+//
+// The RESPONSE record is DELIBERATELY a 5136-byte, 4-byte-aligned OPAQUE image with a
+// typed Route* view aliased at +0x00 and the owner/event ids overlaid at +0x140C/+0x140E
+// -- NOT a value-typed `Route mRoute` member. Reason (X360-faithful): the committed
+// BrnAI::Route embeds Vector4 maNodes[320] (rw vpu Vector4 is alignas(16)), so sizeof(Route)
+// rounds up to 5136 and a value member would push RouteResponse to a 16-aligned 5152-byte
+// object -- which would (a) break the X360-attested 5136 stride and (b) move EventQueue
+// <RouteResponse,16>::maEvents off the committed +0xC (4-byte) landing onto +0x10. The
+// X360 instead reuses Route's trailing 4 alignment-pad bytes (5132..5135) for the two ids,
+// giving the tight 5136 image reproduced here. GetRoute() reinterprets the image start.
 
-#include "types.hpp"                                            // u8/u32/u64/s32
+#include "types.hpp"                                            // u8/u16/u32/s32
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"        // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::Event (empty event base)
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"          // CgsModule::IOBuffer base
+#include "GameShared/GameClasses/Containers/CgsArray.h"         // Array<T,N> (block-section list)
+#include "GameSource/World/AI/Route/BrnAStar.h"                 // AStarQuality / AStarDistanceFunction
+#include "GameSource/World/AI/Route/BrnRoute.h"                 // BrnAI::Route (response view target)
+#include "BrnCommonTypes.h"                                     // Vector2 / Vector3 (rw vpu)
+
+#include <cstddef>   // offsetof / size_t (layout pinning)
 
 namespace BrnAI
 {
     namespace RouteMapModuleIO
     {
-        // Input request: a full race-route query. X360 stride 128, 8-byte aligned
-        // (AddEventSafe @0x8277AF20 copies 16 qwords). Opaque payload pending DWARF.
+        // ---- shared constants (DWARF BrnRouteMapModuleIO.h:43/44) ----
+        const s32 KI_MAX_PLAYER_ROUTE_EXTRAPOLATION_GENERATED_SECTIONS = 16;
+        const s32 KI_MAX_BLOCK_SECTIONS = 16;
+
+        // The request "owner" tag (DWARF BrnRouteMapModuleIO.h:51).
+        enum RequestOwner
+        {
+            E_OWNER_AI           = 0,
+            E_OWNER_GUI          = 1,
+            E_OWNER_MODE_MANAGER = 2,
+            E_OWNER_COUNT        = 3,
+        };
+
+        // The extrapolated look-ahead flavour (DWARF BrnAI::EExtrapolatedType, used by
+        // meRouteType @0x34 in ExtrapolatedRouteRequest). ProcessExtrapolatedRoute
+        // (@0x8278C650): `lwz 0x34; cmpwi 0; bne -> ExtrapolateTwistyRoute, else
+        // ExtrapolateRouteForwards` -- so NORMAL == 0, TWISTY != 0.
+        enum EExtrapolatedType
+        {
+            E_EXTRAPOLATED_NORMAL = 0,
+            E_EXTRAPOLATED_TWISTY = 1,
+        };
+
+        // AISection::AISectionId is a plain u32 (see AISectionsResourceType.h: AISection::mId
+        // == u32). Spelled out here for the block-section list, matching BrnAStar.h's
+        // `u32 maBlockSectionIds[...]` convention (no separate typedef is committed).
+
+        // =====================================================================
+        // Input request: a full race-route query. X360 stride 128, embeds two
+        // Vector3 lane registers so the natural offsets are the attested ones.
+        // =====================================================================
         struct RaceRouteRequest : public CgsModule::Event
         {
-            u64 maOpaque[16];   // 128 bytes, 8-byte aligned (X360-attested size only)
+            // ProcessRaceRoute (@0x8278C340..): lvx128 v0,r0,r31 (mStartPosition @0x00),
+            // lvx128 v0,r31,0x10 (mEndPosition @0x10); lhz 0x20/0x22 (start/end section);
+            // base 0x24 + 0x40 count (Array<u32,16>); lhz 0x68/0x6A (owner/event ids);
+            // lwz 0x6C/0x70, lbz 0x74 (quality / distance function / shortcuts).
+            Vector3                mStartPosition;        // +0x00
+            Vector3                mEndPosition;          // +0x10
+            u16                    muStartSectionIndex;   // +0x20
+            u16                    muEndSectionIndex;     // +0x22
+            Array<u32, 16>         mauBlockSections;      // +0x24 (16 ids; count @ +0x64)
+            u16                    muOwnerId;             // +0x68
+            u16                    muEventId;             // +0x6A
+            AStarQuality           meQuality;             // +0x6C
+            AStarDistanceFunction  meDistanceFunction;    // +0x70
+            bool                   mbUseAIShortcuts;      // +0x74
+
+            // ---- builder (RouteRequestManager calls these by name) ----
+            // RouteRequestManager passes (position, endMiddle, startSection, endSection,
+            // ownerId); the DWARF declares the canonical arg order (ownerId, eventId,
+            // startPos, endPos, startSection, endSection). The manager's call site uses
+            // (startPos, endPos, startSection, endSection, ownerId) -- this overload
+            // matches that exact signature so BrnRouteRequestManager.cpp compiles.
+            void Construct(Vector3 lStartPosition, Vector3 lEndPosition,
+                           u16 luStartSectionIndex, u16 luEndSectionIndex, u16 luOwnerId)
+            {
+                mStartPosition      = lStartPosition;
+                mEndPosition        = lEndPosition;
+                muStartSectionIndex = luStartSectionIndex;
+                muEndSectionIndex   = luEndSectionIndex;
+                mauBlockSections.Construct();           // live count -> 0
+                muOwnerId           = luOwnerId;
+                muEventId           = 0;
+                meQuality           = E_ASTAR_QUALITY_LOW;
+                meDistanceFunction  = E_ASTAR_DISTANCE_EUCLIDEAN;
+                mbUseAIShortcuts    = false;
+            }
+
+            void SetUseAIShortcuts(bool lbUseAIShortcuts)        { mbUseAIShortcuts   = lbUseAIShortcuts; }
+            void SetDistanceFunction(AStarDistanceFunction leDF) { meDistanceFunction = leDF; }
+            void SetQuality(AStarQuality leQuality)              { meQuality          = leQuality; }
+            void AddBlockSectionId(u32 luSectionId)              { mauBlockSections.Append(luSectionId); }
+
+            // ---- accessors (ProcessRaceRoute reads via these) ----
+            u16                   GetOwnerId() const             { return muOwnerId; }
+            u16                   GetEventId() const             { return muEventId; }
+            Vector3               GetStartPosition() const       { return mStartPosition; }
+            Vector3               GetEndPosition() const         { return mEndPosition; }
+            u16                   GetStartSectionIndex() const   { return muStartSectionIndex; }
+            u16                   GetEndSectionIndex() const     { return muEndSectionIndex; }
+            u32                   GetBlockSectionId(s32 liIndex) const
+                                  { return mauBlockSections.GetItem(static_cast<u32>(liIndex)); }
+            s32                   GetBlockSectionIdCount() const { return mauBlockSections.GetCount(); }
+            AStarQuality          GetQuality() const             { return meQuality; }
+            AStarDistanceFunction GetDistanceFunction() const    { return meDistanceFunction; }
+            bool                  UseAIShortcuts() const         { return mbUseAIShortcuts; }
         };
 
-        // Input request: an extrapolated (look-ahead) route query. X360 stride 64,
-        // 8-byte aligned (AddEventSafe @0x8277AFD8 copies 8 qwords). Opaque payload.
+        // =====================================================================
+        // Input request: an extrapolated (look-ahead) route query. X360 stride 64.
+        // =====================================================================
         struct ExtrapolatedRouteRequest : public CgsModule::Event
         {
-            u64 maOpaque[8];    // 64 bytes, 8-byte aligned (X360-attested size only)
+            // ProcessExtrapolatedRoute (@0x8278C4C8..): lhz 0(owner)/2(event); the racing-line
+            // generators read mCarPosition (a2+0x10), mCarDirection (a2+0x20),
+            // muCurrentSectionIndex (a2+0x30 -> clrlwi to u16) and meRouteType (a2+0x34).
+            u16                muOwnerId;                    // +0x00
+            u16                muEventId;                    // +0x02
+            u8                 muNumberOfSectionsToGenerate; // +0x04
+            Vector2            mCarPosition;                 // +0x10
+            Vector2            mCarDirection;                // +0x20
+            u32                muCurrentSectionIndex;        // +0x30
+            EExtrapolatedType  meRouteType;                  // +0x34
+
+            // RouteRequestManager calls Construct(direction2D, position2D, currentSection,
+            // ownerId). Matches that exact call site so BrnRouteRequestManager.cpp compiles.
+            void Construct(Vector2 lCarDirection, Vector2 lCarPosition,
+                           u16 luCurrentSectionIndex, u16 luOwnerId)
+            {
+                muOwnerId                    = luOwnerId;
+                muEventId                    = 0;
+                muNumberOfSectionsToGenerate = static_cast<u8>(
+                    KI_MAX_PLAYER_ROUTE_EXTRAPOLATION_GENERATED_SECTIONS);
+                mCarDirection                = lCarDirection;
+                mCarPosition                 = lCarPosition;
+                muCurrentSectionIndex        = luCurrentSectionIndex;
+                meRouteType                  = E_EXTRAPOLATED_NORMAL;
+            }
+
+            u16               GetOwnerId() const              { return muOwnerId; }
+            u16               GetEventId() const              { return muEventId; }
+            u8                GetNumSectionsToGenerate() const { return muNumberOfSectionsToGenerate; }
+            u32               GetCurrentSectionIndex() const  { return muCurrentSectionIndex; }
+            Vector2           GetCarPosition() const          { return mCarPosition; }
+            Vector2           GetCarDirection() const         { return mCarDirection; }
+            EExtrapolatedType GetRouteType() const            { return meRouteType; }
         };
 
-        // Output response: a computed route. X360 stride 5136, 4-byte aligned
-        // (AddEvent @0x8277B090 / Append @0x8277B668 block-copy 5136 bytes). The
-        // u32 element keeps the natural alignment at 4 so maEvents lands at +0xC.
+        // =====================================================================
+        // Output response: a computed route. X360 stride 5136, 4-byte aligned.
+        // OPAQUE image + typed views (see header note: a value Route member would
+        // repad the record and move the committed EventQueue maEvents offset).
+        // =====================================================================
         struct RouteResponse : public CgsModule::Event
         {
-            u32 maOpaque[1284]; // 5136 bytes, 4-byte aligned (X360-attested size only)
+            // 5136-byte 4-byte-aligned image. The Route occupies [0x0000 .. 0x1407]
+            // (5132 bytes: maNodes[320] + miNodeCount + miDefaultStartNode + meStatus),
+            // and the owner/event ids reuse the trailing pad at +0x140C / +0x140E.
+            u32 maImage[1284];   // 5136 bytes
+
+            // Route view aliased at the image start (X360 BuildRoute / Route::Prepare
+            // operate directly on this; GetRoute() @ DWARF :172/:175).
+            Route*       GetRoute()       { return reinterpret_cast<Route*>(maImage); }
+            const Route* GetRoute() const { return reinterpret_cast<const Route*>(maImage); }
+
+            u16  GetOwnerId() const { return OwnerIdRef(); }
+            u16  GetEventId() const { return EventIdRef(); }
+
+            // Initialise the id tail (X360 ProcessRaceRoute stores the cached ids at
+            // +0x140C/+0x140E; ProcessExtrapolatedRoute writes them from the request).
+            void Construct(u16 luOwnerId, u16 luEventId)
+            {
+                OwnerIdRef() = luOwnerId;
+                EventIdRef() = luEventId;
+            }
+
+        private:
+            // muOwnerId @ +0x140C (5132), muEventId @ +0x140E (5134) inside the image.
+            u16&       OwnerIdRef()       { return ViewU16(0x140C); }
+            const u16& OwnerIdRef() const { return ViewU16(0x140C); }
+            u16&       EventIdRef()       { return ViewU16(0x140E); }
+            const u16& EventIdRef() const { return ViewU16(0x140E); }
+
+            u16&       ViewU16(size_t luByteOffset)
+            {
+                return *reinterpret_cast<u16*>(reinterpret_cast<u8*>(maImage) + luByteOffset);
+            }
+            const u16& ViewU16(size_t luByteOffset) const
+            {
+                return *reinterpret_cast<const u16*>(
+                    reinterpret_cast<const u8*>(maImage) + luByteOffset);
+            }
         };
+
+        // ---- queue typedefs (DWARF :146 / :243 / :183) ----
+        typedef CgsModule::EventQueue<RaceRouteRequest, 1>          RaceRouteRequestQueue;
+        typedef CgsModule::EventQueue<ExtrapolatedRouteRequest, 12> ExtrapolatedRouteRequestQueue;
+        typedef CgsModule::EventQueue<RouteResponse, 16>           RouteResponseQueue;
+
+        // =====================================================================
+        // InputBuffer : public CgsModule::IOBuffer (DWARF :258). Holds the two
+        // request queues; Update drains them under a read lock.
+        // =====================================================================
+        struct InputBuffer : public CgsModule::IOBuffer
+        {
+            void Construct();
+            void Destruct();
+
+            RaceRouteRequestQueue*                GetRaceRouteRequestQueue()                { return &mRaceRouteRequestQueue; }
+            const RaceRouteRequestQueue*          GetRaceRouteRequestQueue() const          { return &mRaceRouteRequestQueue; }
+            ExtrapolatedRouteRequestQueue*        GetExtrapolatedRouteRequestQueue()        { return &mExtrapolatedRouteRequestQueue; }
+            const ExtrapolatedRouteRequestQueue*  GetExtrapolatedRouteRequestQueue() const  { return &mExtrapolatedRouteRequestQueue; }
+
+        private:
+            RaceRouteRequestQueue         mRaceRouteRequestQueue;         // :282
+            ExtrapolatedRouteRequestQueue mExtrapolatedRouteRequestQueue; // :283
+        };
+
+        // =====================================================================
+        // OutputBuffer : public CgsModule::IOBuffer (DWARF :295). Holds the
+        // response queue; ProcessRaceRoute / ProcessExtrapolatedRoute post into it
+        // under a write lock.
+        // =====================================================================
+        struct OutputBuffer : public CgsModule::IOBuffer
+        {
+            void Construct();
+            void Destruct();
+
+            RouteResponseQueue*       GetRouteResponseQueue()       { return &mRouteResponseQueue; }
+            const RouteResponseQueue* GetRouteResponseQueue() const { return &mRouteResponseQueue; }
+
+        private:
+            RouteResponseQueue mRouteResponseQueue;   // :313
+        };
+
+        // ---- layout pinning (never called; enforced at compile time) ----
+        // The request offsets are X360-attested by the field reads in
+        // ProcessRaceRoute / ProcessExtrapolatedRoute; the strides are pinned by the
+        // committed EventQueue<T,N> instantiations.
+        inline void _AssertIoLayout()
+        {
+            static_assert(sizeof(RaceRouteRequest) == 128, "RaceRouteRequest stride must be 128");
+            static_assert(offsetof(RaceRouteRequest, mStartPosition)      == 0x00, "mStartPosition @0x00");
+            static_assert(offsetof(RaceRouteRequest, mEndPosition)        == 0x10, "mEndPosition @0x10");
+            static_assert(offsetof(RaceRouteRequest, muStartSectionIndex) == 0x20, "muStartSectionIndex @0x20");
+            static_assert(offsetof(RaceRouteRequest, muEndSectionIndex)   == 0x22, "muEndSectionIndex @0x22");
+            static_assert(offsetof(RaceRouteRequest, mauBlockSections)    == 0x24, "mauBlockSections @0x24");
+            static_assert(offsetof(RaceRouteRequest, muOwnerId)           == 0x68, "muOwnerId @0x68");
+            static_assert(offsetof(RaceRouteRequest, muEventId)           == 0x6A, "muEventId @0x6A");
+            static_assert(offsetof(RaceRouteRequest, meQuality)           == 0x6C, "meQuality @0x6C");
+            static_assert(offsetof(RaceRouteRequest, meDistanceFunction)  == 0x70, "meDistanceFunction @0x70");
+            static_assert(offsetof(RaceRouteRequest, mbUseAIShortcuts)    == 0x74, "mbUseAIShortcuts @0x74");
+
+            static_assert(sizeof(ExtrapolatedRouteRequest) == 64, "ExtrapolatedRouteRequest stride must be 64");
+            static_assert(offsetof(ExtrapolatedRouteRequest, muOwnerId)                    == 0x00, "muOwnerId @0x00");
+            static_assert(offsetof(ExtrapolatedRouteRequest, muEventId)                    == 0x02, "muEventId @0x02");
+            static_assert(offsetof(ExtrapolatedRouteRequest, muNumberOfSectionsToGenerate) == 0x04, "muNumberOfSectionsToGenerate @0x04");
+            static_assert(offsetof(ExtrapolatedRouteRequest, mCarPosition)                 == 0x10, "mCarPosition @0x10");
+            static_assert(offsetof(ExtrapolatedRouteRequest, mCarDirection)                == 0x20, "mCarDirection @0x20");
+            static_assert(offsetof(ExtrapolatedRouteRequest, muCurrentSectionIndex)        == 0x30, "muCurrentSectionIndex @0x30");
+            static_assert(offsetof(ExtrapolatedRouteRequest, meRouteType)                  == 0x34, "meRouteType @0x34");
+
+            static_assert(sizeof(RouteResponse) == 5136, "RouteResponse stride must be 5136");
+        }
     }
 }
