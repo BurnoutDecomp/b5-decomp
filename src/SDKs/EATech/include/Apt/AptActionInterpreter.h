@@ -95,6 +95,15 @@ public:
     static void _FunctionAptActionDivide  (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionModulo  (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Comparison ops -- compare the two operands (the result is `under OP top`) and
+    // push an AptBoolean:
+    //   Equals @0x7FD938  : under == top (exact int, else float within 0.001)
+    //   LessThan @0x7FD714: under <  top
+    //   Greater @0x7FCF30 : under >  top (type-aware: string strcmp / float / int)
+    static void _FunctionAptActionEquals  (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionLessThan(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionGreater (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- partial state (see header note) ---------------------------------
     int        mnStackTop;   // +0x00
     int        field_04;     // +0x04 -- unmapped; reserved so mpStack lands at +0x08
