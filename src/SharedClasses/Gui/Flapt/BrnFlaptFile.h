@@ -3,8 +3,10 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // CgsUnicode::CgsUtf8 (FlaptFile string table)
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // FlaptFile::GuiVertex element type
 
 namespace rw { struct Resource; }   // fix-up base (relocation) — see FlaptFile::FixUp/FixDown
+namespace renderengine { class Texture; }   // FlaptFile::GuiTexture == renderengine::Texture (mpapTextures element)
 
 // ============================================================================
 // SharedClasses/Gui/Flapt/BrnFlaptFile.h
@@ -88,6 +90,20 @@ namespace BrnFlapt
         f32   mfFontHeight;   // +0x08  -> AptAllocateStringParameters::fFontHeight
     };
 
+    // BrnFlapt::Mesh (DWARF BrnFlaptFile.h:218) — one drawable quad/triangle-strip
+    // primitive inside a MovieClip's render layer: which texture it uses, plus the
+    // span of the owning FlaptFile's shared vertex pool it draws from. Read by
+    // FlaptRenderer::RenderMesh / RenderMask in the X360 ARTIST asm:
+    //   +0x00  miTextureId  (lbz 0(mesh) + extsb; signed — <0 means "no texture")
+    //   +0x01  muNumVerts   (lbz 1(mesh); vertex count, drives the strip length)
+    //   +0x02  muVertOffset (lhz 2(mesh); first vertex, index into FlaptFile::mpaVerts)
+    struct Mesh
+    {
+        s8  miTextureId;     // +0x00 (signed: negative => render with no texture)
+        u8  muNumVerts;      // +0x01
+        u16 muVertOffset;    // +0x02
+    };
+
     // BrnFlapt::MovieClip — one timeline within a FlaptFile.
     //
     // Attested offsets (X360 ARTIST):
@@ -129,17 +145,26 @@ namespace BrnFlapt
     // BrnFlapt::FlaptFile — the serialised GUI resource container (the on-disk
     // 0x10020 movie file). Reconstructed from BURNOUT_X360_ARTIST.XEX.
     //
-    // Attested offsets (X360 ARTIST, via TextFieldInstance::Construct reading through
-    // MovieClip::mpFile):
-    //   +0x28  mpaFontStyles  (lwz 0x28; FontStyle[], indexed by TextField::muFontStyleIndex)
-    //   +0x44  mpapStrings    (lwz 0x44; CgsUtf8*[], indexed by TextField::muInitialStringId)
+    // Attested offsets (X360 ARTIST):
+    //   +0x14  muNumTextures        (lwz 0x14; via FlaptRenderer::RenderMesh bound check)
+    //   +0x18  mpapTextures         (lwz 0x18; GuiTexture*[], indexed by Mesh::miTextureId)
+    //   +0x1C  muNumVerts           (lwz 0x1C; vertex-pool bound)
+    //   +0x20  mpaVerts             (lwz 0x20; the shared GuiVertex pool Mesh spans index)
+    //   +0x28  mpaFontStyles        (lwz 0x28; FontStyle[], indexed by TextField::muFontStyleIndex)
+    //   +0x44  mpapStrings          (lwz 0x44; CgsUtf8*[], indexed by TextField::muInitialStringId)
+    //   +0x48  muNumSpecialTextures (lwz 0x48; trailing slots of mpapTextures are "special")
     //
-    // Members up to +0x44 are named at their DWARF offsets (BrnFlaptFile.h:549..580);
+    // Members up to +0x48 are named at their DWARF offsets (BrnFlaptFile.h:549..582);
     // the interior bytes between named members are opaque padding sized to land the
     // tables at their attested displacements. Grow it additively — the heavy
     // FixUp/FixDown/SetSpecialTexture bodies land with FlaptFile's own member TU.
     struct FlaptFile
     {
+        // BrnFlaptFile.h:61/62 typedefs: a GUI texture is a renderengine::Texture; a GUI
+        // vertex is the screen-space coloured+textured immediate-mode vertex.
+        typedef renderengine::Texture                    GuiTexture;
+        typedef CgsGraphics::Basic2dColouredTexturedVertex GuiVertex;
+
         // FixUp @ 0x824712F0 / FixDown @ 0x82470FD8 : (un)relocate the serialised movie
         // image's internal self-references when the resource is loaded / unloaded. The
         // X360 FlaptFileResourceType wrapper tail-calls these on the resource image; the
@@ -149,10 +174,16 @@ namespace BrnFlapt
         void FixUp(const rw::Resource& lrResource);
         void FixDown(const rw::Resource& lrResource);
 
-        u8   mau8Opaque00[0x28];                 // +0x00..0x27  (header + earlier tables)
+        u8   mau8Opaque00[0x14];                 // +0x00..0x13  (header + movie-clip table)
+        u32  muNumTextures;                      // +0x14 (DWARF BrnFlaptFile.h:563)
+        GuiTexture** mpapTextures;               // +0x18 (DWARF BrnFlaptFile.h:564)
+        u32  muNumVerts;                         // +0x1C (DWARF BrnFlaptFile.h:566)
+        GuiVertex*   mpaVerts;                    // +0x20 (DWARF BrnFlaptFile.h:567)
+        u32  muNumFontStyles;                    // +0x24 (DWARF BrnFlaptFile.h:569)
         FontStyle* mpaFontStyles;                // +0x28 (DWARF BrnFlaptFile.h:570)
         u8   mau8Opaque2C[0x18];                 // +0x2C..0x43  pad to +0x44
         const CgsUnicode::CgsUtf8** mpapStrings; // +0x44 (DWARF BrnFlaptFile.h:580)
+        u32  muNumSpecialTextures;               // +0x48 (DWARF BrnFlaptFile.h:582)
     };
 }
 

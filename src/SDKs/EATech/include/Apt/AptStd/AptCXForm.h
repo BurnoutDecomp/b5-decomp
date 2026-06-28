@@ -63,6 +63,11 @@ struct AptColorHelper
 
     f32 GetValuef(AptColorValue eColor) const { return mfVal[eColor]; }
 
+    // Per-channel store (the inverse of GetValuef). Used by AptRenderingContext's
+    // push/pop/append paths to write one ARGB channel by name. Additive accessor,
+    // no layout change.
+    void SetValuef(AptColorValue eColor, f32 fValue) { mfVal[eColor] = fValue; }
+
     // X360 @0x82AD4938 -- MSVC `vector deleting destructor` for the base
     // AptColorHelper. The thunk restores the AptColorHelper vtable (off_82145590)
     // at +0x00 and, when bit0 of the hidden flags arg is set, frees the block via

@@ -62,6 +62,13 @@ namespace BrnFlapt
         void GetParent(MovieClipRef* lpOutRef);
 
         // ---- timeline playback --------------------------------------------
+        // ResetTimeline -- rewind/reset this clip instance's timeline to its
+        // initial frame. Called on the bound instance by BrnFlaptComponent::Prepare
+        // (X360 @ 0x8240E670: lwz r3,4(component) -> bl ResetTimeline). X360-attested
+        // in the ledger (BrnFlapt::MovieClipInstance::ResetTimeline); the asm
+        // propagates r3 as a tail-call artifact, so the logical return type is void.
+        void ResetTimeline();
+
         // GotoAndPlayLabel @ 0x8246F388 call site.
         void GotoAndPlayLabel(u32 luLabelHash, const char* lpcDEBUGName);
 
