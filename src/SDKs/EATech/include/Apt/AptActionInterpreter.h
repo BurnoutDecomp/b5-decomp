@@ -31,15 +31,32 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstdint>
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue::AddRef/Release
+
+class AptCIH;             // SDKs/EATech/include/Apt/AptCIH.h (the movie-clip scope)
+class AptCharacterInst;   // SDKs/EATech/include/Apt/AptCharacterInst.h
 
 class AptActionInterpreter
 {
 public:
-    // The per-execution context threaded through every opcode handler (the second
-    // handler argument). Opaque here -- it is reconstructed alongside the dispatch
-    // loop (runStream); the arithmetic/logic handlers below do not read it.
-    struct LocalContextT;
+    // ---- the per-execution context (the second handler argument) ----------
+    // Reconstructed from runStream @0x81BD50 (the stack-local frame it builds and
+    // passes to every sGlobalTable handler). Runtime-only (NOT serialised), so it
+    // is reconstructed with x64-native widths + named members rather than the
+    // console's 32-bit frame offsets. The data/branch/call handlers read the PC
+    // (mpProgramCounter) to fetch inline operands; the expression handlers ignore
+    // it.
+    struct LocalContextT
+    {
+        const unsigned char* mpProgramCounter;     // the action-bytecode read pointer
+        AptCIH*              mpCIH;                 // the current movie-clip scope
+        AptValue*            mpPendingReleaseValue; // temp released when the PC reaches...
+        const unsigned char* mpPendingReleasePC;   // ...this position
+        AptValue*            mpScopeVariable;       // the run's scope ("this"), from getVariable
+        bool                 mbStop;                // a stop/end op sets this -> end execution
+        AptCharacterInst*    mpCharacterInst;       // the originating character instance
+    };
 
     // ---- operand stack (PS3 EXTERNAL ELF) --------------------------------
     // Push: store + advance, AddRef the value (the stack owns a counted ref).
@@ -125,7 +142,24 @@ public:
     static void _FunctionAptActionDecrement(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionToInteger(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Branch ops -- the first handlers that drive the PC. They read a 4-byte
+    // (4-byte-aligned) signed offset inline from the bytecode, advance the PC past
+    // it, then jump: BranchAlways unconditionally, BranchIf{True,False} after
+    // popping a toBool condition.
+    //   BranchAlways  @0x7F1C44   BranchIfTrue @0x7F349C   BranchIfFalse @0x7F35B4
+    static void _FunctionAptActionBranchAlways (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionBranchIfTrue (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionBranchIfFalse(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- partial state (see header note) ---------------------------------
+    // Mapped so far: the operand stack. runStream/stackPushIndirect also revealed
+    // (NOT yet added -- they would need a large unmapped gap fabricated, so they
+    // are recorded here and added when runStream/the data handlers land):
+    //   +0x24 mpCIHStack (a second stack: top@+0x24, array@+0x2C -- the target/CIH
+    //         stack runStream pushes the running CIH onto)
+    //   +0x44 mpRegisters (AptValue** -- the local register array, stackPushIndirect)
+    //   +0x60 mnAbortFlag (checked after each handler in runStream)
+    //   +0x64 mnStackBase  (the stack depth this run unwinds to)
     int        mnStackTop;   // +0x00
     int        field_04;     // +0x04 -- unmapped; reserved so mpStack lands at +0x08
     AptValue** mpStack;      // +0x08
