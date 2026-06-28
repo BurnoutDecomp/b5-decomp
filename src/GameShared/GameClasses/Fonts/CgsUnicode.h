@@ -5,6 +5,10 @@
 
 namespace CgsUnicode
 {
+    // The project's UTF-8 code-unit type (DWARF CgsUnicode.h:85 `typedef uint8_t CgsUtf8`).
+    // Text buffers and string pointers throughout the GUI are CgsUtf8*/CgsUtf8[].
+    typedef u8 CgsUtf8;
+
     // Decode one UTF-8 character (1-4 bytes starting at lpUtf8Char) to a UTF-16 code unit.
     // X360 ARTIST 0x827E6B08. Used by the font glyph lookup + the text renderer.
     u16 ConvertUtf8CharToUtf16Char(const u8* lpUtf8Char);

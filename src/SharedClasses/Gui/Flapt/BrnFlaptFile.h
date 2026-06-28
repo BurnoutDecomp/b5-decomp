@@ -2,6 +2,9 @@
 #define BRN_FLAPT_FILE_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // CgsUnicode::CgsUtf8 (FlaptFile string table)
+
+namespace rw { struct Resource; }   // fix-up base (relocation) — see FlaptFile::FixUp/FixDown
 
 // ============================================================================
 // SharedClasses/Gui/Flapt/BrnFlaptFile.h
@@ -21,6 +24,30 @@
 
 namespace BrnFlapt
 {
+    struct TextField;   // forward: MovieClip::mpaTextFields (defined below)
+    struct FontStyle;   // forward: FlaptFile::mpaFontStyles (defined below)
+    struct FlaptFile;   // forward: MovieClip::mpFile (defined below)
+
+    // A 2D point, standing in for the serialised SmoothStep::Vector2 the DWARF
+    // names (BrnFlaptFile.h:195/196). SmoothStep::Vector2 has no reconstructed
+    // home; the only use here is the two text-field corner points, accessed as
+    // two floats each (TextField+0x10..0x1F in the X360 asm), so a minimal
+    // by-value 2-float point reproduces the field set exactly.
+    struct Vector2
+    {
+        f32 mfX;   // +0x00
+        f32 mfY;   // +0x04
+    };
+
+    // BrnFlapt::HashedString (DWARF BrnFlaptFile.h:70) — a 32-bit name hash plus an
+    // optional debug-only literal. Embedded by value as the leading member of
+    // TextField (mName), so the field set must be exact to position the rest.
+    struct HashedString
+    {
+        u32         muHash;            // +0x00
+        const char* mpacDEBUGString;   // +0x04 (debug builds only; opaque otherwise)
+    };
+
     // A keyframe label entry inside a MovieClip's label table. The attested
     // FindLabelledFrameIndex loop advances the table pointer by 8 bytes per entry
     // (`r31 += 8`) and compares the entry's FIRST dword against the wanted frame
@@ -32,12 +59,44 @@ namespace BrnFlapt
         u32 muOpaque04;    // +0x04  (not referenced by the attested methods)
     };
 
+    // BrnFlapt::TextField (DWARF BrnFlaptFile.h:165) — one static text field inside a
+    // MovieClip. Used by BrnFlapt::TextFieldInstance::SetUpAptStringParams, whose X360
+    // asm reads:
+    //   +0x08  muInitialStringId  (lhz 8;  indexes FlaptFile::mpapStrings)
+    //   +0x0A  muFontStyleIndex   (lbz 0xA; indexes FlaptFile::mpaFontStyles)
+    //   +0x0B  mxFlags            (lbz 0xB; bit0 -> bWordWrap, bit1 -> bMultiline)
+    //   +0x0C  muAlignment        (lbz 0xC; -> eAlignment / eBoxAlignment)
+    //   +0x10  mTopLeft.{x,y}     (lfs 0x10/0x14)
+    //   +0x18  mBottomRight.{x,y} (lfs 0x18/0x1C)
+    struct TextField
+    {
+        HashedString mName;              // +0x00 (8 bytes)
+        u16          muInitialStringId;  // +0x08
+        u8           muFontStyleIndex;   // +0x0A
+        u8           mxFlags;            // +0x0B
+        u8           muAlignment;        // +0x0C
+        Vector2      mTopLeft;           // +0x10 (corner box, top-left)
+        Vector2      mBottomRight;       // +0x18 (corner box, bottom-right)
+    };
+
+    // BrnFlapt::FontStyle (DWARF BrnFlaptFile.h:377) — a named font + colour + size.
+    // SetUpAptStringParams reads all three (FontStyle+0x00/0x04/0x08).
+    struct FontStyle
+    {
+        char* mpacFontName;   // +0x00  -> AptAllocateStringParameters::szFontName
+        u32   muColour;       // +0x04  -> AptAllocateStringParameters::nColour
+        f32   mfFontHeight;   // +0x08  -> AptAllocateStringParameters::fFontHeight
+    };
+
     // BrnFlapt::MovieClip — one timeline within a FlaptFile.
     //
     // Attested offsets (X360 ARTIST):
+    //   +0x03  muNumTextFields       (lbz 3(this); TextFieldInstance::Construct bound)
     //   +0x05  mu8NumLabels          (lbz 5(this); FindLabelledFrameIndex loop bound)
     //   +0x08  muNumFramesInTimeline (lhz 8(this);  GetKeyframeForFrame bound check)
+    //   +0x0C  mpFile                (lwz 0xC(this); owning FlaptFile, font/string tables)
     //   +0x10  mpau16KeyframeRemap   (lwz 0x10(this); u16[] keyframe-remap, lhzx)
+    //   +0x30  mpaTextFields         (lwz 0x30(this); TextField[], 0x20 stride)
     //   +0x38  mpaLabels             (lwz 0x38(this); MovieClipLabel[])
     //   +0x3C  mpau16LabelledFrameIds(lwz 0x3C(this); u16[] frame ids, lhzx)
     struct MovieClip
@@ -51,24 +110,50 @@ namespace BrnFlapt
         // lpcLabelText is the human-readable label, used only for the failure msg.
         s32 FindLabelledFrameIndex(u32 luLabelId, const char* lpcLabelText) const;
 
-        u8  mau8Opaque00[5];          // +0x00..0x04  (interior not attested here)
+        u8  mau8Opaque00[3];          // +0x00..0x02  (interior not attested here)
+        u8  muNumTextFields;          // +0x03 (DWARF BrnFlaptFile.h:378)
+        u8  mau8Opaque04;             // +0x04
         u8  mu8NumLabels;             // +0x05
         u8  mau8Opaque06[2];          // +0x06..0x07  pad to +0x08
         u16 muNumFramesInTimeline;    // +0x08 (DWARF BrnFlaptFile.h:384)
-        u8  mau8Opaque0A[6];          // +0x0A..0x0F  pad to +0x10
+        u8  mau8Opaque0A[2];          // +0x0A..0x0B  pad to +0x0C
+        FlaptFile* mpFile;            // +0x0C (DWARF BrnFlaptFile.h:387)
         u16* mpau16KeyframeRemap;     // +0x10  (0 => identity mapping)
-        u8  mau8Opaque14[0x24];       // +0x14..0x37  pad to +0x38
+        u8  mau8Opaque14[0x1C];       // +0x14..0x2F  pad to +0x30
+        TextField* mpaTextFields;     // +0x30 (DWARF BrnFlaptFile.h:404)
+        u8  mau8Opaque34[4];          // +0x34..0x37  pad to +0x38
         MovieClipLabel* mpaLabels;    // +0x38
         u16* mpau16LabelledFrameIds;  // +0x3C
     };
 
-    // BrnFlapt::FlaptFile — the serialised GUI resource container. Declared as a
-    // complete (opaque-bodied) type so CgsResource::ResourcePtr<FlaptFile> can be
-    // instantiated. No member of FlaptFile is touched by any TU in this group
-    // (the ResourcePtr accessor only static_casts the base resource pointer), so
-    // the interior is intentionally left unspecified here; grow it additively as
-    // FlaptFile's own member TUs (SetSpecialTexture / FixUp / FixDown) land.
-    struct FlaptFile;
+    // BrnFlapt::FlaptFile — the serialised GUI resource container (the on-disk
+    // 0x10020 movie file). Reconstructed from BURNOUT_X360_ARTIST.XEX.
+    //
+    // Attested offsets (X360 ARTIST, via TextFieldInstance::Construct reading through
+    // MovieClip::mpFile):
+    //   +0x28  mpaFontStyles  (lwz 0x28; FontStyle[], indexed by TextField::muFontStyleIndex)
+    //   +0x44  mpapStrings    (lwz 0x44; CgsUtf8*[], indexed by TextField::muInitialStringId)
+    //
+    // Members up to +0x44 are named at their DWARF offsets (BrnFlaptFile.h:549..580);
+    // the interior bytes between named members are opaque padding sized to land the
+    // tables at their attested displacements. Grow it additively — the heavy
+    // FixUp/FixDown/SetSpecialTexture bodies land with FlaptFile's own member TU.
+    struct FlaptFile
+    {
+        // FixUp @ 0x824712F0 / FixDown @ 0x82470FD8 : (un)relocate the serialised movie
+        // image's internal self-references when the resource is loaded / unloaded. The
+        // X360 FlaptFileResourceType wrapper tail-calls these on the resource image; the
+        // rw::Resource reference supplies the relocation base, matching the CgsResource
+        // fix-up family (cf. CgsResource::FontResourceType). Declared here so the wrapper
+        // compiles; the bodies are reconstructed with FlaptFile's own member TU.
+        void FixUp(const rw::Resource& lrResource);
+        void FixDown(const rw::Resource& lrResource);
+
+        u8   mau8Opaque00[0x28];                 // +0x00..0x27  (header + earlier tables)
+        FontStyle* mpaFontStyles;                // +0x28 (DWARF BrnFlaptFile.h:570)
+        u8   mau8Opaque2C[0x18];                 // +0x2C..0x43  pad to +0x44
+        const CgsUnicode::CgsUtf8** mpapStrings; // +0x44 (DWARF BrnFlaptFile.h:580)
+    };
 }
 
 #endif // BRN_FLAPT_FILE_H
