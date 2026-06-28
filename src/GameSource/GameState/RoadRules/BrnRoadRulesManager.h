@@ -47,6 +47,9 @@ namespace BrnGameState
     class ModeManager;
     class TrainingManager;
 
+    // OnRoadLimit posts onto the output buffer (X360 a5 arg); pointer only.
+    namespace GameStateModuleIO { struct OutputBuffer; }
+
     // The road-rules debug component (embedded as this class's first member) reaches directly into
     // the private timing/score state below (X360 RoadRulesDebugComponent callbacks + RenderHUD read
     // mfTime/mfStuntTime/miCrashScore/maiChallengeRoadIndex/miLastRoadIndex/mpStreetManager), exactly
@@ -66,6 +69,17 @@ namespace BrnGameState
         // The single X360-attested out-of-line function (body in the .cpp).
         // DWARF: CgsID GetCurrentRoadID() const;  (BrnRoadRulesManager.h:131)
         CgsID GetCurrentRoadID() const;
+
+        // X360 0x82335268 -- validate a road-limit region against the built RoadRules.
+        // Args: regionId (== region trigger id), limitId (region group id, else trigger id).
+        // Declared-only here; body lands with the RoadRulesManager TU.
+        bool IsRoadLimitRegionValid(CgsID lRegionId, CgsID lLimitId) const;
+
+        // X360 0x82352A20 -- the player crossed a road-limit region this frame. Args:
+        // road-limit region id, entry-direction flag (dot(velocity, region forward) > 0),
+        // output buffer, and the per-car road-limit byte. Declared-only; body in the RoadRulesManager TU.
+        void OnRoadLimit(u32 luRoadLimitRegionId, bool lbEntryDirection,
+                         GameStateModuleIO::OutputBuffer* lpOutput, s32 liRoadLimit);
 
         // ---- rest of the public interface: declaration-only (own TUs) ----
         // void Construct( StreetManager*, ModeManager*, TrainingManager* );

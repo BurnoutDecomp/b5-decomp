@@ -31,6 +31,12 @@
 // (GetActiveRaceCarOutputInterface, X360 0x8231D2C0); forward-declare its real home.
 namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
 
+// TriggerQueryManager::UpdateTriggers arms/removes trigger regions through
+// GetTriggerManagementInputInterface(); the grown interface methods below take these by
+// incomplete pointer/reference, so forward declarations suffice.
+namespace BrnTrigger { struct TriggerRegion; }
+namespace BrnWorld { namespace TriggerEntityModuleIO { struct InRemoveTriggerEvent; } }
+
 namespace BrnGameState
 {
 namespace GameStateModuleIO
@@ -200,7 +206,21 @@ namespace GameStateModuleIO
     // (OutputBuffer::TriggerManagementInputInterface). Returned read-locked
     // (BridgeGameStateToWorld) and write-locked (ModeManager::StartGameMode). Modelled minimally
     // as a named opaque payload; swap for the real interface when it is homed.
-    struct TriggerManagementInputInterface { u8 maOpaque[16]; };
+    struct TriggerManagementInputInterface
+    {
+        // X360 0x8238ECF8 (BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface::
+        // AddTriggerRegion). Arm one trigger region: query flags FIRST (the X360 passes 56,
+        // `li r4,0x38`), the RESOLVED region pointer SECOND (mppRegions[idx], `lwzx r5`).
+        // Declared-only here; body forwards to the world trigger-entity interface (own TU).
+        void AddTriggerRegion(s32 liQueryFlags, const BrnTrigger::TriggerRegion* lpRegion);
+        // Drop one armed region: post an InRemoveTriggerEvent onto the interface's embedded
+        // remove queue (asm UpdateTriggers loop @0x823923C4: AddEvent onto interface+131088).
+        // Declared-only here; body lands with the world trigger-entity interface TU (mirrors the
+        // committed ClearLandmarkIndexesForGameMode queue.AddEvent precedent).
+        void RemoveTrigger(const BrnWorld::TriggerEntityModuleIO::InRemoveTriggerEvent& lrRemoveEvent);
+
+        u8 maOpaque[16];
+    };
 
     // OutputBuffer +0x43AC. DWARF (:293, :344): the game-state-to-controller output interface
     // (GameStateToControllerInterface). Write-locked by GameStateInviteManager::Update.
@@ -284,7 +304,10 @@ namespace GameStateModuleIO
         NetworkToGameStateInterface mNetworkToGameStateInterface;      // @ +0x07B0 (named opaque)
         u8  maPadToPlayerStatus[0x2CC8 - (0x7B0 + sizeof(NetworkToGameStateInterface))]; // -> +0x2CC8
         BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface mPlayerStatusInterface; // @ +0x2CC8
-        u8  maPadToNetworkResults[0x36B8 - (0x2CC8 + sizeof(BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface))]; // -> +0x36B8
+        // mPlayerStatusInterface (0x9F0 bytes) ends flush at +0x36B8, so the gap to the next
+        // member is ZERO -- no padding array here (a u8[0] is ill-formed under MSVC /permissive-).
+        // The +0x36B8 offset of mNetworkPlayerResultsInterface is independently pinned by the
+        // static_assert in _AssertLayout(), which guards this flush fit.
         NetworkPlayerResultsInterface mNetworkPlayerResultsInterface;  // @ +0x36B8 (PlayerResultsInterface, 224B)
 
         // Compile-time offset guards (private members -> assert from a member-fn context).
