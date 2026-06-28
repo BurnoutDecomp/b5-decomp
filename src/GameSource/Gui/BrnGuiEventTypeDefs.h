@@ -39,6 +39,20 @@
 namespace BrnGui
 {
 
+// The three GUI render/flow layers the cache tracks apt components for (DWARF:
+// BrnGuiEventTypeDefs.h:883 `enum GuiFlow`). Used as the leading selector on the
+// GuiCache apt-component bookkeeping (e.g. AppendExpectedAptComponent) and on the
+// component AppendExpectedAptComponent helpers. ADDITIVE GROW: only adds this enum
+// at its DWARF home; nothing existing is changed.
+enum GuiFlow
+{
+    E_GUIFLOW_SCREEN  = 0,
+    E_GUIFLOW_HUD     = 1,
+    E_GUIFLOW_OVERLAY = 2,
+    E_GUIFLOW_COUNT   = 3,
+    E_GUIFLOW_FIRST   = 0,
+};
+
 // Player-team identity carried on the X360 sat-nav icon payload. Bounds match the
 // X360 GetPlayerTeam guard (start == 0, count == 9). The canonical enum lives in the
 // GameState IO layer (GsmIO::EPlayerTeam); we reference the bounds by value here to

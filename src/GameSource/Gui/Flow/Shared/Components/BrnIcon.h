@@ -36,6 +36,13 @@ namespace BrnGui
         // indexed identifier onto the apt "apt_state" view-state.
         void SetState(u32 luStateIndex);
 
+        // 0x824E2B90 -- the named-state overload: push the given identifier string directly
+        // onto the apt "apt_state" view-state (callers pass e.g. "idle"). The X360 emits it
+        // as a distinct sibling of SetState(u32) (the build symbolised only the index
+        // overload). Declared here so consumers (e.g. DriveThruMapPanel) call it BY NAME
+        // rather than poking the raw sub_824E2B90 address; the body links from the BrnIcon TU.
+        void SetState(const char* lpacStateIdentifier);
+
         u32 GetState() const { return muStateIndex; }
 
     private:

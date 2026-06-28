@@ -78,6 +78,11 @@ namespace BrnFlapt
         // GotoAndPlayLabel @ 0x8246F388 : jump to a pre-hashed label and play.
         void GotoAndPlayLabel(u32 luLabelHash, const char* lpcDEBUGName) const;
 
+        // GotoAndPlayLabel @ 0x8246F3E8 : hash lpcLabel, jump to it and play (the
+        // string-keyed counterpart to the hash form above; bodied in its own sibling
+        // TU). Used by FlaptAnimatorComponent::Run to play each controlled clip.
+        void GotoAndPlayLabel(const char* lpcLabel) const;
+
         // GotoAndStopLabel @ 0x8246F498 : hash lpcLabel, jump to it and stop.
         void GotoAndStopLabel(const char* lpcLabel) const;
 

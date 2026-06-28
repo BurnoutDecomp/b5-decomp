@@ -11,6 +11,40 @@ namespace CgsLanguage
     class LanguageManager
     {
     public:
+        // ADDITIVE GROW (GuiFlow-consumers group): the localised-value format selector
+        // (DWARF: CgsLanguageManager.h:84 `enum ParameterFormatType`). The GUI text
+        // fields pass it to LanguageManager::FormatParameter / TextField::SetLocalisedText
+        // to pick how a value renders (raw text, a clock format, an id-table lookup, a
+        // distance, ...). E_FORMAT_ID_LOOKUP (9) is the "look this string up in the
+        // localisation database by id" mode the drive-thru panel uses for its
+        // "DT_NAME_%llu" / "DT_LOC_%llu" keys. Values are X360-attested via the
+        // SetLocalisedText overloads that take this type.
+        enum ParameterFormatType
+        {
+            E_FORMAT_TEXT                       = 0,
+            E_FORMAT_HOURS_MINUTES_SECONDS      = 1,
+            E_FORMAT_MINUTES_SECONDS_HUNDREDTHS = 2,
+            E_FORMAT_MINUTES_SECONDS            = 3,
+            E_FORMAT_SECONDS_HUNDREDTHS         = 4,
+            E_FORMAT_SECONDS_HUNDREDTHS_LONG    = 5,
+            E_FORMAT_SECONDS                    = 6,
+            E_FORMAT_SECONDS_LONG               = 7,
+            E_FORMAT_MINUTES_SECONDS_MID_TEXT   = 8,
+            E_FORMAT_ID_LOOKUP                  = 9,
+            E_FORMAT_ID_LOOKUP_TOUPPER          = 10,
+            E_FORMAT_INTEGER                    = 11,
+            E_FORMAT_INTEGER_NOSEPERATOR        = 12,
+            E_FORMAT_PERCENTAGE                 = 13,
+            E_FORMAT_MONEY                      = 14,
+            E_FORMAT_AUTO_DISTANCE              = 15,
+            E_FORMAT_AUTO_DISTANCE_LONG         = 16,
+            E_FORMAT_SMALL_DISTANCE            = 17,
+            E_FORMAT_SMALL_DISTANCE_LONG        = 18,
+            E_FORMAT_LARGE_DISTANCE             = 19,
+            E_FORMAT_LARGE_DISTANCE_LONG        = 20,
+            E_FORMAT_COUNT                      = 21,
+        };
+
         void SetUseMetricUnits(bool lbUseMetric);
         bool IsUsingMetricUnits() const;
 

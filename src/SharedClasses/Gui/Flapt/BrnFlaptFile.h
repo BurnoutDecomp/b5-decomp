@@ -185,6 +185,16 @@ namespace BrnFlapt
         const CgsUnicode::CgsUtf8** mpapStrings; // +0x44 (DWARF BrnFlaptFile.h:580)
         u32  muNumSpecialTextures;               // +0x48 (DWARF BrnFlaptFile.h:582)
     };
+
+    // BrnFlaptFile.h:457 (DWARF) -- the per-clip "trigger parameters": up to four
+    // name strings the animator/icon clips publish (e.g. the names of the child
+    // movie clips an animator drives). The clip iterates this array until a NULL
+    // entry. Reconstructed from BURNOUT_X360_ARTIST.XEX (the X360 animator code reads
+    // mapcParameters[i] as the child-clip name) with the DWARF member name/type.
+    struct TriggerParameters
+    {
+        const char* mapcParameters[4];
+    };
 }
 
 #endif // BRN_FLAPT_FILE_H
