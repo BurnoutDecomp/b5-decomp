@@ -25,6 +25,10 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // AptInteger::Create
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"   // AptBoolean::Create
+#include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"     // AptFloat::Create (PushFloat)
+
+#include <cstdint>
+#include <cstring>   // memcpy (PushFloat bit reinterpret)
 
 // FLAG (wired at AptInit; see AptValueConvert.cpp).
 extern AptValue* gpUndefinedValue;
@@ -105,4 +109,62 @@ void AptActionInterpreter::_FunctionAptActionPushUndefined(AptActionInterpreter*
 void AptActionInterpreter::_FunctionAptActionPushNULL(AptActionInterpreter* pInterp, LocalContextT*)
 {
     pInterp->stackPush(gpUndefinedValue);
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPush1 @0x8064B4 -- push AptInteger(1).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPush1(AptActionInterpreter* pInterp, LocalContextT*)
+{
+    pInterp->stackPush(AptInteger::Create(1));
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPushByte @0x806430 -- read one signed byte inline, push it.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushByte(AptActionInterpreter* pInterp, LocalContextT* pCtx)
+{
+    signed char v = static_cast<signed char>(*pCtx->mpProgramCounter);
+    pCtx->mpProgramCounter += 1;
+    pInterp->stackPush(AptInteger::Create(v));
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPushWord @0x8063A0 -- read a big-endian int16 inline, push it
+// (sign-extended). Assembled byte-by-byte so it is correct regardless of host
+// endianness (the .apt bytecode is big-endian).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushWord(AptActionInterpreter* pInterp, LocalContextT* pCtx)
+{
+    const unsigned char* p = pCtx->mpProgramCounter;
+    int16_t v = static_cast<int16_t>((p[0] << 8) | p[1]);
+    pCtx->mpProgramCounter += 2;
+    pInterp->stackPush(AptInteger::Create(v));
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPushDWord @0x8062FC -- read a big-endian int32 inline, push it.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushDWord(AptActionInterpreter* pInterp, LocalContextT* pCtx)
+{
+    const unsigned char* p = pCtx->mpProgramCounter;
+    int32_t v = (static_cast<int32_t>(p[0]) << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
+    pCtx->mpProgramCounter += 4;
+    pInterp->stackPush(AptInteger::Create(v));
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPushFloat @0x807F50 -- read a big-endian 32-bit float inline,
+// push it. The console assembles the four bytes (big-endian) and reinterprets the
+// word as a float; the byte-by-byte assembly keeps it x64-correct.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushFloat(AptActionInterpreter* pInterp, LocalContextT* pCtx)
+{
+    const unsigned char* p = pCtx->mpProgramCounter;
+    uint32_t u = (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16)
+               | (static_cast<uint32_t>(p[2]) << 8) | p[3];
+    pCtx->mpProgramCounter += 4;
+    float f;
+    std::memcpy(&f, &u, sizeof(f));
+    pInterp->stackPush(AptFloat::Create(f));
 }
