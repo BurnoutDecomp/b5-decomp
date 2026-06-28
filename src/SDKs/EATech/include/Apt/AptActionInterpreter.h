@@ -36,6 +36,11 @@
 class AptActionInterpreter
 {
 public:
+    // The per-execution context threaded through every opcode handler (the second
+    // handler argument). Opaque here -- it is reconstructed alongside the dispatch
+    // loop (runStream); the arithmetic/logic handlers below do not read it.
+    struct LocalContextT;
+
     // ---- operand stack (PS3 EXTERNAL ELF) --------------------------------
     // Push: store + advance, AddRef the value (the stack owns a counted ref).
     void       stackPush(AptValue* pValue);          // @0x7F1790
@@ -65,6 +70,19 @@ public:
     // register array at +0x44) / AptVFT_Register (via AptScriptFunctionBase::
     // GetRegisterValue) values before pushing. Deferred until that register/local
     // machinery + AptScriptFunctionBase are reconstructed.
+
+    // ---- ActionScript opcode handlers (static; (interpreter, context)) ----
+    // The bytecode dispatch registers these by opcode. Each is a static function
+    // taking the interpreter + the execution context; the dispatcher ignores the
+    // return, so they are void. THIS leaf covers the logic ops -- they pop their
+    // operand(s) off the stack, coerce, and push an AptBoolean result:
+    //   Not @0x7F3BB8 : !toBool(top)
+    //   And @0x7FD4D4 : top-1 && top   (int fast path, else toFloat non-zero AND)
+    //   Or  @0x7FD29C : top-1 || top   (int fast path, else toFloat non-zero OR)
+    // The arithmetic/comparison/branch/data handlers are the follow-on.
+    static void _FunctionAptActionNot(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionAnd(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionOr (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
     // ---- partial state (see header note) ---------------------------------
     int        mnStackTop;   // +0x00
