@@ -18,11 +18,20 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // CgsID (GetId return)
 
 namespace BrnProgression
 {
     struct CarData
     {
+        // ADDITIVE GROW (declare-only; bodies in the Progression CarData TU).
+        // DriveThruManager body/paint shops read this record's car id and write its colour/palette.
+        //   GetId()          -> muCarId (the packed car id at +0x00).
+        //   SetColourIndex() -> X360 0x82354890. SetPaletteIndex() -> X360 0x823548F0.
+        CgsID GetId() const;
+        void  SetColourIndex(s32 liColour);
+        void  SetPaletteIndex(s32 liPalette);
+
         // The 64-bit packed car id (X360 ld r11, 0(r3) in IsDLCCarId). Its top 14 bits hold
         // the DLC marker; the rest identify the specific car.
         u64 muCarId;          // +0x00

@@ -57,6 +57,11 @@ public:
     // Called by EnterModification; reconstructed by its own slice (declared-only here).
     void StartCarModificationState(InputBuffer::GameActionQueue* lpActionQueue);
 
+    // ADDITIVE GROW (declare-only; bodied by its Wave-C TU @ X360 0x82398508).
+    // DriveThruManager::ProcessDriveThru case 0 (junk yard) hands the cached junkyard id to the
+    // car-select junkyard flow. Declare-only here.
+    void EnterJunkyard(InputBuffer::GameActionQueue* lpActionQueue, CgsID lJunkyardId);
+
 private:
     State                                          meState;
     f32                                            mfStateTimer;

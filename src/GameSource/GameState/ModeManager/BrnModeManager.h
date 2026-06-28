@@ -181,6 +181,13 @@ public:
     // forward to ScoringSystem::SetNetworkStuntScore.
     void SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liScore);
 
+    // ADDITIVE GROW (declare-only) for the BrnDriveThruManager TU.
+    // HandleDriveThru's body-shop auto-repair path fires a mode-manager hook once the repair is
+    // available (X360 the `(*(*(this+2348)+3480)->vtbl+0x64)()` indirect call). De-inlined to this
+    // named method; body + the real dispatch land with the ModeManager TU. FLAG: the real name and
+    // dispatch object are NOT in the exports -- named conservatively.
+    void OnDriveThruRepairAvailable();
+
     // X360 0x82327388. World position of the checkpoint with the given mode-local id (looks the id up
     // through the mode's checkpoint TriggerData landmark table). Asserts luCheckpointId < muNumLandmarks.
     // Called by ScoringSystem::UpdateRacePositions. (Overload of the existing GetCheckpointPosition.)

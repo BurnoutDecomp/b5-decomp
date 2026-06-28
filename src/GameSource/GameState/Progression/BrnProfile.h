@@ -2,7 +2,9 @@
 #define BRN_PROFILE_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                               // CgsID (Profile drive-thru / deform / event accessors)
 #include "SharedClasses/Progression/BrnTrainingTypes.h"  // BrnProgression::ETrainingType (Profile training-flag accessors)
+#include "SharedClasses/Trigger/BrnGenericRegion.h"      // BrnTrigger::GenericRegion::Type (drive-thru discovery accessors)
 
 // Minimal owning slice for BrnProgression::ProfileEvent -- the element type of
 // Array<BrnProgression::ProfileEvent,175>. DWARF home is BrnProfile.h:312.
@@ -34,6 +36,12 @@ struct ProfileEvent
     bool IsFlagSet(Flags leFlag) const;
     void EnableFlags(u16 lu16Flags);
     void ClearFlags(u16 lu16Flags);
+
+    // ADDITIVE GROW (declare-only; bodies in the Profile/ProfileEvent TU).
+    // DriveThruManager::UnlockCarChallengeForCar flips the "found" flag on a junction's ProfileEvent.
+    // X360: IsFound() reads the muFlags word @+4 bit 0 (E_FLAG_DISCOVERED); SetFound(true) sets it.
+    bool IsFound() const;
+    void SetFound(bool lbFound);
 
 private:
     u32 muEventID;   // BrnProfile.h:335  (+0)
@@ -94,6 +102,30 @@ public:
     // X360 BrnProgression::Profile::SetTrainingAlreadySeen -- mark training tip leTrainingType as
     // seen. Named by TrainingManager::SendTrainingTickerMessage. Declare-only.
     void SetTrainingAlreadySeen(ETrainingType leTrainingType);
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the DriveThruManager TU. The drive-thru discovery /
+    // body-shop-repair / event-unlock flow reads + writes the persisted Profile. Signatures +
+    // semantics are X360-asm-attested; the real member layout (the discovered-drive-thru table,
+    // the deform tally, the race-event id table at +29168) is owned by the Profile TU. Declare-only.
+    // ------------------------------------------------------------------------
+
+    // X360 0x8236ABA8. True iff the drive-thru region lId of kind leType has already been discovered.
+    bool IsDriveThruDiscoverd(CgsID lId, BrnTrigger::GenericRegion::Type leType) const;
+
+    // X360 0x823619F8. Count of drive-thrus of kind leType the player has discovered so far.
+    s32 GetNumDriveThrusDiscovered(BrnTrigger::GenericRegion::Type leType) const;
+
+    // X360 0x8230FBA8. The car lCarId's base (un-repaired) deformation amount (> 0 == damaged).
+    f32 GetPlayerBaseDeformAmount(CgsID lCarId) const;
+
+    // ++ the discovered-event counter (X360 Profile+580). UnlockCarChallengeForCar calls it on a
+    // newly-found event junction.
+    void IncrementNumDiscoveredEvents();
+
+    // X360 linear search of the persisted race-event id table (count word +1000, id table base
+    // +29168) -> the matching ProfileEvent (or NULL). Used by UnlockCarChallengeForCar.
+    ProfileEvent* FindProfileEventByRaceEventId(CgsID lEventId);
 };
 }
 

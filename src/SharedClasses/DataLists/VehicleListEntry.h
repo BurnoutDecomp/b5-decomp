@@ -51,6 +51,13 @@ struct VehicleListEntry
     // Destruct the embedded collision keys (VehicleListResourceType::FixUp @0x8267DD60).
     void FixUp();
 
+    // ADDITIVE GROW (declare-only; body in the VehicleListEntry/VehicleList TU).
+    // The auto-repair capability bit DriveThruManager::HandleDriveThru's body-shop pre-check reads.
+    // X360 asm: `lwz r11,0x94(r3); extrwi r11,r11,1,25` == `(word @+0x94 >> 6) & 1` (LSB-numbered
+    // bit 6) within the leading opaque record (maPad0). FLAG: the field/bit name is recovered from
+    // the HandleDriveThru asm, not from the exports -- named conservatively.
+    bool CanAutoRepair() const;
+
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
     u8 maPad0[160];                                                       // +0x00
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mAttribCollectionKey;        // +0xA0

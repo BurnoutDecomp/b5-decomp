@@ -2,6 +2,7 @@
 #define BRN_RACE_EVENT_DATA_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // CgsID (EventJunction / RaceEventData id accessors)
 
 // =============================================================================
 // BrnRaceEventData.h  (OWNING HEADER for the BrnProgression race-event leaf types)
@@ -37,6 +38,14 @@ struct EventJunction
 
     // ---- Remaining attested API (bodies in their own TUs; declaration-only) ----
     void Construct(u32 luID, const RaceEventData* lpOfflineEvent, const RaceEventData* lpOnlineEvent, s32 liShotGroup);
+
+    // ADDITIVE GROW (declare-only; bodies in the EventJunction/ProgressionData TU).
+    // DriveThruManager::UnlockCarChallengeForCar reads the junction's event id (to find the matching
+    // ProfileEvent) and the junction's own id (for the SendJunctionPlayerIsAt payload). The X360
+    // junction-id read is a CgsID-width word; declared returning CgsID. FLAG: these widen the existing
+    // u32 GetID() read; bodies resolve the exact source word in their own TU.
+    CgsID GetEventId() const;
+    CgsID GetId() const;
 
     u32                  muID;            // 0x00 (DWARF :80)
     const RaceEventData* mpOfflineEvent;  // 0x04 (DWARF :82)
@@ -111,6 +120,11 @@ struct RaceEventData
     // header now defers to this single owner (ODR).
     u8 GetStartRivalCount() const;
     u8 GetAddRivalCount() const;
+
+    // ADDITIVE GROW (declare-only; body in the RaceEventData TU).
+    // The car id this event unlocks (X360 word +0x14 -- the value DriveThruManager::
+    // UnlockCarChallengeForCar matches each junction against the repaired car id). Declare-only.
+    CgsID GetUnlockCarId() const;
 
 private:
     u8                    maPad_00[0x18];                 // 0x00..0x17 (id / car id / leading scalars -- not in this slice)

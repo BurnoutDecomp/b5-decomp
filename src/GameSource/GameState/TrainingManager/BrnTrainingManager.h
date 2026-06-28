@@ -96,6 +96,32 @@ public:
     // X360 0x82366050. DEBUG-only: clears the player's persisted training flags via the Profile.
     void DEBUG_ClearTrainingFlags();
 
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the BrnDriveThruManager TU. DriveThruManager's shop flow
+    // (ProcessDriveThru / Update -> the inlined "TryPlayTrainingTip" guard) reads the pending-tip
+    // slot + the Profile + the since-last-tip delta before requesting a shop training tip. The X360
+    // inlines these as raw offset reads; reconstructed as named accessors here. FLAG: the field /
+    // accessor names are recovered from the asm offsets, not the exports. Bodies land with this TU.
+    // ------------------------------------------------------------------------
+
+    // True when a training tip is already pending (X360 reads *(this+0) == the FSM state slot).
+    bool IsTipPending() const;
+
+    // The player Profile (X360 forwards mpProgressionManager->GetProfile(); the *(this+8) the asm
+    // reads). Used to skip a tip the player has already seen.
+    BrnProgression::Profile* GetProfile();
+
+    // Seconds since the last tip finished (X360 (Profile+108) - (this+24), compared against 5.0).
+    f32 GetTimeSinceLastTip() const;
+
+    // Latch a pending tip request (X360 sets *(this+0)=1, *(this+4)=type).
+    void RequestTip(BrnProgression::ETrainingType leType);
+
+    // X360 0x823590A0. True when a tip of this type is allowed in the current game mode. PRE-EXISTING
+    // (was private); surfaced public additively so the DriveThruManager TU's TryPlayTrainingTip guard
+    // can call it cross-class. Access-only change -- no layout/behaviour effect.
+    bool IsTipAllowedInGameMode(BrnProgression::ETrainingType leTrainingType) const;
+
 private:
     // X360 0x823593C0. True when this training type should pause the world (never in online modes;
     // otherwise a fixed set of "intro / mode-explanation" tip types pause, the rest do not).
@@ -108,10 +134,8 @@ private:
     // when SendTrainingTickerMessage is reconstructed.
     void SendTrainingTickerMessage(GameStateModuleIO::GameActionQueue* lpGameActionQueue);
 
-    // X360 0x823590A0. True when a tip of this type is allowed to play in the current game mode
-    // (gates the online-intro tips on mbIsOnlinePossible, the map-info tip on having played the
-    // timed mode + a sub-state, then a per-mode-type allow-list of tip types).
-    bool IsTipAllowedInGameMode(BrnProgression::ETrainingType leTrainingType) const;
+    // (IsTipAllowedInGameMode moved to the public additive-grow block above so the DriveThruManager
+    //  TU's TryPlayTrainingTip helper can call it; X360 0x823590A0 body unchanged.)
 
     // ---- Members (DWARF-authoritative order; offsets X360-gated, see file header) ----------
     ETrainingState                      meTrainingState;             // +0x00
