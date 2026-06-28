@@ -273,6 +273,12 @@ public:
     static void _FunctionAptActionStringEquals(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionAdd2        (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Class opcodes (prototype chain):
+    //   Extends 0x69 : chain the subclass prototype to the superclass
+    //   ImplementsOp 0x2C : record the implemented interfaces' prototypes
+    static void _FunctionAptActionExtends     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionImplementsOp(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
     // parallel {count, capacity, array} stacks (the operand stack sized by

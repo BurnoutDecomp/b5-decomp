@@ -167,4 +167,8 @@ void AptActionInterpreter::InitDispatchTable()
     // -- ECMA value ops --
     sGlobalTable[0x13] = &_FunctionAptActionStringEquals;
     sGlobalTable[0x47] = &_FunctionAptActionAdd2;
+
+    // -- class / prototype ops --
+    sGlobalTable[0x69] = &_FunctionAptActionExtends;
+    sGlobalTable[0x2C] = &_FunctionAptActionImplementsOp;
 }
