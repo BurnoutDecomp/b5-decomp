@@ -163,4 +163,8 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x30] = &_FunctionAptActionRandom;
     sGlobalTable[0x42] = &_FunctionAptActionInitArray;
     sGlobalTable[0x72] = &_FunctionAptActionPushZeroSetVar;
+
+    // -- ECMA value ops --
+    sGlobalTable[0x13] = &_FunctionAptActionStringEquals;
+    sGlobalTable[0x47] = &_FunctionAptActionAdd2;
 }
