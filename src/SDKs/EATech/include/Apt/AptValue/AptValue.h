@@ -35,6 +35,13 @@ class EAStringC;                  // SDKs/EATech/include/Apt/AptString/EAString.
 typedef EAStringC AptNativeString;
 struct AptNativeHash;            // SDKs/EATech/include/Apt/AptNativeHash.h
 
+// The concrete value types the conversion / c_* cast layer returns (full defs in
+// AptValue/AptInteger.h, AptFloat.h, AptBoolean.h, AptString.h).
+class AptInteger;
+class AptFloat;
+class AptBoolean;
+class AptString;
+
 // ---------------------------------------------------------------------------
 // AptValue virtual-function-table object-type indices (leak AptValue.h:40).
 // Values pinned by the leak's DWARF (explicit = ... in the dossier).
@@ -201,6 +208,26 @@ public:
     {
         mValueBitfield.mbAllowsDelayedDeletion = bAllowed ? 1u : 0u;
     }
+
+    // ---- value conversions (leak AptValue.h:158-162) ---------------------
+    // Convert this value to an ActionScript primitive, dispatching on the value
+    // type (meValueType). Bodies in AptValue/AptValueConvert.cpp, decompiled from
+    // the PS3 EXTERNAL ELF (toBool @0x7EF024, toInteger @0x7F2CF4, toFloat
+    // @0x7E8FE4). toString is the follow-on (needs the StringPool / Append paths).
+    int   toInteger() const;
+    float toFloat() const;
+    bool  toBool() const;
+
+    // ---- typed casts (leak AptValue.h:243-269) ---------------------------
+    // c_<type>() reinterprets this value as the concrete type for the matching
+    // meValueType. The numeric/bool casts are address-identity (single inheritance
+    // through AptValueNoGC), so they are the leak's trivial reinterpret. c_string()
+    // is the one with real dispatch (boxed-string indirection) -- its body is in
+    // AptValueConvert.cpp (@0x7E4E18).
+    AptInteger* c_integer() const { return reinterpret_cast<AptInteger*>(const_cast<AptValue*>(this)); }
+    AptFloat*   c_float()   const { return reinterpret_cast<AptFloat*>(const_cast<AptValue*>(this)); }
+    AptBoolean* c_boolean() const { return reinterpret_cast<AptBoolean*>(const_cast<AptValue*>(this)); }
+    AptString*  c_string()  const;
 
     // ---- GC mark callback ------------------------------------------------
     // The Apt garbage collector installs a reference-registration callback the GC
