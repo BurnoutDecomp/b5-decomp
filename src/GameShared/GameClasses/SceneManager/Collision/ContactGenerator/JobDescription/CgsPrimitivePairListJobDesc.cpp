@@ -33,9 +33,9 @@ namespace CgsCollision
         mPrimitivePairList = *lpPairList;
 
         // `if ( *a1 % 16 )` — the pair-list base pointer must be 16-byte aligned.
-        // (srawi/addze/slwi/subf. of mpData, branch on the remainder.)
+        // (srawi/addze/slwi/subf. of mpaDataStream, branch on the remainder.)
         const bool lbAligned =
-            (reinterpret_cast<uintptr_t>(mPrimitivePairList.mpData) & 0xF) == 0;
+            (reinterpret_cast<uintptr_t>(mPrimitivePairList.mpaDataStream) & 0xF) == 0;
         CGS_ASSERT(lbAligned, "Primitive list not aligned to 16 bytes");
 
         return true;

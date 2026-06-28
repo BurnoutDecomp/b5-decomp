@@ -43,7 +43,7 @@ namespace CgsCollision
         // `if ( v6 % 16 )` where v6 = pair-list base pointer (lwz 0(r3)) — assert it is
         // 16-byte aligned. The asm string is "Data stream not aligned to 16 bytes".
         const bool lbStreamAligned =
-            (reinterpret_cast<uintptr_t>(mPrimitivePairList.mpData) & 0xF) == 0;
+            (reinterpret_cast<uintptr_t>(mPrimitivePairList.mpaDataStream) & 0xF) == 0;
         CGS_ASSERT(lbStreamAligned, "Data stream not aligned to 16 bytes");
 
         // `v7 = (size + 15) & 0xFFF0; if ( v7 != 16 * (v7 >> 4) )` — round the pair-list
@@ -52,7 +52,7 @@ namespace CgsCollision
         // size into the message — "Primitive list size is not a multiple of 16 (actual
         // size is <n>)" — collapsed here to the static message.)
         const u32 luRoundedSize =
-            (static_cast<u32>(mPrimitivePairList.muSizeInBytes) + 15u) & 0xFFF0u;
+            (static_cast<u32>(mPrimitivePairList.mu16UsedData) + 15u) & 0xFFF0u;
         CGS_ASSERT((luRoundedSize & 0xFu) == 0,
                    "Primitive list size is not a multiple of 16");
 

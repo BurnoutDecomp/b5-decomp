@@ -33,14 +33,21 @@ namespace BrnNetwork
     struct RestartTrafficMessage : public CgsNetwork::ReliableMessage
     {
     public:
-        // Sibling-.cpp methods (declared for class shape; NOT bodied in this TU).
+        // Sibling-family methods. PrepareForSend / Construct / PackOrUnpack are bodied in
+        // the .cpp TU (BrnRestartTrafficMessage.cpp); Destruct / Retrieve /
+        // GetPackedMessageSize are declared here for class shape (their own TUs).
+        //
+        // PrepareForSend param order/semantics are ASM-verified (@ 0x8257BBD0): the first
+        // u16 is the reliable network send frame (forwarded to ReliableMessage::
+        // PrepareForSend), the second is the game-logic frame stored in
+        // mu16FrameSinceStartToResetTraffic.
         void          Construct();
         void          Destruct();
-        void          PrepareForSend(u16 lu16FrameSinceStartToResetTraffic, u16 lu16NumActiveHulls,
-                                     const u16* lpu16ActiveTrafficHulls,
-                                     const NetworkPlayerID* lpPlayerIDsForActiveHulls);
-        bool          Retrieve(u16* lpu16FrameSinceStartToResetTraffic, u16* lpu16ActiveTrafficHulls,
-                               NetworkPlayerID* lpPlayerIDsForActiveHulls);
+        void          PrepareForSend(u16 lu16CurrentFrame, u16 lu16FrameSinceStartToResetTraffic,
+                                     const u16* lpau16ActiveTrafficHulls,
+                                     const NetworkPlayerID* lpaPlayerIDsForActiveHulls);
+        bool          Retrieve(u16* lpu16FrameSinceStartToResetTraffic, u16* lpau16ActiveTrafficHulls,
+                               NetworkPlayerID* lpaPlayerIDsForActiveHulls);
         virtual s32   GetPackedMessageSize();        // DWARF :95 (sibling .cpp)
 
         // LEDGER func @ 0x827DFCF0 -- bodied in this TU (DWARF BrnRestartTrafficMessage.h:96).
