@@ -213,10 +213,21 @@ public:
     // Convert this value to an ActionScript primitive, dispatching on the value
     // type (meValueType). Bodies in AptValue/AptValueConvert.cpp, decompiled from
     // the PS3 EXTERNAL ELF (toBool @0x7EF024, toInteger @0x7F2CF4, toFloat
-    // @0x7E8FE4). toString is the follow-on (needs the StringPool / Append paths).
+    // @0x7E8FE4).
     int   toInteger() const;
     float toFloat() const;
     bool  toBool() const;
+
+    // Render this value into pScratch as an ActionScript string. FLAG: the body
+    // (the meValueType-dispatched StringPool / Append renderer) is the value-layer
+    // follow-on; declared so the conversion + opcode layers can call it.
+    void toString(EAStringC* pScratch) const;
+
+    // Get_ToString @0x82AD8558 -- coerce a value to an EAStringC name: a
+    // string-typed value (meValueType 1 / the boxed tag 33) returns its own
+    // embedded EAStringC; any other value is rendered into pScratch via toString.
+    // Body in AptActionInterpreterVarOps.cpp (homed with its first callers).
+    static const EAStringC* Get_ToString(AptValue* pValue, EAStringC* pScratch);
 
     // ---- typed casts (leak AptValue.h:243-269) ---------------------------
     // c_<type>() reinterprets this value as the concrete type for the matching

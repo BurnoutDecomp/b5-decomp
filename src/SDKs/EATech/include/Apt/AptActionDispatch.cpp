@@ -131,4 +131,8 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0xB5] = &_FunctionAptActionPushByte;
     sGlobalTable[0xB6] = &_FunctionAptActionPushWord;
     sGlobalTable[0xB7] = &_FunctionAptActionPushDWord;
+
+    // -- variable access (resolve a name against the run scope/target) --
+    sGlobalTable[0x1C] = &_FunctionAptActionGetVariable;
+    sGlobalTable[0x1D] = &_FunctionAptActionSetVariable;
 }

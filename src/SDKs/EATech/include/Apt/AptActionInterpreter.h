@@ -218,6 +218,16 @@ public:
     static void _FunctionAptActionPushDWord(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushFloat(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Variable access opcodes -- coerce the stack-top name (Get_ToString) and
+    // delegate to the resolver, using the run scope (ctx.mpCIH) + target slot
+    // (ctx.mpPendingReleaseValue):
+    //   GetVariable @0x82B038A0 (0x1C): getVariable -> replace the name with the result
+    //   SetVariable @0x82B03970 (0x1D): setVariable name = value, then pop both
+    // (The member opcodes GetMember/SetMember @0x82B04200/0x82B043C8 (0x4E/0x4F)
+    // are the follow-on -- they add the array/string/__proto__ fast paths.)
+    static void _FunctionAptActionGetVariable(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionSetVariable(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
     // parallel {count, capacity, array} stacks (the operand stack sized by
