@@ -84,6 +84,15 @@ struct AptCharacterAnimation
     // un-bound character to the given animation file.
     void IncCharacterList(AptFilePtr filePtr) const;
 
+    // @0x7E37A4 (X360 @0x82AD92A8) -- restore the init-indicator list: walk the
+    // init indicators and un-flag (restore the sign of) the ones that were marked
+    // pending. Called when an animation instance is torn down before its init
+    // actions have all run (AptCharacterAnimationInst::~AptCharacterAnimationInst).
+    // The X360 body returns `this` (a chaining return the callers ignore); modelled
+    // as `void` to match the family's list-walk methods. BODY in its own TU
+    // (class:AptCharacterAnimation); declared here so callers compile.
+    void ResetInitIndicators();
+
     // --- .apt load resolution (D) ------------------------------------------
     // @0x80EEC4 -- resolve this (serialised) movie root against the load base:
     // clear the resolve scratch + run the recursive Fixup. Returns the root.
