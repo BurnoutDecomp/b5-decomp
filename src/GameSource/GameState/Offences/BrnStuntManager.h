@@ -102,6 +102,14 @@ namespace BrnGameState
         bool              IsStuntElement(const BrnTrigger::GenericRegion*, StuntElementType*); // :209
 
     public:
+        // De-inlined ProcessPlayerTriggers case 7 (X360 0x8239C1F8-0x8239C204): latch this
+        // region as the pending jump element when no jump is already active
+        // (if (!mbJumpActive) mpLastJumpElement = lpRegion). Declared-only here; body in the
+        // StuntManager TU (it writes the private mbJumpActive/mpLastJumpElement members).
+        // PUBLIC: de-inlined helper called cross-class by TriggerQueryManager::ProcessPlayerTriggers
+        // (X360 case 7), so it must be externally reachable (mirrors GetDistrictMap below).
+        void              LatchJumpElement(const BrnTrigger::GenericRegion* lpRegion);
+
         // Additive accessor (FLAG: not its own X360 function -- inlined at the
         // call site). StuntManagerDebugComponent::GetTriggerWorldRegion
         // @ 0x8236F070 samples this manager's district map directly via
