@@ -32,6 +32,22 @@ namespace BrnProgression
         void  SetColourIndex(s32 liColour);
         void  SetPaletteIndex(s32 liPalette);
 
+        // ADDITIVE GROW (declare-only; bodies in the Progression CarData TU). All read/write inside the
+        // existing maReserved[16] window (+0x08..+0x17) -- NO layout change (the 0x18 stride + the
+        // static_assert below stay). Used by the CarSelectManager junkyard flow.
+        //   IsHiddenFromUnlockSequence() -> X360 byte at CarData+0x0A (the per-car "already-shown /
+        //                                   hidden from the unlock sequence" flag).
+        //   GetUnlockType()              -> X360 s32 at CarData+0x10 (the unlock-type enumerator;
+        //                                   3 == shutdown/rival drop, 5 == rank-gated, others == normal).
+        //   GetUnlockDeformationAmount() -> X360 f32 at CarData+0x0C (the car's deform/damage amount).
+        //   SetUnlockDeformationAmount() -> X360 writes CarData+0x0C (DEBUG / start-of-game stamps 0.85).
+        // FLAG: these byte offsets are recovered from the X360 asm, not the CarData DWARF (the reserved
+        // region is opaque in this slice).
+        bool IsHiddenFromUnlockSequence() const;
+        s32  GetUnlockType() const;
+        f32  GetUnlockDeformationAmount() const;
+        void SetUnlockDeformationAmount(f32 lfAmount);
+
         // The 64-bit packed car id (X360 ld r11, 0(r3) in IsDLCCarId). Its top 14 bits hold
         // the DLC marker; the rest identify the specific car.
         u64 muCarId;          // +0x00

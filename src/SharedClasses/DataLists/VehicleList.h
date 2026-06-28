@@ -35,6 +35,13 @@ struct VehicleList
     // VehicleList TU). FLAG: the entry resolution walks a remap table not modelled in this slice.
     const VehicleListEntry* GetVehicleData(s32 liIndex) const;
 
+    // ADDITIVE GROW (declare-only; body in the VehicleList TU) for the CarSelectManager
+    // DEBUG_UnlockCarsForTesting loop bound. X360 reads the vehicle count at VehicleList+0x3400/13312 --
+    // NOTE this differs from this minimal slice's miCount@0 used by GetVehicleIndex/GetVehicleData; the
+    // full VehicleList TU reconciles the two. FLAG: count-word offset inconsistency, modelled as a
+    // declare-only accessor so this caller stays offset-agnostic.
+    s32 GetVehicleCount() const;
+
     // X360 GetVehicleIndex/GetVehicleData read `this->miCount`. FLAG: leading-member offset assumed
     // 0; the real preamble (resource header) lands with the full TU.
     s32 miCount;

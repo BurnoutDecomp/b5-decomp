@@ -2,6 +2,7 @@
 #define SHAREDCLASSES_DATALISTS_VEHICLELISTENTRY_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // CgsID (GetId return)
 
 // VehicleListEntry.h
 // Single home of BrnResource::VehicleListEntry, the per-vehicle record inside a
@@ -57,6 +58,20 @@ struct VehicleListEntry
     // bit 6) within the leading opaque record (maPad0). FLAG: the field/bit name is recovered from
     // the HandleDriveThru asm, not from the exports -- named conservatively.
     bool CanAutoRepair() const;
+
+    // ADDITIVE GROW (declare-only; bodies in the VehicleList/VehicleListEntry TU) for the
+    // CarSelectManager IsThisCarInCurrentUnlockSequence / DEBUG_UnlockCarsForTesting paths. Read inside
+    // the leading opaque header (maPad0/+0x90 gameplay-data region) -- NO layout change; precedent =
+    // CanAutoRepair() above reading +0x94 bit6.
+    //   GetId()        -> the leading car id the X360 reads at entry+0x00.
+    //   IsTrophyCar()  -> X360 `(*(entry+0x94) & 1)` (bit0 of the same flags word CanAutoRepair reads
+    //                     bit6 of); true == trophy/special car.
+    //   GetUnlockRank()-> X360 byte at entry+0x90+0x09 (the embedded gameplay-data sub-object's
+    //                     required-progression-rank field).
+    // FLAG: the +0x94 bit0 / +0x99 byte offsets are recovered from the asm, not the exports.
+    CgsID GetId() const;
+    bool  IsTrophyCar() const;
+    u8    GetUnlockRank() const;
 
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
     u8 maPad0[160];                                                       // +0x00
