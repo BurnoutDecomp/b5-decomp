@@ -104,6 +104,17 @@ public:
     static void _FunctionAptActionLessThan(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionGreater (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Bitwise ops -- coerce both operands to integers and push AptInteger(under OP
+    // top); the shift ops take top as the shift amount. (Their stack collapse IS
+    // stackPopAndPush(2, result) -- the compiler inlined that primitive.)
+    //   BitAnd @0x806BCC  BitOr @0x806A40  BitXor @0x8068B4
+    //   BitLShift @0x806728  BitRShift @0x80659C
+    static void _FunctionAptActionBitAnd   (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionBitOr    (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionBitXor   (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionBitLShift(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionBitRShift(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- partial state (see header note) ---------------------------------
     int        mnStackTop;   // +0x00
     int        field_04;     // +0x04 -- unmapped; reserved so mpStack lands at +0x08
