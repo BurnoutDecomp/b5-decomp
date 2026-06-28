@@ -151,6 +151,23 @@ public:
     static void _FunctionAptActionBranchIfTrue (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionBranchIfFalse(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Stack-manipulation + constant-push ops -- push a fresh/constant/duplicate
+    // value, or reorder the top of the operand stack (no inline operands):
+    //   PushDuplicate @0x7F3CC0 : re-push the top value (+AddRef)
+    //   StackSwap @0x7EE634     : swap the top two operands
+    //   Push0 @0x806528         : push AptInteger(0)
+    //   PushTrue/PushFalse @0x7F3D38/0x7F3DA8 : push the AptBoolean singletons
+    //   PushUndefined/PushNULL @0x7F3E88/0x7F3E18 : push gpUndefinedValue
+    // (Pop @0x7F33D0 deferred -- it respects the run's stack base @+0x64; Push1 the
+    //  same as Push0 with 1, deferred pending its confirmed address.)
+    static void _FunctionAptActionPushDuplicate(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionStackSwap    (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPush0        (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushTrue     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushFalse    (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushUndefined(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushNULL     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- partial state (see header note) ---------------------------------
     // Mapped so far: the operand stack. runStream/stackPushIndirect also revealed
     // (NOT yet added -- they would need a large unmapped gap fabricated, so they
