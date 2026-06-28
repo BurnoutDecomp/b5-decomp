@@ -17,6 +17,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacter.h"        // Add/ReleaseCharacterReference
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"     // AptMatrix (position/mask)
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"     // AptCXForm (colour)
+#include "SDKs/EATech/include/Apt/AptRenderingContext.h"  // the transform/colour stacks
 #include "SDKs/EATech/include/Apt/AptDefine.h"            // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                // DOGMA_PoolManager
 
@@ -188,3 +189,30 @@ void AptRenderItem::ReleaseReference() const
 AptRenderItem* AptRenderItem::Manager_GetFirstChild() const   { return mpManagerFirstChild; }
 AptRenderItem* AptRenderItem::Manager_GetNextSibling() const  { return mpManagerNextSibling; }
 AptRenderItem* AptRenderItem::Manager_GetNextRevision() const { return mpManagerNextRevision; }
+
+// ---------------------------------------------------------------------------
+// Render-traversal helpers (PS3 External PushMatrices @0x7F21E4 / PopMatrices
+// @0x7ECA68). Push: save + concat the item's colour transform and position
+// matrix onto the render context; Pop: restore both. The subtypes bracket their
+// geometry draw with these.
+//
+// FLAG: the console PushMatrices has an "optimised" fast-path (gAptOptFlags & 4 ->
+// _drawCharacterInstOpti); the standard push/append path is reconstructed here.
+// (Identity-singleton note: the item's null-matrix sentinels here are
+// gIdentityMatrix/gIdentityCXForm, distinct from the context's gAptIdentityMatrix/
+// gAptNullCXForm -- the concat still yields the correct result, just without the
+// pointer-identity short-circuit; the two singleton sets should be unified.)
+// ---------------------------------------------------------------------------
+void PushMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem)
+{
+    pCtx->pushColourTransform();
+    pCtx->appendColourTransform(const_cast<AptCXForm*>(pItem->GetColorMatrixConst()));
+    pCtx->pushVertexMatrix();
+    pCtx->appendVertexMatrix(const_cast<AptMatrix*>(pItem->GetPositionMatrixConst()));
+}
+
+void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* /*pItem*/)
+{
+    pCtx->popColourTransform();
+    pCtx->popVertexMatrix();
+}

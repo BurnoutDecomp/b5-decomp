@@ -125,6 +125,16 @@ void AptRenderingContext::appendVertexMatrix(AptMatrix* pMatrix)
     gAptFuncs.pfnSetVertexMatrix(&mCurrentVertexMatrix);   // dword_8324E880(this)
 }
 
+// ---- pushVertexMatrix (PS3 External @0x7E4650) ---------------------------
+// Save the current vertex matrix onto the stack and advance the stack-top
+// pointer (the matching save for popVertexMatrix). Recovered from the PS3
+// External ELF, where it is a distinct entry point.
+void AptRenderingContext::pushVertexMatrix()
+{
+    *mpVertexMatrixStackTop = mCurrentVertexMatrix;       // memcpy(top, this, 24)
+    ++mpVertexMatrixStackTop;                             // *(this+24) += 24 bytes
+}
+
 // ---- popVertexMatrix @ 0x82ADA4F8 ----------------------------------------
 // Pop one entry off the vertex stack and restore the now-top entry into the
 // current vertex matrix, then push it to the renderer.
