@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"          // CgsGeometric::AxisAlignedBox (GetBoundingBox out-param)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"   // EBodyParts (committed home)
 
 // BrnPhysics::Deformation::StreamedDeformationSpec and its inline spec sub-structs.
@@ -85,9 +86,21 @@ namespace Deformation
     // BrnStreamedDeformationSpec.h:87 -- a streamed list of locator points (count + fixed-up ptr).
     struct LocatorPointSpecList
     {
+        // X360 reads the count then walks the array (stride sizeof(LocatorPointSpec) == 80) to
+        // bounds-check each locator's miIkPartIndex during StreamedDeformationSpec::FixUp. Declared
+        // here so that fix-up loop can spell the access by name (asm: count @ +0, array ptr @ +4,
+        // miIkPartIndex @ element +68).
+        u32 GetNumLocatorPoints() const { return muNumLocators; }
+        const LocatorPointSpec* GetLocatorSpec(u32 luIndex) const { return &mpaLocatorPoints[luIndex]; }
+
     private:
         u32               muNumLocators;
         LocatorPointSpec* mpaLocatorPoints;
+
+        // StreamedDeformationSpec::FixUp / FixDown rebase the embedded mpaLocatorPoints offset of
+        // each of the three locator lists in place (add / subtract the stream base), exactly as the
+        // X360 serialiser does inline.
+        friend struct StreamedDeformationSpec;
     };
 
     // BrnStreamedDeformationSpec.h:160 -- the full streamed deformation spec record.
@@ -103,6 +116,23 @@ namespace Deformation
         // X360 @ 0x822A0328: asserts liWheel < eNumWheels (4) (non-gating tripwire), then returns
         // &maWheelSpecs[liWheel] (asm: 48 * liWheel + this + 80).
         const WheelSpec* GetWheelSpec(s32 liWheel) const;
+
+        // BrnStreamedDeformationSpec.h:281 -- fill an axis-aligned bounding box that contains every
+        // deformation sensor sphere. X360 @ 0x825BA9E8: accumulate min/max of (sensorOffset +/- radius)
+        // over the mu8NumDeformationSensors sensors, then write min->box.mMin, max->box.mMax.
+        void GetBoundingBox(CgsGeometric::AxisAlignedBox& lBoxOut) const;
+
+        // BrnStreamedDeformationSpec.h:234 -- re-express all streamed geometry in a new centre-of-mass
+        // frame. X360 @ 0x825E3148: when the COM actually moves, shift every sensor/tag/driven/joint
+        // point by (newCOM - oldCOM), pull mMeshOffset the other way, and record the new COM.
+        void TransformToNewCOMSpace(Vector3 lCOMOffset);
+
+        // BrnStreamedDeformationSpec.h:310/313 -- serialise-time pointer relocation. FixDown rebases
+        // every embedded pointer to a base-relative offset (subtract lpBaseAddress); FixUp rebases
+        // them back to absolute (add lpBaseAddress) and re-runs the per-body-part handedness fix-up.
+        // X360 FixDown @ 0x82631118, FixUp @ 0x82630E18. Both called by the resource serialiser.
+        void FixDown(void* lpBaseAddress);
+        void FixUp(void* lpBaseAddress);
 
     private:
         s32                  miVersionNumber;
