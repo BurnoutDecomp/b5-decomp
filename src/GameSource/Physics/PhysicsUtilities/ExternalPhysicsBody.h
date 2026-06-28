@@ -96,6 +96,18 @@ namespace BrnPhysics
         // Vector3 force arg); the X360 Hex-Rays dropped the arg list.
         void AddLocalSpaceForce(Vector3 lvForce);
 
+        // ADDITIVE GROW (PhysicalBodyPart::UpdateRW caller): DECLARE-ONLY. Integrate the
+        // accumulated forces/torques/impulses into the body's linear/angular velocity for this
+        // step (the "base integrate checkpoint" the suspension and detached-part RW push run at
+        // the end of their force accumulation -- ExternalPhysicsBody::CalculateNewVelocity,
+        // @ the asm `bl BrnPhysics__ExternalPhysicsBody__CalculateNewVelocity` with `this` in r3).
+        // PhysicalBodyPart::UpdateRW calls it BY NAME on the embedded body before reading the new
+        // velocity back out to push into RenderWare. Its body lives in a separate (not-yet-homed)
+        // TU, so only the declaration is needed for the per-TU `cl /c` gate. FLAG: void/void
+        // signature recovered from the call site (the X360 Hex-Rays rendered it `_DWORD*(_DWORD*)`,
+        // the result being the `this`/`mLinearVelocity` row it returns; modelled as void here).
+        void CalculateNewVelocity();
+
         // ADDITIVE GROW (Deformation PhysicalBodyPart family): DECLARE-ONLY; bodies owned by
         // ExternalPhysicsBody's own TU. The deformation PhysicalBodyPart lifecycle (Construct
         // @0x825B4178, Prepare @0x82626700) and per-frame Update @0x825E78C8 invoke these by name:

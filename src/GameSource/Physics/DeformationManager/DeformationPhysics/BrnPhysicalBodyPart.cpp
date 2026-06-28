@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"                 // InSceneUpdateInterface remove/set producers
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                                   // CgsSceneManager::EntityId
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                             // CGS_ASSERT
+#include "rw/math/vpu/vector3_operation.h"                                                     // rw::math::vpu::IsValid (UpdateRW finiteness tripwires)
 
 #include <cstring>   // memset (matching the X360 memset of the BBox scratch tail)
 #include <cmath>     // std::sqrt (the vrsqrtefp magnitude refinements converge to this)
@@ -1065,6 +1066,90 @@ namespace Deformation
         EmitDetachedPartNotification(lpSimOutput, &mRigidBodyId);
 
         return true;   // _restvmx_121(1)
+    }
+
+    // =========================================================================================
+    // UpdateRW @ 0x825E7998   [not executed in goal trace]
+    //
+    // Push this part's pose into the RenderWare physics sim for the current timestep. Skipped
+    // entirely (no event emitted) unless the part is dirty -- the asm short-circuits on
+    //   if ( mbNeedsWritingIntoRenderware || LimitVelocities(lvfTimeStep) )
+    // (the `lbz r11,0x1E7(r30)` / `bne` is the +487 dirty flag; only if it is clear does the
+    // `bl LimitVelocities` run, and the body is entered when EITHER is true -- a logical OR with
+    // LimitVelocities short-circuited away when already dirty).
+    //
+    // When entered:
+    //   1) mRwBody.CalculateNewVelocity() -- integrate the accumulated forces into the body's
+    //      linear/angular velocity (the base integrate checkpoint).
+    //   2) Assemble the InUpdateExternalBody event blob from the body's id + freshly-integrated
+    //      pose: { mRigidBodyId (qword), mRwBody.GetTransform() (4 rows), mRwBody linear vel,
+    //      mRwBody angular vel } -- the asm's `ld r7,0x1D0` (id) + the six `lvx128`/`stvx128`
+    //      copies of this+0/+16/+32/+48 (transform), this+64 (linear vel), this+80 (angular vel)
+    //      into the stacked event slots starting at &v110.
+    //   3) Three non-gating finiteness tripwires on the event (the `vspltw`+`vcmpeqfp.` per-lane
+    //      self-equality NaN checks, ANDed across lanes/rows): IsValid(angularVel), IsValid(vel),
+    //      IsValid(transform) -- in that asm order.
+    //   4) Emit the event onto the sim InputBuffer's InUpdateExternalBody queue
+    //      (`CgsPhysi`(InputBuffer) -> channel; channel->AddEvent(&event)), modelled through the
+    //      flagged EmitUpdateExternalBodyEvent hook.
+    //   5) Clear mbNeedsWritingIntoRenderware (+487 = 0).
+    //
+    // The packed event layout (16-byte-aligned stack slots the asm builds at &v110.., handed to
+    // AddEvent) is reproduced as a POD blob here; the concrete InUpdateExternalBody event type +
+    // the queue's AddEvent are owned by the CgsPhysics sim-IO TU (not homed in this family), so
+    // the emit goes through the provisional hook exactly as the detach-notification emit does.
+    // =========================================================================================
+    void PhysicalBodyPart::UpdateRW(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
+                                    VecFloat lvfTimeStep)
+    {
+        // Dirty gate: enter only if already flagged for RW write OR a velocity clamp was applied
+        // this step. LimitVelocities is short-circuited away when the part is already dirty
+        // (matching the asm's `bne` past the `bl LimitVelocities`).
+        if ( !mbNeedsWritingIntoRenderware && !LimitVelocities(lvfTimeStep) )   // +487 == 0 && no clamp
+        {
+            return;
+        }
+
+        // Integrate the accumulated forces/torques/impulses into the body velocity (the asm's
+        // `mr r3,r30 ; bl CalculateNewVelocity` -- this==&mRwBody since mRwBody is the first member).
+        mRwBody.CalculateNewVelocity();
+
+        // Assemble the InUpdateExternalBody event blob (the stacked &v110.. slots). 16-byte-aligned
+        // POD matching the asm's stvx128 store layout: id qword, then the 4 transform rows, then the
+        // linear + angular velocity rows.
+        struct UpdateExternalBodyEvent
+        {
+            BurnoutBodyPartID mBodyId;        // event+0  (the `ld r7,0x1D0` qword, 16-byte slot)
+            Matrix44Affine    mTransform;     // event+16 (rows from this+0/+16/+32/+48)
+            Vector3           mVel;           // event+80 (this+64 linear velocity)
+            Vector3           mAngularVel;    // event+96 (this+80 angular velocity)
+        };
+
+        UpdateExternalBodyEvent lEvent;
+        lEvent.mBodyId      = mRigidBodyId;                 // event id == this+464
+        lEvent.mTransform   = mRwBody.GetTransform();       // 4 rows, this+0/+16/+32/+48
+        lEvent.mVel         = mRwBody.GetLinearVelocity();  // this+64
+        lEvent.mAngularVel  = mRwBody.GetAngularVelocity(); // this+80
+
+        // Non-gating finiteness tripwires (the per-lane vcmpeqfp self-equality NaN checks), in the
+        // asm's order: angular velocity, then velocity, then the full transform.
+        CGS_ASSERT(rw::math::vpu::IsValid(lEvent.mAngularVel),
+                   "rw::math::IsValid( lUpdateEvent.mAngularVel )");
+        CGS_ASSERT(rw::math::vpu::IsValid(lEvent.mVel),
+                   "rw::math::IsValid( lUpdateEvent.mVel )");
+        CGS_ASSERT(rw::math::vpu::IsValid(lEvent.mTransform.xAxis)
+                       && rw::math::vpu::IsValid(lEvent.mTransform.yAxis)
+                       && rw::math::vpu::IsValid(lEvent.mTransform.zAxis)
+                       && rw::math::vpu::IsValid(lEvent.mTransform.wAxis),
+                   "rw::math::IsValid( lUpdateEvent.mTransform )");
+
+        // Emit the event onto the sim InputBuffer's InUpdateExternalBody queue (the asm's
+        // `bl CgsPhysi`(InputBuffer) -> channel ; channel->AddEvent(&event)). Modelled through the
+        // flagged emit hook with the packed event blob.
+        EmitUpdateExternalBodyEvent(lpSimInput, &lEvent);
+
+        // *(this+487) = 0 -- the part is no longer dirty for RW.
+        mbNeedsWritingIntoRenderware = false;
     }
 }
 }

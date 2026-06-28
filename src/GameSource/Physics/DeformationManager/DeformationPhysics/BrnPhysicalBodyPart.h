@@ -72,8 +72,12 @@ namespace PhysicsSimulationIO
 //   * The detached-part notification emit at the tail of TestJointForBreaking @0x8260C0F8 (the asm
 //     builds a DetachedPartNotificationEvent and AddEventSafeAppend's it onto the sim OutputBuffer's
 //     notification queue). Modelled as a free hook taking the output buffer + the packed event blob.
+//   * The "update external body" event emit at the tail of UpdateRW @0x825E7998 (the asm fetches the
+//     sim InputBuffer's InUpdateExternalBody queue -- `bl CgsPhysi`(InputBuffer) returning the channel
+//     -- and AddEvent's a packed {bodyId, transform, linearVel, angularVel} event onto it). Modelled
+//     as a free hook taking the input buffer + the packed event blob.
 namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface; } }
-namespace CgsPhysics { namespace PhysicsSimulationIO { class OutputBuffer; } }
+namespace CgsPhysics { namespace PhysicsSimulationIO { class InputBuffer; class OutputBuffer; } }
 namespace BrnPhysics
 {
 namespace Deformation
@@ -82,6 +86,8 @@ namespace Deformation
                                  u16 lu16TriangleCacheSlot);                                   // FLAG: provisional
     void EmitDetachedPartNotification(CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
                                       const void* lpEventBlob);                                 // FLAG: provisional
+    void EmitUpdateExternalBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
+                                     const void* lpEventBlob);                                  // FLAG: provisional
 }
 }
 

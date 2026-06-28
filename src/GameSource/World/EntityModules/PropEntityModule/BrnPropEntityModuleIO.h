@@ -24,7 +24,10 @@
 
 #include "types.hpp"          // u32, s32
 #include "BrnCommonTypes.h"   // Matrix44Affine (rw::math::vpu::Matrix44Affine)
-#include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"  // CgsModule::EventQueue (InputBuffer_PostPhysics::mUpdatedPropQueue)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"  // BrnPhysics::ContactSpy::ContactSpyInterface (mContactSpyInterface, by value)
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"   // BrnPhysics::Props::UpdatePropEvent (queue element)
 
 namespace BrnWorld
 {
@@ -330,6 +333,55 @@ namespace PropEntityIO
         // +0x801C start of muCoronaSubmissionInterface.
         unsigned char maPayloadAndPad[0x801C - 0xC];     // +0xC..+0x801B
         u32           muCoronaSubmissionInterface;       // +0x801C
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::InputBuffer_PostPhysics (DWARF BrnPropEntityModuleIO.h:558).
+    // The prop-entity module's post-physics INPUT buffer: the physics side fills it with the
+    // contact-spy results and the per-prop post-physics update events, and
+    // BrnWorld::PropEntityModule's post-physics step drains it.
+    //
+    // This slice homes the real, fully-named members (both element types are already
+    // reconstructed in-tree) so Construct can build them BY NAME -- no opaque storage is
+    // needed here. The X360 Construct (0x822EFDC8) does exactly three things:
+    //   *this = 1;                       -> IOBuffer base: mark constructed (status byte = 1)
+    //   mUpdatedPropQueue.Construct();   -> EventQueue<UpdatePropEvent,200>::Construct (this+0x10)
+    //   mContactSpyInterface.Construct();-> ContactSpyInterface::Construct          (this+0x04)
+    //
+    // LAYOUT (X360 Construct member offsets + DWARF :558 member order, authoritative):
+    //   base  CgsModule::IOBuffer            (1-byte status; +1..+3 natural pad)
+    //   +0x04 ContactSpyInterface mContactSpyInterface   (sizeof 4)                       :576
+    //   +0x10 UpdatePropEventQueue mUpdatedPropQueue     (EventQueue<UpdatePropEvent,200>):577
+    // The queue starts at +0x10 because EventQueue<UpdatePropEvent,200> inherits a 16-byte
+    // alignment from its inline maEvents[] (UpdatePropEvent is alignas(16)); the asm confirms
+    // it with `addi r3, r31, 0x10`, and mContactSpyInterface at `addi r3, r31, 4`. The
+    // DWARF lays mContactSpyInterface (:576) before mUpdatedPropQueue (:577), matching the
+    // ascending offsets; the Construct body just happens to build the queue first.
+    class InputBuffer_PostPhysics : public CgsModule::IOBuffer
+    {
+    public:
+        // DWARF :77 -- the buffer spells its embedded contact-spy interface via a member
+        // typedef; :87/99-style typedefs name the post-physics update-event queue.
+        typedef BrnPhysics::ContactSpy::ContactSpyInterface              ContactSpyInterface;
+        typedef CgsModule::EventQueue<BrnPhysics::Props::UpdatePropEvent, 200> UpdatePropEventQueue;
+
+        // X360 0x822EFDC8 (the only function this TU bodies): mark the IOBuffer base
+        // constructed, then construct the update-prop queue and the contact-spy interface.
+        void Construct();
+
+        // The remaining DWARF-attested members (:567-:573) live in their own (not-yet-
+        // reconstructed) TUs; declared here for declaration-shape fidelity, bodied elsewhere.
+        void Destruct();                                                    // :567
+        const ContactSpyInterface* GetContactSpyInterface() const;          // :569
+        const UpdatePropEventQueue* GetUpdatedPropQueue() const;            // :570
+        ContactSpyInterface* GetContactSpyInterface();                      // :572
+        void AppendUpdatedPropQueue(const UpdatePropEventQueue* lpQueue);   // :573
+
+        static void _AssertLayout();
+
+    private:
+        ContactSpyInterface  mContactSpyInterface;   // +0x04 :576
+        UpdatePropEventQueue mUpdatedPropQueue;       // +0x10 :577
     };
 }
 }
