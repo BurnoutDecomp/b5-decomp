@@ -70,11 +70,13 @@ struct AptRenderItem
     AptRenderItem(AptCharacter* pCharacter, int nCreatedOnTick);   // @0x7E47A0
     virtual ~AptRenderItem();                                       // @0x80F860
 
-    // The concrete draw -- implemented by each subtype (Shape/Sprite/...).
-    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const = 0;
-    virtual void PushRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const = 0;
-    virtual void PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const = 0;
-    virtual void PushRenderDataAbsolute(AptRenderingContext* pCtx) const = 0;
+    // The base render hooks are empty (@0x7E49A8/0x7E499C/0x7E49A4/0x7E49A0); each
+    // character subtype (Shape/Sprite/Button/Text/...) overrides Render to draw.
+    // (So the base is concrete -- it just renders nothing.)
+    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
+    virtual void PushRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
+    virtual void PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
+    virtual void PushRenderDataAbsolute(AptRenderingContext* pCtx) const;
 
     // ---- visual state -----------------------------------------------------
     const AptMatrix* GetPositionMatrixConst() const;      // @0x7DFB60
@@ -107,3 +109,13 @@ struct AptRenderItem
     AptRenderItem* Manager_GetNextSibling() const;  // @0x7DEEC8
     AptRenderItem* Manager_GetNextRevision() const; // @0x7DEED8
 };
+
+// FLAG (homed by the render-context layer, AptRenderingContext, not yet built):
+// the render-traversal helpers the character subtypes call from Render -- push
+// the item's matrices onto the context's transform/colour stacks, draw, then pop.
+//   PushMatrices @0x7F21E4 / PopMatrices @0x7ECA68
+//   AptCharacter_render -> AptCharacter::render @0x810E74 (the geometry draw)
+void PushMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem);
+void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem);
+void AptCharacter_render(AptCharacter* pCharacter, AptRenderingContext* pCtx,
+                         AptMaskRenderOperation eOp, int nTick);
