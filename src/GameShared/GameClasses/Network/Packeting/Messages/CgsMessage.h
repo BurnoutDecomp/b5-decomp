@@ -82,6 +82,17 @@ namespace CgsNetwork
         // ReliableMessage overrides it. Subclass PrepareForSend asserts on it.
         bool IsReliable() const;
         Message* SetType(s32 leType);
+
+        // --- inline flag/scalar accessors (used by the NetworkPlayer send pump) ------------
+        // The "valid" flag (KX8_FLAGS_VALID, bit 0 of mx8Flags) marks a message that has been
+        // queued for (re)send and not yet consumed. The pump reads it to decide which slots to
+        // pack, clears it once an unreliable message is sent, and re-sets it when re-queuing a
+        // reliable message for resend.
+        void SetGameID(u8 lu8GameID)        { mu8GameID = lu8GameID; }
+        s8   GetType() const                { return mi8Type; }
+        bool IsMessageValid() const         { return (mx8Flags & KX8_FLAGS_VALID) != 0; }
+        void SetMessageValid()              { mx8Flags |=  KX8_FLAGS_VALID; }
+        void SetMessageInvalid()            { mx8Flags &= ~KX8_FLAGS_VALID; }
         void PrepareForSend(s32 leType, u16 lu16Frame);
         void PrepareAck(s32 leType, u16 lu16Frame, u8 lu8GameID);
         void PrepareNack(s32 leType, u16 lu16Frame, u8 lu8GameID);

@@ -10,10 +10,14 @@
 //
 // LAYOUT (X360-AUTHORITATIVE; offsets from `this`, recovered from AddHeading @0x82541EB0 and the
 // CopyCategories frame @0x82562590):
-//   +0x00  miLength    s32  -- live heading count. AddHeading reads it (lwz 0(r30)), asserts
-//                             0 <= miLength < 66, post-increments it (stw len+1, 0(r30)).
-//   +0x04  miReserved  s32  -- second header word the caller zero-inits alongside miLength
-//                             (stw 0, var_81C). No further hint; offset-keyed reserved word.
+//   +0x00  miLength      s32  -- live heading count. AddHeading reads it (lwz 0(r30)), asserts
+//                               0 <= miLength < 66, post-increments it (stw len+1, 0(r30)).
+//   +0x04  meHeadingType s32  -- which heading list this is (category / index / variation). The
+//                               ScoreboardDebugComponent::HandleScoreboardHeadingEvent consumer
+//                               @0x82585A88 loads this word (lwz 4(r17)), asserts it != E_HEADING_COUNT
+//                               (3), and switches on 0/1/2 to route into the category/index/variation
+//                               column lists. (Previously labelled "miReserved" when only the AddHeading
+//                               producer was reconstructed -- the consumer pins it as the heading type.)
 //   +0x08  maHeadings[66][31] -- the heading slots. AddHeading writes slot
 //                             &maHeadings[miLength] via strncpy(base + 8 + miLength*31, name, 31)
 //                             (the asm computes 8 + (len<<5 - len) = 8 + len*31; stride 31).
@@ -37,10 +41,22 @@ namespace BrnNetworkModuleIO
     static const s32 KI_MAX_CAT_VAR_INDEX_NAME_LENGTH = 31; // 0x1F
     static const s32 KI_MAX_CAT_VAR_INDEX_COUNT       = 66; // 0x42
 
+    // Which scoreboard heading list this event carries. The consumer
+    // (ScoreboardDebugComponent::HandleScoreboardHeadingEvent @0x82585A88) switches on these and
+    // asserts the value is never E_HEADING_COUNT; the column/index/variation ordering matches the
+    // switch arms (0 -> category, 1 -> index, 2 -> variation).
+    enum EHeadingType
+    {
+        E_HEADING_CATEGORY  = 0,
+        E_HEADING_INDEX     = 1,
+        E_HEADING_VARIATION = 2,
+        E_HEADING_COUNT     = 3,   // sentinel; asserted-against in HandleScoreboardHeadingEvent
+    };
+
     struct NetworkOutScoreboardHeadingList
     {
-        s32  miLength;     // +0x00  live heading count (0 .. 66)
-        s32  miReserved;   // +0x04  zero-inited header word (offset-keyed; no further hint)
+        s32  miLength;      // +0x00  live heading count (0 .. 66)
+        s32  meHeadingType; // +0x04  EHeadingType -- category / index / variation list discriminator
         char maHeadings[KI_MAX_CAT_VAR_INDEX_COUNT][KI_MAX_CAT_VAR_INDEX_NAME_LENGTH]; // +0x08  66 x 31
         u8   maReservedPadTo0x808[0x808 - (0x08 + KI_MAX_CAT_VAR_INDEX_COUNT * KI_MAX_CAT_VAR_INDEX_NAME_LENGTH)]; // +0x806 .. +0x808
 
