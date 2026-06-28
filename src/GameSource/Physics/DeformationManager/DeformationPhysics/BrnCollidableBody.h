@@ -1,15 +1,19 @@
 #pragma once
 
-// BrnPhysics::Deformation::ImpulseParams -- the parameter block the deformation system fills in
-// to apply one impulse to a collidable body (a sensor / vehicle rigid body). Homed at its mirrored
-// DWARF path (references/DecFIGS/dwarfdump/.../DeformationPhysics/BrnCollidableBody.h, struct @ :49).
+// BrnPhysics::Deformation -- the canonical CollidableBody base + its ImpulseParams param block.
+// Homed at the mirrored DWARF path
+// (references/DecFIGS/dwarfdump/.../DeformationPhysics/BrnCollidableBody.h; ImpulseParams @ :49,
+// CollidableBody @ :80).
+//
+// CollidableBody is the shared base of every body the deformation system applies impulses to --
+// DeformationSensor (BrnDeformationSensor.h) and VehicleRigidBody (BrnVehicleRigidBody.h) both
+// derive it. Per the DWARF it has NO data members: just a vptr, two pure-virtual impulse applies,
+// and one non-virtual GetDirectionVector helper.
 //
 // DeformableObject::ApplyCarCarImpulse builds an ImpulseParams and hands it to ApplySensorImpulse,
-// which forwards it to the body's ApplyLocalImpulse. The member SEQUENCE + names + types are
-// DWARF-authoritative -- every field below is verbatim from the DWARF struct (meImpulseDirection ..
-// mbWorldContact). The owning CollidableBody class (the base of VehicleRigidBody) carries only its
-// vptr in the layout that matters here and is NOT reconstructed in this slice (it has its own TU);
-// ImpulseParams is a standalone POD, so the car-car-impulse group only needs the param block.
+// which forwards it to the body's ApplyLocalImpulse. The ImpulseParams member SEQUENCE + names +
+// types are DWARF-authoritative -- every field below is verbatim from the DWARF struct
+// (meImpulseDirection .. mbWorldContact). ImpulseParams is a standalone POD.
 
 #include "types.hpp"            // f32, bool
 #include "BrnCommonTypes.h"     // Vector3, VecFloat
@@ -24,6 +28,9 @@ namespace Deformation
     // The impulse passer is referenced only by pointer (mpImpulsePasser); forward-declare it to
     // avoid pulling its whole header in (it has its own home, BrnImpulsePasser.h).
     struct ImpulsePasser;
+
+    // GetDirectionVector returns a unit body-axis vector by Vector3 value; it is declared with the
+    // ENextSensorDirection enum already included above. Vector3 comes from BrnCommonTypes.h.
 
     // DWARF BrnCollidableBody.h:49. One impulse to apply to a collidable body. Built by
     // DeformableObject::ApplyCarCarImpulse / ApplyCarWorldImpulse and consumed by
@@ -44,6 +51,31 @@ namespace Deformation
         ImpulsePasser*          mpImpulsePasser;               // :62 optional chained impulse passer
         EAbsorptionSets         meAbsorptionSet;               // :63 which absorption profile to use
         bool                    mbWorldContact;                // :64 true if the contact is vs world
+    };
+
+    // DWARF BrnCollidableBody.h:80. The canonical base of every body the deformation system applies
+    // impulses to (DeformationSensor and VehicleRigidBody both derive it). Its console layout is just
+    // the vptr -- it carries NO data members (DWARF lists only `_vptr.CollidableBody`). The two impulse
+    // applies are PURE virtuals (each concrete body supplies its own routing); GetDirectionVector is a
+    // non-virtual shared helper whose body lives in the future BrnCollidableBody.cpp TU (DWARF
+    // BrnCollidableBody.cpp:43) and is DECLARED-ONLY here.
+    //
+    // HOMING NOTE: this REPLACES the minimal local CollidableBody copies that previously lived inside
+    // the derived headers (BrnVehicleRigidBody.h). Derived classes now `#include` THIS header and
+    // derive this canonical base -- do not fork a local copy.
+    struct CollidableBody
+    {
+        // DWARF BrnCollidableBody.h:85 -- apply one fully-specified impulse to this body. Pure: each
+        // concrete body (sensor / vehicle rigid body) routes the impulse into its own physics state.
+        virtual void ApplyLocalImpulse(ImpulseParams* lpImpulseParams) = 0;
+
+        // DWARF BrnCollidableBody.h:90 -- receive an impulse passed on from a neighbouring body in the
+        // impulse-passing chain (the trailing VecFloat is the chain's remaining/scaled magnitude). Pure.
+        virtual void RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams, VecFloat lvfPassedMagnitude) = 0;
+
+        // DWARF BrnCollidableBody.cpp:43 -- non-virtual helper returning the unit body-axis vector for a
+        // given signed-axis direction. DECLARED-ONLY: its body is owned by the BrnCollidableBody TU.
+        Vector3 GetDirectionVector(ENextSensorDirection leDirection);
     };
 }
 }

@@ -13,16 +13,18 @@
 // so the only state pinned is the attached vehicle pointer (console +0x4) plus the per-direction
 // unit-axis lookup table the two functions index (X360 rodata &unk_82FB9680).
 //
-// LAYOUT NOTE (project rule -- members BY NAME, no raw-offset padding): VehicleRigidBody derives
-// CollidableBody, whose console layout is just a vptr at +0x0; mpAttachedVehicle follows at console
-// +0x4 (the asm's `*(this+4)`). The base is reconstructed here only as far as the two overridden
-// virtuals need (the vptr + the two pure-virtual slots), NOT the full CollidableBody TU -- that has
-// its own home (BrnCollidableBody.cpp, GetDirectionVector etc.). GROW this slice into the full member
-// sequence + the remaining methods as the VehicleRigidBody TUs land; do not fork.
+// LAYOUT NOTE (project rule -- members BY NAME, no raw-offset padding): VehicleRigidBody derives the
+// canonical CollidableBody (BrnCollidableBody.h), whose console layout is just a vptr at +0x0;
+// mpAttachedVehicle follows at console +0x4 (the asm's `*(this+4)`). GROW this slice into the full
+// member sequence + the remaining methods as the VehicleRigidBody TUs land; do not fork.
+//
+// HOMING NOTE: this header previously carried a LOCAL minimal copy of CollidableBody. That copy is
+// now REMOVED -- the canonical base is included from BrnCollidableBody.h (Task 1) so there is a single
+// ODR-correct CollidableBody shared by VehicleRigidBody and DeformationSensor.
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"     // Vector3, Vector4, VecFloat
-#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnCollidableBody.h"          // ImpulseParams
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnCollidableBody.h"          // CollidableBody (canonical base) + ImpulseParams
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnSharedDeformationEnums.h"  // ENextSensorDirection
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"                     // BrnPhysics::Vehicle::VehiclePhysics
 
@@ -30,21 +32,6 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
-    // The base collidable body. Console layout is a single vptr; ApplyLocalImpulse and
-    // RecievePassedOnImpulse are the two virtuals VehicleRigidBody overrides (DWARF BrnCollidableBody.h
-    // :85/:90). Modelled here only as far as the override needs -- the rest of CollidableBody
-    // (GetDirectionVector, the ctor/dtor, ...) is owned by the BrnCollidableBody TU. GROW into the
-    // committed CollidableBody when that TU lands (then this minimal base is REPLACED by an include).
-    struct CollidableBody
-    {
-        // DWARF BrnCollidableBody.h:85 -- apply one fully-specified impulse to this body.
-        virtual void ApplyLocalImpulse(ImpulseParams* lpImpulseParams) = 0;
-
-        // DWARF BrnCollidableBody.h:90 -- receive an impulse passed on from a neighbouring body in the
-        // impulse-passing chain (the second VecFloat is the chain's remaining/scaled magnitude).
-        virtual void RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams, VecFloat lvfPassedMagnitude) = 0;
-    };
-
     // VehicleRigidBody : CollidableBody. Wraps the attached car's VehiclePhysics and converts a
     // deformation ImpulseParams into one of the three VehiclePhysics contact-impulse applies.
     struct VehicleRigidBody : public CollidableBody
