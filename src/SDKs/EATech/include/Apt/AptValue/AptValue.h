@@ -223,6 +223,12 @@ public:
     // follow-on; declared so the conversion + opcode layers can call it.
     void toString(EAStringC* pScratch) const;
 
+    // urlEncodeCustomRender @0x82AF9410 -- render this value to its URL-encoded
+    // string form (returned by value; the X360 sret form `urlEncodeCustomRender(
+    // this, &out)`). Used by AptError::sMethod_toString. FLAG: body is the same
+    // value-layer renderer follow-on as toString (declared so callers compile).
+    EAStringC urlEncodeCustomRender() const;
+
     // Append this value's string form to pOut (the toString sibling the ToString
     // opcode uses to render into a fresh AptString). FLAG: body is the same
     // value-layer renderer follow-on as toString.
