@@ -17,6 +17,8 @@
 // ledger TU (the 6-subsystem scene-update cascade is intentionally NOT pulled in).
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                          // global Matrix44Affine typedef
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"         // CgsSceneManager::EntityId
 
 namespace CgsSceneManager
 {
@@ -30,6 +32,14 @@ namespace SceneManagerIO
         // tail-call InSceneUpdateInterface::Construct on this aggregate. Declared-only here
         // so consuming TUs compile; the owning TU emits the body. No layout change.
         void Construct();
+
+        // ADDITIVE GROW (FLAG -- declared-only, bodies owned by InSceneUpdateInterface's own TU):
+        // the trigger entity module's ProcessAddTriggerEvents (X360 0x822D8F48) registers each new
+        // trigger volume + entity via these three producers. Signatures are PROVISIONAL (matched to
+        // the de-inlined X360 call sites; the owning TU's bodies are authoritative). No layout change.
+        void AddDynamicVolume(CgsSceneManager::EntityId lEntityId, const void* lpVolumeImage, u8 lu8VolumeTypeFlag);
+        void AddEntity(CgsSceneManager::EntityId lEntityId, u32 luEntityTypeFlag, f32 lfBoundingRadius);
+        void AddVolumeInstance(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
 
         unsigned char maReserved[256];
     };
