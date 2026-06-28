@@ -5,18 +5,28 @@
 // for a DYNAMIC text field. It is a type-tagged AptCharacter subclass; its runtime
 // per-instance state lives in AptRenderItemDynamicText / AptCharacterTextInst.
 //
-// MINIMAL reconstruction: only the one field the AptCharacterTextInst text path
-// needs is recovered -- the asset's DEFAULT text buffer, read by SetText/UpdateText
-// when the bound variable resolves to a non-string (the field's initial contents).
-// The X360 reads it at console offset 0x3C of the character object:
+// The authored text-field defaults baked from the .apt at Fixup. The asset's
+// DEFAULT text buffer (mpDefaultText) is read by SetText/UpdateText when the bound
+// variable resolves to a non-string (the field's initial contents); the layout /
+// formatting scalars (margins, colour, font size, the glyph index) are the
+// authored defaults stamped into the shared default-text template by
+// AptCharacterHelper::CreateTextCharacterInst (@0x82B010C0) and read by the
+// text-field renderer. The X360 reads the default-text pointer at console offset
+// 0x3C of the character object:
 //   UpdateText: pDefault = *(mpRenderItem->mpCharacter + 0x3C); if(!pDefault) ""
 //
-// FLAG: the remaining dynamic-text character fields (the authored bounds, font,
-// colours, flags baked from the .apt at Fixup) are NOT yet recovered -- there is no
-// header for them in b5-decomp/src, no Feb-2007 partial source, and no DecFIGS
-// dwarfdump for this class. They are represented as an opaque padding region so the
-// one recovered member (mpDefaultText) is reachable BY NAME without an offset hack;
-// access is by name, not by the console byte offset (the x64 base width differs).
+// LAYOUT recovered from the X360 ARTIST AptCharacterHelper::CreateTextCharacterInst
+// field-by-field stores (console offsets; total console sizeof = 0x44 / 68, pinned
+// by that builder's DOGMA Allocate(68) + AptCharacterHelper::Shutdown's
+// Deallocate(.,68)). The authored region is named so the builder writes it BY NAME
+// (no offset hack); the few stores the builder leaves at zero are named with their
+// observed role where clear and as reserved authored dwords otherwise. The x64
+// layout differs (wider base pointers); members are accessed by name regardless.
+//
+// The font for a dynamic-text character is the FONT character it links to: the
+// builder stores it in the inherited AptCharacter::mpFixupLink slot (the
+// character-table back-link), so it is reached by that named base member rather
+// than a per-subclass alias.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -27,15 +37,30 @@
 
 struct AptCharacterDynamicText : public AptCharacter
 {
-    // FLAG: unrecovered authored dynamic-text fields between the AptCharacter base
-    // (console +0x10) and the default-text pointer (console +0x3C) -- 0x3C-0x10 =
-    // 0x2C bytes on the console. Kept as an opaque blob (no offset hack: the one
-    // recovered field below is named). The x64 layout differs (wider base); the
-    // member is accessed by name regardless.
-    uint8_t mPadAuthoredFields[0x3C - 0x10];
+    // ---- authored layout defaults (console +0x10 .. +0x3C) --------------------
+    // The four field-edge margins (the X360 stamps the template's to -2 / -2 / 2 / 2).
+    float       mfMarginLeft;        // [c:0x10]
+    float       mfMarginTop;         // [c:0x14]
+    float       mfMarginRight;       // [c:0x18]
+    float       mfMarginBottom;      // [c:0x1C]
+
+    // The default glyph index into the linked font character's glyph list (the
+    // builder seeds it to -1, then to the index of the first glyph tagged 3).
+    int32_t     mnDefaultGlyphIndex; // [c:0x20]
+
+    int32_t     mnAuthoredReserved0; // [c:0x24] (authored; template stamps 0)
+    int32_t     mnAuthoredReserved1; // [c:0x28] (authored; template stamps 0)
+
+    float       mfFontSize;          // [c:0x2C] default font size (template = 12.0)
+
+    int32_t     mnAuthoredReserved2; // [c:0x30] (authored; template stamps 0)
+    int32_t     mnAuthoredReserved3; // [c:0x34] (authored; template stamps 0)
+    int32_t     mnAuthoredReserved4; // [c:0x38] (authored; template stamps 0)
 
     // [c:0x3C] the asset's default text contents (null -> the empty string ""). Read
     // by AptCharacterTextInst::SetText / UpdateText when the bound AS variable does
     // not resolve to a string.
     const char* mpDefaultText;
+
+    int32_t     mnAuthoredReserved5; // [c:0x40] (authored; template stamps 0)
 };
