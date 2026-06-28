@@ -68,6 +68,12 @@ namespace BrnFlapt
         // (by value into lpOutRef).
         MovieClipRef* GetParent(MovieClipRef* lpOutRef) const;
 
+        // ---- visibility ----------------------------------------------------
+        // SetVisible @ 0x8246CA80 : set/clear the referenced clip instance's
+        // visible flag (bit 0x02 of its flags byte) and return this Ref. Bodied
+        // in BrnFlaptMovieClipInstance.cpp.
+        MovieClipRef* SetVisible(bool lbVisible);
+
         // ---- timeline playback ---------------------------------------------
         // GotoAndPlayLabel @ 0x8246F388 : jump to a pre-hashed label and play.
         void GotoAndPlayLabel(u32 luLabelHash, const char* lpcDEBUGName) const;
