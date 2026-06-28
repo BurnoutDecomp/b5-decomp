@@ -91,9 +91,14 @@ namespace CgsGui
         AnimatorChannel&       AnimatorChan(u32 luIndex);
         const AnimatorChannel& AnimatorChan(u32 luIndex) const;
 
-        // The remaining AnimData methods (Construct / Clear / AddAnimationChannel /
-        // GetChannelData) are homed by their own ledger TUs; declared there. This slice
-        // models the layout so the Array<AnimData,N> container instantiations have a
-        // complete element type.
+        // X360 AnimData::GetChannelData: return the keyframe payload for the animator
+        // channel at luIndex, or null when this animation does not drive that channel.
+        // Walked by CgsGui::Animator::SetAnimation across all six animator channels.
+        // Bodied by its own ledger TU; declared here for the Animator caller surface.
+        AnimChannelData* GetChannelData(s32 liChannel);
+
+        // The remaining AnimData methods (Construct / Clear / AddAnimationChannel) are
+        // homed by their own ledger TUs; declared there. This slice models the layout so
+        // the Array<AnimData,N> container instantiations have a complete element type.
     };
 }
