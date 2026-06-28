@@ -188,12 +188,10 @@ namespace Deformation
         mRwBody.Construct();
 
         // v14 = 5.0 ; lvlx/vspltw v0 ; stvx128 v0 -> this+208  (mfMass = 5.0, broadcast).
-        // mfMass lives inside mRwBody (+208 in the console layout); set via the body's mass seed.
-        // Construct() above already default-inits the body; the 5.0 store is the part's mass.
-        // (Reached by member name through the body; KF_PART_MASS is the recovered 5.0.)
-        // NOTE: mfMass is a protected member of the body's base; the body's Construct/Prepare own the
-        // final value. The 5.0 seed is documented here and applied by Prepare's finalisation.
-        (void)KF_PART_MASS;
+        // mfMass lives inside mRwBody (+208 in the console layout). The asm stores 5.0 BETWEEN
+        // ExternalPhysicsBody::Construct() (above) and ::Prepare() (below). KF_PART_MASS = 5.0f is the
+        // recovered literal (the lvlx/vspltw 5.0 stack temp), not a placeholder.
+        mRwBody.SetMass(KF_PART_MASS);
 
         // BrnPhysics::ExternalPhysicsBody::Prepare().
         mRwBody.Prepare();
@@ -401,47 +399,44 @@ namespace Deformation
     // =========================================================================================
     // SetJoinedToVehicle @ 0x825BA4A8
     //
-    // Join the part to the vehicle as an active joint. The two VMX register args carry the local joint
-    // position (v1) and local COM position (v3); the explicit char arg is the active-joints tag-point
-    // index. The asm seeds:
-    //   mLocalInitialJointPositionPlusLimitStress (+400) <- localJointPos.xyz, limitStress in w (passed
-    //       in v3's w? -- the asm splices the limit-stress scalar into the w lane via vrlimi128);
-    //   mLocalJointPositionPlusRotation (+352) <- localJointPos.xyz, rotation w = 0 (vrlimi128 of 0);
-    //   mLocalInitialComPositionPlusMaxJointAngle (+384) <- localComPos.xyz (max-angle w preserved);
-    //   mLocalGraphicsPositionPlusJointVelocity (+368) <- (the +88 reload, joint velocity w = 0).
+    // Join the part to the vehicle as an active joint. The asm captures only TWO VMX register args --
+    // v1 (= local joint position, vmr128 v127,v1) and v3 (= local COM position, vmr128 v126,v3) -- plus
+    // the char tag-point index. Its ONLY calls are savegpr / BeginAssert / FireAssert / EndAssert: it
+    // does NOT call GetActiveJointSpec() or GetMaxAngle() (those were fabricated). The five vrlimi128
+    // lane writes (mask 1,0 = replace-w-lane / keep-xyz) resolve to:
+    //   +352 mLocalJointPositionPlusRotation        double-store -> {v1.xyz, 0}   (jointpos, rotation=0)
+    //   +400 mLocalInitialJointPositionPlusLimitStress -> {v1.xyz, OLD w preserved} (limit stress NEVER
+    //          written -- there is no 3rd VMX arg)
+    //   +384 mLocalInitialComPositionPlusMaxJointAngle -> {OLD xyz preserved, w = -(v3.w)} (the COM
+    //          arg's w lane, negated via a vxor sign mask -> the max-joint-angle scalar)
+    //   +368 mLocalGraphicsPositionPlusJointVelocity -> {OLD xyz preserved, w = 0} (joint velocity = 0)
     // Then mi8ActiveJointsTagPointIndex (+488) = arg, mbJoinedToVehicle (+484) = 1.
     // Tripwires: GetActiveJointIndex() != KU8_NO_ACTIVE_JOINT ; GetActiveJointSpec() != NULL.
     // =========================================================================================
     void PhysicalBodyPart::SetJoinedToVehicle(Vector3 lLocalJointPosition, Vector3 lLocalComPosition,
-                                              VecFloat lvfLimitStress, s32 liActiveJointsTagPointIndex)
+                                              s32 liActiveJointsTagPointIndex)
     {
         // mpIKPart->GetActiveJointIndex() != KU8_NO_ACTIVE_JOINT (the *(v7+14)==255 test).
         CGS_ASSERT(mpIKPart->GetActiveJointIndex() != IKBodyPart::KU8_NO_ACTIVE_JOINT,
                    "mu8ActiveJointIndex != KU8_NO_ACTIVE_JOINT");
-        // mpIKPart->GetActiveJointSpec() != NULL.
+        // mpIKPart->GetActiveJointSpec() != NULL (asserted; the spec is NOT otherwise dereferenced here).
         CGS_ASSERT(mpIKPart->GetActiveJointSpec() != 0, "mpIKPart->GetActiveJointSpec() != NULL");
 
-        // +352 mLocalJointPositionPlusRotation: xyz = localJointPos, w(rotation) = 0.
+        // +400 mLocalInitialJointPositionPlusLimitStress: xyz = localJointPos; w (limit stress) is the
+        // OLD lane PRESERVED -- the asm never writes it (no limit-stress arg exists).
+        mLocalInitialJointPositionPlusLimitStress.SetVector3(lLocalJointPosition);
+
+        // +384 mLocalInitialComPositionPlusMaxJointAngle: xyz is the OLD lane PRESERVED; w (max joint
+        // angle) = -(v3.w), i.e. the COM arg's w lane negated (the vxor sign mask).
+        mLocalInitialComPositionPlusMaxJointAngle.SetPlus(-lLocalComPosition.w);
+
+        // +368 mLocalGraphicsPositionPlusJointVelocity: xyz OLD preserved; w (joint velocity) = 0.
+        mLocalGraphicsPositionPlusJointVelocity.SetPlus(0.0f);
+
+        // +352 mLocalJointPositionPlusRotation: the double-store nets {v1.xyz, 0} -- xyz = localJointPos,
+        // w (rotation) = 0.
         mLocalJointPositionPlusRotation.SetVector3(lLocalJointPosition);
         mLocalJointPositionPlusRotation.SetPlus(0.0f);
-
-        // +400 mLocalInitialJointPositionPlusLimitStress: xyz = localJointPos, w = limit stress.
-        mLocalInitialJointPositionPlusLimitStress.SetVector3(lLocalJointPosition);
-        mLocalInitialJointPositionPlusLimitStress.SetPlus(lvfLimitStress.x);
-
-        // +384 mLocalInitialComPositionPlusMaxJointAngle: xyz = localComPos (max-angle w preserved by
-        // vrlimi128 -- the asm reloads +100 and splices xyz). Seed it from the IK joint's max angle.
-        mLocalInitialComPositionPlusMaxJointAngle.SetVector3(lLocalComPosition);
-        {
-            const DeformationJointSpec* lpJointSpec = mpIKPart->GetActiveJointSpec();
-            if ( lpJointSpec )
-            {
-                mLocalInitialComPositionPlusMaxJointAngle.SetPlus(lpJointSpec->GetMaxAngle());
-            }
-        }
-
-        // +368 mLocalGraphicsPositionPlusJointVelocity: w(joint velocity) = 0 (vrlimi128 of 0).
-        mLocalGraphicsPositionPlusJointVelocity.SetPlus(0.0f);
 
         // *(this+488) = arg ; *(this+484) = 1.
         mi8ActiveJointsTagPointIndex = static_cast<s8>(liActiveJointsTagPointIndex);
@@ -469,15 +464,33 @@ namespace Deformation
             return false;
         }
 
-        // Time-scaled caps. The asm's fsel/immediate cascade builds:
-        //   lfMaxLinVel = clamp( 60 - (dt*linGrad + 120), [0..120] )-derived  -> recovered immediates.
-        // Modelled as the recovered at-60 caps (the lazy static seeds flt_82FB9FB8=-3599.9998 /
-        // .B4=-5699.9995 are the curve gradients; the visible clamps land the values in [0..cap]).
+        // Time-step-dependent velocity-cap curve (asm @0x825BA5C0 fsel/immediate cascade). The two
+        // gradient immediates flt_82FB9FB8 = -3599.9998 and flt_82FB9FB4 = -5699.9995 are RECOVERED
+        // literals (the lazy one-shot static init caches them in dword_82FB9FBC, but the VALUES are the
+        // visible immediates -- NOT rodata). The cascade computes, with dt = lvfTimeStep:
+        //   _FP8 = 60  - (dt*(-3599.9998) + 120)     // linear slope test
+        //   _FP7 = 5   - (dt*(-5699.9995) + 100)     // angular slope test
+        //   _FP12 = (_FP8 >= 0) ? 120 : (dt*(-3599.9998)+120)   // fsel f12,f8,f10,f12
+        //   _FP11 = (_FP7 >= 0) ? 100 : (dt*(-5699.9995)+100)   // fsel f11,f7,f9,f11
+        //   lfMaxLinVel = (120 - _FP12 >= 0) ? _FP12 : 120      // fsel f31,f10,f12,f0  (clamp to [.,120])
+        //   lfMaxAngVel = (100 - _FP11 >= 0) ? _FP11 : 100      // fsel f29,f9,f11,f13  (clamp to [.,100])
+        // i.e. the per-step cap is the time-scaled value (dt*grad + cap) clamped at the at-60 ceiling
+        // (KF_MAX_LIN_VEL_AT_60 = 120 / KF_MAX_ANG_VEL_AT_60 = 100), and floored at the same ceiling when
+        // the slope test goes non-negative (small dt -> ceiling). fsel(a,b,c) == (a >= 0) ? b : c.
         const f32 lfTimeStep = lvfTimeStep.x;
-        (void)lfTimeStep; (void)KF_MAX_LIN_VEL_AT_60; (void)KF_MAX_ANG_VEL_AT_60;
+        auto lfFSel = [](f32 lfA, f32 lfB, f32 lfC) { return (lfA >= 0.0f) ? lfB : lfC; };
 
-        f32 lfMaxLinVel = KF_MAX_LIN_VEL_AT_INF;   // _FP31 (lands at the cap)
-        f32 lfMaxAngVel = KF_MAX_ANG_VEL_AT_INF;   // _FP29
+        const f32 lfLinSlope = lfTimeStep * -3599.9998f + KF_MAX_LIN_VEL_AT_60;   // dt*v22 + 120
+        const f32 lfAngSlope = lfTimeStep * -5699.9995f + KF_MAX_ANG_VEL_AT_60;   // dt*v23 + 100
+
+        const f32 lfLinTest  = 60.0f - lfLinSlope;                               // _FP8 = 60 - lfLinSlope
+        const f32 lfAngTest  =  5.0f - lfAngSlope;                               // _FP7 = 5  - lfAngSlope
+
+        const f32 lfLinSel   = lfFSel(lfLinTest, KF_MAX_LIN_VEL_AT_60, lfLinSlope);   // _FP12
+        const f32 lfAngSel   = lfFSel(lfAngTest, KF_MAX_ANG_VEL_AT_60, lfAngSlope);   // _FP11
+
+        f32 lfMaxLinVel = lfFSel(KF_MAX_LIN_VEL_AT_60 - lfLinSel, lfLinSel, KF_MAX_LIN_VEL_AT_60);  // _FP31
+        f32 lfMaxAngVel = lfFSel(KF_MAX_ANG_VEL_AT_60 - lfAngSel, lfAngSel, KF_MAX_ANG_VEL_AT_60);  // _FP29
 
         // Range tripwires (non-gating).
         CGS_ASSERT(lfMaxLinVel >= 0.0f && lfMaxLinVel <= KF_MAX_LIN_VEL_AT_INF,
@@ -690,10 +703,12 @@ namespace Deformation
     //
     // (Re)build the oriented bounding box from a transform. Calls CalculateBoundingBoxExtents to get
     // local min/max, sets mBoundingBoxHalfDimensions (+416) = (max-min) * 0.5 max'd against the
-    // min-bbox floor (&unk_82FB9DD0), and stores the box centre back through the passed transform (the
-    // vmaddfp cascade that re-expresses the box centre = (max+min)*0.5 in the transform's frame, minus
-    // the spec mesh offset *(mpDeformableObject->...+6368)). The box-centre store lands in the bbox
-    // orientation's position row (+384 region in the asm's r9 = a1+384 store).
+    // min-bbox floor (&unk_82FB9DD0), and stores the box centre into mLocalInitialComPositionPlusMax-
+    // JointAngle (+384, w lane preserved by vrlimi128 mask 1,0). The centre = (max+min)*0.5 is
+    // transformed through the part's OWN mBBoxOrientation rows (this+288/+304/+320, translation +336),
+    // NOT the passed lTransform arg (they coincide for the Prepare call but differ for UpdateJoint,
+    // which passes GetRigidBodyTransform()), then offset by the spec mesh offset
+    // *(mpDeformableObject->...+6368) (v8 = lvx[r8+1664] - lvx[r8+1632]).
     // =========================================================================================
     void PhysicalBodyPart::CalcBoundingBox(Matrix44Affine lTransform)
     {
@@ -714,28 +729,45 @@ namespace Deformation
         if ( lHalf.z < KV_MIN_BBOX_SIZE.z ) lHalf.z = KV_MIN_BBOX_SIZE.z;
         mBoundingBoxHalfDimensions = lHalf;   // +416
 
-        // centre = (max + min) * 0.5, re-expressed through lTransform and offset by the mesh offset
-        // (the *(mpDeformableObject ... +6368) - ...+6336 difference the asm subtracts). The dense
-        // vmaddfp cascade transforms the centre into the transform's frame; modelled by the affine
-        // transform of the local centre. The mesh-offset subtrahend is rodata/spec-derived and not
-        // recovered -- carried as zero so the centre lands at the transformed box centre.
+        // centre = (max + min) * 0.5, transformed through the part's OWN mBBoxOrientation rows (the asm
+        // reads this+288/+304/+320 and adds the translation row this+336 -- NOT the passed lTransform;
+        // they coincide for the Prepare call but UpdateJoint passes a different transform), then offset
+        // by the mesh offset (the *(mpDeformableObject ... +6368) rows at +1664/+1632 the asm subtracts).
+        // The dense vmaddfp cascade is that affine transform. The mesh-offset subtrahend is rodata/
+        // spec-derived and not recovered -- carried as zero so the centre lands at the transformed box
+        // centre. lTransform is NOT the centre's frame here (see header note); it remains the caller's
+        // pose for the parallel UpdateJoint store path and is intentionally unused in this store.
+        (void)lTransform;
         const Vector3 lLocalCentre = {
             (lvBoundingBoxMax.x + lvBoundingBoxMin.x) * 0.5f,
             (lvBoundingBoxMax.y + lvBoundingBoxMin.y) * 0.5f,
             (lvBoundingBoxMax.z + lvBoundingBoxMin.z) * 0.5f,
             0.0f
         };
-        const Vector3 lWorldCentre = {
-            lTransform.xAxis.x * lLocalCentre.x + lTransform.yAxis.x * lLocalCentre.y +
-                lTransform.zAxis.x * lLocalCentre.z + lTransform.wAxis.x,
-            lTransform.xAxis.y * lLocalCentre.x + lTransform.yAxis.y * lLocalCentre.y +
-                lTransform.zAxis.y * lLocalCentre.z + lTransform.wAxis.y,
-            lTransform.xAxis.z * lLocalCentre.x + lTransform.yAxis.z * lLocalCentre.y +
-                lTransform.zAxis.z * lLocalCentre.z + lTransform.wAxis.z,
+        // FLAG: mesh-offset subtrahend (*(mpDeformableObject ...+6368) rows +1664/+1632) rodata not
+        // recovered -- carried as zero.
+        const Vector3 lMeshOffset = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lLocalCentre_minus_offset = {
+            lLocalCentre.x - lMeshOffset.x,
+            lLocalCentre.y - lMeshOffset.y,
+            lLocalCentre.z - lMeshOffset.z,
             0.0f
         };
-        // Store the box centre into the bbox-orientation position row (preserving its w lane).
-        mBBoxOrientation.wAxis = lWorldCentre;
+        const Vector3 lTransformedCentre = {
+            mBBoxOrientation.xAxis.x * lLocalCentre_minus_offset.x +
+                mBBoxOrientation.yAxis.x * lLocalCentre_minus_offset.y +
+                mBBoxOrientation.zAxis.x * lLocalCentre_minus_offset.z + mBBoxOrientation.wAxis.x,
+            mBBoxOrientation.xAxis.y * lLocalCentre_minus_offset.x +
+                mBBoxOrientation.yAxis.y * lLocalCentre_minus_offset.y +
+                mBBoxOrientation.zAxis.y * lLocalCentre_minus_offset.z + mBBoxOrientation.wAxis.y,
+            mBBoxOrientation.xAxis.z * lLocalCentre_minus_offset.x +
+                mBBoxOrientation.yAxis.z * lLocalCentre_minus_offset.y +
+                mBBoxOrientation.zAxis.z * lLocalCentre_minus_offset.z + mBBoxOrientation.wAxis.z,
+            0.0f
+        };
+        // Store the box centre into mLocalInitialComPositionPlusMaxJointAngle (+384), xyz only --
+        // vrlimi128 v0, v9, 1, 0 preserves the existing w lane (the max-joint-angle scalar).
+        mLocalInitialComPositionPlusMaxJointAngle.SetVector3(lTransformedCentre);
     }
 
     // =========================================================================================
@@ -947,16 +979,18 @@ namespace Deformation
         const DeformationJointSpec* lpActiveJoint = mpIKPart->GetActiveJointSpec();
 
         // (2) early "never breaks": detach threshold (asm reads spec+52 == mfJointDetachThreshold)
-        // <= -0.9 -> return false.
-        if ( lpActiveJoint && lpActiveJoint->GetMaxStress() <= KF_JOINT_DETACH_DISABLED_THRESHOLD )
+        // <= -0.9 -> return false. The asm dereferences spec+52 UNCONDITIONALLY (no null guard), so the
+        // 'lpActiveJoint &&' guard is removed to match.
+        if ( lpActiveJoint->GetMaxStress() <= KF_JOINT_DETACH_DISABLED_THRESHOLD )
         {
             return false;   // LABEL_20: _restvmx_121(0)
         }
 
         // (3) early "no break" gates.
-        //   a. rotation proportion <= gate.
+        //   a. rotation proportion < gate (STRICT). The asm is vcmpgtfp128(gate, proportion) -> the
+        //      early-out fires when gate > proportion, i.e. proportion < gate.
         const VecFloat lJointRotationProportion = GetJointRotationProportion();
-        if ( lJointRotationProportion.x <= KF_ROTATION_PROPORTION_GATE )   // vcmpgtfp gate,proportion
+        if ( lJointRotationProportion.x < KF_ROTATION_PROPORTION_GATE )   // vcmpgtfp gate,proportion
         {
             return false;
         }
@@ -966,7 +1000,9 @@ namespace Deformation
         {
             return false;
         }
-        //   c. sensor-force detachment gate.
+        //   c. sensor-force detachment gate. FLAG: the bool arg (false) is a GUESS -- the X360 Hex-Rays
+        //   dropped the arg list for CheckSensorForcesForJointDetachment, so the argument value is not
+        //   recovered from the asm.
         if ( !mpIKPart->CheckSensorForcesForJointDetachment(false) )
         {
             return false;

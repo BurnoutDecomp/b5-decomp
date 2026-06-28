@@ -106,6 +106,14 @@ namespace BrnPhysics
         void Prepare();
         void ReadPropertiesFromRenderware(const rw::physics::RigidBody* lpRigidBody);
 
+        // ADDITIVE GROW (Deformation PhysicalBodyPart::Construct caller): DECLARE-ONLY. Set the body's
+        // mass (mfMass @ +208). The deformation part Construct @0x825B4178 stores 5.0 into the body's
+        // mass between ExternalPhysicsBody::Construct() and ::Prepare() (the lvlx/vspltw of a 5.0 stack
+        // temp into +208). The authoritative body is owned by ExternalPhysicsBody's own TU; only the
+        // declaration is needed for the per-TU `cl /c` gate. FLAG: signature from the Construct call
+        // site (a single f32 mass arg).
+        void SetMass(f32 lfMass);
+
     protected:
         Matrix33 mLocalInverseInertia;   // :241
         Matrix33 mWorldInverseInertia;   // :242

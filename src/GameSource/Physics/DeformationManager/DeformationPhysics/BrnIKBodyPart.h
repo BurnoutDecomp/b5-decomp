@@ -133,9 +133,14 @@ namespace Deformation
         s32                          GetNumberOfJoints() const;          // forwards to mpSpec
         const DeformationJointSpec*  GetJointSpec(s32 liIndex) const;    // forwards to mpSpec
 
-        // X360 0x825B4110 (the truncated "GetAct" symbol is GetActiveJointIndex). The active
-        // joint index, asserting mu8ActiveJointIndex != KU8_NO_ACTIVE_JOINT first.
+        // Trivial raw-index accessor: mu8ActiveJointIndex as s32. NOT the 0x825B4110 body
+        // (that is GetActiveJointSpec below). Used for the "active joint set?" tripwire.
         s32                          GetActiveJointIndex() const;
+
+        // X360 0x825B4110 (the truncated "GetAct" symbol). Asserts mu8ActiveJointIndex !=
+        // KU8_NO_ACTIVE_JOINT, then returns the active deformation-joint spec pointer
+        // &mpaJointSpecs[mu8ActiveJointIndex] (*(mpSpec+448) + idx*sizeof(DeformationJointSpec)).
+        // The Hex-Rays "int" return is the pointer-typed-as-int trap.
         const DeformationJointSpec*  GetActiveJointSpec() const;
 
         // X360 0x825B40A0. Set the active deformation joint (asserts 0 <= index < 256, then

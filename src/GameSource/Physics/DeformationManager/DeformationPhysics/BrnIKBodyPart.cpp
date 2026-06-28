@@ -9,7 +9,7 @@
 //   Construct                         @ 0x825B3EE8  -- wire pools + spec, seed sentinels
 //   IsToughenedPart                   @ 0x825B3E60  -- part-type "tough" classifier
 //   SetActiveJointIndex               @ 0x825B40A0  -- store active joint (range-asserted)
-//   GetActiveJointIndex (DWARF "GetAct") @ 0x825B4110 -- active joint spec ptr
+//   GetActiveJointSpec (DWARF "GetAct") @ 0x825B4110 -- active joint spec ptr (&mpaJointSpecs[idx])
 //   DetachablePart                    @ 0x825C13F8  -- any tag point breakable?
 //   UpdateSkinningOffsets             @ 0x825C11F0  -- push per-point offset into the skin
 //   UpdateSkinningOffsetsWithinBox    @ 0x825C12E8  -- as above, box-clamped
@@ -25,7 +25,7 @@
 //   this+0x18(word6) miPartPoolIndex (=-1 in Construct)
 //   this+0x38(word14) mu8ActiveJointIndex (=-1/0xFF in Construct, set by SetActiveJointIndex)
 //   spec+464 GetNumberOfDrivenPoints   spec+472 GetNumberOfTagPoints
-//   spec+476 GetPartType   spec+448 mpaJointSpecs (GetActiveJointIndex)
+//   spec+476 GetPartType   spec+448 mpaJointSpecs (GetActiveJointSpec)
 //   IKDrivenPoint stride 48 (0x30); TagPoint stride 32 (0x20).
 //
 // The asserts are NON-gating tripwires: in the asm execution continues past a failed
@@ -355,22 +355,30 @@ namespace Deformation
     }
 
     // ---------------------------------------------------------------------------------------------
-    // GetActiveJointIndex @ 0x825B4110 (DWARF truncated symbol "GetAct")
-    //   Assert an active joint is set, then return the active deformation-joint spec:
+    // GetActiveJointSpec @ 0x825B4110 (DWARF truncated symbol "GetAct")
+    //   Assert an active joint is set, then return the active deformation-joint spec POINTER:
     //     return *(spec+448) + (mu8ActiveJointIndex ROL 6)   == &mpaJointSpecs[mu8ActiveJointIndex]
     //   (__ROL4__(index,6) == index*64 == index*sizeof(DeformationJointSpec); spec+448 == mpaJointSpecs).
-    //   Reached by name via GetJointSpec(mu8ActiveJointIndex).
-    //
-    //   FLAG (signature reconciliation): the frozen header declares GetActiveJointIndex() returning
-    //   s32, but the X360 body (and the GetActiveJointSpec accessor it backs) returns the indexed
-    //   DeformationJointSpec*. The asm computes &mpaJointSpecs[mu8ActiveJointIndex]; modelled below
-    //   as the active-joint *index* (the header's declared s32 return), with the spec-pointer form
-    //   left to GetActiveJointSpec(). The asserted precondition + the index value are exact.
+    //   The Hex-Rays "int" return is the pointer-typed-as-int trap: 0x825B4110 returns a
+    //   const DeformationJointSpec*, NOT the raw index. Reached by name via the spec's GetJointSpec,
+    //   which is exactly *(mpSpec+448)[mu8ActiveJointIndex] (PhysicalBodyPart::TestJointForBreaking /
+    //   UpdateJoint call this through mpIKPart->GetActiveJointSpec()).
     // ---------------------------------------------------------------------------------------------
-    s32 IKBodyPart::GetActiveJointIndex() const
+    const DeformationJointSpec* IKBodyPart::GetActiveJointSpec() const
     {
         CGS_ASSERT(mu8ActiveJointIndex != KU8_NO_ACTIVE_JOINT,
                    "mu8ActiveJointIndex != KU8_NO_ACTIVE_JOINT");
+        // *(mpSpec+448) + mu8ActiveJointIndex*sizeof(DeformationJointSpec) == &mpaJointSpecs[idx].
+        return mpSpec->GetJointSpec(static_cast<s32>(mu8ActiveJointIndex));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // GetActiveJointIndex — trivial raw-index accessor (NOT the 0x825B4110 body; that is
+    //   GetActiveJointSpec above). Returns mu8ActiveJointIndex as s32. PhysicalBodyPart uses this
+    //   for the GetActiveJointIndex() != KU8_NO_ACTIVE_JOINT tripwire.
+    // ---------------------------------------------------------------------------------------------
+    s32 IKBodyPart::GetActiveJointIndex() const
+    {
         return static_cast<s32>(mu8ActiveJointIndex);
     }
 

@@ -60,7 +60,12 @@ namespace Deformation
         BurnoutBodyPartID() {}
 
         // 0x825C1A10 — pack {owningVehicle owner+entityIndex, partIndex, subA, subB}.
-        void Set(u32 luOwningVehicleID, u16 luPartIndex, u16 luSubA, u16 luSubB);
+        // The body @0x825C1A10 stores BOTH muSubA (this+4) and muSubB (this+6) -- the 4-arg
+        // signature is authoritative here. FLAG: some call sites (e.g. PhysicalBodyPartPool::
+        // CreatePart, whose asm is `Set(&id, a4, 0, a3)`) supply only THREE value args, leaving the
+        // 4th (luSubB) register indeterminate at the call. The default below lets those 3-arg call
+        // sites compile without fabricating a meaningful subB; it is NOT an asm-attested value.
+        void Set(u32 luOwningVehicleID, u16 luPartIndex, u16 luSubA, u16 luSubB = 0);
 
         u32 muEntityWord;   // this+0 (high dword): owner | entityIndex | partIndex
         u16 muSubA;         // this+4
