@@ -229,6 +229,12 @@ public:
     AptBoolean* c_boolean() const { return reinterpret_cast<AptBoolean*>(const_cast<AptValue*>(this)); }
     AptString*  c_string()  const;
 
+    // findChild @0x8183B0 -- resolve a child/property/special-name (_root/_parent/
+    // _global/_level<N>/this/...) of this value by name. FLAG: the 190-instruction
+    // special-name + display-tree resolver is its own follow-on TU; declared so
+    // getVariable can call it.
+    AptValue* findChild(const EAStringC* pName, AptValue* pTarget);
+
     // ---- GC mark callback ------------------------------------------------
     // The Apt garbage collector installs a reference-registration callback the GC
     // value types invoke from RegisterReferences (once per held AptValue ref:

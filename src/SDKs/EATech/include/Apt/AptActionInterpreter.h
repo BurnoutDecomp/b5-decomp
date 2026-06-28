@@ -74,11 +74,18 @@ public:
     const unsigned char* runStream(const unsigned char* pStream, AptCIH* pCIH,
                                    int nLength, AptCharacterInst* pCharInst);
 
-    // FLAG (body deferred): the variable lookup runStream uses at entry to bind the
-    // run's scope ("this"). getVariable @0x819814 walks the CIH scope chain; it is a
-    // large reconstruction of its own (the data/variable handlers also need it).
-    AptValue* getVariable(AptCIH* pScope, AptValue* pTarget, const EAStringC* pName,
-                          int a4, int a5, int a6);
+    // getVariable @0x82B03430 (X360) / 0x819814 (PS3) -- resolve a variable/property
+    // by name against a scope: dynamic "$" vars, the path context (getContext +
+    // findChild), the function scope chain, the object member lookup, and the global
+    // fallback, else `undefined`. runStream binds the run's "this" through it.
+    AptValue* getVariable(AptValue* pScope, AptValue* pTarget, const EAStringC* pName,
+                          int nAllowSelf, int nSearchScopeChain, int nDirect);
+
+    // getContext @0x8194CC -- parse a variable PATH (slash/dot syntax) into its
+    // (context object, leaf name) and return the context kind. FLAG: the 115-line
+    // path parser is its own follow-on TU; declared so getVariable can call it.
+    int getContext(AptValue* pScope, AptValue* pTarget, const EAStringC* pPath,
+                   AptValue** ppOutContext, EAStringC* pOutName);
 
     // ---- operand stack (PS3 EXTERNAL ELF) --------------------------------
     // Push: store + advance, AddRef the value (the stack owns a counted ref).
