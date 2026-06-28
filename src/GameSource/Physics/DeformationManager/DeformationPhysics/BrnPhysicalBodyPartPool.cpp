@@ -15,7 +15,9 @@
 //   Construct        (DWARF only; no per-function asm export) -- construct every slot, clear mask
 //   Create           @ 0x826269A0 -- allocate the first free slot, Prepare it, mark it used
 //   GetPart          @ 0x825A0858 -- bounds + used asserts, return &maParts[index]   (mutable)
-//   (GetPart const)               -- the same, modelled identically (single asm body)
+//   GetPart (const)  @ 0x825C1BE0 -- a DISTINCT body with its OWN assert messages
+//                                    ("liPartIndex < (int32_t)KU_MAX_DETACHED_PARTS" /
+//                                     "mUsedParts.IsBitSet( liPartIndex )"), NOT identical to mutable
 //   IsPartIndexUsed  @ 0x825A0758 -- bounds assert, return mUsedParts.IsBitSet(index)
 //   UpdateRWBodies   @ 0x825E7E98 -- walk used parts, UpdateRW each + add the extra-gravity force
 //   UpdateJoinedParts@ 0x8260D200 -- accumulate world+car contacts, integrate active joints
@@ -114,12 +116,15 @@ namespace Deformation
 
         // Pack the part id. The X360 calls BurnoutBodyPartID::Set(owningVehicleId, 0, indexValue):
         // owningVehicleID == the owning vehicle's global EntityId, partIndex field == 0, and the
-        // IK-part index threaded into the sub field. FLAG: the Hex-Rays Create arg soup (a3/a4) does
-        // not pin which CreatePart parameter is the owning-vehicle id vs. the sub index; modelled
-        // with lGlobalVehicleId as the owner and lu16IKPartIndex as the sub, per the header param
-        // semantics (GetGlobalEntityId == owning vehicle; the IK-part index is the part's spec slot).
+        // IK-part index threaded into the sub field. FLAG: the asm Set call (BurnoutBodyPartID::Set(
+        // &id, a4, 0, a3) @ 0x826269A0) passes only THREE value args -- there is NO 4th (sub) value
+        // arg in the asm, so the pool slot index is NOT threaded into Set here.
+        // FLAG: the Hex-Rays Create arg soup (a3/a4) does not pin which CreatePart parameter is the
+        // owning-vehicle id vs. the index value; modelled with lGlobalVehicleId as the owner and
+        // lu16IKPartIndex as the index value, per the header param semantics (GetGlobalEntityId ==
+        // owning vehicle; the IK-part index is the part's spec slot).
         BurnoutBodyPartID lPartId;
-        lPartId.Set(lGlobalVehicleId.muValue, 0, lu16IKPartIndex, static_cast<u16>(luSlot));
+        lPartId.Set(lGlobalVehicleId.muValue, 0, lu16IKPartIndex);
 
         // Bind the part to its vehicle + IK spec, building the joint/graphics/COM/bbox frames.
         lpPart->Prepare(lPartId, lGlobalVehicleId, lpDeformableObject, lpIKPart,
@@ -150,13 +155,19 @@ namespace Deformation
     }
 
     // ------------------------------------------------------------------------------------------
-    // GetPart (const) -- the X360 build emits one body for the slot-index lookup; the const
-    //   overload is modelled identically (same asserts, same &maParts[index] address-of).
+    // GetPart (const) @ 0x825C1BE0 -- the const overload is a DISTINCT body (NOT the mutable one).
+    //   Its bounds assert message is "liPartIndex < (int32_t)KU_MAX_DETACHED_PARTS"
+    //   (BrnPhysicalBodyPartPool.h:176) -- NOT the mutable overload's "Part index out of range" --
+    //   followed by the inlined CgsBitArray "invalid index : N < 50" bounds tripwire, then the
+    //   used-bit assert "mUsedParts.IsBitSet( liPartIndex )" (BrnPhysicalBodyPartPool.h:177). All
+    //   non-gating; returns &maParts[index].
     // ------------------------------------------------------------------------------------------
     const PhysicalBodyPart* PhysicalBodyPartPool::GetPart(s16 li16Index) const
     {
         const u32 luIndex = static_cast<u32>(li16Index);
-        CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "Part index out of range");
+        CGS_ASSERT(static_cast<s32>(li16Index) < static_cast<s32>(KU_MAX_DETACHED_PARTS),
+                   "liPartIndex < (int32_t)KU_MAX_DETACHED_PARTS");
+        CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "invalid index : ");
         CGS_ASSERT(mUsedParts.IsBitSet(luIndex), "mUsedParts.IsBitSet( liPartIndex )");
         return &maParts[luIndex];
     }
@@ -170,7 +181,7 @@ namespace Deformation
     bool PhysicalBodyPartPool::IsPartIndexUsed(s32 liIndex)
     {
         const u32 luIndex = static_cast<u32>(liIndex);
-        CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "luIndex < KU_MAX_DETACHED_PARTS");
+        CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "invalid index : ");
         return mUsedParts.IsBitSet(luIndex);
     }
 

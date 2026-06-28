@@ -247,9 +247,12 @@ namespace Deformation
         bool IsJoinedToVehicle() const;
 
         // BrnPhysicalBodyPart.h:250. Join the part to the vehicle as an active joint: seed the
-        // local joint position/COM, the limit stress, and the active-joints tag-point index.
+        // local joint position (v1) and the max-joint-angle from the COM arg's w lane (v3), then the
+        // active-joints tag-point index. NOTE: the asm takes only TWO vector args (v1, v3) + the char
+        // tag index; the former limit-stress VMX arg was a fabrication (the asm never writes the
+        // +400 limit-stress w lane) and has been dropped.
         void SetJoinedToVehicle(Vector3 lLocalJointPosition, Vector3 lLocalComPosition,
-                                VecFloat lvfLimitStress, s32 liActiveJointsTagPointIndex);
+                                s32 liActiveJointsTagPointIndex);
 
         // BrnPhysicalBodyPart.h:254. Break the joint and hand the part to the sim as a free body.
         void RemoveJointAndAddToSim(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput);
