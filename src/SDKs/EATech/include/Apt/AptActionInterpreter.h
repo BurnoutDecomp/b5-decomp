@@ -84,6 +84,17 @@ public:
     static void _FunctionAptActionAnd(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionOr (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Arithmetic ops -- pop the two operands (under OP top), push an AptInteger
+    // (when both are defined ints, for +/-/*) or an AptFloat result:
+    //   Add @0x808C90  Subtract @0x808A8C  Multiply @0x808888
+    //   Divide @0x8086C4  Modulo @0x8084F8   (Divide/Modulo are float-only and
+    //   yield `undefined` on a zero divisor).
+    static void _FunctionAptActionAdd     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionSubtract(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionMultiply(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionDivide  (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionModulo  (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- partial state (see header note) ---------------------------------
     int        mnStackTop;   // +0x00
     int        field_04;     // +0x04 -- unmapped; reserved so mpStack lands at +0x08
