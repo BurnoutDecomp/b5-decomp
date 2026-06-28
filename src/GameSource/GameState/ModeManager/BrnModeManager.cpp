@@ -302,6 +302,47 @@ void ModeManager::WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface* l
     mScoringSystem.WriteDataToOutput(lpOutput, lpOnlineOutput, lbOnline, lePlayerRaceCarIndex);
 }
 
+// X360 0x82327B98. Publish the live per-car race-distance snapshot into the output interface.
+// No-op when there is no current mode. The X360 writes the active-car count + total race distance
+// directly, then loops all eight active-race-car slots writing each car's live distance-to-finish
+// (the CarScoreData +0x18 field, via GetCarData()->GetScoreData()->GetDistanceToFinishLive());
+// an absent car (GetCarData returns null) contributes 0.0f. (The X360's per-iteration index asserts
+// -- liRaceCarIndex >= 0 / < KI_MAX_ACTIVE_RACE_CARS, the inlined SetRaceCarDistToFinish bounds
+// check -- are carried by the named setter; the GetCarData enum-range assert is GetCarData's own.)
+void ModeManager::FillInRaceDistanceInterface(GameStateModuleIO::RaceCarRaceDistanceInterface* lpRaceDistanceInterface)
+{
+    if (mpCurrentGameMode == nullptr)   // X360 if (*(this+0xD98))
+    {
+        return;
+    }
+
+    // X360 assert (BrnGameStateSharedIO.h:1421); BrnWorld::KI_MAX_ACTIVE_RACE_CARS == the active-car
+    // count == E_ACTIVE_RACE_CAR_INDEX_COUNT (8) in this codebase. Message kept verbatim.
+    CGS_ASSERT(miNumActiveRaceCars <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "liNumActiveRaceCars <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+
+    lpRaceDistanceInterface->SetNumActiveRaceCars(miNumActiveRaceCars);   // X360 *(out+0x24) = *(this+0x5C98)
+    lpRaceDistanceInterface->SetTotalRaceDistance(mfTotalRaceDistance);   // X360 *(out+0x20) = *(this+0x6A94)
+
+    for (s32 liRaceCarIndex = 0; liRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liRaceCarIndex)
+    {
+        const CarData* lpCarData =
+            mScoringSystem.GetCarData(static_cast<EActiveRaceCarIndex>(liRaceCarIndex));
+
+        f32 lfDistanceToFinish;
+        if (lpCarData != nullptr)
+        {
+            lfDistanceToFinish = lpCarData->GetScoreData()->GetDistanceToFinishLive();   // X360 CarData+0x18
+        }
+        else
+        {
+            lfDistanceToFinish = 0.0f;
+        }
+
+        lpRaceDistanceInterface->SetRaceCarDistToFinish(liRaceCarIndex, lfDistanceToFinish);
+    }
+}
+
 // X360 0x82343438. Pack the player's mode results and queue them.
 void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOutputQueue)
 {

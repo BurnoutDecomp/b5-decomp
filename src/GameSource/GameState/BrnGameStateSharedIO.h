@@ -365,10 +365,37 @@ namespace BrnGameState
         // Per-car race-distance interface (DWARF BrnGameStateSharedIO.h:706-708, 40 bytes): the
         // eight cars' distance-to-finish + total race distance + active-car count. RaceCarRaceDistanceInterface::Clear
         // (X360 0x82357470) zeroes them all.
+        //
+        // The inline get/set accessors mirror the Feb-2007 declaration shape
+        // (BrnGameStateSharedIO.h:706-728): SetRaceCarDistToFinish / SetTotalRaceDistance /
+        // SetNumActiveRaceCars and their getters. ModeManager::FillInRaceDistanceInterface
+        // (X360 0x82327B98) is the producer (it writes miNumActiveRaceCars @+0x24, mfTotalRaceDistance
+        // @+0x20 and the 8 per-car floats @+0x00 directly; the X360 inlines these setters into it).
+        // The per-car index assert ceiling is BrnWorld::KI_MAX_ACTIVE_RACE_CARS (== 8) -- the array width.
         class RaceCarRaceDistanceInterface
         {
         public:
+            static const s32 KI_MAX_ACTIVE_RACE_CARS = 8;   // mafRaceCarDistanceToFinish width
+
             void Clear();
+
+            f32 GetRaceCarDistToFinish(s32 liRaceCarIndex) const
+            {
+                CGS_ASSERT(liRaceCarIndex >= 0, "liRaceCarIndex >= 0");
+                CGS_ASSERT(liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+                return mafRaceCarDistanceToFinish[liRaceCarIndex];
+            }
+            f32 GetTotalRaceDistance() const { return mfTotalRaceDistance; }
+            s32 GetNumActiveRaceCars() const { return miNumActiveRaceCars; }
+
+            void SetRaceCarDistToFinish(s32 liRaceCarIndex, f32 lfDistanceToFinish)
+            {
+                CGS_ASSERT(liRaceCarIndex >= 0, "liRaceCarIndex >= 0");
+                CGS_ASSERT(liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+                mafRaceCarDistanceToFinish[liRaceCarIndex] = lfDistanceToFinish;
+            }
+            void SetTotalRaceDistance(f32 lfDistance)        { mfTotalRaceDistance = lfDistance; }
+            void SetNumActiveRaceCars(s32 liNumActiveRaceCars) { miNumActiveRaceCars = liNumActiveRaceCars; }
 
         private:
             f32 mafRaceCarDistanceToFinish[8]; // +0x00 (8 floats)

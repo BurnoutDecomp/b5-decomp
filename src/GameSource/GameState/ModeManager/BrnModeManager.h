@@ -200,6 +200,12 @@ public:
                            bool lbOnline,
                            EActiveRaceCarIndex lePlayerRaceCarIndex);
 
+    // X360 0x82327B98. Publish each active car's live distance-to-finish + the total race distance +
+    // the active-car count into the supplied RaceCarRaceDistanceInterface. No-op when there is no
+    // current mode. Called by GameStateModule::PreWorldUpdate. Reads the per-car distance from the
+    // embedded ScoringSystem (GetCarData(i)->GetScoreData()->GetDistanceToFinishLive()).
+    void FillInRaceDistanceInterface(GameStateModuleIO::RaceCarRaceDistanceInterface* lpRaceDistanceInterface);
+
     // X360 0x82343438. Pack the player's mode results (finish time, fastest lap, takedowns, distance,
     // eliminator, race position, eliminations + per-mode fields) into a results record and AddEvent it
     // onto the supplied per-frame output action queue. Called by FinishCurrentMode / UpdateCurrentMode.
@@ -276,6 +282,12 @@ private:
     // Per-car checkpoint trackers (X360 CarCheckpointData[35] at +0x7EE0). A set bit == checkpoint
     // not yet reached; indexed by EGlobalRaceCarIndex.
     GameStateModuleIO::CarCheckpointData maCarCheckpointData[E_GLOBAL_RACE_CAR_INDEX_COUNT];
+
+    // Live race-distance bookkeeping (the source FillInRaceDistanceInterface publishes). The X360
+    // reads the active-car count at +0x5C98 and the total race distance at +0x6A94 directly off the
+    // ModeManager; modelled as named members here (provisional layout -- see the FLAG above).
+    s32                              miNumActiveRaceCars;           // X360 +0x5C98 (active-car count)
+    f32                              mfTotalRaceDistance;           // X360 +0x6A94 (total race distance)
 
     // Network stunt-score cache (X360 +0x6CD0/+0x6CD4/+0x6CD8 written by SetNetworkStuntScore).
     s32                              miNetworkStuntActiveCarIndex;  // X360 +0x6CD0 (CarData active-race-car index)
