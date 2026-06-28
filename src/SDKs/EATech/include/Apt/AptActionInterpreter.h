@@ -279,6 +279,11 @@ public:
     static void _FunctionAptActionExtends     (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionImplementsOp(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // String-conversion opcodes:
+    //   SubString 0x15 : substring(str, start, len);  ToNumber 0x4A : coerce top to a number
+    static void _FunctionAptActionSubString(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionToNumber (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
     // parallel {count, capacity, array} stacks (the operand stack sized by

@@ -171,4 +171,8 @@ void AptActionInterpreter::InitDispatchTable()
     // -- class / prototype ops --
     sGlobalTable[0x69] = &_FunctionAptActionExtends;
     sGlobalTable[0x2C] = &_FunctionAptActionImplementsOp;
+
+    // -- string conversion --
+    sGlobalTable[0x15] = &_FunctionAptActionSubString;
+    sGlobalTable[0x4A] = &_FunctionAptActionToNumber;
 }
