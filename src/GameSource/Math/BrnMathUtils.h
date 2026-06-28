@@ -42,4 +42,12 @@ namespace BrnMath
 
     // Round lfValue to lfNumFigures significant figures, returned as an integer. @ 0x82361600
     s32 RoundWithNumSignificantFigures(f32 lfValue, f32 lfNumFigures);
+
+    // ADDITIVE GROW (declare-only; body in its own TU @ X360 0x82540AB8).
+    // Exact point-in-oriented-box test: transform lPoint into the box's local frame via
+    // lBoxTransform and test each component against +/- the box half-extents. StuntManager::
+    // OnPropHit's narrowphase calls this. FLAG: the X360 passes the box transform plus two SIMD
+    // args (the prop position and the region dimensions); the exact param order / by-value-vs-ref
+    // is inferred from the OnPropHit call site and the asm register setup.
+    bool IsPointInsideBox(const Matrix44Affine& lBoxTransform, Vector3 lPoint, Vector3 lHalfExtents);
 }

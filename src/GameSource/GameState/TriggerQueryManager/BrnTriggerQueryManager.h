@@ -100,6 +100,20 @@ public:
     // Declared-only here (body elsewhere in the full TU). Reads mbPlayerInTrafficLightRegion.
     bool IsPlayerInTrafficLightRegion() const;
 
+    // ---- ADDITIVE GROW (declare-only; bodies in the TriggerQueryManager TU) ----
+    // Read accessors the StuntManager TU calls on mpTriggerQueryManager to read the track TriggerData
+    // and walk the per-frame active-trigger set. X360-attested (the BrnStuntManager.cpp DWARF hints
+    // name TriggerQueryManager::GetTriggerData / GetActiveTriggerCount / GetActiveTrigger).
+    //   GetTriggerData()       -> mpTriggerData's main-memory pointer (X360 ResourcePtr<TriggerData>::
+    //                             GetMemoryResource on this+1568).
+    //   GetActiveTriggerCount()-> maActiveTriggers.GetLength() (X360 reads the live-count word
+    //                             this+1424, firing the CgsArray 'Array used before Construct/Clear
+    //                             was called' assert via the Array<u16,256> accessor).
+    //   GetActiveTrigger(i)    -> maActiveTriggers.GetItem(i) (X360 short_256::GetItem on this+912).
+    const BrnTrigger::TriggerData* GetTriggerData() const;
+    u32                            GetActiveTriggerCount() const;
+    u16                            GetActiveTrigger(u32 liIndex) const;
+
 private:
 
     // ---- leading preamble (offsets 0..911) not yet reconstructed; reserved to place the first

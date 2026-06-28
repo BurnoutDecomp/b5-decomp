@@ -3,6 +3,14 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h" // CgsID (typedef u64)
 #include "GameSource/GameState/BrnGameStateTypes.h" // BrnGameState::StuntElementType
+#include "SharedClasses/Trigger/BrnGenericRegion.h"  // BrnTrigger::GenericRegion::Type (OnDriveThru param)
+
+// Foreign types the additive DriveThruManager-facing accessors route by pointer (declare-only).
+// Tags match the committed homes (CarData/ProgressionData = struct, AchievementManagerBase = class)
+// to avoid a struct/class mismatch (C4099).
+namespace BrnProgression  { struct CarData; struct ProgressionData; }
+namespace BrnGameState    { class AchievementManagerBase; }
+namespace InputBuffer     { class GameActionQueue; }
 
 namespace BrnProgression
 {
@@ -84,5 +92,53 @@ public:
     // assert the result is non-null, then poke training flags through it. Body + the real embedded
     // Profile member land with the ProgressionManager TU. FLAG: declare-only additive grow.
     Profile* GetProfile();
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the BrnStuntManager TU.
+    // The StuntManager spine (UpdateJumps / CheckForTrophyUnlocks) routes the stunt-element
+    // done-check and the trophy/special-car unlocks through mpProgressionManager. Signatures +
+    // semantics are X360-asm-attested; bodies land with the ProgressionManager TU. Declare-only.
+    // ------------------------------------------------------------------------
+
+    // X360 UpdateJumps reads the completed-stunt-element Set<__int64,512> at this+30568 (0x7768)
+    // via Find -> a present key == that stunt element was already completed before.
+    bool IsStuntElementDone(CgsID lStuntElementKey) const;
+
+    // X360 0x82389740. CheckForTrophyUnlocks fires this when an element-complete count tops out.
+    // FLAG: the exact arg type/count is not recovered; modelled as a single trophy-id s32 (the
+    // X360 li-immediate the call site passes).
+    void OnTrophyUnlock(s32 liTrophyType);
+
+    // X360 0x82396058. Re-evaluates whether any special car should unlock after a stunt-element
+    // milestone; CheckForTrophyUnlocks calls it unconditionally after the trophy path.
+    void CheckForSpecialCarUnlocks();
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the BrnDriveThruManager TU.
+    // The drive-thru discovery / body-shop-repair / paint-shop flow routes discovery, repair,
+    // colour and achievement work through ProgressionManager. Signatures + semantics are
+    // X360-asm-attested; bodies land with the ProgressionManager TU. Declare-only.
+    // ------------------------------------------------------------------------
+
+    // X360 0x82399DD0. Record discovery of drive-thru lId of kind leType and post the resulting
+    // game actions onto lpQueue.
+    void OnDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType, InputBuffer::GameActionQueue* lpQueue);
+
+    // The player's currently-selected car record (NULL when none). DriveThruManager body/paint
+    // shops read its id and write its colour/palette.
+    CarData* GetCurrentCarData();
+
+    // The loaded ProgressionData resource (the event-junction table UnlockCarChallengeForCar walks).
+    const ProgressionData* GetProgressionData() const;
+
+    // X360 0x8237C0D8. Read car lCarId's current colour + palette indices into the two out-params.
+    void GetCarColourAndPalette(CgsID lCarId, s32* lpiColour, s32* lpiPalette);
+
+    // X360 0x82363630. Clear the deform/damage on the just-repaired car lCarId.
+    void RepairUnlockedVehicle(CgsID lCarId);
+
+    // The embedded achievement manager (X360 *(progmgr+133432)); DriveThruManager routes
+    // OnFindAllCarParks / OnBodyShop through it.
+    BrnGameState::AchievementManagerBase* GetAchievementManager();
 };
 }
