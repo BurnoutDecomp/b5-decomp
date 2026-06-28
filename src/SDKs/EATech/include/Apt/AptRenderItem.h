@@ -108,6 +108,18 @@ struct AptRenderItem
     AptRenderItem* Manager_GetFirstChild() const;   // @0x7DEED0
     AptRenderItem* Manager_GetNextSibling() const;  // @0x7DEEC8
     AptRenderItem* Manager_GetNextRevision() const; // @0x7DEED8
+
+    // ---- render-tree-manager double-buffering (the facade uses these) -----
+    // Factory: allocate the right render-item subtype for a character. @0x814094
+    // (defined in AptRenderTreeManager.cpp, where the subtype headers are visible).
+    static AptRenderItem* Manager_CreateItem(AptCharacter* pCharacter, int nTick);
+
+    // True when this item is already the writable revision for nTick (its
+    // creation tick matches, or it is flagged the current/highest revision). @0x7DEF54
+    bool IsWritableForThisTick(int nTick) const;
+    bool Manager_IsDeletionMark() const;            // @0x7DEEBC (mFlags bit 28)
+    void Manager_SetNextRevision(AptRenderItem* pNext);   // @0x7DEF00
+    void Manager_SetDeletionMark(bool bMark);             // @0x7E48DC (simplified)
 };
 
 // The render-traversal helpers the character subtypes call from Render -- push
