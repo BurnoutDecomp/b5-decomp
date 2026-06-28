@@ -238,6 +238,13 @@ private:
     void        AllocateBuffer(const uint32_t uSize);
     static void DeallocateBuffer(const void* const pBuffer, const uint32_t uSize);
 
+    // The open-addressing AptNativeHash stores EAStringC keys directly in its
+    // bucket array and needs the raw slot representation (unused = null m_pData,
+    // tombstone = s_EmptyInternalData, occupied) plus raw occupy/release -- the
+    // same internal access the console code uses. Friended rather than widening
+    // the public API.
+    friend struct AptNativeHash;
+
     DebugDataC* m_pData;
 
     static char              s_EmptyInternalData[8 + 1];
