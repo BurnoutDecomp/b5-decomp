@@ -139,4 +139,13 @@ void AptActionInterpreter::InitDispatchTable()
     // -- member access (object[key] get/set) --
     sGlobalTable[0x4E] = &_FunctionAptActionGetMember;
     sGlobalTable[0x4F] = &_FunctionAptActionSetMember;
+
+    // -- special value / register / control --
+    sGlobalTable[0x34] = &_FunctionAptActionGetTimer;
+    sGlobalTable[0x3E] = &_FunctionAptActionReturn;
+    sGlobalTable[0x56] = &_FunctionAptActionPushThis;
+    sGlobalTable[0x58] = &_FunctionAptActionPushGlobal;
+    sGlobalTable[0x70] = &_FunctionAptActionPushThisVariable;
+    sGlobalTable[0x71] = &_FunctionAptActionPushGlobalVariable;
+    sGlobalTable[0x87] = &_FunctionAptActionStoreRegister;
 }
