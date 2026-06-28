@@ -87,6 +87,12 @@ public:
     int getContext(AptValue* pScope, AptValue* pTarget, const EAStringC* pPath,
                    AptValue** ppOutContext, EAStringC* pOutName);
 
+    // setVariable @0x82B03048 -- getVariable's write side: resolve the path
+    // (getContext), then the object member set, the scope chain, or the context's
+    // native hash. Returns 1 if stored.
+    int setVariable(AptValue* pScope, AptValue* pTarget, const EAStringC* pName,
+                    AptValue* pValue, int nAllowScopeChain, int nSearchScopeChain, int nDirect);
+
     // ---- operand stack (PS3 EXTERNAL ELF) --------------------------------
     // Push: store + advance, AddRef the value (the stack owns a counted ref).
     void       stackPush(AptValue* pValue);          // @0x7F1790
