@@ -32,6 +32,15 @@ namespace CgsGraphics
                                                     u32 luNumVertices,
                                                     u8 luFlags);
 
+        // Append a "push stencil mask" command to the open batch: the mask region is a
+        // two-vertex (min-corner, max-corner) screen-space rectangle, drawn with lpTexture
+        // (X360 Im2dRenderBuffer::PushMask(renderengine::Texture*, GuiGeometryMesh::Im2dVertex*)
+        // @0x8246F638, the <Basic2dColouredTexturedVertex> instance, called by
+        // BrnFlapt::FlaptRenderer::RenderMask). DWARF CgsIm2dRenderBuffer.h:193. On the PC fold
+        // (Im2dRenderBuffer == Im2d) it is reached by name; GuiGeometryMesh::Im2dVertex is the
+        // 20-byte screen-space coloured+textured vertex (== V here).
+        void PushMask(renderengine::Texture* lpTexture, V* lpaMaskVertices);
+
         Im2dTransform mCurrentTransform;
     };
 

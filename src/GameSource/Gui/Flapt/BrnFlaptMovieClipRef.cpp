@@ -4,6 +4,9 @@
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"       // BrnFlapt::TextFieldRef
 #include "GameShared/GameClasses/Containers/CgsHash.h"        // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"  // CgsGraphics::Im2dTransform
+
+#include <cmath>   // std::sqrt, std::cos, std::sin (de-SIMD'd rsqrt/cos/sin)
 
 // ============================================================================
 // BrnFlapt::MovieClipRef member functions, reconstructed from
@@ -21,11 +24,22 @@
 // the instance method and returned. The X360-baked source file/line cites are
 // discarded per project convention; CGS_ASSERT supplies __FILE__/__LINE__.
 //
-// NOTE: the transform-mutating accessors (SetPosition / SetPositionY / SetColour
-// / SetColourScale / SetSizeScale / SetRotation / GetPosition) are NOT in this
-// file -- they are blocked on the unreconstructed CgsGraphics::Im2dTransform and
-// the rw Vector2/Vector4/VecFloat vector-math types (see the header note and the
-// TU block reason).
+// The transform-mutating accessors (SetPosition / SetPositionY / SetColour /
+// SetColourScale / SetSizeScale / SetRotation / GetPosition) read/write the
+// referenced CgsGraphics::Im2dTransform (the Ref's mpTransform slot, +0x04). The
+// X360 emitted those row rewrites as VMX (vperm with the
+// KV_IM2DTRANSFORMPERMUTECONST_* permute tables, vrlimi field-inserts, a
+// vrsqrtefp+Newton-Raphson normalise, and XMVectorCos/XMVectorSin). They are
+// de-optimised here into ordinary named-component math on the transform's four
+// Vector4 rows.
+//
+// Lane mapping (ground truth from the X360 SetRotation store, which lays down
+// {cos, sin, -sin, cos} into mRightUp):
+//   mOriginXYZ = { posX, posY, z, w }           -- 2D position in lanes x,y
+//   mRightUp   = { Right.x, Right.y, Up.x, Up.y } -- the 2x2 basis, Right=x,y / Up=z,w
+//   mColourShift / mColourScale = RGBA in x,y,z,w (additive shift / mult. scale)
+// The X360's permute constants (LHSRIGHT/LHSUP/LHSOUTRIGHTUP) just gather/scatter
+// those named lanes; with semantic-parity-by-named-members the constants drop out.
 // ============================================================================
 
 namespace BrnFlapt
@@ -163,6 +177,157 @@ void MovieClipRef::SetFrameTriggerCallback(void* lpCallback, void* lpUserData) c
 const TriggerParameters* MovieClipRef::GetTriggerParameters()
 {
     return mpMovieClipInst->GetTriggerParameters();
+}
+
+// ===========================================================================
+// Transform accessors -- read/write the referenced Im2dTransform's rows by name.
+// mpTransform is stored opaquely (void*) in the header; cast it to the real type
+// here. The non-null asserts on mpMovieClipInst and mpTransform mirror the X360
+// (a root movieclip has a null transform; mutating it is the asserted error).
+// ===========================================================================
+
+// ---- GetPosition @ 0x8241E340 --------------------------------------------
+// Return the clip's origin position (mOriginXYZ.x/.y). The X360 sret-returns a
+// Vector2; the permute (LHSRIGHT) on mOriginXYZ just gathers the x,y lanes.
+Vector2 MovieClipRef::GetPosition() const
+{
+    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
+    CGS_ASSERT(mpTransform != 0, "NULL transform ptr in MovieClipRef; probably trying to access transform on a root movieclip");
+
+    const CgsGraphics::Im2dTransform* lpTransform =
+        static_cast<const CgsGraphics::Im2dTransform*>(mpTransform);
+
+    Vector2 lPosition;
+    lPosition.x = lpTransform->mOriginXYZ.x;
+    lPosition.y = lpTransform->mOriginXYZ.y;
+    lPosition.z = 0.0f;
+    lPosition.w = 0.0f;
+    return lPosition;
+}
+
+// ---- SetPosition @ 0x8241DFC0 --------------------------------------------
+// Overwrite the whole origin row with the new position; the z and w lanes are
+// cleared (the X360 builds the row from the arg lanes merged with a zero vector).
+void MovieClipRef::SetPosition(Vector2 lPosition)
+{
+    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
+    CGS_ASSERT(mpTransform != 0, "NULL transform ptr in MovieClipRef; probably trying to access transform on a root movieclip");
+
+    CgsGraphics::Im2dTransform* lpTransform =
+        static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
+
+    lpTransform->mOriginXYZ.x = lPosition.x;
+    lpTransform->mOriginXYZ.y = lPosition.y;
+    lpTransform->mOriginXYZ.z = 0.0f;
+    lpTransform->mOriginXYZ.w = 0.0f;
+}
+
+// ---- SetPositionY @ 0x8241E228 -------------------------------------------
+// Set only the origin's Y, keeping X (the X360 re-splats the existing origin.x
+// and merges it with the broadcast arg). The z/w lanes are cleared as above.
+void MovieClipRef::SetPositionY(VecFloat lvfPositionY)
+{
+    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
+    CGS_ASSERT(mpTransform != 0, "NULL transform ptr in MovieClipRef; probably trying to access transform on a root movieclip");
+
+    CgsGraphics::Im2dTransform* lpTransform =
+        static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
+
+    // VecFloat is a broadcast scalar; its x lane carries the value.
+    lpTransform->mOriginXYZ.y = lvfPositionY.x;
+    lpTransform->mOriginXYZ.z = 0.0f;
+    lpTransform->mOriginXYZ.w = 0.0f;
+    // mOriginXYZ.x is preserved (the X360 reloads and re-stores it).
+}
+
+// ---- SetRotation @ 0x827DD618 --------------------------------------------
+// Build the 2x2 right/up basis from the rotation angle. The X360 calls
+// XMVectorCos/XMVectorSin on the broadcast angle and lays down {cos, sin, -sin,
+// cos} into mRightUp; in named terms Right = (cos, sin), Up = (-sin, cos).
+void MovieClipRef::SetRotation(f32 lfAngle)
+{
+    CGS_ASSERT(mpMovieClipInst != 0, "NULL != mpMovieClipInst");
+    CGS_ASSERT(mpTransform != 0, "NULL transform ptr in MovieClipRef; probably trying to access transform on a root movieclip");
+
+    CgsGraphics::Im2dTransform* lpTransform =
+        static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
+
+    const f32 lfCos = std::cos(lfAngle);
+    const f32 lfSin = std::sin(lfAngle);
+
+    lpTransform->mRightUp.x = lfCos;    // Right.x
+    lpTransform->mRightUp.y = lfSin;    // Right.y
+    lpTransform->mRightUp.z = -lfSin;   // Up.x
+    lpTransform->mRightUp.w = lfCos;    // Up.y
+}
+
+// ---- SetSizeScale @ 0x82428518 -------------------------------------------
+// Normalise the existing right/up basis directions to unit length, then scale
+// Right by lScale.x and Up by lScale.y, writing the result back to mRightUp. The
+// X360 uses vrsqrtefp + a Newton-Raphson step for the 1/sqrt; the semantic intent
+// is the unit-length normalise, so std::sqrt is used here.
+void MovieClipRef::SetSizeScale(Vector2 lScale)
+{
+    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
+    CGS_ASSERT(mpTransform != 0, "NULL transform ptr in MovieClipRef; probably trying to access transform on a root movieclip");
+
+    CgsGraphics::Im2dTransform* lpTransform =
+        static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
+
+    // Right = (mRightUp.x, mRightUp.y), Up = (mRightUp.z, mRightUp.w).
+    const f32 lfRightX = lpTransform->mRightUp.x;
+    const f32 lfRightY = lpTransform->mRightUp.y;
+    const f32 lfUpX    = lpTransform->mRightUp.z;
+    const f32 lfUpY    = lpTransform->mRightUp.w;
+
+    // Reciprocal lengths (de-SIMD'd vrsqrtefp + Newton-Raphson refinement).
+    const f32 lfInvRightLen = 1.0f / std::sqrt(lfRightX * lfRightX + lfRightY * lfRightY);
+    const f32 lfInvUpLen    = 1.0f / std::sqrt(lfUpX * lfUpX + lfUpY * lfUpY);
+
+    // Unit basis directions, then scaled by the requested size.
+    lpTransform->mRightUp.x = lfRightX * lfInvRightLen * lScale.x;   // Right.x
+    lpTransform->mRightUp.y = lfRightY * lfInvRightLen * lScale.x;   // Right.y
+    lpTransform->mRightUp.z = lfUpX * lfInvUpLen * lScale.y;         // Up.x
+    lpTransform->mRightUp.w = lfUpY * lfInvUpLen * lScale.y;         // Up.y
+}
+
+// ---- SetColour @ 0x8241E0D0 ----------------------------------------------
+// Set a flat colour: write the colour's RGB into the additive colour shift and
+// zero the colour scale's RGB; both alpha (w) lanes are preserved (the X360
+// vrlimi-inserts lanes 0..2 only, leaving lane 3 untouched).
+void MovieClipRef::SetColour(Vector4 lColour)
+{
+    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
+    CGS_ASSERT(mpTransform != 0, "mpTransform");
+
+    CgsGraphics::Im2dTransform* lpTransform =
+        static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
+
+    // Zero the multiplicative scale's RGB (alpha preserved).
+    lpTransform->mColourScale.x = 0.0f;
+    lpTransform->mColourScale.y = 0.0f;
+    lpTransform->mColourScale.z = 0.0f;
+
+    // Write the flat colour into the additive shift's RGB (alpha preserved).
+    lpTransform->mColourShift.x = lColour.x;
+    lpTransform->mColourShift.y = lColour.y;
+    lpTransform->mColourShift.z = lColour.z;
+}
+
+// ---- SetColourScale @ 0x8240E588 -----------------------------------------
+// Set the multiplicative colour scale to the given value (all four RGBA lanes).
+void MovieClipRef::SetColourScale(Vector4 lColourScale)
+{
+    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
+    CGS_ASSERT(mpTransform != 0, "NULL transform ptr in MovieClipRef; probably trying to access transform on a root movieclip");
+
+    CgsGraphics::Im2dTransform* lpTransform =
+        static_cast<CgsGraphics::Im2dTransform*>(mpTransform);
+
+    lpTransform->mColourScale.x = lColourScale.x;
+    lpTransform->mColourScale.y = lColourScale.y;
+    lpTransform->mColourScale.z = lColourScale.z;
+    lpTransform->mColourScale.w = lColourScale.w;
 }
 
 }
