@@ -310,6 +310,32 @@ void AptNativeHash::Unset__Proto__()   // @0x7E408C
     if (mp__Proto__) { mp__Proto__->Release(); mp__Proto__ = nullptr; }
 }
 
+// RegisterReferences @0x7E7B18 -- the GC mark walk: hand every held AptValue
+// reference (the proto fast-slots + each occupied bucket's value) to the
+// collector's registration callback, attributed to pOwner.
+void AptNativeHash::RegisterReferences(const AptValue* pOwner)
+{
+    // FLAG: only meaningful once the Apt GC is up (it installs the callback);
+    // guarded so the walk is inert during bring-up / before AptInit.
+    if (!AptValue::sReferenceRegistrationCb)
+        return;
+
+    if (mp__Proto__)
+        AptValue::sReferenceRegistrationCb(pOwner, &mp__Proto__, "__proto__", 0);
+    if (mpPrototype)
+        AptValue::sReferenceRegistrationCb(pOwner, &mpPrototype, "prototype", 0);
+
+    if (mpTable)
+    {
+        for (int i = 0; i < mnCapacity; ++i)
+        {
+            AptHashItem* e = &mpTable[i];
+            if (e->mpValue)
+                AptValue::sReferenceRegistrationCb(pOwner, &e->mpValue, e->mKey.c_str(), 0);
+        }
+    }
+}
+
 // DestroyGCPointers @0x7F7D88 -- release the slots + every live bucket's
 // value/key, then free the table.
 void AptNativeHash::DestroyGCPointers()

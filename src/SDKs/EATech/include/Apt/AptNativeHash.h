@@ -74,10 +74,18 @@ struct AptNativeHash
     // @0x7DF28C -- true when no table has been allocated yet.
     bool IsEmpty() const;
 
+    // @0x7E7B18 -- the GC mark walk: register every held AptValue reference (the
+    // proto slots + each bucket value) with the collector, owned by pOwner.
+    void RegisterReferences(const AptValue* pOwner);
+
     AptValue* Get__Proto__() const;                       // @0x7DF27C
     AptValue* GetPrototype() const;                       // @0x7DF284
     void      Set__Proto__(AptValue* pValue);             // @0x7DF8AC
     void      SetPrototype(AptValue* pValue);             // @0x7DF94C
+
+    // Release every held value/key + free the table (the dtor + the
+    // AptValueWithHash teardown call this). @0x7F7D88
+    void      DestroyGCPointers();
 
 private:
     void         FirstAllocation();                       // @0x7EFB34
@@ -87,7 +95,6 @@ private:
     void         SetAt(int32_t nIndex, AptValue* pValue);        // @0x7E40EC
     void         OverwriteAt(int32_t nIndex, AptValue* pValue);  // @0x7E4238
     AptValue*    GetAt(int32_t nIndex) const;             // @0x7DF2D0
-    void         DestroyGCPointers();                     // @0x7F7D88
     void         UnsetPrototype();                        // @0x7E402C
     void         Unset__Proto__();                        // @0x7E408C
 };
