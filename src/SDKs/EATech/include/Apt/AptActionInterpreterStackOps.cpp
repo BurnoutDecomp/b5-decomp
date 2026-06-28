@@ -30,6 +30,21 @@
 extern AptValue* gpUndefinedValue;
 
 // ---------------------------------------------------------------------------
+// _FunctionAptActionPop @0x7F33D0 -- discard the top value, but only while the
+// stack is above the run's reserved base (mnStackBase). Releases the popped value.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPop(AptActionInterpreter* pInterp, LocalContextT*)
+{
+    if (pInterp->mnStackBase < pInterp->mnStackTop && pInterp->mnStackTop > 0)
+    {
+        pInterp->mpStack[pInterp->mnStackTop - 1]->Release();
+        --pInterp->mnStackTop;
+    }
+    // FLAG: console flushes gpValuesToRelease here when the stack had exactly one
+    // element (the deferred-release GC vector -- reconstructed with the GC layer).
+}
+
+// ---------------------------------------------------------------------------
 // _FunctionAptActionPushDuplicate @0x7F3CC0 -- re-push the top value (+AddRef).
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPushDuplicate(AptActionInterpreter* pInterp, LocalContextT*)

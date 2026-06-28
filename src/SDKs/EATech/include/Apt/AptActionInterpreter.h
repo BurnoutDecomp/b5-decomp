@@ -5,28 +5,20 @@
 //
 // This is the linchpin the rest of the Apt engine converges on (frame actions,
 // AptCharacterAnimation::Fixup's resolveStream, value comparison/arithmetic, the
-// native methods). It is reconstructed leaf-first; THIS header covers only the
-// VM's operand stack -- the AptValue* evaluation stack every bytecode handler
-// pushes/pops -- plus the interpreter fields the stack touches. The opcode
-// dispatch (runStream), the per-action handlers (_FunctionAptAction*), the
-// execution context (LocalContextT), the register/local machinery and
-// PrepareForExecution/CleanupAfterExecution are the follow-on.
+// native methods). Reconstructed leaf-first. This header now covers: the full
+// interpreter LAYOUT (the five {count,capacity,array} stacks + per-run state, from
+// initialize() @0x7F29D4), the operand-stack primitives, the per-execution context
+// (LocalContextT, from runStream @0x81BD50), and the bytecode opcode handlers built
+// so far (expression / branch / stack-push). Still the follow-on: runStream's
+// dispatch BODY (blocked on the static sGlobalTable opcode->handler table, which is
+// binary DATA not in the code-only IDA exports), getVariable/setVariable, the call/
+// member/variable handlers, and the .apt-format resolve transcode (_parseStream).
 //
-// LAYOUT recovered from the PS3 EXTERNAL ELF stack primitives (they read the
-// interpreter as a flat record, no vtable):
-//     +0x00  mnStackTop   int            -- count / next-free index into mpStack
-//     +0x04  (unmapped)   int            -- a field exists here (mpStack is at +8,
-//                                           not +4); its meaning is not yet
-//                                           recovered. Reserved, named field_04.
-//     +0x08  mpStack      AptValue**     -- the operand-stack array base
-//     ...                                -- the large remainder (the register
-//            +0x44  mpRegisters AptValue**  array at +0x44 is referenced by
-//                                           stackPushIndirect; the rest of the VM
-//                                           state) is mapped as later leaves land.
-//
-// The console indexes mpStack with byte math (4 * top + base); here it is typed
-// element indexing (mpStack[top]), which is the same on x64 where AptValue* is
-// 8 bytes -- the operand stack stays pointer-width-correct without a transcode.
+// The console indexes the stacks with byte math (4 * top + base); here it is typed
+// element indexing (mpStack[top]), which is the same on x64 where the pointers are
+// 8 bytes. Because the interpreter is a runtime object (not serialised), the struct
+// is reconstructed x64-native (8-byte pointers) -- the console's 32-bit field
+// offsets (noted [c:0xNN]) therefore differ from this struct's; access is by name.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -158,8 +150,9 @@ public:
     //   Push0 @0x806528         : push AptInteger(0)
     //   PushTrue/PushFalse @0x7F3D38/0x7F3DA8 : push the AptBoolean singletons
     //   PushUndefined/PushNULL @0x7F3E88/0x7F3E18 : push gpUndefinedValue
-    // (Pop @0x7F33D0 deferred -- it respects the run's stack base @+0x64; Push1 the
-    //  same as Push0 with 1, deferred pending its confirmed address.)
+    //   Pop @0x7F33D0           : discard the top (only above the run's stack base)
+    // (Push1 the same as Push0 with 1, deferred pending its confirmed address.)
+    static void _FunctionAptActionPop          (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushDuplicate(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionStackSwap    (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPush0        (AptActionInterpreter* pInterp, LocalContextT* pContext);
@@ -168,16 +161,45 @@ public:
     static void _FunctionAptActionPushUndefined(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushNULL     (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
-    // ---- partial state (see header note) ---------------------------------
-    // Mapped so far: the operand stack. runStream/stackPushIndirect also revealed
-    // (NOT yet added -- they would need a large unmapped gap fabricated, so they
-    // are recorded here and added when runStream/the data handlers land):
-    //   +0x24 mpCIHStack (a second stack: top@+0x24, array@+0x2C -- the target/CIH
-    //         stack runStream pushes the running CIH onto)
-    //   +0x44 mpRegisters (AptValue** -- the local register array, stackPushIndirect)
-    //   +0x60 mnAbortFlag (checked after each handler in runStream)
-    //   +0x64 mnStackBase  (the stack depth this run unwinds to)
-    int        mnStackTop;   // +0x00
-    int        field_04;     // +0x04 -- unmapped; reserved so mpStack lands at +0x08
-    AptValue** mpStack;      // +0x08
+    // ---- state ------------------------------------------------------------
+    // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
+    // parallel {count, capacity, array} stacks (the operand stack sized by
+    // AptInitParmsT::iStackSize, the other four by iCallStackDepth) plus per-run
+    // bookkeeping. Console offsets (32-bit) are noted in comments; this struct is
+    // reconstructed x64-native (8-byte pointers) so the offsets differ -- access is
+    // by member name, which is what the handlers/runStream do.
+    //
+    // The operand stack (#1) and the CIH/target stack (#4, which runStream pushes
+    // the running CIH onto) are confirmed; the other three call-depth-sized stacks
+    // (#2/#3/#5 -- the AVM1 call/return, with-scope and try stacks, in some order)
+    // are named generically pending confirmation.
+
+    int        mnStackTop;        // [c:0x00] operand-stack count / next-free index
+    int        mnStackCapacity;   // [c:0x04] iStackSize
+    AptValue** mpStack;           // [c:0x08] operand-stack array
+
+    int        mnCallStackB_Count;    // [c:0x0C] call-depth stack #2 (role TBD)
+    int        mnCallStackB_Capacity; // [c:0x10] iCallStackDepth
+    void**     mpCallStackB;          // [c:0x14]
+
+    int        mnCallStackC_Count;    // [c:0x18] call-depth stack #3 (role TBD)
+    int        mnCallStackC_Capacity; // [c:0x1C]
+    void**     mpCallStackC;          // [c:0x20]
+
+    int        mnCIHStackTop;         // [c:0x24] CIH/target stack count
+    int        mnCIHStackCapacity;    // [c:0x28]
+    AptCIH**   mpCIHStack;            // [c:0x2C] CIH/target stack array
+
+    int        mnCallStackE_Count;    // [c:0x30] call-depth stack #5 (role TBD)
+    int        mnCallStackE_Capacity; // [c:0x34]
+    void**     mpCallStackE;          // [c:0x38]
+
+    uint32_t   field_3C;          // [c:0x3C] unmapped
+    uint32_t   field_40;          // [c:0x40] unmapped
+    AptValue** mpRegisters;       // [c:0x44] the per-call register window (stackPushIndirect)
+    uint32_t   field_48[6];       // [c:0x48..0x5C] unmapped
+    int        mnAbortValue;      // [c:0x60] thrown/abort flag -- runStream checks it after each op
+    int        mnStackBase;       // [c:0x64] operand-stack base this run unwinds to (Pop won't go below it)
+    uint8_t    mbSkipTraceBytecodes; // [c:0x68]
+    uint8_t    field_69;          // [c:0x69]
 };
