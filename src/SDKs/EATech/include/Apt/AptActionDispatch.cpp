@@ -135,4 +135,8 @@ void AptActionInterpreter::InitDispatchTable()
     // -- variable access (resolve a name against the run scope/target) --
     sGlobalTable[0x1C] = &_FunctionAptActionGetVariable;
     sGlobalTable[0x1D] = &_FunctionAptActionSetVariable;
+
+    // -- member access (object[key] get/set) --
+    sGlobalTable[0x4E] = &_FunctionAptActionGetMember;
+    sGlobalTable[0x4F] = &_FunctionAptActionSetMember;
 }
