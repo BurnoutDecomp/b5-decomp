@@ -35,6 +35,7 @@
 
 #include <cstring>   // strlen/strcmp/memcpy/memmove/memset/memcmp
 #include <cstdlib>   // malloc/free (the AptInit-not-yet-wired bring-up fallback)
+#include <string.h>  // _stricmp (MSVC strcasecmp, for the case-insensitive compares)
 
 // ---------------------------------------------------------------------------
 // Statics.
@@ -362,6 +363,45 @@ int32_t EAStringC::Compare(const EAStringC& strText) const
     if (m_pData == strText.m_pData)
         return 0;
     return strcmp(GetInternalBuffer(), strText.GetInternalBuffer());
+}
+
+// Case-insensitive compares (console strcasecmp -> MSVC _stricmp).  PS3 External
+// 0x7E6C18 / 0x7EEA88 / 0x7E6CD4 / 0x7E6D04 / 0x7E7F88. The NoCase hash form is
+// the AptNativeHash probe: same buffer -> equal; different cached (case-folded)
+// hash -> not equal; otherwise confirm with _stricmp.
+bool EAStringC::EqualNoCase(const char* const pStrText) const
+{
+    return _stricmp(GetInternalBuffer(), pStrText) == 0;
+}
+
+bool EAStringC::EqualNoCase(const EAStringC& strText) const
+{
+    if (m_pData->m_uSize != strText.m_pData->m_uSize)
+        return false;
+    if (m_pData == strText.m_pData)
+        return true;
+    return _stricmp(GetInternalBuffer(), strText.GetInternalBuffer()) == 0;
+}
+
+int32_t EAStringC::CompareNoCase(const char* const pStrText) const
+{
+    return _stricmp(GetInternalBuffer(), pStrText);
+}
+
+int32_t EAStringC::CompareNoCase(const EAStringC& strText) const
+{
+    if (m_pData == strText.m_pData)
+        return 0;
+    return _stricmp(GetInternalBuffer(), strText.GetInternalBuffer());
+}
+
+bool EAStringC::EqualNoCaseHash(const EAStringC& strText) const
+{
+    if (m_pData == strText.m_pData)
+        return true;
+    if (m_pData->m_uHash != strText.m_pData->m_uHash)
+        return false;
+    return _stricmp(GetInternalBuffer(), strText.GetInternalBuffer()) == 0;
 }
 
 // ---------------------------------------------------------------------------
