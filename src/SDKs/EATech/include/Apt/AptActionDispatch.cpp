@@ -153,4 +153,7 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x26] = &_FunctionAptActionTrace;
     sGlobalTable[0x2A] = &_FunctionAptActionThrow;
     sGlobalTable[0x4B] = &_FunctionAptActionToString;
+
+    // -- delete --
+    sGlobalTable[0x3B] = &_FunctionAptActionDelete2;
 }

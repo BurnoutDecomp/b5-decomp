@@ -254,6 +254,9 @@ public:
     static void _FunctionAptActionThrow   (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionToString(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Delete2 0x3B : `delete name` -- clear the variable (setVariable null), push true
+    static void _FunctionAptActionDelete2 (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
     // parallel {count, capacity, array} stacks (the operand stack sized by
