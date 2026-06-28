@@ -12,6 +12,13 @@ template <typename Type>
 class Vector2Template
 {
 public:
+    // Additive grow (RouteMapModule embed): a trivial default ctor so the type can be
+    // a value member of a default-constructible aggregate (BrnAI::AStarNode embeds a
+    // Vector2Template<float>, and BrnAI::RouteMapModule embeds an AStar by value). The
+    // X360 builds these records without running any per-lane init (the nodes are
+    // constructed lazily by AStarNodePool::NewNode), so leaving the lanes uninitialised
+    // is faithful. Layout is unchanged (mX@+0, mY@+4; no vtable).
+    Vector2Template() {}
     Vector2Template(Type lX, Type lY);
 
     // Additive grow (World-AI group): the canonical rwmath component readers.
