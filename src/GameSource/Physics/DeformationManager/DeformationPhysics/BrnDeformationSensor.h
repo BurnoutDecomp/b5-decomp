@@ -132,6 +132,18 @@ namespace Deformation
 		const Sphere* GetWorldSpaceSphere() const { return mpWorldSpaceSphere; }
 		f32           GetScratchAmount()   const { return mfScratchAmount; }
 
+		// ADDITIVE GROW (flagged by IKBodyPart-bodies group): the per-sensor accumulated-impulse
+		// vector the detachment test reads. IKBodyPart::CheckSensorForcesForJointDetachment @
+		// 0x825C17F8 loads this 16-byte vector from console sensor +0x10 and broadcasts its w lane
+		// (vspltw v0,v0,3) into the peak-impulse max-fold; the w lane carries the impulse magnitude
+		// the detach band is compared against. The console offset +0x10 falls inside the still-opaque
+		// CollidableBody leading run (maReserved0[0x20]) of THIS slice, so the real member is not yet
+		// named here -- this accessor is DECLARED ONLY (its body lives in the sensor's own TU when the
+		// CollidableBody base is homed) and reaches the vector BY NAME from the IKBodyPart caller under
+		// the per-TU cl /c gate. FLAG: name/role best-effort ("max sensor impulse"); confirm against the
+		// sensor TU when the leading run is reconstructed.
+		const VecFloat& GetMaxSensorImpulse() const;
+
 		// DeformationSensor::ClearNonWorldContacts @ 0x825C1050. Compact the stored-contacts
 		// array (remove contacts whose mu32NonWorldFlag is set) and reset the post-physics
 		// scratch state. Caller (X360 xref): DeformableObject::UpdatePostPhysics.
