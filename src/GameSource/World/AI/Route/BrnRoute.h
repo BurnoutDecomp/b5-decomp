@@ -28,6 +28,19 @@
 // Vector4[320] (16B stride), so AddNode (BrnRoute.cpp) is untouched and every
 // earlier offset / the 0x1400 count offset is preserved. RouteNode is a 16-byte
 // reinterpreting view over a node slot.
+//
+// ADDITIVE GROW (flagged by the Route::Construct/Prepare group, this UNIT): the
+// DecFIGS BrnRoute.h DWARF and the X360 asm of Construct(@0x82767B28) /
+// Prepare(@0x82767B98) attest two more trailing members and a Status enum:
+//   miDefaultStartNode @ guest 0x1404 (5124) -- copied by Construct, written by
+//     Prepare (stw r26, 0x1404(r27)); the default node the route resolves to.
+//   meStatus (Route::Status) @ guest 0x1408 (5128) -- copied by Construct, read
+//     by Prepare's "meStatus != E_STATUS_UNINITIALISED" guard (lwz 0x1408,!=0).
+// Both are appended AFTER miNodeCount so every existing offset (incl. 0x1400 and
+// the Route+8 GetDistance slot) is preserved; AddNode is untouched. Offsets are
+// pinned with static_assert(offsetof(...)==N) in a never-called _AssertLayout().
+
+#include <cstddef>   // offsetof (layout pinning)
 
 namespace BrnAI
 {
@@ -53,6 +66,30 @@ struct Route
 {
     static const s32 KI_MAX_NODES = 320;   // capacity guard in AddNode
 
+    // BrnRoute.h:104 (DWARF) -- route build/finalise status. Prepare guards on
+    // "meStatus != E_STATUS_UNINITIALISED" before computing distances.
+    enum Status
+    {
+        E_STATUS_UNINITIALISED = 0,
+        E_STATUS_COMPLETE      = 1,
+        E_STATUS_PARTIAL       = 2,
+        E_STATUS_BLOCKED       = 3,
+    };
+
+    // @0x82767B28  Copy-construct from lrSource (DWARF: Construct(const Route*)).
+    //   Copies miNodeCount (0x1400), miDefaultStartNode (0x1404), the populated
+    //   node prefix (16B/node, count nodes) and meStatus (0x1408) verbatim from
+    //   the source. No de-dup, no recompute -- a faithful field+node-prefix copy.
+    void Construct(const Route& lrSource);
+
+    // @0x82767B98  Finalise the route after AddNode-ing. Walks the nodes backwards
+    //   filling each node's mfDistanceToCheckpoint with the cumulative PLANAR
+    //   (x,y) distance from that node forward to the last node (the checkpoint);
+    //   node[0] therefore holds the whole-route length, mirrored into Route+8 so
+    //   GetDistance() returns it. Then records liDefaultStartNode (bounds-checked
+    //   against miNodeCount). Returns true.
+    bool Prepare(s32 liDefaultStartNode);
+
     // @0x827642A0  Append lrNode to the route.
     //   - returns 0 (false) if the route is already full (count >= KI_MAX_NODES);
     //   - if the route is non-empty and lrNode's (x,y) equals the last node's
@@ -65,6 +102,10 @@ struct Route
     // ---- ADDITIVE named accessors (X360-attested; see header note) ----
     // Number of nodes appended (Route+0x1400).
     s32 GetNodeCount() const { return miNodeCount; }
+    // The route's resolved default start node (Route+0x1404; set by Prepare).
+    s32 GetDefaultStartNode() const { return miDefaultStartNode; }
+    // The route build status (Route+0x1408).
+    Status GetStatus() const { return meStatus; }
     // Per-node view; the X360 caller indexes with the loop counter directly.
     const RouteNode* GetNode(s32 liNodeIndex) const
     {
@@ -79,6 +120,13 @@ struct Route
 
     Vector4 maNodes[KI_MAX_NODES];   // guest offset 0 .. 0x1400
     s32     miNodeCount;             // guest offset 0x1400 (5120)
+    s32     miDefaultStartNode;      // guest offset 0x1404 (5124)
+    Status  meStatus;                // guest offset 0x1408 (5128)
+
+private:
+    // Never called: pins every offset the X360 asm touches so the compile gate
+    // enforces layout fidelity (private members need a member fn for offsetof).
+    static void _AssertLayout();
 };
 }
 
