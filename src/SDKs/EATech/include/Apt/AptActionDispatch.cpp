@@ -156,4 +156,11 @@ void AptActionInterpreter::InitDispatchTable()
 
     // -- delete --
     sGlobalTable[0x3B] = &_FunctionAptActionDelete2;
+
+    // -- value / string / array utility --
+    sGlobalTable[0x14] = &_FunctionAptActionStringLength;
+    sGlobalTable[0x21] = &_FunctionAptActionStringAdd;
+    sGlobalTable[0x30] = &_FunctionAptActionRandom;
+    sGlobalTable[0x42] = &_FunctionAptActionInitArray;
+    sGlobalTable[0x72] = &_FunctionAptActionPushZeroSetVar;
 }
