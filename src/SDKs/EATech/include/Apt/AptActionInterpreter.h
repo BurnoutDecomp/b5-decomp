@@ -115,6 +115,16 @@ public:
     static void _FunctionAptActionBitLShift(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionBitRShift(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Unary numeric ops -- pop one operand, coerce, push the result:
+    //   Increment @0x80817C : x+1   (int when defined int, else AptFloat)
+    //   Decrement @0x807FF4 : x-1
+    //   ToInteger @0x806F04 : AptInteger(toInteger(x))
+    // (ToNumber @0x808304 deferred -- it needs Get_ToString/toString + _isNaN +
+    // UTF8_Find, the string-conversion layer.)
+    static void _FunctionAptActionIncrement(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionDecrement(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionToInteger(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- partial state (see header note) ---------------------------------
     int        mnStackTop;   // +0x00
     int        field_04;     // +0x04 -- unmapped; reserved so mpStack lands at +0x08
