@@ -25,8 +25,14 @@
 
 #include "types.hpp"
 
+namespace CgsSystem { class TimerStatus; }
+
 namespace CgsNetwork
 {
+    struct Message;
+    struct SignalMessage;
+    typedef s32 NetworkPlayerID;   // mirrors MessageWithPlayerIDs::NetworkPlayerID
+
     struct CompressionAndEncryptionUtils
     {
         // Enumerated keys into the bandwidth table (counts taken from the asm bounds).
@@ -50,5 +56,18 @@ namespace CgsNetwork
         // (average-type, send/recv, player, message-type) cell of the ledger.
         static s32 GetBandwidthUsedInBits(s32 leAverageType, s32 leSendRecv,
                                           s32 liPlayerIndex, s32 liMessageType);
+
+        // --- per-player packet packer (instance methods; bodies in this class's own TU) ---
+        // Reset the per-frame bandwidth accounting at the start of a player's life (DWARF :197).
+        void ResetBandwidthUsed(const CgsSystem::TimerStatus* lpTimerStatus);
+        // Advance the running bandwidth averages once per frame (DWARF :167).
+        void Update(const CgsSystem::TimerStatus* lpTimerStatus);
+        // Compress + encrypt up to liMaxBytes of the queued send/signal messages for liPlayerID
+        // into lpu8Buffer; *lpiBytesPacked receives the packed length. Returns true once every
+        // queued message has been packed (the player pump loops until it does). DWARF :174.
+        bool Pack(NetworkPlayerID liPlayerID,
+                  Message** lpapSendMessages, s32 liNumSendMessages,
+                  SignalMessage** lpapSignalMessages, s32 liNumSignalMessages,
+                  u8* lpu8Buffer, s32 liMaxBytes, s32* lpiBytesPacked);
     };
 }

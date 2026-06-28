@@ -29,6 +29,37 @@
 
 namespace CgsNetwork
 {
+    // --- The "fake network conditions" buffered-message connection block -----------------
+    // The DWARF types the address payload a NetworkPlayer sends through as
+    // FakeNetworkConditions::BufferedMessageData::ConnectionData (passed BY VALUE into
+    // SendTo). NetworkPlayer carries a copy of it (its mConnectionData member). It is an
+    // opaque sized value block here -- this TU only stores/copies it whole; the field-level
+    // shape belongs to the FakeNetworkConditions TU. The X360 SendTo glue reads 0x48 (72)
+    // bytes of it off the stack copy (5 doublewords), so it is modelled as a 0x70-byte value
+    // (the size NetworkPlayer reserves) carried by value. FLAGGED: opaque sized placeholder.
+    // This is the canonical home for the type; NetworkPlayer's mConnectionData reuses it.
+    struct ConnectionData
+    {
+        u8 mReserved[0x70];
+    };
+
+    // --- The network adapter base (UDP/DirtySock send path) ------------------------------
+    // SHAPE/method from the DecFIGS DWARF (CgsNetworkAdapterBase.h:191), gated against the
+    // ARTIST binary. Minimal home: only SendTo (the NetworkPlayer pump's exit point) is
+    // declared; the rest of the adapter (receive path, error state, fake-conditions hooks)
+    // is reconstructed in the adapter's own TU. NetworkAdapter is the concrete adapter the
+    // player holds a pointer to.
+    struct NetworkAdapterBase
+    {
+        // Send liLength bytes of lpData to the peer described by lConnectionData. Returns
+        // true on success (the pump flags the player paused on the first failure). DWARF :191.
+        bool SendTo(void* lpData, s32 liLength, ConnectionData lConnectionData);
+    };
+
+    struct NetworkAdapter : NetworkAdapterBase
+    {
+    };
+
     struct NetworkAdapterPrepareParams
     {
         enum EServerType

@@ -45,6 +45,11 @@ namespace BrnFlapt
         // whether the string is looked up through the localisation manager.
         void SetText(const char* lpcText, bool lbLocalise);
 
+        // SetAutoSize(bool) @ 0x8246D488 -- enable/disable the field's auto-size flag
+        // (the text box grows to fit its content). Used by EATraxInGameComponent::
+        // Prepare to make the artist-name field auto-size.
+        void SetAutoSize(bool lbAutoSize);
+
         // SetLocalisedText(float, ParameterFormatType) @ 0x8246CE38 -- format a
         // numeric value into the field through the language manager. The format-type
         // enum (CgsLanguage::LanguageManager::ParameterFormatType) is passed as the
@@ -52,6 +57,14 @@ namespace BrnFlapt
         // the language-manager header into this widely-included declaration home;
         // documented external-API integer per the conventions.
         bool SetLocalisedText(f32 lfValue, s32 liFormatType);
+
+        // SetLocalisedText(const char*, StringIdType) @ 0x8246CD00 -- look a localised
+        // string up by id through the language manager and display it. The overload
+        // taking a string id; liStringIdType is the raw id-type integer the X360 uses
+        // (the body asserts it is < 21). Used by EATraxInGameComponent::
+        // DisplayNewTrackNotification (passes type 9) when the supplied track text is a
+        // localisation id rather than a literal.
+        void SetLocalisedText(const char* lpcStringId, s32 liStringIdType);
 
         void* mpTextFieldInstance;   // +0x00
         void* mpParentMovie;         // +0x04
