@@ -51,4 +51,16 @@ struct AptRenderTreeManager
     {
         pItem->Manager_SetDeletionMark(true);
     }
+
+    // Display-list change notifications (called by AptDisplayListState as the
+    // per-frame display list mutates). They re-derive the render tree's
+    // first-child / next-sibling / root links from the changed scene node.
+    // FLAG: the render-tree-link re-derivation is the concurrent double-buffering
+    // propagation -- deferred; no-op on the single-buffer bring-up path, where the
+    // display-list links (in the AptCIHs) are themselves the source of truth.
+    //   @0x7EDF6C / 0x7ED694 / 0x7F11D4 / 0x7F0524
+    void Update_ItemFirstChildChanged(AptCIH* /*pCIH*/)  {}
+    void Update_ItemNextSiblingChanged(AptCIH* /*pCIH*/) {}
+    void Update_ItemInserted(AptCIH* /*pCIH*/, int /*nTick*/ = 0) {}
+    void Update_SetRootItem(AptCIH* /*pCIH*/, int /*nTick*/ = 0) {}
 };
