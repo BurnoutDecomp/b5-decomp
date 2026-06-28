@@ -11,6 +11,14 @@ struct Portal;
 struct BoundaryLine;
 struct SectionResetPair;
 
+// Number of AI-section speed classes. AISection::muSpeed (+0x15) indexes the
+// parallel mafSectionMinSpeeds[5] / mafSectionMaxSpeeds[5] bands below. The X360
+// bounds it with "muSpeed < E_SECTION_SPEED_COUNT" (cmplwi ..,5) at
+// AISectionsData.h:907 (e.g. RaceBalancingRoute::GetAISectionSpeed @0x827697A0).
+// Additive grow flagged by the RaceBalancingRoute group; value attested by the
+// asm literal and by the [5]-sized speed arrays.
+const u32 E_SECTION_SPEED_COUNT = 5;
+
 // BrnAI::AISection -- DWARF AISectionsData.h:339 (members :462-473); 24-byte stride.
 struct AISection
 {

@@ -16,9 +16,38 @@
 // (count << 4) + this, the count lives at guest offset 0x1400 == 320*16, and
 // the capacity guard is "count >= 320". Each node is a 4-component vector
 // (x,y,z,w); only the (x,y) pair participates in the de-dup compare.
+//
+// ADDITIVE GROW (flagged by the RaceBalancingRoute::Prepare/Recalculate group):
+// those two functions call lpRoute->GetNodeCount() / GetDistance() / GetNode(i)
+// and read each node's z slot as a per-node distance-to-checkpoint and the low
+// half of the w slot as a u16 AI-section index. The X360 asm (@0x82789368 /
+// @0x82789708) proves: GetNodeCount() == miNodeCount (Route+0x1400);
+// GetDistance() == node[0]'s distance field (Route+8, i.e. maNodes[0].z); each
+// node read as {x@+0, y@+4, mfDistanceToCheckpoint@+8, muSectionIndex(u16)@+12}.
+// The accessors are declaration-additive and storage-preserving: maNodes stays a
+// Vector4[320] (16B stride), so AddNode (BrnRoute.cpp) is untouched and every
+// earlier offset / the 0x1400 count offset is preserved. RouteNode is a 16-byte
+// reinterpreting view over a node slot.
 
 namespace BrnAI
 {
+// A node slot reinterpreted with named per-node fields. Exactly overlays the
+// 16-byte Vector4 store (x@+0, y@+4, z->mfDistanceToCheckpoint@+8,
+// w-low->muSectionIndex@+12). Read-only view; the route is populated via AddNode.
+struct RouteNode
+{
+    f32 mfX;                    // +0  node position x
+    f32 mfY;                    // +4  node position y
+    f32 mfDistanceToCheckpoint; // +8  distance from this node to the next checkpoint
+    u16 muSectionIndex;         // +12 AI section index (lhz at node+0xC)
+    u16 muPad0x0E;              // +14 (w-high; unused by the timing model)
+
+    f32 GetX() const { return mfX; }
+    f32 GetY() const { return mfY; }
+    f32 GetDistanceToCheckpoint() const { return mfDistanceToCheckpoint; }
+    u16 GetSectionIndex() const { return muSectionIndex; }
+};
+
 // Declared as a struct to match the forward declaration in BrnAStar.h.
 struct Route
 {
@@ -32,6 +61,21 @@ struct Route
     //   - otherwise the full 16-byte node is copied into the next slot and the
     //     node count is incremented. Returns 1 (true).
     bool AddNode(const Vector4& lrNode);
+
+    // ---- ADDITIVE named accessors (X360-attested; see header note) ----
+    // Number of nodes appended (Route+0x1400).
+    s32 GetNodeCount() const { return miNodeCount; }
+    // Per-node view; the X360 caller indexes with the loop counter directly.
+    const RouteNode* GetNode(s32 liNodeIndex) const
+    {
+        return reinterpret_cast<const RouteNode*>(&maNodes[liNodeIndex]);
+    }
+    // Whole-route distance == node[0]'s distance-to-checkpoint (Route+8). Used by
+    // the balancer only for the "GetDistance() != 0.0f" guard.
+    f32 GetDistance() const
+    {
+        return reinterpret_cast<const RouteNode*>(&maNodes[0])->mfDistanceToCheckpoint;
+    }
 
     Vector4 maNodes[KI_MAX_NODES];   // guest offset 0 .. 0x1400
     s32     miNodeCount;             // guest offset 0x1400 (5120)

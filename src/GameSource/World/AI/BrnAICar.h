@@ -39,6 +39,7 @@
 namespace BrnAI
 {
     class AIDriver;   // pointer-only collaborator (the aggression bodies never dereference it)
+    struct RouteNode; // pointer-only return of GetNextRouteNode (full type in BrnRoute.h)
 
     // DWARF BrnAICar.h:48 -- where this car sits relative to the player, used by the
     // OUT_OF_RANGE / HANG_AROUND_AHEAD aggression states (read at AICar+0x14D4).
@@ -74,6 +75,20 @@ namespace BrnAI
         Aggressiveness*       GetAggressiveness()       { return &mAggressiveness; }
         const Aggressiveness* GetAggressiveness() const { return &mAggressiveness; }
 
+        // ---- accessors the RaceBalancingManager (rubber-band) bodies call -------------------
+        // All X360-attested separate TUs (or trivial inlined-away getters); declare-only here so
+        // the manager .cpp compiles against named calls instead of raw `*(car+offset)` loads.
+        // HasValidRoute(): X360 inlined as (mRoute.GetStatus() != E_STATUS_UNINITIALISED &&
+        //   mRoute.GetNodeCount() > 0) -- reads Route::meStatus @+0x1408 and miNodeCount @+0x1400.
+        bool             HasValidRoute() const;              // DWARF BrnAICar.h:262
+        const RouteNode* GetNextRouteNode() const;           // DWARF BrnAICar.h:182 (Route::GetNode(miNextRouteNodeIndex), bounds-checked)
+        s32              GetNextRouteNodeIndex() const;       // DWARF BrnAICar.h:185 (== miNextRouteNodeIndex @+0x1524)
+        f32              GetMaxPlayerSpeed() const;           // DWARF BrnAICar.h:287 (== mfMaxPlayerSpeed @+0x1504)
+        s8               GetOpponentIndex() const;            // DWARF BrnAICar.h:371 (== miOpponentIndex @+0x153A)
+        bool             IsAheadOfPlayer() const;             // DWARF BrnAICar.h:332 (== mbIsAheadOfPlayer @+0x153B)
+        EAICarState      GetState() const;                   // DWARF BrnAICar.h:275 (== meCarState @+0x14C8)
+        bool             IsPlayerCar() const;                // DWARF BrnAICar.h:326 (== mbIsPlayer @+0x1549)
+
         // ---- storage (declaration order == layout order; pinned by _AssertLayout below) -----
         // [0x0000 .. 0x140B] mRoute and the early transform/scalar block. Opaque to these bodies.
         u8 mPad0000[5132];
@@ -88,11 +103,18 @@ namespace BrnAI
         ELocationRelativeToPlayer meRelativeLocation;   // +0x14D4 (5332)
         u8 mPad14D8[24];                                // +0x14D8 (asset key + behaviour timers)
         f32 mfDistanceToCheckpoint;                     // +0x14F0 (5360)
-        u8 mPad14F4[40];                                // +0x14F4 (wrong-way / section timers)
-        f32 mfScheduleOffset1;                          // +0x151C (5404)
-        u8 mPad1520[12];                                // +0x1520 (checkpoint / route-node indices)
+        u8 mPad14F4[16];                                // +0x14F4 (wrong-way / dist-ahead / race / alt-route timers)
+        f32 mfMaxPlayerSpeed;                           // +0x1504 (5380) DWARF :693
+        u8 mPad1508[20];                                // +0x1508 (dist-to-player / place-on-track / buzz / invalid-section / mafScheduleOffsets[0])
+        f32 mfScheduleOffset1;                          // +0x151C (5404) == mafScheduleOffsets[1] (DWARF :698)
+        s32 miCurrentCheckpoint;                        // +0x1520 (5408) DWARF :700
+        s32 miNextRouteNodeIndex;                       // +0x1524 (5412) DWARF :701
+        u8 mPad1528[4];                                 // +0x1528 (miRouteTimeStamp)
         s32 miProximityIndex;                           // +0x152C (5420)
-        u8 mPad1530[18];                                // +0x1530 (section indices / portals / flags)
+        u8 mPad1530[10];                                // +0x1530 (section indices / portals)
+        s8 miOpponentIndex;                             // +0x153A (5434) DWARF :714
+        bool mbIsAheadOfPlayer;                         // +0x153B (5435) DWARF :715
+        u8 mPad153C[6];                                 // +0x153C (place-on-track / block / shortcut flags)
         bool mbIsCrashing;                              // +0x1542 (5442)
         u8 mPad1543[3];                                 // +0x1543 (showtime / drifting / touching-car)
         bool mbIsTouchingPlayer;                        // +0x1546 (5446)
@@ -113,8 +135,13 @@ namespace BrnAI
     static_assert(offsetof(AICar, meCarState)           == 0x14C8, "AICar::meCarState @ +0x14C8");
     static_assert(offsetof(AICar, meRelativeLocation)   == 0x14D4, "AICar::meRelativeLocation @ +0x14D4");
     static_assert(offsetof(AICar, mfDistanceToCheckpoint) == 0x14F0, "AICar::mfDistanceToCheckpoint @ +0x14F0");
+    static_assert(offsetof(AICar, mfMaxPlayerSpeed)     == 0x1504, "AICar::mfMaxPlayerSpeed @ +0x1504");
     static_assert(offsetof(AICar, mfScheduleOffset1)    == 0x151C, "AICar::mfScheduleOffset1 @ +0x151C");
+    static_assert(offsetof(AICar, miCurrentCheckpoint)  == 0x1520, "AICar::miCurrentCheckpoint @ +0x1520");
+    static_assert(offsetof(AICar, miNextRouteNodeIndex) == 0x1524, "AICar::miNextRouteNodeIndex @ +0x1524");
     static_assert(offsetof(AICar, miProximityIndex)     == 0x152C, "AICar::miProximityIndex @ +0x152C");
+    static_assert(offsetof(AICar, miOpponentIndex)      == 0x153A, "AICar::miOpponentIndex @ +0x153A");
+    static_assert(offsetof(AICar, mbIsAheadOfPlayer)    == 0x153B, "AICar::mbIsAheadOfPlayer @ +0x153B");
     static_assert(offsetof(AICar, mbIsCrashing)         == 0x1542, "AICar::mbIsCrashing @ +0x1542");
     static_assert(offsetof(AICar, mbIsTouchingPlayer)   == 0x1546, "AICar::mbIsTouchingPlayer @ +0x1546");
     static_assert(offsetof(AICar, mbIsPlayer)           == 0x1549, "AICar::mbIsPlayer @ +0x1549");
