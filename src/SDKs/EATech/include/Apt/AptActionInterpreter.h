@@ -223,10 +223,15 @@ public:
     // (ctx.mpPendingReleaseValue):
     //   GetVariable @0x82B038A0 (0x1C): getVariable -> replace the name with the result
     //   SetVariable @0x82B03970 (0x1D): setVariable name = value, then pop both
-    // (The member opcodes GetMember/SetMember @0x82B04200/0x82B043C8 (0x4E/0x4F)
-    // are the follow-on -- they add the array/string/__proto__ fast paths.)
     static void _FunctionAptActionGetVariable(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionSetVariable(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
+    // Member access opcodes -- dispatch on the object's value type (array index /
+    // named member / extern), coercing the key via Get_ToString:
+    //   GetMember @0x82B04200 (0x4E): object[key] -> push the member (else undefined)
+    //   SetMember @0x82B043C8 (0x4F): object[key] = value, then pop all three
+    static void _FunctionAptActionGetMember(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionSetMember(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
