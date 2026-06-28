@@ -267,6 +267,12 @@ public:
     static void _FunctionAptActionRandom        (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionInitArray     (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // ECMA value opcodes:
+    //   StringEquals 0x13 : AptBoolean(toString(top) == toString(under))
+    //   Add2 0x47 : ECMA `+` -- string concat OR numeric (int/float) add
+    static void _FunctionAptActionStringEquals(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionAdd2        (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
     // parallel {count, capacity, array} stacks (the operand stack sized by
