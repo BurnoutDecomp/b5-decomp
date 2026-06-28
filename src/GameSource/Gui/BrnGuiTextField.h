@@ -3,61 +3,94 @@
 // ===================================================================================
 // BrnGui::TextField  -- owning header
 //   b5-decomp/src/GameSource/Gui/BrnGuiTextField.h
+//   class:BrnGui::TextField   (canonical primary_file GameSource/Gui/Flow/Shared/Components/BrnTextField.cpp)
 //
-// A GUI text field: a renderable string slot with an associated colour, a small
-// formatted-value scratch buffer, and a secondary text region, plus per-field dirty
-// flags. Embedded by value inside map-icon GUI elements (e.g. CrashNavMapIcon, whose
-// operator= copies its TextField member).
+// A GUI text field component: a renderable string slot driven through the apt view-state
+// machinery, with a colour, a small colour-string scratch buffer, a scroll cursor and per-
+// field flags. Embedded by value inside map-icon / panel GUI elements (e.g.
+// CrashNavMapIcon::mIconText copied via operator=, DriveThruMapPanel::maTextfields[2]).
 //
-// Layout proven from BURNOUT_X360_ARTIST.XEX:
+// CLASS SHAPE (DecFIGS DWARF GameSource/Gui/Flow/Shared/Components/BrnTextField.h:45,
+// X360-attested per the ledger):
+//   * TextField : public CgsGui::GuiComponent -- so the field IS a component: it carries
+//     the base vptr @+0x00, macName[128] @+0x04, muHashedName @+0x84 (GetNameHash()) and
+//     mpStateInterface @+0x88 from the base, and overrides the base virtual Construct.
+//     This is why the X360 reads a TextField's apt-component hash at field+0x84 and calls
+//     Construct on it virtually -- see DriveThruMapPanel.
+//
+// Layout proven from BURNOUT_X360_ARTIST.XEX (guest 32-bit byte offsets; the gate compiles
+// 64-bit so members are accessed BY NAME, not raw offsets):
+//   * SetColour @0x82481E48 - stores the colour word @+0x8C (muTextColour), formats it as
+//       "%u" (max 15 chars) into the 16-byte colour buffer @+0x94 (macColour), clears that
+//       buffer's last byte @+0xA3, and raises the dirty/use-colour flag @+0x124 (mbUseColour).
 //   * operator= @0x824470F0 - copies the field byte-for-byte EXCEPT the leading 4 bytes
-//       (the copy anchor is this+0x04): a 128-byte block @+0x04..+0x83, four words
-//       @+0x84/+0x88/+0x8C/+0x90, a 16-byte block @+0x94..+0xA3, a 128-byte block
-//       @+0xA4..+0x123, then three bytes @+0x124/+0x125/+0x126. The +0x00 word is
-//       intentionally NOT assigned (a construction-time slot preserved across copy).
-//   * SetColour @0x82481E48 - stores the colour word @+0x8C, formats it as "%u" (max 15
-//       chars) into the 16-byte buffer @+0x94, clears the buffer's last byte @+0xA3, and
-//       raises the dirty flag @+0x124.
+//       (copy anchor this+0x04): the +0x00 word is the vtable slot, intentionally not
+//       assigned (matching C++ copy-assign of a polymorphic object). Everything from +0x04
+//       onward is the base name region + the field's own members.
 //
-// sizeof == 0x128 (0x127 last touched byte +1, word-aligned). All access is by name; the
-// fixed string regions are modelled as named char buffers at their proven offsets.
+// Member names/types follow the DWARF (muTextColour / miScroll / macColour / macText /
+// mbUseColour / mbResetScroll / mbAutosize). sizeof == 0x128 (last touched byte +0x126,
+// word-aligned). All access is by name; the fixed string regions are named char buffers.
+//
+// Only the X360-ATTESTED methods are declared (Construct / SetText / SetColour /
+// SetLocalisedText / OutputAptData / operator=, per the X360 ledger). The PS3-DWARF-only
+// helpers (GetText / RefreshText / ClearText / Scroll* / ResetScroll / SetAutoSize /
+// SetDatabaseText) are intentionally omitted -- they are not in the X360 ledger.
 // ===================================================================================
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf (SetColour)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"          // CgsCore::SPrintf (SetColour)
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h" // CgsGui::GuiComponent (base)
+#include "GameShared/GameClasses/Language/CgsLanguageManager.h"   // CgsLanguage::LanguageManager::ParameterFormatType
 
 namespace BrnGui
 {
-    class TextField
+    class TextField : public CgsGui::GuiComponent
     {
     public:
-        // Length of the formatted-value scratch buffer at +0x94 (SetColour passes 15 as the
-        // SPrintf capacity and clears index 15, the last byte, so the buffer is 16 bytes).
-        static const u32 KU_VALUE_BUFFER_SIZE = 16;
+        // BrnTextField.h:48 -- primary text capacity.
+        static const u32 KU_MAX_TEXTFIELD_LEN = 128;
+        // BrnTextField.h:49 -- colour scratch-buffer size (SetColour passes 15 as the SPrintf
+        // capacity and clears index 15, the last byte, so the buffer is 16 bytes).
+        static const u32 KU_MAX_COLOUR_LEN = 16;
+
+        // @0x824E4FA8 (BrnTextField.cpp:56) -- run the base component Construct then prime the
+        // field's apt binding. Virtual: vtable slot 0 (overrides GuiComponent::Construct); the
+        // X360 dispatches it through the vtable (e.g. DriveThruMapPanel::Construct). Body links
+        // from the BrnTextField TU.
+        virtual void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
+                               const char* lpacParentName);
+
+        // @0x824E7240 (BrnTextField.cpp:84) -- set the field's text and refresh its apt output.
+        // Body links from the BrnTextField TU.
+        void SetText(const char* lpacText);
 
         // @0x82481E48 - set the field's colour and refresh its displayed value. Stores
-        // luColour, formats it as an unsigned decimal string into the value buffer, clears
-        // a secondary flag and marks the field dirty.
+        // luColour, formats it as an unsigned decimal string into the colour buffer, clears
+        // the buffer's last byte and marks the field as using a colour.
         void SetColour(u32 luColour);
 
-        // @0x824470F0 - copy-assign from lrSource. Reproduces the X360 byte-copy, which
-        // copies everything from +0x04 onward and leaves the +0x00 slot untouched.
+        // @0x824E7418 (BrnTextField.cpp:154) -- look up / format luText under leFormat and push
+        // it as the field's text. For E_FORMAT_ID_LOOKUP the string is treated as a localisation
+        // database id. Returns whether the lookup succeeded. Body links from the BrnTextField TU.
+        bool SetLocalisedText(const char* lpacText,
+                              CgsLanguage::LanguageManager::ParameterFormatType leFormat);
+
+        // @0x824E52B8 (BrnTextField.cpp:511) -- push the field's current contents to its bound
+        // apt clip. Body links from the BrnTextField TU.
+        void OutputAptData();
+
+        // @0x824470F0 - copy-assign from lrSource. Reproduces the X360 byte-copy, which copies
+        // everything from +0x04 onward and leaves the +0x00 vtable slot untouched.
         TextField& operator=(const TextField& lrSource);
 
     private:
-        // +0x00: a 4-byte construction-time slot the X360 operator= deliberately does NOT
-        // copy (the byte-copy anchor is this+0x04). Named so it is preserved across copy.
-        u32  muReservedHead;        // +0x00
-
-        char maText[128];           // +0x04 .. +0x83  (primary text region)
-        u32  muFieldA;              // +0x84
-        u32  muFieldB;              // +0x88
-        u32  muColour;              // +0x8C  (set by SetColour)
-        u32  muFieldD;              // +0x90
-        char maValueText[16];       // +0x94 .. +0xA3  (formatted-value scratch buffer)
-        char maSecondaryText[128];  // +0xA4 .. +0x123 (secondary text region)
-        u8   mbDirty;               // +0x124 (raised by SetColour)
-        u8   mbFlagB;               // +0x125
-        u8   mbFlagC;               // +0x126
+        u32  muTextColour;          // +0x8C  (set by SetColour)
+        s32  miScroll;              // +0x90
+        char macColour[KU_MAX_COLOUR_LEN];   // +0x94 .. +0xA3 (formatted colour scratch buffer)
+        char macText[KU_MAX_TEXTFIELD_LEN];  // +0xA4 .. +0x123 (primary text region)
+        bool mbUseColour;           // +0x124 (raised by SetColour)
+        bool mbResetScroll;         // +0x125
+        bool mbAutosize;            // +0x126
     };
 }

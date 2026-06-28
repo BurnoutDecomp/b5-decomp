@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
 
 // BrnGui::GuiCache subsystem (DecFIGS DWARF: BrnGuiCache.h). StateLoadingHelper is the
 // resource/component watcher embedded in the cache; GuiCache is the cache itself. Only
@@ -85,6 +86,19 @@ namespace BrnGui
 
         f32 GetTime() const;
         f32 GetTimeStep() const;
+
+        // DWARF: BrnGuiCache.h:206 -- register a single apt component (by its name hash) as
+        // "expected" on the given GUI flow layer, so the cache waits for it to finish
+        // initialising before reporting the flow ready. Called by the per-component
+        // AppendExpectedAptComponent(s) helpers (TableRow / TableCell / DriveThruMapPanel /
+        // CrashNavPanel ...). X360-attested @0x824F87B8. Body links from the GuiCache TU.
+        void AppendExpectedAptComponent(GuiFlow leFlow, u32 luComponentNameHash);
+
+        // The name-taking entry @0x824F87C0 (the X360 reaches it as an internal entry of the
+        // same function): hash the component name string and register it as above. TableRow /
+        // TableCell pass the component's name pointer here; DriveThruMapPanel passes the
+        // pre-hashed value to the u32 overload above. Body links from the GuiCache TU.
+        void AppendExpectedAptComponent(GuiFlow leFlow, const char* lpacComponentName);
 
         // ADDITIVE GROW (BrnOnlinePreEventMessages TU): the cache holds the active game-mode
         // type the GUI reads to pick mode-specific apt key-frames (the X360 reads it as a far
