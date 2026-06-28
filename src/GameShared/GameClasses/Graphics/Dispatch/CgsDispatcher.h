@@ -41,13 +41,33 @@ namespace CgsGraphics
 
 // A dispatch command is one 16-byte (quad-word) entry in a DispatchBin. The
 // pointer arithmetic in DispatchBin (m_pNextWord - m_pBin, >> 4) proves
-// sizeof(DispatchCommand) == 16. The low 24 bits of the first word hold the
-// packet length in quad-words (GetPacketLength == word0 & 0x00FFFFFF); the top
-// byte carries command-type/flag bits not modelled here.
+// sizeof(DispatchCommand) == 16. word0 packs the command type and length:
+//   bits  [0 .. 23]  packet length in quad-words   (kSizeBits   = 24)
+//   bits [24 .. 30]  command id                    (kCommandBits = 7)
+// (CgsDispatcherCommands.h:63 DWARF; the command interpreters in
+// CgsDispatcherCommands.cpp read GetCommandID/GetPacketLength off word0.)
 struct DispatchCommand
 {
+    // Command-id values recovered from the asm/asserts (CgsDispatcherCommands.cpp):
+    //   CALLBACKFN(0)              -- CallbackFn::Interpret asserts id == 0
+    //   DRAWRENDERABLE(1)          -- SetupBuiltinInterpreters slot 1
+    //   DRAWRENDERABLEMESH(2)      -- InterpretOcclusionQuery accepts id 2 or 3
+    //   DRAWRENDERABLEMESHZONLY(3) -- ZOnly::AddToBin stamps word0 == 0x03000000
+    enum E_CommandID
+    {
+        E_CALLBACKFN              = 0,
+        E_DRAWRENDERABLE          = 1,
+        E_DRAWRENDERABLEMESH      = 2,
+        E_DRAWRENDERABLEMESHZONLY = 3
+    };
+
+    static const u32 KU_SIZE_BITS    = 24;   // DWARF kSizeBits
+    static const u32 KU_COMMAND_BITS = 7;    // DWARF kCommandBits
+
     u32 muWords[4];
 
+    // word0 >> 24 & 0x7F  (PPC: lbz word0; clrlwi r,r,25)
+    u32 GetCommandID() const { return (muWords[0] >> KU_SIZE_BITS) & 0x7Fu; }
     // word0 & 0x00FFFFFF  (PPC: lwz; clrlwi r,r,8)
     u32 GetPacketLength() const { return muWords[0] & 0x00FFFFFFu; }
 };
@@ -59,8 +79,16 @@ class DispatchFrame;
 
 // DispatchList is homed by a separate TU (the sort-key/block list). GetList only
 // needs the X360-verified stride (sizeof(DispatchList) == 384) and never
-// dereferences it, so a forward declaration suffices here.
-class DispatchList;
+// dereferences it, so a forward declaration suffices here. The one method bodied
+// outside its own TU is RelocateForMainMemory, called by DispatchFrame's
+// relocation pass (CgsDispatcherCommands.cpp) -- declared here so that caller can
+// see it; its body lives in the DispatchList TU.
+class DispatchList
+{
+public:
+    // @ 0x827EE868 -- rebase this list's command/key pointers for main memory.
+    DispatchList* RelocateForMainMemory(u32 luBinBase, u32 luBinOffset, u32 luListOffset);
+};
 
 class DispatchBin
 {
@@ -121,6 +149,24 @@ public:
     // The embedded per-frame dispatch bin (m_Bin, @ 0x80). BufferedDispatchFrame::
     // GetDispatchBinForWrite hands this out (X360: frame + 0x80).
     DispatchBin&  GetBin() { return m_Bin; }
+
+    // ---- Shared-memory output path (bodied in CgsDispatcherCommands.cpp) ------
+    // These operate on the SPU/shared-memory frame image (the produced bin output
+    // block + relocation bookkeeping past 0x100). The members past muNumDispatchLists
+    // are part of the larger SPU job-state frame and are reached as that serialised
+    // image, so these take `this` as a raw frame and are not re-typed here.
+    //
+    // @ 0x827EE7C8 -- build the embedded bin + every output list against shared mem.
+    static DispatchFrame* ConstructWithSharedBinMemory(
+        DispatchFrame* lpResult, DispatchList* lpaDispatchListArray,
+        u32 luDispatchListCount, u32 luDispatchBinMasterAddress,
+        u32 luSharedMemoryStartAddress, u32* lpSharedMemoryBlockNextFreeAtomic,
+        u32 luSharedMemoryBlockMax);
+    // @ 0x827EE970 -- relocate every list in the frame for main-memory addressing.
+    static DispatchFrame* RelocateForMainMemory(DispatchFrame* lpResult,
+        u32 luBinBase, u32 luBinOffset, u32 luListOffset);
+    // @ 0x827F72A8 -- flush the produced bin block into its active shared block.
+    static DispatchFrame* FlushBlockToSharedMemory(DispatchFrame* lpResult);
 
 private:
     DispatchList* m_paLists;                            // 0x000
