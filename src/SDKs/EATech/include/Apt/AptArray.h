@@ -17,12 +17,21 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstddef>   // size_t
 #include <cstdint>
 
 #include "SDKs/EATech/include/Apt/AptObject.h"
 
 struct AptArray : public AptObject
 {
+    // GC-pool allocation @0x82AE6088 -- AptArray is a garbage-collected value
+    // (AptValueGC base), so its block comes from the GC pool rather than the
+    // non-GC leaves' gpNonGCPoolManager route. Bodies in AptArray.cpp so the
+    // header need not pull in the pool-manager type. Reached as
+    // AptArray::operator new(44) from AptValueFactory::CreateArray.
+    static void* operator new(size_t size);
+    static void  operator delete(void* p, size_t size);
+
     AptValue** mpArray;     // [8]  element storage (ref-counted AptValue*s)
     int32_t    mnCapacity;  // [9]  allocated slots
     int32_t    mnLength;    // [10] logical length

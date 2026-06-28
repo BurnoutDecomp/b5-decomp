@@ -12,10 +12,28 @@
 
 #include "SDKs/EATech/include/Apt/AptArray.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
-#include "SDKs/EATech/include/Apt/AptDefine.h"     // gpNonGCPoolManager
+#include "SDKs/EATech/include/Apt/AptDefine.h"        // gpNonGCPoolManager / gpGCPoolManager
+#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"    // AptValueGC_PoolManager::AllocateAptValueGC / DeallocateAptValueGC
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 
 #include <cstring>   // memcpy
+
+// GC-pool operator new/delete @0x82AE6088 -- AptArray is a garbage-collected value
+// (AptValueGC base), so its block comes from the GC pool (gpGCPoolManager), the GC
+// analogue of the non-GC leaves' gpNonGCPoolManager route. AllocateAptValueGC =
+// DOGMA Allocate + AptValueGC_MemItem::SetIsAllocated (the X360 inlines that pair
+// into every GC type's operator new). Reached as AptArray::operator new(44) from
+// AptValueFactory::CreateArray. (FLAG: gpGCPoolManager is null until AptInit wires it.)
+void* AptArray::operator new(size_t size)
+{
+    return (gpGCPoolManager != nullptr) ? gpGCPoolManager->AllocateAptValueGC(size) : nullptr;
+}
+
+void AptArray::operator delete(void* p, size_t size)
+{
+    if (gpGCPoolManager != nullptr)
+        gpGCPoolManager->DeallocateAptValueGC(p, size);
+}
 
 // ctor @0x82D978 -- empty array (object hash capacity 8).
 AptArray::AptArray() : AptObject(AptVFT_Array, 8)
