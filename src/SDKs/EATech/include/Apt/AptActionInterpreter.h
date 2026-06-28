@@ -257,6 +257,16 @@ public:
     // Delete2 0x3B : `delete name` -- clear the variable (setVariable null), push true
     static void _FunctionAptActionDelete2 (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Self-contained value / string / array opcodes:
+    //   PushZeroSetVar 0x72 : push 0, then SetVariable;  StringLength 0x14 : top -> its length
+    //   StringAdd 0x21 : concat top two as strings;  Random 0x30 : AptInteger(rand % top)
+    //   InitArray 0x42 : build an AptArray from N stack values
+    static void _FunctionAptActionPushZeroSetVar(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionStringLength  (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionStringAdd     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionRandom        (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionInitArray     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
     // parallel {count, capacity, array} stacks (the operand stack sized by
