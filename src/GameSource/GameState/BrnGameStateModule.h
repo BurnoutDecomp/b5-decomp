@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                         // CgsID (CarSelect player-car-change grows)
 #include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"  // CgsModule::ModuleSingleBuffered base
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CgsDev::Assert Begin/Fire/EndAssert
@@ -111,6 +112,35 @@ public:
     // namespace BrnGameState.
     void CheckForAllEventsBeingFound(BrnProgression::Profile* lpProfile,
                                      ::InputBuffer::GameActionQueue* lpQueue);
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the BrnGameState::CarSelectManager (junkyard car-select) TUs.
+    // The junkyard FSM routes the player-car snapshot / streaming / swap-broadcast / unpause hooks
+    // through the owning GameStateModule. Signatures + semantics are X360-asm-attested; bodies land
+    // with the GameStateModule TU. Declare-only suffices for the `cl /c` compile gate.
+    // ------------------------------------------------------------------------
+
+    // X360 read at GameStateModule+0x456D8 -- the active player car's CgsID, compared against the
+    // desired/current car id to detect a swap completing.
+    CgsID GetActivePlayerCarId() const;
+
+    // X360 0x82382550. Kick the world to start streaming the chosen vehicle-selection car.
+    void RequestStreamingForVehicleSelection(CgsID lCarId);
+
+    // X360 0x8238FB40. Broadcast a special-event player-car change (the unlock-display / change-car
+    // path uses it). lWheelOrZero is the wheel id (0 when unchanged); lbArg == the X360 trailing 1.
+    void OnSpecialEventPlayerCarChange(CgsID lCarId, CgsID lWheelOrZero,
+                                       ::InputBuffer::GameActionQueue* lpQueue, bool lbArg);
+
+    // X360 0x82396B88. Broadcast a (non-special-event) player-car change on junkyard exit (offline).
+    void OnPlayerCarChange(CgsID lCarId, CgsID lZero,
+                           ::InputBuffer::GameActionQueue* lpQueue, bool lbArg);
+
+    // X360 0x82363698. Mark car lCarId as already-shown in the unlock sequence (so it is not shown again).
+    void SetCarUnlockAlreadyShown(CgsID lCarId);
+
+    // X360 0x82382138. Request the world un-pause on junkyard exit.
+    void RequestUnpause(bool lbArg, ::InputBuffer::GameActionQueue* lpQueue);
 
 private:
     // DWARF BrnGameStateModule.h:771. The by-value ModeManager that owns the current game mode.

@@ -140,5 +140,28 @@ public:
     // The embedded achievement manager (X360 *(progmgr+133432)); DriveThruManager routes
     // OnFindAllCarParks / OnBodyShop through it.
     BrnGameState::AchievementManagerBase* GetAchievementManager();
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the BrnGameState::CarSelectManager (junkyard car-select) TUs.
+    // Signatures + semantics are X360-asm-attested; bodies land with the ProgressionManager TU.
+    // ------------------------------------------------------------------------
+
+    // X360 0x823701D8. The player's current progression rank, compared against a car's required rank
+    // in IsThisCarInCurrentUnlockSequence.
+    s32 GetProgressionRank() const;
+
+    // X360 0x8237A970. Add lCarId to the player's owned-car list with unlock-type leUnlockType and
+    // return the new CarData record (asserts the result non-null internally). The full X360 symbol has
+    // a long inlined-temporary parameter list; the CarSelect call site passes only (carId, unlockType),
+    // so it is modelled as that 2-arg form. FLAG: reconcile the full signature with the ProgressionManager TU.
+    CarData* AddCar(CgsID lCarId, s32 leUnlockType);
+
+    // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133489 -- a rivals-update request flag.
+    // FLAG: de-inlined byte poke, not a named member in the exports.
+    void RequestUpdateRivals();
+
+    // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133512 -- a drive-thrus/rivals
+    // dirty flag. FLAG: de-inlined byte poke, not a named member in the exports.
+    void SetDriveThrusDirtyFlag();
 };
 }

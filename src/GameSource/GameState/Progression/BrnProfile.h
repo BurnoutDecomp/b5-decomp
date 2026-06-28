@@ -15,6 +15,10 @@
 
 namespace BrnProgression
 {
+// Forward-declared so the CarSelectManager-facing Profile grows below can return/route CarData* by
+// pointer (full home: BrnProgressionCarData.h, #included by the dereferencing .cpp).
+struct CarData;
+
 struct ProfileEvent
 {
     // DWARF BrnProfile.h:296 (Flags enum).
@@ -126,6 +130,36 @@ public:
     // X360 linear search of the persisted race-event id table (count word +1000, id table base
     // +29168) -> the matching ProfileEvent (or NULL). Used by UnlockCarChallengeForCar.
     ProfileEvent* FindProfileEventByRaceEventId(CgsID lEventId);
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the BrnGameState::CarSelectManager (junkyard car-select) TUs.
+    // The junkyard FSM walks the owned-car array and reads/writes the chosen-livery + start-of-game
+    // deform state. Signatures + semantics are X360-asm-attested; the real owned-car array layout
+    // (base Profile+0x280/640, stride 0x18, count word Profile+0x26C/620) is owned by the Profile TU.
+    // Bodies land with the Profile TU; declare-only suffices for `cl /c`.
+    // ------------------------------------------------------------------------
+
+    // X360 reads the car-count word at Profile+0x26C/620 -- the number of owned-car records.
+    s32 GetCarCount() const;
+
+    // X360 0x82354950. The liIndex'th owned-car record (car-array base Profile+0x280/640, stride 0x18,
+    // id at +0x00). Asserts liIndex in range (BrnProfile.h:1923 'liCarIndex >= 0 && liCarIndex < miCarCount').
+    const CarData* GetCarData(s32 liIndex) const;
+          CarData* GetCarData(s32 liIndex);
+
+    // X360 0x82359BF8. Linear lookup of the owned-car record whose id == lCarId, or NULL on miss.
+    CarData* FindCar(CgsID lCarId);
+
+    // X360 0x82359C90. Pin the chosen base-car livery on the profile (called from EnterJunkyard with the
+    // active player car id).
+    void SetChosenLiveryIdForBaseCar(CgsID lBaseCarId);
+
+    // X360 0x82359D70. The player's saved livery-variant id for base car lBaseCarId.
+    CgsID GetChosenLiveryIdForBaseCar(CgsID lBaseCarId) const;
+
+    // FLAG: de-inlined byte read at Profile+118401 in ReallyEnterJunkyardAtStartOfGame -- gates whether
+    // the start-of-game car gets the 0.85 deform. Exact member name unconfirmed.
+    bool IsStartOfGameDeformActive() const;
 };
 }
 
