@@ -31,6 +31,10 @@
 
 #include <cstdint>
 
+class EAStringC;                  // SDKs/EATech/include/Apt/AptString/EAString.h
+typedef EAStringC AptNativeString;
+struct AptNativeHash;            // SDKs/EATech/include/Apt/AptNativeHash.h
+
 // ---------------------------------------------------------------------------
 // AptValue virtual-function-table object-type indices (leak AptValue.h:40).
 // Values pinned by the leak's DWARF (explicit = ... in the dossier).
@@ -90,11 +94,24 @@ class AptValue
 {
 public:
 
-    // ---- leak reference-count virtuals (AptValue.h:482-483) --------------
+    // ---- leak reference-count virtuals (AptValue.h:171-172) --------------
     // Bodies owned by other Apt TUs; declared so the operand-stack sibling can
-    // Release popped values by name. vtbl slots 0 / +4.
+    // Release popped values by name.
     virtual void AddRef();
     virtual void Release();
+
+    // ---- object-model virtuals (leak AptValue.h:435-482) -----------------
+    // The full AptValue polymorphic interface, in the leak's declaration order
+    // (so the value/object/CIH subclasses can override by name and MSVC builds a
+    // consistent vtable). Defaults are the leak's: a plain AptValue holds no
+    // native-hash property table and has no class/members. AptValueWithHash/
+    // AptObject/AptCIH override these.
+    virtual AptNativeHash* GetNativeHashVirtual()        { return 0; }
+    virtual bool           ContainsNativeHashVirtual() const { return false; }
+    virtual bool           GetHasClass() const           { return false; }
+    virtual void           SetHasClass(int)              {}
+    virtual AptValue*      objectMemberLookup(AptValue* const, const AptNativeString* const) const { return 0; }
+    virtual bool           objectMemberSet(AptValue* const, const AptNativeString* const, AptValue* const) { return false; }
 
     // ---- out-of-line owned bodies (this TU; defined in AptValue.cpp) -----
     virtual void DeleteThis();
@@ -173,6 +190,26 @@ public:
 
     void setVtblIndex(AptVirtualFunctionTable_Indices n) { mValueBitfield.meValueType = n; }
     void setIsDefined(bool bDefined) { mValueBitfield.mbIsDefined = bDefined ? 1u : 0u; }
+
+    // GC-root count + delayed-deletion flag setters (the inverse of getGCRoot /
+    // getAllowsDelayedDeletion; used by the CIH/object ctors).
+    void setGCRoot(uint32_t n)
+    {
+        mValueBitfield.mnGCRootCount = (n >= MAX_GCROOT) ? MAX_GCROOT : n;
+    }
+    void SetAllowDelayedDeletion(bool bAllowed)
+    {
+        mValueBitfield.mbAllowsDelayedDeletion = bAllowed ? 1u : 0u;
+    }
+
+    // ---- GC mark callback ------------------------------------------------
+    // The Apt garbage collector installs a reference-registration callback the GC
+    // value types invoke from RegisterReferences (once per held AptValue ref:
+    // cb(owner, &slot, debugName, 0)). FLAG: wired by the Apt GC startup (AptInit);
+    // null until then, so the mark walk is inert until the collector is up.
+    typedef void* (*ReferenceRegistrationCb)(const AptValue* pOwner, void* pSlot,
+                                             const char* pDebugName, int);
+    static ReferenceRegistrationCb sReferenceRegistrationCb;
 
     // ---- GC-required pure virtuals (leak AptValue.h:547-548) -------------
     virtual bool IsGarbageCollected() const = 0;
