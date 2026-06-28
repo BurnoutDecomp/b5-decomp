@@ -1,37 +1,52 @@
 #pragma once
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                              // Vector3
+#include "BrnCommonTypes.h"                              // Vector3, Vector3Plus, Matrix44Affine, VecFloat
 #include "GameSource/Physics/ContactSpies/BrnContactId.h"  // BrnPhysics::ContactId
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnCollidableBody.h"          // CollidableBody (canonical base) + ImpulseParams
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnSharedDeformationEnums.h"  // ENextSensorDirection
 
-// Reconstructed slice of BrnPhysics::Deformation::DeformationSensor, homed at its mirrored
-// DWARF path. The full sensor derives CollidableBody and carries the spec pointer, point
-// displacement, stored contacts, a contact spy, a volume-instance id and scratch state.
-// This pass models the members two TUs reach:
-//   - TagPoint::Construct reads the three trailing members mpLocalSpaceSphere (Sphere*),
-//     mpWorldSpaceSphere (Sphere*) and mfScratchAmount (f32, GetScratchAmount()).
-//   - DeformationSensor::ClearNonWorldContacts @ 0x825C1050 compacts the stored-contacts
-//     array (dropping contacts that are flagged "non-world") and resets the post-physics
-//     scratch state. The fields it touches are modelled by name below.
+// BrnPhysics::Deformation::DeformationSensor, homed at its mirrored DWARF path. The sensor IS a
+// CollidableBody (it derives the canonical base, BrnCollidableBody.h) and carries the streamed spec
+// pointer, this-frame point-displacement / biggest-impulse vector, the stored-contacts array, the
+// car-on-car impulse contact, a contact spy, a scene volume-instance id, the live contact count, the
+// local/world collision spheres and the accumulated scratch amount.
 //
-// CONSOLE OFFSETS (X360, 4-byte pointers) used by ClearNonWorldContacts:
-//   +0x20 (32)  -- stored-contacts array base, 64-byte (0x40) stride per contact
-//   +0x54 (84)  -- the per-contact "is non-world" flag word (offset 0x34 within contact[0])
-//   +0x118 (280)-- mfMaxPointDisplacement, reset to 100.0
-//   +0x120 (288)-- a 16-byte vector, zeroed
-//   +0x130 (304)-- a 16-byte vector, zeroed
-//   +0x180 (384)-- a 32-bit count/flag, zeroed
-//   +0x198 (408)-- mi32NumStoredContacts, the live contact count
-//   +0x19C (412)/+0x1A0 (416)/+0x1A4 (420) -- mpLocalSpaceSphere / mpWorldSpaceSphere /
-//     mfScratchAmount (TagPoint::Construct).
+// DWARF MEMBER ORDER (BrnDeformationSensor.h:262-273): mpSpec, mPointDisplacement_BiggestImpulseThisFrame,
+// maStoredContacts[3], mImpulseContact, mContactSpy, mVolInstId, miNumStoredContacts, mpLocalSpaceSphere,
+// mpWorldSpaceSphere, mfScratchAmount.
 //
-// X360 pointers are 32-bit; on the 64-bit host the two trailing Sphere* widen, so the
-// absolute byte offsets above do NOT all hold on the host (the leading run up to the
-// count is built from byte-exact-width primitives so it stays console-shaped, but the
-// trailing pointers add host padding). Members are pinned BY NAME, never raw offset, and
-// the sensor-array indexing in TagPoint/IKDrivenPoint uses sizeof(DeformationSensor) for
-// stride consistently, so the exact host byte size is not load-bearing. GROW the still-
-// opaque spans into their real members as further sensor TUs land — do not fork.
+// RECONCILIATION (committed-TU safety) -- IMPORTANT, two committed/Wave-2 consumers constrain this header:
+//   (1) BrnDeformationSensor.cpp (committed) :: ClearNonWorldContacts reads, BY NAME:
+//         maStoredContacts[i].mu32NonWorldFlag, mi32NumStoredContacts, mfMaxPointDisplacement,
+//         maPostPhysicsVec0[4], maPostPhysicsVec1[4], mu32PostPhysicsReset.
+//       Those names are KEPT verbatim (renaming them would break the committed .cpp). The committed
+//       StoredContact opaque-64-byte model is likewise KEPT (ClearNonWorldContacts copies it as a
+//       64-byte blob and only tests the +0x34 flag).
+//       >>> FLAG: the DWARF gives the REAL StoredContact members (mLocalPointOnA/mLocalPointOnB/mNormal/
+//       mfProjectedDist/mpOtherVehicle/mpOtherSensor/mbValid) and does NOT separately name
+//       mfMaxPointDisplacement / maPostPhysicsVec0 / maPostPhysicsVec1 / mu32PostPhysicsReset -- those
+//       were inferred from ClearNonWorldContacts' offset writes and physically OVERLAY the DWARF's
+//       mImpulseContact / mContactSpy / mVolInstId region (+0x118..+0x180). They are retained as a
+//       reconstructed scratch overlay (NOT promoted to the DWARF members) PRECISELY so the committed
+//       ClearNonWorldContacts keeps compiling unchanged. Promote them when ClearNonWorldContacts is
+//       re-derived against the real members.
+//   (2) BrnIKBodyPart.cpp (Wave-2) :: GetMaxSensorImpulse() -- now bodied against the real DWARF member
+//       mPointDisplacement_BiggestImpulseThisFrame (the +0x10 16-byte vector the detach test splats its
+//       w lane from), replacing the previous declared-only stub over the opaque leading run.
+//
+// X360 pointers are 32-bit; on the 64-bit host the trailing Sphere* widen, so absolute byte offsets do
+// not all hold on the host. Members are pinned BY NAME, never raw offset; sensor-array indexing uses
+// sizeof(DeformationSensor) for stride, so the exact host byte size is not load-bearing. GROW the
+// reconstructed scratch overlay into the real DWARF members as further sensor TUs land -- do not fork.
+
+namespace CgsSceneManager
+{
+	// Penetration / contact handling reaches the solver only through DeformationSensor::
+	// AddContactsToPenetrationSolver, which takes a PenetrationSolver* -- but a PotentialContact
+	// (ValidateAndAddContact's input) is a CgsSceneManager contact record passed by const ref.
+	struct PotentialContact;
+}
 
 namespace BrnPhysics
 {
@@ -42,6 +57,15 @@ namespace Deformation
 	// reads as the sphere's leading Vector4, so a forward declaration suffices here and we
 	// avoid forking the real type.
 	struct Sphere;
+
+	// The full streamed sensor spec lives in SharedClasses/Physics/Deformation/BrnSensorSpec.h; the
+	// sensor holds it only by const pointer (mpSpec), so a forward declaration suffices and avoids an
+	// include cycle (the streamed spec embeds sensor specs, not sensors).
+	struct SensorSpec;
+
+	// The penetration solver the sensor feeds its contacts into (AddContactsToPenetrationSolver param);
+	// referenced only by pointer, so forward-declared (home: BrnPenetrationSolver.h).
+	struct PenetrationSolver;
 
 	// The two-vehicle deformation system passes contacts between cars by pointer, so the
 	// contact record references the *other* car and its sensor only by pointer -- forward
@@ -76,77 +100,125 @@ namespace Deformation
 		void GetInverse(StoredImpulseContact& lrInverse) const;
 	};
 
-	// One stored contact record. ClearNonWorldContacts copies it as eight 64-bit words
-	// (a 64-byte blob) and tests the "non-world" flag at byte +0x34 within the record; no
-	// other field is reached in this pass, so the record is modelled as a 64-byte POD with
-	// just that flag named. GROW into the real contact members when a contact-producing TU
-	// lands. The 8 leading bytes carried in the moved qword whose high word seeds the
-	// compaction index are part of this opaque payload.
+	// One stored contact record. ClearNonWorldContacts copies it as eight 64-bit words (a 64-byte blob)
+	// and tests the "non-world" flag at byte +0x34 within the record; the committed .cpp reaches no
+	// other field, so the record is KEPT as a 64-byte POD with just that flag named so that committed
+	// body compiles unchanged.
+	//
+	// FLAG (DWARF vs committed model): the DWARF (BrnDeformationSensor.h:42) gives the REAL members --
+	//   mLocalPointOnA (Vector3), mLocalPointOnB (Vector3), mNormal (Vector3), mfProjectedDist (f32),
+	//   mpOtherVehicle (DeformableObject*), mpOtherSensor (DeformationSensor*), mbValid (bool),
+	//   + IsVehicleContact() const.
+	// The committed mu32NonWorldFlag at +0x34 corresponds to the mbValid / world-vs-vehicle discriminator
+	// region. The opaque model is retained (rather than promoted to the DWARF members) to keep the
+	// committed ClearNonWorldContacts byte-stable; promote it together with re-deriving that body.
 	struct StoredContact
 	{
-		u8  maHead[0x34];        // contact +0x00 .. +0x33 (opaque)
-		u32 mu32NonWorldFlag;    // contact +0x34 (console sensor +0x54 for contact[0])
-		u8  maTail[0x40 - 0x38]; // contact +0x38 .. +0x3F (opaque)
+		u8  maHead[0x34];        // contact +0x00 .. +0x33 (opaque; real: mLocalPointOnA/B, mNormal, mfProjectedDist)
+		u32 mu32NonWorldFlag;    // contact +0x34 (console sensor +0x54 for contact[0]); real: world/valid discriminator
+		u8  maTail[0x40 - 0x38]; // contact +0x38 .. +0x3F (opaque; real: mpOtherVehicle/mpOtherSensor/mbValid)
 	};
 
-	struct DeformationSensor
+	// DWARF BrnDeformationSensor.h:97. DeformationSensor IS a CollidableBody (canonical base, vptr at
+	// console +0x0). The vptr occupies the leading word; the named DWARF members begin at console +0x4.
+	struct DeformationSensor : public CollidableBody
 	{
-		// FLAG (best-effort capacity): the stored-contacts array base is console +0x20 and
-		// the next named field (mfMaxPointDisplacement) is console +0x118 (280). The 248
-		// bytes between hold the contacts array plus any inter-field padding; at a 64-byte
-		// stride that bounds the capacity, but no asm/DWARF pins the exact maximum here.
-		// The contacts array is modelled with the bounding capacity and a trailing opaque
-		// span so the named post-physics block stays at its console offset relative to the
-		// array base. mi32NumStoredContacts is the authoritative live count.
-		static const u32 KU_MAX_STORED_CONTACTS = 3;
+		static const u32 KU_MAX_STORED_CONTACTS = 3;   // DWARF: maStoredContacts[3]
 
-		// Opaque leading run (CollidableBody base + spec ptr + point displacement + ...)
-		// preceding the stored-contacts array at console +0x20 (32).
-		u8 maReserved0[0x20];
+		// ---- DWARF leading members (console +0x04 onward) --------------------------------------
+		// DWARF :262. The streamed sensor spec (rest offset, per-direction limits, radius, links). Held
+		// by const pointer; console +0x4 (immediately after the vptr).
+		const SensorSpec* mpSpec;
 
-		// console +0x20 -- stored-contacts array (64-byte stride per contact).
+		// DWARF :265. This-frame point-displacement / biggest-impulse vector (Vector3Plus: xyz =
+		// displacement, w = the biggest impulse magnitude this frame). Console +0x10 -- the 16-byte
+		// vector IKBodyPart::CheckSensorForcesForJointDetachment @ 0x825C17F8 loads and broadcasts the
+		// w lane of (vspltw v0,v0,3) into its peak-impulse max-fold. GetMaxSensorImpulse() returns it.
+		Vector3Plus mPointDisplacement_BiggestImpulseThisFrame;
+
+		// console +0x20 -- stored-contacts array (64-byte stride per contact). DWARF :266.
 		StoredContact maStoredContacts[KU_MAX_STORED_CONTACTS];
 
-		// Opaque span between the contacts array end and mfMaxPointDisplacement (+0x118).
+		// ---- RECONSTRUCTED SCRATCH OVERLAY (kept for committed ClearNonWorldContacts) -----------
+		// FLAG: in the DWARF the bytes from the contacts array end through the count are
+		//   mImpulseContact (StoredImpulseContact, :267), mContactSpy (OutContactSpy, :268) and
+		//   mVolInstId (CgsSceneManager::VolumeInstanceId, :269). The committed ClearNonWorldContacts
+		// instead writes named scratch fields at console +0x118 / +0x120 / +0x130 / +0x180 (inferred
+		// from its stores). To keep that committed body byte-stable, the inferred scratch members are
+		// retained HERE (overlaying the DWARF mImpulseContact/mContactSpy/mVolInstId region) rather than
+		// promoting the DWARF members. The opaque spans bridge to each named scratch offset relative to
+		// the contacts-array base. PROMOTE to the DWARF members when ClearNonWorldContacts is re-derived.
 		u8 maReserved1[0x118 - (0x20 + KU_MAX_STORED_CONTACTS * sizeof(StoredContact))];
 
-		f32 mfMaxPointDisplacement;     // console +0x118 (280) -- reset to 100.0
+		f32 mfMaxPointDisplacement;     // console +0x118 (280) -- reset to 100.0  (overlay; DWARF mImpulseContact region)
 		f32 maPostPhysicsVec0[4];       // console +0x120 (288) -- zeroed (16 bytes)
 		f32 maPostPhysicsVec1[4];       // console +0x130 (304) -- zeroed (16 bytes)
 
 		// Opaque span between maPostPhysicsVec1 end (+0x140) and mu32PostPhysicsReset (+0x180).
 		u8 maReserved2[0x180 - 0x140];
 
-		u32 mu32PostPhysicsReset;       // console +0x180 (384) -- zeroed
+		u32 mu32PostPhysicsReset;       // console +0x180 (384) -- zeroed (overlay; DWARF mContactSpy/mVolInstId region)
 
 		// Opaque span between mu32PostPhysicsReset end (+0x184) and the count (+0x198).
 		u8 maReserved3[0x198 - 0x184];
 
-		s32 mi32NumStoredContacts;      // console +0x198 (408) -- live contact count
+		// ---- DWARF trailing members (console +0x198 onward) ------------------------------------
+		// DWARF :270 miNumStoredContacts. KEPT under the committed name mi32NumStoredContacts (the
+		// committed ClearNonWorldContacts spells it that way; the DWARF name miNumStoredContacts differs
+		// only in the i32 width tag).
+		s32 mi32NumStoredContacts;      // console +0x198 (408) -- live contact count  (DWARF :270 miNumStoredContacts)
 
-		Sphere* mpLocalSpaceSphere;   // console +0x19C (412)
-		Sphere* mpWorldSpaceSphere;   // console +0x1A0 (416)
-		f32     mfScratchAmount;      // console +0x1A4 (420) — accumulated scratch / damage
+		Sphere* mpLocalSpaceSphere;   // console +0x19C (412)  (DWARF :271)
+		Sphere* mpWorldSpaceSphere;   // console +0x1A0 (416)  (DWARF :272)
+		f32     mfScratchAmount;      // console +0x1A4 (420)  (DWARF :273) — accumulated scratch / damage
 
+		// ---- trivial accessors (bodied) --------------------------------------------------------
 		const Sphere* GetLocalSpaceSphere() const { return mpLocalSpaceSphere; }
 		const Sphere* GetWorldSpaceSphere() const { return mpWorldSpaceSphere; }
 		f32           GetScratchAmount()   const { return mfScratchAmount; }
 
-		// ADDITIVE GROW (flagged by IKBodyPart-bodies group): the per-sensor accumulated-impulse
-		// vector the detachment test reads. IKBodyPart::CheckSensorForcesForJointDetachment @
-		// 0x825C17F8 loads this 16-byte vector from console sensor +0x10 and broadcasts its w lane
-		// (vspltw v0,v0,3) into the peak-impulse max-fold; the w lane carries the impulse magnitude
-		// the detach band is compared against. The console offset +0x10 falls inside the still-opaque
-		// CollidableBody leading run (maReserved0[0x20]) of THIS slice, so the real member is not yet
-		// named here -- this accessor is DECLARED ONLY (its body lives in the sensor's own TU when the
-		// CollidableBody base is homed) and reaches the vector BY NAME from the IKBodyPart caller under
-		// the per-TU cl /c gate. FLAG: name/role best-effort ("max sensor impulse"); confirm against the
-		// sensor TU when the leading run is reconstructed.
-		const VecFloat& GetMaxSensorImpulse() const;
+		// The per-sensor biggest-impulse vector the joint-detach test reads. Now bodied against the real
+		// DWARF member (its w lane carries the magnitude the detach band compares). Called by
+		// BrnIKBodyPart.cpp (Wave-2) as GetDeformationSensorA()->GetMaxSensorImpulse().w.
+		const VecFloat& GetMaxSensorImpulse() const
+		{
+			return reinterpret_cast<const VecFloat&>(mPointDisplacement_BiggestImpulseThisFrame);
+		}
 
-		// DeformationSensor::ClearNonWorldContacts @ 0x825C1050. Compact the stored-contacts
-		// array (remove contacts whose mu32NonWorldFlag is set) and reset the post-physics
-		// scratch state. Caller (X360 xref): DeformableObject::UpdatePostPhysics.
+		// ---- Wave-3 sensor methods (DECLARED-ONLY; bodies in the sensor TUs) --------------------
+		// DWARF :97. Default constructor (zero-init via ClearVariables).
+		DeformationSensor();
+
+		// DWARF BrnDeformationSensor.cpp:90. Bind the sensor to its spec + local/world spheres and place
+		// it in the body frame. (Matrix44Affine + the four trailing Vector3Plus/Vector3 args are the
+		// world transform + the seeded displacement/offset vectors.)
+		bool Prepare(const SensorSpec* lpSpec, Sphere* lpLocalSphere, Sphere* lpWorldSphere,
+		             Matrix44Affine lWorldTransform, Vector3Plus lDisplacement,
+		             Vector3 lOffsetA, Vector3 lOffsetB, Vector3 lOffsetC);
+
+		// DWARF BrnDeformationSensor.cpp:268 -- CollidableBody override. Apply one impulse to this sensor.
+		virtual void ApplyLocalImpulse(ImpulseParams* lpImpulseParams);
+
+		// DWARF BrnDeformationSensor.cpp:202 -- CollidableBody override. Receive a passed-on impulse from
+		// a neighbouring body (the trailing VecFloat is the chain's remaining magnitude).
+		virtual void RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams, VecFloat lvfPassedMagnitude);
+
+		// DWARF BrnDeformationSensor.cpp:465. Validate a candidate contact (cull / clamp) and, if kept,
+		// store it in maStoredContacts. Returns true if a contact was added.
+		bool ValidateAndAddContact(Matrix44Affine lWorldTransform,
+		                           const CgsSceneManager::PotentialContact& lrPotential,
+		                           ContactId lContactId,
+		                           DeformableObject* lpOtherVehicle,
+		                           DeformationSensor* lpOtherSensor);
+
+		// DWARF BrnDeformationSensor.cpp:718. Push this sensor's stored contacts into the shared
+		// penetration solver (as vehicle or world contacts per the body indices). const.
+		void AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpObject,
+		                                    s32 liBodyIndex, s32 liWorldIndex, bool lbWorld) const;
+
+		// DeformationSensor::ClearNonWorldContacts @ 0x825C1050 (COMMITTED body in BrnDeformationSensor.cpp).
+		// Compact the stored-contacts array (remove contacts whose mu32NonWorldFlag is set) and reset the
+		// post-physics scratch state. Caller (X360 xref): DeformableObject::UpdatePostPhysics.
 		void ClearNonWorldContacts();
 	};
 }

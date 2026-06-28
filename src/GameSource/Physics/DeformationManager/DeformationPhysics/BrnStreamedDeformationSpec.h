@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"          // CgsGeometric::AxisAlignedBox (GetBoundingBox out-param)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"   // EBodyParts (committed home)
+#include "SharedClasses/Physics/Deformation/BrnSensorSpec.h"                       // SensorSpec (canonical home; embedded by value below)
 
 // BrnPhysics::Deformation::StreamedDeformationSpec and its inline spec sub-structs.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX with member names/types from the DecFIGS
@@ -57,22 +58,11 @@ namespace Deformation
         EBodyParts mePartType;
     };
 
-    // BrnSensorSpec.h:48 -- one deformation sensor's streamed parameters.
-    // sizeof == 64: mInitialOffset(16) + maDirectionParams[6](24) + mfRadius(4) +
-    // maNextSensor[6](6) + mu8SceneIndex(1) + mu8AbsorbtionLevel(1) +
-    // mau8NextBoundarySensor[2](2), 16-byte aligned.
-    struct alignas(16) SensorSpec
-    {
-        struct PerDirectionParams { f32 mCompressionLimits; };
-
-        Vector3            mInitialOffset;
-        PerDirectionParams maDirectionParams[6];
-        f32                mfRadius;
-        u8                 maNextSensor[6];
-        u8                 mu8SceneIndex;
-        u8                 mu8AbsorbtionLevel;
-        u8                 mau8NextBoundarySensor[2];
-    };
+    // SensorSpec (one deformation sensor's streamed parameters) is now homed canonically in
+    // SharedClasses/Physics/Deformation/BrnSensorSpec.h (included above) and embedded by value below as
+    // maDeformationSensorSpecs[20]. Its local copy previously lived here; it was REMOVED to keep a single
+    // ODR-correct definition. The committed BrnStreamedDeformationSpec.cpp's field reads
+    // (.mInitialOffset @ +0, .mfRadius @ +40) are unaffected -- the canonical layout matches.
 
     // BrnStreamedDeformationSpec.h:69 -- one streamed locator point (generic/camera/light tag).
     struct LocatorPointSpec
