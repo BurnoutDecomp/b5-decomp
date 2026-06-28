@@ -16,6 +16,11 @@
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 
+// The Apt GC reference-registration callback -- wired by the Apt GC startup
+// (AptInit); null until then (FLAG). The GC value types' RegisterReferences call
+// through it, so the mark walk is inert until the collector is up.
+AptValue::ReferenceRegistrationCb AptValue::sReferenceRegistrationCb = 0;
+
 // DeleteThis @ 0x824ED4B8
 void AptValue::DeleteThis()
 {
