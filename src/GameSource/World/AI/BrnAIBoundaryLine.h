@@ -7,10 +7,11 @@
 // AI-section edges the racing-line code interpolates across). Returned by Portal::GetBoundaryLine
 // and consumed by ResetOnTrackManager::ConvertNodesToPositionAndDirection.
 //
-// LAYOUT (pinned from the X360 asm of GetInterp @ 0x82676C78): the line is a single 16-byte,
-// 16-aligned SIMD register (loaded whole with `lvx128 v13, r0, r4`) holding the two 2D endpoints
-// packed as four floats -- start (lane0,lane1) and end (lane2,lane3). Modelled as the two named
-// Vector2 endpoints so the 16-byte footprint matches and members are reached by name.
+// LAYOUT (pinned from the X360 asm of GetInterp @ 0x82676C78 and GetLength @ 0x82676BE8): the
+// line is a single 16-byte, 16-aligned SIMD register (loaded whole with `lvx128 v0, r0, r4`)
+// holding the two 2D endpoints packed as four floats -- start (lane0,lane1) and end (lane2,lane3).
+// Modelled as the two named Vector2 endpoints so the 16-byte footprint matches and members are
+// reached by name.
 namespace BrnAI
 {
     // 16 bytes total: the two 2D endpoints packed into the four lanes of one SIMD register
@@ -26,5 +27,10 @@ namespace BrnAI
         // 0x82676C78 -- interpolate a point along the boundary line by parameter lfT, writing
         // the result Vector2 to *lpv2Out. (X360 ABI: out in r3, this in r4, lfT in f1.)
         void GetInterp(Vector2* lpv2Out, f32 lfT) const;
+
+        // 0x82676BE8 -- planar length of the boundary line == distance between its two 2D
+        // endpoints, sqrt((mfEndX-mfStartX)^2 + (mfEndY-mfStartY)^2). (X360 ABI: this in r3,
+        // f32 result in f1.) Consumed by ResetOnTrackManager::GetRoadSideForStartingLine.
+        f32 GetLength() const;
     };
 }
