@@ -123,6 +123,20 @@ namespace vpu
         lInverse.wAxis.w = 0.0f;
         return lInverse;
     }
+
+    // IsValid(Matrix44Affine): the affine is valid when every one of its four rows is
+    // valid (no NaN in any x/y/z lane). The console build folds this into a per-row,
+    // per-lane vcmpeqfp self-equality cascade (the x==x NaN test broadcast over each
+    // row, ANDed together); reconstructed here as four IsValid(Vector3) row checks. The
+    // RaceCar transform asserts (AddToWorld / UpdatePositioningData) call this on the
+    // full transform.
+    inline bool IsValid(const Matrix44Affine& lrMatrix)
+    {
+        return IsValid(lrMatrix.xAxis)
+            && IsValid(lrMatrix.yAxis)
+            && IsValid(lrMatrix.zAxis)
+            && IsValid(lrMatrix.wAxis);
+    }
 }
 }
 }
