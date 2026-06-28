@@ -112,6 +112,30 @@ public:
         return KI_INVALID_BITINDEX;
     }
 
+    // Index of the lowest CLEAR (zero) bit, or KI_INVALID_BITINDEX(-1) if every bit in
+    // [0, tuNumBits) is set. Mirrors the X360 find-first-clear-bit slot allocator
+    // (TriggerEntityModule::ProcessAddTriggerEvents 0x822D8F48): per 64-bit field, skip
+    // all-ones fields (== ~0), else complement the word and reuse the lowest-set-bit
+    // helper on the complement (the lowest set bit of ~field == the lowest clear bit of field).
+    s32 GetFirstClearBit() const
+    {
+        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
+        {
+            if (maxBits[luField] == ~static_cast<u64>(0))
+            {
+                continue;   // every bit in this field is set
+            }
+            const s32 liBit = static_cast<s32>(luField) * static_cast<s32>(kuNumberOfBitsInBitField)
+                            + GetZeroBitInInt(~maxBits[luField]);
+            if (static_cast<u32>(liBit) >= tuNumBits)
+            {
+                return KI_INVALID_BITINDEX;
+            }
+            return liBit;
+        }
+        return KI_INVALID_BITINDEX;
+    }
+
 private:
     // Index of the lowest set bit within a single 64-bit field (the X360 (field*64 -
     // clz64(field & -field) + 63) lowest-set-bit idiom, value-identical to a count-trailing-zeros).
