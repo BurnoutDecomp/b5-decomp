@@ -52,6 +52,6 @@ namespace Log
 
 namespace Message
 {
-    u32 gxMessageFilterFlags = 0xFFFFFFFF;
+    u64 gxMessageFilterFlags = 0xFFFFFFFF;
 }
 }
