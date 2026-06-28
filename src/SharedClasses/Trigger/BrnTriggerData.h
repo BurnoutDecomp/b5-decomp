@@ -32,6 +32,13 @@
 // NOT separate symbols (they were inlined into the caller), so they are correctly modeled as
 // inline accessors. Only GetLandmarkFromRegionIndex is forward-declared here (its body lives in
 // the BrnTriggerData TU); everything OfflineGameMode needs is inline below.
+//
+// FixUp/FixDown CONTRACT: the PS3 DWARF declares these as `void FixUp(MemoryResource)`. The X360
+// ARTIST binary (0x8267FC08 / 0x8267F800) instead takes the load-base DELTA as a plain int and
+// returns it, and the committed BrnTrigger::TriggerResourceType.cpp forwarder calls them as
+// `FixUp(static_cast<int>(CgsResource::GetLoadBase(...)))`. The X360 is authoritative, so they
+// are modeled as `int FixUp(int)/int FixDown(int)` — the same int-delta contract already used by
+// the committed BrnProgression::ProgressionData::FixUp/FixDown.
 
 namespace BrnTrigger
 {
@@ -98,9 +105,18 @@ struct TriggerData
     int  GetRoamingLocationCount() const { return miRoamingLocationCount; }
     const SpawnLocation*   GetSpawnLocation(int liIndex) const;
     int  GetSpawnLocationCount() const { return miSpawnLocationCount; }
+
+    // X360 0x82675738. Linear scan of the landmark table for one whose GetId() == lId. Returns the
+    // matching Landmark, or the base pointer mpLandmarks (NOT null) on miss/empty. Body in the TU.
     const Landmark*        FindLandmark(CgsID lId) const;
     const Landmark*        FindLandmarkByDesignIndex(uint8_t luDesignIndex) const;
     uint32_t GetSize() const { return muSize; }
+
+    // X360 0x8267F800 / 0x8267FC08. Load-time pointer relocation. liDelta is the load-base; FixUp
+    // ADDS it (offset -> absolute address), FixDown SUBTRACTS it (absolute -> offset). int-delta
+    // contract (see header note); the committed TriggerResourceType.cpp forwarder calls these.
+    int FixDown(int liDelta);
+    int FixUp(int liDelta);
 
 private:
     // Full X360 layout (DWARF order). Trailing members past miLandmarkCount were absent from the
