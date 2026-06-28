@@ -18,6 +18,10 @@ namespace BrnGameState
 
     class PaybackDebugComponent : public CgsDev::DebugComponent
     {
+        // PaybackManager owns this component by value and wires the back-pointer during its own
+        // Construct (the X360 `*(this+632) = this` store, == &mDebugComponent.mpPaybackManager).
+        friend struct PaybackManager;
+
     protected:
         const char* GetName() const override;   // @ 0x82357B88
         void        OnActivate() override;       // @ 0x82357B98

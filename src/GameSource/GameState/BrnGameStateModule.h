@@ -4,6 +4,7 @@
 #include "BrnCommonTypes.h"                                         // CgsID (CarSelect player-car-change grows)
 #include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"  // CgsModule::ModuleSingleBuffered base
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // CgsModule::VariableEventQueue<N,16> (output GUI event queue)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CgsDev::Assert Begin/Fire/EndAssert
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"        // BrnGameState::ModeManager (mModeManager, by value)
 
@@ -40,6 +41,20 @@ public:
 
     // X360 @ 0x823116D0 (BrnGameStateModule.h:982). Out-of-line; defined in BrnGameStateModule.cpp.
     bool IsOnlineGameMode();
+
+    // ADDITIVE GROW (declare-only) for the BrnPaybackManager TU. X360 @ 0x823566F8. Hands back the
+    // module's per-frame output GUI event queue (a CgsModule::VariableEventQueue<18432,16>) the
+    // PaybackManager publishes its countdown / state-change HUD events onto via AddEvent(&ev,type,
+    // size). Body + the real embedded-queue member land with the GameStateModule TU; declare-only
+    // suffices for the per-TU `cl /c` gate.
+    CgsModule::VariableEventQueue<18432, 16>* GetOutputGuiEventQueue();
+
+    // ADDITIVE GROW (declare-only) for the BrnPaybackManager TU. X360 PaybackManager::
+    // HandleHavingPayback resolves the active race car for a slot index from the module's active-car
+    // table (this+7632) and treats a null entry OR a dead car-id (@+328 == -1) as "the car has left
+    // the game". De-inlined to this named predicate (true == the slot still holds a live race car);
+    // body + the real table walk land with the GameStateModule TU.
+    bool IsActiveRaceCarStillPresent(::EActiveRaceCarIndex leActiveRaceCarIndex) const;
 
     // ADDITIVE GROW (declare-only) for the BrnMugshotManager TU. The X360 build inlines the access
     // to the owning module's embedded ModeManager (MugshotManager reads through *(this+0x1DB8) to

@@ -20,6 +20,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"      // CgsModule::IOBuffer (base; lock state)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"    // CgsModule::EventQueue<T,N> (mTrafficTypeResponseQueue)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<N,16> (GUI output / dirty-trick HUD events)
 #include "GameSource/BurnoutConstants.h"                    // EActiveRaceCarIndex (enum : s32)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (enum : s32)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h" // BrnTraffic::BrnTrafficIO::TrafficTypeResponse
@@ -36,6 +37,10 @@ namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRace
 // incomplete pointer/reference, so forward declarations suffice.
 namespace BrnTrigger { struct TriggerRegion; }
 namespace BrnWorld { namespace TriggerEntityModuleIO { struct InRemoveTriggerEvent; } }
+
+// OutputBuffer::GetGameStateToNetworkInterface() (BrnPaybackManager grow) returns this by pointer
+// only; forward-declare its real home (BrnNetworkModuleGameStateIOInterfaces.h).
+namespace BrnNetwork { namespace BrnNetworkModuleIO { struct GameStateToNetworkInterface; } }
 
 namespace BrnGameState
 {
@@ -158,7 +163,7 @@ namespace GameStateModuleIO
     class GameActionQueue;                 // OutputBuffer +0x04
     class ResourceRequestInterface;        // OutputBuffer +0x3414 (RequestInterface<3072>)
     class TakedownEventOutputQueueType;    // OutputBuffer +0x4040
-    class GameStateToGuiInterface;         // OutputBuffer +0x4450
+    struct GameStateToGuiInterface;        // OutputBuffer +0x4450 (complete def: BrnGameStateToGuiIOInterfaces.h)
     class RaceCarRaceDistanceInterface;    // OutputBuffer +0x2A48C
 
     // Placeholder member types for the OutputBuffer interface members the OutputBuffer TU
@@ -200,7 +205,18 @@ namespace GameStateModuleIO
     // PreWorldInputBuffer +0x7B0. DWARF (:140/141, :166): the network-to-game-state input
     // interface (NetworkToGameStateInterface). Read-locked by BurnoutSkillzManager::PreWorldUpdate.
     // Modelled minimally as a named opaque payload; swap for the real interface when it is homed.
-    struct NetworkToGameStateInterface { u8 maOpaque[16]; };
+    struct NetworkToGameStateInterface
+    {
+        // ADDITIVE GROW (declare-only) for the BrnPaybackManager TU. The X360 PaybackManager::
+        // ProcessDirtyTrickEventQueue reaches the per-frame inbound dirty-trick queue as
+        // lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue() (the queue lives at
+        // interface +0x2268: a CgsModule::EventQueue<DirtyTrickEvent,28> walked by GetLength()/
+        // GetEvent(i)). Body + the real embedded-queue member land with this interface's own TU.
+        const CgsModule::EventQueue<BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent, 28>*
+            GetDirtyTrickQueue() const;
+
+        u8 maOpaque[16];
+    };
 
     // OutputBuffer +0x9050. DWARF (:283/284, :347): the trigger-management input interface
     // (OutputBuffer::TriggerManagementInputInterface). Returned read-locked
@@ -416,6 +432,20 @@ namespace GameStateModuleIO
         TakedownEventOutputQueueType*     GetTakedownEventOutputQueue();
         // X360 0x8231D8A8 (write-lock; "Not locked for writing", line 296)
         GameStateToGuiInterface*          GetGameStateToGuiInterface();
+        // ADDITIVE GROW (declare-only) for the BrnPaybackManager TU. The X360 PaybackManager bodies
+        // (HandleHavingPayback / ProcessDirtyTrickEventQueue) post the per-car dirty-trick game-action
+        // records onto the output buffer's variable-size game-action queue
+        // (CgsModule::VariableEventQueue<13312,16> == the GameStateModuleIO GameActionQueue) via
+        // AddEvent(&ev, type, size) / AddGameAction<T>. Concrete-typed twin of GetGameActionQueue()
+        // (whose forward-declared incomplete GameActionQueue cannot be called through); returned
+        // write-locked, body lands with the OutputBuffer TU.
+        CgsModule::VariableEventQueue<13312, 16>* GetGuiOutputQueue();
+
+        // ADDITIVE GROW (declare-only) for the BrnPaybackManager TU. X360 PaybackManager::Update
+        // appends the manager's per-frame outbound dirty-trick queue into the output buffer's
+        // GameState->Network interface (GetGameStateToNetworkInterface()->GetDirtyTrickQueue()->
+        // Append(...)). Returns the embedded interface by pointer; body lands with the OutputBuffer TU.
+        BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* GetGameStateToNetworkInterface();
         // X360 0x823B9D80 (read-lock; "Not locked for reading", line 295) -- const twin of the above.
         // (class:BrnGameState catch-all TU; the BridgeGameStateToGui consumer reads it read-locked.)
         const GameStateToGuiInterface*    GetGameStateToGuiInterface() const;
