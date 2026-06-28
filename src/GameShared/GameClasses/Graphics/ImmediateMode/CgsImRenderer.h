@@ -57,5 +57,14 @@ namespace CgsGraphics
         // CgsIm2d.cpp (PC: a scratch vertex run drawn via DrawPrimitiveUP).
         V*   RenderStart(u32 luVertexCount);
         void RenderEnd(renderengine::PrimitiveType lePrimitiveType, const V* lpVertices, u32 luVertexCount);
+
+        // Push a "set vertex/pixel program" command into the open render-buffer batch
+        // (X360 CgsGraphics::ImRenderBuffer<V>::SetProgram @ 0x824590B8 for the
+        // <Basic2dColouredTexturedVertex> instance, called by BrnFlapt::FlaptRenderer::SetShader/
+        // RenderMesh/RenderTextField). Must be inside a BeginRendering/EndRendering block; the byte
+        // program id is appended as a command word. The X360 ImRenderBuffer carries this command API
+        // at +4 of the polymorphic buffer; on the PC fold (Im2dRenderBuffer == Im2d : ImRenderer<V>)
+        // it is an ordinary base-class method reached by name.
+        void SetProgram(s8 lcProgramId);
     };
 }

@@ -27,12 +27,15 @@ MovieClipRef* FlaptFileInstance::GetRootMovieClip(MovieClipRef* lpOutRef) const
     CGS_ASSERT(mpRootMovieClipInstance != 0, "mpRootMovieClipInstance");
 
     // Inlined MovieClipRef construction: re-asserts the clip pointer is non-null
-    // ("lpMovieClipInst") and seeds the second slot to 0.
+    // ("lpMovieClipInst") and seeds the transform slot to 0 (a root clip has no
+    // Im2dTransform). The root instance is held opaquely here (void*); the Ref
+    // names it as a MovieClipInstance*, so bridge the pointer type.
     void* lpMovieClipInst = mpRootMovieClipInstance;
     CGS_ASSERT(lpMovieClipInst != 0, "lpMovieClipInst");
 
-    lpOutRef->mpClipInstance = lpMovieClipInst;
-    lpOutRef->mu04           = 0;
+    lpOutRef->mpMovieClipInst =
+        static_cast<BrnFlapt::MovieClipInstance*>(lpMovieClipInst);
+    lpOutRef->mpTransform = 0;
     return lpOutRef;
 }
 
