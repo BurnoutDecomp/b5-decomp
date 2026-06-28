@@ -154,6 +154,7 @@ namespace Deformation
         // interface; here they are the qualified, forward-declared CgsPhysics::PhysicsSimulationIO::
         // InputBuffer / OutputBuffer and CgsSceneManager::SceneManagerIO::InSceneUpdateInterface (the
         // type OutputBuffer::SceneInputInterface is a typedef of). Referenced by pointer only.
+        DeformableObject();   // @0x82603EF0 -- vtable wiring + per-sensor construct (bodied in _Lifecycle.cpp)
         void Construct();                                                                       // :172
         void Destruct();                                                                        // :175
         bool Prepare(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput, u16 lu16Index,
@@ -223,6 +224,13 @@ namespace Deformation
         // ref here to avoid requiring its (not-yet-homed) full layout for a declare-only method.
         void UpdateHandlingBody(const OutUpdateRigidBody& lrUpdate);                            // :341
         RigidBodyId GetHandlingBodyID();                                                        // :344
+
+        // The high byte of the handling-body-id word (console +26384). The X360 reads
+        // HIBYTE(*(this+26384)) as the player/game-mode SELECTOR in UpdateAbsorptionSet /
+        // ApplySensorImpulse / the crash gates -- this is the authoritative source for that byte
+        // (distinct from the reconstructed mu32GameModeState at +26392; do NOT use GetGameModeByte()
+        // for the +26384 reads).
+        u8 GetHandlingBodyIdHighByte() const { return static_cast<u8>(mHandlingBodyID.muValue >> 24); }
 
         // DWARF :347. This car's global scene-entity id. DECLARE-ONLY (its body reads mGlobalEntityId).
         EntityId GetGlobalEntityId();                                                           // :347
