@@ -216,3 +216,15 @@ void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* /*pItem*/)
     pCtx->popColourTransform();
     pCtx->popVertexMatrix();
 }
+
+// AptCharacter_render -- the geometry-draw helper the render-item subtypes call
+// (homed here, dispatching to AptCharacter::render @0x810E74). Now the shape
+// render path is wired end-to-end: AptRenderItemShape::Render -> PushMatrices ->
+// AptCharacter_render -> AptCharacter::render -> AptHook_DrawShape (the RW
+// rasteriser boundary).
+void AptCharacter_render(AptCharacter* pCharacter, AptRenderingContext* pCtx,
+                         AptMaskRenderOperation eOp, int nTick)
+{
+    if (pCharacter)
+        pCharacter->render(pCtx, eOp, nTick);
+}
