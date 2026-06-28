@@ -63,6 +63,9 @@ struct AptCharacterAnimation
     int32_t       mnInitListCount;
     AptInitEntry* mpInitList;
 
+    // Console dword [12] -- cleared by Resolve; the AptMovie::resolve scratch.
+    void*         mpResolveState;
+
     // (More fields -- console [0-2],[5-7],[12+] used by Fixup/Resolve/AptMovie --
     //  are added as decoded; this runtime form is transcoded, so its layout is
     //  ours, populated by the loader.)
@@ -80,4 +83,14 @@ struct AptCharacterAnimation
     // @0x80E790 -- add a character reference to every table entry, binding each
     // un-bound character to the given animation file.
     void IncCharacterList(AptFilePtr filePtr) const;
+
+    // --- .apt load resolution (D) ------------------------------------------
+    // @0x80EEC4 -- resolve this (serialised) movie root against the load base:
+    // clear the resolve scratch + run the recursive Fixup. Returns the root.
+    AptCharacterAnimation* Resolve(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
+    // @0x80E9E4 -- the recursive relocate/transcode of the whole character tree.
+    // FLAG: the deep data-side keystone (per-character-type relocation + recursion
+    // into AptMovie::resolve / AptLoader::Load for imports; on x64 a serialised->
+    // runtime transcode). Stubbed -- the next focused piece.
+    AptCharacterAnimation* Fixup(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
 };

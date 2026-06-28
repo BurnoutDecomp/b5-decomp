@@ -78,4 +78,9 @@ struct AptLoader
 
     // @0x7F2AE4 -- unlink the node owning pFile from the list (called by ~AptFile).
     void Invalidate(AptFile* pFile);
+
+    // @0x80EF2C -- the async load-completion: a streamed .apt blob (pBase) + its
+    // header (pConstFile) + the raw block (pBlock) have arrived for filePtr.
+    // Resolve the movie root and publish it into the AptFile (state -> loaded).
+    void CompleteLoad(AptFilePtr filePtr, void* pBase, struct AptConstFile* pConstFile, void* pBlock);
 };
