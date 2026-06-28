@@ -1,0 +1,107 @@
+#ifndef BRN_GUI_SHARED_H
+#define BRN_GUI_SHARED_H
+
+#include "types.hpp"
+
+// ============================================================================
+// GameSource/Gui/BrnGuiShared.h
+//
+// Shared GUI enumerations + lookup data used across the BrnGui flow components.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX; enum names/values pinned from the
+// DecFIGS DWARF (references/DecFIGS/dwarfdump/GameSource/Gui/BrnGuiShared.h),
+// gated on the X360 ledger.
+//
+// Only the slice the currently-landed TUs need is declared here (grow additively):
+//   - BrnGui::ERoadIcon            -- the 64 sat-nav road-icon ids (the apt timeline
+//                                     label for each road, named by its numeric code).
+//   - gapcRoadIconNames[]          -- the parallel name table FlaptRoadSignIconComponent
+//                                     ::FindRoadFromName (X360 @ 0x8241CD08) walks to map
+//                                     an icon name string back to its ERoadIcon. The
+//                                     names ARE the enum suffixes ("397134", ...); the
+//                                     table is DEFINED by this header's data TU
+//                                     (BrnGuiShared.cpp / off_82F27C98), declared here.
+// ============================================================================
+
+namespace BrnGui
+{
+    // BrnGuiShared.h:296 (DWARF) -- a sat-nav road icon. Each value's numeric suffix
+    // is the apt timeline-label code for that road's sign artwork; the parallel name
+    // table below holds those code strings in the same order.
+    enum ERoadIcon
+    {
+        E_ROADICON_397134 = 0,
+        E_ROADICON_394306 = 1,
+        E_ROADICON_535195 = 2,
+        E_ROADICON_505312 = 3,
+        E_ROADICON_393062 = 4,
+        E_ROADICON_396133 = 5,
+        E_ROADICON_394474 = 6,
+        E_ROADICON_386215 = 7,
+        E_ROADICON_394965 = 8,
+        E_ROADICON_385737 = 9,
+        E_ROADICON_392688 = 10,
+        E_ROADICON_393166 = 11,
+        E_ROADICON_397409 = 12,
+        E_ROADICON_396228 = 13,
+        E_ROADICON_385860 = 14,
+        E_ROADICON_392532 = 15,
+        E_ROADICON_392323 = 16,
+        E_ROADICON_396706 = 17,
+        E_ROADICON_393198 = 18,
+        E_ROADICON_395917 = 19,
+        E_ROADICON_392997 = 20,
+        E_ROADICON_393860 = 21,
+        E_ROADICON_396988 = 22,
+        E_ROADICON_396188 = 23,
+        E_ROADICON_397165 = 24,
+        E_ROADICON_395490 = 25,
+        E_ROADICON_387153 = 26,
+        E_ROADICON_393756 = 27,
+        E_ROADICON_392684 = 28,
+        E_ROADICON_394853 = 29,
+        E_ROADICON_506394 = 30,
+        E_ROADICON_394273 = 31,
+        E_ROADICON_396114 = 32,
+        E_ROADICON_395952 = 33,
+        E_ROADICON_396456 = 34,
+        E_ROADICON_393760 = 35,
+        E_ROADICON_397201 = 36,
+        E_ROADICON_396742 = 37,
+        E_ROADICON_390723 = 38,
+        E_ROADICON_397455 = 39,
+        E_ROADICON_561416 = 40,
+        E_ROADICON_396460 = 41,
+        E_ROADICON_383595 = 42,
+        E_ROADICON_396718 = 43,
+        E_ROADICON_561415 = 44,
+        E_ROADICON_387198 = 45,
+        E_ROADICON_397601 = 46,
+        E_ROADICON_395656 = 47,
+        E_ROADICON_386734 = 48,
+        E_ROADICON_397702 = 49,
+        E_ROADICON_395197 = 50,
+        E_ROADICON_506519 = 51,
+        E_ROADICON_395600 = 52,
+        E_ROADICON_392589 = 53,
+        E_ROADICON_393911 = 54,
+        E_ROADICON_394487 = 55,
+        E_ROADICON_397348 = 56,
+        E_ROADICON_393900 = 57,
+        E_ROADICON_393120 = 58,
+        E_ROADICON_387078 = 59,
+        E_ROADICON_393762 = 60,
+        E_ROADICON_535196 = 61,
+        E_ROADICON_561121 = 62,
+        E_ROADICON_561413 = 63,
+        E_ROADICON_COUNT  = 64,
+    };
+
+    // off_82F27C98 .. off_82F27D98 (X360) -- the road-icon name table, one entry per
+    // ERoadIcon, in enum order. FindRoadFromName linear-searches it for an exact match
+    // and returns the matching index as an ERoadIcon. Owned + defined by BrnGuiShared's
+    // own data TU (the 64-string set is serialised data, not in the function export);
+    // declared here so FindRoadFromName resolves against the single shared home.
+    extern const char* const gapcRoadIconNames[E_ROADICON_COUNT];
+}
+
+#endif // BRN_GUI_SHARED_H
