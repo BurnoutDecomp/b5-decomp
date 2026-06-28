@@ -30,6 +30,13 @@ namespace BrnFlapt
         // into the caller-provided out buffer).
         MovieClipRef* GetRootMovieClip(MovieClipRef* lpOutRef) const;
 
+        // FindComponent @ 0x8246EBxx : look up a named timeline component by its
+        // pre-hashed name and write a MovieClipRef onto it into lpOutRef. Declared
+        // here (asm-attested arg order this/hash/out/name from the BrnFlaptFileRef.cpp
+        // call site, r3..r6) so callers compile; the body lands with this class's TU.
+        MovieClipRef* FindComponent(u32 luHash, MovieClipRef* lpOutRef,
+                                    const char* lpcName) const;
+
         u8    mbIsActive;             // +0x00
         u8    mau8Opaque01[0x23];     // +0x01..0x23  pad to +0x24
         void* mpRootMovieClipInstance;// +0x24
