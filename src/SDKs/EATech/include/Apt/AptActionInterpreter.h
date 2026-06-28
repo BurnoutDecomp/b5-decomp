@@ -50,6 +50,20 @@ public:
         AptCharacterInst*    mpCharacterInst;       // the originating character instance
     };
 
+    // ---- the opcode dispatch table ---------------------------------------
+    // runStream reads each bytecode byte and calls sGlobalTable[opcode]. The
+    // opcode->handler MAP was extracted from the X360 ARTIST decrypted XEX (the
+    // static table at vaddr 0x82F73068; see AptActionDispatch.cpp) -- valid for
+    // opcodes 0x00..0xB8. Each handler is a static (interpreter, context) function.
+    typedef void (*AptActionHandler)(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static AptActionHandler sGlobalTable[256];
+
+    // Populate sGlobalTable from the extracted map (the console ships it as static
+    // data; here it is filled at startup -- equivalent result). Unbuilt opcodes get
+    // the no-op stub until their handlers are reconstructed.
+    static void InitDispatchTable();
+    static void _FunctionAptActionStub(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- operand stack (PS3 EXTERNAL ELF) --------------------------------
     // Push: store + advance, AddRef the value (the stack owns a counted ref).
     void       stackPush(AptValue* pValue);          // @0x7F1790
