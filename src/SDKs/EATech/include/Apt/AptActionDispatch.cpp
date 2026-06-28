@@ -10,7 +10,7 @@
 // as big-endian 4-byte function pointers, then each entry resolved to its handler
 // via the named X360 exports. Valid range: opcodes 0x00..0xB8 (data past 0xB8 is
 // the following StringPool constants, not table entries). 0x82AD5078 = the engine's
-// shared no-op STUB (used for genuinely-unimplemented opcodes).
+// shared no-op STUB (used for genuinely-unhandled opcodes).
 //
 // FULL EXTRACTED MAP (opcode = handler; (*) = handler reconstructed + wired below,
 // the rest are the no-op stub until built):
@@ -66,7 +66,7 @@
 // ships it as static data; building it at startup yields the identical map.
 AptActionInterpreter::AptActionHandler AptActionInterpreter::sGlobalTable[256] = { 0 };
 
-// The shared no-op handler for unimplemented/unused opcodes (the engine's own STUB
+// The shared no-op handler for unhandled/unused opcodes (the engine's own STUB
 // at X360 0x82AD5078). Leaves the stack untouched.
 void AptActionInterpreter::_FunctionAptActionStub(AptActionInterpreter*, LocalContextT*)
 {
