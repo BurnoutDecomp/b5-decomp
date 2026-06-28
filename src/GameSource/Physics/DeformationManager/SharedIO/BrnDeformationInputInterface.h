@@ -36,6 +36,43 @@ namespace BrnPhysics
                                     DeformationResetType leBaseDeformationType,
                                     bool lbUseSweptSphereTests);
 
+            // ADDITIVE GROW (flagged by DeformationManager mgr-core group): the manager's
+            // per-frame event processors (DeformationManager::ProcessAdd/Remove/Deactivate-
+            // DeformationModelEvents, ProcessEvents) drain these request queues every scene
+            // update. The X360 reads them at fixed sub-offsets off the interface base
+            // (add @+0, remove @+3216, deactivate @+3392, the reset-scratches flag @+5056);
+            // these by-name const accessors expose exactly those reads without changing the
+            // class layout or its existing Construct/AddDeformationModel semantics. The
+            // ValidateRaceCar / SetModelCollision / SetModelCullingGroup queues belong to the
+            // sibling processors and gain their own accessors when those TUs land.
+            const CgsModule::EventQueue<AddDeformationModelEvent, 20>& GetAddDeformationModelQueue() const
+            {
+                return mAddDeformationModelQueue;
+            }
+            const CgsModule::EventQueue<RemoveDeformationModelEvent, 20>& GetRemoveDeformationModelQueue() const
+            {
+                return mRemoveDeformationModelQueue;
+            }
+            const CgsModule::EventQueue<DeactivateDeformationModelEvent, 28>& GetDeactivateDeformationModelQueue() const
+            {
+                return mDeactivateDeformationModelQueue;
+            }
+            bool ShouldResetPlayerScratches() const { return mbResetPlayerScratches; }
+
+            // Drop every queued event + clear the reset-scratches flag (the X360 zeroes each
+            // queue's miLength directly at the tail of DeformationManager::ProcessEvents once the
+            // queues are drained). Pure length resets -- the inline buffers are untouched.
+            void ClearAllQueues()
+            {
+                mAddDeformationModelQueue.Clear();
+                mRemoveDeformationModelQueue.Clear();
+                mDeactivateDeformationModelQueue.Clear();
+                mValidateDeformationModelEventQueue.Clear();
+                mSetModelCollisionEventQueue.Clear();
+                mSetModelCullingGroupEventQueue.Clear();
+                mbResetPlayerScratches = false;
+            }
+
         private:
             CgsModule::EventQueue<AddDeformationModelEvent, 20>        mAddDeformationModelQueue;          // X360 +0
             CgsModule::EventQueue<RemoveDeformationModelEvent, 20>     mRemoveDeformationModelQueue;       // X360 +3216
