@@ -2,6 +2,7 @@
 #define BRN_FLAPT_MOVIE_CLIP_REF_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // Vector2, Vector4, VecFloat (the transform accessors take these by value)
 
 // ============================================================================
 // GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h
@@ -21,15 +22,18 @@
 // This is the single declaration home for the type so the various MovieClipRef
 // TUs share one definition (no ODR fork).
 //
-// The accessors body in BrnFlaptMovieClipRef.cpp are the navigation / lookup /
-// playback forwarders. The TRANSFORM-mutating accessors -- SetPosition,
+// The accessors bodied in BrnFlaptMovieClipRef.cpp are the navigation / lookup /
+// playback forwarders PLUS the TRANSFORM-mutating accessors -- SetPosition,
 // SetPositionY, SetColour, SetColourScale, SetSizeScale, SetRotation and
-// GetPosition (the "class:BrnFlapt::MovieClipRef" TU) -- are NOT declared here
-// yet: they take Vector2 / Vector4 / VecFloat by value and rewrite the rows of
-// the CgsGraphics::Im2dTransform via VMX intrinsics. Those rw vector-math types
-// and the Im2dTransform home header are not yet reconstructed in b5-decomp/src,
-// so declaring (let alone bodying) them cleanly is blocked until those types
-// exist -- see the TU block reason. They will be added additively here then.
+// GetPosition (the "class:BrnFlapt::MovieClipRef" TU). The latter take
+// Vector2 / Vector4 / VecFloat by value and rewrite the four Vector4 rows of the
+// referenced CgsGraphics::Im2dTransform (held in mpTransform). The X360 emitted
+// those rewrites as VMX (vperm/vrlimi/vrsqrtefp/cos/sin); they are reconstructed
+// in the .cpp as ordinary named-component math on the Im2dTransform rows. The
+// math-param types are aliased in BrnCommonTypes.h; mpTransform stays an opaque
+// void* in this widely-included declaration home and is cast to
+// CgsGraphics::Im2dTransform* in the .cpp (which includes CgsIm2dTransform.h), so
+// no Im2d/RenderWare cascade is forced on this header's many includers.
 // ============================================================================
 
 namespace BrnFlapt
@@ -97,6 +101,42 @@ namespace BrnFlapt
         // GetTriggerParameters @ 0x8246CAB0 : the referenced clip's current
         // trigger parameters (tail-call forward to the instance).
         const TriggerParameters* GetTriggerParameters();
+
+        // ---- transform accessors -------------------------------------------
+        // These mutate / read the referenced Im2dTransform (mpTransform). Each
+        // asserts mpMovieClipInst and mpTransform non-null, then reads/writes the
+        // named .x/.y/.z/.w lanes of the transform's Vector4 rows. Signatures are
+        // taken from the DecFIGS DWARF (BrnFlaptMovieClipRef.h) and gated on the
+        // X360 ledger. (X360 addresses noted per method.)
+
+        // GetPosition @ 0x8241E340 : return the clip's origin position
+        // (mOriginXYZ.x, mOriginXYZ.y) by value.
+        Vector2 GetPosition() const;
+
+        // SetPosition @ 0x8241DFC0 : set the origin position to lPosition
+        // (mOriginXYZ.x/.y; the z/w lanes are cleared).
+        void SetPosition(Vector2 lPosition);
+
+        // SetPositionY @ 0x8241E228 : set only the origin's Y (mOriginXYZ.y),
+        // preserving X; the z/w lanes are cleared.
+        void SetPositionY(VecFloat lvfPositionY);
+
+        // SetRotation @ 0x827DD618 : build the right/up basis (mRightUp) from the
+        // rotation angle: Right=(cos,sin), Up=(-sin,cos).
+        void SetRotation(f32 lfAngle);
+
+        // SetSizeScale @ 0x82428518 : normalise the existing right/up basis to
+        // unit length, then scale Right by lScale.x and Up by lScale.y (mRightUp).
+        void SetSizeScale(Vector2 lScale);
+
+        // SetColour @ 0x8241E0D0 : set a flat colour -- write lColour.rgb into the
+        // additive colour shift (mColourShift) and zero the colour scale's rgb
+        // (mColourScale); both alpha (w) lanes are preserved.
+        void SetColour(Vector4 lColour);
+
+        // SetColourScale @ 0x8240E588 : set the multiplicative colour scale
+        // (mColourScale) to lColourScale (all four lanes).
+        void SetColourScale(Vector4 lColourScale);
 
         BrnFlapt::MovieClipInstance* mpMovieClipInst;   // +0x00
         void*                        mpTransform;        // +0x04  Im2dTransform*

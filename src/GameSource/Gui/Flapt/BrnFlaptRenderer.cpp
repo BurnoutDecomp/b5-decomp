@@ -6,17 +6,25 @@
 #include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"                     // BrnFlapt::Mesh / FlaptFile / FlaptFile::GuiTexture / GuiVertex
 
 // BrnFlapt::FlaptRenderer member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
-// This TU bodies the shader-state accessor and the per-object render entry points:
+// This TU bodies the constructor, the shader-state accessor, the per-object render entry
+// points, and the mask submission path:
 //
+//   Construct                     @ 0x82472270
 //   SetShader                     @ 0x82470718
 //   SetSpecialTextureShaderProgram@ 0x8246D748
 //   RenderMesh                    @ 0x82470770
+//   RenderMask                    @ 0x8246F900
 //   RenderTextField               @ 0x82470A10
 //
-// (The remaining FlaptRenderer methods - Construct / RenderMask / StartRenderingFrame
-// / StartDrawingMask / PopMask - land in their own TUs in this same file. Construct
-// and RenderMask are blocked on the rw::math::vpu vector-math operators used to build
-// and apply the screen transform, which have no reconstructed home.)
+// (The remaining FlaptRenderer methods - StartRenderingFrame / StartDrawingMask /
+// PopMask - land in their own TUs in this same file.)
+//
+// Construct and RenderMask build/apply a CgsGraphics::Im2dTransform through its four
+// named Vector4 rows (mOriginXYZ / mRightUp / mColourShift / mColourScale). The X360
+// emitted the row construction and the corner transform as hand-VMX (vperm against the
+// KV_IM2DTRANSFORMPERMUTECONST_* tables, vmulfp/vmaddfp lane work); this reconstruction
+// de-optimises that back into ordinary named-component math, which is what the inlined
+// Im2dTransform::Construct / the corner-transform loop were in the original source.
 
 namespace CgsGraphics
 {
@@ -202,6 +210,147 @@ void FlaptRenderer::RenderTextField(const CgsGraphics::TextObject* lpTextObject)
 
     static_cast<CgsGraphics::TextRenderer*>(mpTextRenderer)->RenderString(
         mpImRenderSet->mpIm2dRenderBuffer, *lpTextObject);
+}
+
+// ---- Construct @ 0x82472270 ----------------------------------------------
+// Build the renderer: cache its four collaborators, clear the cached texture/blend/
+// shader state, then construct the default screen-space Im2dTransform and seed the
+// transform stack with it (after folding in the display aspect ratio). The screen
+// transform maps a 1280x720 logical screen onto normalised device coordinates:
+//   origin   = (-1, +1)            (screen pixel (0,0) -> NDC top-left)
+//   right    = ( 1/640, 0 )        (screen-X span 1280 -> NDC width 2)
+//   up       = ( 0, -1/360 )       (screen-Y span 720  -> NDC height 2, Y flipped)
+//   colour   : shift 0, scale 1    (identity colour transform)
+//
+// The X360 packs this with VMX: it scales the rwmath unit basis vectors by the two
+// reciprocal half-extents (1/640 = 0.0015625, -1/360 = -0.0027777778) and permutes the
+// lanes (vperm against the KV_IM2DTRANSFORMPERMUTECONST_* tables) into the transform's
+// mRightUp row, which interleaves the right/up basis as {right.x, up.x, right.y, up.y}.
+// TransformByAspectRatio reads the basis back exactly that way (Right=(mRightUp.x,
+// mRightUp.z), Up=(mRightUp.y, mRightUp.w)). De-optimised here to the equivalent
+// named-component writes (this is the inlined CgsGraphics::Im2dTransform::Construct).
+void FlaptRenderer::Construct(FlaptRenderSet* lpImRenderSet, void* lpTextRenderer,
+                              void* lpLanguageManager, const void* lpFonts)
+{
+    CGS_ASSERT(lpImRenderSet != 0, "lpImRenderSet");
+    CGS_ASSERT(lpTextRenderer != 0, "lpTextRenderer");
+    CGS_ASSERT(lpLanguageManager != 0, "lpLanguageManager");
+    CGS_ASSERT(lpFonts != 0, "lpFonts");
+
+    mpImRenderSet     = lpImRenderSet;
+    mpTextRenderer    = lpTextRenderer;
+    mpLanguageManager = lpLanguageManager;
+    mpFonts           = const_cast<void*>(lpFonts);
+
+    mpCurrentTexture    = 0;
+    mpCurrentBlendState = 0;
+    mxFlags             = 0;
+    miShaderProgram     = -1;
+
+    // The fixed-capacity stacks both start empty-but-constructed.
+    maTransformStack.Construct();
+    mMaskMeshCounts.Construct();
+
+    // Build the default screen->NDC transform by named components, then fold the
+    // display aspect ratio into it in place.
+    const f32 KF_NDC_PER_HALF_WIDTH  =  1.0f / 640.0f;   // 0.0015625
+    const f32 KF_NDC_PER_HALF_HEIGHT = -1.0f / 360.0f;   // -0.0027777778 (Y flipped)
+
+    CgsGraphics::Im2dTransform lScreenXForm;
+
+    // Origin: NDC top-left corner.
+    lScreenXForm.mOriginXYZ.x = -1.0f;
+    lScreenXForm.mOriginXYZ.y =  1.0f;
+    lScreenXForm.mOriginXYZ.z =  0.0f;
+    lScreenXForm.mOriginXYZ.w =  0.0f;
+
+    // Right/Up basis interleaved as {right.x, up.x, right.y, up.y}: a pure scale, so the
+    // off-diagonal lanes (up.x, right.y) are zero.
+    lScreenXForm.mRightUp.x = KF_NDC_PER_HALF_WIDTH;    // right.x
+    lScreenXForm.mRightUp.y = 0.0f;                     // up.x
+    lScreenXForm.mRightUp.z = 0.0f;                     // right.y
+    lScreenXForm.mRightUp.w = KF_NDC_PER_HALF_HEIGHT;   // up.y
+
+    // Identity colour transform.
+    lScreenXForm.mColourShift.x = 0.0f;
+    lScreenXForm.mColourShift.y = 0.0f;
+    lScreenXForm.mColourShift.z = 0.0f;
+    lScreenXForm.mColourShift.w = 0.0f;
+    lScreenXForm.mColourScale.x = 1.0f;
+    lScreenXForm.mColourScale.y = 1.0f;
+    lScreenXForm.mColourScale.z = 1.0f;
+    lScreenXForm.mColourScale.w = 1.0f;
+
+    lScreenXForm.TransformByAspectRatio();
+
+    maTransformStack.Push(lScreenXForm);
+}
+
+// ---- RenderMask @ 0x8246F900 ---------------------------------------------
+// Push a stencil mask region for one mesh quad. Find the quad's min-corner (the vertex
+// with both the smallest X and smallest Y) and max-corner (largest X and Y); bias each
+// corner's position by the current transform's origin contribution (mRightUp scale x
+// mOriginXYZ origin), carry through the per-corner colour and UV, and submit the two
+// corner vertices as the mask rectangle through the render buffer's PushMask. Finally
+// bump the mesh tally for the active mask.
+//
+// The X360 transforms the two corners with VMX vmaddfp lane work; the operation it emits
+// for each corner is pos.x = mRightUp.x * mOriginXYZ.x + cornerX and pos.y = mRightUp.w *
+// mOriginXYZ.y + cornerY (the origin-bias product is shared by both corners). Reproduced
+// here verbatim as named-component math.
+void FlaptRenderer::RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
+                               const FlaptFile::GuiTexture* lpTexture)
+{
+    CGS_ASSERT(lpMesh != 0, "lpMesh");
+    CGS_ASSERT(lpFile != 0, "lpFile");
+    CGS_ASSERT(lpTexture != 0, "lpTexture");
+    CGS_ASSERT((mxFlags & 1u) != 0, "IsRenderingMask()");
+    CGS_ASSERT(!mMaskMeshCounts.IsEmpty(), "!mMaskMeshCounts.IsEmpty()");
+
+    // Mask meshes must be quads (the strip is a single 4-vertex rectangle).
+    CGS_ASSERT(lpMesh->muNumVerts == 4, "Mask meshes need to be quads");
+
+    const FlaptFile::GuiVertex* lpVerts = &lpFile->mpaVerts[lpMesh->muVertOffset];
+
+    // Min-corner (smallest x AND y) and max-corner (largest x AND y), seeded from vertex 0.
+    FlaptFile::GuiVertex lMinVert = lpVerts[0];
+    FlaptFile::GuiVertex lMaxVert = lpVerts[0];
+    for (u32 luVert = 1; luVert < lpMesh->muNumVerts; ++luVert)
+    {
+        const FlaptFile::GuiVertex& lrVert = lpVerts[luVert];
+        if (lrVert.mv2Pos.x <= lMinVert.mv2Pos.x && lrVert.mv2Pos.y <= lMinVert.mv2Pos.y)
+        {
+            lMinVert = lrVert;
+        }
+        else if (lrVert.mv2Pos.x >= lMaxVert.mv2Pos.x && lrVert.mv2Pos.y >= lMaxVert.mv2Pos.y)
+        {
+            lMaxVert = lrVert;
+        }
+    }
+
+    const CgsGraphics::Im2dTransform& lrTransform = maTransformStack.Peek();
+
+    // The origin-bias the X360 adds to each corner (a per-submission constant).
+    const f32 lfOriginBiasX = lrTransform.mRightUp.x * lrTransform.mOriginXYZ.x;
+    const f32 lfOriginBiasY = lrTransform.mRightUp.w * lrTransform.mOriginXYZ.y;
+
+    CgsGraphics::Basic2dColouredTexturedVertex laMaskVerts[2];
+
+    laMaskVerts[0].mv2Pos.x   = lfOriginBiasX + lMinVert.mv2Pos.x;
+    laMaskVerts[0].mv2Pos.y   = lfOriginBiasY + lMinVert.mv2Pos.y;
+    laMaskVerts[0].mv4Colour  = lMinVert.mv4Colour;
+    laMaskVerts[0].mv2Tex0UV  = lMinVert.mv2Tex0UV;
+
+    laMaskVerts[1].mv2Pos.x   = lfOriginBiasX + lMaxVert.mv2Pos.x;
+    laMaskVerts[1].mv2Pos.y   = lfOriginBiasY + lMaxVert.mv2Pos.y;
+    laMaskVerts[1].mv4Colour  = lMaxVert.mv4Colour;
+    laMaskVerts[1].mv2Tex0UV  = lMaxVert.mv2Tex0UV;
+
+    mpImRenderSet->mpIm2dRenderBuffer->PushMask(
+        const_cast<renderengine::Texture*>(lpTexture), laMaskVerts);
+
+    // Count this mesh against the currently-open mask.
+    ++mMaskMeshCounts[mMaskMeshCounts.GetLength() - 1];
 }
 
 }

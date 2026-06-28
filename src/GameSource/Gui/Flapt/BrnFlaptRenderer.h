@@ -57,6 +57,17 @@ namespace BrnFlapt
 
     struct FlaptRenderer
     {
+        // Construct @ 0x82472270 : store the four collaborators (render set, text
+        // renderer, language manager, font collection), clear the cached
+        // texture/blend/shader state, build the default screen-space Im2dTransform
+        // (origin + right/up basis + identity colour transform), fold the display
+        // aspect ratio into it, and seed the transform stack with it. DWARF signature
+        // Construct(CgsGui::ImRendererSet*, CgsGraphics::TextRenderer*,
+        // CgsLanguage::LanguageManager*, const CgsGui::FontCollection*); the latter
+        // three are held opaquely here, so they are taken as the matching member types.
+        void Construct(FlaptRenderSet* lpImRenderSet, void* lpTextRenderer,
+                       void* lpLanguageManager, const void* lpFonts);
+
         // SetShader @ 0x82470718 : if liProgramId differs from the cached
         // miShaderProgram, push a SetProgram command onto the render buffer and
         // cache the new id. Returns the render buffer (the X360 returns r3, the
@@ -78,11 +89,10 @@ namespace BrnFlapt
         // RenderMesh installs when it hits a "special" (video / runtime) texture.
         void SetSpecialTextureShaderProgram(s32 liShaderProgram);
 
-        // RenderMask @ 0x8246F900 : compute the mesh's screen-space min/max corners
-        // through the current transform and push a stencil mask region for it. Body
-        // lands in its own TU (deferred — blocked on the rw::math::vpu vector-math
-        // operators used to transform the corner points); declared here so RenderMesh
-        // compiles.
+        // RenderMask @ 0x8246F900 : find the mesh quad's min/max screen-space corners,
+        // bias them by the current Im2dTransform's origin contribution, and push a
+        // two-vertex stencil mask region (with lpTexture) for it; then bump the
+        // active mask's mesh tally.
         void RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
                         const FlaptFile::GuiTexture* lpTexture);
 
