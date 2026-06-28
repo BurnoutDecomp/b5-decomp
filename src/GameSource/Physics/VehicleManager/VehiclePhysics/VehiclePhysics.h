@@ -370,6 +370,17 @@ namespace Vehicle
         // its push direction from worldUp; provided as a const accessor over the pinned member.
         const Vector3& GetWorldUpRow() const { return mUpAxis; }
 
+        // ----- ADDITIVE GROW (stunt-offences group): three transform/velocity accessors over the
+        //       already-pinned members, mirroring GetLinearVelocity/GetWorldUpRow. BrnPhysics::
+        //       StuntOffencesManager reads the car transform (+0x10), its position column (wAxis,
+        //       +0x40) and the +0x60 angular-velocity register through these (the host vptr is 8
+        //       bytes wide -- the stunt code must NOT touch raw console byte offsets). -----
+        const Matrix44Affine& GetTransform() const { return mTransform; }
+        const Vector3& GetPosition() const { return mTransform.wAxis; }
+        // The +0x60 angular-velocity register (named mLocalVelocity in this slice); UpdateInAirRotations
+        // integrates it (transposed into car space) to score rolls/spins.
+        const Vector3& GetAngularVelocity() const { return mLocalVelocity; }
+
         // ----- ADDITIVE GROW (takedown-chain group): the post-slam/shunt wheel-velocity refresh the
         //       car-car contact handler re-runs on both cars after applying a slam/shunt impulse
         //       (X360 VehiclePhysics::SetWheelVelocities). DECLARE-ONLY -- bodied by its own TU. The

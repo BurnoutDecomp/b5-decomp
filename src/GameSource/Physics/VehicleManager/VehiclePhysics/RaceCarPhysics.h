@@ -200,6 +200,20 @@ namespace Vehicle
         // snapshots the wheel's road-contact record and flags it.
         void AddTractionPoint(s32 leWheel, u32 luSurfaceTag);
 
+        // ----- ADDITIVE GROW (stunt-offences group): seven declare-only race-car stunt-state
+        //       accessors BrnPhysics::StuntOffencesManager reads by name (drift / convoy /
+        //       tailgating). Bodied by the owning RaceCarPhysics/SimpleVehiclePhysics TU later.
+        //       Only the console offsets are asm-proven; FLAG: IsConsideredAirborne and the
+        //       Stunt* names are proposed-by-role. The stunt code MUST go through these (host
+        //       vptr is 8 bytes -- raw console offsets would be wrong). -----
+        f32     GetDriftActiveTime() const;        // +0x109C: drift-active timer (>0 while drifting)
+        f32     GetDriftLateralSpeed() const;      // +0x1010 lane 2: drift lateral (Z) speed
+        bool    IsHandbrakeHeld() const;           // +0x135B: handbrake-held byte
+        bool    IsConsideredAirborne() const;      // +0x1350: physics "should be airborne" gate
+        Vector3 GetStuntReferenceVelocity() const; // +0x6C0: stunt reference velocity register
+        Vector3 GetStuntWorldPosition() const;     // +0x1340: world position for tailgating tests
+        Vector3 GetStuntForwardAxis() const;       // normalized +0x1340 velocity = cone forward axis
+
     private:
         bool mbPlayerCarInShowtime;   // +0x140C (pinned BY NAME)
 
