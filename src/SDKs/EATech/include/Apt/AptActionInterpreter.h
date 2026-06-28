@@ -191,6 +191,20 @@ public:
     static void _FunctionAptActionPushUndefined(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushNULL     (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Immediate pushes -- read an inline operand from the bytecode (via the PC) and
+    // push it. The .apt stores them big-endian, so they are assembled byte-by-byte
+    // (host-endian-independent -> x64-correct):
+    //   Push1 @0x8064B4    : AptInteger(1)
+    //   PushByte @0x806430 : signed byte
+    //   PushWord @0x8063A0 : big-endian int16 (sign-extended)
+    //   PushDWord @0x8062FC: big-endian int32
+    //   PushFloat @0x807F50: big-endian float bits
+    static void _FunctionAptActionPush1    (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushByte (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushWord (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushDWord(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushFloat(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
     // parallel {count, capacity, array} stacks (the operand stack sized by

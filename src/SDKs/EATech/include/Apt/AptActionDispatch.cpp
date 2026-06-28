@@ -124,4 +124,11 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x74] = &_FunctionAptActionPushFalse;
     sGlobalTable[0x75] = &_FunctionAptActionPushUndefined;
     sGlobalTable[0x76] = &_FunctionAptActionPushNULL;   // X360 folds NULL/Undefined to one fn
+
+    // -- immediate pushes (inline operands) --
+    sGlobalTable[0x5A] = &_FunctionAptActionPush1;
+    sGlobalTable[0xB4] = &_FunctionAptActionPushFloat;
+    sGlobalTable[0xB5] = &_FunctionAptActionPushByte;
+    sGlobalTable[0xB6] = &_FunctionAptActionPushWord;
+    sGlobalTable[0xB7] = &_FunctionAptActionPushDWord;
 }
