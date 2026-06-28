@@ -25,6 +25,13 @@
 
 int AptRenderItem::sItemsAllocated = 0;
 
+// Base render hooks -- empty (@0x7E49A8/0x7E499C/0x7E49A4/0x7E49A0). The base
+// renderable draws nothing; the character subtypes override Render.
+void AptRenderItem::Render(AptRenderingContext*, AptMaskRenderOperation, int) const {}
+void AptRenderItem::PushRenderData(AptRenderingContext*, AptMaskRenderOperation, int) const {}
+void AptRenderItem::PopRenderData(AptRenderingContext*, AptMaskRenderOperation, int) const {}
+void AptRenderItem::PushRenderDataAbsolute(AptRenderingContext*) const {}
+
 // ---------------------------------------------------------------------------
 // Pool-backed sized delete: render items are allocated from gpNonGCPoolManager
 // (AptRenderItem::Manager_CreateItem), so `delete this` at refcount zero must
