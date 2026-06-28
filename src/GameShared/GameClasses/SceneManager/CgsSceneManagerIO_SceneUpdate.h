@@ -41,6 +41,18 @@ namespace SceneManagerIO
         void AddEntity(CgsSceneManager::EntityId lEntityId, u32 luEntityTypeFlag, f32 lfBoundingRadius);
         void AddVolumeInstance(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
 
+        // ADDITIVE GROW (FLAG -- declared-only, bodies owned by InSceneUpdateInterface's own TU):
+        // the deformation PhysicalBodyPart scene IO (RemoveFromScene @0x825E7818,
+        // SetRigidBodyTransform @0x825E7778) tears the part's volume instance / entity back out of
+        // the scene and republishes its transform via these producers. Signatures are PROVISIONAL
+        // (matched to the de-inlined X360 call sites in BrnPhysicalBodyPart.cpp; the owning TU's
+        // bodies are authoritative). No layout change.
+        void RemoveEntity(CgsSceneManager::EntityId lEntityId, u32 luFlags);
+        void RemoveForCollision(CgsSceneManager::EntityId lEntityId);
+        void RemoveVolumeInstance(CgsSceneManager::EntityId lEntityId);
+        void RemoveVolume(CgsSceneManager::EntityId lEntityId);
+        void SetVolumeInstanceTransform(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
+
         unsigned char maReserved[256];
     };
 }

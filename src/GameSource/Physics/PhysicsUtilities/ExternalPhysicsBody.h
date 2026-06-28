@@ -86,6 +86,26 @@ namespace BrnPhysics
         void DampPitchYawRoll(VecFloat lvfPitchDamping, VecFloat lvfYawDamping,
                               VecFloat lvfRollDamping, VecFloat lvfDeltaTime);            // h:200 @0x825BE210
 
+        // ADDITIVE GROW (PhysicalBodyPartPool::UpdateRWBodies caller): DECLARE-ONLY.
+        // Accumulate a force expressed in the body's LOCAL frame (rotated by the body's
+        // current orientation before being added to the linear-force accumulator). The X360
+        // UpdateRWBodies builds a local-space gravity force vector (0, KF_PART_EXTRA_GRAVITY,
+        // 0, 0) scaled by a transform row and calls this on each detached part's body. Its body
+        // lives in a separate (not-yet-homed) TU, so only the declaration is needed for the
+        // per-TU `cl /c` gate. FLAG: signature reconstructed from the call site (a single
+        // Vector3 force arg); the X360 Hex-Rays dropped the arg list.
+        void AddLocalSpaceForce(Vector3 lvForce);
+
+        // ADDITIVE GROW (Deformation PhysicalBodyPart family): DECLARE-ONLY; bodies owned by
+        // ExternalPhysicsBody's own TU. The deformation PhysicalBodyPart lifecycle (Construct
+        // @0x825B4178, Prepare @0x82626700) and per-frame Update @0x825E78C8 invoke these by name:
+        // Construct zero-inits the body, Prepare finalises it, and ReadPropertiesFromRenderware
+        // mirrors the RW rigid-body's mass/inertia properties back in. Only declarations are needed
+        // for the per-TU `cl /c` gate. FLAG: signatures from the X360 call sites.
+        void Construct();
+        void Prepare();
+        void ReadPropertiesFromRenderware(const rw::physics::RigidBody* lpRigidBody);
+
     protected:
         Matrix33 mLocalInverseInertia;   // :241
         Matrix33 mWorldInverseInertia;   // :242
