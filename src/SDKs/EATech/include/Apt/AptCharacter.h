@@ -35,6 +35,8 @@
 #include <cstdint>
 
 struct AptFile;   // SDKs/EATech/include/Apt/AptFile.h (mpAnimationFile is an AptFile*)
+struct AptRenderingContext;
+enum AptMaskRenderOperation : int;
 
 struct AptCharacter
 {
@@ -57,4 +59,9 @@ struct AptCharacter
     // Post-Fixup per-character init: drop the animation-file ref, clear the count,
     // and set the type-specific low-16 flags. @0x80E894
     void SetupCharacter();
+
+    // Draw a shape character's geometry. @0x810E74 -- for a plain shape (mnType
+    // == 1, no imported sub-characters) it hands the shape to the host rasterizer
+    // hook; the imported-sub-character resolution path is deferred (see the .cpp).
+    void render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick);
 };
