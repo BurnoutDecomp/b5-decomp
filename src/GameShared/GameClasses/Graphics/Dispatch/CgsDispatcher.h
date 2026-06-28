@@ -111,14 +111,28 @@ private:
 class DispatchFrame
 {
 public:
+    // @ 0x827F7790 — allocate the list array (luNumLists * sizeof(DispatchList))
+    // and Construct the embedded bin + per-list state.
+    void          Construct(u32 luNumLists, u32 luBinSizeQwords, rw::IResourceAllocator* lpAllocator);
+    // @ 0x827E96A8 — free the list array and reset the embedded bin bookkeeping.
+    void          Release();
     DispatchList* GetList(u32 luListId);                // @ 0x822A0530
+
+    // The embedded per-frame dispatch bin (m_Bin, @ 0x80). BufferedDispatchFrame::
+    // GetDispatchBinForWrite hands this out (X360: frame + 0x80).
+    DispatchBin&  GetBin() { return m_Bin; }
 
 private:
     DispatchList* m_paLists;                            // 0x000
-    // FLAG: opaque span (embedded DispatchBin + shared-bin bookkeeping) — sized
-    // to honor the X360-verified 0x100 offset of muNumDispatchLists. Not modelled
-    // by name (no function in this TU reads it).
-    u8            maReservedFrameState[0x100u - sizeof(DispatchList*)];
+    // FLAG: opaque span between m_paLists and the embedded bin (per-list relocation
+    // / shared-bin bookkeeping the leak header lists but no TU here reads). Sized to
+    // land m_Bin at its X360-verified 0x80 offset.
+    u8            maReservedPreBin[0x80u - sizeof(DispatchList*)];
+    DispatchBin   m_Bin;                                // 0x080 (embedded bin)
+    // FLAG: opaque span between the embedded bin and muNumDispatchLists (shared-bin
+    // self-pointer a1[45] + relocation bookkeeping). Sized to land
+    // muNumDispatchLists at its X360-verified 0x100 offset.
+    u8            maReservedPostBin[0x100u - 0x80u - sizeof(DispatchBin)];
     u32           muNumDispatchLists;                   // 0x100
 };
 

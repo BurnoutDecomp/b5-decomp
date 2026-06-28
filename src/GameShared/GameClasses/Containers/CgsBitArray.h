@@ -51,6 +51,21 @@ public:
         return tuNumBits;
     }
 
+    // Per-field bitwise OR of two arrays into this one (this = lpArrayA | lpArrayB).
+    // The exact method the DecFIGS DWARF attests for BitArray<60u> (CgsBitArray.h:491,
+    // alongside the symmetric ANDArrays @ :445 in the Feb-2007 reference). The X360
+    // build inlines it at its call site (AchievementPopupComponent::Display-
+    // NewAchievementNotification folds it into a single ld/or/std over the one 64-bit
+    // field); header-inline here, matching that inlined per-field OR. Zero-risk additive
+    // (no layout change, no behaviour change to existing users).
+    void ORArrays(const BitArray* lpArrayA, const BitArray* lpArrayB)
+    {
+        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
+        {
+            maxBits[luField] = lpArrayA->maxBits[luField] | lpArrayB->maxBits[luField];
+        }
+    }
+
     // ===== Added for the CarCheckpointData TU (BitArray<16>) =====
     // The four generic methods below are the EXACT methods the Feb-2007 reference template
     // declares (DWARF BitArray<16u> at CgsBitArray.h:4482/:4485/:4496/:4502 attests
