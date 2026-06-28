@@ -155,6 +155,25 @@ public:
         return mValueBitfield.mbAllowsDelayedDeletion != 0;
     }
 
+    // ---- leak setters (AptValue.h:228-236) -- trivial bitfield writes (the
+    // inverse of the getters above). The leak declares them out-of-line; they are
+    // the obvious field stores, kept inline here alongside the inline getters.
+    void setRefCount(uint32_t n)
+    {
+        if (n >= MAX_REFCOUNT)
+        {
+            mValueBitfield.mnReferenceCount = MAX_REFCOUNT;
+            mValueBitfield.mnMaxRefCountHit = 1;
+        }
+        else
+        {
+            mValueBitfield.mnReferenceCount = n;
+        }
+    }
+
+    void setVtblIndex(AptVirtualFunctionTable_Indices n) { mValueBitfield.meValueType = n; }
+    void setIsDefined(bool bDefined) { mValueBitfield.mbIsDefined = bDefined ? 1u : 0u; }
+
     // ---- GC-required pure virtuals (leak AptValue.h:547-548) -------------
     virtual bool IsGarbageCollected() const = 0;
     virtual void RegisterReferences() = 0;
