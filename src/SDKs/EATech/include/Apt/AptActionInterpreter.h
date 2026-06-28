@@ -246,6 +246,14 @@ public:
     static void _FunctionAptActionStoreRegister     (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionReturn            (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Value-output / control opcodes:
+    //   Trace 0x26 : emit the top's string form via the host debug sink
+    //   Throw 0x2A : record the top as the thrown value (mpAbortValue) -> runStream stops
+    //   ToString 0x4B : coerce the top to a string in place
+    static void _FunctionAptActionTrace   (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionThrow   (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionToString(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
     // parallel {count, capacity, array} stacks (the operand stack sized by
@@ -283,7 +291,9 @@ public:
     uint32_t   field_40;          // [c:0x40] unmapped
     AptValue** mpRegisters;       // [c:0x44] the per-call register window (stackPushIndirect)
     uint32_t   field_48[6];       // [c:0x48..0x5C] unmapped
-    int        mnAbortValue;      // [c:0x60] thrown/abort flag -- runStream checks it after each op
+    AptValue*  mpAbortValue;      // [c:0x60] the thrown value (null = no abort) -- Throw sets it,
+                                  // runStream checks it after each op and unwinds. x64: a pointer
+                                  // (the console int slot held the 32-bit AptValue*), not an int.
     int        mnStackBase;       // [c:0x64] operand-stack base this run unwinds to (Pop won't go below it)
     uint8_t    mbSkipTraceBytecodes; // [c:0x68]
     uint8_t    field_69;          // [c:0x69]

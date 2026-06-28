@@ -223,6 +223,11 @@ public:
     // follow-on; declared so the conversion + opcode layers can call it.
     void toString(EAStringC* pScratch) const;
 
+    // Append this value's string form to pOut (the toString sibling the ToString
+    // opcode uses to render into a fresh AptString). FLAG: body is the same
+    // value-layer renderer follow-on as toString.
+    void Append_ToString(EAStringC* pOut) const;
+
     // Get_ToString @0x82AD8558 -- coerce a value to an EAStringC name: a
     // string-typed value (meValueType 1 / the boxed tag 33) returns its own
     // embedded EAStringC; any other value is rendered into pScratch via toString.
