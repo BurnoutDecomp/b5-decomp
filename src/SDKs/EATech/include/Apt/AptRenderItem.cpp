@@ -190,6 +190,27 @@ AptRenderItem* AptRenderItem::Manager_GetFirstChild() const   { return mpManager
 AptRenderItem* AptRenderItem::Manager_GetNextSibling() const  { return mpManagerNextSibling; }
 AptRenderItem* AptRenderItem::Manager_GetNextRevision() const { return mpManagerNextRevision; }
 
+// IsWritableForThisTick @0x7DEF54 -- already the writable revision for nTick?
+bool AptRenderItem::IsWritableForThisTick(int nTick) const
+{
+    return mCreatedOnTick == nTick || (mFlags & 0x02000000u) != 0;
+}
+
+// Manager_IsDeletionMark @0x7DEEBC -- mFlags bit 28.
+bool AptRenderItem::Manager_IsDeletionMark() const { return ((mFlags >> 28) & 1u) != 0; }
+
+// Manager_SetNextRevision @0x7DEF00
+void AptRenderItem::Manager_SetNextRevision(AptRenderItem* pNext) { mpManagerNextRevision = pNext; }
+
+// Manager_SetDeletionMark @0x7E48DC -- set the deletion-mark flag (bit 28).
+// FLAG: the console also releases this revision's child/sibling references here
+// (the full revision teardown); deferred with the concurrent double-buffering.
+void AptRenderItem::Manager_SetDeletionMark(bool bMark)
+{
+    if (bMark) mFlags |= 0x10000000u;
+    else       mFlags &= ~0x10000000u;
+}
+
 // ---------------------------------------------------------------------------
 // Render-traversal helpers (PS3 External PushMatrices @0x7F21E4 / PopMatrices
 // @0x7ECA68). Push: save + concat the item's colour transform and position
