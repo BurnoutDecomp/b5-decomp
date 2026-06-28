@@ -7,16 +7,24 @@
 // slot). The class shape is from the DecFIGS DWARF (BrnPausedHudState.h); it derives from
 // CgsGui::State.
 //
-// PHASE NOTE (boot-path push): this push reconstructs the HUD-flow boot path (BrnHudFlow +
-// the controller sequencing BF_PRELOAD->BF_LOADING->BF_VIDEOS...). The in-game gameplay HUD
-// states (PAUSED/CRASHED/...) are off the boot path; this is a faithful class shell so the
-// flow's 14-state pool is structurally complete and instantiable. Its members and out-of-line
-// OnEnter/OnLeave/Update bodies are reconstructed in the later "full faithful all states"
-// phase (class:BrnGui::PausedHudState TU). All base virtuals are non-pure, so the bare shell
-// inherits working defaults and is constructible via CgsGui::State::Construct(id, fsm).
+// This TU reconstructs the state's OnEnter/OnLeave event wiring (X360 @0x8247CBE8 /
+// @0x82475390). The other state virtuals (Update, GetResourcesToLoad) are not in this TU's
+// X360 function set, so they keep the base CgsGui::State defaults; the class stays the
+// size-56 shell the HUD-flow pool instantiates (the added overrides reuse existing base
+// vtable slots and the static members do not change sizeof).
 namespace BrnGui
 {
     struct PausedHudState : public CgsGui::State
     {
+        // X360 vtable overrides (CgsGui::State virtuals).
+        virtual void OnEnter();   // @0x8247CBE8 - register for events + post the paused GUI event
+        virtual void OnLeave();   // @0x82475390 - unregister from those events
+
+    private:
+        // The GUI event ids this state observes (DecFIGS BrnPausedHudState.h:70-71;
+        // miNumEventsObserved == 3). The id table lives in .rdata and carries no value in the
+        // IDA export, so it is declared here and resolved at link time (as BrnGui::BootAttract).
+        static const s32 maiEventToObserve[3];
+        static const s32 miNumEventsObserved;
     };
 }
