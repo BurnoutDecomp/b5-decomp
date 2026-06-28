@@ -64,6 +64,22 @@ public:
     static void InitDispatchTable();
     static void _FunctionAptActionStub(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // ---- the execution loop (runStream @0x81BD50) ------------------------
+    // Run an action bytecode stream against a CIH scope: set up the LocalContextT,
+    // reserve a fresh operand-stack base, then dispatch opcode-by-opcode through
+    // sGlobalTable until a stop op / the stream end / an abort. nLength == -1 is a
+    // top-level run (pushes/pops the CIH on the target stack); nLength >= 0 is a
+    // bounded sub-stream (e.g. a function body, which leaves its result on the
+    // stack). Returns the final program counter.
+    const unsigned char* runStream(const unsigned char* pStream, AptCIH* pCIH,
+                                   int nLength, AptCharacterInst* pCharInst);
+
+    // FLAG (body deferred): the variable lookup runStream uses at entry to bind the
+    // run's scope ("this"). getVariable @0x819814 walks the CIH scope chain; it is a
+    // large reconstruction of its own (the data/variable handlers also need it).
+    AptValue* getVariable(AptCIH* pScope, AptValue* pTarget, const EAStringC* pName,
+                          int a4, int a5, int a6);
+
     // ---- operand stack (PS3 EXTERNAL ELF) --------------------------------
     // Push: store + advance, AddRef the value (the stack owns a counted ref).
     void       stackPush(AptValue* pValue);          // @0x7F1790
