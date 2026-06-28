@@ -2,6 +2,9 @@
 
 #include <intrin.h>   // _InterlockedIncrement / _InterlockedDecrement (MSVC)
 
+#include "SDKs/EATech/include/Apt/AptFile.h"     // AptFile + ~AptFile (Delete)
+#include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager (Delete frees here)
+
 // ===========================================================================
 // AptSharedPtr<AptFile> -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -151,4 +154,35 @@ void* AptSharedPtr<AptFile>::VectorDeletingDestructor(char flags)
 
         return base;
     }
+}
+
+// ---------------------------------------------------------------------------
+// The shared AptFile reference-count primitives. The count is the first 32-bit
+// word of the AptFile (mnRefCount); the console mutates it under an
+// interrupt-masked lwarx/stwcx. loop, the host equivalent is the interlocked
+// op, which yields the same post-value the callers test.
+//
+//   AptSharedPtrIncRef  @0x7E9210   AptSharedPtrDecRef  @0x7E9240
+//   AptSharedPtrDelete  @0x80CC64
+// ---------------------------------------------------------------------------
+int AptSharedPtrIncRef(AptFile* pData)
+{
+    return static_cast<int>(_InterlockedIncrement(reinterpret_cast<volatile long*>(pData)));
+}
+
+int AptSharedPtrDecRef(AptFile* pData)
+{
+    return static_cast<int>(_InterlockedDecrement(reinterpret_cast<volatile long*>(pData)));
+}
+
+int AptSharedPtrDelete(AptFile* pData)
+{
+    if (pData)
+    {
+        pData->~AptFile();
+        // Console frees a literal 28 bytes; sizeof(AptFile) is the width-correct
+        // equivalent on x64 (the block was allocated by Load as sizeof(AptFile)).
+        gpNonGCPoolManager->Deallocate(pData, sizeof(AptFile));
+    }
+    return 0;
 }

@@ -36,18 +36,18 @@
 struct AptFile;
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed, owned by another TU): the two out-of-line reference-count
-// primitives the X360 binary calls from Dispose. They are NOT present in the
-// Feb-2007 DWARF (the names are IDA-synthesized from the call targets) and are
-// emitted once, shared across every AptSharedPtr<T> instance, so they belong to
-// a separate (generic) TU rather than this AptFile instance. Declared here so
-// Dispose compiles and links; their bodies live elsewhere.
+// The three out-of-line reference-count primitives the Apt code calls on the
+// shared AptFile. They are emitted once and shared across every use, so they are
+// homed in AptSharedPtr.cpp (next to Dispose/operator=). PS3 EXTERNAL addresses:
 //
-//   AptSharedPtrDecRef(p) -> atomically decrement p's reference count and
-//                            return the NEW count.
-//   AptSharedPtrDelete(p) -> tear down / free p (count has reached zero) and
-//                            return 0.
+//   AptSharedPtrIncRef(p)  @0x7E9210 -> atomically increment p's reference count
+//                                       and return the NEW count.
+//   AptSharedPtrDecRef(p)  @0x7E9240 -> atomically decrement p's reference count
+//                                       and return the NEW count.
+//   AptSharedPtrDelete(p)  @0x80CC64 -> ~AptFile(p) then free the block back to
+//                                       the non-GC pool (count has reached zero).
 // ---------------------------------------------------------------------------
+int AptSharedPtrIncRef(AptFile* pData);
 int AptSharedPtrDecRef(AptFile* pData);
 int AptSharedPtrDelete(AptFile* pData);
 
