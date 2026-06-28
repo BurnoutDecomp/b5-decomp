@@ -195,3 +195,33 @@ protected:
     {
     }
 };
+
+// ---------------------------------------------------------------------------
+// AptValueGC / AptValueNoGC -- the two AptValue bases the concrete value types
+// derive from (leak AptValue.h:626-687). AptValueGC participates in the Apt
+// garbage collector (concrete GC types still supply RegisterReferences, so it
+// stays abstract); AptValueNoGC opts out (both GC virtuals satisfied here, so
+// the non-GC leaves -- AptBoolean/AptFloat/AptInteger/AptString -- only add
+// their payload + pool new/delete). Bodies are the leak's inline definitions.
+// ---------------------------------------------------------------------------
+class AptValueGC : public AptValue
+{
+protected:
+    AptValueGC(AptVirtualFunctionTable_Indices eType) : AptValue(eType) {}
+    AptValueGC(AptVirtualFunctionTable_Indices eType, const CIH_ONLY eCIH) : AptValue(eType, eCIH) {}
+
+    virtual bool IsGarbageCollected() const { return true; }
+
+    static void VerifyAptValueGC() {}
+};
+
+class AptValueNoGC : public AptValue
+{
+protected:
+    AptValueNoGC(AptVirtualFunctionTable_Indices eType) : AptValue(eType) {}
+
+    virtual bool IsGarbageCollected() const { return false; }
+    virtual void RegisterReferences() {}
+
+    static void VerifyAptValueNoGC() {}
+};
