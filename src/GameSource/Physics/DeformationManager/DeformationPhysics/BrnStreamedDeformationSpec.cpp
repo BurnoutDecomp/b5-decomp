@@ -63,9 +63,15 @@ namespace Deformation
         static const u32 KU_SENSOR_STRIDE           = 64;    // sizeof(SensorSpec)
         static const u32 KU_SENSOR_RADIUS_OFFSET    = 40;    // SensorSpec::mfRadius
 
-        // RwMath::IsZero epsilon (X360 rodata stru_8208F620 lane 0; the standard rwmath dead-band).
-        // TransformToNewCOMSpace splats it and compares it against |old-new COM|^2.
-        static const f32 KF_IS_ZERO_EPSILON_SQ      = 1.1920929e-7f;
+        // The squared dead-band TransformToNewCOMSpace compares |oldCOM - newCOM|^2 against to skip a
+        // no-op re-frame (asm @0x825E3148: vmsum3fp128 magSq -> vandc sign-mask -> vcmpgtfp against a
+        // splatted constant loaded from X360 rodata stru_8208F620, lane 0).
+        // FLAGGED PLACEHOLDER -- the concrete rodata bytes are NOT in the exports and are NOT
+        // fabricated here. Modelled at the renderware rwmath scale (rw::math::vpu::IsZero default
+        // tolerance is 1.0e-6f) purely so the near-zero gate behaves sanely. This value is NOT
+        // load-bearing: the COM shift it gates is itself a no-op at zero delta, so an imperfect epsilon
+        // only changes how often the skip fires, never the result. Replace with the real rodata when homed.
+        static const f32 KF_COM_MOVE_DEADBAND_SQ_PLACEHOLDER = 1.0e-6f;
 
         // Add a 16-byte vector lane-by-lane (the vaddfp the asm runs on xyz; w lane folded the same
         // way the SIMD register is, harmlessly).
@@ -184,7 +190,7 @@ namespace Deformation
             lOldMinusNew.z * lOldMinusNew.z;
 
         // back_chain[0] = (magSq > epsilon)  ->  the COM moved.
-        if ( lfMagnitudeSquared > KF_IS_ZERO_EPSILON_SQ )
+        if ( lfMagnitudeSquared > KF_COM_MOVE_DEADBAND_SQ_PLACEHOLDER )
         {
             // delta = lCOMOffset - mCurrentCOMOffset (v0 = v1 - v13).
             const Vector3 lDelta = {
