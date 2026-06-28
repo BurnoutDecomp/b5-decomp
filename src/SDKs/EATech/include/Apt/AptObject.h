@@ -15,6 +15,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstddef>   // size_t
 #include <cstdint>
 
 #include "SDKs/EATech/include/Apt/AptValueWithHash.h"
@@ -34,6 +35,21 @@ protected:
     }
 
 public:
+    // GC-pool allocation -- AptObject is a garbage-collected value (AptValueGC
+    // base), so its block comes from the GC pool (gpGCPoolManager), exactly like
+    // AptArray. Bodies in AptObject.cpp so the header need not pull in the
+    // pool-manager type. Attesting site: AptScriptColour::sMethod_getTransform
+    // @0x82AF5918 reaches AptObject::operator new(32) building a fresh AS Object.
+    static void* operator new(size_t size);
+    static void  operator delete(void* p, size_t size);
+
+    // The plain AS "new Object()" -- a generic property-bearing AptObject of value
+    // type AptVFT_Object. The X360 inlines exactly this (operator new(32) +
+    // AptValueWithHash(AptVFT_Object, 8) + the AptObject vtable) inside the AS
+    // objects that hand back a fresh Object; factored here as the canonical home.
+    // Returns null if the GC pool is exhausted. Defined in AptObject.cpp.
+    static AptObject* Create(int nHashCapacity = 8);
+
     virtual bool GetHasClass() const;                    // @0x7DF374
     virtual void SetHasClass(int bHasClass);             // @0x7DF34C
     virtual AptValue* objectMemberLookup(AptValue* const pThis,
