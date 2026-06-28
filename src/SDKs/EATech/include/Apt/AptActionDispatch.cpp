@@ -148,4 +148,9 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x70] = &_FunctionAptActionPushThisVariable;
     sGlobalTable[0x71] = &_FunctionAptActionPushGlobalVariable;
     sGlobalTable[0x87] = &_FunctionAptActionStoreRegister;
+
+    // -- value output / control --
+    sGlobalTable[0x26] = &_FunctionAptActionTrace;
+    sGlobalTable[0x2A] = &_FunctionAptActionThrow;
+    sGlobalTable[0x4B] = &_FunctionAptActionToString;
 }

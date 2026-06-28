@@ -63,7 +63,7 @@ const unsigned char* AptActionInterpreter::runStream(
 
     // Reserve a fresh operand-stack base for this run (nested runs save/restore it).
     const int  nSavedBase = mnStackBase;
-    const bool bRun       = (mnAbortValue == 0);
+    const bool bRun       = (mpAbortValue == 0);
     mnStackBase = mnStackTop;
 
     bool bRanOffEnd = false;
@@ -94,7 +94,7 @@ const unsigned char* AptActionInterpreter::runStream(
 
             sGlobalTable[opcode](this, &ctx);
 
-            if (mnAbortValue)
+            if (mpAbortValue)
                 break;
         }
     }
