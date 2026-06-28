@@ -23,6 +23,8 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptLoader.h"
+#include "SDKs/EATech/include/Apt/AptConstFile.h"          // the serialised .apt header
+#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h" // Resolve (the movie root)
 #include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"        // DOGMA_PoolManager::Allocate/Deallocate
 
@@ -231,4 +233,29 @@ void AptLoader::Invalidate(AptFile* pFile)
     prev->mpNext = node->mpNext;
     gpNonGCPoolManager->Deallocate(node, sizeof(AptLoaderNode));
     MutexAptLoader.Unlock();
+}
+
+// CompleteLoad @0x80EF2C -- a streamed .apt has arrived; resolve + publish it.
+void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pConstFile, void* pBlock)
+{
+    if (!pBase)
+        return;
+
+    // The data root, and the movie's AptCharacterAnimation embedded at root+16.
+    // FLAG: the console relocates the offset in place in the 32-bit file slot;
+    // x64 computes the absolute address and stores a 64-bit pointer in the AptFile.
+    void* pRoot = static_cast<char*>(pBase) + pConstFile->mnDataRootOffset;
+    AptCharacterAnimation* pCharAnim =
+        reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pRoot) + 16);
+
+    pCharAnim->Resolve(pBase, pConstFile, pBlock);
+
+    AptFile* f = filePtr.pData;
+    f->mpDataBlock      = pBlock;
+    f->mpData           = pRoot;
+    f->mpResolveContext = pBase;
+    f->mnField12        = f->mnState;   // record the previous state
+    f->mnState          = 3;            // loaded / resolved
+
+    // FLAG: the console then notifies/frees through the load hook (dword_1059C670).
 }
