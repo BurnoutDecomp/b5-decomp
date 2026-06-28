@@ -3,6 +3,9 @@
 
 #include "types.hpp"
 
+// renderengine::Texture -- the sampled texture type (forward-declared; pointer-only use).
+namespace renderengine { class Texture; }
+
 // CgsGraphics::MaterialAssembly @ CgsMaterialAssembly.h:54 (DecFIGS DWARF). A draw-time
 // material: an array of MaterialTechnique* (one per technique / LOD slot), the texture
 // samplers, and the per-stage shader-constant blocks. Layout + member order recovered
@@ -42,6 +45,14 @@ namespace CgsGraphics
 
         u32 GetNameHash() const { return muNameHash; }
         u8  GetLength() const   { return mu8NumMaterials; }
+
+        // UsesTexture: true if this assembly samples lpTexture in any technique stage.
+        // Declaration recovered from the DecFIGS DWARF (CgsMaterialAssembly.h:96,
+        // `bool UsesTexture(const Texture*) const`) and X360-attested (ledger:
+        // CgsGraphics::MaterialAssembly::UsesTexture, reviewed). The pointer is the same
+        // renderengine::Texture* the caller flows in from Renderable's texture set; bodied
+        // in this class's own TU.
+        bool UsesTexture(const renderengine::Texture* lpTexture) const;
     };
 }
 
