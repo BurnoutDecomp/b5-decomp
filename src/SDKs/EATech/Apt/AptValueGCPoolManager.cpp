@@ -133,6 +133,24 @@ void AptValueGC_PoolManager::StaticInitialize()
 }
 
 // ---------------------------------------------------------------------------
+// AllocateAptValueGC
+//
+// DOGMA Allocate, then set the MemItem allocated flag. The alloc-side mirror of
+// DeallocateAptValueGC; the X360 inlines this pair into every GC value type's
+// `operator new` (e.g. AptArray @0x82AE6088 / AptGlobalExtensionObject
+// @0x82AE6588: Allocate(off_8324D834, size) ; SetIsAllocated(p, byte_8324D804,
+// 1)). The flag is set unconditionally (unlike the free, which gates the clear
+// on a successful Deallocate).
+// ---------------------------------------------------------------------------
+void* AptValueGC_PoolManager::AllocateAptValueGC(size_t nAllocatedSize)
+{
+    void* pItem = Allocate(nAllocatedSize);
+    reinterpret_cast<AptValueGC_MemItem*>(pItem)
+        ->SetIsAllocated(gAptValueGCSizeOffset, true);
+    return pItem;
+}
+
+// ---------------------------------------------------------------------------
 // DeallocateAptValueGC @ 0x82AE57D8
 //
 // r31 = pItem. DOGMA Deallocate; on success clear the MemItem allocated flag.
