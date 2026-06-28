@@ -110,11 +110,12 @@ struct AptRenderItem
     AptRenderItem* Manager_GetNextRevision() const; // @0x7DEED8
 };
 
-// FLAG (homed by the render-context layer, AptRenderingContext, not yet built):
-// the render-traversal helpers the character subtypes call from Render -- push
+// The render-traversal helpers the character subtypes call from Render -- push
 // the item's matrices onto the context's transform/colour stacks, draw, then pop.
-//   PushMatrices @0x7F21E4 / PopMatrices @0x7ECA68
-//   AptCharacter_render -> AptCharacter::render @0x810E74 (the geometry draw)
+//   PushMatrices @0x7F21E4 / PopMatrices @0x7ECA68  (homed in AptRenderItem.cpp,
+//   against the real AptRenderingContext).
+//   AptCharacter_render -> AptCharacter::render @0x810E74 -- FLAG: the geometry
+//   draw; still homed by the geometry/render-backend layer (not yet built).
 void PushMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem);
 void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem);
 void AptCharacter_render(AptCharacter* pCharacter, AptRenderingContext* pCtx,

@@ -115,6 +115,12 @@ public:
     // pAppend (identity-singleton short-circuits each operand to a plain copy).
     static void multMatrix(const AptMatrix* pSrc, const AptMatrix* pAppend, AptMatrix* pDst);
 
+    // pushVertexMatrix (PS3 External @0x7E4650) -- save the current vertex matrix
+    // onto the stack (the X360 ARTIST reconstruction omitted it; recovered from
+    // the PS3 External, where it is a distinct entry point). The matching save for
+    // appendVertexMatrix/popVertexMatrix.
+    void pushVertexMatrix();
+
     // popVertexMatrix @ 0x82ADA4F8 -- pop the vertex stack, restore the now-top
     // entry into the current matrix, forward it to the renderer.
     void popVertexMatrix();
