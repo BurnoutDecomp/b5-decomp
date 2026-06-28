@@ -1025,6 +1025,19 @@ namespace Vehicle
         void UpdateSlam(f32* lpControlsCopy, f32 lfFrameTime);                                               // @0x825D4950
         void GetImpulsesFromLocalImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition,
                                          Vector3& lrJWorld, Vector3& lrAngularJWorld) const;  // declare-only (base)
+
+        // ===== ADDITIVE GROW (deformation impulse-passing group) =====
+        // The vtable-slot query VehicleRigidBody::RecievePassedOnImpulse calls on its attached vehicle
+        // before forwarding a passed-on impulse: the asm is a virtual dispatch through the vehicle's
+        // vptr at slot +0x10 (`(*(**(this+4) + 16))(*(this+4))`) whose result GATES the apply (a
+        // non-zero return makes RecievePassedOnImpulse early-out without applying the impulse). The
+        // gate is true while the body is swallowing further impulses (e.g. already crashing). Returns
+        // a u8 0/1 like the X360 boolean. DECLARE-ONLY -- the body lives in the VehiclePhysics /
+        // SimpleVehiclePhysics TU; declared here so the deformation TU resolves it BY NAME under the
+        // per-TU compile gate.
+        // FLAG: this slice does not pin the precise vtable-slot method NAME (the +0x10 slot is not
+        // separately homed); the role is recovered from the call's gating use, the name is inferred.
+        virtual bool IsIgnoringPassedOnImpulses() const;   // vtable +0x10 (role-inferred name)
     };
 }
 }
