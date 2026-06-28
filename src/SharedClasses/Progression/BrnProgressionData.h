@@ -88,6 +88,13 @@ struct ProgressionData
     // count if none matches.
     s32 FindRivalIndexFromId(CgsID lRivalId) const;
 
+    // ADDITIVE GROW (declare-only; bodies in the ProgressionData TU).
+    // DriveThruManager::UnlockCarChallengeForCar walks the event-junction table.
+    //   GetEventJunctionCount() -> muEventJunctionCount (count word +0x1C).
+    //   GetEventJunction(i)     -> &mpaEventJunctions[i]  (base +0x18, 16-byte stride).
+    u32 GetEventJunctionCount() const;
+    const EventJunction* GetEventJunction(u32 luIndex) const;
+
     // ---- Other X360-attested methods this header owns (bodies are separate TUs) ------------
     // FixUp/FixDown keep the int-delta contract the committed ProgressionResourceType.cpp uses
     // (X360-authoritative over the PS3 DWARF's `void FixUp(MemoryResource)`).

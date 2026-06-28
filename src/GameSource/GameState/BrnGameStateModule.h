@@ -13,6 +13,9 @@ namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRace
 // The achievement manager the BurnoutSkillzManager grow returns (StuntModeScoring::AchievementManager
 // is a typedef of this; pointer only here).
 namespace BrnGameState { class AchievementManagerPS3; }
+// For the DriveThruManager additive grow below (pointer-only).
+namespace BrnProgression { class Profile; }
+namespace InputBuffer    { class GameActionQueue; }
 
 namespace BrnGameState
 {
@@ -99,6 +102,15 @@ public:
     // DISCOVERS_EVENT / boost gates). Semantically the elapsed time the player has spent in the current
     // timed game mode. Body + real member land with the GameStateModule TU.
     f32 GetTimePlayedInTimedMode() const;
+
+    // ADDITIVE GROW (declare-only) for the BrnDriveThruManager TU (X360 0x82382460).
+    // UnlockCarChallengeForCar calls it after flipping a newly-found event so the module can check
+    // whether ALL events are now found (and fire the matching unlock/achievement). Declare-only.
+    // NOTE: globally-qualified ::InputBuffer to avoid the BrnGameState::InputBuffer nested forward
+    // decl (BrnScoringSystem.h) shadowing the global queue type when this header is parsed inside
+    // namespace BrnGameState.
+    void CheckForAllEventsBeingFound(BrnProgression::Profile* lpProfile,
+                                     ::InputBuffer::GameActionQueue* lpQueue);
 
 private:
     // DWARF BrnGameStateModule.h:771. The by-value ModeManager that owns the current game mode.

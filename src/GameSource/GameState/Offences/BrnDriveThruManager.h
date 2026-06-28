@@ -1,43 +1,179 @@
 #pragma once
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                                  // CgsID
-#include "SharedClasses/Trigger/BrnGenericRegion.h"          // BrnTrigger::GenericRegion (REAL home; replaces the old local stub)
+#include "BrnCommonTypes.h"                                  // CgsID, Vector3 (== rw::math::vpu::Vector3)
+#include "rw/math/vpu/types.h"                               // rw::math::vpu::Vector3 (DriveThruTriggerData::mPosition, BoxRegion cache)
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<46>
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"  // CgsResource::ResourcePtr<T>
+#include "SharedClasses/Trigger/BrnRegion.h"                 // BrnTrigger::BoxRegion (mBoxRegionCache by value)
+#include "SharedClasses/Trigger/BrnGenericRegion.h"          // BrnTrigger::GenericRegion (REAL home; Type enum, meType @0x36)
 
-// Forward declarations of the types HandleDriveThru routes through (pointers only).
-namespace BrnResource { struct VehicleList; }
-namespace BrnGameState { namespace GameStateModuleIO { struct OutputBuffer; } }
-namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
+// Forward declarations of the types the manager routes through (pointers only).
+namespace BrnResource    { struct VehicleList; struct VehicleListEntry; }
+namespace BrnWorld       { struct GlobalColourPalette;
+                           namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
+namespace BrnProgression { class  ProgressionManager; }
+namespace BrnTrigger     { struct TriggerData; }
+namespace CgsSystem      { class  TimerRequestInterface; }
+namespace InputBuffer    { class  GameActionQueue; }
+namespace BrnGameState
+{
+    class CarSelectManager;
+    class TrainingManager;
+    class ModeManager;
+    class GameStateModule;
+    namespace GameStateModuleIO { struct OutputBuffer; }
+}
 
 namespace BrnGameState
 {
-// Minimal owning slice for BrnGameState::DriveThruManager (DWARF: a plain struct, no base).
-// GetTotalDriveThrusOfType is owned by the DriveThruManager TU; it touches the six per-category
-// total counters, so a leading reserved blob places them at the DWARF word offsets (a1[554..558]).
-// HandleDriveThru (X360 0x8239B010) is added DECLARATION-ONLY for the TriggerQueryManager
-// dispatcher (its body lives in the DriveThruManager TU).
-// Replace mauReserved_Head with the real leading members (maDriveThruTriggerData[46] +
-// maDriveThroughClosed) when the full DriveThruManager TU lands.
+// ============================================================================
+// X360 DriveThruManager constants (recovered from the immediates the bodies use; the
+// DWARF declares the named class-scope KF_*/KI_* statics in BrnDriveThruManager.cpp).
+// ============================================================================
+//   KI_MAX_DRIVE_THRUS_IN_THE_WORLD == 46 (0x2E): the maDriveThruTriggerData / BitArray<46>
+//   capacity Prepare asserts against, and the per-frame Update sweep count.
+const u32 KI_MAX_DRIVE_THRUS_IN_THE_WORLD = 46;
+
+// ----------------------------------------------------------------------------
+// DriveThruTriggerData (DWARF BrnDriveThruManager.h:46). One entry per drive-thru region
+// loaded for the level. Stride 0x30 (48): the X360 Construct loop advances `r11 += 0x30`
+// and writes mfTimeToActiveation (+0x20) = -1.0 and mpGenericRegion (+0x00) = 0 each step.
+// ----------------------------------------------------------------------------
+struct DriveThruTriggerData
+{
+    const BrnTrigger::GenericRegion* mpGenericRegion;   // +0x00
+    u8                               maPad04[0x10 - 0x04];
+    Vector3                          mPosition;          // +0x10 (16B, 16-aligned)
+    f32                              mfTimeToActiveation;// +0x20  (-1.0 == inactive)
+    u8                               maPad24[0x30 - 0x24];
+};
+
+// ============================================================================
+// BrnGameState::DriveThruManager (DWARF BrnDriveThruManager.h:62). Owns the world's
+// drive-thru regions (junk yard / gas station / body shop / paint shop / car park),
+// drives the per-frame discovery + activation flow, and posts game actions onto the
+// GameStateModuleIO action queue. A plain struct, no base.
+//
+// Member byte offsets below are pinned from the X360 Construct/Prepare/Update/HandleDriveThru
+// asm (`*(this + N)` stores/reads). The semantic-parity rule (AGENTS.md) makes named members
+// authoritative; _AssertLayout() pins the offsets the reconstructed bodies depend on so the
+// MSVC gate enforces fidelity.
+// ============================================================================
 struct DriveThruManager
 {
-    u32 mauReserved_Head[554];   // maDriveThruTriggerData[46] (552) + maDriveThroughClosed (2)
+public:
+    void Construct(CarSelectManager* lpCarSelectManager,
+                   TrainingManager*  lpTrainingManager,
+                   ModeManager*      lpModeManager,
+                   GameStateModule*  lpGameStateModule,
+                   BrnProgression::ProgressionManager* lpProgressionManager);  // X360 0x8236E2E8
 
-    s32 miTotalCarParks;     // word 554
-    s32 miTotalGasStations;  // word 555
-    s32 miTotalBodyShops;    // word 556
-    s32 miTotalPaintShops;   // word 557
-    s32 miTotalJunkYards;    // word 558
-    s32 miTotalDriveThrus;   // word 559
+    bool Prepare(const BrnTrigger::TriggerData* lpTriggerData,
+                 CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette> lpPlayerCarColours); // X360 0x8236E3C0
 
-    s32 GetTotalDriveThrusOfType(BrnTrigger::GenericRegion::Type leTriggerType);
+    // X360 0x8239EEF0. Per-frame tick: ages the active drive-thru timers, fires the
+    // activation/discovery events and posts the resulting game actions.
+    void Update(::InputBuffer::GameActionQueue*  lpActionQueue,
+                CgsSystem::TimerRequestInterface* lpTimerRequestInterface,
+                f32  lfTimeStep,
+                BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRcOutputInterface,
+                bool lbIsOnline,
+                bool lbIsFreeburn,
+                bool lbIsShowtiming,
+                bool lbIsAnythingPaused,
+                bool lbIsInJunkyard,
+                bool lbInviteInProgress,
+                const BrnResource::VehicleList* lpVehicleList);
 
-    // X360 0x8239B010. Routes a player-entered drive-thru region (junk yard / gas station / body
-    // shop / paint shop / car park) into the drive-thru / shop flow: checks the player car against
-    // the vehicle list, tallies discovered drive-thrus, and posts the appropriate game actions onto
-    // the output buffer. Declaration-only here; body in the DriveThruManager TU.
-    void HandleDriveThru(const BrnTrigger::GenericRegion*                                            lpRegion,
+    // X360 0x8239B010. Routes a player-entered drive-thru region into the shop flow:
+    // checks the player car against the vehicle list, tallies discovered drive-thrus, and
+    // posts the appropriate game actions onto the output buffer. Bodied by THIS TU.
+    void HandleDriveThru(const BrnTrigger::GenericRegion*                                             lpRegion,
                          const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
-                         const BrnResource::VehicleList*                                             lpVehicleList,
-                         GameStateModuleIO::OutputBuffer*                                            lpOutput);
+                         const BrnResource::VehicleList*                                              lpVehicleList,
+                         GameStateModuleIO::OutputBuffer*                                             lpOutput);
+
+    void DriveThroughsCloseOnceActivatedUntilFurtherNotice();   // own TU; declared-only
+    void DriveThroughsCanNowOpenAgain();                        // own TU; declared-only
+    bool Release();                                             // own TU; declared-only
+    void Destruct();                                           // own TU; declared-only
+
+    s32  GetTotalDriveThrusOfType(BrnTrigger::GenericRegion::Type leTriggerType);  // X360 0x82356468
+
+private:
+    // X360 0x82386840. When a body-shop repair unlocks a car that gates an event junction,
+    // flag that event found, bump the count, and post the unlock + autosave actions.
+    void UnlockCarChallengeForCar(CgsID lRepairedCarID, ::InputBuffer::GameActionQueue* lpActionQueue);
+
+    // X360 0x8239B6E8. Dispatches one drive-thru type to its shop behaviour (junk yard /
+    // gas station / body shop / paint shop / car park). Bodied by THIS TU.
+    void ProcessDriveThru(BrnTrigger::GenericRegion::Type leTriggerType,
+                          ::InputBuffer::GameActionQueue*   lpActionQueue,
+                          CgsSystem::TimerRequestInterface* lpTimerRequestInterface,
+                          BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRcOutputInterface,
+                          bool  lbIsOnline,
+                          bool* lpbIsInJunkyard);
+
+    // The four below have their own X360 TUs; declared-only (called by the bodied funcs).
+    void SetPlayerCarDriver(::InputBuffer::GameActionQueue* lpActionQueue,
+                            CgsSystem::TimerRequestInterface* lpTimerRequestInterface,
+                            const BrnTrigger::BoxRegion* lpBoxRegion,
+                            bool lbPlayerDriving, f32 lfMaxSpeed);                 // X360 0x823867A0
+    bool DoesDriveThruTypeClose(BrnTrigger::GenericRegion::Type leType);          // own TU
+    void PlayAutoRepairTraining(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRcOutputInterface,
+                                const BrnResource::VehicleList* lpVehicleList);    // X360 0x82378848
+
+    static void _AssertLayout();  // never called; pins the offsets the bodies rely on
+
+    // ---- layout (offsets pinned from X360 asm; see _AssertLayout) ----------
+    DriveThruTriggerData          maDriveThruTriggerData[KI_MAX_DRIVE_THRUS_IN_THE_WORLD]; // +0x000  (46 * 0x30 == 0x8A0)
+    CgsContainers::BitArray<46u>  maDriveThroughClosed;     // +0x8A0 (one u64)
+
+    s32 miTotalCarParks;     // +0x8A8 (2216)
+    s32 miTotalGasStations;  // +0x8AC (2220)
+    s32 miTotalBodyShops;    // +0x8B0 (2224)
+    s32 miTotalPaintShops;   // +0x8B4 (2228)
+    s32 miTotalJunkYards;    // +0x8B8 (2232)
+    s32 miTotalDriveThrus;   // +0x8BC (2236)
+
+    BrnTrigger::GenericRegion::Type meDiscoveredDriveThruType;     // +0x8C0 (2240)
+    s32                             miNumDriveThrusOfThisTypeFound;// +0x8C4 (2244)
+    s32                             miTotalDriveThrusOfThisType;   // +0x8C8 (2248)
+    bool                            mbCurrentDriveThruJustFound;   // +0x8CC (2252)
+    u8                              maPad8CD[0x8D0 - 0x8CD];
+
+    CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette> mpPlayerCarColours;  // +0x8D0 (2256)
+
+    BrnTrigger::BoxRegion           mBoxRegionCache;  // +0x8F0 (2288)  (9 words copied by HandleDriveThru)
+    BrnTrigger::GenericRegion::Type meDriveThruCache; // +0x914 (2324)
+    CgsID                           mIdCache;         // +0x918 (2328)
+    bool                            mbIsClosed;       // +0x920 (2336)
+    u8                              maPad921[0x924 - 0x921];
+
+    CarSelectManager*                   mpCarSelectManager;  // +0x924 (2340)
+    TrainingManager*                    mpTrainingManager;   // +0x928 (2344)
+    ModeManager*                        mpModeManager;       // +0x92C (2348)
+    GameStateModule*                    mpGameStateModule;   // +0x930 (2352)
+
+    // CgsID is u64 (8 bytes, BrnCommonTypes.h:32). The two CgsID members are CONTIGUOUS: the X360
+    // does `std @0x938` then `std @0x940`, so mRepairedCarID(8)@0x938..0x940 and
+    // mDriveThruToTurnOffId(8)@0x940..0x948 with NO pad between them. The former maPad93C/maPad944/
+    // maPad94F pads assumed CgsID==4 and were spurious -- they shifted the trailing bool block and
+    // pushed mpProgressionManager off 0x950, failing the layout assert. Removed; natural 8-byte
+    // alignment now reproduces the X360 layout.
+    CgsID mRepairedCarID;       // +0x938 (2360)  (8B; contiguous with the next CgsID)
+    CgsID mDriveThruToTurnOffId;// +0x940 (2368)  (8B)
+
+    bool  mbCurrentCarJustRepaired;        // +0x948 (2376)
+    bool  mbNeedToSendDriveThruOffMessage; // +0x949 (2377)
+    bool  mbPlayerCanUseDriveThrus;        // +0x94A (2378)
+    bool  mbPlayerCanUseJunkyards;         // +0x94B (2379)
+    bool  mbDriveThroughsCloseWhenUsed;    // +0x94C (2380)
+    bool  mbNeedToSendCantPaintMessage;    // +0x94D (2381)
+    bool  mbNeedToSendMustFixMessage;      // +0x94E (2382)
+    // (3-byte natural pad to align the pointer) -> mpProgressionManager @0x950.
+
+    BrnProgression::ProgressionManager* mpProgressionManager;  // +0x950 (2384)
 };
 }
