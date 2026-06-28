@@ -233,6 +233,19 @@ public:
     static void _FunctionAptActionGetMember(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionSetMember(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Special-value / register / control opcodes (small standalone leaves):
+    //   PushThis 0x56 / PushGlobal 0x58 : push the name string "this" / "_global"
+    //   PushThisVariable 0x70 : resolve `this` -> push;  PushGlobalVariable 0x71 : push _global
+    //   GetTimer 0x34 : push AptInteger(elapsed ms);  StoreRegister 0x87 : top -> register N
+    //   Return 0x3E : end the run (ctx.mbStop)
+    static void _FunctionAptActionPushThis          (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushGlobal        (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushThisVariable  (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushGlobalVariable(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionGetTimer          (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionStoreRegister     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionReturn            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
     // parallel {count, capacity, array} stacks (the operand stack sized by

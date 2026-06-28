@@ -58,7 +58,11 @@ struct AptHashItem
 // mpPrototype). Declared extern so Set/Lookup's special-case compiles; the hash
 // literals are their case-folded FNV.
 // ---------------------------------------------------------------------------
-namespace StringPool { extern const EAStringC saConstant; }
+// StringPool is the AS string recycler/pool -- a CLASS (AptString.h declares
+// `friend class StringPool`), not a namespace. Only its saConstant key (the
+// __proto__ key) is needed here; the full class + the static's definition are the
+// string-pool TU's follow-on.
+class StringPool { public: static const EAStringC saConstant; };
 extern const EAStringC gAptKeyPrototype;
 
 struct AptNativeHash
