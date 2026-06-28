@@ -120,3 +120,6 @@ void PushMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem);
 void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem);
 void AptCharacter_render(AptCharacter* pCharacter, AptRenderingContext* pCtx,
                          AptMaskRenderOperation eOp, int nTick);
+// PushMatricesAbsolute @0x7F28B8 -- the absolute (world-space) push variant used
+// by PushRenderDataAbsolute. FLAG: homed by the render-context layer.
+void PushMatricesAbsolute(AptRenderingContext* pCtx, const AptRenderItem* pItem);
