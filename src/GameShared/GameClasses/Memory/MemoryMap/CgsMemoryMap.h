@@ -23,16 +23,37 @@ namespace rw
 namespace CgsMemory
 {
     // The seven element record types reached by the relocated pointers. FixUp only
-    // relocates the pointers (never dereferences them), so forward declarations are
-    // sufficient here. DEFERRED: their real homes (record layouts + accessors) land
-    // with their own TUs; declare-only for now.
-    struct MemoryMapBank;
-    struct MemoryMapPool;
+    // relocates the pointers (never dereferences them); the index accessors (GetBank /
+    // GetPool) return a typed pointer into the matching array using the console record
+    // stride. The two strides used by the accessors are pinned by the X360 ASM:
+    //   GetBank @ 0x82663C88 -> 84-byte stride (`mulli r11, ..., 0x54`)
+    //   GetPool @ 0x82663D60 -> 172-byte stride (`mulli r11, r28, 0xAC`)
+    // The records' real field layouts are DEFERRED to their own TUs (no caller in the
+    // committed tree dereferences them). To keep the typed pointer arithmetic in the
+    // accessors console-exact WITHOUT fabricating named fields, the two records that the
+    // accessors index are sized with an explicit padding buffer to their attested console
+    // size; the remaining five stay forward-declared (FixUp only relocates their pointers).
     struct MemoryMapRawResource;
     struct MemoryMapLinearAllocator;
     struct MemoryMapHeapAllocator;
     struct MemoryMapRWLinearAllocator;
     struct MemoryMapRWGeneralAllocator;
+
+    // On-disk bank record. X360 size = 84 bytes (GetBank stride 0x54). Fields DEFERRED:
+    // reserve the exact console size with padding so GetBank's typed pointer arithmetic is
+    // byte-exact; name real fields when the record's own TU lands.
+    struct MemoryMapBank
+    {
+        u8 maPad[84];
+    };
+
+    // On-disk pool record. X360 size = 172 bytes (GetPool stride 0xAC). Fields DEFERRED:
+    // reserve the exact console size with padding so GetPool's typed pointer arithmetic is
+    // byte-exact; name real fields when the record's own TU lands.
+    struct MemoryMapPool
+    {
+        u8 maPad[172];
+    };
 
     // CgsMemoryMap.h:45
     struct MemoryMap

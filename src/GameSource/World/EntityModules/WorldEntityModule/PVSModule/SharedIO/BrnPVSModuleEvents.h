@@ -3,6 +3,9 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector4 (== rw::math::vpu::Vector4)
+#include "GameShared/GameClasses/Module/CgsDataStructure.h"  // CgsModule::DataStructure
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"     // CgsModule::EventQueue<T,N>
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h" // RequestInterface<512>
 
 // ============================================================================
 // GameSource/World/EntityModules/WorldEntityModule/PVSModule/SharedIO/BrnPVSModuleEvents.h
@@ -73,6 +76,79 @@ struct alignas(16) GetZoneResponse
 {
     // +0x000 .. +0x2DF  opaque response payload (deferred; see FLAG above).
     u8 maPayload[736];
+};
+
+// ============================================================================
+// BrnWorld::PVSIO::InputBuffer -- the PVS module's single-buffered INPUT data
+// structure (the TInputBuffer template argument of the module's
+// CgsModule::ModuleSingleBufferedTemplate<InputBuffer, OutputBuffer> base).
+//
+// The X360 EventQueue_GetZoneRequest_8 instance TU attests that
+// BrnWorld::PVSIO::InputBuffer::Construct drives
+// CgsModule::EventQueue<GetZoneRequest, 8>::Construct @ 0x822E5140 -- i.e. the
+// input buffer owns one fixed-capacity GetZoneRequest queue (the "which zone is
+// the listener in" requests WorldEntityModule::PreSceneUpdate enqueues and the
+// PVS module's Update drains). DataStructure is the empty single-buffered base
+// (CgsDataStructure.h); the queue is the only member, at offset 0.
+//
+// FLAG (slice): only the GetZoneRequest queue is modelled -- the only member this
+// SharedIO slice has X360 evidence for. Grow ADDITIVELY if a later PVS-module TU
+// attests further input-buffer members. Construct/Prepare/Release/Destruct are
+// the DataStructure lifecycle hooks the ModuleSingleBufferedTemplate calls.
+struct InputBuffer : public CgsModule::DataStructure
+{
+    void Construct() { mZoneRequestQueue.Construct(); }
+    bool Prepare()   { return true; }
+    bool Release()   { return true; }
+    void Destruct()  {}
+    void Clear()     {}
+
+    CgsModule::EventQueue<GetZoneRequest, 8> mZoneRequestQueue;   // +0x00
+};
+
+// ============================================================================
+// BrnWorld::PVSIO::OutputBuffer -- the PVS module's single-buffered OUTPUT data
+// structure (the TOutputBuffer template argument of the module's base).
+//
+// LAYOUT (X360 authoritative):
+//   +0x0000  EventQueue<GetZoneResponse, 8> mZoneResponseQueue
+//            The per-zone visibility replies the PVS Update produces. The
+//            EventQueue_GetZoneResponse_8 instance TU pins maEvents at the
+//            16-aligned +0x10, so this sub-object spans 0x10 + 8*736 == 0x1710,
+//            rounded up to the 16-aligned 0x1718.
+//   +0x1718  RequestInterface<512> mGameDataRequestInterface
+//            The game-data request interface the module fills to stream PVS data
+//            (LoadPVS, type 26). BrnWorld::PVSModule::GetGameDataRequestInt
+//            @ 0x822BB068 returns its address (asm: `addi r3, OutputStructure,
+//            0x1718`). sizeof(RequestInterface<512>) == 512 + 16 == 528.
+//
+// The +0x1718 placement is the SAME constant the EventQueue_GetZoneResponse_8 TU
+// already documents (0x10 + 8*736 == 0x1710, 16-aligned to 0x1718); pinned by
+// OutputBuffer::Construct @ 0x822EE658 and re-attested by GetGameDataRequestInt.
+//
+// FLAG (slice): only these two X360-attested members are modelled. The 16-byte
+// EventQueue base (mpEvents/miMaxLength/miLength, 12 bytes) is alignment-padded to
+// 16 because GetZoneResponse is 16-aligned, so mGameDataRequestInterface naturally
+// lands at +0x1718. Grow ADDITIVELY if a later PVS-module TU attests further
+// output-buffer members.
+struct alignas(16) OutputBuffer : public CgsModule::DataStructure
+{
+    void Construct()
+    {
+        mZoneResponseQueue.Construct();
+        // mGameDataRequestInterface (a VariableEventQueue<512,16>) Constructs via its
+        // own per-instance hook; OutputBuffer::Construct drives both.
+    }
+    bool Prepare()  { return true; }
+    bool Release()  { return true; }
+    void Destruct() {}
+    void Clear()    {}
+
+    CgsModule::EventQueue<GetZoneResponse, 8>     mZoneResponseQueue;          // +0x0000
+    BrnResource::GameDataIO::RequestInterface<512> mGameDataRequestInterface;  // +0x1718
+
+    // Pin the X360-attested layout the two accessors depend on.
+    static void _AssertLayout();
 };
 }
 }

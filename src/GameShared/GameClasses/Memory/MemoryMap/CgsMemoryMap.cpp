@@ -60,4 +60,51 @@ void MemoryMap::FixUp(const rw::Resource& lrResource)
         mpRWGeneralAllocators = reinterpret_cast<MemoryMapRWGeneralAllocator*>(reinterpret_cast<uintptr_t>(mpRWGeneralAllocators) + luBase);
 }
 
+// CgsMemoryMap.h:66 / X360 @ 0x82663C88 (BrnResource::GameDataModule::CreateBanks)
+// Return the bank record at liIndex. The X360 bounds-checks against (muNumBanks - 1) and
+// indexes the array at (liIndex + 1): bank slot 0 is the reserved root, so the public
+// indices map to mpBanks[1 .. muNumBanks-1]. The out-of-range message embeds the index, so
+// it is rendered through a CgsDev::StrStream and fired with the Begin/Fire/End triad
+// (matching FixUp above), NOT CGS_ASSERT.
+const MemoryMapBank* MemoryMap::GetBank(s32 liIndex) const
+{
+    if (liIndex >= static_cast<s32>(muNumBanks) - 1)
+    {
+        CgsDev::Assert::BeginAssert();
+        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        lStrStream << "Bank index " << liIndex << " is out of range\n";
+        CgsDev::Assert::FireAssert(
+            lacMessageBuffer,
+            "..\\..\\..\\GameShared\\GameClasses\\Memory/MemoryMap/CgsMemoryMap.h",
+            175);
+        CgsDev::Assert::EndAssert();
+    }
+
+    // result = 84 * (liIndex + 1) + mpBanks  (X360: mulli 0x54 then add the array base)
+    return mpBanks + (liIndex + 1);
+}
+
+// CgsMemoryMap.h:188 / X360 @ 0x82663D60 (BrnResource::GameDataModule::CreatePools)
+// Return the pool record at liIndex. The X360 bounds-checks against muNumPools and indexes
+// the array directly. Same StrStream-formatted assert idiom as GetBank.
+const MemoryMapPool* MemoryMap::GetPool(s32 liIndex) const
+{
+    if (liIndex >= static_cast<s32>(muNumPools))
+    {
+        CgsDev::Assert::BeginAssert();
+        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        lStrStream << "Pool index " << liIndex << " is out of range\n";
+        CgsDev::Assert::FireAssert(
+            lacMessageBuffer,
+            "..\\..\\..\\GameShared\\GameClasses\\Memory/MemoryMap/CgsMemoryMap.h",
+            188);
+        CgsDev::Assert::EndAssert();
+    }
+
+    // result = 172 * liIndex + mpPools  (X360: mulli 0xAC then add the array base)
+    return mpPools + liIndex;
+}
+
 }
