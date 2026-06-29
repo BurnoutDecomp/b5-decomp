@@ -52,6 +52,11 @@ public:
     // cParticleEmitter::Emit.
     BucketType GetRequiredBucketType() const;
 
+    // The draw/render-mode selector (console +0x2C). LionParticleRender::Render switches on
+    // it to pick the geometry shape (0 sprites, 1 quads, 3/4 tilts; 2/other = none). Inline
+    // accessor -- the X360 build reads the field directly (no out-of-line call).
+    u32 GetRenderMode() const { return mRenderMode; }
+
 private:
     // Opaque leading record preceding mFlags at console +0x20 (32).
     u8  maReserved0[0x20];
