@@ -84,7 +84,11 @@ protected:
     virtual void OnLoadComplete( const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent, s32 liListIndex );
     virtual void OnUnloadComplete( const BrnResource::GameDataIO::UnloadGameDataResponse* lpEvent, s32 liListIndex );
 
-private:
+protected:
+    // The RaceCarAudioStreamer leaf FULLY overrides OnLoadComplete/OnUnloadComplete and
+    // drives mLoadedEntries itself (the X360 inlines mLoadedEntries.SetBit/UnSetBit at the
+    // override sites @0x822C08C8/0x822A55C0), so these per-car tables/bit-sets are protected
+    // rather than private. The base's own load/unload hooks still own them by name.
     CgsID                       maDesiredAssets[KI_MAX_ACTIVE_RACE_CARS]; // BrnRaceCarBaseComponentStreamer.h:146
     CgsID                       maLoadedAssets[KI_MAX_ACTIVE_RACE_CARS];  // BrnRaceCarBaseComponentStreamer.h:147
     CgsContainers::BitArray<8u> mAddedEntries;                            // BrnRaceCarBaseComponentStreamer.h:148

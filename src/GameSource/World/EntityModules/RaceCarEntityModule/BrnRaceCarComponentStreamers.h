@@ -22,12 +22,23 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID (typedef u64)
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"   // CgsModule::EventQueue<T,N>
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarBaseComponentStreamer.h"
+// AudioCarDataLoadedEvent (the queue element type for mAudioCarLoadedDataQueue).
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 
 namespace BrnWorld
 {
 
 class RaceCarStreamer;   // owner; back-pointer only
+
+// The PreScene IO buffers the audio streamer's Update() pumps (pointer params only --
+// forward-declared here, fully homed in BrnRaceCarEntityModuleIO.h, #included by the .cpp).
+namespace RaceCarEntityModuleIO
+{
+    struct InputBuffer_PreScene;
+    struct OutputBuffer_PreScene;
+}
 
 // BrnRaceCarComponentStreamers.h:47 (DWARF). Streams the per-car vehicle graphics spec.
 class RaceCarGraphicsStreamer : public RaceCarBaseComponentStreamer
@@ -123,23 +134,56 @@ public:
         bool                       mbDesiredIsPlayer; // :297
     };
 
+    // The per-car streaming-sound (un)load events the streamer publishes to / consumes
+    // from the PreScene IO buffers. Identical to RaceCarEntityModuleIO::AudioCarLoadedDataQueue
+    // (defined the same way in BrnRaceCarEntityModuleIO.h); spelled out here so this header
+    // needs only the lightweight AudioCarDataLoadedEvent home, not the full IO buffer header.
+    typedef CgsModule::EventQueue<RaceCarEntityModuleIO::AudioCarDataLoadedEvent, 16> AudioCarLoadedDataQueue;
+
+    // @ 0x822ECA68. Forward the base streamer Construct (sound pool, asset set
+    // E_ASSETSET_SOUND), construct the audio-loaded-data queue, then initialise the eight
+    // per-car streaming-sound slots (state IDLE, miUserID = slot index).
     void Construct( RaceCarStreamer* lpStreamer );
     void Destruct();
+
+    // @ 0x822ECC00. Pump the streaming-sound state machine for all eight cars: consume the
+    // input buffer's "data (un)loaded" replies to advance ATTACHING->ATTACHED /
+    // DETACHING->DETACHED, drive each slot one step, then flush this frame's outgoing
+    // (un)load requests onto the output buffer.
+    void Update( const RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+                 RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
+
+    // @ 0x822A5730. Register the streaming-sound asset luAssetID for race-car luUserId.
+    // Returns true. lbIsPlayer records whether this is the player's car.
+    bool AddEntry( CgsID luAssetID, u64 luUserId, bool lbIsPlayer );
+
+    // @ 0x822A58D0. True when car liActiveRaceCar's streaming sound has reached the
+    // LOADEDANDATTACHED state. lAssetId / lbIsPlayer are validation-only (unused here).
+    bool IsVehicleAssetLoaded( CgsID lAssetId, s32 liActiveRaceCar, bool lbIsPlayer );
 
 protected:
     virtual void OnAssetLoaded( s32 liActiveRaceCar, const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent );
     virtual void OnAssetUnloading( s32 liActiveRaceCar );
 
+    // @ 0x822C08C8 / 0x822A55C0. The audio streamer fully overrides the base load/unload
+    // completion hooks: it drives its OWN per-car streaming-sound bit set + slot states
+    // rather than the base maDesiredAssets/maLoadedAssets bookkeeping.
+    virtual void OnLoadComplete( const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent, s32 liListIndex );
+    virtual void OnUnloadComplete( const BrnResource::GameDataIO::UnloadGameDataResponse* lpEvent, s32 liListIndex );
+
+private:
+    // @ 0x822D5080 / 0x822D4E40. Emit a load / unload streaming-sound request for the given
+    // slot onto mAudioCarLoadedDataQueue (consumed by the audio subsystem next frame).
+    bool SendLoadRequest( RaceCarStreamingSound* lpEntry );
+    bool SendUnLoadRequest( RaceCarStreamingSound* lpEntry );
+
 private:
     RaceCarStreamingSound maEntries[RaceCarBaseComponentStreamer::KI_MAX_ACTIVE_RACE_CARS]; // :300
 
-    // FLAG: mAudioCarLoadedDataQueue is InputBuffer_PreScene::AudioCarLoadedDataQueue
-    // (RaceCarEntityModuleIO), a VariableEventQueue-backed IO type whose full layout is
-    // owned by the RaceCarEntityModuleIO subsystem. RaceCarStreamer never touches it, so it
-    // is modelled here as an opaque byte placeholder purely for member-presence/sequence.
-    // Its exact byte size is NOT an X360 fact -- GROW into the real type when the audio
-    // streamer TU + its IO queue land.
-    u8 mPadAudioCarLoadedDataQueue[16]; // :302 (placeholder for AudioCarLoadedDataQueue)
+    // The per-car audio-loaded-data event queue (RaceCarEntityModuleIO). The X360 Construct
+    // calls EventQueue<AudioCarDataLoadedEvent,16>::Construct on it (@0x822E3670); Update
+    // appends it onto the output buffer's queue and clears it each frame.
+    AudioCarLoadedDataQueue mAudioCarLoadedDataQueue; // :302
 
     RaceCarStreamer* mpStreamer;        // :303
 };

@@ -22,14 +22,63 @@
 // RegisterFlaptFile / Release / Destruct / SetSoundTriggerHandler) land.
 // ============================================================================
 
+// Pointer-only parameter types for the lifecycle methods declared below. Forward-declared
+// (incomplete-type use is sufficient for the declarations; their real homes would force a
+// transitive header cascade into every includer of this header). DWARF Construct signature:
+// Construct(ImRendererSet*, TextRenderer*, CgsLanguage::LanguageManager*,
+//           const CgsGui::FontCollection*, const RGBA*, int32_t).
+struct RGBA;
+namespace CgsGui { class ImRendererSet; class FontCollection; }
+namespace CgsGraphics { class TextRenderer; }
+namespace CgsLanguage { class LanguageManager; }
+namespace CgsMemory { class LinearMalloc; }
+namespace CgsResource { struct ResourceHandle; }
+
 namespace BrnFlapt
 {
+    // DWARF BrnFlaptManager.h:45 -- the flapt files the manager can host. The X360 build
+    // registers/loads exactly one (the HUD flapt) under E_FLAPTFILE_HUD == 0.
+    enum FlaptFiles
+    {
+        E_FLAPTFILE_HUD     = 0,
+        E_FLAPTFILES_COUNT  = 1,
+    };
+
     struct FlaptManager
     {
         // GetFile @ 0x82473078 : index maFlaptFileInstances[luFile], assert the
         // entry IsActive(), and return a FileRef {&entry} by value into the
         // caller-provided out buffer.
         FileRef* GetFile(FileRef* lpOutRef, u32 luFile);
+
+        // --- Lifecycle / per-frame methods (declared for the BrnGui::ViewModule caller;
+        // bodies live in this class's own ledger TUs -- the per-TU `cl /c` gate does not
+        // link, so the declarations suffice). All X360-attested. ---
+
+        // @0x82472??? Construct : build the manager's renderer + file table from the owning
+        // view module's sub-objects (ImRendererSet, TextRenderer, LanguageManager,
+        // FontCollection) plus the GUI clear colour and a count/flag int.
+        void Construct(CgsGui::ImRendererSet* lpImRenderers, CgsGraphics::TextRenderer* lpTextRenderer,
+                       CgsLanguage::LanguageManager* lpLanguageManager,
+                       const CgsGui::FontCollection* lpFonts, const RGBA* lpColour, int liArg5);
+
+        // @0x82471??? Prepare : two-phase resource prepare; true once the manager is ready.
+        bool Prepare(CgsMemory::LinearMalloc* lpLinear);
+
+        // @0x82472??? Release : tear down the manager's prepared resources; true once done.
+        bool Release();
+
+        // @0x824716F8 Destruct : release the renderer + file instances.
+        void Destruct();
+
+        // @0x82472120 Update : advance every live file instance by lfTimeStep.
+        void Update(f32 lfTimeStep);
+
+        // @0x82472908 Render : draw the live flapt files through the view module's renderers.
+        void Render();
+
+        // @0x824729?? RegisterFlaptFile : bind a loaded resource handle to a flapt file slot.
+        void RegisterFlaptFile(FlaptFiles leFile, CgsResource::ResourceHandle lResourceHandle);
 
         u8                mau8Opaque00[8];          // +0x00..0x07  (not attested here)
         FlaptFileInstance maFlaptFileInstances[1];  // +0x08  (true length not attested; >=1)

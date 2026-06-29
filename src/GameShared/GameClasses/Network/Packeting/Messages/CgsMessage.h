@@ -28,6 +28,10 @@
 // in other TUs; here the SmartBitStream is reduced to the four cursor words this
 // TU manipulates plus padding to the 0x18 boundary the trailing scalars sit on.
 
+// Forward declaration for the PackOrUnpackTime field primitive below; the concrete
+// CgsSystem::Time layout lives in GameShared/GameClasses/System/Timer/CgsTime.h.
+namespace CgsSystem { class Time; }
+
 namespace CgsNetwork
 {
     // Flag bits (CgsNetworkConstants.h / CgsMessage.h:40-43).
@@ -159,6 +163,14 @@ namespace CgsNetwork
     //                        0.0f .. FLT_MAX at 0.005f). The field is passed by pointer; the
     //                        return is the per-field status the callers OR together.
     PackOrUnpackResult PackOrUnpackFloat(Message* lpMessage, f32* lpfField, f32 lfMin, f32 lfMax, f32 lfResolution);
+    //   PackOrUnpackTime  -- sub_8288EA60: a CgsSystem::Time value (de)serialised at a given
+    //                        per-tick resolution (the X360 PlayerFinishedRoundMessage passes
+    //                        1/600 s == flt_8208550C). The Time is passed by pointer; the
+    //                        return is the per-field status the callers OR together. Bodied
+    //                        in its own not-yet-reconstructed bitstream TU. (CgsSystem::Time
+    //                        is forward-declared to keep this base header light -- the
+    //                        callers already include CgsTime.h for the concrete type.)
+    PackOrUnpackResult PackOrUnpackTime(Message* lpMessage, CgsSystem::Time* lpTimeField, f32 lfResolution);
     //   PackOrUnpackBuffer -- the Message method that (de)serialises a raw byte buffer of a
     //                        fixed length (used by the fixed-size bitset payloads). Declared
     //                        here as a free helper mirroring the other primitives so the leaf
