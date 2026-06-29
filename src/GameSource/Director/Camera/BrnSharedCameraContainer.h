@@ -29,6 +29,8 @@
 
 namespace BrnDirector
 {
+    namespace Camera { struct Camera; }
+
     // The gameplay-camera header the container hands out. Opaque to this TU -- the caller
     // receives a pointer to it; its layout belongs to the camera-header TU.
     struct GameplayCameraHeader;
@@ -69,6 +71,14 @@ namespace BrnDirector
         // primary is active and not suspended, otherwise the fallback handle. Writes the
         // chosen (asserted-allocated) header pointer into lrOut and returns &lrOut.
         GameplayCameraHeaderRef* GetGameplayCameraHe(GameplayCameraHeaderRef& lrOut) const;
+
+        // The Camera of the currently-selected gameplay behaviour: pick the primary handle
+        // when the primary is active and not suspended, otherwise the secondary, then resolve
+        // that behaviour through its manager and return its camera (asserts the handle is
+        // allocated). This is the selection ArbStateRoaming::Prepare copies into mCamera; the
+        // X360 inlines it as the primary/secondary test + the two handle-resolve accessors
+        // (sub_822122x). DECLARATION-ONLY (body lands with the SharedCameraContainer TU).
+        const Camera::Camera& GetSelectedGameplayCamera() const;
     };
 
     // Pin only the size-stable offsets the X360 asm proves (the two selection-flag bytes).

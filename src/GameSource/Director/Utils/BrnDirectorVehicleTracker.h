@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 #include "GameSource/BurnoutConstants.h"                      // EActiveRaceCarIndex
 #include "GameSource/Director/Utils/BrnDirectorDataJournal.h" // DataJournal<T,N>
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // BrnDirector::GameState (real home; de-forked)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnDirectorVehicleTracker.h
@@ -71,17 +72,10 @@ public:
 //   Replace with the real homes when this TU links; the accessor NAMES are stable.
 // ----------------------------------------------------------------------------
 
-// The per-frame world-state snapshot. Update reads the event-state journal head (to gate the
-// race-end ramp on the RACING state) and the "is in countdown" flag.
-struct GameState
-{
-    enum EEventState { E_EVENT_STATE_RACING = 3 };
-
-    // The most-recent event state (the head of the GameState's small event-state journal).
-    EEventState GetCurrentEventState() const;
-    // True while the pre-race countdown is still running (suppresses the ramp).
-    bool        IsInCountdown() const;
-};
+// The per-frame world-state snapshot Update reads (event-state journal head + countdown flag)
+// now comes from its real home (BrnDirectorGameState.h, #included above) -- de-forked from the
+// minimal slice that used to live here. GetCurrentEventState()/IsInCountdown() and the
+// E_EVENT_STATE_RACING alias are provided there.
 
 namespace DirectorIO
 {

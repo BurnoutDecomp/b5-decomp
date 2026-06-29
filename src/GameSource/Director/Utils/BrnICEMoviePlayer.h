@@ -153,6 +153,18 @@ namespace Camera
         // Whether a behaviour keeps updating while the game is paused.
         void SetBehaviourUpdatesDuringPause(BehaviourHandle<BehaviourInterpolate>& lrHandle,
                                             bool lbUpdatesDuringPause);
+
+        // Release-side methods the arbitrator states (e.g. ArbStateRoaming::Release) drive.
+        // X360-attested:
+        //   UnSetBehaviourUsedByHandle @0x822194B0 -- drop the manager-side hold a handle has
+        //     on its behaviour, identified by the handle's allocation key.
+        //   CheckNoBehavioursAreAllocatedByState @0x822201B0 -- debug check (asserts) that the
+        //     given state holds no behaviours at release time.
+        // DECLARATION-ONLY (bodies land with the BehaviourManager TU). lpState is the owning
+        // ArbitratorState; declared as a void* here to avoid pulling the arbitrator-state cone
+        // into the movie-player slice (the manager only uses it as an opaque owner key).
+        void UnSetBehaviourUsedByHandle(u32 luAllocationKey);
+        void CheckNoBehavioursAreAllocatedByState(const void* lpState);
     };
 }
 

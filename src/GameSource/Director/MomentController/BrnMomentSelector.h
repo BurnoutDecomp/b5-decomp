@@ -3,9 +3,16 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // template <typename T, u32 N> class Array (global ns)
+#include "GameSource/Director/MomentController/BrnMoment.h" // Moment / Moment::EType (AddMoment / GetSelectedMoment)
 
 namespace BrnDirector
 {
+
+// Forward decls for the Prepare context (passed by reference only; their layouts live in
+// their own TUs).
+class MomentController;
+struct GameState;
+
 
 // MomentHandle - opaque placeholder. No DWARF and no home TU exists for this type;
 // the embedded Array<MomentHandle, N> only needs it to be a complete type with a
@@ -51,6 +58,25 @@ public:
 
     // Clear the current selection. @ 0x821F5868
     void CancelSelection();
+
+    // ---- methods the ArbStateRoaming lifecycle drives (X360-attested) --------------------
+    // Register a candidate establishing-shot moment of the given type + selection weight.
+    // @0x82209F80 (the X360 passes a 16-byte MomentDescription by value; de-inlined here to
+    // the logical {type, weight} pair the call sites build). Returns 1 on success.
+    int AddMoment(Moment::EType leMomentType, f32 lfWeight);
+
+    // Prepare the selector against this frame's moment controller + game-state context.
+    // @0x82255C58. Returns whether preparation succeeded. FLAG: the context arg types
+    // (MomentController&, GameState&) are read off the X360 SharedInfo slots the caller passes
+    // (mpMomentController @+0x20, mpGameState @+0x24).
+    bool Prepare(MomentController& lrMomentController, GameState& lrGameState);
+
+    // Release the selector (drops any live moment handles back to the controller).
+    // @ (BrnMomentSelector.cpp) -- declaration-only here.
+    void Release();
+
+    // The currently-selected moment, asserting HasSelectedMoment(). @0x82219868.
+    Moment* GetSelectedMoment() const;
 
 private:
     // The shared selection core. DECLARE-ONLY here: it lives in a separate TU and is

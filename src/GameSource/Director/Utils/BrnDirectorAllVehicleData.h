@@ -49,6 +49,17 @@ public:
     // buffer is 8 * 12 = 0x60 bytes, then the trailing live-count word at +0x60 -- matching the
     // Append asm, which reads the count from +0x60 and computes element = base + count*3words).
     typedef Array<NearestCarInfo, 8> NearestCarInfoArray;
+
+    // ---- nearest-car queries the director's FX path uses (X360-attested) -----------------
+    // The squared distance from the player to the nearest tracked car (bubble-sorts the
+    // nearest-car list on first call, then returns the front record's distance). @0x82233488.
+    // X360 returns the float via the double FP-ABI; modelled as f32.
+    f32 GetSqDistanceOfNearestCarToPlayer() const;
+
+    // The squared distance to the nearest car that is NOT on liTeamId's team (the nearest
+    // *opposing* member). @0x822334E0. X360 returns it via the result-pointer ABI; modelled as
+    // a plain f32 return. FLAG: const-ness inferred (a read-only query that lazily sorts).
+    f32 SqDistanceOfNearestOpposingTeamMember(s32 liTeamId) const;
 };
 
 // Pin the element size/field offsets to the Append asm (12-byte / 3-word element copied as

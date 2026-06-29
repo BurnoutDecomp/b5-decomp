@@ -76,6 +76,24 @@ namespace BrnDirector
             // X360-attested @0x82255E68. Body: Camera.cpp.
             void Construct();
 
+            // ---- effect-request helpers the arbitrator states drive -----------------------
+            // These write the camera's mEffects request sub-block. The X360 inlines the field
+            // writes into the calling state (ArbStateRoaming::ProcessPossibleFX); de-inlined
+            // here to named Camera operations so callers never poke mEffects by offset.
+            // DECLARATION-ONLY (bodies land with the Camera / CameraEffects TU); the precise
+            // mEffects offsets are this type's own concern. FLAG: the committed mEffects field
+            // layout is nominal past +0x44 -- these setters are the offset-authoritative API.
+
+            // Set the per-frame impact-shake (amplitude, frequency, shake-type id).
+            void SetImpactShake(f32 lfAmplitude, f32 lfFrequency, u8 lu8ShakeType);
+            // Multiply the live shake amplitude (used to decay it when the requested amount
+            // is non-positive).
+            void ScaleImpactShake(f32 lfScale);
+            // Set the showtime-intro motion-blur + black-bars request amounts.
+            void SetShowtimeBlurAndBars(f32 lfBlur, f32 lfBars, bool lbHasStart, bool lbHasStop);
+            // Set the requested post-FX (full-screen) amount.
+            void SetRequestedPostFX(f32 lfAmount);
+
             // FLAG: minimal-slice decl used by the ICE movie-player family. Body lands
             // with this TU's Clear (@0x8223CE70, a separate function); declaration-only.
             void Clear();
