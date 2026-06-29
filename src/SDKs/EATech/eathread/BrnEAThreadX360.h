@@ -94,6 +94,20 @@ namespace Thread
         ConditionParameters(bool bIntraProcess = true, const char* pName = 0);
     };
 
+    // RWMutexParameters(bool bIntraProcess, const char* pName)
+    // Layout: mbIntraProcess@0 (1B), mName@1 (16B). Same shape as MutexParameters
+    // (EATech DWARF eathread_rwmutex.h:85). RWMutex::Init reads only mbIntraProcess
+    // (it builds its two ConditionParameters from it); the X360 build does not call
+    // an RWMutexParameters ctor in the recovered RWMutex TU, so this is declared as a
+    // plain POD used by RWMutex::Init's signature.
+    struct RWMutexParameters
+    {
+        bool mbIntraProcess;  // offset 0
+        char mName[16];       // offset 1
+
+        RWMutexParameters(bool bIntraProcess = true, const char* pName = 0);
+    };
+
     // ---- Thread-dynamic-data pool (X360) -----------------------------------
 
     // EAThreadDynamicData is the per-thread bookkeeping record. The X360 binary

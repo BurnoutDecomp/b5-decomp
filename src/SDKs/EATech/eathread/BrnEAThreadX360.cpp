@@ -112,6 +112,24 @@ namespace Thread
         }
     }
 
+    // RWMutexParameters(bool, const char*) -- same shape/idiom as MutexParameters
+    // (X360 copies pName). The recovered RWMutex TU does not call this ctor directly
+    // (RWMutex::Init reads mbIntraProcess off the passed-in params), but the POD owns
+    // a canonical ctor home here for completeness, mirroring the sibling params.
+    RWMutexParameters::RWMutexParameters(bool bIntraProcess, const char* pName)
+    {
+        mbIntraProcess = bIntraProcess;
+        if (pName)
+        {
+            strncpy(mName, pName, 15);
+            mName[15] = 0;
+        }
+        else
+        {
+            mName[0] = 0;
+        }
+    }
+
     // 0x82B42D58 -- ThreadParameters default ctor.
     // X360 store-for-store (@ 0x82B42D58):
     //   stw r9(=-1),0xC                -> mnProcessor = -1

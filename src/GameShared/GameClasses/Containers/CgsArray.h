@@ -186,6 +186,46 @@ public:
         }
     }
 
+    // Insert lrElement so it sits at luIndex, shifting the tail [luIndex..count) up one slot
+    // (order-preserving). X360 Array<T,N>::InsertBefore (generic template body shared by every
+    // instantiation; e.g. Array<int,20>::InsertBefore @ 0x822111B0, CgsArray.h:312/313/314/336).
+    // Asserts the array was Construct/Clear'd, that luIndex is a valid insert position (<= count),
+    // and that there is room (count < N) before sliding the tail up and writing the new element.
+    void InsertBefore(u32 luIndex, const T& lrElement)
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        CGS_ASSERT(luIndex <= static_cast<u32>(miCount), "trying to insert before an invalid index");
+        CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
+        for (u32 luShift = static_cast<u32>(miCount); luShift > luIndex; --luShift)
+        {
+            maElements[luShift] = maElements[luShift - 1];
+        }
+        ++miCount;
+        maElements[luIndex] = lrElement;
+    }
+
+    // Erase every live element equal to lrElement, compacting the array (order-preserving). X360
+    // Array<T,N>::EraseInstancesOf (generic template body shared by every instantiation; e.g.
+    // Array<int,20>::EraseInstancesOf @ 0x821FBEA0, CgsArray.h:426). Asserts the array was
+    // Construct/Clear'd, then for each slot whose value matches it repeatedly Erase()s at that
+    // index until the value no longer matches, before advancing.
+    void EraseInstancesOf(const T& lrElement)
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        u32 luIndex = 0;
+        while (luIndex < static_cast<u32>(miCount))
+        {
+            if (maElements[luIndex] == lrElement)
+            {
+                while (luIndex < static_cast<u32>(miCount) && maElements[luIndex] == lrElement)
+                {
+                    Erase(luIndex);
+                }
+            }
+            ++luIndex;
+        }
+    }
+
     // Unordered erase: overwrite luIndex with the current last live element, then drop the count
     // (self-copy when luIndex is already last is intentional/harmless, matching the X360).
     void EraseFast(u32 luIndex)
