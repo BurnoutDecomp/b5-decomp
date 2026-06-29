@@ -29,6 +29,7 @@
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC mFileName member
 
 struct AptCharacter;   // FindExport returns the exported character (pointer only)
+struct AptImportEntry; // AptMovieData::mpImportTable element (defined in AptCharacterAnimation.h)
 
 struct AptFile
 {
@@ -73,4 +74,29 @@ struct AptFile
     // movie's import table. CONSUMES the candidate either way: disposes the AptFile and
     // nulls *ppCandidate (matching the asm). Called by AptLinker::isFileImported.
     bool isFileImported(AptFile** ppCandidate) const;
+};
+
+// ---------------------------------------------------------------------------
+// The loaded .apt movie root view (AptFile::mpData points here once loaded). This
+// names only the AptFile/AptLoader-touched members; the [c:] notes are the console
+// byte offsets the asm uses (widths are x64, the PC-port FLAG). RECONCILE POINT
+// with class:AptCharacterAnimation: mpCharacterTable / mnImportCount / mpImportTable
+// are that struct's members (the AptCharacterAnimation embedded at root+0x10); the
+// export table at [c:+0x38]/[c:+0x3C] is the slot the PS3-decoded header labels the
+// init-indicator list -- the X360 FindExport/GetIDFromImportFile asm walks it as a
+// {name,id} export table (a likely PS3/X360 branch divergence).
+// ---------------------------------------------------------------------------
+struct AptExportEntry            // console record = 8 bytes {name@+0, id@+4}
+{
+    const char* mpName;          // the exported symbol name
+    int32_t     mnCharacterId;   // index into mpCharacterTable
+};
+
+struct AptMovieData
+{
+    AptCharacter**  mpCharacterTable;   // [c:+0x20]
+    int32_t         mnImportCount;      // [c:+0x30]
+    AptImportEntry* mpImportTable;      // [c:+0x34]  (16-byte AptImportEntry records)
+    int32_t         mnExportCount;      // [c:+0x38]
+    AptExportEntry* mpExportTable;      // [c:+0x3C]
 };

@@ -25,6 +25,7 @@
 #include "SDKs/EATech/include/Apt/AptLoader.h"
 #include "SDKs/EATech/include/Apt/AptConstFile.h"          // the serialised .apt header
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h" // Resolve (the movie root)
+#include "SDKs/EATech/include/Apt/AptFile.h"               // AptMovieData (AllImportsAvailable)
 #include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"        // DOGMA_PoolManager::Allocate/Deallocate
 
@@ -258,4 +259,39 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     f->mnState          = 3;            // loaded / resolved
 
     // FLAG: the console then notifies/frees through the load hook (dword_1059C670).
+}
+
+// AllImportsAvailable @0x82AEB270 -- true when every import referenced by `file`'s
+// movie has finished loading (AptLoader::IsLoaded accepts it). Consumes the passed
+// handle (the by-value AptFilePtr argument's teardown). FLAG: AptMovieData is the
+// homed-but-file-local view of the loaded .apt root (AptFile.cpp).
+bool AptLoader::AllImportsAvailable(AptFilePtr file)
+{
+    bool bAllAvailable = true;
+
+    const AptMovieData* pMovie = static_cast<const AptMovieData*>(file.pData->mpData);
+    if (pMovie->mnImportCount > 0)
+    {
+        for (int32_t iImport = 0; iImport < pMovie->mnImportCount; ++iImport)
+        {
+            // Temporary EAStringC around the import file name (ctor InitFromBuffer /
+            // dtor DecreaseInternalRefCount = the asm's per-iteration bracket).
+            EAStringC importName(pMovie->mpImportTable[iImport].mpImportFileName);
+            AptFilePtr loaded = IsLoaded(importName);
+            const bool bLoaded = (loaded.pData != nullptr);
+            AptSharedPtr<AptFile>::Dispose(loaded.pData);   // drop IsLoaded's returned ref
+
+            if (!bLoaded)
+            {
+                bAllAvailable = false;
+                break;
+            }
+        }
+    }
+
+    // Consume the passed handle (by-value AptFilePtr param teardown; AptFilePtr has
+    // no RAII dtor, so the release is explicit -- matching the asm).
+    AptSharedPtr<AptFile>::Dispose(file.pData);
+    file.pData = nullptr;
+    return bAllAvailable;
 }

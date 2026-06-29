@@ -76,6 +76,11 @@ struct AptLoader
     // loading (mnState == 4 || 5).
     AptFilePtr IsLoaded(const EAStringC& fileName);
 
+    // @0x82AEB270 -- true when every import referenced by `file`'s loaded movie has
+    // itself finished loading (each import name passes IsLoaded). Consumes the passed
+    // handle (the by-value AptFilePtr's release). Body in AptLoader.cpp.
+    bool AllImportsAvailable(AptFilePtr file);
+
     // @0x7F2AE4 -- unlink the node owning pFile from the list (called by ~AptFile).
     void Invalidate(AptFile* pFile);
 

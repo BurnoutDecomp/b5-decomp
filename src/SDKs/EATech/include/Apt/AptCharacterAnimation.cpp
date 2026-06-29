@@ -139,3 +139,40 @@ AptCharacterAnimation* AptCharacterAnimation::FixupTranscode(void* pBase, AptCon
     (void)pBase; (void)pConstFile; (void)pBlock;
     return this;
 }
+
+// GetIDFromImportFile @0x82ADE998 -- given an import-table slot index, resolve the
+// id of the character that the import's class name names in the imported movie's
+// export table. Mirrors AptFile::FindExport's inline strcmp; returns -1 if the
+// imported movie has no exports or the class name is absent.
+int32_t AptCharacterAnimation::GetIDFromImportFile(int32_t nImportIndex)
+{
+    const AptImportEntry& import = mpImportTable[nImportIndex];
+    const AptMovieData* pMovie = static_cast<const AptMovieData*>(import.mpFile->mpData);
+
+    const int32_t nExportCount = pMovie->mnExportCount;
+    if (nExportCount <= 0)
+        return -1;
+
+    const char* pClassName = import.mpClassName;
+    for (int32_t iExport = 0; iExport < nExportCount; ++iExport)
+    {
+        // Inline strcmp: walk until the SEARCH key (class name) terminates,
+        // breaking early on any mismatch. Bytes are unsigned (asm lbz).
+        const char* pSearch = pClassName;
+        const char* pExport = pMovie->mpExportTable[iExport].mpName;
+        int nDiff;
+        do
+        {
+            nDiff = static_cast<unsigned char>(*pSearch) - static_cast<unsigned char>(*pExport);
+            if (*pSearch == '\0')
+                break;
+            ++pSearch;
+            ++pExport;
+        }
+        while (nDiff == 0);
+
+        if (nDiff == 0)   // names matched up to a shared terminator
+            return pMovie->mpExportTable[iExport].mnCharacterId;
+    }
+    return -1;
+}

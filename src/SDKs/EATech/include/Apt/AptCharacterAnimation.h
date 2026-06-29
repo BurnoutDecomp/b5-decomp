@@ -93,6 +93,12 @@ struct AptCharacterAnimation
     // (class:AptCharacterAnimation); declared here so callers compile.
     void ResetInitIndicators();
 
+    // @0x82ADE998 -- resolve the character id that import-table slot nImportIndex's
+    // class name names in the imported movie's export table (inline strcmp, like
+    // AptFile::FindExport); returns -1 when the imported movie has no exports or the
+    // name is absent. Body in AptCharacterAnimation.cpp.
+    int32_t GetIDFromImportFile(int32_t nImportIndex);
+
     // --- .apt load resolution (D) ------------------------------------------
     // @0x80EEC4 -- resolve this (serialised) movie root against the load base:
     // clear the resolve scratch + run the recursive Fixup. Returns the root.

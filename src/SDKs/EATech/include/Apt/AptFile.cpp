@@ -52,37 +52,12 @@ AptFile::~AptFile()
     //    asm's DecreaseInternalRefCount(this+4).
 }
 
-// ---------------------------------------------------------------------------
-// AptFile::mpData points at the loaded + resolved .apt movie data root. The X360
-// ARTIST AptFile accessors below reveal the table set the request layer reads; the
-// embedded AptCharacterAnimation sits at the console root+0x10 (AptConstFile: "the
-// embedded AptCharacterAnimation sits at root+16").
-//
-// FLAG: PARTIAL + x64-native. The 32-bit .apt is transcoded by the PC loader into a
-// native runtime form, so this view names only the AptFile-touched members (widths are
-// x64; the [c:] notes are the console byte offsets the asm uses). Two reconcile points
-// with class:AptCharacterAnimation (Adriwin):
-//   * mpCharacterTable / mnImportCount / mpImportTable ARE that struct's members (it is
-//     the object embedded at root+0x10).
-//   * the EXPORT table here ([c:+0x38]/[c:+0x3C] == animation+0x28/0x2C) is the console
-//     slot the PS3-decoded AptCharacterAnimation header currently labels the init-
-//     indicator list; the X360 FindExport asm walks it as a {name,id} export table -- a
-//     likely PS3/X360 branch divergence (see the ps3-reconciliation campaign).
-// ---------------------------------------------------------------------------
-struct AptExportEntry            // console record = 8 bytes {name@+0, id@+4}
-{
-    const char* mpName;          // the exported symbol name
-    int32_t     mnCharacterId;   // index into mpCharacterTable
-};
-
-struct AptMovieData
-{
-    AptCharacter**  mpCharacterTable;   // [c:+0x20]
-    int32_t         mnImportCount;      // [c:+0x30]
-    AptImportEntry* mpImportTable;      // [c:+0x34]  (16-byte AptImportEntry records)
-    int32_t         mnExportCount;      // [c:+0x38]
-    AptExportEntry* mpExportTable;      // [c:+0x3C]
-};
+// AptFile::mpData points at the loaded + resolved .apt movie data root. The
+// AptExportEntry / AptMovieData view of that root now lives in AptFile.h (shared so
+// AptCharacterAnimation::GetIDFromImportFile + AptLoader::AllImportsAvailable reuse
+// it). See the reconcile note there (the export table at [c:+0x38]/[c:+0x3C] vs the
+// PS3 init-indicator slot). AptImportEntry comes from AptCharacterAnimation.h.
+#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // AptImportEntry (AptMovieData::mpImportTable element)
 
 // ---------------------------------------------------------------------------
 // FindExport @0x82AD9DF0 -- linear scan of the export table, comparing pName to each
