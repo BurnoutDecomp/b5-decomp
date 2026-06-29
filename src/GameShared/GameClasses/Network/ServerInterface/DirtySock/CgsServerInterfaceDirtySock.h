@@ -193,6 +193,17 @@ namespace CgsNetwork
         // leaving the member private and the layout unchanged.
         DirtySock::LobbySettingRefT* GetSettingRef() const { return mpSettingRef; }
 
+        // ADDITIVE GROW (flagged by the ServerInterfaceGames group): read accessors for
+        // the ConnAPI (+0x80) and GameManager (+0x84) DirtySDK handles, and the SKU
+        // string. ServerInterfaceGames drives game create/join/connection-type/result
+        // actions through these handles (e.g. SetGameServerConnectionType reads
+        // *(mpServerInterface + 0x80) / +0x84; SendGameResult reads the SKU). Exposed by
+        // name rather than widening friendship, leaving the members private and the
+        // layout unchanged.
+        DirtySock::ConnApiRefT*     GetConnAPIRef() const     { return mpConnApiRef; }
+        DirtySock::GameManagerRefT* GetGameManagerRef() const { return mpGameManagerRef; }
+        const char*                 GetSKU() const            { return mpcSKU; }
+
         // ADDITIVE GROW (flagged by the BrnNetworkScoreboardManager group): the rankings
         // component slot accessor. BrnNetwork::ScoreboardManager::Prepare (X360 0x825471B0)
         // reads mpServerInterface->maComponents[E_COMPONENTS_RANKINGS].mpComponent
@@ -204,6 +215,26 @@ namespace CgsNetwork
         ServerInterfaceComponent* GetRankingsComponent() const
         {
             return maComponents[E_COMPONENTS_RANKINGS].mpComponent;
+        }
+
+        // ADDITIVE GROW (flagged by the ServerInterfaceGames group): the ping-regions
+        // component slot accessor + the games component's ConnAPI-callback registration.
+        // ServerInterfaceGames::CreateGame reads the ping-regions component to append the
+        // region-preference list; ServerInterfaceGames::Prepare registers its per-game
+        // ConnAPI callback into the games component slot (the X360 stores the callback into
+        // maComponents[E_COMPONENTS_GAMES].mConnApiCallback after asserting the component is
+        // registered). Exposed by name; layout unchanged.
+        ServerInterfaceComponent* GetPingRegionsComponent() const
+        {
+            return maComponents[E_COMPONENTS_PING_REGIONS].mpComponent;
+        }
+        bool IsGameComponentRegistered() const
+        {
+            return maComponents[E_COMPONENTS_GAMES].mpComponent != 0;
+        }
+        void SetConnApiGameCallback(ServerInterfaceComponentData::ServerInterfaceConnApiCallback lpfnCallback)
+        {
+            maComponents[E_COMPONENTS_GAMES].mConnApiCallback = lpfnCallback;
         }
 
     protected:

@@ -39,6 +39,11 @@ namespace CgsNetwork
         // Base virtual; the X360 leaf override ServerInterfaceEndGameDataX360::Prepare @0x82877130
         // is the one bodied in this group.
         virtual bool Prepare();
+
+        // ADDITIVE GROW (flagged by the ServerInterfaceGames group): serialise the end-game
+        // result payload into the lobby message record. ServerInterfaceGames::SendGameResult
+        // drives this. Declared here (bodied in the end-game-data TU).
+        void SerialiseToString(char* lpcRecord, s32 liRecLen) const;
     };
 
     // X360 platform leaf. `ServerInterfaceEndGameData` aliases to this on the X360
