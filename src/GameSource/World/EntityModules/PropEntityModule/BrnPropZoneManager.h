@@ -109,6 +109,13 @@ namespace BrnWorld
         u32  GetNumberOfPropsInZone(u16 lu16ZoneId) const;
         u32  GetNumberOfPartsInZone(u16 lu16ZoneId) const;
 
+        // Resolve the prop / part instance at (zone, index-within-zone). Both assert
+        // luZoneId < KU_MAX_ZONES and return a pointer into maProps / maParts at the zone's
+        // start slot + the index (X360 GetProp 0x822DC3A8-class accessor inlined into the
+        // debug overlay's render passes). GetProp may return null for an empty slot.
+        PropEntityInstance*     GetProp(u16 lu16ZoneId, u32 luPropIndex) const;
+        PropPartEntityInstance* GetPart(u16 lu16ZoneId, u32 luPartIndex) const;
+
         // 0x822FC168 -- allocate a prop slot + a part slot for the zone, load every prop
         // (LoadProp, unrolled x4 in the X360 build), and register the zone's cells.
         s32  LoadZone(const PropZoneData* lpZoneData, const PropPhysicsDataHeader* lpTypes,

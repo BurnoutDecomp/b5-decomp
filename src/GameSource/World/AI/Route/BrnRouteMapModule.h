@@ -6,6 +6,8 @@
 
 namespace BrnAI
 {
+struct AISectionsData;
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x827E23F0.
 // The X360 layout places a large embedded working set between the two
 // read/write mutexes and the trailing intrusive-list anchor; the unknown
@@ -15,6 +17,12 @@ class RouteMapModule
 {
 public:
     RouteMapModule();
+
+    // Declared-only (bodied in the RouteMapModule TU). The route map owns a CgsResourcePtr to the
+    // loaded AISectionsData; RouteMapDebugComponent::OnActivate (@0x8277FE50) resolves it via
+    // AISectionsData_::GetMemoryResource(this + 0x65A0). Exposed as a named accessor so callers need
+    // no raw offset into the working-set span. X360 offset 0x65A0 (26016).
+    AISectionsData* GetAISectionsData() const;
 
 private:
     EA::Thread::RWMutex mReadWriteMutexA;   // guest index 4

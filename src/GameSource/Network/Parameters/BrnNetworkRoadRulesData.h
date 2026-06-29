@@ -23,9 +23,13 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // committed home of `typedef u64 CgsID`
 
 namespace BrnNetwork
 {
+    // BrnNetworkRoadRulesData.h:31 -- max score rows the upload table holds.
+    const s32 KI_MAX_UPLOAD_DATA = 15;
+
     // BrnNetworkRoadRulesData.h:32 -- max score rows either download table holds.
     const s32 KI_MAX_DOWNLOAD_DATA = 40;
 
@@ -36,6 +40,48 @@ namespace BrnNetwork
     const s32 KI_ROAD_RULES_NAME_LENGTH = 16;
 
     // ------------------------------------------------------------------------
+    // RoadRulesUploadData -- the local player's road-rules scores queued for upload:
+    // up to KI_MAX_UPLOAD_DATA (15) {car-id, record-index, quantised-score} rows, plus
+    // the 64-bit unique road-rules id. SHAPE from DecFIGS DWARF
+    // (BrnNetworkRoadRulesData.h:47), with offsets confirmed against the X360 ARTIST asm
+    // in BrnNetwork::ServerInterfaceCustomCommands::SetRoadRulesForLocalPlayer @ 0x8258F3E0:
+    //   maCarIDs        u64[15] @ +0x00   (`ld r3, 0(r28)`, r28 strides +8)
+    //   mu64RoadRulesID u64     @ +0x78   (`ld r30, 0x78(r25)` -> GetUniqueID)
+    //   maiRecordIndices s32[15]@ +0x80   (`lwz r6, 0(r30)`, r30 = a2+0x80, strides +4)
+    //   maiQuantisedScore s32[15]@ +0xBC  (`lwz r6, 0x3C(r30)`)
+    //   miNumScores     s32     @ +0xF8   (`lwz r11, 0xF8(r25)` -> GetNumScores)
+    // ------------------------------------------------------------------------
+    class RoadRulesUploadData
+    {
+    public:
+        // BrnNetworkRoadRulesData.h:53 -- reset the table and stamp the road-rules id.
+        void Construct(u64 lu64RoadRulesID);
+
+        // BrnNetworkRoadRulesData.h:60 -- append one {record-index, score, car-id} row.
+        bool SetScoreData(s32 liRecordIndex, s32 liQuantisedScore, CgsID lCarID);
+
+        // BrnNetworkRoadRulesData.h:64 -- live row count.
+        s32 GetNumScores();
+
+        // BrnNetworkRoadRulesData.h:69 / :74 / :79 -- per-row accessors.
+        s32   GetScoreValue(s32 liIndex);
+        s32   GetRecordIndex(s32 liIndex);
+        CgsID GetCarID(s32 liIndex);
+
+        // BrnNetworkRoadRulesData.h:83 -- the unique road-rules id stamped at Construct.
+        u64 GetUniqueID();
+
+    private:
+        CgsID maCarIDs[KI_MAX_UPLOAD_DATA];           // +0x00
+        u64   mu64RoadRulesID;                        // +0x78
+        s32   maiRecordIndices[KI_MAX_UPLOAD_DATA];   // +0x80
+        s32   maiQuantisedScore[KI_MAX_UPLOAD_DATA];  // +0xBC
+        s32   miNumScores;                            // +0xF8
+    };
+    static_assert(sizeof(RoadRulesUploadData) >= 0xFC,
+                  "RoadRulesUploadData must cover miNumScores @ +0xF8");
+
+    // ------------------------------------------------------------------------
     // RoadRulesDownloadData -- the leaderboard rows downloaded for one road: up to 40
     // {player-name, score-type, quantised-score} rows. sizeof(mData) == 0x3C4; the
     // owning struct then carries a 123-byte validity pattern. Names are stored as a
@@ -44,6 +90,11 @@ namespace BrnNetwork
     class RoadRulesDownloadData
     {
     public:
+        // BrnNetworkRoadRulesData.h:120 -- zero the table (incl. miNumScores) and write
+        // the fixed validity pattern. Body in the owning TU; declared-only here (the
+        // custom-commands HandleIncomingMessage constructs one on the stack before fill).
+        void Construct();
+
         // DownloadData mirrors the DWARF nested struct (BrnNetworkRoadRulesData.h:166).
         struct DownloadData
         {
@@ -82,6 +133,11 @@ namespace BrnNetwork
     class RoadRulesLocalPlayerDownloadedScores
     {
     public:
+        // BrnNetworkRoadRulesData.h:200 -- stamp the table with its road-rules id and reset
+        // the row count to 0. Body in the owning TU; declared-only here (the custom-commands
+        // HandleIncomingMessage stamps a stack instance with the parsed id before fill).
+        void Construct(u64 lu64RoadRulesID);
+
         // X360 0x825418B0 -- read row liDownloadIndex out into the caller's score-type
         // and score words. Asserts the index is in [0, KI_MAX_DOWNLOAD_DATA) and
         // < miNumScores.

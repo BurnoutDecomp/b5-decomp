@@ -84,6 +84,30 @@ namespace BrnReplays
         // GetId @ inline (BrnReplayBaseSerialiser.h:173) -- returns meId.
         ESerialiserId GetId() const { return meId; }
 
+        // --- snapshot accessors the replay debug overlay reads each frame ---
+        // (additive surface; the bodies are trivial named-member reads). They are the
+        // live-serialiser fields PreUpdateRecord @0x8264BD08 copies into the overlay's
+        // DebugSerialiserInfo record. PreUpdateRecord is the X360 attestation of where
+        // each lives on this build (live-serialiser byte offsets in parentheses):
+        //   GetMode             <- lwz 0x00(src)  (0x8264BF68)
+        //   GetBufferSize       <- lwz 0x0C(src)  (0x8264BF78)  "Buffer Size" column
+        //   GetBufferUsed       <- lwz 0x10(src)  (0x8264BF88)  "Buffer Used" column
+        //   GetBufferRead       <- lwz 0x14(src)  (0x8264BF98)
+        //   GetId               <- lwz 0x28(src)  (0x8264BFA8)  ID column
+        //   GetContext          <- lwz 0x2C(src)  (0x8264BFB8)
+        //   GetStaticBufferSize <- lwz 0x24(src)  (0x8264BFC8)  "Static Size" column
+        //   GetName             <- &src+0x30      (0x8264BF40 byte copy)  macName
+        // NOTE: PreUpdateRecord reads the static-buffer-size at live+0x24 (8 bytes past
+        // the DWARF +0x1C placement); on this 64-bit host all access is by name so the
+        // exact X360 byte offset of miStaticBufferSize is immaterial to the snapshot.
+        EMode              GetMode() const             { return meMode; }
+        s32                GetBufferSize() const       { return miBufferSize; }
+        s32                GetBufferUsed() const       { return miBufferUsed; }
+        s32                GetBufferRead() const       { return miBufferRead; }
+        s32                GetStaticBufferSize() const { return miStaticBufferSize; }
+        ESerialiserContext GetContext() const          { return meContext; }
+        const char*        GetName() const             { return macName; }
+
     protected:
         // SetMode @ 0x8264B0F8. Private in the leak; protected here so the embed
         // check and (future) construction path can drive the mode while it stays

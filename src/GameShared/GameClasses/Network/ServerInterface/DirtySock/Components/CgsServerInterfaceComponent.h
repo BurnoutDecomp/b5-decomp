@@ -39,6 +39,16 @@ namespace CgsNetwork
     // OnEvent signature is well-formed without pulling in that header.
     enum EServerInterfaceEvent : s32;
 
+    // The server-interface result enum (full enumerator set homed in
+    // CgsServerInterfaceErrors.h). Forward-declared with a fixed underlying type so the
+    // ConvertError return type is well-formed without pulling in that header.
+    enum EServerInterfaceError : s32;
+
+    // { DirtySock error code -> EServerInterfaceError } mapping entry (home:
+    // CgsServerInterfaceDirtySockErrorHelpers.h). Reached only by pointer here, so the
+    // forward declaration is sufficient for the ConvertError signature.
+    struct DSErrorToServerInterfaceError;
+
     class ServerInterfaceComponent
     {
     public:
@@ -54,6 +64,24 @@ namespace CgsNetwork
         virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
 
     protected:
+        // ---- Action / error helpers shared by every leaf component ------------------
+        // (Bodied in dedicated component TUs / CgsServerInterfaceComponent.cpp; declared
+        //  here so derived leaves can drive an action through the base by name. In the
+        //  Jan-2008 ARTIST build these helpers live on ServerInterfaceComponent -- they
+        //  had migrated up from ServerInterfaceDirtySock since the Feb-2007 source.)
+
+        // Begin an action: stash the human-readable action name and reset the error.
+        void StartActionCore(const char* lpcAction);
+
+        // End an action: record liError as the last error and mark the component idle.
+        void EndActionCore(int liError);
+
+        // Map a DirtySock error code to an EServerInterfaceError using the supplied table
+        // (falling back to the shared default 'nfnd' table when the code is not present).
+        EServerInterfaceError ConvertError(int liError,
+                                           const DSErrorToServerInterfaceError* lpTable,
+                                           int liCount) const;
+
         const char* mpcCurrentAction;   // +0x04
         s32         meStatus;           // +0x08
         s32         miLastError;        // +0x0C

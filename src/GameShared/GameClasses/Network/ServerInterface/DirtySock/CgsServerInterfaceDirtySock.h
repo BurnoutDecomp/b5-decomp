@@ -3,6 +3,12 @@
 
 #include "types.hpp"
 
+// FLAGGED opaque DirtySock SDK ref handles (vendor SDK; reached by pointer). These live
+// in the GLOBAL namespace to match the DirtySDK vendor headers (vendor/dirtysdk/include/
+// lobbyapi.h), so a TU that includes both this header and the SDK header sees one type.
+struct LobbyApiRefT;
+struct LobbyApiMsgT;
+
 // ===========================================================================
 // CgsNetwork::ServerInterfaceDirtySock
 //   Home: GameShared/GameClasses/Network/ServerInterface/DirtySock/
@@ -92,9 +98,9 @@ namespace CgsNetwork
     enum EServerInterfaceEvent : int;
     enum EServerInterfaceError : int;
 
-    // ---- FLAGGED opaque DirtySock SDK ref handles (vendor SDK; reached by pointer).
-    struct LobbyApiRefT;
-    struct LobbyApiMsgT;
+    // ---- FLAGGED: the DirtySock->game error mapping table type (CgsNetwork-owned;
+    // home CgsServerInterfaceDirtySockErrorHelpers.h). LobbyApiRefT / LobbyApiMsgT are
+    // vendor SDK types declared at global scope above.
     struct DSErrorToServerInterfaceError;
 
     namespace DirtySock
@@ -171,6 +177,13 @@ namespace CgsNetwork
         // field directly. We expose a read accessor instead of widening friendship, so
         // the member stays private and the layout is unchanged.
         DirtySock::LobbyLoginRefT* GetLobbyLoginRef() const { return mpLobbyLoginRef; }
+
+        // ADDITIVE GROW: read accessor for the DirtySock lobby API ref (the +0x78
+        // member). The leaf components (e.g. ServerInterfaceDownloadableConfig::StartAction,
+        // X360 0x8287AD88, reads *(mpServerInterface + 0x78)) drive lobby requests through
+        // this handle; exposed by name rather than widening friendship, leaving the member
+        // private and the layout unchanged.
+        LobbyApiRefT* GetLobbyAPIRef() const { return mpLobbyAPIRef; }
 
     protected:
         // ConvertError: map a DirtySock error to an EServerInterfaceError via the table.
