@@ -221,4 +221,9 @@ struct AptCIH : public AptValueGC
     // IsVisible @0x82AE2F30 -- true iff this node AND every display-list ancestor is
     // visible (walks mpDisplayListParent, testing GetProceduralProperty(_visible)).
     bool IsVisible() const;
+
+    // SetIsMask @0x82AECE58 -- set/clear this node's render-item mask flag (with an
+    // optional mask position matrix) via the writable render item, then propagate the
+    // generalized-process dirty state. Returns SetGeneralizedProcessDirtyState's result.
+    AptCIH* SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);   // @0x82AECE58
 };

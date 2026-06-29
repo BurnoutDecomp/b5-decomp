@@ -588,3 +588,14 @@ AptCIH* AptCIH::SetGeneralizedProcessDirtyState(bool bDirty)
     }
     return this;
 }
+
+// SetIsMask @0x82AECE58 -- toggle this node's mask state: forward (bIsMask,
+// pMaskMatrix) to the writable render item's SetIsMask (lazily (de)allocates + copies
+// the mask matrix + flips the isMask bit), then (un)mark the generalized-process
+// dirty state across the subtree (the X360 propagates that call's return).
+AptCIH* AptCIH::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix)
+{
+    AptRenderItem* pRenderItem = GetCharacterInst()->GetRenderItemWritable();
+    pRenderItem->SetIsMask(bIsMask, pMaskMatrix);
+    return SetGeneralizedProcessDirtyState(bIsMask);
+}
