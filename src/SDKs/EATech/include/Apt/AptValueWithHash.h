@@ -36,6 +36,14 @@ public:
     virtual void           RegisterReferences();         // @0x7E7C9C (key function)
     virtual void           DestroyGCPointers();          // @0x7F8650
 
+    // scalar deleting destructor @0x82AF51F0 -- the GC teardown. The asm conditionally
+    // (if mHash.mpTable != null, i.e. !mHash.IsEmpty()) calls mHash.DestroyGCPointers(),
+    // resets the vtable, then conditionally frees. That is EXACTLY the compiler-generated
+    // deleting dtor here: the inherited `virtual ~AptValue` + the member `~AptNativeHash`
+    // (which is itself `if (mpTable) DestroyGCPointers()`). Defaulted -- the member dtor
+    // supplies the body; declared so the override + its X360 address are documented.
+    virtual ~AptValueWithHash() = default;
+
     // ---- property access (non-virtual; delegate to the hash) --------------
     void      Set(const EAStringC& key, AptValue* pValue) { mHash.Set(key, pValue); } // @0x8042A0
     AptValue* Lookup(const EAStringC& key) const { return mHash.Lookup(key); }        // @0x7F9A68
