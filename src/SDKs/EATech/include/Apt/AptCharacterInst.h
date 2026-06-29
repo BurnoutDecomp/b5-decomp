@@ -62,6 +62,11 @@ struct AptCharacterInst
     AptRenderItem*       GetRenderItemWritable();        // @0x7EC910 (via the manager)
     AptRenderItem*       SetRenderItem(AptRenderItem* pItem);   // @0x7E20E8
 
+    // The character type tag (mTypeFlags bits 26..31): 1 shape / 2 dynamic-text /
+    // 4 button / 5 sprite(movie-clip) / 8 morph / 9 animation / 15 level /
+    // 16 custom-control. Drives the AptCIH::IsXxxInst predicates.
+    uint32_t GetTypeTag() const { return mTypeFlags >> 26; }
+
     AptCharacter*        SetCharacter(AptCharacter* pCharacter); // @0x80F324
 
     // ---- const reads (straight through the render item) -------------------

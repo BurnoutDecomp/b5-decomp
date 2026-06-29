@@ -68,6 +68,21 @@ struct AptCIH : public AptValueGC
     AptCharacterInst* GetCharacterInst() const { return mpCharacterInst; }  // @0x7DF174
     int16_t GetDepth() const;   // @0x7EA024 (through the char inst's render item)
 
+    // ---- character-type predicates (through the char inst's type tag) -----
+    // Each tests mpCharacterInst's type tag (AptCharacterInst::GetTypeTag); IsNone
+    // tests this value's own AptValue vtable index (AptCIHNone == 37). Bodies in
+    // AptCIH.cpp (need the full AptCharacterInst type).
+    bool IsShapeInst() const;          // @0x82AD5A30  type 1
+    bool IsDynamicTextInst() const;    // @0x82AD5A50  type 2
+    bool IsButtonInst() const;         // @0x82AD5A10  type 4
+    bool IsSpriteInst() const;         // @0x82AD59B0  type 5 or 16
+    bool IsSpriteInstBase() const;     // @0x82AD59E0  type 5 or 9
+    bool IsMorphInst() const;          // @0x82AD5A90  type 8
+    bool IsAnimationInst() const;      // @0x82AD5AB0  type 9
+    bool IsLevelInst() const;          // @0x82AD5AD0  type 15
+    bool IsCustomControlInst() const;  // @0x82AD5B08  type 16
+    bool IsNone() const;               // @0x82AD5AF0  AptValue vtable index 37 (AptCIHNone)
+
     // ---- display-list links -----------------------------------------------
     AptCIH* GetDisplayListPrevious() const { return mpDisplayListPrevious; }  // @0x7DF184
     AptCIH* GetDisplayListNext() const     { return mpDisplayListNext; }      // @0x7DF17C

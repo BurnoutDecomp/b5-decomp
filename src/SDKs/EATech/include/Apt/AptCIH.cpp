@@ -146,3 +146,35 @@ void AptCIH::SetCreatedOnFrame(int nFrame)
 {
     mFlagsB = (mFlagsB & 0x0003FFFFu) | (static_cast<uint32_t>(nFrame) << 18);
 }
+
+// ---------------------------------------------------------------------------
+// Character-type predicates -- each reads the character instance's type tag
+// (mTypeFlags bits 26..31). The X360 bodies dereference mpCharacterInst directly
+// (no null guard -- they are only called on placed nodes that own an instance).
+// IsNone instead tests this value's own AptValue vtable index.
+// ---------------------------------------------------------------------------
+bool AptCIH::IsShapeInst() const         { return mpCharacterInst->GetTypeTag() == 1; }   // @0x82AD5A30
+bool AptCIH::IsDynamicTextInst() const   { return mpCharacterInst->GetTypeTag() == 2; }   // @0x82AD5A50
+bool AptCIH::IsButtonInst() const        { return mpCharacterInst->GetTypeTag() == 4; }   // @0x82AD5A10
+bool AptCIH::IsMorphInst() const         { return mpCharacterInst->GetTypeTag() == 8; }   // @0x82AD5A90
+bool AptCIH::IsAnimationInst() const     { return mpCharacterInst->GetTypeTag() == 9; }   // @0x82AD5AB0
+bool AptCIH::IsLevelInst() const         { return mpCharacterInst->GetTypeTag() == 15; }  // @0x82AD5AD0
+bool AptCIH::IsCustomControlInst() const { return mpCharacterInst->GetTypeTag() == 16; }  // @0x82AD5B08
+
+// A sprite inst is a movie-clip (5) or its custom-control variant (16). @0x82AD59B0
+bool AptCIH::IsSpriteInst() const
+{
+    const uint32_t nType = mpCharacterInst->GetTypeTag();
+    return nType == 5 || nType == 16;
+}
+
+// A sprite-base inst is a movie-clip (5) or an imported animation (9). @0x82AD59E0
+bool AptCIH::IsSpriteInstBase() const
+{
+    const uint32_t nType = mpCharacterInst->GetTypeTag();
+    return nType == 5 || nType == 9;
+}
+
+// IsNone @0x82AD5AF0 -- this value is the empty placeholder (AptCIHNone, AptValue
+// vtable index 37), rather than testing a character instance.
+bool AptCIH::IsNone() const { return static_cast<uint32_t>(getVtblIndex()) == 37u; }
