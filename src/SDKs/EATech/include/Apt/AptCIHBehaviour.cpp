@@ -19,6 +19,8 @@
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"            // AptMatrix a/b/c
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"            // AptCXForm (writable colour return)
 #include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"        // AptCurrentRenderTreeManager + Update_Item*
+#include "SDKs/EATech/include/Apt/AptTarget.h"                   // gpAptTarget (the Apt context singleton)
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"          // AptAnimationTarget (animation director)
 #include "SDKs/EATech/include/Apt/AptRenderingContext.h"         // multMatrix + gAptIdentityMatrix
 #include "SDKs/EATech/include/Apt/AptCharacterShape.h"           // shape/static-text leaf bounds (mBounds@+0x10)
 #include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"     // dyn-text leaf bounds (GetBoundsConst)
@@ -126,6 +128,63 @@ void AptCIH::ForceCleanNativeHash()
 }
 
 // ---------------------------------------------------------------------------
+// FindAndSetEvents @0x82B02740 -- bind the built-in AS clip/button event handlers.
+//
+// The X360 walks a static descriptor table (dword_82F72DB4 .. dword_82F72DE4, six
+// 8-byte {eventMask, nameIndex} pairs, EXTRACTED from the decrypted XEX below). For
+// each descriptor whose event bit is not already set in this node's native-hash event
+// mask AND that names a real handler (mask & 0x201C7), it resolves the named child
+// against the runtime AS-name table (AptValue::findChild(&gAptEventNameTable[index]));
+// when the child exists the event bit is OR'd into the hash mask. The return is 1 iff
+// any of the "needs a per-frame update tick" events (mask 0x200C0) was newly bound.
+// ---------------------------------------------------------------------------
+
+// FLAG (homed elsewhere -- the AS-name registration boot TU; console dword_8324E580):
+// the runtime table of registered ActionScript handler-name strings (EAStringC). The
+// descriptors index into it by name id. x64-native: an array of EAStringC (8 bytes
+// each), indexed by element -- NOT the console 4-byte stride.
+extern EAStringC* gAptEventNameTable;
+
+namespace
+{
+    struct AptEventDescriptor { uint32_t nEventMask; uint32_t nNameIndex; };
+
+    // dword_82F72DB4 .. dword_82F72DE4 (EXTRACTED, decrypted XEX rodata).
+    const AptEventDescriptor KaAptEventDescriptors[] = {
+        { 0x00000002u, 56u },
+        { 0x00000080u, 58u },
+        { 0x00000040u, 57u },
+        { 0x00000001u, 59u },
+        { 0x00000004u, 69u },
+        { 0x00000100u, 53u },
+    };
+
+    const uint32_t KU_AptEventHandlerNames    = 0x000201C7u;  // descriptors that name a handler
+    const uint32_t KU_AptEventNeedsUpdateTick = 0x000200C0u;  // events that force a per-frame tick
+}
+
+int AptCIH::FindAndSetEvents()
+{
+    int nNeedsTick = 0;
+    AptNativeHash* pHash = GetNativeHashVirtual();   // vtable slot 2
+
+    for (const AptEventDescriptor& desc : KaAptEventDescriptors)
+    {
+        if ((desc.nEventMask & pHash->mnEventHandlerMask) == 0 &&
+            (desc.nEventMask & KU_AptEventHandlerNames) != 0)
+        {
+            if (findChild(&gAptEventNameTable[desc.nNameIndex], nullptr) != nullptr)
+            {
+                pHash->mnEventHandlerMask |= desc.nEventMask;
+                if ((desc.nEventMask & KU_AptEventNeedsUpdateTick) != 0)
+                    nNeedsTick = 1;
+            }
+        }
+    }
+    return nNeedsTick;
+}
+
+// ---------------------------------------------------------------------------
 // GetAnimationInst @0x82B7B358 -- mpCharacterInst narrowed to the concrete
 // animation subtype. The X360 is a bare `lwz r3, 0x20(r3); blr` (mpCharacterInst
 // at dword [8]); the caller has already confirmed IsAnimationInst (type tag 9),
@@ -135,6 +194,62 @@ void AptCIH::ForceCleanNativeHash()
 AptCharacterAnimationInst* AptCIH::GetAnimationInst() const
 {
     return static_cast<AptCharacterAnimationInst*>(mpCharacterInst);
+}
+
+// ---------------------------------------------------------------------------
+// SetCharacterInst @0x82B00548 -- install (or replace) this node's character inst.
+//
+// A null pCharacterInst is replaced by a freshly built "none" instance (the X360
+// inlines CreateCharacterInst(nullptr): a DOGMA-pool alloc + the base ctor + the base
+// vtable). When the (resolved) instance differs from the current one, it is stored and
+// the OLD instance is retired: its render data is optionally moved into the new one
+// (bMoveRenderData -- AS reparent), its per-frame animation timer functions are removed
+// when it was an animation node (the new instance's type tag == 9, console mask
+// 0x24000000), it is GC-torn-down + freed, and the render tree is told the item moved.
+// Both the replace path and the no-old path end in Update_ItemMoved.
+//   field map: mpCharacterInst @[c:0x20]; the new inst's mTypeFlags @[c:+0x08]
+//   (type tag in bits 26..31); the animation tag is 9 (0x24000000 >> 26).
+// ---------------------------------------------------------------------------
+
+// FLAG (homed with AptAnimationTarget; console @0x82B0...): remove every per-frame
+// timer/event function this node registered against the animation director. Declared
+// here (free-function form, like AptAnimationTarget_RunActions) until that TU bodies it.
+void AptAnimationTarget_RemoveTimerFunctions(AptAnimationTarget* pAnim, AptCIH* pNode);
+
+void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRenderData)
+{
+    AptCharacterInst* pNew = pCharacterInst;
+    if (pNew == nullptr)
+        pNew = AptCharacterInst::CreateCharacterInst(nullptr);   // base "none" instance
+
+    AptCharacterInst* pOld = mpCharacterInst;
+    if (pNew == pOld)
+        return;
+
+    mpCharacterInst = pNew;
+
+    if (pOld != nullptr)
+    {
+        if (bMoveRenderData)
+            pNew->MoveRenderDataFrom(pOld);
+
+        // The freshly installed instance is an animation node (type tag 9) -> drop its
+        // registered per-frame timer functions from the animation director.
+        if ((mpCharacterInst->GetTypeTag() == 9u) && gpAptTarget != nullptr)
+            AptAnimationTarget_RemoveTimerFunctions(gpAptTarget->mpAnimationTarget, this);
+
+        // GC-tear-down + free the old instance (the X360's DestroyGCPointers + the
+        // vtable-0 scalar-deleting destructor; AptCharacterInst is DOGMA-pool-backed).
+        pOld->DestroyGCPointers();
+        pOld->~AptCharacterInst();
+        gpNonGCPoolManager->Deallocate(pOld, sizeof(AptCharacterInst));
+    }
+
+    // Notify the render tree the node's render item moved (FLAG: the X360 reads the
+    // manager + tick from gpAptTarget; the established convention resolves the same
+    // manager through AptCurrentRenderTreeManager() + gnCurrUpdateTick).
+    if (AptRenderTreeManager* pManager = AptCurrentRenderTreeManager())
+        pManager->Update_ItemMoved(this, gnCurrUpdateTick);
 }
 
 // ---------------------------------------------------------------------------
@@ -517,7 +632,7 @@ float AptCIH::GetProceduralProperty(uint32_t nPropertyIndex) const
         const float fHeight = afRect[3] - afRect[1];
         return (fHeight >= 0.0f) ? fHeight : 0.0f;
     }
-    case 2:   // _rotation (degrees) -- cached authored angle (mpAssetString dual-use) or derived
+    case 6:   // _rotation (degrees) -- cached authored angle (mpAssetString dual-use) or derived
         if (mpAssetString != nullptr)
             return *reinterpret_cast<const float*>(mpAssetString);
         if (!(fabsf(pPos->b) >= kSkewEpsilon) && !(fabsf(pPos->c) >= kSkewEpsilon))
@@ -526,19 +641,19 @@ float AptCIH::GetProceduralProperty(uint32_t nPropertyIndex) const
             const float fAngleDeg = acosf(GetCosAngle(pPos)) * 57.29578f;
             return (pPos->b >= 0.0f) ? fAngleDeg : -fAngleDeg;
         }
-    case 0:   // _xscale (percent)
+    case 2:   // _xscale (percent)
         if (!(fabsf(pPos->b) >= kSkewEpsilon) && !(fabsf(pPos->c) >= kSkewEpsilon))
             return pPos->a * 100.0f;
         return sqrtf(pPos->a * pPos->a + pPos->b * pPos->b) * 100.0f;
-    case 1:   // _yscale (percent)
+    case 3:   // _yscale (percent)
         if (!(fabsf(pPos->b) >= kSkewEpsilon) && !(fabsf(pPos->c) >= kSkewEpsilon))
             return pPos->d * 100.0f;
         return sqrtf(pPos->c * pPos->c + pPos->d * pPos->d) * 100.0f;
-    case 6:   // _x -- translation X
+    case 0:   // _x -- translation X
         return pPos->tx;
-    case 7:   // _y -- translation Y
+    case 1:   // _y -- translation Y
         return pPos->ty;
-    case 3:   // _alpha -- colour scale alpha as percent
+    case 7:   // _alpha -- colour scale alpha as percent
         return pCx->scale.GetValuef(AptColorHelper::Alpha) * 100.0f;
     case 8:   // colour translate Red (additive)
         return pCx->translate.GetValuef(AptColorHelper::Red);
@@ -776,6 +891,288 @@ bool AptCIH::ProcessMaskMatricies()
     return true;
 }
 
+// ===========================================================================
+// Behavioural batch 6 -- the AS setProperty writer.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// SetProceduralProperty @0x82AE73C0 -- write a built-in AS "procedural" property by
+// selector (the mirror of GetProceduralProperty). The X360 dispatches through a
+// 12-entry jump table (word_82145258); the selectors decoded from that table are:
+//   0 _x   1 _y   2 _xscale   3 _yscale   4 _width   5 _height   6 _rotation
+//   7 _alpha   8 colour-translate Red   9 Green   10 Blue   11 _visible
+// Every arm first stamps the AS-changed flag (mFlagsA bit31) from bASChanged, then
+// writes through the char inst's WRITABLE position/colour matrix (or SetIsVisible).
+//
+// The console float constants (read from the decrypted XEX rodata):
+//   flt_82001CC0 = 0.0   flt_82002540 = 9.99999975e-05 (the near-zero scale floor)
+//   flt_820049E0 = 100.0   flt_82145830 = 1.13225734 (the _width/_height scale floor)
+//   flt_82002138 = 0.01   flt_82001C98 = 1.0   flt_820025FC = 180.0  flt_820048B4 = -180.0
+//   flt_82004928 = 360.0  flt_82145824 = 0.0174532905 (deg->rad)  dbl_82145828 = 360.0
+//   flt_821455F4 = -255.0  flt_82010C20 = 255.0  flt_82001DA0 = 0.5
+//
+// Field map (flat-float access matches the asm): position matrix a@0 b@4 c@8 d@0xC
+// tx@0x10 ty@0x14; colour matrix scale.Alpha@0x04, translate.Red@0x1C / Green@0x20 /
+// Blue@0x24. The matrices are reached via GetRenderItemWritable()->GetPositionMatrix-
+// Writable()/GetColorMatrixWritable() exactly as the X360.
+// ---------------------------------------------------------------------------
+namespace
+{
+    const float KF_AptProcZero        = 0.0f;            // flt_82001CC0
+    const float KF_AptProcScaleFloor  = 9.99999975e-05f; // flt_82002540 (near-zero scale)
+    const float KF_AptProcPercent     = 100.0f;          // flt_820049E0
+    const float KF_AptProcWidthFloor  = 1.13225734f;     // flt_82145830
+    const float KF_AptProcHundredth   = 0.01f;           // flt_82002138
+    const float KF_AptProcOne         = 1.0f;            // flt_82001C98
+    const float KF_AptProc180         = 180.0f;          // flt_820025FC
+    const float KF_AptProcNeg180      = -180.0f;         // flt_820048B4
+    const float KF_AptProc360         = 360.0f;          // flt_82004928
+    const float KF_AptProcDegToRad    = 0.0174532905f;   // flt_82145824
+    const float KF_AptProcColorMin    = -255.0f;         // flt_821455F4
+    const float KF_AptProcColorMax    = 255.0f;          // flt_82010C20
+    const float KF_AptProcHalf        = 0.5f;            // flt_82001DA0
+}
+
+void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASChanged)
+{
+    if (nSelector > 11u)
+        return;
+
+    // Stamp the AS-changed flag (mFlagsA bit31) from bASChanged on every arm.
+    auto markASChanged = [this, bASChanged]()
+    {
+        mFlagsA = (mFlagsA & 0x7FFFFFFFu) | (bASChanged ? 0x80000000u : 0u);
+    };
+
+    float f31 = fValue;
+
+    switch (nSelector)
+    {
+    case 0:   // _x -- store translation X (position matrix tx @0x10)
+    {
+        markASChanged();
+        AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
+        pPos->tx = f31;
+        return;
+    }
+    case 1:   // _y -- store translation Y (position matrix ty @0x14)
+    {
+        markASChanged();
+        AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
+        pPos->ty = f31;
+        return;
+    }
+    case 2:   // _xscale (percent) -- scale the first column (a,b)
+    {
+        f31 *= KF_AptProcHundredth;          // percent -> ratio
+        markASChanged();
+        if (f31 == KF_AptProcZero)
+            f31 = KF_AptProcScaleFloor;       // never let the column collapse
+        AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
+        if (!(fabsf(pPos->b) >= KF_AptProcScaleFloor) && !(fabsf(pPos->c) >= KF_AptProcScaleFloor))
+        {
+            pPos->a = f31;                    // no rotation -> a is the bare x scale
+        }
+        else
+        {
+            const float fLen = sqrtf(pPos->a * pPos->a + pPos->b * pPos->b);
+            const float fInv = KF_AptProcOne / fLen;
+            pPos->a = (pPos->a * fInv) * f31;
+            pPos->b = (pPos->b * fInv) * f31;
+        }
+        return;
+    }
+    case 3:   // _yscale (percent) -- scale the second column (c,d)
+    {
+        f31 *= KF_AptProcHundredth;
+        markASChanged();
+        if (f31 == KF_AptProcZero)
+            f31 = KF_AptProcScaleFloor;
+        AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
+        if (!(fabsf(pPos->b) >= KF_AptProcScaleFloor) && !(fabsf(pPos->c) >= KF_AptProcScaleFloor))
+        {
+            pPos->d = f31;
+        }
+        else
+        {
+            const float fLen = sqrtf(pPos->c * pPos->c + pPos->d * pPos->d);
+            const float fInv = KF_AptProcOne / fLen;
+            pPos->d = (pPos->d * fInv) * f31;
+            pPos->c = (pPos->c * fInv) * f31;
+        }
+        return;
+    }
+    case 4:   // _width -- drive _xscale so the world width matches f31
+    {
+        markASChanged();
+        if (f31 < KF_AptProcZero)
+            return;
+        if (f31 == KF_AptProcZero)
+            f31 = KF_AptProcScaleFloor;
+
+        float afRect[4];
+        GetBoundingRectClamped(this, afRect);
+        const float fWidth = afRect[2] - afRect[0];
+        if (fWidth == KF_AptProcZero)
+            return;
+
+        AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
+        if (!(fabsf(pPos->b) >= KF_AptProcScaleFloor) && !(fabsf(pPos->c) >= KF_AptProcScaleFloor))
+        {
+            // No rotation: derive the target xscale percent and re-enter case 2.
+            float fScale = f31 / fWidth;
+            if (!(fScale >= KF_AptProcScaleFloor))
+                fScale = KF_AptProcScaleFloor;
+            float fXScale = (pPos->a * fScale) * KF_AptProcPercent;
+            if (!(fXScale >= KF_AptProcWidthFloor))
+                fXScale = KF_AptProcWidthFloor;
+            SetProceduralProperty(2u, fXScale, true);
+        }
+        else
+        {
+            // Rotated: scale the first column by f31 / current width.
+            const float fCurWidth = GetProceduralProperty(4u);
+            if (fCurWidth == KF_AptProcZero)
+                return;
+            float fScale = f31 / fCurWidth;
+            if (!(fScale >= KF_AptProcScaleFloor))
+                fScale = KF_AptProcScaleFloor;
+            pPos->a *= fScale;
+            pPos->b *= fScale;
+        }
+        return;
+    }
+    case 5:   // _height -- drive _yscale so the world height matches f31
+    {
+        markASChanged();
+        if (f31 < KF_AptProcZero)
+            return;
+        if (f31 == KF_AptProcZero)
+            f31 = KF_AptProcScaleFloor;
+
+        float afRect[4];
+        GetBoundingRectClamped(this, afRect);
+        const float fHeight = afRect[3] - afRect[1];
+        if (fHeight == KF_AptProcZero)
+            return;
+
+        AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
+        if (!(fabsf(pPos->b) >= KF_AptProcScaleFloor) && !(fabsf(pPos->c) >= KF_AptProcScaleFloor))
+        {
+            float fScale = f31 / fHeight;
+            if (!(fScale >= KF_AptProcScaleFloor))
+                fScale = KF_AptProcScaleFloor;
+            float fYScale = (pPos->d * fScale) * KF_AptProcPercent;
+            if (!(fYScale >= KF_AptProcWidthFloor))
+                fYScale = KF_AptProcWidthFloor;
+            SetProceduralProperty(3u, fYScale, true);
+        }
+        else
+        {
+            const float fCurHeight = GetProceduralProperty(5u);
+            if (fCurHeight == KF_AptProcZero)
+                return;
+            float fScale = f31 / fCurHeight;
+            if (!(fScale >= KF_AptProcScaleFloor))
+                fScale = KF_AptProcScaleFloor;
+            pPos->c *= fScale;
+            pPos->d *= fScale;
+        }
+        return;
+    }
+    case 6:   // _rotation (degrees) -- wrap to (-180,180], cache, rebuild the rotation
+    {
+        markASChanged();
+        // Wrap into [-180, 180] via fmod 360 then a 360 subtract for the high half.
+        // fmod only when outside [-180, 180] (f31 > 180 || f31 < -180).
+        if (f31 > KF_AptProc180 || f31 < KF_AptProcNeg180)
+            f31 = static_cast<float>(fmod(static_cast<double>(f31), 360.0));   // dbl_82145828
+        if (f31 > KF_AptProc180)
+            f31 -= KF_AptProc360;
+
+        // Cache the authored angle in the lazily-allocated mpAssetString slot (the
+        // X360 reuses it as a single-float store; allocated from the DOGMA pool).
+        if (mpAssetString == nullptr)
+            mpAssetString = gpNonGCPoolManager->Allocate(4);   // FLAG: console off_8324D808 (DOGMA pool)
+        *reinterpret_cast<float*>(mpAssetString) = f31;
+
+        // Rebuild the first two columns from the cached scales + the new angle.
+        AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
+        const float fScaleX = sqrtf(pPos->a * pPos->a + pPos->b * pPos->b);
+        const float fScaleY = sqrtf(pPos->c * pPos->c + pPos->d * pPos->d);
+        const float fRad = f31 * KF_AptProcDegToRad;
+        const float fCos = static_cast<float>(cos(static_cast<double>(fRad)));
+        const float fSin = static_cast<float>(sin(static_cast<double>(fRad)));
+        pPos->a = fCos * fScaleX;
+        pPos->d = fCos * fScaleY;
+        pPos->b = fSin * fScaleX;
+        pPos->c = -(fSin * fScaleY);
+        return;
+    }
+    case 7:   // _alpha (percent) -- colour-scale alpha, rounded to 0..255 then clamped
+    {
+        markASChanged();
+        AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
+        if (f31 < KF_AptProcZero)
+        {
+            // FLAG: the X360 folds the negative-alpha path into a shared store epilogue
+            // (loc_82AE7808); reconstructed as the plain clamp-and-store of the raw value.
+            float fClamped = f31;
+            if (!(fClamped >= KF_AptProcColorMin)) fClamped = KF_AptProcColorMin;
+            if (fClamped > KF_AptProcColorMax)     fClamped = KF_AptProcColorMax;
+            pCx->scale.SetValuef(AptColorHelper::Alpha, fClamped);
+            return;
+        }
+        // percent -> 0..255, round to nearest integer (fctiwz), clamp to [-255, 255].
+        const float fScaled = (f31 * KF_AptProcHundredth) * KF_AptProcColorMax;
+        float fVal = static_cast<float>(static_cast<int32_t>(fScaled));
+        if (!(fVal >= KF_AptProcColorMin)) fVal = KF_AptProcColorMin;
+        if (fVal > KF_AptProcColorMax)     fVal = KF_AptProcColorMax;
+        pCx->scale.SetValuef(AptColorHelper::Alpha, fVal);
+        return;
+    }
+    case 8:   // colour translate Red -- clamp [-255, 255], store at translate.Red (@0x1C)
+    {
+        markASChanged();
+        AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
+        float fVal = f31;
+        if (!(fVal >= KF_AptProcColorMin)) fVal = KF_AptProcColorMin;
+        if (fVal > KF_AptProcColorMax)     fVal = KF_AptProcColorMax;
+        pCx->translate.SetValuef(AptColorHelper::Red, fVal);
+        return;
+    }
+    case 9:   // colour translate Green (@0x20)
+    {
+        markASChanged();
+        AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
+        float fVal = f31;
+        if (!(fVal >= KF_AptProcColorMin)) fVal = KF_AptProcColorMin;
+        if (fVal > KF_AptProcColorMax)     fVal = KF_AptProcColorMax;
+        pCx->translate.SetValuef(AptColorHelper::Green, fVal);
+        return;
+    }
+    case 10:  // colour translate Blue (@0x24)
+    {
+        markASChanged();
+        AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
+        float fVal = f31;
+        if (!(fVal >= KF_AptProcColorMin)) fVal = KF_AptProcColorMin;
+        if (fVal > KF_AptProcColorMax)     fVal = KF_AptProcColorMax;
+        pCx->translate.SetValuef(AptColorHelper::Blue, fVal);
+        return;
+    }
+    case 11:  // _visible -- bool from (f31 > 0.5), set render-item visibility + dirty
+    {
+        const bool bVisible = (f31 > KF_AptProcHalf);
+        GetCharacterInst()->GetRenderItemWritable()->SetIsVisible(bVisible);
+        SetGeneralizedProcessDirtyState(bVisible);
+        return;
+    }
+    default:
+        return;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // CleanNativeFunctions @0x82AD6FB8 -- shutdown teardown of the process-wide
 // ActionScript native-function singletons. Each non-null slot has its value Released
@@ -839,4 +1236,43 @@ void AptCIH::CleanNativeFunctions()
             *ppSlot = nullptr;
         }
     }
+}
+
+// ===========================================================================
+// Behavioural batch 7 -- per-frame dynamic-text refresh.
+// ===========================================================================
+
+// FLAG (homed with the dynamic-text render-item TU; console &unk_82F72DB0): the
+// "unresolved/empty text render-data handle" sentinel. mZID equal to it (or 0) means
+// the field has no resolved render data yet. Mirrors AptRenderItemDynamicText.cpp.
+extern int gAptEmptyTextRenderDataZID;
+
+// ---------------------------------------------------------------------------
+// ProcessTextInst @0x82B076F0 -- refresh a dynamic-text node's baked render data.
+//
+// Acts only on a dynamic-text character instance (type tag 2; the console tests
+// (mTypeFlags & 0xFC000000) == 0x08000000). When the node is visible and its render
+// item's text render-data handle is still unresolved (mZID == 0 or the empty-text
+// sentinel) OR its text is flagged dirty (mStateFlags bit0 clear), the text is
+// (re)built via EnsureStringAllocated, fed the display-list parent so an inherited
+// TextFormat resolves. Returns true when this is a dynamic-text node (whether or not
+// a rebuild was needed), false otherwise.
+// ---------------------------------------------------------------------------
+bool AptCIH::ProcessTextInst()
+{
+    if (mpCharacterInst->GetTypeTag() != 2u)   // (mTypeFlags & 0xFC000000) != 0x08000000
+        return false;
+
+    if (IsVisible())
+    {
+        AptRenderItemDynamicText* pTextItem =
+            static_cast<AptRenderItemDynamicText*>(mpCharacterInst->GetRenderItem());
+        const int nZID = pTextItem->mZID;
+        if (nZID == 0 || nZID == gAptEmptyTextRenderDataZID ||
+            (pTextItem->mStateFlags & 1u) == 0)
+        {
+            EnsureStringAllocated(mpDisplayListParent);   // FLAG: deep text engine (declared-only)
+        }
+    }
+    return true;
 }

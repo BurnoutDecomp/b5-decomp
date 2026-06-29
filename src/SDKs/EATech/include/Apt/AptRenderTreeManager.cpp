@@ -16,6 +16,7 @@
 #include "SDKs/EATech/include/Apt/AptRenderItemLevel.h"
 #include "SDKs/EATech/include/Apt/AptCharacter.h"
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"   // AptCurrentRenderTreeManager / AptRTM_* decls
+#include "SDKs/EATech/include/Apt/AptCIH.h"             // the scene node (display-list links + char inst)
 #include "SDKs/EATech/include/Apt/AptDefine.h"           // gpNonGCPoolManager
 #include "SDKs/EATech/include/Apt/AptRenderManagerItem.h" // gpAptRenderManagerPool (off_8324D808)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
@@ -261,4 +262,505 @@ AptRenderTreeManager::_AptRenderItemRootList::InsertNewRoot(AptRenderItem* pItem
     lpTail->mpNext = lpCell;
 
     return this;
+}
+
+// ---------------------------------------------------------------------------
+// Create @0x82AE1B78  ("_AptRenderItemRootLi") -- the ctor-shaped factory that
+// allocates AND constructs an anchor cell for pItem in one go.
+//
+//   cell = pool->Allocate(8);                 ; DOGMA_PoolManager::Allocate(off_8324D808, 8)
+//   if (cell) { cell->mpItem = 0; cell->mpNext = 0; }
+//   else cell = 0;
+//   pItem->AddReference();                     ; inline lwarx/stwcx. of *(pItem+0x24)
+//   cell->mpItem = pItem;                      ; stw r31, 0(cell)
+//   cell->mpNext = 0;                          ; stw 0, 4(cell)
+//   return cell;
+//
+// The atomic increment is AptRenderItem::mRefCount, i.e. AddReference(). The X360
+// always stores through `cell` after the null-check (it would fault on an exhausted
+// pool); kept verbatim, guarded so the PC build does not deref null.
+// ---------------------------------------------------------------------------
+AptRenderTreeManager::_AptRenderItemRootList*
+AptRenderTreeManager::_AptRenderItemRootList::Create(AptRenderItem* pItem)
+{
+    _AptRenderItemRootList* lpCell =
+        static_cast<_AptRenderItemRootList*>(gpAptRenderManagerPool->Allocate(sizeof(_AptRenderItemRootList)));
+    if (lpCell)
+    {
+        lpCell->mpItem = nullptr;
+        lpCell->mpNext = nullptr;
+    }
+
+    // Take a reference on the root item (X360 inline lwarx/stwcx. of mRefCount).
+    pItem->AddReference();
+
+    if (lpCell)
+    {
+        lpCell->mpItem = pItem;
+        lpCell->mpNext = nullptr;
+    }
+    return lpCell;
+}
+
+// ===========================================================================
+// The render-tree UPDATE re-derivation hooks (called by AptCIH/AptDisplayList as
+// the per-frame display list mutates). Each rewrites the changed node's writable
+// render item's manager links (first-child / next-sibling / mask) from the
+// node's display-list neighbours. The console drives the double-buffered tree;
+// here the writes are applied to the live items (single-buffer bring-up) exactly
+// as the X360 body does, by name -- so the link topology stays faithful.
+//
+// AptCIH layout reached by the X360 via byte offsets, mapped to named members:
+//   +0x14 mpDisplayListPrevious   +0x18 mpDisplayListNext   +0x1C mpDisplayListParent
+//   +0x20 mpCharacterInst         (charInst +0x04 == mpRenderItem)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Update_ItemFirstChildChanged @0x82AE0AC8
+//
+//   item = pNode->mpCharacterInst;             ; lwz r3, 0x20(node)
+//   if (!item) return;
+//   writable = AptCharacterInst::GetRenderItemWritable(item);   ; r9 = writable
+//   firstChild = pNode->GetFirstChild();       ; AptCIH::GetFirstChild
+//   child = firstChild ? firstChild->mpCharacterInst->mpRenderItem : null;
+//   writable->Manager_SetFirstChild(child);
+// ---------------------------------------------------------------------------
+void AptRenderTreeManager::Update_ItemFirstChildChanged(AptCIH* pNode)
+{
+    AptCharacterInst* lpInst = pNode->mpCharacterInst;   // *(node+0x20)
+    if (!lpInst)
+        return;
+
+    AptRenderItem* lpWritable = lpInst->GetRenderItemWritable();   // r9
+    AptCIH* lpFirstChild = pNode->GetFirstChild();
+    AptRenderItem* lpChildItem = lpFirstChild
+        ? lpFirstChild->mpCharacterInst->mpRenderItem   // *(*(child+0x20)+4)
+        : nullptr;
+    lpWritable->Manager_SetFirstChild(lpChildItem);
+}
+
+// ---------------------------------------------------------------------------
+// Update_ItemNextSiblingChanged @0x82AE0A70
+//
+//   item = pNode->mpCharacterInst;             ; lwz r3, 0x20(node)
+//   if (!item) return;
+//   writable = AptCharacterInst::GetRenderItemWritable(item);
+//   next = pNode->mpDisplayListNext;           ; *(node+0x18)
+//   sibling = next ? next->mpCharacterInst->mpRenderItem : null;
+//   writable->Manager_SetNextSibling(sibling);
+// ---------------------------------------------------------------------------
+void AptRenderTreeManager::Update_ItemNextSiblingChanged(AptCIH* pNode)
+{
+    AptCharacterInst* lpInst = pNode->mpCharacterInst;   // *(node+0x20)
+    if (!lpInst)
+        return;
+
+    AptRenderItem* lpWritable = lpInst->GetRenderItemWritable();
+    AptCIH* lpNext = pNode->mpDisplayListNext;            // *(node+0x18)
+    AptRenderItem* lpSiblingItem = lpNext
+        ? lpNext->mpCharacterInst->mpRenderItem           // *(*(next+0x20)+4)
+        : nullptr;
+    lpWritable->Manager_SetNextSibling(lpSiblingItem);
+}
+
+// ---------------------------------------------------------------------------
+// Update_CloneItem @0x82AE0B38
+//
+//   clone = AptRenderItem::Manager_CloneNewItem(pSource->mpCharacterInst->mpRenderItem, nTick);
+//   first = AptCIH::GetFirstChild(pNode);
+//   if (first) clone->Manager_SetFirstChild(first->mpCharacterInst->mpRenderItem);
+//   prev = pNode->mpDisplayListPrevious;                       ; *(node+0x14)
+//   if (prev) AptCharacterInst::GetRenderItemWritable(prev->mpCharacterInst)
+//                  ->Manager_SetNextSibling(clone);
+//   next = pNode->mpDisplayListNext;                           ; *(node+0x18)
+//   if (next) clone->Manager_SetNextSibling(next->mpCharacterInst->mpRenderItem);
+//   pNode->mpCharacterInst->mpRenderItem = clone;              ; *(*(node+0x20)+4) = clone
+//
+// The X360 r3 entering Manager_CloneNewItem holds pSource->mpCharacterInst->
+// mpRenderItem (lwz 0x20(a2); lwz 4(.)). pNode (a3) supplies the display-list-derived
+// links + the destination char-inst slot.
+// ---------------------------------------------------------------------------
+AptRenderItem* AptRenderTreeManager::Update_CloneItem(AptCIH* pSourceCIH, AptCIH* pNode, int nTick)
+{
+    AptRenderItem* lpClone =
+        pSourceCIH->mpCharacterInst->mpRenderItem->Manager_CloneNewItem(nTick);   // r30
+
+    AptRenderItem* lpResult = nullptr;
+
+    AptCIH* lpFirstChild = pNode->GetFirstChild();
+    if (lpFirstChild)
+        lpResult = lpClone->Manager_SetFirstChild(lpFirstChild->mpCharacterInst->mpRenderItem);
+
+    AptCIH* lpPrev = pNode->mpDisplayListPrevious;   // *(node+0x14)
+    if (lpPrev)
+    {
+        AptRenderItem* lpPrevWritable = lpPrev->mpCharacterInst->GetRenderItemWritable();
+        lpResult = lpPrevWritable->Manager_SetNextSibling(lpClone);
+    }
+
+    AptCIH* lpNext = pNode->mpDisplayListNext;        // *(node+0x18)
+    if (lpNext)
+        lpResult = lpClone->Manager_SetNextSibling(lpNext->mpCharacterInst->mpRenderItem);
+
+    pNode->mpCharacterInst->mpRenderItem = lpClone;   // *(*(node+0x20)+4) = clone
+    return lpResult;
+}
+
+// ---------------------------------------------------------------------------
+// Update_ItemMoved @0x82AECD50/0x82AEC218
+//
+//   inst = pNode->mpCharacterInst; if (!inst) return;
+//   writable = AptCharacterInst::GetRenderItemWritable(inst);   ; v9
+//   // walk display-list-PREVIOUS skipping mask-flagged neighbours
+//   p = pNode->mpDisplayListPrevious;
+//   if (p) { while (p && p->...renderItem->GetIsMask()) p = p->mpDisplayListPrevious;
+//            if (p) { GetRenderItemWritable(p->inst)->Manager_SetNextSibling(writable); goto link_next; }
+//            parent = pNode->mpDisplayListParent; }
+//   else   { parent = pNode->mpDisplayListParent;
+//            if (!parent) { Update_SetRootItem(pNode, nTick); goto link_next; } }
+//   GetRenderItemWritable(parent->inst)->Manager_SetFirstChild(writable);
+//  link_next:
+//   n = pNode->mpDisplayListNext;
+//   if (n) { while (n && n->...renderItem->GetIsMask()) n = n->mpDisplayListNext;
+//            sibling = n ? n->mpCharacterInst->mpRenderItem : null; }
+//   else sibling = null;
+//   return writable->Manager_SetNextSibling(sibling);
+//
+// The mask-skip predicate is `renderItem->mFlags bit30` (GetIsMask): a moved node
+// links to the nearest NON-mask previous/next neighbour (masks live outside the
+// normal sibling chain). When there is no live previous neighbour and no parent the
+// node becomes a render root (Update_SetRootItem).
+// ---------------------------------------------------------------------------
+AptRenderItem* AptRenderTreeManager::Update_ItemMoved(AptCIH* pNode, int nTick)
+{
+    AptCharacterInst* lpInst = pNode->mpCharacterInst;   // *(node+0x20)
+    if (!lpInst)
+        return nullptr;
+
+    AptRenderItem* lpWritable = lpInst->GetRenderItemWritable();   // v9 = r30
+
+    // ---- previous-sibling / parent-first-child link -----------------------
+    AptCIH* lpPrev = pNode->mpDisplayListPrevious;       // *(node+0x14)
+    AptCIH* lpParent = nullptr;
+    bool    lbLinkParent = false;
+    if (lpPrev)
+    {
+        // Skip mask-flagged previous neighbours.
+        while (lpPrev->mpCharacterInst->mpRenderItem->GetIsMask())
+        {
+            lpPrev = lpPrev->mpDisplayListPrevious;       // *(prev+0x14)
+            if (!lpPrev)
+                break;
+        }
+        if (lpPrev)
+        {
+            AptRenderItem* lpPrevWritable = lpPrev->mpCharacterInst->GetRenderItemWritable();
+            lpPrevWritable->Manager_SetNextSibling(lpWritable);
+        }
+        else
+        {
+            lpParent     = pNode->mpDisplayListParent;    // *(node+0x1C)
+            lbLinkParent = true;
+        }
+    }
+    else
+    {
+        lpParent = pNode->mpDisplayListParent;            // *(node+0x1C)
+        if (!lpParent)
+            Update_SetRootItem(pNode, nTick);             // becomes a render root
+        else
+            lbLinkParent = true;
+    }
+
+    // X360 @0x82AEC2A0: parent->charInst is dereferenced WITHOUT a null check on
+    // parent in the "had a previous neighbour, all of them masks" path (a child with
+    // a previous sibling always has a parent); only the no-previous path (which
+    // null-checks parent and routes to Update_SetRootItem) guards it. Matched here.
+    if (lbLinkParent)
+    {
+        AptRenderItem* lpParentWritable = lpParent->mpCharacterInst->GetRenderItemWritable();
+        lpParentWritable->Manager_SetFirstChild(lpWritable);
+    }
+
+    // ---- next-sibling link ------------------------------------------------
+    AptCIH* lpNext = pNode->mpDisplayListNext;            // *(node+0x18)
+    AptRenderItem* lpNextItem = nullptr;
+    if (lpNext)
+    {
+        // Skip mask-flagged next neighbours.
+        while (lpNext->mpCharacterInst->mpRenderItem->GetIsMask())
+        {
+            lpNext = lpNext->mpDisplayListNext;           // *(next+0x18)
+            if (!lpNext)
+                break;
+        }
+        if (lpNext)
+            lpNextItem = lpNext->mpCharacterInst->mpRenderItem;   // *(*(next+0x20)+4)
+    }
+    return lpWritable->Manager_SetNextSibling(lpNextItem);
+}
+
+// ---------------------------------------------------------------------------
+// Update_ItemSetMaskState @0x82AE0880  (a4==1 -> becoming a mask)
+//
+// Two near-mirror branches re-derive the moved/mask-state-changed node's sibling
+// links around its (mask-flagged) display-list neighbours:
+//
+//  a4 != 1 (ceasing to be a mask -- fold back into the sibling chain):
+//    prevNonMask = nearest non-mask mpDisplayListNext... no -- the asm walks
+//      mpDisplayListNext for `next` (r11=node[0x18]) and mpDisplayListPrevious for
+//      `prev` (r11=node[0x14]); writes the prev's next-sibling / parent's first-child
+//      to `writable`, then `writable->Manager_SetNextSibling(nextItem)`.
+//  a4 == 1 (becoming a mask -- hoist out of the sibling chain):
+//    re-link the surrounding non-mask neighbours to each other, dropping `writable`.
+//
+// Reconstructed verbatim from the X360 two-arm asm; nTick is unused (the link
+// writes are tick-agnostic, matching the console which never references r5).
+// ---------------------------------------------------------------------------
+void AptRenderTreeManager::Update_ItemSetMaskState(AptCIH* pNode, int /*nTick*/, bool bIsMask)
+{
+    AptCharacterInst* lpInst = pNode->mpCharacterInst;   // *(node+0x20)
+    if (!lpInst)
+        return;
+
+    AptRenderItem* lpWritable = lpInst->GetRenderItemWritable();   // r28
+    AptRenderItem* lpNextNonMask = nullptr;   // r30
+    AptRenderItem* lpPrevNonMask = nullptr;   // r31
+
+    if (bIsMask)   // a4 == 1: becoming a mask -> bridge the gap it leaves behind
+    {
+        // nearest non-mask NEXT neighbour's render item -> r30
+        AptCIH* lpNext = pNode->mpDisplayListNext;        // *(node+0x18)
+        if (lpNext)
+        {
+            while (lpNext->mpCharacterInst->mpRenderItem->GetIsMask())
+            {
+                lpNext = lpNext->mpDisplayListNext;
+                if (!lpNext)
+                    break;
+            }
+            if (lpNext)
+                lpNextNonMask = lpNext->mpCharacterInst->GetRenderItemWritable();
+        }
+        // nearest non-mask PREVIOUS neighbour's render item -> r31
+        AptCIH* lpPrev = pNode->mpDisplayListPrevious;    // *(node+0x14)
+        if (lpPrev)
+        {
+            while (lpPrev->mpCharacterInst->mpRenderItem->GetIsMask())
+            {
+                lpPrev = lpPrev->mpDisplayListPrevious;
+                if (!lpPrev)
+                    break;
+            }
+            if (lpPrev)
+                lpPrevNonMask = lpPrev->mpCharacterInst->GetRenderItemWritable();
+        }
+
+        // @0x82AE093C-0x82AE09A4. The console dereferences parent->charInst here
+        // WITHOUT a null check (a masked node always has a parent display list);
+        // matched faithfully (no PC guard added).
+        if (lpNextNonMask)
+        {
+            if (!lpPrevNonMask)
+            {
+                AptRenderItem* lpParentWritable =
+                    pNode->mpDisplayListParent->mpCharacterInst->GetRenderItemWritable();
+                lpParentWritable->Manager_SetFirstChild(lpNextNonMask);
+            }
+            lpWritable->Manager_SetNextSibling(nullptr);
+        }
+        if (lpPrevNonMask)
+            lpPrevNonMask->Manager_SetNextSibling(lpNextNonMask);
+        if (!lpNextNonMask && !lpPrevNonMask)
+        {
+            AptRenderItem* lpParentWritable =
+                pNode->mpDisplayListParent->mpCharacterInst->GetRenderItemWritable();
+            lpParentWritable->Manager_SetFirstChild(nullptr);
+        }
+    }
+    else   // a4 != 1: ceasing to be a mask -> fold back into the sibling chain
+    {
+        // nearest non-mask NEXT neighbour's render item -> r30
+        AptCIH* lpNext = pNode->mpDisplayListNext;        // *(node+0x18)
+        if (lpNext)
+        {
+            while (lpNext->mpCharacterInst->mpRenderItem->GetIsMask())
+            {
+                lpNext = lpNext->mpDisplayListNext;
+                if (!lpNext)
+                    break;
+            }
+            if (lpNext)
+                lpNextNonMask = lpNext->mpCharacterInst->GetRenderItemWritable();
+        }
+        // nearest non-mask PREVIOUS neighbour -> link it to `writable` (or, none ->
+        // link the parent's first child to `writable`), then writable->next = r30.
+        AptCIH* lpPrev = pNode->mpDisplayListPrevious;    // *(node+0x14)
+        AptRenderItem* lpPrevWritable = nullptr;
+        if (lpPrev)
+        {
+            while (lpPrev->mpCharacterInst->mpRenderItem->GetIsMask())
+            {
+                lpPrev = lpPrev->mpDisplayListPrevious;
+                if (!lpPrev)
+                    break;
+            }
+            if (lpPrev)
+                lpPrevWritable = lpPrev->mpCharacterInst->GetRenderItemWritable();
+        }
+
+        if (lpPrevWritable)
+        {
+            lpPrevWritable->Manager_SetNextSibling(lpWritable);
+        }
+        else
+        {
+            AptCIH* lpParent = pNode->mpDisplayListParent;   // *(node+0x1C)
+            if (lpParent && lpParent->mpCharacterInst)
+            {
+                AptRenderItem* lpParentWritable = lpParent->mpCharacterInst->GetRenderItemWritable();
+                lpParentWritable->Manager_SetFirstChild(lpWritable);
+            }
+        }
+        if (lpNextNonMask)
+            lpWritable->Manager_SetNextSibling(lpNextNonMask);
+    }
+}
+
+// ===========================================================================
+// The render-tree RENDER hooks. Each looks at one of pItem's manager links
+// (first-child / mask / next-sibling); if the linked render item is still
+// renderable for nTick (aged in AND committed, mFlags bit25 clear) the link is
+// already current -> return null. Otherwise the link's current render revision is
+// resolved (Manager_GetRenderRevision) and committed (Manager_Update*), and the
+// (now refreshed) link is returned.
+//
+//   "renderable" == (nTick - mCreatedOnTick) >= 0 AND (mFlags & 0x02000000) == 0,
+//   which is AptRenderItem::IsRenderableForThisTick(nTick). The X360 inlines it.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Render_GetChildInvisible @0x82ADB5E8 -- the first-child link (item +0x30 ==
+// mpManagerFirstChild).
+// ---------------------------------------------------------------------------
+AptRenderItem* AptRenderTreeManager::Render_GetChildInvisible(AptRenderItem* pItem, int nTick)
+{
+    AptRenderItem* lpChild = pItem->mpManagerFirstChild;   // *(item+0x30)
+    if (lpChild)
+    {
+        if (!lpChild->IsRenderableForThisTick(nTick))
+            return nullptr;
+    }
+    AptRenderItem* lpRevision = lpChild ? lpChild->Manager_GetRenderRevision(nTick) : nullptr;
+    pItem->Manager_UpdateFirstChild(lpRevision);
+    return pItem->mpManagerFirstChild;
+}
+
+// ---------------------------------------------------------------------------
+// Render_GetMaskInvisible @0x82ADB6E8 -- the mask link (item +0x1C == mpMask).
+// ---------------------------------------------------------------------------
+AptRenderItem* AptRenderTreeManager::Render_GetMaskInvisible(AptRenderItem* pItem, int nTick)
+{
+    AptRenderItem* lpMask = pItem->mpMask;   // *(item+0x1C)
+    if (lpMask)
+    {
+        if (!lpMask->IsRenderableForThisTick(nTick))
+            return nullptr;
+    }
+    AptRenderItem* lpRevision = lpMask ? lpMask->Manager_GetRenderRevision(nTick) : nullptr;
+    pItem->Manager_UpdateMask(lpRevision);
+    return pItem->mpMask;
+}
+
+// ---------------------------------------------------------------------------
+// Render_GetSiblingInvisible @0x82ADB668 -- the next-sibling link (item +0x2C ==
+// mpManagerNextSibling).
+// ---------------------------------------------------------------------------
+AptRenderItem* AptRenderTreeManager::Render_GetSiblingInvisible(AptRenderItem* pItem, int nTick)
+{
+    AptRenderItem* lpSibling = pItem->mpManagerNextSibling;   // *(item+0x2C)
+    if (lpSibling)
+    {
+        if (!lpSibling->IsRenderableForThisTick(nTick))
+            return nullptr;
+    }
+    AptRenderItem* lpRevision = lpSibling ? lpSibling->Manager_GetRenderRevision(nTick) : nullptr;
+    pItem->Manager_UpdateNextSibling(lpRevision);
+    return pItem->mpManagerNextSibling;
+}
+
+// ---------------------------------------------------------------------------
+// Render_GetRoot @0x82AE55D0
+//
+//   if (!*ppHeadCellSlot) return 0;
+//   cell = (*ppHeadCellSlot)->Get(nTick);      ; prune expired roots
+//   *ppHeadCellSlot = cell;
+//   if (!cell) return 0;
+//   root = cell->mpItem;
+//   if (!root->IsRenderableForThisTick(nTick)) return 0;
+//   revision = root->Manager_GetRenderRevision(nTick);
+//   if (revision != cell->mpItem) {
+//       revision->AddReference();              ; inline lwarx/stwcx. of *(rev+0x24)
+//       old = cell->mpItem; cell->mpItem = 0;
+//       old->ReleaseReference();
+//       cell->mpItem = revision;
+//   }
+//   return cell->mpItem;
+//
+// NOTE the renderable test here KEEPS (returns 0) when NOT renderable -- inverse of
+// the Render_Get*Invisible helpers, matching the asm (@0x82AE5630 `beq` falls to the
+// `li r3,0` return when the item is renderable... actually @0x82AE5630 branches to
+// the return-0 path when `v7==0`, i.e. when the item is NOT the writable revision and
+// aged in). The asm reads cell->mpItem (r9=cell loaded once) for the revision compare.
+// ---------------------------------------------------------------------------
+AptRenderItem* AptRenderTreeManager::Render_GetRoot(_AptRenderItemRootList** ppHeadCellSlot, int nTick)
+{
+    if (!*ppHeadCellSlot)
+        return nullptr;
+
+    _AptRenderItemRootList* lpCell = (*ppHeadCellSlot)->Get(nTick);   // prune expired roots
+    *ppHeadCellSlot = lpCell;
+    if (!lpCell)
+        return nullptr;
+
+    AptRenderItem* lpRoot = lpCell->mpItem;   // *(cell) = root item
+
+    // @0x82AE560C-0x82AE5630: aged-in (nTick - mCreatedOnTick >= 0) AND NOT the
+    // writable revision (mFlags bit25 clear). When that does NOT hold, return null.
+    const bool lbRenderable = (nTick - lpRoot->GetCreatedOnTick()) >= 0
+                           && (lpRoot->mFlags & 0x02000000u) == 0;
+    if (!lbRenderable)
+        return nullptr;
+
+    AptRenderItem* lpRevision = lpRoot->Manager_GetRenderRevision(nTick);
+    if (lpRevision != lpCell->mpItem)
+    {
+        lpRevision->AddReference();                 // X360 inline lwarx/stwcx. of mRefCount
+        AptRenderItem* lpOld = lpCell->mpItem;
+        lpCell->mpItem = nullptr;
+        lpOld->ReleaseReference();
+        lpCell->mpItem = lpRevision;
+    }
+    return lpCell->mpItem;
+}
+
+// ---------------------------------------------------------------------------
+// The two render-tree-manager UPDATE entry points the AptCharacterInst static
+// helpers route through (declared as free functions in AptCharacterInst.h so that
+// header need not include the manager facade). Decompiled @0x82AE1C98 / 0x82AECD50.
+// ---------------------------------------------------------------------------
+struct AptCIH* AptRTM_CloneItem(AptRenderTreeManager* pMgr, struct AptCIH* pNode,
+                                int nSourceArg, int nTick)
+{
+    // a2 (the clone source) = pNode; a3 (the destination node) arrives as the raw
+    // pointer-as-int nSourceArg in the X360 ABI. FLAG: nSourceArg is a CIH* widened
+    // to int at the console call site -- reconstructed back to the 8-byte pointer.
+    pMgr->Update_CloneItem(pNode, reinterpret_cast<AptCIH*>(static_cast<intptr_t>(nSourceArg)), nTick);
+    return pNode;
+}
+
+struct AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode, int nTick)
+{
+    pMgr->Update_ItemMoved(pNode, nTick);
+    return pNode;
 }

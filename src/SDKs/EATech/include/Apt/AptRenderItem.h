@@ -111,18 +111,22 @@ struct AptRenderItem
     int16_t GetDepth() const;       AptRenderItem* SetDepth(int nDepth);          // @0x7DEE14/0x7DEEA0
     int16_t GetClipDepth() const;   AptRenderItem* SetClipDepth(int nClipDepth);  // @0x7DEDF8/0x7DEEA8
 
+    // SetIsVisible @0x82AE0708 -- set the is-visible flag (bit31) + recompute the
+    // subtree's mask-driven visibility (PropagateTreeIsVisible) when the bit changes.
+    AptRenderItem* SetIsVisible(bool bVisible);
+
     bool GetIsVisible() const;      // @0x7DEE68
     bool GetIsMask() const;         // @0x7DEE20
     bool GetHasMask() const;        // @0x7DEE34
     AptRenderItem* GetMask() const; // @0x7DEE2C
 
     // SetHasMask @0x82ADB388 -- set the has-mask flag (bit29) + (un)bind the mask
-    // render item (ref-counted; propagates visibility). FLAG: behavioural body in
-    // its own render-item TU; declared so AptCIH::SetHasMask compiles against it.
-    void SetHasMask(bool bHasMask, AptRenderItem* pMask);
+    // render item (ref-counted; propagates visibility). Returns the previous mask
+    // (X360 r3 = this on the no-op path / the released old mask otherwise).
+    AptRenderItem* SetHasMask(bool bHasMask, AptRenderItem* pMask);
     // SetIsMask @0x82AEBF28 -- set the is-mask flag (bit30) + the mask matrix.
-    // FLAG: body in its own TU (declared for AptCIH::SetMask/ClearCIH).
-    void SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);
+    // Returns this (X360 r3).
+    AptRenderItem* SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);
 
     const AptCharacter* GetCharacterConst() const;        // @0x7DEE04
     AptCharacter*       GetCharacterWritable() const;     // @0x7DEE90
@@ -144,6 +148,34 @@ struct AptRenderItem
     // Factory: allocate the right render-item subtype for a character. @0x814094
     // (defined in AptRenderTreeManager.cpp, where the subtype headers are visible).
     static AptRenderItem* Manager_CreateItem(AptCharacter* pCharacter, int nTick);
+
+    // FLAG (bodies are [todo] in their own render-item revision TU; declared here
+    // decl-only so the AptRenderTreeManager Render_*/Update_* facade compiles
+    // against them by name). These are the per-item revision/link mutators the
+    // render-tree manager drives -- the writable-revision chase + the
+    // first-child / next-sibling / mask link writes for the double-buffered tree.
+    //   Manager_GetRenderRevision  @ (called from Render_GetChildInvisible/...) --
+    //     resolve THIS item's render revision for nTick (chases the revision chain).
+    AptRenderItem* Manager_GetRenderRevision(int nTick);
+    //   Manager_UpdateFirstChild/NextSibling/Mask -- commit pRevision into the
+    //     corresponding manager link of THIS item for the current render walk.
+    void Manager_UpdateFirstChild(AptRenderItem* pRevision);
+    void Manager_UpdateNextSibling(AptRenderItem* pRevision);
+    void Manager_UpdateMask(AptRenderItem* pRevision);
+    //   Manager_CloneNewItem -- pool-allocate a fresh revision of THIS item for nTick.
+    AptRenderItem* Manager_CloneNewItem(int nTick);
+    //   Manager_CreateNewRevision @0x82ADABA0 -- like CloneNewItem but copies the
+    //     extended (mask/depth/manager-link) state into the new revision.
+    AptRenderItem* Manager_CreateNewRevision(int nTick);
+    //   Manager_SetFirstChild/NextSibling -- set THIS item's manager first-child /
+    //     next-sibling link (writable-revision side).
+    AptRenderItem* Manager_SetFirstChild(AptRenderItem* pChild);
+    AptRenderItem* Manager_SetNextSibling(AptRenderItem* pSibling);
+
+    // PropagateTreeIsVisible @0x82ADA8B8 -- recompute the mask-driven "tree visible"
+    // state (mFlags bits 24..26) down this item's first-child + next-sibling subtree.
+    // nVisibleMode: 1 = becoming hidden by a mask, 0 = becoming shown. Recursive.
+    AptRenderItem* PropagateTreeIsVisible(int nVisibleMode);
 
     // True when this item is already the writable revision for nTick (its
     // creation tick matches, or it is flagged the current/highest revision). @0x7DEF54

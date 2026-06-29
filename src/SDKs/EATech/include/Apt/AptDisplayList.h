@@ -84,13 +84,29 @@ struct AptDisplayList
     // under pTransform, by recursing into each node's AptCIH::GetBoundingRect.
     // Returns pAccumulator. Body in AptDisplayList.cpp.
     struct AptRect* GetBoundingRect(int nMode, const struct AptMatrix* pTransform, struct AptRect* pAccumulator);
+
+    // ---- per-frame walks (bodies in AptDisplayList.cpp) --------------------
+    // tick @0x82AD9BB8 -- advance every eligible placed node one frame: a node
+    // ticks when its render-item depth layer is selected (when bUseDepthLayerMask)
+    // or it is not a dead node (CIHState != 3), AND it is a sprite(5)/animation(9)/
+    // button(4) character instance. Returns the OR of each ticked node's result.
+    int tick(int nDepthLayerMask, uint8_t bUseDepthLayerMask);
+
+    // GeneralisedProcess @0x82AE01B0 -- run the generalised-process (deferred AS
+    // action / dirty-state) pass over every eligible placed node (gated by the
+    // render-item depth layer when bUseDepthLayerMask). Returns the OR of each
+    // node's AptCIH::GeneralisedProcess result.
+    int GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t bUseDepthLayerMask);
 };
 
 // ===========================================================================
+// DONE (faithful X360 decompiles, bodies in AptDisplayList.cpp): tick @0x82AD9BB8
+// and GeneralisedProcess @0x82AE01B0 -- the per-frame node walks. They gate each
+// listed node on the render-item depth layer / CIHState / character type tag (all
+// now named) and OR-accumulate AptCIH::tick / AptCIH::GeneralisedProcess (declared
+// as the same AptCIH_* free-function shims AptLinker uses; un-homed cluster).
+//
 // BLOCKED behavioural surface (NOT reconstructed here -- their own follow-on TUs):
-//   tick @0x82AD9BB8 / GeneralisedProcess @0x82AE01B0 / GetBoundingRect @0x82AD9B38
-//     -- need AptCIH::tick / GeneralisedProcess / GetBoundingRect bodies AND a
-//        named mapping of the AptCharacter type/depth-mask flags walked per node.
 //   AddToDisplayList @0x82B0B150 / ReplaceDisplyListItem @0x82B0B2B8 /
 //   mergeState @0x82B0B438 / instantiateCharacter @0x82B061D0 /
 //   placeObject @0x82B097D8 / placeObjectNCXForm @0x82B0AD28 /

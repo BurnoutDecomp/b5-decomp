@@ -51,6 +51,17 @@
 extern void AptApt_FlushDeferredReleases();
 
 // ---------------------------------------------------------------------------
+// FLAG (un-homed AptCIH behavioural surface): the per-node tick / generalised-
+// process hooks the display-list walks (AptCIH::tick @0x82B0BED8 / AptCIH::
+// GeneralisedProcess @0x82AE0228). Declared as the same free-function shims the
+// AptLinker TU uses (AptCIH_tick), so this TU compiles against the AptCIH
+// behavioural cluster by name without redeclaring AptCIH's interface here. Each
+// returns the OR-accumulated "did work" flag the X360 bodies return in r3.
+// ---------------------------------------------------------------------------
+int AptCIH_tick(AptCIH* pCIH);                       // AptCIH::tick
+int AptCIH_GeneralisedProcess(AptCIH* pCIH, int a2); // AptCIH::GeneralisedProcess
+
+// ---------------------------------------------------------------------------
 // ctor @0x82AE4850
 //   v2 = Allocate(off_8324D808, 4);  if (v2) { *v2 = 0; v3 = v2; } else v3 = 0;
 //   *a1 = v3;
@@ -234,4 +245,72 @@ AptRect* AptDisplayList::GetBoundingRect(int nMode, const AptMatrix* pTransform,
         }
     }
     return pAccumulator;
+}
+
+// ---------------------------------------------------------------------------
+// tick @0x82AD9BB8 -- advance every eligible placed node in this list one frame
+// (the per-frame movie-clip update walk). For each listed AptCIH:
+//   * gate: when bUseDepthLayerMask, only nodes whose render-item depth layer is
+//     set in nDepthLayerMask ((1 << GetDepth()) & nDepthLayerMask); otherwise
+//     skip nodes whose CIHState == 3 (mFlagsA bits 29-30 both set: a fully
+//     removed / dead node);
+//   * type gate: only sprite (5) / animation (9) / button (4) character instances
+//     actually tick (those are the only AS-driven container/interactive types);
+//   * accumulate each node's AptCIH::tick result into the OR'd return ("did any
+//     node do work this frame").
+// Walks the next-sibling display-list links (mpDisplayListNext). Returns the OR
+// of every ticked node's result.
+// ---------------------------------------------------------------------------
+int AptDisplayList::tick(int nDepthLayerMask, uint8_t bUseDepthLayerMask)
+{
+    int nResult = 0;
+
+    for (AptCIH* pNode = mpHead ? mpHead->mpFirst : nullptr; pNode; pNode = pNode->GetDisplayListNext())
+    {
+        if (bUseDepthLayerMask)
+        {
+            // (1 << charInst->renderItem->GetDepth()) & nDepthLayerMask -- the node's
+            // depth used as a render-layer bit index; off this frame's mask -> skip.
+            if (((1 << pNode->GetCharacterInst()->GetRenderItem()->GetDepth()) & nDepthLayerMask) == 0)
+                continue;
+        }
+        // (mFlagsA bits 29-30) == CIHState 3 == a dead/removed node -> skip.
+        else if ((pNode->mFlagsA & 0x60000000u) == 0x60000000u)
+        {
+            continue;
+        }
+
+        AptCharacterInst* pCharInst = pNode->GetCharacterInst();
+        const uint32_t nTypeTag = pCharInst->GetTypeTag();
+        bool bTick = (nTypeTag == 5 || nTypeTag == 9);
+        // (charInst->mTypeFlags & 0xFC000000) == 0x10000000  <=>  GetTypeTag() == 4 (button).
+        if (bTick || (pCharInst->mTypeFlags & 0xFC000000u) == 0x10000000u)
+            nResult |= AptCIH_tick(pNode);   // FLAG: AptCIH::tick (un-homed behavioural cluster)
+    }
+
+    return nResult;
+}
+
+// ---------------------------------------------------------------------------
+// GeneralisedProcess @0x82AE01B0 -- run the "generalised process" pass (the
+// deferred AS-action / dirty-state flush) over every eligible placed node. For
+// each listed AptCIH: when bUseDepthLayerMask, only process nodes whose render-
+// item depth layer is set in nDepthLayerMask ((1 << GetDepth()) & mask); else
+// process unconditionally. Accumulates each node's AptCIH::GeneralisedProcess
+// result into the OR'd return. Walks the next-sibling links (mpDisplayListNext).
+// ---------------------------------------------------------------------------
+int AptDisplayList::GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t bUseDepthLayerMask)
+{
+    int nResult = 0;
+
+    for (AptCIH* pNode = mpHead ? mpHead->mpFirst : nullptr; pNode; pNode = pNode->GetDisplayListNext())
+    {
+        if (!bUseDepthLayerMask ||
+            ((1 << pNode->GetCharacterInst()->GetRenderItem()->GetDepth()) & nDepthLayerMask) != 0)
+        {
+            nResult |= AptCIH_GeneralisedProcess(pNode, nFlags);   // FLAG: AptCIH::GeneralisedProcess (un-homed)
+        }
+    }
+
+    return nResult;
 }
