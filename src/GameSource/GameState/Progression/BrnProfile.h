@@ -60,6 +60,26 @@ struct MugshotInfo
 {
     struct UniquePlayerID;   // declared-only: real layout not recovered here
 
+    // ADDITIVE GROW (declare-only) for the BrnGameStateImageManagerBase TU. That manager builds the
+    // gallery "image info" GUI event (X360 type-290 record) field-for-field out of a MugshotInfo:
+    // the X360 reads a 16-byte unique-id block (+0x00), three image words (+0x18/+0x1C/+0x20), an
+    // 8-byte date (+0x24), one word (+0x2C), a 4-byte file id (+0x30) and a 1-byte locked flag (+0x32).
+    // The internal member layout/semantics of MugshotInfo are NOT yet reverse-engineered, so rather
+    // than fabricate member names the touched sub-blocks are exposed as named, declared-only getters
+    // (offsets/widths X360-attested); their bodies + the real members land with MugshotInfo's own TU.
+    // Returned by const-ref/value so the ImageManager accesses every field BY NAME (no raw offsets).
+    // 16-byte unique-player-id block (the X360 only ever moves it as 16 opaque bytes -- two qwords).
+    struct UniquePlayerIDImage { u64 mu64Lo; u64 mu64Hi; };
+    UniquePlayerIDImage GetUniquePlayerID() const;  // +0x00 (16 bytes)
+    u64  GetGamerCardXuid() const;                   // +0x10 (8-byte gamercard XUID posted by ProcessShowGamerCardRequest)
+    s32  GetImageWord0() const;                      // +0x18
+    s32  GetImageWord1() const;                      // +0x1C
+    s32  GetImageWord2() const;                      // +0x20
+    u64  GetDateTaken() const;                       // +0x24 (8-byte date image)
+    s32  GetImageWord2C() const;                     // +0x2C
+    s32  GetFileID() const;                           // +0x30
+    u8   GetLockedFlag() const;                       // +0x32
+
 private:
     u8 mPad_Body[56];        // sizeof(MugshotInfo) == 56 (X360 Array<MugshotInfo,20>::GetItem stride)
 };
@@ -137,6 +157,18 @@ public:
                     CgsSystem::DateAndTime lDateTaken, s32 leWorldRegion);
     s32  GetNumMugshots(s32 leMugshotType);
     s32  GetNumAllMugshots();
+
+    // ADDITIVE GROW (declare-only) for the BrnGameStateImageManagerBase TU. The image-gallery
+    // manager queries / mutates the persisted mugshot records through these (X360-asm-attested):
+    //   GetMugshotInfo (Profile +112256 region): the leMugshotType'th gallery's liImageIndex'th
+    //     mugshot record, or NULL. leMugshotType is a GameStateModuleIO::EImageGalleryType (the
+    //     X360 validates < 5); taken as the s32 the X360 compares against 5.
+    //   DeleteMugshot: removes the liImageIndex'th mugshot of that gallery type (returns >=0 on success).
+    //   LockOrUnlockMugshot: toggles that mugshot's locked-for-deletion flag (returns true if found).
+    // Bodies + the real members land with the Progression mugshot TU.
+    MugshotInfo* GetMugshotInfo(s32 leMugshotType, s32 liImageIndex);
+    s32          DeleteMugshot(s32 leMugshotType, s32 liImageIndex);
+    bool         LockOrUnlockMugshot(s32 leMugshotType, s32 liImageIndex);
 
     void SetPlayerLicencePicture(const CgsNetwork::NetworkTexture* lpNewPlayerImage);
     CgsSystem::DateAndTime GetLicenceIssuedDate() const;

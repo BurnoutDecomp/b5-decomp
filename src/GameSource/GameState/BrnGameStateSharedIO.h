@@ -72,6 +72,37 @@ namespace BrnGameState
             E_IMAGE_TYPE_COUNT                  = 6,
         };
 
+        // ADDITIVE GROW (BrnGameStateImageManagerBase TU): the gallery-image-type enum the in-game
+        // photo gallery is keyed on. DWARF BrnGameStateSharedIO.h:518-525 (X360-gated). The two
+        // road-rule EImageType variants both fold to the single ROAD_RULE gallery; COUNT == 5.
+        enum EImageGalleryType
+        {
+            E_IMAGE_GALLERY_TYPE_START            = 0,
+            E_IMAGE_GALLERY_TYPE_FREEBURN_MUGSHOT = 0,
+            E_IMAGE_GALLERY_TYPE_PAYBACK_MUGSHOT  = 1,
+            E_IMAGE_GALLERY_TYPE_ROAD_RULE_MUGSHOT = 2,
+            E_IMAGE_GALLERY_TYPE_VICTORY_MUGSHOT  = 3,
+            E_IMAGE_GALLERY_TYPE_MUGSHOT          = 4,
+            E_IMAGE_GALLERY_TYPE_COUNT            = 5,
+        };
+
+        // ADDITIVE GROW (BrnGameStateImageManagerBase TU): the gallery UI request kind, switched on
+        // by GameStateImageManagerBase::HandleImageGalleryRequest. DWARF BrnGameStateSharedIO.h:1450
+        // (X360-gated); the switch immediates in the X360 asm match these values.
+        enum EImageGalleryRequest
+        {
+            E_IMAGE_GALLERY_REQUEST_NEW_IMAGE_TYPE  = 0,
+            E_IMAGE_GALLERY_REQUEST_NEW_IMAGES      = 1,
+            E_IMAGE_GALLERY_REQUEST_SCROLL_RIGHT    = 2,
+            E_IMAGE_GALLERY_REQUEST_SCROLL_LEFT     = 3,
+            E_IMAGE_GALLERY_REQUEST_ASK_DELETE      = 4,
+            E_IMAGE_GALLERY_REQUEST_DELETE          = 5,
+            E_IMAGE_GALLERY_REQUEST_LOCK            = 6,
+            E_IMAGE_GALLERY_REQUEST_EXPORT          = 7,
+            E_IMAGE_GALLERY_REQUEST_SHOW_GAMERCARD  = 8,
+            E_IMAGE_GALLERY_REQUEST_COUNT           = 9,
+        };
+
         // Drives the per-mode state machine (GameMode's nested GameModeState set).
         // DWARF: BrnGameStateSharedIO.h:93. Slot 1 (E_GMS_INTRO) is IntroState's state.
         enum EGameModeState
