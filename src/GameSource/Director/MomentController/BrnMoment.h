@@ -31,7 +31,11 @@ namespace BrnDirector
     class Moment
     {
     public:
-        class Parameters;
+        // DWARF: BrnMoment.h:274. The per-moment tuning base. Modelled as a complete empty
+        // base (its only member in the DWARF is a Construct() helper) so the concrete
+        // subclass Parameters records (held by value in MomentParameterBank) can derive
+        // from it. SetParameters takes a const Parameters*.
+        class Parameters {};
         class VehicleRef;
 
         // DWARF: BrnMoment.h:104.
@@ -133,6 +137,15 @@ namespace BrnDirector
     class MomentBystanderSeesAction : public Moment
     {
     public:
+        // DWARF: Moments/BrnMomentBystanderSeesAction.h:100. Held by value (twice) in
+        // MomentParameterBank; modelled faithfully from the DWARF field list.
+        struct Parameters : public Moment::Parameters
+        {
+            bool mbCloseCamera;     // BrnMomentBystanderSeesAction.h:102
+            bool mbCrashMoment;     // BrnMomentBystanderSeesAction.h:104
+            bool mbTakedownMoment;  // BrnMomentBystanderSeesAction.h:105
+        };
+
         bool Prepare(void* lrBehaviourController) override;   // @0x821F7560
 
         // Minimal stubs so the class is concrete for the embed check. DECLARATION-ONLY
