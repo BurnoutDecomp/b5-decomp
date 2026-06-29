@@ -279,7 +279,12 @@ AptMatrix* AptRenderItem::GetPositionMatrixWritable()
     if (mpPositionMatrix)
         return mpPositionMatrix;
     AptMatrix* p = static_cast<AptMatrix*>(gpNonGCPoolManager->Allocate(sizeof(AptMatrix)));
-    p->a = 0.0f; p->b = 0.0f; p->c = 0.0f; p->d = 0.0f; p->tx = 0.0f; p->ty = 0.0f;
+    // console 0x82AE51E0: memset(0) then copies the IDENTITY AptMatrix (flt_8324E2B0 ==
+    // gAptIdentityMatrix): a=d=1, the rest 0. A zero 2x3 affine would collapse every
+    // vertex to the origin -- unlike the const getters + the clone/SetMask lazy-allocs
+    // (which copy a source over the zeros), this getter has no follow-up copy, so it must
+    // seed identity itself (the sibling GetColorMatrixWritable likewise copies identity).
+    p->a = 1.0f; p->b = 0.0f; p->c = 0.0f; p->d = 1.0f; p->tx = 0.0f; p->ty = 0.0f;
     mpPositionMatrix = p;
     return p;
 }

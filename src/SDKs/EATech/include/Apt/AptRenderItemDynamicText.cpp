@@ -101,14 +101,16 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(AptCharacter* pCharacter, int
 
 // ---------------------------------------------------------------------------
 // Clone copy-ctor (sub_82AEF678) -- base clone copy + re-stamp the dynamic-text
-// render-type flag. The strings / colours / bounds / font copy from the source;
-// the render-data handle + TextFormat object start fresh (the new revision resolves
-// its own).
-// FLAG: sub_82AEF678 is [external/unknown] (NOT in this TU's dossier asm). The
-// member-by-member copy + fresh mZID/mpTextFormat is INFERRED by analogy to the
-// in-scope factory ctor + the committed AptRenderItemCustomControl copy-ctor
-// (copying the owned handle/format raw would double-free across revisions, so fresh
-// is the safe choice). The exact member set the console copies is unverified.
+// render-type flag. The strings / colours / bounds / font copy from the source.
+// VERIFIED vs the asm (sub_82AEF678 @0x82AEF678 IS present in .ida-exports/ARTIST):
+// mStateFlags is hard-coded to 4 (li r7,4 -> stw 0x6C), NOT copied; mZID resets to 0.
+// FLAG (deferred, NOT guessed): the console DEEP-COPIES mpTextFormat -- 0x82AEF80C: if
+// source->mpTextFormat (0x68) != null it Allocates a 0x20 block from gpNonGCPoolManager
+// and copy-constructs a fresh TextFormat from the source's, else leaves null. Kept null
+// here because the TextFormat value type is still opaque (an AptValue* that SetTextFormat
+// tears down as an EAStringC 0x20 block); a wrong deep-copy would double-free. Re-home
+// with the TextFormat layer. Effect today: cloning a text field with active formatting
+// loses its format until the next resolve -- safe (no UB), just not yet faithful.
 // ---------------------------------------------------------------------------
 AptRenderItemDynamicText::AptRenderItemDynamicText(const AptRenderItemDynamicText* pSource,
                                                    int nCreatedOnTick, bool bCopyExtended)
@@ -125,10 +127,10 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(const AptRenderItemDynamicTex
     mBounds              = pSource->mBounds;
     mFontSize            = pSource->mFontSize;
     mFontID              = pSource->mFontID;
-    mStateFlags          = pSource->mStateFlags;
+    mStateFlags          = 4;          // console (sub_82AEF678 @0x82AEF7F8) hard-codes 4, NOT a source copy
 
-    mZID         = 0;
-    mpTextFormat = nullptr;
+    mZID         = 0;          // asm stores 0 to 0x3C (the render-data handle re-resolves)
+    mpTextFormat = nullptr;    // FLAG (see header note above): asm deep-copies; deferred with the TextFormat layer
 }
 
 // ---------------------------------------------------------------------------

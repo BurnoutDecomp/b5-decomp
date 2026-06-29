@@ -220,7 +220,11 @@ AptRect* AptDisplayList::GetBoundingRect(int nMode, const AptMatrix* pTransform,
 {
     for (AptCIH* pNode = mpHead ? mpHead->mpFirst : nullptr; pNode; pNode = pNode->GetDisplayListNext())
     {
-        if (!pNode->getIsDefined())
+        // gate on the "real placed node" bit -- mnValueData bit 27 (a meValueType bit),
+        // exactly as removeObject does. The asm (0x82AD9B5C extrwi r11,r11,1,4) reads bit
+        // 27, NOT mbIsDefined (bit 4, what getIsDefined() reads) -- those select different
+        // node sets, so getIsDefined here accumulated bounds over the wrong children.
+        if (((pNode->mnValueData >> 27) & 1u) == 0u)
             continue;
         AptCharacterInst* pCharInst = pNode->GetCharacterInst();
         if (pCharInst != nullptr && pCharInst->GetTypeTag() != 15 &&
