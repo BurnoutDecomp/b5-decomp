@@ -201,6 +201,7 @@ public:
     // reading their args off the global native-arg stack. Bodies in
     // AptActionInterpreterBuiltins.cpp.
     static AptValue* cbCallMethod_isNaN(AptValue* pThis, int nArgCount);     // @0x82AF99E8
+    static AptValue* cbCallMethod_boolean(AptValue* pThis, int nArgCount);   // @0x82AF9BD8
     static AptValue* cbCallMethod_escape(AptValue* pThis, int nArgCount);    // @0x82AF9B08
     static AptValue* cbCallMethod_unescape(AptValue* pThis, int nArgCount);  // @0x82AF9A50
 
