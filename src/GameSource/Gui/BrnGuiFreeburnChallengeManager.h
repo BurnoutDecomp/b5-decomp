@@ -34,7 +34,13 @@
 namespace BrnGui
 {
 
-class GuiCache; // forward (mpGuiCache, out of scope here)
+class GuiCache; // forward (mpGuiCache; full type in GameSource/Gui/BrnGuiCache.h)
+
+// Freeburn-challenge GUI event payloads (pointer-only parameters of the handlers
+// reconstructed below). Full layouts in GameSource/Gui/Events/BrnGuiChallengeEvents.h.
+struct GuiChallengeStartEvent;
+struct GuiChallengeTriggerResponse;
+struct GuiChallengeUpdateEvent;
 
 struct FreeburnChallengeManager
 {
@@ -74,6 +80,11 @@ struct FreeburnChallengeManager
 
     static const s32 KI_MAX_TARGETS = 2; // == BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE
     static const s32 KI_MAX_ARCI    = 8; // == E_ACTIVE_RACE_CAR_INDEX_COUNT
+
+    // ---- reconstructed state transitions (X360 out-of-line) ----
+    void StartChallenge(const GuiChallengeStartEvent* lpEvent);          // @0x82509D60
+    void TriggerChallenge(const GuiChallengeTriggerResponse* lpEvent);   // @0x8250A160
+    void HandleNewData(const GuiChallengeUpdateEvent* lpEvent);          // @0x824F3FC8
 
     // ---- reconstructed accessors (X360 out-of-line) ----
     const BrnResource::ChallengeListEntry*       GetCurrentChallenge() const;          // @0x8240EC30
