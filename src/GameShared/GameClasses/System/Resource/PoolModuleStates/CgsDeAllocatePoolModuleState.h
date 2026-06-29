@@ -43,9 +43,20 @@ namespace CgsResource
         // The polled step @ 0x828DA830 (called by PoolModule::UpdateDeAllocating).
         u32 Update();   // THIS PASS @ 0x828DA830
 
+        // On completion (Update result 3) PoolModule::UpdateDeAllocating forwards the originating
+        // allocate request back to DoAllocateResourceListRequest. The X360 inlines the selection
+        // (mbHaveRequest ? &mRequest : 0) at +0xC/+0x10 of this state; expose it as a named accessor
+        // so the driver never pokes this object's layout by raw offset. Body lives in this state's own
+        // TU (CgsDeAllocatePoolModuleState.cpp; deferred -- trap-stubbed at link).
+        const void* GetPendingAllocateRequest() const;
+
     private:
         u32 muState;            // +0x00  state token (EState)
         u32 muReserved04;       // +0x04  not referenced by the poll step (kept for +8 placement)
         u32 muFramesRemaining;  // +0x08  settle counter
+        u8  mbHaveRequest;      // +0x0C  "a request is stashed" flag (read by UpdateDeAllocating)
+        // +0x10 the stashed AllocateResourceListRequest record (returned by GetPendingAllocateRequest;
+        // its full layout belongs to this state's own TU) -- reserved here as opaque storage.
+        u8  maPendingRequest[64];
     };
 }
