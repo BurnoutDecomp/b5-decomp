@@ -151,7 +151,9 @@ public:
     static void SetRegisterValue(int32_t nRegister, AptValue* pValue);
 
     // ---- static execution-state lifetime ---------------------------------------
-    static void InitializeStaticData();       // @0x82AE26C0
+    // Allocate (nRegisterCount) the flat register window from the operand-stack pool
+    // (the console reads the count from the AptInitParmsT it is passed).
+    static void InitializeStaticData(int32_t nRegisterCount);   // @0x82AE26C0
     static void ShutdownStaticData();         // @0x82AE2758
 
     AptValue* GetCIH() const          { return mpCIH; }
@@ -189,7 +191,9 @@ protected:
     // installs it and SetArgument inserts into its locals.
     static AptFrameStack* spFrameStack;
     // The flat AS register array base (off_8324E3D0) + the live-register count
-    // high-water mark (dword_8324E3D4).
+    // high-water mark (dword_8324E3D4) + the allocated capacity (dword_8324E3D8,
+    // used by ShutdownStaticData to free the array).
     static AptValue**     spRegisters;
     static int32_t        snRegisterCount;
+    static int32_t        snRegisterCapacity;
 };
