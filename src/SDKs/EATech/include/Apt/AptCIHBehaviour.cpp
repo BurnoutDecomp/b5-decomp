@@ -21,6 +21,8 @@
 #include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"        // AptCurrentRenderTreeManager + Update_Item*
 #include "SDKs/EATech/include/Apt/AptDefine.h"                   // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                      // DOGMA_PoolManager
+#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"               // gpGCPoolManager Allocate/Deallocate
+#include "SDKs/EATech/Apt/AptValueGCAllocator.h"                 // AptValueGC_MemItem::SetIsAllocated
 
 #include <cmath>   // sqrtf
 
@@ -316,4 +318,43 @@ AptCIH* AptCIH::SetIsInserted()
     if (GetCharacterInst() == nullptr)
         return this;
     return AptCharacterInst::ItemInserted(this);
+}
+
+// ===========================================================================
+// Behavioural batch 3 -- GC-value pool allocation + the Release override.
+// ===========================================================================
+
+// operator new @0x82AE5B90 -- AptCIH is an AptValueGC value: allocate from the GC
+// value pool (gpGCPoolManager) and mark the AptValueGC_MemItem header allocated.
+// The gpGCPoolManager null-guard matches every committed GC-value sibling operator
+// new (AptPrototype/AptArray/...) for the pre-AptInit startup window.
+void* AptCIH::operator new(size_t size)
+{
+    if (gpGCPoolManager == nullptr)
+        return nullptr;
+    void* pMem = gpGCPoolManager->Allocate(size);
+    reinterpret_cast<AptValueGC_MemItem*>(pMem)->SetIsAllocated(gAptValueGCSizeOffset, true);
+    return pMem;
+}
+
+// operator delete @0x82AE72E8 -- free the GC block; on a successful free clear the
+// AptValueGC_MemItem allocated flag (the inlined DeallocateAptValueGC form).
+void AptCIH::operator delete(void* p, size_t size)
+{
+    if (gpGCPoolManager->Deallocate(p, size))
+        reinterpret_cast<AptValueGC_MemItem*>(p)->SetIsAllocated(gAptValueGCSizeOffset, false);
+}
+
+// Release @0x82AE7390 -- AptValue vtbl[1] override. A CIH that is in state 1 and
+// singly-referenced (only the display list holds it) pins itself: Release is a
+// deliberate no-op (the X360 leaves `this` in r3 without decrementing). Any other
+// state, or any refcount != 1, runs the normal AptValue::Release.
+void AptCIH::Release()
+{
+    if (GetCIHState() != 1u || getRefCount() != 1u)
+    {
+        AptValue::Release();
+        return;
+    }
+    // CIHState == 1 && refcount == 1: singly-owned, pinned -> no-op.
 }

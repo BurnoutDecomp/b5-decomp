@@ -180,4 +180,15 @@ struct AptCIH : public AptValueGC
     void             RemoveEventHandler(int32_t nMask); // @0x82AD5B70 (clear hash event bits)
     void             SetHasMask(bool bHasMask, AptRenderItem* pMask);  // @0x82AE22B8
     AptCIH*          SetIsInserted();                   // @0x82AECE40 (render-tree insert notify)
+
+    // ---- GC-value pool allocation (AptCIH is an AptValueGC) ---------------
+    // operator new @0x82AE5B90 / delete @0x82AE72E8 -- allocate/free from the GC
+    // value pool (gpGCPoolManager) + flip the AptValueGC_MemItem allocated flag.
+    static void* operator new(size_t size);
+    static void  operator delete(void* p, size_t size);
+
+    // Release @0x82AE7390 -- AptValue vtbl[1] override: a CIHState-1, singly-referenced
+    // node (only the display list owns it) pins itself -- Release is a no-op; every
+    // other state/refcount delegates to AptValue::Release.
+    virtual void Release() override;
 };
