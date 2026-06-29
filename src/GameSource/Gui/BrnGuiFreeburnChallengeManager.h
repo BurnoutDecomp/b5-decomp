@@ -80,6 +80,7 @@ struct FreeburnChallengeManager
     const BrnResource::ChallengeListEntryAction* GetCurrentAction() const;             // @0x8240EC88
     EFreeburnChallengeSuccess GetCurrentSuccessForARCI(EActiveRaceCarIndex leARCI) const;  // @0x8240ED50
     f32  GetCurrentContributionForARCI(EActiveRaceCarIndex leARCI) const;              // @0x8240EE50
+    f32  GetCurrentContributionOverall() const;                                       // @0x824F4160
     BrnResource::ChallengeListEntryAction::EChallengeDataType GetCurrentTargetType() const; // @0x8240EF50
 
 private:

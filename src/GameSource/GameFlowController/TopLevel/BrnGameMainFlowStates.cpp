@@ -293,8 +293,34 @@ void MainGameFlowStateMarketingScreens::Update()
 
 void MainGameFlowStateMarketingScreens::Render() {}
 
+// --- MainGameFlowStateCheckDiskSpace ----------------------------------------------------
+// Standalone byte global the X360 OnEnter clears-then-sets (byte_82FAE28E). It is NOT a member
+// (the X360 stores to an absolute .data address, not a `this`-relative slot): it is set to 0 on
+// entry and 1 once OnEnter has finished its stage stamp -- a "disk-check OnEnter has run" flag.
+bool gBrnCheckDiskSpaceEntered = false;
+
 MainGameFlowStateCheckDiskSpace::MainGameFlowStateCheckDiskSpace() {}
-void MainGameFlowStateCheckDiskSpace::OnEnter() {}
+
+// @ 0x823AAA98 - clear the entered-flag, assert we arrived at the START stage, then stamp the
+// game-module load-state slot to 4 and raise the entered-flag. (No disk/storage query is issued
+// here -- the X360 body is just these flag writes + the START-stage assert + the stage stamp.)
+void MainGameFlowStateCheckDiskSpace::OnEnter()
+{
+    gBrnCheckDiskSpaceEntered = false;
+
+    // X360 gated the assert on the global assert-enabled flag (dword_82FAE4B0); CGS_ASSERT subsumes
+    // that gate. The X360 reports this from BrnGameMainFlowStates.h:195 (the OnEnter decl site).
+    CGS_ASSERT(meLoadingStateStage == E_LOADINGSTATESTAGE_START,
+               "meLoadingStateStage == E_LOADINGSTATESTAGE_START");
+
+    gBrnCheckDiskSpaceEntered = true;
+
+    // X360: *(off_830102D0 + 0x9A0644) = 4 -- stamp the value 4 into a game-module-aggregate slot
+    // (the same off_830102D0 base that holds the flow controller at +0x9A0664 and the loading-screen
+    // signal at +0x99FE38). The recovered immediate is 4. [follow-on] that game-module field isn't
+    // mapped in this incremental layout (same status as the +10097260 modules-loaded flag above), so
+    // the stamp has no modelled target yet; the flag writes + assert above are faithful.
+}
 void MainGameFlowStateCheckDiskSpace::OnLeave() {}
 void MainGameFlowStateCheckDiskSpace::Update() {}
 void MainGameFlowStateCheckDiskSpace::Render() {}
