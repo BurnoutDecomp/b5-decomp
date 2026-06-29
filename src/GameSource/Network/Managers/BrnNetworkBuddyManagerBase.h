@@ -86,11 +86,27 @@ namespace BrnNetwork
     protected:
         virtual void BuddyListHasChanged();
 
+        // DWARF BrnNetworkBuddyManagerBase.h:99 (.cpp:910) -- drive the inbound post-sim
+        // network-event queue (read events from the first queue, mirror them onto the
+        // module's IN-event queue). VIRTUAL: the X360 leaf (BuddyManagerX360) overrides it
+        // to additionally route the gamer-card "show profile" events through the Xbox Guide.
+        // ADDITIVE GROW (BrnNetworkBuddyManagerX360 TU): the body is homed in this base's own
+        // TU; declared here so the X360 override (which calls through this slot via the vtable)
+        // matches the base virtual signature.
+        virtual void ProcessNetworkQueue(const NetworkEventQueue* lpInQueue,
+                                         NetworkEventQueue* lpOutQueue);
+
         BrnNetworkModule* GetNetworkModule() { return mpNetworkModule; }
 
         void ProcessEvent(const CgsModule::Event* lpEvent, s32 liEventType);
         void ProcessDebugEvents();
         void GameInviteAvailable(const PlayerName* lpBuddyName);
+
+        // DWARF BrnNetworkBuddyManagerBase.h:90 (.cpp:335) -- begin a Live invite/join with the
+        // launch parameters (taken by value, the 0x9C-byte InviteOrJoinParams block). The X360
+        // leaf's DoInvite forwards the same params block here. ADDITIVE GROW (BrnNetworkBuddy-
+        // ManagerX360 TU): declared-only here; the body is homed in this base's own TU.
+        void StartInvite(BrnNetworkModuleIO::InviteOrJoinParams lInviteOrJoinParams);
 
     private:
         void SendEmptyBuddyInformation(NetworkEventQueue* lpEventQueue);

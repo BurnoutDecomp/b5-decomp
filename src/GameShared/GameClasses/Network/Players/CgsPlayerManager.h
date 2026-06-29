@@ -109,6 +109,12 @@ namespace CgsNetwork
         NetworkPlayerID GetLocalPlayerID() const;   // reads mLocalPlayerID (DWARF h:162)
         u8              GetGameID() const;           // DWARF :297
 
+        // True when the local console is the session host. ADDITIVE GROW (BrnNetworkBuddy-
+        // ManagerX360 TU): BuddyManagerX360::DoInvite gates the invite vs. join decision on it
+        // (X360 DoInvite @ 0x825700A8 calls CgsNetwork::PlayerManager::AmIHost on
+        // &GetNetworkManager()->mpPlayerManager). Declared-only; body is the CgsPlayerManager TU.
+        bool AmIHost();
+
         // --- embedded reliable-message queue (DWARF h:110 mReliableMessageManager by value) ---
         ReliableMessageManager& GetReliableMessageManager();
     };

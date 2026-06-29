@@ -114,6 +114,14 @@ namespace BrnNetwork
         // (body lands with the full BrnNetworkManager TU).
         CgsNetwork::PlayerManager* GetPlayerManager();
 
+        // The signed-in local user's controller/pad index (X360: read whole as *(this+0x60);
+        // BrnNetwork::BuddyManagerX360::DoInvite compares the invite's requesting controller port
+        // against it to decide whether the invite targets the LOCAL user -- see DoInvite
+        // @ 0x825700A8, `subf` of *(NetworkManager+0x60) from the params' miUserControllerPort).
+        // Declared-only here; the storage materialises with the full BrnNetworkManager TU.
+        // ADDITIVE GROW (BrnNetworkBuddyManagerX360 TU).
+        s32 GetLocalUserControllerPort() const;
+
         // The running network send-frame counter (X360: *(this+0x3658), read whole then taken
         // modulo 0xFFFF to derive a reliable-message frame id; see
         // BrnNetwork::MarkedManManager::SendMarkedManDataToAll @ 0x82548DCC). Declared-only here;
