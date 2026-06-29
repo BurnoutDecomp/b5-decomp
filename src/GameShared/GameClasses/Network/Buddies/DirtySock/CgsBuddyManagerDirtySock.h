@@ -164,6 +164,13 @@ namespace CgsNetwork
 
         s32 _SortBuddyFunction(const void* lpA, const void* lpB);
 
+        // Reset hook for the buddies-changed client callback slot (+0x18). The
+        // X360 BuddyManagerX360::Prepare zeroes this private base word (asm:
+        // stw r10, 0x18(this) @0x8287F8E0) alongside the members it clears
+        // directly; expose a protected setter so the derived Prepare can do so
+        // without reaching across the class' private state.
+        void _ClearBuddiesChangedCallback() { mBuddiesChangedCallback = 0; }
+
     private:
         bool IsFullBuddy(s32 liIndex);
         EBuddyErrorCodes _ConvertError(s32 liApiError);

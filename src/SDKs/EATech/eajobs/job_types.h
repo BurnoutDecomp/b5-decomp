@@ -59,6 +59,7 @@ namespace Jobs
     // job.h, not reconstructed in this group).
     struct Job;
     struct JobInstanceHandle;
+    struct EntryPoint;   // entry_point.h -- CreateNotReadyInstance's entry argument
 
     // job_types.h -- a single 32-bit job argument word. Jobs receive four of them
     // (Job::mParams[4] / the local-job entry signature); SetData packs the data
@@ -109,17 +110,43 @@ namespace Jobs
             // compiler emits.
             virtual ~SchedulerBackend();
 
+            // vtable slot +0x28: create a NOT-READY job instance for the supplied
+            // entry-point + parameters, writing its 16-byte JobInstanceHandle into
+            // pOutHandle. Job::INTERNAL_AddNotReady @ 0x82BCA3D8 selects the backend by
+            // the entry's environment (pBackends[env]) and dispatches this slot with the
+            // out-handle buffer, the entry point and the param block.
+            virtual void CreateNotReadyInstance(JobInstanceHandle* pOutHandle,
+                                                const EntryPoint*  pEntryPoint,
+                                                const Param*       pParams) = 0;
+
             // vtable slot +0x30: is the instance identified by (uSubmissionId,
             // uHandleQword==packed backend+index) finished? Nonzero == complete.
             // (X360 passes the submission id and the packed +0x8 qword as a 64-bit
             // handle key.)
             virtual int IsJobComplete(u64 uSubmissionId, u64 uHandleQword) = 0;
 
+            // vtable slot +0x34: register an event/barrier on the instance keyed by
+            // (uSubmissionId, uHandleQword) to fire when the instance reaches phase
+            // iWhen. Job::INTERNAL_SubmitEventsAndDeps dispatches this slot two ways
+            // (X360 0x82BCB39C / 0x82BCB470): with a freshly-built barrier handle as
+            // the payload (a dependency edge), and with one of the job's own Events as
+            // the payload (a start/end event); both hand the backend the submission
+            // key, the payload pointer and the phase word as the last two operands.
+            virtual int SubmitEvent(u64 uSubmissionId, u64 uHandleQword,
+                                    const void* pPayload, int iWhen) = 0;
+
             // vtable slot +0x38: establish a barrier so the dependent job-instance handle
             // waits on the instance keyed by (uSubmissionId, uHandleQword). The X360
             // dispatches this through the *dependency's* backend vtable, handing it the
             // dependent handle, the backend, and the dependency's submission key.
             virtual void AddBarrier(JobInstanceHandle* pDependentHandle, u64 uSubmissionId, u64 uHandleQword) = 0;
+
+            // vtable slot +0x3C: BLOCKING wait on the instance keyed by (uSubmissionId,
+            // uHandleQword) -- the backend's "sleep on instance" entry. Job::SleepOn
+            // @ 0x82BCA1F8 tail-calls this slot (X360 0x82BCA244 lwz r11,0x3C) with the
+            // job's submission id and packed handle qword; the LocalBackend honours it by
+            // waiting on (then re-posting) the slot's completion semaphore.
+            virtual int SleepOn(u64 uSubmissionId, u64 uHandleQword) = 0;
         };
     }
 
@@ -150,9 +177,15 @@ namespace Jobs
         //   pYieldCallback : optional predicate run each spin (nonzero == keep waiting)
         //   iYieldContext  : argument forwarded to pYieldCallback
         //   lYieldSleepMs  : if >= 0, ms to sleep each spin
-        int WaitOn(Detail::WaitOnYieldCallbackArg pYieldCallback,
-                   int                            iYieldContext,
-                   s32                            lYieldSleepMs);
+        // Job::WaitOn @ 0x82BCB238 tail-calls this with only `this` set up (the PPC
+        // tail-`b` loads no argument registers), i.e. the no-knobs form: no user
+        // predicate, no context, and a NEGATIVE sleep that WaitOn's own `>= 0` gate
+        // treats as "don't sleep". Modelled as default arguments so that no-arg call
+        // site keeps compiling; the -1 sleep is grounded by that attested `>= 0` gate,
+        // not an invented timeout. Existing 3-arg callers are unaffected.
+        int WaitOn(Detail::WaitOnYieldCallbackArg pYieldCallback = 0,
+                   int                            iYieldContext  = 0,
+                   s32                            lYieldSleepMs   = -1);
 
         u64                       mSubmissionId;     // +0x0
         Detail::SchedulerBackend* mSchedulerBackend; // +0x8
