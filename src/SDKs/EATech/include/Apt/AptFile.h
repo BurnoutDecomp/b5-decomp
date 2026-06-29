@@ -28,6 +28,8 @@
 
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC mFileName member
 
+struct AptCharacter;   // FindExport returns the exported character (pointer only)
+
 struct AptFile
 {
     // +0 (console): the AptSharedPtr<AptFile> reference count. MUST stay the
@@ -62,7 +64,13 @@ struct AptFile
 
     ~AptFile();
 
-    // FindExport reads mpData's export table; deferred until the loaded AptData
-    // layout is reconstructed (the async parser is a follow-on).
-    //   int32_t FindExport(const char* pName) const;   // @0x7E3920
+    // FindExport @0x82AD9DF0 (PS3 @0x7E3920) -- linear-search the loaded movie's export
+    // table for the export named pName; returns the exported AptCharacter, or null if the
+    // name is absent (or the movie is not loaded). Called by AptCharacterAnimation::Link.
+    AptCharacter* FindExport(const char* pName) const;
+
+    // isFileImported @0x82AEB1C8 -- true when (*ppCandidate)'s file name appears in this
+    // movie's import table. CONSUMES the candidate either way: disposes the AptFile and
+    // nulls *ppCandidate (matching the asm). Called by AptLinker::isFileImported.
+    bool isFileImported(AptFile** ppCandidate) const;
 };
