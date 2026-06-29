@@ -1,0 +1,80 @@
+#pragma once
+
+// ===========================================================================
+// SDKs/EATech/include/Apt/AptTarget.h
+//
+// AptTarget -- the Apt (ActionScript player) per-thread CONTEXT / director the
+// whole Apt runtime hangs off the global singleton (X360 off_8324E574). Roughly
+// a hundred Apt functions reach the active context through it: the loader, the
+// file linker, the animation director, the action interpreter's root, etc.
+//
+// LAYOUT (48 bytes / 12 dwords, proven by AptTarget::AptTarget @0x82B00160 which
+// pool-allocates 48 bytes and by AptTarget::Shutdown @0x82B02328 which frees the
+// sub-objects). The constructor first stores defaults (64/64/64/512/512/256) into
+// the six leading dwords then overwrites them from the AptUpdateParams block:
+//     +0x00 mnConfigA   = params[4]   ) capacity/config values the context keeps
+//     +0x04 mnConfigB   = params[7]   ) for its sub-pools; copied verbatim from
+//     +0x08 mnConfigC   = params[2]   ) the AptUpdateParams passed to
+//     +0x0C mnConfigD   = params[1]   ) AptUpdateInitialize. FLAG: the exact
+//     +0x10 mnConfigE   = params[0]   ) per-field pool meaning is not yet pinned;
+//     +0x14 mnConfigF   = params[3]   ) carried as named config dwords.
+//     +0x18 mpAnimationTarget  AptAnimationTarget*  (88-byte director; pool-alloc'd
+//                                in the ctor; GetAnimationTarget @0x82AD5770 returns it)
+//     +0x1C mpLoader            AptLoader*           (4-byte loader wrapper; ~AptLoader
+//                                + Deallocate(4) in Shutdown; AptLinker::Update calls
+//                                AptLoader::Update(off_8324E574->mpLoader))
+//     +0x20 mpLinker            AptLinker*           (24-byte file linker; constructed
+//                                inline in the ctor; AptLinker scalar-deleting-dtor in Shutdown)
+//     +0x24 mpField24           void*  (zeroed at construction)        FLAG: role TBD
+//     +0x28 mpField28           void*  (zeroed at construction)        FLAG: role TBD
+//     +0x2C mpField2C           void*  (4-byte zeroed alloc in the ctor) FLAG: role TBD
+//
+// Member access is BY NAME; the X360 byte offsets above are documentation only.
+// AptAnimationTarget (88 bytes) and AptLinker (24 bytes) are forward-declared here
+// (held by pointer) and homed in their own follow-on TUs; AptLoader is already homed.
+//
+// EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
+// ===========================================================================
+
+#include "types.hpp"
+
+struct AptAnimationTarget;   // +0x18 -- the 88-byte animation director (own TU)
+struct AptLoader;            // +0x1C -- homed in AptLoader.h (held by pointer here)
+struct AptLinker;            // +0x20 -- the 24-byte file linker (own TU)
+
+struct AptTarget
+{
+    // ---- capacity/config block (copied from the AptUpdateParams) ----
+    u32 mnConfigA;   // +0x00  (= params[4])
+    u32 mnConfigB;   // +0x04  (= params[7])
+    u32 mnConfigC;   // +0x08  (= params[2])
+    u32 mnConfigD;   // +0x0C  (= params[1])
+    u32 mnConfigE;   // +0x10  (= params[0])
+    u32 mnConfigF;   // +0x14  (= params[3])
+
+    // ---- the context's owned sub-objects ----
+    AptAnimationTarget* mpAnimationTarget;   // +0x18
+    AptLoader*          mpLoader;            // +0x1C
+    AptLinker*          mpLinker;            // +0x20
+    void*               mpField24;           // +0x24  FLAG: role TBD (zeroed at ctor)
+    void*               mpField28;           // +0x28  FLAG: role TBD (zeroed at ctor)
+    void*               mpField2C;           // +0x2C  FLAG: role TBD (4-byte zeroed alloc)
+
+    // GetAnimationTarget @0x82AD5770 -- the active animation director (+0x18).
+    AptAnimationTarget* GetAnimationTarget() const { return mpAnimationTarget; }
+
+    // ctor @0x82B00160 / Shutdown @0x82B02328 -- the AptTarget lifecycle (allocates /
+    // tears down mpAnimationTarget + mpLoader + mpLinker). FLAG: bodies are their own
+    // TU, gated on AptAnimationTarget (88B) + AptLinker (24B) being homed. Declared so
+    // the context struct is complete for the ~100 dependents that only read its members.
+    explicit AptTarget(const u32* pParams);   // FLAG: body its own TU
+    void Shutdown();                          // FLAG: body its own TU
+};
+
+// The Apt context/director singletons -- the same active AptTarget* under three X360
+// aliases (current / default / per-thread-TLS), set by AptUpdateInitialize. Declared
+// extern here; defined by the Apt update TU. gpAptTarget (off_8324E574) is the
+// canonical "current context" pointer every Apt subsystem dereferences.
+extern AptTarget* gpAptTargetCurrent;   // X360 off_8324E570
+extern AptTarget* gpAptTarget;          // X360 off_8324E574
+extern AptTarget* gpAptTargetTLS;       // X360 off_8324E578
