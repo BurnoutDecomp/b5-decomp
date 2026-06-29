@@ -18,21 +18,34 @@
 //     the compiler synthesises for ~EAStringC(). That pins offset 0 as an owned
 //     EAStringC; the destructor does nothing else.
 //
-// The trailing 4-byte word is NOT attested: nothing in the X360 ledger reads or
-// writes it (the only AptFileSavedInputState function the build emits is the
-// deleting destructor, which touches only the EAStringC), and there is no DWARF
-// / Feb-2007 / wiki entry for this type. It is therefore kept as a documented,
-// sized placeholder so the named EAStringC member lands at offset 0 and the
-// element stride stays 8 -- it is intentionally NOT given an invented role.
+// The trailing 4-byte word at +4 is the record's STATE -- now attested by the
+// AptSavedInputCheckpoints helpers (CanLinkPendingFiles @0x82AEE938 /
+// CanContinueSavedInputs @0x82AEE980 / Checkpoint @0x82AFD3D0), which read & write
+// *(element+4) with the small integers 1..4. Those bodies pin its meaning:
+// Checkpoint promotes LOADED(2) -> LINKED(3) and appends LINKED(3)/PENDING(1); the
+// gates accept {LOADED,LINKED} (linkable) or {LOADED,PLAYED} (replayable). So +4 is
+// an E_APT_SAVED_INPUT_STATE enum, not the earlier unattested placeholder.
 //
-// Console layout is 8 bytes (2 x 32-bit); the named EAStringC member lets the
-// x64 PC build compute the correct (wider) sizeof/offsets -- the pervasive
-// PC-port FLAG also used by AptFile (named members, not literal console offsets).
+// Console layout is 8 bytes (2 x 32-bit); the named members let the x64 PC build
+// compute the correct (wider) sizeof/offsets -- the pervasive PC-port FLAG also
+// used by AptFile (named members, not literal console offsets).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstdint>
+
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC mInputName member
+
+// Saved-input record state (the +4 word). Values are the literals the X360
+// AptSavedInputCheckpoints helpers store/compare (1..4).
+enum E_APT_SAVED_INPUT_STATE : int32_t
+{
+    E_APT_SAVED_INPUT_PENDING = 1,   // queued; its file is not loaded yet
+    E_APT_SAVED_INPUT_LOADED  = 2,   // its file is loaded (ready to link)
+    E_APT_SAVED_INPUT_LINKED  = 3,   // linked into the movie
+    E_APT_SAVED_INPUT_PLAYED  = 4,   // replayed (consumed by the saved-input tick)
+};
 
 struct AptFileSavedInputState
 {
@@ -43,12 +56,9 @@ struct AptFileSavedInputState
     // faithful equivalent.
     EAStringC mInputName;
 
-    // +4 (console): a single unattested 32-bit word. No X360-emitted code reads
-    // or writes it and there is no DWARF/Feb-2007 reference, so its role is
-    // unknown -- modeled as a sized placeholder (NOT an invented field) purely to
-    // hold the attested 8-byte element stride. (FLAG: name/type pending the TU
-    // that first populates the vector.)
-    uint8_t mauUnknownPad4[4];
+    // +4 (console): the record's state (E_APT_SAVED_INPUT_*). The checkpoint
+    // helpers read/write it; the deleting destructor ignores it (trivial enum).
+    E_APT_SAVED_INPUT_STATE meState;
 
     // Out-of-line destructor: its only work is releasing mInputName, which the
     // compiler does via the embedded EAStringC member's own destructor. Declaring
