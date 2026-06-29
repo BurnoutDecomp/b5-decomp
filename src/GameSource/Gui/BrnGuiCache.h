@@ -11,6 +11,7 @@
 // the methods reached by the in-scope GUI code are declared on GuiCache (its full data
 // layout is an out-of-scope boundary object the leaves only touch through these calls).
 namespace CgsGui { class ObjectController; }
+namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList return (pointer only)
 
 namespace BrnGui
 {
@@ -108,6 +109,15 @@ namespace BrnGui
         // does not need to pull in the heavy game-state enum header. Body links from the
         // GuiCache TU.
         s32 GetCurrentGameModeType() const;
+
+        // ADDITIVE GROW (BrnGuiFreeburnChallengeManager TU): the cache owns the freeburn
+        // challenge list the GUI tracker resolves challenge ids against. The X360
+        // FreeburnChallengeManager StartChallenge/TriggerChallenge (@0x82509D60 / @0x8250A160)
+        // load mpGuiCache, call this, then drive ChallengeList::GetChallengeIndex /
+        // GetChallengeData on the returned list. Returned by pointer (those two callees are
+        // const accessors), so a forward declaration of BrnResource::ChallengeList suffices
+        // here. Body links from the GuiCache TU.
+        const BrnResource::ChallengeList* GetFreeburnChallengeList() const;
 
         // ADDITIVE GROW (BrnFriendsList TU): FriendsListComponent::SetGuiCachePointer
         // (X360 @0x82473580) latches the cache pointer, then caches a single u32 the

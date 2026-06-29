@@ -2,9 +2,11 @@
 // Header-only data-list slice. Two POD resource structs live in this TU:
 // BrnResource::ChallengeListEntryAction (the per-action record, 0x50 bytes) and
 // BrnResource::ChallengeListEntry (the challenge record whose first member is
-// maAction[KI_MAX_ACTIONS_PER_CHALLENGE]). Only ChallengeListEntry::GetAction is
-// reconstructed from the X360 binary in this batch; every other method is
-// declared-only. Member layout (names + offsets) is taken from the DECFIGS DWARF.
+// maAction[KI_MAX_ACTIONS_PER_CHALLENGE]). A growing set of trivial field accessors is
+// reconstructed inline at the bottom of this header (GetAction const/non-const,
+// GetActionType, GetChallengeStyle, GetNumActions, GetNumTargets, GetTargetDataType,
+// GetCombineAction); every other method is still declared-only. Member layout
+// (names + offsets) is taken from the DECFIGS DWARF.
 //
 // IMPORTANT layout note: GetAction @ 0x8230F0F8 computes `this + 80 * index`, which
 // PROVES sizeof(ChallengeListEntryAction) == 80 (0x50) and maAction @ offset 0 in
@@ -360,6 +362,52 @@ ChallengeListEntry::GetChallengeStyle() const
         return E_FREEBURN_STYLE_ROAD_RULES_CRASH;
     }
     return E_FREEBURN_STYLE_NORMAL;
+}
+
+// -----------------------------------------------------------------------------
+// Trivial field accessors the X360 ALWAYS inlines into its callers (so they have
+// no standalone address of their own). Reconstructed here as the named calls the
+// inlined reads correspond to, recovered from the FreeburnChallengeManager
+// StartChallenge @0x82509D60 / TriggerChallenge @0x8250A160 call sites where they
+// appear as raw byte loads at the proven member offsets:
+//   GetNumActions     -> lbz this+0xD4 (muNumActions)               -- loop bound
+//   GetAction (const) -> this + 80*index (== &maAction[index])      -- guards 941/942
+//   GetNumTargets     -> lbz action+0x30 (muNumTargets)             -- used as count
+//   GetTargetDataType -> lbz action+0x3C (mau8TargetDataType[idx])  -- target list build
+//   GetCombineAction  -> lbz action+0x03 (muCombineActionType)      -- branch selector
+// These are plain getters; only GetAction carries guards (its two index asserts are
+// attested verbatim in the StartChallenge/TriggerChallenge asm, ChallengeListEntry.h
+// lines 941/942, and mirror the already-reconstructed non-const GetAction twin).
+// -----------------------------------------------------------------------------
+
+inline int32_t ChallengeListEntry::GetNumActions() const
+{
+    return muNumActions;
+}
+
+inline const ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex ) const
+{
+    CGS_ASSERT( liActionIndex >= 0, "liActionIndex >= 0" );
+    CGS_ASSERT( liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE, "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE" );
+
+    return &maAction[ liActionIndex ];
+}
+
+inline int32_t ChallengeListEntryAction::GetNumTargets() const
+{
+    return muNumTargets;
+}
+
+inline ChallengeListEntryAction::EChallengeDataType
+ChallengeListEntryAction::GetTargetDataType( int32_t liIndex ) const
+{
+    return static_cast<EChallengeDataType>( mau8TargetDataType[ liIndex ] );
+}
+
+inline ChallengeListEntryAction::ECombineActionType
+ChallengeListEntryAction::GetCombineAction() const
+{
+    return static_cast<ECombineActionType>( muCombineActionType );
 }
 
 } // namespace BrnResource
