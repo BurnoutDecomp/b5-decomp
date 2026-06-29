@@ -301,6 +301,12 @@ namespace Thread
         // (0x82B42D98) latch the process-wide function user-wrapper once.
         static void SetGlobalRunnableFunctionUserWrapper(RunnableFunctionUserWrapper pUserWrapper);
 
+        // (0x82B42D88) read back the process-wide function user-wrapper (the global
+        // sGlobalRunnableFunctionUserWrapper). Begin's default 5th argument; rw::core::
+        // filesys::Device::Start passes its result explicitly. Declared here (the Thread
+        // home); the out-of-line body lives with the other Thread statics.
+        static RunnableFunctionUserWrapper GetGlobalRunnableFunctionUserWrapper();
+
     protected:
         EAThreadData mThreadData;
     };
