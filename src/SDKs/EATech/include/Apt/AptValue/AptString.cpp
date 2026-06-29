@@ -222,3 +222,119 @@ AptValue* AptString::sMethod_toUpperCase(AptString* pThis)
     *pResult->GetInternalString() = strValue;
     return pResult;
 }
+
+// ---------------------------------------------------------------------------
+// AptUTF8_SubString (sub_82AE8ED8) -- the shared UTF-8 substring extractor the
+// slice/substring (and the SubString opcode) methods call. Build *pOut from the
+// run of iCount UTF-8 chars starting at the iStart-th char of pSrc. (== the body
+// of EAStringC::UTF8_Mid; kept as the distinct symbol the VM calls.)
+// ---------------------------------------------------------------------------
+// sub_82AE8ED8 -- the shared UTF-8 substring extractor the AS String slice/
+// substr/substring methods (and the SubString opcode) call. Build *pOut from the
+// run of `iCount` UTF-8 characters starting at the `iStart`-th character of pSrc.
+// A negative start is pulled up to 0 with the count shrunk by the same amount
+// (so e.g. start=-2,count=5 -> start=0,count=7, preserving the end). This is the open-coded body of
+// EAStringC::UTF8_Mid(iStart, iCount): walk the buffer to the UTF-8 char
+// boundaries, then do a byte-range Mid.
+static EAStringC* AptUTF8_SubString(EAStringC* pOut, const EAStringC* pSrc, int iStart, int iCount)
+{
+    if (iStart < 0)
+    {
+        iCount -= iStart;   // grow the count to preserve the end position (X360: a4 - a3)
+        iStart = 0;
+    }
+
+    if (iCount > 0)
+    {
+        const char* pBuffer = pSrc->GetBuffer();
+        const char* pStart  = EAStringC::UTF8_GetBuffer(pBuffer, iStart);
+        if (pStart)
+        {
+            const char* pEnd = EAStringC::UTF8_GetBuffer(pStart, iCount);
+            const int   iByteStart = static_cast<int>(pStart - pBuffer);
+            if (pEnd)
+                *pOut = pSrc->Mid(iByteStart, static_cast<int>(pEnd - pStart));
+            else
+                *pOut = pSrc->Mid(iByteStart);   // count runs past the end -> to end
+            return pOut;
+        }
+    }
+
+    *pOut = EAStringC();   // empty: negative/zero count, or start past the end
+    return pOut;
+}
+
+// sMethod_slice @0x82AFC3C0 -- AS String.slice(start, end): return the substring
+// from character `start` (default -1, i.e. the last char) up to but not including
+// `end` (default a huge sentinel == the whole tail). Negative indices count back
+// from the end (idx += length); both are then clamped to [0, length]. With no
+// arguments the call is malformed -> undefined. The args sit on the native-arg stack.
+AptValue* AptString::sMethod_slice(AptString* pThis, int nArgCount)
+{
+    if (nArgCount == 0)
+        return gpUndefinedValue;
+
+    int nStart = -1;
+    int nEnd   = 9999999;
+    if (nArgCount >= 1)
+        nStart = gppAptNativeArgStack[gnAptNativeArgCount - 1]->toInteger();
+    if (nArgCount >= 2)
+        nEnd   = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();
+
+    EAStringC strThis;
+    pThis->toString(&strThis);
+    const int nLength = strThis.UTF8_Size();
+
+    if (nStart < 0) nStart += nLength;
+    if (nEnd   < 0) nEnd   += nLength;
+    if (nStart < 0) nStart = 0;
+    if (nEnd   < 0) nEnd   = 0;
+    if (nStart > nLength) nStart = nLength;
+    if (nEnd   > nLength) nEnd   = nLength;
+
+    EAStringC strSlice;
+    AptUTF8_SubString(&strSlice, &strThis, nStart, nEnd - nStart);
+
+    AptString* pResult = AptString::Create("");
+    *pResult->GetInternalString() = strSlice;
+    return pResult;
+}
+
+// sMethod_substring @0x82AFC8B0 -- AS String.substring(start, end): like slice but
+// it does NOT treat negatives as from-the-end -- instead it swaps start/end so the
+// smaller is first, clamps both to >= 0, then swaps again, before extracting the
+// [start, end) character range. With no arguments the call is malformed -> undefined.
+AptValue* AptString::sMethod_substring(AptString* pThis, int nArgCount)
+{
+    if (nArgCount == 0)
+        return gpUndefinedValue;
+
+    int nStart = -1;
+    int nEnd   = 9999999;
+    if (nArgCount >= 1)
+        nStart = gppAptNativeArgStack[gnAptNativeArgCount - 1]->toInteger();
+    if (nArgCount >= 2)
+        nEnd   = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();
+
+    if (nStart > nEnd)
+    {
+        const int nSwap = nStart;
+        nStart = nEnd;
+        nEnd   = nSwap;
+    }
+    if (nStart < 0) nStart = 0;
+    if (nEnd   < 0) nEnd   = 0;
+    if (nStart > nEnd)
+    {
+        const int nSwap = nStart;
+        nStart = nEnd;
+        nEnd   = nSwap;
+    }
+
+    EAStringC strThis;
+    pThis->toString(&strThis);
+
+    AptString* pResult = AptString::Create("");
+    AptUTF8_SubString(pResult->GetInternalString(), &strThis, nStart, nEnd - nStart);
+    return pResult;
+}
