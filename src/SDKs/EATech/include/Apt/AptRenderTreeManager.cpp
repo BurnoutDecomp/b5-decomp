@@ -12,6 +12,7 @@
 #include "SDKs/EATech/include/Apt/AptRenderItemAnimation.h"
 #include "SDKs/EATech/include/Apt/AptRenderItemMorph.h"
 #include "SDKs/EATech/include/Apt/AptRenderItemStaticText.h"
+#include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"
 #include "SDKs/EATech/include/Apt/AptRenderItemLevel.h"
 #include "SDKs/EATech/include/Apt/AptCharacter.h"
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"   // AptCurrentRenderTreeManager / AptRTM_* decls
@@ -63,10 +64,11 @@ AptRenderItem* AptRenderItem::Manager_CreateItem(AptCharacter* pCharacter, int n
             void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemStaticText));
             return p ? new (p) AptRenderItemStaticText(pCharacter, nTick) : nullptr;
         }
-        // case 2 (dynamic/edit text) -> AptRenderItemDynamicText: FLAG (deferred --
-        // its 112-byte ctor needs the AptTextFormat layout, Wave 5). Until then a
-        // dynamic-text character gets no render item (the console returns the real
-        // subtype here).
+        case 2:   // dynamic / edit text
+        {
+            void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemDynamicText));
+            return p ? new (p) AptRenderItemDynamicText(pCharacter, nTick) : nullptr;
+        }
         default:  // unhandled / not-yet-built character type -> no render item
             return nullptr;
     }
