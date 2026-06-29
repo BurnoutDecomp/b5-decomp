@@ -81,6 +81,16 @@ namespace BrnDirector
         // request on lrCamera (used for Smash_Effect / Billboard_Effect / Checkpoint). De-
         // inlined here to a named call; the body sets mCamera.mEffects' start-hook fields.
         void RequestStartEffectHook(Camera& lrCamera, const char* lpcHook, f32 lfBlend);
+
+        // The X360 inlines this RESET-then-request into ArbStateOnlineCarSelect::Update's
+        // SELECTING_LIVERY case: it first clears the prior start-hook latch / secondary-latch /
+        // a stale name word (mEffects start-hook latch == 0, +1 latch == 0, name-head word == 0),
+        // then sets the new start-hook name + blend and re-latches "has start hook". This is the
+        // RequestStartEffectHook variant that re-arms the start hook from a clean state (used for
+        // the "BlackFadeIn_Quick" fade). De-inlined here to a named call; the body resets and
+        // re-requests mCamera.mEffects' start-hook fields. FLAG: the precise pre-clear field set
+        // is mEffects' own concern (this header does not pin those offsets).
+        void RequestStartEffectHookReset(Camera& lrCamera, const char* lpcHook, f32 lfBlend);
     }
 }
 

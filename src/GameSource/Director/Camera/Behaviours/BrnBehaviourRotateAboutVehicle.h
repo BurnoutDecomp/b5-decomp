@@ -27,6 +27,8 @@ namespace BrnDirector
 namespace Camera
 {
 
+struct Camera;   // the per-frame camera the behaviour produces (full type: Camera.h)
+
 class BehaviourRotateAboutVehicle
 {
 public:
@@ -46,6 +48,22 @@ public:
     // Accessor returning the address of the +0x50 member sub-object. @0x821FB410
     //   (addi r3, r3, 0x50 ; blr  ->  return &maEmbeddedSubObject).
     EmbeddedSubObject* GetEmbeddedSubObject() { return &maEmbeddedSubObject; }
+
+    // Configure the behaviour from a named-parameter block. X360-attested @0x821F55B8 (the
+    // online car-select arbitrator state allocates this behaviour and immediately hands it the
+    // "look around car" parameter block from the NamedParameters bank). The behaviour stores /
+    // applies the block; modelled here as the named setter taking the parameter block as an
+    // opaque pointer (its interior layout is owned by the parameter-bank TU). DECLARATION-ONLY:
+    // the body lands with this behaviour's own TU; the per-TU cl /c gate does not link.
+    void SetParameters(const void* lpParameters);
+
+    // The camera this behaviour produced this frame. The arbitrator states copy it into their
+    // own mCamera while this behaviour is driving them (the X360 reaches it via the manager pool
+    // slot the BehaviourHandle resolves to -- sub_821FDF38 reads slot+0x10, the same role the
+    // ICE-anim behaviour exposes as GetProducedCamera). DECLARATION-ONLY: the body (and the
+    // produced-camera member it returns) land with this behaviour's own TU; modelled here BY
+    // NAME so consumers never reach the camera by offset.
+    const Camera& GetProducedCamera() const;
 
 private:
 

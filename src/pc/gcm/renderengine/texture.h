@@ -42,6 +42,18 @@ namespace renderengine
         static void Lock(Texture* lpTexture, s32 liLevel, s32 liFace, s32 liFlags, LockInfo* lpLockInfoOut);
         static void Unlock(Texture* lpTexture, LockInfo* lpLockInfo);
 
+        // X360 Lock @0x82B62B20 overload: fill the full Locked descriptor (texture +
+        // surface bits + geometry), not just the lean {bits,pitch} LockInfo. The
+        // CgsNetworkImageConverter unpack path and BrnNetworkPlayerImageRenderer::Prepare
+        // pass a Texture::Locked* here; ADDITIVE GROW over the LockInfo overload so the
+        // existing lean callers (CgsMoviePlayer / BrnLoadingScreenRenderer) are unchanged.
+        static void Lock(Texture* lpTexture, s32 liLevel, s32 liFace, s32 liFlags, Locked* lpLockedOut);
+
+        // X360 Destruct @0x82B62D50: release a created texture's GPU/D3D resources in
+        // place (the rw-resource sibling of Destroy; BrnNetworkPlayerImageRenderer::Release
+        // destructs every buffered texture). ADDITIVE GROW.
+        static void Destruct(Texture* lpTexture);
+
         // The serialised raster parameters: GetParameters fills them from a Texture, then
         // GetResourceDescriptor sizes the resource from them. Field set + order match the X360
         // renderengine::Texture Parameters (a _DWORD[8]); on X360 GetParameters reads them back

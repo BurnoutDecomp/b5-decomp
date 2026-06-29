@@ -3,6 +3,8 @@
 #include "types.hpp"
 #include "vendor/renderware/collision/BitTable.hpp"   // rw::BitTable::Storage
 
+namespace rw { struct IResourceAllocator; }
+
 // ===========================================================================
 // CgsSceneManager::CullingGroupManager
 //   Home: GameShared/GameClasses/SceneManager/CgsCullingGroupManager.{h,cpp}
@@ -40,6 +42,20 @@ namespace CgsSceneManager
         // The grid is symmetric: both (A,B) and (B,A) bits are written so the pair
         // test is order-independent.
         void SetCullingGroupPair(CullingGroup liGroupA, CullingGroup liGroupB, bool lbEnabled);
+
+        // @ X360 0x828BAB48 -- allocate the culling table backing store through the
+        // scene resource allocator and build a 0x54 x 4 (84-group) bit grid, then
+        // clear every bit. Bodied in CgsSceneManagerModule.cpp (this TU). The X360
+        // pseudocode returns the backing-store pointer; the public API is void.
+        void CreateCullingTable(rw::IResourceAllocator* lpSceneAllocator);
+
+        // The built culling-table backing store (null until CreateCullingTable).
+        rw::BitTable::Storage* GetCullingTable() { return mpCullingTable; }
+
+        // Per-volume-instance culling-group id array (one byte per instance). The
+        // SceneManager writes an instance's group here on a SetVolumeInstanceCullingGroup
+        // event (DWARF CgsSceneManagerModule.h:129).
+        u8* GetVolumeInstanceCullingGroup() { return maVolumeInstanceCullingGroup; }
 
     private:
         u8                    maVolumeInstanceCullingGroup[5051];   // +0x0000

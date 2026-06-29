@@ -56,6 +56,11 @@ namespace Jobs
         // job_scheduler.h:47 -- tear the scheduler down.
         void Destroy();
 
+        // job_scheduler.h -- submit liCount contiguous jobs to the scheduler. X360
+        // 0x82BCB498: registers each job as not-ready (INTERNAL_AddNotReady), submits
+        // their events + dependencies, runs their start events, then kicks the backend.
+        void AddJobs(Job* lpaJobs, int liCount);
+
         // job_scheduler.h:59 -- spawn a worker thread described by lrParameters.
         JobThreadHandle AddThread(const JobThreadParameters& lrParameters);
 
