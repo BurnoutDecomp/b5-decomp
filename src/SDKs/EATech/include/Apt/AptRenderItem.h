@@ -102,6 +102,12 @@ struct AptRenderItem
     // matrix (null clears it). Used by the clone copy-ctor's extended path.
     void SetMaskMatrix(const AptMatrix* pMatrix);
 
+    // CopyRenderDataFrom @0x82AE5400 -- transfer a source item's visual state onto
+    // this one: the position + colour transforms (lazily (re)allocated, or reset to
+    // identity when the source has none), the clip depth, and the isVisible flag.
+    // (Used by AptCIH::ReplaceZombieChild to carry a swapped node's look over.)
+    void CopyRenderDataFrom(const AptRenderItem* pSource);
+
     int16_t GetDepth() const;       AptRenderItem* SetDepth(int nDepth);          // @0x7DEE14/0x7DEEA0
     int16_t GetClipDepth() const;   AptRenderItem* SetClipDepth(int nClipDepth);  // @0x7DEDF8/0x7DEEA8
 

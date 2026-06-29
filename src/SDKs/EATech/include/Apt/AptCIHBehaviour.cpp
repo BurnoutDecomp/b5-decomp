@@ -12,7 +12,9 @@
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"            // GetTypeTag / mpProperties
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // mDisplayList (sprite-base child list)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"   // GetAnimationInst downcast
-#include "SDKs/EATech/include/Apt/AptDisplayList.h"              // mpHead / AptDisplayListNode::mpFirst
+#include "SDKs/EATech/include/Apt/AptDisplayList.h"              // mpHead / AptDisplayListNode::mpFirst / AsState
+#include "SDKs/EATech/include/Apt/AptDisplayListState.h"         // insert / AddToDelayReleaseList
+#include "SDKs/EATech/include/Apt/AptRenderItem.h"               // GetRenderItem / CopyRenderDataFrom
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"               // mnEventHandlerMask / mp__Proto__ / DestroyGCPointers
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"            // AptMatrix a/b/c
 #include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"        // AptCurrentRenderTreeManager + Update_Item*
@@ -182,4 +184,49 @@ void AptCIH::Remove(bool bClearGCRoots)
 
     // Drop the display list's own reference on this node (X360 vtable slot +4).
     Release();
+}
+
+// ---------------------------------------------------------------------------
+// ReplaceZombieChild @0x82AFE098 -- replace a "zombie" child node in this
+// container's child display list with a freshly constructed replacement.
+//
+// Only the sprite-base character instances (movie-clip type 5 / animation type 9)
+// carry a child display list (AptCharacterSpriteInstBase::mDisplayList); every
+// other character type has none, so the call is a no-op returning `this`. When the
+// list exists: the replacement inherits the zombie's instance name + its render
+// item's visual state (transforms/visibility, via AptRenderItem::CopyRenderDataFrom);
+// the zombie is unlinked + queued on the list's delayed-release list (so a node
+// swapped mid-tick is released safely after the walk); and the replacement is
+// inserted immediately after the zombie's former previous sibling, taking its depth
+// slot. The sole caller (AptLinker::ConvertToZombie) discards the return value.
+// ---------------------------------------------------------------------------
+AptCIH* AptCIH::ReplaceZombieChild(AptCIH* pNewChild, AptCIH* pZombie)
+{
+    AptDisplayListState* pChildList = nullptr;
+    AptCharacterInst* pCharInst = mpCharacterInst;
+    const uint32_t nType = pCharInst->GetTypeTag();
+    if (nType == 5 || nType == 9)   // movie-clip / animation == IsSpriteInstBase
+    {
+        AptCharacterSpriteInstBase* pSpriteInst =
+            static_cast<AptCharacterSpriteInstBase*>(pCharInst);
+        pChildList = pSpriteInst->mDisplayList.AsState();
+    }
+
+    if (!pChildList)
+        return this;
+
+    // Remember where the zombie sat (its previous sibling) before unlinking it.
+    AptCIH* pInsertAfter = pZombie->GetDisplayListPrevious();
+
+    // The replacement inherits the zombie's instance name + render visual state.
+    pNewChild->SetInstanceName(pZombie->GetInstanceName());
+
+    AptRenderItem* pZombieItem = pZombie->mpCharacterInst->GetRenderItem();
+    AptRenderItem* pNewItem = pNewChild->mpCharacterInst->GetRenderItemWritable();
+    pNewItem->CopyRenderDataFrom(pZombieItem);
+
+    // Unlink the zombie from the live list (queued for delayed release), then link
+    // the replacement into the zombie's former position.
+    pChildList->AddToDelayReleaseList(pZombie, false);
+    return pChildList->insert(pInsertAfter, pNewChild);
 }

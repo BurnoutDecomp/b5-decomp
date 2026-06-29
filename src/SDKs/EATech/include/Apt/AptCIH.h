@@ -123,6 +123,13 @@ struct AptCIH : public AptValueGC
     // node (only sprite-base instances own a child display list); null otherwise.
     AptCIH* GetFirstChild() const;
 
+    // ReplaceZombieChild @0x82AFE098 -- swap a "zombie" child out of this container's
+    // child display list for a fresh replacement (sprite-base containers only): the
+    // replacement inherits the zombie's instance name + render-item visual state, the
+    // zombie is queued for delayed release, and the replacement takes its slot.
+    // Returns the inserted node (or `this` when this container has no child list).
+    AptCIH* ReplaceZombieChild(AptCIH* pNewChild, AptCIH* pZombie);
+
     // ClearCIH @0x82AC... (X360-attested behavioural follow-on; body in its own
     // TU) -- tear down this node's character instance / placed state. Declared so
     // the display-list teardown (AptDisplayList::clear) can call it by name.
