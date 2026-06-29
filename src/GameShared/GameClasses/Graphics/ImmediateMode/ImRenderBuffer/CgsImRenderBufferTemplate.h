@@ -4,6 +4,7 @@
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator / ResourceDescriptor / Resource
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"  // renderengine::PrimitiveType / Texture / TextureState fwd-decls
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"  // CgsGraphics::Basic2dColouredTexturedVertex
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"  // CgsGraphics::Im2dTransform (the SetTransform command payload)
 
 // =============================================================================
 // CgsGraphics::ImRenderBuffer<V> - the immediate-mode command/vertex render buffer.
@@ -82,6 +83,12 @@ namespace CgsGraphics
         IM_CMD_SET_SCISSOR           = 12,  // SetScissor(...)
         IM_CMD_SET_CLEAR             = 13,  // SetClear(ClearColorParameters)
         IM_CMD_SET_SHADER_PROGRAM    = 15,  // SetProgram(s8)
+        // The Apt rasteriser (AptRenderHandler::Render @0x5CB230 / @0x827D... X360) inlines a
+        // command writer that stamps muType 16 with an 80-byte record carrying the 64-byte
+        // CgsGraphics::Im2dTransform (the per-batch screen-space + colour transform). The
+        // command's payload begins 16 bytes in (header @ +0/+4, an 8-byte pad, the transform
+        // @ +16..+79). Emitted by SetTransform() below.
+        IM_CMD_SET_TRANSFORM         = 16,  // SetTransform(const Im2dTransform&) -- 80-byte record
     };
 
     // -------------------------------------------------------------------------
@@ -191,6 +198,18 @@ namespace CgsGraphics
         s8 mi8ShaderProgram;                                         // [c:0x08]
     };
 
+    // SetTransform: the per-batch screen-space + colour transform the Apt rasteriser stamps
+    // ahead of its shape draws (AptRenderHandler::Render @0x5CB230). The PS3 inline writer
+    // stores {muType=16, muSize=80} then copies the 64-byte Im2dTransform with four lvx/stvx
+    // into the record 16 bytes past its head -- so the header occupies +0/+4, +8..+15 is an
+    // unconsumed gap (the 16-byte command alignment the writer rounds to), and the transform
+    // lands at +16. Reconstructed with the named transform member at that offset.
+    struct ImCommandSetTransform : public ImCommand                  // muType IM_CMD_SET_TRANSFORM
+    {
+        u32                       mau32Pad[2];   // [c:0x08..0x0F] alignment gap (untouched by the writer)
+        CgsGraphics::Im2dTransform mTransform;   // [c:0x10..0x4F] the 64-byte batch transform
+    };
+
     // -------------------------------------------------------------------------
     // ImRenderBuffer<V> - the double-buffered command+vertex stream itself.
     // DWARF CgsImRenderBuffer.h:229. Member order/names authoritative from the
@@ -243,6 +262,14 @@ namespace CgsGraphics
         // ----- state setters (append a command) -----
         void SetTexture(renderengine::Texture* lpTexture);                                   // @0x24ED54
         void SetProgram(s8 li8Program);                                                      // @0x24ECC8
+        // Append a 16-byte {type:IM_CMD_SET_STATE_TEXTURE} command binding a resolved
+        // renderengine::TextureState. Decompiled from the inline writer in
+        // AptRenderHandler::Render @0x5CB230 (stores muType=9, muSize=16, the state ptr @ +8).
+        void SetTextureState(const renderengine::TextureState* lpTextureState);
+        // Append an 80-byte {type:IM_CMD_SET_TRANSFORM} command carrying the batch transform.
+        // Decompiled from the inline writer in AptRenderHandler::Render @0x5CB230 (stores
+        // muType=16, muSize=80, then copies the 64-byte transform 16 bytes into the record).
+        void SetTransform(const Im2dTransform& lrTransform);
 
         // ----- command-stream walk (the dispatcher drives these) -----
         const ImCommand* GetFirstCommand() const;                                            // @0x57E024
