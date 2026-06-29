@@ -228,6 +228,32 @@ namespace CgsNetwork
         {
             return maComponents[E_COMPONENTS_PING_REGIONS].mpComponent;
         }
+
+        // ADDITIVE GROW (flagged by the BrnNetworkConnectionManager group): the games and
+        // usersets component slot accessors. The NAT-kick policy reads both
+        // (maComponents[E_COMPONENTS_GAMES].mpComponent / [E_COMPONENTS_USERSETS].mpComponent --
+        // X360 KickUnNATablePlayer @ 0x82566860 reads *(this+0x38F4) and *(this+0x393C), i.e.
+        // the +1 and +10 slots) to drive the kick through whichever component the local player
+        // is in. Exposed by name (the same base-pointer component-accessor idiom as
+        // GetRankingsComponent/GetPingRegionsComponent); callers reinterpret_cast the shared
+        // ServerInterfaceComponent base to the concrete leaf. maComponents stays private; layout
+        // unchanged.
+        ServerInterfaceComponent* GetGameComponent() const
+        {
+            return maComponents[E_COMPONENTS_GAMES].mpComponent;
+        }
+        ServerInterfaceComponent* GetUsersetsComponent() const
+        {
+            return maComponents[E_COMPONENTS_USERSETS].mpComponent;
+        }
+
+        // ADDITIVE GROW (flagged by the BrnNetworkConnectionManager group): the per-component
+        // status query. Returns the EStatus (BUSY/ERROR/IDLE) of the component at slot
+        // liComponent (an EComponents value). X360 callers gate kicks on it being non-busy
+        // (e.g. KickUnNATablePlayer / UpdateNATData call GetStatus(E_COMPONENTS_GAMES) /
+        // GetStatus(E_COMPONENTS_USERSETS)). Declared-only here; the body belongs to this
+        // facade's own behavioural TU.
+        EStatus GetStatus(s32 liComponent) const;
         bool IsGameComponentRegistered() const
         {
             return maComponents[E_COMPONENTS_GAMES].mpComponent != 0;

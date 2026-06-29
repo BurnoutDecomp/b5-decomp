@@ -28,6 +28,7 @@ namespace CgsNetwork
     struct SignalMessage;
     struct NetworkPlayer;
     struct PlayerMenuData;
+    class  PlayersConnectionManager;
 
     struct PlayerManager
     {
@@ -48,8 +49,34 @@ namespace CgsNetwork
         // returns false when the walk is exhausted. DWARF :212 / :217 / :226 / :273.
         bool GetNextPlayerID(NetworkPlayerID* lpPlayerID, EPlayersToConsider leConsider) const;
         bool GetNextLocalPlayerID(NetworkPlayerID* lpPlayerID) const;
+        // Total number of players matching leConsider (DWARF CgsPlayerManager.h:289).
+        // ADDITIVE GROW (BrnNetworkLaunchManager TU): the launch state machine compares the
+        // total finalised player count (leConsider == E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED)
+        // against the minimum-players-to-launch threshold. Declared-only; body is the
+        // registry TU.
+        s32 GetTotalNumberPlayers(EPlayersToConsider leConsider) const;
         NetworkPlayer* GetPlayerByID(NetworkPlayerID liPlayerID) const;
         void SetHostPlayerID(NetworkPlayerID liPlayerID);
+
+        // The connection-table view of this same registry object. On the X360 the player
+        // registry IS-A PlayersConnectionManager: the NAT-kick walk drives the registry
+        // iterators (GetNextPlayerID/GetPlayerByID) and the connection-table queries
+        // (AreAllConnectionsSuccessful/HavePlayersFailedToConnect/GetIDOfPlayerToKick) through
+        // one and the same pointer (X360 UpdateNATData @ 0x8256CFF0 passes *(manager+0x78) to
+        // both). Surfaced as a named accessor (rather than re-modelling the inheritance in this
+        // minimal slice) so callers reach the connection API by name. Declared-only; body is the
+        // registry TU. ADDITIVE GROW (BrnNetworkConnectionManager TU).
+        PlayersConnectionManager* GetPlayersConnectionManager();
+
+        // The id of the session host (-1 when there is none). X360-attested
+        // (DWARF CgsPlayerManager.h GetHostPlayerID; TimeManager reads it at +0x23F8).
+        // ADDITIVE GROW (CgsTimeManager TU): declared-only; body is the registry TU.
+        NetworkPlayerID GetHostPlayerID() const;
+
+        // Whether liPlayerID names one of this machine's local players. X360-attested
+        // (DWARF CgsPlayerManager.h IsLocalPlayer). ADDITIVE GROW (CgsTimeManager TU):
+        // declared-only; body is the registry TU.
+        bool IsLocalPlayer(NetworkPlayerID liPlayerID) const;
 
         // The lobby/menu view of the player registered under liPlayerID (the registry stores
         // game-specific PlayerMenuData-derived objects; the Burnout build downcasts the result

@@ -8,6 +8,7 @@
 namespace CgsNetwork
 {
     class ServerInterfaceConnection;   // GetConnectionComponent() return type (pointer only)
+    class ServerInterfaceGames;        // GetGameComponent() return type (pointer only)
 }
 
 // ===========================================================================
@@ -81,6 +82,17 @@ namespace BrnNetwork
         EStatus GetStatus( s32 liComponent ) const;
         bool IsSuspended() const;
         CgsNetwork::ServerInterfaceConnection* GetConnectionComponent();
+
+        // ADDITIVE GROW (BrnNetworkLaunchManager TU): the launch state machine drives the
+        // games component and the per-component error state of the underlying DirtySock
+        // interface. The X360 reaches these through the embedded ServerInterfaceDirtySock
+        // (this+0x38E8/0x38F4 from the network manager): GetGameComponent returns the games
+        // component pointer; GetLastError/ClearLastError read/clear the per-component last
+        // error (liComponent == E_COMPONENTS_GAMES == 1 at every launch-manager call site).
+        // Declared-only here; bodies live in this class's own (DirtySock) TUs.
+        CgsNetwork::ServerInterfaceGames* GetGameComponent();
+        s32  GetLastError( s32 liComponent ) const;
+        void ClearLastError( s32 liComponent );
 
     private:
         // The one extra server-interface component this most-derived class adds over
