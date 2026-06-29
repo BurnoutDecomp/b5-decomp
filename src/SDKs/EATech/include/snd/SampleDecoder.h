@@ -108,6 +108,34 @@ namespace Snd
     public:
         virtual s32 Decode(s16* const* apDest, s32 aiCount);
     };
+
+    // Signed 24-bit source: take the UPPER two bytes of each little-endian 24-bit
+    // frame (byte +2 high, byte +1 low) into the s16; the low byte +0 is dropped.
+    // Decode @ 0x82B7A648  (stride 3 bytes/sample). Unlike the family's other
+    // formats this one also owns a Feed @ 0x82B7A7A0 that primes the source span,
+    // and a scalar-deleting destructor @ 0x82B7D188.
+    class CSign24IntDecS16 : public CShortDestDecoder
+    {
+    public:
+        virtual ~CSign24IntDecS16();
+        virtual s32 Decode(s16* const* apDest, s32 aiCount);
+
+        // Prime the decoder with a source span. Returns 0 on success, -1 if
+        // apSource is null or a prior span is still pending (miRemaining != 0).
+        s32 Feed(u8* apSource, s32 aiCapacity, s32 aiRemaining);
+    };
+
+    // Signed 8-bit source: shift the source byte up into the high byte of the s16
+    // (no -128 bias -- the signed counterpart of CUnSign8IntDecS16).
+    // Decode @ 0x82B7A6F8  (stride 1 byte/sample). SetState @ 0x82B7A888 sets the
+    // channel count (+0x14) from a u16 source word.
+    class CSign8IntDecS16 : public CShortDestDecoder
+    {
+    public:
+        virtual ~CSign8IntDecS16();
+        virtual s32 Decode(s16* const* apDest, s32 aiCount);
+        void SetState(const s16* apNumChannels);
+    };
 } // namespace Snd
 
 #endif // SDKS_EATECH_SND_SAMPLEDECODER_H
