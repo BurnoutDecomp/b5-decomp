@@ -349,6 +349,21 @@ public:
         return getVtblIndex() == AptVFT_Stage && getIsDefined();
     }
 
+    // isTextFormat @0x82AD4D60 -- a defined TextFormat value (meValueType 0x1C/28
+    // AND mbIsDefined). Leak (AptValue.h:409): getVtblIndex()==AptVFT_TextFormat
+    // && !isUndefined(); the X360 reads (field & 0x7F)==0x1C then (field>>27)&1.
+    bool isTextFormat() const
+    {
+        return getVtblIndex() == AptVFT_TextFormat && getIsDefined();
+    }
+
+    // isMCInParentChain @0x82AD8458 -- walk this value's MovieClip parent chain
+    // (vtbl GetParent slot) and report whether the active "current target" /
+    // "highlighted" MovieClip (X360 dword_8324D818 / dword_8324D830) appears in it.
+    // Leak (AptValue.h:490) declares it out-of-line returning int; body in
+    // AptValue.cpp. Xrefed by findChild + AptActionInterpreter::_FunctionAptActionCallMethod.
+    int isMCInParentChain() const;
+
     bool isNone() const
     {
         return getVtblIndex() == AptVFT_None;
