@@ -166,6 +166,15 @@ namespace Camera
         void UnSetBehaviourUsedByHandle(u32 luAllocationKey);
         void CheckNoBehavioursAreAllocatedByState(const void* lpState);
 
+        // Whether the behaviour a handle owns (identified by its allocation key) is still
+        // queued for its first Prepare (i.e. not yet ready to use). X360-attested
+        // (BrnBehaviourManager.h:517 -- the BehaviourHandle's "is the behaviour ready?" query
+        // asserts mbAllocated then forwards here). BrnArbStateRankUp::Prepare returns
+        // !IsBehaviourWaitingToPrepare(key) so that the rank-up state advances to ACTIVE only
+        // once its freshly-allocated take is ready. DECLARATION-ONLY (the body lands with the
+        // BehaviourManager TU; the per-TU cl /c gate does not link).
+        bool IsBehaviourWaitingToPrepare(u32 luAllocationKey) const;
+
         // Allocate a fresh TBehaviour into lrHandle, owned by lpOwningState. X360-attested
         // (the BrnDirector::Camera::BehaviourManager::NewBehaviour<TBehaviour> family, e.g.
         // the BehaviourIceAnim instantiation @0x82268018 the race-intro arbitrator state

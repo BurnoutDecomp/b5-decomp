@@ -49,10 +49,14 @@ namespace BrnParticle
         const rw::math::vpu::Matrix44Affine& GetTransform() const { return mTransform; }
 
         u32 muHandle;                              // +0x00 - the handle this slot holds
-        u8  mPad04[0x0C];                          // +0x04 - hashed name / definition ptr /
-                                                   //         blend factor (not used here)
+        u8  mPad04[0x08];                          // +0x04 - hashed name / definition ptr
+        f32 mfStateBlend;                          // +0x0C - state blend factor (BoostStateMachine
+                                                   //         SetBlendValue stores here; +0x53FC)
         rw::math::vpu::Matrix44Affine mTransform;  // +0x10 - the effect's world transform
-        u8  mPad50[0x14];                          // +0x50 - velocity / world index / death time
+        u8  mPad50[0x0C];                          // +0x50 - velocity / death time
+        u32 muWorldIndex;                          // +0x5C - world index (SetWorldIndex stores
+                                                   //         here; slot +0x5C / module +0x544C)
+        u8  mPad60[0x04];                          // +0x60
         u16 muFlags;                               // +0x64 - ePPEFlag* bitmask
         u8  mPad66[0x0A];                          // +0x66 - pad to the 0x70 array stride
     };
@@ -65,6 +69,15 @@ namespace BrnParticle
         // X360 0x82278380. Resolve a handle to its playing-effect slot, or NULL when the
         // slot has been recycled (its stored handle no longer equals luHandle).
         LionEffect* GetLionEffect(u32 luHandle);
+
+        // X360 0x822867E0. Start the named LION effect (the caller precomputes the name
+        // hash via ParticleDescription::HashString) at the given world index, returning the
+        // new playing-effect handle. Own-TU body; declared here for the boost/jump machines.
+        u32 StartLionEffect(u32 luNameHash, const char* lpcEffectName, u32 luWorldIndex);
+
+        // X360 0x8228A238. Stop a playing LION effect, given its resolved slot pointer
+        // (asserts the slot is non-NULL and in use). Own-TU body.
+        void StopLionEffect(LionEffect* lpEffect);
     };
 }
 

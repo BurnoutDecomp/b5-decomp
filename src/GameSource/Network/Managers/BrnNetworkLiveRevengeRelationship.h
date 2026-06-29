@@ -54,8 +54,20 @@ namespace BrnNetwork
     // combined size with DateAndTime is 4 bytes smaller than the X360 build's (DWARF would imply a
     // 116-byte object placing PlayerName at +252 -- PS3 drift); the X360 binary wins, so the un-homed
     // mLastTimeChanged(DateAndTime)+mUniqueID(MugshotInfo::UniquePlayerID) pad is 40 bytes here.
+    // Forward declaration for the friend grant below (the debug component publishes this
+    // relationship's private stat members into the debug menu by pointer).
+    class LiveRevengeDebugComponent;
+
     struct LiveRevengeRelationship
     {
+        // The Live Revenge debug-menu component registers writable pointers to this relationship's
+        // private stat members (mOverallStats sub-fields, miCurrentScoreForPlayersPointOfView,
+        // miTotalEvents) so they can be inspected/edited in-game. It therefore needs access to those
+        // private members -- the X360 debug component (BrnNetworkLiveRevengeDebugComponent) reads them
+        // by raw offset off the relationship pointer, which in clean C++ is friendship, not an
+        // accessor (the const GetOverallStats() accessor cannot back a writable menu variable).
+        friend class BrnNetwork::LiveRevengeDebugComponent;
+
         // BrnNetworkLiveRevengeRelationship.h:98 (DWARF)
         enum ERelationshipType
         {

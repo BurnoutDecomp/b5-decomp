@@ -72,6 +72,10 @@ namespace CgsDev
         void DrawText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
         void DrawHorizontalBar(Vector2 lv2Min, Vector2 lv2Max, f32 lfValue, f32 lfMax, RGBA lBackColour, RGBA lBarColour);
 
+        // X360 @0x82824098: sprintf the integer value as "%d" and draw it as text at (x,y). Used by the
+        // debug HUDs to print a labelled numeric read-out next to a name. Body lives in this TU.
+        void DrawValue(u32 luValue, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour);
+
         // Width (in virtual-screen units) the given text would occupy at the given scale; used by
         // label/value layout code to position a value just after its label. Body is the text/font
         // follow-on (lives in this TU).

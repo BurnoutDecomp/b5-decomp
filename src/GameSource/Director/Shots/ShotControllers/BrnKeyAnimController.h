@@ -60,6 +60,13 @@ public:
     //                                     (duration = mpClip ? mpClip->mfDuration : 0.0)
     bool HasFinished() const;
 
+    // Seek the controller's normalised playback parameter to lf01 (0..1) of the clip. The
+    // rank-up arbitrator state rewinds a freshly-swapped take to its start with 0.0 each time
+    // it advances to the next rival's take (BrnArbStateRankUp::Update @0x82236380). REAL X360
+    // function (BrnKeyAnimController.cpp); DECLARATION-ONLY here (the per-TU cl /c gate does
+    // not link, and the controller's full rig lands with its own TU).
+    void SetParametricTime0To1(f32 lf01);
+
     // FLAG: only the members these accessors touch are modelled at their asm-attested offsets. The
     //   pinned region uses SIZE-STABLE fields only (the X360 is a 4-byte-pointer build; this PC
     //   reconstruction is 64-bit, so a real 8-byte pointer mid-struct would shift every later

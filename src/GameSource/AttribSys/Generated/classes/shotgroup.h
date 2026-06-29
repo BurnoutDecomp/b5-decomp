@@ -64,6 +64,15 @@ namespace Gen
         // `this` and returns the collection data block -- the staged key/selector are
         // dead in the called body. lbUseSecond mirrors that 0/1 selector for provenance.
         const void* GetShotListData(bool lbUseSecond) const;
+
+        // The per-shot data block at a given index in this group's ShotList. The rank-up
+        // arbitrator state (BrnArbStateRankUp) walks the shots one rival at a time, indexing
+        // by (rivalIndex % Num_ShotList()). The X360 stages the same 64-bit ShotList key with
+        // the shot index in the low word (0x7533C0E2_15246B49 + the index selector), but the
+        // resolved body (Attrib::Instance::GetAttributePointer @0x82805880) reads only `this`
+        // and hands back the collection data block -- the staged key/index are dead in the
+        // called body. liShotIndex mirrors that index selector for provenance.
+        const void* GetShotListData(s32 liShotIndex) const;
     };
 
     // X360 ctor @0x82208620: Collection = FindCollection(948423623, owner); chain the
@@ -75,6 +84,11 @@ namespace Gen
     }
 
     inline const void* shotgroup::GetShotListData(bool /*lbUseSecond*/) const
+    {
+        return const_cast<shotgroup*>(this)->GetAttributePointer();
+    }
+
+    inline const void* shotgroup::GetShotListData(s32 /*liShotIndex*/) const
     {
         return const_cast<shotgroup*>(this)->GetAttributePointer();
     }
