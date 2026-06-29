@@ -61,6 +61,7 @@ public:
     static AptValue* sMethod_toUpperCase(AptString* pThis);
     static AptValue* sMethod_slice(AptString* pThis, int nArgCount);
     static AptValue* sMethod_substring(AptString* pThis, int nArgCount);
+    static AptValue* sMethod_split(AptString* pThis, int nArgCount);
 
 protected:
     virtual void DeleteThis()  { Destroy(); }
