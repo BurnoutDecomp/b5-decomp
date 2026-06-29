@@ -62,6 +62,14 @@ namespace GameDataIO
         CgsID     mId;         // +0x10 (u64, 8-aligned)
         EAssetSet meType;      // +0x18 (4-byte enum)
         bool      mbFailFlag;  // +0x1C
+
+        // ADDITIVE GROW: the asset-id accessor the GameData event consumers read. The
+        // X360 load-complete handlers read mId straight from +0x10 (e.g.
+        // RaceCarBaseComponentStreamer::OnLoadComplete @0x822C0450 `ld r11,0x10(event)`),
+        // which is this accessor inlined. Header-inline, zero-risk additive (no layout
+        // change). GROW with the remaining Set*/Get* accessors when the dedicated
+        // GameDataEvents TU lands -- do NOT fork.
+        CgsID GetGameDataId() const { return mId; }
     };
 
     // DWARF: BrnGameDataEvents.h:138 -- no own members.

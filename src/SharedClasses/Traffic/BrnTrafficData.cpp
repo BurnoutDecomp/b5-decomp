@@ -13,6 +13,7 @@
 // types KillZoneRegion(6) / VehicleTraits(16) and the u8 muNumPaintColours).
 
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"
+#include "SharedClasses/Traffic/BrnTrafficHull.h"   // BrnTraffic::Hull (GetHull return layout)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "types.hpp"
 
@@ -48,5 +49,14 @@ namespace BrnTraffic
     {
         CGS_ASSERT(muNumPaintColours != 0, "muNumPaintColours > 0");
         return muNumPaintColours;
+    }
+
+    // Thin hull-array accessor over mpapHulls (BrnTraffic::Hull**, X360 +0x0C). The X360 indexes the
+    // pointer array inline (`*(mpapHulls + 4*luHull)`, stride 4 = one X360 pointer); modelled here as
+    // mpapHulls[luHull] by name. mpapHulls is stored as void* in the committed layout (the Hull layout
+    // is not needed to PIN the field), so it is cast back to the real Hull** here.
+    const Hull* TrafficData::GetHull(u32 luHull) const
+    {
+        return reinterpret_cast<Hull* const*>(mpapHulls)[luHull];
     }
 }

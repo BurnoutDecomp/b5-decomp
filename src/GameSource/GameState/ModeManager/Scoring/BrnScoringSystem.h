@@ -630,6 +630,12 @@ namespace BrnGameState
         EActiveRaceCarIndex GetNextTeamMember(EActiveRaceCarIndex leRaceCarIndex,
                                               GameStateModuleIO::EPlayerTeam leTeam) const;    // :1135 / 0x82320270
 
+        // The embedded online stunt-run sub-scorer (X360 ss+0x4D44). Callers that need the team
+        // standings reach it inline (e.g. OnlineStuntRunMode::ShouldFinish @0x8233A3F0 calls
+        // GetWinnerTea on `a2+0x4D44`, and WriteDataToOutput calls GetTeamScore there). De-inlined to
+        // this named address-of accessor over the embedded member, mirroring GetScoreData()'s pattern.
+        const OnlineStuntRunModeScoring* GetOnlineStuntRunScorer() const { return &mOnlineStuntRunModeScoring; }
+
         // ===== burnout-skillz tally (declare-only) =====
         void AddPlayerBurnoutSkillz(BrnNetwork::NetworkPlayerID lID, BrnNetwork::NetworkPlayerID lOtherID); // :1141 / 0x823561D0
         // by-active-race-car-index entry 0x8231E408: translates the index to a key (per-car table
