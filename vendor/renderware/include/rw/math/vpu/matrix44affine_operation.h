@@ -162,6 +162,17 @@ namespace vpu
             && IsValid(lrMatrix.zAxis)
             && IsValid(lrMatrix.wAxis);
     }
+
+    // ADDITIVE GROW (consumed by BrnLooker.cpp / BrnBehaviourIceAnim.cpp): spherical-linear
+    // blend between two affine transforms by a per-lane blend amount (the SDK reads the
+    // amount as a broadcast VecFloat; the call sites pass a pointer to a single f32 that is
+    // splatted across the lanes). Returns the blended transform. The console body lives in
+    // the SDK *_platform_inline headers (rotation extracted as a quaternion, slerped, the
+    // translation lerped); DECLARATION-ONLY here -- the body is not reproduced (the rotation
+    // slerp uses SIMD quaternion ops not modelled in this vocabulary). FLAG: a not-yet-bodied
+    // vendor op; the per-TU `cl /c` gate does not link.
+    Matrix44Affine SLerp(const Matrix44Affine& lrFrom, const Matrix44Affine& lrTo,
+                         const float* lpfAmount);
 }
 }
 }

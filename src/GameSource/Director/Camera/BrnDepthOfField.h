@@ -53,6 +53,14 @@ public:
     f32  GetBlurriness() const;
     void SetBlurriness(f32 lfBlurriness);
 
+    // Apply the static (BrnLooker mbUseStaticDOF) depth-of-field band from a scaled focal
+    // length and DOF span. The BrnLooker Zoom asm forwards these as `sub_82204528(this,
+    // focalLength, dof)` (camera+0x124, the DOF block start); de-inlined to this named setter
+    // so BrnLooker never pokes the DOF block by offset. DECLARATION-ONLY here (the body lands
+    // with this type's own TU); FLAG: additive accessor for the BrnLooker consumer, this
+    // type's own offset-authoritative API.
+    void SetStaticParams(f32 lfFocalLength, f32 lfDepthOfField);
+
 private:
     // Layout pinned store-for-store from the asm (stfs displacements off r30):
     f32 mfFocusStartDistanceMeters;        // +0x00  stfs f29, 0(r30)
