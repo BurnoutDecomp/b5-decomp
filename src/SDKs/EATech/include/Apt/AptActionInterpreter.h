@@ -28,6 +28,7 @@
 
 class AptCIH;             // SDKs/EATech/include/Apt/AptCIH.h (the movie-clip scope)
 class AptCharacterInst;   // SDKs/EATech/include/Apt/AptCharacterInst.h
+struct AptScriptFunctionBase;  // SDKs/EATech/include/Apt/AptScriptFunctionBase.h (mpCurrentFunction)
 
 class AptActionInterpreter
 {
@@ -284,6 +285,12 @@ public:
     static void _FunctionAptActionSubString(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionToNumber (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // Local-variable definition (bind in the current function's frame via the
+    // AptScriptFunctionBase keystone):
+    //   DefineLocal 0x3C : `var name = value`;  DefineLocal2 0x41 : `var name`
+    static void _FunctionAptActionDefineLocal (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionDefineLocal2(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
     // parallel {count, capacity, array} stacks (the operand stack sized by
@@ -317,8 +324,9 @@ public:
     int        mnCallStackE_Capacity; // [c:0x34]
     void**     mpCallStackE;          // [c:0x38]
 
-    uint32_t   field_3C;          // [c:0x3C] unmapped
-    uint32_t   field_40;          // [c:0x40] unmapped
+    AptScriptFunctionBase* mpCurrentFunction;  // [c:0x3C] the script function currently executing
+                                  // (callFunction sets it; DefineLocal + the scope chain read it)
+    uint32_t   field_40;          // [c:0x40] unmapped (callFunction's saved register-window slot)
     AptValue** mpRegisters;       // [c:0x44] the per-call register window (stackPushIndirect)
     uint32_t   field_48[6];       // [c:0x48..0x5C] unmapped
     AptValue*  mpAbortValue;      // [c:0x60] the thrown value (null = no abort) -- Throw sets it,
