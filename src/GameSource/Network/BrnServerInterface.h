@@ -9,6 +9,7 @@ namespace CgsNetwork
 {
     class ServerInterfaceConnection;   // GetConnectionComponent() return type (pointer only)
     class ServerInterfaceGames;        // GetGameComponent() return type (pointer only)
+    class ServerInterfacePlayerInfo;   // GetPlayerInfoComponent() return type (pointer only)
 }
 
 // ===========================================================================
@@ -93,6 +94,13 @@ namespace BrnNetwork
         CgsNetwork::ServerInterfaceGames* GetGameComponent();
         s32  GetLastError( s32 liComponent ) const;
         void ClearLastError( s32 liComponent );
+
+        // ADDITIVE GROW (BrnNetworkInviteManager TU): the invite get-game-id sub-machine queries
+        // the embedded player-info component by name (X360 UpdateGettingGameID reaches the
+        // ServerInterfacePlayerInfo through the server interface and calls GetPlayerInfoByName on
+        // it). The component itself is BrnServerInterfaceBase::mPlayerInfo; this is the named
+        // accessor for it. Declared-only here; the body lives in this class's own (DirtySock) TUs.
+        CgsNetwork::ServerInterfacePlayerInfo* GetPlayerInfoComponent();
 
     private:
         // The one extra server-interface component this most-derived class adds over
