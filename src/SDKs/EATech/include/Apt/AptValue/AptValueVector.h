@@ -76,7 +76,7 @@ public:
         lvVec.mnCapacity = nCapacity;
         lvVec.mppItems   = nullptr;
         lvVec.mppItems   = static_cast<AptValue**>(
-            gpAptOperandStackPool->Allocate(4 * nCapacity));
+            gpAptOperandStackPool->Allocate(sizeof(AptValue*) * nCapacity));
         return lvVec;
     }
 
@@ -100,13 +100,64 @@ public:
     // X360 interpreter calls; AptActionInterpreter::shutdown reaches this one).
     void shutdown();
 
-    // GetNumValues @0x82AD5228 / IsVectorFull @0x82ADC130 -- trivial state queries.
-    int32_t GetNumValues() const { return mnTop; }
-    bool    IsVectorFull() const { return mnTop >= mnCapacity; }
+    // -----------------------------------------------------------------------
+    // FLAG (layout collision -- two X360 classes share this one home + storage)
+    //
+    // IDA exports TWO distinct symbol families against this 12-byte
+    // {int@0, int@4, AptValue**@8} shape:
+    //
+    //   (A) `AptValue>::*`  (the operand-stack template instantiation; methods
+    //       PopAndPush/SafePop/pop/Shutdown/shutdown above, ctor @0x82AE1548):
+    //          +0x00 = live count / top, +0x04 = capacity.
+    //
+    //   (B) `AptValueVector::*` (the real `AptValueVector` symbols; ctor
+    //       @0x82AE32F0, plus GetAt/SetAt/GetNumValues/IsVectorFull/RemoveAt/
+    //       ReleaseValues):
+    //          +0x00 = capacity, +0x04 = live count / top.   <-- SWAPPED.
+    //
+    // Both ctors prove this: @0x82AE1548 stores capacity at +4 and 0 at +0;
+    // @0x82AE32F0 stores capacity at +0 and 0 at +4. They are genuinely
+    // different classes the compiler merged onto identical storage. The home
+    // file + the in-tree callers (AptIntervalTimer::mParams, the interpreter
+    // TUs, the embed check) were built against family (A), so the members keep
+    // the family-(A) names: `mnTop` (+0x00) and `mnCapacity` (+0x04).
+    //
+    // The family-(B) `AptValueVector::*` bodies below therefore access the
+    // PHYSICAL offsets faithfully but through the (A)-named members:
+    //     family-(B) capacity  ==  mnTop      (+0x00)
+    //     family-(B) live top   ==  mnCapacity (+0x04)
+    //     items                 ==  mppItems   (+0x08)
+    // Each (B) body restates this so the byte stores match the X360 verbatim.
+    // -----------------------------------------------------------------------
+
+    // ctor @0x82AE32F0 (`AptValueVector::AptValueVector`) -- capacity at +0,
+    // top=0 at +4, allocate 4*capacity slots into +8. Provided as a static
+    // factory (keeps the aggregate) like ConstructWithCapacity, but with the
+    // family-(B) field assignment.
+    static AptValueVector ConstructAptValueVector(int32_t nCapacity);
+
+    // GetAt @0x82ADBFD0 -- mppItems[nIndex] (no bounds check; raw indexed load).
+    AptValue* GetAt(int32_t nIndex) const;
+
+    // SetAt @0x82ADBFE0 -- mppItems[nIndex] = pValue (no bounds check).
+    void      SetAt(int32_t nIndex, AptValue* pValue);
+
+    // GetNumValues @0x82AD5228 -- the live count (+0x04 == mnCapacity member).
+    int32_t GetNumValues() const { return mnCapacity; }
+
+    // IsVectorFull @0x82ADC130 -- full when live-count(+4) >= capacity(+0); i.e.
+    // mnCapacity (the +4 top) >= mnTop (the +0 capacity).
+    bool    IsVectorFull() const { return mnCapacity >= mnTop; }
+
+    // ReleaseValues @0x82ADCF60 -- pop every live value off the top, Release-ing
+    // (or ForceDelete-ing) each; leaves the vector empty. Returns the last
+    // Release/ForceDelete result faithfully (X360 returns r3).
+    AptValue* ReleaseValues();
 
     // RemoveAt @0x82ADBFF0 -- drop the element at nIndex (shift the tail down one,
     // clear the vacated top slot). NOTE: does not Release the removed value (the
-    // caller owns it), matching the X360.
+    // caller owns it), matching the X360. Operates on the +4 (mnCapacity member)
+    // live count per family (B).
     void    RemoveAt(int32_t nIndex);
 
     int32_t     mnTop;        // +0x00

@@ -35,6 +35,11 @@ protected:
     }
 
 public:
+    // GC teardown @0x82AF00D0 -- release the property hash's GC pointers (the
+    // compiler folds the inherited ~AptValueWithHash member-dtor here, plus the
+    // during-/post-destruction vtable resets). Declared so the scalar deleting
+    // destructor (and every derived `vector deleting destructor`) can chain it.
+    virtual ~AptObject();
     // GC-pool allocation -- AptObject is a garbage-collected value (AptValueGC
     // base), so its block comes from the GC pool (gpGCPoolManager), exactly like
     // AptArray. Bodies in AptObject.cpp so the header need not pull in the
@@ -54,4 +59,25 @@ public:
     virtual void SetHasClass(int bHasClass);             // @0x7DF34C
     virtual AptValue* objectMemberLookup(AptValue* const pThis,
                                          const AptNativeString* const pName) const;  // @0x7FC7E8
+
+    // ---- the implemented-interfaces set (AS `implements`) -------------------
+    // mClassFlags' low byte is the count of objects this one implements; the set
+    // itself lives in the property hash under the "__INTERFACES__" key as an
+    // AptArray of the implemented prototype/object values.
+
+    // SetImplementedObjects @0x82AF5868 -- store pImplementedArray under the
+    // "__INTERFACES__" key and record nCount in the low byte of mClassFlags.
+    void SetImplementedObjects(AptValue* pImplementedArray, char nCount);  // @0x82AF5868
+    // GetImplementedObjects @0x82AE68F0 -- hand back the implemented count (via
+    // *pnCountOut) and the "__INTERFACES__" AptArray (return), or null/0 when none.
+    AptValue* GetImplementedObjects(int* pnCountOut) const;                // @0x82AE68F0
+    // DoesImplementObject @0x82AE6960 -- true if pTarget is reachable through this
+    // object's __proto__ chain OR is one of its implemented-interface entries.
+    bool DoesImplementObject(AptValue* pTarget) const;                     // @0x82AE6960
+
+    // ---- prototype thunks (delegate to the property hash) -------------------
+    // AptObject homes its own out-of-line Set__Proto__ @0x82ADC150 / SetPrototype
+    // @0x82ADC158 (each a tail-call into the matching AptNativeHash setter).
+    void Set__Proto__(AptValue* pValue);   // @0x82ADC150
+    void SetPrototype(AptValue* pValue);   // @0x82ADC158
 };

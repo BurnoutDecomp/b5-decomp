@@ -102,7 +102,7 @@ void AptArray::_reserve(int32_t nCount)
         gpNonGCPoolManager->Deallocate(mpArray, sizeof(AptValue*) * mnCapacity);
     }
     for (int i = mnCapacity; i < newCap; ++i)
-        newArray[i] = nullptr;
+        newArray[i] = gpUndefinedValue;   // X360 fills grown slots with the undefined singleton (off_8324D814), not null
 
     mpArray    = newArray;
     mnCapacity = newCap;
@@ -151,7 +151,7 @@ void AptArray::RegisterReferences()
         return;
     for (int i = 0; i < mnLength; ++i)
         if (mpArray[i])
-            AptValue::sReferenceRegistrationCb(this, &mpArray[i], "", 0);
+            AptValue::sReferenceRegistrationCb(this, &mpArray[i], "Element", 0);
 }
 
 void AptArray::DestroyGCPointers()
@@ -185,6 +185,13 @@ void AptArray::DestroyGCPointers()
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // AptInteger::Create
+#include "SDKs/EATech/include/Apt/AptNativeFunction.h"     // AptNativeFunction (lazy native methods)
+#include "SDKs/EATech/include/Apt/AptNativeHash.h"         // AptNativeHash::Lookup (sortOn member fetch)
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"  // the global VM (scriptFunctionSortFunc)
+// FLAG: the global VM instance (off_8324E760), owned by the Apt boot TU; declared extern.
+extern AptActionInterpreter gAptActionInterpreter;
+
+#include <cstdlib>   // qsort / atoi / strtol
 
 // FLAG (homed by the apt VM native-call dispatch): the global native-method arg
 // stack (X360 off_8324E768 = gAptActionInterpreter.mpStack, dword_8324E760 = its
@@ -499,4 +506,301 @@ AptValue* AptArray::sMethod_join(AptArray* pThis, int nArgCount)
     AptString* pString = AptString::Create("");
     *pString->GetInternalString() = strResult;
     return pString;
+}
+
+// ===========================================================================
+// Array.sort / sortOn + their comparators + the AS object-model overrides.
+// DECOMPILED from the X360 ARTIST.XEX:
+//   defaultSortOnCompareFunc @0x82AE7058 / sMethod_sort @0x82AED3C8 /
+//   sMethod_sortOn @0x82AFB938 / scriptFunctionSortFunc @0x82AED2A8 /
+//   objectMemberLookup @0x82AFDA50 / objectMemberSet @0x82AE2A00 /
+//   CleanNativeFunctions @0x82AD6A10.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// File-static Apt-array native-method cache + sort state (X360 .rdata block at
+// 0x8324E3E0..0x8324E410, this TU's statics). Each off_8324E3xx is a lazily-built,
+// GC-rooted AptNativeFunction* shared by every array (objectMemberLookup builds it
+// on first lookup; CleanNativeFunctions releases them at shutdown). The two
+// sort-state slots (0x8324E3F8/0x8324E3FC) hold the script compare function + its
+// context while a qsort with a user comparator is in flight.
+// ---------------------------------------------------------------------------
+static AptNativeFunction* gpArrayMethod_concat   = nullptr;   // off_8324E3E0
+static AptNativeFunction* gpArrayMethod_join     = nullptr;   // off_8324E3E4
+static AptNativeFunction* gpArrayMethod_pop      = nullptr;   // off_8324E3E8
+static AptNativeFunction* gpArrayMethod_push     = nullptr;   // off_8324E3EC
+static AptNativeFunction* gpArrayMethod_shift    = nullptr;   // off_8324E3F0
+static AptNativeFunction* gpArrayMethod_unshift  = nullptr;   // off_8324E3F4
+static AptNativeFunction* gpArrayMethod_sort     = nullptr;   // off_8324E400
+static AptNativeFunction* gpArrayMethod_sortOn   = nullptr;   // off_8324E404
+static AptNativeFunction* gpArrayMethod_reverse  = nullptr;   // off_8324E408
+static AptNativeFunction* gpArrayMethod_splice   = nullptr;   // off_8324E40C
+static AptNativeFunction* gpArrayMethod_slice    = nullptr;   // off_8324E410
+
+// Sort-state for a user (script) compare function: the AS function value
+// (dword_8324E3F8) and its bound context (dword_8324E3FC, == the function's
+// mpScopeVariable at +0x20). sMethod_sort latches them, scriptFunctionSortFunc
+// reads them.
+static AptValue* gpSortScriptFunction = nullptr;   // dword_8324E3F8
+static AptValue* gpSortScriptContext  = nullptr;   // dword_8324E3FC
+
+// FLAG (homed by the Apt string-pool / sort TU): the "sortOn" field-name string,
+// a global EAStringC the sortOn path renders the field name into and the
+// comparator reads back. The X360 stores it as the bare m_pData pointer
+// off_82F73384 (seeded to the empty-string sentinel unk_82F72FF8); modelled here
+// as a real EAStringC default-constructed to the empty string.
+static EAStringC gAptSortOnField;   // off_82F73384
+
+// FLAG (sMethod_shift not in this class's dossier -- ICF-folded / absent in the
+// export): the AS Array.shift native, referenced only by objectMemberLookup's
+// method-cache build. Declared extern so the lookup compiles; its body is the
+// sibling pop-from-front method (a separate TU).
+extern "C" AptValue* AptArray_sMethod_shift(AptArray* pThis);   // off_8324E3F0 target
+
+// ---------------------------------------------------------------------------
+// defaultSortOnCompareFunc @0x82AE7058 -- sortOn comparator. Both elements must be
+// the same shape: AS Objects (look the field up by name in each object's property
+// hash) or AS Arrays (treat the field name as a numeric index into each sub-array).
+// The two resolved field values are then compared with the lexical
+// defaultSortCompareFunc. Anything else compares equal (0).
+// ---------------------------------------------------------------------------
+int AptArray::defaultSortOnCompareFunc(AptValue* const* ppA, AptValue* const* ppB)
+{
+    AptValue* pA = *ppA;
+    AptValue* pB = *ppB;
+
+    AptValue* pFieldA;
+    AptValue* pFieldB;
+
+    if (pA->isObject() && pB->isObject())
+    {
+        // Object path: the field is a named property of each element.
+        pFieldA = pA->GetNativeHashVirtual()->Lookup(gAptSortOnField);
+        if (!pFieldA)
+            return 0;
+        pFieldB = pB->GetNativeHashVirtual()->Lookup(gAptSortOnField);
+        if (!pFieldB)
+            return 0;
+    }
+    else if (pA->isArray() && pB->isArray())
+    {
+        // Array path: the field name is a numeric index into each sub-array.
+        AptArray* pArrA = static_cast<AptArray*>(pA);
+        AptArray* pArrB = static_cast<AptArray*>(pB);
+
+        int nIndexA = atoi(gAptSortOnField.GetBuffer());
+        if (nIndexA < 0 || nIndexA >= pArrA->mnLength || (pFieldA = pArrA->mpArray[nIndexA]) == nullptr)
+            pFieldA = gpUndefinedValue;
+
+        int nIndexB = atoi(gAptSortOnField.GetBuffer());
+        if (nIndexB < 0 || nIndexB >= pArrB->mnLength || (pFieldB = pArrB->mpArray[nIndexB]) == nullptr)
+            pFieldB = gpUndefinedValue;
+    }
+    else
+    {
+        return 0;
+    }
+
+    return defaultSortCompareFunc(&pFieldA, &pFieldB);
+}
+
+// ---------------------------------------------------------------------------
+// scriptFunctionSortFunc @0x82AED2A8 -- the qsort comparator that calls a user AS
+// compare function: push the two element values as arguments onto the global
+// operand stack, invoke the script function (callFunction) bound to its context,
+// then read the integer result back off the stack.
+// ---------------------------------------------------------------------------
+int AptArray::scriptFunctionSortFunc(AptValue* const* ppA, AptValue* const* ppB)
+{
+    if (!gpSortScriptFunction)
+        return 0;
+
+    AptValue* pA = *ppA;   // r30
+    AptValue* pB = *ppB;   // r3
+
+    // FLAG (deferred -- AptActionInterpreter::callFunction / CleanupAfterExecution
+    // are unhomed members of a class this TU does not own, and AptValue<>::Pop is
+    // external): the script-comparator invocation drives the global VM call path.
+    // The faithful operand-stack push order is preserved here (push pB then pA, the
+    // X360's argument order), but the actual VM dispatch + result read is left to
+    // the interpreter when callFunction/CleanupAfterExecution are homed. Returning
+    // 0 keeps the sort stable (no reordering) until then.
+    (void)gAptActionInterpreter;
+    (void)pA;
+    (void)pB;
+    (void)gpSortScriptContext;
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// sMethod_sort @0x82AED3C8 -- AS Array.sort([compareFunction]). With no argument
+// use the default lexical comparator; with one, latch it (+ its context) as the
+// sort-state script function and use scriptFunctionSortFunc. Then qsort the slot
+// array in place. Returns `undefined`.
+// ---------------------------------------------------------------------------
+AptValue* AptArray::sMethod_sort(AptArray* pThis, int nArgCount)
+{
+    if (!pThis->isArray())
+        return gpUndefinedValue;
+
+    int (*pfnCompare)(const void*, const void*);
+
+    if (nArgCount == 0)
+    {
+        pfnCompare = reinterpret_cast<int (*)(const void*, const void*)>(&AptArray::defaultSortCompareFunc);
+    }
+    else
+    {
+        pfnCompare = reinterpret_cast<int (*)(const void*, const void*)>(&AptArray::scriptFunctionSortFunc);
+        // Latch the script compare function (top of the native-arg stack).
+        gpSortScriptFunction = gppAptNativeArgStack[gnAptNativeArgCount - 1];
+        // FLAG (deferred): the X360 also caches the function value's bound context
+        // (its member at console [c:0x20]) into gpSortScriptContext. That field is
+        // the script-function scope, owned by the AptScriptFunction* layer this TU
+        // does not home; reading it by name needs that type. Left null until the
+        // script-comparator path (scriptFunctionSortFunc) is brought online, which
+        // is itself deferred on the unhomed VM call path.
+        gpSortScriptContext = nullptr;   // [c:0x20] mpScopeVariable -- deferred
+    }
+
+    qsort(pThis->mpArray, pThis->mnLength, sizeof(AptValue*), pfnCompare);
+
+    return gpUndefinedValue;
+}
+
+// ---------------------------------------------------------------------------
+// sMethod_sortOn @0x82AFB938 -- AS Array.sortOn(fieldName). Render the field-name
+// argument into the global gAptSortOnField string, qsort by that field
+// (defaultSortOnCompareFunc), then release the field-name string. Returns `undefined`.
+// ---------------------------------------------------------------------------
+AptValue* AptArray::sMethod_sortOn(AptArray* pThis, int nArgCount)
+{
+    if (pThis->isArray() && nArgCount > 0)
+    {
+        // Stringify the field-name argument (top of the native-arg stack) into the
+        // shared sortOn field-name string.
+        gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&gAptSortOnField);
+
+        qsort(pThis->mpArray, pThis->mnLength, sizeof(AptValue*),
+              reinterpret_cast<int (*)(const void*, const void*)>(&AptArray::defaultSortOnCompareFunc));
+
+        // Release the field-name string and reset it to the empty-string sentinel.
+        gAptSortOnField = EAStringC();
+    }
+
+    return gpUndefinedValue;
+}
+
+// ---------------------------------------------------------------------------
+// objectMemberLookup @0x82AFDA50 -- resolve an array member.
+//   - a recognised native method name (push/pop/.../slice): lazily build the shared
+//     GC-rooted AptNativeFunction, then return it;
+//   - "length": a fresh boxed AptInteger of the current length;
+//   - a purely numeric name: index into the element vector (else `undefined`);
+//   - anything else: fall through to the own-property hash.
+// (The X360 dispatch is a gperf perfect-hash jump table over ArrayMembersIndex; the
+// method-name -> case mapping is reproduced as the if-ladder below.)
+// ---------------------------------------------------------------------------
+AptValue* AptArray::objectMemberLookup(AptValue* const /*pThis*/,
+                                       const AptNativeString* const pName) const
+{
+    // FLAG (ArrayMembersIndex is a separate, currently-blocked gperf TU -- its
+    // asso/lookup/wordlist .rdata tables are not in the code-only exports): the
+    // perfect-hash recognizer that maps a member name to its method index. Declared
+    // extern so the dispatch below compiles; until that TU lands the recognizer
+    // returns null and only the numeric-index / own-property fallbacks are live.
+    const char* szName = pName->GetBuffer();
+
+    // --- Lazily build + return a recognised array native method. Each is the X360
+    // `if(!cache){ cache = new AptNativeFunction(method); cache->setGCRoot(1);
+    // cache->AddRef(); } return cache;` idiom (the new-returns-null guard restored
+    // to a plain new). The strcmp ladder stands in for the gperf jump table.
+    #define APT_ARRAY_LAZY_METHOD(slotVar, methodFn)                              \
+        do {                                                                       \
+            if (!(slotVar)) {                                                      \
+                (slotVar) = new AptNativeFunction(                                 \
+                    reinterpret_cast<AptExtFunctionPtr>(&methodFn));               \
+                (slotVar)->setGCRoot(1);                                           \
+                (slotVar)->AddRef();                                               \
+            }                                                                      \
+            return (slotVar);                                                      \
+        } while (0)
+
+    if (strcmp(szName, "concat") == 0)  APT_ARRAY_LAZY_METHOD(gpArrayMethod_concat,  AptArray::sMethod_concat);
+    if (strcmp(szName, "join") == 0)    APT_ARRAY_LAZY_METHOD(gpArrayMethod_join,    AptArray::sMethod_join);
+    if (strcmp(szName, "pop") == 0)     APT_ARRAY_LAZY_METHOD(gpArrayMethod_pop,     AptArray::sMethod_pop);
+    if (strcmp(szName, "push") == 0)    APT_ARRAY_LAZY_METHOD(gpArrayMethod_push,    AptArray::sMethod_push);
+    if (strcmp(szName, "shift") == 0)   APT_ARRAY_LAZY_METHOD(gpArrayMethod_shift,   AptArray_sMethod_shift);
+    if (strcmp(szName, "unshift") == 0) APT_ARRAY_LAZY_METHOD(gpArrayMethod_unshift, AptArray::sMethod_unshift);
+    if (strcmp(szName, "reverse") == 0) APT_ARRAY_LAZY_METHOD(gpArrayMethod_reverse, AptArray::sMethod_reverse);
+    if (strcmp(szName, "sort") == 0)    APT_ARRAY_LAZY_METHOD(gpArrayMethod_sort,    AptArray::sMethod_sort);
+    if (strcmp(szName, "splice") == 0)  APT_ARRAY_LAZY_METHOD(gpArrayMethod_splice,  AptArray::sMethod_splice);
+    if (strcmp(szName, "slice") == 0)   APT_ARRAY_LAZY_METHOD(gpArrayMethod_slice,   AptArray::sMethod_slice);
+    if (strcmp(szName, "sortOn") == 0)  APT_ARRAY_LAZY_METHOD(gpArrayMethod_sortOn,  AptArray::sMethod_sortOn);
+
+    #undef APT_ARRAY_LAZY_METHOD
+
+    // --- "length": a fresh boxed integer of the current length (X360 jump-table
+    // case @loc_82AFDAC8: AptInteger::Create(*(this+40))).
+    if (strcmp(szName, "length") == 0)
+        return AptInteger::Create(mnLength);
+
+    // --- numeric index: strtol the whole name; if it consumed the entire string
+    // (and the name is non-empty), index the element vector.
+    char* pEnd = nullptr;
+    long  nIndex = strtol(szName, &pEnd, 10);
+    if (pName->GetLength() != 0 && pEnd == szName + pName->GetLength())
+    {
+        AptValue* pElement;
+        if (nIndex < 0 || nIndex >= mnLength || (pElement = mpArray[nIndex]) == nullptr)
+            pElement = gpUndefinedValue;
+        return pElement;
+    }
+
+    // --- own-property fallback (the array's named members).
+    return const_cast<AptArray*>(this)->mHash.Lookup(*pName);
+}
+
+// ---------------------------------------------------------------------------
+// objectMemberSet @0x82AE2A00 -- a numeric member name ("0", "12", ...) stores into
+// the element vector (growing it); the leading-zero / atoi==0 check accepts the
+// literal "0". Any non-numeric name is not handled here (returns false). A null
+// value stores `undefined`.
+// ---------------------------------------------------------------------------
+bool AptArray::objectMemberSet(AptValue* const /*pThis*/,
+                               const AptNativeString* const pName,
+                               AptValue* const pValue)
+{
+    const char* szName = pName->GetBuffer();
+
+    if (atoi(szName) != 0 || *szName == '0')
+    {
+        int       nIndex = atoi(szName);
+        AptValue* pStore = pValue ? pValue : gpUndefinedValue;
+        set(nIndex, pStore);
+        return true;
+    }
+
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// CleanNativeFunctions @0x82AD6A10 -- release every lazily-built array native
+// method at Apt shutdown (AptUpdateShutdown). Each `if(p){ p->Release(); p=0; }`
+// matches the X360 vtable-slot-+4 (Release) call. (The release order is the X360's
+// exactly; the two sort-state slots are transient and are not touched here.)
+// ---------------------------------------------------------------------------
+void AptArray::CleanNativeFunctions()
+{
+    if (gpArrayMethod_concat)  { gpArrayMethod_concat->Release();  gpArrayMethod_concat  = nullptr; }
+    if (gpArrayMethod_join)    { gpArrayMethod_join->Release();    gpArrayMethod_join    = nullptr; }
+    if (gpArrayMethod_pop)     { gpArrayMethod_pop->Release();     gpArrayMethod_pop     = nullptr; }
+    if (gpArrayMethod_push)    { gpArrayMethod_push->Release();    gpArrayMethod_push    = nullptr; }
+    if (gpArrayMethod_shift)   { gpArrayMethod_shift->Release();   gpArrayMethod_shift   = nullptr; }
+    if (gpArrayMethod_unshift) { gpArrayMethod_unshift->Release(); gpArrayMethod_unshift = nullptr; }
+    if (gpArrayMethod_reverse) { gpArrayMethod_reverse->Release(); gpArrayMethod_reverse = nullptr; }
+    if (gpArrayMethod_sort)    { gpArrayMethod_sort->Release();    gpArrayMethod_sort    = nullptr; }
+    if (gpArrayMethod_splice)  { gpArrayMethod_splice->Release();  gpArrayMethod_splice  = nullptr; }
+    if (gpArrayMethod_slice)   { gpArrayMethod_slice->Release();   gpArrayMethod_slice   = nullptr; }
+    if (gpArrayMethod_sortOn)  { gpArrayMethod_sortOn->Release();  gpArrayMethod_sortOn  = nullptr; }
 }

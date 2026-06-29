@@ -61,7 +61,38 @@ struct AptArray : public AptObject
     static AptValue* sMethod_splice(AptArray* pThis, int nArgCount);
     static AptValue* sMethod_concat(AptArray* pThis, int nArgCount);
     static AptValue* sMethod_join(AptArray* pThis, int nArgCount);
-    static int       defaultSortCompareFunc(AptValue* const* ppA, AptValue* const* ppB);
+
+    // ---- ActionScript Array.sort / sortOn (qsort-backed) ------------------
+    // sMethod_sort @0x82AED3C8 -- AS Array.sort([compareFunction]): qsort the slot
+    // array with either the default lexical comparator or the script comparator.
+    // sMethod_sortOn @0x82AFB938 -- AS Array.sortOn(fieldName): sort by a named
+    // member of each element. Statics (AptExtFunctionPtr).
+    static AptValue* sMethod_sort(AptArray* pThis, int nArgCount);
+    static AptValue* sMethod_sortOn(AptArray* pThis, int nArgCount);
+
+    // qsort comparators (4-byte stride over AptValue* slots; the X360 qsort hands
+    // each &mpArray[i]). defaultSortCompareFunc @0x82AE6FC8 -- lexical string compare.
+    // defaultSortOnCompareFunc @0x82AE7058 -- compare the gAptSortOnField member of
+    // each element. scriptFunctionSortFunc @0x82AED2A8 -- invoke the AS compare
+    // function through the interpreter.
+    static int defaultSortCompareFunc(AptValue* const* ppA, AptValue* const* ppB);
+    static int defaultSortOnCompareFunc(AptValue* const* ppA, AptValue* const* ppB);
+    static int scriptFunctionSortFunc(AptValue* const* ppA, AptValue* const* ppB);
+
+    // ---- AS object-model overrides ---------------------------------------
+    // objectMemberLookup @0x82AFDA50 -- resolve an array member: a recognised native
+    // method (push/pop/.../slice -- lazily built + GC-rooted), the special "length"
+    // property, a numeric index into the element vector, else the own-property hash.
+    // objectMemberSet @0x82AE2A00 -- a numeric member name stores into the vector.
+    virtual AptValue* objectMemberLookup(AptValue* const pThis,
+                                         const AptNativeString* const pName) const;  // @0x82AFDA50
+    virtual bool      objectMemberSet(AptValue* const pThis,
+                                      const AptNativeString* const pName,
+                                      AptValue* const pValue);                       // @0x82AE2A00
+
+    // CleanNativeFunctions @0x82AD6A10 -- release the lazily-built array native
+    // methods at Apt shutdown (AptUpdateShutdown).
+    static void CleanNativeFunctions();
 
 private:
     void _reserve(int32_t nCount);   // @0x7F01D0 (grow to pow2, min 8)
