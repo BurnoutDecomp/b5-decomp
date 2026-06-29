@@ -68,6 +68,12 @@ namespace ICE
     };
 }
 
+// The director "rank-up" shot-group lives in the AttribSys generated layer; the resource
+// manager embeds one and hands it back by reference. Forward-declared so the minimal
+// DirectorResourceManager slice can name it without pulling the generated header into this
+// behaviour header (the using TU includes shotgroup.h to reach Num_ShotList()/GetShotListData).
+namespace Attrib { namespace Gen { class shotgroup; } }
+
 namespace BrnDirector
 {
 
@@ -93,6 +99,13 @@ public:
     // modelled on this behaviour's minimal DirectorResourceManager slice (the in-scope model
     // for the director-camera cone); the real home is BrnDirectorResourceManager.h.
     const void* GetEventIntroShots(s32 liEventMode, bool lbCarInFront) const;
+
+    // The rank-up sequence's shot-group (the manager's embedded shotgroup @+0x3C8). The
+    // rank-up arbitrator state (BrnArbStateRankUp) drives it: it asserts Num_ShotList() > 0
+    // and indexes the shots by rival. DECLARATION-ONLY (body in the resource-manager TU).
+    // FLAG: modelled on this minimal DirectorResourceManager slice; the real home is
+    // BrnDirectorResourceManager.h. X360: ArbStateRankUp reads it at manager +968 (+0x3C8).
+    const Attrib::Gen::shotgroup& GetRankUp() const;
 };
 
 // FLAG: minimal slice of the per-frame timestep source the Update body samples. No
@@ -260,6 +273,12 @@ public:
     // The controller's normalised playback parameter [0..1].
     f32  GetParametricTime0To1() const;
 
+    // Seek the controller's normalised playback parameter to lf01. The rank-up arbitrator
+    // state rewinds a freshly-swapped take to its start (X360
+    // KeyAnimController::SetParametricTime0To1(behaviour+0x680, 0.0)). DECLARATION-ONLY (the
+    // body lands with the KeyAnimController TU; the per-TU cl /c gate does not link).
+    void SetParametricTime0To1(f32 lf01);
+
     // The eye / look reference-space selectors of the currently-bound take (the Update
     // body switches on these to pick the heading/eye/look space rows).
     s32  GetEyeSpace() const;
@@ -406,6 +425,21 @@ public:
     // ONLY: the body lands with the Behaviour base TU that owns that offset; the per-TU cl /c
     // gate does not link.
     void ClearBaseFirstFrameGate();   // base +0x28 = 0
+
+    // ---- rank-up arbitrator-state pokes (BrnArbStateRankUp::Prepare/Update) -------------
+    // Bind the behaviour's primary anchor vehicle reference (mPrimaryVehicleRef @+0xDF0) to a
+    // race car, so the rank-up take frames that rival's car (X360:
+    // VehicleRef::SetToRaceCar(this+0xDF0, raceCarIndex)). Exposed as a named setter so the
+    // arbitrator state never reaches the (private) ref by offset. DECLARATION-ONLY (the
+    // VehicleRef::SetToRaceCar body lands with the VehicleRef TU; the per-TU cl /c gate does
+    // not link).
+    void SetPrimaryVehicleRefToRaceCar(EActiveRaceCarIndex leRaceCar);
+
+    // Seek the embedded key-anim controller's normalised playback parameter (mKeyAnimController
+    // @+0x680) to lf01. The rank-up state rewinds a freshly-changed take to its start with 0.0
+    // (X360: KeyAnimController::SetParametricTime0To1(this+0x680, 0.0)). Exposed as a named
+    // method so the arbitrator state never reaches the (private) controller by offset.
+    void SetControllerParametricTime0To1(f32 lf01) { mKeyAnimController.SetParametricTime0To1(lf01); }
 
     // Seconds of take left to play (the un-played fraction times the take length).
     f32  GetTimeRemaining();

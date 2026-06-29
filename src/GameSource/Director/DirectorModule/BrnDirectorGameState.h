@@ -227,6 +227,34 @@ struct GameState
     EEventState GetCurrentEventState() const { return mEventState.GetCurrent(); }
     // True while the pre-race countdown is running.
     bool        IsInCountdown() const { return mEventState.GetCurrent() == E_EVENT_STATE_COUNTDOWN; }
+
+    // ---- rank-up control accessors (BrnArbStateRankUp consumes these) ---------------------
+    // The director "rank up" state reads three rank-up control fields the asm proves live in
+    // the trailing sub-object region (ARTIST: Prepare @0x82270EE8 / Update @0x82236380). The
+    // DecFIGS DWARF field layout for that region is unreliable (see the mShowTimeInfo /
+    // RankUpInfo note above), so this region stays an opaque blob -- but its OWN type is the
+    // legitimate home for the documented-offset reads, encapsulated here as named accessors so
+    // consuming TUs never reinterpret the blob themselves. Offsets are GameState-relative,
+    // asm-attested:
+    //   +0x1D4 (byte): the rank-up intro is still running (gates the finish/hand-off check)
+    //   +0x1D6 (byte): a new rival was selected this frame (advance the take to that rival)
+    //   +0x1D8 (word): the rival's active-race-car index (anchor the take to that car)
+    // FLAG: the names are inferred from the rank-up usage; the region's DWARF layout is
+    // unreliable so these read the opaque mShowTimeInfo bytes by documented offset until that
+    // sub-object's own TU recovers the real field layout.
+    bool IsRankUpIntroRunning() const
+    {
+        return mShowTimeInfo.maOpaque[0x00] != 0;   // +0x1D4
+    }
+    bool IsNewRankUpRivalThisFrame() const
+    {
+        return mShowTimeInfo.maOpaque[0x02] != 0;   // +0x1D6
+    }
+    EActiveRaceCarIndex GetRankUpRivalRaceCarIndex() const
+    {
+        return static_cast<EActiveRaceCarIndex>(
+            *reinterpret_cast<const s32*>(&mShowTimeInfo.maOpaque[0x04]));   // +0x1D8
+    }
 };
 
 } // namespace BrnDirector

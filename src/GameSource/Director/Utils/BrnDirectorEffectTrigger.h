@@ -41,7 +41,24 @@ namespace BrnDirector
     // functions below (they query it for the current hook name / blend amount), so its
     // internal layout is owned by the EffectTrigger TU and opaque here. DWARF home
     // BrnDirectorEffectTrigger.h:79.
-    struct EffectInterface;
+    //
+    // The rank-up arbitrator state (BrnArbStateRankUp::Update) additionally queries it for
+    // whether an effect is currently requested and, if so, that effect's name (to decide
+    // whether the live take is the checkpoint take). Those two reads are modelled here as
+    // named accessors so the consumer never pokes the interface by offset; they are
+    // DECLARATION-ONLY (the bodies live with the EffectTrigger TU; the per-TU cl /c gate
+    // does not link). FLAG: minimal slice -- the real EffectInterface layout/method set
+    // lands with its own TU; the accessor NAMES are stable.
+    //   X360 (ArbStateRankUp::Update @0x82236380): the gate byte read at EffectInterface
+    //   +0xD37 -> HasCurrentEffectName(); the name fetch (sub @0x821F17C0) ->
+    //   GetCurrentEffectName().
+    struct EffectInterface
+    {
+        // True when an effect hook is currently requested (X360 byte read at +0xD37).
+        bool        HasCurrentEffectName() const;
+        // The name of the currently-requested effect hook (a NUL-terminated string).
+        const char* GetCurrentEffectName() const;
+    };
 
     namespace Camera
     {

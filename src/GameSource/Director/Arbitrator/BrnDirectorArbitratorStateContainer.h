@@ -6,6 +6,7 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStateRoaming.h"   // BrnDirector::ArbStateRoaming (real layout)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCrashMode.h" // BrnDirector::ArbStateCrashMode (real layout)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateRaceIntro.h" // BrnDirector::ArbStateRaceIntro (real layout)
+#include "GameSource/Director/Arbitrator/States/BrnArbStateRankUp.h"    // BrnDirector::ArbStateRankUp (real layout)
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                // BrnDirector::SharedPlaylists
 
 // ----------------------------------------------------------------------------
@@ -34,16 +35,16 @@ namespace BrnDirector
     // GROW each into its real layout (additively) when its own TU lands. (Parity is by
     // name; the container does not touch any per-state member.)
     //
-    // ArbStateRoaming, ArbStateCrashMode and ArbStateRaceIntro now have their real layouts
-    // (BrnArbStateRoaming.h / BrnArbStateCrashMode.h / BrnArbStateRaceIntro.h, #included above)
-    // -- de-forked from the placeholders so each TU and the container share one definition.
+    // ArbStateRoaming, ArbStateCrashMode, ArbStateRaceIntro and ArbStateRankUp now have their
+    // real layouts (BrnArbStateRoaming.h / BrnArbStateCrashMode.h / BrnArbStateRaceIntro.h /
+    // BrnArbStateRankUp.h, #included above) -- de-forked from the placeholders so each TU and
+    // the container share one definition.
     class ArbStateCrashing        : public ArbitratorState {};
     class ArbStateTakedown        : public ArbitratorState {};
     class ArbStatePostEvent       : public ArbitratorState {};
     class ArbStateOnlineRaceIntro : public ArbitratorState {};
     class ArbStateDriveThru       : public ArbitratorState {};
     class ArbStateCarSelect       : public ArbitratorState {};
-    class ArbStateRankUp          : public ArbitratorState {};
     class ArbStateOnlineCarSelect : public ArbitratorState {};
 
     class ArbitratorStateContainer

@@ -57,5 +57,17 @@ namespace Deformation
         ETagPointType  maGenericLocatorTypes[KI_NUM_GENERIC_LOCATORS];  // :112 per-slot tag type
         s32            miNumGenericLocators;                           // :113 live generic count
     };
+
+    // VehicleLocatorOutput -- the {owning EntityId, locator table} pair the deformation
+    // output interface publishes for each vehicle (DWARF home BrnDeformationOutputInterface.h
+    // :117-120; homed here next to VehicleLocatorData so consumers that only need the locator
+    // table -- e.g. the effects boost/jump state machines -- pull just this pair, not the whole
+    // event-queue output interface). The locator table is referenced by pointer (it lives in
+    // the deformable object); a null mpLocatorData means "no locators this frame".
+    struct VehicleLocatorOutput
+    {
+        EntityId                   mEntityId;       // :119 owning entity
+        const VehicleLocatorData*  mpLocatorData;   // :120 the published locator table
+    };
 }
 }

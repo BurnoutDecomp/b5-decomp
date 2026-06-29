@@ -30,7 +30,73 @@ namespace Deformation
     struct IKDrivenPointSpec;
     struct IKBodyPartSpec;
 
-    enum ETagPointType : s32 { E_TAG_POINT_TYPE_INVALID = -1 };   // BrnStreamedDeformationSpec.h (DWARF); placeholder enumerator
+    // ETagPointType -- the full streamed tag-point taxonomy (DWARF home
+    // SharedClasses/Physics/Deformation/BrnTagPointTypes.h:35). The boost-effect anchors
+    // E_TAGPOINT_FXBOOSTPOINT1..4 (41..44) are read by BrnEffects::BoostStateMachine::OnTick
+    // to position the four boost-nozzle particle effects. E_TAG_POINT_TYPE_INVALID(-1) is the
+    // project's spelling for the no-tag sentinel.
+    enum ETagPointType : s32
+    {
+        E_TAG_POINT_TYPE_INVALID                = -1,
+        E_TAGPOINT_PHYSICS_CENTREOFMASS         = 0,
+        E_TAGPOINT_LIGHTS_FRONTRUNNINGLEFT      = 1,
+        E_TAGPOINT_LIGHTS_FRONTRUNNINGRIGHT     = 2,
+        E_TAGPOINT_LIGHTS_REARRUNNINGLEFT       = 3,
+        E_TAGPOINT_LIGHTS_REARRUNNINGRIGHT      = 4,
+        E_TAGPOINT_LIGHTS_FRONTSPOTLEFT         = 5,
+        E_TAGPOINT_LIGHTS_FRONTSPOTRIGHT        = 6,
+        E_TAGPOINT_LIGHTS_INDICATORFRONTLEFT    = 7,
+        E_TAGPOINT_LIGHTS_INDICATORFRONTRIGHT   = 8,
+        E_TAGPOINT_LIGHTS_INDICATORREARLEFT     = 9,
+        E_TAGPOINT_LIGHTS_INDICATORREARRIGHT    = 10,
+        E_TAGPOINT_LIGHTS_BRAKELEFT             = 11,
+        E_TAGPOINT_LIGHTS_BRAKERIGHT            = 12,
+        E_TAGPOINT_LIGHTS_BRAKECENTRE           = 13,
+        E_TAGPOINT_LIGHTS_REVERSELEFT           = 14,
+        E_TAGPOINT_LIGHTS_REVERSERIGHT          = 15,
+        E_TAGPOINT_LIGHTS_SPOTLIGHT1            = 16,
+        E_TAGPOINT_LIGHTS_SPOTLIGHT2            = 17,
+        E_TAGPOINT_LIGHTS_BLUESTWOS1            = 18,
+        E_TAGPOINT_LIGHTS_BLUESTWOS2            = 19,
+        E_TAGPOINT_TYREWELL_FRONTLEFT           = 20,
+        E_TAGPOINT_TYREWELL_FRONTRIGHT          = 21,
+        E_TAGPOINT_TYREWELL_REARLEFT            = 22,
+        E_TAGPOINT_TYREWELL_REARRIGHT           = 23,
+        E_TAGPOINT_TYREWELL_ADDITIONALLEFT      = 24,
+        E_TAGPOINT_TYREWELL_ADDITIONALRIGHT     = 25,
+        E_TAGPOINT_AXLEPOINT_FRONT              = 26,
+        E_TAGPOINT_AXLEPOINT_REAR               = 27,
+        E_TAGPOINT_ARTICULATIONPOINT_FRONT      = 28,
+        E_TAGPOINT_ARTICULATIONPOINT_REAR       = 29,
+        E_TAGPOINT_ATTACHPOINT                  = 30,
+        E_TAGPOINT_FXGLASSSMASHPOINT1           = 31,
+        E_TAGPOINT_FXGLASSSMASHPOINT2           = 32,
+        E_TAGPOINT_FXGLASSSMASHPOINT3           = 33,
+        E_TAGPOINT_FXGLASSSMASHPOINT4           = 34,
+        E_TAGPOINT_FXGLASSSMASHPOINT5           = 35,
+        E_TAGPOINT_FXGLASSSMASHPOINT6           = 36,
+        E_TAGPOINT_FXGLASSSMASHPOINT7           = 37,
+        E_TAGPOINT_FXGLASSSMASHPOINT8           = 38,
+        E_TAGPOINT_FXGLASSSMASHPOINT9           = 39,
+        E_TAGPOINT_FXGLASSSMASHPOINT10          = 40,
+        E_TAGPOINT_FXBOOSTPOINT1                = 41,
+        E_TAGPOINT_FXBOOSTPOINT2                = 42,
+        E_TAGPOINT_FXBOOSTPOINT3                = 43,
+        E_TAGPOINT_FXBOOSTPOINT4                = 44,
+        E_TAGPOINT_FXFIREPOINT                  = 45,
+        E_TAGPOINT_FXSTEAMPOINT                 = 46,
+        E_TAGPOINT_FXPOV_FRONTLEFT              = 47,
+        E_TAGPOINT_FXPOV_FRONTRIGHT             = 48,
+        E_TAGPOINT_FXPOV_REARLEFT               = 49,
+        E_TAGPOINT_FXPOV_REARRIGHT              = 50,
+        E_TAGPOINT_FXDASHBOARD                  = 51,
+        E_TAGPOINT_FXENGINE                     = 52,
+        E_TAGPOINT_FXTRUNK                      = 53,
+        E_TAGPOINT_FXPETROL_TANK                = 54,
+        E_TAGPOINT_FXPELVIS_FRONTLEFT           = 55,
+        E_TAGPOINT_PAYLOAD                      = 56,
+        E_TAGPOINT_COUNT                        = 57,
+    };   // DWARF BrnTagPointTypes.h:35
 
     // BrnStreamedDeformationSpec.h:49 -- one suspension wheel's streamed placement.
     // sizeof == 48 (0x30): two 16-byte Vector3 lanes + a 4-byte index, 16-byte aligned.
