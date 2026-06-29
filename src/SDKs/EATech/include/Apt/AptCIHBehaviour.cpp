@@ -453,3 +453,93 @@ void AptCIH::SetMask(AptCIH* pMaskSlave)
     AptRenderItem* pSlaveRenderItem = pSlaveCharInst->GetRenderItemWritable();
     mpCharacterInst->GetRenderItemWritable()->SetHasMask(true, pSlaveRenderItem);
 }
+
+// ===========================================================================
+// Behavioural batch 4 -- procedural-property reader + visibility.
+// ===========================================================================
+
+// FLAG (deferred): the X360 static-local bounding-rect helper (sub_82AE2C58) seeds
+// the rect, expands it via AptCIH::GetBoundingRect (@0x82AE2B30 -- not yet homed; it
+// needs the AptCharacterShape glyph/geometry bounds layout), then zeroes the rect if
+// nothing expanded. Until GetBoundingRect lands this returns an empty rect, so the
+// _width/_height procedural properties read 0; every other property is fully faithful.
+static void GetBoundingRectClamped(const AptCIH* /*pThis*/, float afRect[4])
+{
+    afRect[0] = 0.0f; afRect[1] = 0.0f; afRect[2] = 0.0f; afRect[3] = 0.0f;
+}
+
+// GetProceduralProperty @0x82AE2D10 -- the AS getProperty reader. The X360 indexes a
+// 12-entry remap table (byte_82145248, unexported) to select one of twelve arms; the
+// case-label integers below are inferred to match SetProceduralProperty's arm order
+// (only index 11 == _visible is confirmed, by IsVisible). Each arm's behaviour IS
+// proven from the asm.
+float AptCIH::GetProceduralProperty(uint32_t nPropertyIndex) const
+{
+    const AptMatrix* pPos = GetPositionMatrixConst();
+    const AptCXForm* pCx  = GetColorMatrixConst();
+    const float kSkewEpsilon = 1.1754944e-38f;   // FLT_MIN; FLAG: exact bits unread
+
+    switch (nPropertyIndex)
+    {
+    case 4:   // _width -- bounding-rect extent on X
+    {
+        float afRect[4];
+        GetBoundingRectClamped(this, afRect);
+        const float fWidth = afRect[2] - afRect[0];
+        return (fWidth >= 0.0f) ? fWidth : 0.0f;
+    }
+    case 5:   // _height -- bounding-rect extent on Y
+    {
+        float afRect[4];
+        GetBoundingRectClamped(this, afRect);
+        const float fHeight = afRect[3] - afRect[1];
+        return (fHeight >= 0.0f) ? fHeight : 0.0f;
+    }
+    case 2:   // _rotation (degrees) -- cached authored angle (mpAssetString dual-use) or derived
+        if (mpAssetString != nullptr)
+            return *reinterpret_cast<const float*>(mpAssetString);
+        if (!(fabsf(pPos->b) >= kSkewEpsilon) && !(fabsf(pPos->c) >= kSkewEpsilon))
+            return 0.0f;
+        {
+            const float fAngleDeg = acosf(GetCosAngle(pPos)) * 57.29578f;
+            return (pPos->b >= 0.0f) ? fAngleDeg : -fAngleDeg;
+        }
+    case 0:   // _xscale (percent)
+        if (!(fabsf(pPos->b) >= kSkewEpsilon) && !(fabsf(pPos->c) >= kSkewEpsilon))
+            return pPos->a * 100.0f;
+        return sqrtf(pPos->a * pPos->a + pPos->b * pPos->b) * 100.0f;
+    case 1:   // _yscale (percent)
+        if (!(fabsf(pPos->b) >= kSkewEpsilon) && !(fabsf(pPos->c) >= kSkewEpsilon))
+            return pPos->d * 100.0f;
+        return sqrtf(pPos->c * pPos->c + pPos->d * pPos->d) * 100.0f;
+    case 6:   // _x -- translation X
+        return pPos->tx;
+    case 7:   // _y -- translation Y
+        return pPos->ty;
+    case 3:   // _alpha -- colour scale alpha as percent
+        return pCx->scale.GetValuef(AptColorHelper::Alpha) * 100.0f;
+    case 8:   // colour translate Red (additive)
+        return pCx->translate.GetValuef(AptColorHelper::Red);
+    case 9:   // colour translate Green
+        return pCx->translate.GetValuef(AptColorHelper::Green);
+    case 10:  // colour translate Blue
+        return pCx->translate.GetValuef(AptColorHelper::Blue);
+    case 11:  // _visible (confirmed by IsVisible) -- render item isVisible -> 0.0/1.0
+        return GetCharacterInst()->GetRenderItem()->GetIsVisible() ? 1.0f : 0.0f;
+    default:
+        return -1.0f;
+    }
+}
+
+// IsVisible @0x82AE2F30 -- this node + every display-list ancestor must be visible.
+// Walks up mpDisplayListParent; if any node's _visible procedural property is 0, the
+// node is hidden -> not visible. Reaching the root (null parent) means all visible.
+bool AptCIH::IsVisible() const
+{
+    for (const AptCIH* pNode = this; pNode != nullptr; pNode = pNode->mpDisplayListParent)
+    {
+        if (pNode->GetProceduralProperty(11) == 0.0f)
+            return false;
+    }
+    return true;
+}

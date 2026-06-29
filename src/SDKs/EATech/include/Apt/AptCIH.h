@@ -205,4 +205,16 @@ struct AptCIH : public AptValueGC
     // bit24(self)/bit23(subtree) generalized-process-dirty flags down the subtree.
     AptCIH* GetMask();                                          // @0x82AE7B48
     AptCIH* SetGeneralizedProcessDirtyState(bool bDirty);      // @0x82ADCA50
+
+    // GetProceduralProperty @0x82AE2D10 -- read a built-in AS "procedural" property
+    // (scale/rotation/x/y/alpha/colour/visible/width/height) by selector and return
+    // it as a float; out-of-range -> -1. Derives from the node's position + colour
+    // transforms (the AS getProperty reader). FLAG: the case-label integers are
+    // inferred from an unexported remap table (only index 11 == _visible is
+    // confirmed, via IsVisible); _width/_height defer to the un-homed GetBoundingRect.
+    float GetProceduralProperty(uint32_t nPropertyIndex) const;   // @0x82AE2D10
+
+    // IsVisible @0x82AE2F30 -- true iff this node AND every display-list ancestor is
+    // visible (walks mpDisplayListParent, testing GetProceduralProperty(_visible)).
+    bool IsVisible() const;
 };
