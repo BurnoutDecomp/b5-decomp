@@ -114,4 +114,47 @@ namespace BrnTraffic
         u32 muWord0; // +0x00  (interior opaque -- see FLAG)
         u32 muWord1; // +0x04  (-> 8)
     };
+
+    // DWARF home BrnTrafficEntityModule.h:255 -- one "crashing thing" the module tracks while
+    // building the per-frame list of things nearby traffic should react to (producers/consumers:
+    // TrafficEntityModule::UpdateParams_BuildListOfCrashingThings / _TryStartSympatheticCrashing /
+    // _TryAvoidCrashing, all operating on Array<CrashingThingData,168>). sizeof == 32
+    // (X360-authoritative: the Array<CrashingThingData,168>::operator[] @ 0x8270BE68 returns
+    // 32*index + base -- `slwi r,index,5` -- and reads the live-count word at byte +0x1500 ==
+    // 168*32). The 32-byte footprint is the 16-byte/16-aligned Vector3 (mPosition) followed by
+    // the 4-byte EntityId and the bool, rounded up to the Vector3's 16-byte alignment.
+    // DWARF field order/types: Vector3 mPosition (:275), EntityId mEntityId (:276),
+    // bool mbShowtimeCrashMagnet (:278).
+    struct CrashingThingData
+    {
+        Vector3  mPosition;            // :275  +0x00  (16, 16-aligned)
+        EntityId mEntityId;            // :276  +0x10
+        bool     mbShowtimeCrashMagnet;// :278  +0x14  (+pad -> 32, 16-aligned)
+    };
+
+    // NB: BrnTraffic::PhysicalVehicleInfo (the Array<PhysicalVehicleInfo,33> element) is NOT
+    // homed here -- it has its own committed home BrnTrafficPhysicalVehicleInfo.h; do not
+    // redefine it (ODR). Its DWARF fields were grown into that header in this slice.
+
+    // DWARF home BrnTrafficEntityModule.h:293 -- a SIMD "structure-of-arrays" packet holding four
+    // collidable vehicles at once (the trailing "4" in the type name = four vehicles per record),
+    // cached in mCachedCollidableList (Array<CollidableVehicleInfo4,16> -> up to 64 vehicles ==
+    // KU_MAX_COLLIDABLE_CACHED_TRAFFIC). Each Vector4 lane holds the same field for all four
+    // vehicles. sizeof == 128 (X360-authoritative: the Array<CollidableVehicleInfo4,16>::operator[]
+    // @ 0x8270D260 returns (index<<7) + base -- `slwi r,index,7` == 128*index -- and reads the
+    // live-count word at byte +0x800 == 16*128). The 128-byte footprint is exactly eight
+    // 16-byte/16-aligned Vector4 registers. DWARF field order/types (:295-303):
+    //   Vector4 mPosition_X / _Y / _Z, mLinearVelocity_X / _Y / _Z, mHalfLengths, mHalfWidths.
+    // All eight lanes (128 bytes) are DWARF-named at BrnTrafficEntityModule.h:295-303.
+    struct CollidableVehicleInfo4
+    {
+        Vector4 mPosition_X;       // :295  +0x00
+        Vector4 mPosition_Y;       // :296  +0x10
+        Vector4 mPosition_Z;       // :297  +0x20
+        Vector4 mLinearVelocity_X; // :298  +0x30
+        Vector4 mLinearVelocity_Y; // :299  +0x40
+        Vector4 mLinearVelocity_Z; // :300  +0x50
+        Vector4 mHalfLengths;      // :302  +0x60
+        Vector4 mHalfWidths;       // :303  +0x70
+    };
 }

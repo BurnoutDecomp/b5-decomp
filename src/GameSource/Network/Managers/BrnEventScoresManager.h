@@ -27,11 +27,23 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Containers/CgsArray.h"          // Array<T,N> maPendingUploads
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"         // CgsSystem::Time mUploadRetryTimer
+#include "GameSource/Network/Debug Components/BrnNetworkEventScoresManagerDebugComponent.h" // embedded mDebugComponent
 
 namespace CgsNetwork { struct ServerInterfaceDirtySock; }
 
+// VariableEventQueue<14000,16> is the network-event queue type ProcessNetworkEvents walks; only
+// a pointer is named in this header, so forward-declare the class template (full def in
+// CgsVariableEventQueue.h, included by the .cpp).
+namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue; }
+
 namespace BrnNetwork
 {
+    // The post-sim module-IO input buffer ProcessAfterSimulation reads its queue from
+    // (pointer-only here; full def in BrnNetworkModuleIO.h, included by the .cpp).
+    namespace BrnNetworkModuleIO { class PostSimulationInputBuffer; }
+
     struct LocalEventScoreUploadData
     {
         u64 mu64EventID;   // +0x00
@@ -39,35 +51,94 @@ namespace BrnNetwork
         s32 meGameMode;    // +0x0C  (EGameModeType underlying s32)
     };
 
+    // Pointer-only dependencies of the manager (full defs in their own headers; included by
+    // the .cpp where the bodies actually call through them).
+    class BrnServerInterfaceBase;   // mpServerInterface points at the Brn server interface
+    class BrnNetworkModule;         // mpNetworkModule -- owning module, supplies the event queues
+
     // ===============================================================================
     // BrnNetwork::EventScoresManager
-    //   Minimal reconstructed surface for the online event-scores upload manager. The
-    //   full manager (the pending-upload Array<LocalEventScoreUploadData,49>, the score
-    //   queue and the server callbacks) is reconstructed in its own (class-sourced) TU
-    //   and extends this header; only what the debug component reaches is declared here.
-    //   Declarations + the one pinned member are enough for the per-TU `cl /c` gate.
+    //   The online event-scores upload manager. It accumulates per-event scores the player
+    //   posts during a session into a fixed Array<LocalEventScoreUploadData,49>, then -- once
+    //   logged in and the custom-commands component is idle -- batches them into one
+    //   EventScoreData and pushes it to the server via ServerInterfaceCustomCommands::
+    //   UploadEventScoreData, retrying on a timed interval. A small state machine
+    //   (meState: 0 idle / 1 logged-in-trigger / 2 uploading / 3 ...) is pumped from
+    //   ProcessBeforeSimulation; the inbound network-event queue is drained in
+    //   ProcessAfterSimulation -> ProcessNetworkEvents.
     //
-    //   LAYOUT pinned by EventScoresManagerDebugComponent::SetCalvalryBurningRouteBest
-    //   @ 0x82591D00: the component reaches mpServerInterface at +0x32C (lwz r11,0x32C),
-    //   then calls mpServerInterface->GetCustomCommandsComponent() (component at +0x4C).
-    //   Earlier members are unknown, so a padding buffer reserves space up to +0x32C.
+    //   LAYOUT (X360-AUTHORITATIVE; offsets from this, read off Construct @ 0x82556AB0 and the
+    //   member TU functions):
+    //     +0x000  maPendingUploads   Array<LocalEventScoreUploadData,49>  (count word @ +0x310)
+    //     +0x314  (reserved -- not touched by any reconstructed function)
+    //     +0x318  mUploadRetryTimer  CgsSystem::Time   (SetFloatVal(this+0x318), miSeconds @ +0x318)
+    //     +0x320  miUploadCount      s32               (per-batch element counter; stw 0 in Construct)
+    //     +0x324  meState            s32               (the upload state machine; stw 0 in Construct)
+    //     +0x328  mpNetworkModule    BrnNetworkModule* (a2 of Construct; asserted non-null)
+    //     +0x32C  mpServerInterface  BrnServerInterfaceBase* (a3 of Construct; asserted non-null)
+    //     +0x330  mDebugComponent    EventScoresManagerDebugComponent (Construct(this+0x330,this))
     // ===============================================================================
-    class BrnServerInterfaceBase;   // mpServerInterface points at the Brn server interface
-
     class EventScoresManager
     {
     public:
+        // Two-phase init (X360 @ 0x82556AB0): stash the owning module + server interface, clear
+        // the pending list, zero the counter/state and the retry timer, and construct the embedded
+        // debug component.
+        void Construct( BrnNetworkModule* lpNetworkModule, BrnServerInterfaceBase* lpServerInterface );
+
+        // Teardown (X360 @ 0x82556B58): zero everything and destruct the debug component.
+        void Destruct();
+
+        // --- per-frame pumps (called by BrnNetworkManager) -----------------------------------
+        // X360 @ 0x8256FEF0: dispatch on meState (1 -> UpdateLoggedIn, 2 -> UpdateUploadEventScores).
+        void ProcessBeforeSimulation();
+        // X360 @ 0x82565430: pull the post-sim network-event queue from the module IO input and
+        // drain it through ProcessNetworkEvents.
+        void ProcessAfterSimulation( const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput );
+
+        // --- session-state callbacks (called by BrnNetworkManager) ---------------------------
+        void OnAutoLogin();    // X360 @ 0x8254B5C0
+        void OnLeaveOnline();  // X360 @ 0x8254B678
+
         // The LobbyApi completion trampoline handed to ServerInterfaceCustomCommands::
         // UploadEventScoreData as the upload callback (matches CustomCommandCallback:
         // void(void* lpData, void* lpResult, bool lbSuccess)).
         static void _UploadEventScoreCallback( void* lpData, void* lpResult, bool lbSuccess );
 
-        // The debug component reaches the server interface (+0x32C) to post the upload; the X360
-        // inlines this trivial getter at the call site.
+        // The debug component reaches the server interface to post the upload; the X360 inlines
+        // this trivial getter at the call site. Returns the BrnServerInterfaceBase the manager
+        // was constructed with (the committed debug-component TU depends on this exact return type).
         BrnServerInterfaceBase* GetServerInterface() const { return mpServerInterface; }
 
     private:
-        u8                    mPad00[0x32C];   // members before mpServerInterface (other TU)
-        BrnServerInterfaceBase* mpServerInterface;   // +0x32C
+        // X360 @ 0x82561520: walk the network-event queue, storing score-leaderboard events for
+        // upload and absorbing the persisted non-uploaded-scores snapshot.
+        void ProcessNetworkEvents( const CgsModule::VariableEventQueue<14000, 16>* lpNetworkEventQueue );
+
+        // X360 @ 0x8255DFB0: merge one (eventID, score, gameMode) score into the pending list,
+        // updating an existing record's best score (game mode 5 keeps the min, 7 the max) or
+        // appending a new record. (Register order from the ASM: r4 eventID, r5 score, r6 gameMode.)
+        void StoreEventScoreForUpload( u64 lu64EventID, u32 luScore, s32 leGameMode );
+
+        // X360 @ 0x82556BB8: when there are pending uploads, arm the retry timer and move to the
+        // uploading state; otherwise tell the network manager the auto-login flow is complete.
+        void UpdateLoggedIn();
+
+        // X360 @ 0x8256C010: once the retry timer has elapsed (and the custom-commands component
+        // is idle), batch the pending records into one EventScoreData and upload it.
+        void UpdateUploadEventScores();
+
+        // X360 @ 0x8254B4B0: map an (eventID, gameMode) onto its scoreboard slot using the
+        // per-mode scoreboard tables. Static helper (no `this` in the ASM).
+        static s32 GetScoreboardIndexForEvent( u64 lu64EventID, s32 leGameMode );
+
+        Array<LocalEventScoreUploadData, 49> maPendingUploads;   // +0x000 (count word @ +0x310)
+        u8                    mPad314[0x318 - 0x314];             // +0x314 (reserved)
+        CgsSystem::Time       mUploadRetryTimer;                  // +0x318
+        s32                   miUploadCount;                      // +0x320
+        s32                   meState;                            // +0x324
+        BrnNetworkModule*     mpNetworkModule;                    // +0x328
+        BrnServerInterfaceBase* mpServerInterface;                // +0x32C
+        EventScoresManagerDebugComponent mDebugComponent;         // +0x330
     };
 } // namespace BrnNetwork

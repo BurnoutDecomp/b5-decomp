@@ -47,6 +47,30 @@ namespace BrnNetwork
         // (GameSource/Network/Managers/BrnNetworkStateManager.cpp).
         bool GameModeHasEnoughTeams();
 
+        // ---- ADDITIVE GROW (BrnNetworkAutoLoginManager TU) --------------------------------
+        // The connect-request event the auto-login flow (and the road-rules flow it shares the
+        // sign-in path with) hands to the state manager. The X360 AutoLoginManager builds it on
+        // the stack and sets one leading flag word to 1 before the call (stw r(=1),0(event));
+        // its remaining fields are not exercised by this TU, so only the grounded flag is
+        // modelled. The full event shape is owned by the state manager's own TU.
+        struct ConnectEvent
+        {
+            bool mbTriggerSignIn;   // +0x00 (the X360 sets this to 1 / true)
+        };
+
+        // X360 BrnNetwork::StateManager::HandleConnectEvent -- drive the sign-in state machine
+        // from a connect-request event. Reached from AutoLoginManager::UpdateWaitAutoLogin when
+        // the network sub-system is ready but the player is not yet logged in. Declared-only;
+        // body is the state manager's own TU.
+        void HandleConnectEvent(const ConnectEvent* lpConnectEvent);
+
+        // The state manager's current connection-status value. The auto-login flow gates its
+        // connect on this equalling the grounded literal 23 (the "ready / connected" status the
+        // X360 cmpwi's against). The full status enum is owned by the state manager's own TU,
+        // so the raw value is exposed here and the comparison literal lives (named) at the call
+        // site. Declared-only.
+        s32 GetConnectionStatus() const;
+
         // Nested fixed-size player-id -> XUID lookup table (8 slots).
         struct CurrentPlayerXUIDs
         {
