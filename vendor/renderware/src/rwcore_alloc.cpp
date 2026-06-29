@@ -17,6 +17,13 @@ namespace rw
         return lEmpty;
     }
 
+    // Base default (vtbl[3] +24, ?Free@IResourceAllocator@rw@@UEAAXPEAX_K@Z): the concrete
+    // game allocator overrides this. The default is a no-op (matching the elided PC-LEAF
+    // allocators, whose frees happen en masse via re-Initialize, not per-block).
+    void IResourceAllocator::Free(void* /*lpBlock*/, uint64_t /*luSizeOrFlags*/)
+    {
+    }
+
     // A linear allocator keeps its bookkeeping in its own object (m_currentUsage), not inside the
     // managed heap, so the heap descriptor it requires == the requested usage. (X360
     // LinearResourceAllocator::GetResourceDescriptor.)

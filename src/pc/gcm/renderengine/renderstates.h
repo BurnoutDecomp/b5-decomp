@@ -189,4 +189,23 @@ private:
     MeshData* mpData;
 };
 
+// renderengine::StateHelper -- the render-engine's default render-state table. Initialize (X360
+// 0x82B64108, called from BrnRendererModule::Construct) builds the canonical set of default state
+// objects at boot -- four blend states, one depth/stencil state, and one rasterizer state -- through
+// the RenderWare default resource allocator, and records the resulting handles in the file-scope
+// default-state slots (kept as class statics here so they are accessed by name, not by raw address).
+// ResizeDefaultScissorRectAndViewportParameters (X360 0x82B63D30) rebuilds the default full-screen
+// viewport float block and the default scissor rectangle from the current display resolution.
+class StateHelper
+{
+public:
+    // Build the default state table. Returns 1 if the device was ready (the default scissor/viewport
+    // was also (re)built), 0 otherwise. X360 @0x82B64108.
+    static int Initialize();
+
+    // Rebuild the default full-screen viewport parameter block and the default scissor rectangle
+    // from the current display resolution. X360 @0x82B63D30.
+    static int ResizeDefaultScissorRectAndViewportParameters();
+};
+
 }
