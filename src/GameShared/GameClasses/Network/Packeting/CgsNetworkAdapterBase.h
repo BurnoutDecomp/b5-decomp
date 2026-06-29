@@ -26,6 +26,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::EServerType
 
 namespace CgsNetwork
 {
@@ -58,6 +59,11 @@ namespace CgsNetwork
 
     struct NetworkAdapter : NetworkAdapterBase
     {
+        // Selects which server flavour this adapter talks to. DWARF NetworkAdapter.h:
+        // `virtual void SetServerType(EServerType)`; the X360 NetworkServers::SetServerType
+        // forwards the chosen type here (BrnNetworkServers.cpp). Declared-only; bodied in the
+        // adapter's own TU.
+        virtual void SetServerType(EServerType leServerType);
     };
 
     struct NetworkAdapterPrepareParams

@@ -1,5 +1,6 @@
 #include "CgsMessage.h"
 #include "CgsReliableMessage.h"   // CgsNetwork::ReliableMessage (moved out of CgsMessage.h)
+#include "GameShared/GameClasses/Network/Players/CgsHostMigrationManager.h"  // real HostMigrationManager (IsHostAlive)
 #include "BrnMessageSubclasses.h"
 #include "GameSource/Network/Messages/BrnHullSyncMessage.h"   // BrnNetwork::HullSyncMessage (real layout)
 
@@ -38,13 +39,17 @@ namespace BrnNetwork
 namespace CgsNetwork
 {
     // ---- HostMigrationManager::IsHostAlive @ 0x82872258 ------------------------
-    // return UInt16IsLargerWrapped(mu16HostFrame, lu16CurrentFrame)
-    //     || mu16AliveWindow >= GetFrameDiffWrapped16(lu16CurrentFrame, mu16HostFrame);
+    // The host-heartbeat frame is mu16LastHostKeepAliveReceivedTime (+0x5BA) and the
+    // alive window is mu16HostKeepAliveTimeout (+0x5D2) on the real manager class.
+    // return UInt16IsLargerWrapped(mu16LastHostKeepAliveReceivedTime, lu16CurrentFrame)
+    //     || mu16HostKeepAliveTimeout >= GetFrameDiffWrapped16(lu16CurrentFrame,
+    //                                                          mu16LastHostKeepAliveReceivedTime);
     // The subfc/subfe/addi idiom @0x828722A4-AC is the unsigned >= compare.
     bool HostMigrationManager::IsHostAlive(u16 lu16CurrentFrame) const
     {
-        return UInt16IsLargerWrapped(mu16HostFrame, lu16CurrentFrame)
-            || mu16AliveWindow >= GetFrameDiffWrapped16(lu16CurrentFrame, mu16HostFrame);
+        return UInt16IsLargerWrapped(mu16LastHostKeepAliveReceivedTime, lu16CurrentFrame)
+            || mu16HostKeepAliveTimeout >=
+                   GetFrameDiffWrapped16(lu16CurrentFrame, mu16LastHostKeepAliveReceivedTime);
     }
 
     // ---- ReliableMessage::PrepareForSend @ 0x82882100 --------------------------

@@ -1,16 +1,5 @@
-#include "CgsSyncTimeMessageManager.h"
+#include "GameShared/GameClasses/Network/Time/CgsSyncTimeMessageManager.h"
 
-namespace CgsNetwork
-{
-SyncTimeMessageManager::SyncTimeMessageManager()
-{
-    for (SyncTimeRecord& lRecord : maRecords)
-    {
-        lRecord.muMessageVTable = 0x820CE458;
-        lRecord.muSendTicks = 0;
-        lRecord.mfSendTime = 0.0f;
-        lRecord.muReceiveTicks = 0;
-        lRecord.mfReceiveTime = 0.0f;
-    }
-}
-}
+// CgsNetwork::SyncTimeMessageManager is now homed in CgsSyncTimeBase.cpp (the original
+// game source file). This translation unit is retained only as a compatibility stub for
+// the old path; it has nothing of its own to define.

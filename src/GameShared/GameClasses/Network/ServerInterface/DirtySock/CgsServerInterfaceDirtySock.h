@@ -185,6 +185,19 @@ namespace CgsNetwork
         // private and the layout unchanged.
         LobbyApiRefT* GetLobbyAPIRef() const { return mpLobbyAPIRef; }
 
+        // ADDITIVE GROW (flagged by the BrnNetworkScoreboardManager group): the rankings
+        // component slot accessor. BrnNetwork::ScoreboardManager::Prepare (X360 0x825471B0)
+        // reads mpServerInterface->maComponents[E_COMPONENTS_RANKINGS].mpComponent
+        // (the +0x44 slot) and stores it as its mpRankings back-pointer. Exposed as a named
+        // accessor that returns the shared ServerInterfaceComponent base (the caller
+        // reinterpret_casts to the ServerInterfaceRankings leaf -- the same documented
+        // base-pointer component-accessor idiom used by GetDownloadableConfigComponent et al.
+        // in CgsServerInterface.h), keeping maComponents private and the layout unchanged.
+        ServerInterfaceComponent* GetRankingsComponent() const
+        {
+            return maComponents[E_COMPONENTS_RANKINGS].mpComponent;
+        }
+
     protected:
         // ConvertError: map a DirtySock error to an EServerInterfaceError via the table.
         virtual EServerInterfaceError ConvertError(int liError,

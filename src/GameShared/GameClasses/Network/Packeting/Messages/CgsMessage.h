@@ -174,24 +174,16 @@ namespace CgsNetwork
     // hierarchy moved them out and gave MessageWithPlayerIDs its two player-id fields.)
 }
 
-// CgsNetwork::HostMigrationManager  (no committed home -- minimal owning header).
-//
-// IsHostAlive @ 0x82872258 reads two u16 frame fields out of the manager:
-//   +0x5BA  mu16HostFrame    (the last host heartbeat frame)
-//   +0x5D2  mu16AliveWindow  (allowed frame gap before the host is dead)
-// The surrounding bytes are not modelled by this TU, so they are reserved as a
-// sized opaque placeholder so those two named fields land at the exact offsets the
-// asm dereferences. FLAGGED: only the two frame fields are reconstructed by name;
-// everything else in HostMigrationManager is an opaque sized placeholder.
+// CgsNetwork::HostMigrationManager now has its real owning home in
+//   GameShared/GameClasses/Network/Players/CgsHostMigrationManager.h
+// (full peer-to-peer host-migration manager). The earlier minimal opaque placeholder
+// that used to live here -- modelling only mu16HostFrame/mu16AliveWindow so the
+// other-TU IsHostAlive body could compile -- was a catch-all stand-in and would
+// collide (ODR) with the real definition, so it has been removed in favour of a plain
+// forward declaration. IsHostAlive @ 0x82872258 is bodied in CgsMessageSubclasses.cpp
+// against the real class; it reads mu16LastHostKeepAliveReceivedTime (the last host
+// heartbeat frame, +0x5BA) and mu16HostKeepAliveTimeout (the alive window, +0x5D2).
 namespace CgsNetwork
 {
-    struct HostMigrationManager
-    {
-        u8  mReserved0[0x5BA];      // 0x000 .. 0x5B9 (opaque, FLAGGED placeholder)
-        u16 mu16HostFrame;          // 0x5BA
-        u8  mReserved1[0x5D2 - 0x5BA - 2]; // 0x5BC .. 0x5D1 (opaque placeholder)
-        u16 mu16AliveWindow;        // 0x5D2
-
-        bool IsHostAlive(u16 lu16CurrentFrame) const;
-    };
+    struct HostMigrationManager;   // real home: Network/Players/CgsHostMigrationManager.h
 }
