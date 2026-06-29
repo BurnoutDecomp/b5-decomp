@@ -151,6 +151,15 @@ struct AptRenderItem
     bool Manager_IsDeletionMark() const;            // @0x7DEEBC (mFlags bit 28)
     void Manager_SetNextRevision(AptRenderItem* pNext);   // @0x7DEF00
     void Manager_SetDeletionMark(bool bMark);             // @0x7E48DC (simplified)
+
+    // Manager_GetMask @0x82AD4F48 -- the mask render item (manager-side accessor).
+    AptRenderItem* Manager_GetMask() const { return mpMask; }
+    // IsHighestRevisionItem @0x82AD4FF0 -- this item is the latest revision in the
+    // manager's double-buffered chain (no newer revision linked).
+    bool IsHighestRevisionItem() const { return mpManagerNextRevision == nullptr; }
+    // IsRenderableForThisTick @0x82AD4FC8 -- drawable on nTick: aged in (created on or
+    // before nTick) AND the committed (non-writable) revision (mFlags bit 25 clear).
+    bool IsRenderableForThisTick(int nTick) const;
 };
 
 // The render-traversal helpers the character subtypes call from Render -- push
