@@ -42,6 +42,13 @@ public:
     // The bit sets are 30-bit (the X360 bound the asserts compare: luIndex < 30).
     static const u32 KU_NUM_FLAGS = 30;
 
+    // Zero-initialise the state (clears the head book-keeping word and both bit sets).
+    // The director Camera::Construct asm @0x82255E68 calls this out-of-line on the
+    // state sub-object at camera +0x138 (`bl BrnDirector__Camera__CameraState__Construct`).
+    // DECLARATION-ONLY here -- the per-TU `cl /c` gate does not link; the body lands with
+    // CameraState's own ledger TU (BrnCameraState.cpp).
+    void Construct();
+
     // Set flag luIndex to lbValue. lbValue!=0 -> SetBit on the current set; lbValue==0 ->
     // UnSetBit on the current set. @0x82204368.
     void SetFlag(u32 luIndex, bool lbValue);

@@ -21,6 +21,24 @@ namespace renderengine
             u32   muPitch;
         };
 
+        // renderengine::Texture::Locked - the descriptor a Lock fills: where the locked surface's
+        // pixels live plus its geometry. Layout from the DecFIGS DWARF (EATech renderengine
+        // texture.h:132); the X360 CgsNetworkImageConverter unpack path reads pixelData (+0x04),
+        // stride (+0x08) and height (+0x0E) off it. Pointers widen to the x64 target.
+        struct Locked
+        {
+            Texture* mpTexture;     // +0x00
+            void*    mpPixelData;   // the locked surface's bits
+            u32      muStride;      // row pitch in bytes
+            u16      muWidth;
+            u16      muHeight;
+            u16      muVolumeDepth;
+            u8       mu8MipLevel;
+            u8       mu8Index;
+            u32      muSliceStride;
+            u32      muLockFlags;
+        };
+
         static void Lock(Texture* lpTexture, s32 liLevel, s32 liFace, s32 liFlags, LockInfo* lpLockInfoOut);
         static void Unlock(Texture* lpTexture, LockInfo* lpLockInfo);
 
