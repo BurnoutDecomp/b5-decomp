@@ -170,6 +170,13 @@ namespace CgsResource
         u32   GetHeapAlignment(s32 liMemType) const;
         s32   GetNumDependencies() const;
         Pool* GetDependency(s32 liIndex) const;
+        // X360 reads muMaxResources (the slot-array length) at pool+0x104 to bound the entry sweep
+        // (e.g. the texture-pool debug browser walks every slot). Trivial inline accessor.
+        u32   GetMaxResources() const { return muMaxResources; }
+        // Direct (ungated) slot accessor: the X360 debug sweeps index the entry array after their own
+        // status test (mpResourceEntries[i]); this exposes that read for a const Pool*.
+        const Entry* GetEntryDirect(s32 liIndex) const { return &mpResourceEntries[liIndex]; }
+        u8           GetEntryStatusDirect(s32 liIndex) const { return mpx8ResourceStatuses[liIndex]; }
 
         // ---- import resolution / defrag (reconstructed later; load path needs only a subset) ----
         void ResolveAllResources();

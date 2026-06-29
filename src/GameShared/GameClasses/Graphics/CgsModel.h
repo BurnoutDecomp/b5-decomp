@@ -23,6 +23,8 @@
 // NOTE: pointer members are 4 bytes on the X360 and 8 bytes on the PC host; do NOT
 // pin absolute offsets across them. Members are accessed BY NAME below.
 
+namespace renderengine { class Texture; }   // Model::UsesTexture param (pointer only)
+
 namespace CgsGraphics
 {
     // A renderable instance referenced by the model. Forward-declared only; the
@@ -100,6 +102,10 @@ namespace CgsGraphics
         u32 GetVersionNumber() const;
         // CgsModel.h:213
         u32 GetNumLods() const;
+
+        // Does any of this model's renderables reference lpTexture? (X360 0x... ; the texture-pool
+        // debug browser counts models/instances that use the selected texture.) Bodied in CgsModel.cpp.
+        bool UsesTexture(const renderengine::Texture* lpTexture) const;
 
     protected:
         // CgsModel.h:268 - table of renderable pointers (mu8NumRenderables long).

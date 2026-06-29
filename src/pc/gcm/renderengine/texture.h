@@ -70,6 +70,12 @@ namespace renderengine
         static void GetResourceDescriptor(u32* lpDescriptorOut, const Parameters* lpParams);
         static u32  GetPixelDataSize(s32 liFormat, u32 luWidth, u32 luHeight, u32 luDepth, u32 luNumLevels);
 
+        // Width/height accessors (X360 GetWidth @0x82B60EC8, GetHeight @0x82B60F38): read the stored
+        // raster header (muWidth/muHeight). Static (take the texture by pointer) to match the X360
+        // call form `GetWidth(texture)`. Bodied in the renderengine texture TU.
+        static u32  GetWidth(const Texture* lpTexture);
+        static u32  GetHeight(const Texture* lpTexture);
+
         // Realise the texture: create the managed D3D9 texture into mpD3DTexture from the
         // parameters and (if lpPixelData != null) upload the mip chain. This is the PC body of
         // CgsResource::RwRasterResourceType::FixUp (the console FixUp rebases packed GPU offsets;
