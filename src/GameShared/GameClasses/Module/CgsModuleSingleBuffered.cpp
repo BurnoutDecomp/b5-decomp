@@ -196,6 +196,18 @@ void CgsModule::ModuleSingleBuffered::UnlockForOutput()
     mpOutputStructure = nullptr;
 }
 
+CgsModule::DataStructure* CgsModule::ModuleSingleBuffered::GetInputStructure() const
+{
+    CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
+    return mpInputStructure;
+}
+
+CgsModule::DataStructure* CgsModule::ModuleSingleBuffered::GetOutputStructure() const
+{
+    CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
+    return mpOutputStructure;
+}
+
 CgsModule::DataStructure* CgsModule::ModuleSingleBuffered::CreateInputDataStructure()
 {
     CGS_ASSERT(mbIsNewModule, "This is a new module type - can't lock/unlock etc etc\n");

@@ -67,6 +67,7 @@ namespace BrnNetwork
         // @ 0x82585648 -- base Destruct (reset) then store the manager back-pointer + clear members.
         void Construct(BuddyManagerBase* lpBuddyManager);
         bool Prepare();    // @ 0x825856A8 -- clear members, return true.
+        bool Release();    // clear members, return true (mirrors Prepare; called from BuddyManagerBase::Release).
         void Destruct();   // @ 0x825856D0 -- clear members + manager back-pointer, base Destruct.
 
         // NOTE: the DWARF additionally lists GetEventQueue() (h:157, returns mpEventQueue),

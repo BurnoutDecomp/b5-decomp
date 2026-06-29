@@ -75,6 +75,13 @@ namespace CgsNetwork
         // into protected state.
         s32 GetStatus() const { return meStatus; }
 
+        // ADDITIVE GROW (BrnNetworkBuddyManagerBase TU): the last recorded error code
+        // (== miLastError). The X360 buddy-manager completion callbacks read it through the
+        // component by name (CgsNetwork::ServerInterfaceComponent::GetLastError on the custom-
+        // commands component) to branch on E_BUDDY_ERROR_CODES values (3 == not-found ->
+        // overwrite, 1 == pending -> clear). Inline accessor over the named member.
+        s32 GetLastError() const { return miLastError; }
+
     protected:
         // ---- Action / error helpers shared by every leaf component ------------------
         // (Bodied in dedicated component TUs / CgsServerInterfaceComponent.cpp; declared

@@ -71,6 +71,19 @@ namespace BrnNetwork
         // site. Declared-only.
         s32 GetConnectionStatus() const;
 
+        // ---- ADDITIVE GROW (BrnNetworkBuddyManagerBase TU) --------------------------------
+        // Whether the network state machine is currently in its "limbo" idle state (the buddy
+        // manager only re-arms a server-buddy fetch from limbo). X360
+        // BrnNetwork::StateManager::IsInLimbo @ 0x82549F4C, reached from
+        // BuddyManagerBase::Update. Declared-only; body is the state manager's own TU.
+        bool IsInLimbo();
+
+        // Request a server-buddy-list re-fetch on the next limbo tick. The X360 buddy-manager
+        // Update sets the state manager's retry flag directly (stw 1, this+0x3B4) once its retry
+        // timer elapses while in limbo; exposed as a named setter so the manager need not reach
+        // into the state manager's private layout. Declared-only; body is the state manager's TU.
+        void SetRetryGetServerBuddies(bool lbRetry);
+
         // Nested fixed-size player-id -> XUID lookup table (8 slots).
         struct CurrentPlayerXUIDs
         {

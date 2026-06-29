@@ -97,8 +97,10 @@ namespace CgsResource
             s32                    miNumGameSpecificTypes;    // :136
         };
 
-        // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
-        PoolModule() { mbIsNewModule = true; miPendingHead = 0; miPendingTail = 0; miPendingCount = 0; }
+        // X360 ctor @0x827E07B8 stores only vtable/RWMutexes + the 128-slot BaseResourceDescriptor
+        // vector init; it does NOT set mbIsNewModule (Construct @0x828FC0B8 does) nor touch the pending
+        // FIFO indices (CreatePool path establishes them; in-class-zeroed below). Trivial ctor.
+        PoolModule() {}
 
         // ---- lifecycle (Construct is rw-allocator-gated -> deferred) -------------------
         void Construct(const void* lpInitOptions, void* lpAllocator);
@@ -168,9 +170,9 @@ namespace CgsResource
         // (the X360 stores the raw 172B pool request; we carry the resolved InitOptions). [marked]
         static const s32 KI_MAX_PENDING_CREATE = 128;
         Pool::InitOptions maPendingCreate[KI_MAX_PENDING_CREATE];
-        s32               miPendingHead;
-        s32               miPendingTail;
-        s32               miPendingCount;
+        s32               miPendingHead = 0;   // FIFO empty until CreatePool path drives it (not ctor-set)
+        s32               miPendingTail = 0;
+        s32               miPendingCount = 0;
         // (embedded ScratchPool / Relocator / defrag-state cluster / EA Job / RW mutexes /
         //  resource registry / typed request queues are added with the Construct + dispatch
         //  + defrag passes that use them.)
