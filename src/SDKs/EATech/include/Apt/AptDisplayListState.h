@@ -42,6 +42,12 @@ struct AptDisplayListState
     AptCIH* removeItem(AptCIH* pItem);
     AptCIH* remove(AptCIH* pItem);
 
+    // ChangeDepth @0x82AEE7E0 -- re-position pItem to nDepth (unlink + depth-sorted
+    // re-insert + render-tree notify + stamp the render item's depth). Returns pItem.
+    AptCIH* ChangeDepth(int16_t nDepth, AptCIH* pItem);
+    // swapDepths @0x82AEE560 -- exchange two nodes' list positions AND render-item depths.
+    void    swapDepths(AptCIH* pA, AptCIH* pB);
+
     // Locate by name (then by depth): outPrev = the insert-after node, outMatch =
     // the node at that name/depth (or null). @0x7EE8A0
     void findInst(int nDepth, const EAStringC* pName, AptCIH** ppOutPrev, AptCIH** ppOutMatch) const;
