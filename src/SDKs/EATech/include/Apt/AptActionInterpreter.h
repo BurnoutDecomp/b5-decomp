@@ -119,6 +119,20 @@ public:
     // Release the nCount popped, store the new at the collapsed slot).
     void       stackPopAndPush(int nCount, AptValue* pValue);   // @0x7FB288
 
+    // stackAt @0x82ADC060 -- the operand nDepth slots below the top (0 = top).
+    AptValue*  stackAt(int nDepth) const { return mpStack[mnStackTop - nDepth - 1]; }
+
+    // ---- abort / thrown value (the AS Throw/try-catch abort latch) --------
+    // The interpreter aborts the current run when mpAbortValue is set (Throw 0x2A
+    // records the top operand here; runStream unwinds to mnStackBase). All four
+    // are the leak's trivial accessors over mpAbortValue.
+    // getThrownValue @0x82AD52B0 / doUnwindStack @0x82AD5298 / throwValue
+    // @0x82AD52B8 / clearThrownValue @0x82AD5308.
+    AptValue*  getThrownValue() const { return mpAbortValue; }
+    bool       doUnwindStack() const  { return mpAbortValue != 0; }
+    void       throwValue(AptValue* pValue) { pValue->AddRef(); mpAbortValue = pValue; }
+    void       clearThrownValue() { mpAbortValue->Release(); mpAbortValue = 0; }
+
     // FOLLOW-ON: stackPushIndirect @0x7ECE34 resolves AptVFT_Lookup (via the
     // register array at +0x44) / AptVFT_Register (via AptScriptFunctionBase::
     // GetRegisterValue) values before pushing. Deferred until that register/local
