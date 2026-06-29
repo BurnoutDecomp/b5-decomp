@@ -15,10 +15,18 @@
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"              // mpHead / AptDisplayListNode::mpFirst
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"               // mnEventHandlerMask / mp__Proto__ / DestroyGCPointers
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"            // AptMatrix a/b/c
+#include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"        // AptCurrentRenderTreeManager + Update_Item*
 #include "SDKs/EATech/include/Apt/AptDefine.h"                   // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                      // DOGMA_PoolManager
 
 #include <cmath>   // sqrtf
+
+// FLAG (Apt context singleton -- console off_8324E574; owned by the AptTarget /
+// linker boot TU): cancel this node's in-flight asset load + drop the ActionScript
+// actions queued against it. Declared here as the x64-native accessors; their
+// bodies (the linker CancelLoad + the action-queue removal) land with that TU.
+void AptApt_CancelLoad(AptCIH* pNode);
+void AptApt_RemoveActionFor(AptCIH* pNode);
 
 // ---------------------------------------------------------------------------
 // GetFirstChild @0x82ADC938 -- the first placed child of this node. Only the
@@ -133,4 +141,45 @@ float AptCIH::GetCosAngle(const AptMatrix* pMatrix)
         return 1.0f;
 
     return pMatrix->a / sqrtf(pMatrix->a * pMatrix->a + pMatrix->b * pMatrix->b);
+}
+
+// ---------------------------------------------------------------------------
+// Remove @0x82AFC0B0 -- tear this node out of the live scene.
+//
+// X360 signature: __fastcall(r3=this, r4=bClearGCRoots), forwarded verbatim to
+// ClearCIH. The pseudocode's `int` return is a codegen artifact -- the body ends
+// by tail-calling AptValue::Release() (vtable slot +4, void here) and the sole
+// caller (AptDisplayListState::AddToDelayReleaseList) discards it -> void.
+//   refcount>1 test: lwz r11,4(this); rlwinm 0,6,17; cmplwi 0x4000; ble -- the
+//       0x03FFC000 field is a 12-bit count (LSB bit14), so 0x4000 == 1: getRefCount()>1.
+//   CIH-state test:  lwz r11,0xC(this); rlwinm. 0,1,2 (mask 0x60000000) -- the
+//       setIsDefined(false) is gated on GetCIHState() == 0.
+// ---------------------------------------------------------------------------
+void AptCIH::Remove(bool bClearGCRoots)
+{
+    // Cancel any in-flight asset load + drop the queued ActionScript actions
+    // (through the Apt context singleton -- see the FLAG'd accessors above).
+    AptApt_CancelLoad(this);
+    AptApt_RemoveActionFor(this);
+
+    // Tear down the placed/character state.
+    ClearCIH(bClearGCRoots);
+
+    // If anything outside the display list still references this node, it survives
+    // as an AS-visible "zombie" but must leave the scene: unhook it from the render
+    // tree and -- unless it is mid-transition (a non-zero CIH state) -- mark it undefined.
+    if (getRefCount() > 1)
+    {
+        if (AptRenderTreeManager* pManager = AptCurrentRenderTreeManager())
+        {
+            pManager->Update_ItemNextSiblingChanged(this);
+            pManager->Update_ItemFirstChildChanged(this);
+        }
+
+        if (GetCIHState() == 0)
+            setIsDefined(false);
+    }
+
+    // Drop the display list's own reference on this node (X360 vtable slot +4).
+    Release();
 }

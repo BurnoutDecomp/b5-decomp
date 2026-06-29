@@ -128,6 +128,13 @@ struct AptCIH : public AptValueGC
     // the display-list teardown (AptDisplayList::clear) can call it by name.
     void ClearCIH(bool bClearGCRoots);
 
+    // Remove @0x82AFC0B0 -- detach this node from the live scene: cancel any
+    // in-flight load + drop its queued ActionScript actions, ClearCIH its state,
+    // and -- if anything outside the display list still references it (refcount > 1,
+    // an AS-visible "zombie") -- unhook it from the render tree and (unless mid-
+    // transition) mark its value undefined, then drop the display list's reference.
+    void Remove(bool bClearGCRoots);
+
     // ---- packed state / flags (mFlagsA bit-fields) -----------------------
     uint32_t GetCIHState() const;       void SetCIHState(uint32_t eState);    // @0x7DF12C/0x7DF110
     int16_t  GetZombieCount() const;    void IncZombieCount();  void DecZombieCount();  // @0x7DF160/0x7DF138/0x7FB648
