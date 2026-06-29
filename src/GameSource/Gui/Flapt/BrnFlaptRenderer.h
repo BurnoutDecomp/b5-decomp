@@ -96,6 +96,11 @@ namespace BrnFlapt
         void RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
                         const FlaptFile::GuiTexture* lpTexture);
 
+        // StartRenderingFrame : begin a frame on the immediate-mode render buffer (called
+        // by FlaptManager::Render before the movie draws). Declared here so the manager's
+        // Render compiles; the body lands with this class's own TU.
+        void StartRenderingFrame();
+
         FlaptRenderSet* mpImRenderSet;                // +0x00 (X360 asserted name "mpImRenderSet")
         void*           mpTextRenderer;               // +0x04 (CgsGraphics::TextRenderer*; opaque here)
         void*           mpLanguageManager;            // +0x08
