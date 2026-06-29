@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID (committed typedef)
+#include "GameSource/Network/BrnServerInterface.h"            // BrnNetwork::BrnServerInterface (embedded by value)
 
 namespace CgsNetwork
 {
@@ -15,24 +16,6 @@ namespace CgsNetwork
 namespace BrnNetwork
 {
     class NetworkServers;
-
-    class BrnServerInterface
-    {
-    public:
-        enum EStatus
-        {
-            E_STATUS_BUSY = 0,
-            E_STATUS_ERROR,
-            E_STATUS_IDLE,
-            E_STATUS_COUNT
-        };
-
-        EStatus GetStatus(s32 liComponent) const;
-        bool IsSuspended() const;
-        void Suspend(s32 liUpdateFlags);
-        void Resume();
-        CgsNetwork::ServerInterfaceConnection* GetConnectionComponent();
-    };
 }
 
 namespace CgsNetwork
