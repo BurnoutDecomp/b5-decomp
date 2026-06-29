@@ -1,6 +1,7 @@
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // CgsDev::PerfMonCpu
 
 // BrnFlapt::FlaptManager member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. This TU (class:BrnFlapt::FlaptManager) bodies the one
@@ -33,6 +34,32 @@ FileRef* FlaptManager::GetFile(FileRef* lpOutRef, u32 luFile)
 
     lpOutRef->mpFileInstance = lpFileInst;
     return lpOutRef;
+}
+
+// FLAG: the two CPU perf-monitor handles bracketing the flapt UPDATE region (the X360
+// read them from the globals dword_82F2765C / dword_82FB3B0C). They are registered via
+// CgsDev::PerfMonCpu::AddMonitor by the perf-monitor setup TU; declared extern here so
+// the bracket compiles (the per-TU gate does not link). The console wraps the same
+// region in both monitors (a specific + an enclosing total).
+extern s32 giFlaptUpdateMonitor;        // dword_82F2765C
+extern s32 giFlaptUpdateMonitorTotal;   // dword_82FB3B0C
+
+// ---- Update @ 0x82472120 -------------------------------------------------
+// Per-frame tick: bracket the work in the two CPU perf monitors, then -- if the single
+// (HUD) file instance is active -- advance it by the time step. The X360 returns the
+// inner StopMonitor's r3; the caller (BrnGui::ViewModule::Update) ignores it, and the
+// header declares Update void, so the return is dropped.
+void FlaptManager::Update(f32 lfTimeStep)
+{
+    CgsDev::PerfMonCpu::StartMonitor(giFlaptUpdateMonitor);
+    const s32 liTotalMonitor = giFlaptUpdateMonitorTotal;
+    CgsDev::PerfMonCpu::StartMonitor(liTotalMonitor);
+
+    if (maFlaptFileInstances[0].mbIsActive)
+        maFlaptFileInstances[0].Update(lfTimeStep);
+
+    CgsDev::PerfMonCpu::StopMonitor(giFlaptUpdateMonitor);
+    CgsDev::PerfMonCpu::StopMonitor(liTotalMonitor);
 }
 
 }

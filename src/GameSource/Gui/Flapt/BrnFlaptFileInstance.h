@@ -23,6 +23,8 @@
 
 namespace BrnFlapt
 {
+    struct FlaptRenderer;   // FlaptFileInstance::Render draws through it
+
     struct FlaptFileInstance
     {
         // GetRootMovieClip @ 0x8246B360 : assert IsActive() and a live root clip,
@@ -36,6 +38,12 @@ namespace BrnFlapt
         // call site, r3..r6) so callers compile; the body lands with this class's TU.
         MovieClipRef* FindComponent(u32 luHash, MovieClipRef* lpOutRef,
                                     const char* lpcName) const;
+
+        // Update / Render : the per-frame drive (called by FlaptManager::Update/Render
+        // on the active instance). Declared here so the manager's drive compiles; the
+        // bodies land with this class's own TUs.
+        void Update(f32 lfTimeStep);
+        void Render(FlaptRenderer* lpRenderer);
 
         u8    mbIsActive;             // +0x00
         u8    mau8Opaque01[0x23];     // +0x01..0x23  pad to +0x24
