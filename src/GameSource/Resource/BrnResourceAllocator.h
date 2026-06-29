@@ -82,6 +82,14 @@ class Allocators
 {
 public:
     static void* mpInternalDebugAllocator;   // X360 dword: backing general allocator
+
+    // The process-wide "GlobalGraphics" linear resource allocator (X360 object @ dword_82F2C814,
+    // built by ConstructGlobalGraphicsMemory over an XPhysicalAlloc'd region). Graphics objects that
+    // need GPU-visible memory (e.g. BrnRendererMemory's blit texture state) carve through its virtual
+    // DoAllocate. Returned as the abstract rw::IResourceAllocator* (the X360 calls DoAllocate through
+    // the vtable). DECLARATION-ONLY here; the concrete object + ConstructGlobalGraphicsMemory land
+    // with the Allocators TU.
+    static rw::IResourceAllocator* GetGlobalGraphicsAllocator();
 };
 
 } // namespace BrnResource

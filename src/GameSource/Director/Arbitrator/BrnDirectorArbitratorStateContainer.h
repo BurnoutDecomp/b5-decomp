@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"  // BrnDirector::ArbitratorState / ArbStateSharedInfo
 #include "GameSource/Director/Arbitrator/States/BrnArbStateRoaming.h"   // BrnDirector::ArbStateRoaming (real layout)
+#include "GameSource/Director/Arbitrator/States/BrnArbStateCrashMode.h" // BrnDirector::ArbStateCrashMode (real layout)
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                // BrnDirector::SharedPlaylists
 
 // ----------------------------------------------------------------------------
@@ -32,11 +33,11 @@ namespace BrnDirector
     // GROW each into its real layout (additively) when its own TU lands. (Parity is by
     // name; the container does not touch any per-state member.)
     //
-    // ArbStateRoaming now has its real layout (BrnArbStateRoaming.h, #included above) -- de-
-    // forked from the placeholder so the roaming TU and the container share one definition.
+    // ArbStateRoaming and ArbStateCrashMode now have their real layouts (BrnArbStateRoaming.h /
+    // BrnArbStateCrashMode.h, #included above) -- de-forked from the placeholders so each TU and
+    // the container share one definition.
     class ArbStateCrashing        : public ArbitratorState {};
     class ArbStateTakedown        : public ArbitratorState {};
-    class ArbStateCrashMode       : public ArbitratorState {};
     class ArbStatePostEvent       : public ArbitratorState {};
     class ArbStateRaceIntro       : public ArbitratorState {};
     class ArbStateOnlineRaceIntro : public ArbitratorState {};
@@ -89,6 +90,13 @@ namespace BrnDirector
         // table indexed by EState (seeded by ConstructAll). Declaration-only -- body forwards
         // to mArrayOfStatePointers[leState].
         ArbitratorState* GetState(EState leState) const;
+
+        // Make the given EState the active state (mpCurrentState = mArrayOfStatePointers[leState]
+        // == the source build's +0x35CC word store from the +0x35A0 pointer table). A state's
+        // Update inlines this after successfully Prepare()-ing the destination sibling, to hand
+        // the frame over (BrnArbStateCrashMode::Update's ACTIVE->post-event and
+        // CHANGING_TO_ROAMING->roaming edges). Declaration-only -- body forwards to the table.
+        void SetCurrentState(EState leState);
 
     private:
         // Embedded BY VALUE, in the DWARF member order (which is the source build's

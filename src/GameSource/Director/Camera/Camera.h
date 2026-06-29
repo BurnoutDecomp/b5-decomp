@@ -94,6 +94,28 @@ namespace BrnDirector
             // Set the requested post-FX (full-screen) amount.
             void SetRequestedPostFX(f32 lfAmount);
 
+            // ---- crash-mode effect requests (BrnArbStateCrashMode::Update / ::DoCloseup) ----
+            // These four de-inline the per-frame motion-blur / borders post-FX / time-dilation
+            // pokes the crash-mode arbitrator state makes into mEffects, so that state never
+            // touches the effects block by offset. DECLARATION-ONLY (bodies land with the Camera /
+            // CameraEffects TU); the mEffects offsets quoted are this type's own concern.
+
+            // Request the per-frame motion-blur amounts (the two motion-blur fields at mEffects
+            // +0x44 / +0x48, with both blur-enable flags at +0x4C / +0x4D set true).
+            void RequestMotionBlur(f32 lfBlurAmountA, f32 lfBlurAmountB);
+
+            // Request the motion-blur "shake/strobe" overlay (mEffects +0xAC amount, +0xB0 set to
+            // 1.0, the shake-type byte at +0xB4). Only issued while mbBlurShake is set.
+            void RequestMotionBlurShake(f32 lfAmount, f32 lfBlend, u8 lu8ShakeType);
+
+            // Set the requested full-screen border post-FX amount (mEffects +0xA8). Crash mode
+            // drives it from its borders timer.
+            void SetRequestedBorderPostFX(f32 lfAmount);
+
+            // Set the game time-dilation (slow-mo) factor the camera requests this frame (mEffects
+            // +0x9C). Crash mode requests its close-up / impact-time slow-mo through this.
+            void SetRequestedTimeDilation(f32 lfTimeScale);
+
             // FLAG: minimal-slice decl used by the ICE movie-player family. Body lands
             // with this TU's Clear (@0x8223CE70, a separate function); declaration-only.
             void Clear();

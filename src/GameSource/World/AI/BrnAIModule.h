@@ -8,6 +8,8 @@
 namespace BrnAI
 {
 struct Route;
+struct AICar;
+struct AISectionsData;
 
 class AIModule
 {
@@ -22,6 +24,17 @@ public:
     //     the matching name string.
     const Route* GetMasterRoute() const;                  // this + 0x46B60
     const char*  GetDefaultDistanceFunctionName() const;  // KAPC_..._NAMES[*(this + 0x424A8)]
+
+    // Declared-only accessors needed by RaceBalancingDebugComponent (its own TU). Bodies live in the
+    // AIModule TU (X360 standalone symbols BrnAI::AIModule::GetAICar @0x8276A5C8-region and
+    // GetAISectionsData). GetAICar returns the per-slot AI car (FindAICar @0x827676F8 walks indices
+    // 0..34); GetAISectionsData returns the loaded section data the speed read-outs query.
+    AICar*          GetAICar(u32 luIndex) const;          // BrnAI::AIModule::GetAICar(this, index)
+    AISectionsData* GetAISectionsData() const;            // BrnAI::AIModule::GetAISectionsData(this)
+
+    // The current AI difficulty scalar (0..1), read by RaceBalancingDebugComponent::RenderHUD as the
+    // float at this+0x4EBA4 (322404). Declared-only; body lives in the AIModule TU.
+    f32             GetDifficulty() const;                // *(this + 0x4EBA4)
 
 private:
     struct RouteRequestSlot

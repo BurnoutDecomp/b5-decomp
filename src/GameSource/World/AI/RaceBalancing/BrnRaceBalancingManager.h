@@ -40,6 +40,13 @@ namespace BrnAI
     struct RouteNode;
     class  AIModule;
 
+    // The race-balancing debug HUD (its own TU) reads the manager's per-rival graph/route, the
+    // race time + checkpoint count, and re-runs ComputeTargetSpeed/ComputeParSpeed to show the
+    // balancer's working. On X360 those reads/calls hit the private members/symbols directly;
+    // befriending it is the faithful de-inlined form of that direct access (additive -- no layout
+    // or release-behaviour change, like the existing friends in BrnRaceBalancingRoute.h).
+    class RaceBalancingDebugComponent;
+
     // DWARF BrnAICar.h:648 / BrnRaceBalancingManager.h:102-109 -- the rubber-band
     // tuning constants (rodata). KF_DEFAULT_SPEED is the fall-back target speed
     // returned when the racer has no valid route / the race is not running
@@ -58,6 +65,10 @@ namespace BrnAI
     // DWARF BrnRaceBalancingManager.h:48. The DecFIGS dump spells it `struct`.
     struct RaceBalancingManager
     {
+        // The debug HUD reads the private graphs/routes + race state and the private speed
+        // computations (see the forward-declaration note above).
+        friend class RaceBalancingDebugComponent;
+
         // ---- public interface (DWARF declaration order :56-97) -----------------------------
         void Construct(AIModule* lpAIModule);                                   // :56  (inlined on X360)
 

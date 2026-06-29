@@ -25,6 +25,12 @@ namespace BrnAI
 struct Route;
 struct RaceBalancingGraph;
 
+// The race-balancing debug HUD (its own TU) reads the route's per-checkpoint times + take-down
+// count + validity directly to plot the time graph and the textual read-outs. On X360 those were
+// direct member loads (the debug component inlined the access); befriending it is the faithful
+// de-inlined form -- additive, no layout or release-behaviour change.
+class RaceBalancingDebugComponent;
+
 // Which timing graph a sample belongs to. The route keeps two parallel time
 // tables (mafTimes[2][...]): the par time for being AHEAD vs BEHIND the racer.
 enum GraphType
@@ -50,6 +56,7 @@ class RaceBalancingRoute
 {
     friend struct RaceBalancingRouteEmbedProbe;
     friend struct RaceBalancingManager;
+    friend class RaceBalancingDebugComponent;
 public:
     static const s32 KI_MAX_TIMES = 320; // mafTimes second extent
 
