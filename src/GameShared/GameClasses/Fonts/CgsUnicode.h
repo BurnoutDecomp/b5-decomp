@@ -22,6 +22,24 @@ namespace CgsUnicode
     // home; the body is its own TU. Used by CgsResource::LanguageResourceType's serialised
     // descriptor (string-table size).
     u32 ByteLength(const u8* lpUtf8String);
+
+    // Validate the UTF-8 character at lpUtf8Char: its lead byte must be a valid lead and be
+    // followed by the right number of continuation (10xxxxxx) bytes. X360 ARTIST 0x82834D10.
+    // Returns 1 (valid / NUL) or 0 (invalid). Used by IsValidUtf8String.
+    bool IsValidUtf8Character(const u8* lpUtf8Char);
+
+    // Validate a whole NUL-terminated UTF-8 string (every character valid). X360 ARTIST
+    // 0x82834EA0. Returns 1 (empty / all valid) or 0. Used by CgsAptString::Prepare's
+    // string-validity assert.
+    bool IsValidUtf8String(const u8* lpUtf8String);
+
+    // Copy lpUtf8SourceString into lpUtf8TargetString, NUL-terminating, never writing past
+    // lnMaxTargetStringLength bytes and never truncating in the middle of a multi-byte UTF-8
+    // character (backs up to the last leading byte when the cap is hit). Returns the target.
+    // X360 ARTIST 0x82834478. Used by CgsAptString::Prepare to copy the resolved text into the
+    // caller's buffer.
+    CgsUtf8* CopyN(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
+                   s32 lnMaxTargetStringLength);
 }
 
 #endif

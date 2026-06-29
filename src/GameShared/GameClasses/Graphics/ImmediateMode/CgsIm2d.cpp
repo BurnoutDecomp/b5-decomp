@@ -1,3 +1,9 @@
+// <d3d9.h> needs winuser (LPMSG), but a transitive include below (rw/core/debug/DebugCriticalSection.h
+// via the renderengine/Im2d chain) defines NOUSER/NOGDI ahead of its own <windows.h>, which strips
+// winuser. Bring the full <Windows.h> in FIRST so LPMSG is defined before any NOUSER guard runs --
+// the same ordering guard CgsImRenderBufferTemplate.cpp uses for the shared 2D draw path.
+#include <Windows.h>
+
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
 #include "pc/gcm/renderengine/device.h"        // gDevice, gDisplayWidth/Height
 #include "pc/gcm/renderengine/texture.h"       // Texture::mpD3DTexture
