@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"
+#include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h" // GameStateImageManagerBase::ImageLoadRequest (real home)
 
 // Element-type homes for the fixed-capacity Array<T,N> leaf instantiations reconstructed by the
 // GameMode leaf batch. PROVISIONAL minimal records: sized to the X360 element stride; real field
@@ -25,18 +26,12 @@ struct ChainableMultiplierInfo { s32 maField[4]; };  // X360 stride 16 (provisio
 // TU (Array_CollectedBillboard_5.cpp) now includes that home directly (mirroring the
 // StuntModeScoringOnline promotion below).
 
-// Minimal owner-class slices carrying only the nested element type each Array instantiation needs.
-class GameStateImageManagerBase
-{
-public:
-    struct ImageLoadRequest                          // DWARF BrnGameStateImageManagerBase.h:174 (12 bytes)
-    {
-        s32 miImageIndex;            // 0x00
-        s32 miSlotIndex;             // 0x04
-        s32 meImageGalleryImageType; // 0x08  (GameStateModuleIO::EImageGalleryType; s32 placeholder)
-    };
-};
-
+// NOTE: BrnGameState::GameStateImageManagerBase (and its nested ImageLoadRequest element type) is
+// now FULLY homed in ImageManager/BrnGameStateImageManagerBase.h -- the image-gallery manager's own
+// TU. The provisional `class GameStateImageManagerBase { struct ImageLoadRequest { ... }; }` stub
+// that used to live here has been removed; the Array<ImageLoadRequest,3> explicit-instantiation TU
+// (Array_ImageLoadRequest_3.cpp) now reaches the real nested type through this include (mirroring
+// the DeveloperChallengeManager / StuntModeScoringOnline promotions above).
 class OnlineFlybyManager
 {
 public:

@@ -11,9 +11,10 @@
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. MINIMAL-SLICE NOTE: the Module class
 // is a large keystone (Prepare/Release state machines, the VariableEventQueue, the
-// Environment, etc.). The ONLY surface modelled here is the prepare-stage enum and
-// its post-increment operator (X360 @0x82681D30), which the prepare state machine
-// walks. The rest of the class is left to its full owning keystone TU.
+// Environment, etc.). The surfaces modelled here are the constructor (X360 @0x827E0FD0,
+// skeleton sub-object construction), the prepare-stage enum, and its post-increment
+// operator (X360 @0x82681D30), which the prepare state machine walks. The rest of the
+// class body is left to its full owning keystone TU.
 // =============================================================================
 
 namespace CgsSound
@@ -21,12 +22,40 @@ namespace CgsSound
 namespace Logic
 {
 
-// The Module's prepare-stage enum. The X360 prepare state machine walks the stages
-// with the post-increment operator below, range-guarding the stepped-to stage against
-// the final eModulePrepareDone stage (== 6, the bound the X360 asserts at
-// CgsSoundLogicModule.h:277: "leEnumIndex <= Module::eModulePrepareDone").
-namespace Module
+// =============================================================================
+// CgsSound::Logic::Module -- the sound-logic subsystem module (the keystone class).
+//
+// X360 ctor @0x827E0FD0 (CgsSound::Logic::Module::Module) proves the layout shape: a
+// CgsModule subsystem-module base (base-most vtable @+0x000, the two base read/write
+// RWMutex locks @+0x010 and @+0x118), then -- after the most-derived vtable hand-off --
+// the embedded sub-objects:
+//   +0x000   base-most (CgsModule) vtable            (off_820CE500)
+//   +0x010   base read/write lock A                  (EA::Thread::RWMutex)
+//   +0x118   base read/write lock B                  (EA::Thread::RWMutex)
+//   +0x000   most-derived (Module) vtable            (off_820D00E0)
+//   +0x238   mPlaybackModule  (CgsSound::Playback::Module::Module)
+//   +0x29A0  mMicrophoneSystem (CgsSound::Logic::MicrophoneSystem)
+//   +0x2C30  the embedded Nicotine::IDynamicMixer-derived mixer sub-object, whose vtable
+//            the Module overrides @+0x2C30 with off_820CDC40 (a Module-owned mixer vtable);
+//            +0x2C50 (mixer-base +0x20) cleared to 0
+//   +0x2C74  trailing byte flag (stb of 0)
+//
+// SKELETON NOTE: the full ~0x2C75-byte layout is dominated by the embedded
+// Playback::Module (~0x2768 bytes) and the IDynamicMixer-derived mixer, neither of which
+// is modelled here as a named member (Playback::Module is its own TU; the X360 32-bit
+// member sizes of the EAThread/mix primitives do not map cleanly to host widths). Like the
+// sibling subsystem-module ctors (CgsGui::GuiModule, BrnDirector::DirectorModule), the
+// ctor addresses every written location by its authoritative X360 byte offset over a
+// raw view of `this`, constructing each owned sub-object in place. Only the locations the
+// ctor actually writes are reproduced. Module therefore stays a declaration-only skeleton.
+// =============================================================================
+class Module
 {
+public:
+    // The Module's prepare-stage enum. The X360 prepare state machine walks the stages
+    // with the post-increment operator below, range-guarding the stepped-to stage against
+    // the final eModulePrepareDone stage (== 6, the bound the X360 asserts at
+    // CgsSoundLogicModule.h:277: "leEnumIndex <= Module::eModulePrepareDone").
     enum EPrepareState
     {
         eModulePrepareStage0 = 0,
@@ -37,7 +66,12 @@ namespace Module
         eModulePrepareStage5 = 5,
         eModulePrepareDone   = 6
     };
-}
+
+    // X360 @0x827E0FD0. Install the base + most-derived vtables, build the two base
+    // read/write locks, construct the embedded Playback::Module / MicrophoneSystem /
+    // mixer sub-objects, override the mixer vtable, and clear the trailing flags.
+    Module();
+};
 
 // Post-increment over the Module prepare stages. X360 @0x82681D30 (DWARF cites the
 // assert at CgsSoundLogicModule.h:277): saves the old stage, increments in place, then
