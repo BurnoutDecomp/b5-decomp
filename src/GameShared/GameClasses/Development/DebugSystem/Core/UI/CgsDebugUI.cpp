@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // DebugManagerConstructParameters
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsWindow.h"     // Window (mWindowList element - Add/Remove/IsAdded)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (Get2DRenderer guard)
 
 // CgsDev::DebugUI::DebugUI - the manager accessors every DebugComponent / manager reaches through
@@ -42,6 +43,15 @@ namespace CgsDev
 
         // X360 CgsDebugUI.cpp:345 is empty (the debug allocator owns the managers' pool backing).
         void DebugUI::Destruct() {}
+
+        // Window-stack membership (the Console toggle/slide path drives these). AddWindow appends the
+        // window to the stack; RemoveWindow unlinks it; IsWindowAdded queries membership. The full X360
+        // AddWindow also resets the cascade position + focus bookkeeping (UpdateCascadePosition /
+        // SetActiveWindow) - those ride on the DebugUI window-stack follow-on; the membership change is
+        // the part the Console depends on.
+        void DebugUI::AddWindow(Window* lpWindow)    { mWindowList.Add(lpWindow); }
+        void DebugUI::RemoveWindow(Window* lpWindow) { mWindowList.Remove(lpWindow); }
+        bool DebugUI::IsWindowAdded(Window* lpWindow){ return mWindowList.IsAdded(lpWindow); }
 
         // X360 0x828221A8 (CgsDebugUI.h:246). Asserts the 2D immediate renderer has been wired
         // (DebugManager::ConstructRenderer calls Set2DRenderer at boot) then returns it. Every
