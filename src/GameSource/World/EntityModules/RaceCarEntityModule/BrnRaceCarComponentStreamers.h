@@ -161,6 +161,12 @@ public:
     // LOADEDANDATTACHED state. lAssetId / lbIsPlayer are validation-only (unused here).
     bool IsVehicleAssetLoaded( CgsID lAssetId, s32 liActiveRaceCar, bool lbIsPlayer );
 
+    // Drop car liActiveRaceCar's streaming sound (drives the slot toward DETACH/unload).
+    // The X360 RaceCarStreamer removal path calls a dedicated RaceCarAudioStreamer::RemoveEntry
+    // passing the slot's own desired id; the encapsulated 1-arg form reads maEntries[i] itself.
+    // Declared for that call site; bodied with the leaf (in-scope callee).
+    void RemoveEntry( s32 liActiveRaceCar );
+
 protected:
     virtual void OnAssetLoaded( s32 liActiveRaceCar, const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent );
     virtual void OnAssetUnloading( s32 liActiveRaceCar );

@@ -53,6 +53,11 @@ namespace BrnPhysics { namespace Deformation { struct StreamedDeformationSpec; }
 namespace BrnWorld
 {
 
+// BrnRaceCarStreamer.h:278 (DWARF: namespace-scope `extern const float32_t`). The minimum
+// time (seconds) that must elapse since the last desired-car load before UpdateDesiredCars
+// will start a new un-prioritised desired load. Defined in BrnRaceCarStreamer.cpp.
+extern const f32 KF_TIME_BETWEEN_DESIRED_LOADS;
+
 // Forward decls for the PreScene IO buffers (Update only; pointer params).
 namespace RaceCarEntityModuleIO
 {

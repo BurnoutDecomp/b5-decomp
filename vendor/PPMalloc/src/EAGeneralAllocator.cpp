@@ -21,6 +21,47 @@ namespace EA
 {
 namespace Allocator
 {
+    // Uncalled layout pin. The X360 (PPC, 32-bit ptr) and the PC x64 gate host lay this class out
+    // differently once pointer-width widens 4B->8B, so only POINTER-INVARIANT facts are asserted as
+    // absolute byte offsets (the pointer-free leading scalars of each struct + the X360 chunk-header
+    // encoding the engine reads by name). Member ORDER invariants are checked relationally. This is
+    // never called; it exists purely to trip the build if the recovered layout drifts.
+    void GeneralAllocator::_AssertLayout()
+    {
+        // Chunk: the dlmalloc boundary-tag header. mnPriorSize / mnSize are the two u32 size words
+        // the X360 engine masks (size & 0x7FFFFFF8, low bits = in-use/mmapped flags); they precede
+        // the fd/bk pointers and so are pointer-free + offset-stable across X360/x64.
+        static_assert(offsetof(GeneralAllocator::Chunk, mnPriorSize) == 0, "Chunk.mnPriorSize must be first");
+        static_assert(offsetof(GeneralAllocator::Chunk, mnSize)      == 4, "Chunk.mnSize follows mnPriorSize");
+        // CoreBlock: mpCore is the first member (a pointer); the bool flag run + the X360
+        // prev/next list slots come after it, so only the relative ordering is invariant on LLP64.
+        static_assert(offsetof(GeneralAllocator::CoreBlock, mpCore)          == 0,
+                      "CoreBlock.mpCore must be first");
+        static_assert(offsetof(GeneralAllocator::CoreBlock, mbMMappedMemory) <
+                      offsetof(GeneralAllocator::CoreBlock, mpPrevCoreBlock),
+                      "CoreBlock flag run precedes the prev/next list slots");
+        static_assert(offsetof(GeneralAllocator::CoreBlock, mpPrevCoreBlock) <
+                      offsetof(GeneralAllocator::CoreBlock, mpNextCoreBlock),
+                      "CoreBlock mpPrevCoreBlock precedes mpNextCoreBlock (UnlinkCoreBlock splice order)");
+        // Allocator: mbInitialized is the FIRST member (offset 0, non-polymorphic class, no vptr --
+        // asm ctor @0x82B4FF58 stores it as the first byte); mnMaxFastBinChunkSize follows it, then
+        // the fast-bin array - the ctor/Init store order the engine relies on.
+        static_assert(offsetof(GeneralAllocator, mbInitialized) == 0,
+                      "mbInitialized is the first member (offset 0, no vptr)");
+        static_assert(offsetof(GeneralAllocator, mbInitialized) <
+                      offsetof(GeneralAllocator, mnMaxFastBinChunkSize),
+                      "mbInitialized precedes mnMaxFastBinChunkSize");
+        static_assert(offsetof(GeneralAllocator, mnMaxFastBinChunkSize) <
+                      offsetof(GeneralAllocator, mpFastBinArray),
+                      "mnMaxFastBinChunkSize precedes mpFastBinArray");
+        static_assert(offsetof(GeneralAllocator, mpFastBinArray) <
+                      offsetof(GeneralAllocator, mpBinArray),
+                      "fast bins precede the regular bins");
+        static_assert(offsetof(GeneralAllocator, mpBinArray) <
+                      offsetof(GeneralAllocator, mpTopChunk),
+                      "regular bins precede the top chunk");
+    }
+
     // @ 0x82B4EDC8 / 0x82B4DC98 - default sinks (the real X360 versions route to the platform
     // debug-print; inert here - they are only invoked on assertion/trace, which the engine paths
     // gate behind debug flags).
@@ -635,6 +676,18 @@ namespace Allocator
         mAutoHeapValidationLevel       = heapValidationLevel;
         mnAutoHeapValidationFrequency  = static_cast<unsigned int>(nFrequency);
         mnAutoHeapValidationEventCount = 0;
+    }
+
+    // @ 0x82B4DE08 - splice pCoreBlock out of the circular core-block list. The X360 body is the
+    // classic two-store doubly-linked-list unlink against the CoreBlock prev/next slots (offsets
+    // +24 / +28 == mpPrevCoreBlock / mpNextCoreBlock); reconstructed here BY NAMED MEMBER so it is
+    // layout-portable. (Structural op shared by the real Shutdown / TrimCore teardown paths; the
+    // PC-leaf engine keeps a single core block, so it is a faithful but currently-unexercised
+    // entry point.)
+    void GeneralAllocator::UnlinkCoreBlock(CoreBlock* pCoreBlock)
+    {
+        pCoreBlock->mpPrevCoreBlock->mpNextCoreBlock = pCoreBlock->mpNextCoreBlock;
+        pCoreBlock->mpNextCoreBlock->mpPrevCoreBlock = pCoreBlock->mpPrevCoreBlock;
     }
 }
 }
