@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // CgsDev::PerfMonCpu
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"          // CgsGraphics::Im2d::EndRendering (the render-buffer frame flush)
 
 // BrnFlapt::FlaptManager member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. This TU (class:BrnFlapt::FlaptManager) bodies the one
@@ -59,6 +60,40 @@ void FlaptManager::Update(f32 lfTimeStep)
         maFlaptFileInstances[0].Update(lfTimeStep);
 
     CgsDev::PerfMonCpu::StopMonitor(giFlaptUpdateMonitor);
+    CgsDev::PerfMonCpu::StopMonitor(liTotalMonitor);
+}
+
+// FLAG: the two CPU perf-monitor handles bracketing the flapt RENDER region (X360
+// globals dword_82F27680 / dword_82FB3B10). Registered by the perf-monitor setup TU;
+// extern here so the bracket compiles.
+extern s32 giFlaptRenderMonitor;        // dword_82F27680
+extern s32 giFlaptRenderMonitorTotal;   // dword_82FB3B10
+
+// ---- Render @ 0x82472908 -------------------------------------------------
+// Per-frame draw: bracket in the two CPU perf monitors; start the frame on the embedded
+// renderer; draw the single active (HUD) file instance through it; flush the immediate-
+// mode render buffer (EndRendering); then clear the renderer's per-frame texture/blend
+// cache so the next frame re-binds. The X360 reaches the render buffer as
+// mRenderer.mpImRenderSet->mpIm2dRenderBuffer + 4 (the command sub-object), which folds
+// to the named buffer on the PC Im2d; its int return is dropped (header declares void).
+void FlaptManager::Render()
+{
+    CgsDev::PerfMonCpu::StartMonitor(giFlaptRenderMonitor);
+    const s32 liTotalMonitor = giFlaptRenderMonitorTotal;
+    CgsDev::PerfMonCpu::StartMonitor(liTotalMonitor);
+
+    mRenderer.StartRenderingFrame();
+
+    if (maFlaptFileInstances[0].mbIsActive)
+        maFlaptFileInstances[0].Render(&mRenderer);
+
+    mRenderer.mpImRenderSet->mpIm2dRenderBuffer->EndRendering();
+
+    // Clear the renderer's per-frame bound-texture / blend-state cache (X360 a1+0x50/0x54).
+    mRenderer.mpCurrentTexture    = 0;
+    mRenderer.mpCurrentBlendState = 0;
+
+    CgsDev::PerfMonCpu::StopMonitor(giFlaptRenderMonitor);
     CgsDev::PerfMonCpu::StopMonitor(liTotalMonitor);
 }
 

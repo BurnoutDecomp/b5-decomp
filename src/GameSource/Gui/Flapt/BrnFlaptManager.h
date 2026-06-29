@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"          // BrnFlapt::FileRef
 #include "GameSource/Gui/Flapt/BrnFlaptFileInstance.h"     // BrnFlapt::FlaptFileInstance (52-byte stride)
+#include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"         // BrnFlapt::FlaptRenderer (the embedded renderer @ console +0x40)
 
 // ============================================================================
 // GameSource/Gui/Flapt/BrnFlaptManager.h
@@ -82,6 +83,11 @@ namespace BrnFlapt
 
         u8                mau8Opaque00[8];          // +0x00..0x07  (not attested here)
         FlaptFileInstance maFlaptFileInstances[1];  // +0x08  (true length not attested; >=1)
+        // [c:+0x40] the embedded renderer Render() drives (StartRenderingFrame + the
+        // per-frame texture/blend cache it resets). Named member -- the console byte
+        // offset folds away on x64. Render reads mRenderer.mpImRenderSet->mpIm2dRenderBuffer
+        // for EndRendering and clears mRenderer.mpCurrentTexture/mpCurrentBlendState.
+        FlaptRenderer     mRenderer;                // [c:+0x40]
     };
 }
 
