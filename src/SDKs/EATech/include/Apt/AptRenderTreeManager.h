@@ -112,4 +112,9 @@ struct AptRenderTreeManager
     void Update_ItemNextSiblingChanged(AptCIH* /*pCIH*/) {}
     void Update_ItemInserted(AptCIH* /*pCIH*/, int /*nTick*/ = 0) {}
     void Update_SetRootItem(AptCIH* /*pCIH*/, int /*nTick*/ = 0) {}
+
+    // @0x82AE0880 -- a node's mask state changed (set/cleared as a mask). FLAG:
+    // the double-buffered render-tree mask propagation; no-op on the single-buffer
+    // bring-up path (AptCIH::SetMask/ClearCIH call it by name).
+    void Update_ItemSetMaskState(AptCIH* /*pCIH*/, int /*nTick*/, bool /*bIsMask*/) {}
 };

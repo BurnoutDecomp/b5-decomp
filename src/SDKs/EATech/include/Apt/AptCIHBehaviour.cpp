@@ -19,6 +19,7 @@
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"            // AptMatrix a/b/c
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"            // AptCXForm (writable colour return)
 #include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"        // AptCurrentRenderTreeManager + Update_Item*
+#include "SDKs/EATech/include/Apt/AptRenderingContext.h"         // multMatrix + gAptIdentityMatrix
 #include "SDKs/EATech/include/Apt/AptDefine.h"                   // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                      // DOGMA_PoolManager
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"               // gpGCPoolManager Allocate/Deallocate
@@ -357,4 +358,98 @@ void AptCIH::Release()
         return;
     }
     // CIHState == 1 && refcount == 1: singly-owned, pinned -> no-op.
+}
+
+// ---------------------------------------------------------------------------
+// SetMask @0x82AF6650 -- wire (or tear down) the mask MASTER/SLAVE relationship.
+// `this` is the MASTER (the node setMask is invoked on); pMaskSlave is the SLAVE
+// (the node made into a mask). "#!MASKSLAVE!#" lives on the slave's hash -> the
+// master; "#!MASKMASTER!#" lives on the master's hash -> the slave. The matrix
+// handed to the slave is its world transform concatenated up the master's parent
+// chain. Per-node native-hash null-guards (the X360 passes a null hash to
+// Unset/Set when mpProperties is absent) become GetNativeHash() guards.
+// ---------------------------------------------------------------------------
+void AptCIH::SetMask(AptCIH* pMaskSlave)
+{
+    // Only a defined character-instance-handle (or the CIHNone placeholder) is a
+    // legal mask slave; anything else -> no-op.
+    const bool bSlaveIsCIH =
+        (pMaskSlave->getVtblIndex() == AptVFT_CharacterInstHandle && pMaskSlave->getIsDefined()) ||
+        pMaskSlave->getVtblIndex() == AptVFT_CIHNone;
+    if (!bSlaveIsCIH)
+        return;
+
+    AptRenderTreeManager* pManager = AptCurrentRenderTreeManager();
+    const int nTick = gnCurrUpdateTick;
+    const EAStringC strMaskSlave("#!MASKSLAVE!#");
+    const EAStringC strMaskMaster("#!MASKMASTER!#");
+
+    // (1) If THIS master already carries a mask, tear that prior wiring down.
+    AptRenderItem* pMasterRenderItem = mpCharacterInst->mpRenderItem;
+    if (pMasterRenderItem->GetHasMask() && pMasterRenderItem->GetMask())
+    {
+        if (AptCIH* pCurrentSlave = GetMask())
+        {
+            pCurrentSlave->mpCharacterInst->GetRenderItemWritable()->SetIsMask(false, nullptr);
+            pCurrentSlave->SetGeneralizedProcessDirtyState(false);
+            if (pManager)
+                pManager->Update_ItemSetMaskState(pMaskSlave, nTick, false);
+            if (AptNativeHash* pSlaveHash = pCurrentSlave->GetNativeHash())
+                pSlaveHash->Unset(strMaskSlave);
+        }
+        if (ContainsNativeHashVirtual())
+        {
+            if (AptNativeHash* pMasterHash = GetNativeHash())
+                pMasterHash->Unset(strMaskMaster);
+        }
+    }
+
+    // (2) If the requested slave is ALREADY a mask (for another master), unhook it.
+    AptCharacterInst* pSlaveCharInst = pMaskSlave->mpCharacterInst;
+    if (pSlaveCharInst->mpRenderItem->GetIsMask())
+    {
+        pSlaveCharInst->GetRenderItemWritable()->SetIsMask(false, nullptr);
+        pMaskSlave->SetGeneralizedProcessDirtyState(false);
+        if (pManager)
+            pManager->Update_ItemSetMaskState(pMaskSlave, nTick, false);
+
+        AptNativeHash* pSlaveHash = pMaskSlave->GetNativeHash();
+        AptCIH* pOldMaster = pSlaveHash
+            ? static_cast<AptCIH*>(pSlaveHash->Lookup(strMaskSlave))
+            : nullptr;
+
+        pOldMaster->mpCharacterInst->GetRenderItemWritable()->SetHasMask(false, nullptr);
+        if (AptNativeHash* pOldMasterHash = pOldMaster->GetNativeHash())
+            pOldMasterHash->Unset(strMaskMaster);
+        if (pSlaveHash)
+            pSlaveHash->Unset(strMaskSlave);
+    }
+
+    // (3) Build the slave's world mask matrix from the master's parent chain.
+    AptMatrix maskMatrix = gAptIdentityMatrix;
+    for (AptCIH* pAncestor = mpDisplayListParent; pAncestor;
+         pAncestor = pAncestor->mpDisplayListParent)
+    {
+        const AptMatrix* pPos = pAncestor->mpCharacterInst->mpRenderItem->mpPositionMatrix;
+        if (!pPos)
+            pPos = &gAptIdentityMatrix;
+        AptRenderingContext::multMatrix(&maskMatrix, pPos, &maskMatrix);
+    }
+
+    // (4) Install the slave as a mask + cross-link master<->slave.
+    pSlaveCharInst->GetRenderItemWritable()->SetIsMask(true, &maskMatrix);
+    pMaskSlave->SetGeneralizedProcessDirtyState(true);
+    if (pManager)
+        pManager->Update_ItemSetMaskState(pMaskSlave, nTick, true);
+
+    if (AptNativeHash* pSlaveHash = pMaskSlave->GetNativeHash())
+        pSlaveHash->Set(strMaskSlave, this);
+    if (ContainsNativeHashVirtual())
+    {
+        if (AptNativeHash* pMasterHash = GetNativeHash())
+            pMasterHash->Set(strMaskMaster, pMaskSlave);
+    }
+
+    AptRenderItem* pSlaveRenderItem = pSlaveCharInst->GetRenderItemWritable();
+    mpCharacterInst->GetRenderItemWritable()->SetHasMask(true, pSlaveRenderItem);
 }
