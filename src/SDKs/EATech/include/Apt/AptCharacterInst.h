@@ -67,6 +67,9 @@ struct AptCharacterInst
 
     AptRenderItem*       GetRenderItem() const;          // @0x7DF008
     AptRenderItem*       GetRenderItemWritable();        // @0x7EC910 (via the manager)
+    // GetRenderItemDynamicTextWritable @0x82AE1BF8 -- ICF-folded thunk: identical body
+    // to GetRenderItemWritable (the X360 linker folded the duplicate).
+    AptRenderItem*       GetRenderItemDynamicTextWritable() { return GetRenderItemWritable(); }
     AptRenderItem*       SetRenderItem(AptRenderItem* pItem);   // @0x7E20E8
 
     // The character type tag (mTypeFlags bits 26..31): 1 shape / 2 dynamic-text /

@@ -354,6 +354,16 @@ bool AptRenderItem::IsWritableForThisTick(int nTick) const
     return mCreatedOnTick == nTick || (mFlags & 0x02000000u) != 0;
 }
 
+// IsRenderableForThisTick @0x82AD4FC8 -- drawable on nTick: aged in (created on or
+// before nTick) AND the committed (non-writable, mFlags bit 25 clear) revision. The
+// in-progress writable copy and future-tick items are never drawn.
+bool AptRenderItem::IsRenderableForThisTick(int nTick) const
+{
+    if ((nTick - mCreatedOnTick) < 0)
+        return false;
+    return (mFlags & 0x02000000u) == 0;
+}
+
 // Manager_IsDeletionMark @0x7DEEBC -- mFlags bit 28.
 bool AptRenderItem::Manager_IsDeletionMark() const { return ((mFlags >> 28) & 1u) != 0; }
 
