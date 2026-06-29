@@ -32,12 +32,10 @@ namespace CgsGameTalk
 {
     // The default TCP port the listening socket binds to when Construct is called
     // without an explicit port (DEFAULT_GAMETALK_PORT in the PS3 sibling).
-    // NOT GROUNDED: this TU's caller (CgsGameTalk::GameTalk::Construct) always
-    // passes the port explicitly (asm `stw a3,0x4020(this)`), so the default is
-    // never materialised in this TU's asm and the literal is unavailable. Flagged
-    // placeholder 0 -- do NOT trust this value; fill it from the GameTalk TU asm
-    // when that caller is reconstructed.
-    static const s32 KI_DEFAULT_GAMETALK_PORT = 0; // FLAGGED-PLACEHOLDER (ungrounded)
+    // GROUNDED from the caller TU: CgsGameTalk::GameTalk::Construct (X360
+    // @0x82837648) loads `li r5, 0x2694` as the port argument before calling
+    // GameTalkProtocol::Construct, so the listen port is 0x2694 == 9876.
+    static const s32 KI_DEFAULT_GAMETALK_PORT = 9876; // 0x2694 (from GameTalk::Construct asm)
 
     // The receive ring buffer capacity. The asm compares the running message
     // size against 0x4000 (CgsGameTalkProtocolX360.cpp:598 assert) and lays the

@@ -23,15 +23,17 @@ namespace CgsResource
     }
 
     // rw -> small (0x828EB6E8): take the two populated rw slots (main=0, graphics=2) into the
-    // compact 3-pool form; the other serialised categories must be empty. [X360 also asserts rw
-    // slot 4 -- the 5th, BaseResources<5> form; our rw::Resource is <4> so that slot is omitted.]
-    void SmallResource::CreateFromRWResource(const rw::Resource& lrResource)
+    // compact 3-pool form; the other serialised categories must be empty. The X360 fires THREE
+    // "unitialized memory" asserts (slots 3, 4, 1 -- asm 0x828EB708/EB788/EB7E8, lines 200/201/202)
+    // over the 5-slot serialised resource (PC rwcore narrowed rw::Resource to <4>; we take the
+    // <5> form here, paralleling ResourceDescriptor=<5>). Then it writes ONLY small[0] and small[1].
+    void SmallResource::CreateFromRWResource(const rw::BaseResources<5>& lrResource)
     {
-        CGS_ASSERT(lrResource.m_baseResources[1] == 0, "Can not convert from rw resource with unitialized memory\n");
         CGS_ASSERT(lrResource.m_baseResources[3] == 0, "Can not convert from rw resource with unitialized memory\n");
+        CGS_ASSERT(lrResource.m_baseResources[4] == 0, "Can not convert from rw resource with unitialized memory\n");
+        CGS_ASSERT(lrResource.m_baseResources[1] == 0, "Can not convert from rw resource with unitialized memory\n");
         m_baseResources[0] = lrResource.m_baseResources[0];   // main      <- rw[0]
         m_baseResources[1] = lrResource.m_baseResources[2];   // graphics  <- rw[2]
-        m_baseResources[2] = 0;                               // graphics-local unused (X360: caller zero-inits)
     }
 
     // rw -> small descriptor (0x826661F8): map the serialised 5-entry resource descriptor's

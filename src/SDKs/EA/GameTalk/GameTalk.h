@@ -103,6 +103,19 @@ namespace GameTalk
         // Process-wide GameTalk singleton.
         static GameTalkManager* GetInstance();
 
+        // GROWN for CgsGameTalk::GameTalk::Prepare (X360 @0x828394B8): brings the
+        // process-wide GameTalk singleton up. The asm calls this with the owner
+        // object, a small count (10) and a flags word (0), then reads the populated
+        // global singleton pointer back out. Modelled to mirror the asm argument
+        // order (owner, count, flags); the return is discarded by the caller.
+        static void* CreateInstance(void* lpOwner, s32 liMaxChannels, s32 lxFlags);
+
+        // GROWN for CgsGameTalk::GameTalk::Update (X360 @0x828376C0): pump the
+        // singleton's transport once per frame. The X360 reaches the singleton's
+        // embedded protocol and calls its per-frame virtual; modelled here as the
+        // manager's own per-frame Update.
+        void Update();
+
         // Ferry a finished message out to the named tool endpoint
         // ("Tool.GameExplorer"). STATIC (the asm passes the endpoint in r3, not a
         // `this`); FileClose's `GetInstance()->SendMessage(...)` evaluates
@@ -117,9 +130,12 @@ namespace GameTalk
         // register lpHandler to receive messages arriving on the named channel
         // (asm passes the manager instance, the OnMessageReceived function, and
         // the "AttribSys.xenon" channel name).
-        static void RegisterMessageHandler(GameTalkManager* lpManager,
-                                           MessageHandler lpHandler,
-                                           const char* lpcChannel);
+        // Returns the manager's registration result (forwarded by
+        // CgsGameTalk::GameTalk::RegisterMessageHandler, X360 @0x828248D0, which
+        // captures the r3 result and returns it).
+        static s32 RegisterMessageHandler(GameTalkManager* lpManager,
+                                          MessageHandler lpHandler,
+                                          const char* lpcChannel);
     };
 }
 }

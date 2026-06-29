@@ -189,6 +189,16 @@ namespace CgsResource
         bool operator!=(const BaseResourcePtr& lrOther) const;
         bool operator!=(const ResourceHandle& lrHandle) const;
     };
+
+    // ADDITIVE GROW: the engine's shared "null" resource pointer sentinel. Game code
+    // compares loaded resource pointers against it (`lResource != CgsResource::NULLResourcePtr`)
+    // to assert a handle is populated; the X360 ARTIST build implements that compare as
+    // BaseResourcePtr::IsEqual(&NULLResourcePtr, lResource) (e.g. the per-component
+    // RaceCarStreamer::On*Loaded / Get*Resource asserts read &dword_82FAD94C, which IS
+    // CgsResource::NULLResourcePtr). Declared extern here (its definition / rodata global
+    // is not yet recovered in this port -- compile-only references are satisfied by the
+    // declaration). GROW with the real definition when the sentinel's home TU lands.
+    extern const BaseResourcePtr NULLResourcePtr;
 }
 
 #endif // CGS_RESOURCE_PTR_H
