@@ -65,6 +65,19 @@ struct AptRenderItemDynamicText : public AptRenderItem
     AptValue* mpTextFormat;           // [c:0x68] opaque (TextFormat object)
     uint32_t  mStateFlags;            // [c:0x6C]
 
+    // ---- ctors / virtual surface (bodies in AptRenderItemDynamicText.cpp) -
+    // Factory ctor (Manager_CreateItem case 2 @0x82AEC0D0): base render item + the
+    // dynamic-text render-type flag (bit 19), then the authored text-field defaults
+    // copied from the AptCharacterDynamicText (margins -> bounds, font, colours).
+    AptRenderItemDynamicText(AptCharacter* pCharacter, int nCreatedOnTick);   // @0x82AEC0D0
+    // Clone copy-ctor (sub_82AEF678): base clone copy + re-stamp the render-type
+    // flag; the data members copy from the source, the handle + TextFormat start fresh.
+    AptRenderItemDynamicText(const AptRenderItemDynamicText* pSource, int nCreatedOnTick, bool bCopyExtended);
+
+    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) override;   // @0x82AEFE38
+    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const override;  // @0x82AEFAD0
+    virtual ~AptRenderItemDynamicText();   // (frees mpTextFormat + the render-data handle)
+
     // ---- text / variable strings -----------------------------------------
     const EAStringC* GetTextValueConst() const { return &mTextValue; }   // @0x82AD5810 (facade)
     EAStringC*       GetTextValueWritable()     { return &mTextValue; }    // @0x82AE1DD0
