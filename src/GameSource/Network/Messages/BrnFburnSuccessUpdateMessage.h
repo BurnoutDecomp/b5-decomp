@@ -28,15 +28,36 @@ namespace BrnGameState
     // Owning home for the last-second challenge-success bit set the update message carries.
     // DWARF spells it FburnChallengeSuccessUpdateAction::LastSecondChallengeSuccess; it is an
     // 8-byte bitset (the X360 ctor zero-fills it with a single 64-bit std at +0x20, and
-    // PrepareForSend copies it as one 64-bit load/store). No richer committed home exists, so
-    // it is modelled here by name as a 64-bit-word bit store -- the only shape the message TU
-    // touches. FLAG: grow this into the real action class if/when that subsystem lands (the
-    // 8-byte size must not change).
+    // PrepareForSend copies it as one 64-bit load/store).
+    //
+    // TYPE RECOVERED (BrnChallengeSuccessManager TU): the X360 frame-rate translators
+    // (ChallengeSuccessManager::TranslateSuccessUpdate60HzTo50Hz @ 0x82555DD8 /
+    //  ::TranslateSuccessUpdate50HzTo60Hz @ 0x825563F8) operate on this payload through the
+    // inlined CgsContainers::FastBitArray<60> API (UnSetAll / IsBitSet / SetBit), with the
+    // out-of-range guards asserting against CgsFastBitArray.h:396/431. So the payload IS a
+    // FastBitArray<60> -- one 64-bit field (60 bits round up to 64), exactly the 8-byte size
+    // the message ctor/copy assumes. The bit API is added here as inline forwards over the
+    // single u64 field, keeping the mu64Bits member the message .cpp copies/zeroes by name (the
+    // 8-byte size is unchanged). FLAG: if the real FburnChallengeSuccessUpdateAction class gains
+    // members beyond this bit set, re-home it; the 8-byte payload size must not change.
     struct FburnChallengeSuccessUpdateAction
     {
         struct LastSecondChallengeSuccess
         {
-            u64 mu64Bits;   // 8 bytes
+            static const u32 KU_NUMBER_OF_BITS = 60;
+            static const u32 KU_BITS_PER_FIELD = 64;
+
+            u64 mu64Bits;   // 8 bytes (the single FastBitArray<60> field)
+
+            void UnSetAll()              { mu64Bits = 0; }
+            bool IsBitSet(s32 liIndex) const
+            {
+                return (mu64Bits & ((u64)1 << (liIndex & (KU_BITS_PER_FIELD - 1)))) != 0;
+            }
+            void SetBit(s32 liIndex)
+            {
+                mu64Bits |= (u64)1 << (liIndex & (KU_BITS_PER_FIELD - 1));
+            }
         };
     };
 } // namespace BrnGameState

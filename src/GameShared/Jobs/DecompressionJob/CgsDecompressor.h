@@ -31,7 +31,23 @@ namespace CgsResource
         u32   muDestinationSize;     // +12 avail_out
     };
 
-    struct DecompressionJobStatus;   // StatusClasses.h:64 - the saved-stream/heap state, by pointer
+    // StatusClasses.h:64 -- the per-stream saved state the decompression job carries across
+    // job invocations. On X360 this is the 128-byte snapshot Decompressor::Execute memcpy's in
+    // and out (mpStatus): the working zlib stream plus the running read/write counters and the
+    // last inflate result. The DecFIGS (PS3) DecompressionJobStatus additionally embeds an
+    // IndexedNodeHeap + a 128-byte cache; on the X360 ARTIST spine the malloc heap is the
+    // separate CgsMemory::HeapMalloc owned by DecompressionJobInterface (not inside the status),
+    // so the X360 status is exactly the 128-byte stream snapshot. Layout proven by
+    // DecompressionJobInterface::BeginStream @ 0x828DB1E8 (zeros 128 bytes, then sets the three
+    // counters at +0x38/+0x3C/+0x40) and Decompressor::Execute @ 0x82ACCB48 (memcpy 128 bytes).
+    struct DecompressionJobStatus
+    {
+        z_stream mDecompressionStream;   // +0x00 StatusClasses.h:66 (zlib stream, 56B)
+        u32      muAmountRead;           // +0x38 StatusClasses.h:67
+        u32      muAmountWritten;        // +0x3C StatusClasses.h:68
+        s32      miLastInflateResult;    // +0x40 StatusClasses.h:69
+        u8       maPad0[60];             // +0x44 pad the saved snapshot to 128 bytes
+    };
 
     // DecompressionJob.h:46 -- the per-job descriptor. Execute restores the saved zlib stream from
     // mpStatus, walks mpEntries[0..muNumEntries), and allocates zlib internal state via mpHeapMalloc.
@@ -77,4 +93,12 @@ namespace CgsResource
         u32                   muCurrentEntry;  // +0x108  current entry index
         CgsMemory::HeapMalloc* mpHeapMalloc;   // +0x10C  heap the zlib callbacks allocate through
     };
+
+    // 0x82ACCCA0 -- the EA::Jobs local-job entry point the decompression job runs. The
+    // scheduler invokes it on a worker thread with the job's data pointer; it builds a
+    // Decompressor on the worker stack and runs it over the DecompressionJobData. The
+    // address is handed to EA::Jobs::EntryPoint::SetCode by DecompressionJobInterface::
+    // RunFlushJobs. Declared with the job's data pointer as a plain argument (the EA
+    // local-job ABI passes it in the first parameter slot).
+    void DecompressionJobEntry(void* lpvJobData);
 }

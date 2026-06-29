@@ -115,6 +115,12 @@ namespace CgsSceneManager
 
         // This TU's single recovered function.
         bool Prepare(rw::IResourceAllocator* lpAllocator);
+
+        // @ X360 0x828C7508 (tail-called from SceneManagerModule::EndUpdateTriangleCache)
+        // -- finish this frame's triangle-cache update against the supplied collision
+        // generator + the triangle-collision scene. Declared here (its home); body owned
+        // by the cache-manager TU.
+        void EndUpdateTriangleCaches(void* lpCollisionGenerator, void* lpTriangleCollisionScene);
     };
 }
 

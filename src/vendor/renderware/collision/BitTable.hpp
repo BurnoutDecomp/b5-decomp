@@ -27,6 +27,10 @@
 namespace rw
 {
 
+// Forward decl -- the full descriptor lives in rw/rwcore_structs.h. GetResourceDescriptor
+// takes it by pointer, so a forward declaration suffices in this header.
+struct BaseResourceDescriptor;
+
 class BitTable
 {
 public:
@@ -44,6 +48,15 @@ public:
     // (null when *lppStorage is null). X360 __fastcall: r3=&storage, r4=width,
     // r5=height.
     static Storage* Initialize(Storage** lppStorage, int liWidth, int liHeight);
+
+    // Compute the backing-store memory requirement for a liWidth x liHeight grid:
+    // the 12-byte header + ceil(width*height / 32) packed 32-bit words, 4-aligned.
+    // The X360 SceneManager builds a 24x24 table -> 12 + 18*4 == 84 bytes (align 4),
+    // which it feeds to the rw resource allocator before Initialize. Declared as the
+    // descriptor producer the CullingGroupManager uses; the body lives in BitTable's
+    // own TU (declared here for the SceneManager culling-table build).
+    static void GetResourceDescriptor(BaseResourceDescriptor* lpDescriptor,
+                                      int liWidth, int liHeight);
 };
 
 } // namespace rw

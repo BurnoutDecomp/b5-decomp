@@ -60,6 +60,28 @@ namespace Jobs
     struct Job;
     struct JobInstanceHandle;
 
+    // job_types.h -- a single 32-bit job argument word. Jobs receive four of them
+    // (Job::mParams[4] / the local-job entry signature); SetData packs the data
+    // pointer + size into two of the slots. Modelled as a 4-byte POD holding a union
+    // so it can carry a pointer, an int, or a float interchangeably (the X360 stores
+    // raw words). Tag is `struct` to match the job_scheduler.h forward declaration.
+    struct Param
+    {
+        union
+        {
+            void* mpValue;
+            s32   miValue;
+            u32   muValue;
+            f32   mfValue;
+        };
+
+        Param() : mpValue(0) {}
+        Param(void* lpValue) : mpValue(lpValue) {}
+        Param(s32 liValue) : miValue(liValue) {}
+        Param(u32 luValue) : muValue(luValue) {}
+        Param(f32 lfValue) : mfValue(lfValue) {}
+    };
+
     namespace Detail
     {
         // The user yield-predicate JobInstanceHandle::WaitOn threads through to

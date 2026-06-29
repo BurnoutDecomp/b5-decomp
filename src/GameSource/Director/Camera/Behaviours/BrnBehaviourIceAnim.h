@@ -106,6 +106,15 @@ public:
     // FLAG: modelled on this minimal DirectorResourceManager slice; the real home is
     // BrnDirectorResourceManager.h. X360: ArbStateRankUp reads it at manager +968 (+0x3C8).
     const Attrib::Gen::shotgroup& GetRankUp() const;
+
+    // The online car-select reveal shot-group (the manager's embedded shotgroup @+0x5C8). The
+    // online-car-select arbitrator state (BrnArbStateOnlineCarSelect::Prepare) feeds its
+    // ShotList data block to the ICE-anim reveal behaviour's SetParameters. DECLARATION-ONLY
+    // (body in the resource-manager TU). FLAG: modelled on this minimal DirectorResourceManager
+    // slice; the real home is BrnDirectorResourceManager.h. X360: ArbStateOnlineCarSelect reads
+    // it at manager +1480 (+0x5C8) and resolves it through the same ShotList attribute key
+    // (0x7533C0E2_15246B49) the shotgroup accessor uses.
+    const Attrib::Gen::shotgroup& GetOnlineCarSelectShots() const;
 };
 
 // FLAG: minimal slice of the per-frame timestep source the Update body samples. No

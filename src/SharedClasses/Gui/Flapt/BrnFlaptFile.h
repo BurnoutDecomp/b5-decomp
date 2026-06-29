@@ -174,6 +174,15 @@ namespace BrnFlapt
         void FixUp(const rw::Resource& lrResource);
         void FixDown(const rw::Resource& lrResource);
 
+        // SetSpecialTexture @ 0x8246CF20 (X360): bind a runtime-supplied texture into one of
+        // this movie's trailing "special" texture slots, keyed by the texture's logical name
+        // (e.g. "CustomComponentTexture.tif"). The custom-render components
+        // (BrnNetworkPlayerImageRenderer Prepare/SwapBuffers) call it on the FlaptFile their
+        // render-output slot returns, so the GUI mesh that references that special-texture
+        // name samples the component's live frame. Returns the FlaptFile (the X360 passes r3
+        // through). Body reconstructed with FlaptFile's own member TU. ADDITIVE GROW.
+        FlaptFile* SetSpecialTexture(const char* lpcSpecialTextureName);
+
         u8   mau8Opaque00[0x14];                 // +0x00..0x13  (header + movie-clip table)
         u32  muNumTextures;                      // +0x14 (DWARF BrnFlaptFile.h:563)
         GuiTexture** mpapTextures;               // +0x18 (DWARF BrnFlaptFile.h:564)
