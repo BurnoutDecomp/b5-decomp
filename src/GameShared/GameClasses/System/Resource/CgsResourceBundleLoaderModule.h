@@ -107,6 +107,34 @@ namespace CgsResource
         void EnqueueUnloadRequest(const Events::UnloadBundleRequest& lrRequest);
         void ProcessUnloadRequests(PoolModule* lpPoolModule);
 
+        // ---- async streaming state machine (DEFERRED bodies; see CgsBundleLoaderModule.cpp) -----------
+        // These are the per-frame streaming FSM steps + cursor helpers the X360 bundle loader runs
+        // (CgsBundleLoaderModule.cpp). Their SIGNATURES are recovered from the asm prologues (PPC
+        // fastcall: r3=this; the trailing OutputBuffer arg, where present, is r4). Their BODIES read
+        // .BUNDLE files off disk through the FileSystem (StreamDeviceDiskRead async reads), decompress
+        // via the EA job system (DecompressionJobInterface) and march a cursor over the BundleV2
+        // ResourceEntry table -- a subsystem cluster the cgs-resource-pool group reconstructs
+        // separately and that requires the full (~180 KB) module layout (the IO queues, the running-load
+        // cursor, the decompressor, the async-read scratch, the pool-response queue). Until that layout
+        // pass lands, these are declared here (so the streaming TU has a real declaration surface) and
+        // implemented as MARKED-DEFERRED stubs in CgsBundleLoaderModule.cpp -- NOT fabricated bodies.
+        //
+        // The cursor helpers (MoveToFirst/NextResource) advance the (memType, entryIndex) cursor over the
+        // bundle's per-pool ResourceEntry table; the StreamXxxFunc steps are the UpdateStream dispatch
+        // cases (idle -> header -> debug -> entry-list -> data -> close -> done -> finished).
+        bool MoveToFirstResource();                          // 0x828D7DA8
+        bool MoveToNextResource();                           // 0x828D7CE0
+        void ProcessBundleEntryList(void* lpOutputBuffer);   // 0x828FAF58
+        void ProcessPoolResponses();                         // 0x828EC148
+        void SendPartialFixupRequest(void* lpOutputBuffer);  // 0x828FBFC0
+        bool StreamClose(void* lpOutputBuffer);              // 0x828FB260
+        bool StreamCompressedDataAsJobFunc(void* lpOutputBuffer); // 0x82900FA0
+        bool StreamDebugDataFunc();                          // 0x829043A0
+        bool StreamDoneFunc(void* lpOutputBuffer);           // 0x828FB178
+        bool StreamHeaderFunc();                             // 0x829042A0
+        bool StreamIdleFunc(void* lpOutputBuffer);           // 0x82900ED0
+        void UpdateStream(void* lpOutputBuffer);             // 0x82906B30
+
     private:
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EStage            mePrepareStage;     // +0x228 (a1[138])
