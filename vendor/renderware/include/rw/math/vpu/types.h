@@ -82,6 +82,32 @@ namespace vpu
             zAxis = { 0.0f, 0.0f, 1.0f, 0.0f };
         }
     };
+
+    // ADDITIVE GROW (class:rw::math::vpu::MaskScalar): the SDK's 128-bit per-lane
+    // comparison-result wrapper -- the broadcast "mask" a VMX vcmpeqfp/vcmpgtfp leaves in a
+    // vector register (each lane 0x00000000 = false / 0xFFFFFFFF = true). Same 16-byte,
+    // 16-aligned register layout as the Vector* family, stored here as four named float
+    // lanes so the float-domain compare semantics reduce exactly (a 0xFFFFFFFF lane reads
+    // as NaN, which != 0.0; a 0x00000000 lane is +0.0; -0.0 also reads false, matching
+    // vcmpeqfp). The SIMD producers (the vcmp operations themselves) live in the SDK
+    // *_operation headers and are not modelled here; only the scalar reduction the SDK
+    // exposes as a type method is provided.
+    struct alignas(16) MaskScalar
+    {
+        float x, y, z, w;
+
+        // X360 0x821F0D78  rw::math::vpu::MaskScalar::GetBool.
+        //   vspltisw v0,0 ; lvx128 v13,this ; vcmpeqfp. v0,v13,v0  -> CR6
+        //   mfocrf/not/extrwi r,r,1,24 reads (and inverts) CR6's all-lanes-equal bit.
+        // vcmpeqfp. against zero sets CR6[0] ("all true") iff every lane == 0.0; the
+        // trailing `not` then `extrwi ...,1,24` returns the COMPLEMENT of that bit -- i.e.
+        // the mask is "true" iff at least one lane is non-zero. Lowered to portable scalar
+        // float math; called by PolygonSoupTesterJob::{FillTriangleCache,LineTestNearestSS}.
+        bool GetBool() const
+        {
+            return !(x == 0.0f && y == 0.0f && z == 0.0f && w == 0.0f);
+        }
+    };
 }
 }
 }
