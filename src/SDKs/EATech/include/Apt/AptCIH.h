@@ -38,6 +38,7 @@ struct AptCharacter;
 struct AptCharacterInst;
 struct AptMatrix;
 struct AptCXForm;
+struct AptNativeHash;
 
 struct AptCIH : public AptValueGC
 {
@@ -67,6 +68,11 @@ struct AptCIH : public AptValueGC
     // ---- character instance / delegated visual reads ----------------------
     AptCharacterInst* GetCharacterInst() const { return mpCharacterInst; }  // @0x7DF174
     int16_t GetDepth() const;   // @0x7EA024 (through the char inst's render item)
+
+    // ---- delegated mask / property reads (through the char inst) -----------
+    AptNativeHash* GetNativeHash() const;   // @0x82AD5B28 (char inst's property hash)
+    bool IsMask() const;                    // @0x82AD5BA0 (render item's mask flag)
+    bool HasMask() const;                   // @0x82AD5BB8 (render item's has-mask flag)
 
     // ---- character-type predicates (through the char inst's type tag) -----
     // Each tests mpCharacterInst's type tag (AptCharacterInst::GetTypeTag); IsNone
