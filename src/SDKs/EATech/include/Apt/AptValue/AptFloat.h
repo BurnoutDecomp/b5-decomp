@@ -13,6 +13,7 @@
 
 class AptFloat : public AptValueNoGC
 {
+    friend class AptGC;   // AptGC::CleanAll calls the protected ClearPool (leak: friend)
 public:
     static void* operator new(size_t size)              { return gpNonGCPoolManager->Allocate(size); }
     static void  operator delete(void* p, size_t size)  { gpNonGCPoolManager->Deallocate(p, size); }

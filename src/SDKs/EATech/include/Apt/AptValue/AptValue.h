@@ -133,6 +133,19 @@ public:
 
     virtual void ForceDelete();
 
+    // ---- GC mark / deferred-release flag mutators (under the Apt GC lock) -
+    // setGCMark @0x82AD8020 -- set the register-reference mark
+    // (mbHasRegisterReferenceMark); paired with getGCMark(). Used by the GC mark
+    // walk (AptGC::sReferenceRegistrationCb).
+    void setGCMark(bool bMark);
+    // ClearReleaseAtEnd @0x82AD82A8 -- clear the "in deferred-release vector"
+    // flag (mbIsInDeferredVector); used by the deferred-release vector flush.
+    void ClearReleaseAtEnd();
+
+    // When set, AptGC::CleanAll suspends refcount-driven deletions while it runs
+    // PreDestroy()/DestroyGCPointers() over the live value graph. (X360 byte_8324E38E.)
+    static bool sbSuspendRefcountDeletions;
+
     // ---- leak inline accessors (kept verbatim for the GC siblings) -------
     uint32_t getRefCount() const
     {
