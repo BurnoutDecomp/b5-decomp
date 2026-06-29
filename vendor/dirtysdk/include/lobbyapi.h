@@ -45,6 +45,16 @@ const void* LobbyApiInfo(LobbyApiRefT* pLobbyApi, s32 iSelect);
 s32 LobbyApiRequestCB(LobbyApiRefT* pLobbyApi, s32 iKind, const char* pRequest,
                       LobbyApiCallbackT* pCallback, void* pUserCBData);
 
+// Register a callback on a lobby channel (e.g. the chat channel 1). Returns a callback
+// handle (>= 0) the caller stores to later clear it; pCallback is invoked with pUserData
+// for each message that arrives on iChannel.
+s32 LobbyApiSetCallback(LobbyApiRefT* pLobbyApi, s32 iChannel,
+                        LobbyApiCallbackT* pCallback, void* pUserData);
+
+// Clear a previously-registered channel callback (iCallback is the handle returned by
+// LobbyApiSetCallback).
+s32 LobbyApiClearCallback(LobbyApiRefT* pLobbyApi, s32 iCallback);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceServerInfo.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // full ServerInterfaceDirtySock (GetLobbyAPIRef)
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 #include "lobbyapi.h"                                   // DirtySDK LobbyApiInfo/Status + LobbyApiRefT
