@@ -73,25 +73,43 @@ namespace CgsDev
 
             void Clear() { miCount = 0; }
 
+            // X360 0x82821588: bounds-checked append. Overflow fires CGS_ASSERT("pool overflow") and
+            // stores nothing (the store + increment live solely on the miCount < miMaxSize branch).
             void Add(T* lpItem)
             {
-                mppItems[miCount] = lpItem;
-                ++miCount;
+                CGS_ASSERT(miCount < miMaxSize, "pool overflow");
+                if (miCount < miMaxSize)
+                {
+                    mppItems[miCount] = lpItem;
+                    ++miCount;
+                }
             }
 
-            // Find the slot and swap-remove with the last entry (order is not significant for the
-            // pool's active/free arrays; the LIFO free stack relies on this being the last item).
+            // X360 0x82821620: linear-scan for the slot, then COMPACT the tail down over it (preserving
+            // order), zero the vacated last slot and decrement. A missing item fires
+            // CGS_ASSERT("item not found") and leaves the array untouched.
             void Remove(T* lpItem)
             {
-                for (s32 liIndex = 0; liIndex < miCount; ++liIndex)
-                {
-                    if (mppItems[liIndex] == lpItem)
-                    {
-                        --miCount;
-                        mppItems[liIndex] = mppItems[miCount];
-                        return;
-                    }
-                }
+                s32 liIndex = 0;
+                while (liIndex < miCount && mppItems[liIndex] != lpItem)
+                    ++liIndex;
+
+                CGS_ASSERT(liIndex < miCount, "item not found");
+                if (liIndex >= miCount)
+                    return;
+
+                for (s32 liShift = liIndex; liShift < miCount - 1; ++liShift)
+                    mppItems[liShift] = mppItems[liShift + 1];
+                mppItems[miCount - 1] = nullptr;
+                --miCount;
+            }
+
+            // X360-inlined LIFO pop (used by DebugStaticPool::Allocate @0x82827908): decrement the
+            // count and return the formerly-last entry. The caller guards miCount > 0.
+            T* PopBack()
+            {
+                --miCount;
+                return mppItems[miCount];
             }
 
             T*   GetFree();
@@ -142,23 +160,24 @@ namespace CgsDev
             s32 GetMaxSize() const { return mActive.GetMaxSize(); }
 
             // X360 0x82827908: pop the last free item (free is a LIFO stack) onto the active list.
+            // The asm decrement-pops mFree inline (it does NOT scan/Remove) and null-checks the slot.
             T* Allocate()
             {
-                const s32 liFreeCount = mFree.GetCount();
-                if (liFreeCount <= 0)
+                if (mFree.GetCount() <= 0)
                     return nullptr;
 
-                T* lpItem = mFree.GetAt(liFreeCount - 1);
+                T* lpItem = mFree.PopBack();
                 if (!lpItem)
                     return nullptr;
 
-                mFree.Remove(lpItem);
                 mActive.Add(lpItem);
                 return lpItem;
             }
 
+            // X360 0x82827780: assert the item belongs to this pool, then move it active -> free.
             void Free(T* lpItem)
             {
+                CGS_ASSERT(IsFromPool(lpItem), "IsFromPool(lpItem)");
                 mActive.Remove(lpItem);
                 mFree.Add(lpItem);
             }
