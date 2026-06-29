@@ -5,6 +5,12 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"  // CgsGui::AptRenderHandler (mRenderHandler)
 #include "rw/rwcore_structs.h"                                                 // rw::RGBA (Construct alt-colour table)
 
+// Apt SDK opaque/value types the host callback families' signatures reference (so the
+// declarations below match the gAptFuncs slot prototypes in Apt.h exactly). Apt.h forward-
+// declares AptValue / AptSavedInputRecord / AptSysClock and aliases AptGetBytesEnum / the
+// movie-clip handle, which is all these callback signatures need (none deref them here).
+#include "SDKs/EATech/include/Apt/Apt.h"
+
 // Forward declarations for AptAux::Construct's collaborators (passed straight through to
 // AptRenderHandler::Construct; only pointers are held here).
 namespace CgsGraphics    { struct TextRenderer; }
@@ -103,4 +109,70 @@ namespace CgsGui
     public:
         static AptAux* mpAptAuxInst;
     };
+
+    // =========================================================================
+    // The Apt host callback FAMILIES (free functions in per-family namespaces).
+    //
+    // These are the host functions CgsGui::AptAux::ConstructApt @0x5BA0F8 installs into
+    // the gAptFuncs user-function table (Apt.h) so the Apt engine can reach the host. The
+    // render + render-flag families live in CgsAptCallbackRender.h; declared here are the
+    // NON-render families this TU homes (and the one trivial real callback,
+    // AptCallbackMemory::Free, which forwards to the singleton's data-handler allocator).
+    //
+    // Signatures mirror the matching gAptFuncs slot prototypes (Apt.h) exactly, so the
+    // ConstructApt install of these slots is type-correct. Declaration shape (namespace +
+    // names) is from the DecFIGS DWARF (CgsAptAux.h:48..203). Each body is grounded against
+    // the X360 ARTIST binary in CgsAptAux.cpp.
+    //
+    // NOTE on the "not implemented" callbacks: the X360 build attests these as guarded
+    // not-yet-implemented entry points -- each fires an assert ("... has not been
+    // implemented but is being used, please implement before utilising.") and returns a
+    // null/zero result. That assert-and-return IS the faithful body (it is what the binary
+    // does); it is NOT a reconstruction stub.
+    // =========================================================================
+
+    namespace AptCallbackMemory
+    {
+        // X360 0x828492A8. Free an Apt allocation through the singleton AptAux's embedded
+        // data-handler allocator: assert the singleton is live, then forward to
+        // AptDataHandler::AptFree(&mpAptAuxInst->mAptDataHandler, lpBlock). (matches gAptFuncs
+        // pfnMemFree(void*).)
+        void Free(void* lpBlock);
+    }
+
+    namespace AptCallbackDebug
+    {
+        // X360 0x82849528 / 0x82849568. Guarded not-yet-implemented debug callbacks.
+        void AddSavedInput(AptSavedInputRecord* lpRecord, s32 liCount);
+        void SetScreenGrabPending(const char* lpacName);
+    }
+
+    namespace AptCallbackFile
+    {
+        // X360 0x828495E0 / 0x82849620. Guarded not-yet-implemented file-progress callbacks;
+        // each fires the not-implemented assert and returns 0. (gAptFuncs pfnGetBytesTotal /
+        // pfnGetBytesLoaded(const char*, AptGetBytesEnum).)
+        s32 GetBytesTotal(const char* lpacFileName, AptGetBytesEnum leWhich);
+        s32 GetBytesLoaded(const char* lpacFileName, AptGetBytesEnum leWhich);
+    }
+
+    namespace AptCallbackVariable
+    {
+        // X360 0x82849660 / 0x828496A0. Guarded not-yet-implemented extern-variable callbacks.
+        void      SetExternVariable(const char* lpacName, const char* lpacValue);
+        AptValue* GetExternVariable(const char* lpacName);
+    }
+
+    namespace AptCallbackDeprecated
+    {
+        // X360 0x828496E0 / 0x82849720 / 0x828497A0 / 0x828497E0 / 0x82849820. Guarded
+        // not-yet-implemented deprecated callbacks (each fires the not-implemented assert and
+        // returns a null/zero result). Signatures mirror their gAptFuncs slots.
+        void      SendVariables(const char* lpacUrl, const char* lpacTarget,
+                                const char* lpacVariables, const char* lpacMethod, s32 liFlags);
+        void      FsCommand(const char* lpacCommand, const char* lpacArgs);
+        AptValue* LoadVariablesNULL();
+        s32       PointHitTest(f32 lfX, f32 lfY, AptAssetMoiveClip leClip);
+        void      GetRealTimeClock(AptSysClock* lpSysClock, bool lbUseUtc);
+    }
 }

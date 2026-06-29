@@ -224,7 +224,7 @@ namespace BrnGameState
     {
         for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
         {
-            CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            CarData* lpCar = GetCarData(static_cast< ::EActiveRaceCarIndex>(liSlot));
             if (lpCar)
             {
                 // miCumulativePoints (+0x130) += miOnlineFinishPositionScore (+0x58)
@@ -273,7 +273,7 @@ namespace BrnGameState
     {
         CGS_ASSERT(lpOutput != NULL, "lpActiveRaceCarInterface != NULL");
 
-        const EActiveRaceCarIndex lePlayerIndex = lpOutput->GetPlayerActiveRaceCarIndex();
+        const ::EActiveRaceCarIndex lePlayerIndex = lpOutput->GetPlayerActiveRaceCarIndex();
         CGS_ASSERT(lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID, "Player car index hasn't been set");
         CGS_ASSERT(lpOutput->IsRaceCarActive(lePlayerIndex),
                    "lpActiveRaceCarInterface->IsRaceCarActive( lePlayerActiveRaceCarIndex )");
@@ -313,7 +313,7 @@ namespace BrnGameState
     {
         CGS_ASSERT(lpOutput != NULL, "lpActiveRaceCarInterface != NULL");
 
-        const EActiveRaceCarIndex lePlayerIndex = lpOutput->GetPlayerActiveRaceCarIndex();
+        const ::EActiveRaceCarIndex lePlayerIndex = lpOutput->GetPlayerActiveRaceCarIndex();
         CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
 
@@ -394,8 +394,8 @@ namespace BrnGameState
 
                 if (lpPlayerResultsData->mbValid)
                 {
-                    const EActiveRaceCarIndex leActiveRaceCarIndex =
-                        static_cast<EActiveRaceCarIndex>(lpPlayerResultsData->meActiveRaceCarIndex);
+                    const ::EActiveRaceCarIndex leActiveRaceCarIndex =
+                        static_cast< ::EActiveRaceCarIndex>(lpPlayerResultsData->meActiveRaceCarIndex);
                     if (leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
                     {
                         CarData* lpCar = GetCarData(leActiveRaceCarIndex);
@@ -405,7 +405,7 @@ namespace BrnGameState
                             lpScore->SetFinishTime(lpPlayerResultsData->mFinishTime);
                             lpScore->SetDistanceToFinish(lpPlayerResultsData->mfDistanceToFinish);
                             lpScore->SetEliminatorRaceCarIndex(
-                                static_cast<EActiveRaceCarIndex>(lpPlayerResultsData->meEliminatorIndex));
+                                static_cast< ::EActiveRaceCarIndex>(lpPlayerResultsData->meEliminatorIndex));
                             lpScore->SetTimedOut(lpPlayerResultsData->mbTimedOut);
                             lpScore->SetHasNetworkResults(true);
                             lpScore->SetNumEliminations(lpPlayerResultsData->miEliminations);
@@ -475,8 +475,8 @@ namespace BrnGameState
         // ---- (1) lead / last time-in-place (online only) ----
         if (lbOnline)
         {
-            const EActiveRaceCarIndex leLeadIndex = meLeadRaceCarIndex;
-            const EActiveRaceCarIndex leLastIndex = meLastRaceCarIndex;
+            const ::EActiveRaceCarIndex leLeadIndex = meLeadRaceCarIndex;
+            const ::EActiveRaceCarIndex leLastIndex = meLastRaceCarIndex;
 
             // The X360 only enters this block when BOTH indices are set (>= 0); the lead/last asserts
             // pin them in [E_ACTIVE_RACE_CAR_INDEX_0, E_ACTIVE_RACE_CAR_INDEX_COUNT).
@@ -511,7 +511,7 @@ namespace BrnGameState
         // ---- (2) per active-race-car stat loop ----
         for (u32 i = 0; i < luNumberOfActiveRaceCars; ++i)
         {
-            const EActiveRaceCarIndex leActiveRaceCarIndex = lpOutput->maCarsInTheRace[i].meActiveRaceCarIndex;
+            const ::EActiveRaceCarIndex leActiveRaceCarIndex = lpOutput->maCarsInTheRace[i].meActiveRaceCarIndex;
             CarData* lpCar = GetCarData(leActiveRaceCarIndex);
 
             CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
@@ -564,7 +564,7 @@ namespace BrnGameState
     // given active-race-car slot. No-op when the slot has no car record. (The X360
     // body re-runs the GetCarData lookup after the null guard; reproduced once here.)
     // ------------------------------------------------------------------------
-    void ScoringSystem::SetPlayerStuntScore(EActiveRaceCarIndex leRaceCarIndex, s32 liScore)
+    void ScoringSystem::SetPlayerStuntScore(::EActiveRaceCarIndex leRaceCarIndex, s32 liScore)
     {
         CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
                    leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -641,7 +641,7 @@ namespace BrnGameState
     // (E_ACTIVE_RACE_CAR_INDEX_INVALID, E_ACTIVE_RACE_CAR_INDEX_COUNT), looks the car up via
     // GetCarData(EActiveRaceCarIndex) (sub_8231DCD0) and, on a hit, does
     // *(record + 0xFC) += liCount (asm lwz/add/stw 0xFC).
-    void ScoringSystem::PlayerPerformedBarrelRolls(EActiveRaceCarIndex leRaceCarIndex, s32 liCount)
+    void ScoringSystem::PlayerPerformedBarrelRolls(::EActiveRaceCarIndex leRaceCarIndex, s32 liCount)
     {
         CGS_ASSERT(leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                    leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -688,7 +688,7 @@ namespace BrnGameState
 
         for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
         {
-            CarData* lpCar = GetCarData(static_cast<EActiveRaceCarIndex>(liSlot));
+            CarData* lpCar = GetCarData(static_cast< ::EActiveRaceCarIndex>(liSlot));
             if (lpCar)
             {
                 GameStateModuleIO::CarScoreData* lpScore = lpCar->GetScoreData();

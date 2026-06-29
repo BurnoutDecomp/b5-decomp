@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"  // the render + render-flag callback family
 #include "SDKs/EATech/include/Apt/Apt.h"                                         // AptUserFunctions gAptFuncs (the host table)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the host-callback asserts)
 
 #include <cstring>   // memset (zero-install the gAptFuncs slots)
 
@@ -119,22 +120,131 @@ namespace CgsGui
         gAptFuncs.pfnPushRenderFlags     = &AptCallbackRenderFlags::Push;
         gAptFuncs.pfnPopRenderFlags      = &AptCallbackRenderFlags::Pop;
 
+        // ---- the non-render families this TU now homes (their hosts above) -------------------
+        gAptFuncs.pfnMemFree               = &AptCallbackMemory::Free;
+        gAptFuncs.pfnDebugAddSavedInput    = &AptCallbackDebug::AddSavedInput;
+        gAptFuncs.pfnDebugSetScreenGrabPending = &AptCallbackDebug::SetScreenGrabPending;
+        gAptFuncs.pfnGetBytesTotal         = &AptCallbackFile::GetBytesTotal;
+        gAptFuncs.pfnGetBytesLoaded        = &AptCallbackFile::GetBytesLoaded;
+        gAptFuncs.pfnSetExternVariable     = &AptCallbackVariable::SetExternVariable;
+        gAptFuncs.pfnGetExternVariable     = &AptCallbackVariable::GetExternVariable;
+        gAptFuncs.pfnSendVariables         = &AptCallbackDeprecated::SendVariables;
+        gAptFuncs.pfnCommand               = &AptCallbackDeprecated::FsCommand;
+        gAptFuncs.pfnLoadVariablesNULL     = &AptCallbackDeprecated::LoadVariablesNULL;
+        gAptFuncs.pfnPointHitTest          = &AptCallbackDeprecated::PointHitTest;
+        gAptFuncs.pfnGetRealTimeClock      = &AptCallbackDeprecated::GetRealTimeClock;
+
         // FLAG: the remaining gAptFuncs slots ConstructApt @0x5BA0F8 also installs --
-        //   Memory      (pfnMemAlloc / pfnMemFree / pfnMemFreeSize)
-        //   Debug       (pfnAssertFail / pfnDebugPrint / pfnDebugAddSavedInput /
-        //                pfnDebugSetScreenGrabPending)
+        //   Memory      (pfnMemAlloc / pfnMemFreeSize)
+        //   Debug       (pfnAssertFail / pfnDebugPrint)
         //   File        (pfnLoadAnimation / pfnFreeAnimation / pfnFreeConstantTable /
-        //                pfnLoadAnimationCompleted / pfnCommand / pfnGetBytesTotal /
-        //                pfnGetBytesLoaded / pfnOnUnload)
-        //   Variable    (pfnLoadVariables(NULL) / pfnSet/GetExternVariable / pfnSendVariables)
-        //   Custom      (pfnCustomControlRender / pfnCustomControlUpdate / the Zid family /
-        //                pfnPointHitTest)
-        //   Deprecated  (pfnUninitializedVarAccess / pfnGetRealTimeClock /
-        //                pfnCustomSavedInputHandler / pfnPlaySavedInputsDone /
-        //                pfnHandleZombieState)
-        // are NOT installed here: those CgsGui::AptCallback* families are not reconstructed yet.
-        // They remain null (the ctor's value-init); installing them is a follow-on once those
-        // families land. The render family above is the complete, installable bridge from the Apt
-        // engine's render dispatch to AptRenderHandler::Render.
+        //                pfnLoadAnimationCompleted / pfnOnUnload)
+        //   Variable    (pfnLoadVariables)
+        //   Custom      (pfnCustomControlRender / pfnCustomControlUpdate / the Zid family)
+        //   Deprecated  (pfnUninitializedVarAccess / pfnCustomSavedInputHandler /
+        //                pfnPlaySavedInputsDone / pfnHandleZombieState)
+        // are NOT installed here: those hosts are not reconstructed yet (several depend on the
+        // undeclared Apt C-API -- AptLoadAnimation / AptPartialGarbageCollection / ... -- or on
+        // CgsGui::AptCommunicator, neither of which has a reconstructed home). They remain null
+        // (the ctor's value-init); installing them is a follow-on once those families land.
+    }
+
+    // =========================================================================
+    // The non-render Apt host callback families.
+    //
+    // AptCallbackMemory::Free is the one trivial REAL callback (forwards a free through the
+    // singleton's embedded data-handler allocator). The remaining Debug / File / Variable /
+    // Deprecated callbacks are the build's guarded not-yet-implemented entry points: each
+    // fires the not-implemented assert and returns a null/zero result -- that assert-and-
+    // return is the faithful body the X360 binary executes (NOT a reconstruction stub).
+    // =========================================================================
+
+    // ---- Memory -------------------------------------------------------------
+    // X360 0x828492A8 (CgsGui::AptCallbackMemory::Free). Free an Apt allocation through the
+    // singleton AptAux's embedded data-handler allocator. The guest loads off_8305A6C8
+    // (mpAptAuxInst), adds 12 to reach &mAptDataHandler, asserts the singleton is live, then
+    // calls AptDataHandler::AptFree(&mAptDataHandler, a1).
+    void AptCallbackMemory::Free(void* lpBlock)
+    {
+        AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
+        CGS_ASSERT(lpAptAux != nullptr, "Invalid AptDataHandler in AptCallbackMemory::Free");
+        lpAptAux->mAptDataHandler.AptFree(lpBlock);
+    }
+
+    // ---- Debug --------------------------------------------------------------
+    // X360 0x82849528 (CgsGui::AptCallbackDebug::AddSavedInput). Guarded not-yet-implemented.
+    void AptCallbackDebug::AddSavedInput(AptSavedInputRecord* /*lpRecord*/, s32 /*liCount*/)
+    {
+        CGS_ASSERT(false, "AptCallbackDebug::AddSavedInput() has not been implemented but is being used, please implement before utilising.");
+    }
+
+    // X360 0x82849568 (CgsGui::AptCallbackDebug::SetScreenGrabPending). Guarded not-yet-implemented.
+    void AptCallbackDebug::SetScreenGrabPending(const char* /*lpacName*/)
+    {
+        CGS_ASSERT(false, "AptCallbackDebug::SetScreenGrabPending() has not been implemented but is being used, please implement before utilising.");
+    }
+
+    // ---- File ---------------------------------------------------------------
+    // X360 0x828495E0 (CgsGui::AptCallbackFile::GetBytesTotal). Guarded not-yet-implemented.
+    s32 AptCallbackFile::GetBytesTotal(const char* /*lpacFileName*/, AptGetBytesEnum /*leWhich*/)
+    {
+        CGS_ASSERT(false, "AptCallbackFile::GetBytesTotal() has not been implemented but is being used, please implement before utilising.");
+        return 0;
+    }
+
+    // X360 0x82849620 (CgsGui::AptCallbackFile::GetBytesLoaded). Guarded not-yet-implemented.
+    s32 AptCallbackFile::GetBytesLoaded(const char* /*lpacFileName*/, AptGetBytesEnum /*leWhich*/)
+    {
+        CGS_ASSERT(false, "AptCallbackFile::GetBytesLoaded() has not been implemented but is being used, please implement before utilising.");
+        return 0;
+    }
+
+    // ---- Variable -----------------------------------------------------------
+    // X360 0x82849660 (CgsGui::AptCallbackVariable::SetExternVariable). Guarded not-yet-implemented.
+    void AptCallbackVariable::SetExternVariable(const char* /*lpacName*/, const char* /*lpacValue*/)
+    {
+        CGS_ASSERT(false, "AptCallbackVariable::SetExternVariable() has not been implemented but is being used, please implement before utilising.");
+    }
+
+    // X360 0x828496A0 (CgsGui::AptCallbackVariable::GetExternVariable). Guarded not-yet-implemented.
+    AptValue* AptCallbackVariable::GetExternVariable(const char* /*lpacName*/)
+    {
+        CGS_ASSERT(false, "AptCallbackVariable::GetExternVariable() has not been implemented but is being used, please implement before utilising.");
+        return nullptr;
+    }
+
+    // ---- Deprecated ---------------------------------------------------------
+    // X360 0x828496E0 (CgsGui::AptCallbackDeprecated::SendVariables). Guarded not-yet-implemented.
+    void AptCallbackDeprecated::SendVariables(const char* /*lpacUrl*/, const char* /*lpacTarget*/,
+                                              const char* /*lpacVariables*/, const char* /*lpacMethod*/,
+                                              s32 /*liFlags*/)
+    {
+        CGS_ASSERT(false, "SendVariables() has not been implemented but is being used, please implement before utilising.");
+    }
+
+    // X360 0x82849720 (CgsGui::AptCallbackDeprecated::FsCommand). Guarded not-yet-implemented.
+    void AptCallbackDeprecated::FsCommand(const char* /*lpacCommand*/, const char* /*lpacArgs*/)
+    {
+        CGS_ASSERT(false, "Command() has not been implemented but is being used, please implement before utilising.");
+    }
+
+    // X360 0x828497A0 (CgsGui::AptCallbackDeprecated::LoadVariablesNULL). Guarded not-yet-implemented.
+    AptValue* AptCallbackDeprecated::LoadVariablesNULL()
+    {
+        CGS_ASSERT(false, "LoadVariablesNULL() has not been implemented but is being used, please implement before utilising.");
+        return nullptr;
+    }
+
+    // X360 0x828497E0 (CgsGui::AptCallbackDeprecated::PointHitTest). Guarded not-yet-implemented.
+    s32 AptCallbackDeprecated::PointHitTest(f32 /*lfX*/, f32 /*lfY*/, AptAssetMoiveClip /*leClip*/)
+    {
+        CGS_ASSERT(false, "PointHitTest() has not been implemented but is being used, please implement before utilising.");
+        return 0;
+    }
+
+    // X360 0x82849820 (CgsGui::AptCallbackDeprecated::GetRealTimeClock). Guarded not-yet-implemented.
+    void AptCallbackDeprecated::GetRealTimeClock(AptSysClock* /*lpSysClock*/, bool /*lbUseUtc*/)
+    {
+        CGS_ASSERT(false, "GetRealTimeClock() has not been implemented but is being used, please implement before utilising.");
     }
 }
