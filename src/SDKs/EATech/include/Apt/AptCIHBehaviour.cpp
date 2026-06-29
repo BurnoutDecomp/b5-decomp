@@ -666,3 +666,28 @@ AptRect* AptCIH::GetBoundingRect(int nMode, const AptMatrix* pParentTransform, A
     }
     return pAccumulator;
 }
+
+// ---------------------------------------------------------------------------
+// HasMouseEvent @0x82AE2268 -- does this node respond to any mouse event? OR of two
+// sources: (1) the sprite/movie-clip's packed clip-event flags carry a mouse-event
+// bit (mnClipActionFlags & the shifted mouse-event mask), and (2) an ActionScript
+// mouse handler is registered in this value's __proto__ chain (HasEventMember with
+// the same mouse-event set un-shifted). mnClipActionFlags stores the clip-event mask
+// in its high 24 bits, so the two literals are the one mouse-event set in its two
+// storage positions.
+// ---------------------------------------------------------------------------
+namespace
+{
+    const uint32_t KU_AptMouseEventClipMask    = 0x09FC3800u;  // mouse bits, shifted clip-event position
+    const uint32_t KU_AptMouseEventHandlerMask = 0x0009FC38u;  // same bits, native-hash handler position
+}
+
+bool AptCIH::HasMouseEvent()
+{
+    const AptCharacterSpriteInstBase* pSpriteInst =
+        static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
+    if ((pSpriteInst->mnClipActionFlags & KU_AptMouseEventClipMask) != 0)
+        return true;
+
+    return HasEventMember(static_cast<int>(KU_AptMouseEventHandlerMask)) != 0;
+}
