@@ -21,7 +21,50 @@ struct ResourceDescriptor5
 class DepthStencilState
 {
 public:
+    // Depth-test comparison function the immediate-mode library selects per state
+    // (CgsGraphics::ImRendererBase::ConstructDepthStencilState passes one of these as the
+    // leading parameter word). Only the values the X360 state-library builder uses are attested;
+    // E_FUNCTION_ALWAYS == 7 is the value the asm stores for the depth/stencil func words
+    // (the "always pass" function), so it is named; the rest are left unenumerated until attested.
+    enum Function : u32
+    {
+        E_FUNCTION_ALWAYS = 7,
+    };
+
+    // The 0x44-byte depth/stencil parameter block the immediate-mode builder fills positionally
+    // (X360 asm: 17 state words + 6 flag bytes). Only the words the builder writes are named; the
+    // rest are zeroed. muFunction is the leading word (the requested comparison function).
+    struct Parameters
+    {
+        u32 muFunction;        // +0x00 maState[0]  (the Function arg)
+        u32 maState1[3];       // +0x04 maState[1..3] (zeroed)
+        u32 muState4;          // +0x10 maState[4]  == 7 (E_FUNCTION_ALWAYS)
+        u32 maState5[3];       // +0x14 maState[5..7] (zeroed)
+        u32 muState8;          // +0x20 maState[8]  == 7 (E_FUNCTION_ALWAYS)
+        u32 muState9;          // +0x24 maState[9]  (zeroed)
+        u32 muState10;         // +0x28 maState[10] (zeroed)
+        u32 muStencilReadMask; // +0x2C maState[11] == -1
+        u32 muStencilWriteMask;// +0x30 maState[12] == -1
+        u32 muState13;         // +0x34 maState[13] (zeroed)
+        u32 muState14;         // +0x38 maState[14] == -1
+        u32 muState15;         // +0x3C maState[15] == -1
+        u32 muState16;         // +0x40 maState[16] (zeroed)
+        u8  mbDepthTestEnable; // +0x44 (the first bool arg)
+        u8  mbDepthWriteEnable;// +0x45 (the second bool arg)
+        u8  mu8Flag2;          // +0x46 (zeroed)
+        u8  mu8Flag3;          // +0x47 (zeroed)
+        u8  mu8Flag4;          // +0x48 (zeroed)
+        u8  mu8Flag5;          // +0x49 (zeroed)
+    };
+
     static ResourceDescriptor5* GetResourceDescriptor(ResourceDescriptor5* lpDescriptor);
+    // X360 the immediate-mode builder passes the params alongside the out descriptor; the descriptor
+    // build itself is a fixed { size, align } block and ignores the params. Additive overload.
+    static ResourceDescriptor5* GetResourceDescriptor(ResourceDescriptor5* lpDescriptor, const Parameters* lpParameters);
+    static DepthStencilState* Initialize(DepthStencilState** ppState, const Parameters* lpParameters);
+
+private:
+    u32 maState[17];
 };
 
 class Texture;  // the imported raster's runtime type (texture.h)
@@ -100,6 +143,13 @@ public:
 class RasterizerState
 {
 public:
+    // Face-cull selector the immediate-mode library passes per rasterizer state
+    // (CgsGraphics::ImRendererBase::ConstructRasteriserState's second parameter, stored verbatim
+    // into Parameters::muCullMode). The concrete enumerator values are chosen by the (out-of-scope)
+    // caller ConstructOnceOnly, so none are attested here; modelled as a u32-backed enum so the
+    // value flows through by name without inventing enumerators.
+    enum CullMode : u32 {};
+
     struct Parameters
     {
         u32 muFillMode;

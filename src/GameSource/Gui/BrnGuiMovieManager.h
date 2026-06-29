@@ -89,6 +89,11 @@ namespace BrnGui
         // KI_VIDEO_DATA_RESOURCE_EVENT_ID (DWARF + ARTIST Update assert 0x1AFFEED).
         enum { KI_VIDEO_DATA_RESOURCE_EVENT_ID = 28311277 };
 
+        // The X360 C++ constructor (ARTIST @0x827DEFF0) -- sets the initial state-machine/collision/car-pool
+        // states and zeroes the members. (Construct() below is the explicit re-init the GUI calls each boot;
+        // both seed the same initial values, faithful to the ARTIST build.)
+        MovieManager();
+
         void Construct();
         bool Prepare(s32 leLanguage);                                     // requests VIDEOS\VIDEOLIST.BUNDLE
         bool Release();
@@ -101,8 +106,17 @@ namespace BrnGui
         u32  GetPlayingMovie() const { return mPlayingMovie.mVideoResourceId; }
         u32  GetQueuedMovie() const  { return mQueuedMovie.mVideoResourceId; }
         bool IsMovieQueued() const   { return mQueuedMovie.mVideoResourceId != 0; }
-        u32  PendingVideoDataResourceRequest() const;   // the GuiModule polls this to issue the acquire
+        // ARTIST @0x824F7808: the GuiModule polls this (PreWorldUpdate) while the manager is in
+        // REQUESTING_MOVIEDATARESOURCE -- it advances the state to WAITING_FOR_MOVIEDATARESOURCE and
+        // returns the queued video's resource ID (else a default-name hash). NON-const (mutates state).
+        CgsResource::ID PendingVideoDataResourceRequest();
         EMovieManagerState GetState() const { return meState; }
+
+        // ARTIST @0x824EAF78: the GUI's car-pool-validation flow (BrnGui::GuiModule::UpdateCarPoolValidation)
+        // hands the manager the re-validated car-pool resource + its descriptor and flips meCarPoolState to
+        // VALID (true) or INVALID (false). Stashed for the memory-reclaim path.
+        void SetCarPoolValid(bool lbValid, const CgsResource::SmallResource& lrResource,
+                             const CgsResource::Entry::ResourceDescriptor& lrDescriptor);
 
         // The manager parks in REPORTING_FINISHED (12) when a video ends -- Update keeps it there (X360
         // Update case 12 self-loops). The GUI flow that owns the manager acknowledges the finish (sends the
@@ -145,6 +159,10 @@ namespace BrnGui
         bool                     mbKeepMemoryWhenFinished;   // X360 +0xD55
         bool                     mbUsesXMPMusic;             // X360 +0xD56 [stub: XMP background music]
         CgsResource::ResourcePtr<CgsResource::VideoDataResource> mpVideoDataResource;
+        // DecFIGS mCarPoolResource / mCarPoolResourceDescriptor -- the re-validated car-pool memory the GUI
+        // hands back via SetCarPoolValid (the 3-pool SmallResource + its 3-pool size/alignment descriptor).
+        CgsResource::SmallResource             mCarPoolResource;
+        CgsResource::Entry::ResourceDescriptor mCarPoolResourceDescriptor;
         char                     macMovieNameBuffer[256];    // "VIDEOS\<name>" (mapcBuffer)
         const char*              mpcLanguageCode;
         bool                     mbStopVideoStraightAway;

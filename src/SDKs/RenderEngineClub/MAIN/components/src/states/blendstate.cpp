@@ -65,6 +65,11 @@ namespace renderengine
         return pOut;
     }
 
+    void* BlendState::GetResourceDescriptor(void* pOut, const BlendStateParameters* /*pParams*/)
+    {
+        return GetResourceDescriptor(pOut);
+    }
+
     void* BlendState::Initialize(BlendMaterialState** ppMaterial, const BlendStateParameters* pParams)
     {
         BlendMaterialState* lpMat = *ppMaterial;

@@ -8,24 +8,16 @@
 // in the full CgsInputPads.cpp TU.
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Input/CgsInputTypes.h"  // CgsInput::KU_NUMBER_OF_PADS
+#include "GameShared/GameClasses/System/Input/Devices/X360/CgsInputDeviceX360Pad.h" // CgsInput::DeviceX360Pad (452-byte fielded layout)
 
 namespace CgsInput
 {
-    // The per-port physical-pad device record. InputPads owns an inline array of four of
-    // these starting at byte offset 0x78; each record is 452 bytes (0x1C4), the stride both
+    // The per-port physical-pad device record CgsInput::DeviceX360Pad is now the real fielded
+    // 452-byte (0x1C4) class, homed in CgsInputDeviceX360Pad.h (its reconstruction TU). InputPads
+    // owns an inline array of four of these starting at byte offset 0x78; the 452-byte stride both
     // GetDebugGamePad (`452 * liPortIndex + this + 120` @0x823A5F38) and InputPads::Construct
-    // (`v3 = this + 120; DeviceX360Pad::Construct(v3); v3 += 452` x4 @0x828E7238) use.
-    //
-    // SLICE NOTE (FLAGGED): DeviceX360Pad has its own full-reconstruction TU
-    // (CgsInput::DeviceX360Pad::Construct @0x828DC578 and siblings, not yet homed). Its field
-    // layout is NOT attested by this TU's assembly -- GetDebugGamePad only returns the address
-    // of the liPortIndex-th record. Modelled here as an opaque 452-byte span so the maPads array
-    // offsets are exact and GetDebugGamePad returns a correct &maPads[port]. Promote to the real
-    // fielded layout when the DeviceX360Pad reconstruction TU lands; its size must stay 452.
-    struct DeviceX360Pad
-    {
-        u8 maOpaque[452]; // 0x1C4 -- attested by the InputPads::Construct stride @0x828E7238
-    };
+    // (`v3 = this + 120; DeviceX360Pad::Construct(v3); v3 += 452` x4 @0x828E7238) use is preserved
+    // by the layout pin in that header (sizeof == 452).
 
     // INPUT-PADS SLICE (FLAGGED): only the per-port pad array + GetDebugGamePad are modelled.
     // The 0x78-byte head (the four per-pad {player,port,...} bind records the Construct/Bind
