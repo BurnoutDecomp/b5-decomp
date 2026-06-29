@@ -45,3 +45,15 @@ struct AptGCReleaseVector
         }
     }
 };
+
+// The single Apt GC deferred-release vector instance (X360 off_8324E51C). Defined
+// by the Apt GC startup data; declared here for the helpers that query it.
+extern AptGCReleaseVector gValuesToRelease;
+
+// AptIsDeferredVectorFull @0x82ADD238 -- whether the deferred-release vector is at
+// capacity (mnTop >= mnCapacity). This read confirms the layout (mnTop@+4 vs
+// mnCapacity@+0). Used by CgsAptCommunicator::UpdateComponentReserved.
+inline bool AptIsDeferredVectorFull()
+{
+    return gValuesToRelease.mnTop >= gValuesToRelease.mnCapacity;
+}
