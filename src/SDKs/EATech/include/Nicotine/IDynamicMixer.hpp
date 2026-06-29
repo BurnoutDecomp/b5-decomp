@@ -17,8 +17,7 @@
 // ===========================================================================
 
 #include "types.hpp"
-
-namespace rw { class IResourceAllocator; }
+#include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp" // the off_83250004 mixer allocator type
 
 class NFSMixMaster;
 class NFSLiveLink;
@@ -33,15 +32,33 @@ public:
     // PDB: IDynamicMixer::MAP_CREATE_PARAMS (the mixer-create config, +0x10).
     struct MAP_CREATE_PARAMS
     {
-        int                      mPrintSelect;    // +0x00
-        int                      NumMixStates;    // +0x04
-        rw::IResourceAllocator*  MixerAllocator;  // +0x08
+        // DWARF (DynamicMixer.hpp): MixerAllocator is an EA::Allocator::ICoreAllocator*;
+        // modelled here as the project's MixerAllocator (the same vtable shape, slot 2 =
+        // Allocate, slot 3 = Free -- it is what CreateInstance installs into off_83250004).
+        int             mPrintSelect;    // +0x00
+        int             NumMixStates;    // +0x04
+        MixerAllocator* MixerAllocator;  // +0x08
     };
 
-    virtual ~IDynamicMixer();           // vtable slot 0
+    IDynamicMixer();                    // @0x82B44A78 -- zero-init + install the global instance
+    virtual ~IDynamicMixer();           // @0x82B44DD0 -- vtable slot 0
+
+    // @0x82B44AB8 -- the process-wide IDynamicMixer instance (set by the ctor).
+    static IDynamicMixer* GetInstance();
+
+    // @0x82B44AD0 -- install the mixer allocator + create the NFSMixMaster, SnapshotMixer
+    // (and NFSLiveLink) sub-objects through it.
+    void CreateInstance(const MAP_CREATE_PARAMS* lpParams);
 
     void InitMap(int* lpMapData);                 // @0x82B44C40
+    void DestroyMap();                            // @0x82B44D20
+    void InitSnapshots();                         // @0x82B44D68
     void ProcessMixMap(int liUnused, float lfDeltaTime); // @0x82B44CA8
+
+    // @0x825487C0 -- set the camera/mix state index; returns this (X360 returns r3).
+    IDynamicMixer* SetCameraState(int liState);
+
+    void SetSnapshot();                           // @0x82B44DB8
 
     // vtable pointer occupies +0x00.
     int               miCamState;       // +0x04
