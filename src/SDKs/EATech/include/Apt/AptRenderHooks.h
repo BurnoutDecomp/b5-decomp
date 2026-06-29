@@ -12,25 +12,30 @@
 // graphics integration installs them; on PC that is the RW/D3D 2D path).
 //
 // Console: the callbacks are global function pointers in the Apt user-function
-// table, reached by AptCharacter::render (@0x810E74):
-//   dword_1059C6B8  draw a shape's geometry             -> AptHook_DrawShape
-//   dword_1059C6A4  draw an imported character's glyph   -> AptHook_DrawImportGlyph
-//   dword_1059C69C  resolve an imported character id     -> AptHook_ResolveImport
+// table (gAptFuncs, Apt.h), reached by AptCharacter::render (@0x810E74):
+//   dword_1059C6B8  draw a shape's geometry  == gAptFuncs.pfnDrawRenderingUnit
+//   dword_1059C6A4  draw an imported glyph    == gAptFuncs.pfnBindTexture-adjacent slot
+//   dword_1059C69C  resolve an imported id    == gAptFuncs.pfnLoadTexture-adjacent slot
 //
-// FLAG: these are homed by the host RW-render integration (not reconstructed
-// here -- the RW 2D rasteriser is its own subsystem). Declared so the geometry
-// dispatch in AptCharacter::render compiles + links against the boundary. Note:
-// the console passes the shape's geometry sub-field (char[8]) directly; the PC
-// hook takes the whole AptCharacter and reads the geometry from it (the host hook
-// owns the loaded-shape layout), which keeps this side free of the .apt loaded
-// layout (defined by the .apt parse).
+// AptHook_DrawShape IS wired: the console's `dword_1059C6B8(char[8], op, tick)` is
+// the gAptFuncs.pfnDrawRenderingUnit slot, which CgsGui::AptAux::ConstructApt installs
+// to CgsGui::AptCallbackRender::DrawRenderingUnit -> AptRenderHandler::Render. So the
+// hook reads the shape's geometry sub-field (AptCharacter +0x20, the console's v6[8])
+// and calls through the installed slot. AptHook_DrawImportGlyph / AptHook_ResolveImport
+// are the imported-sub-character path -- still deferred with the .apt parse (FLAG).
+//
+// (The PC hook takes the whole AptCharacter and reads the geometry from it -- the host
+// owns the loaded-shape layout -- which keeps the AptCharacter base slice free of the
+// .apt loaded layout the parse defines.)
 // ===========================================================================
 
 struct AptCharacter;
 struct AptRenderingContext;
 enum AptMaskRenderOperation : int;
 
+// Wired to gAptFuncs.pfnDrawRenderingUnit (see AptRenderHooks.cpp).
 void AptHook_DrawShape(AptCharacter* pShape, AptMaskRenderOperation eOp, int nTick);
+// FLAG: the imported-sub-character path, homed with the .apt parse.
 void AptHook_DrawImportGlyph(AptCharacter* pImport, int nIndex, void* pGlyphData);
 int  AptHook_ResolveImport(void* pImportFileData, int nImportId);
 

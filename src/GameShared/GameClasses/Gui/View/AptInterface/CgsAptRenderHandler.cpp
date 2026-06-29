@@ -91,9 +91,12 @@ namespace CgsGui
 
         // The text-layout inputs start empty (AptAux::Construct seeds the font collection / effect
         // / size scale from its construction arguments).
-        mpFontCollection = nullptr;
-        miTextEffect     = 0;
-        mfFontSizeScale  = 1.0f;
+        mpFontCollection      = nullptr;
+        miTextEffect          = 0;
+        mfFontSizeScale       = 1.0f;
+        mpLanguageManager     = nullptr;
+        mpAlternateTextColours = nullptr;
+        miNumAlternateColours  = 0;
         // Both per-shape texture-state caches start empty (HashTable bins live, pool empty).
         mWrapTextureCache.Init();
         mClampTextureCache.Init();
@@ -111,6 +114,98 @@ namespace CgsGui
             mabUnusedAptStrings[luIndex] = 1;
             maacAptStringChars[luIndex]  = 0;
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Construct - PS3 0x5C472C. The parametrised render-state bring-up AptAux::Construct
+    // delegates to (called on the AptAux's embedded handler at a1+0x420). It seeds every field
+    // the render-callback family + the text path read, builds the 256-slot AptString pool against
+    // the alternate-colour table, and brings both per-shape texture-state caches up empty.
+    //
+    // The guest's body is heavily VMX (it computes the per-batch transform reciprocals + the
+    // aspect-folded stage-resolution vector with a vperm/vmaddfp chain off the constant
+    // 0x44A0000044340000 == {1280.0f, 720.0f}). The OBSERVABLE outputs the in-scope methods read
+    // are the two stage-resolution lanes (GetStageHeight == mAptResolution.x, GetStageWidth ==
+    // mAptResolution.y) and the seeded pointers; those are reproduced here. The intermediate
+    // reciprocal vectors the transform uses are recomputed at draw time by the Im2d path, so the
+    // SIMD scratch is not retained. FLAG: the stage-resolution aspect-fold is reconstructed from
+    // the {1280,720} base + the display aspect (height lane 720 exact; width lane == height*aspect);
+    // the bit-exact VMX reciprocal-estimate sequence that produces the width is the platform leaf.
+    // -------------------------------------------------------------------------
+    void AptRenderHandler::Construct(CgsGuiModuleIO::ImRendererSet* lpImRenderers,
+                                     CgsGraphics::TextRenderer* lpTextRenderer,
+                                     CgsLanguage::LanguageManager* lpLanguageManager,
+                                     const FontCollection* lpFonts,
+                                     f32 lfAspectRatio,
+                                     const rw::RGBA* lpAlternateTextColours,
+                                     s32 liNumAlternateColours)
+    {
+        // ---- the renderer set + glyph batcher + language manager + font collection ----------
+        // (guest _R27[27147]/[27148]/[24944]/*_R27). The committed mpImRenderers is the AptIm2d
+        // render-set model; the incoming ImRendererSet's leading slot is the 2D renderer base, so
+        // the set pointer is held directly (re-typed to the committed set model).
+        mpImRenderers     = reinterpret_cast<AptImRendererSet*>(lpImRenderers);
+        mpTextRenderer    = lpTextRenderer;
+        mpLanguageManager = reinterpret_cast<const void*>(lpLanguageManager);
+        mpFontCollection  = reinterpret_cast<const void*>(lpFonts);
+
+        // ---- the stage resolution (guest this+80) -------------------------------------------
+        // Base stage is 1280x720 (the 0x44A0000044340000 constant: 1280.0 / 720.0). The two lanes
+        // the callbacks read are mAptResolution.x == stage HEIGHT (720, fixed) and mAptResolution.y
+        // == stage WIDTH, derived as height * the DISPLAY aspect ratio (square-pixel correction): a
+        // 16:9 display passes aspect 1.7777..., giving width 720 * 1.7777 == 1280 (the base width);
+        // a wider/narrower display rescales the width about that base. lfAspectRatio is the true
+        // display W/H the caller forwards (NOT 1.0 for 16:9).
+        // FLAG: the aspect-fold SEMANTICS (width = height * displayAspect) is reconstructed from the
+        // {1280,720} base; the guest computes it with a bit-exact VMX reciprocal-estimate chain
+        // (vrefp/vnmsubfp/vmaddfp) that is the platform leaf and is not reproduced bit-for-bit. The
+        // height lane (720, read by GetStageHeight) is exact; the width lane tracks the passed aspect.
+        const f32 lfBaseWidth  = 1280.0f;
+        const f32 lfBaseHeight = 720.0f;
+        mAptResolution.SetZero();
+        mAptResolution.x = lfBaseHeight;                                  // stage HEIGHT lane (exact)
+        mAptResolution.y = (lfAspectRatio > 0.0f)
+                               ? (lfBaseHeight * lfAspectRatio)          // width = height * displayAspect
+                               : lfBaseWidth;                            // (guard: degenerate aspect)
+
+        // ---- the text-layout scalar inputs (guest stores 1.0 @ +0x1A828, 0 @ +0x1A824) -------
+        miTextEffect    = 0;       // CgsAptString::E_EFFECT_NONE
+        mfFontSizeScale = 1.0f;
+
+        // ---- the per-shape texture-state caches start empty ---------------------------------
+        mWrapTextureCache.Init();
+        mClampTextureCache.Init();
+
+        // ---- the per-batch transform starts cleared -----------------------------------------
+        mVertexTransform.mOriginXYZ.SetZero();
+        mVertexTransform.mRightUp.SetZero();
+        mVertexTransform.mColourShift.SetZero();
+        mVertexTransform.mColourScale.SetZero();
+
+        // ---- the stage clear colour starts cleared ------------------------------------------
+        mBackgroundColour.m_rgba = 0;
+
+        // ---- build the 256-slot AptString pool against the alt-colour table -----------------
+        // The guest loops 256 times: mark each slot FREE (`*v24 = 1`) then
+        // CgsAptString::Construct(slot, lpAlternateTextColours, liNumAlternateColours). This slice
+        // models the pool slot as opaque storage (the real CgsAptString text-object Construct is
+        // driven from the AllocateString TU that owns that type), so here the pool bookkeeping is
+        // brought up: every slot FREE, the char-pointer table cleared, and the alt-colour table
+        // retained as the table the pool was built with.
+        mpAlternateTextColours = lpAlternateTextColours;
+        miNumAlternateColours  = liNumAlternateColours;
+        for (u32 luIndex = 0; luIndex < KU_NUM_APT_STRINGS; ++luIndex)
+        {
+            mabUnusedAptStrings[luIndex] = 1;
+            maacAptStringChars[luIndex]  = 0;
+        }
+
+        // ---- the white fallback texture (guest _R27[32] = mgStateLibrary.mpTexture_White) ----
+        // The Im-renderer state-library global is not modelled in this slice, so the white texture
+        // is supplied by SetWhiteTexture during boot rather than pulled here. Start it null.
+        // FLAG: white-texture seed deferred to SetWhiteTexture (the state-library global is out of
+        // this slice's scope).
+        mpWhiteTexture = nullptr;
     }
 
     // -------------------------------------------------------------------------

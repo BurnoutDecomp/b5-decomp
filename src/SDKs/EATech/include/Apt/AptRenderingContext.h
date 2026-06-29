@@ -46,34 +46,20 @@
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"    // AptCXForm
 
 // ---------------------------------------------------------------------------
-// Apt host render hooks (un-homed externs).
+// Apt host render hooks — the global AptUserFunctions table gAptFuncs.
 //
-// The X360 reaches the host renderer through the global AptUserFunctions table
-// gAptFuncs (X360 dword_8324E818). This TU touches only its two render hooks:
-//     gAptFuncs.pfnSetVertexMatrix    (table +0x68 -> X360 dword_8324E880)
-//     gAptFuncs.pfnSetColourTransform (table +0x6C -> X360 dword_8324E884)
+// The X360 reaches the host renderer through the single global Apt user-function
+// table gAptFuncs (X360 dword_8324E818). This TU touches only its two render hooks:
+//     gAptFuncs.pfnSetVertexMatrix    (table slot 26 -> X360 dword_8324E880)
+//     gAptFuncs.pfnSetColourTransform (table slot 27 -> X360 dword_8324E884)
 //
-// The full AptUserFunctions table (the Apt.h dispatch struct, ~200 callbacks)
-// would drag in dozens of out-of-scope SDK types, so only the two render hooks
-// this context needs are reconstructed here, placed at their X360-attested byte
-// offsets within an external dispatch table (documented offset placement into a
-// C-style function-pointer table, not into a project C++ object). The table is
-// installed by the Apt runtime startup (not yet reconstructed); declared extern
-// so this TU links. Sibling Apt TUs reference the same single underlying table.
+// The full AptUserFunctions table now lives at its SDK home (Apt.h, recovered
+// verbatim from the DecFIGS DWARF), so this context reaches the same single table
+// by name through it -- the earlier render-hook-only stand-in is unified away.
+// The table is homed by the Apt host-install TU (CgsAptAux.cpp); sibling Apt TUs
+// reference the same underlying gAptFuncs.
 // ---------------------------------------------------------------------------
-struct AptUserFunctionsRenderHooks
-{
-    // 26 function-pointer SLOTS precede pfnSetVertexMatrix in gAptFuncs (Apt.h
-    // order: pfnMemAlloc .. pfnFreeRenderingUnit), i.e. byte offset 0x68 on the
-    // 32-bit X360. The slot count is what matters for named access; the byte
-    // offset widens on the x64 PC build (the host installer is PC-compiled too).
-    void* mapLeadingHooks[26];                         // [X360 +0x00 .. +0x68)
-
-    void (*pfnSetVertexMatrix)(AptMatrix* pMatrix);    // [X360 +0x68] dword_8324E880
-    void (*pfnSetColourTransform)(AptCXForm* pCXForm); // [X360 +0x6C] dword_8324E884
-};
-
-extern AptUserFunctionsRenderHooks gAptFuncs;          // X360 dword_8324E818
+#include "SDKs/EATech/include/Apt/Apt.h"   // AptUserFunctions gAptFuncs (the real host table)
 
 // ---------------------------------------------------------------------------
 // Apt "identity / null" transform singletons (un-homed externs).

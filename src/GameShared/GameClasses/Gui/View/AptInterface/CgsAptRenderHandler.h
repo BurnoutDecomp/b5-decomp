@@ -44,6 +44,10 @@ namespace CgsGraphics
     struct TextRenderer;   // DrawString hands the glyph batcher a TextObject (CgsFontRenderer.h)
 }
 
+namespace CgsLanguage    { class LanguageManager; }       // held by Construct (mpLanguageManager)
+namespace CgsGui         { struct FontCollection; }        // the text-layout font collection
+namespace CgsGuiModuleIO { struct ImRendererSet; }         // the active 2D/3D renderer set (a2)
+
 
 namespace CgsGui
 {
@@ -80,6 +84,32 @@ namespace CgsGui
         // BaseLinkedList "uninitialised" sentinel each HashTable bin starts with; here the
         // HashTable default ctor + Init() produce that same start-empty state.)
         AptRenderHandler();
+
+        // PS3 0x5C472C. The parametrised bring-up AptAux::Construct delegates the render-state
+        // seeding to (it is called on the AptAux's embedded handler at a1+0x420). This is where
+        // the wave-3 slice's deferred field seeds land:
+        //   * mpImRenderers   = lpImRenderers   (guest _R27[27147], +108588) -- the renderer set
+        //   * mpTextRenderer  = lpTextRenderer  (guest _R27[27148], +0x1A830) -- the glyph batcher
+        //   * mpLanguageManager = lpLanguageManager (guest _R27[24944], +99776)
+        //   * mpFontCollection = lpFonts        (guest *_R27, +0x00) -- the text-layout fonts
+        //   * mAptResolution  : the stage HEIGHT/WIDTH lanes derived from the 1280x720 base and the
+        //                       display aspect ratio (the guest's SIMD aspect-fold of the constant
+        //                       0x44A0000044340000 == {1280.0, 720.0}); the two read lanes (.x/.y)
+        //                       are seeded so GetStageHeight/GetStageWidth return the right values.
+        //   * mfFontSizeScale = 1.0  / miTextEffect = 0     (guest stores 1.0 @ +0x1A828, 0 @ +0x1A824)
+        //   * the 256-slot AptString pool is constructed against the alt-colour table
+        //     (lpAlternateTextColours / liNumAlternateColours); every slot starts FREE.
+        //   * the two per-shape texture-state caches start empty.
+        //   * mpWhiteTexture is seeded from the Im-renderer state library (guest _R27[32]); that
+        //     state-library global is not modelled in this slice, so the white texture is supplied
+        //     separately by SetWhiteTexture during boot (FLAG'd below).
+        void Construct(CgsGuiModuleIO::ImRendererSet* lpImRenderers,
+                       CgsGraphics::TextRenderer* lpTextRenderer,
+                       CgsLanguage::LanguageManager* lpLanguageManager,
+                       const FontCollection* lpFonts,
+                       f32 lfAspectRatio,
+                       const rw::RGBA* lpAlternateTextColours,
+                       s32 liNumAlternateColours);
 
         // X360 0x828466E0. Cache the white fallback texture pointer (guest +0x80 == +128).
         // Asserts the incoming pointer is non-null ("Invalid texture pointer sent to
@@ -245,5 +275,16 @@ namespace CgsGui
         const void* mpFontCollection;   // guest +0x00 (a CgsGui::FontCollection*)
         s32         miTextEffect;       // guest +0x1A824 (CgsAptString::ETextEffects)
         f32         mfFontSizeScale;    // guest +0x1A828
+
+        // The language manager Construct holds (guest _R27[24944] == +99776). Carried as an
+        // opaque word -- this slice's in-scope methods do not dereference it; AllocateString /
+        // the text path own its use. Seeded by Construct.
+        const void* mpLanguageManager;  // guest +99776
+
+        // The alternate-text-colour table Construct builds the AptString pool with (each pool
+        // CgsAptString::Construct caches it). Retained so the table the pool was built against is
+        // named state. Seeded by Construct.
+        const rw::RGBA* mpAlternateTextColours;  // guest construct arg a7
+        s32             miNumAlternateColours;   // guest construct arg a8
     };
 }

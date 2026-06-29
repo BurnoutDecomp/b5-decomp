@@ -296,6 +296,16 @@ namespace CgsGraphics
         const ImCommand* GetFirstCommand() const;                                            // @0x57E024
         const ImCommand* GetNextCommand(const ImCommand* lpCurrentCommand) const;            // @0x57E040
 
+        // ----- GPU dispatch (the consumer side) ------------------------------
+        // Im2dRenderBuffer::Dispatch @0x575BD4 - walk the frozen DISPATCH buffer command-by-
+        // command (GetFirstCommand/GetNextCommand) and re-issue each ImCommand to the graphics
+        // device. The PS3/X360 bodies push the RSX/D3D ring through shadow::Device + cellGcm*;
+        // the PC realisation (in CgsImRenderBufferTemplate.cpp) translates each EImCommandType
+        // opcode into the existing src/pc/gcm/renderengine D3D9 device (renderengine::gDevice)
+        // exactly as CgsIm2d.cpp's immediate path does (state -> SetRenderState/SetTexture,
+        // RENDER_PRIMITIVES -> DrawPrimitiveUP of the per-batch SET_TRANSFORM-folded vertices).
+        void Dispatch();
+
         // ----- vertex sub-allocation -----
         V* AllocVertices(u32 luNumVertices);                                                 // @0x24DAE8
 
