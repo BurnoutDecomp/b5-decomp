@@ -37,6 +37,11 @@ public:
     void AttachToMixMap(NFSMixMap* lpMixMap);        // @0x82B47648 (FLAG: cascade -- below)
     void Update(float lfDeltaTime);                  // @0x82B47C68 (FLAG: rodata-blocked DSP)
 
+    // ---- driven by Nicotine::IDynamicMixer (declared here; bodied by the SnapshotMixer TU) ----
+    void InitSnapshots();                            // (re)build the snapshot/channel arrays
+    void DestroySnapshots();                         // tear down the snapshot/channel arrays
+    void SetSnapshot();                              // apply the currently-selected snapshot
+
     void*            mpOwner;        // +0x00  owner (has the assert vtable; Construct arg)
     SnapshotHeader*  mpSnapshotHdr;  // +0x04
     int              meState;        // +0x08  1 = constructed, 2 = attached
