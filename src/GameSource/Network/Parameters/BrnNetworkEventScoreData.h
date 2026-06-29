@@ -45,7 +45,15 @@ namespace BrnNetwork
         // (miNumScores >= 0 and < KI_MAX_EVENT_SCORES_TO_UPLOAD) live in this type's TU
         // (BrnNetworkEventScoreData.cpp), so the per-slot store + count bump is owned here.
         // Bodied in another TU; declared here for the debug component's `cl /c` gate.
-        void AddEventScore( s32 liEventScoreType, s32 liScore, s32 liEventScoreSubType );
+        //
+        // Returns true once the batch is FULL (the X360 EventScoresManager::UpdateUploadEventScores
+        // @ 0x8256C010 stops draining its pending list when this returns a non-zero byte:
+        // clrlwi r11, r3, 24; cmplwi 0; bne break). The debug component's single call ignores the
+        // return. The X360 build's mangled name for this method on the upload object is
+        // SetScoreData; this is the same store-one-score-and-report-full operation. (ADDITIVE GROW:
+        // widened from void to bool -- additive for the existing debug-component call site, which
+        // discards the value.)
+        bool AddEventScore( s32 liEventScoreType, s32 liScore, s32 liEventScoreSubType );
 
     private:
         s32 maEventScoreType[KI_MAX_EVENT_SCORES_TO_UPLOAD];     // +0x04

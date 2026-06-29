@@ -156,6 +156,33 @@ namespace BrnNetwork
         // materialises with the full BrnNetworkManager TU. ADDITIVE GROW.
         CgsSystem::EFrameRate GetLocalConsoleFrameRate() const;
 
+        // ---- ADDITIVE GROW (BrnNetworkAutoLoginManager TU) --------------------------------
+        // The auto-login state machine reaches the manager's embedded login sub-machine. The
+        // X360 (AutoLoginManager::UpdateWaitAutoLogin / ::UpdateConnecting) asserts the login
+        // manager is present (manager + 0x4DB4 != 0) and reads its current state value
+        // (lwz manager + 0x4DC0) to decide whether a sign-in is already in progress. The state
+        // value is compared against the grounded literals 14 and 15 ("signing in" / "busy");
+        // the full state enum is owned by the login manager's own TU, so the raw value is
+        // exposed here and the comparison literals live (named) at the call site.
+        // Declared-only; storage / body materialise with the full BrnNetworkManager TU.
+        bool HasLoginManager() const;
+        s32  GetNetworkLoginState() const;
+
+        // The auto-login manager notifies the network manager that an auto-login connect has
+        // completed (X360 AutoLoginManager::Connect -> BrnNetworkManager::OnAutoLogin).
+        // Declared-only; body lands with the full BrnNetworkManager TU.
+        void OnAutoLogin();
+
+        // ---- ADDITIVE GROW (BrnNetworkEventScoresManager TU) ------------------------------
+        // EventScoresManager signals the manager that a stage of the auto-login process is done
+        // (X360: every call site passes the literal 2 in r4 -- e.g. UpdateLoggedIn @ 0x82556BB8,
+        // OnAutoLogin @ 0x8254B5C0, _UploadEventScoreCallback @ 0x825654A0 all call
+        // OnAutoLoginProcessComplete(GetNetworkManager(), 2)). The argument is a process-stage
+        // selector; its enum home is the auto-login manager's own TU, so it is exposed as a raw
+        // s32 here (FLAG: re-type to the login-process-stage enum once that enum is reconstructed).
+        // Declared-only; body lands with the full BrnNetworkManager TU.
+        void OnAutoLoginProcessComplete( s32 liProcessStage );
+
     private:
         CgsNetwork::VersionDisplay mVersionDisplay;
         CgsNetwork::NetworkAdapter mNetworkAdapter;

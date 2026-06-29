@@ -22,7 +22,8 @@
 
 #include "types.hpp"
 
-#include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"            // CgsModule::IOBuffer
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<512,16> (the request queue)
 
 namespace CgsResource
 {
@@ -39,6 +40,23 @@ namespace LiveUpdateIO
         };
 
         const OutputQueueStorage* GetOutputQueue() const;   // +4, read-lock
+
+        // GROWN for CgsResource::LiveUpdateModule::Update (X360 @0x82903128). The live-update
+        // module write-locks this buffer each frame, calls Get() to obtain the bundle-load
+        // *request* queue (the same +4 payload, viewed as the VariableEventQueue<512,16> the
+        // module pushes its LoadBundleRequest onto via AddEvent), and at the end of the frame
+        // calls SetStatus() to publish whether a live-update is still in progress.
+        //
+        // Get() @ 0x82903198 call site: returns the request queue (r3 is then passed straight to
+        //   VariableEventQueue<512,16>::AddEvent). Write-locked accessor (the module holds the
+        //   write lock around the call). Declaration-only here; the body lives in this IO TU.
+        CgsModule::VariableEventQueue<512, 16>* Get();
+
+        // SetStatus() @ 0x82903314 call site: the module passes the address of a 1-byte status
+        //   value (lpStatus[0] = (mUpdateState != 0)) -- "a live-update is in flight". The X360
+        //   renders the argument as a pointer to the on-stack status byte; modelled faithfully as
+        //   a pointer to the status byte. Declaration-only here; the body lives in this IO TU.
+        void SetStatus(const u8* lpStatus);
 
         static void _AssertLayout();
 

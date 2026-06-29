@@ -99,6 +99,16 @@ namespace BrnNetworkModuleIO
     class NetworkToGuiInterface;         // OutputBuffer @ +180588
     class NetworkToGameStateInterface;   // OutputBuffer @ +172376
     class NetworkEventQueue;             // OutputBuffer @ +184080 ; PostSim @ +72952..+73284
+    struct PostSimulationInputBuffer;    // defined below; PostSim() takes a pointer to it
+
+    // ---- ADDITIVE GROW (BrnNetworkEventScoresManager TU) -------------------------------------
+    // BrnNetworkModuleIO::PostSim -- pull the inbound post-sim network-event queue out of a
+    // PostSimulationInputBuffer (X360: EventScoresManager::ProcessAfterSimulation @ 0x82565430
+    // calls PostSim(lpInput) then walks the returned VariableEventQueue<14000,16> via
+    // GetFirstEvent/GetNextEvent). The X360 hands the buffer in r3 and returns the queue start in
+    // r3; NetworkEventQueue is CgsModule::VariableEventQueue<14000,16> (see the BuddyManager debug
+    // component typedef). Declared-only here; body lands with the BrnNetworkModuleIO TU.
+    const NetworkEventQueue* PostSim( const PostSimulationInputBuffer* lpInput );
 
     // ========================================================================
     // PreSimulationInputBuffer  (DWARF BrnNetworkModuleIO.h:102 : IOBuffer)
