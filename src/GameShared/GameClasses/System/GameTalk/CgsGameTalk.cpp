@@ -1,0 +1,133 @@
+#include "GameShared/GameClasses/System/GameTalk/CgsGameTalk.h"
+
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"
+
+// The AttribSys GameTalk message handler registered by Prepare. Owned by the
+// (not-yet-reconstructed) CgsAttribSys::AttribSysModule TU; forward-declared here
+// with its GameTalk MessageHandler signature so the per-TU compile gate resolves
+// the address-of without fabricating the AttribSysModule type.
+namespace CgsAttribSys
+{
+    namespace AttribSysModule
+    {
+        void AttribulatorGameTalkHandler(EA::GameTalk::GameTalkMessage* lpMessage);
+    }
+}
+
+// =====================================================================================
+// CgsGameTalk::GameTalk -- game-side GameTalk front door.
+//   Reconstructed from BURNOUT_X360_ARTIST.XEX. Source files (from the asm asserts):
+//     ..\..\..\GameShared\GameClasses\System\GameTalk\CgsGameTalk.h   (inline methods)
+//     d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\system\gametalk\CgsGameTalk.cpp
+//
+//     Construct              @ 0x82837648  (ran in the goal trace)
+//     Prepare                @ 0x828394B8
+//     RegisterMessageHandler @ 0x828248D0  (header-inline in the original)
+//     SendMessage            @ 0x828DAEE8  (header-inline in the original)
+//     Update                 @ 0x828376C0
+//
+//   All member offsets / constants were read directly off the asm; members are
+//   accessed by name.
+// =====================================================================================
+
+namespace CgsGameTalk
+{
+    namespace
+    {
+        // The "Core/GameTalk" debug log window: a file-scope static in the X360 build
+        // (the asm's off_82F32FD4). Construct sizes it to 20 lines and prepares it under
+        // the "Core/GameTalk" menu path with the "Log" caption (off_82F32FBC / off_82F32FB8).
+        CgsDev::DebugUI::LogWindow sLogWindow;
+
+        const char* const KAC_LOG_WINDOW_PATH    = "Core/GameTalk"; // off_82F32FBC
+        const char* const KAC_LOG_WINDOW_CAPTION = "Log";           // off_82F32FB8
+        const s32         KI_LOG_WINDOW_LINES     = 20;             // li r4, 0x14
+
+        // The GameTalk manager is created with a small fixed channel count and no flags
+        // (asm `li r4, 0xA; li r5, 0`).
+        const s32         KI_GAMETALK_MAX_CHANNELS = 10;            // li r4, 0xA
+
+        // The channel name the AttribSys GameTalk handler is registered on
+        // (off_82F32FB4 "AttribSys.xenon").
+        const char* const KAC_ATTRIBSYS_CHANNEL = "AttribSys.xenon";
+    }
+
+    // X360 @0x82837648.
+    void GameTalk::Construct()
+    {
+        mbPrepared        = false;          // stb 0, 0x4034
+        mpGameTalkManager = nullptr;        // stw 0, 0x4030
+
+        // Bring up the transport on the GameTalk listen port (asm passes 0x2694 in r5).
+        mProtocol.Construct(true, KI_DEFAULT_GAMETALK_PORT);
+
+        // Reset the debug component to its clean state (the asm's `...Destruct` symbol on
+        // the +0x4024 subobject is the dedup-shared DebugComponent constructor body).
+        mDebugComponent.Construct();
+
+        // Bring up the "Core/GameTalk" log window.
+        sLogWindow.Construct(KI_LOG_WINDOW_LINES);
+        sLogWindow.Prepare(KAC_LOG_WINDOW_PATH, KAC_LOG_WINDOW_CAPTION, 0);
+    }
+
+    // X360 @0x828394B8.
+    void GameTalk::Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep)
+    {
+        // Create the process-wide GameTalk singleton, then point mpGameTalkManager at it.
+        EA::GameTalk::GameTalkManager::CreateInstance(this, KI_GAMETALK_MAX_CHANNELS, 0);
+        mpGameTalkManager = EA::GameTalk::GameTalkManager::GetInstance();
+
+        // Prepare the transport with the inactivity timeout / per-frame update step.
+        mProtocol.Prepare(lrInactivityTimeout, lrUpdateTimeStep, mpGameTalkManager);
+
+        // Register the AttribSys GameTalk handler on the AttribSys channel.
+        EA::GameTalk::GameTalkManager::RegisterMessageHandler(
+            mpGameTalkManager,
+            &CgsAttribSys::AttribSysModule::AttribulatorGameTalkHandler,
+            KAC_ATTRIBSYS_CHANNEL);
+
+        // Register the debug component with the debug menu.
+        mDebugComponent.Register();
+
+        mbPrepared = true;                  // stb 1, 0x4034
+    }
+
+    // X360 @0x828248D0 (header-inline in the original CgsGameTalk.h:143-146).
+    s32 GameTalk::RegisterMessageHandler(EA::GameTalk::MessageHandler lpHandlerFunc,
+                                         const char* lpacFilter)
+    {
+        CGS_ASSERT(mbPrepared, "mbPrepared");
+        CGS_ASSERT(lpHandlerFunc != nullptr, "lpHandlerFunc != NULL");
+        CGS_ASSERT(lpacFilter != nullptr, "lpacFilter != NULL");
+        CGS_ASSERT(mpGameTalkManager != nullptr, "mpGameTalkManager != NULL");
+
+        return EA::GameTalk::GameTalkManager::RegisterMessageHandler(
+            mpGameTalkManager, lpHandlerFunc, lpacFilter);
+    }
+
+    // X360 @0x828DAEE8 (header-inline in the original CgsGameTalk.h:178-179).
+    s32 GameTalk::SendMessage(const char* lpTarget, EA::GameTalk::GameTalkMessage* lpMessage)
+    {
+        CGS_ASSERT(lpTarget != nullptr, "lpTarget");
+        CGS_ASSERT(lpMessage != nullptr, "lpMessage");
+
+        return EA::GameTalk::GameTalkManager::SendMessage(lpTarget, lpMessage);
+    }
+
+    // X360 @0x828376C0.
+    void GameTalk::Update()
+    {
+        CGS_ASSERT(mbPrepared,
+                   "Call GameTalk::Prepare() before calling GameTalk::Update()\n");
+        CGS_ASSERT(mpGameTalkManager != nullptr, "mpGameTalkManager != NULL");
+
+        // The asm pumps the process-wide singleton (off_8303577C) rather than the member
+        // copy; both reference the same GameTalkManager.
+        EA::GameTalk::GameTalkManager* lpManager = EA::GameTalk::GameTalkManager::GetInstance();
+        if (lpManager != nullptr)
+        {
+            lpManager->Update();
+        }
+    }
+}

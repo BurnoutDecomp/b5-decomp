@@ -78,7 +78,9 @@ namespace CgsResource
         SmallResource() {}   // PC build: allow field-by-field fill (X360 fills raw)
         SmallResource(const SmallMemoryResource& lrMemoryResource);          // :220
         SmallResource(const rw::Resource& lrResource);                       // :226
-        void CreateFromRWResource(const rw::Resource& lrResource);           // :233
+        // Takes the X360 SERIALISED 5-slot resource form (PC rwcore narrowed rw::Resource to
+        // <4>; the X360 build reads slot 4 -- same documented delta as ResourceDescriptor=<5>).
+        void CreateFromRWResource(const rw::BaseResources<5>& lrResource);    // :233
         void ConvertToRWResource(rw::Resource& lrResource);                 // :246
         SmallMemoryResource         GetMemoryResource() const;             // :258
         SmallMemoryResource&        GetMemoryResource();                   // :264
