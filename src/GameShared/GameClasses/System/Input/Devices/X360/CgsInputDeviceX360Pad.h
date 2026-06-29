@@ -98,6 +98,24 @@ namespace CgsInput
         // X360 0x828DC870. Returns axis value luAxis (asserts luAxis <= 5); reads mafAxisValues[luAxis].
         f32 GetAxisValue(u32 luAxis) const;
 
+        // Returns control float luControl (asserts luControl <= 0x1B); reads mafControls[luControl].
+        // Inlined into InputPads::FillRawData (the `lbValidControl` assert @ CgsInputDeviceX360Pad.cpp:304
+        // and the `mafControls[i]` read at +0x4C are its body). Declared here so FillRawData calls it by
+        // name instead of raw-offset-reading the private control array.
+        f32 GetControlValue(u32 luControl) const;
+
+        // X360 (external in this TU): push the two motor magnitudes [0,1] to the device. Called by
+        // InputPads::UpdatePadRumble as `pad.SetRumble(lfLeft, lfRight)`.
+        void SetRumble(f32 lfLeftMotor, f32 lfRightMotor);
+
+        // Device type (meType @ +0x04); == E_DEVICETYPE_WHEEL selects the wheel FF path.
+        EDeviceType GetDeviceType() const { return static_cast<EDeviceType>(meType); }
+
+        // Publish the wheel force-feedback spring parameters (the +0x08 / +0x0C floats the device's
+        // wheel FF magnitude math reads). InputPads::UpdatePadRumble writes maPads[port]+8/+12 directly
+        // in the X360 asm; modelled here as a by-name setter so the caller does not raw-offset write.
+        void SetWheelFFSpring(f32 lfCoefficient, f32 lfSaturation) { mfRumbleX = lfCoefficient; mfRumbleY = lfSaturation; }
+
         // X360 0x828DCB20. Applies the symmetric inner/outer deadzone+range remap to one raw axis.
         f32 DeadzoneAxis(f32 lfRaw) const;
 
