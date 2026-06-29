@@ -34,11 +34,31 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT (builder >= 0 guards)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"      // BrnNetwork::Event (empty event spine base)
+#include "GameSource/Network/Shared Server Types/BrnNetworkSharedServerTypes.h" // ServerGeneratedTypes::OfflineProgressionT
 
 namespace BrnNetwork
 {
 namespace BrnNetworkModuleIO
 {
+    // DWARF (BrnNetworkInEventTypeDefs.h:438) -- the IN-event that delivers a player's
+    // accumulated offline-play progress to the network player-stats manager. DWARF spells it
+    // `: public NetworkEvent<33>` (tag 33); the empty BrnNetwork::Event base is byte-identical
+    // to that NetworkEvent<N> base (no data members, first field at +0x00 -- see the
+    // NetworkInSelectScoreboardEvent note below), so it is modelled on Event directly.
+    //
+    // LAYOUT is X360-AUTHORITATIVE from NetworkPlayerStatsManager::HandleOfflineProgressionEvent
+    // (@0x82546BB0): that body memcpy's exactly 0x44 == 68 bytes of this event into its buffered
+    // copy, and reads a 32-bit word at event+0x40 == +64 as the freeburn-challenge success count
+    // (handed to ServerInterfaceCustomCommands::UploadOfflineProgress as its count argument).
+    // The 64-byte OfflineProgressionT at +0 plus that trailing s32 give the 68-byte total. The
+    // trailing count field is not present in the (incomplete) DWARF member list but is required
+    // by the asm; FLAGGED as asm-recovered.
+    struct NetworkInOfflineProgression : public Event
+    {
+        ServerGeneratedTypes::OfflineProgressionT mOfflineProgression; // +0x00 (64 bytes)
+        s32                                       miFreeburnChallengeSuccessCount; // +0x40 (asm-recovered)
+    };
+
     struct NetworkInSelectScoreboardEvent : public Event
     {
         // Which scoreboard browsing level this event selects (the +0xC discriminator).

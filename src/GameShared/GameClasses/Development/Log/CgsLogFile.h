@@ -21,6 +21,12 @@ namespace Log
 {
     struct LogFile : public StrStreamBase
     {
+        // The X360 default ctor (inlined at every embed site, e.g. BrnGame::AutoTestManager @
+        // 0x827DB4C0) runs StrStreamBase() then stores -1 (INVALID_HANDLE_VALUE) into miFile at
+        // 8(this) before patching in LogFile's own vtable. Modelled here so embed-by-value brings
+        // the handle up un-opened.
+        LogFile() : miFile(INVALID_HANDLE_VALUE) {}
+
         // X360 0x82820880. Open the named file: in append mode (lbAppend) it OPENS_ALWAYS and seeks
         // to the end; otherwise it CREATE_ALWAYS (truncates). On a failed CreateFileA it fires the
         // "mFileHandle != INVALID_HANDLE_VALUE" assert. Always returns true (the X360 hard-returns 1).
