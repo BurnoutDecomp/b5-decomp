@@ -83,7 +83,19 @@ namespace GameTalk
         // payload (the take buffer + its length). Returns an opaque slot
         // pointer (discarded by FileClose).
         void* AddKeyContent(const char* lpcKey, s32 liType, const void* lpContent, s32 liLength);
+
+        // GROWN for CgsGameTalk::GameTalkProtocol::SendPingResponseToGameExplorer
+        // (X360 @0x82838978). The X360 builds the outgoing GameTalkMessage by
+        // package-allocating the message object and then calling AllocateDataBuffer
+        // to attach its key/content storage before AddKeyContent populates it.
+        // Modelled as a member that lazily allocates the message's data buffer.
+        void* AllocateDataBuffer();
     };
+
+    // Signature of a GameTalk message-received handler: the manager hands the
+    // decoded incoming message to the registered handler. CgsGameTalk's
+    // GameTalkProtocol::OnMessageReceived is registered through this.
+    typedef void (*MessageHandler)(GameTalkMessage* lpMessage);
 
     class GameTalkManager
     {
@@ -96,6 +108,18 @@ namespace GameTalk
         // `this`); FileClose's `GetInstance()->SendMessage(...)` evaluates
         // GetInstance() for its side effect then calls this static method.
         static s32 SendMessage(const char* lpcEndpoint, GameTalkMessage& rMessage);
+
+        // GROWN for CgsGameTalk::GameTalkProtocol::SendPingResponseToGameExplorer
+        // (X360 @0x82838978): the X360 sends a heap-built message by pointer.
+        static s32 SendMessage(const char* lpcEndpoint, GameTalkMessage* lpMessage);
+
+        // GROWN for CgsGameTalk::GameTalkProtocol::Prepare (X360 @0x82839238):
+        // register lpHandler to receive messages arriving on the named channel
+        // (asm passes the manager instance, the OnMessageReceived function, and
+        // the "AttribSys.xenon" channel name).
+        static void RegisterMessageHandler(GameTalkManager* lpManager,
+                                           MessageHandler lpHandler,
+                                           const char* lpcChannel);
     };
 }
 }

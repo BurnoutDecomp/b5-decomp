@@ -37,6 +37,25 @@ namespace BrnAI
         E_ROUTE_FINDING_COUNT           = 7,
     };
 
+    // DWARF BrnAISharedConstants.h:112 -- the per-frame behaviour an AI car is running. Stored
+    // at AICar+0x14B4 (the previous one at +0x14B8); AICar::SetBehaviour asserts the new value is
+    // in [0, E_AI_BEHAVIOUR_COUNT). Enumerator names/values are the DecFIGS DWARF.
+    enum EAIBehaviour
+    {
+        E_AI_BEHAVIOUR_STOP            = 0,
+        E_AI_BEHAVIOUR_ROLLING_START   = 1,
+        E_AI_BEHAVIOUR_DRIVE_THRU      = 2,
+        E_AI_BEHAVIOUR_CRUISING        = 3,
+        E_AI_BEHAVIOUR_FIGHTING        = 4,
+        E_AI_BEHAVIOUR_QUICK_TURN      = 5,
+        E_AI_BEHAVIOUR_SLOW_TURN       = 6,
+        E_AI_BEHAVIOUR_CRASHING        = 7,
+        E_AI_BEHAVIOUR_DONUT           = 8,
+        E_AI_BEHAVIOUR_POST_RACE_WIN   = 9,
+        E_AI_BEHAVIOUR_POST_RACE_LOSE  = 10,
+        E_AI_BEHAVIOUR_COUNT           = 11,
+    };
+
     // DWARF BrnAISharedConstants.h:92 -- whether an AI car is currently active and in range of
     // the player. Stored at AICar+0x14C8; the aggression machine treats any non-IN_RANGE state
     // as "not suitable for aggression".

@@ -2,9 +2,12 @@
 #include "GameSource/World/AI/Route/BrnRoute.h"                 // BrnAI::Route, RouteNode, Route::GetNode
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h" // RaceBalancingManager::ComputeTargetSpeed
 
+#include "GameSource/Math/BrnMathUtils.h"                      // BrnMath::IsNormal (SetRight unit-length check)
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"    // CgsDev::StrStream (streamed assert message)
-#include "rw/math/vpu/vector3_operation.h"                     // rw::math::vpu vector ops (dot / length)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"      // CgsDev::Log::gpDebugPrint, Message::gxMessageFilterFlags
+#include "rw/math/vpu/vector3_operation.h"                     // rw::math::vpu vector ops (dot / length / IsValid)
 
 #include <cmath>   // std::sqrt for the de-SIMD'd velocity magnitude
 
@@ -685,5 +688,128 @@ namespace BrnAI
         CGS_ASSERT(lpThisRoute->GetNodeCount() > 0, "mRoute.GetNodeCount() > 0");
 
         return lpThisRoute->GetNode(lpThisRoute->GetNodeCount() - 1)->GetSectionIndex();
+    }
+
+    // ==================================================================================
+    // GetSpeed @0x82764D68
+    //
+    // The car's current speed. IN_RANGE reads the cached in-range speed; OUT_OF_RANGE reads the
+    // cached out-of-range speed (asserting it really is one of those two states). The X360 asm
+    // tests meCarState @+0x14C8: ==0 (IN_RANGE) -> mfSpeedInRange @+0x14E4; otherwise it asserts
+    // the state is 1 (OUT_OF_RANGE) and returns mfSpeedOutOfRange @+0x14E8.
+    // ==================================================================================
+    f32 AICar::GetSpeed() const
+    {
+        if (meCarState == E_AI_CAR_STATE_IN_RANGE)
+            return mfSpeedInRange;
+
+        CGS_ASSERT(meCarState == E_AI_CAR_STATE_OUT_OF_RANGE, "AI car in bad state");
+        return mfSpeedOutOfRange;
+    }
+
+    // ==================================================================================
+    // GetVelocity @0x8276B570
+    //
+    // The car's world-space velocity (mVelocity @+0x1470), validity-asserted. The X360 body is
+    // the inlined sret accessor: it runs the per-lane rw::math::vpu::IsValid NaN check, asserts
+    // "Invalid velocity", then copies the stored vector into the return slot.
+    // ==================================================================================
+    Vector3 AICar::GetVelocity() const
+    {
+        CGS_ASSERT(vpu::IsValid(mVelocity), "Invalid velocity");
+        return mVelocity;
+    }
+
+    // ==================================================================================
+    // GetLastGoodPosition @0x8276B640
+    //
+    // The car's last known on-track position (mLastGoodPosition @+0x1460), validity-asserted.
+    // Same inlined sret-accessor shape as GetVelocity, asserting "Invalid car last good position".
+    // ==================================================================================
+    Vector3 AICar::GetLastGoodPosition() const
+    {
+        CGS_ASSERT(vpu::IsValid(mLastGoodPosition), "Invalid car last good position");
+        return mLastGoodPosition;
+    }
+
+    // ==================================================================================
+    // IsOnStartLine @0x82764E68
+    //
+    // Whether the car is sitting on the start line (mbIsOnStartLine @+0x1547). Asserts the car is
+    // not in the INACTIVE state first (meCarState @+0x14C8 != 2).
+    // ==================================================================================
+    bool AICar::IsOnStartLine() const
+    {
+        CGS_ASSERT(meCarState != E_AI_CAR_STATE_INACTIVE, "GetState() != E_AI_CAR_STATE_INACTIVE");
+        return mbIsOnStartLine;
+    }
+
+    // ==================================================================================
+    // SetBehaviour @0x82764DE0
+    //
+    // Sets the car's per-frame behaviour. Asserts the value is in range, shifts the current
+    // behaviour into mePreviousBehaviour, stores the new one, and resets the per-behaviour timer
+    // (mfBehaviourTimer @+0x14E0) to 0. (X360 stores meBehaviour @+0x14B4 and the previous one
+    // @+0x14B8; the cleared float is flt_82001CC0 == 0.0f.)
+    // ==================================================================================
+    void AICar::SetBehaviour(EAIBehaviour leBehaviour)
+    {
+        CGS_ASSERT(leBehaviour >= 0, "leBehaviour >= 0");
+        CGS_ASSERT(leBehaviour < E_AI_BEHAVIOUR_COUNT, "leBehaviour < E_AI_BEHAVIOUR_COUNT");
+
+        mePreviousBehaviour = meBehaviour;
+        meBehaviour         = leBehaviour;
+        mfBehaviourTimer    = 0.0f;
+    }
+
+    // ==================================================================================
+    // SetIsInJunkyard @0x82764EC0
+    //
+    // Records whether the car is currently inside a junkyard (mbIsInJunkYard @+0x154F) and logs
+    // the transition through the debug-print stream, gated by the message filter. The log line is
+    // prefixed "<AI> Player -> " / "<AI> AI -> " depending on mbIsPlayer @+0x1549, then either
+    // "In junkyard\n" or "Exit junkyard\n".
+    // ==================================================================================
+    void AICar::SetIsInJunkyard(bool lbInJunkyard)
+    {
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+        {
+            if (mbIsPlayer)
+                *CgsDev::Log::gpDebugPrint << "<AI> Player -> ";
+            else
+                *CgsDev::Log::gpDebugPrint << "<AI> AI -> ";
+
+            if (lbInJunkyard)
+                *CgsDev::Log::gpDebugPrint << "<AI> In junkyard\n";
+            else
+                *CgsDev::Log::gpDebugPrint << "<AI> Exit junkyard\n";
+        }
+
+        mbIsInJunkYard = lbInJunkyard;
+    }
+
+    // ==================================================================================
+    // SetRight @0x8276B7D0
+    //
+    // Stores the car's world-space right vector (mRight @+0x1450). Asserts the input is a valid
+    // (non-NaN) vector and that it is unit length (BrnMath::IsNormal); the unit-length failure
+    // streams the offending components into the assert message ("Right is  (x,y,z)\n").
+    // ==================================================================================
+    void AICar::SetRight(Vector3 lRight)
+    {
+        CGS_ASSERT(vpu::IsValid(lRight), "RwMath::IsValid( lRight )");
+
+        if (!BrnMath::IsNormal(lRight))
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStream << "Right is  (" << lRight.x << "," << lRight.y << "," << lRight.z << "\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessageBuffer,
+                                       "..\\..\\..\\GameSource\\World/AI/BrnAICar.h", 1312);
+            CgsDev::Assert::EndAssert();
+        }
+
+        mRight = lRight;
     }
 }

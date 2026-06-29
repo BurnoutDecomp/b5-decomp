@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Timer/CgsTimer.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsSystem::Timer::Prepare @ 0x828D72E0
@@ -7,25 +8,10 @@
 //
 // A fractional tick accumulator: Update advances an accumulator by rate*scale each
 // frame, bumping the integer tick count and carrying the fraction once it reaches 1.
+// The class is declared in CgsTimer.h (the canonical Timer home); the bodies live here.
 
 namespace CgsSystem
 {
-    class Timer
-    {
-        int    miTicks;        // [+0]
-        int    miAccumTicks;   // [+4]
-        float  mfAccumulator;  // [+8]
-        float  mfRate;         // [+12]
-        float  mfScaleCurrent; // [+16]
-        float  mfScaleTarget;  // [+20]
-        int    mbRunning;      // [+24]
-
-    public:
-        bool Prepare(float lfRate);
-        Timer* Reset();
-        Timer* Update();
-    };
-
     bool Timer::Prepare(float lfRate)
     {
         mfAccumulator  = 0.0f;

@@ -84,6 +84,21 @@ namespace BrnAI
         // gate needs only the declaration. (Returns the car's world-space right vector.)
         Vector3 GetRight() const;
 
+        // ---- the AICar leaf accessors/setters bodied in BrnAICar.cpp (this UNIT) -------------
+        // The car's last on-track position (validity-asserted). X360 AICar::GetLastGoodPosition
+        // @0x8276B640 -- a sret-returned copy of mLastGoodPosition.
+        Vector3 GetLastGoodPosition() const;            // @0x8276B640
+
+        // Store the car's per-frame behaviour, shifting the old one into mePreviousBehaviour and
+        // resetting the behaviour timer. leBehaviour must be in [0, E_AI_BEHAVIOUR_COUNT).
+        void SetBehaviour(EAIBehaviour leBehaviour);    // @0x82764DE0
+
+        // Set whether this car is currently inside a junkyard (logs the transition).
+        void SetIsInJunkyard(bool lbInJunkyard);        // @0x82764EC0
+
+        // Store the car's world-space right vector (validity- and unit-length-asserted).
+        void SetRight(Vector3 lRight);                  // @0x8276B7D0
+
         // Inlined-away getter (DWARF BrnAICar.h:547). Restored inline -> &mAggressiveness so the
         // bodies reach the speed-match knobs via the public Aggressiveness getters.
         Aggressiveness*       GetAggressiveness()       { return &mAggressiveness; }
@@ -201,16 +216,23 @@ namespace BrnAI
 
         Aggressiveness mAggressiveness;                 // +0x140C (5132)
 
-        u8 mPad1424[144];                               // [0x1424 .. 0x14B3] vectors + mpDriver
-        s32 meBehaviour;                                // +0x14B4 (5300) EAIBehaviour (==1 means INACTIVE-mode skip in CalcDesiredSpeed)
-        u8 mPad14B8[4];                                 // +0x14B8 (mPreviousBehaviour)
+        u8 mPad1424[44];                                // [0x1424 .. 0x144F] transform scratch + mpDriver
+        Vector3 mRight;                                 // +0x1450 (5200) car world-space right vector (SetRight @0x8276B7D0 stores here)
+        Vector3 mLastGoodPosition;                      // +0x1460 (5216) last on-track position (GetLastGoodPosition @0x8276B640)
+        Vector3 mVelocity;                              // +0x1470 (5232) world-space velocity (GetVelocity @0x8276B570)
+        u8 mPad1480[52];                                // [0x1480 .. 0x14B3] remaining transform/scalar block
+        EAIBehaviour meBehaviour;                       // +0x14B4 (5300) (==1 ROLLING_START -> INACTIVE-mode skip in CalcDesiredSpeed)
+        EAIBehaviour mePreviousBehaviour;               // +0x14B8 (5304) prior behaviour (SetBehaviour shifts meBehaviour into here)
         s32 meSpeedSelectionMethod;                     // +0x14BC (5308) EAISpeedSelectionMethod -- CalcDesiredSpeed switch
         ERouteFindingStyle meRouteFindingStyle;         // +0x14C0 (5312)
         s32 miRaceCarIndex;                             // +0x14C4 (5316) -- index packed into each route request
         EAICarState meCarState;                         // +0x14C8 (5320)
         u8 mPad14CC[8];                                 // +0x14CC (personality / reset-speed)
         ELocationRelativeToPlayer meRelativeLocation;   // +0x14D4 (5332)
-        u8 mPad14D8[20];                                // +0x14D8 (asset key + behaviour/in-range/desired-speed scalars)
+        u8 mPad14D8[8];                                 // +0x14D8 (asset key + behaviour scalars)
+        f32 mfBehaviourTimer;                           // +0x14E0 (5344) per-behaviour timer (SetBehaviour @0x82764DE0 resets it to 0)
+        f32 mfSpeedInRange;                             // +0x14E4 (5348) cached speed while IN_RANGE     (GetSpeed @0x82764D68)
+        f32 mfSpeedOutOfRange;                          // +0x14E8 (5352) cached speed while OUT_OF_RANGE  (GetSpeed @0x82764D68)
         f32 mfRouteTimer;                               // +0x14EC (5356) DWARF :687
         f32 mfDistanceToCheckpoint;                     // +0x14F0 (5360) DWARF :688
         f32 mfWrongWayTime;                             // +0x14F4 (5364) DWARF :689
@@ -241,7 +263,7 @@ namespace BrnAI
         bool mbIsCrashing;                              // +0x1542 (5442)
         u8 mPad1543[3];                                 // +0x1543 (showtime / drifting / touching-car)
         bool mbIsTouchingPlayer;                        // +0x1546 (5446)
-        u8 mPad1547[1];                                 // +0x1547 (on-start-line flag)
+        bool mbIsOnStartLine;                           // +0x1547 (5447) IsOnStartLine @0x82764E68 returns this
         u8 mbForceStandardRoute;                        // +0x1548 (5448) -- override alternative with standard
         bool mbIsPlayer;                                // +0x1549 (5449)
         bool mbIsDrivenByPlayer;                        // +0x154A (5450)
@@ -249,7 +271,7 @@ namespace BrnAI
         bool mbIsInShortcut;                            // +0x154C (5452) DWARF :732
         bool mbRouteRequested;                          // +0x154D (5453) DWARF :733 -- "a fresh route is needed"
         bool mbIsInMasterRoute;                         // +0x154E (5454) DWARF :734
-        u8 mPad154F[1];                                 // +0x154F (mbIsInJunkYard)
+        bool mbIsInJunkYard;                            // +0x154F (5455) SetIsInJunkyard @0x82764EC0 stores here
         u8 mbUseChosenDistanceFunction;                 // +0x1550 (5456) -- run ChooseDistanceFunction
 
     private:
@@ -261,7 +283,16 @@ namespace BrnAI
 
     // Pin every touched offset -- the compile gate fails if the slice ever drifts.
     static_assert(offsetof(AICar, mAggressiveness)      == 0x140C, "AICar::mAggressiveness @ +0x140C");
+    static_assert(offsetof(AICar, mRight)               == 0x1450, "AICar::mRight @ +0x1450");
+    static_assert(offsetof(AICar, mLastGoodPosition)    == 0x1460, "AICar::mLastGoodPosition @ +0x1460");
+    static_assert(offsetof(AICar, mVelocity)            == 0x1470, "AICar::mVelocity @ +0x1470");
     static_assert(offsetof(AICar, meBehaviour)          == 0x14B4, "AICar::meBehaviour @ +0x14B4");
+    static_assert(offsetof(AICar, mePreviousBehaviour)  == 0x14B8, "AICar::mePreviousBehaviour @ +0x14B8");
+    static_assert(offsetof(AICar, mfBehaviourTimer)     == 0x14E0, "AICar::mfBehaviourTimer @ +0x14E0");
+    static_assert(offsetof(AICar, mfSpeedInRange)       == 0x14E4, "AICar::mfSpeedInRange @ +0x14E4");
+    static_assert(offsetof(AICar, mfSpeedOutOfRange)    == 0x14E8, "AICar::mfSpeedOutOfRange @ +0x14E8");
+    static_assert(offsetof(AICar, mbIsOnStartLine)      == 0x1547, "AICar::mbIsOnStartLine @ +0x1547");
+    static_assert(offsetof(AICar, mbIsInJunkYard)       == 0x154F, "AICar::mbIsInJunkYard @ +0x154F");
     static_assert(offsetof(AICar, meSpeedSelectionMethod) == 0x14BC, "AICar::meSpeedSelectionMethod @ +0x14BC");
     static_assert(offsetof(AICar, meRouteFindingStyle)  == 0x14C0, "AICar::meRouteFindingStyle @ +0x14C0");
     static_assert(offsetof(AICar, miRaceCarIndex)       == 0x14C4, "AICar::miRaceCarIndex @ +0x14C4");
