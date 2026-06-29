@@ -60,6 +60,49 @@ namespace CgsGui
             return E_CUSTOMRENDERLAYER_1;
         }
 
+        // ---- ADDITIVE GROW (FLAG): the polymorphic component lifecycle/dispatch
+        // interface the GUI CustomRendererManager drives every renderer through. The
+        // X360 manager (BrnGui::CustomRendererManager, GameSource/Gui/CustomRenderer/
+        // BrnCustomRenderer.cpp) calls these through the component-pointer array via the
+        // renderer vtables, at these slots (byte offsets observed in the manager asm):
+        //   +0x00 Construct, +0x04 Prepare, +0x08 Release, +0x0C Destruct,
+        //   +0x10 GetComponentTexture, +0x14 RecvEvent, +0x18 Update,
+        //   +0x1C SetRenderEnabled (above), +0x24 GetComponentID,
+        //   +0x28 GetNumTexturesForComponent.
+        // Modelled as NON-pure virtuals (empty/neutral defaults) so the existing
+        // concrete minimal-slice renderers (e.g. BrnGui::MainMapRenderer) stay
+        // instantiable. The original game vtable slot numbers are NOT load-bearing on
+        // the 64-bit host gate (overrides bind by signature); declared here in the
+        // observed relative order for honesty. FLAG: grown interface -- the full
+        // parameter types (rw::IResourceAllocator, ImRendererSet, renderengine::Texture,
+        // CgsModule::Event, CgsID) are uncommitted, so opaque pointers / s32 stand in.
+        virtual void Construct()                                  {}
+        virtual bool Prepare(void* lpResourceAllocator, void* lpA, void* lpB)
+        {
+            (void)lpResourceAllocator; (void)lpA; (void)lpB; return true;
+        }
+        virtual bool Release()                                    { return true; }
+        virtual void Destruct()                                   {}
+        // +0x10: fetch a texture for this component (texture index, the asserted out/shader
+        // pointer, renderer set). Returns an opaque texture pointer. The manager passes its
+        // own a3/a4/a5 straight through (asm: (*(comp+16))(comp, a3, a4, a5)).
+        virtual void* GetComponentTexture(s32 liTextureIndex, void* lpiShaderProgram,
+                                          void* lpRendererSet)
+        {
+            (void)liTextureIndex; (void)lpiShaderProgram; (void)lpRendererSet; return 0;
+        }
+        // +0x14: receive a module event (event pointer, event type id).
+        virtual void RecvEvent(const void* lpEvent, s32 liEventType)
+        {
+            (void)lpEvent; (void)liEventType;
+        }
+        // +0x18: per-frame update.
+        virtual void Update()                                     {}
+        // +0x24: the component's CgsID (returned as u32; the real CgsID is uncommitted).
+        virtual u32  GetComponentID() const                       { return 0; }
+        // +0x28: number of textures this component exposes.
+        virtual s32  GetNumTexturesForComponent() const           { return 0; }
+
     protected:
         bool mbRenderEnabled;   // [+0x04] h:182
     };

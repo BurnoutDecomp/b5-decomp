@@ -73,6 +73,71 @@ namespace CgsGraphics
         mpfCurrentFontHeight  = &mfAutosizedFontHeight;
     }
 
+    // Faithful port of X360 0x827F7C10. Counts the wrapped lines of mpUtf8String laid out in
+    // this object's box and reports the start of line luStartLine (1-based) via *lppLine. When
+    // the object is not both multiline AND word-wrapped (mbWordWrap / mbMultiLine), it is a
+    // single line (returns 1). Otherwise it walks the string line-by-line with
+    // Font::GetStringStartAndEnd (the same line measurer RenderStringInternal uses), counting a
+    // line per embedded newline (when multiline) and a final line per wrapped segment (when
+    // word-wrapped), recording the requested line's start pointer along the way.
+    u32 TextObject::GetNumLinesAndStartLine(u32 luStartLine, const CgsResource::CgsUtf8** lppLine) const
+    {
+        using CgsResource::CgsUtf8;
+
+        // mbWordWrap (+0x34) and mbMultiLine (+0x30) must both be set to do line counting.
+        if (mbWordWrap == 0 || mbMultiLine == 0)
+            return 1;
+
+        const f32 lfWidthInEm =
+            (mv2BottomRight.mX - mv2TopLeft.mX) / *mpfCurrentFontHeight;
+
+        const CgsUtf8* lpCursor = mpUtf8String;
+        u32 luNumLines = 1;
+
+        CGS_ASSERT(lppLine != 0, "lppLine != NULL");
+        *lppLine = lpCursor;
+
+        const CgsResource::Font* lpFont = mpFont.operator->();
+
+        while (*lpCursor != 0)
+        {
+            bool lbSawNewline = false;
+            const CgsUtf8* lpLineStart = lpCursor;
+            const CgsUtf8* lpLineEnd   = lpCursor;
+            lpFont->GetStringStartAndEnd(lpCursor, lfWidthInEm, &lpLineStart, &lpLineEnd, true);
+            lpCursor = lpLineEnd;
+
+            // Multiline: consume the run of CR/LF after the measured line, counting a new line
+            // for each LF and recording the requested line's start when it is reached.
+            if (mbMultiLine != 0)
+            {
+                while (true)
+                {
+                    const CgsUtf8 lcCh = *lpCursor;
+                    if (lcCh != 13 && lcCh != 10)
+                        break;
+                    if (lcCh == 10)
+                    {
+                        ++luNumLines;
+                        lbSawNewline = true;
+                        if (luStartLine == luNumLines)
+                            *lppLine = lpCursor + 1;
+                    }
+                    ++lpCursor;
+                }
+            }
+
+            // Word-wrap: a wrapped (non-newline-terminated) segment also begins a new line.
+            if (mbWordWrap != 0)
+            {
+                if (!lbSawNewline && luStartLine == ++luNumLines)
+                    *lppLine = lpCursor;
+            }
+        }
+
+        return luNumLines;
+    }
+
     // Faithful port of X360 0x82801998: render through the Im2d buffer, then clear it.
     void TextRenderer::RenderString(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject)
     {
@@ -261,6 +326,156 @@ namespace CgsGraphics
             return maaTempVertices[leType];
         }
         return 0;   // no render buffer set
+    }
+
+    // X360 0x82800798. Render the text object's string with a per-glyph vertical fade (the
+    // RenderStringInternal layout/glyph/colour-code path with the vertex alpha scaled by the
+    // line's Y within the fade band). NOTE (RenderStringInternal precedent): the CORE path is
+    // implemented; the guarded background/border/drop-shadow/emboss/gradient passes are a
+    // follow-on (the credits caller never enables them). Shares the line measurer + RenderBuffer*
+    // helpers with RenderStringInternal (defined above).
+    void TextRenderer::RenderStringFadingY(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject,
+                                           f32 lfFadeTopY, f32 lfFadeTopExtent,
+                                           f32 lfFadeBottomStart, f32 lfFadeBottomEnd)
+    {
+        using CgsResource::CgsUtf8;
+        using CgsResource::FontChar;
+
+        mpIm2dRenderBuffer = lpRenderBuffer;
+        mpIm3dRenderBuffer = 0;
+
+        const CgsResource::Font* lpFont = lrTextObject.mpFont.operator->();
+
+        mauVertexCount[EImRenderingType_Buffered] = 0;
+
+        const f32 lfFontHeight = *lrTextObject.mpfCurrentFontHeight;
+        const f32 lfGlyphX     = lpFont->mScaleUV.mX * lfFontHeight;
+        const f32 lfGlyphY     = lpFont->mScaleUV.mY * lfFontHeight;
+        const f32 lfWidthInEm  = (lrTextObject.mv2BottomRight.mX - lrTextObject.mv2TopLeft.mX) / lfFontHeight;
+
+        static const f32 skafAlignFactor[TextObject::E_ALIGNMENT_COUNT] = { 0.0f, 0.0f, 0.5f, 1.0f };
+        const u32 luAlign = (lrTextObject.meAlignment >= 0 && lrTextObject.meAlignment < TextObject::E_ALIGNMENT_COUNT)
+                            ? static_cast<u32>(lrTextObject.meAlignment)
+                            : static_cast<u32>(TextObject::E_ALIGNMENT_LEFT);
+        const f32 lfAlignFactor = skafAlignFactor[luAlign];
+
+        const f32 lfTopRampLen    = lfFadeTopExtent;
+        const f32 lfBottomRampLen = (lfFadeBottomEnd - lfFadeBottomStart);
+
+        f32 lfPenY = lrTextObject.mv2TopLeft.mY;
+        s32 liColourIndex = -1;
+        const CgsUtf8* lpCursor = lrTextObject.mpUtf8String;
+
+        while (*lpCursor != 0 && lfPenY < lrTextObject.mv2BottomRight.mY)
+        {
+            const CgsUtf8* lpLineStart = lpCursor;
+            const CgsUtf8* lpLineEnd   = lpCursor;
+            const f32 lfLineWidth = lpFont->GetStringStartAndEnd(lpCursor, lfWidthInEm, &lpLineStart, &lpLineEnd,
+                                                                 lrTextObject.mbWordWrap != 0);
+
+            f32 lfPenX = lrTextObject.mv2TopLeft.mX + (lfAlignFactor * (lfWidthInEm - lfLineWidth)) * lfFontHeight;
+
+            u32 luGlyphCount = 0;
+            for (const CgsUtf8* lpScan = lpLineStart; lpScan < lpLineEnd;
+                 lpScan = CgsUnicode::IncrementUtf8Pointer(lpScan))
+            {
+                if (*lpScan != '^')
+                    ++luGlyphCount;
+            }
+
+            Im2dVertex* const lpVtxBase = RenderBufferRenderStart(6u * luGlyphCount, EImRenderingType_Buffered);
+            Im2dVertex* lpVtx = lpVtxBase;
+            mauVertexCount[EImRenderingType_Buffered] = 0;
+            RenderBufferSetTextureState(lpFont->mpTextureState, EImRenderingType_Buffered);
+
+            f32 lfFade = 1.0f;
+            if (lfTopRampLen > 0.0f && lfPenY < (lfFadeTopY + lfTopRampLen))
+            {
+                lfFade = (lfPenY - lfFadeTopY) / lfTopRampLen;
+            }
+            else if (lfBottomRampLen > 0.0f && lfPenY > lfFadeBottomStart)
+            {
+                lfFade = 1.0f - (lfPenY - lfFadeBottomStart) / lfBottomRampLen;
+            }
+            if (lfFade < 0.0f) lfFade = 0.0f;
+            if (lfFade > 1.0f) lfFade = 1.0f;
+            const u32 luFadeAlpha = static_cast<u32>(lfFade * 255.0f + 0.5f) & 0xFFu;
+
+            for (const CgsUtf8* lpChar = lpLineStart; lpChar < lpLineEnd; )
+            {
+                if (*lpChar == '^')
+                {
+                    if (liColourIndex > -1 && lpChar[1] == '^')
+                    {
+                        liColourIndex = -1;
+                        lpChar += 2;
+                        continue;
+                    }
+                    if (lpChar[1] >= '0' && lpChar[1] <= '9')
+                    {
+                        s32 liNumber = 0;
+                        s32 liDigits = 0;
+                        for (const CgsUtf8* lpDigit = lpChar + 1; lpDigit < lpLineEnd && *lpDigit != '^';
+                             lpDigit = CgsUnicode::IncrementUtf8Pointer(lpDigit))
+                        {
+                            liNumber = liNumber * 10 + (*lpDigit - '0');
+                            ++liDigits;
+                        }
+                        if (liDigits > 0)
+                        {
+                            liColourIndex = (liNumber >= 0 && liNumber < lrTextObject.miNumAlternateColours) ? liNumber : -1;
+                            lpChar += liDigits + 2;
+                            continue;
+                        }
+                    }
+                }
+
+                const FontChar* lpFc = lpFont->GetFontChar(lpChar);
+
+                if (lpFc->mbIsRenderable != 0 && lpVtx != 0)
+                {
+                    const f32 lfLeftU   = lpFc->mTopLeftUV.mX;
+                    const f32 lfTopV    = lpFc->mTopLeftUV.mY;
+                    const f32 lfRightU  = lfLeftU + lpFc->mDimensionsUV.mX;
+                    const f32 lfBottomV = lfTopV  + lpFc->mDimensionsUV.mY;
+                    const f32 lfLeftX   = lfPenX + lpFc->mStart.mX * lfGlyphX;
+                    const f32 lfTopY    = lfPenY + lpFc->mStart.mY * lfGlyphY;
+                    const f32 lfRightX  = lfLeftX + lpFc->mDimensionsUV.mX * lfGlyphX;
+                    const f32 lfBottomY = lfTopY  + lpFc->mDimensionsUV.mY * lfGlyphY;
+
+                    const CgsGraphics::RGBA lBase =
+                        (liColourIndex >= 0 && lrTextObject.mpAlternateTextColours != 0)
+                            ? lrTextObject.mpAlternateTextColours[liColourIndex]
+                            : lrTextObject.mTextColour;
+
+                    const u32 luBaseAlpha = (lBase >> 24) & 0xFFu;
+                    const u32 luAlpha = (luBaseAlpha * luFadeAlpha) / 255u;
+                    const CgsGraphics::RGBA lColour = (lBase & 0x00FFFFFFu) | (luAlpha << 24);
+
+                    lEmitVertex(lpVtx[0], lfLeftX,  lfBottomY, lfLeftU,  lfBottomV, lColour);
+                    lEmitVertex(lpVtx[1], lfLeftX,  lfBottomY, lfLeftU,  lfBottomV, lColour);
+                    lEmitVertex(lpVtx[2], lfRightX, lfBottomY, lfRightU, lfBottomV, lColour);
+                    lEmitVertex(lpVtx[3], lfLeftX,  lfTopY,    lfLeftU,  lfTopV,    lColour);
+                    lEmitVertex(lpVtx[4], lfRightX, lfTopY,    lfRightU, lfTopV,    lColour);
+                    lEmitVertex(lpVtx[5], lfRightX, lfTopY,    lfRightU, lfTopV,    lColour);
+                    lpVtx += 6;
+                    mauVertexCount[EImRenderingType_Buffered] += 6;
+                }
+
+                lfPenX += lpFc->mfAdvance * lrTextObject.mfCharSpacingMultiplier * lfGlyphX;
+                lpChar = CgsUnicode::IncrementUtf8Pointer(lpChar);
+            }
+
+            RenderBufferRenderEnd(KU_PRIMITIVE_TRIANGLE_STRIP, lpVtxBase,
+                                  mauVertexCount[EImRenderingType_Buffered], EImRenderingType_Buffered);
+
+            lpCursor = (lpLineEnd > lpCursor) ? lpLineEnd : CgsUnicode::IncrementUtf8Pointer(lpCursor);
+            if (*lpCursor == '\n' || *lpCursor == '\r')
+                lpCursor = CgsUnicode::IncrementUtf8Pointer(lpCursor);
+            lfPenY += lfFontHeight;
+        }
+
+        mpIm2dRenderBuffer = 0;
     }
 
     // X360 0x827FAC28: bind the texture state (the font atlas) for the next submission.
