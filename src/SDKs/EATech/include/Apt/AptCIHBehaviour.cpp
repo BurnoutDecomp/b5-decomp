@@ -691,3 +691,152 @@ bool AptCIH::HasMouseEvent()
 
     return HasEventMember(static_cast<int>(KU_AptMouseEventHandlerMask)) != 0;
 }
+
+// ===========================================================================
+// Behavioural batch 5 -- mask world-matrix rebuild + native-function teardown.
+// ===========================================================================
+
+// FLAG (Apt runtime scratch -- console dword_8324E53C; a process-wide fixed buffer
+// the runtime uses to stage this node's display-list ancestor pointers while it
+// folds their transforms). x64-native: a buffer of AptCIH* (8-byte pointers), NOT
+// the console 4. Owned + sized by the Apt runtime boot TU; declared here so the
+// mask-matrix fold can stage into it faithfully (one mask is processed at a time,
+// so the buffer is never re-entered).
+extern AptCIH** gAptMaskAncestorScratch;
+
+// The minimum colour-scale alpha a mask render item is allowed to carry (console
+// flt_82145924). A near-transparent mask would clip nothing visibly, so the mask's
+// scale-alpha is clamped up to this floor before the matrix fold.
+namespace { const float KF_AptMaskMinScaleAlpha = 51.0f; }
+
+// ---------------------------------------------------------------------------
+// ProcessMaskMatricies @0x82AEDAE0 -- rebuild a mask node's world position matrix.
+//
+// Only acts when this node's render item is flagged as a mask (mFlags bit30 ==
+// GetIsMask). It first clamps the mask's colour-scale alpha up to the minimum mask
+// alpha (the const read uses the identity-CXForm fallback when the node has no own
+// colour matrix). It then folds every display-list ancestor's position transform
+// into an identity-seeded mask matrix -- ancestors are staged into the runtime
+// scratch buffer parent-first, then applied root-first (the X360 walks the staged
+// array back-to-front) so the result is the node's full world transform. That matrix
+// is installed via the writable render item (SetIsMask(true, .)) and the generalized-
+// process dirty state is (re)marked. Returns true when a mask was processed.
+//   field map: mpCharacterInst @[c:0x20]; its mpRenderItem @[c:+0x04]; the render
+//   item's mFlags @[c:+0x18] (bit30 isMask), mpColorMatrix @[c:+0x0C], mpPositionMatrix
+//   @[c:+0x08]; mpDisplayListParent @[c:0x1C].
+// ---------------------------------------------------------------------------
+bool AptCIH::ProcessMaskMatricies()
+{
+    AptCharacterInst* pCharInst = mpCharacterInst;
+    AptRenderItem* pRenderItem = pCharInst->GetRenderItem();
+    if (!pRenderItem->GetIsMask())
+        return false;
+
+    // Clamp the mask's colour-scale alpha up to the floor (const read falls back to
+    // the identity CXForm when the node carries no own colour matrix).
+    const AptCXForm* pColorConst = pRenderItem->GetColorMatrixConst();
+    if (pColorConst->scale.GetValuef(AptColorHelper::Alpha) < KF_AptMaskMinScaleAlpha)
+    {
+        AptCXForm* pColorWritable = pCharInst->GetRenderItemWritable()->GetColorMatrixWritable();
+        pColorWritable->scale.SetValuef(AptColorHelper::Alpha, KF_AptMaskMinScaleAlpha);
+    }
+
+    // Seed the mask matrix to identity, then stage the display-list ancestors into the
+    // runtime scratch (immediate parent first, root last).
+    AptMatrix maskMatrix = gAptIdentityMatrix;
+
+    int nAncestorCount = 0;
+    AptCIH** ppStage = gAptMaskAncestorScratch;
+    for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; pAncestor = pAncestor->mpDisplayListParent)
+    {
+        *ppStage = pAncestor;
+        ++ppStage;
+        ++nAncestorCount;
+    }
+
+    // Apply them root-first (back-to-front over the staged array), clearing each slot
+    // as it is consumed. multMatrix(maskMatrix, ancestorPos, maskMatrix) == post-concat.
+    AptCIH** ppCursor = gAptMaskAncestorScratch + nAncestorCount;
+    while (nAncestorCount != 0)
+    {
+        --ppCursor;
+        --nAncestorCount;
+        AptCIH* pAncestor = *ppCursor;
+        *ppCursor = nullptr;
+
+        const AptMatrix* pPos = pAncestor->mpCharacterInst->GetRenderItem()->mpPositionMatrix;
+        if (!pPos)
+            pPos = &gAptIdentityMatrix;
+        AptRenderingContext::multMatrix(&maskMatrix, pPos, &maskMatrix);
+    }
+
+    // Install the rebuilt world mask matrix + re-mark the generalized-process dirty state.
+    mpCharacterInst->GetRenderItemWritable()->SetIsMask(true, &maskMatrix);
+    SetGeneralizedProcessDirtyState(true);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// CleanNativeFunctions @0x82AD6FB8 -- shutdown teardown of the process-wide
+// ActionScript native-function singletons. Each non-null slot has its value Released
+// (AptValue vtable slot 1, the deleting destructor path) and is nulled. The X360
+// unrolls the 27 slots in a fixed (non-address) order; reproduced verbatim so the
+// teardown sequence matches. The slots are owned by the AS-builtin registration boot
+// TU, so they are FLAG'd extern here.
+// ---------------------------------------------------------------------------
+// FLAG (homed elsewhere -- the AS-builtin registration boot TU; console
+// off_8324E42C..0x8324E494): the per-built-in native-function singletons. Each is an
+// AptValueGC (AptNativeFunction) torn down through the AptValue Release virtual.
+extern AptValue* gpAptNativeFn_8324E440;
+extern AptValue* gpAptNativeFn_8324E43C;
+extern AptValue* gpAptNativeFn_8324E48C;
+extern AptValue* gpAptNativeFn_8324E488;
+extern AptValue* gpAptNativeFn_8324E480;
+extern AptValue* gpAptNativeFn_8324E484;
+extern AptValue* gpAptNativeFn_8324E47C;
+extern AptValue* gpAptNativeFn_8324E444;
+extern AptValue* gpAptNativeFn_8324E448;
+extern AptValue* gpAptNativeFn_8324E44C;
+extern AptValue* gpAptNativeFn_8324E450;
+extern AptValue* gpAptNativeFn_8324E454;
+extern AptValue* gpAptNativeFn_8324E45C;
+extern AptValue* gpAptNativeFn_8324E458;
+extern AptValue* gpAptNativeFn_8324E460;
+extern AptValue* gpAptNativeFn_8324E46C;
+extern AptValue* gpAptNativeFn_8324E474;
+extern AptValue* gpAptNativeFn_8324E470;
+extern AptValue* gpAptNativeFn_8324E478;
+extern AptValue* gpAptNativeFn_8324E430;
+extern AptValue* gpAptNativeFn_8324E434;
+extern AptValue* gpAptNativeFn_8324E42C;
+extern AptValue* gpAptNativeFn_8324E490;
+extern AptValue* gpAptNativeFn_8324E494;
+extern AptValue* gpAptNativeFn_8324E464;
+extern AptValue* gpAptNativeFn_8324E468;
+extern AptValue* gpAptNativeFn_8324E438;
+
+void AptCIH::CleanNativeFunctions()
+{
+    // Each: if the singleton exists, Release it (vtable slot 1) and clear the slot.
+    // The X360 order is preserved exactly (it is not by address).
+    AptValue** const apSlots[] = {
+        &gpAptNativeFn_8324E440, &gpAptNativeFn_8324E43C, &gpAptNativeFn_8324E48C,
+        &gpAptNativeFn_8324E488, &gpAptNativeFn_8324E480, &gpAptNativeFn_8324E484,
+        &gpAptNativeFn_8324E47C, &gpAptNativeFn_8324E444, &gpAptNativeFn_8324E448,
+        &gpAptNativeFn_8324E44C, &gpAptNativeFn_8324E450, &gpAptNativeFn_8324E454,
+        &gpAptNativeFn_8324E45C, &gpAptNativeFn_8324E458, &gpAptNativeFn_8324E460,
+        &gpAptNativeFn_8324E46C, &gpAptNativeFn_8324E474, &gpAptNativeFn_8324E470,
+        &gpAptNativeFn_8324E478, &gpAptNativeFn_8324E430, &gpAptNativeFn_8324E434,
+        &gpAptNativeFn_8324E42C, &gpAptNativeFn_8324E490, &gpAptNativeFn_8324E494,
+        &gpAptNativeFn_8324E464, &gpAptNativeFn_8324E468, &gpAptNativeFn_8324E438,
+    };
+
+    for (AptValue** ppSlot : apSlots)
+    {
+        if (*ppSlot)
+        {
+            (*ppSlot)->Release();
+            *ppSlot = nullptr;
+        }
+    }
+}

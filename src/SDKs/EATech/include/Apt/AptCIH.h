@@ -237,4 +237,17 @@ struct AptCIH : public AptValueGC
     // (sprite-base) recurse into its child display list, or (leaf shape/static-text/
     // dynamic-text) expand by the character/render-item bounds. Returns pAccumulator.
     AptRect* GetBoundingRect(int nMode, const AptMatrix* pParentTransform, AptRect* pAccumulator);   // @0x82AE2B30
+
+    // ProcessMaskMatricies @0x82AEDAE0 -- when this node's render item is flagged as a
+    // mask: clamp its colour-scale alpha up to the minimum mask alpha (51), then rebuild
+    // the mask's world position matrix by concatenating every display-list ancestor's
+    // position transform top-down, install it on the writable render item (SetIsMask),
+    // and (re)mark the generalized-process dirty state. Returns true when a mask was
+    // (re)processed, false when the node carries no mask.
+    bool ProcessMaskMatricies();   // @0x82AEDAE0
+
+    // CleanNativeFunctions @0x82AD6FB8 -- shutdown teardown: Release + null each of the
+    // process-wide ActionScript native-function singletons (the built-in AS functions
+    // registered at startup). Static: the X360 takes no `this`. (Called by AptUpdateShutdown.)
+    static void CleanNativeFunctions();   // @0x82AD6FB8
 };

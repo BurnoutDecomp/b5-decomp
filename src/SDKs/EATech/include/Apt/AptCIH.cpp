@@ -141,7 +141,7 @@ void AptCIH::SetInCtor(uint32_t b)
 }
 
 // ---- packed state / flags (mFlagsB) ---------------------------------------
-int  AptCIH::GetCreatedOnFrame() const { return static_cast<int>(mFlagsB >> 18); }
+int  AptCIH::GetCreatedOnFrame() const { return static_cast<int32_t>(mFlagsB) >> 18; }   // srawi: signed/arithmetic shift (sign-extends the 14-bit field)
 void AptCIH::SetCreatedOnFrame(int nFrame)
 {
     mFlagsB = (mFlagsB & 0x0003FFFFu) | (static_cast<uint32_t>(nFrame) << 18);
