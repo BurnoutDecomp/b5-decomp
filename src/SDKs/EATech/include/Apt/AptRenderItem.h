@@ -116,6 +116,14 @@ struct AptRenderItem
     bool GetHasMask() const;        // @0x7DEE34
     AptRenderItem* GetMask() const; // @0x7DEE2C
 
+    // SetHasMask @0x82ADB388 -- set the has-mask flag (bit29) + (un)bind the mask
+    // render item (ref-counted; propagates visibility). FLAG: behavioural body in
+    // its own render-item TU; declared so AptCIH::SetHasMask compiles against it.
+    void SetHasMask(bool bHasMask, AptRenderItem* pMask);
+    // SetIsMask @0x82AEBF28 -- set the is-mask flag (bit30) + the mask matrix.
+    // FLAG: body in its own TU (declared for AptCIH::SetMask/ClearCIH).
+    void SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);
+
     const AptCharacter* GetCharacterConst() const;        // @0x7DEE04
     AptCharacter*       GetCharacterWritable() const;     // @0x7DEE90
     AptCharacter*       SetCharacter(AptCharacter* pCharacter);  // @0x80F2DC
