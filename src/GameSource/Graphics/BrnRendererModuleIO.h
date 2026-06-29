@@ -79,6 +79,8 @@ namespace RendererIO
     {
         void Construct();   // @ 0x82400190
 
+        void SetBrnCamera(const BrnDirector::Camera::Camera& lrCamera);   // @ 0x823C8610 (write-lock)
+
     private:
         BrnDirector::Camera::Camera mBrnCamera;   // DWARF :150 (camera lands at this+0x10)
     };
@@ -89,6 +91,47 @@ namespace RendererIO
     struct OutputBuffer : public CgsModule::IOBuffer
     {
         void Construct();   // @ 0x824001A8
+
+        // Per-frame data-interface accessors, reconstructed from BURNOUT_X360_ARTIST.XEX.
+        // Bodies in BrnRendererModuleIO_OutputBuffer_Accessors.cpp. Getters read-lock (status bit 4),
+        // setters write-lock (status bit 3); the embedded-aggregate handle getters return a mutable
+        // address (non-const); GetExternallyVisiblePerformanceMonitors is a bare thunk (no lock guard).
+        CgsGraphics::DispatchFrame*                     GetDispatchFrame() const;                  // @ 0x823B35A8
+        CgsGraphics::Im2dRenderBuffer*                  GetIm2dRenderBuffer() const;               // @ 0x823B36F8
+        CgsGraphics::Im3dRenderBuffer*                  GetIm3dRenderBuffer() const;               // @ 0x823B37A0
+        CgsGraphics::Im3dRenderBufferUntex*             GetIm3dRenderBufferUntex() const;          // @ 0x823B3848
+        CgsGraphics::Im3dRenderBuffer*                  GetIm3dDebugRenderBuffer() const;          // @ 0x823B3A40
+        CgsGraphics::Im2dRenderBuffer*                  GetIm2dDebugRenderBuffer() const;          // @ 0x823B3AE8
+        CgsGraphics::Im3dRenderBuffer*                  GetIm3dRenderBufferRacePosition() const;   // @ 0x823B38F0
+        CgsGraphics::Im3dRenderBuffer*                  GetIm3dRenderBufferMenusAndHud() const;    // @ 0x823B3998
+        BrnEffectsFrame*                                GetBaseEffectsFrame() const;               // @ 0x823B3B90
+        BrnEffectsFrame*                                GetWorldEffectsFrame(s32 liSlot) const;    // @ 0x823B3C38
+        BrnEffectsFrame*                                GetFXEventsEffectsFrame(s32 liSlot) const; // @ 0x823B3D10
+        BrnShaderConstantsFrame*                        GetShaderConstantsFrame() const;           // @ 0x823B3DE8
+        BrnBlobbyShadowManager::BrnBlobbyShadowBuffer*  GetBlobbyShadowBuffer() const;             // @ 0x823B3E90
+        BrnCoronaManager::BrnSubmissionInterface*       GetCoronaSubmissionInterface() const;      // @ 0x823B3F38
+        CgsMemory::LinearMalloc*                        GetReusableLoadingScreenAllocator() const; // @ 0x823B4088
+        BrnDirector::Camera::Camera*                    GetBrnCamera();                            // @ 0x823B3650 (read-lock)
+        RenderSwitches*                                 GetRenderSwitches();                       // @ 0x823B3FE0 (read-lock)
+        ExternallyVisiblePerformanceMonitors*           GetExternallyVisiblePerformanceMonitors(); // @ 0x823F6B38 (no lock guard)
+
+        void SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame);                        // @ 0x823FAE60
+        void SetIm2dRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpBuffer);                         // @ 0x823FAF08
+        void SetIm3dRenderBuffer(CgsGraphics::Im3dRenderBuffer* lpBuffer);                         // @ 0x823FAFB0
+        void SetIm3dRenderBufferUntex(CgsGraphics::Im3dRenderBufferUntex* lpBuffer);               // @ 0x823FB058
+        void SetIm3dDebugRenderBuffer(CgsGraphics::Im3dRenderBuffer* lpBuffer);                    // @ 0x823FB250
+        void SetIm2dDebugRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpBuffer);                    // @ 0x823FB2F8
+        void SetIm3dRenderBufferRacePosition(CgsGraphics::Im3dRenderBuffer* lpBuffer);             // @ 0x823FB100
+        void SetIm3dRenderBufferMenusAndHud(CgsGraphics::Im3dRenderBuffer* lpBuffer);              // @ 0x823FB1A8
+        void SetBaseEffectsFrame(BrnEffectsFrame* lpFrame);                                        // @ 0x823FB3A0
+        void SetWorldEffectsFrame(s32 liSlot, BrnEffectsFrame* lpFrame);                           // @ 0x823FB448
+        void SetFXEventsEffectsFrame(s32 liSlot, BrnEffectsFrame* lpFrame);                        // @ 0x823FB528
+        void SetShaderConstantsFrame(BrnShaderConstantsFrame* lpFrame);                            // @ 0x823FB608
+        void SetBlobbyShadowBuffer(BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBuffer);       // @ 0x823FB6B0
+        void SetCoronaSubmissionInterface(BrnCoronaManager::BrnSubmissionInterface* lpInterface);  // @ 0x823FB758
+        void SetBrnCamera(const BrnDirector::Camera::Camera& lrCamera);                            // @ 0x82405980
+        void SetRenderSwitches(const RenderSwitches& lrSwitches);                                  // @ 0x823FB800
+        void SetReusableLoadingScreenAllocator(CgsMemory::LinearMalloc* lpAllocator);              // @ 0x823FB8C8
 
     private:
         CgsGraphics::DispatchFrame*           mpDispatchFrame;                 // DWARF :330
