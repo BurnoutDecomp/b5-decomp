@@ -2,6 +2,9 @@
 #define GAMESOURCE_RESOURCE_BRNDLCMANAGER_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // CgsDev::DebugComponent (base of DLCDebugComponent)
+
+namespace CgsDev { struct Debug2DImmediateRender; }
 
 // ============================================================================
 // GameSource/Resource/BrnDLCManager.h
@@ -60,8 +63,14 @@ enum { KU_DLC_FEATURE_COUNT = 25 };
 //   +0x1C maePackForFeature[25] dword per feature (which pack it requires)
 //   +0x80 mabFeatureEnabled[25] byte per feature (default-enabled flag)
 // ---------------------------------------------------------------------------
+class DLCDebugComponent;   // same-TU debug component reaches the file-scope table directly
+
 class DLCFeatureAvailability
 {
+    // The DLC debug component lives in the same TU as the file-scope availability table and, in the
+    // X360 image, reads/writes its members straight off the static's address (byte_82FFA7F0 etc.).
+    friend class DLCDebugComponent;
+
 public:
     // X360 0x82662C48. Zeroes the mask + table, then writes the default per-pack
     // masks, per-feature pack indices and per-feature enabled flags. (The asm's
@@ -106,6 +115,92 @@ public:
 private:
     bool mbIsAvailable; // +0x00
     bool mbIsEnabled;   // +0x01
+};
+
+// ---------------------------------------------------------------------------
+// DLCDebugComponent
+//
+// The in-game debug menu + HUD overlay for the downloadable-content system. It
+// derives from the real CgsDev::DebugComponent and, through the debug menu, lets
+// you toggle the per-feature "entitlement" flags of the file-scope
+// DLCFeatureAvailability instance and watch the per-pack availability records.
+//
+// SOURCE-OF-TRUTH: bodies reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX
+//   Construct   @ 0x826627F8  (caller BrnResource::GameDataModule::Construct)
+//   Update      @ 0x82662948
+//   RenderHUD   @ 0x826629C8
+//   OnRegister  @ 0x82662A10
+//   OnActivate  @ 0x82662B40
+//   GetName     @ 0x827DD210
+// No DecFIGS DWARF for this class; layout is asm-attested (offsets noted below).
+//
+// LAYOUT (members BY NAME + SEQUENCE; console 32-bit `this` offsets noted for
+// provenance only -- every access is by member name). The base CgsDev::
+// DebugComponent occupies console +0x00..+0x0B (vtable + mbActive + list-next), so
+// the first member below sits at console +0x0C.
+//   +0x0C mapcFeatureNames[25]  const char* per feature (Construct stores 25 string
+//                               literals at a1[3]..a1[27]; memset 100 bytes @+0xC).
+//   +0x70 maPackDetails[5]      one 12-byte record per data pack (Update walks the
+//                               5 records from +0x70 to +0xAC, stride 12).
+// Total console size 0xAC (172) bytes.
+// ---------------------------------------------------------------------------
+class DLCDebugComponent : public CgsDev::DebugComponent
+{
+public:
+    DLCDebugComponent() {}
+
+    // X360 0x826627F8. Two-phase construct: the folded base CgsDev::DebugComponent::
+    // Construct (the X360 image coalesces the trivial base body onto the
+    // BaseCollisionGenerator::Destruct address), zero the 25-entry feature-name table,
+    // then store the 25 debug feature-name string literals.
+    void Construct();
+
+    // X360 0x82662948. Per-frame: for each of the 5 pack-detail records, if the target
+    // availability byte changed since last frame, push the new state into the file-scope
+    // DLCFeatureAvailability via SetPackAvailabilityState.
+    virtual void Update();
+
+    // X360 0x826629C8. Draw the "Beat the team mode" HUD label iff the file-scope
+    // DLCFeatureAvailability's mbField01 flag is set.
+    virtual void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender);
+
+protected:
+    // X360 0x827DD210. The component's debug-menu name.
+    virtual const char* GetName() const;
+
+    // X360 0x82662A10. Acquire a (stack-scoped) debug interface, assert the manager exists,
+    // and activate this component in the debug menu.
+    virtual void OnRegister();
+
+    // X360 0x82662B40. Register the 5 data packs (RegisterPackDetails) then, for each of the
+    // 25 features, register the file-scope availability table's per-feature enabled flag as a
+    // bool debug variable grouped under the feature name.
+    virtual void OnActivate();
+
+private:
+    // X360 0x82662B40 helper (own TU -- declaration only here). Populate one pack-detail
+    // record (name + index) and seed its availability state. The X360 keeps the body outside
+    // this TU's function set.
+    void RegisterPackDetails(const char* lpcPackName, s32 liPackIndex);
+
+    // One downloadable data pack's debug record. 12 bytes (Update stride). Fields named from
+    // the asm: Update reads +0/+1 as the target/last availability bytes and +8 as the pack
+    // index; OnActivate reads +4 as a char* (the pack name) for the entitlement label.
+    struct PackDetail
+    {
+        bool        mbAvailable;     // console +0x00  target availability (RegisterPackDetails / menu)
+        bool        mbLastApplied;   // console +0x01  last value pushed into DLCFeatureAvailability
+        u8          mPad02[2];       // console +0x02  alignment to the +0x04 pointer
+        const char* mpcPackName;     // console +0x04  pack display name (set by RegisterPackDetails)
+        s32         miPackIndex;     // console +0x08  data-pack index (0..4)
+        // (console record = 12 bytes; the pointer widens to 8 on the 64-bit host -> access BY NAME only)
+    };
+
+    // Never called; pins the asm-attested member offsets via offsetof.
+    static void _AssertDebugLayout();
+
+    const char* mapcFeatureNames[KU_DLC_FEATURE_COUNT];  // +0x0C .. +0x6F (25 ptrs, 100 bytes)
+    PackDetail  maPackDetails[E_DLC_DATA_PACK_COUNT];     // +0x70 .. +0xAB (5 records, 60 bytes)
 };
 
 } // namespace BrnResource

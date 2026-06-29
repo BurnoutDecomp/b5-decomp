@@ -28,6 +28,8 @@
 
 #include "types.hpp"
 
+namespace CgsNetwork { struct ServerInterfaceDirtySock; }
+
 namespace BrnNetwork
 {
     struct LocalEventScoreUploadData
@@ -35,5 +37,37 @@ namespace BrnNetwork
         u64 mu64EventID;   // +0x00
         u32 muScore;       // +0x08
         s32 meGameMode;    // +0x0C  (EGameModeType underlying s32)
+    };
+
+    // ===============================================================================
+    // BrnNetwork::EventScoresManager
+    //   Minimal reconstructed surface for the online event-scores upload manager. The
+    //   full manager (the pending-upload Array<LocalEventScoreUploadData,49>, the score
+    //   queue and the server callbacks) is reconstructed in its own (class-sourced) TU
+    //   and extends this header; only what the debug component reaches is declared here.
+    //   Declarations + the one pinned member are enough for the per-TU `cl /c` gate.
+    //
+    //   LAYOUT pinned by EventScoresManagerDebugComponent::SetCalvalryBurningRouteBest
+    //   @ 0x82591D00: the component reaches mpServerInterface at +0x32C (lwz r11,0x32C),
+    //   then calls mpServerInterface->GetCustomCommandsComponent() (component at +0x4C).
+    //   Earlier members are unknown, so a padding buffer reserves space up to +0x32C.
+    // ===============================================================================
+    class BrnServerInterfaceBase;   // mpServerInterface points at the Brn server interface
+
+    class EventScoresManager
+    {
+    public:
+        // The LobbyApi completion trampoline handed to ServerInterfaceCustomCommands::
+        // UploadEventScoreData as the upload callback (matches CustomCommandCallback:
+        // void(void* lpData, void* lpResult, bool lbSuccess)).
+        static void _UploadEventScoreCallback( void* lpData, void* lpResult, bool lbSuccess );
+
+        // The debug component reaches the server interface (+0x32C) to post the upload; the X360
+        // inlines this trivial getter at the call site.
+        BrnServerInterfaceBase* GetServerInterface() const { return mpServerInterface; }
+
+    private:
+        u8                    mPad00[0x32C];   // members before mpServerInterface (other TU)
+        BrnServerInterfaceBase* mpServerInterface;   // +0x32C
     };
 } // namespace BrnNetwork

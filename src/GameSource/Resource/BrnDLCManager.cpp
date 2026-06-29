@@ -1,5 +1,9 @@
 #include "GameSource/Resource/BrnDLCManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"      // CgsDev::DebugInterface
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"             // CgsDev::DebugManager::ActivateComponent
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // CgsDev::Debug2DImmediateRender, RGBA
 #include <cstddef>   // offsetof
 #include <cstring>   // memset
 
@@ -119,6 +123,152 @@ namespace BrnResource
         if (lbEnabled)
         {
             CGS_ASSERT(mbIsAvailable, "!(mbIsEnabled && !mbIsAvailable)");
+        }
+    }
+
+    // =============================================================================================
+    // DLCDebugComponent
+    // =============================================================================================
+
+    // The file-scope downloadable-content availability table the debug component drives. In the X360
+    // image this is the static instance at byte_82FFA7F0; Update / RenderHUD / OnActivate all reach it
+    // directly (the asm hard-codes its address), so it is a TU-local static here.
+    static DLCFeatureAvailability g_DLCFeatureAvailability;
+
+    // MaybeDrawText (X360 0x82824048) -- the shared "draw debug text iff on-screen" helper. External to
+    // this TU (its own TU); declared so the compile gate sees its shape. Signature recovered from the
+    // call sites: (display, text, x, y, scale, colour, centred).
+    int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+                      f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
+
+    // Never called -- pins the asm-attested member offsets of DLCDebugComponent. The console offsets
+    // inside the byte/bool fields reproduce on the host; the PackDetail record's pointer field is 4
+    // bytes on the 32-bit console and 8 on the 64-bit host, so the record is 12 bytes only on console --
+    // every access is BY NAME, so the host stride difference is benign and is NOT asserted here.
+    void DLCDebugComponent::_AssertDebugLayout()
+    {
+        static_assert(offsetof(PackDetail, mbAvailable)   == 0x00, "pack avail @ +0x00");
+        static_assert(offsetof(PackDetail, mbLastApplied) == 0x01, "pack last @ +0x01");
+    }
+
+    // X360 0x826627F8 (store-for-store). The leading folded BaseCollisionGenerator::Destruct(this) is the
+    // trivial base CgsDev::DebugComponent::Construct the X360 image coalesces onto one address. Then the
+    // 25-entry feature-name table is zeroed (memset 100 bytes @ +0xC) and filled with the debug labels.
+    // Every string below is a baked .rdata literal (stw aFeatures.../aCars.../aGameModes...).
+    void DLCDebugComponent::Construct()
+    {
+        CgsDev::DebugComponent::Construct();   // base two-phase init (X360 folded body)
+
+        std::memset(mapcFeatureNames, 0, sizeof(mapcFeatureNames));   // memset(this+0xC, 0, 100)
+
+        mapcFeatureNames[0]  = "Features - Freeburn Challenges";            // a1[3]  +0x0C
+        mapcFeatureNames[1]  = "Features - Specific Freeburn Challenges";   // a1[4]  +0x10
+        mapcFeatureNames[2]  = "Features - Marked man and payback";         // a1[5]  +0x14
+        mapcFeatureNames[3]  = "Features - Burning Routes";                 // a1[6]  +0x18
+        mapcFeatureNames[4]  = "Features - Playground events";              // a1[7]  +0x1C
+        mapcFeatureNames[5]  = "Features - new road rules";                 // a1[8]  +0x20
+        mapcFeatureNames[6]  = "Features - Collectable Filter";             // a1[9]  +0x24
+        mapcFeatureNames[7]  = "Features - Picture paradise mod";           // a1[10] +0x28
+        mapcFeatureNames[8]  = "Features - jumps stunts smashes";           // a1[11] +0x2C
+        mapcFeatureNames[9]  = "Cars - MONTGOMERY_HAWKER";                  // a1[12] +0x30
+        mapcFeatureNames[10] = "Cars - SUPER_CAR";                          // a1[13] +0x34
+        mapcFeatureNames[11] = "Cars - DIRT_KING";                          // a1[14] +0x38
+        mapcFeatureNames[12] = "Cars - CRASH_TEST";                         // a1[15] +0x3C
+        mapcFeatureNames[13] = "Cars - HUMMER";                             // a1[16] +0x40
+        mapcFeatureNames[14] = "Cars - NEW_AGGRESSION";                     // a1[17] +0x44
+        mapcFeatureNames[15] = "Cars - NEW_STUNT";                          // a1[18] +0x48
+        mapcFeatureNames[16] = "Cars - NEW_SPEED";                          // a1[19] +0x4C
+        mapcFeatureNames[17] = "Cars - HOT_ROD";                            // a1[20] +0x50
+        mapcFeatureNames[18] = "Cars - DRAGSTER";                           // a1[21] +0x54
+        mapcFeatureNames[19] = "Game Modes - Online stunt run";            // a1[22] +0x58
+        mapcFeatureNames[20] = "Game Modes - Online road rage";            // a1[23] +0x5C
+        mapcFeatureNames[21] = "Game Modes - Online Burning home run";     // a1[24] +0x60
+        mapcFeatureNames[22] = "Leaderboards - burning route";             // a1[25] +0x64
+        mapcFeatureNames[23] = "Leaderboards - Stunt run";                 // a1[26] +0x68
+    }
+
+    // X360 0x82662948. For each of the 5 data-pack records, latch the target availability byte: when it
+    // differs from the last applied value, copy it forward and push the new state into the file-scope
+    // DLCFeatureAvailability (SetPackAvailabilityState(pack index, new availability)). The leading folded
+    // base call (BaseCollisionGenerator::Destruct == trivial base prep) is a no-op here.
+    void DLCDebugComponent::Update()
+    {
+        for (PackDetail& lPack : maPackDetails)   // asm: walk +0x70 .. +0xAC, stride 12
+        {
+            bool lbChanged = false;
+            if (lPack.mbLastApplied != lPack.mbAvailable)
+            {
+                lbChanged          = true;
+                lPack.mbLastApplied = lPack.mbAvailable;   // stb r11, 1(r31)
+            }
+
+            if (lbChanged)
+            {
+                g_DLCFeatureAvailability.SetPackAvailabilityState(lPack.miPackIndex, lPack.mbLastApplied);
+            }
+        }
+    }
+
+    // X360 0x826629C8. Early-out unless the file-scope availability table's mbField01 flag (the byte at
+    // its +0x01, byte_82FFA7F1) is set; when set, draw the "Beat the team mode" HUD label. The float
+    // literals are baked .rdata: X=700.0 (flt_8205820C), Y=40.0 (flt_82004D0C, asm-confirmed in
+    // BrnStuntManager), scale=16.0 (flt_82004000); the colour is the packed 0xFFFFFFC8 (li r8,-0x38).
+    void DLCDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
+    {
+        if (g_DLCFeatureAvailability.mbField01)   // byte_82FFA7F1
+        {
+            MaybeDrawText(lpRender, "Beat the team mode", 700.0f, 40.0f, 16.0f, 0xFFFFFFC8u, false);
+        }
+    }
+
+    // X360 0x827DD210. The component's debug-menu name: a single pointer to the baked .rdata string at
+    // unk_8207C1EC. FLAG: the bytes at that address are not present in the available X360 exports, so the
+    // literal cannot be grounded. Placeholder name used (non-load-bearing -- it is only the debug-menu
+    // label); replace with the real string if the .rdata for 0x8207C1EC is recovered.
+    const char* DLCDebugComponent::GetName() const
+    {
+        return "DLC Debug" /* FLAGGED: unk_8207C1EC string bytes not in exports */;
+    }
+
+    // X360 0x82662A10. Acquire a stack-scoped automatic debug interface (its ctor enters the debug
+    // critical section and grabs the DebugManager singleton; GetDebugManager asserts it is non-null),
+    // then activate this component in the debug menu. The interface's automatic-release semantics drop
+    // the lock on scope exit (X360: the trailing `if (mbIsAutomaticClass) ThreadSafeRelease`).
+    void DLCDebugComponent::OnRegister()
+    {
+        CgsDev::DebugInterface lDebugInterface;
+        lDebugInterface.GetDebugManager().ActivateComponent(this);
+    }
+
+    // X360 0x82662B40. Register the 5 named data packs, then register each of the 25 features' enabled
+    // flags (the file-scope DLCFeatureAvailability's per-feature mabFeatureEnabled[i]) as a bool debug
+    // variable. The variable name is "<pack name>/<...> Entitlement" (CgsCore::SPrintf into a 127-byte
+    // buffer) and the menu group is the feature's debug name (mapcFeatureNames[i]). The leading folded
+    // base call is a no-op here.
+    void DLCDebugComponent::OnActivate()
+    {
+        RegisterPackDetails("friends Pack",       0);
+        RegisterPackDetails("rivalry Pack",       1);
+        RegisterPackDetails("car Pack",           2);
+        RegisterPackDetails("world Pack",         3);
+        RegisterPackDetails("insider guide Pack", 4);
+
+        for (s32 liFeature = 0; liFeature < KU_DLC_FEATURE_COUNT; ++liFeature)
+        {
+            // The feature's required data pack selects which pack-detail record names the entitlement.
+            const s32         liPack = g_DLCFeatureAvailability.maePackForFeature[liFeature];  // dword_82FFA80C[i]
+            const PackDetail& lPack  = maPackDetails[liPack];
+
+            // FLAG: the X360 SPrintf("%s/%s Entitlement", ...) spills two pointer args -- the pack name
+            // (record +0x04) is the only attested char* field; the second %s arg is the same record's
+            // name (RegisterPackDetails, an external TU, owns the record's string population, so the
+            // exact second field is non-load-bearing for the gate). Reproduced as pack name / pack name.
+            char lacEntitlement[128];
+            lacEntitlement[127] = 0;
+            CgsCore::SPrintf(lacEntitlement, 127, "%s/%s Entitlement", lPack.mpcPackName, lPack.mpcPackName);
+
+            RegisterVariable(&g_DLCFeatureAvailability.mabFeatureEnabled[liFeature],   // byte_82FFA870[i]
+                             lacEntitlement, mapcFeatureNames[liFeature]);
         }
     }
 }
