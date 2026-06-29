@@ -30,6 +30,25 @@ namespace CgsDev
                      const rw::RGBA& lrColour);
         void DrawSphere(const rw::math::vpu::Vector3& lrCentre, f32 lfRadius, const rw::RGBA& lrColour);
 
+        // Additional world-space primitive draws (declared-only; bodies are the 3D render follow-on).
+        // Recovered from BrnDeformationDebugComponent::RenderWorld / DrawDetachedWheels (the deformation
+        // rig visualiser): a hollow (wireframe) sphere, a hollow triangle / a line / an arrow between two
+        // world points, and a coordinate-axis gizmo given a world transform, each tinted by an RGBA.
+
+        // Wireframe sphere at a world centre + radius.
+        void DrawHollowSphere(const rw::math::vpu::Vector3& lrCentre, f32 lfRadius, const rw::RGBA& lrColour);
+
+        // Wireframe triangle from three world-space corners.
+        void DrawHollowTriangle(const rw::math::vpu::Vector3& lrA, const rw::math::vpu::Vector3& lrB,
+                                const rw::math::vpu::Vector3& lrC, const rw::RGBA& lrColour);
+
+        // A line / an arrow from lrFrom to lrTo.
+        void DrawLine(const rw::math::vpu::Vector3& lrFrom, const rw::math::vpu::Vector3& lrTo, const rw::RGBA& lrColour);
+        void DrawArrow(const rw::math::vpu::Vector3& lrFrom, const rw::math::vpu::Vector3& lrTo, const rw::RGBA& lrColour);
+
+        // A coordinate-axis gizmo (the three basis vectors of the transform, drawn from its origin).
+        void DrawAxis(const rw::math::vpu::Matrix44Affine& lrTransform, const rw::RGBA& lrColour);
+
         CgsResource::SafeResourceHandle<CgsResource::Font> mpFont;
     };
 }

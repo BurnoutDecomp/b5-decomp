@@ -48,7 +48,22 @@ namespace Deformation
         const Vector3& GetDirection() const;
         const TagPoint* GetTagPointA() const;
         const TagPoint* GetTagPointB() const;
-        void           SetPosition(Vector3);
+
+        // X360 OnPointPositionChange (0x825B98F8) writes a new xyz position into a driven
+        // point but PRESERVES the existing w lane (the desired distance-to-A the IK solver
+        // stores in mPositionPlusDistanceToA.w). The console does this with a single
+        // `vrlimi128 v0, vExisting, 1, 0` (insert lane 3 of the existing vector into the new
+        // one). Modelled by name here: overwrite xyz, keep w. The incoming vector's own w is
+        // ignored, exactly as the asm (it loads the slider xyz with w==0 then re-inserts the
+        // stored w). Inline so the debug component can rely on the lane-preserving semantics.
+        void SetPosition(Vector3 lvNewPosition)
+        {
+            mPositionPlusDistanceToA.x = lvNewPosition.x;
+            mPositionPlusDistanceToA.y = lvNewPosition.y;
+            mPositionPlusDistanceToA.z = lvNewPosition.z;
+            // mPositionPlusDistanceToA.w (distance-to-A) deliberately left untouched.
+        }
+
         Vector3        GetOffsetFromInitialPosition() const;
         f32            GetScratchAmount() const;
         Vector3        GetOriginalPosition() const;

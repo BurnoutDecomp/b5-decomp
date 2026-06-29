@@ -107,6 +107,20 @@ namespace Deformation
         // &maWheelSpecs[liWheel] (asm: 48 * liWheel + this + 80).
         const WheelSpec* GetWheelSpec(s32 liWheel) const;
 
+        // Live deformation-sensor count (mu8NumDeformationSensors; asm spec+1618). The debug component's
+        // selected-sensor slider range-checks against this.
+        s32 GetNumDeformationSensors() const { return static_cast<s32>(mu8NumDeformationSensors); }
+
+        // Live tag-point / driven-point / IK-part counts (the spec tables the rig debug walk bounds
+        // against). asm spec+8 / spec+16 / spec+24.
+        s32 GetNumberOfTagPoints() const { return miNumberOfTagPoints; }
+        s32 GetNumberOfDrivenPoints() const { return miNumberOfDrivenPoints; }
+        s32 GetNumberOfIKParts() const { return miNumberOfIKParts; }
+
+        // The four streamed wheel specs the detached-wheel debug draw reads (asm DrawDetachedWheels:
+        // *(spec+...) wheel spec table). Returns the wheel spec at liWheel, or the typed table accessor.
+        const WheelSpec* GetW(s32 liWheel) const { return GetWheelSpec(liWheel); }
+
         // BrnStreamedDeformationSpec.h:281 -- fill an axis-aligned bounding box that contains every
         // deformation sensor sphere. X360 @ 0x825BA9E8: accumulate min/max of (sensorOffset +/- radius)
         // over the mu8NumDeformationSensors sensors, then write min->box.mMin, max->box.mMax.
