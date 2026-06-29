@@ -50,6 +50,18 @@ struct AptArray : public AptObject
     void      SetAt(int32_t nIndex, AptValue* pValue);       // @0x7E11B0 (AddRef/Release)
     void      set(int32_t nIndex, AptValue* pValue);         // @0x7F0328 (grow + set, extends length)
 
+    // ---- ActionScript Array native methods (sMethod_*) + sort comparator --
+    // bodies in AptArray.cpp. AptExtFunctionPtr natives: f(thisArray[, argCount]),
+    // AS args off the global native-arg stack. (sort/sortOn/join are a follow-on.)
+    static AptValue* sMethod_push(AptArray* pThis, int nArgCount);
+    static AptValue* sMethod_pop(AptArray* pThis);
+    static AptValue* sMethod_reverse(AptArray* pThis);
+    static AptValue* sMethod_unshift(AptArray* pThis, int nArgCount);
+    static AptValue* sMethod_slice(AptArray* pThis, int nArgCount);
+    static AptValue* sMethod_splice(AptArray* pThis, int nArgCount);
+    static AptValue* sMethod_concat(AptArray* pThis, int nArgCount);
+    static int       defaultSortCompareFunc(AptValue* const* ppA, AptValue* const* ppB);
+
 private:
     void _reserve(int32_t nCount);   // @0x7F01D0 (grow to pow2, min 8)
 };
