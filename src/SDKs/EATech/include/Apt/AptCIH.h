@@ -93,9 +93,26 @@ struct AptCIH : public AptValueGC
     // property hash and null its slot (called by AptLinker::Update).
     void ForceCleanNativeHash();
 
+    // FindAndSetEvents @0x82B02740 -- scan the built-in AS event-handler table: for each
+    // (eventMask, nameIndex) descriptor whose bit is not yet set in this node's native-hash
+    // event mask, look up the matching named child (AptValue::findChild against the runtime
+    // AS-name table); when found, OR the event bit into the hash mask. Returns 1 if any of
+    // the "needs-an-update-tick" events (mask 0x200C0) was newly set, else 0. (AptCIH::
+    // AssociateInstToClass uses the return to decide whether to register a tick.)
+    int FindAndSetEvents();
+
     // GetAnimationInst @0x82B7B358 -- mpCharacterInst narrowed to the animation
     // subtype (caller has already confirmed IsAnimationInst, type tag 9).
     AptCharacterAnimationInst* GetAnimationInst() const;
+
+    // SetCharacterInst @0x82B00548 -- swap this node's character instance. A null
+    // pCharacterInst is replaced by a freshly built "none" instance. When the new
+    // instance differs from the current one it is installed; the old one (if any) has
+    // its render data optionally moved into the new (bMoveRenderData), its per-frame
+    // animation timer functions removed (when it was an animation, type tag 9), is
+    // GC-torn-down + deleted, and the render tree is notified the item moved.
+    // (AptDisplayList::instantiateCharacter / AptLinker::Update.)
+    void SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRenderData);   // @0x82B00548
 
     // GetCosAngle @0x82AD7448 -- cosine of the rotation baked into an affine
     // transform's first column (1.0 when there is no rotation). Static: the X360
@@ -215,6 +232,15 @@ struct AptCIH : public AptValueGC
     // scan for a still-dirty child. Returns the offending child, else `this`.
     AptCIH* SetGeneralizedProcessDirtyState(bool bDirty);      // @0x82ADCA50
 
+    // SetProceduralProperty @0x82AE73C0 -- write a built-in AS "procedural" property
+    // (the AS setProperty writer, mirror of GetProceduralProperty) by selector. The
+    // selector order is the X360 jump table (word_82145258): 0 _x / 1 _y / 2 _xscale /
+    // 3 _yscale / 4 _width / 5 _height / 6 _rotation / 7 _alpha / 8 colour-translate R /
+    // 9 G / 10 B / 11 _visible. bASChanged stamps the AS-changed flag (mFlagsA bit31).
+    // Writes through the char inst's writable position/colour matrix (or SetIsVisible),
+    // then re-marks the generalized-process dirty state for _visible.
+    void SetProceduralProperty(uint32_t nSelector, float fValue, bool bASChanged);   // @0x82AE73C0
+
     // GetProceduralProperty @0x82AE2D10 -- read a built-in AS "procedural" property
     // (scale/rotation/x/y/alpha/colour/visible/width/height) by selector and return
     // it as a float; out-of-range -> -1. Derives from the node's position + colour
@@ -250,4 +276,18 @@ struct AptCIH : public AptValueGC
     // process-wide ActionScript native-function singletons (the built-in AS functions
     // registered at startup). Static: the X360 takes no `this`. (Called by AptUpdateShutdown.)
     static void CleanNativeFunctions();   // @0x82AD6FB8
+
+    // ProcessTextInst @0x82B076F0 -- per-frame dynamic-text refresh. Only acts on a
+    // dynamic-text node (char type tag 2). When the node is visible and its render-data
+    // handle is unresolved (0 / the empty-text sentinel) or its text is dirty (state
+    // bit0 clear), it re-resolves the text (EnsureStringAllocated, fed the parent node
+    // so inherited TextFormat resolves). Returns true if the node is dynamic text.
+    bool ProcessTextInst();   // @0x82B076F0
+
+    // EnsureStringAllocated @0x82B06F08 -- FLAG (declared-only): the deep dynamic-text
+    // build/layout path (AptCharacterTextInst::UpdateText + the glyph/TextFormat layout
+    // engine that bakes the field's render data). Its body belongs with the Apt text/font
+    // engine TU; declared here so ProcessTextInst / the AS createTextField path can name
+    // it. pParent is the display-list parent (inherited TextFormat source).
+    void EnsureStringAllocated(AptCIH* pParent);   // @0x82B06F08
 };

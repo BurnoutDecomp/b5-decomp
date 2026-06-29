@@ -29,6 +29,22 @@ struct AptNativeHash;
 struct AptMatrix;
 struct AptCXForm;
 struct AptRenderTreeManager;
+struct AptRenderItem;
+struct AptCIH;
+
+// ---------------------------------------------------------------------------
+// FLAG (homed by the AptRenderTreeManager TU; not declared on the manager facade
+// yet): the two render-tree-manager UPDATE entry points the static helpers below
+// route through. Decompiled faithfully from the X360 ARTIST.XEX:
+//   CloneItem -> AptRenderTreeManager::Update_CloneItem(mgr, pItem, a2, nTick) @0x82AE1C98
+//   ItemMoved -> AptRenderTreeManager::Update_ItemMoved (mgr, pNode, nTick)    @0x82AECD50
+// Declared as free functions taking the manager (rather than members) so the
+// home file can reference them without editing the manager header; the live
+// double-buffer bodies are deferred (single-buffer bring-up).
+// ---------------------------------------------------------------------------
+struct AptCIH* AptRTM_CloneItem(AptRenderTreeManager* pMgr, struct AptCIH* pNode,
+                                int nSourceArg, int nTick);
+struct AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode, int nTick);
 
 // ---------------------------------------------------------------------------
 // FLAG (homed by the AptRenderTreeManager / AptTargetSim TUs, not yet built):
@@ -67,6 +83,16 @@ struct AptCharacterInst
 
     AptRenderItem*       GetRenderItem() const;          // @0x7DF008
     AptRenderItem*       GetRenderItemWritable();        // @0x7EC910 (via the manager)
+
+    // ---- static render-tree-manager notifications (operate on a scene NODE) -
+    // Each re-derives a render-tree link from the changed AptCIH and notifies the
+    // current target sim's render-tree manager. They take the scene node directly
+    // (the X360 passes it in r3, no `this`) and route through AptCurrentRenderTreeManager().
+    static AptCIH* CloneItem(AptCIH* pNode, int nArg);            // @0x82AE1C98
+    static AptCIH* ItemFirstChildChanged(AptCIH* pNode);          // @0x82AE1C78
+    static AptCIH* ItemMoved(AptCIH* pNode);                      // @0x82AECD50
+    static AptCIH* SetMaskedItem(AptCIH* pNode, bool bIsMask);    // @0x82AE1C50
+    static AptCIH* SetRootItem(AptCIH* pNode);                    // @0x82AE66A0
     // GetRenderItemDynamicTextWritable @0x82AE1BF8 -- ICF-folded thunk: identical body
     // to GetRenderItemWritable (the X360 linker folded the duplicate).
     AptRenderItem*       GetRenderItemDynamicTextWritable() { return GetRenderItemWritable(); }
@@ -78,6 +104,23 @@ struct AptCharacterInst
     uint32_t GetTypeTag() const { return mTypeFlags >> 26; }
 
     AptCharacter*        SetCharacter(AptCharacter* pCharacter); // @0x80F324
+
+    // DestroyGCPointers @0x82AF5490 -- mark the owned render item deleted and
+    // tear down the per-instance property hash (the GC drop path).
+    void DestroyGCPointers();
+
+    // The writable character / position matrix (through the tick-writable render item).
+    AptCharacter* GetCharacterWritable();                // @0x82AE1CC0
+    AptMatrix*    GetPositionMatrixWritable();           // @0x82AE6650
+
+    // MoveRenderDataFrom @0x82AF4630 -- transfer pSource's render data (visual
+    // state via the render item + the clip depth) and steal its property hash.
+    void MoveRenderDataFrom(AptCharacterInst* pSource);
+
+    // SetHasMask @0x82AE1D50 / SetIsMask @0x82AECDC0 -- delegate to the writable
+    // render item's mask flags (a3 is the mask item / mask matrix respectively).
+    void SetHasMask(bool bHasMask, AptRenderItem* pMask);
+    void SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);
 
     // ---- const reads (straight through the render item) -------------------
     const AptCharacter* GetCharacterConst() const;       // @0x7E8784

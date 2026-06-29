@@ -52,6 +52,15 @@ struct AptRenderTreeManager
         AptRenderItem*         mpItem;   // +0x00  (*v)
         _AptRenderItemRootList* mpNext;  // +0x04  (v[1])
 
+        // Create @0x82AE1B78  (the X360 ctor-shaped factory; Hex-Rays
+        // "_AptRenderItemRootLi") -- pool-allocate a fresh anchor cell from the shared
+        // Apt pool (zeroing both slots; null block -> the cell pointer is left null but
+        // the body still stores through it, matching the console verbatim), atomically
+        // take a reference on pItem (the inline lwarx/stwcx. of mRefCount), then store
+        // mpItem=pItem / mpNext=null and return the cell. Static: the X360 takes pItem
+        // in r3 (not a `this`). Called by AptRenderTreeManager::Update_SetRootItem.
+        static _AptRenderItemRootList* Create(AptRenderItem* pItem);
+
         // Shutdown @ 0x82AE19E0 -- free the ENTIRE chain rooted at pHead: for
         // each cell, release its item reference (zeroing the slot first) and
         // return the 8-byte cell to the shared Apt pool. Static: the X360 takes
@@ -103,18 +112,52 @@ struct AptRenderTreeManager
 
     // Display-list change notifications (called by AptDisplayListState as the
     // per-frame display list mutates). They re-derive the render tree's
-    // first-child / next-sibling / root links from the changed scene node.
-    // FLAG: the render-tree-link re-derivation is the concurrent double-buffering
-    // propagation -- deferred; no-op on the single-buffer bring-up path, where the
-    // display-list links (in the AptCIHs) are themselves the source of truth.
-    //   @0x7EDF6C / 0x7ED694 / 0x7F11D4 / 0x7F0524
-    void Update_ItemFirstChildChanged(AptCIH* /*pCIH*/)  {}
-    void Update_ItemNextSiblingChanged(AptCIH* /*pCIH*/) {}
+    // first-child / next-sibling links from the changed scene node by writing the
+    // node's writable render item against its sibling/child node's render item.
+    //
+    // Update_ItemFirstChildChanged  @0x82AE0AC8 -- set the node's render item's
+    //   manager first-child link to the node's first display-list child's render item.
+    // Update_ItemNextSiblingChanged @0x82AE0A70 -- set the node's render item's
+    //   manager next-sibling link to the node's display-list-next's render item.
+    void Update_ItemFirstChildChanged(AptCIH* pCIH);
+    void Update_ItemNextSiblingChanged(AptCIH* pCIH);
+
+    // Update_ItemInserted / Update_SetRootItem -- still deferred (not in this TU's
+    // decompile scope; Update_ItemMoved below calls Update_SetRootItem by name when
+    // a node has no previous/parent display-list neighbour, i.e. it becomes a root).
     void Update_ItemInserted(AptCIH* /*pCIH*/, int /*nTick*/ = 0) {}
     void Update_SetRootItem(AptCIH* /*pCIH*/, int /*nTick*/ = 0) {}
 
-    // @0x82AE0880 -- a node's mask state changed (set/cleared as a mask). FLAG:
-    // the double-buffered render-tree mask propagation; no-op on the single-buffer
-    // bring-up path (AptCIH::SetMask/ClearCIH call it by name).
-    void Update_ItemSetMaskState(AptCIH* /*pCIH*/, int /*nTick*/, bool /*bIsMask*/) {}
+    // Update_ItemMoved @0x82AECD50 (helper-wrapped @0x82AECD50) -- a node moved in
+    // the display list: re-derive its render item's previous-sibling / parent-first-
+    // child and next-sibling manager links (skipping mask-flagged neighbours), or --
+    // when it has no live previous/parent neighbour -- make it a root item.
+    AptRenderItem* Update_ItemMoved(AptCIH* pNode, int nTick);
+
+    // Update_CloneItem @0x82AE0B38 -- clone pSourceCIH's render item into a fresh
+    // revision for nTick, splice it into pNode's display-list-derived manager links
+    // (first-child / previous-sibling / next-sibling), and install it as pNode's
+    // character instance's render item.
+    AptRenderItem* Update_CloneItem(AptCIH* pSourceCIH, AptCIH* pNode, int nTick);
+
+    // Update_ItemSetMaskState @0x82AE0880 -- a node's mask state changed (becoming a
+    // mask, a4==1, vs. ceasing to be one). Re-derive the node's render item's manager
+    // sibling/first-child links around the (mask-flagged) display-list neighbours so
+    // the mask is hoisted out of / folded back into the normal sibling chain. (nTick
+    // is unused by the console body -- the link writes are tick-agnostic.)
+    void Update_ItemSetMaskState(AptCIH* pCIH, int nTick, bool bIsMask);
+
+    // ---- RENDER side (feed the render walk) --------------------------------
+    // Each tests whether pItem's linked child / mask / next-sibling render item is
+    // still renderable for nTick; if it is, returns null (nothing to refresh),
+    // otherwise resolves + commits the link's current render revision and returns it.
+    AptRenderItem* Render_GetChildInvisible  (AptRenderItem* pItem, int nTick);  // @0x82ADB5E8
+    AptRenderItem* Render_GetMaskInvisible   (AptRenderItem* pItem, int nTick);  // @0x82ADB6E8
+    AptRenderItem* Render_GetSiblingInvisible(AptRenderItem* pItem, int nTick);  // @0x82ADB668
+
+    // Render_GetRoot @0x82AE55D0 -- prune expired root cells from *ppHeadCellSlot
+    // (via _AptRenderItemRootList::Get), then (if the surviving root is renderable
+    // for nTick) refresh that cell's item to its current render revision, releasing
+    // the prior item. Returns the current root render item (or null).
+    AptRenderItem* Render_GetRoot(_AptRenderItemRootList** ppHeadCellSlot, int nTick);
 };

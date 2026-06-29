@@ -28,6 +28,8 @@
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"                // GetDepth (render-item depth)
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"               // removeClonedObject
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"          // AptInteger::Create
+#include "SDKs/EATech/include/Apt/AptString/EAString.h"           // EAStringC (the AS-arg string scratch)
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"         // the AS VM (clone / loadVariables this-ptr)
 
 // ---------------------------------------------------------------------------
 // FLAG (homed by the apt VM native-call dispatch): the global native-method arg
@@ -207,4 +209,65 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_removeMovieClip(AptValue* pContext
 AptValue* AptCIHNativeFunctionHelper::sMethod_removeTextField(AptValue* pContext, int nArgCount)
 {
     return sMethod_removeMovieClip(pContext, nArgCount);
+}
+
+// ---------------------------------------------------------------------------
+// FLAG (homed by AptActionInterpreter, not yet built): the process-wide AS VM.
+// The X360 passes its base address (&dword_8324E760 == the interpreter's
+// mnStackTop slot [c:0x00]) as the `this` to the clone/loadVariables behavioural
+// entry points below; declared as the extern global so the calls keep the exact
+// shape. (The same singleton whose stacks back gppAptNativeArgStack /
+// gnAptNativeArgCount above.)
+// ---------------------------------------------------------------------------
+extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
+
+// FLAG: AptActionInterpreter::_doCloneSprite (the AS duplicateMovieClip core) is
+// not yet homed; declared as an extern shim so this dispatcher keeps the exact
+// (interpreter, owner, 0, parent, nameValue, depth, initObject) call shape.
+extern AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* pInterp,
+                                                    AptValue* pOwner, int a3, AptValue* pParent,
+                                                    AptValue* pNameValue, int nDepth, AptValue* pInitObject);
+
+// FLAG: AptActionInterpreter::loadVariables (the AS loadVariables core) is not yet
+// homed; declared as an extern shim, preserving the exact (interpreter, node, 0,
+// &urlString) call shape.
+extern void AptActionInterpreter_loadVariables(AptActionInterpreter* pInterp,
+                                               AptValue* pNode, int a3, EAStringC* pURL);
+
+// ===========================================================================
+// sMethod_duplicateMovieClip @0x82B0DEE8 -- AS duplicateMovieClip(name, depth
+// [, initObject]): clone this node into its parent under a new instance name at a
+// fresh depth (AS depth + the 0x4000 bias), forwarding to the interpreter's
+// _doCloneSprite core. The init object (arg 2) is optional -- absent (< 3 args)
+// it passes null. Returns the new clone handle (or undefined).
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_duplicateMovieClip(AptValue* pContext, int nArgCount)
+{
+    AptValue* const pNameValue = gppAptNativeArgStack[gnAptNativeArgCount - 1];        // arg 0: new name
+    AptValue* const pInitObject = (nArgCount < 3)                                       // arg 2: optional init object
+        ? nullptr
+        : gppAptNativeArgStack[gnAptNativeArgCount - 3];
+    const int nDepth = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();      // arg 1: AS depth
+
+    return AptActionInterpreter_doCloneSprite(&gAptActionInterpreter,
+                                              pContext, 0, pContext,
+                                              pNameValue, nDepth + 0x4000, pInitObject);
+}
+
+// ===========================================================================
+// sMethod_loadVariables @0x82B09C10 -- AS loadVariables(url): with at least one
+// argument, render arg 0 to its URL string and hand it to the interpreter's
+// loadVariables core (node, the resolved URL); the EAStringC scratch's lifetime
+// matches the X360's explicit InitFromBuffer / DecreaseInternalRefCount pair.
+// Always returns undefined.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_loadVariables(AptValue* pContext, int nArgCount)
+{
+    if (nArgCount > 0)
+    {
+        EAStringC strURL;                                                     // the X360 &unk_82F72FF8 empty sentinel
+        gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&strURL);     // arg 0 -> the URL
+        AptActionInterpreter_loadVariables(&gAptActionInterpreter, pContext, 0, &strURL);
+    }
+    return gpUndefinedValue;
 }
