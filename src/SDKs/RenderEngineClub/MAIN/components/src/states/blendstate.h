@@ -49,6 +49,11 @@ namespace renderengine
     public:
         void* GetParameters(const BlendMaterialState* pMaterial, BlendStateParameters* pParams);
         static void* GetResourceDescriptor(void* pOut);
+        // X360 the descriptor build is sized from the resource only and ignores the params, but the
+        // immediate-mode state-library builder (CgsGraphics::ImRendererBase::Construct*BlendState)
+        // passes the params block alongside the out buffer. Additive overload so that call compiles;
+        // the params are unused (the descriptor is a fixed { 0x4C, 4 } block).
+        static void* GetResourceDescriptor(void* pOut, const BlendStateParameters* pParams);
         static void* Initialize(BlendMaterialState** ppMaterial, const BlendStateParameters* pParams);
     };
 }

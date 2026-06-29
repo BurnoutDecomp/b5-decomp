@@ -107,6 +107,39 @@ namespace BrnGui
         mbDisableCustomSoundtracks = lpOther->mbDisableCustomSoundtracks;
     }
 
+    // ---- constructor (ARTIST MovieManager::MovieManager @0x827DEFF0) ----------------------------------
+    // The X360 ctor does NOT write meState/meCollisionWorldState/meCarPoolState/meLanguage
+    // (+0x4/+0x8/+0xC) -- those are seeded by Construct(). Its (r31)-relative stores target only the
+    // 0x8D0-0x908 block (the owned MovieAllocator/GeneralAllocator free-list + its three =1 flag fields
+    // @+0x8E4/0x8EC/0x8F4, plus the GeneralAllocator(...,1,...) ctor + vtable off_820CEA44) and the
+    // 0xDB0-0xDD0 car-pool region (the three SmallResource base pointers = 0 and the three descriptor
+    // {size=0, alignment=1} pairs). The allocator internals are the [omitted, stubbed] subsystem (header);
+    // they are intentionally not fabricated here -- only the deterministic car-pool seeding is reproduced.
+    MovieManager::MovieManager()
+    {
+        miMoveMemoryReleaseDelay  = 0;
+        muFirstCollisionBlockAddress = 0;
+        muNumCollisionBlocks      = 0;
+        mbKeepMemoryWhenFinished  = false;
+        mbUsesXMPMusic            = false;
+        mbStopVideoStraightAway   = false;
+        macMovieNameBuffer[0]     = 0;
+        mpcLanguageCode           = 0;
+        mapPoolBacking[0]         = 0;
+        mapPoolBacking[1]         = 0;
+        mapPoolBacking[2]         = 0;
+        mbBundleLoaded            = false;
+
+        // Car-pool memory descriptor: asm seeds all three pools to {base=0, size=0, alignment=1}
+        // (+0xDB0..+0xDD0). SmallResource/ResourceDescriptor have no zero-init, so do it explicitly.
+        for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+        {
+            mCarPoolResource.m_baseResources[lt] = 0;
+            mCarPoolResourceDescriptor.m_baseResourceDescriptors[lt].m_size      = 0;
+            mCarPoolResourceDescriptor.m_baseResourceDescriptors[lt].m_alignment = 1;
+        }
+    }
+
     // ---- lifecycle (ARTIST Construct 0x824F9598 / Prepare 0x82514780) --------------------------------
     void MovieManager::Construct()
     {
@@ -300,22 +333,100 @@ namespace BrnGui
             meState = E_MOVIEMANAGERSTATE_STOP_MOVIE;
     }
 
-    // ---- [STUBBED SUBSYSTEMS] (marked) ---------------------------------------------------------------
-    // [stub: collision-world memory reclaim] X360 swaps the collision world out/in to free movie memory;
-    // here the state flips immediately so the machine progresses. Real impl needs the collision subsystem.
-    void MovieManager::RequestInvalidationOfCollisionWorld()   { meCollisionWorldState = E_COLLISIONWORLDSTATE_INVALID; }
-    void MovieManager::RequestValidationOfCollisionWorldState(){ meCollisionWorldState = E_COLLISIONWORLDSTATE_VALID; }
-    // [stub: car-pool memory reclaim]
-    void MovieManager::RequestInvalidationOfCarPool()          { meCarPoolState = E_CARPOOLSTATE_INVALID; }
-    void MovieManager::RequestValidationOfCarPool()            { meCarPoolState = E_CARPOOLSTATE_VALID; }
+    // ---- collision-world / car-pool state requests (ARTIST-faithful) ---------------------------------
+    // These four only flip the state to the transitional value (INVALIDATE/VALIDATE); the X360 subsystem
+    // (collision-world swap-out / car-pool free) then advances it to INVALID/VALID asynchronously. The PC
+    // build has no live collision/car-pool subsystem yet, so Update() completes those transitions itself
+    // (marked [stub-complete]) -- but the request functions themselves are reconstructed exactly per the asm.
+
+    // ARTIST @0x824EADF8: asserts the collision world is currently VALID(0), then requests INVALIDATE(1).
+    void MovieManager::RequestInvalidationOfCollisionWorld()
+    {
+        CGS_ASSERT(meCollisionWorldState == E_COLLISIONWORLDSTATE_VALID,
+                   "Invalidation of collision world requested when collision world wasn't valid");
+        if (meCollisionWorldState == E_COLLISIONWORLDSTATE_VALID)
+            meCollisionWorldState = E_COLLISIONWORLDSTATE_INVALIDATE;
+    }
+
+    // ARTIST @0x824EAEB8: asserts the collision world is INVALID(3), then requests VALIDATE(4).
+    void MovieManager::RequestValidationOfCollisionWorldState()
+    {
+        if (meCollisionWorldState == E_COLLISIONWORLDSTATE_INVALID)
+        {
+            meCollisionWorldState = E_COLLISIONWORLDSTATE_VALIDATE;
+        }
+        else
+        {
+            CGS_ASSERT(false, "Validation of collision world requested when collision world wasn't invalid");
+        }
+    }
+
+    // ARTIST @0x824EAE58: asserts the car pool is currently VALID(0), then requests INVALIDATE(1).
+    void MovieManager::RequestInvalidationOfCarPool()
+    {
+        CGS_ASSERT(meCarPoolState == E_CARPOOLSTATE_VALID,
+                   "Invalidation of car pool requested when collision world wasn't valid");
+        if (meCarPoolState == E_CARPOOLSTATE_VALID)
+            meCarPoolState = E_CARPOOLSTATE_INVALIDATE;
+    }
+
+    // ARTIST @0x824EAF18: asserts the car pool is INVALID(3), then requests VALIDATE(4).
+    void MovieManager::RequestValidationOfCarPool()
+    {
+        if (meCarPoolState == E_CARPOOLSTATE_INVALID)
+        {
+            meCarPoolState = E_CARPOOLSTATE_VALIDATE;
+        }
+        else
+        {
+            CGS_ASSERT(false, "Validation of car pool requested when car pool wasn't invalid");
+        }
+    }
+
+    // SetCarPoolValid (ARTIST @0x824EAF78): the GUI car-pool-validation flow hands back the re-validated
+    // car-pool resource + descriptor and sets meCarPoolState to VALID(0) when lbValid, else INVALID(3).
+    // asm: stw (0 if a2 else 3) -> +0xC ; copy 3 dwords from a3 -> +0xDB0 ; copy 6 dwords from a4 -> +0xDBC.
+    void MovieManager::SetCarPoolValid(bool lbValid, const CgsResource::SmallResource& lrResource,
+                                       const CgsResource::Entry::ResourceDescriptor& lrDescriptor)
+    {
+        meCarPoolState = lbValid ? E_CARPOOLSTATE_VALID : E_CARPOOLSTATE_INVALID;
+
+        for (u32 li = 0; li < CgsResource::E_MEMTYPE_NUMTYPES; ++li)
+            mCarPoolResource.m_baseResources[li] = lrResource.m_baseResources[li];
+        for (u32 li = 0; li < CgsResource::E_MEMTYPE_NUMTYPES; ++li)
+        {
+            mCarPoolResourceDescriptor.m_baseResourceDescriptors[li].m_size =
+                lrDescriptor.m_baseResourceDescriptors[li].m_size;
+            mCarPoolResourceDescriptor.m_baseResourceDescriptors[li].m_alignment =
+                lrDescriptor.m_baseResourceDescriptors[li].m_alignment;
+        }
+    }
+
     // [stub: MovieAllocator] X360 carves a Heap+Linear allocator from the freed memory for the movie.
     bool MovieManager::PrepareMovieAllocator()                 { return true; }
     void MovieManager::DestroyMemoryResourceAndDescriptor()    { }
 
-    u32 MovieManager::PendingVideoDataResourceRequest() const
+    // PendingVideoDataResourceRequest (ARTIST @0x824F7808): the GuiModule polls this each PreWorldUpdate.
+    // While in REQUESTING_MOVIEDATARESOURCE(14) it advances to WAITING_FOR_MOVIEDATARESOURCE(15), asserts a
+    // movie is queued, and returns the queued video's resource ID; otherwise returns a default-name hash.
+    CgsResource::ID MovieManager::PendingVideoDataResourceRequest()
     {
-        // The GuiModule polls this in REQUESTING_MOVIEDATARESOURCE to issue the resource acquire request.
-        return (meState == E_MOVIEMANAGERSTATE_REQUESTING_MOVIEDATARESOURCE) ? mQueuedMovie.mVideoResourceId : 0;
+        CgsResource::ID lId;
+        if (meState == E_MOVIEMANAGERSTATE_REQUESTING_MOVIEDATARESOURCE)
+        {
+            meState = E_MOVIEMANAGERSTATE_WAITING_FOR_MOVIEDATARESOURCE;
+            CGS_ASSERT(IsMovieQueued(), "IsMovieQueued()");
+            lId.SetHash(mQueuedMovie.mVideoResourceId);
+        }
+        else
+        {
+            // asm: CgsResource::ID::HashString(&unk_820046A7) -- default video-name hash. The literal at
+            // 0x820046A7 is address-only in the export, so the argument is an honest placeholder (the empty
+            // string), matching the existing VideoDefinition::Prepare reconstruction.
+            lId.SetHash(static_cast<u64>(CgsResource::ID::HashString(
+                reinterpret_cast<const u8*>(""))));   // [unrecoverable: literal @0x820046A7]
+        }
+        return lId;
     }
 
     // ---- QueueNextMovie (ARTIST 0x824FF898) ----------------------------------------------------------
@@ -369,6 +480,20 @@ namespace BrnGui
     // ---- the state machine (ARTIST Update 0x82507A98), single-step per call --------------------------
     void MovieManager::Update()
     {
+        // [stub-complete] On the X360 the collision-world swap-out / car-pool free subsystem advances the
+        // transitional INVALIDATE(1)->INVALID(3) and VALIDATE(4)->VALID(0) states asynchronously. The PC
+        // build has no live collision/car-pool subsystem yet, so the request is treated as completing
+        // immediately here -- the Request* helpers themselves are reconstructed exactly per the ARTIST asm
+        // (they set only the transitional state); this block stands in for the missing subsystem's reply.
+        if (meCollisionWorldState == E_COLLISIONWORLDSTATE_INVALIDATE)
+            meCollisionWorldState = E_COLLISIONWORLDSTATE_INVALID;
+        else if (meCollisionWorldState == E_COLLISIONWORLDSTATE_VALIDATE)
+            meCollisionWorldState = E_COLLISIONWORLDSTATE_VALID;
+        if (meCarPoolState == E_CARPOOLSTATE_INVALIDATE)
+            meCarPoolState = E_CARPOOLSTATE_INVALID;
+        else if (meCarPoolState == E_CARPOOLSTATE_VALIDATE)
+            meCarPoolState = E_CARPOOLSTATE_VALID;
+
         switch (meState)
         {
         case E_MOVIEMANAGERSTATE_CONSTRUCTED:
@@ -444,8 +569,10 @@ namespace BrnGui
             break;
 
         case E_MOVIEMANAGERSTATE_REQUESTING_MOVIEDATARESOURCE:
-            // The GuiModule polls PendingVideoDataResourceRequest() + issues the acquire; advance to wait.
-            meState = E_MOVIEMANAGERSTATE_WAITING_FOR_MOVIEDATARESOURCE;
+            // On the X360 the GuiModule's PreWorldUpdate polls PendingVideoDataResourceRequest() to obtain
+            // the resource ID + advance to WAITING_FOR_MOVIEDATARESOURCE, then issues the acquire. The PC
+            // build drives that poll here (the GuiModule bridge isn't wired yet); the call advances state.
+            PendingVideoDataResourceRequest();
             break;
 
         case E_MOVIEMANAGERSTATE_WAITING_FOR_MOVIEDATARESOURCE:

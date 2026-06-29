@@ -29,6 +29,12 @@ namespace shadow
         static void FlushDepthStencilState();
         static void FlushRasterizerState();
 
+        // Set a low-level render state through the shadow cache (the immediate-mode SetState path,
+        // X360 0x82276D08 calls this). lbWasUnset is true when no state had been set yet (the X360
+        // passes (last == 0) so the device can take the full-set path). Returns the device/result
+        // pointer (X360 r3 passthrough). Body is the X360 shadow device's low-level setter.
+        static void* Xbox2SetStateLowLevelShadowed(void* lpState, bool lbWasUnset);
+
     private:
         // The X360 build keeps the live vertex-program binding as a small static
         // slot (5 dwords @ dword_83011118) whose first entry points at the real
