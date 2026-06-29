@@ -8,13 +8,13 @@
 // (gAptActionInterpreter operand stack). They return a fresh boxed value, or
 // the shared "undefined" value (off_8324D814) when the call is malformed.
 //
-// The substring family (slice/substring/split) + cat are a follow-on (they need
-// the UTF8 substring-extract helper sub_82AE8ED8 homed first).
+// cat (@0x82AECD10) is a follow-on (Hex-Rays dropped its second operand).
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // AptInteger::Create (boxed indices)
+#include "SDKs/EATech/include/Apt/AptArray.h"              // sMethod_split returns an Array
 
 #include <stdio.h>   // sprintf (charCodeAt renders the code as decimal text)
 
@@ -337,4 +337,89 @@ AptValue* AptString::sMethod_substring(AptString* pThis, int nArgCount)
     AptString* pResult = AptString::Create("");
     AptUTF8_SubString(pResult->GetInternalString(), &strThis, nStart, nEnd - nStart);
     return pResult;
+}
+
+// sMethod_split @0x82AFC518 -- AS String.split(separator, limit). Always returns
+// a freshly-allocated AptArray.
+//
+//  * No args            -> a one-element array holding the whole string value.
+//  * separator present  -> the source is split on the separator (limit caps the
+//                          number of pieces; default 999999):
+//        - a non-empty separator splits on each occurrence, the trailing
+//          remainder forming the final piece;
+//        - an empty separator splits into individual UTF8 characters.
+//
+// The source string is reached through c_string() (which unwraps a boxed
+// StringObject to its primitive String), then its embedded EAStringC.
+AptValue* AptString::sMethod_split(AptString* pThis, int nArgCount)
+{
+    AptArray* pArray = new AptArray();
+
+    if (nArgCount == 0)
+    {
+        // split() with no separator: the whole value as the single element.
+        pArray->set(0, pThis);
+        return pArray;
+    }
+
+    if (nArgCount < 1)
+        return pArray;
+
+    int nLimit = 999999;
+    EAStringC strSeparator;
+    gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&strSeparator);
+    if (nArgCount >= 2)
+        nLimit = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();
+
+    const EAStringC& strSource = *pThis->c_string()->GetInternalString();
+    const int nSeparatorLength = static_cast<int>(strSeparator.GetLength());
+
+    if (nSeparatorLength != 0)
+    {
+        // Non-empty separator: find each occurrence, emit the slice between.
+        if (nLimit > 0)
+        {
+            int nSearchPos = 0;
+            int nOutIndex  = 0;
+            for (;;)
+            {
+                const int nFound = strSource.Find(strSeparator.GetBuffer(), nSearchPos);
+                if (nFound == -1)
+                {
+                    // Last piece: the remainder of the source.
+                    AptString* pPiece = AptString::Create("");
+                    if (nSearchPos != -1)
+                        *pPiece->GetInternalString() = strSource.Mid(nSearchPos);
+                    pArray->set(nOutIndex, pPiece);
+                    break;
+                }
+
+                AptString* pPiece = AptString::Create("");
+                *pPiece->GetInternalString() = strSource.Mid(nSearchPos, nFound - nSearchPos);
+                pArray->set(nOutIndex++, pPiece);
+
+                nSearchPos = nFound + nSeparatorLength;
+                if (nOutIndex >= nLimit)
+                    break;
+            }
+        }
+    }
+    else
+    {
+        // Empty separator: one element per UTF8 character (capped at limit).
+        if (nLimit > 0)
+        {
+            const int nCharCount = strSource.UTF8_Size();
+            int nOutIndex = 0;
+            while (nOutIndex < nLimit && nOutIndex < nCharCount)
+            {
+                AptString* pPiece = AptString::Create("");
+                *pPiece->GetInternalString() = strSource.UTF8_Mid(nOutIndex, 1);
+                pArray->set(nOutIndex, pPiece);
+                ++nOutIndex;
+            }
+        }
+    }
+
+    return pArray;
 }
