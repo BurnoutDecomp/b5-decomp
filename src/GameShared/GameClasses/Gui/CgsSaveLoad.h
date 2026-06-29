@@ -48,6 +48,48 @@ namespace CgsGui
         E_SAVELOADCIF_COUNT          = 8,
     };
 
+    // CgsSaveLoad.h:139 -- the callback interface the save/load system reports a finished
+    // task to (success/failure/cancelled). DWARF: single virtual HandleSaveLoadTaskResult.
+    class SaveLoadTaskResultHandler
+    {
+    public:
+        virtual void HandleSaveLoadTaskResult(ESaveLoadTaskResult leResult) = 0;
+    };
+
+    // CgsSaveLoad.h:107/:117/:119/:121-:127 -- the on-screen message/icon display interface
+    // the save/load system drives (yes/no prompts, no-space prompt, autosave icon). DWARF
+    // vtable order: ShowMessage(0), ShowNoSpaceMessage(1), HideMessage(2), ShowAutosaveIcon(3).
+    class MessageDisplay
+    {
+    public:
+        // CgsSaveLoad.h:117 -- the option-choice callback a shown message routes the user's
+        // selection through. DWARF: single virtual HandleOption(uint32_t).
+        class OptionHandler
+        {
+        public:
+            virtual void HandleOption(u32 luOption) = 0;
+        };
+
+        virtual void ShowMessage(OptionHandler* lpHandler, const char* lpcMessage,
+                                 const char** lpacOptions, u32 luNumberOfOptions) = 0;
+        virtual void ShowNoSpaceMessage(OptionHandler* lpHandler, const char* lpcMessage,
+                                        u32 luRequiredKb, u32 luFreeKb) = 0;
+        virtual void HideMessage() = 0;
+        virtual void ShowAutosaveIcon(bool lbVisible) = 0;
+    };
+
+    // CgsSaveLoad.h:189/:195-:212 -- the content-information-file provider the save/load
+    // system inherits from so the memory-card layer can query/load its CIF blobs.
+    // DWARF vtable order: IsSavingCif(0), GetCifFileType(1), GetCifFileName(2), LoadCifFile(3).
+    class ContentInformationFileInterface
+    {
+    public:
+        virtual bool        IsSavingCif(ESaveLoadCif leCif) = 0;
+        virtual int         GetCifFileType(ESaveLoadCif leCif) = 0;
+        virtual const char* GetCifFileName(ESaveLoadCif leCif) = 0;
+        virtual bool        LoadCifFile(ESaveLoadCif leCif, void** lppData, s32* lpiSize) = 0;
+    };
+
     // CgsSaveLoad.h:284/:272 -- true when the wide character(s) are representable in 7-bit
     // ASCII. Defined out-of-line in this TU's .cpp companion family (not in scope here).
     extern bool WideCharIsAscii(wchar_t lwChar);
