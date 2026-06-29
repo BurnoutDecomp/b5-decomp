@@ -100,6 +100,15 @@ public:
     // X360 interpreter calls; AptActionInterpreter::shutdown reaches this one).
     void shutdown();
 
+    // GetNumValues @0x82AD5228 / IsVectorFull @0x82ADC130 -- trivial state queries.
+    int32_t GetNumValues() const { return mnTop; }
+    bool    IsVectorFull() const { return mnTop >= mnCapacity; }
+
+    // RemoveAt @0x82ADBFF0 -- drop the element at nIndex (shift the tail down one,
+    // clear the vacated top slot). NOTE: does not Release the removed value (the
+    // caller owns it), matching the X360.
+    void    RemoveAt(int32_t nIndex);
+
     int32_t     mnTop;        // +0x00
     int32_t     mnCapacity;   // +0x04
     AptValue**  mppItems;     // +0x08

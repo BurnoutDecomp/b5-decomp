@@ -11,6 +11,8 @@
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"
 
+#include <cstring>   // memmove (RemoveAt tail shift)
+
 // ---------------------------------------------------------------------------
 // PopAndPush @ 0x82ADBAB8
 //
@@ -136,4 +138,24 @@ void AptValueVector::shutdown()
     mnCapacity = 0;
     mnTop = 0;
     mppItems = nullptr;
+}
+
+void AptValueVector::RemoveAt(int32_t nIndex)
+{
+    // Drop one element; the live count shrinks by one first.
+    const int32_t nNewTop = mnTop - 1;
+    mnTop = nNewTop;
+
+    // Shift the tail [nIndex+1 .. nNewTop) down by one slot, unless we removed
+    // the (new) last element or the vector is now empty -- in those cases the
+    // memmove would be a no-op / out of range, so it is skipped.
+    if (nNewTop != 0 && nIndex != nNewTop)
+    {
+        memmove(&mppItems[nIndex],
+                &mppItems[nIndex + 1],
+                sizeof(AptValue*) * (nNewTop - nIndex));
+    }
+
+    // Clear the now-vacated top slot.
+    mppItems[mnTop] = nullptr;
 }
