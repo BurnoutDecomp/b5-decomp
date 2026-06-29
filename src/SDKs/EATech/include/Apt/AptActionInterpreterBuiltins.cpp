@@ -30,6 +30,10 @@ extern bool isNaN(AptValue* pValue);
 extern void escape(EAStringC* pString);
 extern void unescape(EAStringC* pString);
 
+// FLAG (wired at AptInit; committed externs in the sibling AptActionInterpreter*Ops TUs):
+// the running .swf version (only v7 makes a non-empty string coerce to boolean true).
+extern unsigned int AptGetSwfVersion();
+
 // ---------------------------------------------------------------------------
 // cbCallMethod_isNaN @0x82AF99E8 -- AS isNaN(x): true with no argument, or when the
 // single argument is Not-a-Number. Returns the shared true/false singleton.
@@ -41,6 +45,50 @@ AptValue* AptActionInterpreter::cbCallMethod_isNaN(AptValue* /*pThis*/, int nArg
 
     AptValue* pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
     return AptBoolean::Create(isNaN(pArg));
+}
+
+// ---------------------------------------------------------------------------
+// cbCallMethod_boolean @0x82AF9BD8 -- AS Boolean(x): coerce the single argument to a
+// boolean (returns the shared true/false singleton). No argument -> undefined.
+// ---------------------------------------------------------------------------
+AptValue* AptActionInterpreter::cbCallMethod_boolean(AptValue* /*pThis*/, int nArgCount)
+{
+    if (nArgCount == 0)
+        return gpUndefinedValue;
+
+    AptValue* pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
+    const AptVirtualFunctionTable_Indices eType = pArg->getVtblIndex();
+
+    // A defined movie-clip handle (or a CIHNone), or a defined Object, is always true.
+    if ((eType == AptVFT_CharacterInstHandle && pArg->getIsDefined())
+        || eType == AptVFT_CIHNone
+        || (eType == AptVFT_Object && pArg->getIsDefined()))
+        return AptBoolean::Create(true);
+
+    // The shared `undefined` value is false.
+    if (pArg == gpUndefinedValue)
+        return AptBoolean::Create(false);
+
+    // A defined number -- or any other value whose numeric coercion is well-defined
+    // (not NaN) -- is true iff that number is non-zero.
+    const bool bNumber = (eType == AptVFT_Float || eType == AptVFT_Integer) && pArg->getIsDefined();
+    if (bNumber || !isNaN(pArg))
+        return AptBoolean::Create(pArg->toFloat() != 0.0f);
+
+    // NaN bucket: a defined Boolean returns its own value.
+    if (eType == AptVFT_Boolean && pArg->getIsDefined())
+        return AptBoolean::Create(pArg->c_boolean()->GetBool());
+
+    // Under SWF v7 a defined, non-empty string is true; anything else is false.
+    const bool bString = (eType == AptVFT_StringValue || eType == AptVFT_StringObject)
+                      && pArg->getIsDefined();
+    if (!bString || AptGetSwfVersion() != 7)
+        return AptBoolean::Create(false);
+
+    // c_string() unwraps a boxed StringObject to its primitive String (identity for a
+    // raw StringValue); a non-empty embedded EAStringC coerces to true.
+    const bool bEmpty = pArg->c_string()->GetInternalString()->IsEmpty();
+    return AptBoolean::Create(!bEmpty);
 }
 
 // ---------------------------------------------------------------------------
