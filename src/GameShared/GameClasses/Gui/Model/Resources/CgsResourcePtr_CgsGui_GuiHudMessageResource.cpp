@@ -28,3 +28,20 @@ namespace CgsGui { struct GuiHudMessageResource; }
 
 template CgsGui::GuiHudMessageResource*
     CgsResource::ResourcePtr<CgsGui::GuiHudMessageResource>::operator->();
+
+// operator->() const  @ 0x824FBC90  (IDA-truncated symbol "CgsGui::GuiHudMessageResourc";
+// baked CgsResourcePtr.h line 0x233 = 563 = the CONST operator-> arm). The const sibling of
+// the accessor above: the same single load of offset 0 (mpResourceMemory), the same "instance"
+// assert at line 563, and a single deref returning the const resource pointer. Verified
+// store-for-store against the assembly:
+//   lwz  r11, 0(r28)   ; load mpResourceMemory
+//   cmpwi r11, 0       ; null-test
+//   bne  ...skip       ; non-null -> skip the assert
+//   <BeginAssert/Clear/FireAssert(line 563)/EndAssert, msg
+//    "Can not instance resource pointer - it has no main memory resource\n">
+//   lwz  r3, 0(r28)    ; return mpResourceMemory DIRECTLY (single deref)
+// The HudMessageController const getters (GetMessageHashFromIndex / GetMessageParamCount /
+// GetMessageParamType / GetNextMessageIdInGroup / ... ) call this const accessor. The X360-baked
+// file/line are discarded per project convention -- CGS_ASSERT supplies __FILE__/__LINE__.
+template const CgsGui::GuiHudMessageResource*
+    CgsResource::ResourcePtr<CgsGui::GuiHudMessageResource>::operator->() const;

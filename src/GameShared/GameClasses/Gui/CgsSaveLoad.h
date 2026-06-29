@@ -55,7 +55,14 @@ namespace CgsGui
 
     // CgsSaveLoad.h:305 -- copy up to luMaxLen wide characters from lpwSource into the
     // ASCII buffer lpacDest (the on-screen-keyboard listeners pass their fixed string
-    // buffer). Defined out-of-line (external to this TU); declared here so the CrashNav
-    // keyboard listeners can call it.
+    // buffer). The body lives in CgsSaveLoad.cpp; declared here so the CrashNav keyboard
+    // listeners can call it.
     extern void ConvertWideCharToAsciiSafe(char* lpacDest, const wchar_t* lpwSource, size_t luMaxLen);
+
+    // CgsSaveLoad.h:326 -- the reverse of ConvertWideCharToAsciiSafe: copy the
+    // null-terminated ASCII string lpacSource into the wide-character buffer lpwDest,
+    // sign-extending each byte to a wide character. luMaxLen is the destination capacity;
+    // the source length (excluding the terminator) must be strictly less than it.
+    // Body in CgsSaveLoad.cpp. Called by CgsGui::SaveLoadSystem::Construct / ::SetMetadata.
+    extern void ConvertAsciiToWideCharSafe(wchar_t* lpwDest, const char* lpacSource, size_t luMaxLen);
 }

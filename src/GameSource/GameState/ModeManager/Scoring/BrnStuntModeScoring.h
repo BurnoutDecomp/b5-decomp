@@ -207,6 +207,12 @@ namespace BrnGameState
         s32        GetTargetScore() const     { return miTargetScore; }                 // :160
         s32        GetComboScore() const;                                               // :163 (s32 from f32 mfComboScore -- conversion lives in .cpp)
         s32        GetComboMultiplier() const { return miComboMultiplier; }             // :166
+
+        // ADDITIVE GROW (declare-only) for the BrnGameState::DeveloperChallengeManager TU.
+        // OnEventWin (stunt run) reads a score word at scorer+456 for the multiplier-driven win
+        // challenge (E_DEV_CHALLENGE_EVENT_WIN_STUNT). Body + the real member land with the
+        // StuntModeScoring TU. FLAG: offset +456, semantics inferred from the OnEventWin asm.
+        s32        GetBestStuntScore() const;
         u32        GetCurrentStunts() const;                                            // :170 (X360 0x82310640 -- real body)
         u32        GetAllStuntTypesForInProgressStunt() const;                          // :174
         bool       HasTargetScoreBeenExceeded() const;                                  // :177

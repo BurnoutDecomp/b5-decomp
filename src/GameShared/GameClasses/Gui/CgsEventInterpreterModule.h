@@ -13,6 +13,16 @@ namespace CgsGui
 class EventInterpreterModule
 {
 public:
+    // CgsEventInterpreterModule.h:84 (DecFIGS DWARF). The stages Prepare() steps through as
+    // it brings the interpreter up; the prepare loop bumps a stage index with operator++ and
+    // asserts it never overruns E_PREPARE_DONE.
+    enum EventInterpreterPrepareStage
+    {
+        E_PREPARE_START   = 0,
+        E_PREPARE_MANAGER = 1,
+        E_PREPARE_DONE    = 2,
+    };
+
     struct HashTableElement
     {
         HashTableElement();
@@ -76,6 +86,14 @@ public:
         CgsContainers::BitArray<KU_NUM_EVENTS> mxRegisteredEvents; // +0x08
     };
 };
+
+// @ 0x828470D0 (CgsEventInterpreterModule.h:303). Post-increment the prepare-stage index:
+// advance it by one and assert it did not pass E_PREPARE_DONE, returning the value it held
+// BEFORE the increment. The X360 stores the new value back through the reference, range-checks
+// it (leEnumIndex <= EventInterpreterModule::E_PREPARE_DONE) and returns the old value in r3.
+// Declared here next to the enum; body in CgsEventInterpreterModule.cpp.
+EventInterpreterModule::EventInterpreterPrepareStage operator++(
+    EventInterpreterModule::EventInterpreterPrepareStage& lrStage, int);
 }
 
 #endif

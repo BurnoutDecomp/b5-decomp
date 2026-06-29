@@ -34,4 +34,17 @@ EventInterpreterModule::sMapEntry::sMapEntry(const u32* lpaIndices, s32 liCount)
         maBits[luIndex >> 6] |= (1ull << (luIndex & 0x3F));
     }
 }
+
+// @ 0x828470D0 - post-increment the prepare-stage index. Capture the current value, store
+// the incremented value back through the reference, assert it has not overrun E_PREPARE_DONE,
+// and return the value held before the increment (X360 returns the saved old value in r3).
+EventInterpreterModule::EventInterpreterPrepareStage operator++(
+    EventInterpreterModule::EventInterpreterPrepareStage& lrStage, int)
+{
+    const EventInterpreterModule::EventInterpreterPrepareStage leOldStage = lrStage;
+    lrStage = static_cast<EventInterpreterModule::EventInterpreterPrepareStage>(leOldStage + 1);
+    CGS_ASSERT(lrStage <= EventInterpreterModule::E_PREPARE_DONE,
+        "leEnumIndex <= EventInterpreterModule::E_PREPARE_DONE");
+    return leOldStage;
+}
 }

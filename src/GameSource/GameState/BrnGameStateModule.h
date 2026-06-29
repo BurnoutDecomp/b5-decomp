@@ -18,6 +18,8 @@ namespace BrnGameState { class AchievementManagerPS3; }
 // For the DriveThruManager additive grow below (pointer-only).
 namespace BrnProgression { class Profile; }
 namespace InputBuffer    { class GameActionQueue; }
+// For the DeveloperChallengeManager additive grow below (pointer-only).
+namespace BrnResource    { struct VehicleList; }
 
 namespace BrnGameState
 {
@@ -41,6 +43,11 @@ public:
 
     // X360 @ 0x823116D0 (BrnGameStateModule.h:982). Out-of-line; defined in BrnGameStateModule.cpp.
     bool IsOnlineGameMode();
+
+    // ADDITIVE GROW (declare-only) for the BrnGameState::DeveloperChallengeManager TU. CheckCarID
+    // resolves the loaded vehicle list off the owning module (the X360 reads the VehicleList* at
+    // this+284392). Body + the real member land with the GameStateModule TU. Declare-only.
+    BrnResource::VehicleList* GetVehicleList();
 
     // ADDITIVE GROW (declare-only) for the BrnPaybackManager TU. X360 @ 0x823566F8. Hands back the
     // module's per-frame output GUI event queue (a CgsModule::VariableEventQueue<18432,16>) the
