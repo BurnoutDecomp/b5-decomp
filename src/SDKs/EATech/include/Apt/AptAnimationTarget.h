@@ -81,4 +81,16 @@ struct AptAnimationTarget
     void            SetOnPressObject(void* p)     { mpOnPressObject = p; }             // @0x82AD5F40
     void            SetOnRollOverObject(void* p)  { mpOnRollOverObject = p; }          // @0x82AD5F48
     void            SetQueuedInputsSize(int nSize){ mnQueuedInputsSize = (u32)nSize; } // @0x82AD4FC0
+
+    // ---- class-static data layer (shared tables; bodies in AptAnimationTarget.cpp) ----
+    static void  SetupStaticData(int nMaxNewMovieClips);  // @0x82AE41F0
+    static void  CleanupStaticData();                     // @0x82AE42A8
+    static int   GetXMousePos();                          // @0x82AD5F98
+    static int   GetYMousePos();                          // @0x82AD5FA8
+    static int   GetMaxNewMovieClips();                   // @0x82AD5E90
+    static void* GetNewInsts();                           // @0x82AD5EA0
+    static int   GetNewInstSize();                        // @0x82AD5EB0
+    static int   DecNewInstSize();                        // @0x82AD5EC0 (post-increments)
+    static void* GetDelayedReleaseList();                 // @0x82AD5ED8
+    static int   GetDelayedReleaseListSize();             // @0x82AD5EE8
 };
