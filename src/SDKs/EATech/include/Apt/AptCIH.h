@@ -36,6 +36,7 @@
 
 struct AptCharacter;
 struct AptCharacterInst;
+struct AptCharacterAnimationInst;
 struct AptMatrix;
 struct AptCXForm;
 struct AptNativeHash;
@@ -74,6 +75,27 @@ struct AptCIH : public AptValueGC
     bool IsMask() const;                    // @0x82AD5BA0 (render item's mask flag)
     bool HasMask() const;                   // @0x82AD5BB8 (render item's has-mask flag)
 
+    // ---- native-hash (per-instance AS property table) ops -----------------
+    // ContainsNativeHashVirtual @0x82AD74B8 -- AptValue vtbl[3] override: does this
+    // node's character instance carry a per-instance property hash?
+    virtual bool ContainsNativeHashVirtual() const override;
+    // HasEventMember @0x82AD74E0 -- walk this value's __proto__ chain, returning the
+    // first link whose native-hash event-handler mask intersects nEventMask (the
+    // matched bits, non-zero == "has an event member"), else 0.
+    int HasEventMember(int nEventMask);
+    // ForceCleanNativeHash @0x82AF2338 -- force-destroy the char inst's per-instance
+    // property hash and null its slot (called by AptLinker::Update).
+    void ForceCleanNativeHash();
+
+    // GetAnimationInst @0x82B7B358 -- mpCharacterInst narrowed to the animation
+    // subtype (caller has already confirmed IsAnimationInst, type tag 9).
+    AptCharacterAnimationInst* GetAnimationInst() const;
+
+    // GetCosAngle @0x82AD7448 -- cosine of the rotation baked into an affine
+    // transform's first column (1.0 when there is no rotation). Static: the X360
+    // passes the AptMatrix in r3, not a CIH `this`.
+    static float GetCosAngle(const AptMatrix* pMatrix);
+
     // ---- character-type predicates (through the char inst's type tag) -----
     // Each tests mpCharacterInst's type tag (AptCharacterInst::GetTypeTag); IsNone
     // tests this value's own AptValue vtable index (AptCIHNone == 37). Bodies in
@@ -96,6 +118,10 @@ struct AptCIH : public AptValueGC
     void SetDisplayListPrevious(AptCIH* p) { mpDisplayListPrevious = p; }     // @0x7DF1C4
     void SetDisplayListNext(AptCIH* p)     { mpDisplayListNext = p; }         // @0x7DF1BC
     void SetDisplayListParent(AptCIH* p)   { mpDisplayListParent = p; }       // @0x7DF1CC
+
+    // GetFirstChild @0x82ADC938 -- the first placed child of a movie-clip/animation
+    // node (only sprite-base instances own a child display list); null otherwise.
+    AptCIH* GetFirstChild() const;
 
     // ClearCIH @0x82AC... (X360-attested behavioural follow-on; body in its own
     // TU) -- tear down this node's character instance / placed state. Declared so
