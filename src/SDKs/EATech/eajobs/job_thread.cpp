@@ -1,4 +1,5 @@
 #include "SDKs/EATech/eajobs/job_thread.h"
+#include "SDKs/EATech/eajobs/local_backend.h" // EA::Jobs::LocalBackend::LocalBackend (mpBackend dispatch target)
 #include "SDKs/EATech/eajobs/jobs.h" // EA::Jobs::GetAllocator (off_8327F280 Free)
 
 #include <windows.h> // CreateEventA, CloseHandle, WaitForSingleObject
