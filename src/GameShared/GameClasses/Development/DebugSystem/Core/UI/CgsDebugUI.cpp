@@ -4,6 +4,13 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsWindow.h"     // Window (mWindowList element - Add/Remove/IsAdded)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (Get2DRenderer guard)
 
+// Complete element types for the three DebugStaticPool<T>::Allocate instantiations below: the
+// pool template (DebugStaticPool, in CgsDebugCollections.h, transitively included via CgsDebugUI.h)
+// only reaches the elements by pointer, but the explicit instantiations need the full types.
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsMenuItemVariable.h"  // MenuItemVariable
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenuWindow.h"             // MenuWindow
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariable.h"          // VariableMetadata
+
 // CgsDev::DebugUI::DebugUI - the manager accessors every DebugComponent / manager reaches through
 // GetUI(). The X360 reads them as fixed sub-objects of the UI singleton (MenuManager@+228,
 // VariableManager@+272, FunctionManager@+332); here they are the named by-value members. The rest of
@@ -88,5 +95,27 @@ namespace CgsDev
                 lpcBuffer[liEnd] = lpcSource[liSource];
             lpcBuffer[liEnd] = '\0';
         }
+
+    }
+
+    // ---- DebugStaticPool<T>::Allocate instantiations -----------------------------------------
+    // The three pool-allocate entry points the debug-UI managers drive (X360 ARTIST):
+    //   * DebugStaticPool<MenuItemVariable>::Allocate @0x82827B10 - called by
+    //       VariableManager::RegisterVariable when it pools the rendered menu-item row.
+    //   * DebugStaticPool<MenuWindow>::Allocate       @0x82827700 - called by
+    //       MenuManager::CreateMenuWindow when it pools a new menu window.
+    //   * DebugStaticPool<VariableMetadata>::Allocate @0x82827D18 - called by
+    //       VariableManager::SetMetadata when it pools an attribute record.
+    // Each asm is the same shape: pop the last free slot (mFree, a LIFO DebugStaticArray at
+    // this+8: i16 miCount@+2, T** mppItems@+4), null-guard it, push it onto the active list
+    // (mActive.Add - the trailing `_::Add` call), and return it. That body is the single generic
+    // DebugStaticPool<T>::Allocate in CgsDebugCollections.h; these are the explicit instantiations
+    // for the three element types, NOT a redefinition of the generic. Explicit instantiation must
+    // live in the template's home namespace (CgsDev::Internal), not in DebugUI.
+    namespace Internal
+    {
+        template DebugUI::MenuItemVariable* DebugStaticPool<DebugUI::MenuItemVariable>::Allocate();
+        template DebugUI::MenuWindow*       DebugStaticPool<DebugUI::MenuWindow>::Allocate();
+        template DebugUI::VariableMetadata* DebugStaticPool<DebugUI::VariableMetadata>::Allocate();
     }
 }
