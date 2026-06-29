@@ -5,6 +5,7 @@
 
 #include "SDKs/EATech/include/Apt/AptTarget.h"
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"
+#include "SDKs/EATech/include/Apt/AptActionQueueC.h"   // mpActionQueue as a complete type
 
 namespace
 {
@@ -16,10 +17,11 @@ namespace
         AptDisplayList*   pRoot   = pAnim->GetRootDisplayList();   // &mDisplayList (+0x20)
         AptDisplayList*   pRoot2  = &pAnim->mDisplayList;          // same
         AptActionQueueC*  pQueue  = pAnim->mpActionQueue;          // +0x0C
+        u32               nQueue  = pQueue ? pQueue->mnCapacity : 0u;  // complete type
         AptIntervalTimer* pTimers = pAnim->mpIntervalTimers;       // +0x24
         u32               nTimers = pAnim->mnNumIntervalTimers;    // +0x04
         void*             pSlots  = pAnim->mpListenerSlots;        // +0x2C
 
-        (void)pRoot; (void)pRoot2; (void)pQueue; (void)pTimers; (void)nTimers; (void)pSlots;
+        (void)pRoot; (void)pRoot2; (void)pQueue; (void)nQueue; (void)pTimers; (void)nTimers; (void)pSlots;
     }
 }
