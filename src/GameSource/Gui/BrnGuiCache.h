@@ -124,7 +124,18 @@ namespace BrnGui
         // cache exposes at a far member (X360 lwzx r,this,0xAC74). The component reads it
         // once at attach time and stores it locally; its exact semantic is not recovered,
         // so it is exposed by name as an opaque u32. Body links from the GuiCache TU.
+        //
+        // REFINED (BrnGuiBurnoutSkillsManager TU): the burnout-skills manager
+        // (SetSkillsData, X360 @0x825118F0) reads this SAME far member @0xAC74 and tests it
+        // as a player count (`> 1`) to gate the "you beat someone's record" HUD flash -- i.e.
+        // it is the number of active players in the current race. Exposed below by an apt
+        // name for that consumer; both accessors hit the one @0xAC74 member.
         u32 GetFriendsListCachedField() const;   // X360 far member @0xAC74
+
+        // ADDITIVE GROW (BrnGuiBurnoutSkillsManager TU): the active-player count the
+        // burnout-skills manager gates its HUD-message emission on. Same far member as
+        // GetFriendsListCachedField (X360 lwzx r,this,0xAC74). Body links from the GuiCache TU.
+        s32 GetNumActivePlayers() const;         // X360 far member @0xAC74
 
         // ADDITIVE GROW (BrnGui::MapIconManager TU): the map-icon manager walks the cache's
         // drive-through / junkyard sat-nav icon list when building the on-map selection set

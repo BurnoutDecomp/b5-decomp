@@ -35,6 +35,8 @@
 #include "GameSource/BurnoutConstants.h"                // EActiveRaceCarIndex
 #include "SharedClasses/World/BrnWorldRegion.h"         // BrnWorld::ECounty / EDistrict
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"     // CgsGui::GuiEvent<N> (event payload base)
+#include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BurnoutSkillzData (by value)
 
 namespace BrnGui
 {
@@ -316,5 +318,62 @@ private:
 // validated indirectly via the reserved-span construction documented above. (The button
 // records land at +0x88 / +0xCC == 2*0x44 / 3*0x44, the count at +0x118, the guards at
 // +0x11C / +0x11D, matching GetButton1Param/GetButton2Param/GetMessageParam.)
+
+// ===================================================================================
+// BrnGui::GuiNewBurnoutSkillzEvent -- the per-frame "new burnout skillz scores" event
+// the scoring system publishes to the GUI. The burnout-skills HUD manager
+// (BrnGui::BurnoutSkillsManager::SetSkillsData, X360 @0x825118F0) consumes it: it walks
+// the carried per-skill score array, updates each skill's record-holder, fires the
+// "you beat" HUD flash and, for newly-beaten records above a per-skill threshold, emits a
+// GuiNewBurnoutHudMessageEvent.
+//
+// DWARF home BrnGuiEventTypeDefs.h:6330 (GuiEvent<526>); member order/types verbatim from
+// the DecFIGS DWARF and corroborated by the X360 SetSkillsData field offsets (member
+// access by NAME -- per project policy the GuiEvent<N> base contributes its own header to
+// the layout; the asm offsets only fix member ORDER, not byte placement):
+//   mNetworkPlayerID      (origin player id)             -- read by the HUD-message branch
+//   meActiveRaceCarIndex  (which active race-car scored)
+//   mSkillzData           (the 14-skill score array; SetSkillsData reads mafBurnoutSkilz[i])
+//   mbUpdateHUDMessage    (gate: only emit the HUD message when set; X360 lbz @event+0x40)
+struct GuiNewBurnoutSkillzEvent : public CgsGui::GuiEvent<526>
+{
+    // DWARF type is RoadRulesRecvData::NetworkPlayerID, a typedef of s32 (see
+    // BrnNetwork::RoadRulesRecvData). Modelled as s32 here to avoid dragging the network
+    // flyby header into this GUI payload home; value semantics are identical (the manager
+    // stores it / compares it to -1 only).
+    s32                                mNetworkPlayerID;    // BrnGuiEventTypeDefs.h:6333
+    EActiveRaceCarIndex                meActiveRaceCarIndex;// BrnGuiEventTypeDefs.h:6334
+    BrnGameState::BurnoutSkillzData    mSkillzData;         // BrnGuiEventTypeDefs.h:6335
+    bool                               mbUpdateHUDMessage;  // BrnGuiEventTypeDefs.h:6336
+};
+
+// ===================================================================================
+// BrnGui::GuiNewBurnoutHudMessageEvent -- the "show a burnout-skill HUD flash" event the
+// burnout-skills manager pushes onto the GUI out-event queue when a record changes hands.
+// DWARF home BrnGuiEventTypeDefs.h:6358 (GuiEvent<527>). The X360 SetSkillsData builds it
+// field by field on the stack and publishes it via OutputBuffer::AddGuiOutEvent<>:
+//   mRoadID         -- the road/road-rule id (left zero by SetSkillsData; head dword)
+//   meMessageType   -- which flash text (X_BEAT_YS / X_BEAT_YOUR / X_GOT / YOU_GOT)
+//   meSkill         -- the skill whose record changed
+//   meNewOwner      -- the active race-car that now holds the record
+//   mePreviousOwner -- the active race-car that previously held it (-1 if none)
+struct GuiNewBurnoutHudMessageEvent : public CgsGui::GuiEvent<527>
+{
+    // BrnGuiEventTypeDefs.h:6351 -- which of the four HUD flash strings to show.
+    enum EBurnoutSkillzMessageTypes
+    {
+        E_BURNOUT_SKILLZ_MESSAGE_TYPE_X_BEAT_YS   = 0,
+        E_BURNOUT_SKILLZ_MESSAGE_TYPE_X_BEAT_YOUR = 1,
+        E_BURNOUT_SKILLZ_MESSAGE_TYPE_X_GOT       = 2,
+        E_BURNOUT_SKILLZ_MESSAGE_TYPE_YOU_GOT     = 3,
+        E_BURNOUT_SKILLZ_MESSAGE_TYPE_COUNT       = 4,
+    };
+
+    CgsID                                          mRoadID;        // BrnGuiEventTypeDefs.h:6361
+    EBurnoutSkillzMessageTypes                     meMessageType;  // BrnGuiEventTypeDefs.h:6362
+    BrnGameState::BurnoutSkillzData::EBurnoutSkillType meSkill;    // BrnGuiEventTypeDefs.h:6363
+    EActiveRaceCarIndex                            meNewOwner;     // BrnGuiEventTypeDefs.h:6364
+    EActiveRaceCarIndex                            mePreviousOwner;// BrnGuiEventTypeDefs.h:6365
+};
 
 } // namespace BrnGui

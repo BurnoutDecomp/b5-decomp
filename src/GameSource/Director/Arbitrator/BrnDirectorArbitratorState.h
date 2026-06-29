@@ -119,6 +119,11 @@ namespace BrnDirector
         bool ShouldCycleCameraThisFrame() const { return mbCycleCameraThisFrame; }
         bool IsDebugDisplayActive() const       { return mbDebugDisplayActive; }
 
+        // Clear the two base camera flags. The derived states' virtual Construct() re-zero
+        // them at init time (X360 byte stores at +0x170 / +0x171); exposed protected so the
+        // derived Construct can reset them by name without poking the base privates by offset.
+        void ResetBaseCameraFlags() { mbDebugDisplayActive = false; mbCycleCameraThisFrame = false; }
+
         // Mutable camera access for the derived states' per-frame effect / transition pokes.
         Camera::Camera& GetNonConstCamera() { return mCamera; }
 

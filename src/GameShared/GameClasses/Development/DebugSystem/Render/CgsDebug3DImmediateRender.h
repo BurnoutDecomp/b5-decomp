@@ -46,8 +46,11 @@ namespace CgsDev
         void DrawLine(const rw::math::vpu::Vector3& lrFrom, const rw::math::vpu::Vector3& lrTo, const rw::RGBA& lrColour);
         void DrawArrow(const rw::math::vpu::Vector3& lrFrom, const rw::math::vpu::Vector3& lrTo, const rw::RGBA& lrColour);
 
-        // A coordinate-axis gizmo (the three basis vectors of the transform, drawn from its origin).
-        void DrawAxis(const rw::math::vpu::Matrix44Affine& lrTransform, const rw::RGBA& lrColour);
+        // A coordinate-axis gizmo (the three basis vectors of the transform, drawn from its
+        // origin). The colour defaults (each axis is conventionally drawn in its own R/G/B);
+        // callers that only have a transform - e.g. EffectsDebugComponent::RenderWorld (X360
+        // 0x82278DB8) - pass just the transform, matching the single-argument X360 call.
+        void DrawAxis(const rw::math::vpu::Matrix44Affine& lrTransform, const rw::RGBA& lrColour = rw::RGBA());
 
         // A SOLID (filled) oriented box given local-space min/max corners + a world transform.
         // The wireframe counterpart is DrawBox; the prop debug overlay draws a solid box then

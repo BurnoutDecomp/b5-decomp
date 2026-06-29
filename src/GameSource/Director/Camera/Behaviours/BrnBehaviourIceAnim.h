@@ -84,6 +84,15 @@ class DirectorResourceManager
 public:
     ICE::ICEAuthor&        GetICEAuthor() const;   // manager +560
     const BrnResource::ICEList& GetICEList() const;  // manager +544
+
+    // The intro shot-group for an event mode. @0x821F6AB8: a switch on the event mode that
+    // returns a pointer to one of the manager's embedded shot-group records (manager + a
+    // mode-specific offset); lbCarInFront selects between the two shot variants per mode.
+    // Returns the shot group as an opaque pointer (the Attrib::Gen::shotgroup the arbitrator
+    // race-intro state drives). DECLARATION-ONLY (body in the resource-manager TU). FLAG:
+    // modelled on this behaviour's minimal DirectorResourceManager slice (the in-scope model
+    // for the director-camera cone); the real home is BrnDirectorResourceManager.h.
+    const void* GetEventIntroShots(s32 liEventMode, bool lbCarInFront) const;
 };
 
 // FLAG: minimal slice of the per-frame timestep source the Update body samples. No
@@ -374,6 +383,29 @@ public:
 
     // True once the controller has finished playing or the behaviour has failed.
     bool HasFinishedOrFailed() const;
+
+    // The camera this behaviour produced this frame (mLastCamera). The arbitrator states
+    // copy it into their own mCamera while the behaviour is driving (the X360 reaches it
+    // via the manager pool slot the BehaviourHandle resolves to). Inline accessor.
+    const Camera& GetProducedCamera() const { return mLastCamera; }
+
+    // ---- intro/transition configuration the arbitrator race-intro state pokes ----------
+    // ArbStateRaceIntro::Prepare/Update set these behaviour-mode flags directly on the live
+    // behaviour after SetParameters (X360 byte stores at the offsets noted). Exposed as named
+    // setters so the arbitrator state never pokes the (private) flags by offset.
+    void SetUseCollisionPolicy(bool lbUse)            { mbUseCollisionPolicy = lbUse; }                   // +0xE28
+    void SetForceLooseHeadingSpace(bool lbForce)      { mbForceHeadingSpaceToBeLooseHeadingSpace = lbForce; } // +0xE2A
+
+    // The two per-take reset bytes the intro state seeds (maReset0DE4[0] / [2]; roles not
+    // recovered -- the intro state sets them to gate the take's first-frame behaviour).
+    void SetTakeResetByte0(u8 lu8Value)               { maReset0DE4[0] = lu8Value; }   // +0xDE4
+    void SetTakeResetByte2(u8 lu8Value)               { maReset0DE4[2] = lu8Value; }   // +0xDE6
+
+    // Clear the base-behaviour "first-frame" gate the intro state resets (X360 stb 0 at the
+    // base behaviour's +0x28 -- a field beyond this header's modelled base slice). DECLARATION-
+    // ONLY: the body lands with the Behaviour base TU that owns that offset; the per-TU cl /c
+    // gate does not link.
+    void ClearBaseFirstFrameGate();   // base +0x28 = 0
 
     // Seconds of take left to play (the un-played fraction times the take length).
     f32  GetTimeRemaining();

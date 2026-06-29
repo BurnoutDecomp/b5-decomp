@@ -48,6 +48,23 @@ enum EOnlineAwardID : s32
     E_ONLINE_AWARD_COUNT                       = 11,
 };
 
+// Which road-rule contest is currently active (DWARF BrnGameStateTypes.h:104). The GUI
+// burnout-skills manager reads it (BrnGui::BurnoutSkillsManager::SetRoadRuleMode, X360
+// @0x824F9F30) to switch its showing-type into the dedicated road-rule slot and lock the
+// displayed skill to the road-rule TIME (12) or CRASH (13) record. The X360 switch maps
+// NONE -> back to auto-rotate, OFFLINE/ONLINE_TIME -> skill 12, OFFLINE/ONLINE_CRASH ->
+// skill 13, which pins these values. This is the single owner (DWARF home); grow here, do
+// not fork.
+enum EActiveRoadRule : s32
+{
+    E_ACTIVE_ROAD_RULE_NONE          = 0,
+    E_ACTIVE_ROAD_RULE_OFFLINE_TIME  = 1,
+    E_ACTIVE_ROAD_RULE_ONLINE_TIME   = 2,
+    E_ACTIVE_ROAD_RULE_OFFLINE_CRASH = 3,
+    E_ACTIVE_ROAD_RULE_ONLINE_CRASH  = 4,
+    E_ACTIVE_ROAD_RULE_COUNT         = 5,
+};
+
 // Stunt classification id (DWARF BrnGameStateTypes.h:58). Identifies the kind of stunt the
 // stunt-mode scorer is rating/scoring. The first 15 values (E_STUNT_TYPE_SPIN .. _COUNT) are the
 // real per-stunt categories that index StuntModeScoring::mStuntTypeInfo[E_STUNT_TYPE_COUNT]; the
