@@ -68,6 +68,12 @@ protected:
     static bool      SetVariable(AptValue* pContext, const AptNativeString* const pName,
                                  AptValue* const pValue);
 
+    // FLAG: the apt native-method argument fetch -- a native sMethod_* reads its i-th
+    // ActionScript call argument off the apt interpreter operand stack via this helper
+    // (X360 AptExtObject::GetParam). Declared here (body its own TU) so the native
+    // methods of derived extensions (e.g. CgsGui::AptCommunicator) compile.
+    static AptValue* GetParam(int iIndex);
+
 private:
     AptNativeHash* mpNativeHash;   // native member hash table
     uint32_t       mnObjectSize;   // reserved object size

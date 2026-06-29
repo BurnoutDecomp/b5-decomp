@@ -3,26 +3,64 @@
 
 #include "types.hpp"
 
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"               // CgsGui::GuiEvent<N> (event-record bases)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<18432,16>
+#include "SDKs/EATech/include/Apt/AptExtObject.h"                 // AptExtObject (base), AptValue
+#include "SDKs/EATech/include/Apt/AptString/EAString.h"           // EAStringC (AptNativeString)
+
 // ============================================================================
 // GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h
 //
-// Minimal owning home for the APT-communicator value type CgsGui::KeyValue.
+// CgsGui::AptCommunicator - the ActionScript <-> game communication bridge the APT
+// (Scaleform-style) GUI exposes as a global apt extension object ("gAptCommunicator").
+// It is an AptExtObject whose native methods (sMethod_*) Flash calls to push events,
+// sound events and component data across, and whose Update*Component* helpers the
+// game calls to mirror component state back into the Flash movie.
 //
-// The full CgsAptCommunicator translation unit (CgsGui::AptCommunicator and its
-// many native-function methods) is not reconstructed here; this header only
-// supplies the small data type that the X360 ARTIST build attests through the
-// AptComponentList key-value pointer table (Get/SetKeyValue return/take a
-// KeyValue*). The type's shape is taken verbatim from the DecFIGS DWARF
-// (references/DecFIGS/dwarfdump/.../CgsAptCommunicator.h:95-98), which is the
-// declared home of CgsGui::KeyValue.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. SHAPE (members, names, the two helper
+// event records, the AptEventType enum, the static-data set) is taken from the
+// DecFIGS DWARF (references/DecFIGS/dwarfdump/.../CgsAptCommunicator.h, where the
+// class is declared `struct CgsGui::AptCommunicator : public AptExtObject`). The
+// X360 stores every data member at a fixed global address (file-static class data):
+//   mAptComponentList            @ dword_830395A0  (the AptComponentList instance)
+//   miNumUsedKeyValues           @ dword_8305A6D0
+//   muNumActivecomponents        @ dword_8305A6D4
+//   miMaxNumUsedKeyValues        @ dword_8305A6D8
+//   maKeyValuePool[256]          @ byte_830522A0   (stride sizeof(KeyValue)==132)
+//   mauReservedVariablesHashes[9]@ dword_8305A6A0..dword_8305A6C4
+//   mpAptInternalCommunicator    @ dword_8305A6CC
+//   mbCircleButtonAsSelect       @ byte_8305A6DC
+//   mOutAptTriggerEvents         @ unk_8305A960    (VariableEventQueue<18432,16>)
+// so the members are modelled as static; the index math the asm performs reproduces
+// exactly at each member's natural array index (no raw offsets used).
+//
+// KeyValue is defined HERE (its DWARF home) and the sibling CgsAptComponentList.h
+// includes this header back for it; AptComponentList is therefore only forward-
+// declared here (it is a static data member -- a declaration needs no complete type)
+// and the .cpp pulls in CgsAptComponentList.h for the full type. That one-directional
+// dependency breaks the otherwise-circular include.
+//
+// EA SDK identifiers (AptExtObject, AptValue, EAStringC, AptNativeFunction, ...) are
+// kept verbatim per CXX_NAMING_CONVENTIONS (external/middleware API exception).
 // ============================================================================
+
+// FLAG: un-homed type referenced only by pointer in this TU's data/decls. The apt
+// native-method descriptor; the six psMethod_* slots in the DWARF hold these by ptr.
+class AptNativeFunction;
 
 namespace CgsGui
 {
-    // CgsAptCommunicator.h:95 (DWARF) - one stored key/value pair. The APT GUI
-    // communicator keeps a pool of these and hands AptComponentList a KeyValue*
-    // for each (component, key-slot) cell. mHashedKey is the hash of the key
-    // string; macValue is the fixed-width value text.
+    // The per-component parallel-array store (full definition in CgsAptComponentList.h,
+    // which includes this header for KeyValue below). Forward-declared: AptCommunicator
+    // only holds a static instance of it, so the class definition needs no complete type.
+    class AptComponentList;
+
+    // ------------------------------------------------------------------------
+    // KeyValue (DWARF CgsAptCommunicator.h:95) - one stored key/value pair. The APT
+    // GUI communicator keeps a pool of these and hands AptComponentList a KeyValue*
+    // for each (component, key-slot) cell. mHashedKey is the hash of the key string;
+    // macValue is the fixed-width value text. Defined before any include that needs it.
+    // ------------------------------------------------------------------------
     struct KeyValue
     {
         // CgsAptCommunicator.h:96 (DWARF) - value text capacity.
@@ -30,6 +68,155 @@ namespace CgsGui
 
         u32  mHashedKey;                    // CgsAptCommunicator.h:97 (DWARF)
         char macValue[KI_MAX_VALUE_LENGTH]; // CgsAptCommunicator.h:98 (DWARF)
+    };
+
+    // ------------------------------------------------------------------------
+    // GuiEventAptTrigger - the 20-byte event record SendAptEvent pushes onto the
+    // out queue (DWARF CgsAptCommunicator.h:49, `: public GuiEvent<21>`).
+    //
+    // FLAG: in the X360 build the record actually queued is the 5-field, 20-byte
+    // PAYLOAD only (AddEvent is called with liSize==20 and a pointer to a bare 5-word
+    // struct of exactly these fields). The DWARF `: public GuiEvent<21>` base carries
+    // no extra stored words in front of the payload in this build, so the queued
+    // struct == these five members. Modelled as a GuiEvent<21> (so GetEventType()==21
+    // and it lives in the CgsGui event vocabulary); the constructor fills only the
+    // five payload fields, matching the X360 by-value store.
+    // ------------------------------------------------------------------------
+    struct GuiEventAptTrigger : public GuiEvent<21>
+    {
+        // CgsAptCommunicator.h:54 (DWARF) - the apt event kind SendAptEvent forwards.
+        enum AptEventType
+        {
+            E_APT_EVENT_START               = 0,
+            E_APT_EVENT_ONLOAD              = 1,
+            E_APT_EVENT_POSTFX              = 2,
+            E_APT_EVENT_FRAME_TRIGGER       = 3,
+            E_APT_EVENT_TRANSITION_COMPLETE = 4,
+            E_APT_EVENT_NUM                 = 5
+        };
+
+        AptEventType meEventType;         // CgsAptCommunicator.h:66 (DWARF)
+        s32          miUniqueId;          // CgsAptCommunicator.h:67 (DWARF)
+        const char*  mpacComponentName;   // CgsAptCommunicator.h:68 (DWARF)
+        u32          muComponentNameHash; // CgsAptCommunicator.h:69 (DWARF)
+        AptValue*    mpComponentRef;      // CgsAptCommunicator.h:70 (DWARF)
+    };
+
+    // ------------------------------------------------------------------------
+    // GuiEventSoundTrigger - the 100-byte record SendAptSoundEvent pushes (DWARF
+    // CgsAptCommunicator.h:83, `: public GuiEvent<22>`). The X360 queues exactly the
+    // 100-byte payload (AddEvent liSize==100): three 32-byte fixed strings + a layer.
+    // Same GuiEvent<22> base note as GuiEventAptTrigger above (FLAG).
+    // ------------------------------------------------------------------------
+    struct GuiEventSoundTrigger : public GuiEvent<22>
+    {
+        // CgsAptCommunicator.h:85 (DWARF) - fixed-width string capacity.
+        static const s32 KI_EVENT_NAME_LENGTH = 32;
+
+        char macTypeName[KI_EVENT_NAME_LENGTH];   // CgsAptCommunicator.h:87 (DWARF)
+        char macActionName[KI_EVENT_NAME_LENGTH]; // CgsAptCommunicator.h:89 (DWARF)
+        char macLabel[KI_EVENT_NAME_LENGTH];      // CgsAptCommunicator.h:90 (DWARF)
+        s32  miLayer;                             // CgsAptCommunicator.h:91 (DWARF)
+    };
+
+    // ------------------------------------------------------------------------
+    // AptCommunicator - the apt extension bridge (DWARF CgsAptCommunicator.h:303).
+    // ------------------------------------------------------------------------
+    class AptCommunicator : public AptExtObject
+    {
+    public:
+        // CgsAptCommunicator.h:393 (DWARF) - the key/value pool capacity (== KU_MAX_COMPONENTS).
+        static const s32 KI_MAX_KEYVALUES = 256;
+        // CgsAptCommunicator.h:400 (DWARF) - count of registered native methods.
+        static const s32 KI_NUM_FUNCS = 6;
+        // The reserved-variable table length (the UpdateComponentReserved switch is 9-wide).
+        static const s32 KI_NUM_RESERVED_VARIABLES = 9;
+
+        // ---- the apt native methods (static; the apt VM calls them with the bound
+        // context + param count and they read their args via AptExtObject::GetParam).
+        // DWARF gives the native-ABI signature (AptValue* pContext, int iNumParams).
+
+        // X360 0x8285C360. Forward an apt event (start/onload/postfx/frame/transition)
+        // to the out queue; for E_APT_EVENT_ONLOAD also register the new component.
+        static AptValue* sMethod_SendAptEvent(AptValue* pContext, int iNumParams);
+
+        // X360 0x8285C9B8. Forward a sound trigger (type/action/label/layer) to the queue.
+        static AptValue* sMethod_SendAptSoundEvent(AptValue* pContext, int iNumParams);
+
+        // X360 0x82849870. Bind the apt-side communicator object (an apt Object value).
+        static AptValue* sMethod_SetCommunicationObject(AptValue* pContext, int iNumParams);
+
+        // X360 0x82850618. Look a stored key/value up for a component movieclip.
+        static AptValue* sMethod_GetComponentData(AptValue* pContext, int iNumParams);
+
+        // X360 0x82849950. Return the platform string ("xbox").
+        static AptValue* sMethod_GetPlatformString(AptValue* pContext, int iNumParams);
+
+        // X360 0x82849960. Return whether the circle button acts as "select".
+        static AptValue* sMethod_GetCircleButtonAsSelect(AptValue* pContext, int iNumParams);
+
+        // ---- AptExtObject overrides ----
+        // X360 0x82849860. The extension's display name ("CAptCommunicator").
+        virtual const char* GetName();
+
+        // ---- game-side mirroring helpers ----
+        // X360 0x82850958. Mirror one (key,value) onto the named component: find/update
+        // an existing KeyValue or allocate a new one from the pool.
+        void UpdateComponent(const char* lpacName, const char* lpacKey, const char* lpacValue);
+
+        // X360 0x82851408. Mirror one reserved (typed) variable onto the named component.
+        void UpdateComponentReserved(const char* lpacName, const char* lpacKey, const char* lpacValue);
+
+        // X360 0x828499D0. Flush all dirty components to Flash ("UpdateAll") then reset
+        // the per-frame dirty flags and the key/value pool.
+        void UpdateAllComponents();
+
+    private:
+        // X360 0x82849F48. Hash lpacName and return its registered component index, or -1.
+        // Static: it only touches the file-static class data (no `this`), and the static
+        // sMethod_* / instance Update* helpers both call it.
+        static s32 FindAptComponent(const char* lpacName);
+
+        // FLAG: un-homed siblings (their own TUs) declared by name so this TU compiles:
+        //   FindAptComponent(AptValue*) -- X360 sub_8284A0B8 (DWARF cpp:808): the
+        //     movieclip-ref overload (resolve a component index from an apt object).
+        //   AddNewAptComponent          -- DWARF cpp:721: register a new component for
+        //     an ONLOAD event (sMethod_SendAptEvent calls it).
+        // Static for the same reason -- the static native methods invoke them.
+        static s32  FindAptComponent(AptValue* lpMovieClip);
+        static void AddNewAptComponent(AptValue* lpMovieClip, const char* lpacName);
+
+        // ===== static data (file-static class members; fixed X360 globals) =====
+
+        // @ dword_830395A0 - the per-component parallel-array store.
+        static AptComponentList mAptComponentList;
+
+        // @ dword_8305A6D0 - count of KeyValue records currently taken from the pool.
+        static s32 miNumUsedKeyValues;
+        // @ dword_8305A6D4 - count of registered/active components (the loop bound).
+        static u32 muNumActivecomponents;
+        // @ dword_8305A6D8 - high-water mark of miNumUsedKeyValues.
+        static s32 miMaxNumUsedKeyValues;
+
+        // @ byte_830522A0 - the KeyValue backing pool UpdateComponent hands out.
+        static KeyValue maKeyValuePool[KI_MAX_KEYVALUES];
+
+        // @ dword_8305A6CC - the apt-side communicator object SetCommunicationObject binds.
+        static AptValue* mpAptInternalCommunicator;
+
+        // @ byte_8305A6DC - "circle == select" controller flag.
+        static bool mbCircleButtonAsSelect;
+
+        // @ unk_8305A960 - the GUI-trigger out queue SendApt(Sound)Event push to.
+        static CgsModule::VariableEventQueue<18432, 16> mOutAptTriggerEvents;
+
+        // @ mpacReservedVariableNames / @ dword_8305A6A0 - the reserved-variable name
+        // table and its precomputed hashes. FLAG: the name strings are installed by the
+        // sibling AptCommunicator::CalculateReservedVariableHashes (cpp:929, a separate
+        // un-homed TU), which also fills mauReservedVariablesHashes; only the table
+        // shape (9 entries) is recovered here, not the literal names.
+        static const char* mpacReservedVariableNames[KI_NUM_RESERVED_VARIABLES];
+        static u32         mauReservedVariablesHashes[KI_NUM_RESERVED_VARIABLES];
     };
 }
 
