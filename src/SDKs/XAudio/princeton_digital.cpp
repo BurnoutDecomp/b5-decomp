@@ -81,48 +81,120 @@ s32 nearest_prime(u32 value)
 }
 
 // ---------------------------------------------------------------------------
-// vardelay_t<T,N>::preprocess -- modulated delay line with an old->new tap
-// crossfade (mMix ramps by 0.0002/sample).
-// *** APPROXIMATE -- NOT store-for-store; the vardelay TUs are BLOCKED. ***
-// The X360 build (@0x82960B08 / 0x8295FA78) is a 4-wide-unrolled DUAL code path
-// selected on round(mMix*10000)>>1 >= 0x100, ramps the mix BOTH up (+0.0002) and
-// down (-0.0002), and runs a tap-rotation state machine at the end of the slow
-// path (mTapTarget@+16 -> mTapNew@+8, mTapNew@+8 -> mTapNew2@+12, mMix reset to
-// 0/1). This body reconstructs only the single-tap up-crossfade and is therefore
-// behaviour-divergent; a faithful reconstruction needs that full 4-wide VMX
-// dual-path + tap-rotation machine. Both vardelay instances are work-blocked
-// pending that. Kept compilable so the family header gates.
+// vardelay_t<T,N>::preprocess -- modulated delay line that linearly crossfades
+// between two tap lengths, ramping the mix by 0.0002/sample.
+//
+// Store-for-store reconstruction of the X360 dual code path @0x82960B08
+// (<float,256>) / @0x8295FA78 (<float,16384>). The block is 256 samples. Each
+// output sample blends two ring taps:
+//   out = maBuffer[(w - mTapNew2)&(N-1)] * mixDown
+//       + maBuffer[(w - mTapNew )&(N-1)] * mixUp
+// where, per sample, mixDown ramps -0.0002 (from mMix) and mixUp ramps +0.0002
+// (from 1 - mMix); w is the ring write index, advancing as the incoming sample
+// is stored at maBuffer[w] (raw, unmasked pointer -- exactly as the asm). The
+// final write index advances by one full block (& 0x00FFFFFF) and mState carries
+// out[256] to the next block.
+//
+// The selector v5 = trunc(mMix*10000) >> 1 (~mMix*5000) is the number of samples
+// left in the CURRENT crossfade:
+//   * v5 >= 256 (FAST path): the whole block stays inside one crossfade -- no tap
+//     rotation; mMix is left mid-ramp.
+//   * v5 <  256 (SLOW path): the current crossfade completes at sample v5, then a
+//     tap rotation runs (mTapNew2 <- mTapNew, mTapNew <- mTapTarget; mMix reset to
+//     0.0 if the target equals the old new-tap, else 1.0) and a second crossfade
+//     runs over the remaining 256-v5 samples with the rotated taps.
+// The X360 build unrolls each phase 4-wide; the unrolling is a pure perf
+// transform, so the per-sample kernel below is the store-for-store equivalent.
 // ---------------------------------------------------------------------------
+namespace
+{
+// One crossfade phase: blend the two taps for `count` samples, writing the
+// incoming samples into the ring at the (raw, unmasked) write pointer. Advances
+// `writeIndex`, `in`, `out`, and the running mix coefficients in place so the
+// caller can chain phases. Mirrors the slow-path remainder kernels at
+// loc_82960CDC / loc_82960EEC (and the fast path at loc_82960FA4), with the
+// 4-wide head loops folded back into the scalar form they unroll.
+template <typename T, int N>
+void vardelay_crossfade(T *buffer, s32 &writeIndex, s32 tapNew, s32 tapNew2,
+                        const T *&in, T *&out, T &mixDown, T &mixUp, int count)
+{
+    const T kRamp = static_cast<T>(0.00019999999);
+
+    const s32 readNew = writeIndex - tapNew;    // old-tap read base (v43/v90 = w - mTapNew)
+    const s32 readNew2 = writeIndex - tapNew2;  // new-tap read base (= w - mTapNew2)
+    T *bufW = &buffer[writeIndex];               // raw write pointer (unmasked, as asm)
+
+    for (int i = 0; i < count; ++i)
+    {
+        const T sampleA = static_cast<T>(buffer[(readNew + i) & (N - 1)] * mixUp);
+        const T sampleB = buffer[(readNew2 + i) & (N - 1)];
+        *bufW++ = *in++;                                         // store incoming sample
+        *out++ = static_cast<T>(sampleB * mixDown) + sampleA;   // blended output
+        mixUp = static_cast<T>(mixUp + kRamp);                  // up-ramp  (+0.0002)
+        mixDown = static_cast<T>(mixDown - kRamp);              // down-ramp (-0.0002)
+    }
+    writeIndex += count;
+}
+} // namespace
+
 template <typename T, int N>
 T *vardelay_t<T, N>::preprocess(T *in, T *out)
 {
     const int kBlock = 256;
-    const T kRamp = static_cast<T>(0.00019999999);
 
-    out[0] = mState;
-    T *o = out + 1;
+    out[0] = mState;                 // carry the previous block's tail (asm: *a3 = mState)
+    const T *src = in;               // a2
+    T *dst = out + 1;                // a3 + 1
 
-    s32 tapOld = mTapOld;
-    const s32 deltaNew = mTapNew - mTapOld;     // v101-style tap delta (new vs base)
-    const s32 deltaNew2 = mTapOld - mTapNew2;   // secondary tap delta
-    T mix = mMix;
+    s32 writeIndex = mTapOld;        // v4 -- ring write index, advances by kBlock total
+    // v5 = samples remaining in the current crossfade (~mMix * 5000).
+    const u32 remain = static_cast<u32>(static_cast<long long>(mMix * static_cast<T>(10000.0))) >> 1;
 
-    for (int i = 0; i < kBlock; ++i)
+    if (remain >= static_cast<u32>(kBlock))
     {
-        const T x = in[i];
-        const T sampleA = static_cast<T>(maBuffer[tapOld & (N - 1)] * (T(1) - mix));
-        const T sampleB = maBuffer[(deltaNew2 + tapOld) & (N - 1)];
-        maBuffer[(mTapOld + i) & (N - 1)] = x; // write incoming sample into the line
-        *o = static_cast<T>(sampleB * mix) + sampleA;
-        mix = static_cast<T>(mix + kRamp);
-        ++o;
-        ++tapOld;
+        // FAST path: the entire block lies within one crossfade -- no rotation.
+        T mixDown = mMix;                       // v104 (new tap), ramps -0.0002
+        T mixUp = static_cast<T>(T(1) - mMix);  // v102 (old tap), ramps +0.0002
+        vardelay_crossfade<T, N>(maBuffer, writeIndex, mTapNew, mTapNew2,
+                                 src, dst, mixDown, mixUp, kBlock);
+        mMix = mixDown;                          // leave the mix mid-ramp
     }
-    (void)deltaNew;
+    else
+    {
+        // SLOW path: finish the current crossfade, rotate taps, then start the next.
+        const int n1 = static_cast<int>(remain);   // samples left in the current fade
+        {
+            T mixDown = mMix;
+            T mixUp = static_cast<T>(T(1) - mMix);
+            vardelay_crossfade<T, N>(maBuffer, writeIndex, mTapNew, mTapNew2,
+                                     src, dst, mixDown, mixUp, n1);
+            mMix = mixDown;
+        }
 
-    mMix = mix;
-    mState = out[kBlock];
-    mTapOld = mTapNew;
+        // Tap rotation (loc_82960D2C): shift new->old, target->new, and seed the
+        // fresh mix. mMix = 0.0 when the target matches the outgoing new tap (no
+        // further fade pending), else 1.0 to begin a full old->new crossfade.
+        const s32 target = mTapTarget;          // v51 = *(this+16)
+        const s32 prevNew = mTapNew;            // v52 = *(this+8)
+        mMix = (target == prevNew) ? T(0) : T(1);
+        mTapNew2 = prevNew;                     // *(this+12) = old mTapNew
+        mTapNew = target;                       // *(this+8)  = mTapTarget
+
+        // Second crossfade over the remaining samples with the rotated taps.
+        const int n2 = kBlock - n1;
+        {
+            T mixDown = mMix;                            // v87
+            T mixUp = static_cast<T>(T(1) - mMix);       // v54
+            vardelay_crossfade<T, N>(maBuffer, writeIndex, mTapNew, mTapNew2,
+                                     src, dst, mixDown, mixUp, n2);
+            mMix = mixDown;
+        }
+    }
+
+    mState = out[kBlock];                              // *(this+20) = a3[256]
+    // Both paths advance writeIndex by exactly one full block; the asm stores the
+    // index masked to 24 bits (clrlwi r11, r10, 24).
+    mTapOld = static_cast<s32>(static_cast<u32>(writeIndex) & 0x00FFFFFFu);
     return in;
 }
 
