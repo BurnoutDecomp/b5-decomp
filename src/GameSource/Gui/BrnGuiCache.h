@@ -125,5 +125,24 @@ namespace BrnGui
         // once at attach time and stores it locally; its exact semantic is not recovered,
         // so it is exposed by name as an opaque u32. Body links from the GuiCache TU.
         u32 GetFriendsListCachedField() const;   // X360 far member @0xAC74
+
+        // ADDITIVE GROW (BrnGui::MapIconManager TU): the map-icon manager walks the cache's
+        // drive-through / junkyard sat-nav icon list when building the on-map selection set
+        // (X360 GetDriveThroughOrJunkyardAtIndex @0x824FAC10 reads the count member, then
+        // indexes each SatNavIconInfo entry). DWARF (BrnGuiCache.h:1482/1485) gives the
+        // accessor shapes: an indexed const SatNavIconInfo* and the entry count. The X360
+        // inlines both at the call site; exposing them by name keeps the manager TU off raw
+        // offsets. Bodies link from the GuiCache TU.
+        const GuiEventUpdateSatNav::SatNavIconInfo* GetDriveThrough(s32 liIndex) const;
+        s32 GetNumberOfDriveThroughs() const;
+
+        // ADDITIVE GROW (BrnGui::MapIconManager TU): UpdateSatNavIcons' network-rivals pass
+        // (X360 AddTeamToNetworkRivals @0x824F4FF8) looks up the player's online team for the
+        // active-race-car index (X360 indexes maeCurrentPlayerTeam[index], the far member at
+        // GuiCache+0xB808). DWARF (BrnGuiCache.h:954) gives the accessor. Returned as the raw
+        // GsmIO::EPlayerTeam value (s32) so this GUI boundary header does not pull the heavy
+        // GameState IO enum header (same convention as GetCurrentGameModeType). Body links
+        // from the GuiCache TU.
+        s32 GetCurrentOnlinePlayerTeam(EActiveRaceCarIndex leActiveRaceCarIndex) const;
     };
 }

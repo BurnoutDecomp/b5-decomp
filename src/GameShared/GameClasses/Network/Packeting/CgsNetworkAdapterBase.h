@@ -30,6 +30,8 @@
 
 namespace CgsNetwork
 {
+    struct NetworkAdapterPrepareParams;   // defined below; Prepare() takes it by pointer.
+
     // --- The "fake network conditions" buffered-message connection block -----------------
     // The DWARF types the address payload a NetworkPlayer sends through as
     // FakeNetworkConditions::BufferedMessageData::ConnectionData (passed BY VALUE into
@@ -45,16 +47,68 @@ namespace CgsNetwork
     };
 
     // --- The network adapter base (UDP/DirtySock send path) ------------------------------
-    // SHAPE/method from the DecFIGS DWARF (CgsNetworkAdapterBase.h:191), gated against the
-    // ARTIST binary. Minimal home: only SendTo (the NetworkPlayer pump's exit point) is
-    // declared; the rest of the adapter (receive path, error state, fake-conditions hooks)
-    // is reconstructed in the adapter's own TU. NetworkAdapter is the concrete adapter the
-    // player holds a pointer to.
+    // SHAPE/method from the DecFIGS DWARF (CgsNetworkAdapterBase.h:129-222), gated against the
+    // ARTIST binary. Polymorphic base: the X360/PS3 concrete adapter overrides Prepare /
+    // Update / Release / SetServerType, and CgsNetwork::NetworkManager dispatches through the
+    // vtable (the X360 adapter stores a vtable at +0x00, confirmed by the asm). The member
+    // layout below is the X360-attested offset map (the asm reads mpNetworkManager @+0x08,
+    // mpServerInterface @+0x0C, meServerType @+0x18, mbDuplicateLogin @+0x1C; concrete adapter
+    // members begin @+0x28). The fake-network-conditions / last-error region between
+    // mpServerInterface and meServerType is NOT individually attested by the X360 binary, so it
+    // is reserved as an explicit padding buffer rather than fabricating its field shape -- the
+    // FakeNetworkConditions debug block belongs to its own home. FLAGGED: mPad10 is an
+    // offset-preserving reserve, not a recovered field layout.
     struct NetworkAdapterBase
     {
+        // DWARF CgsNetworkAdapterBase.h:132 / :145 -- the adapter status + error enums.
+        enum ENetworkStatus
+        {
+            E_NET_STATUS_NONE  = 0,
+            E_NET_STATUS_BUSY  = 1,
+            E_NET_STATUS_READY = 2,
+            E_NET_STATUS_ERROR = 3,
+            E_NET_STATUS_COUNT = 4,
+        };
+
+        enum ENetworkError
+        {
+            E_NET_ERROR_NONE                   = 0,
+            E_NET_ERROR_FAILED_TO_UP_INTERFACE = 1,
+            E_NET_ERROR_COUNT                  = 2,
+        };
+
+        // Construct is a plain initialiser (not virtual on the base; the X360 ctor stores the
+        // vtable then calls this). Prepare / Update / Release are virtual (the concrete adapter
+        // overrides them). DWARF :153/:159/:168/:171/:174.
+        void                          Construct();
+        virtual ENetworkStatus        Prepare(NetworkAdapterPrepareParams* lpParams);
+        virtual void                  Update();
+        virtual bool                  Release();
+        void                          Destruct();
+
+        ENetworkError                 GetLastError();
+
         // Send liLength bytes of lpData to the peer described by lConnectionData. Returns
         // true on success (the pump flags the player paused on the first failure). DWARF :191.
         bool SendTo(void* lpData, s32 liLength, ConnectionData lConnectionData);
+
+        bool HadDuplicateLogin() const;
+
+        // --- layout (X360 asm offsets) ----------------------------------------------------
+        // +0x00 is the vtable pointer (implicit, from the virtuals above).
+        void* mpMessageSentCallbackFunction; // +0x04
+        void* mpNetworkManager;              // +0x08  (NetworkManager*; X360 Update reads its
+                                             //        active-user index @+0x60 -- a foreign
+                                             //        layout, read via the attested offset)
+        void* mpServerInterface;             // +0x0C  (ServerInterface*)
+        u8              mPad10[8];           // +0x10  FLAGGED reserve (FakeNetworkConditions
+                                             //        + meLastError region, not field-attested)
+        EServerType     meServerType;        // +0x18
+        bool            mbDuplicateLogin;    // +0x1C
+        u8              mPad1D[3];           // +0x1D  pad to word
+        void*           mpHeapMalloc;        // +0x20
+        u8*             mpRecvBuffer;        // +0x24
+        // ...concrete adapter members continue from +0x28.
     };
 
     struct NetworkAdapter : NetworkAdapterBase

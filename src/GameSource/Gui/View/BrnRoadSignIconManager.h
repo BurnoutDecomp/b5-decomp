@@ -17,6 +17,11 @@
 // master flag is updated once at the end.
 namespace BrnGui
 {
+    // The road-rule batch-data response GUI event payload (DWARF: the road-sign
+    // icon manager takes it by const pointer). Defined in another TU; forward-
+    // declared here so the declared-only SetRoadRuleBatchData below can name it.
+    struct GuiEventRoadRuleBatchDataResponse;
+
     // One on-map road-sign icon. Derives from the GUI component base because the
     // X360 build calls CgsGui::GuiComponent::AddOutputAptViewState on the element
     // pointer directly (call site @0x824F57F0, this = element base). The visible /
@@ -43,6 +48,14 @@ namespace BrnGui
 
         // @ 0x824F5778 : broadcast the visible flag across every road-sign icon.
         void SetSignsVisible(u8 lbVisible);
+
+        // ADDITIVE GROW (BrnGui::MapIconManager TU): MapIconManager::SetRoadRuleBatchData
+        // (@0x824B2F80) forwards the road-rule batch response straight into the embedded
+        // RoadSignIconManager (X360 call BrnGui__RoadSignIconManager__SetRoadRuleBatchData
+        // on this+0x7090). DWARF (BrnRoadSignIconManager.h:90) gives the signature. The
+        // body lives in the RoadSignIconManager TU (not yet reconstructed); declared-only
+        // here so the manager TU links against the real declaration.
+        void SetRoadRuleBatchData(const GuiEventRoadRuleBatchDataResponse* lpRoadRules);
 
     private:
         // @this+0x0 : inline pool of road-sign icon components (stride 0xC0). The

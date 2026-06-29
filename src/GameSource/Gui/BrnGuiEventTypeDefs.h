@@ -109,6 +109,18 @@ struct GuiEventUpdateSatNav
         // 0x28-modelled struct undersized it). This grow ONLY ADDS named fields at
         // X360-proven offsets and pins the total size to 0x30; the four committed
         // accessors and their proven 0x24..0x27 offsets are untouched.
+
+        // ADDITIVE GROW (BrnGui::MapIconManager TU): the MapIconManager icon loops read
+        // the icon-type byte @0x28, the hidden-drive-through flag @0x23 and write the
+        // player-team byte @0x27. The X360 inlines these as raw byte loads/stores; expose
+        // them by name so the manager TU accesses them through the type, not by offset.
+        // No field is reordered/retyped/removed - mbIsHiddenDriveThru is carved out of the
+        // (previously fully-reserved) head at its DWARF-documented @0x23 position.
+        s8   GetIconTypeByte() const   { return mi8IconType; }              // @0x28
+        s8   GetPlayerTeamByte() const { return mi8PlayerTeam; }            // @0x27
+        void SetPlayerTeamByte(s8 li8Team) { mi8PlayerTeam = li8Team; }     // @0x27
+        bool IsHiddenDriveThru() const { return mbIsHiddenDriveThru; }      // @0x23
+
     private:
         // ---- leading payload (PS3 DWARF :1699-1707) ----
         // The DWARF-documented head order is, at byte offsets: Vector3 mv3Position
@@ -120,7 +132,8 @@ struct GuiEventUpdateSatNav
         // mid block. This keeps the four verified trailing bytes at their proven
         // offsets. See LAYOUT NOTE at top of file.
         Vector4 mv4Position;          // @0x00 .. 0x0F  (X360-pinned; DoWorstCase lvx128)
-        u8      maHeadReserved[0x14]; // @0x10 .. 0x23  (named head tail, see comment above)
+        u8      maHeadReserved[0x13]; // @0x10 .. 0x22  (named head tail, see comment above)
+        bool    mbIsHiddenDriveThru;  // @0x23  (DWARF head tail; MapIconManager drive-thru skip)
 
         // ---- trailing bytes, X360-pinned (offsets proven by the four accessors) ----
         u8      mu8County;          // @0x24  (GetCounty / DoWorstCase write)
