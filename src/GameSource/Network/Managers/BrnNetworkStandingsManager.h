@@ -89,7 +89,8 @@ namespace BrnNetwork
 
     namespace BrnNetworkModuleIO
     {
-        struct OutputBuffer;   // GetReceivedPlayerFinishedRoundMessages param
+        struct OutputBuffer;       // GetReceivedPlayerFinishedRoundMessages param
+        struct PlayerResultsData;  // FillOutResultsData out param (homed in BrnNetworkModuleIO.h)
     }
 
     // The DWARF/source spell CgsSystem::Time unqualified as `Time` (the established BrnNetwork
@@ -139,6 +140,12 @@ namespace BrnNetwork
             E_STANDINGS_EVENT_COUNT                            = 3,
         };
 
+        // Default constructor (X360 @ 0x827E29D8): default-constructs the 8 StandingsData slots,
+        // each of which default-constructs its two embedded PlayerFinishedRoundMessage objects
+        // (vtable + zeroed mFinishTime) and the slot's own mFinishTime. Relies entirely on member
+        // construction -- the ASM is exactly the aggregate of those sub-object constructors.
+        StandingsManager();
+
         // ---- lifecycle / API (DWARF h:94-179) --------------------------------------
         void          Construct(BrnNetworkModule* lpNetworkModule, CgsNetwork::TimeManager* lpTimeManager);
         bool          Prepare();
@@ -162,6 +169,20 @@ namespace BrnNetwork
         StandingsData* GetStandingsDataEntry(NetworkPlayerID lPlayerID);
         void          ClearStandingsData();
         void          EnsureCountdownTimerStartedOnLocalPlayerDisconnect();
+
+        // ---- X360-only results-reporting helpers -----------------------------------
+        // These two are NOT in the PS3 DecFIGS DWARF (which omits them); they ARE attested in the
+        // X360 ARTIST binary (ArePlayersResultsValid @ 0x82545750, FillOutResultsData @ 0x82545790),
+        // both reached from BrnNetworkManager::OutputPlayerResultsInfo, and the .cpp asserts spell
+        // them with BrnNetworkStandingsManager.cpp file/line. Declared here to home their bodies.
+
+        // True if the named player's slot has a recorded result (StandingsData::mbResultsReceived).
+        bool          ArePlayersResultsValid(NetworkPlayerID lPlayerID);
+
+        // Populate lpResultsData from the named player's recorded StandingsData result (finish time,
+        // active-race-car index, eliminator car index, distance, eliminations, timed-out / won-round).
+        void          FillOutResultsData(BrnNetworkModuleIO::PlayerResultsData* lpResultsData,
+                                         NetworkPlayerID lPlayerID);
 
     private:
         // ---- internals (DWARF h:211-240) -------------------------------------------

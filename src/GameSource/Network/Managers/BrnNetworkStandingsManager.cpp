@@ -19,7 +19,8 @@
 #include "GameSource/Network/BrnNetworkModule.h"                                // BrnNetworkModule::GetNetworkManager / GetGameStateToNetworkInterface
 #include "GameSource/Network/BrnNetworkManager.h"                               // BrnNetworkManager::GetPlayerManager / GetCurrentRoundNumber
 #include "GameSource/Network/BrnNetworkPlayer.h"                                 // BrnNetworkPlayer::SetHasWonRound (the registry stores BrnNetworkPlayer-derived peers)
-#include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"  // GameStateToNetworkInterface::GetNetworkPlayerID
+#include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"  // GameStateToNetworkInterface::GetNetworkPlayerID / GetActiveRaceCarIndex
+#include "GameSource/Network/BrnNetworkModuleIO.h"                              // BrnNetworkModuleIO::PlayerResultsData (FillOutResultsData out param)
 #include "GameSource/GameState/BrnGameActions.h"                                // FinishedModeAction
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"            // PlayerManager::GetPlayerByID / GetNextPlayerID / GetNextLocalPlayerID
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"            // NetworkPlayer::RegisterMessageType / UnRegisterMessageType / GetRegisteredSendMessage
@@ -54,6 +55,18 @@ namespace BrnNetwork
     // (the only safe, non-fabricating choice). Re-ground KF_BAD_DISTANCE_SENTINEL against
     // flt_82F29918 when its rodata value is available.
     static const f32 KF_BAD_DISTANCE_SENTINEL = -1.0f;   // FLAGGED placeholder (flt_82F29918 unresolved)
+
+    // ---------------------------------------------------------------------------------
+    // StandingsManager  (X360 @ 0x827E29D8)  -- default constructor
+    //   The X360 ctor body is exactly the aggregate of the member sub-object constructors: for each
+    //   of the 8 StandingsData slots it writes the send/recv PlayerFinishedRoundMessage vtables and
+    //   zeroes each message's mFinishTime, then zeroes the slot's own mFinishTime (seconds + frac).
+    //   In human C++ that is precisely default member construction, so the body is empty -- the
+    //   StandingsData / PlayerFinishedRoundMessage / Time default constructors emit those stores.
+    // ---------------------------------------------------------------------------------
+    StandingsManager::StandingsManager()
+    {
+    }
 
     // ---------------------------------------------------------------------------------
     // ClearStandingsData  (X360 @ 0x82545278)
@@ -370,5 +383,73 @@ namespace BrnNetwork
                 }
             }
         }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // ArePlayersResultsValid  (X360 @ 0x82545750)
+    //   True if the named player's slot exists and has a recorded result. The X360 passes its own
+    //   (this, lPlayerID) straight through to GetStandingsDataEntry and returns the slot's
+    //   mbResultsReceived byte (+0x9E), or false when no slot matches.
+    // ---------------------------------------------------------------------------------
+    bool StandingsManager::ArePlayersResultsValid(NetworkPlayerID lPlayerID)
+    {
+        StandingsData* lpStandingsData = GetStandingsDataEntry(lPlayerID);
+        if (lpStandingsData != nullptr)
+        {
+            return lpStandingsData->mbResultsReceived;
+        }
+        return false;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // FillOutResultsData  (X360 @ 0x82545790)
+    //   Populate an external PlayerResultsData record from the named player's recorded StandingsData
+    //   result. First clears the record to its empty defaults, asserts the player's results are
+    //   valid, then copies finish time / distance / eliminations / timed-out across, maps the
+    //   player's network id and the eliminator's network id to active-race-car indices, and stamps
+    //   the record valid. The eliminator index stays -1 when there was no eliminator.
+    // ---------------------------------------------------------------------------------
+    void StandingsManager::FillOutResultsData(BrnNetworkModuleIO::PlayerResultsData* lpResultsData,
+                                              NetworkPlayerID lPlayerID)
+    {
+        CGS_ASSERT(lpResultsData != nullptr, "lpResultsData");
+
+        StandingsData* lpStandingsData = GetStandingsDataEntry(lPlayerID);
+        CGS_ASSERT(lpStandingsData != nullptr, "lpStandingsData");
+
+        // Clear the record to its empty defaults (matches the inlined PlayerResultsData::Clear:
+        // distance -1.0, both car indices -1, finish time 0, everything else zeroed/false).
+        lpResultsData->mfDistanceToFinish   = KF_INVALID_DISTANCE_FROM_FINISH;
+        lpResultsData->meActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(-1);
+        lpResultsData->meEliminatorIndex    = static_cast<EActiveRaceCarIndex>(-1);
+        lpResultsData->mbTimedOut           = false;
+        lpResultsData->mFinishTime.SetFloatVal(0.0f);
+        lpResultsData->miEliminations       = 0;
+        lpResultsData->mbValid              = false;
+        lpResultsData->mbEliminated         = false;
+
+        CGS_ASSERT(ArePlayersResultsValid(lPlayerID), "ArePlayersResultsValid( lPlayerID )");
+
+        lpResultsData->mbValid = true;
+        lpResultsData->meActiveRaceCarIndex =
+            mpNetworkModule->GetGameStateToNetworkInterface()->GetActiveRaceCarIndex(lPlayerID);
+
+        lpResultsData->mFinishTime        = lpStandingsData->mFinishTime;
+        lpResultsData->mfDistanceToFinish = lpStandingsData->mfDistanceFromFinish;
+        lpResultsData->miEliminations     = lpStandingsData->miEliminations;
+        lpResultsData->mbEliminated       = lpStandingsData->mbWonRound;
+
+        if (lpStandingsData->mEliminatorNetworkPlayerID == K_INVALID_PLAYER_ID)
+        {
+            lpResultsData->meEliminatorIndex = static_cast<EActiveRaceCarIndex>(-1);
+        }
+        else
+        {
+            lpResultsData->meEliminatorIndex =
+                mpNetworkModule->GetGameStateToNetworkInterface()->GetActiveRaceCarIndex(
+                    lpStandingsData->mEliminatorNetworkPlayerID);
+        }
+
+        lpResultsData->mbTimedOut = lpStandingsData->mbTimedOut;
     }
 } // namespace BrnNetwork
