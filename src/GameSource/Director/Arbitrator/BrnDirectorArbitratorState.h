@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_ARBITRATOR_BRN_DIRECTOR_ARBITRATOR_STATE_H
 
 #include "types.hpp"
+#include "GameSource/Director/Camera/Camera.h"   // BrnDirector::Camera::Camera (mCamera by value)
 
 // ----------------------------------------------------------------------------
 // BrnDirector::ArbitratorState -- the polymorphic base of every director arbitrator
@@ -25,11 +26,68 @@
 // ----------------------------------------------------------------------------
 namespace BrnDirector
 {
-    // ArbStateSharedInfo is the per-update shared context (camera container, ICE wrapper,
-    // game state, vehicle data, timesteps, ...). It is only ever passed by reference to
-    // Update/Release, so it is opaque here -- its real layout lives with the arbitrator
-    // update TUs.
-    struct ArbStateSharedInfo;
+    // ---- pointee types the shared-context holds by pointer (declaration-only) -------------
+    // ArbStateSharedInfo carries these by pointer only; forward declarations suffice (the
+    // states reach them by name and the real layouts live in their own TUs). Where this TU
+    // dereferences one (GameState, AllVehicleData, the state container, the behaviour
+    // manager), the consumer #includes the real header itself.
+    struct SharedCameraContainer;
+    class  DebugPrinter;
+    class  DebugLog;
+    class  ICEWrapper;
+    struct DirectorOutputInterface;
+    class  ArbitratorStateContainer;
+    namespace Camera { class BehaviourManager; }
+    struct NamedParameters;
+    class  MomentController;
+    struct GameState;
+    struct Random;
+    class  DirectorResourceManager;
+    struct EffectInterface;
+    struct PlayerCrashInfo;
+    class  AllVehicleData;
+    class  VehicleTracker;
+    struct ControllerInfo;
+    struct VehicleInfo;
+    class  Camera2DRotationController;
+    class  CameraSphericalRotationController;
+
+    // ArbStateSharedInfo -- the per-update shared context passed by reference to every
+    // arbitrator state's Prepare/Update/Release. Layout recovered VERBATIM from the DecFIGS
+    // DWARF (BrnDirectorArbitratorState.h:54), X360-attested: the ARTIST asm dereferences
+    // exactly these slots (mpStateContainer @+0x14, mpBehaviourManager @+0x18, mpGameState
+    // @+0x24, mpEffectInterface @+0x30, mpAllVehicleData @+0x38, mpPlayerTracker @+0x3C,
+    // mfTimestep @+0x5C, mfSimTimestep @+0x60 on the 4-byte-pointer console). The X360
+    // offsets quoted are the console layout; on the x64 host the pointers widen and the two
+    // trailing timesteps shift -- access is BY NAME (the x64-gate rule).
+    struct ArbStateSharedInfo
+    {
+        SharedCameraContainer*                  mpSharedCameraContainer;      // +0x00
+        DebugPrinter*                           mpDebugPrinter;               // +0x04
+        DebugLog*                               mpDebugLog;                   // +0x08
+        ICEWrapper*                             mpICEWrapper;                 // +0x0C
+        DirectorOutputInterface*                mpOutputInterface;            // +0x10
+        ArbitratorStateContainer*               mpStateContainer;             // +0x14
+        Camera::BehaviourManager*               mpBehaviourManager;           // +0x18
+        const NamedParameters*                  mpNamedParameters;            // +0x1C
+        MomentController*                       mpMomentController;           // +0x20
+        GameState*                              mpGameState;                  // +0x24
+        Random*                                 mpRandom;                     // +0x28
+        const DirectorResourceManager*          mpDirectorResourceManager;    // +0x2C
+        const EffectInterface*                  mpEffectInterface;            // +0x30
+        const PlayerCrashInfo*                  mpPlayerCrashInfo;            // +0x34
+        const AllVehicleData*                   mpAllVehicleData;             // +0x38
+        const VehicleTracker*                   mpPlayerTracker;              // +0x3C
+        const ControllerInfo*                   mpControllerInfo;             // +0x40
+        const VehicleInfo*                      mpRaceCars;                   // +0x44
+        const VehicleInfo*                      mpPlayerCar;                  // +0x48
+        const void*                             mpPlayerCarTransform;         // +0x4C  (Matrix44Affine*)
+        s32                                     mePlayerActiveRaceCarIndex;   // +0x50  (EActiveRaceCarIndex)
+        const Camera2DRotationController*       mpRotationController;         // +0x54
+        const CameraSphericalRotationController* mpSphericalRotationController; // +0x58
+        f32                                     mfTimestep;                   // +0x5C
+        f32                                     mfSimTimestep;                // +0x60
+    };
 
     class ArbitratorState
     {
@@ -51,15 +109,26 @@ namespace BrnDirector
         // UpdateAll clears this each frame after Update (X360 byte store at +0x171).
         void ClearCycleCameraThisFrame() { mbCycleCameraThisFrame = false; }
 
+        // The director camera this state drives. DWARF (BrnDirectorArbitratorState.h:135/157)
+        // pins mCamera as a protected by-value member with a public const GetCamera(); the
+        // non-const accessor is what the roaming state's effect-trigger calls need (the X360
+        // passes &mCamera == this+0x10 to EnsureEffectIsPlaying / StopCurrentEffect).
+        const Camera::Camera& GetCamera() const { return mCamera; }
+
     protected:
         bool ShouldCycleCameraThisFrame() const { return mbCycleCameraThisFrame; }
         bool IsDebugDisplayActive() const       { return mbDebugDisplayActive; }
 
+        // Mutable camera access for the derived states' per-frame effect / transition pokes.
+        Camera::Camera& GetNonConstCamera() { return mCamera; }
+
+        // mCamera is embedded by value at +0x10 (X360 Camera::Construct(this+0x10)); the
+        // states reach it by name (parity rule). The two trailing flag bytes follow it at the
+        // source build's +0x170/+0x171.
+        Camera::Camera mCamera;          // +0x10
     private:
-        // mCamera region (embedded by value in the source build); opaque here.
-        u8   mPadCamera[0x16C];   // +0x004 .. +0x170
-        bool mbDebugDisplayActive;   // +0x170
-        bool mbCycleCameraThisFrame; // +0x171
+        bool mbDebugDisplayActive;   // +0x170 (console)
+        bool mbCycleCameraThisFrame; // +0x171 (console)
     };
 }
 

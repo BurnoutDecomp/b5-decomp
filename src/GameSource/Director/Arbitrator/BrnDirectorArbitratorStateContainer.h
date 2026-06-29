@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"  // BrnDirector::ArbitratorState / ArbStateSharedInfo
+#include "GameSource/Director/Arbitrator/States/BrnArbStateRoaming.h"   // BrnDirector::ArbStateRoaming (real layout)
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                // BrnDirector::SharedPlaylists
 
 // ----------------------------------------------------------------------------
@@ -30,7 +31,9 @@ namespace BrnDirector
     // purely so the container can embed them by value and dispatch their virtuals --
     // GROW each into its real layout (additively) when its own TU lands. (Parity is by
     // name; the container does not touch any per-state member.)
-    class ArbStateRoaming         : public ArbitratorState {};
+    //
+    // ArbStateRoaming now has its real layout (BrnArbStateRoaming.h, #included above) -- de-
+    // forked from the placeholder so the roaming TU and the container share one definition.
     class ArbStateCrashing        : public ArbitratorState {};
     class ArbStateTakedown        : public ArbitratorState {};
     class ArbStateCrashMode       : public ArbitratorState {};
@@ -79,6 +82,13 @@ namespace BrnDirector
         // X360 0x821F5A60. Returns the active state, asserting it is non-null
         // ("mpCurrentState != NULL"). mpCurrentState is the source build's +0x35CC word.
         ArbitratorState* GetCurrentState() const;
+
+        // The state registered for a given EState index. The X360 reaches the embedded
+        // sub-states by their fixed interior offsets (e.g. container+0x1C60 == the crash-mode
+        // state) when a transition needs to query/hand-off a sibling; here that is the pointer
+        // table indexed by EState (seeded by ConstructAll). Declaration-only -- body forwards
+        // to mArrayOfStatePointers[leState].
+        ArbitratorState* GetState(EState leState) const;
 
     private:
         // Embedded BY VALUE, in the DWARF member order (which is the source build's

@@ -49,6 +49,11 @@ struct GameState
         E_EVENT_STATE_COUNTDOWN  = 2,
         E_EVENT_STATE_ACTIVE     = 3,
         E_EVENT_STATE_POST_EVENT = 4,
+
+        // Alias: the "race is live" state == ACTIVE. Kept so the VehicleTracker (which
+        // previously forked a minimal GameState naming this E_EVENT_STATE_RACING) reads through
+        // the real enum after its fork is removed.
+        E_EVENT_STATE_RACING     = E_EVENT_STATE_ACTIVE,
     };
 
     // BrnDirectorGameState.h:53
@@ -98,7 +103,18 @@ struct GameState
     //                                           miTotalVehiclesHit + 6 per-frame bools
     //   DirectorProfileData (+0x1E8, 12 bytes): meCameraMode (+ un-DWARF'd trailing members;
     //                                           Clear sets its +0x08 word to 1)
-    struct RankUpInfo          { u8 maOpaque[0x08]; };   // FLAG: opaque (DWARF field layout unreliable)
+    // RankUpInfo: the DWARF field layout (mbDoingRankUp/.../meRivalIndex) does not line up with
+    // the byte/word offsets the asm uses, so the body stays opaque. BUT the head word at +0x1CC
+    // is read by ProcessPossibleFX as a full 4-byte value (asm 0x82234BF4 lwz +0x1CC == 2, and
+    // 0x82234CC0 lwz +0x1CC passed to SqDistanceOfNearestOpposingTeamMember). Expose it as a
+    // faithful named 4-byte head (the rival-team / rank-up sub-state selector Clear stores as a
+    // word) so consumers do a real word read instead of a 1-byte cast. The remaining 4 bytes of
+    // the 8-byte blob stay opaque (the +0x1D0/+0x1D1 road-rage bools, read below).
+    struct RankUpInfo
+    {
+        s32 miRivalTeamSelector;   // +0x1CC (FLAG: asm-attested 4-byte head; DWARF name unreliable)
+        u8  maOpaque[0x04];        // +0x1D0..+0x1D3 (road-rage critical/totalled bools, opaque)
+    };
     struct ShowTimeInfo        { u8 maOpaque[0x14]; };   // FLAG: opaque (DWARF field layout unreliable)
     struct DirectorProfileData { u8 maOpaque[0x0C]; };   // FLAG: opaque (DWARF incomplete + unreliable)
 
@@ -203,6 +219,14 @@ struct GameState
 
     // BrnDirectorGameState.h:258 -- not owned by this TU; declare only.
     void ResetPerFrameData();
+
+    // ---- small accessors other director TUs reach by name (declare-only) -----------------
+    // The most-recent event state (the head of mEventState). The VehicleTracker gates its
+    // race-end ramp on this; previously each consumer forked a minimal GameState slice -- these
+    // give the real type the same named accessors so the fork can be removed.
+    EEventState GetCurrentEventState() const { return mEventState.GetCurrent(); }
+    // True while the pre-race countdown is running.
+    bool        IsInCountdown() const { return mEventState.GetCurrent() == E_EVENT_STATE_COUNTDOWN; }
 };
 
 } // namespace BrnDirector
