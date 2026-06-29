@@ -19,12 +19,12 @@
 //   +0x1C miStaticBufferSize int32_t
 //   +0x20 meId               ESerialiserId       (RegisterSerialiser reads this)
 //   +0x24 meContext          ESerialiserContext
-//   +0x28 macName[32]        char
-//   +0x48 mbIsKeyFrame       bool
-//   +0x4C mfTime             f32
-//   +0x50 mbDataReady        bool
-//   +0x51 mbDataRestored     bool
-//   +0x52 mbAllowStreaming   bool
+//   +0x28 macName[32]        char   (.. +0x48; +0x48..+0x50 reserved/padding)
+//   +0x50 mbIsKeyFrame       bool   (asm Read/Write select the key-frame path off lbz 0x50)
+//   +0x54 mfTime             f32
+//   +0x58 mbDataReady        bool
+//   +0x59 mbDataRestored     bool
+//   +0x5A mbAllowStreaming   bool
 //
 // NOTE on meId offset: wave 1's comment placed meId at +0x28 from the asm. With the
 // real named layout (8 leading fields == 0x20 bytes, meId at +0x20) the slot index
@@ -56,6 +56,15 @@ namespace BrnReplays
 
         // DWARF: BrnReplayBaseSerialiser.h:67
         static const s32 KI_MAX_NAME_LENGTH = 32;
+
+        // Construct @ (BaseSerialiser TU, external). Shared initialiser every concrete
+        // serialiser forwards to: (id, mode, bufferSize, staticBufferSize, name, flag).
+        // X360 attestation: each leaf serialiser calls it with 6 args after `this`
+        // (e.g. PropEntitySerialiser @0x8264C6C0 -> 6,0,0x4000,0x7480,"PropEntity",1;
+        // RaceCarEntitySerialiser -> 0,0,0x1B000,0x1B000,"RaceCarEntity",1). Declared
+        // here (home of BaseSerialiser); the body lives in the BaseSerialiser TU.
+        s32 Construct(s32 liId, s32 liMode, s32 liBufferSize, s32 liStaticBufferSize,
+                      const char* lpcName, s32 liFlag);
 
         // --- read/write/seek primitives owned by THIS TU ---
 

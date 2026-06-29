@@ -51,6 +51,7 @@ namespace BrnNetwork
     class RoadRulesUploadData;         // SetRoadRulesForLocalPlayer input (Parameters/BrnNetworkRoadRulesData.h)
     class OnlineGameResults;           // UploadFreeBurnLobbyStats input (other TU)
     struct RivalDataT;                 // UploadLiveRevengeData rows (other TU)
+    class EventScoreData;              // UploadEventScoreData input (Parameters/BrnNetworkEventScoreData.h)
 
     // DWARF (BrnNetworkInEventTypeDefs.h:90) aliases the upload payload as
     // NetworkInOfflineProgression::OfflineProgressionT == the server-generated OFFPROG
@@ -142,6 +143,11 @@ namespace BrnNetwork
             s32 liFreeburnChallengeSuccessCount);
         void UploadLiveRevengeData(const RivalDataT* lpRivalData, const s32* lpiRivalIDs,    // @ 0x82590A88
                                    s32 liNumberToUpload);
+        // E_ACTION_UPLOAD_EVENT_SCORE_DATA (8). Driven by EventScoresManagerDebugComponent::
+        // SetCalvalryBurningRouteBest @ 0x82591D00, which passes (this, &EventScoreData,
+        // callback, manager-as-userdata) in r3..r6. Bodied in another TU.
+        int UploadEventScoreData(EventScoreData* lpEventScoreData,
+                                 CustomCommandCallback lCallback, void* lpData);
 
         // Declared-only (bodied in other TUs; not part of this TU's function set):
         void UploadFreeBurnLobbyStats(const OnlineGameResults* lpResults,

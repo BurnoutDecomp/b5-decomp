@@ -13,10 +13,12 @@
 // by a future TU -- the trivial inline accessors needed by no caller in this group are left as
 // declarations so the home stays honest.
 //
-// SuspensionSpring (the SIMD sibling that the DWARF also homes here) is a DISTINCT type owned by
-// its own future TU and is intentionally NOT reconstructed here.
+// SuspensionSpring (the SIMD sibling that the DWARF also homes here) is a DISTINCT type. Its
+// state-setter API (Set*) is bodied in SuspensionSpring.cpp; the remaining declared-only methods
+// are owned by a future TU.
 
-#include "types.hpp"   // f32
+#include "types.hpp"          // f32
+#include "BrnCommonTypes.h"   // Vector4
 
 namespace BrnPhysics
 {
@@ -65,5 +67,70 @@ namespace BrnPhysics
         f32 mfDampeningConstant;   // :299  result[6] @ +0x18
         f32 mfMaxStretch;          // :300  result[7] @ +0x1C
         f32 mfMinStretch;          // :301  result[8] @ +0x20
+    };
+
+    // ------------------------------------------------------------------------------------------
+    // BrnPhysics::SuspensionSpring -- the SIMD (VMX) sibling of Spring1D. Where Spring1D keeps its
+    // state as a flat run of FPU scalars, SuspensionSpring packs its state into three 16-byte
+    // 4-lane vector registers (the console `VectorIntrinsicUnion::VectorIntrinsic`; on PC that is
+    // one rw::math::vpu::Vector4 each -- same layout/offset, lanes named by .x/.y/.z/.w). Member
+    // SEQUENCE + names are verbatim from the DecFIGS DWARF (Spring1D.h:147-149); the public/
+    // protected method set + signatures are the DWARF declarations (Spring1D.h:42-191).
+    //
+    // The eight Set* state-setters are bodied in SuspensionSpring.cpp. Each console body broadcasts
+    // the scalar across a VMX register and `vrlimi128`-inserts it into exactly one lane, guarded by
+    // a `vcmpeqfp128. v0,v127,v127` NaN check (x==x is false only for NaN) that fires an assert on
+    // an invalid (NaN) input. The lane each setter writes is pinned by the asm's store base offset
+    // + vrlimi mask and matches the packed lane name in the member identifier. The rest of the API
+    // (Construct/Destruct/Prepare/Reset/Integrate/ApplyForce + getters) is declared-only and owned
+    // by a future TU.
+    struct SuspensionSpring
+    {
+        void     Construct();
+        void     Destruct();
+        void     Prepare(VecFloat lvStiffness, VecFloat lvDamping, VecFloat lvMass);
+        void     Reset();
+        void     Integrate(VecFloat lvTimeStep);
+        void     ApplyForce(VecFloat lvForce);
+        VecFloat GetResultantForce() const;
+        VecFloat GetStiffness() const;
+        VecFloat GetDamping() const;
+        VecFloat GetMass() const;
+        VecFloat GetPosition() const;
+        VecFloat GetVelocity() const;
+
+        // @0x8259F318: base+0, vrlimi mask 8 -> lane 0 (.x) of the stiffness/damping/mass/position vec.
+        void SetStiffness(f32 lfStiffness);
+        // @0x8259F410: base+0, vrlimi mask 4 -> lane 1 (.y).
+        void SetDamping(f32 lfDamping);
+        // @0x8259F508: base+0, vrlimi mask 2 -> lane 2 (.z).
+        void SetMass(f32 lfMass);
+        // @0x8259F600: base+0, vrlimi mask 1 -> lane 3 (.w).
+        void SetPosition(f32 lfPosition);
+        // @0x825BF8C8: base+16, vrlimi mask 8 -> lane 0 (.x) of the velocity/accel/dampingF/springF vec.
+        void SetVelocity(f32 lfVelocity);
+
+        VecFloat GetAcceleration() const;
+
+    protected:
+        VecFloat GetDampingForce() const;
+        VecFloat GetSpringForce() const;
+        VecFloat GetExternalForce() const;
+
+        // @0x825BF9C0: base+16, vrlimi mask 4 -> lane 1 (.y).
+        void SetAcceleration(f32 lfAcceleration);
+        void SetDampingForce(f32 lfDampingForce);   // declared-only (no body in this TU)
+        // @0x825BFBB0: base+16, vrlimi mask 1 -> lane 3 (.w).
+        void SetSpringForce(f32 lfSpringForce);
+        // @0x825BFCA8: base+32, vrlimi mask 8 -> lane 0 (.x) of the external-force vec.
+        void SetExternalForce(f32 lfExternalForce);
+
+    protected:
+        // :147  +0x00  {x=stiffness, y=damping, z=mass, w=position}
+        Vector4 mvStiffness_Damping_Mass_Position;
+        // :148  +0x10  {x=velocity, y=acceleration, z=damping force, w=spring force}
+        Vector4 mvVelocity_Acceleration_DampingForce_SpringForce;
+        // :149  +0x20  {x=external force}
+        Vector4 mvExternalForce;
     };
 }
