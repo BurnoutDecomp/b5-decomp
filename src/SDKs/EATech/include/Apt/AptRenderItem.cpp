@@ -70,6 +70,117 @@ AptRenderItem::AptRenderItem(AptCharacter* pCharacter, int nCreatedOnTick)
     ++sItemsAllocated;
 }
 
+// Chase a manager link to its latest revision (the console's
+// `while (p->mpManagerNextRevision) p = p->mpManagerNextRevision`).
+static AptRenderItem* LatestRevision(AptRenderItem* p)
+{
+    if (p)
+        while (p->mpManagerNextRevision)
+            p = p->mpManagerNextRevision;
+    return p;
+}
+
+// ---------------------------------------------------------------------------
+// Clone copy-ctor @0x82AEB9A0 -- the shared base render-item copy helper every
+// subtype Clone delegates to. Deep-copies pSource into this fresh pool block:
+// the base visual state + lazily-allocated transforms always; with bCopyExtended
+// the mask, depth, manager links and the copied state-flag bits too (each
+// manager link chased to its latest revision and reference-counted).
+// ---------------------------------------------------------------------------
+AptRenderItem::AptRenderItem(const AptRenderItem* pSource, int nCreatedOnTick, bool bCopyExtended)
+{
+    mpCharacter           = pSource->mpCharacter;
+    mpPositionMatrix      = nullptr;
+    mpColorMatrix         = nullptr;
+    mpMaskPositionMatrix  = nullptr;
+    mDepth                = -1;
+    mClipDepth            = -1;
+    mpMask                = nullptr;
+    mCreatedOnTick        = nCreatedOnTick;
+    mRefCount             = 0;
+    mpManagerNextRevision = nullptr;
+    mpManagerNextSibling  = nullptr;
+    mpManagerFirstChild   = nullptr;
+
+    // isVisible (bit31) set; render-type bits (18..23) cleared for the subtype to
+    // stamp; bit27 carried over from the source.
+    mFlags = 0x80000000u | (pSource->mFlags & 0x08000000u);
+
+    // Deep-copy the lazily-allocated transforms.
+    if (pSource->mpPositionMatrix)
+    {
+        AptMatrix* p = static_cast<AptMatrix*>(gpNonGCPoolManager->Allocate(sizeof(AptMatrix)));
+        if (p)
+        {
+            p->a = 0.0f; p->b = 0.0f; p->c = 0.0f; p->d = 0.0f; p->tx = 0.0f; p->ty = 0.0f;
+            p->AptMatrixCopy(pSource->mpPositionMatrix);
+        }
+        mpPositionMatrix = p;
+    }
+    if (pSource->mpColorMatrix)
+    {
+        AptCXForm* p = static_cast<AptCXForm*>(gpNonGCPoolManager->Allocate(sizeof(AptCXForm)));
+        mpColorMatrix = p ? new (p) AptCXForm(pSource->mpColorMatrix) : nullptr;
+    }
+
+    // Extended copy: mask, depth, manager links + the source's state-flag bits.
+    if (bCopyExtended)
+    {
+        mDepth     = pSource->mDepth;
+        mClipDepth = pSource->mClipDepth;
+        mFlags = (mFlags & 0x7FFFFFFFu) | (pSource->mFlags & 0x80000000u);   // isVisible (bit31)
+        mFlags = (mFlags & 0xBFFFFFFFu) | (pSource->mFlags & 0x40000000u);   // isMask   (bit30)
+        mFlags = (mFlags & 0xDFFFFFFFu) | (pSource->mFlags & 0x20000000u);   // hasMask  (bit29)
+        SetMaskMatrix(pSource->mpMaskPositionMatrix);
+        mFlags = (mFlags & 0xEFFFFFFFu) | (pSource->mFlags & 0x10000000u);   // deletion mark (bit28)
+
+        mpMask                = LatestRevision(pSource->mpMask);
+        mpManagerNextRevision = nullptr;
+        mpManagerNextSibling  = LatestRevision(pSource->mpManagerNextSibling);
+        mpManagerFirstChild   = LatestRevision(pSource->mpManagerFirstChild);
+
+        if (mpManagerNextSibling) mpManagerNextSibling->AddReference();
+        if (mpManagerFirstChild)  mpManagerFirstChild->AddReference();
+        if (mpMask)               mpMask->AddReference();
+
+        if (pSource->mFlags & 0x04000000u)
+            mFlags |= 0x02000000u;                                          // writable-revision (bit25) from source bit26
+        mFlags = (mFlags & 0xFEFFFFFFu) | (pSource->mFlags & 0x01000000u);  // bit24
+    }
+
+    if (mpCharacter)
+        mpCharacter->AddCharacterReference();
+    ++sItemsAllocated;
+}
+
+// SetMaskMatrix @0x82AE52F8 -- lazily (de)allocate + copy the mask position matrix
+// (null clears + frees it).
+void AptRenderItem::SetMaskMatrix(const AptMatrix* pMatrix)
+{
+    if (mpMaskPositionMatrix)
+    {
+        if (pMatrix)
+        {
+            mpMaskPositionMatrix->AptMatrixCopy(pMatrix);
+        }
+        else
+        {
+            gpNonGCPoolManager->Deallocate(mpMaskPositionMatrix, sizeof(AptMatrix));
+            mpMaskPositionMatrix = nullptr;
+        }
+    }
+    else if (pMatrix)
+    {
+        AptMatrix* p = static_cast<AptMatrix*>(gpNonGCPoolManager->Allocate(sizeof(AptMatrix)));
+        if (p)
+        {
+            p->a = 0.0f; p->b = 0.0f; p->c = 0.0f; p->d = 0.0f; p->tx = 0.0f; p->ty = 0.0f;
+            p->AptMatrixCopy(pMatrix);
+        }
+        mpMaskPositionMatrix = p;
+    }
+}
+
 // dtor @0x80F860
 AptRenderItem::~AptRenderItem()
 {
