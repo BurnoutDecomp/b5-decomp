@@ -23,11 +23,14 @@
 // to the X360; widths follow x64 (LinearMalloc/streams are larger than the X360's 28/36 bytes),
 // so the PC compiler lays the class out - offsets are NOT byte-matched.
 //
-// DEFER STATUS: this lands the type + the fully-visible simple bodies (Construct/Clear/GetEntry).
-// The sizing + defrag-streaming bodies (GetOverheadMemoryRequired, InitPool's scratch-memory
-// carving, AddEntry, BeginDistribution/UpdateGather/UpdateScatter/Build*DistributionList) are
-// DEFERRED with the resource-defrag subsystem (they pair with the PoolModule defrag-state
-// machine), and are inert marked stubs - nothing drives them until a pool defragments.
+// DEFER STATUS: this lands the type + the fully-visible bodies (Construct/Clear/GetEntry +
+// GetOverheadMemoryRequired). GetOverheadMemoryRequired (0x828E2BB8) is reconstructed bar one
+// un-grounded term: its gather/scatter distribution-buffer contribution comes from sub_82BBCF10
+// (external/unknown, not a recovered TU), carried as a flagged-0 placeholder. The rest of the
+// defrag-streaming surface (InitPool's scratch-memory carving, AddEntry, BeginDistribution/
+// UpdateGather/UpdateScatter/Build*DistributionList) is DEFERRED with the resource-defrag
+// subsystem (they pair with the PoolModule defrag-state machine), and are inert marked stubs -
+// nothing drives them until a pool defragments.
 namespace CgsResource
 {
     class ScratchPool

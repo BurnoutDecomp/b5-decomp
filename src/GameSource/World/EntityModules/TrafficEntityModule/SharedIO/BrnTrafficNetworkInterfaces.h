@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"                  // EActiveRaceCarIndex
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"  // CgsModule::EventQueue<T,N>
+#include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"  // BrnTraffic::KU_MAX_HULLS_IN_PVS
 
 namespace BrnTraffic
 {
@@ -39,6 +40,43 @@ namespace BrnTrafficIO
     private:
         ActivateHullQueue mActivateHullQueue;   // :100 (offset 0)
         bool              mbDiverged;           // :103
+    };
+
+    // DWARF :117 -- the network-side OUTPUT interface that the local sim fills each frame so the
+    // network layer can publish the traffic snapshot to peers. Holds the 8-deep ActivateHull event
+    // queue (its `this` IS the embedded queue at offset 0, so ActivateHull forwards `this` straight
+    // to AddEvent), the per-active-race-car active-hull table (KU_MAX_HULLS_IN_PVS == 8, seeded to
+    // KU_INVALID_HULL in Construct), the cross-peer hash + the frame it was taken on, and the two
+    // "valid" tripwire flags plus the hull-sync divergence flag. Member layout & types from the
+    // DecFIGS DWARF, grounded against the X360 byte offsets (queue @0, table @0x6C, flags @0x7C/0x7D
+    // /0x7E, hash @0x80 as a halfword, hash-frame @0x84 as a word).
+    struct TrafficNetworkOutputInterface
+    {
+    public:
+        typedef TrafficNetworkInputInterface::ActivateHullQueue ActivateHullQueue;   // DWARF :48
+
+        void Construct();                                                            // :122
+        // Queue a hull-activation event for a local active race car (X360 0x8271D238).
+        void ActivateHull(EActiveRaceCarIndex leActiveRaceCarIndex,
+                          u32 luNewActiveHull, u32 luUpdateFrame);                    // :129
+        void SetDataHash(u32 luUpdateFrame, u16 luHash);                             // :135
+        void SetActiveHull(EActiveRaceCarIndex leActiveRaceCarIndex, u16 luHull);    // :141
+        void SetDetectedHullSyncDivergence(bool lbDivergence);                       // :146
+        const ActivateHullQueue& GetActivateHullQueue() const;                       // :151
+        bool HasHashBeenSet() const;                                                 // :155
+        u16  GetDataHash() const;                                                    // :159  (X360 0x82542438)
+        u32  GetUpdateFrameForHash() const;                                          // :163  (X360 0x82542490)
+        const u16* GetActiveHulls() const;                                           // :167  (X360 0x825424E8)
+        bool GetDetectedHullSyncDivergence() const;                                  // :171
+
+    private:
+        ActivateHullQueue mActivateHullQueue;                       // :175 (offset 0)
+        u16               mau16ActiveHulls[KU_MAX_HULLS_IN_PVS];    // :176 (offset 0x6C)
+        bool              mbHashValid;                              // :178 (offset 0x7C)
+        bool              mbActiveHullsValid;                       // :179 (offset 0x7D)
+        bool              mbHullSyncDivergence;                     // :180 (offset 0x7E)
+        u16               muHash;                                   // :181 (offset 0x80)
+        u32               muHashUpdateFrame;                        // :182 (offset 0x84)
     };
 }
 }

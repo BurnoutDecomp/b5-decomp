@@ -157,4 +157,16 @@ namespace CgsFileSystem
         friend class DebugComponentFileSystem;
     };
 
+    // ---- DWARF CgsFile.h (forward-declared `File`) ----
+    // The concrete file handle the FileSystem owns 16 of (maFiles). It is the BaseFile base plus
+    // the buffered-file state that lives in CgsFile.cpp (a follow-on TU); only the inherited
+    // BaseFile::GetStatus() is read by the committed code. Declared here as a BaseFile subclass so
+    // FileSystem can embed the array and call GetStatus() by name. The derived buffer members are
+    // a follow-on; FileSystem reaches everything BY NAME (no exact-byte embedding), so they land
+    // free.
+    class File : public BaseFile
+    {
+        // (derived buffered-file state is the CgsFile.cpp follow-on TU)
+    };
+
 } // namespace CgsFileSystem
