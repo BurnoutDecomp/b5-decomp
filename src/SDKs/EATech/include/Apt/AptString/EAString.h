@@ -139,6 +139,9 @@ public:
     int32_t Find(const char cChar, const int32_t iStart = 0) const;
     int32_t FindOneOf(const char* const pStrText) const;
     int32_t ReverseFind(const char cChar) const;
+    // LastIndexOf @0x82AD8BF8 -- index of the last occurrence of pStrText at or
+    // before iStart (the AS String.lastIndexOf backing search), or -1.
+    int32_t LastIndexOf(const char* const pStrText, const int32_t iStart = 0) const;
 
     int32_t Delete(const int32_t iIndex, const int32_t iCount = 1);
     int32_t Remove(const char cRemove);

@@ -47,6 +47,19 @@ public:
     static AptString* Create(const char* szValue);
     static AptString* Create() { return Create(""); }
 
+    // ---- ActionScript String native methods (sMethod_*) -- bodies in AptString.cpp.
+    // Static natives (AptExtFunctionPtr): the VM calls f(thisString[, argCount]);
+    // AS arguments come off the global native-arg stack. (slice/substring/split/cat
+    // are a follow-on -- they need the UTF8 substring-extract helper homed.)
+    static AptValue* sMethod_charAt(AptString* pThis);
+    static AptValue* sMethod_charCodeAt(AptString* pThis);
+    static AptValue* sMethod_concat(AptString* pThis, int nArgCount);
+    static AptValue* sMethod_fromCharCode(AptString* pThis, int nArgCount);
+    static AptValue* sMethod_indexOf(AptString* pThis, int nArgCount);
+    static AptValue* sMethod_lastIndexOf(AptString* pThis, int nArgCount);
+    static AptValue* sMethod_toLowerCase(AptString* pThis);
+    static AptValue* sMethod_toUpperCase(AptString* pThis);
+
 protected:
     virtual void DeleteThis()  { Destroy(); }
     virtual void ForceDelete() { Destroy(); }
