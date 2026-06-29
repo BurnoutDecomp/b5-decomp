@@ -47,7 +47,9 @@ namespace renderengine
     class BlendState
     {
     public:
-        void* GetParameters(const BlendMaterialState* pMaterial, BlendStateParameters* pParams);
+        // Unpack a packed BlendMaterialState into a BlendStateParameters struct.
+        // X360 pseudocode shows 2-arg call (no visible 'this') → static.
+        static void* GetParameters(const BlendMaterialState* pMaterial, BlendStateParameters* pParams);
         static void* GetResourceDescriptor(void* pOut);
         // X360 the descriptor build is sized from the resource only and ignores the params, but the
         // immediate-mode state-library builder (CgsGraphics::ImRendererBase::Construct*BlendState)

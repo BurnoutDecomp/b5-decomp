@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                 // Vector3 (CarState's camera position)
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"  // CgsModule::ModuleSingleBuffered (base)
 #include "GameSource/Effects/Particles/ParticleModule.h"   // BrnParticle::ParticleModule (accessor return)
 
 // ============================================================================
@@ -100,10 +101,15 @@ namespace BrnEffects
         bool mbEngineRunning;             // +0x4F
     };
 
-    class EffectsModule
+    class EffectsModule : public CgsModule::ModuleSingleBuffered
     {
     public:
         static const u32 KU_MAX_JUNKYARD_VFX = 10;   // DWARF EffectsModule.h:633
+
+        // X360 ARTIST @ 0x827E35E0. Constructs the module's base, the embedded
+        // ParticleModule at X360 byte +0xA80, 8 debris generators, debris-cluster
+        // slots, debrisparams, and surfacelist. See EffectsModule.cpp for the body.
+        EffectsModule();
 
         // The embedded particle module (DWARF EffectsModule.h:308).
         BrnParticle::ParticleModule& ParticleModule();
@@ -113,6 +119,13 @@ namespace BrnEffects
 
         // True while a junkyard VFX edit session is live; the debug editor resets when false.
         bool IsJunkyardVfxActive() const;
+
+    private:
+        // FLAG: fully opaque body. The X360 EffectsModule is ~185 KB; sub-objects are
+        // constructed by the ctor at X360 absolute byte offsets via placement new.
+        // When individual sub-type layouts land, fold them into named typed members.
+        // Conservative bound: 185400 bytes covers surfacelist at X360 +185288.
+        u8 mOpaqueBody[185400];
     };
 }
 

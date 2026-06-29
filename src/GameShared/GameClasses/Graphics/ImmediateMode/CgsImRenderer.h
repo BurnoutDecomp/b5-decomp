@@ -80,6 +80,10 @@ namespace CgsGraphics
         // the ones the X360 ARTIST attests for this TU are reconstructed; the rest stay declared.
         const BlendState*        ConstructNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator);
         const BlendState*        ConstructNoBlendNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator);
+        // X360 @ 0x827ED118. Build a parameterised blend state using 'this' as the ResourceAllocator.
+        // luMode = 5-bit source-blend enum (v8[0] bits 0..4); liBlendA / liBlendB feed the
+        // blend-op and destination-factor via the per-channel param word.
+        const BlendState*        ConstructBlendState(u8 luMode, int liBlendA, int liBlendB);
         const RasterizerState*   ConstructRasteriserState(
             rw::IResourceAllocator* lpAllocator, renderengine::RasterizerState::CullMode leCullMode);
         const DepthStencilState* ConstructDepthStencilState(
