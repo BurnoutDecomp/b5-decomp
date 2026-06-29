@@ -1,72 +1,64 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Development/Log/CgsLogCombined.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsDev::Log::LogCombined::AddStream @ 0x82817660
 //   CgsDev::Log::LogCombined::Append    @ 0x82817698
 //
-// LogCombined is a composite log sink: it holds up to four child Stream pointers
-// (array at this+8) and fans every Append() out to each non-null child, calling
-// the child's Append virtual (vtable slot 1, +4) with the text (or "<NULLSTRING>"
-// when passed null). AddStream stores into the first empty slot, silently
-// dropping once all four are taken. Being a Stream itself, a LogCombined can be
-// nested inside another.
+// LogCombined is a StrStreamBase composite sink: it holds up to KI_MAX_COMBINED_STREAMS child
+// stream pointers (array at this+8) and fans every Append() out to each non-null child, streaming
+// the text through the child's char* sink (or "<NULLSTRING>" when passed null). AddStream stores
+// into the first empty slot, silently dropping once all slots are taken. Being a StrStreamBase
+// itself, a LogCombined can be nested inside another.
 
 namespace CgsDev
 {
     namespace Log
     {
-        class Stream
+        // X360 0x82817660. Store lpStream in the first empty slot; drop once all slots are full.
+        void LogCombined::AddStream(StrStreamBase* lpStream)
         {
-        public:
-            virtual void Flush() = 0;                       // vtable slot 0 (+0)
-            virtual int  Append(const char* pcString) = 0;  // vtable slot 1 (+4)
-
-        protected:
-            u32 muReserved;   // [+4] Stream base bookkeeping (untouched here)
-        };
-
-        class LogCombined : public Stream
-        {
-            static const u32 KU_MAX_STREAMS = 4;
-
-            Stream* mapStreams[KU_MAX_STREAMS];   // [+8]
-
-        public:
-            void Flush() override {}
-            int  Append(const char* pcString) override;
-
-            LogCombined* AddStream(Stream* pStream);
-        };
-
-        LogCombined* LogCombined::AddStream(Stream* pStream)
-        {
-            u32 uCount = 0;
-            for (Stream** ppStream = mapStreams; *ppStream != nullptr; ++ppStream)
+            for (s32 li = 0; li < KI_MAX_COMBINED_STREAMS; ++li)
             {
-                if (++uCount >= KU_MAX_STREAMS)
-                    return this;   // all slots full - drop
-            }
-
-            mapStreams[uCount] = pStream;
-            return this;
-        }
-
-        int LogCombined::Append(const char* pcString)
-        {
-            int iResult = 0;
-
-            Stream** ppStream = mapStreams;
-            for (u32 i = 0; i < KU_MAX_STREAMS; ++i, ++ppStream)
-            {
-                Stream* pStream = *ppStream;
-                if (pStream)
+                if (mapStreams[li] == nullptr)
                 {
-                    const char* pcText = pcString ? pcString : "<NULLSTRING>";
-                    iResult = pStream->Append(pcText);
+                    mapStreams[li] = lpStream;
+                    return;
                 }
             }
+        }
 
-            return iResult;
+        // CgsLogCombined.cpp:74. Drop lpStream from whichever slot holds it.
+        void LogCombined::RemoveStream(StrStreamBase* lpStream)
+        {
+            for (s32 li = 0; li < KI_MAX_COMBINED_STREAMS; ++li)
+            {
+                if (mapStreams[li] == lpStream)
+                {
+                    mapStreams[li] = nullptr;
+                    return;
+                }
+            }
+        }
+
+        // CgsLogCombined.cpp:123. Clear every child slot.
+        void LogCombined::RemoveAllStreams()
+        {
+            for (s32 li = 0; li < KI_MAX_COMBINED_STREAMS; ++li)
+                mapStreams[li] = nullptr;
+        }
+
+        // X360 0x82817698. Fan the text out to every non-null child stream's char* sink (the X360
+        // calls the child's virtual char* sink; null text becomes "<NULLSTRING>").
+        void LogCombined::Append(const char* lpcText)
+        {
+            const char* lpcOut = lpcText ? lpcText : "<NULLSTRING>";
+            for (s32 li = 0; li < KI_MAX_COMBINED_STREAMS; ++li)
+            {
+                if (mapStreams[li] != nullptr)
+                {
+                    *mapStreams[li] << lpcOut;
+                }
+            }
         }
     }
 }

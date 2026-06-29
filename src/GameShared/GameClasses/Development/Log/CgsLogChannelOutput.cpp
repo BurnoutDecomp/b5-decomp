@@ -15,7 +15,9 @@ namespace CgsDev
 {
     namespace Log
     {
-        int LogChannelOutput::Append(const char* lpcText)
+        // X360 0x8229FB20. The StrStreamBase char* sink: write the text to the unified game log,
+        // channel-prefixed when miChannel != -1.
+        void LogChannelOutput::Append(const char* lpcText)
         {
             if (miChannel == -1)
             {
@@ -28,7 +30,6 @@ namespace CgsDev
                 WriteToLog(lacPrefix);
                 WriteToLog(lpcText);
             }
-            return 0;
         }
     }
 }

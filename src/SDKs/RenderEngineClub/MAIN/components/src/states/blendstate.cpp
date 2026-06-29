@@ -1,5 +1,7 @@
 #include "types.hpp"
 
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"  // shared decl surface
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   renderengine::BlendState::GetParameters         @ 0x82B60A50
 //   renderengine::BlendState::GetResourceDescriptor @ 0x82B636B8
@@ -22,45 +24,6 @@ namespace renderengine
     {
         const u32 KU_DEFAULT_BLEND_FACTOR = 65537;   // 0x00010001
     }
-
-    struct ResourceDescriptorEntry
-    {
-        u32 muSize;
-        u32 muAlignment;
-    };
-
-    struct BlendMaterialState
-    {
-        u32 maState[19];
-    };
-
-    struct BlendStateParameters
-    {
-        u32 maBlendFactor[4];
-        u32 muState15;
-        u32 muState4;
-        u32 muState5;
-        u32 muState6;
-        u32 muState7;
-        u32 muState8;
-        u32 muState17;
-        u32 muState9;
-        u8  mbHasCustomBlendFactors;
-        u8  mbState10;
-        u8  mbState11;
-        u8  mbState12;
-        u8  mbState13;
-        u8  mbState14;
-        u8  mbState16;
-    };
-
-    class BlendState
-    {
-    public:
-        void* GetParameters(const BlendMaterialState* pMaterial, BlendStateParameters* pParams);
-        void* GetResourceDescriptor(void* pOut);
-        void* Initialize(BlendMaterialState** ppMaterial, const BlendStateParameters* pParams);
-    };
 
     void* BlendState::GetParameters(const BlendMaterialState* pMaterial, BlendStateParameters* pParams)
     {

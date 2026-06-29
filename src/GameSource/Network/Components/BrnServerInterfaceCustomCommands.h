@@ -5,6 +5,7 @@
 #include "BrnCommonTypes.h"  // CgsID (u64)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceCustomCommands.h"
 #include "lobbyapi.h"        // DirtySDK LobbyApiRefT / LobbyApiMsgT (global namespace)
+#include "GameSource/Network/Shared Server Types/BrnNetworkSharedServerTypes.h" // ServerGeneratedTypes::OfflineProgressionT (real OFFPROG record)
 
 // ===========================================================================
 // BrnNetwork::ServerInterfaceCustomCommands
@@ -51,9 +52,13 @@ namespace BrnNetwork
     class OnlineGameResults;           // UploadFreeBurnLobbyStats input (other TU)
     struct RivalDataT;                 // UploadLiveRevengeData rows (other TU)
 
+    // DWARF (BrnNetworkInEventTypeDefs.h:90) aliases the upload payload as
+    // NetworkInOfflineProgression::OfflineProgressionT == the server-generated OFFPROG
+    // record. Model that alias here so UploadOfflineProgress's param type resolves to the
+    // single real BrnNetwork::ServerGeneratedTypes::OfflineProgressionT.
     namespace NetworkInOfflineProgression
     {
-        struct OfflineProgressionT;    // UploadOfflineProgress input (other TU)
+        typedef ServerGeneratedTypes::OfflineProgressionT OfflineProgressionT; // UploadOfflineProgress input
     }
 
     class ServerInterfaceCustomCommands : public CgsNetwork::ServerInterfaceCustomCommands
