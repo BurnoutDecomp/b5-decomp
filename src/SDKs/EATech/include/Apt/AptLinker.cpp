@@ -1,0 +1,606 @@
+#include "SDKs/EATech/include/Apt/AptLinker.h"
+
+#include <new>   // placement new for the pool-allocated AptCIH/AptCharacterInst
+
+#include "SDKs/EATech/include/Apt/AptFile.h"
+#include "SDKs/EATech/include/Apt/AptLoader.h"
+#include "SDKs/EATech/include/Apt/AptTarget.h"               // gpAptTarget, mpLoader, mpAnimationTarget, mpLinker
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"      // GetRootDisplayList
+#include "SDKs/EATech/include/Apt/AptDisplayList.h"          // removeObject, AsState
+#include "SDKs/EATech/include/Apt/AptDisplayListState.h"     // insert
+#include "SDKs/EATech/include/Apt/AptCIH.h"                  // AptCIH ctor/new, ReplaceZombieChild, ClearCIH, SetDirtyState, ForceCleanNativeHash
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"        // AptCharacterInst, GetRenderItemWritable
+#include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptValue.h"       // setIsDefined, setGCRoot
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // getVariable
+#include "SDKs/EATech/include/Apt/AptCharacterHelper.h"      // AptGetAnimationAtLevel
+#include "SDKs/EATech/include/Apt/AptSavedInputCheckpoints.h"// gpAptSavedInputCheckpoints, CanLinkPendingFiles, AllLinked
+#include "SDKs/EATech/include/Apt/AptString/EAString.h"
+
+// =====================================================================
+//  Un-homed callees/globals referenced below (declared by name + FLAG'd in the
+//  newTypes list). Bodies are separate TUs; declared here so this TU links.
+// =====================================================================
+
+// The shared Apt action interpreter instance (X360 &dword_8324E760). FLAG:
+// global owned by the Apt boot TU; declared extern.
+extern AptActionInterpreter gAptActionInterpreter;            // &dword_8324E760
+
+// FLAG (un-homed): @0x82AD85D8 Burnout name-classification predicate -- returns
+// true when the requested name must NOT be linked (a special/non-file name; the
+// AptFileSavedInputState name test the saved-input TU also names). Verbatim IDA
+// symbol; body its own TU.
+bool Burnout_X360_Artist_0040_0(int nLevel, EAStringC* pName);
+
+// FLAG (un-homed AptCIH behavioural surface): set the character instance on a CIH
+// (@0x82B00548) and tick it (@0x82B0BED8). Declared so Update/ConvertToZombie
+// compile; bodies in the AptCIH behavioural cluster.
+void AptCIH_SetCharacterInst(AptCIH* pCIH, AptCharacterInst* pInst, int bFlag);   // AptCIH::SetCharacterInst
+void AptCIH_tick(AptCIH* pCIH);                                                   // AptCIH::tick
+
+// FLAG (un-homed GC primitive): @0x82AE4DF0 ReplaceReferences(pOld, pNew, a, b)
+// -- retarget every live reference from pOld to pNew across the value graph.
+void ReplaceReferences(AptValue* pOld, AptValue* pNew, int a, int b);
+
+// FLAG (un-homed): @0x82B0C9B0 AptAnimationTarget::RunActions -- flush the queued
+// deferred ActionScript actions for the director.
+void AptAnimationTarget_RunActions(AptAnimationTarget* pAnim);
+
+// FLAG (un-homed AptRenderItem depth accessor): the X360 reads/writes the int16
+// at AptRenderItem+0x14 (the placed depth) and dispatches a vtbl slot (+0x14) to
+// copy visual state during a zombie swap. Modelled via named render-item depth
+// get/set; the vtbl-dispatched copy is the un-homed AptRenderItem clone path.
+int16_t AptRenderItem_GetDepth(const AptRenderItem* pItem);                        // *(item+0x14)
+void    AptRenderItem_SetDepth(AptRenderItem* pItem, int16_t nDepth);             // *(item+0x14)=
+void    AptRenderItem_CopyVisualFrom(AptRenderItem* pDst, const AptRenderItem* pSrc); // (*item->vtbl[+0x14])(dst, src)
+
+// FLAG (un-homed saved-input debug gate): dword_8324D7F0 -- nonzero when the
+// saved-input record/replay system is active (gates Update's checkpoint logic).
+extern int gbAptSavedInputActive;                              // dword_8324D7F0
+
+// FLAG (un-homed intrusive refcount on AptLinkerThingy, mirroring AptSharedPtrIncRef/
+// DecRef for AptFile -- the thingy carries its count at +0x00). Bodies their own TU.
+int  AptSharedPtrIncRefThingy(AptLinkerThingy* pThingy);
+int  AptSharedPtrDecRefThingy(AptLinkerThingy* pThingy);
+
+// FLAG (un-homed singly-linked thingy-list ops; the compiler-emitted SingleList<>):
+//   ListPushFront == AptSingleLis @0x82AF4F88 (alloc 8-byte node, AddRef thingy, link head)
+//   ListErase     == sub_82AF83A0 (find+unlink the node, release its thingy, free the node)
+void ListPushFront(AptSingleListNode** ppHead, AptLinkerThingy* pThingy);
+void ListErase(AptSingleListNode** ppHead, AptSingleListNode** ppNode);
+
+// FLAG (un-homed ctor/alloc helpers; bodies their own TUs):
+AptLinkerThingy*           MakeLinkerThingy(AptFilePtr& rFile, AptValue* pValue);   // ctor @0x82ADBF58
+AptFile*                   MakeAptFile(void* pMem, int nLevel);                     // AptFile::AptFile @0x82AE6268
+AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile);             // ctor @0x82AFFDE8
+void InstallEmptyCharacterInstVtbl(AptCharacterInst* pInst);                        // *inst = &off_82145FD0
+void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst);                   // dword_8324E530 lazy init
+void MarkRenderItemFlag(AptCharacterInst* pInst, int nFlag);                        // *(inst+20) |= flag
+void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH);                         // dword_8324E844/E830 hooks
+bool RestartPendingScanIfGrew(AptFilePtr* pEntry, AptFile* pFile);                  // pending-vector realloc guard
+
+
+// ---------------------------------------------------------------------
+// AptLinker::AptLinker -- inline body emitted inside AptTarget::AptTarget
+// @0x82B00160 (head=null; mPendingFiles is an empty SBO vector pointing at its
+// own inline buffer). Reproduced here as the standalone ctor.
+// ---------------------------------------------------------------------
+AptLinker::AptLinker()
+{
+    mpThingyListHead          = nullptr;       // v7[0] = 0
+    mPendingFiles.mnSize      = 0;             // v7[1] = 0
+    mPendingFiles.mnCapacity  = 0;             // v7[2] = 0
+    mPendingFiles.mpData      = mPendingFiles.mInlineStorage;   // v7[3] = v7 + 4 (-> +0x10)
+    mPendingFiles.mInlineStorage[0].pData = nullptr;            // v7[4] = 0
+    mPendingFiles.mInlineStorage[1].pData = nullptr;            // v7[5] = 0
+}
+
+// ---------------------------------------------------------------------
+// AptLinker::ScalarDeletingDestructor -- @0x82B00D50.
+//   Strin(this+1)            -> mPendingFiles (BasicString-as-vector) dtor
+//   while(*this) sub_82AF50B8(this)  -> pop_front the thingy list until empty
+//   if(flags&1) Deallocate(pool, this, 24)
+// ---------------------------------------------------------------------
+void* AptLinker::ScalarDeletingDestructor(char flags)
+{
+    // ~PendingFileVector: release every owned AptFilePtr + free any heap block.
+    // (The X360 `Strin(a1+1)` is the BasicString<...> dtor over this+4.)
+    mPendingFiles.~PendingFileVector();
+
+    // Drain the singly-linked thingy list: pop_front releases each node's counted
+    // thingy ref (and destroys the thingy at count 0).
+    while (mpThingyListHead != nullptr)
+    {
+        AptSingleListNode* pHead = mpThingyListHead;          // result = *a1
+        AptSingleListNode* pNext = pHead->mpNext;             // v3 = *(result+4)
+        // node dtor (AptSingleL): release node[0] -> at 0, AptLinkerThingy dtor;
+        // then free the 8-byte node.
+        AptLinkerThingy* pThingy = pHead->mpThingy;
+        if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+            pThingy->ScalarDeletingDestructor(1);
+        gpAptSharedPtrPool->Deallocate(pHead, sizeof(AptSingleListNode));
+        mpThingyListHead = pNext;                             // *a1 = v3
+    }
+
+    if (flags & 1)
+        gpAptSharedPtrPool->Deallocate(this, sizeof(AptLinker));   // Deallocate(pool,this,0x18)
+
+    return this;
+}
+
+// ---------------------------------------------------------------------
+// AptLinker::Notify -- @0x82B00938.
+//   Scan mPendingFiles for an entry whose pData == pFile->pData. If found, just
+//   drop the incoming ref (it is already pending). If not found, push_back it
+//   (sub_82B00498 == vector<AptFilePtr>::Insert at end), which takes the ref.
+//   Either way the caller's *pFile is consumed (zeroed + released).
+// ---------------------------------------------------------------------
+void AptLinker::Notify(AptFilePtr* pFile)
+{
+    for (AptFilePtr* pEntry = mPendingFiles.begin(); pEntry != mPendingFiles.end(); ++pEntry)
+    {
+        if (pEntry->pData == pFile->pData)        // *v4 == *a2
+        {
+            // Already pending: just release the incoming reference (consume *a2).
+            AptFile* pData = pFile->pData;        // result = *a2
+            pFile->pData   = nullptr;             // *a2 = 0
+            if (pData != nullptr && AptSharedPtrDecRef(pData) == 0)
+                AptSharedPtrDelete(pData);
+            return;
+        }
+    }
+
+    // Not pending: append (the vector takes ownership of the ref)...
+    mPendingFiles.PushBack(*pFile);               // sub_82B00498
+    // ...then release the caller's now-transferred reference (consume *a2).
+    {
+        AptFile* pData = pFile->pData;
+        pFile->pData   = nullptr;
+        if (pData != nullptr && AptSharedPtrDecRef(pData) == 0)
+            AptSharedPtrDelete(pData);
+    }
+}
+
+// ---------------------------------------------------------------------
+// AptLinker::CancelLoad -- @0x82AFAE18.
+//   Find the node keyed on pValue (node->mpThingy->mpValue == pValue) and
+//   pop it from the list. No-op if not found.
+// ---------------------------------------------------------------------
+void AptLinker::CancelLoad(AptValue* pValue)
+{
+    AptSingleListNode* pNode = mpThingyListHead;                       // i = *result
+    while (pNode != nullptr && pNode->mpThingy->mpValue != pValue)     // *(*i+8) != a2
+        pNode = pNode->mpNext;                                         // i = i[1]
+
+    if (pNode != nullptr)
+        ListErase(&mpThingyListHead, &pNode);   // sub_82AF83A0(result, &v3) -- unlink + release
+}
+
+// ---------------------------------------------------------------------
+// AptLinker::ConvertToZombie -- @0x82B00A18.
+//   When pValue is mid-transition (CIH flags 0x60000000 == 0x20000000): find its
+//   thingy, mark its file resolved, build a replacement AptCIH, splice it in for
+//   the old node (via the parent's ReplaceZombieChild, or directly into the root
+//   display list), fix up every reference, and drop the thingy. Otherwise set the
+//   transition bits and return pValue unchanged.
+// ---------------------------------------------------------------------
+AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
+{
+    AptCIH* pCIH = static_cast<AptCIH*>(pValue);
+    const uint32_t nFlags = pCIH->mFlagsA;                            // v4 = *(a2+12)
+
+    if ((nFlags & 0x60000000u) != 0x20000000u)                       // not transitioning
+    {
+        pCIH->mFlagsA = nFlags | 0x60000000u;                        // *(a2+12) = v4 | 0x60000000
+        return pCIH;                                                  // result = a2
+    }
+
+    // Find the node keyed on pValue.
+    AptSingleListNode* pNode = mpThingyListHead;
+    while (pNode != nullptr && pNode->mpThingy->mpValue != pValue)    // *(*i+8) != a2
+        pNode = pNode->mpNext;                                        // i = i[1]
+    AptLinkerThingy* pThingy = pNode->mpThingy;                       // _R27 = *i
+
+    // Pin the thingy across the work (it may be popped below).
+    if (pThingy != nullptr)
+        AptSharedPtrIncRefThingy(pThingy);
+
+    // Resolve the owned file: bump+drop its ref (a balanced touch the X360 emits)
+    // and read its state.
+    AptFile* pFile = pThingy->mpFile.pData;                          // _R30 = *(_R27+4)
+    if (pFile != nullptr)
+    {
+        AptSharedPtrIncRef(pFile);
+        if (AptSharedPtrDecRef(pFile) == 0)
+            AptSharedPtrDelete(pThingy->mpFile.pData);
+    }
+
+    // Mark the file "linked/zombified" (state 5) once, recording the prior state.
+    if (pFile->mnState != 5)                                         // *(_R30+8) != 5
+    {
+        ListErase(&mpThingyListHead, &pNode);                       // sub_82AF83A0(a1,&v31)
+        pFile->mnField12 = pFile->mnState;                          // *(_R30+12) = *(_R30+8)
+        pFile->mnState   = 5;                                       // *(_R30+8) = 5
+    }
+
+    // Build the replacement AptCIH (parent == pValue's parent CIH).
+    AptCIH* pParent = pCIH->mpDisplayListParent;                    // *(a2+28)  (== AptCIH[7])
+    AptCIH* pNew    = nullptr;
+    void* pMem = AptCIH::operator new(40);                          // AptCIH::operator new(0x28)
+    if (pMem != nullptr)
+        pNew = ::new (pMem) AptCIH(nullptr, pParent);                 // AptCIH::AptCIH(mem,0,parent)
+
+    if (pParent != nullptr)
+    {
+        // Swap the new node in for the zombie within the parent's child list.
+        pParent->ReplaceZombieChild(pNew, pCIH);                    // (parent, new, zombie)
+        pValue->Release();                                          // (**a2)(a2) -- vtbl[?] Release/destroy step
+        pValue->setIsDefined(true);                                 // AptValue::setIsDefined(a2,1)
+    }
+    else
+    {
+        // Top-level node: hand the visual state across + reseat in the root list.
+        AptRenderItem* pNewItem = pNew->mpCharacterInst->GetRenderItemWritable();   // *(v20+32)
+        AptRenderItem_CopyVisualFrom(pNewItem, pCIH->mpCharacterInst->mpRenderItem);// (*item->vtbl[+0x14])(item, *(v22+4))
+        const int16_t nDepth = AptRenderItem_GetDepth(pCIH->mpCharacterInst->mpRenderItem); // *(*(*(a2+32)+4)+20)
+        AptRenderItem_SetDepth(pNew->mpCharacterInst->GetRenderItemWritable(), nDepth);
+
+        const int nInsertDepth = pCIH->GetDepth();                 // v24 = *(a2+20) (placed index/depth)
+        AptDisplayList* pRoot = gpAptTarget->mpAnimationTarget->GetRootDisplayList();  // *(off_8324E574+6)+0x20
+        pRoot->removeObject(pCIH);                                  // AptDisplayList::removeObject(root, a2)
+        pValue->Release();                                          // (**a2)(a2)
+        pValue->setIsDefined(true);                                 // AptValue::setIsDefined(a2,1)
+        pRoot->AsState()->insert(nInsertDepth, pNew);              // AptDisplayListState::insert(root, v24, v20)
+    }
+
+    pNew->Release();                                                // (**v20)(v20)
+    pValue->setGCRoot(1);                                           // v25 = AptValue::setGCRoot(a2,1)
+    ReplaceReferences(pValue, pNew, 0, 0);                          // ReplaceReferences(v25, v20, 0, 0)
+
+    // Drop our pin on the thingy; destroy at count 0.
+    if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+        pThingy->ScalarDeletingDestructor(1);
+
+    return pNew;                                                    // result = v20
+}
+
+// ---------------------------------------------------------------------
+// AptLinker::Load -- @0x82B06660.
+//   Resolve the loadMovie target value; if it is a movie-clip/CIH placeholder,
+//   (re)load the AptFile through the loader and, when it is ready, enqueue a
+//   Notify + an AptLinkerThingy linking the file to the value. Mirrors the X360
+//   control flow (the lwarx/stwcx. blocks are AptFilePtr AddRef/Release, the
+//   v96/v97/v98/v99 locals are temporary AptFilePtrs).
+// ---------------------------------------------------------------------
+void AptLinker::Load(int nLevel, EAStringC* pFileName)
+{
+    AptCIH* pAnim = AptGetAnimationAtLevel(0);                                       // AptGetAnimationAtLevel(0)
+    AptValue* pVar = gAptActionInterpreter.getVariable(pAnim, nullptr, pFileName,
+                                                       /*allowSelf*/0,
+                                                       /*scopeChain*/1,
+                                                       /*direct*/1);                 // ...,1,1,0
+    AptValue* pValue = pVar;
+    if (pValue == nullptr)
+        goto done;
+
+    // Accept only a CIH-handle placeholder (type 12) marked, or a CIH-none (37).
+    {
+        const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();
+        bool bAccept = false;
+        if (eType == AptVFT_CharacterInstHandle &&
+            pValue->mValueBitfield.mbAllowsDelayedDeletion /* (v9>>27)&1 bit */ )
+            bAccept = true;
+        else if (eType == AptVFT_CIHNone)
+            bAccept = true;
+        if (!bAccept)
+            goto done;
+    }
+
+    {
+        AptFilePtr   filePtr;        filePtr.pData = nullptr;     // v96 (the load result handle)
+        AptFile*     pLinkedFile = nullptr;                       // _R28
+        EAStringC    skipName;                                    // v97 scratch
+
+        // (skipName is an empty RAII EAStringC; the X360 InitFromBuffer + the
+        //  manual DecreaseInternalRefCount below are the dtor's job in this model.)
+        const bool bSkip = Burnout_X360_Artist_0040_0(nLevel, &skipName);
+
+        if (!bSkip)
+        {
+            // Already loaded?  -> grab its handle.
+            filePtr = gpAptTarget->mpLoader->IsLoaded(*pFileName); // AptLoader::IsLoaded(&v98, loader, a2) + operator=
+            pLinkedFile = filePtr.pData;
+            if (pLinkedFile != nullptr)
+            {
+                // Pin it and notify (it is ready).
+                AptSharedPtrIncRef(pLinkedFile);
+                AptFilePtr notifyPtr; notifyPtr.pData = pLinkedFile;
+                Notify(&notifyPtr);                                // AptLinker::Notify(a1, &v97)
+            }
+            else
+            {
+                // Not loaded yet: kick a load request.
+                filePtr = gpAptTarget->mpLoader->Load(*pFileName); // AptLoader::Load(&v99, loader, a2)
+                pLinkedFile = filePtr.pData;
+                // If the request just completed (state 6 -> swap state/field12 to 4),
+                // notify immediately.
+                if (pLinkedFile != nullptr && pLinkedFile->mnState == 6)   // v96[2] == 6
+                {
+                    const int32_t nNew = pLinkedFile->mnField12;           // v28 = v96[3]
+                    const int32_t nOld = pLinkedFile->mnState;             // v29 = v96[2]
+                    pLinkedFile->mnState   = nNew;                         // v96[2] = v28
+                    pLinkedFile->mnField12 = nOld;                         // _R28[3] = v29
+                    if (nNew == 4)
+                    {
+                        AptSharedPtrIncRef(pLinkedFile);
+                        AptFilePtr notifyPtr; notifyPtr.pData = pLinkedFile;
+                        Notify(&notifyPtr);                                // LABEL_24
+                    }
+                }
+            }
+        }
+
+        // Mark the placeholder value defined + transitioning, dirty it.
+        pValue->setIsDefined(true);                                        // AptValue::setIsDefined(v8,1)
+        static_cast<AptCIH*>(pValue)->mFlagsA |= 0x60000000u;              // *(v8+12) |= 0x60000000
+        static_cast<AptCIH*>(pValue)->SetDirtyState(false, false);         // AptCIH::SetDirtyState(IsDefined,0,0)
+
+        // Drop any existing thingy keyed on this value (re-load supersedes it).
+        {
+            AptSingleListNode* pNode = mpThingyListHead;
+            while (pNode != nullptr && pNode->mpThingy->mpValue != pValue) // *(*i+8) == v8
+                pNode = pNode->mpNext;
+            if (pNode != nullptr)
+                ListErase(&mpThingyListHead, &pNode);                      // sub_82AF83A0(a1, &v97)
+        }
+
+        if (pLinkedFile != nullptr)
+        {
+            // Create + push a thingy linking pLinkedFile to pValue.
+            AptLinkerThingy* pThingy = nullptr;
+            if (gpAptSharedPtrPool->Allocate(16) != nullptr)
+            {
+                AptSharedPtrIncRef(pLinkedFile);
+                AptFilePtr held; held.pData = pLinkedFile;
+                pThingy = MakeLinkerThingy(held, pValue);                  // AptLinkerThingy::AptLinkerThingy(&file, value)
+            }
+            if (pThingy != nullptr)
+                AptSharedPtrIncRefThingy(pThingy);
+            ListPushFront(&mpThingyListHead, pThingy);                     // AptSingleLis(a1, &v97)
+            if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+                pThingy->ScalarDeletingDestructor(1);
+        }
+        else
+        {
+            // No loaded file: synthesize a stub AptFile for unloaded/level cases.
+            const uint32_t nTypeTag =
+                static_cast<AptCIH*>(pValue)->mpCharacterInst->GetTypeTag();   // *(*(v8+32)+8) >> 26
+            if (nTypeTag == 15)                                               // level inst -> give up
+                goto consume_name;
+
+            if (nTypeTag != 9)                                               // non-animation
+            {
+                AptFile* pStub = nullptr;
+                void* pMem = gpAptSharedPtrPool->Allocate(28);
+                if (pMem != nullptr)
+                    pStub = MakeAptFile(pMem, nLevel);                       // AptFile::AptFile(mem, a2)
+                if (pStub != nullptr)
+                    AptSharedPtrIncRef(pStub);
+                AptFilePtr stubPtr; stubPtr.pData = pStub;
+                filePtr = stubPtr;                                           // AptFile_::operator=(&v96, &v97)
+                pLinkedFile = filePtr.pData;
+                const int32_t nPrev = pLinkedFile->mnState;                  // v55 = v96[2]
+                pLinkedFile->mnState   = 6;                                  // v96[2] = 6
+                pLinkedFile->mnField12 = nPrev;                              // _R28[3] = v55
+
+                AptLinkerThingy* pThingy = nullptr;
+                if (gpAptSharedPtrPool->Allocate(16) != nullptr)
+                {
+                    AptSharedPtrIncRef(pLinkedFile);
+                    AptFilePtr held; held.pData = pLinkedFile;
+                    pThingy = MakeLinkerThingy(held, pValue);
+                }
+                if (pThingy != nullptr) AptSharedPtrIncRefThingy(pThingy);
+                ListPushFront(&mpThingyListHead, pThingy);
+                if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+                    pThingy->ScalarDeletingDestructor(1);
+
+                if (pStub != nullptr && AptSharedPtrDecRef(pStub) == 0)
+                    AptSharedPtrDelete(pStub);
+            }
+            else
+            {
+                // Animation inst: same stub path, slightly different ordering.
+                AptFile* pStub = nullptr;
+                void* pMem = gpAptSharedPtrPool->Allocate(28);
+                if (pMem != nullptr)
+                    pStub = MakeAptFile(pMem, nLevel);
+                if (pStub != nullptr) AptSharedPtrIncRef(pStub);
+                pStub->mnField12 = pStub->mnState;                          // *(_R31+12) = *(_R31+8)
+                pStub->mnState   = 6;                                       // *(_R31+8) = 6
+
+                AptLinkerThingy* pThingy = nullptr;
+                if (gpAptSharedPtrPool->Allocate(16) != nullptr)
+                {
+                    AptSharedPtrIncRef(pStub);
+                    AptFilePtr held; held.pData = pStub;
+                    pThingy = MakeLinkerThingy(held, pValue);
+                }
+                if (pThingy != nullptr) AptSharedPtrIncRefThingy(pThingy);
+                ListPushFront(&mpThingyListHead, pThingy);
+                if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+                    pThingy->ScalarDeletingDestructor(1);
+
+                if (pStub != nullptr && AptSharedPtrDecRef(pStub) == 0)
+                    AptSharedPtrDelete(pStub);
+            }
+        }
+
+        // Drop the load handle's reference.
+        if (pLinkedFile != nullptr && AptSharedPtrDecRef(pLinkedFile) == 0)
+            AptSharedPtrDelete(pLinkedFile);
+    }
+
+consume_name:
+done:
+    // (pFileName is owned by the caller; its internal refcount is released by the
+    //  caller's RAII EAStringC dtor -- the X360's manual drop here is unnecessary.)
+    ;
+}
+
+// ---------------------------------------------------------------------
+// AptLinker::Update -- @0x82B0CC68.
+//   (1) Tick the loader. (2) Optionally gate on the saved-input checkpoint list.
+//   (3) Walk the thingy list: for each thingy whose linked value is active and
+//       whose file is ready (state 6), either ConvertToZombie the old node or
+//       build a fresh AptCharacterInst and link it in, then drop the thingy.
+//   (4) Walk mPendingFiles: for each pending file not already linked, build an
+//       AptCharacterAnimationInst, attach it, mark dirty/defined, fire the
+//       callbacks, and clear the thingy. (5) Clear mPendingFiles + run actions.
+//   The lwarx/stwcx. blocks are AptFilePtr/AptLinkerThingy AddRef/Release; the
+//   per-element refcount bookkeeping is de-optimised to balanced inc/dec here.
+// ---------------------------------------------------------------------
+void AptLinker::Update()
+{
+    gpAptTarget->mpLoader->Update();                                 // AptLoader::Update(off_8324E574->mpLoader)
+
+    if (gbAptSavedInputActive &&
+        !AptSavedInputCheckpoints::CanLinkPendingFiles(*gpAptSavedInputCheckpoints))
+        return;                                                      // gate: not all pending files ready
+
+    // ---- pass 1: resolve thingies whose files just finished loading ----
+    for (AptSingleListNode* pNode = mpThingyListHead; pNode != nullptr; )
+    {
+        AptLinkerThingy* pThingy = pNode->mpThingy;                 // _R28 = *v5
+        if (pThingy != nullptr) AptSharedPtrIncRefThingy(pThingy);
+
+        bool bReady = false;
+        if (pThingy->mpValue != nullptr)                            // *(_R28+8) != 0 (active)
+        {
+            AptFile* pFile = pThingy->mpFile.pData;                 // _R27 = *(_R28+4)
+            if (pFile != nullptr) AptSharedPtrIncRef(pFile);
+            bReady = (pFile != nullptr && pFile->mnState == 6);     // *(_R27+8) == 6
+            if (pFile != nullptr && AptSharedPtrDecRef(pFile) == 0)
+                AptSharedPtrDelete(pFile);
+        }
+
+        if (bReady)
+        {
+            AptCIH* pCIH = static_cast<AptCIH*>(pThingy->mpValue);          // v24 = *(_R28+8)
+            const int16_t nDepth =
+                AptRenderItem_GetDepth(pCIH->mpCharacterInst->mpRenderItem);// v25 = *(*(*(v24+32)+4)+20)
+            pCIH->mFlagsA &= 0x9FFFFFFFu;                                   // clear transition bits
+            pCIH->ClearCIH(false);                                         // AptCIH::ClearCIH(v24,0)
+
+            if ((pCIH->mFlagsA & 0x60000000u) == 0x20000000u)             // still transitioning
+            {
+                AptCIH* pZombie = ConvertToZombie(pCIH);                   // AptLinker::ConvertToZombie(a1, v24)
+                AptRenderItem_SetDepth(pZombie->mpCharacterInst->GetRenderItemWritable(), nDepth);
+            }
+            else
+            {
+                AptCharacterInst* pInst = nullptr;
+                void* pMem = gpAptSharedPtrPool->Allocate(16);
+                if (pMem != nullptr)
+                {
+                    pInst = ::new (pMem) AptCharacterInst(nullptr);          // AptCharacterInst::AptCharacterInst(v27,0)
+                    // *v28 = &off_82145FD0 : install the concrete vtable (FLAG: the
+                    // empty-placeholder AptCharacterInst vtable, un-homed data sym).
+                    InstallEmptyCharacterInstVtbl(pInst);
+                }
+                AptCIH_SetCharacterInst(pCIH, pInst, 1);                   // AptCIH::SetCharacterInst(v24, v29, 1)
+                AptRenderItem_SetDepth(pCIH->mpCharacterInst->GetRenderItemWritable(), nDepth);
+                ListErase(&mpThingyListHead, &mpThingyListHead);          // sub_82AF83A0(a1, &v82) -- drop head
+            }
+            if (mpThingyListHead == nullptr)
+                break;
+        }
+
+        // Release + (at 0) destroy this thingy, then advance.
+        AptSingleListNode* pNext = pNode->mpNext;                          // v5 = v5[1]
+        if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+            pThingy->ScalarDeletingDestructor(1);
+        pNode = pNext;
+    }
+
+    // ---- pass 2: link any still-unlinked pending file into the scene ----
+    for (AptFilePtr* pEntry = mPendingFiles.begin(); pEntry != mPendingFiles.end(); )
+    {
+        AptFile* pFile = pEntry->pData;                                    // _R28 = *v8
+        if (pFile != nullptr) AptSharedPtrIncRef(pFile);
+        bool bAdvance = true;
+
+        for (AptSingleListNode* pNode = mpThingyListHead; pNode != nullptr; pNode = pNode->mpNext)
+        {
+            AptLinkerThingy* pThingy = pNode->mpThingy;                    // _R29 = *i
+            if (pThingy != nullptr) AptSharedPtrIncRefThingy(pThingy);
+
+            AptFile* pThingyFile = pThingy->mpFile.pData;                  // result = *(_R29+4)
+            if (pThingyFile != nullptr) AptSharedPtrIncRef(pThingyFile);
+            // A thingy matches this pending file iff same file AND not yet linked.
+            const bool bMatch = (pThingyFile == pFile) && !pThingy->mbLinked;  // result==_R28 && !*(_R29+12)
+            if (pThingyFile != nullptr && AptSharedPtrDecRef(pThingyFile) == 0)
+                AptSharedPtrDelete(pThingyFile);
+
+            if (bMatch)
+            {
+                AptCharacterAnimationInst* pAnimInst = nullptr;
+                if (gpAptSharedPtrPool->Allocate(44) != nullptr)
+                {
+                    if (pFile != nullptr) AptSharedPtrIncRef(pFile);
+                    pAnimInst = MakeCharacterAnimationInst(pFile);         // AptCharacterAnimationInst::AptCharacterAnimationInst()
+                }
+                AptCIH* pCIH = static_cast<AptCIH*>(pThingy->mpValue);     // v61 = *(_R29+8)
+
+                EnsureAnimFrameRateCached(pAnimInst);                      // dword_8324E530 lazy init (FLAG)
+
+                if (pCIH->mpCharacterInst->mpProperties != nullptr)        // *(v61[8]+12)
+                {
+                    pCIH->ClearCIH(true);                                  // AptCIH::ClearCIH(v61,1)
+                    pCIH->ForceCleanNativeHash();                          // AptCIH::ForceCleanNativeHash(v61)
+                }
+                pCIH->mFlagsA &= 0x9FFFFFFFu;                              // v61[3] &= 0x9FFFFFFF
+                AptCIH_SetCharacterInst(pCIH, /*as inst*/reinterpret_cast<AptCharacterInst*>(pAnimInst), 1);
+                pCIH->setIsDefined(true);                                  // AptValue::setIsDefined(v61,1)
+                pCIH->mpCharacterInst->mpRenderItem /*+16*/ = nullptr;     // *(v61[8]+16) = -1 (FLAG: render-item field)
+                MarkRenderItemFlag(pCIH->mpCharacterInst, 0x80);          // *(v61[8]+20) |= 0x80
+                pCIH->SetDirtyState(false, false);                        // AptCIH::SetDirtyState(...,0)
+                AptCIH_tick(pCIH);                                        // AptCIH::tick
+                pCIH->SetDirtyState(true, true);                          // AptCIH::SetDirtyState(v61,1,1)
+                pThingy->mbLinked = true;                                 // *(_R29+12) = 1
+
+                FireLinkNotifyCallbacks(pFile, pCIH);                     // dword_8324E844 / dword_8324E830 hooks (FLAG)
+
+                // If the pending vector reallocated mid-link, restart its scan.
+                if (RestartPendingScanIfGrew(pEntry, pFile))
+                {
+                    bAdvance = false;
+                    if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+                        pThingy->ScalarDeletingDestructor(1);
+                    break;
+                }
+            }
+
+            if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+                pThingy->ScalarDeletingDestructor(1);
+        }
+
+        if (bAdvance) ++pEntry;
+        if (pFile != nullptr && AptSharedPtrDecRef(pFile) == 0)
+            AptSharedPtrDelete(pFile);
+    }
+
+    if (gbAptSavedInputActive)
+        AptSavedInputCheckpoints::AllLinked(*gpAptSavedInputCheckpoints);
+
+    // ---- finish: if anything was pending, clear the vector + run actions ----
+    if (mPendingFiles.mnSize > 0)
+    {
+        PendingFileVector empty;
+        empty.mnSize = 0; empty.mnCapacity = 0; empty.mpData = empty.mInlineStorage;
+        empty.mInlineStorage[0].pData = nullptr; empty.mInlineStorage[1].pData = nullptr;
+        mPendingFiles.Swap(empty);                                        // sub_82AFF018(a1+4, v83)
+        AptAnimationTarget_RunActions(gpAptTarget->mpAnimationTarget);    // AptAnimationTarget::RunActions(off_8324E574->mpAnimationTarget)
+        // ~empty (Strin(v83)) releases the swapped-out elements.
+    }
+}

@@ -3,48 +3,55 @@
 // =====================================================================
 //  AptLinkerThingy.h  --  EA APT (ActionScript Player Technology) middleware
 //
-//  AptLinkerThingy is the small (16-byte) pool-allocated node the APT linker
-//  (AptLinker) tracks per loaded movie/file. It owns one AptFile reference (a
-//  reference-counted AptSharedPtr<AptFile> control object) which it disposes on
-//  destruction; the remaining slots are linker bookkeeping touched by the
-//  AptLinker Load/Update/ConvertToZombie paths (not by destruction).
+//  CORRECTED LAYOUT (supersedes the {mpLinkPrev,mpFile,muState,mpLinkNext}
+//  guess). The list links are NOT in the thingy; the linker list is a separate
+//  singly-linked list of 8-byte AptSingleListNode records, each holding a
+//  ref-counted AptLinkerThingy* + a next pointer. The thingy is itself a
+//  ref-counted heap object (count at +0x00).
 //
-//  NO DWARF exists for this class (X360-only; not in the PS3 DecFIGS dump nor
-//  the EATech public Apt.h). The shape below is derived STRICTLY from the X360
-//  binary scalar-deleting-destructor:
-//      AptLinkerThingy::`scalar deleting destructor'  @ 0x82AE5128
+//  HARD ASM EVIDENCE (BURNOUT_X360_ARTIST.XEX):
+//   * push_front AptSingleLis @0x82AF4F88: Allocate(pool,8); node[0]=thingy
+//     (AddRef'd); node[1]=oldhead.            => NODE is 8 bytes {thingy*,next}.
+//   * node dtor AptSingleL @0x82AF5020: Release node[0]; at 0 -> thingy dtor;
+//     Deallocate(node,8).                     => node[0] is a COUNTED thingy ref.
+//   * pop_front sub_82AF50B8: next=*(head+4). => node next at +0x04.
+//   * thingy dtor @0x82AE5128 (16-byte obj): r3=*(this+4); *(this+4)=0;
+//     AptSharedPtr<AptFile>::Dispose(r3); Deallocate(this,0x10).
+//                                             => thingy+0x04 == owned AptFilePtr.
+//   * walks (CancelLoad/ConvertToZombie/Load/Update): *(*node+8) keyed on the
+//     AptValue arg.                           => thingy+0x08 == AptValue* mpValue.
+//   * Update: lbz/stb *(thingy+0xC) byte flag set to 1 once linked.
+//                                             => thingy+0x0C == bool mbLinked.
+//   * thingy ctor (Load @0x82B06908, r4=&AptFilePtr r5=AptValue*) fills +4/+8.
 //
-//  That body reads only +0x04 (the AptFile reference) and the object size
-//  (16 == 0x10, the pool block size). The +0x00 / +0x08 / +0x0C slots are
-//  preserved as named bookkeeping fields the linker fills in elsewhere; they
-//  are untouched by destruction.
-//
-//  LAYOUT (16 bytes):
-//      +0x00  mpLinkPrev  linker list link / owner (untouched by dtor)
-//      +0x04  mpFile      owned AptFile reference (disposed, then zeroed)
-//      +0x08  muState     linker bookkeeping (untouched by dtor)
-//      +0x0C  mpLinkNext  linker list link (untouched by dtor)
+//  Members accessed BY NAME (semantic parity; console offsets documentation only).
 // =====================================================================
 
 #include "types.hpp"
 
-#include "SDKs/EATech/include/Apt/AptSharedPtr.h"   // AptSharedPtr<AptFile>::Dispose, gpAptSharedPtrPool
-#include "SDKs/EATech/Apt/DogmaAllocator.h"          // DOGMA_PoolManager
+#include "SDKs/EATech/include/Apt/AptSharedPtr.h"   // AptFilePtr (AptSharedPtr<AptFile>)
+#include "SDKs/EATech/Apt/DogmaAllocator.h"          // DOGMA_PoolManager, gpAptSharedPtrPool
 
 struct AptFile;
+class  AptValue;
 
+// 16-byte ref-counted per-linked-file record.
 struct AptLinkerThingy
 {
-    // ---- layout (16 bytes; only +0x04 is read by the dtor) ----
-    void*    mpLinkPrev;   // [0x00] linker list link / owner
-    AptFile* mpFile;       // [0x04] owned AptFile reference
-    u32      muState;      // [0x08] linker bookkeeping
-    void*    mpLinkNext;   // [0x0C] linker list link
+    int32_t    mnRefCount;   // [0x00] intrusive ref count (FIRST member)
+    AptFilePtr mpFile;       // [0x04] owned AptFile shared reference (disposed by dtor)
+    AptValue*  mpValue;      // [0x08] the linked AptValue (list key; null == inactive)
+    bool       mbLinked;     // [0x0C] "already linked into the scene" flag (+3 pad)
 
-    // X360 @0x82AE5128 -- MSVC `scalar deleting destructor`. Disposes the owned
-    // AptFile reference (load it, zero +0x04, then AptSharedPtr<AptFile>::Dispose
-    // it -- store/zero before the call is preserved), then, when bit0 of flags is
-    // set, frees the 16-byte block back to the Apt pool. Returns `this`.
-    //   flags: the hidden MSVC second parameter (bit0 = also free the block).
+    // X360 @0x82AE5128 -- MSVC scalar deleting destructor: dispose+zero mpFile,
+    // then (flags&1) free the 16-byte block. Returns `this`.
     void* ScalarDeletingDestructor(char flags);
+};
+
+// 8-byte external pool node forming the linker's thingy list (head is
+// AptLinker::mpThingyListHead). Owns a COUNTED reference to its thingy.
+struct AptSingleListNode
+{
+    AptLinkerThingy*   mpThingy;   // [0x00] counted held thingy
+    AptSingleListNode* mpNext;     // [0x04] next node
 };
