@@ -53,6 +53,43 @@ void AptValue::ClearReleaseAtEnd()
     AptGCFlagLock_Release();
 }
 
+// incGCRoot @0x82AD8120 -- bump the GC-root count one, under the Apt GC flag
+// lock. X360: acquire the lwarx/stwcx spin lock on unk_8324E75C, then
+//   if ((*(this+4) & 0x3F00) < 0x3F00) <add 0x100 to the field>
+// i.e. if the 6-bit mnGCRootCount is below MAX_GCROOT, increment it (setGCRoot
+// clamps anyway), then release the lock.
+void AptValue::incGCRoot()
+{
+    AptGCFlagLock_Acquire();
+    if (getGCRoot() < MAX_GCROOT)
+        setGCRoot(getGCRoot() + 1);
+    AptGCFlagLock_Release();
+}
+
+// decGCRoot @0x82AD81A8 -- drop the GC-root count one (floored at 0), under the
+// Apt GC flag lock. X360: acquire the spin lock, then
+//   if (((*(this+4) >> 8) & 0x3F) != 0) <field = field - 1>
+// i.e. if mnGCRootCount is non-zero, decrement it, then release the lock.
+void AptValue::decGCRoot()
+{
+    AptGCFlagLock_Acquire();
+    if (getGCRoot() > 0)
+        setGCRoot(getGCRoot() - 1);
+    AptGCFlagLock_Release();
+}
+
+// SetReleaseAtEnd @0x82AD8230 -- mark this value as queued in the GC deferred-
+// release vector, under the Apt GC flag lock. X360: acquire the spin lock, then
+//   *(this+4) |= 0x20000000   (oris r10,r10,0x2000)
+// which sets the big-endian bit for mbIsInDeferredVector, then release the lock.
+// (The "second locked block" in the pseudocode is the lock release itself.)
+void AptValue::SetReleaseAtEnd()
+{
+    AptGCFlagLock_Acquire();
+    mValueBitfield.mbIsInDeferredVector = 1u;
+    AptGCFlagLock_Release();
+}
+
 // DeleteThis @ 0x824ED4B8
 void AptValue::DeleteThis()
 {

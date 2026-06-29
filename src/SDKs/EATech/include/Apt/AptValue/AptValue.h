@@ -141,6 +141,12 @@ public:
     // ClearReleaseAtEnd @0x82AD82A8 -- clear the "in deferred-release vector"
     // flag (mbIsInDeferredVector); used by the deferred-release vector flush.
     void ClearReleaseAtEnd();
+    // incGCRoot @0x82AD8120 / decGCRoot @0x82AD81A8 -- adjust mnGCRootCount (clamped
+    // [0,MAX_GCROOT]) under the GC flag lock. SetReleaseAtEnd @0x82AD8230 -- set
+    // mbIsInDeferredVector under the lock (the inverse of ClearReleaseAtEnd).
+    void incGCRoot();
+    void decGCRoot();
+    void SetReleaseAtEnd();
 
     // When set, AptGC::CleanAll suspends refcount-driven deletions while it runs
     // PreDestroy()/DestroyGCPointers() over the live value graph. (X360 byte_8324E38E.)
@@ -220,6 +226,168 @@ public:
     void SetAllowDelayedDeletion(bool bAllowed)
     {
         mValueBitfield.mbAllowsDelayedDeletion = bAllowed ? 1u : 0u;
+    }
+
+    // ---- value-type predicates (leak AptValue.h is*/CanCreateScriptObject) ----
+    // Each tests meValueType (+ mbIsDefined where the asm reads it). Reconstructed
+    // from the X360 ARTIST pseudocode/asm; bit math folded back to named members.
+    bool isString() const
+    {
+        return (getVtblIndex() == AptVFT_StringValue || getVtblIndex() == AptVFT_StringObject)
+            && getIsDefined();
+    }
+
+    bool isInteger() const
+    {
+        return getVtblIndex() == AptVFT_Integer && getIsDefined();
+    }
+
+    bool isFloat() const
+    {
+        return getVtblIndex() == AptVFT_Float && getIsDefined();
+    }
+
+    bool isRegister() const
+    {
+        return getVtblIndex() == AptVFT_Register && getIsDefined();
+    }
+
+    bool isLookup() const
+    {
+        return getVtblIndex() == AptVFT_Lookup && getIsDefined();
+    }
+
+    bool isNativeFunction() const
+    {
+        return getVtblIndex() == AptVFT_NativeFunction && getIsDefined();
+    }
+
+    bool isFrameStack() const
+    {
+        return getVtblIndex() == AptVFT_FrameStack && getIsDefined();
+    }
+
+    bool isExtern() const
+    {
+        return getVtblIndex() == AptVFT_Extern && getIsDefined();
+    }
+
+    bool isCIH(bool bUndefOK = false) const
+    {
+        AptVirtualFunctionTable_Indices eType = getVtblIndex();
+        return (eType == AptVFT_CharacterInstHandle && (bUndefOK || getIsDefined()))
+            || eType == AptVFT_CIHNone;
+    }
+
+    bool isSound() const
+    {
+        return getVtblIndex() == AptVFT_Sound && getIsDefined();
+    }
+
+    bool isArray() const
+    {
+        return getVtblIndex() == AptVFT_Array && getIsDefined();
+    }
+
+    bool isMath() const
+    {
+        return getVtblIndex() == AptVFT_Math && getIsDefined();
+    }
+
+    bool isKey() const
+    {
+        return getVtblIndex() == AptVFT_Key && getIsDefined();
+    }
+
+    bool isMouse() const
+    {
+        return getVtblIndex() == AptVFT_Mouse && getIsDefined();
+    }
+
+    bool isXmlNode() const
+    {
+        return getVtblIndex() == AptVFT_XmlNode;
+    }
+
+    bool isXml() const
+    {
+        return getVtblIndex() == AptVFT_Xml;
+    }
+
+    bool isXmlAttributes() const
+    {
+        return getVtblIndex() == AptVFT_XmlAttributes;
+    }
+
+    bool isLoadVars() const
+    {
+        return getVtblIndex() == AptVFT_LoadVars;
+    }
+
+    bool isPrototype() const
+    {
+        return getVtblIndex() == AptVFT_Prototype && getIsDefined();
+    }
+
+    bool isObject() const
+    {
+        return getVtblIndex() == AptVFT_Object && getIsDefined();
+    }
+
+    bool isDate() const
+    {
+        return getVtblIndex() == AptVFT_Date && getIsDefined();
+    }
+
+    bool isMovieClip() const
+    {
+        return getVtblIndex() == AptVFT_MovieClip && getIsDefined();
+    }
+
+    bool isStage() const
+    {
+        return getVtblIndex() == AptVFT_Stage && getIsDefined();
+    }
+
+    bool isNone() const
+    {
+        return getVtblIndex() == AptVFT_None;
+    }
+
+    bool isScriptFunction() const
+    {
+        return (getVtblIndex() == AptVFT_ScriptFunction1
+             || getVtblIndex() == AptVFT_ScriptFunction2
+             || getVtblIndex() == AptVFT_ScriptFunctionByteCodeBlock)
+            && getIsDefined();
+    }
+
+    // CanCreateScriptObject @0x82AD84E0 -- can this value type be used as the base
+    // for a script Object? meValueType in {StringValue,NativeFunction,Array,ScriptColour,
+    // Object,Date,MovieClip,Xml,TextFormat,Error,StringObject,ScriptFunction1,
+    // ScriptFunction2}. (X360 accepts numeric tags {1,9,14,18,19,21,22,25,28,32,33,34,35};
+    // no mbIsDefined check.) Xrefed by AptActionInterpreter::_createObject.
+    bool CanCreateScriptObject() const
+    {
+        switch (getVtblIndex())
+        {
+        case AptVFT_StringValue:          // 1
+        case AptVFT_NativeFunction:       // 9
+        case AptVFT_Array:                // 14
+        case AptVFT_ScriptColour:         // 18
+        case AptVFT_Object:               // 19
+        case AptVFT_Date:                 // 21
+        case AptVFT_MovieClip:            // 22
+        case AptVFT_Xml:                  // 25
+        case AptVFT_TextFormat:           // 28
+        case AptVFT_Error:                // 32
+        case AptVFT_StringObject:         // 33
+        case AptVFT_ScriptFunction1:      // 34
+        case AptVFT_ScriptFunction2:      // 35
+            return true;
+        default:
+            return false;
+        }
     }
 
     // ---- value conversions (leak AptValue.h:158-162) ---------------------
