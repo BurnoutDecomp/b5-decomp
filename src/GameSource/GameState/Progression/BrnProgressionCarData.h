@@ -24,37 +24,51 @@ namespace BrnProgression
 {
     struct CarData
     {
-        // ADDITIVE GROW (declare-only; bodies in the Progression CarData TU).
-        // DriveThruManager body/paint shops read this record's car id and write its colour/palette.
-        //   GetId()          -> muCarId (the packed car id at +0x00).
-        //   SetColourIndex() -> X360 0x82354890. SetPaletteIndex() -> X360 0x823548F0.
+        // DWARF BrnProfile.h:92 (UnlockType enum).
+        enum UnlockType
+        {
+            E_UNLOCK_TYPE_UNLOCK        = 0,
+            E_UNLOCK_TYPE_GIFT          = 1,
+            E_UNLOCK_TYPE_TROPHY        = 2,
+            E_UNLOCK_TYPE_SHUTDOWN_RIVAL = 3,
+            E_UNLOCK_TYPE_GOLD_SILVER   = 4,
+            E_UNLOCK_TYPE_SPONSOR       = 5
+        };
+
+        // The full member layout is now named (proven by Profile::AddCar @0x82366C80, which
+        // inlines the per-car init: std id @+0x00, stb 0xFF @+0x08/+0x09, stb 0 @+0x0A,
+        // stfs 0.0 @+0x0C, stw unlockType @+0x10). Construct(CgsID) is the X360 CarData
+        // initialiser the Progression TU owns; AddCar open-codes the same stores.
+        void Construct(CgsID lId);
+
+        // GetId()          -> mId (the packed car id at +0x00).
+        // SetColourIndex() -> X360 0x82354890. SetPaletteIndex() -> X360 0x823548F0.
         CgsID GetId() const;
         void  SetColourIndex(s32 liColour);
         void  SetPaletteIndex(s32 liPalette);
 
-        // ADDITIVE GROW (declare-only; bodies in the Progression CarData TU). All read/write inside the
-        // existing maReserved[16] window (+0x08..+0x17) -- NO layout change (the 0x18 stride + the
-        // static_assert below stay). Used by the CarSelectManager junkyard flow.
-        //   IsHiddenFromUnlockSequence() -> X360 byte at CarData+0x0A (the per-car "already-shown /
-        //                                   hidden from the unlock sequence" flag).
-        //   GetUnlockType()              -> X360 s32 at CarData+0x10 (the unlock-type enumerator;
-        //                                   3 == shutdown/rival drop, 5 == rank-gated, others == normal).
-        //   GetUnlockDeformationAmount() -> X360 f32 at CarData+0x0C (the car's deform/damage amount).
-        //   SetUnlockDeformationAmount() -> X360 writes CarData+0x0C (DEBUG / start-of-game stamps 0.85).
-        // FLAG: these byte offsets are recovered from the X360 asm, not the CarData DWARF (the reserved
-        // region is opaque in this slice).
-        bool IsHiddenFromUnlockSequence() const;
-        s32  GetUnlockType() const;
-        f32  GetUnlockDeformationAmount() const;
-        void SetUnlockDeformationAmount(f32 lfAmount);
+        //   IsHiddenFromUnlockSequence() / WasUnlockSequenceAlreadyShown() -> mbUnlockSequenceAlreadyShown @+0x0A.
+        //   GetUnlockType() / SetUnlockType()  -> meUnlockType @+0x10.
+        //   GetUnlockDeformationAmount() / SetUnlockDeformationAmount() -> mfUnlockDeformedAmount @+0x0C.
+        bool       IsHiddenFromUnlockSequence() const;
+        bool       WasUnlockSequenceAlreadyShown() const;
+        void       SetUnlockSequenceAlreadyShown();
+        UnlockType GetUnlockType() const;
+        void       SetUnlockType(UnlockType leType);
+        f32        GetUnlockDeformationAmount() const;
+        void       SetUnlockDeformationAmount(f32 lfAmount);
 
-        // The 64-bit packed car id (X360 ld r11, 0(r3) in IsDLCCarId). Its top 14 bits hold
-        // the DLC marker; the rest identify the specific car.
-        u64 muCarId;          // +0x00
-
-        // Remaining record payload (unmodeled here; 0x18-byte stride proven by SplitArray's
-        // three-qword copy). Replace with the real named members in the CarData TU.
-        u8  maReserved[16];   // +0x08 .. +0x17  -> sizeof(CarData) == 24
+        // Layout (DWARF BrnProfile.h:151..158, offsets X360-proven by AddCar). All access by name.
+        CgsID      mId;                            // +0x00  packed car id (8 bytes)
+        u8         mu8ColourIndex;                 // +0x08  (AddCar inits 0xFF)
+        u8         mu8PaletteIndex;                // +0x09  (AddCar inits 0xFF)
+        bool       mbUnlockSequenceAlreadyShown;   // +0x0A
+        // +0x0B: one byte trailing pad (mfUnlockDeformedAmount is 4-aligned at +0x0C)
+        u8         mPad0B;                          // +0x0B
+        f32        mfUnlockDeformedAmount;         // +0x0C
+        UnlockType meUnlockType;                   // +0x10  (4 bytes)
+        // +0x14: 4 bytes trailing pad -> 0x18 (SplitArray three-qword stride)
+        u32        mPad14;                          // +0x14 .. +0x17
     };
 
     static_assert(sizeof(CarData) == 0x18, "CarData must be the 0x18 SplitArray stride");
