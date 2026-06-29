@@ -67,6 +67,13 @@ namespace CgsGui
         // @ 0x82846AE0 : return maiNumUsedData[liComponent], bounds-asserted.
         u8 GetUsedData(s32 liComponent) const;
 
+        // Read accessors the X360 inlines directly into CgsAptCommunicator (the
+        // FindAptComponent hash scan reads mauHashedName at the instance's +0x8400;
+        // the debug logs read the per-component name text maacName). They mirror the
+        // existing SetHashedName setter and the maacName name store.
+        u32         GetHashedName(s32 liComponent) const { return mauHashedName[liComponent]; }
+        const char* GetName(s32 liComponent)       const { return maacName[liComponent]; }
+
         // @ 0x82846BE8 : mapComponentReference[liComponent] = lpValue, bounds-asserted.
         void SetAptValue(s32 liComponent, AptValue* lpValue);
 
