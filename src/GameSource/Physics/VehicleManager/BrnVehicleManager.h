@@ -213,6 +213,48 @@ namespace Vehicle
         // own TU. DWARF/asm shape is (VehicleManager* this, RaceCarResponseInfo* lpInfo).
         void GenerateContactSituation(RaceCarResponseInfo* lpInfo);
 
+        // ==========================================================================================
+        // Player-stats / showtime / network / lookup surface (X360 wave-10 fan-out). These nine
+        // functions are independent of the takedown classifier chain above; they read/write the deep
+        // §7 members (player active index, the player-stats + showtime blocks, the network-hidden
+        // bitset/countdown, the traffic global->physical map). Offsets/constants are asm-proven.
+        // ==========================================================================================
+
+        // @0x8259BF00: copy the per-frame player-car stats action into the manager's stats block and
+        // the player car's record. lpSendCarStatsAction points at >=6 floats: [0..3] -> maPlayerCarStats
+        // [0..3]; [4] -> mfShowtimePlayerCarDamageLimit; [5] -> maPlayerCarStats[4] AND the player
+        // record's mfPlayerBoostStrengthStat; (s32)[1] * 0.1f -> mfShowtimePlayerCarStrength.
+        void ApplyPlayerStats(const f32* lpSendCarStatsAction);
+
+        // @0x825B4DE0: resolve a GLOBAL entity id to a PHYSICS traffic entity id via the
+        // global->physical index map. Returns true and writes *lpOutPhysicsEntityId (packed
+        // (physicalIndex << 10) | E_ENTITYTYPE_TRAFFIC_VEHICLE bits) when the map slot is not the 0x7F
+        // "no vehicle" sentinel; returns false otherwise.
+        bool GetTrafficPhysicsEntityIDFromGlobalEntityID_Safe(u32 luGlobalEntityId,
+                                                              EntityId* lpOutPhysicsEntityId);
+
+        // @0x825B4F50: resolve a packed physics-vehicle id to its physics body. Owner==RACECAR (1)
+        // returns &maRaceCarVehicles[index] (as the VehiclePhysics base); owner==TRAFFIC_VEHICLE (2)
+        // delegates to the contained PhysicalTrafficManager. Returns an untyped body pointer (the two
+        // branch types -- RaceCarPhysics : VehiclePhysics and SimpleVehiclePhysics : ExternalPhysicsBody
+        // -- share no base, matching the X360's raw-pointer return).
+        void* GetVehiclePhysi(EntityId lPhysicsVehicleId);
+
+        // @0x825C3040: mark a NETWORK race car hidden for at least luFrames frames (sets its bit in
+        // mHiddenNetworkRaceCars and stores luFrames into maHiddenForFrames[index]).
+        void SetNetworkRaceCarHidden(EActiveRaceCarIndex leActiveRaceCarIndex, s32 liFrames);
+
+        // @0x8259C028: store the local player's active-race-car slot (gated 0..7).
+        void SetPlayerActiveRaceCarIndex(EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
+
+        // @0x8259C098: store the current showtime behaviour mode (gated 0..2).
+        void SetShowtimeBehaviour(u32 luShowtimeBehaviour);
+
+        // @0x8259C108: drive the player car into (or out of) showtime: forwards the cached showtime
+        // strength/damage-limit to RaceCarPhysics::SetPlayerVehicleInShowtime on the player car and
+        // latches the global player-in-showtime byte.
+        void SetPlayerCarToShowtimeMode(bool lbInShowtime);
+
     private:
         // ------------------------------------------------------------------------------------------
         // Deep VehicleManager data members the takedown chain touches, recovered by LAYOUT RECOVERY
@@ -278,7 +320,13 @@ namespace Vehicle
             // +4308 (asm: record+6164): per-car "protected player has grace" flag the slam/shunt
             // pre-gate consults. FLAG: role inferred.
             unsigned char mbPlayerGrace;             // +4308
-            unsigned char mPad10D5[5120 - 4309];
+            unsigned char mPad10D5[5084 - 4309];
+            // +5084 (asm: record+5084 == 5216*playerIdx + 6940): ApplyPlayerStats stamps the player's
+            // "boost strength" stat (lpSendCarStatsAction[5]) into the player car's record here, in
+            // addition to the manager-level copy at mfShowtimePlayerCarDamageLimit. FLAG: name proposed;
+            // the in-record +5084 offset is asm-proven (stw r10, 0x1B1C(5216*idx + this)).
+            f32           mfPlayerBoostStrengthStat; // +5084
+            unsigned char mPad13DC[5120 - 5088];
             f32           mfRecoveryTimer;           // +5120 (asm stores 0.0f when the victim is the player)
             unsigned char mPad1404[5200 - 5124];
             // +5200 (asm: record+7056): the crashing entity id stamped into the record by the
@@ -327,12 +375,35 @@ namespace Vehicle
         CgsContainers::BitArray<8>  mUsedRaceCars;               // +44224 (live-car bitset)
         CgsContainers::BitArray<32> mRaceCarCrashDataAllocBits;  // +44232 (crash-data free-list)
 
-        unsigned char        mPadACE8[148128 - (44232 + 8)];
+        unsigned char        mPadACE8[44704 - (44232 + 8)];
+        // The "network race car hidden" bitset @ +44704 (CgsBitArray<8>, single 8-byte word). Read /
+        // SetBit by SetNetworkRaceCarHidden (asm: this+44704, sets bit leActiveRaceCarIndex). FLAG:
+        // name proposed; +44704 asm-proven (r27 = this + 44704; sld/or/stdx the per-index bit).
+        CgsContainers::BitArray<8> mHiddenNetworkRaceCars;        // +44704 (ends 44712)
+        unsigned char        mPadAEB8[44736 - (44704 + 8)];
+        // Per-car "hide for at least N frames" countdown @ +44736. Stride 4 (asm: 4*(idx+11184) ==
+        // 4*idx+44736); SetNetworkRaceCarHidden stores the requested frame count here. FLAG: name
+        // proposed; +44736 / stride 4 asm-proven.
+        s32                  maHiddenForFrames[8];                // +44736 (4 * 8 = 32; ends 44768)
+        // (the contained PhysicalTrafficManager subobject begins at +44768 -- modelled as opaque
+        // padding here, consistent with the existing layout that also names maRaceCarEntityIdRemap as
+        // a direct sibling at +148128 inside this region. The X360 build folds every contained-manager
+        // member the VehicleManager methods touch to its absolute class offset, so the members below
+        // are reached BY their absolute-offset NAMES rather than through an embedded manager object.)
+        unsigned char        mPadAEE0[148128 - 44768];
         // Per-car EntityId REMAP table @ +148128. Stride 4 (asm: 4*(idx+37032) == 4*idx+148128).
         // SetRaceCarCrashing remaps a "type 2" packed id through this table before re-validating /
         // firing the secondary remapped-id event. FLAG: name proposed; +148128 / stride 4 asm-proven.
         EntityId             maRaceCarEntityIdRemap[8]; // +148128 (4 * 8 = 32; ends 148160)
-        unsigned char        mPad242C0[171464 - 148160];
+        unsigned char        mPad242C0[149456 - 148160];
+        // The traffic "global entity index -> physical entity index" map @ +149456 (the contained
+        // PhysicalTrafficManager's mu8GlobalToPhysicalEntityIndexMap, which the build folds to this
+        // absolute class offset == 44768 + 104688). 600 entries, 1 byte each (asm asserts the global
+        // index < 0x258 == 600). A slot value of 127 (0x7F) means "no physical vehicle for this global
+        // index". GetTrafficPhysicsEntityIDFromGlobalEntityID_Safe reads it. FLAG: name from the assert
+        // string; +149456 / size 600 asm-proven (lbzx this+149456+idx; cmplwi idx, 0x258).
+        unsigned char        mau8GlobalToPhysicalEntityIndexMap[600]; // +149456 (ends 150056)
+        unsigned char        mPad24A68[171464 - 150056];
         // Master "takedowns enabled" gate @ +171464 (asm: a non-zero byte gates the whole routine).
         // FLAG: name proposed; offset asm-proven.
         bool                 mbTakedownsEnabled;      // +171464
@@ -405,7 +476,28 @@ namespace Vehicle
         unsigned char        mPad2A0B8[172315 - (172311 + 1)];
         bool                 mbStationaryTakedownsEnabled;     // +172315
 
-        unsigned char        mPad2A0BC[172612 - (172315 + 1)];
+        unsigned char        mPad2A0BC[172320 - (172315 + 1)];
+        // ---- player-car stats (written by ApplyPlayerStats; the first two re-read by
+        //      SetPlayerCarToShowtimeMode -> RaceCarPhysics::SetPlayerVehicleInShowtime) -------------
+        // +172320 (asm v3[43080]): the showtime "player car strength" == (s32)lpSendCarStatsAction[1]
+        //   sign-extended * 0.1f. +172324 (asm v3[43081]): the showtime "damage limit" ==
+        //   lpSendCarStatsAction[4]. FLAG: names proposed by role; +172320/+172324 asm-proven.
+        f32                  mfShowtimePlayerCarStrength;      // +172320
+        f32                  mfShowtimePlayerCarDamageLimit;   // +172324
+        // +172328..+172344 (asm v3[43082..43086]): the raw player-car stats block ApplyPlayerStats
+        //   copies straight from lpSendCarStatsAction[0],[1],[2],[3],[5] (the [4] entry goes to the
+        //   damage-limit field above, [1] also feeds the *0.1 strength). FLAG: names proposed;
+        //   offsets/stride asm-proven (172328,172332,172336,172340,172344).
+        f32                  maPlayerCarStats[5];              // +172328 (5 * 4 = 20; ends 172348)
+
+        unsigned char        mPad2A0DC[172456 - (172328 + 20)];
+        // +172456 (asm v3[43114]): the current showtime behaviour mode (BrnGameState::EShowtimeMode;
+        //   gated 0..2 against E_SHOWTIME_MODE_COUNT==3). Stored as a 4-byte word (asm stwx). FLAG:
+        //   stored as a plain u32 because the EShowtimeMode enum has no committed home yet; +172456
+        //   asm-proven. Replace the type with the enum when its home lands.
+        u32                  muShowtimeBehaviour;              // +172456 (ends 172460)
+
+        unsigned char        mPad2A12C[172612 - (172456 + 4)];
         // Per-frame takedown-event cap counter @ +172612 (throttled < 32). FLAG: name proposed.
         u32                  muTakedownEventsThisFrame;        // +172612 (ends 172616)
 
@@ -413,6 +505,10 @@ namespace Vehicle
         // members (offsetof on a private member needs member-function context). The gate FAILS if any
         // padding run is wrong, which is the intended signal.
         static void _AssertLayout();
+
+        // As _AssertLayout, but pins the wave-10 player-stats / showtime / network / map members added
+        // for the second .cpp (BrnVehicleManagerPlayerStats.cpp). Never called.
+        static void _AssertLayoutPlayerStats();
     };
 }
 }
