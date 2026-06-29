@@ -57,7 +57,11 @@ struct AptSavedInputRecord;        // debug saved-input record
 struct AptSysClock;                // real-time-clock out-struct
 typedef int AptAssetMoiveClip;     // a movie-clip handle (DWARF spelling kept verbatim)
 typedef int AptGetBytesEnum;       // GetBytesTotal/Loaded selector
-typedef AptFile* AptFilePtr;       // the ref-counted .apt file pointer (counted handle)
+// AptFilePtr is the ref-counted .apt file handle. Its canonical definition is
+// AptSharedPtr<AptFile> (AptSharedPtr.h) -- the older `typedef AptFile* AptFilePtr`
+// here was a stale duplicate that collided with that counted-handle typedef whenever
+// both headers were in scope. Pull the real one in (no cycle; AptSharedPtr.h is light).
+#include "SDKs/EATech/include/Apt/AptSharedPtr.h"   // AptFilePtr == AptSharedPtr<AptFile>
 
 // Apt.h:600 — the mask operation the Apt render tree requests for a rendering unit.
 // (The full reconstruction of the enum values lives in CgsAptCallbackRender.h, where

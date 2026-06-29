@@ -191,4 +191,18 @@ struct AptCIH : public AptValueGC
     // node (only the display list owns it) pins itself -- Release is a no-op; every
     // other state/refcount delegates to AptValue::Release.
     virtual void Release() override;
+
+    // SetMask @0x82AF6650 -- make pMaskSlave the mask for this node (the MASTER), or
+    // tear the relationship down: wires the two render items' isMask/hasMask flags +
+    // the "#!MASKSLAVE!#"/"#!MASKMASTER!#" native-hash cross-links, builds the slave's
+    // world mask matrix from this node's parent chain, and notifies the render tree.
+    // (AS .setMask, via AptCIHNativeFunctionHelper::sMethod_setMask.)
+    void SetMask(AptCIH* pMaskSlave);
+
+    // FLAG'd not-yet-homed behavioural callees SetMask reaches by name (bodies are
+    // their own TUs): GetMask returns the current mask SLAVE (resolved from the
+    // master's "#!MASKMASTER!#" key); SetGeneralizedProcessDirtyState stamps the
+    // bit24(self)/bit23(subtree) generalized-process-dirty flags down the subtree.
+    AptCIH* GetMask();                                          // @0x82AE7B48
+    AptCIH* SetGeneralizedProcessDirtyState(bool bDirty);      // @0x82ADCA50
 };
