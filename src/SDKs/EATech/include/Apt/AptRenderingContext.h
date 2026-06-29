@@ -138,6 +138,11 @@ public:
     // slot's 8 channels back into the current colour transform.
     void popColourTransform();
 
+    // The current colour transform (top of the colour-transform stack). The morph
+    // render path sets its alpha scale channel directly, then flushes it through
+    // the SetColourTransform render hook (AptRenderItemMorph::Render @0x82AFEEC0).
+    AptCXForm& GetCurrentColourTransform() { return mCurrentColourTransform; }
+
 private:
     AptMatrix  mCurrentVertexMatrix;                    // [+0x000]
     AptMatrix* mpVertexMatrixStackTop;                  // [+0x018]

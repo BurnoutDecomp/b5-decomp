@@ -68,11 +68,24 @@ struct AptRenderItem
     static void operator delete(void* p, size_t sz);
 
     AptRenderItem(AptCharacter* pCharacter, int nCreatedOnTick);   // @0x7E47A0
+
+    // Clone copy-ctor (the shared base copy helper @0x82AEB9A0): deep-copy pSource
+    // into this fresh pool block for a new render-tree-manager revision. Always
+    // copies the base visual state + transforms; with bCopyExtended it also brings
+    // over the mask, depth and manager links (each chased to its latest revision and
+    // reference-counted). Each subtype Clone allocates the sized block, runs this,
+    // then stamps its own render-type flag + vtable.
+    AptRenderItem(const AptRenderItem* pSource, int nCreatedOnTick, bool bCopyExtended);
+
+    // Clone (vtable slot 0) -- pool-allocate a fresh copy of this item for a new
+    // revision (null when the pool is exhausted). PURE: the base is abstract; every
+    // concrete subtype supplies its sized allocation + render-type flag + vtable.
+    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) = 0;
+
     virtual ~AptRenderItem();                                       // @0x80F860
 
     // The base render hooks are empty (@0x7E49A8/0x7E499C/0x7E49A4/0x7E49A0); each
     // character subtype (Shape/Sprite/Button/Text/...) overrides Render to draw.
-    // (So the base is concrete -- it just renders nothing.)
     virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
     virtual void PushRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
     virtual void PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
@@ -84,6 +97,10 @@ struct AptRenderItem
     const AptMatrix* GetMaskPositionMatrixConst() const;  // @0x7DEE0C
     AptMatrix* GetPositionMatrixWritable();               // @0x7F1578
     AptCXForm* GetColorMatrixWritable();                  // @0x7FDF68
+
+    // SetMaskMatrix @0x82AE52F8 -- lazily (de)allocate + copy the mask position
+    // matrix (null clears it). Used by the clone copy-ctor's extended path.
+    void SetMaskMatrix(const AptMatrix* pMatrix);
 
     int16_t GetDepth() const;       AptRenderItem* SetDepth(int nDepth);          // @0x7DEE14/0x7DEEA0
     int16_t GetClipDepth() const;   AptRenderItem* SetClipDepth(int nClipDepth);  // @0x7DEDF8/0x7DEEA8

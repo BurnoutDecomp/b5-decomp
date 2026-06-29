@@ -18,6 +18,9 @@
 struct AptRenderItemShape : public AptRenderItem
 {
     AptRenderItemShape(AptCharacter* pCharacter, int nCreatedOnTick);   // @0x80FDF4
+    // Clone copy-ctor: base copy + the shape render-type flag.
+    AptRenderItemShape(const AptRenderItemShape* pSource, int nCreatedOnTick, bool bCopyExtended);
 
+    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) override;                 // @0x82AECB10
     virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;  // @0x8113C0
 };

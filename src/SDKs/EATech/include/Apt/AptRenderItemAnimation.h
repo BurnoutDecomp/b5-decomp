@@ -12,5 +12,9 @@
 struct AptRenderItemAnimation : public AptRenderItemSprite
 {
     AptRenderItemAnimation(AptCharacter* pCharacter, int nCreatedOnTick);   // @0x814004
+    // Clone copy-ctor: the shared sprite copy + the animation render-type flag.
+    AptRenderItemAnimation(const AptRenderItemAnimation* pSource, int nCreatedOnTick, bool bCopyExtended);
+
+    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) override;                 // @0x82AEFD70
     virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;  // @0x7E49B0 (empty)
 };

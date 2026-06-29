@@ -4,6 +4,9 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptRenderItemShape.h"
+#include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager
+#include "SDKs/EATech/Apt/DogmaAllocator.h"             // DOGMA_PoolManager
+#include <new>                                     // placement new
 
 // ctor @0x80FDF4 -- base render item + the shape render-type flag.
 AptRenderItemShape::AptRenderItemShape(AptCharacter* pCharacter, int nCreatedOnTick)
@@ -12,6 +15,23 @@ AptRenderItemShape::AptRenderItemShape(AptCharacter* pCharacter, int nCreatedOnT
     // FLAG: the console additionally rotate-masks mFlags; 0x40000 is the shape
     // render-type bit (the part that matters for dispatch).
     mFlags |= 0x00040000u;
+}
+
+// Clone copy-ctor -- base copy + (re)stamp the shape render-type bits.
+AptRenderItemShape::AptRenderItemShape(const AptRenderItemShape* pSource, int nCreatedOnTick, bool bCopyExtended)
+    : AptRenderItem(pSource, nCreatedOnTick, bCopyExtended)
+{
+    mFlags = (mFlags & 0xFF03FFFFu) | 0x00040000u;
+}
+
+// Clone @0x82AECB10 -- pool-allocate a fresh shape render item copy-initialised
+// from this one (null on pool exhaustion).
+AptRenderItem* AptRenderItemShape::Clone(int nCreatedOnTick, bool bCopyExtended)
+{
+    void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemShape));
+    if (!p)
+        return nullptr;
+    return new (p) AptRenderItemShape(this, nCreatedOnTick, bCopyExtended);
 }
 
 // Render @0x8113C0 -- push the item's transforms, draw the shape geometry, pop.

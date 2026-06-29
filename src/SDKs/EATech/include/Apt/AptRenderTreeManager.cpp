@@ -10,6 +10,9 @@
 #include "SDKs/EATech/include/Apt/AptRenderItemShape.h"
 #include "SDKs/EATech/include/Apt/AptRenderItemSprite.h"
 #include "SDKs/EATech/include/Apt/AptRenderItemAnimation.h"
+#include "SDKs/EATech/include/Apt/AptRenderItemMorph.h"
+#include "SDKs/EATech/include/Apt/AptRenderItemStaticText.h"
+#include "SDKs/EATech/include/Apt/AptRenderItemLevel.h"
 #include "SDKs/EATech/include/Apt/AptCharacter.h"
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"   // AptCurrentRenderTreeManager / AptRTM_* decls
 #include "SDKs/EATech/include/Apt/AptDefine.h"           // gpNonGCPoolManager
@@ -20,18 +23,17 @@
 
 // ---------------------------------------------------------------------------
 // Manager_CreateItem @0x814094 -- allocate the render-item subtype for a
-// character's type (the Manager_CreateItem switch). The built subtypes
-// (Shape/Sprite/Animation) dispatch precisely; the not-yet-built ones
-// (DynamicText[2]/Morph[8]/StaticText[10]/Button/CustomControl + the null-char
-// Level) fall back to a base render item (which draws nothing) -- FLAG: replace
-// with the real subtype as each lands.
+// character's type (the Manager_CreateItem switch). Each case pool-allocates the
+// sized subtype, whose ctor stamps the render-type flag + vtable; an unhandled
+// type (and the deferred dynamic-text case) returns null, as the console does.
 // ---------------------------------------------------------------------------
 AptRenderItem* AptRenderItem::Manager_CreateItem(AptCharacter* pCharacter, int nTick)
 {
+    // Null character -> the stage "level" render item (the movie root).
     if (!pCharacter)
     {
-        void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItem));   // FLAG: -> AptRenderItemLevel
-        return new (p) AptRenderItem(nullptr, nTick);
+        void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemLevel));
+        return p ? new (p) AptRenderItemLevel(nullptr, nTick) : nullptr;
     }
 
     switch (pCharacter->mnType)
@@ -39,23 +41,34 @@ AptRenderItem* AptRenderItem::Manager_CreateItem(AptCharacter* pCharacter, int n
         case 1:   // shape
         {
             void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemShape));
-            return new (p) AptRenderItemShape(pCharacter, nTick);
+            return p ? new (p) AptRenderItemShape(pCharacter, nTick) : nullptr;
         }
         case 5:   // sprite / movie clip
         {
             void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemSprite));
-            return new (p) AptRenderItemSprite(pCharacter, nTick);
+            return p ? new (p) AptRenderItemSprite(pCharacter, nTick) : nullptr;
+        }
+        case 8:   // morph / tween
+        {
+            void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemMorph));
+            return p ? new (p) AptRenderItemMorph(pCharacter, nTick) : nullptr;
         }
         case 9:   // imported animation
         {
             void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemAnimation));
-            return new (p) AptRenderItemAnimation(pCharacter, nTick);
+            return p ? new (p) AptRenderItemAnimation(pCharacter, nTick) : nullptr;
         }
-        default:  // FLAG: 2/8/10/Button/CustomControl not yet built -> base placeholder
+        case 10:  // static text
         {
-            void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItem));
-            return new (p) AptRenderItem(pCharacter, nTick);
+            void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemStaticText));
+            return p ? new (p) AptRenderItemStaticText(pCharacter, nTick) : nullptr;
         }
+        // case 2 (dynamic/edit text) -> AptRenderItemDynamicText: FLAG (deferred --
+        // its 112-byte ctor needs the AptTextFormat layout, Wave 5). Until then a
+        // dynamic-text character gets no render item (the console returns the real
+        // subtype here).
+        default:  // unhandled / not-yet-built character type -> no render item
+            return nullptr;
     }
 }
 
