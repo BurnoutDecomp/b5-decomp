@@ -189,6 +189,11 @@ namespace CgsNetwork
     protected:
         void CheckForPlayerDisconnectTimeout(const CgsSystem::TimerStatus* lpTimerStatus);
 
+        // Derived players (e.g. BrnNetwork::BrnNetworkPlayer) read the owning session
+        // registry directly (X360 dereferences this+0xC); exposed protected so the derived
+        // TUs reach it by name rather than by raw offset.
+        PlayerManager* GetPlayerManager() const { return mpPlayerManager; }
+
     private:
         void UnregisterAllMessages();
         void UpdatePing(const CgsSystem::TimerStatus* lpTimerStatus, u16 lu16CurrentFrame,

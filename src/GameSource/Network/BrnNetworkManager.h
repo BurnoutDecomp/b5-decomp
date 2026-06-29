@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"      // CgsSystem::Time (GetTime() return)
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"
+#include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"  // CgsSystem::EFrameRate (GetLocalConsoleFrameRate() return)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID (committed typedef)
 #include "GameSource/Network/BrnServerInterface.h"            // BrnNetwork::BrnServerInterface (embedded by value)
@@ -148,6 +149,12 @@ namespace BrnNetwork
         // *(this+613776)/*(this+613780)). Declared-only here; the storage materialises with the
         // full BrnNetworkManager TU. ADDITIVE GROW (BrnNetworkConnectionManager TU).
         CgsSystem::Time GetTime() const;
+
+        // The local console's frame rate (X360: read whole as *(this+0x95DA0) and compared to
+        // CgsSystem::E_FRAMERATE_50HZ/_60HZ; see BrnNetwork::BrnNetworkPlayer::
+        // ProcessReceivedStuntMultiplier @ 0x82593E7C). Declared-only here; the storage
+        // materialises with the full BrnNetworkManager TU. ADDITIVE GROW.
+        CgsSystem::EFrameRate GetLocalConsoleFrameRate() const;
 
     private:
         CgsNetwork::VersionDisplay mVersionDisplay;

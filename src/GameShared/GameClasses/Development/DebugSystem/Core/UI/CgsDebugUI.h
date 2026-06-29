@@ -112,5 +112,20 @@ namespace CgsDev
             Window* GetPreviousActiveWindow(Window* lpWindow);
             DebugManager& GetDebugManager() const;
         };
+
+        // MINIMAL SLICE -- the debug console's script runner. Only the Execute entry
+        // point CgsDev::DebugGameTalkInterface::GameTalkMsgHandler (X360 @0x82833D20)
+        // drives is modelled; the full ScriptInterface (its parser/state, an
+        // mScriptInterface by-value member of DebugUI at this+0x200) is the DebugUI
+        // subsystem follow-on. GROW this in place when that subsystem is reconstructed;
+        // do NOT fork a parallel type.
+        struct ScriptInterface
+        {
+            // X360 @ ScriptInterface::Execute: run a console script. The GameTalk
+            // "ExecuteScript" handler forwards the message's script text here. The asm
+            // passes the script source pointer in r4 (declaration-only; body owned by
+            // the DebugUI script-runner TU, the /c gate does not link it).
+            void Execute(const char* lpcScript);
+        };
     }
 }

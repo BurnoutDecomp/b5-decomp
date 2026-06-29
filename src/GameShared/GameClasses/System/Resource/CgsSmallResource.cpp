@@ -37,13 +37,14 @@ namespace CgsResource
     }
 
     // rw -> small descriptor (0x826661F8): map the serialised 5-entry resource descriptor's
-    // populated categories (main=0, videomapped=2) into the 3-pool runtime descriptor; entries
-    // 1/3/4 must be unused (size <= 1).
+    // populated categories (main=0, videomapped=2) into the 3-pool runtime descriptor. Each unused
+    // entry (asm order 3,4,1) is gated on BOTH words: the asm fires if m_size!=0 (cmplwi 0; bne) OR
+    // m_alignment>1 (cmplwi 1; ble-skip), so the PASS predicate is (m_size==0 && m_alignment<=1).
     void SmallResourceDescriptor::CreateFromRWDescriptor(const ResourceDescriptor& lrDescriptor)
     {
-        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[1].m_size <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
-        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[3].m_size <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
-        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[4].m_size <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
+        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[3].m_size == 0 && lrDescriptor.m_baseResourceDescriptors[3].m_alignment <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
+        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[4].m_size == 0 && lrDescriptor.m_baseResourceDescriptors[4].m_alignment <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
+        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[1].m_size == 0 && lrDescriptor.m_baseResourceDescriptors[1].m_alignment <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
         m_baseResourceDescriptors[0] = lrDescriptor.m_baseResourceDescriptors[0];   // main     <- serialised[0]
         m_baseResourceDescriptors[1] = lrDescriptor.m_baseResourceDescriptors[2];   // graphics <- serialised[2]
     }

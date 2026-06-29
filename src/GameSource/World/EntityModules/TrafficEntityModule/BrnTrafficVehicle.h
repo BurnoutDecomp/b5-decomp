@@ -113,6 +113,11 @@ public:
                       const VehicleTypeRuntime* lpVehicleTypeRuntime,
                       Vector3 lOldUp);
 
+    // Accessors used by BrnReplays::TrafficEntitySerialiser::SetVehicleData @0x82714060
+    // (reads mxFlags at this+5 and the physical-parts index when E_FLAG_PHYSICAL is set).
+    u8  GetFlags() const { return mxFlags; }
+    s32 GetPhysicalPartsIndex() const { return miPhysicalPartsIndex; }
+
 private:
     u8 muVehicleType;
     u8 muCrashTrafficType;

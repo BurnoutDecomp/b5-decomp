@@ -90,6 +90,24 @@ namespace GameTalk
         // to attach its key/content storage before AddKeyContent populates it.
         // Modelled as a member that lazily allocates the message's data buffer.
         void* AllocateDataBuffer();
+
+        // GROWN for CgsDev::DebugGameTalkInterface::GameTalkMsgHandler
+        // (X360 @0x82833D20). The handler receives an incoming message and gates on
+        // its state word == 1 before reading the "ExecuteScript" key. The X360 Hex-Rays
+        // mis-resolves these two reads as CgsNetwork::ServerInterfaceComponent::GetLastError
+        // and sub_82837E08, but the call sites pass the GameTalkMessage `this` (r3) and
+        // (for the second) the key string in r4 -- so they are message accessors.
+        //
+        // GetState(): the message's state/result word the handler compares to 1 (only a
+        //             state of 1 is acted on). Asm-shape-derived (return is the r3 int the
+        //             handler branches on); the enumerated state values are not attested by
+        //             this TU, so the raw word is exposed and the caller compares it to 1.
+        s32 GetState() const;
+
+        // GetKeyContent(): look up the named key and return its content blob (the script
+        //                  source for "ExecuteScript"); NULL when the key is absent. The
+        //                  handler treats a non-NULL result as the script text to execute.
+        const char* GetKeyContent(const char* lpcKey) const;
     };
 
     // Signature of a GameTalk message-received handler: the manager hands the

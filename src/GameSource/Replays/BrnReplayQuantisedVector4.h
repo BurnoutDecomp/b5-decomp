@@ -30,6 +30,20 @@
 
 namespace BrnReplays
 {
+    // Free-function packer used by TrafficEntitySerialiser::WritePhysicsInfo
+    // @0x8265AE98: `QuantisedVector4::Pack(out, &gDetachedPartCompression, vec...)`
+    // quantises a Vector4 through a QuantisedVector4Compression descriptor into the
+    // packed output buffer. The descriptor it is called with is a global bit-count
+    // record (byte_82FFA5C0..C3, the four per-lane bit counts); the written byte count
+    // is (sum-of-bit-counts + 7) / 8. No DWARF recovered for the packer; declared here
+    // (its home), body in the (not-yet reconstructed) QuantisedVector4 TU.
+    struct QuantisedVector4Compression;
+    namespace QuantisedVector4
+    {
+        void Pack(void* lpDest, const QuantisedVector4Compression* lpCompression,
+                  const Vector4& lrValue);
+    }
+
     struct alignas(16) QuantisedVector4Compression
     {
         // X360 0x8264C7E8: store the 4 per-lane bit counts (+0..+3), then assert

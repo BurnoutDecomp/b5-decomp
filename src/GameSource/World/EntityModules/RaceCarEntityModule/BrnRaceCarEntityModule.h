@@ -25,12 +25,18 @@
 
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"             // EActiveRaceCarIndex / EGlobalRaceCarIndex
+#include "GameSource/GameState/BrnGameStateSharedIO.h" // BrnGameState::GameStateModuleIO::EPlayerScoringIndex
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstddef>                                   // offsetof
 
 namespace BrnWorld
 {
+
+// The active-race-car output interface (real home:
+// SharedIO/BrnRaceCarEntityModuleOutputInterface.h). CopyActiveRaceCarToPlayerScoringMappingToOutput
+// only takes a pointer to it, so a forward declaration suffices here.
+namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; }
 
 // ---- PLACEHOLDER element types ---------------------------------------------
 // The real RaceCar / ActiveRaceCar live in their own (not-yet-committed) homes
@@ -62,6 +68,34 @@ public:
     // X360 0x822A3568 -- &maRaceCars[leGlobalRaceCarIndex], in-range checked.
     inline RaceCar* GetGlobalRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex);
 
+    // ------------------------------------------------------------------------
+    // Active-race-car <-> player-scoring-slot mapping (online scoring). The module
+    // keeps maActiveRaceCarForPlayerScoringIndex[player] == the active-race-car slot
+    // that the given player is scoring as, or E_ACTIVE_RACE_CAR_INDEX_COUNT (8) as the
+    // "no mapping" sentinel (that is the value the X360 stores -- `li r10,8` / `li r27,8`).
+    // ------------------------------------------------------------------------
+
+    // X360 0x822A3760 -- set every player slot to the "no mapping" sentinel (8).
+    void ClearAllActiveRaceCarToPlayerScoringMappings();
+
+    // X360 0x822A37C8 -- find the player slot currently mapped to leActiveRaceCarIndex
+    // and reset it to the sentinel (8). If no slot maps to it, do nothing.
+    void ClearActiveRaceCarToPlayerScoringMapping(EActiveRaceCarIndex leActiveRaceCarIndex);
+
+    // X360 0x822A3888 -- map player scoring slot lePlayerScoringIndex to
+    // leActiveRaceCarIndex.
+    void SetActiveRaceCarForPlayerScoringIndex(
+        BrnGameState::GameStateModuleIO::EPlayerScoringIndex lePlayerScoringIndex,
+        EActiveRaceCarIndex leActiveRaceCarIndex);
+
+    // X360 0x822A3918 -- copy the whole player-scoring mapping into the active-race-car
+    // output interface (one SetActiveRaceCarIndex per slot).
+    void CopyActiveRaceCarToPlayerScoringMappingToOutput(
+        BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpOutputInterface);
+
+    // X360 0x822A3A20 -- (mxGameModeFlags & lxFlagMask) != 0.
+    bool GetGameModeFlag(u64 lxFlagMask) const;
+
 private:
     // Compiled-never-called offsetof layout lock (see definition below).
     void LockLayout_();
@@ -76,6 +110,26 @@ private:
 
     // Active race-car slots (local player + rivals). +0x1A60, stride 0x1CD0.
     ActiveRaceCar maActiveRaceCars[E_ACTIVE_RACE_CAR_INDEX_COUNT];
+    // (maActiveRaceCars ends at +0x1A60 + 8*0x1CD0 == +0x100E0 == 65760)
+
+    // FLAG: opaque mid-object state. The full class carries the streamer/boost/near-miss/
+    // crash-play managers, timers, RNGs, etc. between the active-car array and the
+    // game-mode/scoring tail below; here it is honest padding that lands the two named
+    // members at their X360-asm-proven byte offsets. The scoring functions and
+    // GetGameModeFlag are the only bodies in this TU that touch the tail.
+    u8 maTailPadA[0x18358 - 0x100E0];   // +0x100E0 (65760) .. +0x18358 (99160)
+
+    // X360 +0x18358 (99160). GetGameModeFlag reads it with a 64-bit load (`ldx`) and ANDs
+    // it with the caller's mask. DWARF BrnRaceCarEntityModule.h:388 -> uint64_t.
+    u64 mxGameModeFlags;                // +0x18358 (99160) .. +0x18360 (99168)
+
+    u8 maTailPadB[0x187BC - 0x18360];   // +0x18360 (99168) .. +0x187BC (100284)
+
+    // X360 +0x187BC (100284). Player-scoring-slot -> active-race-car-slot map. The X360
+    // DWORD index is 0x61EF (25071). Indexed by EPlayerScoringIndex (0..7); each cell is
+    // E_ACTIVE_RACE_CAR_INDEX_COUNT (8) when no active car is mapped to that player.
+    EActiveRaceCarIndex maActiveRaceCarForPlayerScoringIndex
+        [BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT];
 };
 
 // X360 0x822A34A8. Asserts the index is in [E_ACTIVE_RACE_CAR_INDEX_0,
@@ -117,6 +171,10 @@ inline void RaceCarEntityModule::LockLayout_()
                   "maRaceCars @+0x250 (== 592)");
     static_assert(offsetof(RaceCarEntityModule, maActiveRaceCars) == 0x1A60,
                   "maActiveRaceCars @+0x1A60 (== 6752)");
+    static_assert(offsetof(RaceCarEntityModule, mxGameModeFlags) == 0x18358,
+                  "mxGameModeFlags @+0x18358 (== 99160)");
+    static_assert(offsetof(RaceCarEntityModule, maActiveRaceCarForPlayerScoringIndex) == 0x187BC,
+                  "maActiveRaceCarForPlayerScoringIndex @+0x187BC (== 100284)");
 }
 
 }
