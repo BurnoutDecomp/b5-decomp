@@ -185,6 +185,14 @@ namespace CgsNetwork
         // private and the layout unchanged.
         LobbyApiRefT* GetLobbyAPIRef() const { return mpLobbyAPIRef; }
 
+        // ADDITIVE GROW: read accessor for the DirtySock lobby-settings ref (the +0x88
+        // member). ServerInterfacePlayerInfo's account-settings actions (EditAccount /
+        // GetAccountSettings / LoadSettings, X360 0x82879458 / 0x82879528 / 0x82879638)
+        // drive LobbySettingSetNumber/GetNumber/Save/Load through this handle
+        // (*(mpServerInterface + 0x88)). Exposed by name rather than widening friendship,
+        // leaving the member private and the layout unchanged.
+        DirtySock::LobbySettingRefT* GetSettingRef() const { return mpSettingRef; }
+
         // ADDITIVE GROW (flagged by the BrnNetworkScoreboardManager group): the rankings
         // component slot accessor. BrnNetwork::ScoreboardManager::Prepare (X360 0x825471B0)
         // reads mpServerInterface->maComponents[E_COMPONENTS_RANKINGS].mpComponent

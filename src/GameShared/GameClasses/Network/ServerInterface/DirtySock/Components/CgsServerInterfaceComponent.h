@@ -63,6 +63,18 @@ namespace CgsNetwork
         // CgsServerInterfaceComponent.h:61
         virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
 
+        // Reset the component's pending error/status back to idle (X360 @ 0x828766F0). Returns the
+        // component pointer (the X360 ABI hands `this` back in r3). The body lives in the sibling
+        // CgsServerInterfaceComponent.cpp (same mangled symbol); declared here so callers that hold
+        // the component by name (e.g. the network debug components) can drive it without forking the
+        // layout. Public to match the X360 call sites that invoke it through a base pointer.
+        void* ClearLastError();
+
+        // Current action status (== meStatus; ServerInterfaceDirtySock::EStatus, 1 == error, 2 ==
+        // idle). Inline accessor over the named member so callers can branch on it without reaching
+        // into protected state.
+        s32 GetStatus() const { return meStatus; }
+
     protected:
         // ---- Action / error helpers shared by every leaf component ------------------
         // (Bodied in dedicated component TUs / CgsServerInterfaceComponent.cpp; declared

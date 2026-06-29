@@ -81,6 +81,12 @@ namespace BrnNetwork
         void      Clear();
 
         const s32 GetStatAsInt(EStatsValue leValue) const;
+
+        // Address of one raw stat value slot (maiValues[liIndex]). The X360 stats debug component
+        // (BrnNetworkStatsDebugComponent::AddStats/RemoveStats) registers each slot as an editable
+        // s32* debug-menu variable, indexing the maiValues[] array directly (it is the first member,
+        // at object offset 0). Inline accessor over the named member so callers do not offset-hack.
+        s32* GetStatValuePtr(s32 liIndex) { return &maiValues[liIndex]; }
         void      GetStatAsString(EStatsValue leValue, char* lpcBuffer, s32 liSize) const;
         void      SetStat(EStatsValue leValue, const char* lpcStat, EStatType leType);
         void      SetStatAsInt(EStatsValue leValue, s32 liValue, EStatType leType);
