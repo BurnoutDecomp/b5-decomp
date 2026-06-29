@@ -199,11 +199,15 @@ struct AptCIH : public AptValueGC
     // (AS .setMask, via AptCIHNativeFunctionHelper::sMethod_setMask.)
     void SetMask(AptCIH* pMaskSlave);
 
-    // FLAG'd not-yet-homed behavioural callees SetMask reaches by name (bodies are
-    // their own TUs): GetMask returns the current mask SLAVE (resolved from the
-    // master's "#!MASKMASTER!#" key); SetGeneralizedProcessDirtyState stamps the
-    // bit24(self)/bit23(subtree) generalized-process-dirty flags down the subtree.
+    // GetMask @0x82AE7B48 -- FLAG (not yet homed; body its own TU): the current mask
+    // SLAVE, resolved from this master's "#!MASKMASTER!#" native-hash key.
     AptCIH* GetMask();                                          // @0x82AE7B48
+
+    // SetGeneralizedProcessDirtyState @0x82ADCA50 -- mark this node's generalized-
+    // process-dirty state. When dirtying: set the self bit (mFlagsA bit24) and
+    // propagate the subtree bit (bit23) up the parent chain to the first marked
+    // ancestor. When clearing: clear the self bit, then (if the subtree bit is clear)
+    // scan for a still-dirty child. Returns the offending child, else `this`.
     AptCIH* SetGeneralizedProcessDirtyState(bool bDirty);      // @0x82ADCA50
 
     // GetProceduralProperty @0x82AE2D10 -- read a built-in AS "procedural" property
