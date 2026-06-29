@@ -24,16 +24,53 @@ namespace rw
             // (5th entry) is the close/release method ~Handle invokes when open.
             class DeviceBase;
 
-            // An outstanding async filesystem operation. Only the fields touched by the
-            // group's TUs are named; the rest of the X360 object is reserved space so the
-            // named members land at their observed offsets.
-            //   +0x00 mpNext  : intrusive forward link (AsyncOpList node link)
-            //   +0x18 mu64Size : 64-bit size queried by GetSize
+            // An outstanding async filesystem operation. Fields are named at the X360
+            // offsets proven by the asm of the AsyncOp-list helpers AND of the Device
+            // scheduler TU (Device::InsertOp / CheckForOptimalReadOp / ThreadEntry, which
+            // walk this object by `this+N`). Offsets verified from BURNOUT_X360_ARTIST.XEX:
+            //   +0x00 mpNext      : intrusive forward link (AsyncOpList node link)
+            //   +0x04 miResult    : DoIo result/status (Device::ThreadEntry stores it here)
+            //   +0x09 mbIsReadOp  : non-zero for read-class ops the scheduler may reorder
+            //   +0x0C miPriority  : queue priority (Device sorts the op list by this)
+            //   +0x10 mpStream    : owning stream/handle; the scheduler reads (*mpStream)+8
+            //   +0x18 (union)     : 64-bit size (GetSize) OR the completion callback ptr
+            //                       the scheduler invokes once the op's DoIo finishes
+            //   +0x20 mu64Position: 64-bit byte position used by the read-coalescing math
+            //   +0x44 mpfnDoIo    : the op's transfer entry point (Device calls it)
+            //
+            // The +0x18 slot is modelled as a union: GetSize @0x82BBD700 reads the 64-bit
+            // word there (`ld 0x18`) while the Device scheduler reads a callback pointer at
+            // the same offset (`lwz 0x18`); both views are byte-for-byte the X360 object.
+            struct AsyncOp;
+            typedef void (*CompletionCallback)(AsyncOp* lpOp);
+
+            // The object AsyncOp::mpStream points at. The Device scheduler only reads the
+            // word at +0x08 (`*(*(op+0x10)+8)`) -- the handle/key it hands to the device
+            // driver's block-size vtable method -- so only that field is named here.
+            struct OpStream
+            {
+                u8    macReserved0[8]; // +0x00 .. +0x07
+                void* mpDriverKey;     // +0x08  key passed to DeviceDriver::GetBlockSize
+            };
+
             struct AsyncOp
             {
                 AsyncOp*  mpNext;          // +0x00  forward link in the AsyncOpList
-                u8        macReserved0[0x14]; // +0x04 .. +0x17 (op state: not in this group)
-                u64       mu64Size;        // +0x18  byte size of the operation/transfer
+                s32       miResult;        // +0x04  DoIo result / status
+                u8        mbReserved08;    // +0x08
+                u8        mbIsReadOp;       // +0x09  non-zero for read-class ops
+                u8        macReserved0A[2]; // +0x0A .. +0x0B
+                s32       miPriority;      // +0x0C  scheduling priority
+                OpStream* mpStream;        // +0x10  owning stream/handle (scheduler reads +8)
+                u8        macReserved14[4]; // +0x14 .. +0x17
+                union                      // +0x18
+                {
+                    u64               mu64Size;       // GetSize: `ld 0x18`
+                    CompletionCallback mpfnComplete;  // scheduler: `lwz 0x18`, then call
+                };
+                u64       mu64Position;    // +0x20  byte position (read-coalescing math)
+                u8        macReserved28[0x1C]; // +0x28 .. +0x43
+                s32       (*mpfnDoIo)(AsyncOp* lpOp); // +0x44  transfer entry point
             };
 
             // GetSize @0x82BBD700:  ld r3, 0x18(r3)  -- return the 64-bit size at +0x18.

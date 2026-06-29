@@ -38,6 +38,16 @@ namespace stdc
     void MemClear(void* lpDst, u32 luSize);
     void MemCopy(void* lpDst, const void* lpSrc, u32 luSize);
 
+    // memset-style fills. MemFill32 is the workhorse the others trampoline into:
+    // it splats the low byte of luValue across luSize bytes of lpDst, in 64/16/4-byte
+    // unrolled blocks after head-aligning the destination (the X360 build replicates
+    // the byte into a 32-bit pattern and stores it whole-word). MemClear forwards as
+    // MemFill32(dst, 0, size); MemFill8 forwards as MemFill32(dst, byte*0x01010101, size)
+    // after broadcasting the byte. luValue's low byte is the fill byte (the high 24
+    // bits are ignored by the byte-granular tails).
+    void MemFill32(void* lpDst, u32 luValue, u32 luSize);
+    void MemFill8(void* lpDst, u8 luValue, u32 luSize);
+
     // memcmp wrapper: compare luSize bytes of lpA against lpB, returning a value
     // <0 / 0 / >0 (C-library memcmp semantics). ICETake::DataChanged uses it to
     // detect whether the live take differs from its newest undo snapshot. The
@@ -86,8 +96,37 @@ namespace stdc
     // value <0 / 0 / >0 (C-library strcmp semantics; 0 means equal). The ICE menu
     // widget uses it to detect empty cells (cell text == the empty sentinel) and
     // the "<ICON>" cell marker. Both buffers are read-only text, modelled as
-    // const char*. DECLARATION-ONLY.
+    // const char*. The bytes are compared as signed char (the X360 build sign-
+    // extends each byte before the difference).
     s32 StringCompare(const char* lpcA, const char* lpcB);
+
+    // stricmp wrapper: case-insensitive compare of the NUL-terminated lpcA against
+    // lpcB, returning <0 / 0 / >0 (0 means equal ignoring ASCII case). Each step
+    // normalises lpcA's character toward lpcB's case before comparing, so the result
+    // is keyed on the (case-folded) lpcA byte vs the raw lpcB byte. The device/bundle
+    // lookups use it for case-insensitive name matching.
+    s32 StringNoCaseCompare(const char* lpcA, const char* lpcB);
+
+    // strupr-style copy: copy the NUL-terminated lpcSrc into lpcDst, upper-casing the
+    // ASCII a-z range as it goes, and return lpcDst. The bundle loader upper-cases
+    // resource names through it. Source read-only, destination writable.
+    char* StringToUpperCase(char* lpcDst, const char* lpcSrc);
+
+    // -----------------------------------------------------------------------------
+    // Integer/hex -> ASCII formatters (the building blocks the Vsprintf/Vsnprintf
+    // formatter dispatches into for %d/%i/%u/%x/%X/%p). Each writes the decimal/hex
+    // digits of the value into lpcDst as a NUL-terminated string and returns lpcDst.
+    //
+    // DECLARATION-ONLY: the X360 bodies emit the digits via a recursive high-order
+    // digit helper (a private rwcore routine, not part of this class' function set)
+    // and the printf family that consumes them is itself declaration-only here, so
+    // there is no grounded body to reconstruct without fabricating that helper. The
+    // signatures are pinned from the call sites in Vsprintf/Vsnprintf:
+    //   * liRadix selects base 10 vs 8 (ConvertIToA) / 10 (ConvertI64ToA);
+    //   * ConvertXToA's liUpperCase picks 'a'-'f' (0) vs 'A'-'F' (>0) hex digits.
+    char* ConvertIToA(s32 liValue, char* lpcDst, u32 luRadix);
+    char* ConvertI64ToA(s64 llValue, char* lpcDst, s32 liRadix);
+    char* ConvertXToA(s32 liValue, char* lpcDst, s32 liUpperCase);
 }
 }
 }
