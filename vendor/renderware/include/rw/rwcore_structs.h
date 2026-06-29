@@ -168,6 +168,15 @@ RW_SIZE_ASSERT(rw::FreeList, 80);
 struct IResourceAllocator {  // sizeof = 8 (rwcore.pdb, x64) == one vptr
     virtual ~IResourceAllocator() {}
     virtual ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor, const char* lpcName);
+
+    // ADDITIVE (virtual member fn, no storage -> sizeof unchanged): the vtable's Free slot
+    // (vtbl[3] +24, ?Free@IResourceAllocator@rw@@UEAAXPEAX_K@Z = void Free(void*, size_t)).
+    // The rw::core::debug subsystem releases its IFormatter through this slot (X360 scalar
+    // deleting destructor @0x82BBCB50 calls rw::IResourceAllocator::Free(allocator, block)).
+    // Default is a no-op (the concrete game allocator overrides it); kept non-pure so the
+    // vestigial `IResourceAllocator field_0x0;` members in the concrete structs below stay
+    // instantiable.
+    virtual void Free(void* lpBlock, uint64_t luSizeOrFlags = 0);
 };
 RW_SIZE_ASSERT(rw::IResourceAllocator, 8);
 
@@ -710,6 +719,17 @@ RW_SIZE_ASSERT(rw::core::debug::FileDevice_vtbl, 32);
 
 struct IFormatter {  // sizeof = 8 (rwcore.pdb, x64)
     void* __vftable;  // +0
+
+    // ADDITIVE (member fns, no storage -> sizeof unchanged): the abstract debug-formatter
+    // interface's allocation hooks, reconstructed from BURNOUT_X360_ARTIST.XEX. Bodies in
+    // renderware/src/rw/core/debug/Formatter.cpp.
+    //   IFormatter::operator new            @0x82BBCBF0  (carve `size` bytes through the
+    //                                                     subsystem resource allocator)
+    //   IFormatter::`scalar deleting dtor'  @0x82BBCB50  (reset vptr; Free if flag bit0 set)
+    // The class is an interface (Formatter below is the concrete impl with the Format vtbl
+    // slot); these are RenderWare's per-class allocation operators.
+    static void* operator new(size_t luSize);
+    static void  operator delete(void* lpBlock);
 };
 RW_SIZE_ASSERT(rw::core::debug::IFormatter, 8);
 
@@ -734,6 +754,12 @@ RW_SIZE_ASSERT(rw::core::debug::IFormatter_vtbl, 16);
 
 struct Manager {  // sizeof = 1 (rwcore.pdb, x64)
     uint8_t _pad0[1];  // +0
+
+    // ADDITIVE (static member fn, no storage -> sizeof unchanged): the debug-subsystem
+    // bring-up entry point (X360 rw::core::debug::Manager::CreateInstance @0x82BBD380).
+    // Records the supplied resource allocator as the subsystem allocator, then constructs
+    // the singleton IFormatter through it. Body in renderware/src/rw/core/debug/Manager.cpp.
+    static int CreateInstance(::rw::IResourceAllocator* lpAllocator);
 };
 RW_SIZE_ASSERT(rw::core::debug::Manager, 1);
 }  // namespace rw::core::debug
