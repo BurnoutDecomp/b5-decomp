@@ -71,6 +71,15 @@ namespace Props
         // X360 @ 0x822BB2D0: range-asserts X/Z then computes (cellX, cellZ).
         PropCellId GetCellId(f32 lfX, f32 lfZ);
 
+        // ADDITIVE GROW (PropZoneManager::LoadZone group): the three trivial header-inline
+        // getters LoadZone (0x822FC168) reads off the streamed record. The X360 LoadZone
+        // body loads them directly (lhz 0x18 == muZoneId, lwz 0x14 == muNumberOfProps,
+        // lwz 0x10 == muNumberOfInstances) -- they are inline accessors folded at the call
+        // site. Pure addition (no layout/sizeof change; the members already exist).
+        u16 GetZoneId() const             { return muZoneId; }
+        u32 GetNumberOfInstances() const  { return muNumberOfInstances; }
+        u32 GetNumberOfProps() const      { return muNumberOfProps; }
+
     private:
         PropCellData* maCells;
         u8            muNumCells;

@@ -3,7 +3,8 @@
 // Scene-manager IO event payloads (the subset the boot-path event queues embed).
 // Reconstructed from the DecFIGS DWARF. Events derive from an empty per-module Event
 // base (CgsModule event-queue convention).
-#include "BrnCommonTypes.h"                                          // Vector3, EntityId
+#include "types.hpp"
+#include "BrnCommonTypes.h"                                          // Vector3, EntityId, Matrix44Affine
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h" // CgsSceneManager::VolumeInstanceId
 #include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"     // CgsSceneManager::SceneQueryId
 
@@ -12,6 +13,26 @@ namespace CgsSceneManager
 namespace SceneManagerIO
 {
     struct Event {};
+
+    // ========================================================================
+    // CgsSceneManager::SceneManagerIO::InSceneUpdateInterface -- the write-side handle a
+    // module's post-physics/pre-scene output buffer hands out so loaded entities can have
+    // their positions / per-volume transforms pushed into the scene graph for the frame.
+    //
+    // MINIMAL SLICE (declared-only): the prop entity module (PropZoneManager::UpdateInstance
+    // @0x822F0920, RemoveAllPropsAndParts) calls only the three updaters below; their bodies
+    // live in the scene-manager's own TU. The full interface (the queue it appends to, the
+    // remove/add-entity calls) is reconstructed by that TU; this header grows it ADDITIVELY.
+    // It is used pointer-only here, so no member layout is asserted.
+    //   SetEntityPosition            @ 0x822B1398 -- (EntityId, const Matrix44Affine&)
+    //   SetVolumeInstanceTransform   @ 0x822CB7E8 -- (VolumeInstanceId, const Matrix44Affine&)
+    //   RemoveAllEntities            @ 0x...      -- clears every entity this frame
+    struct InSceneUpdateInterface
+    {
+        void SetEntityPosition(u32 luEntityId, const Matrix44Affine& lTransform);
+        void SetVolumeInstanceTransform(VolumeInstanceId lVolumeInstanceId, const Matrix44Affine& lTransform);
+        void RemoveAllEntities();
+    };
 
     // Output event: the nearest hit of a line test.
     struct alignas(16) OutEventLineTestNearestResult : public Event
