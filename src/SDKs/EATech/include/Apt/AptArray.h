@@ -60,10 +60,14 @@ struct AptArray : public AptObject
     static AptValue* sMethod_slice(AptArray* pThis, int nArgCount);
     static AptValue* sMethod_splice(AptArray* pThis, int nArgCount);
     static AptValue* sMethod_concat(AptArray* pThis, int nArgCount);
+    static AptValue* sMethod_join(AptArray* pThis, int nArgCount);
     static int       defaultSortCompareFunc(AptValue* const* ppA, AptValue* const* ppB);
 
 private:
     void _reserve(int32_t nCount);   // @0x7F01D0 (grow to pow2, min 8)
+    // toString @0x82AED040 -- join() backing helper: render the elements (via
+    // AptValue::Get_ToString) into pOut, separated by pSeparator.
+    void toString(EAStringC* pOut, const char* pSeparator) const;
 };
 
 // FLAG (homed by the AS-globals TU): the shared "undefined" value get() returns
