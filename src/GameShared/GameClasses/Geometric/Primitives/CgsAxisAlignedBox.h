@@ -34,10 +34,10 @@ namespace CgsGeometric
         // corner (lvMax) at +0x10 (two raw 16-byte stvx128 stores).
         void Set(const Vector4& lvMin, const Vector4& lvMax);
 
-        // ContainsPoint @ 0x828AA398 -- true iff the point lies inside the box on
-        // all three axes (min < p <= max per lane). The X360 body is heavy VMX
-        // (vcmpgtfp / vcmpgefp / vrlimi128 cross-lane reduction); declared here to
-        // match the class shape but BODIED in its own TU.
+        // ContainsPoint @ 0x828AA398 -- true iff the point lies strictly inside the
+        // box on all three axes (min < p < max per lane). The X360 body is heavy
+        // VMX (vcmpgtfp min, vcmpgefp+vnot max, vrlimi128 cross-lane AND); the max
+        // edge is strict because the >= compare is negated. Bodied in the .cpp.
         bool ContainsPoint(const Vector4& lvPoint) const;
     };
 }
