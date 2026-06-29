@@ -192,6 +192,18 @@ public:
     static void _FunctionAptActionDecrement(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionToInteger(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
+    // AsciiToChar @0x82AF3C18 (the AS chr() opcode) -- replace the top operand with
+    // a one-byte string of its integer char code. Body in AptActionInterpreterBuiltins.cpp.
+    static void _FunctionAptActionAsciiToChar(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
+    // ---- ActionScript global builtins (cbCallMethod_*) --------------------
+    // AS global functions the CallMethod dispatch invokes as f(thisValue, argCount),
+    // reading their args off the global native-arg stack. Bodies in
+    // AptActionInterpreterBuiltins.cpp.
+    static AptValue* cbCallMethod_isNaN(AptValue* pThis, int nArgCount);     // @0x82AF99E8
+    static AptValue* cbCallMethod_escape(AptValue* pThis, int nArgCount);    // @0x82AF9B08
+    static AptValue* cbCallMethod_unescape(AptValue* pThis, int nArgCount);  // @0x82AF9A50
+
     // Branch ops -- the first handlers that drive the PC. They read a 4-byte
     // (4-byte-aligned) signed offset inline from the bytecode, advance the PC past
     // it, then jump: BranchAlways unconditionally, BranchIf{True,False} after
