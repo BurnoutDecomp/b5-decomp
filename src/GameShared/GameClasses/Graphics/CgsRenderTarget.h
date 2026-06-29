@@ -79,6 +79,37 @@ public:
     // viewport + scissor to the target's full extent.
     void SetRenderTargetState(u32 luSection);
 
+    // --- serialise-side description setters --------------------------------------------------------
+    // These seed the render target's description before Construct() builds the post-fx target. The
+    // X360 inlines them (they appear as raw stores in callers such as BrnRendererMemory::CreateBackBuffer);
+    // reconstructed here as inline members so callers reach the named fields rather than poking offsets.
+    // The DWARF lists the full PS3 setter family; only the ones an X360-attested caller uses are added.
+    void SetDimensions(u32 luWidth, u32 luHeight)            { mu32MaxWidth = luWidth; mu32MaxHeight = luHeight; }
+    void SetNumMipMaps(u32 luNumMipMaps)                    { mu32MaxNumMipMaps = luNumMipMaps; }
+    void SetMultisampleFormat(s32 lnFormat)                 { mn32MultiSampleFormat = lnFormat; }
+    void SetNumSections(u8 lu8NumSections)                  { mu8NumSections = lu8NumSections; }
+    void SetUseDepthStencilAsTexture(bool lbUse)            { mbUseDepthStencilAsTexture = lbUse; }
+
+    // Mark colour section luSection in use (the X360 sets its filter mode to 1 and flags it in-use +
+    // device-written), or clear it.
+    void SetColourTargetInUse(u32 luSection)
+    {
+        maRenderTargets[luSection].mu32FilterMode = 1;
+        maRenderTargets[luSection].mbInUse        = true;
+        maRenderTargets[luSection].mbUseDevice    = true;
+    }
+    void ClearColourTargetInUse(u32 luSection)
+    {
+        maRenderTargets[luSection].mbInUse     = false;
+        maRenderTargets[luSection].mbUseDevice = false;
+    }
+    void SetColourTargetBufferFormat(u32 luSection, u32 luFormat)  { maRenderTargets[luSection].mu32BufferFormat = luFormat; }
+    void SetColourTargetTextureFormat(u32 luSection, u32 luFormat) { maRenderTargets[luSection].mu32TextureFormat = luFormat; }
+
+    // The built post-fx render target (null until Construct()/Prepare()). CreateBackBuffer reaches in
+    // to share the down-sample buffer's depth-stencil section state.
+    rw::graphics::postfx::RenderTarget* GetRenderTarget() const { return mpRenderTarget; }
+
 private:
     u32  mu32MaxWidth;
     u32  mu32MaxHeight;

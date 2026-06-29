@@ -28,6 +28,11 @@ namespace BrnDirector
 namespace Camera
 {
 
+// The director camera the behaviour produces each frame (its base Behaviour's output camera at
+// +0x10). Forward-declared so the Get/Set accessors below can name it; consumers that copy the
+// produced camera #include Camera.h themselves.
+struct Camera;
+
 // FLAG: minimal slice of the camera-behaviour type tag. Each behaviour carries a type id in the
 //   leading word of its Parameters block; SetParameters asserts the block's id is the
 //   aftertouch-crash one. The console value for eBehaviourAftertouchCrash is 13 (the asm at
@@ -70,6 +75,27 @@ public:
     // Adopt an aftertouch-crash parameter block: assert it carries the aftertouch-crash type
     // tag, then cache its first word and store the pointer. @0x821F4378.
     void SetParameters(const Parameters* lpParameters);
+
+    // ---- per-frame outputs the crash-mode arbitrator state drives -----------------------
+    // These three are the named operations BrnArbStateCrashMode::Update / ::DoCloseup invoke on
+    // the live behaviour each frame (DWARF SetRollAngleRads :108, SetCloseupAmount0To1 :113;
+    // GetCamera is the base Behaviour's produced-camera accessor). DECLARATION-ONLY here -- the
+    // bodies land with the full BehaviourAftertouchCrash TU; the precise produced-camera /
+    // mfRollAngleRads (+0x3D0) / mfCloseupAmount0To1 (+0x3D4) offsets are this type's own concern.
+    // The crash-mode state copies the produced camera and pokes only these two scalars by name,
+    // never by offset.
+
+    // The camera this behaviour produced this frame (the X360 reads it at behaviour +0x10 via the
+    // handle helper @0x821FDE68); the crash-mode state copies it into its own mCamera.
+    const Camera& GetCamera() const;
+
+    // Set the camera roll angle (radians) the crash-mode tilt oscillation drives. Stores
+    // mfRollAngleRads (+0x3D0). @ (with the full behaviour TU).
+    void SetRollAngleRads(f32 lfRollAngleRads);
+
+    // Set the slow-mo close-up blend [0..1] the crash-mode close-up ramps. Stores
+    // mfCloseupAmount0To1 (+0x3D4). @ (with the full behaviour TU).
+    void SetCloseupAmount0To1(f32 lfCloseupAmount0To1);
 
 private:
 

@@ -62,7 +62,19 @@ namespace postfx
         // The per-section D3D surface state to bind (Device::SetState). luSection selects the
         // section; the wrapper binds section 0.
         renderengine::RenderTargetState* GetRenderTargetState(u32 luSection);
+
+        // The per-section render-target-state pointer array (X360: +0x1C + luSection*4, read by
+        // RenderTarget::Begin). CreateBackBuffer patches section 0 to the engine default state and
+        // copies section 4 (the resolved depth-stencil state) from the down-sample buffer so the back
+        // buffer shares its depth surface. Declaration-only here (the fields live in this class's own
+        // TU); naming the operation keeps the caller off raw offsets.
+        renderengine::RenderTargetState* GetSectionRenderTargetState(u32 luSection);
+        void SetSectionRenderTargetState(u32 luSection, renderengine::RenderTargetState* lpState);
     };
+
+    // The engine's default render-target state (X360 dword_83271614, installed by
+    // renderengine::Device::Start). Used as section 0's state for targets that have none of their own.
+    extern renderengine::RenderTargetState* gpDefaultRenderTargetState;
 }
 }
 }

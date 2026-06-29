@@ -118,6 +118,22 @@ namespace BrnAI
         EAICarState      GetState() const;                   // DWARF BrnAICar.h:275 (== meCarState @+0x14C8)
         bool             IsPlayerCar() const;                // DWARF BrnAICar.h:326 (== mbIsPlayer @+0x1549)
 
+        // ---- accessors the RaceBalancingDebugComponent (debug HUD) reads (its own TU) ----------
+        // The car's embedded route (mRoute is at AICar+0; the X360 passes the AICar pointer straight
+        // to Route::GetNode/GetNodeCount). Restored inline so the debug HUD reaches it by name.
+        const Route* GetRoute() const { return reinterpret_cast<const Route*>(this); }
+        // Distance the car is ahead of the player along the route (== mfDistanceAheadOfPlayer
+        // @+0x14F8). The debug HUD prints it and uses the 80m threshold to label the active graph.
+        f32 GetDistanceAheadOfPlayer() const { return mfDistanceAheadOfPlayer; }
+        // Speed-matching read-out for the debug HUD. The X360 reads a sub-controller pointer at
+        // AICar+0x14B0 (only meaningful while IN_RANGE) and, when its "is speed matching" flag is
+        // set (+0x1D66 on the pointee), prints its matched speed (+0x1D18). Exposed as named
+        // accessors here; the bodies (which perform the +0x14B0 deref) live in the AICar TU.
+        // UNCERTAIN: the pointee type and the two field offsets are recovered from the debug-HUD asm
+        // only (not cross-checked against the owning class); see open questions.
+        bool IsSpeedMatching() const;                         // X360: car+0x14B0 -> [+0x1D66] (IN_RANGE only)
+        f32  GetSpeedMatchSpeed() const;                      // X360: car+0x14B0 -> [+0x1D18]
+
         // ---- accessors the speed + route-progress core (BrnAICar.cpp, this UNIT) call -------
         // GetDecentSpeed @0x82766030 -- the "decent" floor speed for the car's current route-
         // finding style (a fraction of mfMaxPlayerSpeed). Bodied in BrnAICar.cpp.
