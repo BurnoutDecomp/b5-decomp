@@ -260,14 +260,13 @@ namespace CgsResource
             break;
         case 3:
         {
-            mProcessState = E_UPDATESTATE_IDLE;   // X360 *(a1+105264) = 0
-            // The deallocate state stashes the originating allocate request inline; +12 is the "have
-            // request" byte, +16 the request block. Forward it (or null) to the allocate handler.
-            const u8* lpcState = reinterpret_cast<const u8*>(&mDeAllocateState);
-            const void* lpRequest = (*(lpcState + 12) != 0) ? (lpcState + 16) : 0;
-            if (lpRequest != 0)
-                DoAllocateResourceListRequest(lpRequest);
-            // X360 *(a1+105356) = 0 -- clear the live-update-in-progress flag (mLiveUpdateState region).
+            mProcessState = E_UPDATESTATE_IDLE;   // X360 *(this+0x19B30) = 0
+            // The deallocate state stashed the originating allocate request; forward it (or null when
+            // its have-request flag is clear) to the allocate handler. The X360 makes this call
+            // UNCONDITIONALLY -- the null case is reached only defensively. (Asm: lbz +0xC -> r4 =
+            // (flag ? &state+0x10 : 0); bl DoAllocateResourceListRequest.)
+            DoAllocateResourceListRequest(mDeAllocateState.GetPendingAllocateRequest());
+            // X360 *(this+0x19B8C) byte = 0 -- clear the live-update-in-progress flag (mLiveUpdateState region).
             break;
         }
         default:
