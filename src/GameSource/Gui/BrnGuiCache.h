@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
+#include "BrnCommonTypes.h"                        // Vector3 (event-position accessor returns)
 
 // BrnGui::GuiCache subsystem (DecFIGS DWARF: BrnGuiCache.h). StateLoadingHelper is the
 // resource/component watcher embedded in the cache; GuiCache is the cache itself. Only
@@ -12,9 +13,16 @@
 // layout is an out-of-scope boundary object the leaves only touch through these calls).
 namespace CgsGui { class ObjectController; }
 namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList return (pointer only)
+namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
+namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (pointer only)
 
 namespace BrnGui
 {
+    // Defined later in this header (minimal-slice records returned by GetPresetEvent /
+    // the inlined event-display helpers).
+    struct PresetEvent;
+    struct SatNavEventDisplayInfo;
+
     struct StateLoadingHelper
     {
         enum EResourceState
@@ -155,5 +163,73 @@ namespace BrnGui
         // GameState IO enum header (same convention as GetCurrentGameModeType). Body links
         // from the GuiCache TU.
         s32 GetCurrentOnlinePlayerTeam(EActiveRaceCarIndex leActiveRaceCarIndex) const;
+
+        // ADDITIVE GROW (BrnSatNavRenderer TU). The sat-nav icon renderer reaches the world /
+        // event data through the cache when it builds and refreshes its on-map icon set. DWARF
+        // (BrnGuiCache.h) gives every signature; the X360 inlines several at the call site, so
+        // exposing them by name keeps the renderer off raw offsets. Bodies link from the GuiCache TU.
+
+        // DWARF h: -- the GUI world-data front-end (event records + landmark counts).
+        WorldDataController* GetWorldDataController() const;
+
+        // ADDITIVE GROW (BrnSatNavRenderer TU). The world-space camera position the sat-nav
+        // renderer measures off-screen icons against. RenderIconsForSatNav loads it ONCE before
+        // the per-icon loop (X360 @0x8245FA48: lvx128 v124, mpGuiCache, 0x4AE0 -- the far member
+        // GuiCache+0x4AE0, a 16-byte VMX lane) and then computes the per-icon squared distance
+        // |iconPos - cameraPos|^2 (vsubfp128 + vmsum3fp128 over the first three lanes) to pick the
+        // closest off-screen icon. Exposed by name as the leading 16-byte lane (xyz = camera
+        // world position); body links from the GuiCache TU. X360-attested @0x4AE0.
+        const Vector4& GetWorldCameraPosition() const;   // X360 far member @0x4AE0
+
+        // DWARF h:1386/1389 -- the player's profile-event list (offline events). GetProfileEvent
+        // indexes it; GetNumProfileEvents is the live count.
+        u32                              GetNumProfileEvents() const;
+        const BrnProgression::ProfileEvent* GetProfileEvent(u32 luIndex) const;
+
+        // DWARF h:1392/1398 -- the preset (online) event list. GetPresetEvent (X360 @0x8241E520)
+        // indexes it (asserts liIndex >= 0 / array-constructed / in-bounds); GetNumPresetEvents is
+        // the live count. The element is the game-state preset Event; only the two ids the renderer
+        // reads off it are exposed (by name) via PresetEvent below.
+        const PresetEvent*   GetPresetEvent(s32 liIndex) const;
+        s32                  GetNumPresetEvents() const;
+
+        // DWARF h:1456-ish -- fill lpOutIconInfo with the online-landmark icon record at the given
+        // position-in-list slot (used for meIconDisplayType == ONLINE_CHECKPOINTS). Returns the
+        // out pointer. The element is the GuiEventUpdateSatNav::SatNavIconInfo (committed type).
+        GuiEventUpdateSatNav::SatNavIconInfo*
+            GetOnlineLandmarkInfoAtPositionInList(s32 liIndex,
+                                                  GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const;
+
+        // X360 inlined cache helpers (sub_824F8838 / sub_824F8AF0): resolve an event id to its
+        // on-map display record. The record's leading 16-byte lane is the world-space icon
+        // position (the renderer VMX-copies it into the cached icon's mv3Position); its +0x18 word
+        // is the event-instance id the renderer feeds to GetEventInfoFromEventId in the preset
+        // path. Two flavours for the two event lists (profile vs preset).
+        const SatNavEventDisplayInfo* GetProfileEventDisplayInfo(u32 luEventId) const; // X360 @0x824F8AF0
+        const SatNavEventDisplayInfo* GetPresetEventDisplayInfo(u32 luEventId) const;  // X360 @0x824F8838
+    };
+
+    // Boundary record returned by the two inlined event-display helpers above. Only the two
+    // fields the sat-nav renderer reads are named (X360-proven offsets); the rest of the record
+    // is opaque. FLAG: minimal-slice display record.
+    struct SatNavEventDisplayInfo
+    {
+        Vector3 mv3Position;     // +0x00 (16-byte VMX lane copied to the cached icon)
+        u8      mPad_10[0x08];   // +0x10..+0x17
+        u32     muEventInstanceId; // +0x18 (preset path WDC lookup id)
+    };
+
+    // Minimal slice of the preset/online event record the cache hands back from GetPresetEvent.
+    // The sat-nav renderer only reads two ids off it (X360 GetIconInformation preset branch):
+    //   * GetPositionLookupId -- X360 word +0x20; passed to GetPresetEventWorldPosition.
+    //   * GetEventId          -- X360 word +0x28; stored as the cached icon's miEventId and used
+    //                            for the WorldDataController event-info lookup.
+    // The real element is BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event
+    // (uncommitted); modelled here as a named-accessor boundary type. Bodies link from the
+    // GuiCache / game-state TU. FLAG: minimal-slice preset-event record.
+    struct PresetEvent
+    {
+        u32 GetPositionLookupId() const;  // +0x20
+        u32 GetEventId() const;           // +0x28
     };
 }

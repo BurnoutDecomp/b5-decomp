@@ -123,6 +123,17 @@ struct GuiEventUpdateSatNav
         void SetPlayerTeamByte(s8 li8Team) { mi8PlayerTeam = li8Team; }     // @0x27
         bool IsHiddenDriveThru() const { return mbIsHiddenDriveThru; }      // @0x23
 
+        // ADDITIVE GROW (BrnSatNavRenderer TU): the sat-nav renderer's online-landmark icon path
+        // (GetIconInformation display-type 2) copies the 16-byte position lane (@0x00) and the
+        // signed landmark-index half-word (@0x20) out of a landmark record. Exposed by name so the
+        // renderer stays off raw offsets. Returns the Vector4 position lane (the renderer narrows
+        // it to its Vector3 icon position) and the sign-extended @0x20 half-word.
+        const Vector4& GetPositionLane() const { return mv4Position; }      // @0x00
+        s16  GetLandmarkIndexHalf() const                                   // @0x20 (within the head)
+        {
+            return *reinterpret_cast<const s16*>(&maHeadReserved[0x20 - 0x10]);
+        }
+
     private:
         // ---- leading payload (PS3 DWARF :1699-1707) ----
         // The DWARF-documented head order is, at byte offsets: Vector3 mv3Position
@@ -374,6 +385,23 @@ struct GuiNewBurnoutHudMessageEvent : public CgsGui::GuiEvent<527>
     BrnGameState::BurnoutSkillzData::EBurnoutSkillType meSkill;    // BrnGuiEventTypeDefs.h:6363
     EActiveRaceCarIndex                            meNewOwner;     // BrnGuiEventTypeDefs.h:6364
     EActiveRaceCarIndex                            mePreviousOwner;// BrnGuiEventTypeDefs.h:6365
+};
+
+// Declaration mirror of the DWARF parent (BrnGuiEventTypeDefs.h:1902). Only the nested
+// EIconDisplayType enum is modelled -- it is the type of SatNavRenderer::meIconDisplayType
+// (which "event set" the sat-nav renderer draws). ADDITIVE GROW (BrnSatNavRenderer TU):
+// adds the enum at its DWARF home; nothing existing is changed.
+struct GuiEventEnableSatNavIcons
+{
+    enum EIconDisplayType
+    {
+        E_ICON_DISPLAY_TYPE_OFFLINE_EVENTS        = 0,
+        E_ICON_DISPLAY_TYPE_ONLINE_EVENT_STARTS   = 1,
+        E_ICON_DISPLAY_TYPE_ONLINE_CHECKPOINTS    = 2,
+        E_ICON_DISPLAY_TYPE_ONLINE_FINISH_POINTS  = 3,
+        E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS  = 4,
+        E_ICON_DISPLAY_TYPE_COUNT                 = 5,
+    };
 };
 
 } // namespace BrnGui
