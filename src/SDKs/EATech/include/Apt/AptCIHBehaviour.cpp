@@ -543,3 +543,48 @@ bool AptCIH::IsVisible() const
     }
     return true;
 }
+
+// ---------------------------------------------------------------------------
+// SetGeneralizedProcessDirtyState @0x82ADCA50 -- mark/clear this node's
+// generalized-process-dirty state (mFlagsA bit24 = self, bit23 = subtree).
+//
+// SET (bDirty): set bit24 on this node, then walk up mpDisplayListParent setting
+//   each ancestor's bit23 until one already has it. CLEAR: clear bit24; if the
+//   subtree bit (bit23) is not set, scan this node's children for one still flagged
+//   dirty and return it (the X360's outer parent-walk re-scans the same child list,
+//   so it is a single scan gated on having a parent). The return is `this` on every
+//   path except a found dirty child; the sole callers (SetMask/InsertChild) discard
+//   it, so the scan is observable only through that discarded value -- no side effect.
+//   (The X360 leaves r3 == `this` when no parent exists; reconstructed faithfully as
+//   `return this`, where an earlier ungated reconstruction wrongly returned null.)
+// ---------------------------------------------------------------------------
+AptCIH* AptCIH::SetGeneralizedProcessDirtyState(bool bDirty)
+{
+    if (bDirty)
+    {
+        mFlagsA |= 0x01000000u;   // self generalized-process-dirty (bit24)
+        for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; )
+        {
+            if (pAncestor->mFlagsA & 0x00800000u)   // subtree bit already set -> stop
+                break;
+            AptCIH* pNext = pAncestor->mpDisplayListParent;
+            pAncestor->mFlagsA |= 0x00800000u;       // propagate subtree dirty (bit23)
+            pAncestor = pNext;
+        }
+        return this;
+    }
+
+    mFlagsA &= 0xFEFFFFFFu;   // clear the self bit (bit24)
+    if (!(mFlagsA & 0x00800000u))
+    {
+        for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; pAncestor = pAncestor->mpDisplayListParent)
+        {
+            for (AptCIH* pChild = GetFirstChild(); pChild; pChild = pChild->mpDisplayListNext)
+            {
+                if (pChild->mFlagsA & 0x01800000u)   // child still dirty (bit23 | bit24)
+                    return pChild;
+            }
+        }
+    }
+    return this;
+}
