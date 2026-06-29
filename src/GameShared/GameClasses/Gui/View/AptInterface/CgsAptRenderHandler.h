@@ -184,6 +184,15 @@ namespace CgsGui
         s32         GetTextEffect()     const { return miTextEffect; }
         f32         GetFontSizeScale()  const { return mfFontSizeScale; }
 
+        // The language manager Construct held (guest RenderHandler +99776). CgsAptString::Prepare
+        // resolves a $LANGID / ~ key through it (guest reads *(v14+99776) off &mRenderHandler and
+        // calls LanguageManager::FindString). Returned as the typed pointer the call site needs;
+        // the member stays an opaque word (only the text path dereferences it).
+        CgsLanguage::LanguageManager* GetLanguageManager() const
+        {
+            return reinterpret_cast<CgsLanguage::LanguageManager*>(const_cast<void*>(mpLanguageManager));
+        }
+
     public:
         // One per-shape texture-state cache: a chained HashTable<textureId, TextureState*, 25>
         // (the 25 bins) backed by an EXTERNAL fixed node pool. The guest lays the 25-bin table

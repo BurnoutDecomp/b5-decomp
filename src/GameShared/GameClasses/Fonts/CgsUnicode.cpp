@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // CgsUnicode -- UTF-8 helpers. Faithful ports of the X360 ARTIST bodies:
 //   ConvertUtf8CharToUtf16Char  0x827E6B08
@@ -69,5 +70,105 @@ namespace CgsUnicode
 
         // (X360 asserts luUtf32 <= KUTF32_MAX_UTF16 (0xFFFF).)
         return static_cast<u16>(luUtf32);
+    }
+
+    // Faithful port of X360 ARTIST 0x82834D10: validate one UTF-8 character.
+    //   - a NUL lead byte is "valid" (the empty-string terminator);
+    //   - byte_820DE3C8[lead] gives the trailing-byte count (0..3) or 255 (not a valid lead);
+    //   - a valid lead byte must NOT itself be a continuation byte (10xxxxxx) and must be
+    //     followed by exactly that many continuation bytes.
+    // (The X360 build emits a debug log line on each failure when the message filter bit is
+    // set; that diagnostic print is debug-only formatting and is not reproduced here -- the
+    // observable result, 0/1, is.)
+    bool IsValidUtf8Character(const u8* lpUtf8Char)
+    {
+        const u8 lu8Lead = *lpUtf8Char;
+        if (lu8Lead == 0)
+            return true;
+
+        const u32 luTrailing = lUtf8TrailingBytes(lu8Lead);
+        if (luTrailing == 255u)
+            return false;                       // not a valid start byte (continuation / >4-byte)
+
+        // luTrailing <= 3 and the lead is not a 10xxxxxx continuation byte: walk the trailing
+        // bytes and require each to be a 10xxxxxx continuation. (X360: luTrailing > extra count
+        // -> too many trailing bytes -> invalid; fewer -> the loop ends early and is valid.)
+        const u8* lpByte = lpUtf8Char + 1;
+        u32 luSeen = 1u;
+        while ((*lpByte & 0xC0) == 0x80)
+        {
+            ++lpByte;
+            if (++luSeen > luTrailing)
+                return false;                   // more continuation bytes than the lead allows
+        }
+        return true;
+    }
+
+    // Faithful port of X360 ARTIST 0x82834EA0: a string is valid when it is empty or every
+    // character in it is a valid UTF-8 character.
+    bool IsValidUtf8String(const u8* lpUtf8String)
+    {
+        const u8* lpByte = lpUtf8String;
+        if (*lpByte == 0)
+            return true;
+
+        while (IsValidUtf8Character(lpByte))
+        {
+            lpByte = IncrementUtf8Pointer(lpByte);
+            if (*lpByte == 0)
+                return true;
+        }
+        return false;
+    }
+
+    // Faithful port of X360 ARTIST 0x82834478: copy at most lnMaxTargetStringLength bytes of
+    // the source string into the target, always NUL-terminating, and NEVER cutting a multi-byte
+    // UTF-8 character: when the byte cap is reached, back up over any trailing continuation
+    // bytes (10xxxxxx) so the truncation lands on a character boundary.
+    CgsUtf8* CopyN(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
+                   s32 lnMaxTargetStringLength)
+    {
+        CGS_ASSERT(lpUtf8TargetString != 0, "lpUtf8TargetString!= NULL");
+        CGS_ASSERT(lpUtf8SourceString != 0, "lpUtf8SourceString!= NULL");
+        CGS_ASSERT(lnMaxTargetStringLength > 0, "lnMaxTargetStringLength > 0");
+
+        const CgsUtf8* lpSource = lpUtf8SourceString;
+        CgsUtf8*       lpDest    = lpUtf8TargetString;
+        s32            liCopied  = 0;
+
+        // Copy bytes until the source ends or the cap is reached (X360: the loop breaks at
+        // v8 == a3 -- i.e. exactly lnMaxTargetStringLength bytes written -- or at the source NUL).
+        bool lbHitCap = false;
+        while (*lpSource != 0)
+        {
+            if (liCopied >= lnMaxTargetStringLength)
+            {
+                lbHitCap = true;
+                break;
+            }
+            *lpDest++ = *lpSource++;
+            ++liCopied;
+        }
+        if (liCopied == lnMaxTargetStringLength)
+            lbHitCap = true;
+
+        // If the cap was hit, the last byte written may be mid-character: rewind over any
+        // trailing continuation bytes so the NUL lands on a leading byte. (X360 asserts it
+        // found a leading byte before the start of the buffer; that under-run is impossible
+        // for any well-formed UTF-8 input shorter than the cap, so the guard is documentary.)
+        if (lbHitCap)
+        {
+            do
+            {
+                --lpDest;
+            }
+            while ((*lpDest & 0xC0) == 0x80);
+
+            CGS_ASSERT(lpDest >= lpUtf8TargetString,
+                       "Could not find a leading byte in string.");
+        }
+
+        *lpDest = 0;
+        return lpUtf8TargetString;
     }
 }

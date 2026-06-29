@@ -56,6 +56,12 @@ namespace CgsLanguage
         // TU. (DWARF buffer type is CgsUnicode::CgsUtf8* == u8; returned as that here.)
         const u8* FindString(const char* lpcKey) const;
 
+        // X360 0x82864028. FindString's back-end: looks a precomputed key hash up in the
+        // manager's loaded localised-string table and returns the stored UTF-8 string pointer
+        // (or NULL when the table holds no entry for that hash). Split out so the credits /
+        // HUD paths that already hold a hash skip the re-hash. Body links from this TU.
+        const u8* FindStringByHash(unsigned int luHash) const;
+
         // The active language id. The X360 reads it as the manager's leading field
         // (the InGameMessageRenderer compares it against 16 -- a wide-glyph language --
         // to nudge the on-screen message Y-position). Exposed as a named accessor so

@@ -247,4 +247,21 @@ namespace CgsGui
     {
         CGS_ASSERT(false, "GetRealTimeClock() has not been implemented but is being used, please implement before utilising.");
     }
+
+    // The language-manager accessor CgsAptString::Prepare (CgsAptString.cpp) reaches the manager
+    // through. The console Prepare loads the AptAux singleton (off_8305A6C8 == AptAuxPointer::
+    // mpAptAuxInst), adds 0x420 to reach the embedded render handler, and reads mpLanguageManager
+    // at +99776. This TU owns the full AptAux / AptRenderHandler layout, so it can return the
+    // manager by name; the real-CgsAptString TU cannot include those types (the opaque pool
+    // CgsAptString stand-in clashes), hence this out-of-line bridge. Asserts mirror the console's.
+    CgsLanguage::LanguageManager* GetAptRenderHandlerLanguageManager()
+    {
+        AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
+        CGS_ASSERT(lpAptAux != 0, "Invalid Apt Aux instance in AptCallbackRender::AllocateString");
+        AptRenderHandler* lpRenderHandler = &lpAptAux->mRenderHandler;
+        CGS_ASSERT(lpRenderHandler != 0, "Invalid render handler instance in AptCallbackRender::AllocateString");
+        CgsLanguage::LanguageManager* lpLanguage = lpRenderHandler->GetLanguageManager();
+        CGS_ASSERT(lpLanguage != 0, "Invalid language manager in CgsAptString::Prepare");
+        return lpLanguage;
+    }
 }
