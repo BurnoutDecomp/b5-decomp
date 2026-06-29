@@ -2,7 +2,12 @@
 #define EA_JOBS_JOB_SCHEDULER_H
 
 #include "types.hpp"
-#include "eathread/eathread_futex.h"                    // EA::Thread::Futex (CRITICAL_SECTION-backed lock)
+#include "SDKs/EATech/eathread/BrnEAThreadX360.h"        // EA::Thread::Futex -- PROJECT X360 home (CRITICAL_SECTION-backed lock).
+                                                         // NOT the vendor eathread/eathread_futex.h: that header transitively
+                                                         // pulls a divergent EA::Thread::MutexParameters which collides (C2011)
+                                                         // with the X360-faithful one in BrnEAThreadX360.h (reached via
+                                                         // local_backend.h -> job_thread.h). The single project-homed
+                                                         // EA::Thread types are the ones the X360 build links.
 #include "SDKs/EATech/eajobs/job_types.h"               // JobEnvironment, JobAffinity, Detail::SchedulerBackend, JobInstanceHandle, Job
 #include "SDKs/EATech/eajobs/job_thread_parameters.h"   // JobThreadParameters
 #include "SDKs/EATech/eajobs/job_thread_handle.h"       // JobThreadHandle
@@ -60,6 +65,13 @@ namespace Jobs
         // 0x82BCB498: registers each job as not-ready (INTERNAL_AddNotReady), submits
         // their events + dependencies, runs their start events, then kicks the backend.
         void AddJobs(Job* lpaJobs, int liCount);
+
+        // job_scheduler.h -- submit lpRootJob together with its transitively reachable
+        // dependency/dependent graph as one batch. X360 0x82BCB540: a breadth-first
+        // closure walk (24-slot stack list doubling as the visited set via Job::mSeen)
+        // registers every reached job not-ready, submits their events + dependency
+        // edges, runs their start events, then kicks the backend.
+        void AddTree(Job* lpRootJob);
 
         // job_scheduler.h:59 -- spawn a worker thread described by lrParameters.
         JobThreadHandle AddThread(const JobThreadParameters& lrParameters);

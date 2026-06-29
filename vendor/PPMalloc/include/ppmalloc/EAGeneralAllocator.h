@@ -197,7 +197,11 @@ namespace Allocator
                          void* pCoreAddFunctionContext = 0);
         // Default-construct an empty allocator (core adopted later via AddCore). Preserved.
         GeneralAllocator();
-        virtual ~GeneralAllocator();
+        // NON-virtual: the X360 GeneralAllocator is non-polymorphic (DWARF declares no base/no
+        // virtual dtor; ctor @0x82B4FF58 stores mbInitialized as a BYTE at offset 0 with no vptr;
+        // the dtor @0x82B511A8 is a plain tail-call to Shutdown invoked via callers' scalar-deleting
+        // thunks, not a vtable slot). A virtual dtor would fabricate a vptr and shift every member.
+        ~GeneralAllocator();
 
         // Empty-heap bring-up (preserved 0-arg form used by the resource allocators).
         bool  Init();
@@ -410,6 +414,10 @@ namespace Allocator
         // installs into the mpTraceFunction / mpAssertionFailureFunction slots). The DWARF lists
         // them without an explicit this in the trace, consistent with the static signature; no
         // separate non-static overload is added (it would collide on identical parameter types).
+
+        // Uncalled layout pin (defined in the .cpp). A static member so its offsetof checks can
+        // reach the protected members below; never called - it only trips the build on layout drift.
+        static void _AssertLayout();
 
     protected:
         // --- members (real order; see the PDB dump + X360 ctor/Init store offsets) ------

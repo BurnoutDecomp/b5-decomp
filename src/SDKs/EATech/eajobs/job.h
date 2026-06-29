@@ -86,6 +86,11 @@ namespace Jobs
         // no standalone X360 body in this build -- see job.cpp).
         void DependsOn(JobInstanceHandle hInstance, Event::When eTrigger);
 
+        // job.h:68 -- how many direct dependencies this job has across its bucket
+        // chain. Counterpart to GetNumDependents; the JobScheduler::AddTree closure
+        // walk @ 0x82BCB540 reads it to bound the GetDependency loop. (Body lives in
+        // the vendor job TU; declaration-only here -- not yet reconstructed.)
+        int  GetNumDependencies() const;
         // job.h:70 -- the i-th dependency's owning Job. X360 0x82BCA258 (+ the chain
         // walker Job::Depende @ 0x82BCA078).
         Job* GetDependency(int iIndex) const;

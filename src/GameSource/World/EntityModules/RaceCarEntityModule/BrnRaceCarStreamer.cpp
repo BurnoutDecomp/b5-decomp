@@ -35,6 +35,11 @@ namespace BrnWorld
 // The X360 logs gate on (gxMessageFilterFlags & KX_FILTER_GLOBAL); GLOBAL == bit 0.
 static const u64 KX_FILTER_GLOBAL = 1;
 
+// BrnRaceCarStreamer.h:278 (DWARF namespace-scope const). UpdateDesiredCars compares
+// mfTimeSinceLastLoad against this gate (X360 asm @0x822EC974: lfs flt_820054D0; the
+// Hex-Rays-resolved float literal is 7.0). Seconds.
+const f32 KF_TIME_BETWEEN_DESIRED_LOADS = 7.0f;
+
 // @ 0x827E4BC8. Default ctor. The ARTIST asm installs the five contained streamers'
 // vtables and zeroes the three intrusively-linked resource-pointer tables (each slot's
 // next/prev/this self-links); in human C++ that is exactly the contained members'
@@ -333,6 +338,385 @@ void RaceCarStreamer::HACKGetValidModelIds( CgsID& lrModelId, CgsID& lrWheelId )
     strcpy( lacIDBuffer, "WHE_" );
     CgsIDConvertToString( lrWheelId, lacIDBuffer + 4 );
     lrWheelId = CgsIDCompress( lacIDBuffer );
+}
+
+// ============================================================================
+// The eight asset-director functions homed in THIS .cpp (the dossier's ledger
+// set for BrnRaceCarStreamer.cpp). Reconstructed from BURNOUT_X360_ARTIST.XEX:
+//   Construct              @ 0x822F7FA0  (boot-trace EXECUTED)
+//   Destruct               @ 0x822EBC98
+//   AddVehicleData         @ 0x822EBE18
+//   RemoveVehicleData      @ 0x822A53E8
+//   SetRequiredVehicleData @ 0x822EC650
+//   SetDesiredVehicleData  @ 0x822A5468
+//   Update                 @ 0x822F80C0
+//   UpdateDesiredCars      @ 0x822EC6F8
+//
+// The four trivial component streamers (mGraphicsStreamer / mPhysicsStreamer /
+// mAttributeStreamer / mWheelGraphicsStreamer) supply their own
+// Construct(this)/Destruct() (in-scope callees -- their declarations satisfy
+// cl /c here; their bodies land with the RaceCarComponentStreamers leaves). The
+// X360 INLINED those leaf Construct/Destruct into RaceCarStreamer::Construct/
+// Destruct (calling RaceCarBaseComponentStreamer::Construct directly then writing
+// each leaf mpStreamer back-pointer); the human form below delegates to the leaf
+// Construct/Destruct, which is where that pool-id/asset-set knowledge belongs.
+// ============================================================================
+
+// @ 0x822F7FA0. Install the five component streamers and clear the per-car tables.
+// The X360 clears maxLoadFlags / the three graphics-style ResourcePtr tables (to the
+// NULL handle) / mabAttribsLoaded / mabAudioLoaded / maDesiredCarIds / maDesiredPriorities
+// per car, then constructs each contained streamer and zeroes the scalar bookkeeping.
+// (maDesiredWheelIds is intentionally NOT cleared here -- the asm leaves it, paired with
+// maDesiredCarIds only when SetDesiredVehicleData writes a fresh request.)
+void RaceCarStreamer::Construct()
+{
+    mpVehicleList = 0;
+
+    for( s32 liActiveRaceCar = 0; liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS; liActiveRaceCar++ )
+    {
+        maxLoadFlags[liActiveRaceCar] = 0;
+
+        maGraphicsResources[liActiveRaceCar]      = CgsResource::NULLResourcePtr;
+        maPhysicsResources[liActiveRaceCar]       = CgsResource::NULLResourcePtr;
+        mabAttribsLoaded[liActiveRaceCar]         = false;
+        maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
+        mabAudioLoaded[liActiveRaceCar]           = false;
+
+        maDesiredCarIds[liActiveRaceCar]    = 0;
+        maDesiredPriorities[liActiveRaceCar] = -1;
+    }
+
+    mGraphicsStreamer.Construct( this );
+    mPhysicsStreamer.Construct( this );
+    mAttributeStreamer.Construct( this );
+    mWheelGraphicsStreamer.Construct( this );
+    mAudioStreamer.Construct( this );
+
+    mbHACK_WaitingForAudioAfterCarSelect = false;
+    mfTimeSinceLastLoad                  = 0.0f;
+}
+
+// @ 0x822EBC98. Tear the streamer down: destruct the five component streamers (the X360
+// inlines each leaf Destruct -- clear its mpStreamer back-pointer and reset its base
+// linkage) then NULL the three ResourcePtr tables and clear mabAudioLoaded.
+void RaceCarStreamer::Destruct()
+{
+    mWheelGraphicsStreamer.Destruct();
+    mAttributeStreamer.Destruct();
+    mPhysicsStreamer.Destruct();
+    mGraphicsStreamer.Destruct();
+    mAudioStreamer.Destruct();
+
+    for( s32 liActiveRaceCar = 0; liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS; liActiveRaceCar++ )
+    {
+        maGraphicsResources[liActiveRaceCar]      = CgsResource::NULLResourcePtr;
+        maPhysicsResources[liActiveRaceCar]       = CgsResource::NULLResourcePtr;
+        mabAudioLoaded[liActiveRaceCar]           = false;
+        maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
+    }
+}
+
+// @ 0x822EBE18. Begin streaming a car's five asset components for slot liActiveRaceCar.
+// If the slot is flagged E_LOADFLAG_UNUSED (a pending removal), first tear the old
+// entries down. Re-prefix the ids (HACKGetValidModelIds), probe each component streamer
+// for an already-loaded asset (folding the matching LOADED* bit + skipping a redundant
+// load when the cached ResourcePtr is non-NULL), commit the assembled flag byte, then
+// register the desired asset with each component streamer. lbActive flows to the audio
+// streamer as the is-player flag.
+void RaceCarStreamer::AddVehicleData( s32 liActiveRaceCar, CgsID lModelId, CgsID lWheelId, bool lbActive )
+{
+    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT( lModelId != 0, "lModelId" );
+    CGS_ASSERT( lWheelId != 0, "lWheelId" );
+
+    // Re-adding a car to a slot that is already ACTIVE and NOT pending-removal is an error
+    // (asm 0x822EBE48: (flags & E_LOADFLAG_ACTIVE) != 0 && (flags & E_LOADFLAG_UNUSED) == 0).
+    if( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0
+        && ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_UNUSED ) == 0 )
+    {
+        char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream( lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
+        lStrStream << "Flags = " << static_cast<u32>( maxLoadFlags[liActiveRaceCar] )
+                   << " Car index = " << liActiveRaceCar << "\n";
+        CGS_ASSERT( false, lStrStream.GetBuffer() );
+    }
+
+    mfTimeSinceLastLoad                  = 0.0f;
+    maDesiredCarIds[liActiveRaceCar]     = 0;
+    maDesiredPriorities[liActiveRaceCar] = -1;
+
+    if( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_UNUSED ) != 0 )
+    {
+        CGS_ASSERT( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0,
+                    "( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0" );
+
+        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint << "STRM: " << "Removing racecar for streaming: car="
+                                       << liActiveRaceCar << ", model=" << lModelId
+                                       << ", wheel=" << lWheelId << "\n";
+            *CgsDev::Log::gpDebugPrint << "STRM: " << "  Previous flags were "
+                                       << CgsDev::E_PRINTMODE_HEX
+                                       << static_cast<u32>( maxLoadFlags[liActiveRaceCar] )
+                                       << CgsDev::E_PRINTMODE_DECIMAL << "\n";
+        }
+
+        mGraphicsStreamer.RemoveEntry( liActiveRaceCar );
+        mPhysicsStreamer.RemoveEntry( liActiveRaceCar );
+        mAttributeStreamer.RemoveEntry( liActiveRaceCar );
+        mWheelGraphicsStreamer.RemoveEntry( liActiveRaceCar );
+        mAudioStreamer.RemoveEntry( liActiveRaceCar );
+    }
+
+    HACKGetValidModelIds( lModelId, lWheelId );
+
+    char lacModelName[32];
+    char lacWheelName[32];
+    CgsIDUnCompress( lModelId, lacModelName );
+    CgsIDUnCompress( lWheelId, lacWheelName );
+
+    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "STRM: " << "Adding racecar for streaming: car="
+                                   << liActiveRaceCar
+                                   << ", model=" << lacModelName
+                                   << ", wheel=" << lacWheelName
+                                   << ", model id=" << lModelId
+                                   << ", wheel id=" << lWheelId << "\n";
+    }
+
+    u8 lxLoadFlags = E_LOADFLAG_ACTIVE;
+
+    if( mGraphicsStreamer.IsVehicleAssetLoaded( lModelId, liActiveRaceCar )
+        && maGraphicsResources[liActiveRaceCar] != CgsResource::NULLResourcePtr )
+    {
+        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+            *CgsDev::Log::gpDebugPrint << "STRM: " << "  Gfx already loaded\n";
+        lxLoadFlags |= E_LOADFLAG_LOADEDGFX;
+    }
+    else if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Need to load Gfx\n";
+    }
+
+    if( mPhysicsStreamer.IsVehicleAssetLoaded( lModelId, liActiveRaceCar )
+        && maPhysicsResources[liActiveRaceCar] != CgsResource::NULLResourcePtr )
+    {
+        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+            *CgsDev::Log::gpDebugPrint << "STRM: " << "  Phys already loaded\n";
+        lxLoadFlags |= E_LOADFLAG_LOADEDPHYSICS;
+    }
+    else if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Need to load Phys\n";
+    }
+
+    if( mAttributeStreamer.IsVehicleAssetLoaded( lModelId, liActiveRaceCar )
+        && mabAttribsLoaded[liActiveRaceCar] )
+    {
+        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+            *CgsDev::Log::gpDebugPrint << "STRM: " << "  Attrs already loaded\n";
+        lxLoadFlags |= E_LOADFLAG_LOADEDATTRS;
+    }
+    else if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Need to load Attrs\n";
+    }
+
+    if( mWheelGraphicsStreamer.IsVehicleAssetLoaded( lWheelId, liActiveRaceCar )
+        && maWheelGraphicsResources[liActiveRaceCar] != CgsResource::NULLResourcePtr )
+    {
+        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+            *CgsDev::Log::gpDebugPrint << "STRM: " << "  WheelGfx already loaded\n";
+        lxLoadFlags |= E_LOADFLAG_LOADEDWHEELGFX;
+    }
+    else if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Need to load WheelGfx\n";
+    }
+
+    if( mAudioStreamer.IsVehicleAssetLoaded( lModelId, liActiveRaceCar, lbActive )
+        && mabAudioLoaded[liActiveRaceCar] )
+    {
+        if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+            *CgsDev::Log::gpDebugPrint << "STRM: " << "  Audio already loaded\n";
+        lxLoadFlags |= E_LOADFLAG_LOADEDAUDIO;
+    }
+    else if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Need to load Audio\n";
+    }
+
+    if( ( CgsDev::Message::gxMessageFilterFlags & KX_FILTER_GLOBAL ) != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "STRM: " << "  Flags are "
+                                   << CgsDev::E_PRINTMODE_HEX << static_cast<u32>( lxLoadFlags )
+                                   << CgsDev::E_PRINTMODE_DECIMAL << "\n";
+    }
+
+    maxLoadFlags[liActiveRaceCar] = lxLoadFlags;
+
+    mGraphicsStreamer.AddEntry( lModelId, liActiveRaceCar );
+    mPhysicsStreamer.AddEntry( lModelId, liActiveRaceCar );
+    mAttributeStreamer.AddEntry( lModelId, liActiveRaceCar );
+    mWheelGraphicsStreamer.AddEntry( lWheelId, liActiveRaceCar );
+    mAudioStreamer.AddEntry( lModelId, static_cast<u64>( liActiveRaceCar ), lbActive );
+}
+
+// @ 0x822A53E8. Flag a slot for removal (sets E_LOADFLAG_UNUSED). The actual teardown
+// happens later in AddVehicleData / UpdateDesiredCars when the slot is re-evaluated.
+void RaceCarStreamer::RemoveVehicleData( s32 liActiveRaceCar )
+{
+    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+
+    maxLoadFlags[liActiveRaceCar] |= E_LOADFLAG_UNUSED;
+}
+
+// @ 0x822EC650. Ensure slot liActiveRaceCar is loading exactly (lModelId, lWheelId): if
+// the car is inactive, add it; if active but its desired model OR wheel asset differs from
+// the (validated) request, flag the old data for removal and re-add. lbActive is the audio
+// is-player flag passed through to AddVehicleData.
+void RaceCarStreamer::SetRequiredVehicleData( s32 liActiveRaceCar, CgsID lModelId, CgsID lWheelId, bool lbActive )
+{
+    CgsID lValidModelId = lModelId;
+    CgsID lValidWheelId = lWheelId;
+    HACKGetValidModelIds( lValidModelId, lValidWheelId );
+
+    if( IsRaceCarActive( liActiveRaceCar ) )
+    {
+        if( mGraphicsStreamer.GetDesiredAsset( liActiveRaceCar ) != lValidModelId
+            || mWheelGraphicsStreamer.GetDesiredAsset( liActiveRaceCar ) != lValidWheelId )
+        {
+            RemoveVehicleData( liActiveRaceCar );
+        }
+        else
+        {
+            return;
+        }
+    }
+
+    AddVehicleData( liActiveRaceCar, lModelId, lWheelId, lbActive );
+}
+
+// @ 0x822A5468. Record a deferred "desired" car request for slot liSlotIndex at priority
+// liPriority. No-op when the requested model already matches the slot's current model id;
+// otherwise stash (model, wheel, priority) for UpdateDesiredCars to action when budget allows.
+void RaceCarStreamer::SetDesiredVehicleData( s32 liSlotIndex, CgsID lModelId, CgsID lWheelId, s32 liPriority )
+{
+    CGS_ASSERT( liSlotIndex >= 0, "liSlotIndex >= 0" );
+    CGS_ASSERT( liSlotIndex < KI_MAX_ACTIVE_RACE_CARS, "liSlotIndex < KI_MAX_ACTIVE_RACE_CARS" );
+
+    if( GetCarModelId( liSlotIndex ) != lModelId )
+    {
+        maDesiredCarIds[liSlotIndex]     = lModelId;
+        maDesiredWheelIds[liSlotIndex]   = lWheelId;
+        maDesiredPriorities[liSlotIndex] = liPriority;
+    }
+}
+
+// @ 0x822F80C0. One frame: pump each component streamer's engine (the four graphics-style
+// streamers via the inherited InternalBaseStreamer::Update, the audio streamer via its own
+// IO-buffer Update), accumulate the inter-load timer, then service any deferred desired-car
+// requests.
+void RaceCarStreamer::Update( const RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+                              RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput, f32 lfTimeStep )
+{
+    mAttributeStreamer.Update();
+    mPhysicsStreamer.Update();
+    mGraphicsStreamer.Update();
+    mWheelGraphicsStreamer.Update();
+    mAudioStreamer.Update( lpInput, lpOutput );
+
+    mfTimeSinceLastLoad += lfTimeStep;
+
+    UpdateDesiredCars();
+}
+
+// @ 0x822EC6F8. Service deferred desired-car requests. First scan for any active-but-not-yet
+// -loaded car -- if one exists we are still busy, so bail. Otherwise pick the highest-priority
+// (numerically lowest, non-negative) pending desired slot and, if its desired id differs from
+// the slot's current car, start loading it (flagging the previous data for removal). If no slot
+// has an explicit priority but enough time has elapsed since the last load
+// (mfTimeSinceLastLoad > KF threshold), sweep slots 7..0 looking for a desired id to action.
+void RaceCarStreamer::UpdateDesiredCars()
+{
+    // While any active car still has assets in flight, do not start a new desired load.
+    for( s32 liActiveRaceCar = 0; liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS; liActiveRaceCar++ )
+    {
+        CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
+
+        if( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0
+            && !IsRaceCarLoaded( liActiveRaceCar ) )
+        {
+            return;
+        }
+    }
+
+    // Pick the highest-priority (lowest non-negative value) pending desired slot.
+    s32 liHighestPrioritySlot = -1;
+    s32 liHighestPriority     = 0x7FFFFFFF;
+    for( s32 liActiveRaceCar = 0; liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS; liActiveRaceCar++ )
+    {
+        const s32 liPriority = maDesiredPriorities[liActiveRaceCar];
+        if( liPriority > -1 && liPriority < liHighestPriority )
+        {
+            liHighestPrioritySlot = liActiveRaceCar;
+            liHighestPriority     = liPriority;
+        }
+    }
+
+    if( liHighestPrioritySlot == -1 )
+    {
+        // No prioritised request: only sweep for any pending desired id once enough time has
+        // elapsed since the last load.
+        if( mfTimeSinceLastLoad <= KF_TIME_BETWEEN_DESIRED_LOADS )
+            return;
+
+        for( s32 liActiveRaceCar = KI_MAX_ACTIVE_RACE_CARS - 1; liActiveRaceCar >= 0; liActiveRaceCar-- )
+        {
+            const CgsID lDesiredCarModelId = maDesiredCarIds[liActiveRaceCar];
+
+            if( ( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_UNUSED ) != 0
+                  || ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) == 0 )
+                && lDesiredCarModelId != 0 )
+            {
+                if( lDesiredCarModelId == GetCarModelId( liActiveRaceCar ) )
+                {
+                    maDesiredCarIds[liActiveRaceCar] = 0;
+                }
+                else
+                {
+                    AddVehicleData( liActiveRaceCar, maDesiredCarIds[liActiveRaceCar],
+                                    maDesiredWheelIds[liActiveRaceCar], false );
+                    maxLoadFlags[liActiveRaceCar] |= E_LOADFLAG_UNUSED;
+                    return;
+                }
+            }
+        }
+        return;
+    }
+
+    // Action the prioritised slot.
+    const CgsID lDesiredCarModelId = maDesiredCarIds[liHighestPrioritySlot];
+
+    if( ( ( maxLoadFlags[liHighestPrioritySlot] & E_LOADFLAG_UNUSED ) != 0
+          || ( maxLoadFlags[liHighestPrioritySlot] & E_LOADFLAG_ACTIVE ) == 0 )
+        && lDesiredCarModelId != 0 )
+    {
+        if( lDesiredCarModelId == GetCarModelId( liHighestPrioritySlot ) )
+        {
+            maDesiredCarIds[liHighestPrioritySlot]     = 0;
+            maDesiredPriorities[liHighestPrioritySlot] = -1;
+        }
+        else
+        {
+            AddVehicleData( liHighestPrioritySlot, maDesiredCarIds[liHighestPrioritySlot],
+                            maDesiredWheelIds[liHighestPrioritySlot], false );
+            maxLoadFlags[liHighestPrioritySlot] |= E_LOADFLAG_UNUSED;
+        }
+    }
 }
 
 } // namespace BrnWorld

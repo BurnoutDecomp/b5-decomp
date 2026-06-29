@@ -176,6 +176,70 @@ namespace Thread
     // 0x82B42610: a1 points at a millisecond count; 0 -> yield, else SleepEx.
     u32      ThreadSleep(const u32* lpuMilliseconds);
 
+    // ---- Futex (X360 fast user-space mutex) --------------------------------
+
+    // EA::Thread::Futex -- the EAThread fast lock. On the X360 (and every Microsoft
+    // platform) the EATHREAD_MANUAL_FUTEX_ENABLED path is OFF, so Futex is simply a
+    // CRITICAL_SECTION wrapper: the ctor RtlInitializeCriticalSection's an embedded
+    // critical section, Lock()=RtlEnterCriticalSection, Unlock()=RtlLeaveCriticalSection,
+    // TryLock()=RtlTryEnterCriticalSection, and the dtor RtlDeleteCriticalSection's it.
+    //
+    // The X360 .XEX proves this exact shape at the EA::Jobs::JobScheduler call sites:
+    //   JobScheduler::JobScheduler @ 0x82BC9AA0 -> RtlInitializeCriticalSection(this+8)
+    //   JobScheduler::AddThread    @ 0x82BCA5F8 -> RtlEnterCriticalSection(this+8) ...
+    //                                              RtlLeaveCriticalSection(this+8)
+    // i.e. the scheduler's mLock Futex lives at +0x08 and occupies the +0x08..+0x28
+    // span (mEnableProfiling is the next member at +0x28) -- 32 bytes, matching the
+    // vendor EAThread FUTEX_PLATFORM_DATA_SIZE for the Win32/X360 CRITICAL_SECTION
+    // variant.
+    //
+    // This is the PROJECT home for EA::Thread::Futex. It must NOT pull the divergent
+    // vendor eathread/eathread_futex.h (that header transitively defines a different
+    // EA::Thread::MutexParameters than the X360-faithful one above, a C2011 collision).
+    // The CRITICAL_SECTION storage is modeled as a suitably-sized/aligned byte buffer
+    // so this header stays free of <Windows.h>; the lock bodies live out-of-line in
+    // BrnEAThreadX360.cpp (which owns the Win32 critical-section calls).
+    class Futex
+    {
+    public:
+        enum Result
+        {
+            kResultTimeout = -2
+        };
+
+        // RtlInitializeCriticalSection(&mCRITICAL_SECTION) (X360 init-with-spin-count
+        // on the Microsoft build).
+        Futex();
+
+        // RtlDeleteCriticalSection(&mCRITICAL_SECTION).
+        ~Futex();
+
+        // RtlTryEnterCriticalSection -- true if the lock was acquired.
+        bool TryLock();
+
+        // RtlEnterCriticalSection.
+        void Lock();
+
+        // RtlLeaveCriticalSection.
+        void Unlock();
+
+    private:
+        // Raw, pointer-aligned storage for the host CRITICAL_SECTION. Sized to the
+        // X360/Win32 FUTEX_PLATFORM_DATA_SIZE (32 bytes) so the member spans exactly
+        // the +0x08..+0x28 range the JobScheduler asm proves; the host CRITICAL_SECTION
+        // (24 bytes on Win32) fits within it. Reached only through the out-of-line Win32
+        // calls in the .cpp -- never by raw offset.
+        union
+        {
+            u8     mCRITICAL_SECTION[32];
+            void*  mAlign;
+        };
+
+        // Not copyable (the embedded critical section is not copyable).
+        Futex(const Futex&);
+        Futex& operator=(const Futex&);
+    };
+
     // ---- IRunnable + RunnableFunction (EATech DWARF eathread_thread.h) ------
 
     // A thread body can be either a free function (RunnableFunction) or an
