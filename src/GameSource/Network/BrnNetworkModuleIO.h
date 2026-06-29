@@ -67,6 +67,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (PlayerResultsInterface::GetPlayerResultsData guard)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                     // PlayerName(16B), NetworkPlayerID, EActiveRaceCarIndex, DirtyTrickEvent
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // FULL InGamePlayerStatusData / InGamePlayerStatusInterface
+#include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                     // CgsModule::BaseEventQueue<T> (typed impact/takedown queue accessors)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"        // BrnPhysics::Vehicle::ImpactEvent
+#include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"       // BrnGameState::TakedownEvent
 
 namespace BrnNetwork
 {
@@ -139,6 +142,15 @@ namespace BrnNetworkModuleIO
         // X360 0x8254ED70 (read,  h:708) -> const NetworkEventQueue* @ +73284 (const twin of the write accessor)
         const NetworkEventQueue* GetNetworkEventQueueForWriting() const;
 
+        // ---- typed input event-queue accessors used by the AggressiveDriving relay (declared-only) ----
+        // X360 sub_8254EB78 / sub_8254E980 (Hex-Rays un-named): the inbound vehicle ImpactEvent and
+        //   GameState TakedownEvent queues ProcessInputQueue walks each frame (it GetEvent()s every
+        //   element and forwards it to AddImpactEvent/AddTakedownEvent). Return the typed
+        //   BaseEventQueue so the relay reads GetLength/GetEvent BY NAME. Declared-only (bodies land
+        //   with the PostSimulationInputBuffer / VehicleManager IO TUs).
+        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::ImpactEvent>* GetImpactEventQueue() const;
+        const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>*      GetTakedownEventQueue() const;
+
         // X360 0x82593158: PostSimulationInputBuffer::operator= -- zeroes the live count of and
         //   Appends lOther's events onto the five embedded fixed-capacity event queues
         //   (RoadRulesRecvData @ +0, RoadRulesDownloadEvent @ +3712, RoadRulesMessageData @ +5968,
@@ -179,6 +191,18 @@ namespace BrnNetworkModuleIO
         const NetworkEventQueue*            GetNetworkEventQueue() const;
         // X360 0x8254F160 (write, h:994)  -> NetworkEventQueue* @ +184080 (non-const twin)
         NetworkEventQueue*                  GetNetworkEventQueue();
+
+        // ---- typed event-queue accessors used by the AggressiveDriving relay (declared-only) ----
+        // X360 OutputBuffer::GetVehicleManagerOutputInterface (Hex-Rays "GetVeh"): the
+        //   per-frame race-car/vehicle output interface; HandleReceivingMessages AddEvent()s the
+        //   reconstructed ImpactEvent onto its embedded BaseEventQueue<ImpactEvent> (X360 +141376).
+        // X360 OutputBuffer::GetNetworkToGameStateTakedownEventQueue (Hex-Rays "Outp"): the inbound
+        //   takedown-event queue the relay drains/feeds. Both return the typed BaseEventQueue so the
+        //   relay calls AddEvent/GetEvent/GetLength BY NAME. Declared-only here (bodies + the full
+        //   interface layouts land with the OutputBuffer / VehicleManager IO TUs); the storage these
+        //   reach lives beyond the offset-pinned region this minimal slice models.
+        CgsModule::BaseEventQueue<BrnPhysics::Vehicle::ImpactEvent>* GetVehicleManagerImpactEventQueue();
+        CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>*      GetNetworkToGameStateTakedownEventQueue();
 
         // X360 0x825931D0: OutputBuffer::operator= -- zeroes + Appends the embedded DirtyTrickEvent
         //   queue (@ +0), then copies the trailing scalar field block +460..+537.

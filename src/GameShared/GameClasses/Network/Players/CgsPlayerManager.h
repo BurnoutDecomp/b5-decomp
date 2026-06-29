@@ -26,11 +26,41 @@
 namespace CgsNetwork
 {
     struct SignalMessage;
+    struct NetworkPlayer;
+    struct PlayerMenuData;
 
     struct PlayerManager
     {
         static const s32 KI_MAX_ACKS_TO_BUFFER  = 10;
         static const s32 KI_MAX_NACKS_TO_BUFFER = 10;
+
+        // Which players a registry walk should visit. DWARF CgsPlayerManager.h:18.
+        // GetNextPlayerID's second arg in the host-migration walks is 0 (finalised players).
+        enum EPlayersToConsider
+        {
+            E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED = 0,
+            E_CONSIDER_ALL_PLAYERS                = 1,
+            E_CONSIDER_PLAYERS_COUNT              = 2,
+        };
+
+        // --- registry iteration / lookup (host-migration view) ---
+        // Iterate registered player ids: seed *lpPlayerID with -1, then call repeatedly;
+        // returns false when the walk is exhausted. DWARF :212 / :217 / :226 / :273.
+        bool GetNextPlayerID(NetworkPlayerID* lpPlayerID, EPlayersToConsider leConsider) const;
+        bool GetNextLocalPlayerID(NetworkPlayerID* lpPlayerID) const;
+        NetworkPlayer* GetPlayerByID(NetworkPlayerID liPlayerID) const;
+        void SetHostPlayerID(NetworkPlayerID liPlayerID);
+
+        // The lobby/menu view of the player registered under liPlayerID (the registry stores
+        // game-specific PlayerMenuData-derived objects; the Burnout build downcasts the result
+        // to BrnNetwork::PlayerMenuData at the call sites). DWARF CgsPlayerManager.h:256.
+        PlayerMenuData* GetMenuDataByID(NetworkPlayerID liPlayerID) const;
+
+        // Count of registered network players. The X360 call sites pass a single bool flag
+        // (0 == count all players, not just the in-game subset). DWARF CgsPlayerManager.h.
+        // ADDITIVE GROW (BrnNetworkAggressiveDrivingManager TU): declared-only; body is the
+        // CgsPlayerManager.cpp registry TU.
+        s32 GetNumberNetworkPlayers(bool lbInGameOnly) const;
 
         // --- round-robin / connection scheduling (player-pump view) ---
         // Is it liPlayerID's turn to piggy-back a round-robin message this frame? DWARF :364.

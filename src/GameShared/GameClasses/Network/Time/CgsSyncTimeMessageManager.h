@@ -1,27 +1,9 @@
 #pragma once
 
-#include "types.hpp"
+// CgsNetwork::SyncTimeMessageManager moved to its canonical owning header,
+// CgsSyncTimeBase.h (matching the original game source file name CgsSyncTimeBase.cpp,
+// which the X360 assert strings reference). This file is kept as a compatibility shim
+// so existing includers of the old path keep compiling and the class has a single
+// definition (no ODR conflict).
 
-namespace CgsNetwork
-{
-class SyncTimeMessageManager
-{
-public:
-    SyncTimeMessageManager();
-
-private:
-    struct SyncTimeRecord
-    {
-        u32 muMessageVTable;
-        u8  mPad0[28];
-        u32 muSendTicks;
-        f32 mfSendTime;
-        u32 muReceiveTicks;
-        f32 mfReceiveTime;
-        u8  mPad1[8];
-    };
-
-    u8             mPad0[28];
-    SyncTimeRecord maRecords[14];
-};
-}
+#include "GameShared/GameClasses/Network/Time/CgsSyncTimeBase.h"

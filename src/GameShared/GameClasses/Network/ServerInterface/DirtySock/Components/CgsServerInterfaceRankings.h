@@ -49,6 +49,32 @@ namespace CgsNetwork
         virtual void Construct();
         virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
 
+        // === ADDITIVE GROW (flagged by the BrnNetworkScoreboardManager group) ============
+        // The downloaded-scoreboard query surface. The bodies live in this component's own
+        // dossier (the X360 exports for these are RECOVERED -> CgsServerInterfaceRankings.cpp
+        // but not yet committed); declared-only here so the ScoreboardManager call sites gate
+        // under cl /c. Signatures are pinned from the BrnNetworkScoreboardManager X360 call
+        // sites: PPC Hex-Rays drops the trailing index args, so they are restored from the
+        // register usage at each call (e.g. GetColumnType(mpRankings, liColumn)).
+        bool        IsBusy() const;                                        // meStatus != E_STATUS_IDLE (2)
+        s32         GetNumberOfCategories() const;
+        s32         GetNumberOfIndexes(s32 liCategory) const;
+        s32         GetNumberOfVariations(s32 liCategory, s32 liIndex) const;
+        s32         GetNumberOfColumns() const;
+        s32         GetNumberOfRows() const;
+        s32         GetColumnType(s32 liColumn) const;
+        s32         GetColumnStyle(s32 liColumn) const;
+        s32         GetColumnWidth(s32 liColumn) const;
+        const char* GetColumnTitle(s32 liColumn) const;
+        bool        ScoreboardHasParam(s32 liParam) const;
+        s32         GetRowThatContainsLocalUser() const;
+        void        GetCell(s32 liColumn, s32 liRow, char* lpcBuffer, s32 liBufferSize) const;
+        s32         GetUserType(s32 liVariation, const char** lapcUserListNames,
+                                s32* lpiUserListCount) const;
+        bool        DownloadHeadings(void* lpHeadingType);
+        void        CancelCurrentActionAndInvalidateScoreboard();
+        // =================================================================================
+
     private:
         // --- ServerInterfaceComponent base layout (see header note) ---
         const char* mpcCurrentAction;   // +0x04
