@@ -159,6 +159,21 @@ namespace vpu
                         lrVector.z * lfInverseMagnitude, lrVector.w * lfInverseMagnitude };
     }
 
+    // ADDITIVE GROW (consumed by BrnLooker.cpp): the SDK's NormalizeFast(v) -- on console a
+    // single vrsqrtefp estimate (no Newton refinement) scaled into the vector. The estimate
+    // error is irrelevant to the PC parity build, so it reduces to the exact Normalize above.
+    inline Vector3 NormalizeFast(Vector3 lrVector) { return Normalize(lrVector); }
+
+    // ADDITIVE GROW (consumed by BrnLooker.cpp): the SDK's SqrtFast(s) -- a vrsqrtefp-based
+    // reciprocal-sqrt estimate refined to sqrt. Modelled as the exact scalar std::sqrt
+    // (broadcast across the lanes by the VecFloat alias); negative/zero inputs return 0,
+    // matching the console vsel-against-zero guard.
+    inline Vector4 SqrtFast(Vector4 lvValue)
+    {
+        const float lfResult = (lvValue.x > 0.0f) ? std::sqrt(lvValue.x) : 0.0f;
+        return Vector4{ lfResult, lfResult, lfResult, lfResult };
+    }
+
     // -- lane accessors -----------------------------------------------------------------
 
     // SDK Vector3::GetX/Y/Z (vector3_type_inline.h) return VecFloatRef lane refs; modelled
