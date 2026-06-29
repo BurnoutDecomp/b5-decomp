@@ -63,6 +63,13 @@ namespace Jobs
         };
 
         // --- Job API (X360-attested subset the engine drives by name) ---------------
+        // job.h:42 -- construct a named, empty job. X360 0x82BCB0C0 (inits the entry
+        // defaults + both dependency/event bucket lists, then Clear()s and SetName()s).
+        explicit Job(const char* lpcName);
+        // job.h:43 -- tear the job down: destroy the event/dependency/dependent bucket
+        // chains. X360 0x82BCB1A8.
+        ~Job();
+
         // job.h:51  -- reset the job to its default (empty) state. X360 0x82BCA110.
         void Clear();
         // job.h:81  -- point the job's entry at code (forwards to mEntryPoint.SetCode).
@@ -72,25 +79,76 @@ namespace Jobs
         // job.h:99  -- attach the job's data block (X360 0x82BC9978 stores it in mParams).
         void SetData(void* lpvData, size_t luSize);
 
+        // job.h:60 -- declare that THIS job depends on rOther firing eTrigger before it
+        // may run; records the edge on both sides. X360 0x82BCB280.
+        void DependsOn(Job& rOther, Event::When eTrigger);
+        // job.h:62 -- depend on an already-submitted instance (DWARF surface overload;
+        // no standalone X360 body in this build -- see job.cpp).
+        void DependsOn(JobInstanceHandle hInstance, Event::When eTrigger);
+
+        // job.h:70 -- the i-th dependency's owning Job. X360 0x82BCA258 (+ the chain
+        // walker Job::Depende @ 0x82BCA078).
+        Job* GetDependency(int iIndex) const;
+        // job.h:72 -- the i-th dependent (back-pointer) Job. X360 0x82BCA2A0.
+        Job* GetDependent(int iIndex) const;
+        // job.h:74 -- how many dependents this job has across its bucket chain. X360 0x82BCA390.
+        int  GetNumDependents() const;
+
+        // job.h:90 -- has this job's submitted instance completed (or no instance)? X360 0x82BCA2E8.
+        bool IsDone() const;
+        // job.h:92 -- block on the backend's "sleep on instance" entry until done. X360 0x82BCA1F8.
+        void SleepOn();
+        // job.h:94 -- spin-wait on this job's instance handle until done. X360 0x82BCB238.
+        void WaitOn();
+
+        // job.h:110 -- (scheduler-internal) record THIS job's instance handle from the
+        // backend's just-submitted slot and seed mStartEvent's barrier. X360 0x82BCA3D8.
+        JobInstanceHandle* INTERNAL_AddNotReady(Detail::SchedulerBackend** pBackends);
+        // job.h:112 -- (scheduler-internal) push every dependency-edge barrier and every
+        // begin/end event into the backend so the instance fires them. X360 0x82BCB2F0.
+        void INTERNAL_SubmitEventsAndDeps();
+
         // Accessors (declaration-only; bodies live in the vendor job TU).
         const EntryPoint& GetEntryPoint() const { return mEntryPoint; }
         EntryPoint&       GetEntryPoint()       { return mEntryPoint; }
 
-        // X360 object layout (see the header note). Members the reconstructed engine
-        // code accesses are named; the bucket-list/event tail is held as named padding.
-        bool              mSeen;              // +0x00 job.h:118
-        EntryPoint        mEntryPoint;        // +0x04 job.h:127 (44 bytes on X360)
-        Param             mParams[4];         // +0x30 job.h:128
-        JobInstanceHandle mJobInstanceHandle; // +0x40 job.h:130
-        bool              mHasJobDependency;  // +0x50 job.h:132
-        u8                maPad0[3];          // +0x51 align the bucket-list tail to +0x54
-        // +0x54 .. +0x34F : mDependencies (BucketListNode<Dependency,10>),
-        // mDependents (BucketListNode<Job*,6>), mEvents (BucketListNode<Event,10>[2])
-        // and mStartEvent (Event) -- the template-heavy bucket-list machinery this
-        // build's reconstructed callers never reference by name. Held as explicit
-        // named padding so sizeof(Job) == 0x350 (848, the AddJobs stride) without
-        // pulling the BucketListNode<...> instantiations into every job.h includer.
-        u8                maDependencyAndEventLists[0x350 - 0x54];
+    private:
+        // job.h -- chain walker behind GetDependency: advance to the bucket node that
+        // owns iIndex (fixed capacity-10 hops, matching the X360 helper @ 0x82BCA078),
+        // returning that node's slot. Static so it can recurse over a raw node pointer.
+        static const Dependency* IndexDependencyChain(
+            const Detail::BucketListNode<Dependency, 10>* pNode, int iIndex);
+
+    public:
+
+        // Object layout. The +0x.. offsets below are the X360 object offsets proven by
+        // the Clear/ctor/dtor/SubmitEventsAndDeps asm; the reconstruction models every
+        // member BY NAME (no raw-offset reads). NOTE: the X360 had 4-byte pointers, so on
+        // the 64-bit host the embedded JobInstanceHandle/Param/EntryPoint pointers widen
+        // and the byte offsets are NOT reproduced verbatim -- the layout is therefore
+        // shape-faithful, not host-ABI byte-exact (matching the committed siblings, which
+        // pack the handle key from named members instead of reading raw +0x48). Member
+        // declaration ORDER is preserved exactly so the (X360) layout and the C++ member
+        // sequence agree; natural alignment supplies any inter-member padding.
+        bool              mSeen;              // +0x00  job.h:118
+        EntryPoint        mEntryPoint;        // +0x04  job.h:127 (44 bytes on X360)
+        Param             mParams[4];         // +0x30  job.h:128
+        JobInstanceHandle mJobInstanceHandle; // +0x40  job.h:130
+        bool              mHasJobDependency;  // +0x50  job.h:132
+
+        // The dependency/dependents/event bucket-list machinery, modelled by name.
+        // X360 offsets (verified against the asm `addi rN,base,<off>`):
+        //   mDependencies @ +0x60  (BucketListNode<Dependency,10>: mNext @ +0x1A0,
+        //                           mSize @ +0x1A4; sizeof 0x150 -> ends +0x1B0)
+        //   mDependents   @ +0x1B0 (BucketListNode<Job*,6>: mNext @ +0x1C8,
+        //                           mSize @ +0x1CC; sizeof 0x28 -> ends +0x1D8)
+        //   mEvents[2]    @ +0x1E0 (BucketListNode<Event,10>, 0xB0 stride -> +0x340)
+        //   mStartEvent   @ +0x340 (Event, 16 bytes -> ends +0x350; sizeof(Job)==0x350,
+        //                           the AddJobs stride @ 0x82BCB498)
+        Detail::BucketListNode<Dependency, 10> mDependencies;   // +0x60
+        Detail::BucketListNode<Job*, 6>        mDependents;     // +0x1B0
+        Detail::BucketListNode<Event, 10>      mEvents[2];      // +0x1E0
+        Event                                  mStartEvent;     // +0x340
     };
 
     inline Job::Dependency::Dependency()
