@@ -96,9 +96,23 @@ struct AptCIH : public AptValueGC
     // the display-list teardown (AptDisplayList::clear) can call it by name.
     void ClearCIH(bool bClearGCRoots);
 
-    // ---- packed state / flags --------------------------------------------
+    // ---- packed state / flags (mFlagsA bit-fields) -----------------------
     uint32_t GetCIHState() const;       void SetCIHState(uint32_t eState);    // @0x7DF12C/0x7DF110
     int16_t  GetZombieCount() const;    void IncZombieCount();  void DecZombieCount();  // @0x7DF160/0x7DF138/0x7FB648
     bool     IsInCtor() const;          void SetInCtor(uint32_t b);           // @0x7DF0E8/0x7DF0F4
     int      GetCreatedOnFrame() const; void SetCreatedOnFrame(int nFrame);   // @0x7DF1D4/0x7DF1E4
+
+    // ActionScript-changed flag (bit 31). @0x82AD50E8/0x82AD50C8
+    bool GetASChanged() const  { return (mFlagsA >> 31) != 0; }
+    void SetASChanged(bool b)  { mFlagsA = (mFlagsA & 0x7FFFFFFFu) | (b ? 0x80000000u : 0u); }
+    // Dirty-state flag (bit 25; getter only -- SetDirtyState is behavioural). @0x82AD5C10
+    bool GetDirtyState() const { return ((mFlagsA >> 25) & 1u) != 0; }
+    // "In remove list" flag (bit 26). @0x82AD5188/0x82AD5170
+    bool GetInRemList() const  { return ((mFlagsA >> 26) & 1u) != 0; }
+    void SetInRemList(bool b)  { mFlagsA = (mFlagsA & 0xFBFFFFFFu) | (b ? 0x04000000u : 0u); }
+
+    // ---- AptValue object-model overrides (mFlagsA bit 28) -----------------
+    // @0x82AD7438/0x82AD7418 -- whether this CIH has an attached AS class.
+    virtual bool GetHasClass() const override { return ((mFlagsA >> 28) & 1u) != 0; }
+    virtual void SetHasClass(int b) override  { mFlagsA = (mFlagsA & 0xEFFFFFFFu) | (b ? 0x10000000u : 0u); }
 };
