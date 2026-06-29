@@ -93,6 +93,14 @@ namespace GameDataIO
     struct GetICEListRequest : public GameDataAssetEvent {};
     struct GetWheelListRequest : public GameDataAssetEvent {};
     struct GetFreeburnChallengeListRequest : public GameDataAssetEvent {};
+
+    // DWARF: BrnGameDataEvents.h:637 -- the "asset finished unloading" response. No own
+    // data members (the DWARF lists only a Construct(int,int,CgsID,EAssetSet)); it carries
+    // the unloaded asset's id in the inherited GameDataAssetEvent::mId, read back via
+    // GetGameDataId() (e.g. RaceCarAudioStreamer::OnUnloadComplete @0x822A55C0
+    // `ld r10,0x10(event)`). ADDITIVE GROW of this header's event family; the BrnBaseStreamer
+    // forward-decl stays compatible. GROW with its Construct when the GameDataEvents TU lands.
+    struct UnloadGameDataResponse : public GameDataAssetEvent {};
 }
 }
 

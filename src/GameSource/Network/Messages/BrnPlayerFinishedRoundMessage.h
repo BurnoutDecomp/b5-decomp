@@ -9,15 +9,37 @@
 // the base (CgsNetwork::ReliableMessage) is the committed home in CgsReliableMessage.h and
 // is reused BY NAME here -- not forked. CgsSystem::Time is the committed time value type.
 //
+// MEMBER LAYOUT / ORDER: the X360 ARTIST .XEX (rung 1) is authoritative for the byte
+// offsets, and it does NOT match the DWARF's declaration order. Construct @ 0x8257A188,
+// PrepareForSend @ 0x8257D9A0 and Retrieve @ 0x8257DB78 fix the real offsets (leaf data
+// starts at +0x28, after the size-0x28 ReliableMessage/MessageWithPlayerIDs base):
+//     +0x28  mFinishTime               (Time: miSeconds@+0x28, mfFraction@+0x2C)
+//     +0x30  mEliminatorNetworkPlayerID(stw, NetworkPlayerID)
+//     +0x34  miEliminations            (stw, s32; PackOrUnpack range [0,7])
+//     +0x38  mfDistanceFromFinish      (stfs, f32)
+//     +0x3C  mu8RoundNumber            (stb, u8; PackOrUnpack range [0,10])
+//     +0x3D  mbTimedOut                (stb, bool)
+//     +0x3E  mbWonRound                (stb, bool)  <-- see note below
+// so the members are declared in OFFSET order here (the DWARF list -- mbTimedOut first,
+// mFinishTime fifth -- would mis-place every field).
+//
+// X360-LEDGER-ATTESTED MISSING MEMBER: the binary carries a SEVENTH leaf scalar -- a
+// second bool at +0x3E -- that the DWARF (which models this class with a single bool
+// mbTimedOut) omits. Construct/GetPackedMessageSize zero it, PrepareForSend stores it
+// (its last, stack-passed argument), Retrieve copies it out (the 7th out-pointer, r10),
+// and PackOrUnpack (de)serialises it as a bool right after mbTimedOut (two back-to-back
+// sub_8288DDA0 bool calls at +0x3D then +0x3E). Its source name is not attested; named
+// mbWonRound here as a plausible round-outcome companion to mbTimedOut -- FLAGGED.
+//
 // LEDGER FUNCTION reconstructed in this TU (X360 BURNOUT_X360_ARTIST.XEX):
 //   BrnNetwork::PlayerFinishedRoundMessage::GetName  @ 0x827DFCD0
 //     -> returns the literal "Player Finished Round Message" (lis/addi a rodata string,
 //        blr). No member or base access.
 //
 // The other declared methods (Construct/Destruct/PrepareForSend/Retrieve/
-// GetPackedMessageSize/PackOrUnpack and the inline getters) live in the sibling
-// BrnPlayerFinishedRoundMessage.cpp TU and are declared here for class shape but NOT
-// bodied in this TU.
+// GetPackedMessageSize/PackOrUnpack) are bodied in the sibling
+// BrnPlayerFinishedRoundMessage.cpp TU; the inline getters are declared here for class
+// shape (inlined-only in the binary, no standalone ledger body).
 #pragma once
 
 #include "types.hpp"                                                               // bool, s32, u8, f32
@@ -38,23 +60,25 @@ namespace BrnNetwork
     struct PlayerFinishedRoundMessage : public CgsNetwork::ReliableMessage
     {
     private:
-        bool            mbTimedOut;                  // DWARF :109
-        u8              mu8RoundNumber;              // DWARF :110
-        NetworkPlayerID mEliminatorNetworkPlayerID;  // DWARF :111
-        f32             mfDistanceFromFinish;        // DWARF :112
-        Time            mFinishTime;                 // DWARF :113
-        s32             miEliminations;              // DWARF :114
+        // Declared in X360 byte-offset order (rung 1), not DWARF declaration order.
+        Time            mFinishTime;                 // +0x28  DWARF :113
+        NetworkPlayerID mEliminatorNetworkPlayerID;  // +0x30  DWARF :111
+        s32             miEliminations;              // +0x34  DWARF :114
+        f32             mfDistanceFromFinish;        // +0x38  DWARF :112
+        u8              mu8RoundNumber;              // +0x3C  DWARF :110
+        bool            mbTimedOut;                  // +0x3D  DWARF :109
+        bool            mbWonRound;                  // +0x3E  X360-attested, DWARF-omitted (FLAGGED name)
 
     public:
-        // Sibling-.cpp methods (declared for class shape; NOT bodied in this TU).
+        // Sibling-.cpp methods (bodied in BrnPlayerFinishedRoundMessage.cpp).
         void Construct();
         void Destruct();
         void PrepareForSend(u16 lu16Frame, u8 lu8RoundNumber, Time lFinishTime,
                             f32 lfDistanceFromFinish, NetworkPlayerID lEliminatorNetworkPlayerID,
-                            s32 liEliminations, bool lbTimedOut);
+                            s32 liEliminations, bool lbTimedOut, bool lbWonRound);
         bool Retrieve(u8* lpu8RoundNumber, Time* lpFinishTime, f32* lpfDistanceFromFinish,
                       NetworkPlayerID* lpEliminatorNetworkPlayerID, s32* lpiEliminations,
-                      bool* lpbTimedOut);
+                      bool* lpbTimedOut, bool* lpbWonRound);
         virtual s32 GetPackedMessageSize();
 
         u8              GetRoundNumber() const;

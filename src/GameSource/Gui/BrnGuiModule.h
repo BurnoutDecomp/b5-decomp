@@ -36,6 +36,20 @@ namespace BrnGui
 
         MovieManager* GetMovieManager() { return &mMovieManager; }
 
+        // The always-available GUI components manager the module owns (the in-game EATrax
+        // banner / achievement pop-up / save-icon / etc.) lives at a far offset in a part of
+        // the GuiModule layout this MINIMAL movie-hosting slice does not yet model. It is
+        // reached BY NAME through the free accessor GetAlwaysAvailableComponentsManager()
+        // declared in BrnGuiAlwaysAvailableComponentsManager.h (bodied in BrnGuiModule.cpp),
+        // which encapsulates the X360-attested byte offset there. See KU_OFF_AAC_MANAGER.
+
+    public:
+        // X360 byte offset of the always-available components manager within GuiModule
+        // (mpGuiModule + 0x17D670; used by the free GetAlwaysAvailableComponentsManager()
+        // accessor in BrnGuiModule.cpp). [FLAG -- uncommitted-layout offset; becomes a real
+        // named member once the full GuiModule view/components block is reconstructed.]
+        static const u32 KU_OFF_AAC_MANAGER = 0x17D670;
+
     private:
         // Route the boot HUD flow <-> the MovieManager for one frame: feed BootVideos its input events,
         // tick it, deliver its play/stop output to the manager, tick the manager, and feed video-finished

@@ -3,8 +3,9 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"            // CgsModule::IOBuffer (1-byte FlagSet base)
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"               // CgsGui::GuiEventQueueBase<N,16>, GuiEventQueueSmall
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"               // CgsGui::GuiEventQueueBase<N,16>, GuiEventQueueSmall, CgsModule::Event
 #include "GameShared/GameClasses/System/Resource/CgsResourceRequestQueue.h" // ResourceRequestQueue<N>
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"       // CgsResource::ResourceHandle (load-notification payload)
 
 // GUI resource-request vocabulary recovered from the DecFIGS DWARF
 // (CgsGuiResourceModuleIO.h): the resource-type / load-unload enums and the
@@ -49,6 +50,46 @@ namespace CgsGui
         u32                 muId;
         ResourceRequestTypes meType;
     };
+
+    // CgsGuiResourceModuleIO.h:114 (DWARF): GuiEventLoadNotification : public GuiEvent<14>,
+    // with members { ResourceHandle mResourceHandle; ResourceRequestTypes meRequestType;
+    // u32 muLoadRequestId; }. This is the concrete record the resource loader pushes onto the
+    // GUI OutputBuffer's mLoadNotifications queue (OutputBuffer::AddLoadNotification @0x8285AA98
+    // records it as queue-type 14, SIZE 16) and that ViewModule::ProcessIncomingLoadNotification
+    // consumes.
+    //
+    // *** X360 LAYOUT (authoritative; reconciles the asm with the DWARF) ***
+    // The X360 ARTIST consumer (BrnGui::ViewModule::ProcessIncomingLoadNotification @0x824F9468)
+    // reads mResourceHandle as the 8-byte load at event+0 (`ld r5, 0(r27)`) and meRequestType
+    // as the word at event+8 (`lwz r11, 8(r27); cmpwi 0xA`). Together with the queue record
+    // SIZE of 16 (AddLoadNotification), this proves the GuiEvent<14> base is EMPTY (0 bytes)
+    // on X360 -- the 12-byte muHeader0/muEventType/muHeader2 the PC GuiEvent<N> model carries
+    // is NOT present in this record on the X360 build; the queue's per-record type tag (14)
+    // lives in the queue header, not the payload. So the X360 16-byte payload is exactly:
+    //     X360 +0x00  mResourceHandle  (8 bytes: 2 x 4-byte ptr)
+    //     X360 +0x08  meRequestType    (4 bytes; the value the consumer switches on)
+    //     X360 +0x0C  muLoadRequestId  (4 bytes)
+    // Modelled NOT as `: public GuiEvent<14>` (whose committed PC model would push these to
+    // +0x0C and mismatch the asm) but as the flat record the X360 asm attests. Member ORDER
+    // is preserved and the fields are accessed BY NAME by the consumer; on the x64 PC build
+    // the pointers in ResourceHandle widen to 8 bytes (handle = 16, so meRequestType lands at
+    // +0x10 and the record is 24 bytes) -- the standard "widen pointers for PC" rule. The
+    // size pin below records the PC layout; the X360 figure (16) is noted above.
+    struct GuiEventLoadNotification
+    {
+        CgsResource::ResourceHandle mResourceHandle; // X360 +0x00 (8) / PC +0x00 (16)
+        ResourceRequestTypes        meRequestType;   // X360 +0x08    / PC +0x10
+        u32                         muLoadRequestId; // X360 +0x0C    / PC +0x14
+    };
+    // PC layout (x64 widths): ResourceHandle is two 8-byte pointers (16) + two 4-byte words.
+    static_assert(sizeof(CgsResource::ResourceHandle) == 16,
+                  "ResourceHandle is two x64 pointers on PC");
+    static_assert(sizeof(GuiEventLoadNotification) == 24,
+                  "GuiEventLoadNotification PC layout (X360 payload size is 16 with 4-byte ptrs)");
+}
+
+namespace CgsGui
+{
 
     // CgsGuiResourceModuleIO.h:172 (DWARF). The GUI model's resource-IO buffers. Both
     // derive CgsModule::IOBuffer (the 1-byte FlagSet status base: bit 3 = locked-for-write,

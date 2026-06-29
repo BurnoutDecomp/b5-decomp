@@ -44,6 +44,7 @@ namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue
 namespace BrnGui
 {
     class GuiCache;
+    class GuiModule;
 
     class AlwaysAvailableComponentsManager : public CgsGui::EventObserver
     {
@@ -105,6 +106,18 @@ namespace BrnGui
         GuiCache*                   mpGuiCache;             // +0x101C0
         bool                        mbFlaptPrepared;        // +0x101C4
     };
+
+    // Reach the always-available components manager the GuiModule owns. The manager is a far
+    // embedded sub-object in a part of the GuiModule layout that its current minimal
+    // (movie-hosting) home does not model as a named member, so the X360-attested byte offset
+    // (mpGuiModule + 0x17D670, from BrnGui::ViewModule::ProcessIncomingLoadNotification
+    // @0x824F9468) is encapsulated in this accessor's body (bodied in BrnGuiModule.cpp, which
+    // owns the GuiModule layout). Declared here -- next to the type it returns -- so callers
+    // (e.g. BrnGui::ViewModule) reach the manager BY NAME without taking on GuiModule.h's heavy
+    // transitive includes or doing offset arithmetic themselves. [FLAG: uncommitted
+    // GuiModule-layout offset; self-corrects to a real GuiModule member when that block is
+    // reconstructed.]
+    AlwaysAvailableComponentsManager* GetAlwaysAvailableComponentsManager(GuiModule* lpGuiModule);
 }
 
 #endif // BRN_GUI_ALWAYS_AVAILABLE_COMPONENTS_MANAGER_H
