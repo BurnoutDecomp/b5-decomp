@@ -78,6 +78,15 @@ namespace BrnNetwork
                                                             CgsNetwork::NetworkPlayerID lNetworkPlayerID,
                                                             void* lpUserData);
 
+        // X360-attested: BrnNetwork::StandingsManager::_RoundFinishedMessageArrivedCallback
+        // (0x82545530) stores 1 into the bool at this+0x2232 when an inbound
+        // PlayerFinishedRoundMessage for the current round reports the sender won it
+        // (`stb r30(==1), 0x2232(r3)`). Surfaced as a named setter so that TU reaches the flag by
+        // name rather than by raw offset. ADDITIVE GROW (BrnNetworkStandingsManager TU);
+        // declared-only (body lands with the full BrnNetworkPlayer TU). FLAGGED: the source
+        // member name is not independently attested -- mbHasWonRound is provisional.
+        void SetHasWonRound(bool lbHasWonRound);
+
     private:
         // Only the members the reconstructed functions reach are modelled (by name). Their
         // X360 byte offsets are recorded for documentation; the reconstruction accesses them
@@ -87,6 +96,7 @@ namespace BrnNetwork
         StuntMultiplierMessage   mStuntMultiplierMessageSend;     // X360 +0x2158
         CgsNetwork::TimeManager* mpTimeManager;                   // X360 +0x2224
         BrnNetworkModule*        mpNetworkModule;                 // X360 +0x2228
+        bool                     mbHasWonRound;                   // X360 +0x2232 (StandingsManager sets it; FLAGGED name)
     };
 }
 

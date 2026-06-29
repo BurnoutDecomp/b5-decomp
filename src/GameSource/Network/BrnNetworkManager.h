@@ -125,6 +125,14 @@ namespace BrnNetwork
         // BrnNetworkManager TU. ADDITIVE GROW (BrnNetworkAggressiveDrivingManager TU).
         LiveRevengeManager* GetLiveRevengeManager();
 
+        // The current online round number (X360: read whole as a u8 at *(this+613796) ==
+        // *(this+0x95DA4); BrnNetwork::StandingsManager stamps the sent PlayerFinishedRoundMessage
+        // with it and matches received messages against it -- see HandlePlayerFinishedMode @
+        // 0x82550BB8 / _RoundFinishedMessageArrivedCallback @ 0x82545530). Declared-only here;
+        // the storage materialises with the full BrnNetworkManager TU. ADDITIVE GROW
+        // (BrnNetworkStandingsManager TU).
+        u8 GetCurrentRoundNumber() const;
+
         // ---- ADDITIVE GROW (BrnNetworkLaunchManager TU) -----------------------------------
         // The launch state machine reaches four further embedded sub-objects of the full
         // manager (X360 byte offsets, from the LaunchManager asm against mpNetworkManager):

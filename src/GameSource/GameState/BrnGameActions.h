@@ -72,6 +72,7 @@ enum EGameActionType
     E_ACTION_ONLINE_ROUND_RESULT        = 222,   // DWARF BrnGameActions.h
     E_ACTION_RANK_INFO_RESPONSE         = 173,   // DWARF BrnGameActions.h:183
     E_ACTION_TROPHY_UNLOCK              = 196,   // DWARF BrnGameActions.h:206
+    E_ACTION_FINISHED_MODE              = 31,    // DWARF BrnGameActions.h:41
     E_ACTION_PREPARE_FOR_MODE           = 19,    // DWARF BrnGameActions.h:29
     E_ACTION_SET_UP_ALL_DRIVE_THRUS     = 40,    // DWARF BrnGameActions.h:40
     E_ACTION_ON_STUNT_ELEMENT_COMPLETE  = 53,    // DWARF BrnGameActions.h:63
@@ -386,6 +387,39 @@ struct OnStuntElementCompleteAction : public GameAction<E_ACTION_ON_STUNT_ELEMEN
     f32              maConvoyLegDistances[8];   // +0x24 (X360-proven; DWARF-silent; walked vs flt_82CDB778)
     s32              maConvoyMemberIds[8];      // +0x44 (X360-proven; DWARF-silent; searched for player index)
     s32              miConvoyMemberCount;       // +0x64 (X360-proven; DWARF-silent; the count>1 gate)
+};
+
+// X360 BrnNetwork::StandingsManager::HandlePlayerFinishedMode (0x82550BB8) reads it; the per-player
+// "this player has finished the mode/round" action. DWARF home BrnGameActions.h:1347 (the true owning
+// home for the FULL member set + methods; only the SHAPE is modelled here so the StandingsManager TU
+// can name the fields it dereferences). The GameAction<T> base is the empty tag, so mFinishTime is at
+// +0x00, matching the X360 access pattern (HandlePlayerFinishedMode reads a3+0/+4 == mFinishTime,
+// a3+20 == meEliminatorIndex, a3+32 == mfDistanceFromFinish, a3+40 == miEliminations,
+// a3+45 == mbTimedOut, a3+46 == mbWonRound). Member order/offsets follow the DWARF source list
+// (mFinishTime@0, mFastestLapTime@8, meFinishedGameModeType@16, meEliminatorIndex@20,
+// meBeatenRivalIndex@24, miNumberOfTakedowns@28, mfDistanceFromFinish@32, miFinishPosition@36,
+// miEliminations@40, mbIsOnlineGameMode@44, mbTimedOut@45), all of which the X360 asm corroborates.
+//
+// X360-ATTESTED, DWARF-OMITTED member: the binary reads a SEVENTH-from-end byte at +0x2E (a3+46)
+// immediately after mbTimedOut and copies it into the per-player StandingsData "won round" byte and
+// forwards it to PlayerFinishedRoundMessage::PrepareForSend's last argument. The PS3 DecFIGS DWARF
+// models this action with mbTimedOut as its last bool and omits the +46 byte; the X360 build clearly
+// carries it. Named mbWonRound here (FLAGGED -- the same round-outcome companion bool seen on
+// BrnNetwork::PlayerFinishedRoundMessage; source name not independently attested).
+struct FinishedModeAction : public GameAction<E_ACTION_FINISHED_MODE>
+{
+    CgsSystem::Time     mFinishTime;             // +0x00 (8)  DWARF BrnGameActions.h:1348
+    CgsSystem::Time     mFastestLapTime;         // +0x08 (8)  DWARF BrnGameActions.h:1349
+    EGameModeType       meFinishedGameModeType;  // +0x10      DWARF BrnGameActions.h:1351
+    EActiveRaceCarIndex meEliminatorIndex;       // +0x14      DWARF BrnGameActions.h:1352 (a3+20)
+    EGlobalRaceCarIndex meBeatenRivalIndex;      // +0x18      DWARF BrnGameActions.h:1353
+    s32                 miNumberOfTakedowns;     // +0x1C      DWARF BrnGameActions.h:1355
+    f32                 mfDistanceFromFinish;    // +0x20      DWARF BrnGameActions.h:1356 (a3+32)
+    s32                 miFinishPosition;        // +0x24      DWARF BrnGameActions.h:1357
+    s32                 miEliminations;          // +0x28      DWARF BrnGameActions.h:1358 (a3+40)
+    bool                mbIsOnlineGameMode;      // +0x2C      DWARF BrnGameActions.h:1360
+    bool                mbTimedOut;              // +0x2D      DWARF BrnGameActions.h:1361 (a3+45)
+    bool                mbWonRound;              // +0x2E      X360-attested, DWARF-omitted (FLAGGED name) (a3+46)
 };
 
 // Lock the X360-asm-proven convoy offsets (0x24 / 0x44 / 0x64). The GameAction<T> base is the empty
