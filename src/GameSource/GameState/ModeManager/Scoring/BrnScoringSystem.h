@@ -243,6 +243,14 @@ namespace BrnGameState
         EActiveRaceCarIndex GetActiveRaceCarIndex() const { return meRaceCarIndex; }      // :178 (scorers call this)
         BrnNetwork::NetworkPlayerID GetNetworkPlayerID() const { return mNetworkPlayerID; } // :181 (scorers call this)
 
+        // ADDITIVE GROW (declare-only) for the BrnGameState::DeveloperChallengeManager TU.
+        // OnEventWin (race win) reads the player's finish score word at CarData+252 ( > 0 == a real
+        // finishing score) and the flawless/no-damage flag at CarData+32 ( == 0 -> flawless). Bodies +
+        // the real members land with the ScoringSystem TU. FLAG: offsets +252 / +32, semantics inferred
+        // from the OnEventWin asm.
+        s32  GetFinishScore() const;
+        bool IsFlawless() const;
+
         // ---- field setters (trivial writes; inline) ----
         void SetCarID(CgsID lCarId)                       { mCarId = lCarId; }                 // :186
         void SetCumulativePoints(s32 liPoints)            { miCumulativePoints = liPoints; }   // :190
@@ -603,6 +611,12 @@ namespace BrnGameState
         CarData*       GetCarData(EActiveRaceCarIndex leActiveRaceCarIndex);                  // :1061 / 0x8231DC18
         CarData*       GetCarData(BrnNetwork::NetworkPlayerID lID);                           // :1065
         const CarData* GetCarData(BrnNetwork::NetworkPlayerID lID) const;                     // :1069
+
+        // ADDITIVE GROW (declare-only) for the BrnGameState::DeveloperChallengeManager TU.
+        // OnTakedown's "took down every rival" sweep compares the taken-down count against the number
+        // of cars in the scoring system minus one (X360 reads the car-count word at ss+20200). Body +
+        // the real count member land with the ScoringSystem TU. FLAG: offset 20200, count semantics.
+        s32 GetCarCount() const;
 
         // X360 0x82310E30 (non-const). Direct index by player scoring slot (no match search).
         CarData*       GetCarDataFromPlayerScoringIndex(GameStateModuleIO::EPlayerScoringIndex leIndex);       // :1073 / 0x82310E30

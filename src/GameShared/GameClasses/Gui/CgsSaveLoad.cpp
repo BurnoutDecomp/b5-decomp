@@ -15,6 +15,83 @@
 
 #include "GameShared/GameClasses/Gui/CgsSaveLoad.h"        // CgsGui::ConvertWideCharToAsciiSafe
 #include "GameShared/GameClasses/Gui/CgsGuiKeyboard.h"     // CgsGui::GuiKeyboardListener, CgsUtf16
+#include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
+
+namespace CgsGui
+{
+    // @ 0x824C0590 (CgsSaveLoad.h:305). Copy the wide-character string lpwSource into the
+    // ASCII buffer lpacDest, one byte per character. Two guards fire first, faithful to the
+    // X360 asserts:
+    //   1. a terminator must appear within luMaxLen wide characters (else "source string is
+    //      too long", baked CgsSaveLoad.h:307);
+    //   2. every wide character must be 7/8-bit (< 0x100), i.e. representable in one ASCII
+    //      byte (else "source string is not ascii", baked CgsSaveLoad.h:308).
+    // The copy then writes the low byte of each wide character until the source terminator,
+    // and null-terminates the destination. Wide reads are 16-bit (X360 lhz) -- wchar_t is a
+    // 16-bit code unit on both the X360 and the PC target.
+    void ConvertWideCharToAsciiSafe(char* lpacDest, const wchar_t* lpwSource, size_t luMaxLen)
+    {
+        // (1) require a terminator within luMaxLen units.
+        const wchar_t* lpEnd    = lpwSource + luMaxLen;
+        const wchar_t* lpScan   = lpwSource;
+        while (lpScan != lpEnd && *lpScan != 0)
+            ++lpScan;
+        CGS_ASSERT(lpScan != lpEnd, "source string is too long");
+
+        // (2) require every character to be representable as a single ASCII byte (< 0x100).
+        bool lbIsAscii = true;
+        if (*lpwSource != 0)
+        {
+            lbIsAscii = false;
+            for (const wchar_t* lpCheck = lpwSource; ; )
+            {
+                const u32 luChar = static_cast<u32>(static_cast<u16>(*lpCheck));
+                ++lpCheck;
+                if (luChar >= 0x100)
+                    break;
+                if (*lpCheck == 0)
+                {
+                    lbIsAscii = true;
+                    break;
+                }
+            }
+        }
+        CGS_ASSERT(lbIsAscii, "source string is not ascii");
+
+        // Copy the low byte of each character, then null-terminate.
+        const wchar_t* lpRead = lpwSource;
+        char*          lpWrite = lpacDest;
+        while (*lpRead != 0)
+        {
+            *lpWrite++ = static_cast<char>(*lpRead++);
+        }
+        *lpWrite = 0;
+    }
+
+    // @ 0x8284BC98 (CgsSaveLoad.h:326). The reverse conversion: copy the null-terminated
+    // ASCII string lpacSource into the wide-character buffer lpwDest, sign-extending each
+    // byte (X360 extsb) to a 16-bit wide character. The single guard requires the source
+    // length (excluding the terminator) to be strictly less than luMaxLen (the destination
+    // capacity); otherwise it fires "source string is too long" (baked CgsSaveLoad.h:326).
+    void ConvertAsciiToWideCharSafe(wchar_t* lpwDest, const char* lpacSource, size_t luMaxLen)
+    {
+        // Measure the source (length excludes the terminator) and require it to fit.
+        const char* lpScan = lpacSource;
+        while (*lpScan++ != 0)
+            ;
+        const size_t luLength = static_cast<size_t>(lpScan - lpacSource - 1);
+        CGS_ASSERT(luLength < luMaxLen, "source string is too long");
+
+        // Sign-extend each byte into a wide character, then null-terminate.
+        const char* lpRead  = lpacSource;
+        wchar_t*    lpWrite = lpwDest;
+        while (*lpRead != 0)
+        {
+            *lpWrite++ = static_cast<wchar_t>(static_cast<signed char>(*lpRead++));
+        }
+        *lpWrite = 0;
+    }
+}
 
 namespace BrnGui
 {

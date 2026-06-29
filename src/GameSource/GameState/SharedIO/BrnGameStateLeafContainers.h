@@ -18,13 +18,14 @@ struct TargetEventScore        { u8 maBlob[40]; };   // X360 stride 40 (provisio
 struct ChainableMultiplierInfo { s32 maField[4]; };  // X360 stride 16 (provisional)
 }
 
-// Minimal owner-class slices carrying only the nested element type each Array instantiation needs.
-class DeveloperChallengeManager
-{
-public:
-    struct CollectedBillboard { u8 maBlob[16]; };    // X360 stride 16 (provisional)
-};
+// NOTE: BrnGameState::DeveloperChallengeManager (and its nested CollectedBillboard element type) is
+// now FULLY homed in DeveloperChallengeManager/BrnDeveloperChallengeManager.h -- the manager's own
+// TU. The provisional `class DeveloperChallengeManager { struct CollectedBillboard { u8 maBlob[16]; }; }`
+// stub that used to live here has been removed; the Array<CollectedBillboard,5> explicit-instantiation
+// TU (Array_CollectedBillboard_5.cpp) now includes that home directly (mirroring the
+// StuntModeScoringOnline promotion below).
 
+// Minimal owner-class slices carrying only the nested element type each Array instantiation needs.
 class GameStateImageManagerBase
 {
 public:

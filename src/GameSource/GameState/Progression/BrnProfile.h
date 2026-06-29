@@ -175,6 +175,21 @@ public:
     // Mark the freeburn challenge lChallengeID complete on the profile and return the player's new
     // total completed-freeburn-challenge count (the value the achievement manager is notified with).
     u32 CompleteFreeburnChallenge(CgsID lChallengeID);
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the BrnGameState::DeveloperChallengeManager TU.
+    // The persisted developer-challenge completion record: a u64 bit set keyed by EDeveloperChallenge
+    // index. The X360 reads it at Profile+0x1D7C0 (== ProgressionManager+121200, Profile being
+    // ProgressionManager+0x170) and tests bit (1<<liChallengeIndex); SetDeveloperChallengeComplete
+    // (X360 0x823XXXXX, called as SetDeveloperChallengeComplete(profile, index)) sets that bit.
+    // Bodies + the real member land with the Profile TU. Declare-only suffices for the compile gate.
+    // ------------------------------------------------------------------------
+
+    // True iff developer-challenge liChallengeIndex is already marked complete on the profile.
+    bool IsDeveloperChallengeComplete(s32 liChallengeIndex) const;
+
+    // Mark developer-challenge liChallengeIndex complete on the persisted profile.
+    void SetDeveloperChallengeComplete(s32 liChallengeIndex);
 };
 }
 

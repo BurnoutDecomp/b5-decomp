@@ -73,6 +73,12 @@ struct VehicleListEntry
     bool  IsTrophyCar() const;
     u8    GetUnlockRank() const;
 
+    // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
+    // BrnGameState::DeveloperChallengeManager::CheckCarID parent-chain walk. X360 CheckCarID reads
+    // the entry's parent-car id and chases it until it matches the target (or runs out). Per the
+    // Vehicle-List wiki the parent id sits at entry+0x08 (CgsID mParentId, 0 == no parent).
+    CgsID GetParentId() const;
+
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
     u8 maPad0[160];                                                       // +0x00
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mAttribCollectionKey;        // +0xA0
