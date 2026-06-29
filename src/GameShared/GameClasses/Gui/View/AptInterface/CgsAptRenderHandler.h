@@ -1,80 +1,179 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"      // CgsGraphics::Im2dTransform (mVertexTransform)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // CgsGraphics::ImRenderBuffer<V> (the +4 command buffer)
+#include "GameShared/GameClasses/Containers/CgsHashTable.h"                      // CgsContainers::HashTable<u32,TextureState*,25>
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"    // CgsResource::GuiGeometryFile (Render arg)
+#include "GameShared/GameClasses/Fonts/CgsUnicode.h"                             // CgsUnicode::CgsUtf8 (GetUnusedAptString out-param)
 
 // CgsGui::AptRenderHandler - the GUI's Apt (Adobe-Flash-player) rendering bridge: it owns the
-// Im2d renderer set, a white fallback texture, and two large per-frame string/rendering-unit
-// caches the Apt callback renderer fills while drawing a movie. Recovered from the X360 ARTIST
-// binary:
-//   AptRenderHandler()      @ 0x827DFBD8  (constructor; EXECUTED in the boot trace)
-//   SetWhiteTexture(tex)    @ 0x828466E0  (EXECUTED in the boot trace)
-//   GetIm2dRendererType()   @ 0x82846780  (debug-asserted Im2d renderer-type accessor)
+// Im2d renderer set, a white fallback texture, the per-batch vertex/colour transform, two
+// per-shape texture-state caches (one CLAMP-addressed, one WRAP-addressed), and a fixed pool of
+// reusable AptString text units the Apt callback renderer hands out while drawing a movie.
 //
-// The real guest object is very large (~108 KB) and only PARTIALLY recovered here: these three
-// functions are the entire in-scope slice, so this class models ONLY the fields they touch.
-// Every other DWARF member is uncommitted and intentionally OMITTED.  FLAG: minimal-slice class.
+// Recovered from the PS3 External ELF (primary) cross-checked vs BURNOUT_X360_ARTIST.XEX:
+//   AptRenderHandler()      X360 0x827DFBD8  (constructor; EXECUTED in the boot trace)
+//   SetWhiteTexture(tex)    X360 0x828466E0  (EXECUTED in the boot trace)
+//   GetIm2dRendererType()   X360 0x82846780  (debug-asserted Im2d renderer-type accessor)
+//   Render(geom, shader)    PS3  0x5CB230    (the shape-geometry -> 2D command/vertex submit)
+//   GetUnusedAptString()    PS3  0x5BAC6C    (hand out a free AptString from the pool)
+//   DestroyAptString(str)   PS3  0x5BACF8    (return an AptString to the pool)
 //
-// CrashNavIcon/BoostBarRenderer-style reconstruction: standalone class (NO base class, NO raw
-// offset casts), members declared BY NAME, repeated stride writes grouped into arrays cleared by
-// loops, data-segment pointers held as named slots. Exact byte offsets are NOT reproduced because
-// the gate compiles for a 64-bit host (pointers widen 4->8 bytes), so the X360 pseudocode offsets
-// are not load-bearing here -- the constructor reproduces the SAME stores (zeroed dword runs,
-// 0x7FFFFFFF-seeded slot arrays, cleared flag bytes, -1 sentinels) in the same order.
+// LAYOUT NOTE: the real guest object is very large (~108 KB). The fields modelled here are the
+// ones the in-scope methods touch, declared BY NAME in the order the guest stores them; the
+// console byte-offsets the PS3/X360 code addresses (this+99780 cache A, this+104180 cache B,
+// this+128 white texture, this+108588 renderer set, the +99520 AptString pool base) are recorded
+// in [c:0xNN]/[guest +N] comments. The gate compiles for a 64-bit host, so pointers widen
+// 4->8 bytes and those exact offsets are NOT load-bearing; the members reproduce the same
+// observable state. FLAG: partial slice -- every DWARF member the in-scope methods do not touch
+// is intentionally omitted.
+
+namespace renderengine
+{
+    class Texture;        // the bound raster (white fallback + the per-shape sampled pages)
+    class TextureState;   // the resolved sampler+raster state the caches memoise
+    enum PrimitiveType : s32;
+}
+
+namespace CgsGraphics
+{
+    template <typename V> struct ImRenderBuffer;
+    struct Basic2dColouredTexturedVertex;
+}
+
+
 namespace CgsGui
 {
+    // One pooled text unit. The guest array strides 0x80 (128 bytes) per element (the
+    // DestroyAptString slot search uses `i << 7`); only the pool bookkeeping is in scope, so the
+    // unit body is modelled as opaque storage of that stride. FLAG: CgsAptString interior is
+    // out-of-scope opaque state (homed when the text-draw path is recovered).
+    struct CgsAptString
+    {
+        u8 mau8Opaque[128];   // 0x80-byte stride (DestroyAptString `i << 7`)
+    };
+
+    // The active 2D renderer the Apt rasteriser drives. On the X360 this is an Im2dRenderBuffer:
+    // its leading word is a head slot (the value GetIm2dRendererType returns the ADDRESS of), and
+    // the actual command-buffer state (CgsGraphics::ImRenderBuffer<V>) lives at +4. Render reads
+    // GetIm2dRendererType() (the base pointer) and then `base + 4` (this mCommandBuffer) and issues
+    // every command -- SetTransform, SetProgram, SetState, SetTexture, RenderFromStaticVertexBuffer
+    // -- through it. (X360 Im2dRenderBuffer::SetTransform @0x8244FF30 takes the base and itself does
+    // `+4`; the per-mesh ops in Render take `base + 4` directly. The committed ImRenderBuffer<V>
+    // template IS that +4 command-buffer object -- its members line up with 0x20/0x30/0x34/0x41
+    // relative to base+4 -- so SetTransform here is called on mCommandBuffer too.)
+    struct AptIm2dRenderBuffer
+    {
+        u32 mu32Head;   // [c:0x00] the renderer base head word (GetIm2dRendererType returns &this)
+        CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex> mCommandBuffer; // [c:0x04]
+    };
+
     class AptRenderHandler
     {
     public:
-        // X360 0x827DFBD8. Zeroes two leading dword runs, seeds two large slot arrays with the
-        // 0x7FFFFFFF "unset" marker, clears two flag bytes, and stores the -1 "no current entry"
-        // sentinel into two trailing index words.
+        // X360 0x827DFBD8. Brings the two per-shape texture-state caches up empty, clears the
+        // batch transform, marks every AptString slot free, and seeds the renderer/white-texture
+        // slots. (The X360 ctor's 0x7FFFFFFF seeding of the 12-byte cache bins is the
+        // BaseLinkedList "uninitialised" sentinel each HashTable bin starts with; here the
+        // HashTable default ctor + Init() produce that same start-empty state.)
         AptRenderHandler();
 
-        // X360 0x828466E0. Cache the white fallback texture pointer (guest +0x80). Asserts the
-        // incoming pointer is non-null ("Invalid texture pointer sent to AptRenderHandler::
-        // SetWhiteTexture").
+        // X360 0x828466E0. Cache the white fallback texture pointer (guest +0x80 == +128).
+        // Asserts the incoming pointer is non-null ("Invalid texture pointer sent to
+        // AptRenderHandler::SetWhiteTexture").
         void SetWhiteTexture(void* lpWhiteTexture);
 
-        // X360 0x82846780. Return the active Im2d renderer's leading type word: asserts the
-        // renderer pointer (mpImRenderers, guest +108588) is non-null ("mpImRenderers"), then
-        // returns *mpImRenderers (the first dword of the pointed-to renderer). The X360 does a
-        // member load (lwz r11,0(r31)) then a SINGLE deref of that pointer (lwz r3,0(r11)).
-        int GetIm2dRendererType() const;
+        // X360 0x82846780. Despite the name (the verbatim EA symbol), this does NOT return a type
+        // word: it asserts the renderer-set pointer (mpImRenderers, guest +108588) is non-null
+        // ("mpImRenderers"), then returns **mpImRenderers -- i.e. the SET's leading slot, which is
+        // the active 2D renderer (Im2dRenderBuffer) BASE POINTER. The asm is two loads:
+        // `lwz r11, 0(this+108588)` (the set ptr) then `lwz r3, 0(r11)` (the renderer base ptr).
+        // Render then uses (base + 4) as the command-buffer sub-object (see AptIm2dRenderBuffer).
+        AptIm2dRenderBuffer* GetIm2dRendererType() const;
 
-    private:
-        // One slot of a 0x7FFFFFFF-seeded cache (the ctor writes only the leading marker word of
-        // each 3-dword slot; the other two dwords are left untouched). FLAG: only the leading
-        // marker word is attested -- the slot's other two dwords are opaque uninitialised state.
-        struct MarkerSlot
+        // PS3 0x5CB230. Walk a GUI shape geometry's meshes and submit each as a textured 2D
+        // primitive batch through the Im2d render buffer: choose the primitive topology, resolve
+        // (and memoise) the per-mesh texture state, and draw the mesh's static vertex run. Bounded
+        // by the batch transform's colour-scale alpha (a fully-transparent batch is skipped).
+        void Render(CgsResource::GuiGeometryFile* lpGeometry, int liShaderIndex);
+
+        // PS3 0x5BAC6C. Hand out the first free AptString from the pool: stamp its preallocated
+        // char-buffer pointer through lpcStringPointer, mark the slot in-use, and return it (or
+        // null when the pool is exhausted). lpcStringToAllocate is the requested text (carried for
+        // signature parity; the pool slot already owns its char storage).
+        CgsAptString* GetUnusedAptString(CgsUnicode::CgsUtf8** lpcStringPointer,
+                                         const char* lpcStringToAllocate);
+
+        // PS3 0x5BACF8. Return an AptString to the pool: find its slot and mark it free.
+        void DestroyAptString(CgsAptString* lpAptString);
+
+    public:
+        // One per-shape texture-state cache: a chained HashTable<textureId, TextureState*, 25>
+        // (the 25 bins) backed by an EXTERNAL fixed node pool. The guest lays the 25-bin table
+        // (300 bytes) immediately ahead of the node pool, with the live node count 0x1000 bytes
+        // past the pool base (== 256 nodes * 16 bytes) -- so the pool holds 256 entries. Render's
+        // miss path bump-allocates the next free node, stamps {key,value}, and sorted-inserts it
+        // into its bin (key % 25). Sources: AptRenderHandler::Render 0x5CB230 (the inlined
+        // GetInternal + ordered insert), HashTable<...,25>::GetInternal 0x5CEF84.
+        struct TextureStateCache
         {
-            s32 miMarker;     // ctor stores 0x7FFFFFFF (KI_UNSET)
-            s32 maOpaque[2];  // untouched by the ctor
+            typedef CgsContainers::HashTable<u32, renderengine::TextureState*, 25> Table;
+            typedef Table::Node                                                    Node;
+
+            static const u32 KU_POOL_SIZE = 256;   // 0x1000 / sizeof(Node) (16-byte nodes)
+
+            Table mBins;                  // [guest +0] the 25 chained bins (300 bytes)
+            Node  maNodePool[KU_POOL_SIZE];// [guest +300] the external node pool (256 * 16 bytes)
+            u32   muNodeCount;            // [guest +300 + 0x1000] live node count (next-free index)
+
+            void Init() { mBins.Init(); muNodeCount = 0; }
+
+            // The ordered insert Render inlines: take the next pool node, stamp the pair, and
+            // splice it into its bin keeping the bin sorted ascending by key. Mirrors the guest's
+            // InternalGetHead/InternalGetTail compare-and-(AddHead/AddTail/AddBefore) chain.
+            renderengine::TextureState* InsertSorted(u32 luKey, renderengine::TextureState* lpState);
+
+            // Look the key up; returns the memoised state or null on a miss (HashTable::Get).
+            renderengine::TextureState* Find(u32 luKey)
+            {
+                renderengine::TextureState** lppState = mBins.Get(luKey);
+                return lppState ? *lppState : nullptr;
+            }
         };
 
-        static const s32 KI_UNSET     = 0x7FFFFFFF;  // the "unset" slot marker the ctor seeds
-        static const s32 KI_NO_ENTRY  = -1;          // the "no current entry" index sentinel
-        static const u32 KU_NUM_SLOTS = 25;          // each slot array is 25 entries (loop r10=24..0)
-
-        // ---- leading zeroed dword runs (guest +0x88..+0x98 and +0xA0..+0xB0) ----
-        u32 maZeroRunA[5];  // guest +0x88..+0x98 (the ctor's first 5-store run, dup-first-write)
-        u32 maZeroRunB[5];  // guest +0xA0..+0xB0 (the ctor's second 5-store run, dup-first-write)
-
-        // ---- white fallback texture (guest +0x80, written by SetWhiteTexture) ----
+    private:
+        // ---- white fallback texture (guest +0x80 == +128; SetWhiteTexture / mesh mode 0) ----
         void* mpWhiteTexture;
 
-        // ---- first 0x7FFFFFFF-seeded slot array (guest +99780) + its trailing flag/sentinel ----
-        MarkerSlot maSlotsA[KU_NUM_SLOTS];  // guest +99780, 12-byte stride, marker-only writes
-        u8         mbFlagA;                 // guest +100072 (cleared to 0)
-        s32        miEntryIndexA;           // guest +104172 (set to -1)
+        // ---- the per-batch screen-space + colour transform (mColourScale.w gates the batch) --
+        CgsGraphics::Im2dTransform mVertexTransform;
 
-        // ---- second 0x7FFFFFFF-seeded slot array (guest +104184) + its trailing flag/sentinel --
-        MarkerSlot maSlotsB[KU_NUM_SLOTS];  // guest +104184, 12-byte stride, marker-only writes
-        u8         mbFlagB;                 // guest +104476 (cleared to 0)
-        s32        miEntryIndexB;           // guest +108576 (set to -1)
+        // ---- the two per-shape texture-state caches ------------------------------------------
+        TextureStateCache mWrapTextureCache;   // [guest +99780]  mesh texture-mode 2 (WRAP address)
+        TextureStateCache mClampTextureCache;  // [guest +104180] mesh texture-mode 1 (CLAMP address)
 
-        // ---- Im2d renderer set (guest +108588; read by GetIm2dRendererType) ----
-        // Pointer to the active Im2d renderer; GetIm2dRendererType returns its leading dword
-        // (one deref of this held pointer).
-        int* mpImRenderers;                 // guest +108588 (mpImRenderers)
+        // ---- the AptString pool (guest base +99520) ------------------------------------------
+        static const u32 KU_NUM_APT_STRINGS = 256;
+        CgsAptString    maAptStrings[KU_NUM_APT_STRINGS];       // [guest +99520+192] 0x80-byte units
+        u32             maacAptStringChars[KU_NUM_APT_STRINGS]; // [guest +99520+...] preallocated char ptrs (32-bit)
+        u8              mabUnusedAptStrings[KU_NUM_APT_STRINGS];// [guest +99520] free flags (1 == free)
+
+        // ---- Im2d renderer set (guest +108588; read by GetIm2dRendererType / Render) ----------
+        // The guest holds a pointer to the active render set. Its leading slot (offset 0) is the 2D
+        // renderer (AptIm2dRenderBuffer) BASE POINTER -- GetIm2dRendererType returns it (**this+108588)
+        // and Render drives `base + 4` (the embedded command buffer). Offset +16 is the 3D renderer
+        // (Render asserts it non-null but this path does not use it). Modelled as the set struct below.
+    public:
+        struct AptImRendererSet
+        {
+            AptIm2dRenderBuffer* mpIm2dRenderer;  // [c:0x00] *mpImRenderers == GetIm2dRendererType() (2D renderer base)
+            void*                mpReserved04;    // [c:0x04] (set slot; unused by this path)
+            void*                mpReserved08;    // [c:0x08]
+            void*                mpReserved0C;    // [c:0x0C]
+            void*                mp3dRenderer;    // [c:0x10] 3D renderer (Render asserts *(set+16) != 0)
+        };
+    private:
+        AptImRendererSet* mpImRenderers;   // guest +108588 ("mpImRenderers")
     };
 }

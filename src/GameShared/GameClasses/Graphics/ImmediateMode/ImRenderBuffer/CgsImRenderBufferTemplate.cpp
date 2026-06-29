@@ -378,6 +378,60 @@ namespace CgsGraphics
     }
 
     // -------------------------------------------------------------------------
+    // SetTextureState - append a 16-byte {type:IM_CMD_SET_STATE_TEXTURE} command
+    // binding a resolved renderengine::TextureState. Decompiled from the inline
+    // writer in AptRenderHandler::Render @0x5CB230 (LABEL_19): it stores muType=9,
+    // muSize=16, advances the write position, then writes the state pointer at +8
+    // (the ImCommandSetStateTexture::mpTextureState payload slot). Same overflow
+    // arm as the other 16-byte command writers.
+    // -------------------------------------------------------------------------
+    template <typename V>
+    void ImRenderBuffer<V>::SetTextureState(const renderengine::TextureState* lpTextureState)
+    {
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        if (muCommandBufferSize >= luPos + 16u)
+        {
+            ImCommandSetStateTexture* lpCommand = reinterpret_cast<ImCommandSetStateTexture*>(
+                mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand->muType         = IM_CMD_SET_STATE_TEXTURE;            // 9
+            lpCommand->muSize         = 16u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            lpCommand->mpTextureState = reinterpret_cast<const TextureState*>(lpTextureState);
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // SetTransform - append an 80-byte {type:IM_CMD_SET_TRANSFORM} command carrying
+    // the batch transform. Decompiled from the inline writer at the head of
+    // AptRenderHandler::Render @0x5CB230: it stores muType=16, muSize=80, advances
+    // the write position, then copies the 64-byte CgsGraphics::Im2dTransform into the
+    // record 16 bytes past its head (the four lvx/stvx). The PS3 `dcbz` cache-line
+    // pre-warm before the copy is dropped (no observable effect; see file header).
+    // -------------------------------------------------------------------------
+    template <typename V>
+    void ImRenderBuffer<V>::SetTransform(const Im2dTransform& lrTransform)
+    {
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        if (muCommandBufferSize >= luPos + 80u)
+        {
+            ImCommandSetTransform* lpCommand = reinterpret_cast<ImCommandSetTransform*>(
+                mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand->muSize = 80u;
+            lpCommand->muType = IM_CMD_SET_TRANSFORM;                        // 16
+            mpWriteBuffer->muCommandBufferWritePos = luPos + 80u;
+            lpCommand->mTransform = lrTransform;
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // GetFirstCommand @0x57E024 - the dispatcher's iterator start: the first
     // command in the DISPATCH buffer, or nullptr if it is empty. (PS3 reads
     // mpDispatchBuffer == this+36; returns its command base iff write-pos != 0.)
