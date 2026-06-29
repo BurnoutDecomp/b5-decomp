@@ -12,6 +12,7 @@
 
 #include "SDKs/EATech/include/Apt/AptArray.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"  // sMethod_join boxes the result into an AptString
 #include "SDKs/EATech/include/Apt/AptDefine.h"        // gpNonGCPoolManager / gpGCPoolManager
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"    // AptValueGC_PoolManager::AllocateAptValueGC / DeallocateAptValueGC
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
@@ -446,4 +447,56 @@ int AptArray::defaultSortCompareFunc(AptValue* const* ppA, AptValue* const* ppB)
     const EAStringC* pStrB = AptValue::Get_ToString(*ppB, &scratchB);
 
     return strcmp(pStrA->GetBuffer(), pStrB->GetBuffer());
+}
+
+// ---------------------------------------------------------------------------
+// toString @0x82AED040 -- render the array as separator-joined element strings into
+// pOut (the join() backing helper). Each element is coerced to a string via
+// AptValue::Get_ToString; the separator goes BETWEEN elements (not after the last).
+// (A null slot contributes no text but still gets a following separator.)
+// ---------------------------------------------------------------------------
+void AptArray::toString(EAStringC* pOut, const char* pSeparator) const
+{
+    *pOut = EAStringC("");   // X360 seeds pOut from the empty-string literal
+    for (int i = 0; i < mnLength; ++i)
+    {
+        AptValue* pElem = mpArray[i];
+        if (pElem)
+        {
+            EAStringC strScratch;
+            *pOut += *AptValue::Get_ToString(pElem, &strScratch);
+        }
+        if (i < mnLength - 1)
+            *pOut += pSeparator;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// sMethod_join @0x82AFB850 -- AS Array.join([separator]): render every element to a
+// string joined by the separator (default ","), boxed as a fresh AptString.
+// ---------------------------------------------------------------------------
+AptValue* AptArray::sMethod_join(AptArray* pThis, int nArgCount)
+{
+    if (!pThis->isArray())
+        return gpUndefinedValue;
+
+    EAStringC strResult;       // accumulates the joined text
+    EAStringC strSeparator;    // holds the rendered separator argument (if any)
+
+    const char* szSeparator;
+    if (nArgCount > 0)
+    {
+        gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&strSeparator);
+        szSeparator = strSeparator.GetBuffer();
+    }
+    else
+    {
+        szSeparator = ",";
+    }
+
+    pThis->toString(&strResult, szSeparator);
+
+    AptString* pString = AptString::Create("");
+    *pString->GetInternalString() = strResult;
+    return pString;
 }
