@@ -190,3 +190,39 @@ AptNativeHash* AptCIH::GetNativeHash() const   // @0x82AD5B28
 }
 bool AptCIH::IsMask() const  { return mpCharacterInst->GetRenderItem()->GetIsMask(); }   // @0x82AD5BA0
 bool AptCIH::HasMask() const { return mpCharacterInst->GetRenderItem()->GetHasMask(); }  // @0x82AD5BB8
+
+// ---------------------------------------------------------------------------
+// SetDirtyState @0x82AD76B8 -- set/clear the per-node dirty bit (mFlagsA bit 25).
+// Clearing, or a non-renderable character type (shape 1 / dynamic-text 2 /
+// static-text 10) or the empty AptCIHNone placeholder, leaves it clear. When a
+// renderable node is dirtied with bPropagate, the dirty bit is pushed up the
+// display-list parent chain, stopping at the first already-dirty ancestor.
+// ---------------------------------------------------------------------------
+void AptCIH::SetDirtyState(bool bDirty, bool bPropagate)
+{
+    if (!bDirty)
+    {
+        mFlagsA &= ~0x02000000u;
+        return;
+    }
+
+    const uint32_t nType = mpCharacterInst->GetTypeTag();
+    if (nType == 1 || nType == 2 || nType == 10 || IsNone())
+    {
+        mFlagsA &= ~0x02000000u;
+        return;
+    }
+
+    mFlagsA |= 0x02000000u;
+    if (bPropagate)
+    {
+        for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; )
+        {
+            if ((pAncestor->mFlagsA & 0x02000000u) != 0)
+                break;
+            AptCIH* pNext = pAncestor->mpDisplayListParent;
+            pAncestor->mFlagsA |= 0x02000000u;
+            pAncestor = pNext;
+        }
+    }
+}

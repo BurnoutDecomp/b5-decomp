@@ -111,8 +111,12 @@ struct AptCIH : public AptValueGC
     // ActionScript-changed flag (bit 31). @0x82AD50E8/0x82AD50C8
     bool GetASChanged() const  { return (mFlagsA >> 31) != 0; }
     void SetASChanged(bool b)  { mFlagsA = (mFlagsA & 0x7FFFFFFFu) | (b ? 0x80000000u : 0u); }
-    // Dirty-state flag (bit 25; getter only -- SetDirtyState is behavioural). @0x82AD5C10
+    // Dirty-state flag (bit 25). @0x82AD5C10 / @0x82AD76B8
     bool GetDirtyState() const { return ((mFlagsA >> 25) & 1u) != 0; }
+    // SetDirtyState @0x82AD76B8 -- set/clear the dirty bit; container/leaf types
+    // (shape/dyn-text/static-text) and the empty placeholder never carry it. When
+    // dirtying with bPropagate, mark up the parent chain to the first dirty ancestor.
+    void SetDirtyState(bool bDirty, bool bPropagate);
     // "In remove list" flag (bit 26). @0x82AD5188/0x82AD5170
     bool GetInRemList() const  { return ((mFlagsA >> 26) & 1u) != 0; }
     void SetInRemList(bool b)  { mFlagsA = (mFlagsA & 0xFBFFFFFFu) | (b ? 0x04000000u : 0u); }
