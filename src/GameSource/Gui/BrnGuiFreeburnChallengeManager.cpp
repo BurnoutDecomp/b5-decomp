@@ -67,4 +67,22 @@ FreeburnChallengeManager::GetCurrentTargetType() const
     return maeChallengeTargetTypes[ miCurrentTargetIndex ];
 }
 
+// @ 0x824F4160 — sum the per-ARCI contributions over all eight active-race-car slots.
+// The X360 walks leCar = 0..7 with the post-increment operator++(EActiveRaceCarIndex&,int)
+// (GameSource/BurnoutConstants.h:39) inlined: that operator carries the range guard whose
+// failed assert ("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", BurnoutConstants.h line 39)
+// shows in this function's asm. The guard is non-fatal. Hex-Rays renders the prototype as
+// void because it loses the fp31 return; the function returns the accumulated f32 total.
+f32 FreeburnChallengeManager::GetCurrentContributionOverall() const
+{
+    f32 lfCurrentTotal = 0.0f;
+    for ( EActiveRaceCarIndex leCurrentCar = E_ACTIVE_RACE_CAR_INDEX_0;
+          leCurrentCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+          leCurrentCar++ )
+    {
+        lfCurrentTotal += GetCurrentContributionForARCI( leCurrentCar );
+    }
+    return lfCurrentTotal;
+}
+
 } // namespace BrnGui
