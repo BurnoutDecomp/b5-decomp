@@ -33,3 +33,20 @@ enum AptMaskRenderOperation : int;
 void AptHook_DrawShape(AptCharacter* pShape, AptMaskRenderOperation eOp, int nTick);
 void AptHook_DrawImportGlyph(AptCharacter* pImport, int nIndex, void* pGlyphData);
 int  AptHook_ResolveImport(void* pImportFileData, int nImportId);
+
+// ---------------------------------------------------------------------------
+// Custom-control host hooks (AptRenderItemCustomControl). A custom control is a
+// game-supplied widget the Apt player does not draw itself; the host installs
+// these to draw/destroy it and to receive the instance-name render-data
+// notifications. FLAG: homed by the host custom-control integration; declared
+// here so the custom-control render item compiles/links against the boundary.
+// ---------------------------------------------------------------------------
+extern bool gbAptCustomControlRenderEnabled;                                   // byte_82F733F6
+extern void (*gpfnAptDestroyCustomControl)(int nZId);                          // dword_8324E898
+extern void (*gpfnAptDrawCustomControl)(const char* pType, const char* pTarget,
+                                        void* pPayload, const char* pProperties,
+                                        AptMaskRenderOperation eOp, int nTick); // dword_8324E88C
+extern void (*gpfnAptDrawCustomControlById)(int nZId, void* pPayload,
+                                            AptMaskRenderOperation eOp, int nTick);   // dword_8324E89C
+extern void (*gpfnAptCustomControlPushRenderData)(const char* pInstanceName);  // dword_8324E8CC
+extern void (*gpfnAptCustomControlPopRenderData)(const char* pInstanceName);   // dword_8324E8D0
