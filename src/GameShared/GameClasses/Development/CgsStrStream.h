@@ -53,6 +53,12 @@ namespace CgsDev
     {
         StrStream(char* lpcBuffer, s32 liBufferSize);
 
+        // Un-hide the inherited scalar formatting overloads (s32/u32/u64/f32/void*/PrintMode):
+        // overriding operator<<(const char*) below would otherwise hide every base-class overload
+        // by name. The X360 streams the teleport-location ordinal as an int through this path
+        // (StrStreamBase::AppendFormat) when building the "Reset Player Car" location labels.
+        using StrStreamBase::operator<<;
+
         StrStreamBase& operator<<(const char* lpcText) override;
 
         // 0x82815E80 - the buffer sink: append text to mpcBuffer without overflowing it (X360

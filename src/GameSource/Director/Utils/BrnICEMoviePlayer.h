@@ -165,7 +165,22 @@ namespace Camera
         // into the movie-player slice (the manager only uses it as an opaque owner key).
         void UnSetBehaviourUsedByHandle(u32 luAllocationKey);
         void CheckNoBehavioursAreAllocatedByState(const void* lpState);
+
+        // Allocate a fresh TBehaviour into lrHandle, owned by lpOwningState. X360-attested
+        // (the BrnDirector::Camera::BehaviourManager::NewBehaviour<TBehaviour> family, e.g.
+        // the BehaviourIceAnim instantiation @0x82268018 the race-intro arbitrator state
+        // drives). The trailing two selectors mirror the recorded allocation request (the
+        // X360 passes 0, 1). Generic over the handle type so the arbitrator states' own
+        // BehaviourHandle<> (a 5-word variant carrying a lookup-helper word) binds as well as
+        // this header's interpolator handle. DECLARATION-ONLY (the body lands with the
+        // BehaviourManager TU; the per-TU cl /c gate does not link).
+        template <typename TBehaviour, typename THandle>
+        void NewBehaviour(THandle& lrHandle, void* lpOwningState, s32 liArgA, s32 liArgB);
     };
+
+    // Trap-stub-free declaration only: the template body is never defined here (the real body
+    // lands with the BehaviourManager TU). Naming it as a template lets the per-TU gate emit a
+    // call without an inline definition; nothing instantiates a body in this header.
 }
 
 // ----------------------------------------------------------------------------

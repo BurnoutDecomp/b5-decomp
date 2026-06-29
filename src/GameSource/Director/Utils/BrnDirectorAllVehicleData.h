@@ -60,6 +60,19 @@ public:
     // *opposing* member). @0x822334E0. X360 returns it via the result-pointer ABI; modelled as
     // a plain f32 return. FLAG: const-ness inferred (a read-only query that lazily sorts).
     f32 SqDistanceOfNearestOpposingTeamMember(s32 liTeamId) const;
+
+    // ---- race-car queries the director's race-intro path uses (X360-attested) ------------
+    // The index of the race car nearest the player. luSelector selects the candidate set the
+    // X360 passes (1 == race cars only). @0x82233380. The intro state feeds the result to
+    // GetRaceCar. FLAG: const-ness inferred (a read-only query that lazily sorts the list).
+    s32 GetNearestRaceCarIndexToPlayer(u32 luSelector) const;
+
+    // The race-car record at liIndex (an opaque vehicle-data blob whose layout belongs to the
+    // full AllVehicleData TU). @0x82205DE8. The intro state reads the car's world position out
+    // of it (the X360 lvx128 at the record's +0x220) to decide whether the car is in front of
+    // the player. Returned as a raw pointer because the record type is not reconstructed here.
+    // FLAG: const-ness inferred.
+    const void* GetRaceCar(s32 liIndex) const;
 };
 
 // Pin the element size/field offsets to the Append asm (12-byte / 3-word element copied as

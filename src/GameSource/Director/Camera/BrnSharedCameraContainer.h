@@ -79,6 +79,16 @@ namespace BrnDirector
         // X360 inlines it as the primary/secondary test + the two handle-resolve accessors
         // (sub_822122x). DECLARATION-ONLY (body lands with the SharedCameraContainer TU).
         const Camera::Camera& GetSelectedGameplayCamera() const;
+
+        // Force the PRIMARY gameplay-camera behaviour to finish immediately so an intro /
+        // transition camera can take over. The X360 (ArbStateRaceIntro::Update cases 1 and 3)
+        // resolves the primary handle (this+0x04) to its behaviour via the manager, then sets
+        // its remaining-time to FLT_MAX and raises its two "finished" flags (behaviour-
+        // relative byte stores at +0x29E and +0xB5D). Those camera-behaviour offsets belong to
+        // the gameplay-camera-behaviour TU, so this is exposed as a single named operation
+        // here rather than poked by offset. DECLARATION-ONLY (body lands with the
+        // SharedCameraContainer / gameplay-camera-behaviour TU).
+        void ForcePrimaryGameplayBehaviourToFinish();
     };
 
     // Pin only the size-stable offsets the X360 asm proves (the two selection-flag bytes).

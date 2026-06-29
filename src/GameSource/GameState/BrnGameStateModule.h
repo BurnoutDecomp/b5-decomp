@@ -20,6 +20,10 @@ namespace BrnProgression { class Profile; }
 namespace InputBuffer    { class GameActionQueue; }
 // For the DeveloperChallengeManager additive grow below (pointer-only).
 namespace BrnResource    { struct VehicleList; }
+// For the ResetPlayerDebugComponent additive grows below (pointer-only).
+namespace BrnResource    { class  WheelList; }
+namespace BrnTrigger     { struct TriggerData; }
+namespace CgsWorld       { struct WorldMap2D; }
 
 namespace BrnGameState
 {
@@ -163,6 +167,46 @@ public:
 
     // X360 0x82382138. Request the world un-pause on junkyard exit.
     void RequestUnpause(bool lbArg, ::InputBuffer::GameActionQueue* lpQueue);
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the BrnGameState::ResetPlayerDebugComponent TU. The
+    // "Reset Player Car" debug menu reads the loaded vehicle/wheel resources, the active track's
+    // trigger data and the district map off the owning GameStateModule, and publishes its
+    // teleport / change-car requests onto the module's output GUI event queue. Signatures +
+    // semantics are X360-asm-attested (offsets noted); bodies land with the GameStateModule TU.
+    // Declare-only suffices for the per-TU `cl /c` gate.
+    // ------------------------------------------------------------------------
+
+    // X360 read at GameStateModule+0x456EC (284396). The loaded wheel-list resource (the runtime
+    // aggregation of wheel records the change-wheel menu enumerates).
+    BrnResource::WheelList* GetWheelList();
+
+    // X360 read at GameStateModule+0xAB70 (43888). The currently-loaded track's trigger data (the
+    // landmark / generic-region table the teleport-location menu is built from). The X360 reaches
+    // it through the embedded resource pointer at this offset; de-inlined to a named accessor.
+    BrnTrigger::TriggerData* GetTrackTriggerData();
+
+    // X360 read at GameStateModule+0x3C090 (245904). The world district map (sampled to label each
+    // teleport region with its county/district name).
+    CgsWorld::WorldMap2D* GetDistrictMap();
+
+    // The output GUI event queue the debug menu's teleport/change-car requests are published onto
+    // (X360 reaches it at GameStateModule+0x3CA40 / 248384 -- the same per-frame output queue
+    // GetOutputGuiEventQueue() above returns; exposed here for the debug component's AddEvent calls).
+
+    // X360 read at GameStateModule+0x456E0 (284384). The player's currently-equipped wheel id; the
+    // change-wheel menu pre-selects the option whose wheel-record id matches it. (GetActivePlayerCarId()
+    // above exposes the sibling active-car id at +0x456D8.)
+    CgsID GetActivePlayerWheelId() const;
+
+    // X360 read at GameStateModule+0x1DB8 (7608) -- the leading flag of the embedded mModeManager.
+    // The change-car debug action gates on it: it only publishes a change-car request when this is
+    // false (the X360 `if ( !*(mpGameStateModule + 7608) ) { AddEvent(...); }`). Semantically "a mode
+    // change / mode-data load is in progress", so a live car swap is deferred while it is true. FLAG:
+    // the exact member name is unconfirmed (it is the first byte of the not-yet-named mModeManager
+    // prefix); the predicate name reflects the asm-attested gate semantics. Body lands with the
+    // GameStateModule TU.
+    bool IsModeChangeInProgress() const;
 
 private:
     // DWARF BrnGameStateModule.h:771. The by-value ModeManager that owns the current game mode.

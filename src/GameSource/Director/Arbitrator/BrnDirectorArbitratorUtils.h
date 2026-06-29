@@ -31,6 +31,8 @@
 
 namespace BrnDirector
 {
+    class ArbitratorState;   // the calling state ChangeToState releases on a successful switch
+
     namespace ArbUtils
     {
         template <class TFromState>
@@ -44,6 +46,33 @@ namespace BrnDirector
             (void)leTargetState;
             (void)lreFromStateField;
             (void)leFromStateWhenSwitched;
+            (void)leFromStateWhenBlocked;
+            __debugbreak();   // trap stub -- real body lands with the ArbitratorUtils TU
+        }
+
+        // The release-on-switch overload (DWARF home BrnDirectorArbitratorUtils.h:31; X360
+        // body @0x821FE728). Like ChangeToStateWithoutRelease, but on a SUCCESSFUL switch it
+        // ALSO calls the caller state's Release() (the X360 dispatches the caller's vtable
+        // slot 3 after ChangeToState(container, target)). On failure it leaves the caller in
+        // place and writes leFromStateWhenBlocked into the caller's state field.
+        //
+        // X360 argument order: (lprCallingState, lrSharedInfo, leTargetState,
+        // lreFromStateField, leFromStateWhenBlocked) -- there is no separate "switched" value
+        // (Release seeds the post-switch state itself).
+        //
+        // BODY = TRAP STUB (the per-TU cl /c gate does not link): the real body lives with
+        // the ArbitratorUtils TU and dispatches through the container + the caller's vtable.
+        template <class TFromState>
+        void ChangeToState(ArbitratorState* lprCallingState,
+                           ArbStateSharedInfo& lrSharedInfo,
+                           ArbitratorStateContainer::EState leTargetState,
+                           TFromState& lreFromStateField,
+                           TFromState leFromStateWhenBlocked)
+        {
+            (void)lprCallingState;
+            (void)lrSharedInfo;
+            (void)leTargetState;
+            (void)lreFromStateField;
             (void)leFromStateWhenBlocked;
             __debugbreak();   // trap stub -- real body lands with the ArbitratorUtils TU
         }

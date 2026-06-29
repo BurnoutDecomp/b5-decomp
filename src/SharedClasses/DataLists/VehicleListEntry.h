@@ -79,6 +79,12 @@ struct VehicleListEntry
     // Vehicle-List wiki the parent id sits at entry+0x08 (CgsID mParentId, 0 == no parent).
     CgsID GetParentId() const;
 
+    // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
+    // BrnGameState::ResetPlayerDebugComponent change-car menu label. The car's display name
+    // C-string. Per the Vehicle-List wiki macVehicleName is the char[64] at entry+0x30 (the X360
+    // OnChangeCarFilter streams `entry+0x30` into the menu label). Returns nullptr/empty-safe.
+    const char* GetName() const;
+
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
     u8 maPad0[160];                                                       // +0x00
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mAttribCollectionKey;        // +0xA0
