@@ -76,6 +76,11 @@ namespace BrnReplays
         // buffer at the read cursor; returns bytes read.
         s32 Read(void* lpData, s32 liSize);
 
+        // ReadByte(void*) @ 0x8264FCF0. The 1-byte read primitive (X360 sub_8264FCF0):
+        // reads exactly one byte from the playback buffer into *lpDest. The traffic
+        // frame reader uses this for the bonus-asset count and the trailing slot table.
+        s32 ReadByte(void* lpDest);
+
         // Serialise(void*, int32_t) @ 0x8264C470. Mode-directed dispatch: forwards
         // the (buffer, size) pair to Write while recording, to Read while playing,
         // and is a no-op (returns 0) in every other mode.
