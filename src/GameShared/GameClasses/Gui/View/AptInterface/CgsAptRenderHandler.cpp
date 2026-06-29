@@ -82,7 +82,18 @@ namespace CgsGui
     AptRenderHandler::AptRenderHandler()
         : mpWhiteTexture(nullptr)
         , mpImRenderers(nullptr)
+        , mpTextRenderer(nullptr)
     {
+        // The stage clear colour + resolution start cleared (AptAux::Construct fills the
+        // resolution from the display mode; SetBackgroundColour sets the clear colour).
+        mBackgroundColour.m_rgba = 0;
+        mAptResolution.SetZero();
+
+        // The text-layout inputs start empty (AptAux::Construct seeds the font collection / effect
+        // / size scale from its construction arguments).
+        mpFontCollection = nullptr;
+        miTextEffect     = 0;
+        mfFontSizeScale  = 1.0f;
         // Both per-shape texture-state caches start empty (HashTable bins live, pool empty).
         mWrapTextureCache.Init();
         mClampTextureCache.Init();
