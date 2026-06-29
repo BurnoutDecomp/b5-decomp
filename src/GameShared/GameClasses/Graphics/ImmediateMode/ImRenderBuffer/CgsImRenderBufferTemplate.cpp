@@ -432,6 +432,72 @@ namespace CgsGraphics
     }
 
     // -------------------------------------------------------------------------
+    // PushMaskGeometry - the Apt mask ADD op (AptCallbackRender::DrawRenderingUnit @0x5CBA30,
+    // per-mesh). Reserve the 2-vertex screen-space corner run (AllocVertices(2)), append a
+    // 16-byte {muType=18, muSize=16} record carrying the bound texture id @ +8 and the corner-run
+    // pointer @ +12, then copy the two filled corners into the run. The PS3 stores the command
+    // header FIRST (and pre-warms the line with dcbz, dropped here), then calls AllocVertices, then
+    // -- only when BOTH the run and the command slot are valid -- writes the +8/+12 payload and the
+    // two corner vertices. A command-buffer overflow (no room for the 16-byte record) rewinds.
+    // -------------------------------------------------------------------------
+    template <typename V>
+    void ImRenderBuffer<V>::PushMaskGeometry(uintptr_t luTextureId, const V& lrCorner0,
+                                             const V& lrCorner1)
+    {
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        ImCommandPushMaskTexture<V>* lpCommand = nullptr;
+        if (muCommandBufferSize >= luPos + 16u)
+        {
+            lpCommand = reinterpret_cast<ImCommandPushMaskTexture<V>*>(
+                mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand->muSize = 16u;
+            lpCommand->muType = IM_CMD_PUSH_MASK_GEOMETRY;                    // 18
+            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+        }
+
+        // The corner run is bump-allocated from the vertex stream (the guest's sub_4F6EE4(this,2)).
+        V* lpRun = AllocVertices(2u);
+
+        // Only stamp the payload when both the command slot and the vertex run carved successfully
+        // (the guest's `if (v28 && v29)` guard).
+        if (lpCommand && lpRun)
+        {
+            // +8 = the bound texture id, +12 = the corner-run pointer (the console writes the run
+            // pointer as a 32-bit word; here it is the typed run pointer).
+            lpCommand->mpTexture  = reinterpret_cast<renderengine::Texture*>(luTextureId);
+            lpCommand->mpVertices = lpRun;
+            lpRun[0] = lrCorner0;   // transformed min corner {pos, colour, uv}
+            lpRun[1] = lrCorner1;   // transformed max corner {pos, colour, uv}
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // EndMask - the Apt mask SUBTRACT op (DrawRenderingUnit @0x5CBA30 loc_5CBF24). A 16-byte
+    // header-only {muType=19, muSize=16} record; overflow rewinds like the other writers.
+    // -------------------------------------------------------------------------
+    template <typename V>
+    void ImRenderBuffer<V>::EndMask()
+    {
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        if (muCommandBufferSize >= luPos + 16u)
+        {
+            ImCommand* lpCommand = reinterpret_cast<ImCommand*>(
+                mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand->muSize = 16u;
+            lpCommand->muType = IM_CMD_END_MASK;                             // 19
+            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // GetFirstCommand @0x57E024 - the dispatcher's iterator start: the first
     // command in the DISPATCH buffer, or nullptr if it is empty. (PS3 reads
     // mpDispatchBuffer == this+36; returns its command base iff write-pos != 0.)

@@ -89,6 +89,13 @@ namespace CgsGraphics
         // command's payload begins 16 bytes in (header @ +0/+4, an 8-byte pad, the transform
         // @ +16..+79). Emitted by SetTransform() below.
         IM_CMD_SET_TRANSFORM         = 16,  // SetTransform(const Im2dTransform&) -- 80-byte record
+        // The Apt mask path (AptCallbackRender::DrawRenderingUnit @0x5CBA30) inlines two more
+        // command writers: muType 18 begins a stencil mask from a rendering unit's shape AABB
+        // (a 16-byte record carrying the bound texture id @ +8 and a 2-vertex screen-space corner
+        // run @ +12), and muType 19 ends/clears the current mask (a 16-byte header-only record).
+        // (The Subtract op writes 19; the Add op writes a 18 per mesh.)
+        IM_CMD_PUSH_MASK_GEOMETRY    = 18,  // DrawRenderingUnit Add op -- begin a mask from the shape AABB
+        IM_CMD_END_MASK              = 19,  // DrawRenderingUnit Subtract op -- end/clear the current mask
     };
 
     // -------------------------------------------------------------------------
@@ -270,6 +277,20 @@ namespace CgsGraphics
         // Decompiled from the inline writer in AptRenderHandler::Render @0x5CB230 (stores
         // muType=16, muSize=80, then copies the 64-byte transform 16 bytes into the record).
         void SetTransform(const Im2dTransform& lrTransform);
+
+        // Begin a stencil mask from a shape's two screen-space corner vertices (the Apt mask
+        // ADD op). Decompiled from the inline writer in AptCallbackRender::DrawRenderingUnit
+        // @0x5CBA30: pre-warm the command line (dcbz, dropped), AllocVertices(2) for the corner
+        // run (mask buffer-full rewinds), then a 16-byte {muType=18, muSize=16} record with the
+        // bound texture id @ +8 and the corner-run pointer @ +12. Copies the two filled corner
+        // vertices into the allocated run. luTextureId is the GuiTexture id (or the white-texture
+        // pointer) the console stores at the record's +8 slot.
+        void PushMaskGeometry(uintptr_t luTextureId, const V& lrCorner0, const V& lrCorner1);
+
+        // End/clear the current stencil mask (the Apt mask SUBTRACT op). Decompiled from the
+        // terminal branch of DrawRenderingUnit @0x5CBA30 (loc_5CBF24): a 16-byte header-only
+        // {muType=19, muSize=16} record (overflow rewinds, matching the other writers).
+        void EndMask();
 
         // ----- command-stream walk (the dispatcher drives these) -----
         const ImCommand* GetFirstCommand() const;                                            // @0x57E024
