@@ -48,6 +48,19 @@ namespace BrnWorld
         }
 
     public:
+        // The prop streaming / reset state machine the module runs each frame and the debug
+        // overlay's "Reset props" action pokes. DWARF-faithful (BrnPropEntityModule.h:93).
+        enum EPropStreamingMode
+        {
+            E_STREAM                      = 0,
+            E_DONT_STREAM                 = 1,
+            E_RESET_UNLOADING             = 2,
+            E_RESET_UNLOADING_FOR_PROFILE = 3,
+            E_REQUESTING_PROFILE_DATA     = 4,
+            E_WAITING_FOR_PROFILE_DATA    = 5,
+        };
+
+    public:
         // [+0x000 .. +0x27F] base (CgsModule::ModuleSingleBuffered) + prepare/release state
         // + leading module members -- not reconstructed here.
         u8 mPad0[640];                                       // -> mZoneManager @ +0x280
@@ -69,11 +82,19 @@ namespace BrnWorld
         u8 mPad3[0x318];                                     // -> +0xCDD48
         const BrnPhysics::Props::PropPhysicsDataHeader* mpPropPhysicsDataHeader; // +0xCDD48
 
+        // meStreamingMode @ +0xD3200 (864768): the prop streaming/reset state. The debug
+        // overlay's "Reset props" action (PropEntityDebugComponent::ResetProps @0x822A9758)
+        // writes E_RESET_UNLOADING(=2) here -- asm: `lwz r11,0x34(this)` (mpPropEntityModule)
+        // then `stwx <2>, r11, 0xD3200`.
+        u8                mPad4a[0x54B4];                    // -> +0xD3200
+        EPropStreamingMode meStreamingMode;                 // +0xD3200 (864768)
+
         // muNumberOfLoadedZones @ +0xD320C (864780): the running loaded-zone count the
         // module-stats overlay prints (" Zones loaded: " <count>). RenderModuleStats
         // 0x822DE3F8 reads it as `*(module + 864780)` (asm 0x822DEA14-0x822DEA28:
-        // `lwzx r4, module, 0xD320C`).
-        u8   mPad4a[0x54C0];                                 // -> +0xD320C
+        // `lwzx r4, module, 0xD320C`). The 8-byte gap holds the DWARF muMaxLoadedZones /
+        // muZonesLoaded the module's own TU will name.
+        u8   mPad4z[0x8];                                    // -> +0xD320C
         u32  muNumberOfLoadedZones;                          // +0xD320C (864780)
 
         // mbCurrentlyOnline @ +0xD3340 (865088); mbAllowPropProgression @ +0xD3342.

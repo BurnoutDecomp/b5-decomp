@@ -712,10 +712,18 @@ namespace BrnWorld
         lpDisplay->DrawCircle(lOrigin, KF_PLAYER_CELL_MARKER_RADIUS, 5, 0xFF0000FFu);  // ARGB 0xFF0000FF (blue)
     }
 
-    // @ 0x822EFE48 -- the "Reset props" debug-menu action callback.
+    // @ 0x822A9758 -- the "Reset props" debug-menu action callback (registered in OnActivate
+    // as RegisterFunction(&ResetProps, this, ...); the DebugUI invokes it with lpUserData == the
+    // component `this`). It flips the owning module's streaming state to E_RESET_UNLOADING so the
+    // module unloads + reloads every prop zone next frame.
+    //
+    // X360 body (single store, no branch):
+    //   lwz   r11, 0x34(r3)          ; lpUserData->mpPropEntityModule
+    //   li    r9, 2                  ; E_RESET_UNLOADING
+    //   stwx  r9, r11, 0xD3200       ; module->meStreamingMode = E_RESET_UNLOADING
     void PropEntityDebugComponent::ResetProps(void* lpUserData)
     {
-        // Forwarded to the owning module's prop-reset path (bodied in this helper's own TU).
-        (void)lpUserData;
+        PropEntityDebugComponent* lpComponent = static_cast<PropEntityDebugComponent*>(lpUserData);
+        lpComponent->mpPropEntityModule->meStreamingMode = PropEntityModule::E_RESET_UNLOADING;
     }
 }
