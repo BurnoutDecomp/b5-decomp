@@ -49,6 +49,23 @@ namespace CgsDev
         // A coordinate-axis gizmo (the three basis vectors of the transform, drawn from its origin).
         void DrawAxis(const rw::math::vpu::Matrix44Affine& lrTransform, const rw::RGBA& lrColour);
 
+        // A SOLID (filled) oriented box given local-space min/max corners + a world transform.
+        // The wireframe counterpart is DrawBox; the prop debug overlay draws a solid box then
+        // overlays the wire box in black. (X360 callers: PropEntityDebugComponent::Draw 0x822A9770.)
+        void DrawSolidBox(const rw::math::vpu::Vector3& lrMin,
+                          const rw::math::vpu::Vector3& lrMax,
+                          const rw::math::vpu::Matrix44Affine& lrTransform,
+                          const rw::RGBA& lrColour);
+
+        // World-space text at a world position, at a pixel scale (white). Recovered from the prop
+        // debug overlay's per-prop stat read-outs (RenderProps / RenderPropStats / RenderTrafficLights).
+        void DrawText(const rw::math::vpu::Vector3& lrWorldPosition, const char* lpcText, f32 lfScale);
+
+        // The current debug camera world position (the cull origin the world-space debug passes
+        // measure prop distance from). X360: read by RenderProps/RenderPropStats/RenderInertiaBoxes/
+        // RenderTrafficLights as the first lane group of the renderer's view state (+0x7DB0).
+        const rw::math::vpu::Vector3& GetCameraPosition() const;
+
         CgsResource::SafeResourceHandle<CgsResource::Font> mpFont;
     };
 }

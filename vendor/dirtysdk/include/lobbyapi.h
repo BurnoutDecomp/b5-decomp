@@ -11,6 +11,24 @@
 
 struct LobbyApiRefT;   // opaque
 
+// A completed lobby request message delivered to a request callback. Field layout
+// mirrors the DirtySDK source (core/include/lobbyapi.h): the X360 components read the
+// result fourcc at +0x0C (`code`) and the response payload pointer at +0x10 (`pData`).
+struct LobbyApiMsgT
+{
+    s32         id;      // +0x00
+    s32         type;    // +0x04
+    s32         kind;    // +0x08
+    s32         code;    // +0x0C  result fourcc ('new0'+idx on success, error code otherwise)
+    const char* pData;   // +0x10  response tagfield record / payload text
+    void*       pMisc;   // +0x14
+};
+
+// Request-completion callback TYPE: (lobby ref, completed message, user data). The
+// DirtySDK convention is a function type (not a pointer); call sites use
+// `LobbyApiCallbackT*`.
+typedef void (LobbyApiCallbackT)(LobbyApiRefT* pLobbyApi, LobbyApiMsgT* pMsg, void* pUserData);
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -21,6 +39,11 @@ s32 LobbyApiStatus(LobbyApiRefT* pLobbyApi, s32 iSelect, void* pBuf, s32 iBufLen
 
 // Query an info item, returning a pointer to the relevant tagfield record blob.
 const void* LobbyApiInfo(LobbyApiRefT* pLobbyApi, s32 iSelect);
+
+// Issue an asynchronous request with the assembled tagfield record pRequest. iKind is
+// the request fourcc; pCallback is invoked with pUserCBData when the response arrives.
+s32 LobbyApiRequestCB(LobbyApiRefT* pLobbyApi, s32 iKind, const char* pRequest,
+                      LobbyApiCallbackT* pCallback, void* pUserCBData);
 
 #ifdef __cplusplus
 }
