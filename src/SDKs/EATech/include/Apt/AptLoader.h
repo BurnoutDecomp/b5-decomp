@@ -83,4 +83,9 @@ struct AptLoader
     // header (pConstFile) + the raw block (pBlock) have arrived for filePtr.
     // Resolve the movie root and publish it into the AptFile (state -> loaded).
     void CompleteLoad(AptFilePtr filePtr, void* pBase, struct AptConstFile* pConstFile, void* pBlock);
+
+    // @0x82B0C... -- per-frame loader tick: pump the async request queue + publish
+    // completed loads. FLAG: body is the loader-completion follow-on TU (the request
+    // layer above); declared so AptLinker::Update (which calls it each frame) compiles.
+    void Update();
 };

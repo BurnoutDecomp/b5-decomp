@@ -26,8 +26,8 @@
 
 void* AptLinkerThingy::ScalarDeletingDestructor(char flags)
 {
-    AptFile* lpFile = mpFile;   // v4 = *(this+4)
-    mpFile = nullptr;           // *(this+4) = 0
+    AptFile* lpFile = mpFile.pData;   // v4 = *(this+4)
+    mpFile.pData = nullptr;     // *(this+4) = 0
 
     AptSharedPtr<AptFile>::Dispose(lpFile);   // AptFile_::Dispose(v4)
 
