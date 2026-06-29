@@ -22,8 +22,26 @@ namespace CgsGui
         void Construct();
         bool Prepare(GuiAccessPointers* lpAccessPointers, rw::IResourceAllocator* lpAllocator);
 
+        // EXTENSION (X360 vtable order): the interpreter's ProcessInEvents dispatches the
+        // accumulated per-observer queue through the observer's FIRST virtual
+        // (CgsEventInterpreterModule.cpp ProcessInEvents @0x8285B448 calls `(***mpObserver)(
+        // mpObserver, queue)`). The DWARF lists only PreWorldUpdate/Update; this leading
+        // ProcessEvents virtual is required for the X360-faithful vtable[0] dispatch. Declared
+        // (not defined) so the interpreter's per-TU compile gate can reference it; the queue is
+        // the interpreter's per-observer working queue (a VariableEventQueue<18432,16>).
+        virtual void ProcessEvents(CgsModule::VariableEventQueue<18432, 16>* lpEventQueue);
+
         virtual void PreWorldUpdate();
         virtual void Update();
+
+        // EXTENSION: named access to the observer's outbound event queue (its StateInterface's
+        // large output queue). The interpreter's ProcessOutEvents reaches this queue (the X360
+        // reads it at this+16, i.e. mStateInterface.mOutEventQueue) to drain each observer's
+        // emitted events; exposing it by name avoids an offset reinterpret_cast at the call site.
+        GuiStackEventQueue::GuiEventQueueLarge* GetOutputEventQueue()
+        {
+            return mStateInterface.GetOutputEventQueue();
+        }
 
     protected:
         StateInterface mStateInterface;
