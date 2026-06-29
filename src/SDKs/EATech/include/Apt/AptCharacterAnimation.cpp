@@ -99,15 +99,42 @@ AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile*
     return Fixup(pBase, pConstFile, pBlock);
 }
 
-// Fixup @0x80E9E4 -- FLAG (deep follow-on): the recursive relocate/transcode of
-// the serialised character tree. The console walks the character table, adds the
-// load base to every record's file-relative offset, switches on each character's
-// type to relocate its type-specific fields, recurses into AptMovie::resolve for
-// sprites + AptLoader::Load for imports. On x64 this must TRANSCODE the 32-bit
-// serialised records into the native 64-bit runtime structs (the in-place
-// relocation cannot work). It is the data-side keystone -- stubbed so the
-// load-completion entry links; reconstructed next.
+// Fixup @0x80E9E4 -- relocate/resolve the serialised character tree. POINTER-SIZE
+// DUAL-PATH (a PC-compatibility refinement of the console, which only ever shipped the
+// 4-byte format): the console walks the character table and adds the load base to every
+// record's file-relative offset IN PLACE, then uses the blob directly as the runtime
+// root. That in-place relocation works VERBATIM on x64 for an 8-byte .apt (a 64-bit base
+// fits an 8-byte slot), but NOT for a 4-byte .apt (a 64-bit pointer won't fit a 32-bit
+// slot) -- that one must instead TRANSCODE the records into native structs. So we
+// dispatch on the header's pointer size: 8 -> FixupInPlace (faithful verbatim),
+// 4 -> FixupTranscode (the x64 fork). This keeps the faithful path faithful, confines
+// the x64 invention to the 4-byte fork, and supports 8-byte .apts from other builds.
 AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* pConstFile, void* pBlock)
+{
+    if (pConstFile && pConstFile->GetPointerSizeBytes() == 8)
+        return FixupInPlace(pBase, pConstFile, pBlock);
+    return FixupTranscode(pBase, pConstFile, pBlock);
+}
+
+// FixupInPlace -- the 8-byte path: the faithful console relocation generalised to 8-byte
+// slots. FLAG (scaffold): walk the character / import / frame records and add the load
+// base to each file-relative pointer slot in place, then return `this` (the blob IS the
+// runtime root). The per-record slot map (which fields are pointers, by character type)
+// + the AptMovie::resolve / AptLoader::Load recursion is the shared follow-on with
+// FixupTranscode -- so until that walk is bodied this is the identity stub.
+AptCharacterAnimation* AptCharacterAnimation::FixupInPlace(void* pBase, AptConstFile* pConstFile, void* pBlock)
+{
+    (void)pBase; (void)pConstFile; (void)pBlock;
+    return this;
+}
+
+// FixupTranscode -- the 4-byte path (the console default): the x64 fork that transcodes
+// the 32-bit serialised records into native 64-bit runtime structs. FLAG: the deep
+// data-side keystone -- walk + switch on each character's type, build each native struct,
+// recurse into AptMovie::resolve (sprites) / AptLoader::Load (imports). Stubbed so the
+// load-completion entry links; reconstructed next (shares the record walk with
+// FixupInPlace, differing only in slot width + whether it relocates in place or rebuilds).
+AptCharacterAnimation* AptCharacterAnimation::FixupTranscode(void* pBase, AptConstFile* pConstFile, void* pBlock)
 {
     (void)pBase; (void)pConstFile; (void)pBlock;
     return this;
