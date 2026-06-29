@@ -86,6 +86,12 @@ namespace CgsGraphics
 
         // Autosize the font height to fit mv2TopLeft..mv2BottomRight (X360 0x827EEF58). Body deferred.
         void CalculateAutosizing();
+
+        // Count the wrapped lines of mpUtf8String laid out in this object's box, and return
+        // (via lppLine) the start of line luStartLine (1-based). X360 0x827F7C10. Returns 1
+        // when the object is single-line / has no multiline+wordwrap flags set. Used by the
+        // credits renderer (RecalculateParagraphs) to size each paragraph and by CgsAptString.
+        u32 GetNumLinesAndStartLine(u32 luStartLine, const CgsResource::CgsUtf8** lppLine) const;
     };
 
     // CgsGraphics::TextRenderer -- batches a TextObject's glyphs into Im2d vertices and submits them.
@@ -106,6 +112,16 @@ namespace CgsGraphics
         // Render one text object's string into the given Im2d buffer. X360 0x82801998: stashes the
         // buffer, runs RenderStringInternal (Buffered), clears the buffer pointer.
         void RenderString(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject);
+
+        // Render the text object's string with a per-glyph vertical fade: glyphs fade out
+        // above lfFadeTopY (over the band up to lfFadeTopY) and below lfFadeBottomStart..
+        // lfFadeBottomEnd. X360 0x82800798 -- the same per-line / per-glyph layout as
+        // RenderStringInternal with the vertex alpha scaled by the glyph's Y position within
+        // the fade band. The fade-band params are (top fade pivot, fade-in extent, lower
+        // fade start, lower fade end). Used by the scrolling credits renderer (RenderComponent).
+        void RenderStringFadingY(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject,
+                                 f32 lfFadeTopY, f32 lfFadeTopExtent,
+                                 f32 lfFadeBottomStart, f32 lfFadeBottomEnd);
 
     private:
         // The glyph-quad builder (X360 0x827FF670). Translated from the PPC asm (the Hex-Rays output

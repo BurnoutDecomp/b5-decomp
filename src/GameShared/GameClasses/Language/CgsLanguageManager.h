@@ -48,6 +48,14 @@ namespace CgsLanguage
         void SetUseMetricUnits(bool lbUseMetric);
         bool IsUsingMetricUnits() const;
 
+        // ADDITIVE GROW (GUI text consumers): look up a localised string by its database key
+        // (e.g. "CREDITS_TITLE_0"). Returns the UTF-8 string, or NULL when the key is not in
+        // the localisation database. The X360 emits it out-of-line; callers (e.g. the credits
+        // renderer's RecalculateParagraphs) pass a SPrintf'd key and store the result as a
+        // CgsResource::CgsUtf8* to feed the text path. Body links from the CgsLanguageManager
+        // TU. (DWARF buffer type is CgsUnicode::CgsUtf8* == u8; returned as that here.)
+        const u8* FindString(const char* lpcKey) const;
+
         // The active language id. The X360 reads it as the manager's leading field
         // (the InGameMessageRenderer compares it against 16 -- a wide-glyph language --
         // to nudge the on-screen message Y-position). Exposed as a named accessor so
