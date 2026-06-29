@@ -178,3 +178,15 @@ bool AptCIH::IsSpriteInstBase() const
 // IsNone @0x82AD5AF0 -- this value is the empty placeholder (AptCIHNone, AptValue
 // vtable index 37), rather than testing a character instance.
 bool AptCIH::IsNone() const { return static_cast<uint32_t>(getVtblIndex()) == 37u; }
+
+// ---------------------------------------------------------------------------
+// Delegated mask / property reads (through the character instance + its render
+// item). GetNativeHash null-guards the char inst (as the X360 does); IsMask/HasMask
+// dereference it directly (only valid on placed nodes that own an instance).
+// ---------------------------------------------------------------------------
+AptNativeHash* AptCIH::GetNativeHash() const   // @0x82AD5B28
+{
+    return mpCharacterInst ? mpCharacterInst->mpProperties : nullptr;
+}
+bool AptCIH::IsMask() const  { return mpCharacterInst->GetRenderItem()->GetIsMask(); }   // @0x82AD5BA0
+bool AptCIH::HasMask() const { return mpCharacterInst->GetRenderItem()->GetHasMask(); }  // @0x82AD5BB8
