@@ -43,22 +43,22 @@ struct AptConstFile
     uint32_t mnSecondaryOffset;     // +0x1C
 
     // --- .apt FORMAT DISCRIMINATORS (in the leading signature header) ----------
-    // AptCharacterAnimationInst::GetSwfVersion (@0x7E6F60) parses the version out of a
-    // signature string: a ':' marker followed by an ASCII version digit. The POINTER
-    // SIZE is the adjacent format byte: the 32-bit console never reads it (its .apt is
-    // always the 4-byte serialised form), but 64-bit (8-byte-pointer) .apt images exist
-    // in other builds of the game, and the x64 loader branches on it to pick the
-    // relocate strategy (see AptCharacterAnimation::Fixup -- 4 => transcode, 8 =>
-    // verbatim in-place relocate).
+    // The .apt signature carries a "<n>:<version>:<pointerSize>" token -- USER-CONFIRMED:
+    // "1:7:4" = SWF v7 with 4-byte (32-bit) pointers, "1:7:8" = v7 with 8-byte (64-bit)
+    // pointers. AptCharacterAnimationInst::GetSwfVersion (@0x7E6F60) reads the version: a
+    // ':' at signature byte 10, then the ASCII version digit at byte 11. The pointer-size
+    // field follows after a SECOND ':' (byte 12) as the digit at byte 13.
     //
-    // FLAG: the signature byte offsets here are PROVISIONAL -- the version offset is
-    // reconstructed from GetSwfVersion's ':'+digit read (signature byte 10 == ':',
-    // byte 11 == version), and the pointer-size byte is the inferred-adjacent field
-    // (byte 12) per the observed 8-byte .apts. The signature is assumed to start at the
-    // file image (this+0). Confirm both against a real .apt (and a real 8-byte one)
-    // before trusting the non-default path. Both accessors fall back to the console
-    // defaults (version 6 / 4-byte) when the ':' marker is absent, so absent/unknown
-    // headers behave exactly as today.
+    // The 32-bit console never reads the pointer size (its .apt is always 4-byte), but
+    // 64-bit .apt images exist in other builds of the game, so the x64 loader branches on
+    // it to pick the relocate strategy (AptCharacterAnimation::Fixup -- 4 => transcode,
+    // 8 => verbatim in-place relocate).
+    //
+    // The version byte offsets are from GetSwfVersion (authoritative); the pointer-size
+    // offsets follow the confirmed "n:v:p" format. FLAG: the signature is assumed to start
+    // at the file image (this+0) -- worth a glance at a real .apt header. Both accessors
+    // fall back to the console defaults (version 6 / 4-byte) when the markers are absent,
+    // so unknown headers behave exactly as today.
     const char* GetSignature() const { return reinterpret_cast<const char*>(this); }
 
     int GetVersion() const
@@ -71,7 +71,9 @@ struct AptConstFile
     int GetPointerSizeBytes() const
     {
         const char* sig = GetSignature();
-        const int nSize = (sig[10] == ':') ? (sig[12] - '0') : 4;
+        // "<n>:<version>:<pointerSize>": version ':' @byte10 (digit @11), pointer-size
+        // ':' @byte12 (digit @13). e.g. "1:7:4" => 4, "1:7:8" => 8.
+        const int nSize = (sig[12] == ':') ? (sig[13] - '0') : 4;
         return (nSize == 8) ? 8 : 4;   // anything but a clear 8 => the safe 4-byte path
     }
 };
