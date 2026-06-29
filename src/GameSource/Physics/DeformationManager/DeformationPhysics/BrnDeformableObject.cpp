@@ -98,15 +98,22 @@ namespace Deformation
 
         // -------- showtime / bounce-boost shaping --------
         // The asm gates the shaping on a virtual showtime predicate on THIS car's physics body (the
-        // inlined `(*(vtbl+16))(body)` -> IsPlayerVehicleActuallyInShowtime). Inside that, it branches
-        // on the OTHER car's game-mode HIGH byte: mode 2 (takedown/bounce-eligible) gets the punchy
-        // bounce-boost shaping; any other mode gets the lighter double-bounce damp path. A body that
-        // is not a race car (no showtime) takes neither and uses the raw solver impulse unchanged.
+        // inlined `(*(vtbl+16))(body)` -> IsPlayerVehicleActuallyInShowtime). It is a TRUE/FALSE split
+        // (asm: the `else` at ~line 958), NOT two nested cases:
+        //   * predicate TRUE  (this car in showtime): the punchy BOUNCE-BOOST path, itself gated on the
+        //       OTHER car's game-mode HIGH byte == 2 (takedown/bounce-eligible). Any other mode: nothing.
+        //   * predicate FALSE (this car NOT in showtime): the DOUBLE-BOUNCE-DAMP path. It (a) ALWAYS runs
+        //       a bare-shaping step on the impulse, then (b) gates on THIS car's mode HIGH byte == 2, and
+        //       (c) only then checks (other-car-in-showtime || other-car-has-bounced) before applying the
+        //       damp scale and latching THIS car's mbHasBouncedThisFrame (+26414).
+        // A body that is not a race car (no showtime) takes the FALSE/damp path with this car's mode.
         Vehicle::RaceCarPhysics* lpRaceCarPhysics = AsRaceCarPhysics();
         const bool lbThisInShowtime = (lpRaceCarPhysics != nullptr) &&
                                       lpRaceCarPhysics->IsPlayerVehicleActuallyInShowtime();
         if (lbThisInShowtime)
         {
+            // ----- predicate TRUE: bounce-boost (asm ~lines 843-957) -----
+            // Gated on the OTHER car's game-mode HIGH byte (asm: `HIBYTE(*(otherCar+26392)) == 2`).
             if (lOtherCar.GetGameModeByte() == KU_GAMEMODE_BOUNCE_ELIGIBLE)
             {
                 // Was the impact above the minimum bounce stress? (squared magnitude vs the rodata band).
@@ -152,14 +159,37 @@ namespace Deformation
                 const u32 luDraw = const_cast<CgsNumeric::Random&>(lRandom).RandomUInt();
                 lOtherCar.SetBounceRandomParity((luDraw % 3u) == 0u);
             }
-            else if (lpRaceCarPhysics->IsBounceBoosting() || lOtherCar.HasBouncedThisFrame())
+            // (asm: when HIBYTE(otherCar+26392) != 2 the TRUE branch does nothing -- raw impulse kept.)
+        }
+        else
+        {
+            // ----- predicate FALSE: double-bounce damp (asm `else` ~lines 958-1176) -----
+            // (a) UNCONDITIONAL bare-shaping step (asm ~lines 960-975): scale the impulse per-lane by
+            //     `(lvfIteration + 1) * 0.5`. The 1.0/0.5 are asm-visible vcfsx immediates (NOT rodata):
+            //     `vcfsx 1>>0 = 1.0`, `vcfsx 1>>1 = 0.5`. lvfIteration is a broadcast VecFloat, so the
+            //     per-lane multiply is a scalar broadcast of that factor.
+            const f32 lfBareShapeFactor = (lvfIteration.x + 1.0f) * 0.5f;
+            lImpulse = vpu::Mult(lImpulse, lfBareShapeFactor);
+
+            // (b) Gate the rest on THIS car's game-mode HIGH byte == 2 (asm ~line 976:
+            //     `HIBYTE(*(this+26392)) != 2` -> skip straight to apply). NOTE: this is THIS car's
+            //     mode (GetGameModeByte() on `this`), NOT the other car's.
+            if (GetGameModeByte() == KU_GAMEMODE_BOUNCE_ELIGIBLE)
             {
-                // In showtime but the other car is NOT in the bounce-eligible mode: if either car has
-                // already bounced this frame, apply the double-bounce DAMP scale and latch the flag
-                // (asm: `*(this+26414)=1` then the unk_82FB82F0 multiply). Otherwise (the bare else
-                // below) the raw solver impulse is used unchanged.
-                SetHasBouncedThisFrame(true);
-                lImpulse = vpu::Mult(lImpulse, KVF_DOUBLE_BOUNCE_DAMP);
+                // (c) Only when this-car-mode == 2: apply the damp + latch iff the OTHER car is in
+                //     showtime OR the OTHER car has already bounced this frame (asm ~line 1163:
+                //     `otherCar.IsPlayerVehicleActuallyInShowtime() || *(otherCar+26414)`).
+                const Vehicle::RaceCarPhysics* lpOtherRaceCar = lOtherCar.AsRaceCarPhysics();
+                const bool lbOtherInShowtime = (lpOtherRaceCar != nullptr) &&
+                                               lpOtherRaceCar->IsPlayerVehicleActuallyInShowtime();
+                if (lbOtherInShowtime || lOtherCar.HasBouncedThisFrame())
+                {
+                    // Latch THIS car's bounced-this-frame flag (asm ~line 1166: `*(this+26414) = 1`),
+                    // then apply the double-bounce DAMP scale (asm: the unk_82FB82F0 multiply). The
+                    // damp vector is a FLAGGED placeholder.
+                    SetHasBouncedThisFrame(true);
+                    lImpulse = vpu::Mult(lImpulse, KVF_DOUBLE_BOUNCE_DAMP);
+                }
             }
         }
 

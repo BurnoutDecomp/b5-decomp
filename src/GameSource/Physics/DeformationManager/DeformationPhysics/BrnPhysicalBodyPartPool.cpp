@@ -149,7 +149,8 @@ namespace Deformation
     PhysicalBodyPart* PhysicalBodyPartPool::GetPart(s16 li16Index)
     {
         const u32 luIndex = static_cast<u32>(li16Index);
-        CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "Part index out of range");
+        CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "Part index out of range: ");
+        CGS_ASSERT(luIndex < KU_MAX_DETACHED_PARTS, "invalid index : ");   // inlined CgsBitArray bounds tripwire (< 50)
         CGS_ASSERT(mUsedParts.IsBitSet(luIndex), "mUsedParts.IsBitSet( liPartIndex )");
         return &maParts[luIndex];
     }
