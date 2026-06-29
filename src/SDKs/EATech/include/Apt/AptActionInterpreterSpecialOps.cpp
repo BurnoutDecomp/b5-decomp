@@ -34,6 +34,9 @@
 #include "SDKs/EATech/include/Apt/AptGlobal.h"              // gpAptGlobalFallback
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"  // AptScriptFunctionBase::SetRegisterValue
 #include "SDKs/EATech/include/Apt/AptCIH.h"                 // AptCIH : AptValueGC (mpCIH -> AptValue* upcast)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"            // GetCharacterInst / GetTypeTag
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // mnClipActionFlags / mDisplayList
+#include "SDKs/EATech/include/Apt/AptDisplayList.h"              // removeClonedObject
 
 #include <cstdint>
 
@@ -124,4 +127,350 @@ void AptActionInterpreter::_FunctionAptActionReturn(AptActionInterpreter* /*pInt
                                                     LocalContextT* pContext)
 {
     pContext->mbStop = true;
+}
+
+// ===========================================================================
+// Timeline / sprite-control opcodes (GotoFrame / NextFrame / Play / Stop /
+// CloneSprite / RemoveSprite / SetTarget / SetTarget2 / TargetPath).
+//   DECOMPILED from the X360 ARTIST:
+//     GotoFrame    @0x82B0C480  (the inline-frame jump)
+//     NextFrame    @0x82B0C3E0
+//     Play         @0x82ADD690      Stop        @0x82ADD768
+//     CloneSprite  @0x82B0DE08      RemoveSprite@0x82B08D28
+//     SetTarget    @0x82B093C8      SetTarget2  @0x82B08A88
+//     TargetPath   @0x82B09050
+//
+// These drive the scene node bound to the run (the run scope ctx.mpCIH and the
+// "current target" slot ctx.mpPendingReleaseValue). The X360 reaches the play-head
+// state through the node's character instance; when the type tag confirms a sprite/
+// movie-clip the instance is an AptCharacterSpriteInstBase, so its play-head flags
+// (mnClipActionFlags) / goto-frame (mnGotoFrame) / child display list (mDisplayList)
+// are accessed by NAMED member here (the console reads them at +0x14/+0x10/+0x1C off
+// the instance). The character-type tag check `(mTypeFlags & 0xFC000000) != 0x3C000000`
+// is `GetTypeTag() != 15` (i.e. NOT a level instance).
+//
+// EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
+// ===========================================================================
+
+// The clip's play-head "playing" bit (mnClipActionFlags bit 6 / 0x40): set by Play,
+// cleared by Stop / NextFrame / GotoFrame. (Console *(spriteBase + 0x14) & 0x40.)
+static const uint32_t KU_CLIP_PLAYING = 0x40u;
+
+// The level-instance character type tag (mTypeFlags >> 26 == 15): the timeline ops
+// are no-ops on it. (Console: (mTypeFlags & 0xFC000000) == 0x3C000000.)
+static const uint32_t KU_TYPETAG_LEVEL = 15u;
+
+// ---------------------------------------------------------------------------
+// Local: the X360 "defined movie-clip handle, or a CIHNone" predicate that gates
+// the timeline ops -- `type == AptVFT_CharacterInstHandle && isDefined` or
+// `type == AptVFT_CIHNone`. (Console: the low 7 bits of the AptValue bitfield word
+// hold the value type, bit 27 the defined flag; modelled through the named accessors.)
+// ---------------------------------------------------------------------------
+static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
+{
+    const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();
+    return (eType == AptVFT_CharacterInstHandle && pValue->getIsDefined())
+        || eType == AptVFT_CIHNone;
+}
+
+// FLAG (un-homed AptCIH play-head seek -- declared as an extern shim, matching the
+// sibling AptCIHNativeFunctionHelper.cpp): seek the node's timeline to nFrame.
+//   AptCIH::jumpToFrame @0x82B0C... (X360).
+extern void AptCIH_jumpToFrame(AptCIH* pNode, int nFrame);
+
+// FLAG (un-homed AptActionInterpreter::valueToObject -- declared as an extern shim,
+// matching the sibling AptCIHNativeFunctionHelper.cpp): coerce pValue to the object
+// it designates under (pScope, pTarget), writing the result through *ppOut.
+//   AptActionInterpreter::valueToObject @0x82B0... (X360).
+extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
+                                               AptValue* pValue, AptValue** ppOut);
+
+// FLAG (AptGC layer -- AptValueVector::ReleaseValues over off_8324E51C): drain the
+// deferred-release value vector once the operand stack empties. Shared with the
+// Var/Member/Control opcodes (declared there too); the host-side vector type/global
+// are not reconstructed yet, so the flush is encapsulated.
+extern void AptApt_FlushDeferredReleases();
+
+// FLAG (homed by the AS-globals layer): the shared "undefined" value (off_8324D814).
+extern AptValue* gpUndefinedValue;
+
+// ---------------------------------------------------------------------------
+// GotoFrame @0x82B0C480 -- jump the bound clip to the inline-encoded frame number.
+// The target node is the "current target" (ctx.mpPendingReleaseValue) when it is a
+// clip handle / CIHNone, else the run scope (ctx.mpCIH); a None-typed node is left
+// alone. The frame number is a 4-byte (4-byte-aligned) inline operand. After the
+// seek the clip's "playing" bit is cleared and -- once the operand stack has drained
+// -- the deferred-release vector is flushed.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pInterp,
+                                                       LocalContextT* pContext)
+{
+    // Align the PC up to 4, read the inline frame dword, advance the PC by 4.
+    const int32_t* pFrame = reinterpret_cast<const int32_t*>(
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pFrame + 1);
+
+    // Pick the target node: the current-target slot when it is a clip / CIHNone,
+    // otherwise the run scope.
+    AptCIH* pNode = nullptr;
+    if (pContext->mpPendingReleaseValue && IsClipHandleOrCIHNone(pContext->mpPendingReleaseValue))
+        pNode = static_cast<AptCIH*>(pContext->mpPendingReleaseValue);
+    else if (IsClipHandleOrCIHNone(pContext->mpCIH))
+        pNode = pContext->mpCIH;
+
+    if (pNode && pNode->getVtblIndex() != AptVFT_None)
+    {
+        AptCIH_jumpToFrame(pNode, *pFrame);   // FLAG: un-homed play-head seek
+        // clear the "playing" bit on the node's sprite instance.
+        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mnClipActionFlags
+            &= ~KU_CLIP_PLAYING;
+    }
+
+    // Flush the AptGC deferred-release vector once the operand stack has drained
+    // (console: off_8324E51C->count != 0 && mnStackTop == 0).
+    if (pInterp->mnStackTop == 0)
+        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+}
+
+// ---------------------------------------------------------------------------
+// NextFrame @0x82B0C3E0 -- advance the run scope's play-head one frame
+// (jumpToFrame(mnGotoFrame + 1)) and clear the clip's "playing" bit.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionNextFrame(AptActionInterpreter* /*pInterp*/,
+                                                       LocalContextT* pContext)
+{
+    AptCIH* const pNode = pContext->mpCIH;
+    AptCharacterSpriteInstBase* const pSprite =
+        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
+
+    AptCIH_jumpToFrame(pNode, pSprite->mnGotoFrame + 1);   // FLAG: un-homed play-head seek
+    pSprite->mnClipActionFlags &= ~KU_CLIP_PLAYING;
+}
+
+// ---------------------------------------------------------------------------
+// Play @0x82ADD690 -- start the play-head of a (non-level) clip. When the run scope
+// is a defined node whose instance is not a level instance: prefer the "current
+// target" slot (ctx.mpPendingReleaseValue) when it is a clip / CIHNone -- set its
+// "playing" bit + dirty it; otherwise act on the run scope itself.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPlay(AptActionInterpreter* /*pInterp*/,
+                                                  LocalContextT* pContext)
+{
+    AptCIH* const pNode = pContext->mpCIH;
+    if (!pNode->getIsDefined())
+        return;
+
+    AptCharacterInst* const pInst = pNode->GetCharacterInst();
+    if (pInst->GetTypeTag() == KU_TYPETAG_LEVEL)
+        return;
+
+    AptValue* const pTarget = pContext->mpPendingReleaseValue;
+    if (pTarget && IsClipHandleOrCIHNone(pTarget))
+    {
+        AptCIH* const pTargetNode = static_cast<AptCIH*>(pTarget);
+        static_cast<AptCharacterSpriteInstBase*>(pTargetNode->GetCharacterInst())->mnClipActionFlags
+            |= KU_CLIP_PLAYING;
+        pTargetNode->SetDirtyState(true, true);
+    }
+    else if (IsClipHandleOrCIHNone(pNode))
+    {
+        static_cast<AptCharacterSpriteInstBase*>(pInst)->mnClipActionFlags |= KU_CLIP_PLAYING;
+        pNode->SetDirtyState(true, true);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Stop @0x82ADD768 -- clear the run scope clip's "playing" bit (a defined,
+// non-level node). The console reads the type tag before the null check; preserved.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionStop(AptActionInterpreter* /*pInterp*/,
+                                                  LocalContextT* pContext)
+{
+    AptCIH* const pNode = pContext->mpCIH;
+    if (!pNode->getIsDefined())
+        return;
+
+    AptCharacterInst* const pInst = pNode->GetCharacterInst();
+    if (pInst->GetTypeTag() != KU_TYPETAG_LEVEL && pInst != nullptr)
+        static_cast<AptCharacterSpriteInstBase*>(pInst)->mnClipActionFlags &= ~KU_CLIP_PLAYING;
+}
+
+// ---------------------------------------------------------------------------
+// CloneSprite @0x82B0DE08 -- AS duplicateMovieClip opcode: clone the run scope's
+// node under a new name + depth from the top three operands (top-3 = parent value,
+// top-2 = name value, top-1 = depth), forwarding to the interpreter's clone core,
+// then pop the three operands.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionCloneSprite(AptActionInterpreter* pInterp,
+                                                         LocalContextT* pContext)
+{
+    AptValue* const pNameValue   = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* const pParentValue = pInterp->mpStack[pInterp->mnStackTop - 3];
+    const int       nDepth       = pInterp->mpStack[pInterp->mnStackTop - 1]->toInteger();
+
+    // FLAG: AptActionInterpreter::_doCloneSprite (the AS duplicateMovieClip core) is
+    // not yet homed; declared as an extern shim so this opcode keeps the exact
+    // (interpreter, scope, target, parent, name, depth, initObject=null) call shape.
+    extern AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* pInterp,
+                                                        AptValue* pScope, AptValue* pTarget,
+                                                        AptValue* pParent, AptValue* pNameValue,
+                                                        int nDepth, AptValue* pInitObject);
+    AptActionInterpreter_doCloneSprite(pInterp, pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                       pParentValue, pNameValue, nDepth, nullptr);
+
+    pInterp->stackSafePop(3);   // console Burnout_X360_Artist_01e3_0(this, 3)
+}
+
+// ---------------------------------------------------------------------------
+// RemoveSprite @0x82B08D28 -- AS removeMovieClip opcode: when the top operand is a
+// defined value, resolve it to its backing object and -- when that is a clip handle
+// / CIHNone -- drop the cloned node from its display-list parent's child list. The
+// top operand is then popped.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionRemoveSprite(AptActionInterpreter* pInterp,
+                                                          LocalContextT* pContext)
+{
+    AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    if (pTop->getIsDefined())
+    {
+        AptValue* pResolved = nullptr;
+        AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                           pTop, &pResolved);   // FLAG: un-homed valueToObject
+        if (pResolved && IsClipHandleOrCIHNone(pResolved))
+        {
+            // The cloned node lives in its display-list parent's child display list
+            // (the parent sprite instance's embedded AptDisplayList, console +0x1C);
+            // remove the node at this clone's depth from it.
+            AptCIH* const pCIH = static_cast<AptCIH*>(pResolved);
+            AptCharacterSpriteInstBase* const pParentSprite =
+                static_cast<AptCharacterSpriteInstBase*>(pCIH->GetDisplayListParent()->GetCharacterInst());
+            pParentSprite->mDisplayList.removeClonedObject(pCIH);
+        }
+    }
+    pInterp->stackPop();
+}
+
+// ---------------------------------------------------------------------------
+// SetTarget @0x82B093C8 -- AS SetTarget opcode: redirect the run's "current target"
+// to the inline-encoded path. An empty path clears the target (releasing the prior
+// one). A path beginning with '/' or '.' is walked relative to the run scope ('..'
+// climbs the display-list parent chain); any other path is resolved through getObject
+// (after trimming a trailing '/'). The resolved node is AddRef'd into the target slot.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionSetTarget(AptActionInterpreter* pInterp,
+                                                       LocalContextT* pContext)
+{
+    // Align the PC up to 4, read the inline string pointer, advance the PC by 4.
+    const unsigned char* const pAligned = reinterpret_cast<const unsigned char*>(
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    const char* const szPath = *reinterpret_cast<const char* const*>(pAligned);
+    pContext->mpProgramCounter = pAligned + 4;
+
+    if (szPath[0] == '\0')
+    {
+        // empty path -> drop the current target.
+        if (pContext->mpPendingReleaseValue)
+            pContext->mpPendingReleaseValue->Release();
+        pContext->mpPendingReleaseValue = nullptr;
+        return;
+    }
+
+    EAStringC strPath(szPath);   // console EAStringC::InitFromBuffer scratch (RAII Decrease)
+    AptValue* pTarget = nullptr;
+    if (szPath[0] == '/' || szPath[0] == '.')
+    {
+        // relative walk: each leading ".." climbs to the display-list parent.
+        AptCIH* pNode = pContext->mpCIH;
+        const char* pCursor = szPath;
+        while (pCursor[0] == '.' && pCursor[1] == '.' && pNode->GetDisplayListParent())
+        {
+            pCursor += 2;
+            pNode = pNode->GetDisplayListParent();
+        }
+        pTarget = pNode;
+    }
+    else
+    {
+        strPath.TrimRight("/");
+        pTarget = pInterp->getObject(pContext->mpCIH, nullptr, &strPath);
+    }
+
+    pContext->mpPendingReleaseValue = pTarget;
+    pContext->mpPendingReleasePC = nullptr;
+    pTarget->AddRef();   // console (**pTarget)(pTarget) -> vtbl[0] AddRef
+}
+
+// ---------------------------------------------------------------------------
+// SetTarget2 @0x82B08A88 -- the dynamic SetTarget: the path comes off the operand
+// stack (the top value, coerced to a string) rather than inline. An empty path
+// clears the target; otherwise getObject resolves it under the run scope + current
+// target. The operand is then popped.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionSetTarget2(AptActionInterpreter* pInterp,
+                                                        LocalContextT* pContext)
+{
+    AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    EAStringC scratch;
+    const EAStringC* const pPath = AptValue::Get_ToString(pTop, &scratch);
+
+    if (pPath->GetInternalSize() != 0)   // console: *(strData + 2) (m_uSize) != 0 -> non-empty path
+    {
+        AptValue* const pTarget =
+            pInterp->getObject(pContext->mpCIH, pContext->mpPendingReleaseValue, pPath);
+        pContext->mpPendingReleaseValue = pTarget;
+        pContext->mpPendingReleasePC = nullptr;
+        pTarget->AddRef();   // console (**pTarget)(pTarget) -> vtbl[0] AddRef
+    }
+    else
+    {
+        // empty path -> drop the current target.
+        if (pContext->mpPendingReleaseValue)
+            pContext->mpPendingReleaseValue->Release();
+        pContext->mpPendingReleaseValue = nullptr;
+    }
+
+    pInterp->stackPop();
+}
+
+// ---------------------------------------------------------------------------
+// TargetPath @0x82B09050 -- AS targetPath(obj): resolve the top operand to its
+// backing object and push that object's slash/dot path name as a string. A clip-
+// handle / CIHNone object yields its getName path; any other object yields the
+// special "/" path (the console seeds the scratch from the single-char constant at
+// 0x82143A2F). A non-object operand pushes `undefined`. The operand is popped.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionTargetPath(AptActionInterpreter* pInterp,
+                                                        LocalContextT* pContext)
+{
+    AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+
+    AptValue* pResolved = nullptr;
+    AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                       pTop, &pResolved);   // FLAG: un-homed valueToObject
+
+    if (pResolved)
+    {
+        EAStringC scratch;
+        if (IsClipHandleOrCIHNone(pResolved))
+        {
+            pInterp->getName(pResolved, &scratch);   // the slash/dot path of the node
+        }
+        else
+        {
+            scratch = EAStringC("/");   // console InitFromBuffer(&unk_82143A2F == "/") -> scratch
+        }
+
+        AptString* pStr = AptString::Create("");    // FLAG: seed const @0x820046A7 (""), overwritten
+        *pStr->GetInternalString() = scratch;
+        pInterp->stackPop();
+        pInterp->mpStack[pInterp->mnStackTop++] = pStr;   // inlined stackPush
+        pStr->AddRef();
+    }
+    else
+    {
+        // not an object -> push `undefined`.
+        pInterp->stackPop();
+        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // console off_8324D814
+        gpUndefinedValue->AddRef();
+    }
 }

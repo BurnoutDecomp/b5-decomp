@@ -26,12 +26,24 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // AptInteger::Create
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"   // AptBoolean::Create
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"     // AptFloat::Create (PushFloat)
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"    // AptString::Create / GetInternalString
+#include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC (dictionary-string temp)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                // AptCIH : AptValueGC (mpCIH -> AptValue* upcast)
 
 #include <cstdint>
 #include <cstring>   // memcpy (PushFloat bit reinterpret)
 
 // FLAG (wired at AptInit; see AptValueConvert.cpp).
 extern AptValue* gpUndefinedValue;
+
+// FLAG (member follow-on -- stackPushIndirect @0x7ECE34 is declared in
+// AptActionInterpreter.h only as a deferred FOLLOW-ON, not as a callable member:
+// it resolves AptVFT_Lookup (via the register array at +0x44) / AptVFT_Register
+// (via AptScriptFunctionBase::GetRegisterValue) values before pushing. _Push
+// below needs it; it is forwarded through this shim until that register/local
+// machinery is reconstructed and the member is declared. The console call is the
+// member AptActionInterpreter::stackPushIndirect(pInterp, pValue).
+extern void AptActionInterpreter_stackPushIndirect(AptActionInterpreter* pInterp, AptValue* pValue);
 
 // ---------------------------------------------------------------------------
 // _FunctionAptActionPop @0x7F33D0 -- discard the top value, but only while the
@@ -167,4 +179,216 @@ void AptActionInterpreter::_FunctionAptActionPushFloat(AptActionInterpreter* pIn
     float f;
     std::memcpy(&f, &u, sizeof(f));
     pInterp->stackPush(AptFloat::Create(f));
+}
+
+// ===========================================================================
+// Dictionary-aware constant / variable push opcodes (the .apt string-dictionary
+// shortcut forms of Push + the fused Push+Get/Set ops).
+//   DECOMPILED from the X360 ARTIST:
+//     _FunctionAptActionPush                 @0x82ADE498
+//     _FunctionAptActionPushStringDictByte   @0x82ADE7D0
+//     _FunctionAptActionPushStringGetVar     @0x82B05640
+//     _FunctionAptActionPushStringGetMember  @0x82B056E8
+//     _FunctionAptActionPushStringSetVar     @0x82B05788
+//     _FunctionAptActionPushStringSetMember  @0x82B05828
+//     _FunctionAptActionStringDictByteGetVar @0x82B058C8
+//     _FunctionAptActionStringDictByteGetMember @0x82B05970
+//
+// The "StringDictByte"/"Push*String*" families take a single inline byte that
+// indexes the string-constant dictionary the console keeps at interpreter offset
+// +0x44 (the same slot the header names mpRegisters; the dict opcodes reuse it as
+// the AptValue* string-pool array). Each pushes the dictionary entry onto the
+// operand stack -- the inlined store/advance/AddRef sequence the asm emits is
+// exactly stackPush(), reproduced here -- and the fused forms then delegate to the
+// matching variable/member opcode handler. The console indexes the array with byte
+// math (4 * byteIndex); on x64 it is typed element indexing (mpRegisters[byte]),
+// the same entry where the pointers are 8 bytes.
+//
+// The "Push*String*Get/SetVar" forms also pass the entry's embedded EAStringC name
+// straight into getVariable; the asm inlines AptValue::Get_ToString (a raw type-1
+// StringValue exposes its own string at +8, a boxed StringObject tag 33 indirects
+// through +0x20 first). That dispatch is reused via Get_ToString here.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPush @0x82ADE498 -- push a run of dictionary/constant values
+// described by an inline operand block. The console aligns the PC up to 4, reads
+// {int count; AptValue** array}, advances the PC past both, then stackPushIndirect's
+// each array[i] (resolving Lookup/Register entries as it pushes).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPush(AptActionInterpreter* pInterp, LocalContextT* pCtx)
+{
+    // Align the read pointer up to the next 4-byte boundary, then consume the
+    // {count, array} header. FLAG: the inline operand block stores a 4-byte
+    // serialized pointer (console widths); its on-x64 resolved width is settled by
+    // _parseStream (the transcode, a deferred follow-on), so the count+array header
+    // is read in the console's serialized form here.
+    const unsigned char* pAligned =
+        reinterpret_cast<const unsigned char*>(
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    const int32_t   nCount = *reinterpret_cast<const int32_t*>(pAligned);
+    AptValue* const* pArray = *reinterpret_cast<AptValue* const* const*>(pAligned + 4);
+    pCtx->mpProgramCounter = pAligned + 8;
+
+    for (int32_t i = 0; i < nCount; ++i)
+        AptActionInterpreter_stackPushIndirect(pInterp, pArray[i]);   // FLAG: deferred member shim
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPushStringDictByte @0x82ADE7D0 -- push the dictionary string
+// the inline byte indexes (the .apt string-constant table at +0x44). The console
+// emits the inlined stackPush (store at the top, advance, AddRef via vtbl[0]).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushStringDictByte(AptActionInterpreter* pInterp,
+                                                                LocalContextT* pCtx)
+{
+    const unsigned int nIndex = *pCtx->mpProgramCounter;   // byte dictionary index
+    pCtx->mpProgramCounter += 1;
+
+    AptValue* pEntry = pInterp->mpRegisters[nIndex];        // console: *(4*idx + a1[17])
+    pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
+    pEntry->AddRef();
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPushStringGetMember @0x82B056E8 -- build an AptString from the
+// inline dictionary string, push it, then run the GetMember opcode (object[name]).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushStringGetMember(AptActionInterpreter* pInterp,
+                                                                 LocalContextT* pCtx)
+{
+    // Align the PC up to 4 and read the inline string pointer (advances the PC by 4).
+    const unsigned char* pAligned =
+        reinterpret_cast<const unsigned char*>(
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    const char* szName = *reinterpret_cast<const char* const*>(pAligned);
+    pCtx->mpProgramCounter = pAligned + 4;
+
+    // AptString::Create("") + InitFromBuffer/operator=/Decrease idiom (the X360's
+    // empty-seed-then-assign); the temporary EAStringC's ctor/dtor are the asm's
+    // InitFromBuffer / DecreaseInternalRefCount pair.
+    AptString* pStr = AptString::Create("");                // FLAG: seed const @0x820046A7 ("")
+    *pStr->GetInternalString() = EAStringC(szName);
+
+    pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
+    pStr->AddRef();
+
+    _FunctionAptActionGetMember(pInterp, pCtx);
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPushStringGetVar @0x82B05640 -- resolve the inline dictionary
+// string as a variable (getVariable) and push the result. The console builds a
+// scratch EAStringC from the inline string into the global name slot (off_82F733B0)
+// and reads the run scope/target from the context (ctx+4 / ctx+8).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushStringGetVar(AptActionInterpreter* pInterp,
+                                                              LocalContextT* pCtx)
+{
+    const unsigned char* pAligned =
+        reinterpret_cast<const unsigned char*>(
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    const char* szName = *reinterpret_cast<const char* const*>(pAligned);
+    pCtx->mpProgramCounter = pAligned + 4;
+
+    // FLAG: the console assembles the name into the shared scratch EAStringC
+    // off_82F733B0 (InitFromBuffer + operator= + DecreaseInternalRefCount) and
+    // passes &off_82F733B0 as the name. The scratch global is not reconstructed; a
+    // local EAStringC name is behaviourally faithful (same value passed to
+    // getVariable).
+    EAStringC name(szName);
+    AptValue* pResult = pInterp->getVariable(pCtx->mpCIH, pCtx->mpPendingReleaseValue,
+                                             &name, 1, 1, 0);
+
+    pInterp->mpStack[pInterp->mnStackTop++] = pResult;      // inlined stackPush (store + advance)
+    pResult->AddRef();
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPushStringSetMember @0x82B05828 -- build an AptString from the
+// inline dictionary string, push it, then run the SetMember opcode (object[name] = v).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushStringSetMember(AptActionInterpreter* pInterp,
+                                                                 LocalContextT* pCtx)
+{
+    const unsigned char* pAligned =
+        reinterpret_cast<const unsigned char*>(
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    const char* szName = *reinterpret_cast<const char* const*>(pAligned);
+    pCtx->mpProgramCounter = pAligned + 4;
+
+    AptString* pStr = AptString::Create("");                // FLAG: seed const @0x820046A7 ("")
+    *pStr->GetInternalString() = EAStringC(szName);
+
+    pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
+    pStr->AddRef();
+
+    _FunctionAptActionSetMember(pInterp, pCtx);
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionPushStringSetVar @0x82B05788 -- build an AptString from the
+// inline dictionary string, push it, then run the SetVariable opcode (name = value).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushStringSetVar(AptActionInterpreter* pInterp,
+                                                              LocalContextT* pCtx)
+{
+    const unsigned char* pAligned =
+        reinterpret_cast<const unsigned char*>(
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    const char* szName = *reinterpret_cast<const char* const*>(pAligned);
+    pCtx->mpProgramCounter = pAligned + 4;
+
+    AptString* pStr = AptString::Create("");                // FLAG: seed const @0x820046A7 ("")
+    *pStr->GetInternalString() = EAStringC(szName);
+
+    pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
+    pStr->AddRef();
+
+    _FunctionAptActionSetVariable(pInterp, pCtx);
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionStringDictByteGetMember @0x82B05970 -- push the dictionary
+// string the inline byte indexes (the +0x44 string table), then run GetMember.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionStringDictByteGetMember(AptActionInterpreter* pInterp,
+                                                                     LocalContextT* pCtx)
+{
+    const unsigned int nIndex = *pCtx->mpProgramCounter;    // byte dictionary index
+    pCtx->mpProgramCounter += 1;
+
+    AptValue* pEntry = pInterp->mpRegisters[nIndex];        // console: *(4*idx + a1[17])
+    pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
+    pEntry->AddRef();
+
+    _FunctionAptActionGetMember(pInterp, pCtx);
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionStringDictByteGetVar @0x82B058C8 -- resolve the dictionary
+// string the inline byte indexes as a variable (getVariable) and push the result.
+// The console takes the dictionary entry's embedded EAStringC name directly: a raw
+// StringValue (type 1) exposes its own string at +8; any other (boxed StringObject
+// tag 33) indirects through +0x20 first -- i.e. AptValue::Get_ToString.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInterpreter* pInterp,
+                                                                  LocalContextT* pCtx)
+{
+    const unsigned int nIndex = *pCtx->mpProgramCounter;    // byte dictionary index
+    pCtx->mpProgramCounter += 1;
+
+    AptValue* pEntry = pInterp->mpRegisters[nIndex];        // console: *(4*idx + a1[17])
+
+    // The asm inlines Get_ToString: type-1 StringValue -> its own EAStringC (+8);
+    // else (boxed tag 33) -> the AptString at +0x20, then its EAStringC. Reuse the
+    // recovered Get_ToString (a string-typed value never touches the scratch).
+    EAStringC scratch;
+    const EAStringC* pName = AptValue::Get_ToString(pEntry, &scratch);
+
+    AptValue* pResult = pInterp->getVariable(pCtx->mpCIH, pCtx->mpPendingReleaseValue,
+                                             pName, 1, 1, 0);
+
+    pInterp->mpStack[pInterp->mnStackTop++] = pResult;      // inlined stackPush (store + advance)
+    pResult->AddRef();
 }

@@ -25,10 +25,11 @@
 
 #include <cstdint>
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue::AddRef/Release
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"  // mpCurrentFunction + SavedExecutionState
 
 class AptCIH;             // SDKs/EATech/include/Apt/AptCIH.h (the movie-clip scope)
 class AptCharacterInst;   // SDKs/EATech/include/Apt/AptCharacterInst.h
-struct AptScriptFunctionBase;  // SDKs/EATech/include/Apt/AptScriptFunctionBase.h (mpCurrentFunction)
+class EAStringC;          // SDKs/EATech/include/Apt/AptString/EAString.h (path/name buffers)
 
 class AptActionInterpreter
 {
@@ -137,6 +138,75 @@ public:
     // register array at +0x44) / AptVFT_Register (via AptScriptFunctionBase::
     // GetRegisterValue) values before pushing. Deferred until that register/local
     // machinery + AptScriptFunctionBase are reconstructed.
+
+    // ---- lifecycle (initialize/destroy the five stacks) ------------------
+    // ~AptActionInterpreter @0x82AE3918 -- free each of the five {count,capacity,
+    // array} stacks back to the operand-stack pool (Deallocate(array, count*sizeof)).
+    ~AptActionInterpreter();
+
+    // ---- run scaffolding / native call dispatch --------------------------
+    // CleanupAfterExecution @0x82AE9388 -- end-of-run cleanup: drop the pending
+    // thrown value (mpAbortValue: render its string form then Release + clear) and
+    // restore the AptScriptFunctionBase per-call execution state (PopStaticData).
+    void CleanupAfterExecution(AptScriptFunctionBase::SavedExecutionState* pSaved);
+
+    // callFunction @0x82AE3C08 -- invoke an AS callable value pFunction with nArgs
+    // operands already on the stack (the function body run / native callback / new
+    // dispatch). pScope is the "this"/path scope; pNewTarget/pConstructTarget feed
+    // the SetupBeforeExecution preloads. Collapses the args + result on the stack.
+    AptValue* callFunction(AptValue* pScope, AptValue* pFunction, int nArgs,
+                           AptValue* pNewTarget, AptValue* pConstructTarget);
+
+    // _doEnumerate @0x82B036D8 -- AS `for..in`: resolve the enumeration target,
+    // replace the stack top with a null marker, then push each enumerable member
+    // name of the target's native hash (skipping the two reserved keys).
+    void _doEnumerate(AptValue* pScope, AptValue* pTarget);
+
+    // _parseStream @0x82AF3440 -- relocate/transcode an action bytecode stream's
+    // inline pointer/constant operands between the on-disk (.apt) form and the live
+    // form (the resolve / unresolve pass). a2 is the relocation base; a4 the live/
+    // disk direction (0 = resolve). FLAG: faithful transcode is a follow-on (see body).
+    const unsigned char* _parseStream(const unsigned char* pStream, int nRelocBase,
+                                      AptValue* pResolveCtx, int nDirection);
+
+    // getObject @0x82B07F18 -- resolve a path name (pName) under (pScope, pTarget)
+    // to the AptValue object it designates (findChild on the parsed context), or
+    // null. Used by the SetTarget / valueToObject paths.
+    AptValue* getObject(AptValue* pScope, AptValue* pTarget, const EAStringC* pName);
+
+    // getName @0x82AF75C8 / getName2 @0x82AF7540 -- build the slash/dot path name of
+    // a value into pOut (getName2 also appends a trailing "/" for an empty path).
+    // FLAG: the core path walk (sub_82AF7400) is the path-builder follow-on.
+    void getName (AptValue* pValue, EAStringC* pOut);
+    void getName2(AptValue* pValue, EAStringC* pOut);
+
+    // isObjectOfType @0x82AEA5B8 -- AS `instanceof`: walk pObject's prototype /
+    // interface chain looking for pClass's prototype; type-aware fallback for the
+    // non-object cases. Returns 1 on a match.
+    int isObjectOfType(AptValue* pObject, AptValue* pClass);
+
+    // isFSCommand @0x82AD9148 / doFSCommand @0x82AD91A0 -- the AS getURL "FSCommand:"
+    // host-callback path: detect the "FSCommand:" url prefix and dispatch the
+    // command (the part after the prefix) + its argument to the host hook.
+    bool isFSCommand(const char* pUrl);
+    int  doFSCommand(const char* pUrl, const char* pArgs);
+
+    // urlDecode @0x82AEE208 -- parse one "key=value[&...]" pair out of pStream into
+    // (pOutKey, pOutValue) (un-escaping each), returning the read position past the
+    // pair (or null when there is no pair). Used by loadVariables.
+    const char* urlDecode(const char* pStream, EAStringC* pOutKey, EAStringC* pOutValue);
+
+    // ---- AS global builtins (cbCallMethod_*) that this TU owns ------------
+    // cbCallMethod_ASSetPropFlags @0x82AD8448 -- ASSetPropFlags() stub (returns
+    // `undefined`; the AS member-visibility flags are a no-op in this build).
+    static AptValue* cbCallMethod_ASSetPropFlags(AptValue* pThis, int nArgCount);
+    // cbCallMethod_setInterval @0x82B019D8 -- setInterval(fn|obj,method,ms,...args):
+    // allocate a free AptIntervalTimer slot, bind the callback + period + extra args,
+    // and return its integer id (or `undefined` when the table is full).
+    static AptValue* cbCallMethod_setInterval(AptValue* pThis, int nArgCount);
+    // cbCallMethod_clearInterval @0x82AE3AE0 -- clearInterval(id): find + tear down
+    // the timer slot whose id matches the (integer) argument.
+    static AptValue* cbCallMethod_clearInterval(AptValue* pThis, int nArgCount);
 
     // ---- ActionScript opcode handlers (static; (interpreter, context)) ----
     // The bytecode dispatch registers these by opcode. Each is a static function
@@ -317,6 +387,66 @@ public:
     //   DefineLocal 0x3C : `var name = value`;  DefineLocal2 0x41 : `var name`
     static void _FunctionAptActionDefineLocal (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionDefineLocal2(AptActionInterpreter* pInterp, LocalContextT* pContext);
+
+    // ---- call / member / function-definition opcodes ----------------------
+    // The function-call family (CallFunction/CallMethod/...) drives callFunction;
+    // the New* ops construct objects; the Define* ops build script-function /
+    // dictionary values from the inline bytecode. Bodies in sibling call-op TUs.
+    static void _FunctionAptActionCallFrame            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionCallFuncSetVar       (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionCallFunction         (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionCallMethod           (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionCallMethodPop        (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionCallMethodSetVar     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionDictCallFuncSetVar   (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionDictCallMethodPop    (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionDictCallMethodSetVar (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionNewMethod            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionTry                  (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
+    // Dictionary-aware constant/variable push opcodes (the .apt string-dictionary
+    // shortcut forms of Push + the Get/Set fused ops):
+    static void _FunctionAptActionPush                 (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushStringDictByte   (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushStringGetMember  (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushStringGetVar     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushStringSetMember  (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushStringSetVar     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionStringDictByteGetMember(AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionStringDictByteGetVar (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
+    // Timeline / sprite control opcodes (gotoFrame / play / stop / clone / drag /
+    // setTarget) -- they drive the bound character instance's animation timeline.
+    static void _FunctionAptActionGotoFrame            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionGotoFrame2           (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionGotoLabel            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionNextFrame            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPlay                 (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionStop                 (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionCloneSprite          (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionRemoveSprite         (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionStartDragMovie       (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionSetTarget            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionSetTarget2           (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionTargetPath           (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
+    // Object construction / property / type opcodes:
+    static void _FunctionAptActionNewObject            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionInitObject           (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionDefineFunction       (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionDefineFunction2      (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionDefineDictionary     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionGetProperty          (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionSetProperty          (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionEnumerate            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionCastOp               (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionTypeOf               (AptActionInterpreter* pInterp, LocalContextT* pContext);
+
+    // URL / trace / equality opcodes:
+    static void _FunctionAptActionGetUrl               (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionGetUrl2              (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionTraceStart           (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionEquals2              (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five

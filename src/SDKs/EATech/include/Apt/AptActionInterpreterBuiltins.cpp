@@ -11,7 +11,14 @@
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"   // AptBoolean::Create (shared true/false)
-#include "SDKs/EATech/include/Apt/AptValue/AptString.h"    // AptString::Create
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"    // AptString::Create / c_string / GetInternalString
+#include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC (the URL/target scratch + operands)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                // AptCIH : AptValueGC (mpCIH -> AptValue* upcast)
+#include "SDKs/EATech/include/Apt/AptGlobal.h"             // gpAptGlobalFallback (off_8324E380 sentinel)
+#include "SDKs/EATech/include/Apt/AptObject.h"             // AptValueWithHash (gpAptGlobalFallback upcast)
+#include "SDKs/EATech/include/Apt/AptTarget.h"             // gpAptTarget->mpLinker (off_8324E574+0x20)
+
+#include <cstdint>   // uintptr_t
 
 // FLAG (homed by the apt VM native-call dispatch): the global native-method arg
 // stack (X360 off_8324E768 = gAptActionInterpreter.mpStack, dword_8324E760 = its
@@ -33,6 +40,13 @@ extern void unescape(EAStringC* pString);
 // FLAG (wired at AptInit; committed externs in the sibling AptActionInterpreter*Ops TUs):
 // the running .swf version (only v7 makes a non-empty string coerce to boolean true).
 extern unsigned int AptGetSwfVersion();
+
+// FLAG (AS loadVariables core @0x82B07DF8 -- not yet homed; the same extern shim the
+// loadVariables native method drives, preserving the (interpreter, node, pendingRelease,
+// &url) call shape -- r5 = *(pContext+8) = mpPendingReleaseValue). The GetUrl2
+// loadVariables branch forwards to it.
+extern void AptActionInterpreter_loadVariables(AptActionInterpreter* pInterp,
+                                               AptValue* pNode, AptValue* pPendingRelease, EAStringC* pURL);
 
 // ---------------------------------------------------------------------------
 // cbCallMethod_isNaN @0x82AF99E8 -- AS isNaN(x): true with no argument, or when the
@@ -165,4 +179,174 @@ void AptActionInterpreter::_FunctionAptActionAsciiToChar(AptActionInterpreter* p
     pInterp->stackPop();                                  // pop the operand (Release)
     pInterp->mpStack[pInterp->mnStackTop++] = pResult;    // push the result
     pResult->AddRef();
+}
+
+// ---------------------------------------------------------------------------
+// The getURL load entry @0x82B06660 -- the X360 `AptLinker::Load` invoked from the
+// getURL ops as f(this=mpLinker, &urlString, &targetString). The committed
+// AptLinker::Load member (AptLinker.cpp) models that overload with a 32-bit `int`
+// first parameter (a pre-existing modeling choice in a TU this file does not own);
+// passing an EAStringC* through that int parameter would truncate the pointer on
+// x64. To call the same homed routine faithfully without the lossy cast, it is
+// declared here as a free-function shim with the real (linker, url, target) pointer
+// types -- the getURL ABI -- and links to the same body at final link.
+// FLAG: x64 pointer-width fork of the committed AptLinker::Load(int, EAStringC*)
+//       signature; the engine target is the single @0x82B06660 routine.
+extern void AptLinker_GetUrlLoad(AptLinker* pLinker, EAStringC* pUrl, EAStringC* pTarget);
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionGetUrl @0x82B09300 -- AS getURL(url, target): the SWF1 form
+// with the url + target stored as two inline (4-byte-aligned) string operands in
+// the action bytecode. "FSCommand:"-prefixed urls are routed to the host hook;
+// otherwise, when the url ends in ".swf" (suffix stripped in place) or is empty,
+// the linker loads it into the target level.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionGetUrl(AptActionInterpreter* pInterp,
+                                                    LocalContextT* pContext)
+{
+    // Two inline string-pointer operands at the next 4-byte-aligned position; the PC
+    // then advances past both. Console operands are 4-byte; the resolved x64 stream
+    // stores 8-byte pointers (the _parseStream transcode), so they are read at the
+    // host pointer width here -- the same x64-native PC model as the branch ops.
+    // FLAG: 8-byte (vs console 4-byte) inline operand width -- _parseStream transcode.
+    const char* const* pOperands = reinterpret_cast<const char* const*>(
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pOperands + 2);
+
+    const char* pUrl    = pOperands[0];
+    const char* pTarget = pOperands[1];
+
+    if (pInterp->isFSCommand(pUrl))
+    {
+        pInterp->doFSCommand(pUrl, pTarget);
+        return;
+    }
+
+    // Build a scoped EAStringC from the url buffer (the X360 InitFromBuffer; the dtor
+    // is the trailing DecreaseInternalRefCount). A url that ends in ".swf" (suffix
+    // removed) or that is empty triggers the linker load into the target level.
+    EAStringC strUrl(pUrl);
+    const bool bSwf = strUrl.EndWithRemoveIgnoreCase(".swf");
+    if (bSwf || strUrl.IsEmpty())
+    {
+        EAStringC strTarget(pTarget);
+        AptLinker_GetUrlLoad(gpAptTarget->mpLinker, &strUrl, &strTarget);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionGetUrl2 @0x82B09588 -- AS getURL2: the operands come off the
+// operand stack ([..., url, target] with target on top). It supports the
+// "FSCommand:" host hook, a loadVariables form (when the url is a variable
+// reference that does not resolve to a ".swf"), and the plain linker load. The two
+// operands are popped at the end (stackPop(2)) and the scratch strings released.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionGetUrl2(AptActionInterpreter* pInterp,
+                                                     LocalContextT* pContext)
+{
+    AptValue* pUrlValue    = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the url
+    AptValue* pTargetValue = pInterp->mpStack[pInterp->mnStackTop - 1];   // top = the target
+
+    EAStringC strTarget;   // v28 -- rendered lazily on the non-FSCommand paths
+    EAStringC strUrl;      // v29 -- the url string form
+    pUrlValue->toString(&strUrl);
+
+    // "FSCommand:"-prefixed url -> dispatch (url, target) to the host hook, pop, done.
+    if (pInterp->isFSCommand(strUrl.GetBuffer()))
+    {
+        pTargetValue->toString(&strTarget);
+        pInterp->doFSCommand(strUrl.GetBuffer(), strTarget.GetBuffer());
+        pInterp->stackPop(2);
+        return;
+    }
+
+    // A non-empty url that does NOT end in ".swf" (suffix stripped in place) is the
+    // loadVariables form: the target value names the destination variable scope.
+    if (!strUrl.IsEmpty() && !strUrl.EndWithRemoveIgnoreCase(".swf"))
+    {
+        const AptVirtualFunctionTable_Indices eTargetType = pTargetValue->getVtblIndex();
+        const bool bStringTarget =
+            (eTargetType == AptVFT_StringValue || eTargetType == AptVFT_StringObject)
+            && pTargetValue->getAllowsDelayedDeletion();
+
+        AptValue* pNode;
+        if (bStringTarget)
+        {
+            // A string target is a variable path: resolve it to the destination node.
+            // c_string() unboxes the StringObject (type 33) form; GetInternalString()
+            // is the embedded EAStringC the console reads at the value's +8.
+            pNode = pInterp->getVariable(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                         pTargetValue->c_string()->GetInternalString(),
+                                         1, 1, 0);
+        }
+        else
+        {
+            pNode = pTargetValue;
+        }
+
+        // Drive the AS loadVariables core (interpreter, node, mpPendingReleaseValue,
+        // &url). loadVariables is not an AptActionInterpreter member; the homed core is
+        // the same extern shim the loadVariables native method (AptCIHNativeFunctionHelper)
+        // drives. FLAG: AptActionInterpreter::loadVariables (@0x82B07DF8) not yet homed.
+        AptActionInterpreter_loadVariables(pInterp, pNode, pContext->mpPendingReleaseValue, &strUrl);
+        pInterp->stackPop(2);
+        return;
+    }
+
+    // Plain ".swf"/empty load: resolve the target value to a name, then linker-load
+    // the url into it.
+    pTargetValue->toString(&strTarget);
+    AptValue* pResolved = pInterp->getVariable(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                               &strTarget, 1, 1, 0);
+
+    // A defined CIH-handle (type 12) or a CIH-none (type 37) target gets its full
+    // slash/dot path name written back into strTarget before the load.
+    const AptVirtualFunctionTable_Indices eResolvedType = pResolved->getVtblIndex();
+    if ((eResolvedType == AptVFT_CharacterInstHandle && pResolved->getAllowsDelayedDeletion())
+        || eResolvedType == AptVFT_CIHNone)
+    {
+        pInterp->getName(pResolved, &strTarget);
+    }
+
+    pInterp->stackPop(2);
+    AptLinker_GetUrlLoad(gpAptTarget->mpLinker, &strUrl, &strTarget);
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionTraceStart @0x82ADE688 -- the EA "trace target" opcode: pop the
+// target operand (resolving the _global fallback indirection), and when it is a
+// defined integer, pop that many further operands off the stack (the trace argument
+// list). The PC then advances past the inline count operand -- by the count itself
+// when trace-bytecode skipping is enabled (mbSkipTraceBytecodes), else by one word.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionTraceStart(AptActionInterpreter* pInterp,
+                                                        LocalContextT* pContext)
+{
+    // The inline count operand the PC points at (read as a raw word, like the console).
+    const int32_t nInlineCount = *reinterpret_cast<const int32_t*>(pContext->mpProgramCounter);
+
+    // Take the current top operand as the trace target, popping it if present.
+    AptValue* pTarget = pInterp->mpStack[pInterp->mnStackTop - 1];
+    if (pInterp->mnStackTop >= 1)
+        pInterp->stackPop();
+
+    // A `_global` target resolves through to the next operand below it.
+    if (pTarget == static_cast<AptValue*>(gpAptGlobalFallback))
+    {
+        pTarget = pInterp->mpStack[pInterp->mnStackTop - 1];
+        if (pInterp->mnStackTop >= 1)
+            pInterp->stackPop();
+    }
+
+    // A defined integer target -> pop that many further operands (its value at +8 is
+    // the integer datum the console reads).
+    if (pTarget->getVtblIndex() == AptVFT_Integer && pTarget->getAllowsDelayedDeletion())
+        pInterp->stackPop(pTarget->toInteger());
+
+    // Advance the PC: by the inline count when trace-bytecode skipping is on, else by
+    // a single (word-aligned) operand slot.
+    if (pInterp->mbSkipTraceBytecodes)
+        pContext->mpProgramCounter += nInlineCount;
+    else
+        pContext->mpProgramCounter += 4;
 }

@@ -19,7 +19,13 @@
 //   * otherwise / undefined operands -> GetMember pushes `undefined`.
 //
 // The member name is coerced from the key via AptValue::Get_ToString (string keys
-// hand back their own EAStringC; others render via toString). vtable slots used:
+// hand back their own EAStringC; others render via toString). FLAG (extern path): for
+// an EXTERN (type 11) object the console inlines a raw string-ONLY key extraction
+// (assumes the key is already a string: type-1 -> &key.mString, else *(key+0x20)) rather
+// than Get_ToString. Get_ToString is byte-identical for the common defined-string key;
+// it diverges only for a non-string extern key (Get_ToString materialises a temp via
+// toString, the console reads the boxed string slot). Kept as the PC abstraction since
+// the whole AptExtern_* interface is itself a FLAG'd host-edge reconstruction. vtable slots used:
 // ContainsNativeHashVirtual() = vtbl[3], SetHasClass() = vtbl[5] (both declared on
 // AptValue). GetMember ignores the execution context; SetMember uses its target
 // slot (mpPendingReleaseValue, normally null) as the setVariable target, matching
@@ -37,9 +43,14 @@
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"    // AptString::Create / GetInternalString (TypeOf)
 #include "SDKs/EATech/include/Apt/AptArray.h"              // AptArray::get/set + gpUndefinedValue
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"         // StringPool::saConstant (the __proto__ key)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC
+#include "SDKs/EATech/include/Apt/AptCIH.h"                // AptCIH::GetCharacterInst (TypeOf CIH tag)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"      // AptCharacterInst::GetTypeTag
+
+#include <cstdint>
 
 // FLAG (host extern-object interface -- AptVFT_Extern type 11; console fn-ptrs
 // dword_8324E858 get / dword_8324E854 set): the extern subsystem is host-provided
@@ -169,4 +180,240 @@ void AptActionInterpreter::_FunctionAptActionSetMember(AptActionInterpreter* pIn
     pInterp->stackPop(3);                                 // pop object + key + value
     if (pInterp->mnStackTop == 0)
         AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+}
+
+// ===========================================================================
+// The property / enumerate / cast / typeof opcodes.
+//   DECOMPILED from the X360 ARTIST:
+//     GetProperty @0x82B08B58 (0x22) -- AS `obj.prop` builtin-property read
+//     SetProperty @0x82B08C70 (0x23) -- AS `obj.prop = value` builtin-property write
+//     Enumerate   @0x82B05070 (0x46) -- AS `for..in` over a named target
+//     CastOp      @0x82AEA818 (0x2B) -- AS `(Class) obj` / dynamic downcast
+//     TypeOf      @0x82AF3DD0 (0x44) -- AS `typeof obj` -> the type-name string
+//
+// GetProperty/SetProperty resolve the object operand to its designated object
+// (valueToObject) and then route the access through getVariable / setVariable
+// under a builtin-property NAME -- the property index (the second/under operand,
+// coerced via toInteger) selects the name from the static property-name table
+// (console &dword_8324E580[dword_82F73010[index]]: a remap of the property id
+// into the engine's class/property name EAStringC table). Enumerate is a thin
+// tail-call into the reconstructed _doEnumerate. CastOp leans on isObjectOfType
+// (`instanceof`): a matching object stays on the stack, a non-match collapses to
+// `undefined`. TypeOf renders the operand's value type into a fresh AptString.
+//
+// FLAG -- engine rodata + the un-homed object coercion:
+//   * AptActionInterpreter_valueToObject (the un-homed member shim, matching the
+//     sibling SpecialOps / CIHNativeFunctionHelper TUs) coerces an operand to the
+//     object it designates under (scope, target).
+//   * gAptPropertyNameTable / gAptPropertyIndexRemap are the engine's static
+//     property-name string table + id->table-index remap (console dword_8324E580 /
+//     dword_82F73010); the table data is the data-segment follow-on.
+//   * gAptTypeName_* are entries of that same EAStringC table holding the AS
+//     typeof() type-name literals ("undefined"/"number"/"boolean"/"string"/
+//     "object"/"movieclip"/"null"/"function"); wired by the engine constant table.
+// ===========================================================================
+
+// FLAG (un-homed AptActionInterpreter::valueToObject -- declared as an extern shim,
+// matching the sibling AptActionInterpreterSpecialOps.cpp): coerce pValue to the
+// object it designates under (pScope, pTarget), writing the result through *ppOut.
+//   AptActionInterpreter::valueToObject @0x82B0... (X360).
+extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
+                                               AptValue* pValue, AptValue** ppOut);
+
+// FLAG (engine rodata -- the static AS builtin-property name table + its id remap;
+// console dword_8324E580[dword_82F73010[index]]): gAptPropertyIndexRemap maps a
+// property id (0..N) to its slot in gAptPropertyNameTable, the engine's array of
+// class/property name EAStringC literals. Declared here so Get/SetProperty can name
+// the looked-up name; the table data itself is the data-segment follow-on.
+extern const EAStringC gAptPropertyNameTable[];   // dword_8324E580
+extern const int       gAptPropertyIndexRemap[];  // dword_82F73010
+
+// FLAG (engine rodata -- the AS typeof() type-name literals; entries of the same
+// dword_8324E580 EAStringC table). Wired by the engine constant-string table.
+extern const EAStringC gAptTypeName_Undefined;   // dword_8324E6C8 "undefined"
+extern const EAStringC gAptTypeName_Number;      // dword_8324E64C "number"
+extern const EAStringC gAptTypeName_Boolean;     // dword_8324E608 "boolean"
+extern const EAStringC gAptTypeName_String;      // dword_8324E6B4 "string"
+extern const EAStringC gAptTypeName_Object;      // dword_8324E650 "object"
+extern const EAStringC gAptTypeName_MovieClip;   // dword_8324E640 "movieclip"
+extern const EAStringC gAptTypeName_Null;        // dword_8324E648 "null"
+extern const EAStringC gAptTypeName_Function;    // dword_8324E624 "function"
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionGetProperty @0x82B08B58 (0x22) -- AS `obj.prop` read.
+// Stack: [object, propertyIndex] (the index on top). Coerce the object to its
+// designated object (valueToObject); on success resolve the builtin-property name
+// (the index -> the name table) through getVariable and replace both operands with
+// the result, else replace them with `undefined`.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionGetProperty(AptActionInterpreter* pInterp,
+                                                         LocalContextT* pContext)
+{
+    AptValue* pIndexValue = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = property index
+    AptValue* pObjectOper = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the object
+
+    AptValue* pObject = nullptr;
+    AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                       pObjectOper, &pObject);   // FLAG: un-homed valueToObject
+
+    if (pObject)
+    {
+        const int nProperty = pIndexValue->toInteger();
+        const EAStringC* pName = &gAptPropertyNameTable[gAptPropertyIndexRemap[nProperty]];   // FLAG: rodata
+        AptValue* pResult = pInterp->getVariable(pObject, pContext->mpPendingReleaseValue,
+                                                 pName, 1, 1, 0);
+        pInterp->stackPop(2);
+        pInterp->mpStack[pInterp->mnStackTop++] = pResult;   // inlined stackPush
+        pResult->AddRef();
+    }
+    else
+    {
+        pInterp->stackPop(2);
+        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
+        gpUndefinedValue->AddRef();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionSetProperty @0x82B08C70 (0x23) -- AS `obj.prop = value`.
+// Stack: [object, propertyIndex, value] (value on top). Coerce the object operand
+// to its designated object; on success store the value through setVariable under
+// the index-selected builtin-property name, then pop all three operands.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionSetProperty(AptActionInterpreter* pInterp,
+                                                         LocalContextT* pContext)
+{
+    AptValue* pValue      = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = the value to store
+    AptValue* pIndexValue = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = property index
+    AptValue* pObjectOper = pInterp->mpStack[pInterp->mnStackTop - 3];   // the object
+
+    AptValue* pObject = nullptr;
+    AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                       pObjectOper, &pObject);   // FLAG: un-homed valueToObject
+
+    const int nProperty = pIndexValue->toInteger();
+    if (pObject)
+    {
+        const EAStringC* pName = &gAptPropertyNameTable[gAptPropertyIndexRemap[nProperty]];   // FLAG: rodata
+        pInterp->setVariable(pObject, pContext->mpPendingReleaseValue,
+                             pName, pValue, 1, 1, 0);
+    }
+
+    pInterp->stackPop(3);   // pop object + index + value
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionEnumerate @0x82B05070 (0x46) -- AS `for..in` over a named
+// target. A thin tail-call into _doEnumerate with the run scope (ctx.mpCIH) and
+// the target slot (ctx.mpPendingReleaseValue).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionEnumerate(AptActionInterpreter* pInterp,
+                                                       LocalContextT* pContext)
+{
+    pInterp->_doEnumerate(pContext->mpCIH, pContext->mpPendingReleaseValue);
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionCastOp @0x82AEA818 (0x2B) -- AS `(Class) obj`. Stack:
+// [object, class] (class on top). When `object instanceof class`, collapse both
+// operands to the object (an in-place downcast); otherwise (or when fewer than two
+// operands are present) collapse to `undefined`.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionCastOp(AptActionInterpreter* pInterp,
+                                                    LocalContextT* /*pContext*/)
+{
+    if (pInterp->mnStackTop < 2)
+    {
+        pInterp->stackPopAndPush(pInterp->mnStackTop, gpUndefinedValue);
+        return;
+    }
+
+    AptValue* pObject = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = the object to cast
+    AptValue* pClass  = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the class
+
+    if (pInterp->isObjectOfType(pObject, pClass))
+    {
+        pInterp->stackPopAndPush(2, pObject);   // the cast succeeds -> keep the object
+        return;
+    }
+
+    pInterp->stackPop(2);
+    // The no-match push stores the `undefined` singleton WITHOUT an AddRef
+    // (faithful to the console: no refcount bump on this collapse path).
+    pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // inlined stackPush
+}
+
+// ---------------------------------------------------------------------------
+// _FunctionAptActionTypeOf @0x82AF3DD0 (0x44) -- AS `typeof obj`. Replace the top
+// operand with a fresh AptString holding its ECMA type name. An undefined value is
+// "undefined"; otherwise the value type selects the name (number/boolean/string/
+// object/null/function), with a CIH resolving through its character instance's type
+// tag (a clip/sprite -> "movieclip", a destroyed placeholder -> "undefined", else
+// "object"). Unrecognised types leave the freshly-created empty string.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionTypeOf(AptActionInterpreter* pInterp,
+                                                    LocalContextT* /*pContext*/)
+{
+    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = the operand
+
+    AptString* pResult = AptString::Create("");   // FLAG: seed const, overwritten below
+    const EAStringC* pTypeName = nullptr;
+
+    if (!pTop->getIsDefined())
+    {
+        pTypeName = &gAptTypeName_Undefined;
+    }
+    else
+    {
+        const int eType = static_cast<int>(pTop->getVtblIndex());
+        switch (eType)
+        {
+        case AptVFT_Integer:               // 7
+        case AptVFT_Float:                 // 6
+            pTypeName = &gAptTypeName_Number;
+            break;
+        case AptVFT_Boolean:               // 5
+            pTypeName = &gAptTypeName_Boolean;
+            break;
+        case AptVFT_StringValue:           // 1
+        case AptVFT_StringObject:          // 33
+            pTypeName = &gAptTypeName_String;
+            break;
+        case AptVFT_Object:                // 19
+        case AptVFT_Array:                 // 14
+            pTypeName = &gAptTypeName_Object;
+            break;
+        case AptVFT_CharacterInstHandle:   // 12
+        case AptVFT_CIHNone:               // 37
+        {
+            const AptCharacterInst* pInst =
+                static_cast<const AptCIH*>(pTop)->GetCharacterInst();
+            const uint32_t nTag = pInst->GetTypeTag();   // mTypeFlags >> 26
+            if (nTag == 5 || nTag == 16 || nTag == 9)
+                pTypeName = &gAptTypeName_MovieClip;
+            else if (nTag == 15)
+                pTypeName = &gAptTypeName_Undefined;
+            else
+                pTypeName = &gAptTypeName_Object;
+            break;
+        }
+        case AptVFT_None:                  // 3
+            pTypeName = &gAptTypeName_Null;
+            break;
+        default:
+            // Script functions (34/35/36) and native functions (9) -> "function";
+            // anything else leaves the empty seed string. (Console: unsigned
+            // `(v6 - 34) <= 2` -- the range test must be unsigned.)
+            if (static_cast<unsigned int>(eType - 34) <= 2u || eType == AptVFT_NativeFunction)
+                pTypeName = &gAptTypeName_Function;
+            break;
+        }
+    }
+
+    if (pTypeName)
+        *pResult->GetInternalString() = *pTypeName;   // copy the pooled type-name literal
+
+    pInterp->stackPop();                                 // pop the operand
+    pInterp->mpStack[pInterp->mnStackTop++] = pResult;   // inlined stackPush
+    pResult->AddRef();
 }
