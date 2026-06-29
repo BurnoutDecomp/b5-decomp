@@ -126,6 +126,21 @@ struct RaceEventData
     // UnlockCarChallengeForCar matches each junction against the repaired car id). Declare-only.
     CgsID GetUnlockCarId() const;
 
+    // ADDITIVE GROW (declare-only; bodies in the RaceEventData TU) -- BrnSatNavRenderer TU.
+    // The sat-nav icon renderer reads three record fields when caching an on-map event icon:
+    //   * GetEventTypeByte  -- X360 byte +0xEC; the renderer indexes a sat-nav-icon lookup
+    //     table with it to pick the icon's UV row (E_SATNAVICON_EVENT_*).
+    //   * GetIconFrameBase  -- X360 byte +0xED; the icon's animation base frame (renderer
+    //     adds 6 to it for the mini-icon variant).
+    //   * GetEventInstanceId -- X360 doubleword +0x10; the event-instance id the renderer
+    //     compares against the cache's "current" event to special-case the active event.
+    // Declare-only: the backing fields live past this minimal slice (a future TU grows the
+    // single owner with the proven offsets). Returned by accessor so the renderer stays off
+    // raw +0xEC/+0xED/+0x10 casts.
+    u8    GetEventTypeByte() const;
+    u8    GetIconFrameBase() const;
+    u64   GetEventInstanceId() const;
+
 private:
     u8                    maPad_00[0x18];                 // 0x00..0x17 (id / car id / leading scalars -- not in this slice)
     const CheckpointData* mpaCheckpoints;                 // 0x18  checkpoint table base (X360 GetCheckpointData base)
