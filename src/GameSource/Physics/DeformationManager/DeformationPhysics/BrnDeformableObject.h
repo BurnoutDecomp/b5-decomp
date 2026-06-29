@@ -373,6 +373,76 @@ namespace Deformation
         bool HasBouncedThisFrame() const     { return mbHasBouncedThisFrame != 0u; }
         void SetBounceRandomParity(bool lb)  { mbBounceRandomParity = lb ? 1u : 0u; }
 
+        // =========================================================================================
+        // Debug-visualiser accessors (for BrnPhysics::Deformation::DeformationDebugComponent).
+        //
+        // The deformation debug component walks this car's whole rig -- the streamed spec, the sensor /
+        // tag-point / driven-point / IK-part pools, and the drive-time limit box -- to render and edit it.
+        // It is NOT a friend, so it reaches the (private) pools through these named accessors. Each is a
+        // by-member-name view of the X360 raw-offset read the component's asm performs (the console
+        // offset is noted for provenance); none widen/poke raw bytes. Reconstructed alongside
+        // BrnDeformationDebugComponent.cpp.
+        // =========================================================================================
+
+        // The streamed deformation spec (asm rig+6368 == mpDeformationSpec). Null until prepared.
+        const StreamedDeformationSpec* GetDeformationSpec() const { return mpDeformationSpec; }
+
+        // The attached vehicle physics (asm rig+6476 == mVehicleBody.GetVehiclePhysics()). The
+        // detached-wheel debug draw reads the wheel array off it. May be null.
+        BrnPhysics::Vehicle::VehiclePhysics* GetVehiclePhysicsDebug() { return mVehicleBody.GetVehiclePhysics(); }
+
+        // Live tag-point pool (asm rig+19216 count, rig+19232 base; TagPoint stride 0x20).
+        s32             GetNumTagPointsDebug() const { return miNumTagPoints; }
+        TagPoint&       GetTagPointDebug(s32 liIndex) { return maTagPoints[liIndex]; }
+        const TagPoint& GetTagPointDebug(s32 liIndex) const { return maTagPoints[liIndex]; }
+
+        // Live driven-point pool (asm count == miNumDrivenPoints, base rig+19232+...; IKDrivenPoint
+        // stride 0x30). Note: maTagPoints precedes maDrivenPoints, so the driven-point base in the asm
+        // is computed from the tag-point base; here it is the named maDrivenPoints array.
+        s32                  GetNumDrivenPointsDebug() const { return miNumDrivenPoints; }
+        IKDrivenPoint&       GetDrivenPointDebug(s32 liIndex) { return maDrivenPoints[liIndex]; }
+        const IKDrivenPoint& GetDrivenPointDebug(s32 liIndex) const { return maDrivenPoints[liIndex]; }
+
+        // Live IK-part pool (asm rig+26232 count, rig+25388 base).
+        s32               GetNumIKPartsDebug() const { return miNumIKBodyParts; }
+        IKBodyPart&       GetIKPartDebug(s32 liIndex) { return maIKParts[liIndex]; }
+        const IKBodyPart& GetIKPartDebug(s32 liIndex) const { return maIKParts[liIndex]; }
+
+        // Deformation sensor pool (asm rig+15120 base; DeformationSensor stride 0x1B0 == 432). The
+        // component's selected-sensor read seeds the index at +15 (the first 15 sensor slots are the
+        // reserved world/swept entries that precede the live grid in the X360 layout -- see asm
+        // `432*(liIndex+15)+rig`). DebugSensor takes the already-biased index.
+        DeformationSensor&       GetSensorDebug(s32 liIndex) { return maDeformationSensors[liIndex]; }
+        const DeformationSensor& GetSensorDebug(s32 liIndex) const { return maDeformationSensors[liIndex]; }
+
+        // Drive-time deformation limit box (asm rig+26352 min, rig+26368 max == mDriveTimeBBoxLimitMin /
+        // mDriveTimeBBoxLimitMax, written by CalculateDriveTimeLimits).
+        const Vector3& GetDriveTimeLimitsMin() const { return mDriveTimeBBoxLimitMin; }
+        const Vector3& GetDriveTimeLimitsMax() const { return mDriveTimeBBoxLimitMax; }
+
+        // The rig's "is this deformable model live" flag (asm rig+26402 == mbActive). The debug
+        // component's RenderWorld walks the manager's active-rig bit array, then skips any rig whose
+        // mbActive byte is clear before rendering its points. Named view of that direct byte read
+        // (the IsActive() body lives in another TU; this exposes the same member without it).
+        bool IsActiveDebug() const { return mbActive; }
+
+        // Mark the rig "deformed / needs re-skin this update" (asm rig+26408 = 1, written when the debug
+        // component nudges a sensor/driven point). Backed by the named mbHasDeformedThisFrame flag.
+        void SetDeformedThisFrameDebug() { mbHasDeformedThisFrame = true; }
+
+        // Public debug wrappers around the (private) per-frame rebuild helpers the debug component drives
+        // directly (the X360 calls UpdateDeformedBBox / CalculateDriveTimeLimits BY ADDRESS from the
+        // component). Forward to the private members so the component does not need friendship.
+        void UpdateDeformedBBoxDebug()       { UpdateDeformedBBox(); }
+        void CalculateDriveTimeLimitsDebug() { CalculateDriveTimeLimits(); }
+
+        // Public wrapper around the (private) sensor render the debug component's RenderWorld calls
+        // (asm rig RenderSensors). Forwards to the private member.
+        void RenderSensorsDebug(CgsDev::Debug3DImmediateRender* lpRender, s32 liFlags) const
+        {
+            RenderSensors(lpRender, liFlags);
+        }
+
     private:
         // =========================================================================================
         // FULL DWARF MEMBER SEQUENCE (BrnDeformableObject.h:600-677). Members BY NAME + SEQUENCE.

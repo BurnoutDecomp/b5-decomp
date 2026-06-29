@@ -94,6 +94,31 @@ namespace vpu
         return Mult(lrLhs, lrRhs);
     }
 
+    // -- orthonormalisation -------------------------------------------------------------
+
+    // OrthoNormalize3x3(m): re-normalise the three rotation rows (xAxis/yAxis/zAxis) of an
+    // affine whose 3x3 is built from a (near-)orthogonal basis, leaving each row a unit
+    // vector and the translation row untouched. X360 0x82203B28: per row it computes
+    // vmsum3fp (magnitude-squared), a vrsqrtefp estimate refined by two Newton-Raphson
+    // steps (vnmsubfp/vmaddfp), then scales the row by that reciprocal magnitude; a degenerate
+    // (zero-length) row is selected to zero via vcmpeqfp/vsel. The PC reconstruction
+    // de-optimises the rsqrt-estimate-plus-refinement to an exact 1/sqrt (the same convention
+    // as Normalize in vector3_operation.h) -- numerically a touch tighter, never a placeholder.
+    // The console reads the source rows from one buffer and writes the result to another; here
+    // the input is taken by const ref and the orthonormalised matrix returned. Each row is
+    // independently normalised (the caller feeds three mutually-orthogonal axes -- a direction,
+    // a rotation axis and their cross product -- so per-row normalisation yields an orthonormal
+    // 3x3).
+    inline Matrix44Affine OrthoNormalize3x3(const Matrix44Affine& lrMatrix)
+    {
+        Matrix44Affine lResult;
+        lResult.xAxis = Normalize(lrMatrix.xAxis);
+        lResult.yAxis = Normalize(lrMatrix.yAxis);
+        lResult.zAxis = Normalize(lrMatrix.zAxis);
+        lResult.wAxis = lrMatrix.wAxis;
+        return lResult;
+    }
+
     // -- inverse ------------------------------------------------------------------------
 
     // InverseOfMatrixWithOrthonormal3x3(m): the affine inverse when the upper 3x3 is

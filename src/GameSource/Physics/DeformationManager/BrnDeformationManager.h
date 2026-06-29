@@ -405,6 +405,15 @@ namespace Deformation
         // :383. The static debug component (the file-scope mDebugComponent below) by reference.
         static DeformationDebugComponent& GetDebugComponentStatic();
 
+        // DEBUG: the deformation debug component's rig-picker reads the live-model bit array + model pool
+        // to bind the selected rig (asm OnSelectedRigChange: mModelsAdded.IsBitSet(i) gate, then
+        // &mpaModels[i]). Exposed by name so the (non-friend) component can resolve a slot.
+        // GetDeformableObject is declared-only here (the DeformableObject layout is deliberately NOT
+        // pulled into this header -- see the forward declaration above); its one-line body lives in the
+        // manager TU where the full type is in scope.
+        bool              IsDeformableObjectActive(s32 liIndex) const { return mModelsAdded.IsBitSet(static_cast<u32>(liIndex)); }
+        DeformableObject* GetDeformableObject(s32 liIndex);
+
     private:
         // ====================================================================
         // Private helpers (DWARF :413-497). DECLARE-ONLY -- bodies owned by the
