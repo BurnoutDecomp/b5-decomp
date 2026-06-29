@@ -3,13 +3,16 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/FSM/CgsScriptedState.h"
 
-// InputBuffer is a class with a nested GuiEventQueue; the GUI state only holds a
-// pointer to that nested queue, so an incomplete nested declaration is enough.
-class InputBuffer
+// InputBuffer is the global event-queue NAMESPACE (the game-state headers add GameActionQueue /
+// TakedownEventQueue / ... to the same namespace); the GUI state only holds a pointer to the
+// nested GuiEventQueue, so an incomplete member declaration is enough. It MUST be modelled as a
+// namespace (not a class) so it merges with the game-state's `namespace InputBuffer` rather than
+// clashing -- a global `class InputBuffer` vs `namespace InputBuffer` is a C2757 in any TU (e.g.
+// BrnMain) that includes both the GUI and the game-state headers.
+namespace InputBuffer
 {
-public:
     class GuiEventQueue;
-};
+}
 
 // CgsGui::State - base of every GUI screen/HUD state. Extends the scripted-FSM
 // state with the input-event queue it reads, the StateInterface it drives, and

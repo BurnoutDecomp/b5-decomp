@@ -22,7 +22,7 @@
 
 namespace CgsDev
 {
-    namespace Message { extern u32 gxMessageFilterFlags; }   // defined in Development/Log/CgsLog.cpp
+    namespace Message { extern u64 gxMessageFilterFlags; }   // defined in Development/Log/CgsLog.cpp (u64 -- matches CgsLog.h / CgsMessage.h FilterFlag)
     namespace Log { void DebugPrint(const char* pcText, int liArg); void DebugPrint(const char*, int) { __debugbreak(); } }
 }
 

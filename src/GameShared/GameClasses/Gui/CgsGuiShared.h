@@ -11,7 +11,10 @@ namespace CgsModule { template <s32, s32> class EventReceiverQueue; }
 namespace CgsLanguage { class LanguageManager; }
 namespace BrnFlapt { class FileRef; class FlaptManager; }
 
-class InputBuffer;
+// The global event-queue namespace (see CgsGuiState.h): mpGDMInput points at the GUI-event input
+// queue the GameDataModule fills -- the same InputBuffer::GuiEventQueue the GUI state reads. Declared
+// as a namespace (not a global `class`) so it does not clash with the game-state `namespace InputBuffer`.
+namespace InputBuffer { class GuiEventQueue; }
 
 namespace CgsGui
 {
@@ -49,7 +52,7 @@ namespace CgsGui
         BrnFlapt::FileRef*          mpFlaptFile;
         BrnFlapt::FlaptManager*     mpFlaptManager;
         BrnGui::GuiCache*           mpGuiCache;
-        InputBuffer*                mpGDMInput;
+        InputBuffer::GuiEventQueue* mpGDMInput;
         GuiEventReceiverQueue*      mpGDMReceiverQueue;
 
     public:
@@ -58,13 +61,13 @@ namespace CgsGui
         void SetFlaptFile(const BrnFlapt::FileRef& lFlaptFile);
         void SetFlaptManager(BrnFlapt::FlaptManager* lpFlaptManager);
         void SetGuiCache(BrnGui::GuiCache* lpGuiCache);
-        void SetGDMInput(InputBuffer* lpInput);
+        void SetGDMInput(InputBuffer::GuiEventQueue* lpInput);
         void SetGDMReceiverQueue(GuiEventReceiverQueue* lpReceiverQueue);
 
         BrnFlapt::FileRef*      GetFlaptFile();
         BrnFlapt::FlaptManager* GetFlaptManager();
         BrnGui::GuiCache*       GetGuiCache();
-        InputBuffer*            GetGDMInput();
+        InputBuffer::GuiEventQueue* GetGDMInput();
         GuiEventReceiverQueue*  GetGDMReceiverQueue();
     };
 }
