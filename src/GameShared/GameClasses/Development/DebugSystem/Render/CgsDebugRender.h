@@ -60,8 +60,26 @@ namespace CgsDev
     class DebugRender
     {
     public:
+        // Text justification for Draw2DTextJustified (DecFIGS DWARF CgsDebugRender.h:112).
+        enum Justification
+        {
+            E_JUSTIFY_LEFT   = 0,
+            E_JUSTIFY_CENTRE = 1,
+            E_JUSTIFY_RIGHT  = 2,
+        };
+
         void Construct();
         void Clear();
+
+        // Draw a justified 2D text string: measure the text width at lfSize, shift lv2Position left
+        // by 0 / width*0.5 / width for LEFT / CENTRE / RIGHT, then queue it like Draw2DText. X360-
+        // attested (CgsDev::DebugRender::Draw2DTextJustified); the DebugPrinter overlay draws each
+        // line through this. DECLARATION-ONLY here: the body lives in the DebugRender TU
+        // (CgsDebugRender.cpp) and the per-TU /c gate does not link. Signature/justification enum
+        // from the DecFIGS DWARF (CgsDebugRender.cpp:672); the DebugPrinter call site (ActualPrint
+        // @0x821F71D8) passes text/position/justification/size/colour in exactly this order.
+        void Draw2DTextJustified(const char* lpcText, Vector2 lv2Position, Justification leJustification,
+                                 f32 lfSize, RGBA lColour);
 
         // Queue a 2D primitive (replayed by Dispatch2D), screen-space in the Im2d logical coords.
         // X360-attested Vector2 overloads (DecFIGS DWARF CgsDebugRender.h:93/96): the debug overlay

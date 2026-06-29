@@ -160,6 +160,21 @@ public:
     // FLAG: de-inlined byte read at Profile+118401 in ReallyEnterJunkyardAtStartOfGame -- gates whether
     // the start-of-game car gets the 0.85 deform. Exact member name unconfirmed.
     bool IsStartOfGameDeformActive() const;
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the ChallengeManager / ChallengeManagerDebugComponent TUs.
+    // The persisted per-player freeburn-challenge completion record. Signatures + semantics are
+    // X360-asm-attested (ChallengeManagerDebugComponent::CompleteAllChallenges @0x82335010: each call
+    // passes only the u64 challenge id in r4 with r3 = the embedded Profile at ProgressionManager+0x170).
+    // Bodies + the real completion-record layout land with the Profile TU. Declare-only.
+    // ------------------------------------------------------------------------
+
+    // True iff the player has already completed the freeburn challenge with the given CgsID.
+    bool HasPlayerCompletedFreeburnChallenge(CgsID lChallengeID) const;
+
+    // Mark the freeburn challenge lChallengeID complete on the profile and return the player's new
+    // total completed-freeburn-challenge count (the value the achievement manager is notified with).
+    u32 CompleteFreeburnChallenge(CgsID lChallengeID);
 };
 }
 

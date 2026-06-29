@@ -23,6 +23,14 @@ namespace Camera
 class DepthOfField
 {
 public:
+    // Default-initialise the focus band to the camera defaults
+    // (start=0.1, perfect-start=0.2, perfect-end=0.3, end=0.4 metres, blurriness=0.0).
+    // The director Camera::Construct asm @0x82255E68 inlines this as five raw stfs into
+    // the DOF sub-object at camera +0x124..+0x134 (no SetParams range asserts emitted),
+    // so it is a plain default-init, NOT a SetParams call. DECLARATION-ONLY here -- the
+    // per-TU `cl /c` gate does not link; the body lands with DepthOfField's own TU.
+    void Construct();
+
     // Set the depth-of-field parameters. @0x821F1AC8. Validates the band is ordered and the
     // blurriness is in [0,1] (asserts only), then stores all five f32 values store-for-store.
     //
