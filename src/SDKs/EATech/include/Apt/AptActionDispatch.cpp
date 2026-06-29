@@ -175,4 +175,8 @@ void AptActionInterpreter::InitDispatchTable()
     // -- string conversion --
     sGlobalTable[0x15] = &_FunctionAptActionSubString;
     sGlobalTable[0x4A] = &_FunctionAptActionToNumber;
+
+    // -- local-variable definition --
+    sGlobalTable[0x3C] = &_FunctionAptActionDefineLocal;
+    sGlobalTable[0x41] = &_FunctionAptActionDefineLocal2;
 }
