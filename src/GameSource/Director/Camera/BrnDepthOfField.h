@@ -46,6 +46,13 @@ public:
                    f32 lfFocusEndDistanceMeters,
                    f32 lfBlurriness);
 
+    // Read / write just the blurriness lane (mfBlurriness @+0x10). The BrnLooker Zoom path
+    // ramps the DOF blurriness toward 0 (un-blur) or up (blur) at a fixed per-second rate.
+    // DECLARATION-ONLY here (bodies land with this type's own TU); FLAG: additive accessors
+    // for the BrnLooker consumer, this type's own offset-authoritative API.
+    f32  GetBlurriness() const;
+    void SetBlurriness(f32 lfBlurriness);
+
 private:
     // Layout pinned store-for-store from the asm (stfs displacements off r30):
     f32 mfFocusStartDistanceMeters;        // +0x00  stfs f29, 0(r30)

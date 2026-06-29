@@ -120,6 +120,22 @@ namespace BrnDirector
             // with this TU's Clear (@0x8223CE70, a separate function); declaration-only.
             void Clear();
 
+            // ---- FOV / transform / depth-of-field accessors --------------------------------
+            // The look-at + zoom post-process (BrnLooker) reads/writes the camera FOV, reads
+            // the live transform, and drives the depth-of-field band through these. The X360
+            // inlines them as direct field loads/stores (mfFOV @+0x58, mTransform @+0x00,
+            // mDepthOfField @+0x124); de-inlined to named Camera operations so BrnLooker never
+            // pokes those fields by offset. DECLARATION-ONLY here (bodies land with the Camera
+            // TU; the per-TU `cl /c` gate does not link). SetFOV asserts the FOV stays > 0
+            // (Camera.h:424 in the X360 source). FLAG: these are Camera's own offset-authoritative
+            // API; declared additively for the BrnLooker consumer.
+            f32  GetFOV() const;
+            void SetFOV(f32 lfFOV);
+            const rw::math::vpu::Matrix44Affine& GetTransform() const;
+            void SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform);
+            DepthOfField& GetDepthOfField();
+            const DepthOfField& GetDepthOfField() const;
+
             // ---- Layout (DWARF member order; offsets X360-pinned) -----------------
             rw::math::vpu::Matrix44Affine mTransform;        // +0x00  (64B)
             rw::math::vpu::Vector3        mSubject;          // +0x40  (16B)

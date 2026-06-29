@@ -1,13 +1,18 @@
 #pragma once
 
 #include "types.hpp"
-#ifdef WIN32
+
+// CGS_PLATFORM_X360 selects the X360 hardware-init surface even when the PC
+// toolchain (which defines WIN32) is building the X360 translation unit. The X360
+// .cpp defines it before including this header; the PC build never does, so the
+// WIN32 branch below is unchanged for PC.
+#if defined(WIN32) && !defined(CGS_PLATFORM_X360)
 #include <Windows.h>
 #endif
 
 namespace CgsSystem
 {
-#ifdef WIN32
+#if defined(WIN32) && !defined(CGS_PLATFORM_X360)
     static const s32 knHardwarePathMaxLength = MAX_PATH + 7;
 #else
     static const s32 knHardwarePathMaxLength = 1024;
@@ -16,8 +21,13 @@ namespace CgsSystem
     class HardwareInit
     {
     public:
-#ifdef WIN32
+#if defined(WIN32) && !defined(CGS_PLATFORM_X360)
         static void InitializeHardware(const char* lpCmdLine);
+#elif defined(CGS_PLATFORM_X360)
+        // X360: argc/argv plus the (always-null on xbox) working-/fopen-dir overrides.
+        static void InitializeHardware(s32 lnArgc, char** lapcArgv,
+                                       const char* lpcWorkingDirOverride,
+                                       const char* lpcFOpenDirOverride);
 #else
         static void InitializeHardware(s32 lnArgc, char* lapcArgv[]);
 #endif
