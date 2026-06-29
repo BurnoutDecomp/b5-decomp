@@ -36,6 +36,21 @@ namespace CgsDev
             mfHeight   = lfHeight;
         }
 
+        // Geometry accessors + setters (the Console slide/size path drives these). GetX/GetY read the
+        // stored position; SetSize/SetPosition store the size/position the layout was computed at.
+        f32  Window::GetX() const      { return mfX; }
+        f32  Window::GetY() const      { return mfY; }
+        f32  Window::GetWidth() const  { return mfWidth; }
+        f32  Window::GetHeight() const { return mfHeight; }
+
+        void Window::SetSize(f32 lfWidth, f32 lfHeight)   { mfWidth = lfWidth; mfHeight = lfHeight; }
+        void Window::SetPosition(f32 lfX, f32 lfY)        { mfX = lfX; mfY = lfY; }
+
+        // The screen-clamp keeps the window inside the screen rect unless KX_FLAGNOCLAMPTOSCREEN is
+        // set. The real metric-driven clamp lands with the DebugUI window stack reconstruction; this is
+        // the link stub (the Console is prepared NOCLAMPTOSCREEN, so the clamp is a no-op for it).
+        void Window::ClampToScreen() {}
+
         // Virtual protocol -- stubbed for link (grow-in).
         void Window::Update(f32 /*lfTimeStep*/, InputEvent /*leEvent*/) {}
         void Window::Render(Debug2DImmediateRender* /*lpRender*/) {}
