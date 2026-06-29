@@ -84,6 +84,14 @@ namespace CgsNetwork
         // CgsServerInterfaceGameParams.h:443 -- true if muGameFlags bit 10 set.
         bool IsRankedGame() const;
 
+        // ADDITIVE GROW (flagged by the ServerInterfaceGames group): the lobby-record
+        // (de)serialisers, matching the sibling param families (PlayerParams / GameSearch /
+        // QuickJoin all expose SerialiseToString). ServerInterfaceGames create/join/update
+        // drive SerialiseToString; GetGameParameters / the search-sort comparator drive
+        // DeserialiseFromString. Declared here (bodied in the game-params TU).
+        void SerialiseToString(char* lpcRecord, s32 liRecLen) const;
+        bool DeserialiseFromString(const char* lpcRecord);
+
         // CgsServerInterfaceGameParams.h:339
         virtual void SetRankedGame(bool lbRanked);
 

@@ -58,6 +58,11 @@ namespace CgsNetwork
         // 0 <= liRegion < miCurrentRegion (both vacuous), then returns maRegionPings[liRegion].
         s32 GetPingValue(s32 liRegion) const;
 
+        // ADDITIVE GROW (flagged by the ServerInterfaceGames group): the recorded ping-region
+        // count (miCurrentRegion, +0xE4). ServerInterfaceGames::CreateGame iterates it to build
+        // the "REGIONS" preference list. Exposed by name; layout unchanged.
+        s32 GetNumberOfPingRegions() const { return miCurrentRegion; }
+
     private:
         s32   maRegionPings[KI_MAX_PING_REGIONS];   // +0x10 (50 words; ctor fills -1)
         s32   miField_D8;                           // +0xD8
