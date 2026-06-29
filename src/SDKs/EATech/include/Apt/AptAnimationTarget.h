@@ -48,18 +48,37 @@ struct AptAnimationTarget
     u32               mnNumIntervalTimers;  // +0x04  (= params[0])
     u32               mnNumListenerSlots;   // +0x08  (= params[1])
     AptActionQueueC*  mpActionQueue;        // +0x0C
-    u32               mInlineSubA[2];       // +0x10  FLAG: inline 8-byte sub-object, type TBD
-    u32               mInlineSubB[2];       // +0x18  FLAG: inline 8-byte sub-object, type TBD
+    // +0x10 / +0x18 -- two inline 8-byte sub-objects the ctor builds from params[2]/
+    // params[3]. GetListenerSet/GetInputSet hand back their addresses. FLAG: exact
+    // element types TBD; kept as opaque 8-byte stores (accessed by address only).
+    u32               mListenerSet[2];      // +0x10  (ctor __(this+0x10, params[2]))
+    u32               mInputSet[2];         // +0x18  (ctor sub_82AE1708(this+0x18, params[3]))
     AptDisplayList    mDisplayList;         // +0x20  (inline root display list)
     AptIntervalTimer* mpIntervalTimers;     // +0x24  (array of mnNumIntervalTimers)
-    u32               mnField28;            // +0x28  FLAG: role TBD
+    u32               mnQueuedInputsSize;   // +0x28  (SetQueuedInputsSize; zeroed at ctor)
     void*             mpListenerSlots;      // +0x2C  (4*mnNumListenerSlots alloc)
-    void*             mpQueueHeadA;         // +0x30  FLAG: deferred-callback list head
-    void*             mpQueueHeadB;         // +0x34  FLAG: deferred-callback list head
-    void*             mpQueueHeadC;         // +0x38  FLAG: deferred-callback list head
-    void*             mpQueueHeadD;         // +0x3C  FLAG: deferred-callback list head
-    u32               maTail[6];            // +0x40..+0x54  FLAG: roles TBD
+    // +0x30..+0x3C -- four input-event object slots, ALL seeded to the None sentinel
+    // (off_8324D814) by the ctor; the input layer's Set*Object accessors store the
+    // currently-acting movie clip / object here. (Earlier guessed "queue heads" --
+    // the ctor's None-seeding + the Set* accessors prove they are object slots.)
+    void*             mpOnPressObject;      // +0x30  (SetOnPressObject)
+    void*             mpOnRollOverObject;   // +0x34  (SetOnRollOverObject)
+    void*             mpInputEventObject38; // +0x38  FLAG: 3rd input-event slot, role TBD
+    void*             mpDragMC;             // +0x3C  (Get/SetDragMC -- the dragged clip)
+    u32               mDragPos[2];          // +0x40  (GetDragPos returns &mDragPos; inline pos)
+    u32               maTail[4];            // +0x48..+0x54  FLAG: roles TBD
 
     // GetRootDisplayList -- the root display list the context walks (mDisplayList).
     AptDisplayList* GetRootDisplayList() { return &mDisplayList; }
+
+    // ---- instance accessors (X360 ARTIST one-liners; offsets above) ------------
+    AptDisplayList* GetDisplayList()              { return &mDisplayList; }            // @0x82AD5F18
+    void*           GetListenerSet()              { return &mListenerSet; }            // @0x82AD5F08
+    void*           GetInputSet()                 { return &mInputSet; }               // @0x82AD5F10
+    void*           GetDragPos()                  { return &mDragPos; }                // @0x82AD5F38
+    void*           GetDragMC()                   { return mpDragMC; }                 // @0x82AD5F30
+    void            SetDragMC(void* pClip)        { mpDragMC = pClip; }                // @0x82AD5F28
+    void            SetOnPressObject(void* p)     { mpOnPressObject = p; }             // @0x82AD5F40
+    void            SetOnRollOverObject(void* p)  { mpOnRollOverObject = p; }          // @0x82AD5F48
+    void            SetQueuedInputsSize(int nSize){ mnQueuedInputsSize = (u32)nSize; } // @0x82AD4FC0
 };
