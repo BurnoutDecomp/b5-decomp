@@ -16,6 +16,9 @@
 #pragma once
 
 #include "types.hpp"   // s32, bool
+#include <new>         // placement new (AbstractPool::AllocateVoid constructs in-slot)
+#include "GameShared/GameClasses/Containers/CgsObjectPool.h" // CgsContainers::ObjectPool
+#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 
 namespace BrnDirector
 {
@@ -60,6 +63,67 @@ protected:
     IAbstractPoolFreeObject* mpFreeObjectInterface; // +0x04  owning pool (free callback)
     s32                      miIndex;               // +0x08  slot index within the pool
     s32                      miSize;                // +0x0C  slot/object byte size
+};
+
+// Fixed-capacity typed object pool, modelled on the Feb-2007 BrnAbstractPool.h template
+// but updated to the SHIPPED X360 shape: it derives the IAbstractPoolFreeObject interface
+// (so a handed-out AbstractPoolVoidHandle can free its slot back through FreeObject) and
+// AllocateVoid<T> returns the four-word AbstractPoolVoidHandle (object, free-interface,
+// index, size) rather than the old nested VoidHandle.
+//
+// Storage is one CgsContainers::ObjectPool of `num_buckets` buckets, each bucket a
+// `unit_type[units_in_bucket]` blob big enough to hold the largest object the pool stores.
+// DWARF (BrnAbstractPool.h): MomentController's pool is AbstractPool<70,20,Vector4>, i.e.
+// ObjectPool<rw::math::vpu::Vector4[70],20,int32_t>.
+//
+// Layout note: x64 host build -- the vptr/pointer widths differ from the X360, so no
+// absolute member offset is pinned (semantic parity, not byte-matching).
+template <u32 units_in_bucket, u32 num_buckets, class unit_type = char>
+class AbstractPool : public IAbstractPoolFreeObject
+{
+public:
+    typedef s32 IndexType;
+
+    // One pool slot: a bucket of `units_in_bucket` unit_type units (the X360 sizes a slot
+    // to hold the largest moment/behaviour the pool serves).
+    typedef unit_type Bucket[units_in_bucket];
+
+    void Construct() { /* ObjectPool occupancy/free-queue init -- no field read by NewMoment */ }
+    bool Prepare()   { return true; }
+    bool Release()   { return true; }
+    void Destruct()  { }
+
+    bool IsObjectAllocated(IndexType liIndex) { return mObjectPool.IsObjectAllocated(liIndex); }
+
+    void*       operator[](IndexType liIndex)       { return mObjectPool[liIndex]; }
+    const void* operator[](IndexType liIndex) const { return mObjectPool[liIndex]; }
+
+    // The slot-release callback the AbstractPoolVoidHandle calls (IAbstractPoolFreeObject).
+    void FreeObject(s32 liIndex) override { mObjectPool.FreeObject(static_cast<IndexType>(liIndex)); }
+
+    // Allocate a slot, construct a T in it, and hand back a type-erased handle. Faithful to
+    // the SHIPPED X360 AllocateVoid<T> shape (returns AbstractPoolVoidHandle): assert the
+    // object fits the bucket, pop a free slot (asserting space), construct the object in the
+    // bucket, and Prepare the handle with (this-as-free-interface, object, index, sizeof(T)).
+    template <class T>
+    AbstractPoolVoidHandle AllocateVoid()
+    {
+        CGS_ASSERT(sizeof(Bucket) >= sizeof(T), "AbstractPool : object is too large");
+
+        const IndexType liIndex = mObjectPool.AllocateObject();
+        CGS_ASSERT(liIndex >= 0, "AbstractPool : out of space");
+
+        void* lpSlot = static_cast<void*>(mObjectPool[liIndex]);
+        T* lpObject = new (lpSlot) T();   // construct a fresh T in the slot (X360 default-init)
+
+        AbstractPoolVoidHandle lHandle;
+        lHandle.Prepare(this, static_cast<void*>(lpObject), liIndex,
+                        static_cast<s32>(sizeof(T)));
+        return lHandle;
+    }
+
+private:
+    CgsContainers::ObjectPool<Bucket, static_cast<s32>(num_buckets), IndexType> mObjectPool;
 };
 
 } // namespace BrnDirector

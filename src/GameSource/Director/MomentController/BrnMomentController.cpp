@@ -14,11 +14,15 @@ namespace BrnDirector
 {
 
 // @0x821F5798. Asserts mbIsAllocated (this+0x00; "mbIsAllocated" at BrnMomentController.h:150)
-// then returns the held moment pointer (lwz r3, 4(r31) == this+0x04 == mpMoment).
+// then returns the held moment pointer (lwz r3, 4(r31) == this+0x04). With the DWARF layout
+// (BrnMomentController.h:124) that word is mMomentPoolHandle.mpObject -- the moment object the
+// pool handed out -- so GetMoment returns the pool handle's stored object.
 Moment* MomentController::MomentHandle::GetMoment() const
 {
     CGS_ASSERT(mbIsAllocated, "mbIsAllocated");
-    return mpMoment;
+    // The const handle's Get() yields const void*; the X360 GetMoment returns the stored
+    // moment pointer as a mutable Moment* (it only reads the slot's object-pointer word).
+    return static_cast<Moment*>(const_cast<void*>(mMomentPoolHandle.Get()));
 }
 
 } // namespace BrnDirector
