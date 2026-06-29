@@ -181,6 +181,48 @@ void AptRenderItem::SetMaskMatrix(const AptMatrix* pMatrix)
     }
 }
 
+// CopyRenderDataFrom @0x82AE5400 -- transfer pSource's visual state onto this item.
+void AptRenderItem::CopyRenderDataFrom(const AptRenderItem* pSource)
+{
+    // Position matrix: copy the source's (lazy-alloc if we have none), or -- when the
+    // source has none -- reset ours to identity.
+    if (pSource->mpPositionMatrix)
+    {
+        if (!mpPositionMatrix)
+        {
+            AptMatrix* p = static_cast<AptMatrix*>(gpNonGCPoolManager->Allocate(sizeof(AptMatrix)));
+            if (p) { p->a = 0.0f; p->b = 0.0f; p->c = 0.0f; p->d = 0.0f; p->tx = 0.0f; p->ty = 0.0f; }
+            mpPositionMatrix = p;
+        }
+        if (mpPositionMatrix)
+            mpPositionMatrix->AptMatrixCopy(pSource->mpPositionMatrix);
+    }
+    else if (mpPositionMatrix)
+    {
+        mpPositionMatrix->AptMatrixCopy(&gAptIdentityMatrix);   // X360 flt_8324E2B0
+    }
+
+    // Colour matrix: only the lazy-alloc path copies the source (the X360 leaves an
+    // existing colour matrix untouched when the source also has one); when the source
+    // has none, reset ours to the null colour transform.
+    if (pSource->mpColorMatrix)
+    {
+        if (!mpColorMatrix)
+        {
+            AptCXForm* p = static_cast<AptCXForm*>(gpNonGCPoolManager->Allocate(sizeof(AptCXForm)));
+            mpColorMatrix = p ? new (p) AptCXForm(pSource->mpColorMatrix) : nullptr;
+        }
+    }
+    else if (mpColorMatrix)
+    {
+        mpColorMatrix->AptCXFormCopy(&gAptNullCXForm);   // X360 off_82F73388
+    }
+
+    // Carry the clip depth + the isVisible flag (bit 31) from the source.
+    mClipDepth = pSource->mClipDepth;
+    mFlags = (mFlags & 0x7FFFFFFFu) | (pSource->mFlags & 0x80000000u);
+}
+
 // dtor @0x80F860
 AptRenderItem::~AptRenderItem()
 {
