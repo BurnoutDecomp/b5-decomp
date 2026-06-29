@@ -17,6 +17,7 @@
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"               // GetRenderItem / CopyRenderDataFrom
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"               // mnEventHandlerMask / mp__Proto__ / DestroyGCPointers
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"            // AptMatrix a/b/c
+#include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"            // AptCXForm (writable colour return)
 #include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"        // AptCurrentRenderTreeManager + Update_Item*
 #include "SDKs/EATech/include/Apt/AptDefine.h"                   // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                      // DOGMA_PoolManager
@@ -229,4 +230,90 @@ AptCIH* AptCIH::ReplaceZombieChild(AptCIH* pNewChild, AptCIH* pZombie)
     // the replacement into the zombie's former position.
     pChildList->AddToDelayReleaseList(pZombie, false);
     return pChildList->insert(pInsertAfter, pNewChild);
+}
+
+// ===========================================================================
+// Behavioural batch 2 -- delegated transform / flag / native-hash accessors.
+// Each forwards through the char inst's (writable) render item or its property
+// hash; reconstructed + adversarially verified against the X360 asm.
+// ===========================================================================
+
+// GetPositionMatrixConst @0x82ADC2F0 -- the node's position transform (identity
+// when unset). Inlined chain mpCharacterInst->mpRenderItem->mpPositionMatrix with
+// the null->gIdentityMatrix fallback == AptRenderItem::GetPositionMatrixConst().
+const AptMatrix* AptCIH::GetPositionMatrixConst() const
+{
+    return GetCharacterInst()->GetRenderItem()->GetPositionMatrixConst();
+}
+
+// GetColorMatrixConst @0x82ADC318 -- the node's colour transform (identity CXForm
+// when unset), through the char inst's render item.
+const AptCXForm* AptCIH::GetColorMatrixConst() const
+{
+    return GetCharacterInst()->GetColorMatrixConst();
+}
+
+// GetPositionMatrixWritable @0x82AE6730 -- the tick-writable position matrix (lazily
+// allocates an identity AptMatrix on first write), via the writable render item.
+AptMatrix* AptCIH::GetPositionMatrixWritable()
+{
+    return GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
+}
+
+// GetColorMatrixWritable @0x82AE6758 -- the tick-writable colour transform (lazy-
+// allocated), via the writable render item.
+AptCXForm* AptCIH::GetColorMatrixWritable()
+{
+    return GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
+}
+
+// SetDepth @0x82AE2300 -- stamp the render depth into the char inst's WRITABLE
+// render item (a halfword store of the 16-bit depth); returns that render item.
+AptRenderItem* AptCIH::SetDepth(int16_t nDepth)
+{
+    return GetCharacterInst()->GetRenderItemWritable()->SetDepth(nDepth);
+}
+
+// GetIsPlaying @0x82AD5C00 -- the movie-clip play-head state (bit 6 of the sprite-
+// base inst's mnClipActionFlags low byte). Only valid on a sprite-base node; the
+// X360 reads mpCharacterInst unconditionally (no null/type guard).
+bool AptCIH::GetIsPlaying() const
+{
+    const AptCharacterSpriteInstBase* pSpriteInst =
+        static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
+    return ((pSpriteInst->mnClipActionFlags >> 6) & 1u) != 0;
+}
+
+// SetEventHandler @0x82AD5B48 -- OR nEventMask into the per-instance property hash's
+// packed event-handler mask (inlined GetNativeHash + AptNativeHash::SetEventHandler;
+// the mask write is not null-guarded -- callers only invoke once a hash exists).
+void AptCIH::SetEventHandler(int nEventMask)
+{
+    GetNativeHash()->SetEventHandler(nEventMask);
+}
+
+// RemoveEventHandler @0x82AD5B70 -- clear the given AS event-handler bits in the
+// per-instance property-hash mask (inlined GetNativeHash + AptNativeHash::
+// RemoveEventHandler; likewise not null-guarded).
+void AptCIH::RemoveEventHandler(int32_t nMask)
+{
+    GetNativeHash()->RemoveEventHandler(nMask);
+}
+
+// SetHasMask @0x82AE22B8 -- set the has-mask flag + (un)bind the mask render item,
+// delegating to the char inst's writable render item.
+void AptCIH::SetHasMask(bool bHasMask, AptRenderItem* pMask)
+{
+    AptRenderItem* pRenderItem = GetCharacterInst()->GetRenderItemWritable();
+    pRenderItem->SetHasMask(bHasMask, pMask);
+}
+
+// SetIsInserted @0x82AECE40 -- when this node owns a character instance, notify the
+// render tree that the item was (re)inserted (AptCharacterInst::ItemInserted re-reads
+// mpCharacterInst from the node, so `this` is passed); a null inst short-circuits.
+AptCIH* AptCIH::SetIsInserted()
+{
+    if (GetCharacterInst() == nullptr)
+        return this;
+    return AptCharacterInst::ItemInserted(this);
 }

@@ -58,6 +58,13 @@ struct AptCharacterInst
     // @0x817D40 -- factory: build the right AptCharacterInst for a character.
     static AptCharacterInst* CreateCharacterInst(AptCharacter* pCharacter);
 
+    // ItemInserted @0x82AECD70 -- render-tree "item (re)inserted" notification.
+    // Static helper: it takes the scene NODE (re-reads mpCharacterInst from it),
+    // clears the item's deletion mark, and notifies the render-tree manager.
+    // FLAG: behavioural body in its own TU; declared so AptCIH::SetIsInserted
+    // compiles. (struct AptCIH is forward-declared below.)
+    static struct AptCIH* ItemInserted(struct AptCIH* pNode);
+
     AptRenderItem*       GetRenderItem() const;          // @0x7DF008
     AptRenderItem*       GetRenderItemWritable();        // @0x7EC910 (via the manager)
     AptRenderItem*       SetRenderItem(AptRenderItem* pItem);   // @0x7E20E8

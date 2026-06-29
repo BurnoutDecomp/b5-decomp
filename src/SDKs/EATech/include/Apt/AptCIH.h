@@ -37,6 +37,7 @@
 struct AptCharacter;
 struct AptCharacterInst;
 struct AptCharacterAnimationInst;
+struct AptRenderItem;
 struct AptMatrix;
 struct AptCXForm;
 struct AptNativeHash;
@@ -165,4 +166,18 @@ struct AptCIH : public AptValueGC
     // @0x82AD7438/0x82AD7418 -- whether this CIH has an attached AS class.
     virtual bool GetHasClass() const override { return ((mFlagsA >> 28) & 1u) != 0; }
     virtual void SetHasClass(int b) override  { mFlagsA = (mFlagsA & 0xEFFFFFFFu) | (b ? 0x10000000u : 0u); }
+
+    // ---- behavioural batch 2: delegated transform / flag / native-hash ops -
+    // All forward through the char inst's (writable) render item or its property
+    // hash; bodies in AptCIHBehaviour.cpp, verified against the X360 asm.
+    const AptMatrix* GetPositionMatrixConst() const;   // @0x82ADC2F0
+    const AptCXForm* GetColorMatrixConst() const;      // @0x82ADC318
+    AptMatrix*       GetPositionMatrixWritable();       // @0x82AE6730 (lazy-alloc)
+    AptCXForm*       GetColorMatrixWritable();          // @0x82AE6758 (lazy-alloc)
+    AptRenderItem*   SetDepth(int16_t nDepth);          // @0x82AE2300
+    bool             GetIsPlaying() const;              // @0x82AD5C00 (movie-clip play-head bit)
+    void             SetEventHandler(int nEventMask);   // @0x82AD5B48 (OR into the hash event mask)
+    void             RemoveEventHandler(int32_t nMask); // @0x82AD5B70 (clear hash event bits)
+    void             SetHasMask(bool bHasMask, AptRenderItem* pMask);  // @0x82AE22B8
+    AptCIH*          SetIsInserted();                   // @0x82AECE40 (render-tree insert notify)
 };
