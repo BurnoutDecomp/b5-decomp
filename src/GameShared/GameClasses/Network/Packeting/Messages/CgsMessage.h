@@ -136,12 +136,21 @@ namespace CgsNetwork
     // (mePackOrUnpack) decides pack vs unpack. Each returns a per-field status that
     // the callers OR together (0 == all fields succeeded == KX_PACK_OR_UNPACK_SUCCESS).
     //   PackOrUnpackInt  -- sub_82881370: a quantised 32-bit int in [liMin, liMax].
+    //   PackOrUnpackU8   -- sub_82881078: a quantised 8-bit value  in [liMin, liMax].
+    //   PackOrUnpackS16  -- sub_82881198: a quantised signed-16-bit value in [liMin, liMax].
     //   PackOrUnpackU16  -- sub_82881250: a quantised 16-bit value in [liMin, liMax].
     //   PackOrUnpackBool -- sub_8288DDA0: a single boolean flag.
     //   PackOrUnpackCgsID-- sub_82881C00: a 64-bit CgsID.
+    // (PackOrUnpackU8 / PackOrUnpackS16 are the uint8_t* / int16_t* overloads of the X360
+    // Message::PackOrUnpack field primitive -- DWARF CgsMessage.cpp:538 / :576 -- distinct
+    // from the uint16_t* one (PackOrUnpackU16, :617). First needed by
+    // BrnNetwork::SelectedRoutesMessage::PackOrUnpack: the u8 landmark count and the s16
+    // landmark ids respectively. Bodies live in their own not-yet-reconstructed TU.)
     // The field to (de)serialise is passed by pointer; the return is a per-field
     // status the callers bitwise-OR together into the message's PackOrUnpackResult.
     PackOrUnpackResult PackOrUnpackInt(Message* lpMessage, s32* lpiField, s32 liMin, s32 liMax);
+    PackOrUnpackResult PackOrUnpackU8(Message* lpMessage, u8* lpu8Field, s32 liMin, s32 liMax);
+    PackOrUnpackResult PackOrUnpackS16(Message* lpMessage, s16* lps16Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackU16(Message* lpMessage, u16* lpu16Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackBool(Message* lpMessage, bool* lpbField);
     PackOrUnpackResult PackOrUnpackCgsID(Message* lpMessage, u64* lpu64Field);
