@@ -24,6 +24,22 @@ namespace BrnProgression
 class ProgressionManager;
 }
 
+namespace BrnTraffic
+{
+// Forward decl: ModeManager::GetTrafficData hands out the live TrafficData by pointer only.
+// Real owning header is SharedClasses/Traffic/BrnTrafficDataResourceType.h (the callers that
+// walk it #include it). A pointer-only use needs no layout here.
+struct TrafficData;
+}
+
+namespace CgsNumeric
+{
+// Forward decl: ModeManager::SetupOnlineStartingGrid takes the per-event start-grid shuffle
+// generator by pointer only. Real owning header is
+// GameShared/GameClasses/Numeric/CgsRandom.h (the online-mode .cpp that calls it #includes it).
+class Random;
+}
+
 namespace BrnGameState
 {
 // Forward decls: the accessors below hand out a GameMode / take a GameModeParams only by
@@ -113,10 +129,27 @@ public:
     // Returns by pointer; body + member land with the ModeManager TU.
     const NetworkRoundManager* GetNetworkRoundManager() const;
 
+    // FLAG (declare-only): the live traffic-data resource for the current track. The X360 reaches
+    // it through a streaming/world holder the ModeManager caches (the GetBestStartGridID chain reads
+    // `(*(this+0x6D60)+0x640)->GetMemoryStructure()`), an indirection whose intermediate holder type
+    // is NOT reconstructed in this tree. De-inlined to this named accessor so the online-mode bodies
+    // that walk the traffic hulls (OnlineStuntRunMode::GetBestStartGridID) stay member-by-name; the
+    // body + the real holder wiring land when that streaming object is reconstructed. DO NOT
+    // fabricate the +0x6D60/+0x640 chain here.
+    const BrnTraffic::TrafficData* GetTrafficData() const;
+
     // DWARF BrnModeManager.h:483. Places the online race cars on the grid from the start event.
     // Body + layout land with the ModeManager TU.
     void SetOnlineRaceCars(GameModeParams* lpGameModeParams,
                            const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent) const;
+
+    // X360-attested via the online modes' Start() (e.g. OnlineStuntRunMode::Start @0x82339E70 calls
+    // it as SetupOnlineStartingGrid(this, lpGameModeParams, miNumRaceCars, &mRandom, false)). Lays
+    // out the online start grid, shuffling the slots with the supplied per-event random generator.
+    // Body + layout land with the ModeManager TU. (CgsNumeric::Random by pointer; its owning header
+    // is pulled in by the online-mode .cpp that calls this.)
+    void SetupOnlineStartingGrid(GameModeParams* lpGameModeParams, s32 liNumRaceCars,
+                                 CgsNumeric::Random* lpRandom, bool lbPushForwards) const;
 
     // X360: BrnGameState::ModeManager::GetCheckpointPosition (0x82327388); DWARF
     // BrnModeManager.h:663 -> `Vector3 GetCheckpointPosition(uint32_t) const`. Returns the

@@ -8,6 +8,11 @@
 
 namespace BrnTraffic
 {
+// Forward decl: TrafficData::GetHull hands out a Hull only by pointer (its real layout lives in
+// the committed owning header SharedClasses/Traffic/BrnTrafficHull.h, which BrnTrafficData.cpp
+// #includes to body the accessor). A pointer-only use needs no layout here.
+struct Hull;
+
 struct TrafficData
 {
     // ADDITIVE GROW for GetSerialisedResourceDescriptor @ 0x82760660: the X360 reads
@@ -69,6 +74,13 @@ struct TrafficData
     const KillZoneRegion* GetKillZoneRegions(u32 luRegion) const;
     const VehicleTraits*  GetVehicleTraitsForVehicleType(u32 luVehicleType) const;
     s32                   GetNumPaintColours() const;
+
+    // Thin hull-array accessor over the already-present mpapHulls (BrnTraffic::Hull**, X360 +0x0C).
+    // Returns the luHull'th per-hull traffic-graph block. The X360 reaches it inline as
+    // `mpapHulls[luHull]` (e.g. OnlineStuntRunMode::GetBestStartGridID @0x82331708 reads
+    // `*(*(GetMemoryStructure()+0xC) + 4*luHull)`); de-inlined to this named accessor. Bodied in
+    // BrnTrafficData.cpp (which #includes BrnTrafficHull.h for the Hull layout).
+    const Hull* GetHull(u32 luHull) const;
 };
 
 class TrafficDataResourceType : public CgsResource::Type
