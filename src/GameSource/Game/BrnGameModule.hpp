@@ -68,7 +68,7 @@ namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleB
 // no longer the opaque stub.
 namespace BrnEffects   { class EffectsModule   : public CgsModule::ModuleSingleBuffered {}; }
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // BrnSound::Module::RootSoundModule (real class)
-namespace BrnReplays   { class ReplayModule    : public CgsModule::ModuleSingleBuffered {}; }
+#include "GameSource/Replays/BrnReplayModule.h"   // BrnReplays::ReplayModule (real class -- was an ODR stub)
 namespace BrnNetwork   { class BrnNetworkModule : public CgsModule::ModuleSingleBuffered {}; }
 
 namespace BrnGame

@@ -81,6 +81,13 @@ namespace CgsNetwork
         // CgsServerInterfaceGameParams.h:296
         void SetSession(const char* lpcSession);
 
+        // The session-ID string set by SetSession. ADDITIVE GROW (BrnNetworkBuddyManagerX360 TU):
+        // BuddyManagerX360::IsUserInGameSession reads the current game's session ID directly off
+        // the params object (X360 reads macSession @ +76 with no out-of-line call, i.e. an inlined
+        // trivial getter) and strnicmp-compares it against the invite's session ID. Exposed as an
+        // inline accessor so the read goes through the named member rather than a raw-offset hack.
+        const char* GetSession() const { return macSession; }
+
         // CgsServerInterfaceGameParams.h:443 -- true if muGameFlags bit 10 set.
         bool IsRankedGame() const;
 
