@@ -22,7 +22,7 @@
 // X360 layout (ctor store offsets @ 0x82BCAB38; 44-byte stride proven by
 // LocalBackend::AddThread's `44 * index` element addressing):
 //   +0x00 (IRunnable vtable; off_821824D0 == JobThread vtable, base off_821823FC)
-//   +0x04 mpBackend     (Backend*)        -- the LocalBackend this worker drives
+//   +0x04 mpBackend     (LocalBackend*)   -- the LocalBackend this worker drives
 //   +0x08 mbStarted     (bool)            -- thread was Begin()'d (WaitForEnd guard)
 //   +0x09 mbQuit        (bool)            -- Run loop exit flag
 //   +0x0C mThread       (EA::Thread::Thread) [4B]
@@ -38,26 +38,16 @@ namespace Jobs
 {
 namespace LocalBackend
 {
-    // The backend JobThread::Run drives. Only the two virtual entry points Run
-    // dispatches into are committed here (the X360 asm proves the call sites:
-    // backend vtable slot +0x50 to run any ready jobs for an affinity, slot +0x54 to
-    // get the sleep timeout before the next wake). The full LocalBackend is
-    // reconstructed elsewhere; this is the minimal abstract surface Run calls BY
-    // NAME without committing the (out-of-group) backend layout.
-    class Backend
-    {
-    public:
-        virtual ~Backend() {}
-
-        // vtable slot +0x50: try to execute ready jobs for the given affinity mask.
-        // Returns nonzero if it did work (so Run loops again immediately without
-        // sleeping); 0 if there was nothing to do.
-        virtual int ExecuteReadyJobs(int iAffinity) = 0;
-
-        // vtable slot +0x54: how long (ms) to wait on the wake event before the next
-        // execute pass when there was no work.
-        virtual u32 GetSleepTimeoutMs() = 0;
-    };
+    // The backend JobThread::Run drives. The X360 stores the owning LocalBackend* in
+    // the worker's +0x04 slot and dispatches its combined-vtable worker entry points
+    // BY NAME -- slot +0x50 (ExecuteReadyJobs, run any ready jobs for an affinity) and
+    // slot +0x54 (GetSleepTimeoutMs, the wait before the next wake). LocalBackend has
+    // ONE vptr (off_82182500, the Detail::SchedulerBackend vtable extended with the
+    // worker slots), so the worker calls those virtuals directly on the concrete
+    // backend -- there is NO separate worker-interface base/vtable. Forward-declared
+    // here; the definition (and the call dispatch in JobThread::Run) lives in
+    // job_thread.cpp, which includes local_backend.h.
+    class LocalBackend;
 
     class JobThread : public EA::Thread::IRunnable
     {
@@ -74,11 +64,17 @@ namespace LocalBackend
         // event for the backend's sleep timeout. Returns 0.
         virtual intptr_t Run(void* pContext = 0);
 
+        // Start this idle worker running: adopt the supplied parameters + backend, mark
+        // it started and Begin the underlying OS thread. (LocalBackend::AddThread @
+        // 0x82BCA6C0 calls it as Start(&parameters, backend); the body lives in the
+        // out-of-group JobThread object TU -- declared here so AddThread links.)
+        void Start(const EA::Jobs::JobThreadParameters* pParameters, LocalBackend* pBackend);
+
         // @ 0x82BC9F60 -- if the thread was started, join it (EA::Thread::Thread::
         // WaitForEnd), then clear the started flag.
         void WaitForEnd();
 
-        Backend*                  mpBackend;    // +0x04
+        LocalBackend*             mpBackend;    // +0x04
         bool                      mbStarted;    // +0x08
         bool                      mbQuit;       // +0x09
         EA::Thread::Thread        mThread;      // +0x0C

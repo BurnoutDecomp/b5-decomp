@@ -32,6 +32,15 @@ namespace Jobs
     {
     public:
         virtual ~Allocator() {}
+        // vtable slot +0x04: allocate a block. The X360 calls it as
+        // Allocate(size, pName, flags, align, alignOffset) (`lwz r11,0(r3) / lwz r11,4(r11)`
+        // then bctrl with r4=size, r5=name, r6=flags, r7=align, r8=alignOffset). Returns
+        // the block (or 0). Named per the EA ICoreAllocator-style debug-alloc surface.
+        virtual void* Allocate(u32 uSize, const char* pName, int iFlags,
+                               u32 uAlign, u32 uAlignOffset) = 0;
+        // vtable slot +0x08: release-with-flags overload placeholder (the X360 backend
+        // never calls it; reserved so Free lands at the proven +0x0C slot).
+        virtual void  AllocateReserved() = 0;
         // vtable slot +0x0C: release a block this allocator handed out.
         virtual void Free(void* pBlock, int iSize) = 0;
     };
