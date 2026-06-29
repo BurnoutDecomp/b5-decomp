@@ -85,6 +85,10 @@ struct AptCIH : public AptValueGC
     // first link whose native-hash event-handler mask intersects nEventMask (the
     // matched bits, non-zero == "has an event member"), else 0.
     int HasEventMember(int nEventMask);
+    // HasMouseEvent @0x82AE2268 -- true if this node responds to any mouse event:
+    // either its sprite-base clip-event flags carry a mouse bit, or an AS mouse
+    // handler is registered in its __proto__ chain. Body in AptCIHBehaviour.cpp.
+    bool HasMouseEvent();
     // ForceCleanNativeHash @0x82AF2338 -- force-destroy the char inst's per-instance
     // property hash and null its slot (called by AptLinker::Update).
     void ForceCleanNativeHash();
