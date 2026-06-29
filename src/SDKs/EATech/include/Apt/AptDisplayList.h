@@ -78,6 +78,12 @@ struct AptDisplayList
     // list and removeObject it (used to drop a script-removed clone). Body in
     // AptDisplayList.cpp.
     void removeClonedObject(AptCIH* pSource);
+
+    // GetBoundingRect @0x82AD9B38 -- accumulate the world-space bounds of every
+    // placed (defined, non-level, unclipped) node in this list into pAccumulator
+    // under pTransform, by recursing into each node's AptCIH::GetBoundingRect.
+    // Returns pAccumulator. Body in AptDisplayList.cpp.
+    struct AptRect* GetBoundingRect(int nMode, const struct AptMatrix* pTransform, struct AptRect* pAccumulator);
 };
 
 // ===========================================================================

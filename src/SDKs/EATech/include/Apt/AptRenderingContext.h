@@ -44,6 +44,7 @@
 
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"    // AptMatrix
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"    // AptCXForm
+#include "SDKs/EATech/include/Apt/AptStd/AptRect.h"      // AptRect (expandBoundingRect)
 
 // ---------------------------------------------------------------------------
 // Apt host render hooks — the global AptUserFunctions table gAptFuncs.
@@ -100,6 +101,11 @@ public:
     // multMatrix @ 0x82ADA550 -- 2D affine concat: pDst = pSrc concatenated with
     // pAppend (identity-singleton short-circuits each operand to a plain copy).
     static void multMatrix(const AptMatrix* pSrc, const AptMatrix* pAppend, AptMatrix* pDst);
+
+    // expandBoundingRect @0x82ADA6B0 (PS3 External 0x7E1EF8) -- transform pBounds'
+    // four corners by the 2D affine pMatrix and grow pAccumulator to include them
+    // (the AptCIH/AptDisplayList bounds walk's leaf-accumulate step).
+    static void expandBoundingRect(const AptRect* pBounds, const AptMatrix* pMatrix, AptRect* pAccumulator);
 
     // pushVertexMatrix (PS3 External @0x7E4650) -- save the current vertex matrix
     // onto the stack (the X360 ARTIST reconstruction omitted it; recovered from

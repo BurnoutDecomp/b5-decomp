@@ -32,6 +32,8 @@
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"   // delegated list ops
 #include "SDKs/EATech/include/Apt/AptCIH.h"                // the listed nodes + AddRef/Release/ClearCIH
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"      // GetCharacterInst()->GetDepth() (removeClonedObject)
+#include "SDKs/EATech/include/Apt/AptRenderItem.h"           // GetClipDepth (the per-node bounds gate)
+#include "SDKs/EATech/include/Apt/AptStd/AptRect.h"          // AptRect accumulator
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"         // the parent's property hash (Lookup/Unset)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // the instance-name key
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"     // setGCRoot
@@ -204,4 +206,28 @@ void AptDisplayList::removeClonedObject(AptCIH* pSource)
     AptCIH* pMatch = nullptr;
     AsState()->findInst(nDepth, nullptr, &pPrev, &pMatch);
     removeObject(pMatch);
+}
+
+// ---------------------------------------------------------------------------
+// GetBoundingRect @0x82AD9B38 -- accumulate the world-space bounds of the placed
+// nodes in this list. Walk the listed AptCIHs (mpHead->mpFirst, then each one's
+// next-sibling link); for every node that is defined, owns a non-"level" character
+// instance, and is not acting as a clip mask (its render item's clip depth still
+// has its high bit set == the default unclipped sentinel), recurse into the node's
+// AptCIH::GetBoundingRect to expand pAccumulator. Returns pAccumulator.
+// ---------------------------------------------------------------------------
+AptRect* AptDisplayList::GetBoundingRect(int nMode, const AptMatrix* pTransform, AptRect* pAccumulator)
+{
+    for (AptCIH* pNode = mpHead ? mpHead->mpFirst : nullptr; pNode; pNode = pNode->GetDisplayListNext())
+    {
+        if (!pNode->getIsDefined())
+            continue;
+        AptCharacterInst* pCharInst = pNode->GetCharacterInst();
+        if (pCharInst != nullptr && pCharInst->GetTypeTag() != 15 &&
+            static_cast<uint16_t>(pCharInst->GetRenderItem()->GetClipDepth()) >= 0x8000u)
+        {
+            pNode->GetBoundingRect(nMode, pTransform, pAccumulator);
+        }
+    }
+    return pAccumulator;
 }
