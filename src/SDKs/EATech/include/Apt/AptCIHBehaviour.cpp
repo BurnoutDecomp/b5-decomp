@@ -20,6 +20,9 @@
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"            // AptCXForm (writable colour return)
 #include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"        // AptCurrentRenderTreeManager + Update_Item*
 #include "SDKs/EATech/include/Apt/AptRenderingContext.h"         // multMatrix + gAptIdentityMatrix
+#include "SDKs/EATech/include/Apt/AptCharacterShape.h"           // shape/static-text leaf bounds (mBounds@+0x10)
+#include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"     // dyn-text leaf bounds (GetBoundsConst)
+#include "SDKs/EATech/include/Apt/AptStd/AptRect.h"               // AptRect (bounds accumulator)
 #include "SDKs/EATech/include/Apt/AptDefine.h"                   // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                      // DOGMA_PoolManager
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"               // gpGCPoolManager Allocate/Deallocate
@@ -463,9 +466,28 @@ void AptCIH::SetMask(AptCIH* pMaskSlave)
 // needs the AptCharacterShape glyph/geometry bounds layout), then zeroes the rect if
 // nothing expanded. Until GetBoundingRect lands this returns an empty rect, so the
 // _width/_height procedural properties read 0; every other property is fully faithful.
-static void GetBoundingRectClamped(const AptCIH* /*pThis*/, float afRect[4])
+// FLAG: the bounding-rect mode threaded through GetBoundingRect (X360 dword_8324E2AC);
+// it is plumbed through the recursion but not read for the bounds math. Defined by
+// the Apt runtime; declared here so the clamp helper passes it faithfully.
+extern int gAptBoundingRectMode;
+
+// GetBoundingRectClamped -- sub_82AE2C58: seed the rect to the empty (+/-FLT_MAX)
+// sentinel, accumulate this node's world bounds (identity transform = local space),
+// then zero the rect if nothing expanded it. (afRect[0..3] == AptRect left/top/right/
+// bottom -- the X360 GetBoundingRect path fills exactly that 16-byte rect.)
+static void GetBoundingRectClamped(const AptCIH* pThis, float afRect[4])
 {
-    afRect[0] = 0.0f; afRect[1] = 0.0f; afRect[2] = 0.0f; afRect[3] = 0.0f;
+    AptRect* pRect = reinterpret_cast<AptRect*>(afRect);
+    pRect->fLeft = 3.4028235e38f;  pRect->fTop    = 3.4028235e38f;
+    pRect->fRight = -3.4028235e38f; pRect->fBottom = -3.4028235e38f;
+
+    const_cast<AptCIH*>(pThis)->GetBoundingRect(gAptBoundingRectMode, &gAptIdentityMatrix, pRect);
+
+    if (pRect->fLeft == 3.4028235e38f && pRect->fTop == 3.4028235e38f &&
+        pRect->fRight == -3.4028235e38f && pRect->fBottom == -3.4028235e38f)
+    {
+        pRect->fLeft = 0.0f; pRect->fTop = 0.0f; pRect->fRight = 0.0f; pRect->fBottom = 0.0f;
+    }
 }
 
 // GetProceduralProperty @0x82AE2D10 -- the AS getProperty reader. The X360 indexes a
@@ -598,4 +620,49 @@ AptCIH* AptCIH::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix)
     AptRenderItem* pRenderItem = GetCharacterInst()->GetRenderItemWritable();
     pRenderItem->SetIsMask(bIsMask, pMaskMatrix);
     return SetGeneralizedProcessDirtyState(bIsMask);
+}
+
+// ---------------------------------------------------------------------------
+// GetBoundingRect @0x82AE2B30 -- accumulate this node's world-space bounds into
+// pAccumulator. Concat this node's position matrix onto pParentTransform, then by
+// character type: a sprite-base (movie-clip/animation) recurses into its child
+// display list; a leaf shape/static-text expands by the character's authored
+// AptRect (AptCharacterShape::mBounds @+0x10); a dynamic-text expands by its render
+// item's baked bounds; a morph (and the null-character "level") contributes nothing.
+// nMode is plumbed through the recursion (unread by the bounds math). Returns pAccumulator.
+// ---------------------------------------------------------------------------
+AptRect* AptCIH::GetBoundingRect(int nMode, const AptMatrix* pParentTransform, AptRect* pAccumulator)
+{
+    AptCharacterInst* pCharInst = mpCharacterInst;
+    if (pCharInst != nullptr && pCharInst->GetTypeTag() != 15)   // 15 == the null-char "level" node
+    {
+        // scratch = pParentTransform concat this node's position transform (identity if none).
+        const AptMatrix* pPos = pCharInst->GetRenderItem()->GetPositionMatrixConst();
+        AptMatrix scratch;
+        AptRenderingContext::multMatrix(pParentTransform, pPos, &scratch);
+
+        const uint32_t nType = pCharInst->GetTypeTag();
+        if (nType == 5 || nType == 9)   // movie-clip / animation -> recurse into the child display list
+        {
+            AptCharacterSpriteInstBase* pSprite = static_cast<AptCharacterSpriteInstBase*>(pCharInst);
+            pSprite->mDisplayList.GetBoundingRect(nMode, &scratch, pAccumulator);
+        }
+        else
+        {
+            const AptRect* pLeafBounds = nullptr;
+            if (nType == 2)   // dynamic text -> the render item's baked bounds
+            {
+                pLeafBounds = static_cast<AptRenderItemDynamicText*>(pCharInst->GetRenderItem())->GetBoundsConst();
+            }
+            else if (nType != 8)   // not morph (a morph contributes no bounds here)
+            {
+                AptCharacter* pChar = pCharInst->GetRenderItem()->GetCharacterWritable();
+                if (pChar->mnType == 1 || pChar->mnType == 10)   // shape / static-text
+                    pLeafBounds = &static_cast<AptCharacterShape*>(pChar)->mBounds;
+            }
+            if (pLeafBounds != nullptr)
+                AptRenderingContext::expandBoundingRect(pLeafBounds, &scratch, pAccumulator);
+        }
+    }
+    return pAccumulator;
 }

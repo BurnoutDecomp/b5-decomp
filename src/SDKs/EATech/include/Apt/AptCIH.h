@@ -40,6 +40,7 @@ struct AptCharacterAnimationInst;
 struct AptRenderItem;
 struct AptMatrix;
 struct AptCXForm;
+struct AptRect;
 struct AptNativeHash;
 
 struct AptCIH : public AptValueGC
@@ -226,4 +227,10 @@ struct AptCIH : public AptValueGC
     // optional mask position matrix) via the writable render item, then propagate the
     // generalized-process dirty state. Returns SetGeneralizedProcessDirtyState's result.
     AptCIH* SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);   // @0x82AECE58
+
+    // GetBoundingRect @0x82AE2B30 -- accumulate this node's world-space bounds into
+    // pAccumulator under pParentTransform: concat this node's position matrix, then
+    // (sprite-base) recurse into its child display list, or (leaf shape/static-text/
+    // dynamic-text) expand by the character/render-item bounds. Returns pAccumulator.
+    AptRect* GetBoundingRect(int nMode, const AptMatrix* pParentTransform, AptRect* pAccumulator);   // @0x82AE2B30
 };

@@ -226,3 +226,27 @@ void AptRenderingContext::popColourTransform()
         mCurrentColourTransform.translate.SetValuef(eChannel, lpSlot->translate.GetValuef(eChannel));
     }
 }
+
+// ---------------------------------------------------------------------------
+// expandBoundingRect @0x82ADA6B0 (body recovered from the PS3 External ELF
+// @0x7E1EF8; the X360 form is not in the exports). Transform pBounds' four corners
+// by the 2D affine pMatrix (x' = a*x + c*y + tx, y' = b*x + d*y + ty) and grow
+// pAccumulator (left/top = min, right/bottom = max) to include them. The console
+// keeps a pMatrix==identity-singleton fast-path; it is folded into the general
+// affine here (which yields the identical result for the identity matrix).
+// ---------------------------------------------------------------------------
+void AptRenderingContext::expandBoundingRect(const AptRect* pBounds, const AptMatrix* pMatrix, AptRect* pAccumulator)
+{
+    const float afCornerX[4] = { pBounds->fLeft,  pBounds->fRight, pBounds->fRight,  pBounds->fLeft };
+    const float afCornerY[4] = { pBounds->fTop,   pBounds->fTop,   pBounds->fBottom, pBounds->fBottom };
+
+    for (int i = 0; i < 4; ++i)
+    {
+        const float fX = pMatrix->a * afCornerX[i] + (pMatrix->c * afCornerY[i] + pMatrix->tx);
+        const float fY = pMatrix->b * afCornerX[i] + (pMatrix->d * afCornerY[i] + pMatrix->ty);
+        if (fX < pAccumulator->fLeft)   pAccumulator->fLeft   = fX;
+        if (fX > pAccumulator->fRight)  pAccumulator->fRight  = fX;
+        if (fY < pAccumulator->fTop)    pAccumulator->fTop    = fY;
+        if (fY > pAccumulator->fBottom) pAccumulator->fBottom = fY;
+    }
+}
