@@ -53,6 +53,11 @@ namespace BrnDirector { namespace DirectorIO { struct InputBuffer; } }
 namespace BrnWorldIO { struct UpdateInputBuffer; }
 namespace BrnGame { struct DebugControllerImage; }
 namespace CgsGui { class GuiModule; }
+// Replay-bridge family (GameSource/Unity/../Game/GameBridgeReplayToX.cpp) parameter type:
+// the committed replay pre-sim OUTPUT buffer (home GameSource/Replays/BrnReplayModuleIO.h).
+// Forward-declared here (the bridge body includes the real home) to keep the heavy replay IO
+// header out of this keystone header.
+namespace BrnReplays { namespace ReplayIO { struct OutputBuffer_PreSim; } }
 // (CgsGui::CgsGuiModuleIO::OutputBuffer is the GUI output buffer the ToGui bridge threads through;
 //  it is already declared as a placeholder struct below near the IO-payload stubs.)
 
@@ -197,6 +202,17 @@ namespace BrnGame
         // assigned, the cross-pad menu-accept scan) and push them through the GUI module.
         void BridgeControllerToGui(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
                                    const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
+
+        // ---- replay-output bridge family (GameSource/Unity/../Game/GameBridgeReplayToX.cpp) -------
+        // The mirror of the controller bridges: each reads the replay module's pre/post-sim OUTPUT
+        // buffer and republishes it into a subsystem's INPUT buffer.
+        //
+        // X360 0x823E7210 -- snapshot the replay status interface into a GuiReplayStatusEvent (type
+        // 514) pushed through the GUI module, then bulk-append the replay output buffer's GUI event
+        // queue into the GUI input buffer's inbound queue. lpGuiInput is the CgsGui GUI input buffer
+        // (placeholder type); lpReplayOutput is the committed replay pre-sim output buffer.
+        void BridgeReplayToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                               const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutput);
     private:
 
         // ---- members (real order; off-path ranges omitted; see LAYOUT NOTE) -------------
