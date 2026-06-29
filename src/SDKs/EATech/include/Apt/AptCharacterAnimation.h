@@ -97,9 +97,19 @@ struct AptCharacterAnimation
     // @0x80EEC4 -- resolve this (serialised) movie root against the load base:
     // clear the resolve scratch + run the recursive Fixup. Returns the root.
     AptCharacterAnimation* Resolve(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
-    // @0x80E9E4 -- the recursive relocate/transcode of the whole character tree.
-    // FLAG: the deep data-side keystone (per-character-type relocation + recursion
-    // into AptMovie::resolve / AptLoader::Load for imports; on x64 a serialised->
-    // runtime transcode). Stubbed -- the next focused piece.
+    // @0x80E9E4 -- relocate/resolve the serialised character tree. On x64 the strategy
+    // depends on the .apt's pointer size (AptConstFile::GetPointerSizeBytes): this is the
+    // DISPATCHER (body in AptCharacterAnimation.cpp) over the two paths below.
     AptCharacterAnimation* Fixup(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
+
+    // --- the Fixup pointer-size dual-path (the per-record walk is shared) ------
+    // 8-byte .apt: the faithful console relocation -- add the load base to each record's
+    // file-relative pointer slot IN PLACE (a 64-bit base fits an 8-byte slot) and use the
+    // blob directly as the runtime root. FLAG: scaffold -- the per-record slot map (which
+    // fields are pointers, per character type) is the shared follow-on.
+    AptCharacterAnimation* FixupInPlace(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
+    // 4-byte .apt: the x64 fork -- TRANSCODE the 32-bit serialised records into native
+    // 64-bit runtime structs (in-place cannot work; a 64-bit pointer won't fit a 32-bit
+    // slot). FLAG: the deep data-side keystone -- the per-record transcode is the follow-on.
+    AptCharacterAnimation* FixupTranscode(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
 };
