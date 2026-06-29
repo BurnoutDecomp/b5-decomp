@@ -11,6 +11,18 @@
 // is no portable equivalent and it changes nothing the dispatcher reads).
 // =============================================================================
 
+// The PC D3D9 device headers MUST be included before the template header: the template
+// header transitively pulls rw/core/debug/DebugCriticalSection.h, which defines NOUSER/
+// NOGDI/WIN32_LEAN_AND_MEAN ahead of its own <windows.h> (to keep USER/GDI macros from
+// leaking). That NOUSER drop strips winuser (LPMSG), which <d3d9.h> needs - so the full
+// <Windows.h> + <d3d9.h> must be brought in first, before that guarded include runs.
+#include <Windows.h>                            // full Win32 (LPMSG / winuser) for <d3d9.h>
+#include <d3d9.h>
+
+#include "pc/gcm/renderengine/device.h"        // renderengine::gDevice, gDisplayWidth/Height (the existing PC D3D9 device)
+#include "pc/gcm/renderengine/texture.h"        // renderengine::Texture::mpD3DTexture
+#include "pc/gcm/renderengine/renderstates.h"   // renderengine::TextureState::mpRaster
+
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h"
 
 namespace CgsGraphics
@@ -571,23 +583,295 @@ namespace CgsGraphics
     }
 
     // =========================================================================
-    // GPU DISPATCH (the platform leaf).
+    // GPU DISPATCH (the consumer side) - the PC/D3D9 realisation of
+    // Im2dRenderBuffer::Dispatch @0x575BD4.
     //
-    // The consumer side - Im2dRenderBuffer::Dispatch @0x575BD4 - walks the dispatch
-    // buffer with GetFirstCommand/GetNextCommand and re-issues each ImCommand to the
-    // graphics device. That re-issue is PURELY platform GPU-submission: the PS3 body
-    // writes the RSX push-buffer through gCellGcmCurrentContext + shadow::Device
-    // (cellGcmSetVertexProgramParameterBlockInline, the DirectDraw segment ring, the
-    // dcbz/stvx vertex packing, etc.); the X360 equivalent writes the D3D ring.
+    // The PS3 body (read in full from the External ELF dossier) walks the frozen
+    // DISPATCH buffer with GetFirstCommand/GetNextCommand and switches on each
+    // ImCommand::muType, re-issuing the command to the GPU. On the PS3 that re-issue
+    // pushes the RSX ring through shadow::Device::*FastPS3 + cellGcm* + the DirectDraw
+    // segment ring (the X360 pushes the D3D ring); that lowest device-internal push is
+    // the only PLATFORM-DIVERGENT leaf. The portable shape is the command WALK and the
+    // opcode->state/draw mapping, which the PS3 switch makes explicit:
+    //   case 0  BEGIN_RENDERING      : open a render block (reset bound state, bind program)
+    //   case 1  END_RENDERING        : close the block
+    //   case 2  RENDER_PRIMITIVES    : *(cmd+8)=primType, *(cmd+12)=verts, *(cmd+16)=count -> Draw
+    //   case 3  SET_STATE_BLEND      : *(cmd+8) -> SetStateFastPS3(BlendState*)
+    //   case 4  SET_STATE_DEPTH      : *(cmd+8) -> SetStateFastPS3(DepthStencilState*)
+    //   case 6  SET_STATE_RASTERIZER : *(cmd+8) -> SetStateFastPS3(RasterizerState*)
+    //   case 8  SET_STATE_SAMPLER    : *(cmd+8) -> SetSamplerStateFastPS3(SamplerState*,0)
+    //   case 9  SET_STATE_TEXTURE    : *(cmd+8) -> SetTextureStateFastPS3(TextureState*,0)
+    //   (case 10 SET_TEXTURE / 15 SET_PROGRAM / 16 SET_TRANSFORM / 18 PUSH_MASK / 19 END_MASK
+    //    are the Apt-rasteriser-emitted opcodes the same switch consumes.)
     //
-    // FLAG: ImRenderBuffer<V>::Dispatch is a DECLARED-BUT-DEFERRED platform leaf.
-    //       It is NOT reconstructed here - the device draw-call / push-buffer write
-    //       has no PC-portable shape and must be supplied by the PC render backend
-    //       (the same place CgsIm2d.cpp's DrawPrimitiveUP lives). The portable
-    //       command-stream PRODUCER above (append/encode/rewind/swap/walk) is the
-    //       half this TU faithfully decompiles; the command opcode table
-    //       (EImCommandType) is the contract the PC dispatcher consumes.
+    // The PC realisation below walks the buffer identically and translates each opcode
+    // into the EXISTING src/pc/gcm/renderengine D3D9 device (renderengine::gDevice),
+    // reusing the exact idioms already proven in CgsIm2d.cpp: state commands map to
+    // SetRenderState / SetTexture / sampler stage state; RENDER_PRIMITIVES folds the
+    // current SET_TRANSFORM (origin + right/up basis + colour shift/scale) into each
+    // vertex on the CPU, scales the 1280x720 logical space to the back buffer, and
+    // submits one DrawPrimitiveUP per draw (D3DFVF_XYZRHW screen-space verts).
+    //
+    // FLAG: the single device-internal leaf is the D3D ring write itself, which lives
+    //       inside IDirect3DDevice9::DrawPrimitiveUP (the pc/gcm/renderengine device) -
+    //       there is nothing lower for this TU to reconstruct; the renderengine device
+    //       already exposes the draw call, so no extra FLAG'd shim is introduced here.
     // =========================================================================
+    namespace
+    {
+        // The D3D9 pre-transformed screen-space vertex DrawPrimitiveUP consumes (same shape
+        // CgsIm2d.cpp uses for the immediate path).
+        struct DispatchScreenVertex { float x, y, z, rhw; u32 color; float u, v; };
+        const unsigned long KU_DISPATCH_FVF = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX1;
+
+        // The engine works in a fixed 1280x720 logical space; map it onto the actual back buffer.
+        const f32 KF_DISPATCH_LOGICAL_W = 1280.0f;
+        const f32 KF_DISPATCH_LOGICAL_H = 720.0f;
+
+        // PrimitiveType -> D3DPRIMITIVETYPE + primitive count. The Apt path stores 4 (TRIANGLES),
+        // 6 (TRIANGLESTRIPS) and 2 (LINES); map them to their D3D9 topologies (matching CgsIm2d.cpp,
+        // which draws the loading-screen quads as strips).
+        bool DispatchTopology(s32 liPrimitiveType, u32 luNumVertices,
+                              D3DPRIMITIVETYPE* lpeTypeOut, u32* lpuPrimCountOut)
+        {
+            switch (liPrimitiveType)
+            {
+            case 2:  // PRIMITIVETYPE_LINES
+                if (luNumVertices < 2u) return false;
+                *lpeTypeOut = D3DPT_LINELIST;       *lpuPrimCountOut = luNumVertices / 2u;     return true;
+            case 4:  // PRIMITIVETYPE_TRIANGLES
+                if (luNumVertices < 3u) return false;
+                *lpeTypeOut = D3DPT_TRIANGLELIST;   *lpuPrimCountOut = luNumVertices / 3u;     return true;
+            case 6:  // PRIMITIVETYPE_TRIANGLESTRIPS
+            default:
+                if (luNumVertices < 3u) return false;
+                *lpeTypeOut = D3DPT_TRIANGLESTRIP;  *lpuPrimCountOut = luNumVertices - 2u;     return true;
+            }
+        }
+
+        // Fold one colour channel through the batch transform's colour shift/scale (floats in [0,1],
+        // the X360 vertex-program colour transform) and re-pack to 8-bit. shift/scale default to
+        // {0,1} (identity) for buffers that never emitted a SET_TRANSFORM.
+        u8 DispatchColourChannel(u8 lu8In, f32 lfScale, f32 lfShift)
+        {
+            f32 lfOut = (static_cast<f32>(lu8In) / 255.0f) * lfScale + lfShift;
+            if (lfOut < 0.0f) lfOut = 0.0f;
+            if (lfOut > 1.0f) lfOut = 1.0f;
+            return static_cast<u8>(lfOut * 255.0f + 0.5f);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Dispatch @0x575BD4 - the PC/D3D9 command-walk. Drains the frozen dispatch buffer
+    // and submits each command through renderengine::gDevice.
+    // -------------------------------------------------------------------------
+    template <typename V>
+    void ImRenderBuffer<V>::Dispatch()
+    {
+        IDirect3DDevice9* lpDevice = renderengine::gDevice;
+        if (lpDevice == nullptr)
+        {
+            return;
+        }
+
+        const f32 lfScaleX = static_cast<f32>(renderengine::gDisplayWidth)  / KF_DISPATCH_LOGICAL_W;
+        const f32 lfScaleY = static_cast<f32>(renderengine::gDisplayHeight) / KF_DISPATCH_LOGICAL_H;
+
+        // The per-batch transform the current SET_TRANSFORM command latched (identity until one is
+        // seen): screen pos = origin + right*v.x + up*v.y, colour = colour*scale + shift. mRightUp
+        // holds the apt 2x2 {a,b,c,d} exactly as AptCallbackRender::SetVertexMatrix stamps it
+        // (mRightUp.x=a, .y=b, .z=c, .w=d). The screen fold is the standard SWF/apt affine
+        // x'=a*localX + c*localY + tx, y'=b*localX + d*localY + ty -- i.e. the "right" basis (the
+        // localX multipliers) is (a,b)=(.x,.y) and the "up" basis (the localY multipliers) is
+        // (c,d)=(.z,.w). This is the SAME unpacking the committed AptCallbackRender::DrawRenderingUnit
+        // mask-corner fold uses; the two render paths must agree.
+        bool        lbHaveTransform = false;
+        Im2dTransform lTransform;
+        // Identity transform defaults (used until a SET_TRANSFORM arrives).
+        f32 lfOriginX = 0.0f, lfOriginY = 0.0f;
+        f32 lfRightX  = 1.0f, lfRightY  = 0.0f;
+        f32 lfUpX     = 0.0f, lfUpY     = 1.0f;
+        f32 lfColScaleR = 1.0f, lfColScaleG = 1.0f, lfColScaleB = 1.0f, lfColScaleA = 1.0f;
+        f32 lfColShiftR = 0.0f, lfColShiftG = 0.0f, lfColShiftB = 0.0f, lfColShiftA = 0.0f;
+
+        // BeginRendering's D3D state prologue (matches CgsIm2d.cpp's ImRenderer::BeginRendering):
+        // no lighting, no depth, no cull, alpha-blend over the framebuffer, bilinear filtering, and
+        // the colour stage modulating the bound texture by the vertex colour.
+        lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
+        lpDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+        lpDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+        lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+        lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+        lpDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+        lpDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+        lpDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+        lpDevice->SetFVF(KU_DISPATCH_FVF);
+
+        // A scratch CPU batch for the per-draw vertex fold. Sized like CgsIm2d.cpp's reserve scratch
+        // so a whole line of glyph quads / a full Apt mesh never overflows in one DrawPrimitiveUP.
+        enum { KI_DISPATCH_MAX = 2048 };
+        static DispatchScreenVertex saBatch[KI_DISPATCH_MAX];
+
+        // Walk the frozen dispatch buffer command-by-command (the PS3 while(GetNextCommand) loop).
+        for (const ImCommand* lpCommand = GetFirstCommand();
+             lpCommand != nullptr;
+             lpCommand = GetNextCommand(lpCommand))
+        {
+            switch (lpCommand->muType)
+            {
+            case IM_CMD_BEGIN_RENDERING:   // case 0
+            case IM_CMD_END_RENDERING:     // case 1
+                // Block open/close: the PS3 resets/clears the active-renderer shadow; on PC the
+                // device render state is already installed above and persists across the block.
+                break;
+
+            case IM_CMD_SET_TRANSFORM:     // case 16 - latch the per-batch transform (80-byte record)
+            {
+                const ImCommandSetTransform* lpSet =
+                    static_cast<const ImCommandSetTransform*>(lpCommand);
+                lTransform      = lpSet->mTransform;
+                lbHaveTransform = true;
+                lfOriginX = lTransform.mOriginXYZ.x; lfOriginY = lTransform.mOriginXYZ.y;
+                // mRightUp = the apt 2x2 {a,b,c,d}: right basis (localX multipliers) = (a,b) = (.x,.y),
+                // up basis (localY multipliers) = (c,d) = (.z,.w). Folds to x'=a*x+c*y, y'=b*x+d*y --
+                // matching AptCallbackRender::SetVertexMatrix's packing + DrawRenderingUnit's fold.
+                lfRightX  = lTransform.mRightUp.x;   lfRightY  = lTransform.mRightUp.y;
+                lfUpX     = lTransform.mRightUp.z;   lfUpY     = lTransform.mRightUp.w;
+                lfColScaleR = lTransform.mColourScale.x; lfColScaleG = lTransform.mColourScale.y;
+                lfColScaleB = lTransform.mColourScale.z; lfColScaleA = lTransform.mColourScale.w;
+                lfColShiftR = lTransform.mColourShift.x; lfColShiftG = lTransform.mColourShift.y;
+                lfColShiftB = lTransform.mColourShift.z; lfColShiftA = lTransform.mColourShift.w;
+                break;
+            }
+
+            case IM_CMD_SET_STATE_TEXTURE: // case 9 - bind a resolved renderengine::TextureState
+            {
+                const ImCommandSetStateTexture* lpSet =
+                    static_cast<const ImCommandSetStateTexture*>(lpCommand);
+                const renderengine::TextureState* lpState =
+                    reinterpret_cast<const renderengine::TextureState*>(lpSet->mpTextureState);
+                renderengine::Texture* lpTexture = (lpState != nullptr) ? lpState->mpRaster : nullptr;
+                lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+                // Texture present: modulate by vertex colour. (CgsIm2d.cpp's SetState(TextureState*).)
+                lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+                lpDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+                break;
+            }
+
+            case IM_CMD_SET_TEXTURE:       // case 10 - bind a raw renderengine::Texture (white fallback)
+            {
+                const ImCommandSetTexture* lpSet =
+                    static_cast<const ImCommandSetTexture*>(lpCommand);
+                renderengine::Texture* lpTexture = lpSet->mpTexture;
+                lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+                // No texture -> drive the stage from the vertex colour alone (SELECTARG2 = DIFFUSE),
+                // exactly as CgsIm2d.cpp's SetTexture(nullptr) path does for the untextured solids.
+                const unsigned long luOp = (lpTexture != nullptr) ? D3DTOP_MODULATE : D3DTOP_SELECTARG2;
+                lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, luOp);
+                lpDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, luOp);
+                break;
+            }
+
+            case IM_CMD_SET_STATE_BLEND:   // case 3 - install the standard alpha-blend-over state
+                lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+                lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+                break;
+
+            case IM_CMD_RENDER_PRIMITIVES: // case 2 - the actual draw
+            {
+                const ImCommandRenderPrimitives<V>* lpDraw =
+                    static_cast<const ImCommandRenderPrimitives<V>*>(lpCommand);
+                const V* lpVertices = lpDraw->mpVertices;
+                u32      luCount    = lpDraw->muNumVertices;
+                if (lpVertices == nullptr || luCount < 2u)
+                {
+                    break;
+                }
+
+                D3DPRIMITIVETYPE leTopology;
+                u32              luPrimCount;
+                if (!DispatchTopology(static_cast<s32>(lpDraw->mePrimitiveType), luCount,
+                                      &leTopology, &luPrimCount))
+                {
+                    break;
+                }
+
+                if (luCount > static_cast<u32>(KI_DISPATCH_MAX))
+                {
+                    luCount = static_cast<u32>(KI_DISPATCH_MAX);
+                }
+
+                // Fold the batch transform into each vertex, scale logical->back-buffer, pack colour.
+                for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+                {
+                    const Basic2dColouredTexturedVertex& lrVertex =
+                        reinterpret_cast<const Basic2dColouredTexturedVertex*>(lpVertices)[luIndex];
+
+                    f32 lfLocalX = lrVertex.mv2Pos.x;
+                    f32 lfLocalY = lrVertex.mv2Pos.y;
+                    f32 lfScreenX, lfScreenY;
+                    if (lbHaveTransform)
+                    {
+                        lfScreenX = lfOriginX + lfRightX * lfLocalX + lfUpX * lfLocalY;
+                        lfScreenY = lfOriginY + lfRightY * lfLocalX + lfUpY * lfLocalY;
+                    }
+                    else
+                    {
+                        lfScreenX = lfLocalX;
+                        lfScreenY = lfLocalY;
+                    }
+
+                    saBatch[luIndex].x   = lfScreenX * lfScaleX;
+                    saBatch[luIndex].y   = lfScreenY * lfScaleY;
+                    saBatch[luIndex].z   = 0.0f;
+                    saBatch[luIndex].rhw = 1.0f;
+
+                    u8 lu8R = lrVertex.mv4Colour.r;
+                    u8 lu8G = lrVertex.mv4Colour.g;
+                    u8 lu8B = lrVertex.mv4Colour.b;
+                    u8 lu8A = lrVertex.mv4Colour.a;
+                    if (lbHaveTransform)
+                    {
+                        lu8R = DispatchColourChannel(lu8R, lfColScaleR, lfColShiftR);
+                        lu8G = DispatchColourChannel(lu8G, lfColScaleG, lfColShiftG);
+                        lu8B = DispatchColourChannel(lu8B, lfColScaleB, lfColShiftB);
+                        lu8A = DispatchColourChannel(lu8A, lfColScaleA, lfColShiftA);
+                    }
+                    saBatch[luIndex].color =
+                        static_cast<u32>(D3DCOLOR_ARGB(lu8A, lu8R, lu8G, lu8B));
+
+                    saBatch[luIndex].u = lrVertex.mv2Tex0UV.x;
+                    saBatch[luIndex].v = lrVertex.mv2Tex0UV.y;
+                }
+
+                // Recompute the primitive count if the count was clamped.
+                if (!DispatchTopology(static_cast<s32>(lpDraw->mePrimitiveType), luCount,
+                                      &leTopology, &luPrimCount) || luPrimCount == 0u)
+                {
+                    break;
+                }
+                lpDevice->DrawPrimitiveUP(leTopology, luPrimCount, saBatch, sizeof(DispatchScreenVertex));
+                break;
+            }
+
+            // The remaining state opcodes (SET_STATE_DEPTH/RASTERIZER/SAMPLER/RT, SET_VIEWPORT/
+            // SCISSOR/CLEAR, SET_SHADER_PROGRAM) and the mask ops (PUSH_MASK_GEOMETRY/END_MASK)
+            // configure GPU descriptor state the fixed-function PC 2D path already covers via the
+            // BeginRendering prologue above (or, for the stencil mask, is a follow-on). They are
+            // walked-over here (the stride is correct - GetNextCommand uses muSize) so the draw
+            // stream stays in sync; the visible Apt/GUI/text output is produced by the texture/
+            // transform/draw opcodes handled above.
+            default:
+                break;
+            }
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Explicit instantiation: the screen-space 2D buffer the Apt/Flapt/GUI/text
