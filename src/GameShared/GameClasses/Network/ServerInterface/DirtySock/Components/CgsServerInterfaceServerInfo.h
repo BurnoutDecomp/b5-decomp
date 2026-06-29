@@ -39,11 +39,9 @@ struct LobbyApiRefT;   // DirtySDK opaque lobby handle (vendor/dirtysdk/include/
 namespace CgsNetwork
 {
     // Forward-declared DirtySock interface; only its GetLobbyAPIRef() accessor is used.
-    class ServerInterfaceDirtySock
-    {
-    public:
-        LobbyApiRefT* GetLobbyAPIRef() const;
-    };
+    // (The full definition lives in CgsServerInterfaceDirtySock.h; a TU that needs to
+    //  *call* GetLobbyAPIRef -- e.g. this component's own .cpp -- includes that header.)
+    struct ServerInterfaceDirtySock;
 
     class ServerInterfaceServerInfo
     {

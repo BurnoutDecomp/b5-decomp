@@ -2,17 +2,17 @@
 #define BRN_SERVER_INTERFACE_BASE_H
 
 #include "network_defines.h"
-#include "Network/ServerInterface/CgsServerInterface.h"
-#include "Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h"
-#include "Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h"
-#include "Network/ServerInterface/DirtySock/Components/CgsServerInterfaceBroadcastMessages.h"
-#include "Network/ServerInterface/DirtySock/Components/CgsServerInterfaceHttp.h"
-#include "Network/ServerInterface/DirtySock/Components/CgsServerInterfaceServerInfo.h"
-#include "Network/ServerInterface/DirtySock/Components/CgsServerInterfaceRankings.h"
-#include "Network/Components/BrnServerInterfaceDownloadableConfig.h"
-#include "Network/Components/BrnServerInterfaceTelemetry.h"
-#include "Network/Components/BrnServerInterfaceCustomCommands.h"
-#include "Network/Debug Components/BrnNetworkServerInterfaceDebugComponent.h"
+#include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceBroadcastMessages.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceHttp.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceServerInfo.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceRankings.h"
+#include "GameSource/Network/Components/BrnServerInterfaceDownloadableConfig.h"
+#include "GameSource/Network/Components/BrnServerInterfaceTelemetry.h"
+#include "GameSource/Network/Components/BrnServerInterfaceCustomCommands.h"
+#include "GameSource/Network/Debug Components/BrnNetworkServerInterfaceDebugComponent.h"
 
 namespace BrnNetwork
 {
@@ -61,6 +61,9 @@ public:
     };
 
     BrnServerInterfaceBase();
+
+    // Scalar deleting destructor @ 0x827E1710 (bodied in BrnServerInterfaceBase.cpp).
+    virtual ~BrnServerInterfaceBase();
 
     virtual void Construct();
     virtual bool Prepare( CgsNetwork::ServerInterfacePrepareParams * lpPrepareParams );
