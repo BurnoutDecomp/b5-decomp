@@ -33,8 +33,14 @@
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValueGC base, AptValue, AptNativeString
 
-class AptNativeHash;       // SDKs/EATech/include/Apt/AptNativeHash.h (held by pointer only)
-class AptNativeFunction;
+struct AptNativeHash;      // SDKs/EATech/include/Apt/AptNativeHash.h (held by pointer only)
+class  AptNativeFunction;  // SDKs/EATech/include/Apt/AptNativeFunction.h
+struct AptObject;          // SDKs/EATech/include/Apt/AptObject.h
+
+// The native-callback pointer type (leak AptExtObject.h:116) the apt VM wraps in an
+// AptNativeFunction. Defined as `void*` in AptNativeFunction.h; forward-typedef'd
+// here so CreateNewAptFunction/SetFunction can take it without pulling that header.
+typedef void* AptExtFunctionPtr;
 
 class AptExtObject : public AptValueGC
 {
@@ -55,11 +61,35 @@ public:
     virtual void Initialize() {}
 
     // GC-required virtuals (AptValue leaves RegisterReferences pure; satisfy it here
-    // so this base is concrete). Leak AptExtObject.h:293-294.
-    virtual void RegisterReferences() {}
-    virtual void DestroyGCPointers() {}
+    // so this base is concrete). Leak AptExtObject.h:293-294. Both forward to the
+    // owned native-member hash (X360 RegisterReferences @0x82ADCFD8 / DestroyGCPointers
+    // @0x82AEDDB0); bodies in AptExtObject.cpp.
+    virtual void RegisterReferences();
+    virtual void DestroyGCPointers();
+
+    // ---- object-model override (leak AptExtObject.h) ----------------------
+    // Store pValue under pName in the native-member hash, but only when no member of
+    // that name already exists (the X360 objectMemberSet @0x82AF9720 is "set if
+    // absent"); always returns true. pThis is ignored (the bound apt value is the
+    // hash itself).
+    virtual bool objectMemberSet(AptValue* const pThis, const AptNativeString* const pName,
+                                 AptValue* const pValue);
 
     uint32_t GetSize() const { return mnObjectSize; }
+
+    // ---- native-member factories / setters (leak AptExtObject.h) ----------
+    // Allocate a fresh generic AS Object (value type AptVFT_Object) from the GC pool.
+    // X360 CreateNewAptObject @0x82AF07E0 (inlines AptObject::operator new(32) +
+    // AptValueWithHash(AptVFT_Object,8) + the AptObject vtable). Null on exhaustion.
+    static AptObject* CreateNewAptObject();
+
+    // Allocate a fresh AS native-function value wrapping pAptExtFnc from the GC pool.
+    // X360 CreateNewAptFunction @0x82AF08D0. Null on exhaustion.
+    static AptNativeFunction* CreateNewAptFunction(AptExtFunctionPtr pAptExtFnc);
+
+    // Add a native function member named pName to this extension's member hash.
+    // X360 SetFunction @0x82AF7288 (build a scoped EAStringC key, Set it on the hash).
+    void SetFunction(const char* pName, AptValue* pFunction);
 
 protected:
     // Look the named ActionScript variable up on / store it onto the bound apt

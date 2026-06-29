@@ -15,7 +15,13 @@
 
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // AptInteger::Create (boxed indices)
 #include "SDKs/EATech/include/Apt/AptArray.h"              // sMethod_split returns an Array
+#include "SDKs/EATech/include/Apt/AptNativeFunction.h"     // objectMemberLookup builds the cached method values
+#include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"  // gValuesToRelease (the deferred-release vector)
+#include "SDKs/EATech/include/Apt/AptDefine.h"             // gpNonGCPoolManager (the non-GC value pool)
+#include "SDKs/Packages/Apt/2.00.00/source/AptValue/AptString.h" // StringMembersIndex::in_word_set recognizer
 
+#include <intrin.h>  // _InterlockedExchange (the Apt non-GC value-pool spin lock)
+#include <new>       // placement new (construct an AptString into pooled storage)
 #include <stdio.h>   // sprintf (charCodeAt renders the code as decimal text)
 
 // FLAG (homed by the apt VM native-call dispatch): the global native-method
@@ -422,4 +428,260 @@ AptValue* AptString::sMethod_split(AptString* pThis, int nArgCount)
     }
 
     return pArray;
+}
+
+// ===========================================================================
+// Pooled lifecycle: Create / Destroy   (the StringPool recycling spine).
+//
+// AptString values are recycled through a singly-linked free list whose head is
+// the X360 global off_8324E4FC. Create pops a node (or, when the list is empty,
+// allocates a fresh one from the non-GC value pool and constructs it); Destroy
+// pushes a node back onto the list (releasing an over-large buffer first). Both
+// mutate the free list under the Apt non-GC value-pool spin lock (X360
+// unk_8324E8E8 -- a separate lock from the GC flag lock in AptValue.cpp).
+// ===========================================================================
+
+// FLAG (homed by the StringPool TU): the AptString recycle free-list head
+// (X360 off_8324E4FC). Null until a node is ever freed; nodes are chained
+// through AptString::mpNext (the +0xC link). Declared here so Create/Destroy can
+// pop/push by name; the StringPool that also manages it is the follow-on.
+extern AptString* gpStringPoolFreeList;   // off_8324E4FC
+
+// FLAG: the non-GC value-pool free-list spin lock (X360 unk_8324E8E8). The
+// console brackets the free-list mutation with the lwarx/stwcx. interrupt-masked
+// test-and-set idiom; modelled as a host-portable interlocked TAS (uncontended on
+// the single-thread bring-up path).
+namespace
+{
+    volatile long gNonGCPoolFreeListLock = 0;
+    inline void NonGCPoolFreeListLock_Acquire()
+    {
+        while (_InterlockedExchange(&gNonGCPoolFreeListLock, 1) != 0) {}
+    }
+    inline void NonGCPoolFreeListLock_Release()
+    {
+        _InterlockedExchange(&gNonGCPoolFreeListLock, 0);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Create @0x82AEDC18 -- hand back an AptString holding szValue.
+//
+// X360 control flow:
+//   * Free list empty (off_8324E4FC == 0): allocate 16 bytes from the non-GC
+//     pool (off_8324D808 == gpNonGCPoolManager) and run the ctor; return it (or
+//     null if the pool is dry).
+//   * Otherwise (under the pool lock): take the head node, mark it queued in the
+//     GC deferred-release vector (SetReleaseAtEnd); if that vector has room push
+//     the node, else undo (ClearReleaseAtEnd). Reset the node's embedded string
+//     buffer when it still owns a real (non-empty-sentinel) one, unlink the node
+//     (head = node->mpNext), copy szValue in when non-empty, and return it.
+// ---------------------------------------------------------------------------
+AptString* AptString::Create(const char* szValue)
+{
+    // Fast path duplicated by the X360: if the free list is empty there is no
+    // lock/pop work to do -- go straight to a fresh pool allocation.
+    if (gpStringPoolFreeList == 0)
+    {
+        // FLAG: the X360 calls DOGMA_PoolManager::Allocate(off_8324D808, 16)
+        // directly; off_8324D808 is gpNonGCPoolManager (same global the header's
+        // operator new/delete route through). sizeof(AptString) == 16 on X360.
+        void* pMem = gpNonGCPoolManager->Allocate(sizeof(AptString));
+        if (pMem == 0)
+            return 0;
+        return ::new (pMem) AptString(szValue);
+    }
+
+    NonGCPoolFreeListLock_Acquire();
+
+    AptString* pNode = gpStringPoolFreeList;
+    if (pNode == 0)
+    {
+        // The list emptied between the unlocked test and the lock: fall back to a
+        // fresh pool allocation (the X360 re-checks under the lock and jumps to
+        // the same allocate-and-construct tail).
+        NonGCPoolFreeListLock_Release();
+        void* pMem = gpNonGCPoolManager->Allocate(sizeof(AptString));
+        if (pMem == 0)
+            return 0;
+        return ::new (pMem) AptString(szValue);
+    }
+
+    // Queue the recycled node in the GC deferred-release vector (or back it out
+    // when the vector is full) -- the X360's SetReleaseAtEnd / push-or-clear.
+    pNode->SetReleaseAtEnd();
+    if (gValuesToRelease.mnTop < gValuesToRelease.mnCapacity)
+        gValuesToRelease.mppItems[gValuesToRelease.mnTop++] = pNode;
+    else
+        pNode->ClearReleaseAtEnd();
+
+    // Reset the embedded buffer when the node still owns a real StringDataC (the
+    // X360 test is `str.m_pData != s_EmptyInternalData`). FLAG: ChangeBuffer is an
+    // EAStringC-private helper that clears the buffer IN PLACE keeping its capacity;
+    // its private members (m_pData / the empty sentinel) are not reachable from
+    // AptString, so this drops back to a fresh empty value -- same observable result
+    // (the node holds an empty string before the szValue copy), at the cost of not
+    // recycling the buffer capacity. IsEmpty() stands in for the sentinel compare.
+    if (!pNode->str.IsEmpty())
+        pNode->str = EAStringC();
+
+    // Unlink the head (head = node->mpNext).
+    gpStringPoolFreeList = pNode->mpNext;
+
+    if (szValue && szValue[0] != '\0')
+    {
+        // X360: build a temp EAStringC from szValue and assign it into the node's
+        // string (operator=), then drop the temp.
+        EAStringC strInit(szValue);
+        pNode->str = strInit;
+    }
+
+    NonGCPoolFreeListLock_Release();
+    return pNode;
+}
+
+// ---------------------------------------------------------------------------
+// Destroy @0x82AE8218 -- return this node to the recycle free list.
+//
+// Under the pool lock: push the node onto the free list (node->mpNext = head;
+// head = node). If the node's buffer is over the kept-temp size (its StringDataC
+// m_uMaxSize > MAX_SIZE_KEPT_TEMP_STRING, i.e. > 0x21-1 -- the X360 gate is
+// `m_uMaxSize > 0x21`) release the buffer and reset the string to the empty
+// sentinel, so an over-large allocation is not held by the pool.
+// ---------------------------------------------------------------------------
+void AptString::Destroy()
+{
+    NonGCPoolFreeListLock_Acquire();
+
+    // Push onto the free list head.
+    mpNext = gpStringPoolFreeList;
+    gpStringPoolFreeList = this;
+
+    // X360: if (str.m_pData->m_uMaxSize > 0x21) { release the buffer; reset to the
+    // empty sentinel }. GetInternalMaxSize() reads that same m_uMaxSize field.
+    // FLAG: the X360 does a raw m_pData swap to the empty sentinel after a private
+    // DecreaseInternalRefCount; the public equivalent (assigning an empty value)
+    // performs the same buffer release + empty-reset.
+    if (str.GetInternalMaxSize() > 0x21u)
+        str = EAStringC();
+
+    NonGCPoolFreeListLock_Release();
+}
+
+// ===========================================================================
+// objectMemberLookup @0x82AFCAB0 -- resolve an AS member/method name on a String.
+//
+// Run the gperf recognizer (StringMembersIndex::in_word_set) over the requested
+// name; on a hit, dispatch on its member id. The "length" member computes a fresh
+// boxed integer (the UTF-8 character count of the rendered value). Each method
+// member returns a process-wide cached AptNativeFunction wrapping the matching
+// sMethod_* native, lazily built on first use (GC-rooted + AddRef'd so the GC
+// keeps it alive). A miss (or no name) returns 0.
+// ===========================================================================
+
+// FLAG (homed by the StringPool/Apt-globals TU): the 12 cached AS String method
+// values (X360 off_8324E4B8 .. off_8324E4E4, one per method). Null until first
+// lazily built by objectMemberLookup; Released + nulled by CleanNativeFunctions.
+// Indexed by E_StringMethodCache below (declaration order == the X360 address
+// order of the cache globals).
+enum E_StringMethodCache
+{
+    SMC_charAt = 0, SMC_charCodeAt, SMC_concat,  SMC_fromCharCode,
+    SMC_indexOf,    SMC_lastIndexOf, SMC_slice,  SMC_split,
+    SMC_substr,     SMC_substring,   SMC_toLowerCase, SMC_toUpperCase,
+    SMC_Count
+};
+AptNativeFunction* gapAptStringMethodCache[SMC_Count] = { 0 };
+
+namespace
+{
+    // The repeated X360 block: lazily build the cached native-function for one
+    // String method (operator new -> ctor wrapping the sMethod), GC-root it, take
+    // a reference, and return the cache. Already-built caches return immediately
+    // without re-referencing (the X360 `if (cache) return cache`).
+    AptValue* GetCachedStringMethod(E_StringMethodCache eSlot, AptExtFunctionPtr pFn)
+    {
+        AptNativeFunction*& rpCache = gapAptStringMethodCache[eSlot];
+        if (rpCache != 0)
+            return rpCache;
+
+        // FLAG: the X360 does not null-guard the operator-new result (it would
+        // setGCRoot/AddRef through a null `this`); guarded here so a dry pool
+        // cannot crash the bring-up. The success path is byte-faithful.
+        rpCache = new AptNativeFunction(pFn);
+        if (rpCache != 0)
+        {
+            rpCache->setGCRoot(1);   // AptValue::setGCRoot(this, 1)
+            rpCache->AddRef();       // vtable slot 0
+        }
+        return rpCache;
+    }
+}
+
+AptValue* AptString::objectMemberLookup(AptValue* const pContext,
+                                        const AptNativeString* const pName) const
+{
+    const StringMembersIndex::Entry* pEntry = 0;
+    if (pContext != 0)
+    {
+        // X360: in_word_set(pName->str.m_pData buffer, pName m_uSize). GetBuffer()
+        // is that +8 buffer pointer; GetLength() the m_uSize the asm loads (lhz 2).
+        pEntry = StringMembersIndex::in_word_set(pName->GetBuffer(), pName->GetLength());
+    }
+
+    if (pEntry == 0)
+        return 0;
+
+    // The Entry's second word carries a 1-based member id; (id - 1) indexes the
+    // X360 jump table. FLAG: the jump-table data (word_82145380) + the gperf
+    // wordlist id assignment are not recovered, so the id->member mapping below
+    // follows the gperf keyword declaration order; the per-member bodies are exact.
+    const unsigned int uMember = static_cast<unsigned int>(
+        reinterpret_cast<uintptr_t>(pEntry->mpPayload)) - 1u;
+    if (uMember > 0xCu)   // only 13 valid members (the X360 `> 0xC` reject)
+        return 0;
+
+    switch (uMember)
+    {
+    case 0:  return GetCachedStringMethod(SMC_charAt,      reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_charAt));
+    case 1:  return GetCachedStringMethod(SMC_charCodeAt,  reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_charCodeAt));
+    case 2:  return GetCachedStringMethod(SMC_concat,      reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_concat));
+    case 3:  return GetCachedStringMethod(SMC_fromCharCode,reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_fromCharCode));
+    case 4:  return GetCachedStringMethod(SMC_indexOf,     reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_indexOf));
+    case 5:  return GetCachedStringMethod(SMC_lastIndexOf, reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_lastIndexOf));
+    case 6:  return GetCachedStringMethod(SMC_slice,       reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_slice));
+    case 7:  return GetCachedStringMethod(SMC_split,       reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_split));
+    case 8:  return GetCachedStringMethod(SMC_substr,      reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_substr));
+    case 9:  return GetCachedStringMethod(SMC_substring,   reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_substring));
+    case 10: return GetCachedStringMethod(SMC_toLowerCase, reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_toLowerCase));
+    case 11: return GetCachedStringMethod(SMC_toUpperCase, reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_toUpperCase));
+
+    case 12:
+    {
+        // "length": render the value and box its UTF-8 character count.
+        EAStringC strValue;
+        pContext->toString(&strValue);
+        return AptInteger::Create(strValue.UTF8_Size());
+    }
+
+    default:
+        return 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CleanNativeFunctions @0x82AD7A78 -- Apt shutdown teardown: Release every cached
+// String method value (vtable slot +4 == Release) and null its cache slot, in the
+// X360's order (off_8324E4B8 .. off_8324E4E4). Called by AptUpdateShutdown.
+// ---------------------------------------------------------------------------
+void AptString::CleanNativeFunctions()
+{
+    for (int i = 0; i < SMC_Count; ++i)
+    {
+        if (gapAptStringMethodCache[i] != 0)
+        {
+            gapAptStringMethodCache[i]->Release();
+            gapAptStringMethodCache[i] = 0;
+        }
+    }
 }

@@ -47,6 +47,17 @@ public:
     static AptString* Create(const char* szValue);
     static AptString* Create() { return Create(""); }
 
+    // CleanNativeFunctions @0x82AD7A78 -- drop (Release) every cached AS String
+    // native-method value (the 13 globals lazily built by objectMemberLookup) at
+    // Apt shutdown, nulling each cache slot. Called by AptUpdateShutdown.
+    static void CleanNativeFunctions();
+
+    // cat @0x82AECD10 / cpy @0x82AE64E8 -- the engine's string-value mutators: the
+    // embedded EAStringC `str += rhs` / `str = rhs` (the X360 tail-calls
+    // EAStringC::operator+= / operator= on &str). Return the mutated string.
+    EAStringC& cat(const EAStringC& strText) { return str += strText; }
+    EAStringC& cpy(const EAStringC& strText) { return str =  strText; }
+
     // ---- ActionScript String native methods (sMethod_*) -- bodies in AptString.cpp.
     // Static natives (AptExtFunctionPtr): the VM calls f(thisString[, argCount]);
     // AS arguments come off the global native-arg stack. (slice/substring/split/cat
@@ -62,6 +73,11 @@ public:
     static AptValue* sMethod_slice(AptString* pThis, int nArgCount);
     static AptValue* sMethod_substring(AptString* pThis, int nArgCount);
     static AptValue* sMethod_split(AptString* pThis, int nArgCount);
+    // FLAG: sMethod_substr (the legacy AS String.substr(start, length)) is referenced
+    // by objectMemberLookup (X360 @0x82AFCE5C) but is a SEPARATE symbol/TU not part of
+    // this class's recovered function set -- declared so the lookup can name its
+    // address; its body is the follow-on (not in this dossier).
+    static AptValue* sMethod_substr(AptString* pThis, int nArgCount);
 
 protected:
     virtual void DeleteThis()  { Destroy(); }
@@ -93,7 +109,10 @@ private:
     {
     }
 
-    bool IsConstantString();   // FLAG: follow-on
+    // IsConstantString @0x82AD5370 -- whether the embedded string is a constant
+    // (its StringDataC m_uSize exceeds m_uMaxSize: the X360 reads str.m_pData and
+    // compares maxsize < size, exactly EAStringC::IsConstantString).
+    bool IsConstantString() { return str.IsConstantString(); }
 
     // ---- layout (leak AptString.h) -- the embedded string + the free-list link.
     AptNativeString str;       // the EAStringC contents
