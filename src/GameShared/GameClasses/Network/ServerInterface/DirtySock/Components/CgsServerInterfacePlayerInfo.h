@@ -103,6 +103,12 @@ namespace CgsNetwork
         // ---- Player-info queries ----------------------------------------------------
         void GetPlayerInfoByName(const PlayerName* lpcPlayerName,
                                  ServerInterfacePlayerInfoDataBase* lpPlayerInfo);
+        // ADDITIVE GROW (BrnNetwork::NetworkGamerCardManagerX360 TU): resolve a player's 64-bit
+        // XUID by gamer name. The X360 gamer-card manager (ActionReqXuidByName @0x8254CD18)
+        // reaches the component through the server interface and calls this with the requested
+        // name and the destination XUID slot (asm: GetPlayerXUIDByName(this, &name, &xuid)).
+        // Declared-only here; the body lives in this component's own (DirtySock) TU.
+        void GetPlayerXUIDByName(const PlayerName* lpcPlayerName, u64* lpXuidOut);
         void GetLocalPlayerInfo(ServerInterfacePlayerInfoDataBase* lpPlayerInfo);
         void UpdateUserAuxiliaryInfo(ServerInterfaceStructureInterface* lpInfo);
 

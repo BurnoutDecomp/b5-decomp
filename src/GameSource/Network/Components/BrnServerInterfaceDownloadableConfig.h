@@ -54,6 +54,15 @@ namespace BrnNetwork
         // this+0x34C. Declared-only; the backing config-cache member and the body land with this
         // component's own config-load TU. FLAG: re-home onto a real member once the storage exists.
         f32 GetEventScoreUploadRetryInterval() const;
+
+        // ---- ADDITIVE GROW (BrnNetworkBuddyManagerBase TU) --------------------------------
+        // The downloaded retry delay (seconds) the buddy manager arms its
+        // mTimeUntilRetryAfterFailedBuddyUpload timer with after a failed server-buddy
+        // download/upload (X360 _GetFriendsListFromServerComplete @ 0x82549C58: lfs from
+        // this+0x354 of the downloadable-config component then CgsSystem::Time::SetFloatVal).
+        // Read as the f32 at this+0x354. Declared-only; the backing config-cache member and
+        // the body land with this component's own config-load TU.
+        f32 GetBuddyUploadRetryDelay() const;
     };
 }
 

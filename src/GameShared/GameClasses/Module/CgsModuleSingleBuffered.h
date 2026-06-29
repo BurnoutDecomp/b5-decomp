@@ -31,9 +31,6 @@ namespace CgsModule
         EManagerPrepareStage mePrepareStage;
         EManagerReleaseStage meReleaseStage;
 
-        EA::Thread::RWMutex mInputMutex;
-        EA::Thread::RWMutex mOutputMutex;
-
         DataBuffer mInputBuffer;
         DataBuffer mOutputBuffer;
 
@@ -48,7 +45,7 @@ namespace CgsModule
         void Update() override;
         void SetMultiThreaded(bool isMultiThreaded) override;
 
-        DataStructure* GetOutputStructure() const { return mpOutputStructure; }
+        DataStructure* GetOutputStructure() const;
 
         void LockForInput() override;
         void UnlockForInput() override;
@@ -69,7 +66,7 @@ namespace CgsModule
         DataStructure* LockOutputForWrite();
         void UnlockOutputForWrite();
 
-        DataStructure* GetInputStructure() const { return mpInputStructure; }
+        DataStructure* GetInputStructure() const;
 
     private:
         DataStructure* LockInputForWrite();

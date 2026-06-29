@@ -73,10 +73,10 @@ namespace CgsResource
             bool mbForcePS3HardDriveUpperCaseGame; // :134
         };
 
-        // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
-        // Construct the load-request queue here (embedded-member ctor) so it is ready even though the
-        // full BundleLoaderModule::Construct -- the allocator/job bring-up -- is still deferred.
-        BundleLoaderModule() { mbIsNewModule = true; mLoadRequests.Construct(); mUnloadRequests.Construct(); }
+        // X360 ctor @0x827DD270 stores only the two vtables, the RWMutexes, two EA::Jobs::Job members,
+        // the GeneralAllocator, and one far byte (+0x2B084); it does NOT set mbIsNewModule (Construct
+        // @0x828EBAF8 does) nor Construct() the request queues (those are embedded-member default-ctor'd).
+        BundleLoaderModule() {}
 
         // ---- lifecycle ----------------------------------------------------------------
         void Construct();   // deferred (embeds the GeneralAllocator + jobs)
