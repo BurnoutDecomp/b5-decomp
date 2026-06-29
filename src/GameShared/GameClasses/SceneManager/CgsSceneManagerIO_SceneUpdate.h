@@ -19,6 +19,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // global Matrix44Affine typedef
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"         // CgsSceneManager::EntityId
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h" // CgsSceneManager::VolumeInstanceId
 
 namespace CgsSceneManager
 {
@@ -52,6 +53,16 @@ namespace SceneManagerIO
         void RemoveVolumeInstance(CgsSceneManager::EntityId lEntityId);
         void RemoveVolume(CgsSceneManager::EntityId lEntityId);
         void SetVolumeInstanceTransform(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
+
+        // ADDITIVE GROW (merged from the former CgsSceneManagerModuleIO.h minimal slice --
+        // unify the two divergent reconstructions of this type into this canonical home to
+        // kill the ODR double-definition). The prop entity module (PropZoneManager::UpdateInstance
+        // @0x822F0920, RemoveAllPropsAndParts) calls these write-side updaters; bodies are owned
+        // by InSceneUpdateInterface's own TU. Pointer-/value-used; no layout change (covered by
+        // the 256-byte reserved blob below).
+        void SetEntityPosition(u32 luEntityId, const Matrix44Affine& lTransform);
+        void SetVolumeInstanceTransform(VolumeInstanceId lVolumeInstanceId, const Matrix44Affine& lTransform);
+        void RemoveAllEntities();
 
         unsigned char maReserved[256];
     };
