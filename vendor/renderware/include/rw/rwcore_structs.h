@@ -33,6 +33,12 @@ namespace rw {
 struct BaseResourceDescriptor {  // sizeof = 8 (rwcore.pdb, x64)
     uint32_t m_size;       // +0
     uint32_t m_alignment;  // +4
+
+    // ADDITIVE (user-declared default ctor, no storage -> sizeof unchanged, type stays
+    // standard-layout): the X360 out-of-line ctor @0x821F05C8 value-initialises to the
+    // identity descriptor { m_size = 0, m_alignment = 1 }. Body in
+    // renderware/src/rw/BaseResourceDescriptor.cpp.
+    BaseResourceDescriptor();
 };
 RW_SIZE_ASSERT(rw::BaseResourceDescriptor, 8);
 
