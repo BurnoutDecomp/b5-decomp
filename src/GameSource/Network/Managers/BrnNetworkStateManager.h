@@ -41,6 +41,12 @@ namespace BrnNetwork
 {
     struct StateManager
     {
+        // Whether the currently-selected game mode has enough populated teams to launch
+        // (the launch "locking" gate). ADDITIVE GROW (BrnNetworkLaunchManager TU):
+        // declared-only; body is the StateManager's own TU
+        // (GameSource/Network/Managers/BrnNetworkStateManager.cpp).
+        bool GameModeHasEnoughTeams();
+
         // Nested fixed-size player-id -> XUID lookup table (8 slots).
         struct CurrentPlayerXUIDs
         {

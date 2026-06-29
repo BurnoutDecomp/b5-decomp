@@ -158,6 +158,15 @@ namespace CgsNetwork
                                     ServerInterfacePlayerParamsBase* lpPlayerParams);
         void LockGame();
         void UnlockGame();
+        // ADDITIVE GROW (BrnNetworkLaunchManager TU): the host issues the lobby "start
+        // game" action once stats have downloaded (UpdateDownloadingStats). Declared-only;
+        // body lives in this component's own TU.
+        void StartGame();
+        // ADDITIVE GROW (BrnNetworkPostRoundManager TU): leave the current lobby game.
+        // The post-round flow (ActionLeaveGame) calls LeaveGame(0, 1) -- the two trailing
+        // args are the X360 LeaveGame(this, 0, 1) request flags. Declared-only; body lives
+        // in this component's own TU.
+        void LeaveGame(s32 liFlagsA, s32 liFlagsB);
         void* KickPlayerByID(s32 liPlayerID, s32 liReason, char lbBan);
         void SendGameResult(ServerInterfaceEndGameDataBase* lpEndGameData, void* lpUserData);
         void SetGameServerConnectionType(s32 liConnectionType);
@@ -184,6 +193,13 @@ namespace CgsNetwork
         bool IsGameStarted();
         bool IsGameServerGame();
 
+        // ADDITIVE GROW (flagged by the BrnNetworkConnectionManager group): kick a player by
+        // name with a reason/ban. X360 BrnNetwork::ConnectionManager (KickUnNATablePlayer @
+        // 0x82566860, UpdateNATData @ 0x8256CFF0) calls this cross-class on the games component,
+        // so it belongs to the public surface. Body is homed in the X360-derived
+        // ServerInterfaceGamesX360 TU / a sibling; declared here so callers can reach it.
+        void* KickPlayer(const char* lpcPlayerName, s32 liReason, char lbBan);
+
     private:
         // ---- Internal helpers (this TU) -------------------------------------------
         void StartAction(EAction leAction, void* lpfnCallback);
@@ -198,10 +214,9 @@ namespace CgsNetwork
         void* FreeDisplayLists();
 
         // Homed in the X360-derived ServerInterfaceGamesX360 TU / a sibling; declared here so
-        // this base TU can call them. (KickPlayer issues the kick request; AllocDisplayLists
-        // creates the found-games display list; OnlyFinishOnErrorCallback is the create/join
-        // action thunk that only ends the action on error.)
-        void* KickPlayer(const char* lpcPlayerName, s32 liReason, char lbBan);
+        // this base TU can call them. (AllocDisplayLists creates the found-games display list;
+        // OnlyFinishOnErrorCallback is the create/join action thunk that only ends the action on
+        // error.) KickPlayer is now public (see above) -- it is reached cross-class.
         void  AllocDisplayLists();
         static s32 OnlyFinishOnErrorCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
 

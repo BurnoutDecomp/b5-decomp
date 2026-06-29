@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"  // CgsNetwork::EKickReason
 
 // ===========================================================================
 // CgsNetwork::ServerInterfaceUsersets
@@ -45,6 +46,16 @@ namespace CgsNetwork
 
         // CgsServerInterfaceUsersets.h:69 -- vector deleting destructor @ 0x827DE280.
         virtual ~ServerInterfaceUsersets();
+
+        // ADDITIVE GROW (flagged by the BrnNetworkConnectionManager group). The NAT-kick walk
+        // (X360 KickUnNATablePlayer @ 0x82566860) routes the kick through the userset component
+        // when the target is in the local player's userset:
+        //   IsPlayerInOurUserset() -- is the named player in our userset? (DWARF h:238)
+        //   KickPlayer()           -- evict the named player with a kick reason (DWARF h:241)
+        // Signatures from DecFIGS DWARF (CgsServerInterfaceUsersets.h). Declared-only here;
+        // bodies are homed in the usersets component's own behavioural TU.
+        bool IsPlayerInOurUserset(const char* lpcPlayerName) const;
+        void KickPlayer(const char* lpcPlayerName, EKickReason leReason);
     };
 }
 
