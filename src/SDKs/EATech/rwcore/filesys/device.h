@@ -80,29 +80,114 @@ namespace rw
                 char                      macName[1];  // +0x04  scheme name
             };
 
-            // The process-wide filesys Manager singleton (X360 off_8327F078). The Device
-            // TUs read these fields of it, all by name:
+            // The process-wide filesys Manager singleton (X360 off_8327F078). Homed by its
+            // own TU (manager.cpp); the device scheduler/path-resolver read its fields by
+            // name. The full 72-byte (0x48) X360 layout is reproduced in WORD order from the
+            // Manager ctor/Init asm (every slot grounded by a store/load):
             //   X360 +0x00 mpDeviceListHead  : head of the registered-Device list
+            //   X360 +0x04 mpListField1      : registered-list field (cleared by ctor/dtor)
+            //   X360 +0x08 mpListField2      : registered-list field (cleared by ctor/dtor)
             //   X360 +0x0C mThreadParameters : params handed to EA::Thread::Thread::Begin
+            //   X360 +0x24 miMaxReadSize     : per-read size ceiling, ctor-initialised to -1
+            //                                   (read as an unsigned cap by AsyncOp::DoRead)
             //   X360 +0x28 mpDefaultDevice   : device returned when a path has no scheme
+            //   X360 +0x2C mpScratchBuffer   : working path buffer (Init allocs muScratchSize)
             //   X360 +0x30 mpCurrentDir      : current working-directory prefix string
+            //   X360 +0x34 muScratchSize     : byte size of mpScratchBuffer
+            //   X360 +0x38 muMaxSearchPaths  : capacity of mpSearchPathTable (8 bytes/entry)
+            //   X360 +0x3C mpSearchPathTable : array of { const char* path, Device* dev }
             //   X360 +0x40 mbSortByPosition  : when == 1, read ops are reordered by position
-            // The X360 byte offsets are not reproduced (host pointer / ThreadParameters
-            // sizes differ); members keep the X360 ORDER and are accessed purely by name.
-            // The full Manager is owned by its own (not-yet-homed) TU -- this is a forward
-            // shape exposing only what the device scheduler/path-resolver touch.
+            //   X360 +0x44 muReserved44      : ctor-cleared trailing word
+            // The X360 byte offsets are not reproduced literally (host pointer /
+            // ThreadParameters sizes differ); members keep the X360 ORDER and are accessed
+            // purely by name. _AssertLayout() is intentionally absent: the host
+            // ThreadParameters size differs from the X360's, so the byte offsets are not
+            // host-stable; only the field order/semantics are reconstructed.
+            //
+            // The CgsFileSystem config object handed to CreateInstance / the Manager ctor.
+            // Only the three words those functions read are named (proven by the asm):
+            //   +0x00 muMaxSearchPaths : search-path table capacity (ctor: a2[0])
+            //   +0x04 muScratchSize    : working-buffer byte size   (ctor: a2[1])
+            //   +0x08 mpAllocator      : the filesys allocator       (CreateInstance: a1[2])
+            struct FileSystemConfig
+            {
+                u32        muMaxSearchPaths;  // +0x00
+                u32        muScratchSize;     // +0x04
+                Allocator* mpAllocator;       // +0x08
+            };
+
+            // A search-path table entry: { path string, resolved device }.
+            struct SearchPathEntry
+            {
+                const char* mpcPath;  // +0x00
+                Device*     mpDevice;  // +0x04
+            };
+
             struct Manager
             {
                 Device*                       mpDeviceListHead;   // X360 +0x00
+                void*                         mpListField1;        // X360 +0x04
+                void*                         mpListField2;        // X360 +0x08
                 EA::Thread::ThreadParameters  mThreadParameters;   // X360 +0x0C
+                s32                           miMaxReadSize;       // X360 +0x24 (init -1; read-size ceiling)
                 Device*                       mpDefaultDevice;     // X360 +0x28
+                char*                         mpScratchBuffer;     // X360 +0x2C
                 const char*                   mpCurrentDir;        // X360 +0x30
+                u32                           muScratchSize;       // X360 +0x34
+                u32                           muMaxSearchPaths;    // X360 +0x38
+                SearchPathEntry*              mpSearchPathTable;   // X360 +0x3C
                 s32                           mbSortByPosition;    // X360 +0x40
+                u32                           muReserved44;        // X360 +0x44
+
+                // ----- rw::core::filesys::Manager methods (homed in manager.cpp) ----------
+
+                // @0x82BBE418 (ctor) -- zero the lists, default-construct the thread params
+                // (then bump their priority by 2), seed the handle id to -1, and latch the
+                // search-path capacity (a2[0]) / scratch size (a2[1]) from the config.
+                Manager(const FileSystemConfig* lpConfig);
+
+                // @0x82BBF008 (dtor) -- free the search-path table and scratch buffer through
+                // the global allocator, then unregister every device and clear the list.
+                ~Manager();
+
+                // @0x82BBF0B8 -- allocate the scratch buffer + search-path table, register
+                // the default device and the static device table, set the default search path.
+                int Init();
+
+                // @0x82BBEEC8 -- (re)build the search-path table from a ';'-separated path
+                // string, resolving each entry to a Device via Device::GetInstance.
+                int SetSearchPath(const char* lpcSearchPath);
+
+                // @0x82BBD640 -- allocate luSize bytes through the global filesys allocator.
+                static void* Allocate(u32 luSize);
+
+                // @0x82BBD678 -- free a block through the global filesys allocator.
+                static void* Free(void* lpBlock);
+
+                // @0x82BBD630 -- return the global Manager singleton (off_8327F078).
+                static void* GetInstance();
+
+                // @0x82BBF518 -- install the allocator from the config, allocate + construct
+                // the singleton, Init it, and publish it. Returns the singleton.
+                static void* CreateInstance(const FileSystemConfig* lpConfig);
+
+                // @0x82BBF850 -- destroy + free the singleton and clear off_8327F078.
+                static void* DestroyInstance();
+
+                // RegisterDevice / UnregisterDevice (owned by their own not-yet-homed TUs):
+                // Init/dtor call them; declared so this TU compiles. RegisterDevice returns
+                // the Device it bound; UnregisterDevice drops the head device.
+                Device* RegisterDevice(const void* lpDeviceDesc, int liFlags);
+                int     UnregisterDevice();
             };
 
-            // X360 off_8327F078 -- the global filesys Manager. Owned by the Manager TU;
+            // X360 off_8327F078 -- the global filesys Manager. Owned by manager.cpp;
             // declared here so the scheduler can read its sort flag / thread params.
             extern Manager* gpFileSysManager;
+
+            // Manager::`scalar deleting destructor' @0x82BBF5A0: ~Manager, then if (flags & 1)
+            // free `this` through gpFileSysAllocator. Returns lpManager (X360 r3 == this).
+            Manager* ManagerScalarDeletingDtor(Manager* lpManager, char lcFlags);
 
             // The RenderWare core filesystem device scheduler. A worker thread drains a
             // priority-ordered list of AsyncOps, optionally coalescing adjacent read ops
@@ -154,6 +239,20 @@ namespace rw
                 // working buffer (a2) to a registered Device, returning the matching
                 // Device* (or the default device when the resolved path has no scheme).
                 static Device* GetInstance(const char* lpcPath, char* lpScratch);
+
+                // Wait (owned by its own not-yet-homed TU): block until lpOp completes.
+                // The AsyncOp result accessors call it with an optional timeout pointer
+                // (the &kTimeoutNone constant). Declared so asyncop.cpp compiles.
+                int Wait(AsyncOp* lpOp, const void* lpTimeout = nullptr);
+
+                // Read accessor for the driver pointer; the AsyncOp DoIo callbacks hand the
+                // driver to the Stream IO vtable slots as an opaque argument.
+                DeviceDriver* GetDriver() const { return mpDriver; }
+
+                // The "external thread" flag at +0x06. The AsyncOp queue/wait paths read it
+                // (`lbz 6(device)`) to decide whether to operate on this device or redirect
+                // to the Manager's default device's worker.
+                bool IsExternalThread() const { return mbExternalThread != 0; }
 
             private:
                 Device*               mpNextRegistered;  // X360 +0x000 (Manager device-list link)
