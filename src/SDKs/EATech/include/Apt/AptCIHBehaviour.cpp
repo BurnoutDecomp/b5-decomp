@@ -653,8 +653,10 @@ float AptCIH::GetProceduralProperty(uint32_t nPropertyIndex) const
         return pPos->tx;
     case 1:   // _y -- translation Y
         return pPos->ty;
-    case 7:   // _alpha -- colour scale alpha as percent
-        return pCx->scale.GetValuef(AptColorHelper::Alpha) * 100.0f;
+    case 7:   // _alpha -- colour scale alpha (stored 0..255) as percent
+        // flt_82145600 = 0.3921569 == 100/255 (the scale-alpha field is 0..255, not 0..1;
+        // cross-checked vs SetProceduralProperty's inverse percent->0..255 store).
+        return pCx->scale.GetValuef(AptColorHelper::Alpha) * 0.3921569f;
     case 8:   // colour translate Red (additive)
         return pCx->translate.GetValuef(AptColorHelper::Red);
     case 9:   // colour translate Green

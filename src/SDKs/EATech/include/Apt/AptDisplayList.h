@@ -111,11 +111,33 @@ struct AptDisplayList
 //   mergeState @0x82B0B438 / instantiateCharacter @0x82B061D0 /
 //   placeObject @0x82B097D8 / placeObjectNCXForm @0x82B0AD28 /
 //   _addToSetCaches @0x82AF46B8
-//     -- need the un-homed AptCharacter frame/clip-event-mask layout, the module
-//        static dispatch arrays (off_8324E544 / dword_8324E548 the "to be ticked"
-//        list, off_8324E574, dword_8324E514), the unnamed local subs
-//        (sub_82B0B080 / sub_82B008B0 / sub_82AEE788), AptCharacterAnimation::
-//        ExecuteInitActions, AptActionInterpreter::setVariable,
-//        Burnout_X360_Artist_0040_0, and AptCXForm::AptUint32CXFormCopy's
-//        recovered signature. Reconstructed when those types/callees land.
+//     -- still un-faithfully-bodyable (Phase B re-audit). Some prerequisites have
+//        landed since the original note: the module-static "new instance / to-be-
+//        ticked" table (off_8324E544 / dword_8324E548) is now reachable through
+//        AptAnimationTarget::GetNewInsts() / GetNewInstSize() / DecNewInstSize();
+//        off_8324E574 == gpAptTarget (AptTarget.h) and dword_8324E514 ==
+//        gnAptActionFrameId (AptMovie.cpp). The TRUE remaining blockers are TYPE-
+//        and SUB-level, and bodying around them would require guessing offsets on
+//        un-homed types (forbidden) or extending the SHARED value/char headers
+//        (out of scope this phase):
+//          * the opaque local sub_82B0B080 -- the frame-placement dispatcher whose
+//            return is the placed CIH (AddToDisplayList / ReplaceDisplyListItem hinge
+//            on it). IDA exported NO standalone body for it, so its placement logic +
+//            any struct layout it touches are unrecoverable -> these two stay missing.
+//          * the un-homed AptCharacter SPRITE/ANIMATION-subclass + AS frame/placement
+//            record layout: the deep chains (e.g. *(*(*(*(a4+32)+4)+4)+4)+16 reaching
+//            AptCharacterAnimation::ExecuteInitActions' `this`, and the AS depth->name
+//            lookup table at renderItem+0x30/+0x34 walked by AddToDisplayList /
+//            ReplaceDisplyListItem / instantiateCharacter) index fields these headers
+//            do NOT model. AptCharacterInst is modelled only to +0x10, but placeObject
+//            / instantiateCharacter read charInst+0x10 (create-depth) and +0x18
+//            (un-named) -- un-homed.
+//          * sub_82B008B0 / sub_82AEE788 ARE recoverable (create/re-insert a CIH at a
+//            depth via AptDisplayListState::findInst+insert), but their callers
+//            (instantiateCharacter) remain blocked on the above, so they are not
+//            broken out yet.
+//        Also pending: AptFile::operator= on the un-homed AS placement record, the
+//        AptCXForm::AptUint32CXFormCopy 1-arg form (IDA flags its local alloc failed),
+//        and AptActionInterpreter::setVariable's placeObject use of the un-homed
+//        per-instance __proto__ walk. Reconstructed when those types/callees land.
 // ===========================================================================

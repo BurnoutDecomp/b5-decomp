@@ -20,17 +20,23 @@
 //   then the embedded TextFormat record at the X360 +0x20 (a1+32).
 //
 // TextFormat record (X360 layout; the ctor seeds "inherit" sentinels then
-// copyTextFormatObj overlays the source):
-//   +0x00 mFontName  EAStringC  (default empty)
-//   +0x04 mfSize     float  = -1.0   ("inherit")
-//   +0x08 mnColor    s32    = -1      ("inherit")
-//   +0x0C mnField0C  s32    =  3      FLAG: role TBD (objectMemberLookup's per-member
-//   +0x10 mnField10  s32    =  2      FLAG: role TBD   jump table @0x82AF18E0 is not
-//   +0x14 mnField14  s32    = -1      FLAG: margin/indent group (inherit sentinel)
-//   +0x18 mnField18  s32    = -1      FLAG:  exported, so the precise member->field
-//   +0x1C mnField1C  s32    = -1      FLAG:  mapping for the 16 gperf keywords (align/
-//                                            bold/italic/url/leftMargin/... -- see
-//                                     AptTextFormatMembersIndex) is resolved later.)
+// copyTextFormatObj overlays the source). Field roles + the copy-ctor seed values
+// are now DWARF-confirmed from the PS3 DecFIGS build: TextFormat::TextFormat(const
+// TextFormat*) @PS3 0xF32780 seeds a1[1..7] (=+0x04..+0x1C) and the full
+// TextFormat::TextFormat(AptValue*,float,...) @PS3 0xF37268 assigns each named field:
+//   +0x00 mFontName    EAStringC  (default empty -- InitFromBuffer "")
+//   +0x04 mfSize       float  = -1.0   (0xBF800000 "inherit")
+//   +0x08 mnColor      s32    = -1      ("inherit")
+//   +0x0C mnAlign      s32    =  3      align enum (ctor: "left"->0 "center"->2
+//                                       "right"->1 default->3 from the align string)
+//   +0x10 mnStyleFlags s32    =  2      bold/italic/underline packed word (ctor base
+//                                       0x10002, ORs 0x100000/0x1000000/0x100/0x10)
+//   +0x14 mnIndent     s32    = -1      (ctor `*(this+5)=a13`; -1 == inherit)
+//   +0x18 mnLeftMargin s32    = -1      (ctor `*(this+6)=a11`; -1 == inherit)
+//   +0x1C mnRightMargin s32   = -1      (ctor `*(this+7)=a12`; -1 == inherit)
+// The 16 gperf keyword cases (align/bold/italic/url/leftMargin/...) of
+// objectMemberLookup @0x82AF18E0 read exactly these fields (the jump table is the
+// AptTextFormatMembersIndex perfect hash).
 //
 // Member access is BY NAME; X360 offsets are documentation (EAStringC + the value
 // base widen on x64, so later offsets shift -- no size assert, per the parity rule).
@@ -55,7 +61,8 @@ struct TextFormat
     EAStringC mFontName;   // +0x00  empty == inherit
     float     mfSize;      // +0x04  -1.0 == inherit
     s32       mnColor;     // +0x08  -1   == inherit (24-bit RGB in the low bits)
-    s32       mnAlign;     // +0x0C  align enum: 0 left / 1 center / 2 right / >=3 inherit
+    s32       mnAlign;     // +0x0C  align enum (DWARF ctor 0xF37268): 0 left/true /
+                          //        1 right / 2 center / 3 default(inherit)
     // Packed style-flags word (resolved from objectMemberLookup @0x82AF18E0):
     //   bit 0  = bold value      bit 16 = bold defined
     //   bit 4  = italic value    bit 20 = italic defined
