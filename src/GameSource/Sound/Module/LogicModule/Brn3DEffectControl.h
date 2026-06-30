@@ -65,12 +65,22 @@ namespace Logic
 // tears down (mEngineDataAtrib, an Attrib::Instance).
 struct Brn3DEffectControl : public CgsSound::Logic::Cgs3dEffectControl
 {
+    // Constructor @ 0x826AF7F0. The X360 ctor zero-inits the Cgs3dEffectControl
+    // transform/emitter state and the +0xA0/+0xA4/+0xA8 control fields, then
+    // constructs the generated Attrib::Gen::globalenginedata at this+0xB0 with
+    // (collection=0, owner=0). Only the single HOMED member (mEngineDataAtrib) is
+    // modelled, so the ctor stays inline here: it builds mEngineDataAtrib from a
+    // null collection (matching globalenginedata(this+0xB0, 0, 0)).
+    // FLAG: the un-homed transform/emitter member zero-inits (X360 +0x18..+0x58)
+    // and the +0xA0(=2.0)/+0xA4(=0.5)/+0xA8(=0) control fields are declaration-only
+    // / DEFERRED with the rest of the Cgs3dEffectControl surface — not fabricated.
     Brn3DEffectControl()
-        : mEngineDataAtrib(nullptr, this)
+        : mEngineDataAtrib(nullptr, nullptr)  // asm: globalenginedata(this+0xB0, owner=0, 0)
     {
     }
 
-    virtual ~Brn3DEffectControl() {}
+    // Scalar deleting destructor @ 0x826C85F8 — out-of-line; see Brn3DEffectControl.cpp.
+    virtual ~Brn3DEffectControl();
 
     // BrnEffectControl.h:149 (DWARF) — generated globalenginedata attribute handle.
     // Modelled as the Attrib::Instance sub-object slice the destructor tears down.

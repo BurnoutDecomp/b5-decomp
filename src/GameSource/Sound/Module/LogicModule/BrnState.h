@@ -49,6 +49,13 @@ struct State
 
     virtual ClassTypeInfo<State>* GetTypeInfo() const;
     virtual const char*           GetTypeName() const;
+
+    // CgsSound::Logic::State::DestroyEffects -- tears down the state's attached effect
+    // objects. Called by GlobalState's destructor (X360 `bl ...DestroyEffects` @0x826D2278).
+    // The body is un-homed (a separate sound-logic recon slice), so it is declaration-only
+    // here -- exists so the destructor can call it BY NAME without fabricating its body.
+    // FLAG: declaration-only un-homed base member (do not body here).
+    void DestroyEffects();
 };
 
 } // namespace Logic
