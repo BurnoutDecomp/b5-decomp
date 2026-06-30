@@ -32,6 +32,8 @@
 
 #include "SDKs/EATech/include/Apt/AptTextFormat.h"
 
+#include <cstring>   // strcmp (align keyword classify in AptTextFormat_ConstructRecord)
+
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"      // AptValue, AptVFT_TextFormat
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"     // AptString::Create / GetInternalString
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"    // AptInteger::Create
@@ -184,4 +186,77 @@ AptValue* AptTextFormat::objectMemberLookup(AptValue* const pThis,
     default:  // miData 2/4/9/12/13/16 (blockIndent/bullet/leading/tabStops/target/url)
         return nullptr;   // X360 loc_82AF1AF0: empty jump-table slots -> return 0
     }
+}
+
+// ---------------------------------------------------------------------------
+// AptTextFormat_ConstructRecord -- the AS `TextFormat(...)` field ctor: stamp a
+// 32-byte TextFormat record from the call's arguments. X360 sub_82AFAEB8; the field
+// map + style packing are attested verbatim by the PS3 DecFIGS ctor
+// _ZN10TextFormatC1EP8AptValuefjiiiiiS1_iiii @0xF37268.
+//
+//   font   : when defined, AptValue::toString(pFont) -> mFontName (else stays empty/inherit)
+//   fSize  : mfSize
+//   color  : mnColor
+//   bold/italic/underline (0=false, 1=true, anything else = inherit): pack the
+//            value+defined bits into mnStyleFlags (KU_*_VALUE / KU_*_DEFINED). The
+//            console seeds mnStyleFlags to 2 then OR-s 0x10001/0x100000/0x1000000...
+//            per attribute; reproduced here through the named style-flag bits.
+//   margins/indent : mnLeftMargin / mnRightMargin / mnIndent
+//   align  : when defined, AptValue::toString(pAlign) compared vs "left"/"true" -> 0,
+//            "center" -> 2, "right" -> 1, anything else -> 3 (inherit); when the
+//            align value is undefined, mnAlign = 3 (inherit).
+//
+// FLAG (faithful): the console seeds mnStyleFlags with a base `2` bit
+// (`*(a1+16)=2`) before the per-attribute OR-s; that low bit is dead state the
+// objectMemberLookup masks never read (it only tests the *_DEFINED/*_VALUE bits), so
+// it is reproduced by the explicit base store to keep the word bit-identical.
+// ---------------------------------------------------------------------------
+TextFormat* AptTextFormat_ConstructRecord(TextFormat* pRecord, AptValue* pFont,
+                         float fSize, int nColor, int nBold, int nItalic, int nUnderline,
+                         int nLeftMargin, int nRightMargin, int nIndent, AptValue* pAlign)
+{
+    pRecord->mfSize = fSize;          // *(a1+4) = a3
+    pRecord->mnColor = nColor;        // *(a1+8) = a5
+    pRecord->mFontName = EAStringC(); // *a1 = &s_EmptyInternalData (empty == inherit)
+
+    // ---- pack the bold/italic/underline style flags (base 2, then per-attr) ----
+    uint32_t uStyle = 2u;                                  // *(a1+16) = 2
+    if (nBold == 0)        uStyle  = 0x00010002u;          // !a6  -> 65538
+    else if (nBold == 1)   uStyle |= 0x00010001u;          // a6==1
+    if (nItalic == 0)      uStyle |= 0x00100000u;          // !a7
+    else if (nItalic == 1) uStyle |= 0x00100010u;          // a7==1
+    if (nUnderline == 0)   uStyle |= 0x01000000u;          // !a8
+    else if (nUnderline == 1) uStyle |= 0x01000100u;       // a8==1
+    pRecord->mnStyleFlags = static_cast<int32_t>(uStyle);  // *(a1+16)
+
+    pRecord->mnIndent      = nIndent;       // *(a1+20) = a37 (mnIndent)
+    pRecord->mnLeftMargin  = nLeftMargin;   // *(a1+24) = a33 (mnLeftMargin)
+    pRecord->mnRightMargin = nRightMargin;  // *(a1+28) = a35 (mnRightMargin)
+
+    // ---- font: render the value to mFontName only when it is a defined value ----
+    if (pFont->getIsDefined())                              // (*(a2+4)>>27)&1
+        pFont->toString(&pRecord->mFontName);               // AptValue::toString(a2, a1)
+
+    // ---- align: undefined -> inherit (3); else keyword-classify ----------------
+    if (!pAlign->getIsDefined())                            // (*(a31+4)>>27)&1 == 0
+    {
+        pRecord->mnAlign = 3;                               // *(a1+12) = 3
+        return pRecord;
+    }
+
+    EAStringC lAlign;
+    pAlign->toString(&lAlign);                              // AptValue::toString(a31, &v53)
+    const char* szAlign = lAlign.GetBuffer();
+    if (std::strcmp(szAlign, "left") == 0 || std::strcmp(szAlign, "true") == 0)
+        pRecord->mnAlign = 0;                               // "left"/"true" -> 0
+    else if (std::strcmp(szAlign, "center") == 0)
+        pRecord->mnAlign = 2;                               // "center" -> 2
+    else if (std::strcmp(szAlign, "right") == 0)
+        pRecord->mnAlign = 1;                               // "right" -> 1
+    else
+        pRecord->mnAlign = 3;                               // anything else -> inherit
+    // (lAlign's internal-ref drop is the X360's DecreaseInternalRefCount; the
+    //  EAStringC dtor performs it at scope end.)
+
+    return pRecord;                                         // result = a1
 }

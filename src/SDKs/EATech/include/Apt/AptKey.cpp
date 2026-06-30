@@ -484,10 +484,74 @@ AptValue* AptKey::sMethod_getAnalogTriggerInfo()
     return pResult;
 }
 
-// removeListener / getAscii: referenced by objectMemberLookup (they back the
-// "removeListener" / "getAscii" native members) but their disassembly was NOT part
-// of this TU's dossier (only their symbol addresses, off_8324E3AC / off_8324E3A0).
-// They are therefore separate, not-yet-reconstructed leaves: declared in the
-// header so objectMemberLookup compiles against their addresses; their bodies are
-// their own follow-on TUs and are intentionally NOT fabricated here (project rule:
-// never invent a body).
+// ---------------------------------------------------------------------------
+// FLAG (homed by the Apt input subsystem, not yet reconstructed): the sibling of
+// AptKeyManagerAddListener -- remove pListener from the input/Key manager's
+// listener membership vector (off_8324E574 / the gpCurrentTargetSim +0x18 manager,
+// vector at +16). The X360/PS3 inline the {count, array} scan-and-remove (PS3
+// 0xF303D8: find the entry == pListener, Release it (vtbl[1]), null the slot, and
+// decrement the count). The manager + its listener-vector type are not yet
+// reconstructed, so the raw-offset walk is expressed through this named helper
+// (declared extern, defined by the input TU). Returns true iff it removed one.
+// ---------------------------------------------------------------------------
+extern bool AptKeyManagerRemoveListener(AptValue* pListener);
+
+// ---------------------------------------------------------------------------
+// sMethod_removeListener @ 0x82ADC??? (PS3 EXTERNAL DecFIGS 0xF303D8) -- unregister
+// a Key listener. DECOMPILED from the PS3 body, cross-checked vs the X360 listener-
+// vector `remove` helper (ARTIST 0x82ADBC28).
+//
+// Mirrors addListener: only a single-argument call acts. The listener value is the
+// top of the native arg stack; it is removed only when it carries the listener
+// marker bit (PS3 `*(value+4) & 0x8000000` -- the same packed value-flag word the
+// add path tests, here AptValue::mnValueData bit 27). The actual {count, array}
+// scan-find-Release-null-and-decrement over the manager's listener vector is the
+// un-homed input subsystem (see the AptKeyManagerRemoveListener FLAG above).
+// Returns the AS true/false singleton (true iff a listener was removed; every early
+// bail returns false).
+// ---------------------------------------------------------------------------
+AptValue* AptKey::sMethod_removeListener(AptKey* /*pThis*/, int nArgCount)
+{
+    if (nArgCount != 1)
+        return AptBoolean::Create(false);                 // PS3: a2 != 1
+
+    AptValue* pListener = gppAptNativeArgStack[gnAptNativeArgCount - 1];   // PS3: top of the interp value stack
+
+    // PS3: (*(value + 4) & 0x8000000) == 0 -> not a registered listener value.
+    // Bit 27 of the packed value word (mnValueData). Only a value carrying the
+    // listener marker is eligible; otherwise nothing to remove.
+    if ((pListener->mnValueData & 0x8000000u) == 0)
+        return AptBoolean::Create(false);
+
+    // The find-Release-null-decrement walk over the manager's listener vector. The
+    // manager/vector types are un-homed (see addListener); a miss returns false.
+    const bool bRemoved = AptKeyManagerRemoveListener(pListener);
+    return AptBoolean::Create(bRemoved);
+}
+
+// ---------------------------------------------------------------------------
+// sMethod_getAscii @ 0x82?????? (PS3 EXTERNAL DecFIGS 0xF3E078) -- box the last
+// key event's ASCII/virtual key code as an AptInteger.
+//
+// DECOMPILED from the PS3 body: take the last event's raw key code (event >> 17);
+// only when the event actually carries a controller field (event >> 2 != 0) is the
+// low code (<= 0x13) folded through the pad->keycode translate table -- a raw code
+// with no controller (a pure ASCII event) is reported verbatim. (PS3:
+//   v2 = dword_1071B118 >> 17;
+//   if ( dword_1071B118 >> 2 ) { if ( v2 <= 0x13 ) v2 = BUTTONACTIONCODE_TO_KEYCODE[v2]; }
+//   return AptInteger::Create(v2); )
+// BUTTONACTIONCODE_TO_KEYCODE is the same 20-entry low-code translate table the
+// X360 getCode/isDown use (kAptKeyCodeTranslate). The header (and the X360 method
+// slot) take no arguments; the PS3 a2 is the AptInteger::Create allocation arg the
+// caller threads, reproduced by the Create call here.
+// ---------------------------------------------------------------------------
+AptValue* AptKey::sMethod_getAscii()
+{
+    int nCode = (int)(gAptKeyLastEvent >> 17);
+    if ((gAptKeyLastEvent >> 2) != 0)
+    {
+        if ((unsigned int)nCode <= 0x13u)
+            nCode = kAptKeyCodeTranslate[nCode];
+    }
+    return AptInteger::Create(nCode);
+}

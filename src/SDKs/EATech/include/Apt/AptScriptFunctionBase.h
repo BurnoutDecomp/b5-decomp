@@ -158,6 +158,14 @@ public:
 
     AptValue* GetCIH() const          { return mpCIH; }
     AptValue* GetParentScope() const  { return mpParentScope; }
+    // +0x24 ParentAnim accessor (the global-object frame the interpreter's variable
+    // fallback resolves _level / global members through -- getVariable @0x82B03430
+    // reads it as *(mpCurrentFunction+36)).
+    AptValue* GetParentAnim() const   { return mpParentAnim; }
+
+    // The current live local-variable frame stack (off_8324E3DC); the interpreter's
+    // scope-chain walkers consult it before falling back to mpParentScope.
+    static AptFrameStack* GetActiveFrameStack() { return spFrameStack; }
 
 protected:
     // ctor @0x82AF1030 -- chain to AptObject(eType, 8), bind to pCIH, derive the

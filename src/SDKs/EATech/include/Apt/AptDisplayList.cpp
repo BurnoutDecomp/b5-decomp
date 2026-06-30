@@ -482,7 +482,9 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
 //   AptCIH_queueClipEvents -- queue the given clip events on a node for a frame.
 //   gnAptActionFrameId (dword_8324E514) -- the current AS action frame, homed in AptMovie.cpp.
 // ---------------------------------------------------------------------------
-extern AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, int nFrameId, int nFlag);
+// Canonical sig: the X360/PS3 AptCIH::queueClipEvents(int, unsigned int, int) -- the
+// frame-id (a3) is UNSIGNED. Reconciled across the three call-site TUs (was int here).
+extern AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, unsigned int nFrameId, int nFlag);
 extern int gnAptActionFrameId;
 
 // ---------------------------------------------------------------------------

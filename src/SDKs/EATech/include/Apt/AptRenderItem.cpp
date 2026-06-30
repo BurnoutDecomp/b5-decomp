@@ -940,6 +940,52 @@ void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* /*pItem*/)
     pCtx->popVertexMatrix();
 }
 
+// PushMatricesAbsolute (PS3 External @0x7F28B8) -- the absolute (world-space) push
+// variant. Like PushMatrices it pushes + appends the item's colour transform and
+// saves the current vertex matrix, but then RESETS the current vertex matrix to the
+// world-space identity (setVertexMatrix(&gIdentityMatrix)) and appends the item's
+// MASK position matrix (GetMaskPositionMatrixConst, console *(a2+4)) -- so the item
+// draws at an absolute screen transform independent of its parents' matrices. Used
+// by PushRenderDataAbsolute (sprite/button/etc.).
+//
+// FLAG (x64 fork): the console fast-paths gAptOptFlags&4 -> _drawCharacterInstAbsoluteOpti;
+// the standard push/append path is reconstructed (matching the committed PushMatrices,
+// whose opti fast-path is likewise folded out).
+void PushMatricesAbsolute(AptRenderingContext* pCtx, const AptRenderItem* pItem)
+{
+    pCtx->pushColourTransform();
+    pCtx->appendColourTransform(const_cast<AptCXForm*>(pItem->GetColorMatrixConst()));
+    pCtx->pushVertexMatrix();
+    pCtx->setVertexMatrix(&gIdentityMatrix);
+    pCtx->appendVertexMatrix(const_cast<AptMatrix*>(pItem->GetMaskPositionMatrixConst()));
+}
+
+// ---------------------------------------------------------------------------
+// Free-function render-item accessors (AptLinker zombie-swap path). The X360
+// inlines these as raw field reads/writes + a vtbl-slot dispatch; here they are
+// thin wrappers onto the named AptRenderItem members so AptLinker compiles + links
+// against them by name.
+//   AptRenderItem_GetDepth      -- read the placed depth (console *(item+0x14) i16).
+//   AptRenderItem_SetDepth      -- write it (console *(item+0x14) = nDepth).
+//   AptRenderItem_CopyVisualFrom-- carry a node's visual state across (the X360
+//     vtbl[+0x14] dispatch is CopyRenderDataFrom @0x82AE5400; the base impl is the
+//     only one, so the named non-virtual call is faithful).
+// ---------------------------------------------------------------------------
+int16_t AptRenderItem_GetDepth(const AptRenderItem* pItem)
+{
+    return pItem->GetDepth();
+}
+
+void AptRenderItem_SetDepth(AptRenderItem* pItem, int16_t nDepth)
+{
+    pItem->SetDepth(nDepth);
+}
+
+void AptRenderItem_CopyVisualFrom(AptRenderItem* pDst, const AptRenderItem* pSrc)
+{
+    pDst->CopyRenderDataFrom(pSrc);
+}
+
 // AptCharacter_render -- the geometry-draw helper the render-item subtypes call
 // (homed here, dispatching to AptCharacter::render @0x810E74). Now the shape
 // render path is wired end-to-end: AptRenderItemShape::Render -> PushMatrices ->

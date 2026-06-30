@@ -120,3 +120,14 @@ struct AptCharacterAnimationInst : public AptCharacterSpriteInstBase
     // convention (a virtual dtor here injects a second vptr -> layout fork -> FAIL).
     ~AptCharacterAnimationInst();
 };
+
+// ---------------------------------------------------------------------------
+// MakeCharacterAnimationInst -- the AptCharacterAnimationInst::AptCharacterAnimationInst
+// ctor @0x82AFFDE8 wrapped as the AptLinker::Update factory: pool-allocate the 44-byte
+// instance, then construct it over the pending file's loaded movie root (the ctor's
+// AptCharacter a2 = pFile->mpData) with an incref'd hold of pFile (the ctor's a3).
+// Body in AptCharacterAnimationInst.cpp (the X360 ctor is folded -- no own export
+// symbol -- disassembled from the decrypted ARTIST.XEX, cross-checked vs the PS3 lift).
+// ---------------------------------------------------------------------------
+struct AptFile;
+AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile);

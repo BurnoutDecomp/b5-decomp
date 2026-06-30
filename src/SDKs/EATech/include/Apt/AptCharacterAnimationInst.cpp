@@ -13,14 +13,37 @@
 // source .apt file plus the teardown of that imported movie's character table.
 // ===========================================================================
 
+#include <new>   // placement new for MakeCharacterAnimationInst
+
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // base dtor (chained)
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"            // GetRenderItemWritable / mpRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"               // mpCharacter
-#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"       // ClearCharacterList / ResetInitIndicators
+#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"       // ClearCharacterList / ResetInitIndicators / IncCharacterList
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"              // mDisplayList.clear
-#include "SDKs/EATech/include/Apt/AptSharedPtr.h"                // AptSharedPtrDecRef / AptSharedPtrDelete
+#include "SDKs/EATech/include/Apt/AptSharedPtr.h"                // AptSharedPtrIncRef / AptSharedPtrDecRef / AptSharedPtrDelete
 #include "SDKs/EATech/include/Apt/AptFile.h"                     // AptFile (the shared pointee)
+#include "SDKs/EATech/include/Apt/AptCharacter.h"                // AptCharacter base (the embedded movie root follows it)
+
+// ---------------------------------------------------------------------------
+// AptMovieCharacter_GetAnimation -- a movie/animation AptCharacter embeds its
+// AptCharacterAnimation movie root by value immediately after the AptCharacter base
+// (X360: `addi r3, mpCharacter, 0x10; blr` -- the embedded timeline at char+0x10,
+// the same "char+16" embedded movie AptMovie.h documents). The owning character-
+// subtype that would carry it as a named `AptCharacterAnimation mAnimation;` member
+// has no home header yet, so -- per the header FLAG -- the embedded root is reached
+// through this single accessor instead of a raw cast at the call sites.
+//
+// FLAG (x64 fork): the console embeds it at the literal +0x10 (== console
+// sizeof(AptCharacter)); on the x64 gate the base widens, so the embedded root is
+// taken at sizeof(AptCharacter) (the byte just past the base subobject) rather than
+// the console literal 0x10 -- keeping the layout correct under the 8-byte pointer rule.
+// ---------------------------------------------------------------------------
+AptCharacterAnimation* AptMovieCharacter_GetAnimation(AptCharacter* pCharacter)
+{
+    return reinterpret_cast<AptCharacterAnimation*>(
+        reinterpret_cast<char*>(pCharacter) + sizeof(AptCharacter));   // [c:0x10] addi r3, mpCharacter, 0x10
+}
 
 // ---------------------------------------------------------------------------
 // PreDestroy @0x82AFE148
@@ -92,4 +115,112 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
 
     // ~AptCharacterSpriteInstBase() (the embedded display list + the AptCharacterInst
     // base teardown) is chained automatically by the compiler.
+}
+
+// ---------------------------------------------------------------------------
+// MakeCharacterAnimationInst -- the AptCharacterAnimationInst::AptCharacterAnimationInst
+// ctor @0x82AFFDE8 wrapped as the AptLinker::Update factory. The X360 ctor is folded
+// (it follows AptCompleteAnimationAsyncLoad's range with no own export symbol);
+// DISASSEMBLED from the decrypted ARTIST.XEX @0x82AFFDE8 and cross-checked against the
+// PS3 EXTERNAL lift (._ZN25AptCharacterAnimationInstC2EP12AptCharacter12AptSharedPtrI7AptFileE
+// @0xF5B4B0). The ctor takes (this, AptCharacter* a2, AptFilePtr& a3):
+//   AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(this, a2);  // base ctor
+//   *this = off_82145FE8;                       // AnimInst vtable (automatic codegen)
+//   *(this+0x28) = 0;                           // mAnimationFilePtr.pData = 0
+//   *(this+0x24) = 0;                           // mAnimationState_unknown = 0
+//   AptSharedPtr<AptFile>::operator=(a2+0xC, a3);   // (a2's embedded AptFilePtr) = a3
+//   AptSharedPtr<AptFile>::operator=(this+0x28, a3);// mAnimationFilePtr = a3
+//   held = a3; if(held) incref(held);               // pinned copy of the file
+//   AptCharacterAnimation::IncCharacterList(this->mpRenderItem->mpCharacter + 0x10, &held);
+//   if(held && --held.count==0) AptSharedPtrDelete(held);   // drop the pin
+//   return this;
+//
+// The Update caller (AptLinker::Update @0x82B0D028) derives the two ctor args from
+// the pending AptFile: a2 = pFile->mpData (the loaded movie root, used as the
+// AptCharacter the base ctor builds over) and a3 = an incref'd AptFilePtr(pFile).
+// The Make* convention owns the 44-byte pool allocation (the caller's separate
+// Allocate(0x2C) is the presence test the X360 folds into the ctor prologue).
+// ---------------------------------------------------------------------------
+AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
+{
+    void* lpMem = gpAptSharedPtrPool->Allocate(sizeof(AptCharacterAnimationInst));    // Allocate(off_8324D808, 0x2C)
+    if (lpMem == nullptr)
+        return nullptr;
+
+    // Derive the ctor args from the pending file (the Update caller's r4/r5 setup):
+    // the movie root (pFile->mpData) is the AptCharacter the base ctor builds over,
+    // and the held file reference is an incref'd AptFilePtr(pFile).
+    AptCharacter* lpCharacter = reinterpret_cast<AptCharacter*>(pFile->mpData);   // r4 = *(pFile+0x14)
+    AptFilePtr    laHeldFile;
+    laHeldFile.pData = pFile;
+    if (pFile != nullptr)
+        AptSharedPtrIncRef(pFile);                       // incref into the stack AptFilePtr (r5)
+
+    // ---- base ctor + member init (the folded ctor body) -----------------------
+    AptCharacterAnimationInst* pInst =
+        static_cast<AptCharacterAnimationInst*>(lpMem);
+
+    // AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(this, character).
+    // (The AnimInst vtable store `*this = off_82145FE8` is the manual-vtable family's
+    // automatic codegen -- not hand-written here, matching the dtor + the base ctor.)
+    ::new (static_cast<void*>(static_cast<AptCharacterSpriteInstBase*>(pInst)))
+        AptCharacterSpriteInstBase(lpCharacter);
+
+    pInst->mAnimationFilePtr.pData = nullptr;    // *(this+0x28) = 0 (pre-op= clear)
+    pInst->mAnimationState_unknown = 0;          // *(this+0x24) = 0
+
+    // FLAG (raw-offset poke into the loaded movie root): the X360 also assigns the
+    // held file into the AptFilePtr the movie root carries at +0x0C
+    // (AptSharedPtr<AptFile>::operator=(character+0xC, &held)). That slot is part of
+    // the loaded .apt data the parser produces; reached only once mpData is non-null
+    // (a resolved load). Modelled as the same ref-counted store the operator= emits.
+    if (lpCharacter != nullptr)
+    {
+        AptFilePtr* lpRootFilePtr =
+            reinterpret_cast<AptFilePtr*>(reinterpret_cast<char*>(lpCharacter) + 0x0C);   // a2+0xC
+        AptFile* lpOld = lpRootFilePtr->pData;
+        lpRootFilePtr->pData = laHeldFile.pData;
+        if (laHeldFile.pData != nullptr)
+            AptSharedPtrIncRef(laHeldFile.pData);
+        if (lpOld != nullptr && AptSharedPtrDecRef(lpOld) == 0)
+            AptSharedPtrDelete(lpOld);
+    }
+
+    // mAnimationFilePtr = held (ref-counted assign).
+    {
+        AptFile* lpOld = pInst->mAnimationFilePtr.pData;
+        pInst->mAnimationFilePtr.pData = laHeldFile.pData;
+        if (laHeldFile.pData != nullptr)
+            AptSharedPtrIncRef(laHeldFile.pData);
+        if (lpOld != nullptr && AptSharedPtrDecRef(lpOld) == 0)
+            AptSharedPtrDelete(lpOld);
+    }
+
+    // (3)+(4) @0x82AFFE38..74: form the by-value IncCharacterList argument (copy held
+    // + incref it -- the pin sp+0x50), then IncCharacterList over the movie embedded in
+    // the current render item's character (char+0x10). IncCharacterList takes the
+    // AptFilePtr BY VALUE (a shallow copy; its body does not release the arg), so the
+    // pin's incref is the argument's hand-off -- the asm leaves sp+0x50 un-decref'd
+    // after the call (it is balanced by the table reference IncCharacterList keeps),
+    // so no separate drop is emitted here.
+    {
+        AptFilePtr laIncArg;
+        laIncArg.pData = laHeldFile.pData;
+        if (laIncArg.pData != nullptr)
+            AptSharedPtrIncRef(laIncArg.pData);       // lwarx/+1/stwcx. @0x82AFFE50
+        AptMovieCharacter_GetAnimation(pInst->mpRenderItem->mpCharacter)
+            ->IncCharacterList(laIncArg);             // @0x82AFFE74
+    }
+
+    // (5) @0x82AFFE78..AC: consume the passed-in reference -- read held, null it,
+    // decref, delete at zero. This is the ctor consuming a3 (the caller handed it an
+    // incref'd AptFilePtr(pFile) it no longer owns).
+    {
+        AptFile* lpHeld = laHeldFile.pData;
+        laHeldFile.pData = nullptr;
+        if (lpHeld != nullptr && AptSharedPtrDecRef(lpHeld) == 0)
+            AptSharedPtrDelete(lpHeld);
+    }
+
+    return pInst;   // ctor returns `this`
 }

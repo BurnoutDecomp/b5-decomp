@@ -29,9 +29,16 @@
 #include "SDKs/EATech/include/Apt/AptCharacter.h"             // mnType / mnRefAndFlags / mpFixupLink
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::mpRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"            // AptRenderItem::mpCharacter
-#include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH::mpCharacterInst
+#include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH::mpCharacterInst / operator new / ctor
 #include "SDKs/EATech/include/Apt/AptDefine.h"                // gpNonGCPoolManager (off_8324D808)
+#include "SDKs/EATech/include/Apt/AptTarget.h"                // gpAptTarget, mpAnimationTarget
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"       // GetRootDisplayList
+#include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::AsState
+#include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // AptDisplayListState::insert(depth, item)
+#include "SDKs/EATech/include/Apt/AptValue/AptValue.h"        // AptValue::setGCRoot
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                   // DOGMA_PoolManager::Allocate/Deallocate
+
+#include <new>   // placement new for the level-0 root CIH
 
 #include <cstring>   // memset
 
@@ -102,6 +109,65 @@ AptCIH* AptCharacterHelper::CreateTextCharacterInst()
 }
 
 // ---------------------------------------------------------------------------
+// CreateMovieCharacterInst @0x82B0BC.. (PS3 @0xF56FC4)
+// ---------------------------------------------------------------------------
+// The sibling of CreateTextCharacterInst: lazily build the shared default empty
+// MOVIE-CLIP character template (spDefaultMovieCharacter, type tag 5) that backs AS
+// createEmptyMovieClip. Much smaller than the text builder -- the movie template has
+// no authored margins/font: just the type tag, the resolved default character, and
+// the per-type flag.
+//
+// The PS3 body:
+//   pDynamicMovie = Allocate(gpNonGCPoolManager, 0x44); memset(.,0,68);
+//   *pDynamicMovie = 5;                                  // mnType (movie-clip)
+//   result = _AptGetAnimationAtLevel(0);
+//   *(pDynamicMovie+4) = **(*(*(*(*(result+32)+4)+4)+4) + 0x20);   // mpFixupLink
+//   *(pDynamicMovie+8) |= 0x8000;                        // the per-type flag
+//   return result;
+//
+// The walk `*(*(*(*(result+32)+4)+4)+4)` is the SAME spine the text builder walks --
+// the level-0 node's char-inst -> render-item -> character (all named members) -- and
+// the `**(.+0x20)` double-deref reads that character's default-character slot into the
+// template's mpFixupLink (the movie template's analogue of the text builder's default-
+// font resolve). The return is the level-0 node the walk started from.
+// ---------------------------------------------------------------------------
+AptCIH* AptCharacterHelper::CreateMovieCharacterInst()
+{
+    // Allocate the shared default movie-clip character template from the non-GC pool
+    // and zero it (the X360/PS3 Allocate(68) + memset(.,0,68)).
+    spDefaultMovieCharacter =
+        static_cast<AptCharacter*>(gpNonGCPoolManager->Allocate(sizeof(AptCharacterDynamicText)));
+    std::memset(spDefaultMovieCharacter, 0, sizeof(AptCharacterDynamicText));
+
+    AptCharacter* pTemplate = spDefaultMovieCharacter;
+
+    // Movie-clip character type tag.
+    pTemplate->mnType = 5;                                       // [c:0x00] *pDynamicMovie = 5
+
+    // Resolve the level-0 movie's default character (the same named spine the text
+    // builder walks: node -> char-inst -> render-item -> character -> fixup-link).
+    // PS3 @0xF5701C does FOUR loads (...+0x20,+4,+4,+4) -- the trailing ->mpFixupLink
+    // was dropped here; +0x20 must be read off mpCharacter->mpFixupLink, not mpCharacter.
+    AptCIH* pLevel0 = AptGetAnimationAtLevel(0);
+    AptCharacter* pSpineChar =
+        pLevel0->mpCharacterInst->mpRenderItem->mpCharacter->mpFixupLink;
+
+    // mpFixupLink = **(pSpineChar + 0x20): the default character stored at the spine
+    // character's +0x20 slot (a pointer to a pointer; the double-deref reads through
+    // it). FLAG (x64 fork): the console reads the 32-bit slot; on x64 the slot holds a
+    // host pointer, read here as AptCharacter*const* through the named base.
+    AptCharacter** pDefaultSlot =
+        *reinterpret_cast<AptCharacter***>(reinterpret_cast<char*>(pSpineChar) + 0x20);
+    pTemplate->mpFixupLink = *pDefaultSlot;                      // [c:0x04] **(.+0x20)
+
+    // The per-type flag the builder OR-s into the low half of the packed ref/flags word.
+    pTemplate->mnRefAndFlags |= 0x8000u;                         // [c:0x08] |= 0x8000
+
+    // The X360/PS3 return the level-0 animation node the walk started from.
+    return pLevel0;
+}
+
+// ---------------------------------------------------------------------------
 // Shutdown @0x82AE2FA0 -- free both cached default templates + null the statics.
 // ---------------------------------------------------------------------------
 void AptCharacterHelper::Shutdown()
@@ -118,4 +184,58 @@ void AptCharacterHelper::Shutdown()
 
     spDefaultTextCharacter  = nullptr;
     spDefaultMovieCharacter = nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// AptGetAnimationAtLevel -- the root AptCIH-at-display-level resolver (X360
+// _AptGetAnimationAtLevel @0x82B00788 / PS3 _Z23_AptGetAnimationAtLeveli @0xF4E540).
+//
+// Walk the root display list of the active target's animation director for the node
+// whose placed depth equals nLevel; if none exists, lazily create an empty AptCIH,
+// stamp its render-item depth to nLevel, pin it as a GC root, and insert it into the
+// root display list at that depth. Returns the (found or created) node, or null when
+// no movie is mounted.
+//
+// CANONICAL signature reconciled to AptCIH* (the AptCharacterHelper.h / AptLinker.h
+// form); the AptAnimationTarget/AptCharacterAnimation/AptMovie/AptScriptFunctionBase
+// TUs that declared a `void*`-returning extern are corrected to AptCIH* (a void* sink
+// still accepts the AptCIH*, and the reinterpret_cast<AptValue*> sites are unaffected).
+//
+// X360 walks children by *(result+24) and PS3 by result[6] -- both the named
+// mpDisplayListNext sibling link; the depth match is
+// cih->mpCharacterInst->mpRenderItem->GetDepth() == nLevel. The PS3 inserts directly
+// via AptDisplayListState::insert(root, depth, node) (the X360's sub_82AEE788 is the
+// same findInst+insert+stamp-depth, folded here to the one insert).
+// ---------------------------------------------------------------------------
+AptCIH* AptGetAnimationAtLevel(int nLevel)
+{
+    // No active target / director / root display list -> nothing mounted.
+    if (gpAptTarget == nullptr || gpAptTarget->mpAnimationTarget == nullptr)
+        return nullptr;
+
+    AptDisplayList* pRoot = gpAptTarget->mpAnimationTarget->GetRootDisplayList();   // *(target+0x18)+0x20
+    AptDisplayListState* pState = pRoot->AsState();
+    // console third guard (@0x82B00788 `*(v2+32) != 0` / PS3 0xF4E540): the root display
+    // list's head node (+0x20 / mpHead, which AsState() returns) is nullable -- the ctor may
+    // fail to allocate it and PreDestroy/dtor null it. Bail rather than deref pState->mpFirst.
+    if (pState == nullptr)
+        return nullptr;
+
+    // Search the placed children for the node at depth nLevel.
+    for (AptCIH* pNode = pState->mpFirst; pNode != nullptr; pNode = pNode->mpDisplayListNext)   // result[6] / *(result+24)
+    {
+        if (pNode->mpCharacterInst->mpRenderItem->GetDepth() == nLevel)   // *(*(node->charInst+4)+0x14) == nLevel
+            return pNode;
+    }
+
+    // Not present: lazily create the level node.
+    AptCIH* pNew = nullptr;
+    if (void* pMem = AptCIH::operator new(40))           // AptValueGC_PoolManager::AllocateAptValueGC(0x28)
+        pNew = ::new (pMem) AptCIH(nullptr, nullptr);    // AptCIH::AptCIH(mem, 0, 0)
+
+    // Stamp its render item to depth nLevel, pin it as a GC root, insert at nLevel.
+    pNew->mpCharacterInst->GetRenderItemWritable()->SetDepth(nLevel);   // *(GetRenderItemWritable(node->charInst)+20) = nLevel
+    pNew->setGCRoot(1);                                                  // AptValue::setGCRoot(node, 1)
+    pState->insert(nLevel, pNew);                                       // AptDisplayListState::insert(root, nLevel, node)
+    return pNew;
 }

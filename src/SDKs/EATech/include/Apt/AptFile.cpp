@@ -12,21 +12,61 @@
 // AptSharedPtrDelete calls this, then frees the AptFile block.
 // ===========================================================================
 
+#include <new>   // placement new for MakeAptFile's EAStringC member construct
+
 #include "SDKs/EATech/include/Apt/AptFile.h"
 #include "SDKs/EATech/include/Apt/AptLoader.h"   // GetTarget / AptTarget_GetLoader / AptLoader::Invalidate
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // AptImportEntry (import-table record) + AptCharacter
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"            // AptSharedPtr<AptFile>::Dispose
 
 // ---------------------------------------------------------------------------
-// FLAG (homed by their own engine TUs; reached ONLY once the async load has
-// resolved, which the request layer cannot do yet). Routed through hooks rather
-// than the literal console offsets/fn-ptr so the x64 layout stays correct:
-//   AptFile_UnresolveAnimation -> AptCharacterAnimation::Unresolve((mpData+16),
-//                                 mpResolveContext)   @0x80C3C4
-//   AptFile_FreeLoadedBlock    -> the loaded-block free via off_1059C66C
+// The loaded-data teardown the ~AptFile branch reaches once the async load has
+// resolved. DECOMPILED from the PS3 EXTERNAL ~AptFile (D2 @0xF48E30); the
+// register form is:
+//   if ( (*(this+2) - 3) <= 3 && *(this+5) ) {           // mnState in 3..6 && mpData
+//       AptCharacterAnimation::Unresolve(*(this+5) + 16, *(this+4));   // (mpData+0x10, mpResolveContext)
+//       (*dword_1071B1F4)(*(this+6));                     // free hook on mpDataBlock
+//   }
+// Decomposed by the request-layer dossier into these two free helpers; bodied
+// here against the named x64 members (console offsets in [c:] comments).
 // ---------------------------------------------------------------------------
-void AptFile_UnresolveAnimation(void* pLoadedData, void* pResolveContext);
-void AptFile_FreeLoadedBlock(void* pDataBlock);
+
+// FLAG (un-homed deferred subsystem callback): the loaded-block free hook the Apt
+// runtime installs at GUI bring-up. PS3 dword_1071B1F4 (X360 off_1059C66C) is set
+// to `&CgsGui::AptCallbackFile::FreeAnimation` by CgsGui::AptAux::ConstructApt --
+// the registered "free a loaded .apt data block" user-function. It is owned by the
+// (not-yet-homed) GUI Apt-callback TU; declared here as a named function-pointer
+// hook so the teardown calls through it faithfully without fabricating its body.
+// Null until ConstructApt installs it (the request layer never reaches this path
+// during bring-up).
+typedef void (*AptFreeAnimationHook)(void* pDataBlock);
+extern AptFreeAnimationHook gpAptFreeAnimationHook;   // dword_1071B1F4 / off_1059C66C
+AptFreeAnimationHook gpAptFreeAnimationHook = nullptr;
+
+// AptFile_UnresolveAnimation -- the inverse of the load-time Fixup over the loaded
+// movie root: run AptCharacterAnimation::Unresolve on the AptCharacterAnimation
+// embedded at the movie root + 0x10, passing the load base (the resolve context)
+// as nBase. PS3: AptCharacterAnimation::Unresolve(*(this+5) + 16, *(this+4)).
+void AptFile_UnresolveAnimation(void* pLoadedData, void* pResolveContext)
+{
+    // The movie root (mpData) carries its AptCharacterAnimation by value at +0x10
+    // (the AptMovieData embedded-timeline layout AptFile.h documents); Unresolve is
+    // a method on that embedded animation.
+    AptCharacterAnimation* pAnimation = reinterpret_cast<AptCharacterAnimation*>(
+        reinterpret_cast<char*>(pLoadedData) + 0x10);   // [c:] *(this+5) + 16
+
+    // FLAG (raw-ptr-as-id): the console passes the load base (mpResolveContext, a
+    // pointer) into Unresolve's int32_t nBase param; preserved verbatim.
+    pAnimation->Unresolve(static_cast<int32_t>(reinterpret_cast<intptr_t>(pResolveContext)));
+}
+
+// AptFile_FreeLoadedBlock -- hand the raw loaded-data block (mpDataBlock) back to
+// the registered Apt free callback. PS3: (*dword_1071B1F4)(*(this+6)).
+void AptFile_FreeLoadedBlock(void* pDataBlock)
+{
+    if (gpAptFreeAnimationHook != nullptr)   // installed by CgsGui::AptAux::ConstructApt
+        gpAptFreeAnimationHook(pDataBlock);
+}
 
 AptFile::~AptFile()
 {
@@ -50,6 +90,44 @@ AptFile::~AptFile()
     // 3. mFileName (the EAStringC member) is released by its destructor, which
     //    the compiler runs after this body -- the faithful equivalent of the
     //    asm's DecreaseInternalRefCount(this+4).
+}
+
+// ---------------------------------------------------------------------------
+// MakeAptFile -- AptFile::AptFile @0x82AE6268 (the constructor the loader/linker
+// run over a pool-allocated 28-byte block). The X360 ctor is not exported as its
+// own symbol (it folds into AptScriptFunctionByteCodeBlock::operator new's range);
+// disassembled directly from the decrypted ARTIST.XEX @0x82AE6268:
+//   *(this+0)    = 0;                 // mnRefCount = 0
+//   *(this+4)    = *(pName+0);        // mFileName.m_pData = pName->m_pData ...
+//   if (*(pName+0) != &s_EmptyData)   //   (the EAStringC copy-construct; bump the
+//       interrupt-masked lwarx/+0x10000/stwcx. on *m_pData;   // shared refcount
+//   *(this+0x10) = 0;                 // mpResolveContext = 0
+//   *(this+0x14) = 0;                 // mpData = 0
+//   *(this+0x18) = 0;                 // mpDataBlock = 0
+//   *(this+8)    = 1;                 // mnState = 1   (requested)
+//   *(this+0xC)  = 1;                 // mnField12 = 1
+// The EAStringC member copy + its refcount increment (the +0x10000 add on the
+// StringDataC refcount, with the empty-string sentinel guard) is exactly the
+// EAStringC copy constructor, so it is expressed here as a placement-construct of
+// the member from *pName -- semantic parity with the asm, x64-native widths.
+// ---------------------------------------------------------------------------
+AptFile* MakeAptFile(void* pMem, EAStringC* pName)
+{
+    AptFile* pFile = static_cast<AptFile*>(pMem);
+
+    pFile->mnRefCount = 0;                                  // *(this+0) = 0
+
+    // mFileName = *pName: copy the shared StringDataC pointer + bump its internal
+    // refcount (the empty-string sentinel guard is inside the EAStringC copy ctor).
+    ::new (static_cast<void*>(&pFile->mFileName)) EAStringC(*pName);   // *(this+4) = *(pName+0) + IncRef
+
+    pFile->mpResolveContext = nullptr;                     // *(this+0x10) = 0
+    pFile->mpData           = nullptr;                     // *(this+0x14) = 0
+    pFile->mpDataBlock      = nullptr;                     // *(this+0x18) = 0
+    pFile->mnState          = 1;                           // *(this+8)   = 1 (requested)
+    pFile->mnField12        = 1;                           // *(this+0xC) = 1
+
+    return pFile;                                          // ctor returns `this`
 }
 
 // AptFile::mpData points at the loaded + resolved .apt movie data root. The

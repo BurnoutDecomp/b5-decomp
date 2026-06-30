@@ -117,6 +117,12 @@ public:
     // entry into the current matrix, forward it to the renderer.
     void popVertexMatrix();
 
+    // setVertexMatrix (PS3 External @0x7E4690) -- overwrite the current vertex
+    // matrix with pMatrix's six affine floats (a plain copy; no renderer flush --
+    // the caller appends/forwards afterwards). Used by PushMatricesAbsolute to seat
+    // the world-space identity before appending the item's mask position matrix.
+    void setVertexMatrix(const AptMatrix* pMatrix);
+
     // appendColourTransform @ 0x82AE0558 -- multiply/add pCXForm into the current
     // colour transform with per-channel [-255,255] clamping (skipped when pCXForm
     // is the null singleton) and forward the result to the renderer.

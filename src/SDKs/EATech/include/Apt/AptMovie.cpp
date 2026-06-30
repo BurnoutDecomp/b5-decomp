@@ -95,7 +95,8 @@ extern int        gnAptRegisterCount;   // dword_8324E3D4 == AptScriptFunctionBa
 
 // FLAG (deferred VM / display-list callees -- owned by other TUs, declared with the
 // raw-but-faithful call-site signatures so the timeline driver links):
-extern void* AptGetAnimationAtLevel(int nLevel);                         // _AptGetAnimationAtLevel
+struct AptCIH;
+extern AptCIH* AptGetAnimationAtLevel(int nLevel);                       // _AptGetAnimationAtLevel @0x82B00788 (canonical AptCIH*; void* blob walk binds)
 extern void* AptPseudoDisplayList_FindInst(void* pList, void* pSource,   // AptPseudoDisplayList::FindInst
                                            unsigned char* pOutHit, void** ppExisting,
                                            void* pContext, void* pInfo);

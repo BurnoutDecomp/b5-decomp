@@ -145,6 +145,21 @@ void AptRenderingContext::popVertexMatrix()
     gAptFuncs.pfnSetVertexMatrix(&mCurrentVertexMatrix);   // dword_8324E880(this)
 }
 
+// ---- setVertexMatrix (PS3 External @0x7E4690) ----------------------------
+// Overwrite the current vertex matrix with pMatrix's six affine floats (store-for
+// -store: a,b,c,d,tx,ty). A plain copy -- unlike append/pop it does NOT flush to
+// the renderer; the caller (PushMatricesAbsolute) seats the world-space identity
+// here, then appends the item's mask position matrix which performs the flush.
+void AptRenderingContext::setVertexMatrix(const AptMatrix* pMatrix)
+{
+    mCurrentVertexMatrix.a  = pMatrix->a;
+    mCurrentVertexMatrix.b  = pMatrix->b;
+    mCurrentVertexMatrix.c  = pMatrix->c;
+    mCurrentVertexMatrix.d  = pMatrix->d;
+    mCurrentVertexMatrix.tx = pMatrix->tx;
+    mCurrentVertexMatrix.ty = pMatrix->ty;
+}
+
 // ---- appendColourTransform @ 0x82AE0558 ----------------------------------
 // Fold pCXForm into the current colour transform: the four scale channels are
 // multiplied (and re-normalised by 1/255), the four translate channels are

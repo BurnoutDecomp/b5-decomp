@@ -551,11 +551,46 @@ static AptValue* gpSortScriptContext  = nullptr;   // dword_8324E3FC
 // as a real EAStringC default-constructed to the empty string.
 static EAStringC gAptSortOnField;   // off_82F73384
 
-// FLAG (sMethod_shift not in this class's dossier -- ICF-folded / absent in the
-// export): the AS Array.shift native, referenced only by objectMemberLookup's
-// method-cache build. Declared extern so the lookup compiles; its body is the
-// sibling pop-from-front method (a separate TU).
+// AS Array.shift native -- referenced by objectMemberLookup's method-cache build.
+// The X360 ARTIST body was ICF-folded out of this class's dossier, but the PS3
+// DecFIGS export carries it verbatim: AptArray::sMethod_shift @0xF1D39C. The free
+// name AptArray_sMethod_shift (extern "C") is kept -- the method-cache macro casts
+// it to AptExtFunctionPtr anyway -- and the unused AS-call argument (a2) the member
+// form takes is dropped (the sibling pop native is the same single-arg shape).
 extern "C" AptValue* AptArray_sMethod_shift(AptArray* pThis);   // off_8324E3F0 target
+
+// ---------------------------------------------------------------------------
+// AptArray_sMethod_shift @0xF1D39C (PS3) -- Array.prototype.shift: remove and return
+// the FIRST element, sliding the rest down one slot. The shifted-out value's
+// reference is handed to the caller (no Release), and the now-vacated tail slot is
+// cleared so the shortened array does not double-own it (the pop sibling's contract).
+//
+//   PS3: if (!isArray) return undefined;  if (length<=0) return undefined;
+//        v5 = get(0);  length -= 1;
+//        if (oldLen != 1) memmove(mpArray, mpArray+1, 4*(oldLen-1));
+//        mpArray[length] = 0;  return v5;
+// The console memmove strides 4-byte pointers; widened here to sizeof(AptValue*).
+// ---------------------------------------------------------------------------
+extern "C" AptValue* AptArray_sMethod_shift(AptArray* pThis)
+{
+    if (!pThis->isArray())
+        return gpUndefinedValue;
+
+    const int nOldLen = pThis->mnLength;   // *(this+10)
+    if (nOldLen <= 0)
+        return gpUndefinedValue;
+
+    // The first element (handed to the caller; ref ownership transfers out).
+    AptValue* pElement = pThis->get(0);    // AptArray::get(this, 0)
+
+    pThis->mnLength = nOldLen - 1;         // *(this+10) = v4 - 1
+    if (nOldLen != 1)
+        std::memmove(pThis->mpArray, pThis->mpArray + 1,
+                     sizeof(AptValue*) * static_cast<size_t>(nOldLen - 1));   // 4*(v4-1) -> x64 stride
+    pThis->mpArray[pThis->mnLength] = nullptr;   // *(4*length + mpArray) = 0 -- transfer ref out
+
+    return pElement;
+}
 
 // ---------------------------------------------------------------------------
 // defaultSortOnCompareFunc @0x82AE7058 -- sortOn comparator. Both elements must be
@@ -803,4 +838,18 @@ void AptArray::CleanNativeFunctions()
     if (gpArrayMethod_splice)  { gpArrayMethod_splice->Release();  gpArrayMethod_splice  = nullptr; }
     if (gpArrayMethod_slice)   { gpArrayMethod_slice->Release();   gpArrayMethod_slice   = nullptr; }
     if (gpArrayMethod_sortOn)  { gpArrayMethod_sortOn->Release();  gpArrayMethod_sortOn  = nullptr; }
+}
+
+// ---------------------------------------------------------------------------
+// AptValue_AptArrayToString -- the free-function thunk AptValue::toString reaches
+// the (private, cross-TU) AptArray::toString @0x82AED040 through (AptValueConvert.cpp
+// declares it extern; the X360 inlines the private call across the folded TU). Homed
+// here, where the full AptArray type + the toString body live, so the thunk is the
+// one-line forward the convert TU's `case AptVFT_Array` needs. (PS3 EXTERNAL
+// 0xF39520 == this EAStringC& overload; the char* overload 0xF39624 just strcpy's
+// out of it and is not the path AptValue::toString takes.)
+// ---------------------------------------------------------------------------
+void AptValue_AptArrayToString(AptArray* pArray, EAStringC* pOut, const char* pSeparator)
+{
+    pArray->toString(pOut, pSeparator);
 }

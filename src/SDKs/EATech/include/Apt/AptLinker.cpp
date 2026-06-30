@@ -42,9 +42,13 @@ bool Burnout_X360_Artist_0040_0(EAStringC* pName, EAStringC* pReference);
 void AptCIH_SetCharacterInst(AptCIH* pCIH, AptCharacterInst* pInst, int bFlag);   // AptCIH::SetCharacterInst
 void AptCIH_tick(AptCIH* pCIH);                                                   // AptCIH::tick
 
-// FLAG (un-homed GC primitive): @0x82AE4DF0 ReplaceReferences(pOld, pNew, a, b)
-// -- retarget every live reference from pOld to pNew across the value graph.
-void ReplaceReferences(AptValue* pOld, AptValue* pNew, int a, int b);
+// FLAG (un-homed GC primitive): @0x82AE4DF0 / PS3 _Z17ReplaceReferences...
+// ReplaceReferences(pOld, pNew, ppTable, nCount) -- retarget every live reference
+// from pOld to pNew across the value graph. CANONICAL signature reconciled to the
+// PS3 DecFIGS export `ReplaceReferences(AptValue*,AptValue*,AptValue**,int)` (was
+// mistyped here as (...,int,int); the call sites pass (val,new,0,0) which still
+// binds: 0 -> (AptValue**)nullptr, 0 -> nCount). Body its own GC TU.
+int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nCount);
 
 // FLAG (un-homed): @0x82B0C9B0 AptAnimationTarget::RunActions -- flush the queued
 // deferred ActionScript actions for the director.
@@ -73,7 +77,11 @@ int  AptSharedPtrDecRefThingy(AptLinkerThingy* pThingy);
 void ListPushFront(AptSingleListNode** ppHead, AptLinkerThingy* pThingy);
 void ListErase(AptSingleListNode** ppHead, AptSingleListNode** ppNode);
 
-// FLAG (un-homed ctor/alloc helpers; bodies their own TUs):
+// Pool-allocate-and-construct factories (now HOMED next to their classes; also
+// declared in the corresponding headers this TU includes -- re-declared here for the
+// address documentation). MakeLinkerThingy -> AptLinkerThingy.cpp (ctor @0x82ADBF58);
+// MakeAptFile -> AptFile.cpp (AptFile::AptFile @0x82AE6268, a2 = the .apt name);
+// MakeCharacterAnimationInst -> AptCharacterAnimationInst.cpp (ctor @0x82AFFDE8).
 AptLinkerThingy*           MakeLinkerThingy(AptFilePtr& rFile, AptValue* pValue);   // ctor @0x82ADBF58
 AptFile*                   MakeAptFile(void* pMem, EAStringC* pName);               // AptFile::AptFile @0x82AE6268 (a2 = the .apt name)
 AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile);             // ctor @0x82AFFDE8
@@ -613,4 +621,182 @@ void AptLinker::Update()
         AptAnimationTarget_RunActions(gpAptTarget->mpAnimationTarget);    // AptAnimationTarget::RunActions(off_8324E574->mpAnimationTarget)
         // ~empty (Strin(v83)) releases the swapped-out elements.
     }
+}
+
+// =====================================================================
+//  Out-of-line helper bodies the linker spine calls (split out by the X360
+//  decompile as small free functions). Homed faithfully here against the X360
+//  ARTIST.XEX + PS3 DecFIGS exports.
+// =====================================================================
+
+// ---------------------------------------------------------------------
+// AptSharedPtrIncRefThingy / AptSharedPtrDecRefThingy -- the intrusive ref-count
+// on an AptLinkerThingy (count at +0x00, mnRefCount). PS3 DecFIGS:
+//   _Z18AptSharedPtrIncRefP15AptLinkerThingy @0xF1F584 (lwarx/+1/stwcx., ret new)
+//   _Z18AptSharedPtrDecRefP15AptLinkerThingy @0xF1F5B4 (lwarx/-1/stwcx., ret new)
+// The console runs a true interrupt-masked load-linked / store-conditional atomic;
+// on the single-threaded x64 Apt gate that folds to a plain ++/-- on the counter.
+// FLAG: atomicity dropped (no PC equivalent needed; the Apt runtime is single-thread
+// for the linker pass). Returns the NEW count, exactly as the asm leaves it in r9.
+// ---------------------------------------------------------------------
+int AptSharedPtrIncRefThingy(AptLinkerThingy* pThingy)
+{
+    return ++pThingy->mnRefCount;   // lwarx r9; r9+1; stwcx. -> return r9
+}
+
+int AptSharedPtrDecRefThingy(AptLinkerThingy* pThingy)
+{
+    return --pThingy->mnRefCount;   // lwarx r9; r9-1; stwcx. -> return r9
+}
+
+// ---------------------------------------------------------------------
+// ListPushFront -- push a new node holding a COUNTED reference to pThingy onto the
+// front of the thingy list. X360 AptSingleLis @0x82AF4F88:
+//   node = Allocate(pool, 8); if(node){ node[0]=thingy; if(thingy) AddRef(thingy);
+//   node[1]=0; } v10=node; v10[1]=*head; *head=v10;
+// The AddRef is the same lwarx/+1/stwcx. atomic as AptSharedPtrIncRefThingy. Note
+// the console links the (possibly null on OOM) node either way.
+// ---------------------------------------------------------------------
+void ListPushFront(AptSingleListNode** ppHead, AptLinkerThingy* pThingy)
+{
+    AptSingleListNode* pNode =
+        static_cast<AptSingleListNode*>(gpAptSharedPtrPool->Allocate(sizeof(AptSingleListNode)));   // Allocate(pool,8)
+    if (pNode != nullptr)
+    {
+        pNode->mpThingy = pThingy;                 // *result = *a2
+        if (pThingy != nullptr)
+            AptSharedPtrIncRefThingy(pThingy);     // the lwarx/+1/stwcx. AddRef loop
+        pNode->mpNext = nullptr;                   // result[1] = 0
+    }
+    pNode->mpNext = *ppHead;                        // v10[1] = *a1   (== old head)
+    *ppHead       = pNode;                          // *a1 = v10
+}
+
+// ---------------------------------------------------------------------
+// ListErase -- find the node *ppNode in the list headed by *ppHead, unlink it,
+// release its counted thingy (destroy the thingy at count 0), and free the 8-byte
+// node. X360 sub_82AF83A0; the body is attested verbatim by the PS3 DecFIGS inline
+// in AptLinker::CancelLoad @0xF431D0 (find-or-pop-front, then Release the thingy
+// via DecRef + AptSharedPtrDelete(thingy) and Deallocate the node).
+// ---------------------------------------------------------------------
+void ListErase(AptSingleListNode** ppHead, AptSingleListNode** ppNode)
+{
+    AptSingleListNode* pTarget = *ppNode;          // the node to remove
+    AptSingleListNode* pCur    = *ppHead;
+    if (pCur == nullptr)
+        return;
+
+    if (pCur == pTarget)
+    {
+        // Pop front: head = head->next, then release + free the old head.
+        *ppHead = pCur->mpNext;                     // *v2 = v9
+    }
+    else
+    {
+        // Walk to the node whose next == pTarget, then splice it out.
+        AptSingleListNode* pPrev = pCur;
+        while (pPrev != nullptr && pPrev->mpNext != pTarget)
+            pPrev = pPrev->mpNext;
+        if (pPrev == nullptr)
+            return;
+        pPrev->mpNext = pTarget->mpNext;            // v3[1] = *(v10+4)
+    }
+
+    // Release the unlinked node's counted thingy (destroy at 0), then free the node.
+    AptLinkerThingy* pThingy = pTarget->mpThingy;   // *node
+    pTarget->mpThingy = nullptr;                     // *node = 0
+    if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+        pThingy->ScalarDeletingDestructor(1);        // == PS3 AptSharedPtrDelete(AptLinkerThingy*) @0xF43114 (dispose file + free 16-byte block)
+    gpAptSharedPtrPool->Deallocate(pTarget, sizeof(AptSingleListNode));   // Deallocate(pool,node,8)
+}
+
+// ---------------------------------------------------------------------
+// InstallEmptyCharacterInstVtbl -- the X360 stores the "empty placeholder"
+// AptCharacterInst vtable (&off_82145FD0) into a freshly pool-constructed
+// AptCharacterInst (`*inst = &off_82145FD0`). On the x64 PC gate the object is
+// built with `::new (mem) AptCharacterInst(nullptr)`, so the C++ compiler has
+// already installed the concrete vtable for this type; the raw .data vtable symbol
+// has no homed method set to point at. FLAG: console raw-vtable poke expressed by
+// the C++ virtual-dispatch model -- no-op on PC (the empty-placeholder behaviour is
+// the default-constructed AptCharacterInst the caller just placement-new'd).
+// ---------------------------------------------------------------------
+void InstallEmptyCharacterInstVtbl(AptCharacterInst* /*pInst*/)
+{
+    // *pInst = &off_82145FD0;  -- modelled by the placement-new vtable install.
+}
+
+// ---------------------------------------------------------------------
+// EnsureAnimFrameRateCached -- lazy-init the module frame-rate cache
+// (X360 dword_8324E530): on first link of an animation inst, read the imported
+// movie's serialised .apt header tag at animInst->file->header+0xA: when it is 58
+// the frame rate is header[+0xB]-48, else the default 6.
+//   X360: if(!dword_8324E530){ v62=*(*(animInst+40)+16); if(*(v62+10)==58)
+//          v63=*(v62+11)-48; else v63=6; dword_8324E530=v63; }
+// The serialised .apt header byte-record (the `*(file+16)` blob) has no
+// reconstructable C++ home (no header in b5-decomp/src, no DWARF -- the same
+// deferred serialised-.apt layer as AptResolveDefaultTextFont), and the frame-rate
+// cache global is owned by that deferred layer. FLAG: deferred -- the cache stays
+// at its default until the serialised-.apt header layer is homed; no functional
+// effect on the link pass (the value is only read by the un-homed timeline tick).
+// ---------------------------------------------------------------------
+void EnsureAnimFrameRateCached(AptCharacterAnimationInst* /*pInst*/)
+{
+    // dword_8324E530 lazy init -- deferred with the serialised-.apt header layer.
+}
+
+// ---------------------------------------------------------------------
+// FireLinkNotifyCallbacks -- after a pending file is linked, fire the two host
+// notification hooks (X360 dword_8324E844 / dword_8324E830, gated by E844 / E518).
+//   X360: if(dword_8324E844) dword_8324E844(file->name+8, cih->assetString+8);
+//         if(dword_8324E518){ build a 6-tag string from file->name; dword_8324E830(&s); }
+// Both are host-installed function-pointer slots (the gAptFuncs host-callback
+// family, the same indirection as pfnSetExternVariable). They are null until the
+// host installs them; the console guards each call with its slot, so when unwired
+// nothing fires. FLAG: host notify hooks deferred -- no-op while the slots are null
+// (faithful to the `if(slot)` console guards during bring-up).
+// ---------------------------------------------------------------------
+void FireLinkNotifyCallbacks(AptFile* /*pFile*/, AptCIH* /*pCIH*/)
+{
+    // dword_8324E844 / dword_8324E830 host hooks -- deferred (null during bring-up).
+}
+
+// ---------------------------------------------------------------------
+// RestartPendingScanIfGrew -- the pending-vector realloc guard at the tail of the
+// per-pending-file inner link loop. The X360 saves the vector's data base before
+// firing FireLinkNotifyCallbacks (whose host notify can re-enter Notify and grow /
+// reallocate mPendingFiles) and, when the base changed (`if (v7 != *v6)`), bails out
+// of the inner scan -- releasing the current thingy -- so the outer loop restarts
+// against the moved storage. Returns true when a restart is required.
+//
+// FLAG (PC simplification): FireLinkNotifyCallbacks is deferred (its host hooks are
+// null during bring-up), so no re-entrant Notify can push a new pending file mid-link
+// and the vector never reallocates inside the loop. With no reallocation possible the
+// guard can never trip, so this faithfully returns false. When the host notify hooks
+// (and their re-entrant Notify path) are homed, this must compare a per-iteration
+// snapshot of mPendingFiles.mpData against its current value.
+// ---------------------------------------------------------------------
+bool RestartPendingScanIfGrew(AptFilePtr* /*pEntry*/, AptFile* /*pFile*/)
+{
+    return false;   // v7 == *v6 (no mid-link reallocation while the notify hooks are deferred)
+}
+
+// ---------------------------------------------------------------------
+// ReplaceReferences -- BLOCKED FLAG stub. @0x82AE4DF0 / PS3 _Z17ReplaceReferences
+// P8AptValueS0_PS0_i @0xF219B4: retarget every live reference from pOld to pNew
+// across the GC value graph by re-running the per-value reference-registration
+// callback with a replace callback installed, then fixing pNew's refcount.
+//
+// GENUINELY BLOCKED: the body depends on the un-homed GC reference-registration
+// subsystem -- the globals gpRefernceValue / gpRefernceValueReplace / pnRefCount /
+// snUseNewWay / nTemp1 / nTemp2, the swappable AptValue::sReferenceRegistrationCb +
+// ReferenceReplaceCb, and AptRegisterGlobalReferences -- NONE of which exist in the
+// tree (verified absent from the X360 + PS3 + BurnoutPR dumps' homed surface). A
+// faithful body cannot be written without fabricating that subsystem, so this is a
+// documented no-op stub (listed in functions_blocked) so the linker resolves it; the
+// reference-remap is deferred to the GC reference-registration TU. Call sites pass
+// (val, new, nullptr, 0); the remap is a behavioural refinement, not boot-critical.
+// ---------------------------------------------------------------------
+int ReplaceReferences(AptValue* /*pOld*/, AptValue* /*pNew*/, AptValue** /*ppTable*/, int /*nCount*/)
+{
+    return 0;   // FLAG BLOCKED: un-homed GC reference-registration subsystem
 }

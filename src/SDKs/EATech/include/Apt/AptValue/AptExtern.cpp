@@ -11,6 +11,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptValue/AptExtern.h"
+#include "SDKs/EATech/include/Apt/Apt.h"   // gAptFuncs.pfnSetExternVariable (X360 dword_8324E854)
 
 // ctor @0x82AE63D8
 //   X360: sub_82AE3000(this, 11);            // AptValue(AptVFT_Extern) base ctor
@@ -48,4 +49,22 @@ bool AptExtern::objectMemberSet(AptValue* const /*pThis*/,
     AptHost_SetExternVariable(pName->c_str(), lValueString.c_str());
 
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// AptHost_SetExternVariable -- forward an ActionScript extern-variable write to the
+// host's installed callback. The X360 objectMemberSet @0x82AF95F8 issues a single
+// unconditional indirect call `dword_8324E854(name+8, value+8)`; dword_8324E854 is
+// the gAptFuncs (X360 dword_8324E818) host-callback table slot pfnSetExternVariable
+// (Apt.h:405, table +0x3C). Homed here -- the one TU that owns the call -- routed
+// through the named table member rather than the raw .data offset.
+//
+// FLAG: the console call is unconditional (the host installs the table at AptInit);
+// guarded for null here so a write before the host wires the table is a safe no-op
+// during PC bring-up (the slot is null until CgsAptAux installs gAptFuncs).
+// ---------------------------------------------------------------------------
+void AptHost_SetExternVariable(const char* szVar, const char* szValue)
+{
+    if (gAptFuncs.pfnSetExternVariable != nullptr)   // dword_8324E854
+        gAptFuncs.pfnSetExternVariable(szVar, szValue);
 }

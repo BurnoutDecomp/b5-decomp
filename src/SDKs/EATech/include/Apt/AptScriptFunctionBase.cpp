@@ -33,6 +33,8 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstdlib>   // abort (the _purecall pure-virtual terminator @0x82C08F60)
+
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"
 #include "SDKs/EATech/include/Apt/AptFrameStack.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
@@ -103,10 +105,119 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     }
 }
 
+// copy ctor @0x82B00E90 (sub_82B00E90; PS3 DecFIGS
+// _ZN21AptScriptFunctionBaseC2E31AptVirtualFunctionTable_IndicesPS_P6AptCIH @0xF5A94C)
+// -- duplicate rOther's scope/prototype state while re-binding to pCIH. Used by the
+// subclass Duplicate paths (AptScriptFunction1::Duplicate -> its own copy ctor ->
+// this base copy ctor). Unlike the primary ctor it takes rOther.mpParentScope
+// directly (no PrepareCallContextScope -- the enclosing frame is inherited verbatim
+// from the original) and copies the prototype / __proto__ from rOther's embedded
+// hash instead of optionally building a fresh prototype.
+AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eType,
+                                             const AptScriptFunctionBase& rOther,
+                                             AptValue* pCIH)
+    : AptObject(eType, 8)   // -> AptValueWithHash(eType, 8); clears the class-flags word
+    , mpCIH(pCIH)
+    , mpParentAnim(0)
+    , mpParentScope(rOther.mpParentScope)   // a3[10]: inherit the enclosing frame verbatim
+    , mnCreatingNestedFunction(0)
+{
+    // Derive the owning timeline animation from the (re-bound) CIH -- identical walk to
+    // the primary ctor (the X360 starts from a4 == pCIH, which is what we store at +0x20).
+    const AptVirtualFunctionTable_Indices eCIH = pCIH->getVtblIndex();
+    if ((eCIH == AptVFT_CharacterInstHandle && pCIH->getIsDefined())
+        || eCIH == static_cast<AptVirtualFunctionTable_Indices>(37))
+        mpParentAnim = AptApt_DeriveFunctionAnimation(pCIH);   // FLAG: CIH-chain walk (-> AptGetAnimationAtLevel)
+    else
+        mpParentAnim = reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
+
+    // AddRef the inherited scope (when present) + the CIH + the owning animation, then
+    // bump the animation's +0x0C character ref-counter (the same twiddle the primary
+    // ctor performs via AptApt_AnimationAddCharacterRef).
+    if (mpParentScope)
+        mpParentScope->AddRef();
+    mpCIH->AddRef();
+    mpParentAnim->AddRef();
+    AptApt_AnimationAddCharacterRef(mpParentAnim);   // FLAG: +0x0C character ref-counter ++
+
+    // Copy the prototype + __proto__ links from the original (a3[5] / a3[4]).
+    // GetNativeHashVirtual is non-const (the SDK accessor is not const-qualified), so
+    // read rOther's hash through a const_cast -- the read is non-mutating in practice.
+    AptNativeHash* pOtherHash =
+        const_cast<AptScriptFunctionBase&>(rOther).GetNativeHashVirtual();
+    GetNativeHashVirtual()->SetPrototype(pOtherHash->GetPrototype());
+    GetNativeHashVirtual()->Set__Proto__(pOtherHash->Get__Proto__());
+}
+
 // ~AptScriptFunctionBase (@0x82AF5B08 scalar-deleting-destructor thunk) -- the GC
 // pointers are released by DestroyGCPointers; the dtor chains to ~AptObject.
 AptScriptFunctionBase::~AptScriptFunctionBase()
 {
+}
+
+// ===========================================================================
+// Pure-virtual script-function interface (base slots are _purecall @0x82C08F60)
+// ===========================================================================
+//
+// The compiled-body accessors (GetName / GetNumArguments / GetByteCodeBase /
+// GetByteCodeSize / GetConstantPool / SetArgument) and Duplicate are PURE VIRTUAL on
+// AptScriptFunctionBase: in the X360 ARTIST.XEX every one of these slots in the base
+// vtable (off_82145C40 slots 15-20, 22) holds _purecall (0x82C08F60), and each
+// concrete subclass (AptScriptFunction1 / AptScriptFunction2 /
+// AptScriptFunctionByteCodeBlock) installs its own override. The base declares them
+// non-pure (so the three subclass vtables share the base layout and the interpreter
+// can name them on an AptScriptFunctionBase*); these out-of-line definitions
+// reproduce the _purecall slot faithfully -- reaching one means a pure base method
+// was dispatched (a subclass forgot to override), which the X360 _purecall handles by
+// aborting. They return a type-appropriate default after the abort so the (never
+// taken) fallthrough type-checks.
+//
+// FLAG (reconstruction): _purecall (@0x82C08F60) is a CRT abort handler
+// (_NMSG_WRITE(0x19) -> _set_abort_behavior -> abort, after an optional installed
+// gpPureCallHandler at dword_832BADDC). Modelled here with the PC CRT abort() (the
+// faithful "pure virtual call" terminator); the dword_832BADDC user-handler hook is
+// not wired on PC.
+
+const char* AptScriptFunctionBase::GetName() const
+{
+    abort();           // _purecall @0x82C08F60 -- pure virtual; subclass must override
+    return 0;
+}
+
+int32_t AptScriptFunctionBase::GetNumArguments() const
+{
+    abort();           // _purecall
+    return 0;
+}
+
+void* AptScriptFunctionBase::GetByteCodeBase() const
+{
+    abort();           // _purecall
+    return 0;
+}
+
+int32_t AptScriptFunctionBase::GetByteCodeSize() const
+{
+    abort();           // _purecall
+    return 0;
+}
+
+AptConstantPool AptScriptFunctionBase::GetConstantPool() const
+{
+    abort();           // _purecall
+    AptConstantPool pool = { 0, 0 };
+    return pool;
+}
+
+void AptScriptFunctionBase::SetArgument(int32_t /*nArgIndex*/, AptValue* /*pValue*/)
+{
+    abort();           // _purecall
+}
+
+AptScriptFunctionBase* AptScriptFunctionBase::Duplicate(AptValue* /*pCIH*/) const
+{
+    abort();           // _purecall
+    return 0;
 }
 
 // ===========================================================================

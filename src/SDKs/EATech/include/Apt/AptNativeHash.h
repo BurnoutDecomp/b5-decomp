@@ -41,7 +41,12 @@
 
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC keys (friend access)
 
-struct AptValue;
+// AptValue is a CLASS (AptValue.h). The forward declaration MUST use the `class`
+// tag: MSVC mangles member signatures from the tag keyword seen at the call/def
+// site, so a `struct AptValue` forward decl here would mangle UpdateObjectMethods/
+// RegisterReferences with PEBUAptValue while every caller (which includes the real
+// AptValue.h) wants PEBVAptValue -> unresolved-at-link. Keep it `class`.
+class AptValue;
 
 // One bucket: a ref-counted key + its value. Console 8 bytes {key@+0, value@+4}.
 struct AptHashItem

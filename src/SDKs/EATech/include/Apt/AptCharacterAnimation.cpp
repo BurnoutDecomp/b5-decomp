@@ -66,9 +66,12 @@ extern void* AptActionInterpreter_CleanupAfterExecution(void* pVM, void* pSavedS
 extern void* gAptParseArgHeapPtr;     // off_8324E3D0 (FLAG)
 extern int   gAptParseArgHeapCount;   // dword_8324E3D4 (FLAG)
 
-// AptGetAnimationAtLevel @0x82xxxxxx -- the root AptCIH-at-level resolver the init
-// passes use when the supplied CIH is itself a level (type 0x25). FLAG: deferred TU.
-extern void* AptGetAnimationAtLevel(int nLevel);
+// AptGetAnimationAtLevel @0x82B00788 -- the root AptCIH-at-level resolver the init
+// passes use when the supplied CIH is itself a level (type 0x25). Homed in
+// AptCharacterHelper.cpp; CANONICAL return reconciled to AptCIH* (was void* here --
+// the void* blob walk below still binds via the AptCIH*->void* assignment).
+struct AptCIH;
+extern AptCIH* AptGetAnimationAtLevel(int nLevel);
 
 // Unresolve reaches the VM's deferred-release queue + a host free hook for shapes.
 // dword_8324E500 = the VM (owning) thread id; the queue (off_8324E2C8 / count
@@ -201,6 +204,149 @@ void AptCharacterAnimation::IncCharacterList(AptFilePtr filePtr) const
                     AptSharedPtrDelete(oldp);
             }
             pCharacter->AddCharacterReference();
+        }
+    }
+}
+
+// ===========================================================================
+// AptCharacterAnimation_Link @0x82AFF... (PS3 @0xF44894, the DecFIGS-named
+// AptCharacterAnimation::Link(AptCharacter*, void*)).   DECOMPILED FAITHFULLY from
+// the PS3 EXTERNAL ELF (the X360 ARTIST collapses this into the loader; the DWARF-
+// named PS3 body is authoritative).
+//
+// Bind a just-loaded movie root into the scene -- the final import/cross-reference
+// resolution pass AptLoader::Update runs once every import is available (state 3 ->
+// 4). It is homed here (with the AptCharacterAnimation blob walk) rather than as a
+// member because the loader calls it through the named extern hook on the embedded
+// AptCharacterAnimation at AptFile::mpData+0x10 (root+16).
+//
+// The console signature is (this, AptCharacter* a2, void* a3); the body never reads
+// a2/a3 (the asm leaves r4/r5 untouched), so the homed free-function form keeps them
+// as the raw pData/pDataBlock the loader passes and the return (`this`, a chaining
+// value the callers ignore) is modelled void -- matching the family's list-walk
+// methods. Two passes over the serialised blob (the FLAGged in-place 32-bit fork,
+// the same one Fixup/Unresolve walk -- console offsets via the Blob* accessors):
+//
+//   1. import table [c:0x20]/[c:0x24]: for each import, resolve its class name in the
+//      imported movie's export table (AptFile::FindExport), store the resolved
+//      character into mpCharacterTable[importId], copy the import's loaded AptFile into
+//      that character's mpAnimationFile slot (AptFilePtr assign: inc new / dec+delete
+//      old), and add a character reference.
+//   2. character table [c:0x0C]/[c:0x10]: turn each owned character's stored cross-
+//      reference INDICES into live character pointers -- a type-8 import character's
+//      two single index fields (+0x10, +0x14), or a type-3 character's index ARRAY
+//      (count @+0x14, array @+0x18). (The inverse of Unresolve's index re-mapping.)
+//
+// FLAG (x64 fork): the resolved-character pointers and the index->pointer rewrites are
+// stored into the in-place 32-bit blob slots -- the same 32-bit-slot-can't-hold-a-
+// 64-bit-pointer impossibility already FLAGged for the Fixup walk. The char table is
+// treated as a host AptCharacter** here (matching Unresolve's slot stores), so the
+// pointer width stays correct on x64; the native-struct transcode lands with the
+// FixupTranscode rebuild. The ref-count bookkeeping is faithful.
+// ===========================================================================
+void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, void* pDataBlock)
+{
+    (void)pData;        // console a2 (r4) -- the asm never reads it
+    (void)pDataBlock;   // console a3 (r5) -- the asm never reads it
+
+    void* const pThis = pCharAnim;
+
+    // ---- pass 1: resolve the import table -------------------------------------
+    const int32_t nImports = BlobI32(pThis, 0x20);          // mnImportCount (this[8])
+    if (nImports > 0)
+    {
+        for (int32_t i = 0; i < nImports; ++i)
+        {
+            void* pEntry = BlobAt(BlobPtr(pThis, 0x24), i * 16);   // mpImportTable[i] (this[9])
+            const int32_t nId = BlobI32(pEntry, 0x08);             // importEntry.mnId
+
+            // FindExport(entry.mpFile, entry.mpClassName): the imported movie's export
+            // table resolves the class name to a character. entry.mpFile is the import's
+            // loaded AptFile (+0xC), entry.mpClassName is +4.
+            AptFile* const pImportFile = reinterpret_cast<AptFile*>(BlobPtr(pEntry, 0x0C));
+            const char* const pClassName = reinterpret_cast<const char*>(BlobPtr(pEntry, 0x04));
+            AptCharacter* const pResolved = pImportFile->FindExport(pClassName);
+
+            // Store the resolved character into mpCharacterTable[importId] (the char
+            // table is a host AptCharacter** -- the Unresolve slot-store convention).
+            AptCharacter** const pTable = reinterpret_cast<AptCharacter**>(BlobPtr(pThis, 0x10));
+            pTable[nId] = pResolved;
+
+            // If it resolved, copy the import's AptFile into the resolved character's
+            // animation-file slot and add a character reference.
+            AptCharacter* const pChar = pTable[nId];
+            if (pChar)
+            {
+                // AptFilePtr assign (char->mpAnimationFile = entry.mpFile): only when
+                // the slots differ. inc new, dec+delete old (the console operator=).
+                AptFile** pCharSlot  = &pChar->mpAnimationFile;       // resolvedChar +0xC
+                AptFile** pEntrySlot = reinterpret_cast<AptFile**>(BlobAt(pEntry, 0x0C)); // importEntry +0xC
+                if (pCharSlot != pEntrySlot)
+                {
+                    AptFile* const pNew = *pEntrySlot;
+                    AptFile* const pOld = *pCharSlot;
+                    *pCharSlot = pNew;
+                    if (pNew)
+                        AptSharedPtrIncRef(pNew);
+                    if (pOld && AptSharedPtrDecRef(pOld) == 0)
+                        AptSharedPtrDelete(pOld);
+                }
+
+                // AddCharacterReference (re-read the table slot, as the asm does).
+                pTable[nId]->AddCharacterReference();
+            }
+        }
+    }
+
+    // ---- pass 2: turn stored cross-reference INDICES into character pointers ----
+    const int32_t nChars = BlobI32(pThis, 0x0C);            // mnCharacterCount (this[3])
+    if (nChars > 0)
+    {
+        AptCharacter** const pTable = reinterpret_cast<AptCharacter**>(BlobPtr(pThis, 0x10));
+        for (int32_t i = 0; i < nChars; ++i)
+        {
+            void* pChar = pTable[i];
+            if (!pChar)
+                continue;
+
+            const int32_t eType = BlobI32(pChar, 0x00);     // mnType
+            if (eType != 3)
+            {
+                if (eType == 8)
+                {
+                    // Type-8 import character: its two cross-reference INDEX fields
+                    // (+0x10, +0x14) name characters by table index; rewrite them to
+                    // live pointers via mpCharacterTable.
+                    AptCharacter** const pT = reinterpret_cast<AptCharacter**>(BlobPtr(pThis, 0x10));
+                    // FLAG (x64 fork): +0x10 and +0x14 are adjacent 4-byte index fields
+                    // on the console; an 8-byte host pointer written at +0x10 would clobber
+                    // +0x14, so both indices are read BEFORE either pointer is stored (the
+                    // console writes 4-byte slots, so ordering was immaterial there).
+                    const int32_t nIdx0 = BlobI32(pChar, 0x10);
+                    const int32_t nIdx1 = BlobI32(pChar, 0x14);
+                    BlobPtrRef(pChar, 0x10) = pT[nIdx0];
+                    BlobPtrRef(pChar, 0x14) = pT[nIdx1];
+                }
+                // (any other type: nothing to resolve)
+            }
+            else
+            {
+                // Type-3 character: an ARRAY of cross-reference indices (count @+0x14,
+                // array @+0x18); rewrite each entry to a live character pointer.
+                const int32_t nRefs = BlobI32(pChar, 0x14);
+                if (nRefs > 0)
+                {
+                    for (int32_t r = 0; r < nRefs; ++r)
+                    {
+                        AptCharacter** const pT = reinterpret_cast<AptCharacter**>(BlobPtr(pThis, 0x10));
+                        void* pArr = BlobPtr(pChar, 0x18);                 // char[6] (the index array)
+                        const int32_t nIdx = BlobI32(pArr, r * 4);
+                        *reinterpret_cast<void**>(BlobAt(pArr, r * 4)) = pT[nIdx];
+                        // (the asm reloads char[4]/char[6] each iteration)
+                        pChar = pTable[i];
+                    }
+                }
+            }
         }
     }
 }

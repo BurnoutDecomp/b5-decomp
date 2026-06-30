@@ -50,7 +50,8 @@ extern AptValue* AptInterp_LookupScopeChain(AptActionInterpreter* pInterp, const
 // FLAG: the _level / global-object fallback for CIH contexts (the global frame's
 // AptNativeHash). Returns the found value or null.
 extern AptValue* AptInterp_LookupGlobalFallback(AptActionInterpreter* pInterp,
-                                                AptValue* pContext, const EAStringC* pName);
+                                                AptValue* pContext, const EAStringC* pName,
+                                                int nDirect);
 
 // FLAG: the "variable not found" diagnostic callback (null until AptInit).
 typedef void (*AptVarNotFoundCb)(const char* pName);
@@ -112,7 +113,7 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
             // 5) the _level / global-object fallback (only when not targeting).
             if (!pFound && !pTarget)
             {
-                pFound = AptInterp_LookupGlobalFallback(this, pContext, pLeaf);  // FLAG
+                pFound = AptInterp_LookupGlobalFallback(this, pContext, pLeaf, nDirect);  // FLAG
                 if (!pFound)
                 {
                     if (gpAptVarNotFoundCb)

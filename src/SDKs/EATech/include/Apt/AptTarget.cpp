@@ -79,14 +79,14 @@ extern AptRenderManagerQueue gAptRenderManagerQueue;   // dword_8324E7D8
 // retiring the entries flagged this pass. Body its own (Apt update) TU.
 void* AptUpdateZombieVector(char bAll);
 
-// FLAG (un-homed AptAnimationTarget lifecycle surface; bodies their own TU):
-//   AptAnimationTarget::AptAnimationTarget @0x82AFF648 -- the 88-byte director ctor
-//                                       (built from the same AptUpdateParams block).
+// MakeAptAnimationTarget (the @0x82AFF648 ctor, built from the AptUpdateParams block)
+// is now HOMED in AptAnimationTarget.cpp next to the ctor it wraps -- its declaration
+// comes from the AptAnimationTarget.h include above. The remaining lifecycle surface
+// is still its own TU (declared by name + FLAG'd):
 //   AptAnimationTarget::PreDestroy   @0x82AFE... -- release the director's owned
 //                                       display-list/listener state before the GC pass.
 //   AptAnimationTarget::CleanRemList @0x82B0...  -- drain the remove list.
 //   ~AptAnimationTarget              @0x82AFF790 -- the 88-byte director destructor.
-AptAnimationTarget* MakeAptAnimationTarget(void* pMem, const u32* pParams);
 void AptAnimationTarget_PreDestroy(AptAnimationTarget* pAnim);
 void AptAnimationTarget_CleanRemList(AptAnimationTarget* pAnim);
 void AptAnimationTarget_Destruct(AptAnimationTarget* pAnim);
@@ -270,4 +270,38 @@ void AptTarget::Shutdown()
     gAptTargetTls.SetValue(pPrevTLS);
     gpAptTarget = pPrevCurrent;                      // off_8324E574 = v2
     gAptTargetTls.SetValue(pPrevCurrent);
+}
+
+// ---------------------------------------------------------------------
+// GetTarget -- the per-thread current AptTarget. PS3 _Z9GetTargetv @0xF1AD14:
+//   return EA::Thread::ThreadLocalStorage::GetValue(&gTLSCurrentTarget);
+// The current-target TLS slot is the gAptTargetTls mirror Shutdown publishes into
+// (X360 unk_8324E814). Homed here (the AptTarget TU that owns that mirror).
+// ---------------------------------------------------------------------
+AptTarget* GetTarget()
+{
+    return static_cast<AptTarget*>(gAptTargetTls.GetValue());   // TlsGetValue(gTLSCurrentTarget)
+}
+
+// ---------------------------------------------------------------------
+// AptTarget_GetLoader -- the loader the target holds at +0x1C. PS3
+// _ZN9AptTarget9GetLoaderEv @0xF15E60: `return *(this + 7);` (the 8th pointer word
+// == mpLoader). Routed through the named member so the x64 layout stays correct
+// (the AptLoader.h FLAG that introduced this accessor instead of the literal offset).
+// ---------------------------------------------------------------------
+AptLoader* AptTarget_GetLoader(AptTarget* pTarget)
+{
+    return pTarget->mpLoader;   // *(this + 7) == +0x1C
+}
+
+// ---------------------------------------------------------------------
+// AptLoader_Destruct -- run ~AptLoader (drain the weak loaded-file list + cancel
+// every still-registered preloaded animation). PS3 _ZN9AptLoaderD1Ev/D2Ev
+// @0xF440B8/@0xF44198; the body is homed as AptLoader::~AptLoader (AptLoader.cpp
+// @0x82AFF958). This shim is the named-callee Shutdown invokes (the console emits a
+// direct `~AptLoader; Deallocate` -- the explicit destructor call, no block free).
+// ---------------------------------------------------------------------
+void AptLoader_Destruct(AptLoader* pLoader)
+{
+    pLoader->~AptLoader();
 }

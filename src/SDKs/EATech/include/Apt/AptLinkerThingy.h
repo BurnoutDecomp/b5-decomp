@@ -55,3 +55,10 @@ struct AptSingleListNode
     AptLinkerThingy*   mpThingy;   // [0x00] counted held thingy
     AptSingleListNode* mpNext;     // [0x04] next node
 };
+
+// MakeLinkerThingy -- the AptLinkerThingy::AptLinkerThingy ctor @0x82ADBF58 wrapped
+// as the AptLinker::Load factory: pool-allocate a 16-byte node, then MOVE the held
+// file reference from rFile into mpFile (incref into the thingy, dispose the source)
+// and key it on pValue. Body in AptLinkerThingy.cpp (the X360 ctor is folded -- no
+// own export symbol -- and was disassembled from the decrypted ARTIST.XEX).
+AptLinkerThingy* MakeLinkerThingy(AptFilePtr& rFile, AptValue* pValue);
