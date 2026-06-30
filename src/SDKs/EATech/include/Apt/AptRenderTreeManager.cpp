@@ -89,13 +89,16 @@ AptRenderTreeManager* AptCurrentRenderTreeManager()
 
 AptRenderItem* AptRTM_CreateItem(AptRenderTreeManager* pMgr, AptCharacter* pCharacter, int nTick)
 {
-    // NULL-SAFE (x64 bring-up): AptCurrentRenderTreeManager() is a FLAG'd null stub until the target
-    // sim / render-tree manager is initialised (AptRenderInitialize, un-homed). The console always has
-    // a live manager here; on our partial bring-up it is null, so return null instead of dereferencing
-    // it. The caller (AptCharacterInst ctor) then leaves mpRenderItem null and the higher-level guards
-    // bail cleanly. FLAG: no render item is created until the render-tree manager lands.
+    // x64 bring-up: AptCurrentRenderTreeManager() is a FLAG'd null stub until the target sim /
+    // render-tree manager is initialised (AptRenderInitialize, un-homed). Update_CreateItem is the
+    // manager's DOUBLE-BUFFERED wrapper around the homed AptRenderItem::Manager_CreateItem factory --
+    // which itself needs NO manager (it just pool-allocates the typed render item from the character).
+    // So when the manager is null we call the factory DIRECTLY: this gives every AptCharacterInst a
+    // real render item (carrying mpCharacter), which is what AptCIH::tick / AptCIH_GetClipMovie reach
+    // the clip's movie through. FLAG: no double-buffering until the manager lands; the single render
+    // item is created in place. (The console always routes through the live manager.)
     if (pMgr == nullptr)
-        return nullptr;
+        return AptRenderItem::Manager_CreateItem(pCharacter, nTick);
     return pMgr->Update_CreateItem(pCharacter, nTick);
 }
 

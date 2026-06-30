@@ -21,15 +21,33 @@
 
 #include <new>   // placement new (factory)
 
+// The mkitem step-probe sink (host-implemented; weak no-op default so this TU links standalone).
+#if defined(_MSC_VER)
+extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const void* pCharacter,
+                                   const void* pRenderItem, const void* pItemCharacter);
+#pragma comment(linker, "/alternatename:CgsApt_MkItemProbe=CgsApt_MkItemProbeDefault")
+extern "C" void CgsApt_MkItemProbeDefault(const void*, int, const void*, const void*, const void*) {}
+#else
+extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const void* pCharacter,
+                                   const void* pRenderItem, const void* pItemCharacter);
+#endif
+
 // ctor @0x81431C
 AptCharacterInst::AptCharacterInst(AptCharacter* pCharacter)
 {
     mpProperties = nullptr;
 
-    AptRenderItem* pItem = nullptr;
-    if (AptRenderTreeManager* pMgr = AptCurrentRenderTreeManager())
-        pItem = AptRTM_CreateItem(pMgr, pCharacter, gnCurrUpdateTick);
+    // CREATE THE RENDER ITEM. BUGFIX (x64 bring-up): the original guard
+    //   `if (AptRenderTreeManager* pMgr = AptCurrentRenderTreeManager()) pItem = AptRTM_CreateItem(...)`
+    // short-circuited when the manager is the FLAG'd null stub, so the render item was NEVER created
+    // and mpRenderItem stayed null (-> the tick / render path had nothing). AptRTM_CreateItem now
+    // handles a null manager internally (falling back to the homed AptRenderItem::Manager_CreateItem
+    // factory, which needs no manager), so call it UNCONDITIONALLY and store the result.
+    AptRenderItem* pItem = AptRTM_CreateItem(AptCurrentRenderTreeManager(), pCharacter, gnCurrUpdateTick);
     mpRenderItem = pItem;
+
+    CgsApt_MkItemProbe(this, pCharacter ? pCharacter->mnType : -1, pCharacter, pItem,
+                       pItem ? pItem->mpCharacter : nullptr);
 
     // High 6 bits of mTypeFlags = the character's type tag (15 when none).
     const uint32_t uType = pCharacter ? static_cast<uint32_t>(pCharacter->mnType) : 15u;

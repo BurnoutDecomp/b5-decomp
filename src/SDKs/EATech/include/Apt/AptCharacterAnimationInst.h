@@ -131,3 +131,11 @@ struct AptCharacterAnimationInst : public AptCharacterSpriteInstBase
 // ---------------------------------------------------------------------------
 struct AptFile;
 AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile);
+
+// gAptSkipCharList -- character-list-bookkeeping skip gate (companion to gAptSkipTimeline in AptCIH.h).
+// Set to 1 on the native-8 (GUIAPT64) faithful path: the movie's embedded AptCharacterAnimation
+// character table is only partly relocated by FixupInPlace, so MakeCharacterAnimationInst's
+// IncCharacterList walk would AV on `mpCharacterTable[i]`. When set, that walk is skipped cleanly with
+// the ref-count kept balanced; the registration resumes once the character records are fully widened.
+// Default 0 (console/4-byte path runs IncCharacterList normally).
+extern unsigned int gAptSkipCharList;
