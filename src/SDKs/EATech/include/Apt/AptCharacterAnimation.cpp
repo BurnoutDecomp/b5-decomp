@@ -134,6 +134,36 @@ namespace
     inline int64_t Reloc64(int64_t nOffset, int64_t nBase) { return nOffset ? (nOffset + nBase) : 0; }
 }
 
+// ---------------------------------------------------------------------------
+// FIXUP RESOURCE BOUNDS (defensive, set by the host before calling Fixup on the native 8-byte
+// path). The FixupWalk relocates file-relative offsets in place; on real data a record offset can
+// be garbage (e.g. an interleaved string the converter left in a table slot). When these bounds are
+// set, the per-character pass skips any record pointer that lands outside [base, base+size) instead
+// of dereferencing it (-> no AV). Bounds of 0 disable the guard (the faithful console behaviour).
+// gApt: file-scope so FixupWalk (in an anonymous namespace) + the public callers can both set them.
+// ---------------------------------------------------------------------------
+uintptr_t gAptFixupBoundLo = 0;
+uintptr_t gAptFixupBoundHi = 0;
+
+// Per-Fixup diagnostics (reset by the host before each Fixup): counts of records the bounds guard
+// skipped + the per-character probe budget. The probe sink (CgsApt_FixupProbe) is implemented by the
+// host (BrnAptRuntimeBringUp.cpp) so this engine TU does not depend on the game log directly.
+int gAptFixupSkipped       = 0;
+int gAptFixupSkippedMovies = 0;
+int gAptFixupProbeChars    = 0;
+extern void CgsApt_FixupProbe(int nCharIndex, int nType, long long nCharOffset);
+
+namespace
+{
+    inline bool FixupInBounds(const void* p, int nNeed)
+    {
+        if (gAptFixupBoundLo == 0)
+            return true;   // guard disabled -> faithful (no bounds check)
+        const uintptr_t a = reinterpret_cast<uintptr_t>(p);
+        return a >= gAptFixupBoundLo && a + static_cast<uintptr_t>(nNeed) <= gAptFixupBoundHi;
+    }
+}
+
 // IsImport @0x7E3738 -- find the import slot whose local id matches nId.
 int32_t AptCharacterAnimation::IsImport(int32_t nId)
 {
@@ -401,126 +431,215 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
 // ===========================================================================
 namespace
 {
+    // ---- the serialised .apt field-offset set, parameterised by pointer width -------------------
+    // The 4-byte (console) layout packs everything tight; the 8-byte (native x64) layout widens every
+    // pointer field 4->8 with natural alignment (an int before a pointer gets 4 bytes pad), per the
+    // USER-supplied + VERIFIED widening scheme (TITLE_SCREEN02 def-base @res+0x4950: frameCount=103,
+    // charCount=41, w=1280, h=720, ms=33, importCount=5). The character HEADER widens 0x10->0x20
+    // (type@+0, signature 0x09876543 @+8, def-base @ header+0x20 vs console header+0x10).
+    template <int PTR> struct AptOffsets;
+    template <> struct AptOffsets<4> {   // console 4-byte
+        static const int kCharCount   = 0x0C;
+        static const int kCharTable   = 0x10;
+        static const int kImportCount = 0x20;
+        static const int kImportTable = 0x24;
+        static const int kInitCount   = 0x28;
+        static const int kInitList    = 0x2C;
+        static const int kInitStride  = 0x08;   // {ptr, int32}
+        static const int kImpStride   = 0x10;   // {name*, class*, id, AptFile*}
+        static const int kImpFileOff  = 0x0C;   // AptFile* slot within an import entry
+    };
+    template <> struct AptOffsets<8> {   // native x64 8-byte (def-base offsets)
+        static const int kCharCount   = 0x18;
+        static const int kCharTable   = 0x20;
+        static const int kImportCount = 0x34;
+        static const int kImportTable = 0x38;
+        static const int kInitCount   = 0x40;
+        static const int kInitList    = 0x48;
+        static const int kInitStride  = 0x10;   // {ptr(8), int32 charId, 4 pad}
+        static const int kImpStride   = 0x20;   // {name*(8), class*(8), id(4)+pad(4), AptFile*(8)}
+        static const int kImpFileOff  = 0x18;   // AptFile* slot within an 8-byte import entry
+    };
+
     template <typename TOff, TOff (*TReloc)(TOff, TOff)>
     AptCharacterAnimation* FixupWalk(AptCharacterAnimation* pThis, void* pBase,
                                      void* pA3, void* pA4)
     {
+        typedef AptOffsets<static_cast<int>(sizeof(TOff))> Off;   // 4- or 8-byte field offsets
         const TOff nBase = static_cast<TOff>(reinterpret_cast<intptr_t>(pBase));
 
-        // Relocate one file-relative slot of width sizeof(TOff) in place.
+        // Relocate one file-relative slot of width sizeof(TOff) IN PLACE -- BOUNDS-GUARDED. When the
+        // host has set [gAptFixupBoundLo, gAptFixupBoundHi) (the native-8 real-data path), a slot that
+        // lands outside the resource is SKIPPED (a write to a bad slot would corrupt the heap; a read
+        // of one would AV). 0 bounds -> faithful (no check). This is the universal guard that closes
+        // every per-record relocation gap in the walk.
         auto RelocSlot = [nBase](void* pRec, int nOff)
         {
-            TOff* pSlot = reinterpret_cast<TOff*>(reinterpret_cast<char*>(pRec) + nOff);
+            void* pSlotAddr = reinterpret_cast<char*>(pRec) + nOff;
+            if (!FixupInBounds(pSlotAddr, static_cast<int>(sizeof(TOff))))
+                return;
+            TOff* pSlot = reinterpret_cast<TOff*>(pSlotAddr);
             *pSlot = TReloc(*pSlot, nBase);
         };
 
-        // Read a (now relocated) pointer slot of width sizeof(TOff) -- the file
-        // pointer slots are TOff-wide, so they must NOT be read as host void* on the
-        // 4-byte path. Returns the slot value as a host pointer.
+        // Read a (relocated) pointer slot of width sizeof(TOff) -- BOUNDS-GUARDED: an out-of-range
+        // slot reads as null (the caller's null-checks then skip), never AVs.
         auto SlotPtr = [](void* pRec, int nOff) -> void*
         {
+            void* pSlotAddr = reinterpret_cast<char*>(pRec) + nOff;
+            if (!FixupInBounds(pSlotAddr, static_cast<int>(sizeof(TOff))))
+                return nullptr;
             return reinterpret_cast<void*>(static_cast<intptr_t>(
-                *reinterpret_cast<TOff*>(reinterpret_cast<char*>(pRec) + nOff)));
+                *reinterpret_cast<TOff*>(pSlotAddr)));
         };
 
-        // char_i = mpCharacterTable[i]; the table-slot stride is sizeof(TOff).
+        // char_i = mpCharacterTable[i]; the table-slot stride is sizeof(TOff). The charTable field
+        // offset within the def base is Off::kCharTable (console 0x10 / native-8 0x20).
         auto CharAt = [&SlotPtr, pThis](int32_t i) -> void*
         {
-            void* pTable = SlotPtr(pThis, 0x10);   // mpCharacterTable (relocated)
+            void* pTable = SlotPtr(pThis, Off::kCharTable);   // mpCharacterTable (relocated)
             return SlotPtr(pTable, i * static_cast<int>(sizeof(TOff)));
         };
 
-        // The pointer-array slot stride (sizeof(TOff)); the char table + init list +
-        // import table index by it. The console (4-byte) value is 4; the 8-byte .apt
-        // widens it. FLAG: the AptInitEntry / AptImportEntry record sizes below mix a
-        // pointer slot with trailing int fields -- their TOTAL stride for an 8-byte
-        // .apt is not recoverable from the 4-byte console asm, so the trailing-field
-        // portion (init +4, import +8/+0x0C) is assumed unchanged (console offsets);
-        // only the leading pointer slots widen. This is exact for the 4-byte path.
+        // The pointer-array slot stride (sizeof(TOff)); the char/init/import tables index by it.
         const int nPtr = static_cast<int>(sizeof(TOff));
 
-        // ---- pass 1: the init-indicator list [c:0x28]/[c:0x2C] ----------------
-        // mpCharacterTable [c:0x10] and mpInitList [c:0x2C] are relocated first;
-        // then each AptInitEntry's object pointer (+0). Console record stride = 8
-        // {ptr@+0, indicator@+4}; widened to nPtr + 4 for the 8-byte path.
-        RelocSlot(pThis, 0x10);                          // mpCharacterTable
-        RelocSlot(pThis, 0x2C);                          // mpInitList
+        // ---- pass 1: the init-indicator list (init/export pair) --------------
+        // mpCharacterTable + mpInitList are relocated first; then each entry's object pointer (+0).
+        // Record stride is Off::kInitStride ({ptr, int32} -- 8 console / 16 native-8). NOTE (USER):
+        // in this format the "init" pair IS the movie's EXPORT table; the walk relocates it the same.
+        RelocSlot(pThis, Off::kCharTable);                       // mpCharacterTable
+        RelocSlot(pThis, Off::kInitList);                        // mpInitList / exportsOffset
         {
-            const int32_t nInit = BlobI32(pThis, 0x28);  // mnInitListCount
-            void* pInitList = SlotPtr(pThis, 0x2C);
-            const int nInitStride = nPtr + 4;            // {ptr, int32 indicator}
+            const int32_t nInit = BlobI32(pThis, Off::kInitCount);
+            void* pInitList = SlotPtr(pThis, Off::kInitList);
             for (int32_t i = 0; i < nInit; ++i)
-                RelocSlot(pInitList, i * nInitStride);   // AptInitEntry.mpInitObject (+0)
+                RelocSlot(pInitList, i * Off::kInitStride);      // entry.ptr (+0)
         }
 
-        // ---- pass 2: the character table [c:0x0C]/[c:0x10] --------------------
-        const int32_t nChars = BlobI32(pThis, 0x0C);     // mnCharacterCount
+        // ---- pass 2: the character table -------------------------------------
+        const int32_t nChars = BlobI32(pThis, Off::kCharCount);
         for (int32_t i = 0; i < nChars; ++i)
         {
             // relocate this table slot (slot stride = sizeof(TOff)).
-            RelocSlot(SlotPtr(pThis, 0x10), i * nPtr);
+            RelocSlot(SlotPtr(pThis, Off::kCharTable), i * nPtr);
 
             // re-read the (now relocated) entry; null entries are skipped.
             void* pChar = CharAt(i);
             if (!pChar)
                 continue;
-
-            // mpFixupLink [c:+4] = the table base (table[0]); a back-link the asm
-            // wires for every character: stw *(mpCharacterTable) -> char[+4]. The
-            // link is a pointer slot, so it is TOff-wide.
+            // DEFENSIVE (native-8 real data): a table slot may hold an interleaved string / garbage
+            // offset; if the relocated character record (its read fields up to the type switch) falls
+            // outside the resource, skip it entirely rather than read/write it. Need >= the largest
+            // per-type offset we touch (case-10 glyph header @+0x3C+...; be generous: 0x60).
+            if (!FixupInBounds(pChar, 0x60))
             {
-                void* pTable = SlotPtr(pThis, 0x10);
-                TOff nTable0 = *reinterpret_cast<TOff*>(pTable);   // table[0]
-                *reinterpret_cast<TOff*>(reinterpret_cast<char*>(pChar) + 0x04) = nTable0;
+                ++gAptFixupSkipped;
+                continue;
             }
 
-            const int32_t eType = BlobI32(pChar, 0x00);  // mnType
+            const int32_t eType = BlobI32(pChar, 0x00);  // mnType (pChar in-bounds: safe)
+            if (gAptFixupProbeChars < 64)
+            {
+                ++gAptFixupProbeChars;
+                CgsApt_FixupProbe(i, eType, reinterpret_cast<char*>(pChar) - static_cast<char*>(pBase));
+            }
+
+            // mpFixupLink [c:+4] = the table base (table[0]); a back-link the asm wires for every
+            // character. BOUNDS-GUARDED: only write when both the source slot (table[0]) and the dest
+            // (pChar+0x04) are in range. FLAG: the dest offset +0x04 is the console one; for native-8
+            // the fixup-link likely sits elsewhere in the (widened) header -- but the bounds guard makes
+            // a wrong write a safe no-op rather than heap corruption, until the exact offset is pinned.
+            {
+                void* pTableBase = SlotPtr(pThis, Off::kCharTable);   // null if out-of-range
+                void* pLinkDst   = reinterpret_cast<char*>(pChar) + 0x04;
+                if (pTableBase != nullptr && FixupInBounds(pTableBase, static_cast<int>(sizeof(TOff))) &&
+                    FixupInBounds(pLinkDst, static_cast<int>(sizeof(TOff))))
+                {
+                    TOff nTable0 = *reinterpret_cast<TOff*>(pTableBase);   // table[0]
+                    *reinterpret_cast<TOff*>(pLinkDst) = nTable0;
+                }
+            }
+
             switch (eType)
             {
                 case 1:
-                    // Shape: load the host rendering unit for character index i and
-                    // store the returned handle at char[+0x20] (a pointer slot, TOff-
-                    // wide). dword_8324E878 == gAptFuncs+0x60 == pfnLoadRenderingUnit(
-                    // a4, index). FLAG: the asm calls through the gAptFuncs slot by raw
-                    // offset; routed through the named pfn.
-                    *reinterpret_cast<TOff*>(reinterpret_cast<char*>(pChar) + 0x20) =
-                        static_cast<TOff>(reinterpret_cast<intptr_t>(
-                            gAptFuncs.pfnLoadRenderingUnit(pA4, i)));
+                {
+                    // Shape: store the host rendering-unit handle at char[+0x20] (console). The handle
+                    // comes from gAptFuncs.pfnLoadRenderingUnit(pA4, i) -- which reads the GuiGeometry
+                    // object pointer at *(pA4+12) (console offset) and bsearches it. On the native-8
+                    // resource that offset is NOT the geometry pointer, so the call would bsearch garbage
+                    // and AV. So SKIP the shape-handle store on the native-8 path (the render path
+                    // resolves geometry separately via the AptDataHeader). 4-byte runs it faithfully.
+                    if (sizeof(TOff) != 8)
+                    {
+                        void* pShapeSlot = reinterpret_cast<char*>(pChar) + 0x20;
+                        if (FixupInBounds(pShapeSlot, static_cast<int>(sizeof(TOff))))
+                            *reinterpret_cast<TOff*>(pShapeSlot) =
+                                static_cast<TOff>(reinterpret_cast<intptr_t>(
+                                    gAptFuncs.pfnLoadRenderingUnit(pA4, i)));
+                    }
                     break;
+                }
 
                 case 2:
-                    // Sprite-button / morph header: relocate char[+0x3C] and char[+0x40].
+                    // Sprite-button / morph header: relocate char[+0x3C]/+0x40 (RelocSlot is guarded).
                     RelocSlot(pChar, 0x3C);
                     RelocSlot(pChar, 0x40);
                     break;
 
                 case 3:
-                    // Text / edit-text: relocate char[+0x10] and char[+0x18].
+                    // Text / edit-text: relocate char[+0x10]/+0x18 (guarded).
                     RelocSlot(pChar, 0x10);
                     RelocSlot(pChar, 0x18);
                     break;
 
                 case 5:
                 case 9:
-                    // Sprite / movie: recurse into the embedded timeline at char+0x10.
-                    // a4 (r6) = pThis+0x30 (the resolve-state scratch, AptCharacterAnimation
-                    // console dword [12]); a3 (r5) = pA3; nBase (r4) = the load base.
-                    reinterpret_cast<AptMovie*>(reinterpret_cast<char*>(pChar) + 0x10)
-                        ->resolve(static_cast<int>(nBase), pA3,
-                                  static_cast<int>(reinterpret_cast<intptr_t>(
-                                      reinterpret_cast<char*>(pThis) + 0x30)));
+                {
+                    // Sprite / movie: recurse into the embedded timeline. Console AptMovie @ char+0x10;
+                    // native-8 @ char+0x20 (widened header). DEFENSIVE: only recurse when the movie
+                    // sub-record is in-bounds (a garbage slot would AV deep inside AptMovie::resolve).
+                    const int nMovieOff = (sizeof(TOff) == 8) ? 0x20 : 0x10;
+                    AptMovie* pMovie =
+                        reinterpret_cast<AptMovie*>(reinterpret_cast<char*>(pChar) + nMovieOff);
+                    // FLAG: AptMovie::resolve walks the timeline command stream with CONSOLE offsets;
+                    // its internal record widening is NOT yet done, so it can AV on native-8 timeline
+                    // data even with an in-bounds movie header. Until the timeline layout is widened we
+                    // SKIP the recursion on the native-8 path (the bounds guard cannot protect inside
+                    // resolve). The clip's frames/AS are a follow-on; the char/geometry tables (relocated
+                    // above) are what the render path needs.
+                    if (sizeof(TOff) == 8)
+                    {
+                        ++gAptFixupSkippedMovies;
+                    }
+                    else if (FixupInBounds(pMovie, 0x20))
+                    {
+                        pMovie->resolve(static_cast<int>(nBase), pA3,
+                                        static_cast<int>(reinterpret_cast<intptr_t>(
+                                            reinterpret_cast<char*>(pThis) + 0x30)));
+                    }
                     break;
+                }
 
                 case 10:
-                    // Font: relocate char[+0x3C] (the glyph table), then walk its
-                    // char[+0x38] entries (stride 0x38), relocating each entry's +0x34
-                    // glyph-data slot.
+                    // Font: relocate char[+0x3C] (glyph table) then walk char[+0x38] entries (stride
+                    // 0x38), relocating each +0x34 glyph-data slot. All RelocSlot/SlotPtr calls are
+                    // bounds-guarded; bound the glyph count + each entry too.
                     RelocSlot(pChar, 0x3C);
                     {
                         const int32_t nGlyphs = BlobI32(pChar, 0x38);
-                        void* pGlyphs = SlotPtr(pChar, 0x3C);   // relocated glyph table
-                        for (int32_t g = 0; g < nGlyphs; ++g)
-                            RelocSlot(pGlyphs, g * 0x38 + 0x34);
+                        void* pGlyphs = SlotPtr(pChar, 0x3C);   // null if out-of-range
+                        if (pGlyphs != nullptr && nGlyphs > 0 && nGlyphs <= 65536)
+                        {
+                            for (int32_t g = 0; g < nGlyphs; ++g)
+                            {
+                                void* pEnt = reinterpret_cast<char*>(pGlyphs) + g * 0x38 + 0x34;
+                                if (!FixupInBounds(pEnt, static_cast<int>(sizeof(TOff))))
+                                    break;
+                                RelocSlot(pGlyphs, g * 0x38 + 0x34);
+                            }
+                        }
                     }
                     break;
 
@@ -528,9 +647,19 @@ namespace
                     break;
             }
 
-            // Post-relocation per-character init (re-reads the relocated table slot).
-            // The asm calls AptCharacter::SetupCharacter with r3=pChar only.
-            reinterpret_cast<AptCharacter*>(CharAt(i))->SetupCharacter();
+            // Post-relocation per-character init. SetupCharacter reads the record by the reconstructed
+            // AptCharacter MEMBER offsets (console layout) -- notably mpAnimationFile, which it derefs
+            // through AptSharedPtrDecRef. On the native-8 record those members sit at different offsets,
+            // so it would read a GARBAGE pointer there and AV inside the atomic. The bounds guard cannot
+            // protect a deref of a pointer VALUE read from a wrong field. So SKIP SetupCharacter on the
+            // native-8 path (it is a ref-count/flag cleanup, not load-bearing for instantiation); run it
+            // faithfully on the 4-byte path. FLAG: native-8 AptCharacter member widening is the follow-on.
+            if (sizeof(TOff) != 8)
+            {
+                void* pSetup = CharAt(i);
+                if (pSetup != nullptr && FixupInBounds(pSetup, 0x60))
+                    reinterpret_cast<AptCharacter*>(pSetup)->SetupCharacter();
+            }
         }
 
         // ---- pass 3: the import table [c:0x20]/[c:0x24] -----------------------
@@ -540,54 +669,61 @@ namespace
         // is not recoverable from the 4-byte asm -- the per-entry layout below uses the
         // console offsets, exact for the 4-byte path (and the widened entry stride
         // tracks the two leading pointer slots).
-        RelocSlot(pThis, 0x24);                          // mpImportTable
-        const int32_t nImports = BlobI32(pThis, 0x20);   // mnImportCount
+        RelocSlot(pThis, Off::kImportTable);             // mpImportTable
+        const int32_t nImports = BlobI32(pThis, Off::kImportCount);
         const int nNameOff  = 0;
         const int nClassOff = nPtr;                      // class slot follows the name slot
-        const int nFileOff  = nPtr * 2 + 4;              // {name*, class*, id(int32)} then AptFilePtr
-        const int nImpStride = nPtr * 3 + 4;             // {name*, class*, id, AptFile*}
+        const int nFileOff  = Off::kImpFileOff;          // AptFilePtr slot within an import entry
+        const int nImpStride = Off::kImpStride;          // {name*, class*, id, AptFile*}
         for (int32_t i = 0; i < nImports; ++i)
         {
-            void* pImports = SlotPtr(pThis, 0x24);
+            void* pImports = SlotPtr(pThis, Off::kImportTable);
+            if (pImports == nullptr)
+                break;   // import table out-of-range (guarded SlotPtr returned null)
             const int nEntry = i * nImpStride;
-            RelocSlot(pImports, nEntry + nNameOff);      // mpImportFileName
-            RelocSlot(pImports, nEntry + nClassOff);     // mpClassName
+            // Bound the whole import entry before touching it.
+            if (!FixupInBounds(reinterpret_cast<char*>(pImports) + nEntry, nImpStride))
+                break;
+            RelocSlot(pImports, nEntry + nNameOff);      // mpImportFileName (guarded)
+            RelocSlot(pImports, nEntry + nClassOff);     // mpClassName (guarded)
 
-            // EAStringC around the (relocated) import file name -- the ctor's
-            // InitFromBuffer / dtor's DecreaseInternalRefCount are the asm's
-            // per-iteration RAII bracket (var_4C).
-            EAStringC importName(reinterpret_cast<const char*>(
-                SlotPtr(SlotPtr(pThis, 0x24), nEntry + nNameOff)));
-
-            // AptLoader::Load(out, gpAptTarget->mpLoader, &name) -> the AptFilePtr handle.
+            // EAStringC around the (relocated) import file name -- ONLY when the name pointer is in
+            // bounds (else the ctor would read an unbounded garbage string and AV). The AptLoader_
+            // LoadX360 callee is a stub (returns null), so the loaded handle is always null; the
+            // AptFile-slot store below is the faithful no-op ref-count dance with pNew==null.
+            const char* pName = reinterpret_cast<const char*>(
+                SlotPtr(pImports, nEntry + nNameOff));
             AptFilePtr loaded;
             loaded.pData = nullptr;
-            AptLoader_LoadX360(&loaded, gpAptTarget->mpLoader, &importName);
+            if (pName != nullptr && FixupInBounds(pName, 1))
+            {
+                EAStringC importName(pName);
+                AptLoader_LoadX360(&loaded, gpAptTarget ? gpAptTarget->mpLoader : nullptr, &importName);
+            }
 
-            // Assign the handle into the entry's AptFile slot (+0x0C console) -- the
-            // console AptFile_::operator_ (AptSharedPtr<AptFile>::operator=): inc the
-            // new ref, dec+delete the old. The slot is a TOff-wide pointer word.
-            // FLAG (4-byte x64 fork): on the 4-byte path the host AptFile* is 64-bit
-            // but the slot is only 32-bit, so the stored pointer is truncated -- the
-            // genuine 32-bit-slot-can't-hold-a-64-bit-pointer impossibility. The native
-            // transcode (a real AptFilePtr in a 64-bit native struct) lands with the
-            // FixupTranscode rebuild; the ref-count bookkeeping below is faithful.
-            TOff* pFileSlot = reinterpret_cast<TOff*>(
-                reinterpret_cast<char*>(SlotPtr(pThis, 0x24)) + nEntry + nFileOff);
-            AptFile* pNew = loaded.pData;
-            AptFile* pOld = reinterpret_cast<AptFile*>(static_cast<intptr_t>(*pFileSlot));
-            if (pNew)
-                AptSharedPtrIncRef(pNew);
-            *pFileSlot = static_cast<TOff>(reinterpret_cast<intptr_t>(pNew));
-            if (pOld && AptSharedPtrDecRef(pOld) == 0)
-                AptSharedPtrDelete(pOld);
+            // Assign the (null) handle into the entry's AptFile slot, BOUNDS-GUARDED. pOld is read from
+            // the slot; only DecRef it if it is a plausible in-bounds-or-heap pointer (a garbage slot
+            // value would AV in the atomic). Since pNew is null here, this is effectively a clear.
+            void* pFileSlotAddr = reinterpret_cast<char*>(pImports) + nEntry + nFileOff;
+            if (FixupInBounds(pFileSlotAddr, static_cast<int>(sizeof(TOff))))
+            {
+                TOff* pFileSlot = reinterpret_cast<TOff*>(pFileSlotAddr);
+                AptFile* pNew = loaded.pData;
+                AptFile* pOld = reinterpret_cast<AptFile*>(static_cast<intptr_t>(*pFileSlot));
+                if (pNew)
+                    AptSharedPtrIncRef(pNew);
+                *pFileSlot = static_cast<TOff>(reinterpret_cast<intptr_t>(pNew));
+                // FLAG: pOld is a pre-fixup file value (an offset or a stale ptr); dereferencing it on
+                // the native-8 path is unsafe, so DecRef the old slot only on the 4-byte path.
+                if (sizeof(TOff) != 8 && pOld && AptSharedPtrDecRef(pOld) == 0)
+                    AptSharedPtrDelete(pOld);
+            }
 
-            // Release the local `loaded` handle (asm: *var_50=0; DecRef; delete-if-zero).
+            // Release the local `loaded` handle (always null via the stub).
             AptFile* pTmp = loaded.pData;
             loaded.pData = nullptr;
             if (pTmp && AptSharedPtrDecRef(pTmp) == 0)
                 AptSharedPtrDelete(pTmp);
-            // importName's dtor fires here (DecreaseInternalRefCount).
         }
 
         return pThis;

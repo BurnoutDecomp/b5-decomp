@@ -30,6 +30,21 @@
 
 struct AptFile;
 
+// FIXUP RESOURCE BOUNDS (defensive guard for the native 8-byte FixupInPlace on real data). When
+// set to [lo, hi) the FixupWalk's per-character pass skips any relocated record that lands outside
+// the resource (a converter-left string in a table slot would otherwise AV). 0 disables the guard
+// (faithful console behaviour). Defined in AptCharacterAnimation.cpp; set by the host before Fixup.
+extern uintptr_t gAptFixupBoundLo;
+extern uintptr_t gAptFixupBoundHi;
+
+// Per-Fixup diagnostics (the host resets them before each Fixup, reads them after): how many records
+// the bounds guard skipped + how many type-5/9 sub-movie recursions were skipped on the native-8 path.
+extern int gAptFixupSkipped;
+extern int gAptFixupSkippedMovies;
+extern int gAptFixupProbeChars;
+// Per-character probe sink, implemented by the host (logs "[AptRT] fixup: char[i] type=T @off=..").
+void CgsApt_FixupProbe(int nCharIndex, int nType, long long nCharOffset);
+
 // One import: pull character `mnId` from `mpImportFileName`'s export `mpClassName`.
 // Console record = 16 bytes {name@+0, class@+4, id@+8, AptFilePtr@+12}.
 struct AptImportEntry
