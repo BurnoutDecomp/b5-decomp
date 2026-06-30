@@ -49,6 +49,10 @@
 #include "SDKs/EATech/include/Apt/AptListenerSlotList.h"     // the clip-event set-cache add (_addToSetCaches)
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"        // AptCXForm / AptUint32CXForm (ReplaceDisplyListItem merge)
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"        // AptMatrix (ReplaceDisplyListItem position merge)
+#include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h" // authored text defaults (instantiateCharacter)
+#include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"// dyn-text render-item seed (instantiateCharacter)
+#include "SDKs/EATech/include/Apt/AptCharacterTextInst.h"    // SetText (instantiateCharacter)
+#include "SDKs/EATech/include/Apt/AptCharacterMorphInst.h"   // morph blend slot (placeObject)
 
 // ---------------------------------------------------------------------------
 // FLAG (module-static, owned by the Apt GC layer, not yet homed): the X360 drains
@@ -550,4 +554,448 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
         AptCIH_queueClipEvents(static_cast<AptValue*>(pNode), 0x40000, gnAptActionFrameId, 1);
         pSprite->mnClipActionFlags &= 0xFBFDFFFFu;
     }
+}
+
+// ---------------------------------------------------------------------------
+// FLAG (un-homed leaf-first callees / globals; bodies in their own TUs):
+//   AptDLState_CreateInstAtDepth (sub_82B008B0) -- create a fresh AptCIH(char,parent),
+//     find its insert-after slot at nDepth, stamp the render-item depth, insert; returns it.
+//   AptDLState_ReinsertInstAtDepth (sub_82AEE788) -- re-insert an existing node at nDepth.
+//   AptCharInst_SetPlacementField18 -- write the placement dword into the char inst's
+//     subclass slot at +0x18 (role differs by subclass; encapsulated, not offset-poked).
+//   AptCIH_CloneClassMembers -- copy every non-reserved (__proto__/prototype-skipped)
+//     member of an AS class object onto a freshly placed instance (AptActionInterpreter::
+//     setVariable over the class hash); reached only with a non-null class object.
+//   AptCIH_AssociateInstToClass (@0x82B073B8) -- register the placed instance with its class.
+// ---------------------------------------------------------------------------
+extern AptCIH* AptDLState_CreateInstAtDepth(AptDisplayListState* pState, int nDepth,
+                                            AptCharacter* pCharacter, AptCIH* pParentNode);
+extern AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* pNode);
+extern void    AptCharInst_SetPlacementField18(AptCharacterInst* pInst, uint32_t nValue);
+extern void    AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject);
+extern int     AptCIH_AssociateInstToClass(AptCIH* pNode);
+
+// ---------------------------------------------------------------------------
+// instantiateCharacter @0x82B061D0 -- find-or-create the placed node at a depth and
+// (re)bind it to a character. (Signature is the 8-reg + 1-stack-out asm prologue, not
+// the Hex-Rays vararg over-count.)
+// ---------------------------------------------------------------------------
+AptRenderItem* AptDisplayList::instantiateCharacter(int nDepth, AptCharacter* pCharacter,
+                                                    const EAStringC* pName, AptCIH* pParentNode,
+                                                    int bForceRemove, int16_t nClipDepth,
+                                                    AptCIH** ppOutNode, int* pbOutCreatedNew)
+{
+    AptCIH* pNode = nullptr;
+
+    // Locate the node currently at this depth (findInst fills prev + match through the
+    // head node reinterpreted as the list state).
+    AptCIH* pPrev  = nullptr;
+    AptCIH* pMatch = nullptr;
+    AsState()->findInst(nDepth, pName, &pPrev, &pMatch);
+
+    // bCreatedNew is false ONLY when an already-placed node is reused verbatim.
+    bool bCreatedNew = true;
+    if (pMatch != nullptr)
+    {
+        if (bForceRemove)
+        {
+            removeObject(pMatch);
+        }
+        else if (((pMatch->mnValueData >> 27) & 1u) != 0u)
+        {
+            pNode = pMatch;          // a real placed node -- reuse unchanged
+            bCreatedNew = false;
+        }
+        else if (pName != nullptr && *pName == pMatch->GetInstanceName())
+        {
+            pMatch->setIsDefined(true);   // empty placeholder with our name -- reuse as slot
+            pNode = pMatch;
+        }
+    }
+
+    if (bCreatedNew)
+    {
+        if (pNode != nullptr)
+        {
+            // Reusing a placeholder: re-insert it at nDepth if it has drifted.
+            if (nDepth != pNode->GetCharacterInst()->GetRenderItem()->GetDepth())
+            {
+                AsState()->remove(pNode);
+                AptDLState_ReinsertInstAtDepth(AsState(), nDepth, pNode);
+                pNode->Release();   // vtbl[1] -- drop the old list slot's reference
+            }
+            pNode->SetCharacterInst(AptCharacterInst::CreateCharacterInst(pCharacter), true);
+        }
+        else
+        {
+            pNode = AptDLState_CreateInstAtDepth(AsState(), nDepth, pCharacter, pParentNode);
+        }
+
+        // Created-on-frame: inherit the parent sprite/animation's current goto-frame.
+        AptCharacterInst* const pParentInst = pParentNode->GetCharacterInst();
+        const uint32_t nParentTag = pParentInst->GetTypeTag();
+        if (nParentTag == 5 || nParentTag == 9)
+            pNode->SetCreatedOnFrame(static_cast<AptCharacterSpriteInstBase*>(pParentInst)->mnGotoFrame);
+        else
+            pNode->SetCreatedOnFrame(0x3FFF);
+
+        // Register the node under its instance name in the parent's property hash, unless
+        // empty or it already maps to a live CIH.
+        if (pName != nullptr)
+        {
+            pNode->SetInstanceName(*pName);
+            if (!pName->IsEmpty())
+            {
+                AptNativeHash* const pParentHash = pParentInst->mpProperties;
+                AptValue* const pHit = pParentHash->Lookup(*pName);
+                bool bHitIsCIH = false;
+                if (pHit != nullptr)
+                {
+                    const AptVirtualFunctionTable_Indices eType = pHit->getVtblIndex();
+                    bHitIsCIH = (eType == AptVFT_CharacterInstHandle || eType == AptVFT_CIHNone);
+                }
+                if (!bHitIsCIH)
+                    pParentHash->Set(*pName, static_cast<AptValue*>(pNode));
+            }
+        }
+
+        // Per character-type init.
+        AptCharacterInst* const pInst = pNode->GetCharacterInst();
+        const uint32_t nTypeTag = pInst->GetTypeTag();
+        if (nTypeTag == 5 || nTypeTag == 9 || nTypeTag == 4)
+        {
+            void** const pNewInsts = static_cast<void**>(AptAnimationTarget::GetNewInsts());
+            pNewInsts[AptAnimationTarget::GetNewInstSize()] = pNode;
+            AptAnimationTarget::DecNewInstSize();   // post-increments the count
+            pNode->AddRef();                        // vtbl[0]
+        }
+        else if (nTypeTag == 2)
+        {
+            // Dynamic text: seed the render item from the authored character defaults.
+            const AptCharacterDynamicText* const pAuthored =
+                static_cast<const AptCharacterDynamicText*>(pInst->GetRenderItem()->mpCharacter);
+            AptRenderItemDynamicText* const pText =
+                static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
+
+            const char* const pTextDefault = pAuthored->mpDefaultText;
+            pText->mTextValue = EAStringC(pTextDefault ? pTextDefault : "");
+            const char* const pVarDefault = reinterpret_cast<const char*>(pAuthored->mnAuthoredReserved5);
+            pText->mVarValue = EAStringC(pVarDefault ? pVarDefault : "");
+
+            pText->SetAlignment(pAuthored->mnAuthoredReserved0);
+            pText->SetBoxAlignment(3);
+            pText->SetMultiline(pAuthored->mnAuthoredReserved3 > 0);
+            pText->SetWordWrap(pAuthored->mnAuthoredReserved4 > 0);
+
+            static_cast<AptCharacterTextInst*>(pInst)->SetText(pParentNode);
+
+            pText->ClearStateFlags(1u);   // mark resolved
+            pText->SetStateFlags(6u);     // dirty for layout
+        }
+    }
+
+    if (bCreatedNew)
+    {
+        AptCharacterInst* const pInst = pNode->GetCharacterInst();
+        if (pInst->GetRenderItem()->mpCharacter != pCharacter)
+            pInst->GetRenderItemWritable()->SetCharacter(pCharacter);
+    }
+    else
+    {
+        // Reused existing placed node: rebind its parent (ref-counted swap) + character.
+        if (pParentNode != pNode->GetDisplayListParent())
+        {
+            pParentNode->AddRef();   // vtbl[0]
+            if (AptCIH* const pOldParent = pNode->GetDisplayListParent())
+                pOldParent->Release();   // vtbl[1]
+            pNode->SetDisplayListParent(pParentNode);
+        }
+        if (pNode->GetCharacterInst()->GetRenderItem()->mpCharacter != pCharacter)
+            pNode->SetCharacterInst(AptCharacterInst::CreateCharacterInst(pCharacter), true);
+    }
+
+    AptRenderItem* const pResult = pNode->GetCharacterInst()->GetRenderItemWritable();
+    pResult->mClipDepth = nClipDepth;
+    *ppOutNode = pNode;
+    *pbOutCreatedNew = bCreatedNew ? 1 : 0;
+    return pResult;
+}
+
+// ---------------------------------------------------------------------------
+// placeObject @0x82B097D8 -- place a character at a depth. (Signature/arg order from
+// the asm prologue: a2=existing node, a3=depth, a4=character, a5=name, a6=parent node
+// [also the dirtied node], a7=force-remove, a8=clip depth, f1=frame value; stack:
+// colour CXForm, position matrix, placement field, AS class object.)
+// ---------------------------------------------------------------------------
+AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharacter* pCharacter,
+                                    const EAStringC* pName, AptCIH* pParentNode, int bForceRemove,
+                                    int16_t nClipDepth, double fFrameValue, const AptCXForm* pColorXForm,
+                                    const float* pPositionMatrix, uint32_t nPlacementField18,
+                                    AptValue* pClassObject)
+{
+    AptCIH* pNode = pExistingNode;
+
+    int bWasInstantiated = 0;
+    if (pNode == nullptr)
+    {
+        AptCIH* pCreated = nullptr;
+        instantiateCharacter(nDepth, pCharacter, pName, pParentNode, bForceRemove, nClipDepth,
+                             &pCreated, &bWasInstantiated);
+        pNode = pCreated;
+    }
+
+    // Mark the parent (the dirtied node) -- the callee takes only (this, bDirty).
+    pParentNode->SetGeneralizedProcessDirtyState(true);
+
+    if (pNode == nullptr)
+        return pNode;
+
+    AptCharacterInst* const pInst = pNode->GetCharacterInst();
+
+    // Copy the supplied colour transform into the placed render item.
+    if (pColorXForm != nullptr)
+        pInst->GetRenderItemWritable()->GetColorMatrixWritable()->AptCXFormCopy(pColorXForm);
+
+    // Copy the supplied position matrix (6-float affine) into the placed render item.
+    if (pPositionMatrix != nullptr)
+        pInst->GetRenderItemWritable()->GetPositionMatrixWritable()
+            ->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pPositionMatrix));
+
+    // Stamp the placement field at the char inst's +0x18 subclass slot when supplied.
+    if (nPlacementField18 != 0u)
+        AptCharInst_SetPlacementField18(pInst, nPlacementField18);
+
+    // A morph instance (type tag 8) takes the AS frame value as its blend amount.
+    if ((pInst->mTypeFlags & 0xFC000000u) == 0x20000000u)
+        *reinterpret_cast<float*>(&static_cast<AptCharacterMorphInst*>(pInst)->mMorphState_unknown) =
+            static_cast<float>(fFrameValue);
+
+    // The class-binding tail runs only for a freshly instantiated node.
+    if (bWasInstantiated == 0)
+        return pNode;
+
+    AptDisplayList::_addToSetCaches(pNode, 1);
+
+    const uint32_t nTypeTag = pNode->GetCharacterInst()->GetTypeTag();
+    if (nTypeTag == 5 || nTypeTag == 9)
+    {
+        // When the supplied AS class object carries a class (mnValueData bit 27), clone
+        // its non-reserved members onto the freshly placed instance.
+        if (pClassObject != nullptr && ((pClassObject->mnValueData >> 27) & 1u) != 0u)
+            AptCIH_CloneClassMembers(pNode, pClassObject);
+        AptCIH_AssociateInstToClass(pNode);
+    }
+
+    return pNode;
+}
+
+// ---------------------------------------------------------------------------
+// placeObjectNCXForm @0x82B0AD28 -- placeObject with the colour supplied as a packed-
+// ARGB AptUint32CXForm* (expanded into a scratch AptCXForm), the clip-event hash null.
+// ---------------------------------------------------------------------------
+AptCIH* AptDisplayList::placeObjectNCXForm(AptCIH* pExistingNode, int nDepth, AptCharacter* pCharacter,
+                                           const EAStringC* pName, AptCIH* pParentNode, int bForceRemove,
+                                           int16_t nClipDepth, double fFrameValue,
+                                           const float* pPositionMatrix, uint32_t nPlacementField18,
+                                           const AptUint32CXForm* pPackedColor)
+{
+    AptCXForm scratchColor;   // default-constructed (helper vtables installed, channels zeroed)
+
+    const AptCXForm* pColor = nullptr;
+    if (pPackedColor != nullptr)
+    {
+        scratchColor.AptUint32CXFormCopy(pPackedColor);   // expand packed ARGB -> CXForm (2-operand)
+        pColor = &scratchColor;
+    }
+
+    return placeObject(pExistingNode, nDepth, pCharacter, pName, pParentNode, bForceRemove,
+                       nClipDepth, fFrameValue, pColor, pPositionMatrix, nPlacementField18,
+                       /*pClassObject*/ nullptr);
+}
+
+// One source-frame placement node in mergeState's source chain (serialised .apt frame
+// data; its first two pointers are the {record, props} pair = an AddToDisplayList/
+// ReplaceDisplyListItem ppPlacement command).
+struct AptMergeSourceNode
+{
+    void*                   mpRecord;   // +0x00  PlaceObject record ([0] dword == 3 == place)
+    AptFramePlacementProps* mpProps;    // +0x04  runtime placement properties
+    int32_t                 mnDepth;    // +0x08  placement depth
+    AptMergeSourceNode*     mpNext;     // +0x0C  next placement node
+};
+
+// ---------------------------------------------------------------------------
+// mergeState @0x82B0B438 -- reconcile this display list against a source frame's
+// placement chain, walking both depth-ordered lists in lockstep.
+// ---------------------------------------------------------------------------
+AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHash, char bKeepRemoved)
+{
+    AptCIH* pResult = nullptr;
+    AptCIH* const pParentNode = static_cast<AptCIH*>(ppMergeInfo[1]);
+
+    AptCIH* pNode = mpHead ? mpHead->mpFirst : nullptr;
+    AptMergeSourceNode* pSrc =
+        *reinterpret_cast<AptMergeSourceNode**>(static_cast<char*>(ppMergeInfo[0]) + 0xC);
+
+    while (pNode)
+    {
+        AptCharacterInst* const pInst       = pNode->GetCharacterInst();
+        AptRenderItem*    const pRenderItem = pInst->GetRenderItem();
+        const int16_t           nExistingDepth = pRenderItem->GetDepth();
+
+        if (nExistingDepth >= 0x4000)
+            break;   // sentinel depth: drain remaining source after the loop
+
+        if (!pSrc)
+        {
+            AptCIH* const pNext = pNode->GetDisplayListNext();
+            if (!bKeepRemoved)
+                removeObject(pNode);
+            pNode = pNext;
+            continue;
+        }
+
+        if (pSrc->mnDepth == nExistingDepth)
+        {
+            const uint32_t nTag = pInst->GetTypeTag();
+            const bool bSpriteOrAnim = (nTag == 5 || nTag == 9);
+
+            // An AS-owned sprite/animation node (render-item bit27) is left as-is.
+            if (bSpriteOrAnim && ((pRenderItem->mFlags >> 27) & 1u) != 0u)
+            {
+                pNode = pNode->GetDisplayListNext();
+                pSrc  = pSrc->mpNext;
+                continue;
+            }
+
+            AptCIH* const pNextExisting = pNode->GetDisplayListNext();
+
+            if (*static_cast<const int32_t*>(pSrc->mpRecord) != 3)   // not a PlaceObject command
+            {
+                removeObject(pNode);
+                pSrc  = pSrc->mpNext;
+                pNode = pNextExisting;
+                continue;
+            }
+
+            AptFramePlacementProps* const pProps = pSrc->mpProps;
+            if (!pProps)
+            {
+                pResult = ReplaceDisplyListItem(pParentHash, pNode,
+                                                reinterpret_cast<void**>(pSrc), pParentNode);
+                pSrc  = pSrc->mpNext;
+                pNode = pNextExisting;
+                continue;
+            }
+
+            // Placement-identity gate (evaluated BEFORE any in-place merge).
+            const bool bGate1 = (pProps->mi16CharacterId == pNode->GetCreatedOnFrame());
+            const bool bGate2 = ((pInst->mTypeFlags & 0xFC000000u) == 0x24000000u);
+            if (!bGate1 && !bGate2)
+            {
+                pResult = ReplaceDisplyListItem(pParentHash, pNode,
+                                                reinterpret_cast<void**>(pSrc), pParentNode);
+                pSrc  = pSrc->mpNext;
+                pNode = pNextExisting;
+                continue;
+            }
+
+            if (pProps->mpCharacter == nullptr)
+            {
+                // No new character: merge colour/position in place (never over an AS write).
+                if (!pNode->GetASChanged())
+                {
+                    if ((pProps->mnFlags & 0x8) != 0)
+                        pInst->GetRenderItemWritable()->GetColorMatrixWritable()
+                            ->AptUint32CXFormCopy(pProps->mpColorTransform);
+                    if ((pProps->mnFlags & 0x4) != 0 && pProps->mpPositionMatrix != nullptr)
+                        pInst->GetRenderItemWritable()->GetPositionMatrixWritable()
+                            ->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pProps->mpPositionMatrix));
+                }
+                pSrc  = pSrc->mpNext;
+                pNode = pNextExisting;
+                continue;
+            }
+
+            // A character IS named: merge in place only when it is the same character
+            // already here (or the inst is an animation); else replace.
+            const bool bSameChar =
+                (nTag == static_cast<uint32_t>(pProps->mpCharacter->mnType) &&
+                 pProps->mpCharacter == pRenderItem->mpCharacter && bGate1);
+            if (!(bSameChar || nTag == 9))
+            {
+                pResult = ReplaceDisplyListItem(pParentHash, pNode,
+                                                reinterpret_cast<void**>(pSrc), pParentNode);
+                pSrc  = pSrc->mpNext;
+                pNode = pNextExisting;
+                continue;
+            }
+
+            if (!pNode->GetASChanged())
+            {
+                if ((pProps->mnFlags & 0x8) != 0)
+                {
+                    pInst->GetRenderItemWritable()->GetColorMatrixWritable()
+                        ->AptUint32CXFormCopy(pProps->mpColorTransform);
+                }
+                else
+                {
+                    // No colour supplied: reset the colour transform to identity
+                    // (scale channels -> 255, translate channels -> 0).
+                    AptCXForm* const pCX = pInst->GetRenderItemWritable()->GetColorMatrixWritable();
+                    static const float kScaleId[4]     = { 255.0f, 255.0f, 255.0f, 255.0f };
+                    static const float kTranslateId[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    pCX->scale.CopyFromFloatArray(kScaleId);
+                    pCX->translate.CopyFromFloatArray(kTranslateId);
+                }
+                if ((pProps->mnFlags & 0x4) != 0 && pProps->mpPositionMatrix != nullptr)
+                    pInst->GetRenderItemWritable()->GetPositionMatrixWritable()
+                        ->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pProps->mpPositionMatrix));
+            }
+            pSrc  = pSrc->mpNext;
+            pNode = pNextExisting;
+            continue;
+        }
+        else if (pSrc->mnDepth > nExistingDepth)
+        {
+            // Existing node below the source range -> remove (unless keeping), advance.
+            AptCIH* const pNext = pNode->GetDisplayListNext();
+            if (!bKeepRemoved)
+                removeObject(pNode);
+            pNode = pNext;
+            continue;
+        }
+        else
+        {
+            // Source below the existing node -> add every lower source node before it
+            // (the existing node is re-examined next outer iteration; not advanced).
+            while (pSrc && pSrc->mnDepth < pInst->GetRenderItem()->GetDepth())
+            {
+                if (*static_cast<const int32_t*>(pSrc->mpRecord) == 3)
+                    pResult = AddToDisplayList(pParentHash, reinterpret_cast<void**>(pSrc), pParentNode);
+                pSrc = pSrc->mpNext;
+            }
+            continue;
+        }
+    }
+
+    // Drain the remaining source placement nodes.
+    if (pSrc)
+    {
+        while (pNode && pSrc &&
+               pSrc->mnDepth < pNode->GetCharacterInst()->GetRenderItem()->GetDepth())
+        {
+            if (*static_cast<const int32_t*>(pSrc->mpRecord) == 3)
+                pResult = AddToDisplayList(pParentHash, reinterpret_cast<void**>(pSrc), pParentNode);
+            pSrc = pSrc->mpNext;
+        }
+        while (pSrc)
+        {
+            if (*static_cast<const int32_t*>(pSrc->mpRecord) == 3)
+                pResult = AddToDisplayList(pParentHash, reinterpret_cast<void**>(pSrc), pParentNode);
+            pSrc = pSrc->mpNext;
+        }
+    }
+
+    return pResult;
 }

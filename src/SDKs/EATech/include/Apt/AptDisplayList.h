@@ -32,6 +32,11 @@
 struct AptCIH;
 struct AptDisplayListState;
 struct AptNativeHash;   // AddToDisplayList registers the placed node in the parent's property hash
+struct AptRenderItem;   // instantiateCharacter returns the placed node's writable render item
+struct AptCharacterInst;
+struct AptCXForm;       // placeObject's supplied colour transform
+class  AptValue;        // placeObject's AS class object
+class  EAStringC;       // placement instance names
 
 // The 4-byte pool-allocated head/sentinel node: its single dword is the first
 // listed entry (the AptCIH chain is then linked through the CIH display-list links).
@@ -59,6 +64,7 @@ struct AptFramePlacementProps
     int32_t          mnReserved0C;       // [3] +0x0C
     int32_t          mnReserved10;       // [4] +0x10
     int32_t          mnFlags;            // [5] +0x14  bit2 = has matrix, bit3 = has colour
+    int16_t          mi16CharacterId;    //     +0x18  placed-char id (mergeState gate1: == node createdOnFrame)
 };
 
 struct AptDisplayList
@@ -142,9 +148,37 @@ struct AptDisplayList
     AptCIH* ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH* pExisting,
                                   void** ppPlacement, AptCIH* pParentNode);
 
-    // (mergeState / instantiateCharacter / placeObject / placeObjectNCXForm
-    //  @0x82B0B438/0x82B061D0/0x82B097D8/0x82B0AD28 -- declared with their full
-    //  asm-derived signatures when bodied.)
+    // instantiateCharacter @0x82B061D0 -- find-or-create the placed node at nDepth and
+    // (re)bind it to pCharacter (force-remove / reuse-placed / placeholder-reuse / create),
+    // register its instance name, enrol sprite/anim/button nodes in the new-inst table, or
+    // seed a dynamic-text inst's render item. *ppOutNode = the node, *pbOutCreatedNew = the
+    // not-a-reused-placed flag; returns the node's writable render item.
+    AptRenderItem* instantiateCharacter(int nDepth, AptCharacter* pCharacter, const EAStringC* pName,
+                                        AptCIH* pParentNode, int bForceRemove, int16_t nClipDepth,
+                                        AptCIH** ppOutNode, int* pbOutCreatedNew);
+
+    // placeObject @0x82B097D8 -- place a character at a depth: instantiate when no node is
+    // supplied, mark the parent's generalised-process dirty state, copy the supplied colour
+    // transform / position matrix / placement field, stamp a morph blend value, and bind a
+    // freshly-instantiated node's AS class. Returns the placed node.
+    AptCIH* placeObject(AptCIH* pExistingNode, int nDepth, AptCharacter* pCharacter,
+                        const EAStringC* pName, AptCIH* pParentNode, int bForceRemove,
+                        int16_t nClipDepth, double fFrameValue, const AptCXForm* pColorXForm,
+                        const float* pPositionMatrix, uint32_t nPlacementField18,
+                        AptValue* pClassObject);
+
+    // placeObjectNCXForm @0x82B0AD28 -- placeObject with the colour supplied as a packed-ARGB
+    // AptUint32CXForm* (expanded into a scratch AptCXForm), the clip-event hash forced null.
+    AptCIH* placeObjectNCXForm(AptCIH* pExistingNode, int nDepth, AptCharacter* pCharacter,
+                               const EAStringC* pName, AptCIH* pParentNode, int bForceRemove,
+                               int16_t nClipDepth, double fFrameValue, const float* pPositionMatrix,
+                               uint32_t nPlacementField18, const AptUint32CXForm* pPackedColor);
+
+    // mergeState @0x82B0B438 -- reconcile this list against a source frame's placement chain
+    // (ppMergeInfo[0] = source AptPseudoDisplayList, ppMergeInfo[1] = parent node), walking
+    // both depth-ordered lists in lockstep (match -> merge/replace, lower source -> add,
+    // lower existing -> remove unless bKeepRemoved). Returns the last (re)placed node.
+    AptCIH* mergeState(void** ppMergeInfo, AptNativeHash* pParentHash, char bKeepRemoved);
 };
 
 // ===========================================================================
