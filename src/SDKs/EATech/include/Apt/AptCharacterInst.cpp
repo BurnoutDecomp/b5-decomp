@@ -133,22 +133,13 @@ void AptCharacterInst::SetIsVisible(bool bVisible)
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// Render-tree-manager UPDATE facades (declared in AptCharacterInst.h). FLAG: the
-// console's AptRenderTreeManager::Update_CloneItem / Update_ItemMoved re-derive
-// the double-buffered render-tree links (revision cloning under a spin-lock);
-// no-op on the single-buffer bring-up path (the AptCIH display-list links are the
-// source of truth there), matching the deferred Update_* stubs on the manager.
+// Render-tree-manager UPDATE facades -- the REAL bodies are homed in
+// AptRenderTreeManager.cpp (AptRTM_*). Declared extern here (this TU calls them);
+// the earlier no-op stubs were removed to resolve the LNK2005 double-definition.
 // ---------------------------------------------------------------------------
-AptCIH* AptRTM_CloneItem(AptRenderTreeManager* /*pMgr*/, AptCIH* pNode,
-                         int /*nSourceArg*/, int /*nTick*/)
-{
-    return pNode;
-}
-
-AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* /*pMgr*/, AptCIH* pNode, int /*nTick*/)
-{
-    return pNode;
-}
+extern AptCIH* AptRTM_CloneItem(AptRenderTreeManager* pMgr, AptCIH* pNode,
+                                int nSourceArg, int nTick);
+extern AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, int nTick);
 
 // The X360 render-tree helpers read the live manager through gpCurrentTargetSim's
 // field [11] (console +0x2C) and the current update tick through dword_8324E520.

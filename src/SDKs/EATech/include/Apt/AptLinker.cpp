@@ -40,7 +40,7 @@ bool Burnout_X360_Artist_0040_0(EAStringC* pName, EAStringC* pReference);
 // (@0x82B00548) and tick it (@0x82B0BED8). Declared so Update/ConvertToZombie
 // compile; bodies in the AptCIH behavioural cluster.
 void AptCIH_SetCharacterInst(AptCIH* pCIH, AptCharacterInst* pInst, int bFlag);   // AptCIH::SetCharacterInst
-void AptCIH_tick(AptCIH* pCIH);                                                   // AptCIH::tick
+int AptCIH_tick(AptCIH* pCIH);                                                    // AptCIH::tick
 
 // FLAG (un-homed GC primitive): @0x82AE4DF0 / PS3 _Z17ReplaceReferences...
 // ReplaceReferences(pOld, pNew, ppTable, nCount) -- retarget every live reference
