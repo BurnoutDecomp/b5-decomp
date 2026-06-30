@@ -68,5 +68,27 @@ namespace BrnGui
         // @0x82488FC0 -- look up the selectable for luIndex, mark it id-set, and store luId
         // (64-bit) into the selectable's id field. Returns the selectable (guest pointer).
         u32 SetId(u32 luIndex, u64 luId);
+
+        // @0x824E9320 -- construct the menu over its StateInterface with a selectable capacity.
+        // X360 sig: Construct(name, stateInterface, count, a5, a6); the title-screen menu uses
+        // ("MenuItem", interface, 2, 0, -1). Body links from the MenuComponent TU.
+        void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
+                       s32 liCount, s32 liArg5, s64 liArg6);
+
+        // @0x824E2C08 -- lay out the menu with liNumEntries selectable rows; lbVertical selects
+        // the layout axis (BootLegal passes (2, 1)). Body links from the MenuComponent TU.
+        void SetupMenu(s32 liNumEntries, bool lbVertical);
+
+        // @0x8241EA88 -- set the localisation-key text of the menu row at liIndex. Body links
+        // from the MenuComponent TU.
+        void SetText(s32 liIndex, const char* lpacText);
+
+        // The X360 dispatches three component virtuals on the menu (through mppVTable) after
+        // SetupMenu/SetText and on each input action. Following the SelectableGroup flat-vtable
+        // convention, they are declared as named non-virtual members (bodies link from the
+        // MenuComponent / component TU):
+        void Refresh();          // vtbl+0x14 -- re-layout / re-highlight after a change
+        void SelectPrevious();   // vtbl+0x34 -- input action 42: move the cursor up
+        void SelectNext();       // vtbl+0x38 -- input action 41: move the cursor down
     };
 }
