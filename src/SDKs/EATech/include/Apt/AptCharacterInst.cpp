@@ -103,27 +103,45 @@ AptRenderItem* AptCharacterInst::SetRenderItem(AptRenderItem* pItem)
 
 AptCharacter* AptCharacterInst::SetCharacter(AptCharacter* pCharacter)
 {
-    return GetRenderItemWritable()->SetCharacter(pCharacter);
+    // NULL-SAFE (x64 bring-up): no writable render item when the render-tree manager is the null stub.
+    AptRenderItem* pItem = GetRenderItemWritable();
+    return pItem ? pItem->SetCharacter(pCharacter) : nullptr;
 }
 
 // ---- const reads (through the render item) --------------------------------
-const AptCharacter* AptCharacterInst::GetCharacterConst() const { return mpRenderItem->GetCharacterConst(); }
-int16_t AptCharacterInst::GetDepth() const     { return mpRenderItem->GetDepth(); }
-int16_t AptCharacterInst::GetClipDepth() const { return mpRenderItem->GetClipDepth(); }
-bool AptCharacterInst::GetIsVisible() const     { return mpRenderItem->GetIsVisible(); }
-bool AptCharacterInst::GetIsMask() const        { return mpRenderItem->GetIsMask(); }
-bool AptCharacterInst::GetHasMask() const       { return mpRenderItem->GetHasMask(); }
-const AptMatrix* AptCharacterInst::GetPositionMatrixConst() const { return mpRenderItem->GetPositionMatrixConst(); }
+// NULL-SAFE (x64 bring-up): mpRenderItem is null when the render-tree manager is the FLAG'd null stub
+// (no render item was created). The console always has a render item; on our partial bring-up these
+// return safe defaults instead of dereferencing null. FLAG: remove the guards once the render-tree
+// manager lands (every AptCharacterInst will then own a render item).
+const AptCharacter* AptCharacterInst::GetCharacterConst() const { return mpRenderItem ? mpRenderItem->GetCharacterConst() : nullptr; }
+int16_t AptCharacterInst::GetDepth() const     { return mpRenderItem ? mpRenderItem->GetDepth() : static_cast<int16_t>(0); }
+int16_t AptCharacterInst::GetClipDepth() const { return mpRenderItem ? mpRenderItem->GetClipDepth() : static_cast<int16_t>(0); }
+bool AptCharacterInst::GetIsVisible() const     { return mpRenderItem ? mpRenderItem->GetIsVisible() : false; }
+bool AptCharacterInst::GetIsMask() const        { return mpRenderItem ? mpRenderItem->GetIsMask() : false; }
+bool AptCharacterInst::GetHasMask() const       { return mpRenderItem ? mpRenderItem->GetHasMask() : false; }
+const AptMatrix* AptCharacterInst::GetPositionMatrixConst() const { return mpRenderItem ? mpRenderItem->GetPositionMatrixConst() : nullptr; }
 const AptCXForm* AptCharacterInst::GetColorMatrixConst() const    { return mpRenderItem->GetColorMatrixConst(); }
 
 // ---- writes (through the writable render item) ----------------------------
-void AptCharacterInst::SetDepth(int nDepth)         { GetRenderItemWritable()->SetDepth(nDepth); }
-void AptCharacterInst::SetClipDepth(int nClipDepth) { GetRenderItemWritable()->SetClipDepth(nClipDepth); }
+// NULL-SAFE (x64 bring-up): GetRenderItemWritable() returns null when the render-tree manager is the
+// null stub. The console always has a writable item; here we skip the write rather than deref null.
+void AptCharacterInst::SetDepth(int nDepth)
+{
+    if (AptRenderItem* pItem = GetRenderItemWritable())
+        pItem->SetDepth(nDepth);
+}
+void AptCharacterInst::SetClipDepth(int nClipDepth)
+{
+    if (AptRenderItem* pItem = GetRenderItemWritable())
+        pItem->SetClipDepth(nClipDepth);
+}
 void AptCharacterInst::SetIsVisible(bool bVisible)
 {
     // FLAG: AptRenderItem::SetIsVisible (visibility propagation @0x7ED720) is a
     // follow-on; the writable item + the flag bit are set here.
     AptRenderItem* pItem = GetRenderItemWritable();
+    if (pItem == nullptr)
+        return;
     if (bVisible) pItem->mFlags |= 0x80000000u;
     else          pItem->mFlags &= ~0x80000000u;
 }
@@ -277,9 +295,15 @@ AptCIH* AptCharacterInst::ItemMoved(AptCIH* pNode)
 // ---------------------------------------------------------------------------
 void AptCharacterInst::MoveRenderDataFrom(AptCharacterInst* pSource)
 {
-    GetRenderItemWritable()->CopyRenderDataFrom(pSource->mpRenderItem);   // vtbl[+0x14]
-    int16_t nDepth = pSource->mpRenderItem->mDepth;                       // [c:0x14]
-    GetRenderItemWritable()->mDepth = nDepth;
+    // NULL-SAFE (x64 bring-up): render items are null when the render-tree manager is the null stub.
+    // The console always has both items; here we move the render data only when both exist, else just
+    // transfer the property-hash ownership below. FLAG: render-data move resumes once the RTM lands.
+    AptRenderItem* pDst = GetRenderItemWritable();
+    if (pDst != nullptr && pSource->mpRenderItem != nullptr)
+    {
+        pDst->CopyRenderDataFrom(pSource->mpRenderItem);   // vtbl[+0x14]
+        pDst->mDepth = pSource->mpRenderItem->mDepth;      // [c:0x14]
+    }
 
     if (pSource->mpProperties)                                           // [c:0x0C]
     {

@@ -82,15 +82,23 @@ AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(AptCharacter* pCharacter)
         pProperties = ::new (pMem) AptNativeHash(8);
     mpProperties = pProperties;
 
-    // Wire this hash's __proto__ to the registered sprite class's prototype: find
-    // the class value in the _global fallback scope by its class-name key, take its
-    // native property hash, and copy that hash's "prototype" slot into our
-    // __proto__. (The X360 derefs without a null-guard -- the sprite class is
-    // registered before any sprite instance is built -- so the wiring is faithful
-    // and unguarded.)
-    AptValue* pClassValue = gpAptGlobalFallback->Lookup(gAptSpriteClassKey);
-    AptNativeHash* pClassHash = pClassValue->GetNativeHashVirtual();
-    mpProperties->Set__Proto__(pClassHash->mpPrototype);
+    // Wire this hash's __proto__ to the registered sprite class's prototype: find the class value in
+    // the _global fallback scope by its class-name key, take its native property hash, and copy that
+    // hash's "prototype" slot into our __proto__.
+    //
+    // NULL-SAFE (x64 bring-up): the X360 derefs gpAptGlobalFallback unguarded because the sprite class
+    // is registered (by the un-homed AS-builtin registration) before any sprite instance is built. In
+    // our partial bring-up that registration has NOT run, so gpAptGlobalFallback (and the looked-up
+    // class value / its hash) are null. Skip the __proto__ wiring when any link is null -- the instance
+    // is built structurally without the AS prototype. FLAG: __proto__ wiring resumes once the AS-builtin
+    // class registry lands. Also requires mpProperties (null if the pool alloc above failed).
+    if (gpAptGlobalFallback != nullptr && mpProperties != nullptr)
+    {
+        AptValue* pClassValue = gpAptGlobalFallback->Lookup(gAptSpriteClassKey);
+        AptNativeHash* pClassHash = (pClassValue != nullptr) ? pClassValue->GetNativeHashVirtual() : nullptr;
+        if (pClassHash != nullptr)
+            mpProperties->Set__Proto__(pClassHash->mpPrototype);
+    }
 }
 
 // ---------------------------------------------------------------------------

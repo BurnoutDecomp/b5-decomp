@@ -89,11 +89,22 @@ AptRenderTreeManager* AptCurrentRenderTreeManager()
 
 AptRenderItem* AptRTM_CreateItem(AptRenderTreeManager* pMgr, AptCharacter* pCharacter, int nTick)
 {
+    // NULL-SAFE (x64 bring-up): AptCurrentRenderTreeManager() is a FLAG'd null stub until the target
+    // sim / render-tree manager is initialised (AptRenderInitialize, un-homed). The console always has
+    // a live manager here; on our partial bring-up it is null, so return null instead of dereferencing
+    // it. The caller (AptCharacterInst ctor) then leaves mpRenderItem null and the higher-level guards
+    // bail cleanly. FLAG: no render item is created until the render-tree manager lands.
+    if (pMgr == nullptr)
+        return nullptr;
     return pMgr->Update_CreateItem(pCharacter, nTick);
 }
 
 AptRenderItem* AptRTM_GetTickItemWritable(AptRenderTreeManager* pMgr, const AptRenderItem* pItem, int nTick)
 {
+    // NULL-SAFE (see AptRTM_CreateItem): a null manager returns the item unchanged rather than
+    // dereferencing the null manager.
+    if (pMgr == nullptr)
+        return const_cast<AptRenderItem*>(pItem);
     return pMgr->Update_GetTickItemWritable(pItem, nTick);
 }
 

@@ -207,36 +207,88 @@ void AptCharacterHelper::Shutdown()
 // via AptDisplayListState::insert(root, depth, node) (the X360's sub_82AEE788 is the
 // same findInst+insert+stamp-depth, folded here to the one insert).
 // ---------------------------------------------------------------------------
+// DEFENSIVE PROBE SINK (implemented by the host, BrnAptRuntimeBringUp.cpp): logs a step tag + a
+// pointer so a single run names the exact line AptGetAnimationAtLevel reaches before any AV. A weak
+// no-op default is provided so other callers / TUs that do not define it still link.
+#if defined(_MSC_VER)
+extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p);
+#pragma comment(linker, "/alternatename:CgsApt_GalProbe=CgsApt_GalProbeDefault")
+extern "C" void CgsApt_GalProbeDefault(const char*, const void*) {}
+#else
+extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p);
+#endif
+
 AptCIH* AptGetAnimationAtLevel(int nLevel)
 {
     // No active target / director / root display list -> nothing mounted.
     if (gpAptTarget == nullptr || gpAptTarget->mpAnimationTarget == nullptr)
+    {
+        CgsApt_GalProbe("no target/director", gpAptTarget);
         return nullptr;
+    }
+    CgsApt_GalProbe("director", gpAptTarget->mpAnimationTarget);
 
     AptDisplayList* pRoot = gpAptTarget->mpAnimationTarget->GetRootDisplayList();   // *(target+0x18)+0x20
-    AptDisplayListState* pState = pRoot->AsState();
-    // console third guard (@0x82B00788 `*(v2+32) != 0` / PS3 0xF4E540): the root display
-    // list's head node (+0x20 / mpHead, which AsState() returns) is nullable -- the ctor may
-    // fail to allocate it and PreDestroy/dtor null it. Bail rather than deref pState->mpFirst.
+    CgsApt_GalProbe("rootDisplayList", pRoot);
+    AptDisplayListState* pState = (pRoot != nullptr) ? pRoot->AsState() : nullptr;
+    // The root display list's head node (mpHead, which AsState() returns) is nullable -- the ctor may
+    // fail to allocate it. Bail rather than deref pState->mpFirst.
     if (pState == nullptr)
-        return nullptr;
-
-    // Search the placed children for the node at depth nLevel.
-    for (AptCIH* pNode = pState->mpFirst; pNode != nullptr; pNode = pNode->mpDisplayListNext)   // result[6] / *(result+24)
     {
-        if (pNode->mpCharacterInst->mpRenderItem->GetDepth() == nLevel)   // *(*(node->charInst+4)+0x14) == nLevel
+        CgsApt_GalProbe("pState NULL -> bail", nullptr);
+        return nullptr;
+    }
+    CgsApt_GalProbe("pState", pState);
+
+    // Search the placed children for the node at depth nLevel. GUARDED: skip any node whose
+    // charInst / renderItem is null (a partially-built node would AV on the GetDepth() chain).
+    CgsApt_GalProbe("search mpFirst", pState->mpFirst);
+    for (AptCIH* pNode = pState->mpFirst; pNode != nullptr; pNode = pNode->mpDisplayListNext)
+    {
+        if (pNode->mpCharacterInst == nullptr || pNode->mpCharacterInst->mpRenderItem == nullptr)
+            continue;
+        if (pNode->mpCharacterInst->mpRenderItem->GetDepth() == nLevel)
             return pNode;
     }
 
-    // Not present: lazily create the level node.
-    AptCIH* pNew = nullptr;
-    if (void* pMem = AptCIH::operator new(40))           // AptValueGC_PoolManager::AllocateAptValueGC(0x28)
-        pNew = ::new (pMem) AptCIH(nullptr, nullptr);    // AptCIH::AptCIH(mem, 0, 0)
+    // Not present: lazily create the level node. AptCIH::operator new -> the GC pool; the AptCIH ctor
+    // runs AptCharacterInst::CreateCharacterInst -> the render-tree manager (AptRTM_CreateItem). If the
+    // render-tree manager is not initialised (AptRenderInitialize is un-homed in our bring-up) this is
+    // where it can AV -- the probes bracket each sub-step.
+    CgsApt_GalProbe("operator new(40)", nullptr);
+    void* pMem = AptCIH::operator new(40);              // AptValueGC pool
+    CgsApt_GalProbe("operator new ->", pMem);
+    if (pMem == nullptr)
+        return nullptr;                                  // GC carve failed -> bail (no AV)
 
-    // Stamp its render item to depth nLevel, pin it as a GC root, insert at nLevel.
-    pNew->mpCharacterInst->GetRenderItemWritable()->SetDepth(nLevel);   // *(GetRenderItemWritable(node->charInst)+20) = nLevel
-    pNew->setGCRoot(1);                                                  // AptValue::setGCRoot(node, 1)
-    pState->insert(nLevel, pNew);                                       // AptDisplayListState::insert(root, nLevel, node)
+    CgsApt_GalProbe("AptCIH ctor (CreateCharacterInst)", nullptr);
+    AptCIH* pNew = ::new (pMem) AptCIH(nullptr, nullptr);
+    CgsApt_GalProbe("AptCIH ctor done; charInst", pNew ? pNew->mpCharacterInst : nullptr);
+
+    // GUARDED post-create derefs: a partial render-tree manager can leave mpCharacterInst /
+    // mpRenderItem null. Bail (the node exists but is not fully wired) rather than AV.
+    if (pNew == nullptr || pNew->mpCharacterInst == nullptr)
+    {
+        CgsApt_GalProbe("charInst NULL -> bail", pNew);
+        return nullptr;
+    }
+
+    CgsApt_GalProbe("GetRenderItemWritable/SetDepth", nullptr);
+    AptRenderItem* pRI = pNew->mpCharacterInst->GetRenderItemWritable();
+    // FLAG (x64 bring-up): the render-tree manager is a null stub (AptCurrentRenderTreeManager==0),
+    // so no render item is created and pRI is null. The console always has one (SetDepth stamps the
+    // render item's depth). We still create + GC-root + INSERT the root node so the display tree
+    // exists + the instantiation chain proceeds; only the render-item depth stamp is skipped (the
+    // node's depth defaults). When the render-tree manager lands, SetDepth runs faithfully.
+    if (pRI != nullptr)
+        pRI->SetDepth(nLevel);
+    else
+        CgsApt_GalProbe("renderItem NULL -> SetDepth skipped (no RTM)", nullptr);
+    CgsApt_GalProbe("setGCRoot", nullptr);
+    pNew->setGCRoot(1);
+    CgsApt_GalProbe("insert", nullptr);
+    pState->insert(nLevel, pNew);
+    CgsApt_GalProbe("RETURN root CIH", pNew);
     return pNew;
 }
 

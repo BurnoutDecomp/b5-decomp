@@ -17,6 +17,9 @@
 
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // base dtor (chained)
+
+// The instantiation step-probe sink (host-implemented; weak no-op default in AptCharacterHelper.cpp).
+extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p);
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"            // GetRenderItemWritable / mpRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"               // mpCharacter
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"       // ClearCharacterList / ResetInitIndicators / IncCharacterList
@@ -143,7 +146,11 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
 // ---------------------------------------------------------------------------
 AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
 {
+    CgsApt_GalProbe("MakeCAI: enter pFile", pFile);
+    if (pFile == nullptr)
+        return nullptr;
     void* lpMem = gpAptSharedPtrPool->Allocate(sizeof(AptCharacterAnimationInst));    // Allocate(off_8324D808, 0x2C)
+    CgsApt_GalProbe("MakeCAI: alloc inst", lpMem);
     if (lpMem == nullptr)
         return nullptr;
 
@@ -151,6 +158,7 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // the movie root (pFile->mpData) is the AptCharacter the base ctor builds over,
     // and the held file reference is an incref'd AptFilePtr(pFile).
     AptCharacter* lpCharacter = reinterpret_cast<AptCharacter*>(pFile->mpData);   // r4 = *(pFile+0x14)
+    CgsApt_GalProbe("MakeCAI: mpData(character)", lpCharacter);
     AptFilePtr    laHeldFile;
     laHeldFile.pData = pFile;
     if (pFile != nullptr)
@@ -163,8 +171,10 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(this, character).
     // (The AnimInst vtable store `*this = off_82145FE8` is the manual-vtable family's
     // automatic codegen -- not hand-written here, matching the dtor + the base ctor.)
+    CgsApt_GalProbe("MakeCAI: SpriteInstBase ctor ...", nullptr);
     ::new (static_cast<void*>(static_cast<AptCharacterSpriteInstBase*>(pInst)))
         AptCharacterSpriteInstBase(lpCharacter);
+    CgsApt_GalProbe("MakeCAI: SpriteInstBase done; renderItem", pInst->mpRenderItem);
 
     pInst->mAnimationFilePtr.pData = nullptr;    // *(this+0x28) = 0 (pre-op= clear)
     pInst->mAnimationState_unknown = 0;          // *(this+0x24) = 0
@@ -203,13 +213,23 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // pin's incref is the argument's hand-off -- the asm leaves sp+0x50 un-decref'd
     // after the call (it is balanced by the table reference IncCharacterList keeps),
     // so no separate drop is emitted here.
+    // NULL-SAFE (x64 bring-up): this reaches the movie's character list through the instance's RENDER
+    // ITEM (pInst->mpRenderItem->mpCharacter). With the render-tree manager the null stub, mpRenderItem
+    // is null, so skip IncCharacterList (it only ref-counts the embedded character table) when there is
+    // no render item / character. FLAG: the character-list incref resumes once the RTM lands.
+    CgsApt_GalProbe("MakeCAI: IncCharacterList (renderItem)", pInst->mpRenderItem);
+    if (pInst->mpRenderItem != nullptr && pInst->mpRenderItem->mpCharacter != nullptr)
     {
         AptFilePtr laIncArg;
         laIncArg.pData = laHeldFile.pData;
         if (laIncArg.pData != nullptr)
             AptSharedPtrIncRef(laIncArg.pData);       // lwarx/+1/stwcx. @0x82AFFE50
-        AptMovieCharacter_GetAnimation(pInst->mpRenderItem->mpCharacter)
-            ->IncCharacterList(laIncArg);             // @0x82AFFE74
+        AptCharacterAnimation* lpAnim =
+            AptMovieCharacter_GetAnimation(pInst->mpRenderItem->mpCharacter);
+        if (lpAnim != nullptr)
+            lpAnim->IncCharacterList(laIncArg);       // @0x82AFFE74
+        else if (laIncArg.pData != nullptr && AptSharedPtrDecRef(laIncArg.pData) == 0)
+            AptSharedPtrDelete(laIncArg.pData);       // balance the incref if we skip
     }
 
     // (5) @0x82AFFE78..AC: consume the passed-in reference -- read held, null it,
