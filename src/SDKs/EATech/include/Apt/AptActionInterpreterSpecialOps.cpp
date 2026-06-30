@@ -194,6 +194,46 @@ extern void AptApt_FlushDeferredReleases();
 // FLAG (homed by the AS-globals layer): the shared "undefined" value (off_8324D814).
 extern AptValue* gpUndefinedValue;
 
+// FLAG (host path-context resolver -- console sub_82B02F80, the same one CallFunction
+// uses): parse pName into (*ppOutContext, *pOutLeaf) under (pScope, pTarget). Shared
+// with the StackOps call opcodes (declared there too).
+extern void AptInterp_ResolveTargetContext(AptValue* pScope, AptValue* pTarget,
+                                           const EAStringC* pName,
+                                           AptValue** ppOutContext, EAStringC* pOutLeaf);
+
+// ---------------------------------------------------------------------------
+// FLAG (the drag-state singleton + mouse globals -- host/AptApt layer, wired at
+// AptInit; reached through the apt-context global off_8324E574 in the console).
+// StartDragMovie writes the active drag target + its constrain rect + grab offset
+// into the engine's single drag-state record. The host owns the record (it lives
+// behind the apt-context global's +0x18 slot in the console); it is modelled here
+// as a small named struct so the float-field stores stay faithful (the console
+// reaches them at +0x3C/+0x40.. off the record) without raw offset arithmetic.
+// ---------------------------------------------------------------------------
+struct AptDragState
+{
+    uint8_t   mPad00[0x3C];
+    AptValue* mpDragTarget;   // [c:0x3C] the value being dragged (AddRef'd)
+    float     mConstrainL;    // [c:0x40] constrain-rect left   (default -9999)
+    float     mConstrainT;    // [c:0x44] constrain-rect top    (default -9999)
+    float     mConstrainR;    // [c:0x48] constrain-rect right  (default -9999)
+    float     mConstrainB;    // [c:0x4C] constrain-rect bottom (default -9999)
+    float     mGrabOffsetX;   // [c:0x50] cursor->clip grab offset X (default 0)
+    float     mGrabOffsetY;   // [c:0x54] cursor->clip grab offset Y (default 0)
+};
+
+// FLAG (host apt-context global off_8324E574 -> +0x18 = the live drag-state record):
+// the single drag state StartDragMovie mutates. Encapsulated as an accessor so the
+// console's `(*off_8324E574)[+0x18]` deref stays a host boundary.
+extern AptDragState* AptApt_GetDragState();
+
+// FLAG (host mouse position -- the engine's current cursor coords, console
+// dword_8324E534 / dword_8324E538, advanced by the input layer each frame; the
+// console loads them as 64-bit then converts int->float). The grab-offset path
+// reads them once.
+extern int32_t gAptMouseX;   // dword_8324E534
+extern int32_t gAptMouseY;   // dword_8324E538
+
 // ---------------------------------------------------------------------------
 // GotoFrame @0x82B0C480 -- jump the bound clip to the inline-encoded frame number.
 // The target node is the "current target" (ctx.mpPendingReleaseValue) when it is a
@@ -348,6 +388,86 @@ void AptActionInterpreter::_FunctionAptActionRemoveSprite(AptActionInterpreter* 
         }
     }
     pInterp->stackPop();
+}
+
+// FLAG (the drag target's clip matrix translation -- the console reaches it through
+// the resolved value's boxed object (+0x20) -> character instance (+4) -> position
+// matrix (+8), reading the translate components at the matrix's +0x10/+0x14, with a
+// null-matrix fallback to the engine's identity translate (flt_8324E2B0). AptMatrix
+// is not yet a reconstructed named type, so the deref chain is encapsulated here):
+// write the drag target's clip translate (x,y) through the out params.
+extern void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY);
+
+// ---------------------------------------------------------------------------
+// StartDragMovie @0x82B03A20 -- AS startDrag opcode: begin dragging a movie clip.
+// The top operand names the drag target (a clip handle directly, or a string path
+// resolved through the path context + getVariable). The drag-state singleton records
+// the target, resets its constrain rect (to the -9999 "unbounded" sentinel) and grab
+// offset, then -- unless the "lockcenter" operand (top-2, an integer when present) is
+// set -- computes the cursor->clip grab offset from the clip's matrix translate and
+// the current mouse position. When the "constrain" operand (top-3) is an integer the
+// constrain rect is filled from the four bound operands (top-4..top-7). Finally the
+// consumed operands are popped (3 by default, 7 with the constrain rect).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter* pInterp,
+                                                            LocalContextT* pContext)
+{
+    AptValue* pTarget = pInterp->mpStack[pInterp->mnStackTop - 1];   // console Variable (top)
+
+    // A string-typed name (raw type 1 / boxed 33) is resolved through the path context.
+    if (pTarget->isString())
+    {
+        EAStringC leafName;                                          // console v23 scratch
+        AptValue* pResolvedContext = nullptr;                        // console HIDWORD(v24)
+
+        // Boxed strings (type != 1) expose their AptString behind +0x20.
+        const EAStringC* pName = (pTarget->getVtblIndex() == AptVFT_StringValue)
+            ? reinterpret_cast<AptString*>(pTarget)->GetInternalString()
+            : (*reinterpret_cast<AptString**>(reinterpret_cast<char*>(pTarget) + 0x20))
+                  ->GetInternalString();   // FLAG: type-33 box (console *(Variable+32) then +8)
+
+        AptInterp_ResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                       pName, &pResolvedContext, &leafName);   // FLAG: sub_82B02F80
+        pTarget = pInterp->getVariable(pResolvedContext, pContext->mpPendingReleaseValue,
+                                       &leafName, 1, 1, 0);
+    }
+
+    int nPopCount = 3;                                  // console v8 = 3 (becomes 7 with bounds)
+    pTarget->AddRef();                                  // console (**Variable)(Variable)
+
+    AptDragState* const pDrag = AptApt_GetDragState();  // FLAG: host drag-state singleton
+    pDrag->mpDragTarget = pTarget;
+    pDrag->mGrabOffsetX = 0.0f;
+    pDrag->mGrabOffsetY = 0.0f;
+    pDrag->mConstrainL  = -9999.0f;
+    pDrag->mConstrainT  = -9999.0f;
+    pDrag->mConstrainR  = -9999.0f;
+    pDrag->mConstrainB  = -9999.0f;
+
+    // "lockcenter" (top-2): when it is NOT an integer, drag relative to the grab point
+    // -- the cursor->clip offset is (mouse - clip-translate).
+    if (!pInterp->mpStack[pInterp->mnStackTop - 2]->isInteger())
+    {
+        float fTransX = 0.0f;
+        float fTransY = 0.0f;
+        AptApt_GetDragTargetTranslate(pTarget, &fTransX, &fTransY);   // FLAG: clip matrix translate
+
+        pDrag->mGrabOffsetX = static_cast<float>(gAptMouseX) - fTransX;   // console dword_8324E534
+        pDrag->mGrabOffsetY = static_cast<float>(gAptMouseY) - fTransY;   // console dword_8324E538
+    }
+
+    // "constrain" (top-3): an integer enables the constrain rect, read from the four
+    // bound operands (top-4 = left .. top-7 = bottom, per the console's slot order).
+    if (pInterp->mpStack[pInterp->mnStackTop - 3]->isInteger())
+    {
+        nPopCount = 7;
+        pDrag->mConstrainB = pInterp->mpStack[pInterp->mnStackTop - 4]->toFloat();
+        pDrag->mConstrainR = pInterp->mpStack[pInterp->mnStackTop - 5]->toFloat();
+        pDrag->mConstrainT = pInterp->mpStack[pInterp->mnStackTop - 6]->toFloat();
+        pDrag->mConstrainL = pInterp->mpStack[pInterp->mnStackTop - 7]->toFloat();
+    }
+
+    pInterp->stackSafePop(nPopCount);   // console Burnout_X360_Artist_01e3_0(this, v8)
 }
 
 // ---------------------------------------------------------------------------

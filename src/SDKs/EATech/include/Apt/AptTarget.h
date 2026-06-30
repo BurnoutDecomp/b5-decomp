@@ -38,6 +38,8 @@
 
 #include "types.hpp"
 
+#include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"   // _AptRenderItemRootList (mppRenderRootAnchor)
+
 struct AptAnimationTarget;   // +0x18 -- the 88-byte animation director (own TU)
 struct AptLoader;            // +0x1C -- homed in AptLoader.h (held by pointer here)
 struct AptLinker;            // +0x20 -- the 24-byte file linker (own TU)
@@ -56,19 +58,27 @@ struct AptTarget
     AptAnimationTarget* mpAnimationTarget;   // +0x18
     AptLoader*          mpLoader;            // +0x1C
     AptLinker*          mpLinker;            // +0x20
-    void*               mpField24;           // +0x24  FLAG: role TBD (zeroed at ctor)
+    void*               mpField24;           // +0x24  FLAG: role TBD (zeroed at ctor; SetNext writes it)
     void*               mpField28;           // +0x28  FLAG: role TBD (zeroed at ctor)
-    void*               mpField2C;           // +0x2C  FLAG: role TBD (4-byte zeroed alloc)
+    // +0x2C -- the render-root ANCHOR cell: a one-pointer slot (pool-allocated +
+    // zeroed by the ctor) holding the head of the per-target _AptRenderItemRootList
+    // chain. Shutdown frees it (inline on the owning thread, else deferred to the
+    // render-manager queue). Console 4-byte slot; on x64 it is sizeof(ptr).
+    AptRenderTreeManager::_AptRenderItemRootList** mppRenderRootAnchor;   // +0x2C
 
     // GetAnimationTarget @0x82AD5770 -- the active animation director (+0x18).
+    // X360 body: `lwz r3,0x18(r3); blr`.
     AptAnimationTarget* GetAnimationTarget() const { return mpAnimationTarget; }
 
+    // SetNext @0x82B6BEA0 -- store a pointer into the +0x24 slot and return this.
+    // X360 body: `stw r4,0x24(r3); blr`.
+    AptTarget* SetNext(void* pNext) { mpField24 = pNext; return this; }
+
     // ctor @0x82B00160 / Shutdown @0x82B02328 -- the AptTarget lifecycle (allocates /
-    // tears down mpAnimationTarget + mpLoader + mpLinker). FLAG: bodies are their own
-    // TU, gated on AptAnimationTarget (88B) + AptLinker (24B) being homed. Declared so
-    // the context struct is complete for the ~100 dependents that only read its members.
-    explicit AptTarget(const u32* pParams);   // FLAG: body its own TU
-    void Shutdown();                          // FLAG: body its own TU
+    // tears down mpAnimationTarget + mpLoader + mpLinker + the render-root anchor).
+    // Bodies in AptTarget.cpp.
+    explicit AptTarget(const u32* pParams);
+    void Shutdown();
 };
 
 // The Apt context/director singletons -- the same active AptTarget* under three X360
