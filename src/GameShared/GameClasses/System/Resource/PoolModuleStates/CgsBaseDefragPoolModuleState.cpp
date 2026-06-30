@@ -133,4 +133,17 @@ namespace CgsResource
         muRelocationCount = luIndex + 1;       // *(a1+0x40) = result + 1
         return luIndex;
     }
+
+    // FLAG (link stub): the base RunDefragAlgorithm / RunPoolDefragmentation are declared
+    // virtual but have no X360 base body -- the IntelliFrag / EmergencyFrag subclass
+    // overrides carry the real strategy. Stubbed so the base vtable links; the base
+    // implementations are never selected at runtime (the concrete states always override).
+    bool BaseDefragPoolModuleState::RunDefragAlgorithm(AllocListSet*, LinearHeapNode*, s32, s32)
+    {
+        return false;
+    }
+
+    void BaseDefragPoolModuleState::RunPoolDefragmentation(RelocateRequest*, RelocateSource*, u32, s32)
+    {
+    }
 }
