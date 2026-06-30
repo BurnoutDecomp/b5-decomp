@@ -4,8 +4,10 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
+#include "GameShared/GameClasses/Core/CgsID.h"     // CgsID (u64) -- mPursuedCarID / mShutdownCarID
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
-#include "BrnCommonTypes.h"                        // Vector3 (event-position accessor returns)
+#include "GameSource/BurnoutConstants.h"          // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
+#include "BrnCommonTypes.h"                        // Vector3 / Vector4 (event-position / camera accessors)
 
 // BrnGui::GuiCache subsystem (DecFIGS DWARF: BrnGuiCache.h). StateLoadingHelper is the
 // resource/component watcher embedded in the cache; GuiCache is the cache itself. Only
@@ -15,9 +17,16 @@ namespace CgsGui { class ObjectController; }
 namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList return (pointer only)
 namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
 namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (pointer only)
+namespace BrnProgression { struct Profile; }      // DetermineCarUnlockPending arg (pointer only)
 
 namespace BrnGui
 {
+    // Pointer-only members of the GuiCache layout (forward-declared; the cache never
+    // dereferences their full type in this TU -- it stores/returns the pointer).
+    struct FreeburnChallengeManager;
+    struct HudMessageController;
+    struct HudMessageDirector;
+    struct MapIconManager;
     // Defined later in this header (minimal-slice records returned by GetPresetEvent /
     // the inlined event-display helpers).
     struct PresetEvent;
@@ -207,6 +216,91 @@ namespace BrnGui
         // path. Two flavours for the two event lists (profile vs preset).
         const SatNavEventDisplayInfo* GetProfileEventDisplayInfo(u32 luEventId) const; // X360 @0x824F8AF0
         const SatNavEventDisplayInfo* GetPresetEventDisplayInfo(u32 luEventId) const;  // X360 @0x824F8838
+
+        // ====================================================================
+        //  Scalar / pointer snapshot accessors recovered in the GuiCache TU.
+        //  Each reads ONE named member at an asm-proven offset, guarded by the
+        //  game's debug assert (a no-op CGS_ASSERT in this build). Bodies in
+        //  BrnGuiCache.cpp. (Array-indexed accessors -- race-car / online-player
+        //  tables, preset/profile-event indexers, replay tables, scoring traffic --
+        //  remain declaration-only: their element strides/types and per-element
+        //  callees are out-of-scope boundary records not yet recovered.)
+        // ====================================================================
+        GuiCache();                                 // X360 @0x827E05B8 (field inits only)
+
+        f32 GetCurrentTimeInEvent() const;          // X360 @0x8240F2C8 (mfEventTime,  >= 0)
+        f32 GetTargetTimeInEvent() const;           // X360 @0x8240F330 (mfTargetTime, >= 0)
+        s32 GetOpponentsInEvent() const;            // X360 @0x8240F450 (miOpponentsInEvent, s8)
+        s32 GetEventDestinationDistrict() const;    // X360 @0x82472DB0 (mEventDestinationDistrict)
+        s32 GetCheckpointReached() const;           // X360 @0x824EC468 (miCheckpointReached, >= 0)
+        s32 GetCurrentTakedownsInEvent() const;     // X360 @0x8240F4B0 (miTakedownsCurrent, ROAD_RAGE)
+        s32 GetTargetTakedownsInEvent() const;      // X360 @0x8240F550 (miTakedownTarget,   ROAD_RAGE)
+        s32 GetCurrentScoreInEvent() const;         // X360 @0x8240F5F0 (miScoreCurrent)
+        s32 GetTargetScoreInEvent() const;          // X360 @0x8240F650 (miScoreTarget)
+        s32 GetCurrentComboInEvent() const;         // X360 @0x8240F6B0 (miScoreCombo)
+        s32 GetMultiplierInEvent() const;           // X360 @0x8240F710 (miComboMultiplier)
+        CgsID GetPursuitCarID() const;              // X360 @0x8240F7F0 (mPursuedCarID,  PURSUIT)
+        CgsID GetShutdownCarID() const;             // X360 @0x824B3060 (mShutdownCarID)
+        s32 GetTrophyCarUnlockType() const;         // X360 @0x824B30C0 (meTrophyCarUnlockType, != NONE)
+        s32 GetActiveRoadRuleScoringMode() const;   // X360 @0x8240FC28 (meRoadRuleScoreMode, != COUNT)
+
+        const FreeburnChallengeManager* GetFreeburnChallengeManager() const; // X360 @0x8240F168
+        const HudMessageController*     GetHudMessageController() const;      // X360 @0x82472D00
+        const HudMessageDirector*       GetHudMessageDirector() const;        // X360 @0x82472D58
+
+    private:
+        // ===================================================================
+        //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps
+        //  reserved with explicit padding (AGENTS.md "LAYOUT RECOVERY WITH
+        //  PADDING"). Member NAMES/TYPES from DecFIGS DWARF (BrnGuiCache.h);
+        //  every offset in a trailing comment is X360-attested. Only the members
+        //  the recovered accessors touch are named; the object is a large plain
+        //  aggregate (no vptr) so the first member sits at offset 0.
+        // ===================================================================
+        u8  mPad_0000[4];                                // +0x0000 GuiEventTimeInfo header word
+        f32 mfTimeNow;                                   // +0x0004 (4)     GetTime, != -FLT_MAX
+        u8  mPad_0008[16476];                            // +0x0008..+0x4063
+        WorldDataController*      mpWorldDataController;  // +0x4064 (16484)
+        u8  mPad_4068[4];                                // +0x4068
+        FreeburnChallengeManager* mpChallengeManager;    // +0x406C (16492)
+        HudMessageController*     mpHudMessageController; // +0x4070 (16496)
+        HudMessageDirector*       mpHudMessageDirector;   // +0x4074 (16500)
+        u8  mPad_4078[4616];                             // +0x4078..+0x527F
+        s32 miNumPresetRaces;                            // +0x5280 (21120)
+        u8  mPad_5284[19408];                            // +0x5284..+0x9E53
+        s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker
+        s32 meGameModeType;                              // +0x9E58 (40536) GsmIO::EGameModeType
+        u8  mPad_9E5C[208];                              // +0x9E5C..+0x9F2B
+        f32 mfEventTime;                                 // +0x9F2C (40748)
+        f32 mfTargetTime;                                // +0x9F30 (40752)
+        u8  mPad_9F34[16];                               // +0x9F34..+0x9F43 mafTargetScores[4]
+        s8  miOpponentsInEvent;                          // +0x9F44 (40772)
+        u8  mPad_9F45[7];                                // +0x9F45..+0x9F4B
+        u16 mEventDestinationLandmarkIndex;              // +0x9F4C (40780) LandmarkIndex (s16)
+        u8  mPad_9F4E[2];                                // +0x9F4E..+0x9F4F
+        s32 mEventDestinationDistrict;                   // +0x9F50 (40784) BrnWorld::EDistrict
+        u8  mPad_9F54[96];                               // +0x9F54..+0x9FB3
+        s32 miCheckpointReached;                         // +0x9FB4 (40884)
+        u32 muCheckpointsInEvent;                        // +0x9FB8 (40888)
+        s32 miTakedownsCurrent;                          // +0x9FBC (40892)
+        s32 miTakedownTarget;                            // +0x9FC0 (40896)
+        s32 miScoreCurrent;                              // +0x9FC4 (40900)
+        s32 miScoreTarget;                               // +0x9FC8 (40904)
+        s32 miScoreCombo;                                // +0x9FCC (40908)
+        s32 miComboMultiplier;                           // +0x9FD0 (40912)
+        u8  mPad_9FD4[12];                               // +0x9FD4..+0x9FDF
+        CgsID mPursuedCarID;                             // +0x9FE0 (40928)
+        u8  mPad_9FE8[8];                                // +0x9FE8..+0x9FEF
+        CgsID mShutdownCarID;                            // +0x9FF0 (40944)
+        u8  mPad_9FF8[8];                                // +0x9FF8..+0x9FFF
+        s32 meTrophyCarUnlockType;                       // +0xA000 (40960) TrophyUnlockData::UnlockType
+        u8  mPad_A004[3132];                             // +0xA004..+0xAC3F
+        s32 meRoadRuleScoreMode;                         // +0xAC40 (44096) GuiEventSetRoadRuleScoreMode::ERoadPanelModes
+        u8  mPad_AC44[1];                                // tail guard (further far members --
+        // pre-race messages, profile/replay/online tables, sat-nav zoom -- are reached only
+        // by declaration-only array accessors and are not modelled here.)
+
+        static void _AssertLayout();
     };
 
     // Boundary record returned by the two inlined event-display helpers above. Only the two
