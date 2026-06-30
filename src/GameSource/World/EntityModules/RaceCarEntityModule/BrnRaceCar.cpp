@@ -31,6 +31,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (streamed asserts)
 #include "GameShared/GameClasses/World/CgsWorldMap2D.h"       // CgsWorld::WorldMap2D::GetValue
 #include "rw/math/vpu/matrix44affine_operation.h"             // rw::math::vpu::IsValid(Matrix44Affine)
+#include "rw/math/vpu/vector3_operation.h"                    // rw::math::vpu::IsValid(Vector3)
 
 namespace BrnWorld
 {
@@ -300,6 +301,154 @@ void RaceCar::UpdatePositioningData(const Matrix44Affine& lTransform, CgsWorld::
     // WorldRegion::Construct (BrnWorldRegion.h:155) -- it lives once in WorldRegion::Construct
     // (which we call below), so it is NOT duplicated at this call site.
     mWorldRegion.Construct(leDistrict);
+}
+
+// ----------------------------------------------------------------------------
+// UpdateVelocity @ 0x822B3DE0. Validates the supplied velocity (the X360 RwMath::IsValid
+// per-lane NaN check over x/y/z) and stores it into mVelocity (+0x50).
+// ----------------------------------------------------------------------------
+void RaceCar::UpdateVelocity(Vector3 lVelocity)
+{
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+    CGS_ASSERT(IsInWorld(), "IsInWorld()");
+    CGS_ASSERT(rw::math::vpu::IsValid(lVelocity), "RwMath::IsValid( lVelocity )");
+
+    mVelocity = lVelocity;
+}
+
+// ----------------------------------------------------------------------------
+// SetInCurrentGameMode @ 0x822B3F08. Marks whether this slot participates in the current
+// game mode (and whether car-select is allowed). Entering game mode requires the slot to
+// already be in the world. When leaving game mode and there is no attached active car the
+// active-race-car index is released back to invalid.
+// ----------------------------------------------------------------------------
+void RaceCar::SetInCurrentGameMode(bool lbInGameMode, bool lbCarSelectAllowed)
+{
+    if (lbInGameMode)
+    {
+        CGS_ASSERT(IsInWorld(), "!(lbIsInGameMode && !IsInWorld())");
+    }
+
+    mbIsInGameMode               = lbInGameMode;
+    mbCarSelectAllowedInGameMode = lbCarSelectAllowed;
+
+    if (!lbInGameMode && mpActiveRaceCar == nullptr)
+    {
+        miActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// SetActiveRaceCarIndex @ 0x822A1030. Records the active-race-car slot index. Re-assigning
+// to a different index while one is already set (and not the invalid sentinel) is an error.
+// ----------------------------------------------------------------------------
+void RaceCar::SetActiveRaceCarIndex(EActiveRaceCarIndex leIndex)
+{
+    if (miActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID
+        && miActiveRaceCarIndex != static_cast<s8>(leIndex))
+    {
+        char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        lStrStream << "Active car index modified when not unused";
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+        CgsDev::Assert::EndAssert();
+    }
+
+    miActiveRaceCarIndex = static_cast<s8>(leIndex);
+}
+
+// ----------------------------------------------------------------------------
+// GetActiveRaceCar @ 0x822B3988. Returns the attached active (simulated) car, or null.
+// ----------------------------------------------------------------------------
+ActiveRaceCar* RaceCar::GetActiveRaceCar()
+{
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+    CGS_ASSERT(IsInWorld(), "IsInWorld()");
+
+    return mpActiveRaceCar;
+}
+
+// ----------------------------------------------------------------------------
+// GetPosition @ 0x822B3500. The car's world position (mTransform translation row, +0x30).
+// ----------------------------------------------------------------------------
+Vector3 RaceCar::GetPosition() const
+{
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+    CGS_ASSERT(IsInWorld(), "IsInWorld()");
+
+    return mTransform.Pos();
+}
+
+// ----------------------------------------------------------------------------
+// GetDirection @ 0x822B3610. The car's forward direction (mTransform At/zAxis row, +0x20).
+// ----------------------------------------------------------------------------
+Vector3 RaceCar::GetDirection() const
+{
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+    CGS_ASSERT(IsInWorld(), "IsInWorld()");
+
+    return mTransform.At();
+}
+
+// ----------------------------------------------------------------------------
+// HasActiveRaceCar @ 0x822A0CD8. True iff this slot is in the world and has an attached
+// active car. An inactive slot short-circuits to false (no IsInWorld assert is taken).
+// ----------------------------------------------------------------------------
+bool RaceCar::HasActiveRaceCar() const
+{
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+
+    return muType != E_RACE_CAR_TYPE_INACTIVE && mpActiveRaceCar != nullptr;
+}
+
+// ----------------------------------------------------------------------------
+// IsInRangeRival @ 0x822A0F20. An AI car that currently has an active (in-range) car.
+// ----------------------------------------------------------------------------
+bool RaceCar::IsInRangeRival() const
+{
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+
+    if (muType == E_RACE_CAR_TYPE_AI)
+    {
+        return HasActiveRaceCar();
+    }
+
+    return false;
+}
+
+// ----------------------------------------------------------------------------
+// IsOutOfRangeRival @ 0x822A0E90. An AI car that is currently out of range (no active car).
+// ----------------------------------------------------------------------------
+bool RaceCar::IsOutOfRangeRival() const
+{
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+
+    return muType == E_RACE_CAR_TYPE_AI && !HasActiveRaceCar();
+}
+
+// ----------------------------------------------------------------------------
+// ToBeRenderedDamaged @ 0x822B3D70. Whether this car should render with accumulated damage:
+// it has persistent damage, or it is the player car, or it is a network car.
+// ----------------------------------------------------------------------------
+bool RaceCar::ToBeRenderedDamaged() const
+{
+    if (mfPersistentDamage > 0.0f)
+    {
+        return true;
+    }
+
+    if (IsPlayerDriven())
+    {
+        return true;
+    }
+
+    if (IsNetworkDriven())
+    {
+        return true;
+    }
+
+    return false;
 }
 
 }

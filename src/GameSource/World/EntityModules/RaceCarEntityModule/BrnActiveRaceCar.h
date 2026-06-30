@@ -23,6 +23,7 @@
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"   // EActiveRaceCarIndex
 #include "BrnCommonTypes.h"                 // Matrix44, Vector2, Vector4 (RenderParams)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // ERaceCarType (IsPlayer)
 
 namespace BrnWorld
 {
@@ -42,6 +43,62 @@ public:
 
     // X360: returns mbToBePlacedOnTrack (byte this+0x7C4). DWARF BrnActiveRaceCar.h:853.
     bool ToBePlacedOnTrack() const;
+
+    // ========================================================================
+    // Per-frame state accessors bodied in BrnActiveRaceCar.cpp. These thin wrappers
+    // forward to the paired global RaceCar (mpGlobalRaceCar, this+0x6F0) which owns
+    // the world pose/identity; the active car owns the live physics/AI snapshot. The
+    // forwarders below only touch the X360-homed members (mpGlobalRaceCar via
+    // GetGlobalRaceCar(), mbIsAttached via IsAttached()), so they are fully bodied.
+    // ========================================================================
+
+    // X360 0x822CCEB8: assert IsAttached() + mpGlobalRaceCar != NULL, then forward to
+    // RaceCar::GetTransform() on the paired global slot.
+    Matrix44Affine GetTransform() const;
+
+    // X360 0x822CD038: assert IsAttached() + mpGlobalRaceCar != NULL, then forward to
+    // RaceCar::GetDirection() on the paired global slot.
+    Vector3 GetDirection() const;
+
+    // X360 0x822CD0F8: assert IsAttached(), then forward to RaceCar::GetVelocity() on
+    // the paired global slot.
+    Vector3 GetVelocity() const;
+
+    // X360 0x822B8540: the paired global slot's type is E_RACE_CAR_TYPE_PLAYER (muType == 0).
+    bool IsPlayer() const;
+
+    // ------------------------------------------------------------------------
+    // DECLARATION-ONLY (bodies deferred). These read/write per-frame ActiveRaceCar
+    // state members (mbIsCrashing @+0x52A, meRaceStartState @+0x77C, miBrakingCounter
+    // @+0x738, mbBraking @+0x1BE7, the per-wheel physics blocks @+0x310/+0x1020/+0x1560
+    // and mau8WheelOnGround @+0x526/+0x1560) that the committed sparse declaration
+    // surface deliberately does NOT lay out (the full 0x1CD0/7376-byte instance is not
+    // homed here -- see the header comment above). They are declared so consumers/this
+    // TU compile; their bodies resolve at link against the not-yet-homed full layout.
+    // Homing them would require laying out the entire instance, which is out of scope
+    // for this declaration-surface header. FLAGGED: un-homed members.
+
+    // X360 0x822A2150: returns mbIsCrashing (byte @+0x52A).
+    bool IsCrashing() const;
+
+    // X360 0x822A2060: leState == meRaceStartState (int @+0x77C).
+    bool IsOnRaceStartState(s32 liState) const;
+
+    // X360 0x822A20D8: meRaceStartState is one of the two race-start states (0 or 1).
+    bool IsInAnyRaceStartState() const;
+
+    // X360 0x822B8610: for an AI car, ramp a braking counter (miBrakingCounter @+0x738,
+    // +1 toward +10 when braking / -2 toward -10 when not) and set mbBraking
+    // (@+0x1BE7) = counter > 0; for non-AI cars mbBraking = lbBraking directly.
+    void SetBraking(bool lbBraking);
+
+    // X360 0x822B8738: DEFERRED -- multi-stage VMX (lvx128/stvx128) copy of the four
+    // per-wheel 64-byte physics transforms from the physics scratch into the active
+    // car's wheel-physics blocks (@+0x310 and @+0x1020) plus the per-wheel on-ground
+    // byte (@+0x526 / +0x1560). Declared only; the per-TU `cl /c` gate does not link,
+    // so an undefined-but-declared method compiles cleanly. FLAGGED: VMX pipeline +
+    // un-homed wheel-physics layout.
+    void UpdateWheelPhysicsState(const void* lpPhysicsWheelData);
 
     // ========================================================================
     // BrnWorld::ActiveRaceCar::RenderParams -- the per-car VISUAL snapshot the
