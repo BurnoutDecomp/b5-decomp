@@ -4,20 +4,26 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                    // DOGMA_PoolManager::Deallocate
 
 // AptIntervalTimer member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
-// The compiler-emitted vector deleting destructor @ 0x82AEAA68 is an array
-// new[]/delete[] thunk (it walks the 36-byte-stride array calling ~AptIntervalTimer
-// and frees via the array cookie) and is intentionally NOT reconstructed, per the
-// project convention of dropping deleting-destructor thunks.
+
+#include <cstdint>   // intptr_t for the array-cookie byte arithmetic
+
+// The shared Apt fixed-size pool (X360 off_8324D808) the timer array is allocated
+// from / freed back to (the same single pool gpAptOperandStackPool aliases). The
+// array deleting destructor frees its pool block through this handle.
+extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 
 // ---- ctor @ 0x82AE2548 ---------------------------------------------------
 AptIntervalTimer::AptIntervalTimer()
 {
-    miId            = 0;
-    miFunctionValue = 0;
-    mfInterval      = 0.0f;
-    mfElapsed       = 0.0f;
+    // The X360 ctor zeroes the +0x00 slot gate and the +0x04 callback value (two
+    // int32 stores), zeroes the two floats, then constructs the param stack. It
+    // does NOT touch mpContext(+0x10) or miId(+0x20) -- the setInterval setup path
+    // fills those.
+    mpActiveValue   = nullptr;   // *a1     = 0
+    mpCBFunction    = nullptr;   // *(a1+4) = 0
+    mfInterval      = 0.0f;      // *(a1+8) = 0.0
+    mfElapsed       = 0.0f;      // *(a1+12)= 0.0
     mParams         = AptValueVector::ConstructWithCapacity(6);
-    // (+0x10 / +0x20 deliberately left uninitialised, matching the X360 ctor.)
 }
 
 // ---- CleanParams @ 0x82ADF120 --------------------------------------------
@@ -53,4 +59,50 @@ s32 AptIntervalTimer::GenerateId()
 {
     static s32 siNextId = 0;   // X360: module counter, atomically incremented
     return ++siNextId;
+}
+
+// ---- `vector deleting destructor' @ 0x82AEAA68 ---------------------------
+// The MSVC array deleting destructor. nFlags bit1 selects the array form; the
+// element count is the dword immediately before the array (the new[] cookie), the
+// 36-byte-stride elements are destroyed high index -> low, and (bit0) the pool
+// block -- which begins one dword before that count, sized cookie+4 -- is freed.
+// The non-array branch destroys a single element and (bit0) frees its 36 bytes.
+//
+// FLAG (x64 widening): the X360 cookie/stride are console 4-byte/36-byte; on PC
+// AptIntervalTimer is wider (8-byte AptValue*/AptValueVector), so the genuine PC
+// new[] cookie + element stride differ from the console 36. We honour the X360's
+// SEMANTICS (count cookie one dword ahead; destroy every element; free the block)
+// using sizeof(AptIntervalTimer) for the stride and the count dword the parent's
+// allocation wrote, rather than the literal console 36 -- correct per the
+// project's semantic-parity-by-named-members rule.
+void* AptIntervalTimer::_vector_deleting_destructor_(AptIntervalTimer* pArray, char nFlags)
+{
+    if ((nFlags & 2) != 0)
+    {
+        // Array form. The count dword sits at pArray[-1] (the new[] cookie); the
+        // pool block starts one dword before it.
+        s32* lpCount = reinterpret_cast<s32*>(pArray) - 1;
+        const s32 liCount = *lpCount;
+
+        for (s32 liIndex = liCount - 1; liIndex >= 0; --liIndex)
+        {
+            pArray[liIndex].~AptIntervalTimer();
+        }
+
+        if ((nFlags & 1) != 0)
+        {
+            // X360: Deallocate(off_8324D808, &count - 1, count + 4) -- the block is
+            // the count cookie (one dword) preceded by the pool's own size dword.
+            s32* lpBlock = lpCount - 1;
+            gpAptPseudoDataPool->Deallocate(lpBlock, static_cast<u32>(liCount) + 4u);
+        }
+        return lpCount;
+    }
+
+    pArray->~AptIntervalTimer();
+    if ((nFlags & 1) != 0)
+    {
+        gpAptPseudoDataPool->Deallocate(pArray, sizeof(AptIntervalTimer));
+    }
+    return pArray;
 }

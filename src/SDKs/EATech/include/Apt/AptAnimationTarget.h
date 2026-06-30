@@ -46,7 +46,7 @@
 #include "SDKs/EATech/include/Apt/AptIntervalTimer.h"   // mpIntervalTimers element type
 
 class AptValue;           // GC value (slots / input-event objects held as AptValue*)
-struct AptActionQueueC;   // +0x0C -- the 20-byte deferred-action queue (own TU; held by ptr)
+class AptActionQueueC;    // +0x0C -- the deferred-action queue (AptActionQueue.h; held by ptr)
 
 // ---------------------------------------------------------------------------
 // AptAnimationTargetSet -- one of the two inline 8-byte (console) "set" sub-objects
@@ -62,6 +62,22 @@ struct AptAnimationTargetSet
     u16        mnCount;     // +0x00  live entries used this frame
     u16        mnCapacity;  // +0x02  slot count
     AptValue** mppSlots;    // +0x04  slot array (4*mnCapacity on console)
+};
+
+// ---------------------------------------------------------------------------
+// AptAnimationTargetParams -- the small sizing struct AptTarget::ctor hands the
+// director's ctor (X360: a contiguous dword array; the ctor reads words 0/1/2/3/5).
+// Modelled as a named struct so the ctor reads by name. Word 4 is not consumed by
+// the director ctor (FLAG: role TBD -- read by another AptTarget setup step).
+// ---------------------------------------------------------------------------
+struct AptAnimationTargetParams
+{
+    u32 mnNumIntervalTimers;  // [0] -> mnNumIntervalTimers
+    u32 mnQueuedInputsCap;    // [1] -> mnQueuedInputsCap
+    u16 mnListenerSetSize;    // [2] -> mListenerSet capacity (helper reads a u16)
+    u16 mnInputSetSize;       // [3] -> mInputSet capacity   (helper reads a u16)
+    u32 mnReserved4;          // [4]  FLAG: not read by the director ctor
+    u32 mnActionQueueCap;     // [5] -> AptActionQueueC capacity
 };
 
 struct AptAnimationTarget
@@ -82,6 +98,17 @@ struct AptAnimationTarget
     void*                 mpDragMC;             // +0x3C  (Get/SetDragMC; ctor sentinel)
     u32                   mDragPos[2];          // +0x40  (GetDragPos returns &mDragPos)
     u32                   maTail[4];            // +0x48..+0x54  FLAG: roles TBD
+
+    // ctor @0x82AFF648 -- build the director from the sizing params: copy the timer
+    // count + input cap, build the two listener/input sets, pool-allocate the action
+    // queue + the interval-timer array (each AptIntervalTimer ctor'd) + the queued-
+    // input ring, and seed the four input-event object slots to the None sentinel.
+    AptAnimationTarget(const AptAnimationTargetParams* pParams);
+
+    // dtor @0x82AFF790 -- free the queued-input ring, tear down the interval-timer
+    // array, free the action queue (ring block + control block), destroy the root
+    // display list, then the input + listener sets.
+    ~AptAnimationTarget();
 
     // GetRootDisplayList -- the root display list the context walks (mDisplayList).
     AptDisplayList* GetRootDisplayList() { return &mDisplayList; }
@@ -111,13 +138,94 @@ struct AptAnimationTarget
     int  ProcessAptInput(unsigned int nPackedInput, int bFirstThisFrame);
 
     // ProcessInputSet @0x82AF4478 / ProcessListenerEvents @0x82B01ED0 -- the two
-    // ProcessAptInput dispatches. FLAG: bodies pending -- they walk the AptValue GC
-    // tag bits of mInputSet/mListenerSet entries and call AptCIH::queueClipEvents /
-    // AddListenerToQueue, which need the (sibling-owned) AptValue/AptCIH layouts
-    // modelled before a faithful by-name decompile is possible. Declared so the
-    // ProcessAptInput dispatcher links into the per-frame pump.
+    // ProcessAptInput dispatches: each walks the live AptValue* entries of
+    // mInputSet / mListenerSet and routes the input event to the listed CIHs. The
+    // asm only reads nCode (the event phase: 0 == rollover, 1 == press) and nPacked
+    // (the packed event word) of the args ProcessAptInput passes; nEventId / nSub /
+    // bFirstThisFrame are forwarded for signature parity but not re-read here.
     int  ProcessInputSet(int nEventId, int nCode, unsigned int nPacked, int nSub, int bFirstThisFrame);
     int  ProcessListenerEvents(int nEventId, unsigned int nCode, int nPacked, int nSub);
+
+    // AddListenerToQueue @0x82B01C88 -- if pListener is an event-bearing value (an
+    // AS object/CIH-none whose __proto__ chain or own hash carries one of the input
+    // event handlers in nEventMask), resolve each matching handler child, (re)bind
+    // its "this" to pListener (a GC-root handoff), and enqueue a deferred function
+    // call for it on the action queue. Returns the last enqueue/lookup result.
+    AptValue* AddListenerToQueue(AptValue* pListener, int nEventMask, int nPacked);
+
+    // ---- deferred-action queue thunks (each tail-jumps into mpActionQueue) ------
+    // The four X360 one-liners at 0x82ADC608..0x82ADC620 load mpActionQueue (+0x0C)
+    // and tail-call the matching AptActionQueueC enqueue method on it.
+    AptValue* AddActionBack  (s32 iEventId, AptCIH* pCIH, s32 iContext);        // @0x82ADC608
+    AptValue* AddActionFront (s32 iEventId, AptCIH* pCIH, s32 iContext);        // @0x82ADC610
+    AptValue* AddFunctionBack (AptValue* pContext, AptValue* pFuncDef,
+                               s32 iReturnReg, s32 iArgCount);                  // @0x82ADC618
+    AptValue* AddFunctionFront(AptValue* pContext, AptValue* pFuncDef,
+                               s32 iReturnReg, s32 iArgCount);                  // @0x82ADC620
+
+    // ---- analog-stick input (bodies in AptAnimationTarget.cpp) -----------------
+    // AptAnalogInputEvent -- the 16-byte by-value analog sample AddAnalogInput takes
+    // (X360 passes it in the r4:r5 register pair). One of the two axis floats is live
+    // per event id; the player index + event id select the destination table.
+    struct AptAnalogInputEvent
+    {
+        f32 mfAxis0;     // +0x00  axis-0 value (event 0x134)
+        f32 mfAxis1;     // +0x04  axis-1 value (event 0x135)
+        u8  mnPlayer;    // +0x08  player index (table stride 16 bytes)
+        u8  mauPad[3];   // +0x09
+        u32 mnEventId;   // +0x0C  0x134/0x135 analog axes; 0x1F5/0x1F6 stick snapshots
+    };
+
+    // AddAnalogInput @0x82ADEA28 -- record one analog sample. For an axis event
+    // (0x134/0x135) the live float is stored into the per-player axis table (the other
+    // axis zeroed) and, when it is non-zero + the recorder is on, the event is logged;
+    // for a stick-snapshot event (0x1F5/0x1F6) the whole 16-byte sample is copied into
+    // the per-player analog-stick table. When any of those wrote, a packed analog input
+    // (event id + player) is appended to the queued-input ring (then logged). Returns
+    // the AddInput result, or 0 when nothing was queued.
+    int  AddAnalogInput(const AptAnalogInputEvent& rEvent);
+
+    // ---- per-frame action / timer drains (bodies in AptAnimationTarget.cpp) ----
+    // RunActions @0x82B0C9B0 -- drain the deferred action queue: clean the remove
+    // list, then for each queued slot run the clip-event action stream / function
+    // call through the AptActionInterpreter, ticking newly-created instances; finish
+    // by ticking new insts, clearing the queue and cleaning the remove list again.
+    int  RunActions();
+
+    // TickIntervalTimers @0x82AEAD00 -- advance every armed interval timer by the
+    // frame delta; when one elapses, fire its callback (pushing the saved param
+    // values) and either reschedule (setInterval) or tear it down (setTimeout).
+    int  TickIntervalTimers(int nDeltaMs);
+
+    // TickNewInsts @0x82B0C8E0 -- tick + release every entry on the shared
+    // "new instance" table (CIHs created this frame), then clear the table.
+    static void TickNewInsts();
+
+    // RemoveTimerFunctions @0x82AE4320 -- tear down every interval timer whose
+    // callback is bound to (or owned by) the given CIH context (used when a CIH that
+    // owns timers is cleared / its character instance swapped).
+    int  RemoveTimerFunctions(AptCIH* pContext);
+
+    // CleanRemList @0x82AEAB08 -- flush the shared delayed-release list: for each
+    // queued value run its GC teardown (PreDestroy/DestroyGCPointers) and either free
+    // it now or, when it survives, replace its references and delete it.
+    static void CleanRemList();
+
+    // ---- GC mark / reference passes (bodies in AptAnimationTarget.cpp) ---------
+    // RegisterReferences @0x82ADEC00 -- register every AptValue* this director (and
+    // the shared new-inst / delayed-release tables) holds with the GC collector so
+    // the held graph survives a collection.
+    void RegisterReferences();
+
+    // RemoveCIHReferences @0x82ADEEA0 -- the ReplaceReferences callback: re-register
+    // (remap) every held AptValue* and scrub the interval-timer param slots that
+    // point at the value being replaced.
+    void* RemoveCIHReferences();
+
+    // PreDestroy @0x82AFE420 -- shutdown teardown: release every armed interval
+    // timer's callback/context values + drain their param stacks, release every
+    // listener-set entry, then PreDestroy the root display list.
+    void PreDestroy();
 
     // ---- class-static data layer (shared tables; bodies in AptAnimationTarget.cpp) ----
     static void  SetupStaticData(int nMaxNewMovieClips);  // @0x82AE41F0
