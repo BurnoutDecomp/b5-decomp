@@ -63,6 +63,42 @@ namespace BrnNetwork
         // Read as the f32 at this+0x354. Declared-only; the backing config-cache member and
         // the body land with this component's own config-load TU.
         f32 GetBuddyUploadRetryDelay() const;
+
+        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
+        // The login state machine drives the downloadable-config component through several entry
+        // points (X360 reaches the embedded config component as *(mpNetworkManager+0x38EC) + the
+        // downloadable-config slot):
+        //
+        //   Suspend() -- LoginManagerBase::AnswerAgreeTOS @ 0x82566478 / ::CancelLogin @ 0x8254FE60
+        //                call CgsNetwork::ServerInterfaceDownloadableConfig::Suspend on the slot to
+        //                abort any in-flight config download. (The behavioural body lives on the
+        //                Cgs base @ 0x8287AD50; declared here so the slot type the game embeds
+        //                exposes it by name.)
+        //
+        //   GetConfigDataFromNews(liNewsIndex) -- LoginManagerBase::UpdateLoggingIn @ 0x8254FA10
+        //                and ::UpdateGetConfigurationData re-request the configuration data from the
+        //                news feed (every recovered call site passes the literal 8). Declared-only;
+        //                the body lands with this component's own config-load TU.
+        //
+        //   GetTelemetryDisabledList() -- LoginManagerBase::PrepareConnectTelemetry @ 0x8254FEC8
+        //                returns the parsed telemetry-disabled country list the telemetry component
+        //                is configured with. Declared-only; the body lands with the config-load TU.
+        //
+        //   GetTelemetryFirstUsageEventFilters() / GetTelemetryNormalUsageEventFilters() --
+        //                PrepareConnectTelemetry passes the two parsed event-filter blobs (the X360
+        //                +280 / +536 config-cache fields) to ServerInterfaceTelemetry::SetEventFilters.
+        //                Declared-only; the backing members and bodies land with the config-load TU.
+        //
+        //   GetTosDownloadBufferSize() -- LoginManagerBase::PrepareDownloadingTOS @ 0x825438A8
+        //                passes the parsed TOS download buffer size (the X360 +804 config-cache field)
+        //                to ServerInterfaceHttp::StartHttpsDownload. Declared-only; the backing member
+        //                and body land with the config-load TU.
+        void       Suspend();
+        void       GetConfigDataFromNews(s32 liNewsIndex);
+        s32        GetTelemetryDisabledList() const;
+        const u8*  GetTelemetryFirstUsageEventFilters() const;
+        const u8*  GetTelemetryNormalUsageEventFilters() const;
+        s32        GetTosDownloadBufferSize() const;
     };
 }
 

@@ -258,6 +258,15 @@ namespace CgsNetwork
         {
             return maComponents[E_COMPONENTS_GAMES].mpComponent != 0;
         }
+
+        // ADDITIVE GROW (BrnNetworkLoginManagerBase TU): the DirtySock server-interface memory
+        // helpers. BrnNetwork::LoginManagerBase::UpdateDownloadingTOS @ 0x82566320 / ::Disconnected
+        // @ 0x82543D18 allocate and free the cached terms-of-service buffer through these
+        // (X360 calls MemAlloc(size, 0, 0) and MemFree(ptr, 0, 0) -- the two trailing zero args are
+        // an alignment / pool selector). They are static helpers (the X360 call sites pass no
+        // `this`). Declared-only here; the bodies live in this facade's own behavioural TU.
+        static void* MemAlloc(s32 liSize, s32 liAlignment, s32 liPool);
+        static void  MemFree(void* lpBlock, s32 liAlignment, s32 liPool);
         void SetConnApiGameCallback(ServerInterfaceComponentData::ServerInterfaceConnApiCallback lpfnCallback)
         {
             maComponents[E_COMPONENTS_GAMES].mConnApiCallback = lpfnCallback;

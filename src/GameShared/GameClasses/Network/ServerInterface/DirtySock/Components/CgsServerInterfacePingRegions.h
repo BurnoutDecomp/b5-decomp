@@ -63,6 +63,13 @@ namespace CgsNetwork
         // the "REGIONS" preference list. Exposed by name; layout unchanged.
         s32 GetNumberOfPingRegions() const { return miCurrentRegion; }
 
+        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
+        // Begin pinging the region servers (X360: LoginManagerBase::PreparePingRegions @
+        // 0x82543E08 reaches this component through *(mpNetworkManager+0x38EC) + ping-regions slot
+        // and calls StartPingRegions once the DirtySock interface reports idle). Declared-only
+        // here; the body lives in this component's own (DirtySock) TU.
+        void StartPingRegions();
+
     private:
         s32   maRegionPings[KI_MAX_PING_REGIONS];   // +0x10 (50 words; ctor fills -1)
         s32   miField_D8;                           // +0xD8

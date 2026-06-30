@@ -114,6 +114,20 @@ namespace BrnNetwork
             return reinterpret_cast<GuiEventQueueSmall*>(&mOutputGuiEventQueueStorage);
         }
 
+        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
+        // Publish one GUI event onto the module's output GUI event queue. The X360 call sites
+        // (BrnNetwork::LoginManagerBase::AnswerAgreeTOS @ 0x82566478 /
+        //  ::UpdateDownloadingTOS @ 0x82566320) build the event on the stack and call the templated
+        //  AddOutputGuiEvent<TEvent>(this, &event). The template is a thin forward to the
+        //  type-erased queue append (which copies the first sizeof(TEvent) bytes of the event); the
+        //  byte-level append helper is declared-only here, its body landing with the output GUI
+        //  event-queue TU. Modelled as a forward so no queue internals are fabricated.
+        template<typename TEvent>
+        void AddOutputGuiEvent(const TEvent& lEvent)
+        {
+            EnqueueOutputGuiEvent(&lEvent, static_cast<s32>(sizeof(TEvent)));
+        }
+
         // The embedded GameState->Network IO interface (X360 GetGameStateToNetworkInterface @
         // 0x82542CA8, return this+818064). Body lands in the .cpp with the rest of this TU.
         BrnNetworkModuleIO::GameStateToNetworkInterface* GetGameStateToNetworkInterface();
@@ -159,6 +173,12 @@ namespace BrnNetwork
 
         // X360 0x825819A0 IsRecvUpdateMessageToBeShown (const, lbz this+614665).
         bool IsRecvUpdateMessageToBeShown() const;
+
+        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
+        // Type-erased byte append behind the AddOutputGuiEvent<TEvent> template above: copy
+        // liEventSize bytes of *lpEvent onto the output GUI event queue. Declared-only here; the
+        // body lands with the output GUI event-queue TU.
+        void EnqueueOutputGuiEvent(const void* lpEvent, s32 liEventSize);
 
     private:
         // Offsets are absolute from `this`. Only the pinned anchors are load-bearing for this TU;

@@ -65,6 +65,21 @@ namespace CgsNetwork
         // CgsServerInterfaceTelemetry.h:232 -- @ 0x82541968.
         void EnableTemetry(bool lbEnable);
 
+        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
+        // LoginManagerBase::PrepareConnectTelemetry @ 0x8254FEC8 configures and connects this
+        // component (reached through *(mpNetworkManager+0x38EC) + telemetry slot):
+        //   SetDisabledCountryList -- pass the downloadable-config's telemetry-disabled country
+        //                             list (the asm value from BrnServerInterfaceDownloadableConfig::
+        //                             GetTelemetryDisabledList).
+        //   SetEventFilters        -- pass the two event-filter blobs that live inside the
+        //                             downloadable-config component (the +280 / +536 fields).
+        //   Connect                -- open the telemetry connection (r4 == 0 == not first-usage),
+        //                             returning a non-zero error on failure.
+        // Declared-only here; the bodies live in this component's own (DirtySock) TU.
+        void SetDisabledCountryList(s32 liDisabledCountryList);
+        void SetEventFilters(const u8* lpFirstUsageFilters, const u8* lpNormalUsageFilters);
+        s32  Connect(bool lbFirstUsage);
+
     private:
         u32                muMaxFirstUsageBufferSize;        // +0x10
         bool               mbDidSuspendHaltCurrentBuffer;    // +0x14

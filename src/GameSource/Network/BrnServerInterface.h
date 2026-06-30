@@ -11,6 +11,8 @@ namespace CgsNetwork
     class ServerInterfaceGames;        // GetGameComponent() return type (pointer only)
     class ServerInterfacePlayerInfo;   // GetPlayerInfoComponent() return type (pointer only)
     class ServerInterfaceServerInfo;   // GetServerInfoComponent() return type (pointer only)
+    class ServerInterfaceHttp;         // GetHttpComponent() return type (pointer only)
+    class ServerInterfacePingRegions;  // GetPingRegionsComponent() return type (pointer only)
 }
 
 // ===========================================================================
@@ -110,6 +112,22 @@ namespace BrnNetwork
         // BrnServerInterfaceBase::mServerInfo; this is the named accessor for it.
         // Declared-only here; the body lives in this class's own (DirtySock) TUs.
         CgsNetwork::ServerInterfaceServerInfo* GetServerInfoComponent();
+
+        // ADDITIVE GROW (BrnNetworkLoginManagerBase TU): the login state machine drives the HTTPS
+        // download component (the terms-of-service download) and the ping-regions component, and
+        // reads-and-clears the per-component last error of the underlying DirtySock interface:
+        //   GetHttpComponent        -- LoginManagerBase::PrepareDownloadingTOS / ::UpdateDownloadingTOS
+        //                              reach the embedded ServerInterfaceHttp (the +0x38EC HTTP slot).
+        //   GetPingRegionsComponent -- LoginManagerBase::PreparePingRegions reaches the embedded
+        //                              ServerInterfacePingRegions (the +0x38EC ping-regions slot).
+        //   GetAndClearLastError    -- LoginManagerBase::UpdateConnectingDS reads-and-clears the
+        //                              connection component's last error (X360 GetAndClearLastError
+        //                              on the +0x38E8 DirtySock base) to special-case error 18.
+        // The component accessors are the BrnServerInterfaceBase::mHttp / the inherited ping-regions
+        // slot; declared-only here, bodies in this class's own (DirtySock) TUs.
+        CgsNetwork::ServerInterfaceHttp* GetHttpComponent();
+        CgsNetwork::ServerInterfacePingRegions* GetPingRegionsComponent();
+        s32  GetAndClearLastError( s32 liComponent );
 
     private:
         // The one extra server-interface component this most-derived class adds over
