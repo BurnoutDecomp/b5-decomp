@@ -27,6 +27,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h" // Resolve (the movie root)
 #include "SDKs/EATech/include/Apt/AptFile.h"               // AptMovieData (AllImportsAvailable)
 #include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager
+#include "SDKs/EATech/include/Apt/AptTarget.h"    // gpAptTarget->mpLinker (off_8324E574+0x20)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"        // DOGMA_PoolManager::Allocate/Deallocate
 
 #include "eathread/eathread_mutex.h"               // EA::Thread::Mutex
@@ -37,6 +38,26 @@
 // The one global lock for the loader's list. (EA::Thread::Mutex is recursive,
 // which IsLoaded/Load rely on.)
 EA::Thread::Mutex MutexAptLoader;
+
+// ---------------------------------------------------------------------------
+// FLAG (un-homed engine hooks, owned by their own deferred TUs). The X360 loader
+// reaches the async stream subsystem + the linker through fn-ptr slots / the
+// AptLinker; routed here through named externs (not the literal console offsets)
+// so the x64 layout stays correct. Each lands when its owning TU is reconstructed.
+//
+//   AptLoader_StartAsyncLoad  (dword_8324E838) -- kick off the async .apt stream
+//        for a freshly-requested file: takes the file name buffer + the AptFile
+//        handle. Called from Update on the state 1 -> 2 transition.
+//   AptLoader_CancelAsyncLoad (dword_8324E83C) -- abort an in-flight stream
+//        (state 2 with a pending data block). Called from CancelPreloadedAnimation.
+//   AptLinker_isFileImported  (AptLinker__isFileImported) -- true when the
+//        candidate AptFile is still imported by any movie the linker tracks;
+//        CONSUMES the candidate handle (disposes + nulls *ppCandidate), matching
+//        the AptFile::isFileImported it wraps.
+// ---------------------------------------------------------------------------
+extern void AptLoader_StartAsyncLoad(const char* pFileName, AptFilePtr* pFile);   // dword_8324E838
+extern void AptLoader_CancelAsyncLoad(void* pDataBlock);                          // dword_8324E83C
+extern bool AptLinker_isFileImported(AptLinker* pLinker, AptFilePtr* ppCandidate); // AptLinker__isFileImported
 
 // ---------------------------------------------------------------------------
 // FileNameCompare @0x7E3E94 -- case-insensitive, slash-normalised ('\' == '/')
@@ -240,12 +261,22 @@ void AptLoader::Invalidate(AptFile* pFile)
 void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pConstFile, void* pBlock)
 {
     if (!pBase)
+    {
+        // The by-value handle is owned by the callee; release it on this exit too
+        // (asm early-exit @0x82AFFA10: *a2=0 + DecRef + delete-if-zero).
+        AptSharedPtr<AptFile>::Dispose(filePtr.pData);
+        filePtr.pData = nullptr;
         return;
+    }
 
     // The data root, and the movie's AptCharacterAnimation embedded at root+16.
     // FLAG: the console relocates the offset in place in the 32-bit file slot;
     // x64 computes the absolute address and stores a 64-bit pointer in the AptFile.
-    void* pRoot = static_cast<char*>(pBase) + pConstFile->mnDataRootOffset;
+    // The +pBase relocation is GUARDED on a nonzero offset (asm @0x82AFFA44 beq):
+    // a zero data-root offset leaves the root null.
+    void* pRoot = pConstFile->mnDataRootOffset
+                      ? static_cast<char*>(pBase) + pConstFile->mnDataRootOffset
+                      : nullptr;
     AptCharacterAnimation* pCharAnim =
         reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pRoot) + 16);
 
@@ -259,6 +290,11 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     f->mnState          = 3;            // loaded / resolved
 
     // FLAG: the console then notifies/frees through the load hook (dword_1059C670).
+
+    // Release the by-value handle the callee owns (asm normal-exit @0x82AFFAC0:
+    // *a2=0 + DecRef + AptSharedPtrDelete), mirroring AllImportsAvailable.
+    AptSharedPtr<AptFile>::Dispose(filePtr.pData);
+    filePtr.pData = nullptr;
 }
 
 // AllImportsAvailable @0x82AEB270 -- true when every import referenced by `file`'s
@@ -294,4 +330,258 @@ bool AptLoader::AllImportsAvailable(AptFilePtr file)
     AptSharedPtr<AptFile>::Dispose(file.pData);
     file.pData = nullptr;
     return bAllAvailable;
+}
+
+// ---------------------------------------------------------------------------
+// FLAG (un-homed engine hook, owned by class:AptCharacterAnimation's link TU):
+// Link @... binds the loaded movie root into the scene -- it resolves every import
+// (pulling characters from the imported movies' export tables) and finalises the
+// character list. Routed through a named extern (root+16 is the embedded
+// AptCharacterAnimation; the console passes the raw mpData/mpDataBlock) so the x64
+// layout stays correct. Lands with the AptCharacterAnimation link follow-on.
+// ---------------------------------------------------------------------------
+void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, void* pDataBlock);
+
+// ---------------------------------------------------------------------------
+// notify @0x82B02030 -- publish a just-linked AptFile through the global Apt
+// notification hook, then consume the passed handle.
+//
+// The asm takes a local copy of the file (IncRef), hands that copy to the
+// notification function (which takes ownership of it -- note the asm never DecRefs
+// the local), then releases the passed-in *pFile (DecRef + delete-when-zero).
+// ---------------------------------------------------------------------------
+// FLAG (un-homed global): GlobalNotificationFunction @... is the Apt load-event
+// callback registered by the host (the loader's "file linked" notification). It
+// takes the AptFilePtr by address and consumes that reference. Modelled as an
+// extern hook (the registration TU is a follow-on).
+extern void GlobalNotificationFunction(AptFilePtr* pFile);
+
+void AptLoader::notify(AptFilePtr* pFile)
+{
+    // Local copy handed to the notification (its reference is consumed there).
+    AptFilePtr local;
+    local.pData = pFile->pData;
+    if (local.pData)
+        AptSharedPtrIncRef(local.pData);
+
+    GlobalNotificationFunction(&local);
+
+    // Release the passed-in handle (consume it).
+    AptFile* pConsumed = pFile->pData;
+    pFile->pData = nullptr;
+    if (pConsumed && AptSharedPtrDecRef(pConsumed) == 0)
+        AptSharedPtrDelete(pConsumed);
+}
+
+// ---------------------------------------------------------------------------
+// Update @0x82B020C8 -- per-frame loader tick. Walk the weak list; for each file,
+// advance it by its load state. Re-run the whole pass while any file advanced
+// (a freshly-linked import may unblock another file's AllImportsAvailable).
+// ---------------------------------------------------------------------------
+void AptLoader::Update()
+{
+    MutexAptLoader.Lock();
+
+    bool bAnyAdvanced;
+    do
+    {
+        AptLoaderNode* node = mpHead;
+        bAnyAdvanced = false;
+
+        while (node)
+        {
+            while (node)
+            {
+                // Take a counted reference on the node's file for the duration of
+                // the state handling (the node is weak).
+                AptFile* pFile = node->mpFile;
+                if (pFile)
+                    AptSharedPtrIncRef(pFile);
+
+                const int32_t nState = pFile->mnState;   // [c:+0x08]
+                if (nState == 1)
+                {
+                    // Requested: kick off the async stream. state -> 2 (loading),
+                    // field12 records the previous state (1).
+                    AptFilePtr handle;
+                    handle.pData       = node->mpFile;
+                    pFile->mnField12   = 1;              // [c:+0x0C] previous state
+                    pFile->mnState     = 2;             // [c:+0x08] loading
+                    AptSharedPtrIncRef(pFile);          // handle's reference
+                    // FLAG: dword_8324E838 -- the async-load-start hook (extern).
+                    AptLoader_StartAsyncLoad(pFile->mFileName.c_str(), &handle);
+                    node = mpHead;                       // restart from the (possibly mutated) head
+                    // Drop the per-iteration ref (asm tail @0x82B02218: unconditional
+                    // DecRef + delete-if-zero), matching every other state branch.
+                    if (AptSharedPtrDecRef(pFile) == 0)
+                        AptSharedPtrDelete(pFile);
+                }
+                else if (nState == 2)
+                {
+                    // Loading: nothing to do this frame -- just drop our reference.
+                    if (AptSharedPtrDecRef(pFile) == 0)
+                        AptSharedPtrDelete(pFile);
+                    break;
+                }
+                else if (nState == 3)
+                {
+                    // Data has arrived. Block until every import is available.
+                    AptFilePtr handle;
+                    handle.pData = node->mpFile;
+                    AptSharedPtrIncRef(pFile);           // handle's reference
+                    if (!AllImportsAvailable(handle))    // consumes `handle`
+                    {
+                        if (AptSharedPtrDecRef(pFile) == 0)
+                            AptSharedPtrDelete(pFile);
+                        break;
+                    }
+
+                    // All imports ready: link the movie + notify. state -> 4,
+                    // field12 records the previous state.
+                    void* pData      = pFile->mpData;        // [c:+0x14]
+                    void* pDataBlock = pFile->mpDataBlock;   // [c:+0x18]
+                    bAnyAdvanced     = true;
+                    pFile->mnField12 = pFile->mnState;       // [c:+0x0C]
+                    pFile->mnState   = 4;                    // [c:+0x08] linked
+                    // FLAG: root+16 is the embedded AptCharacterAnimation (extern Link hook).
+                    AptCharacterAnimation_Link(
+                        reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pData) + 16),
+                        pData, pDataBlock);
+
+                    AptFilePtr notifyHandle;
+                    notifyHandle.pData = pFile;
+                    AptSharedPtrIncRef(pFile);
+                    notify(&notifyHandle);                   // consumes notifyHandle
+
+                    // Drop our state-handling reference.
+                    if (AptSharedPtrDecRef(pFile) == 0)
+                        AptSharedPtrDelete(pFile);
+                }
+                else if (nState == 4 || nState == 5 || nState == 6)
+                {
+                    // Already linked / live: drop our reference.
+                    if (AptSharedPtrDecRef(pFile) == 0)
+                        AptSharedPtrDelete(pFile);
+                    break;
+                }
+                else
+                {
+                    // Any other (failed) state: unlink the file's node, then drop
+                    // our reference.
+                    Invalidate(node->mpFile);
+                    if (AptSharedPtrDecRef(pFile) == 0)
+                        AptSharedPtrDelete(pFile);
+                    break;
+                }
+            }
+
+            if (node)
+                node = node->mpNext;
+        }
+    }
+    while (bAnyAdvanced);
+
+    MutexAptLoader.Unlock();
+}
+
+// ---------------------------------------------------------------------------
+// CancelPreloadedAnimation @0x82AFEA40 -- cancel a preloaded movie by name. Drop
+// the named file's load and, if it was already resolved (state 3..5), recurse on
+// each of its imports that no other linked movie still imports.
+// ---------------------------------------------------------------------------
+void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
+{
+    MutexAptLoader.Lock();
+
+    AptFilePtr found = findFile(fileName);
+    AptFile* pFile = found.pData;
+    if (pFile)
+    {
+        const int32_t nState = pFile->mnState;   // [c:+0x08]
+        if (nState != 1)
+        {
+            if (nState == 2)
+            {
+                // In-flight stream: abort it (only when a data block is pending).
+                if (pFile->mpDataBlock)              // [c:+0x18]
+                    AptLoader_CancelAsyncLoad(pFile->mpDataBlock);   // FLAG: dword_8324E83C
+            }
+            else if (nState == 3 || nState == 4 || nState == 5)
+            {
+                // Resolved: walk this movie's import table and recurse on imports
+                // no other linked movie still needs.
+                const AptMovieData* pMovie = static_cast<const AptMovieData*>(pFile->mpData);   // [c:+0x14]
+                if (pMovie->mnImportCount > 0)                                                  // [c:+0x30]
+                {
+                    for (int32_t iImport = 0; iImport < pMovie->mnImportCount; ++iImport)       // [c:+0x34]
+                    {
+                        EAStringC importName(pMovie->mpImportTable[iImport].mpImportFileName);
+                        AptFilePtr imp = findFile(importName);
+
+                        AptFile* pImp = imp.pData;
+                        if (pImp)
+                        {
+                            AptSharedPtrIncRef(pImp);
+                            AptFilePtr candidate;
+                            candidate.pData = pImp;
+                            // AptLinker_isFileImported consumes `candidate`. If no
+                            // linked movie still imports it, recurse to cancel it.
+                            if (!AptLinker_isFileImported(gpAptTarget->mpLinker, &candidate))   // off_8324E574->mpLinker
+                            {
+                                const AptMovieData* pSelfMovie =
+                                    static_cast<const AptMovieData*>(pFile->mpData);
+                                EAStringC recurseName(pSelfMovie->mpImportTable[iImport].mpImportFileName);
+                                CancelPreloadedAnimation(recurseName);
+                            }
+                        }
+
+                        // Release the findFile reference on this import.
+                        if (pImp && AptSharedPtrDecRef(pImp) == 0)
+                            AptSharedPtrDelete(pImp);
+                    }
+                }
+            }
+        }
+
+        // Release the findFile reference on the named file.
+        if (AptSharedPtrDecRef(pFile) == 0)
+            AptSharedPtrDelete(pFile);
+    }
+
+    MutexAptLoader.Unlock();
+}
+
+// ---------------------------------------------------------------------------
+// ~AptLoader @0x82AFF958 -- teardown. Cancel every still-registered preloaded
+// animation (which may unlink its own node), then drain the weak list.
+// ---------------------------------------------------------------------------
+AptLoader::~AptLoader()
+{
+    MutexAptLoader.Lock();
+
+    while (mpHead)
+    {
+        AptLoaderNode* node = mpHead;
+        CancelPreloadedAnimation(node->mpFile->mFileName);   // v3+4 = &mpFile->mFileName
+
+        // CancelPreloadedAnimation may have unlinked this node already (via the
+        // file's ~AptFile -> Invalidate). Only erase it ourselves if it is still
+        // the head.
+        if (node == mpHead)
+        {
+            AptLoaderNode* next = mpHead->mpNext;
+            gpNonGCPoolManager->Deallocate(mpHead, sizeof(AptLoaderNode));
+            mpHead = next;
+        }
+    }
+
+    MutexAptLoader.Unlock();
+
+    // Drain any remaining nodes (PopFront until empty).
+    while (mpHead)
+    {
+        AptLoaderNode* next = mpHead->mpNext;
+        gpNonGCPoolManager->Deallocate(mpHead, sizeof(AptLoaderNode));
+        mpHead = next;
+    }
 }
