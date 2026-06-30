@@ -18,6 +18,10 @@ namespace shadow
             u32 muNumVertices;
         };
 
+        // The number of texture sampler / sampler-state slots the shadow cache mirrors
+        // (X360 asserts luSamplerId < MaxTextureStates with 0x10).
+        static const u32 KU_MAX_TEXTURE_STATES = 16;
+
         static bool Initialize();
         static renderengine::VertexProgramState* GetVertexProgramState(
             const renderengine::ProgramBufferData* lpVertexProgram,
@@ -25,6 +29,36 @@ namespace shadow
         static void SetVertexProgramInternal();
         static void DrawIndexedMultipleStreams_Custom(
             const DrawIndexedParameters& lrParameters);
+
+        // Reset the entire shadow cache (X360 0x82276970): clears the bound stream/index/descriptor
+        // pointers, the vertex/pixel program shadows, the per-sampler state/texture caches and marks
+        // the vertex-program state dirty so the next flush rebinds.
+        static void ResetShadowing();
+
+        // Bind a vertex program through the shadow cache (X360 0x82276BA0). Returns true when the
+        // binding actually changed (the shadow differed and a flush was requested).
+        static bool SetVertexProgram(const renderengine::ProgramBufferData* lpVertexProgram);
+
+        // Bind a pixel program through the shadow cache (X360 0x82276C00). Returns true when the
+        // binding actually changed and a D3D pixel shader was bound.
+        static bool SetPixelProgram(const renderengine::ProgramBufferData* lpPixelProgram);
+
+        // Bind a sampler state object through the shadow cache (X360 0x822769E0).
+        static void* SetState(void* lpState, u32 luSamplerId);
+
+        // Bind a texture (resource) through the shadow cache (X360 0x82276C70).
+        static void* SetResource(void* lpTexture, u32 luSamplerId);
+
+        // Rebind the dirty vertex-program / stream sources to D3D (X360 0x827E7A10).
+        static void FlushVertexProgramState();
+
+        // Force-stencil-write window (X360 0x823F3250 / 0x823F32E0).
+        static void* BeginForceStencilWrite(u32 luStencilValueToWrite);
+        static void* EndForceStencilWrite();
+
+        // Rasteriser-state lock window (X360 0x823F3190 / 0x823F31F0).
+        static void* LockRasteriserState();
+        static void* UnlockRasteriserState();
 
         static void FlushDepthStencilState();
         static void FlushRasterizerState();
@@ -42,6 +76,39 @@ namespace shadow
         // slot to reach it. Both are modelled here by name.
         static renderengine::VertexProgramState mVertexProgramState;
         static renderengine::VertexProgramState* mapVertexProgramStateSlot[5];
+        // The vertex-program-state dirty flag (X360 byte_83010A34): ResetShadowing sets it,
+        // SetVertexProgramInternal sets it, FlushVertexProgramState consumes & clears it.
         static bool mbVertexProgramStateDirty;
+
+        // --- Bound geometry sources (X360 off_83010950 block) -------------------------------
+        // mpStreamArray / mpIndexStreamArray are the two alternative stream-layout descriptors the
+        // flush walks (the first non-null one wins); mpVertexDescriptor is the active vertex
+        // descriptor used to map element streams to D3D stream slots.
+        static const void* mpStreamArray;        // off_83010950
+        static const void* mpIndexStreamArray;   // off_83010954
+        static const renderengine::VertexDescriptorData* mpVertexDescriptor; // off_83010958
+
+        // --- Program shadows (X360 dword_8301095C / dword_83010960) -------------------------
+        static const renderengine::ProgramBufferData* mpVertexProgramShadow; // dword_8301095C
+        static const renderengine::ProgramBufferData* mpPixelProgramShadow;  // dword_83010960 (init -1)
+        static u32 muUnused64;                    // dword_83010964 (reset to 0, otherwise unread here)
+
+        // --- Per-sampler caches (X360 16-entry arrays) --------------------------------------
+        static u32 mauSamplerDirty[KU_MAX_TEXTURE_STATES];   // dword_83010968
+        static void* mapSamplerState[KU_MAX_TEXTURE_STATES]; // dword_830109A8
+        static void* mapSamplerTexture[KU_MAX_TEXTURE_STATES];// dword_830109E8
+
+        // --- Force-stencil / lock window state ----------------------------------------------
+        static u32 muMisc28;                      // dword_83010A28 (cleared by stencil window ops)
+        static u32 muMisc2C;                      // dword_83010A2C
+        static u32 muMisc30;                      // dword_83010A30
+        static bool mbForceStencilWrite;          // byte_83010906
+        static u32 muStencilValueToWrite;         // dword_83010908
+        static bool mbRasteriserStateLocked;      // mbRasteriserStateLocked
+
+        // --- Low-level blend/colour-write/alpha render-state shadow (X360 dword_83010730..774).
+        // 18 contiguous dwords mirroring the D3D render-state block Xbox2SetStateLowLevelShadowed
+        // pushes; modelled as a named array so the setter compares & stores by index.
+        static u32 mauLowLevelStateShadow[18];    // dword_83010730 .. dword_83010774
     };
 }
