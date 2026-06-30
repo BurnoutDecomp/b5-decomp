@@ -40,6 +40,27 @@ struct AptDisplayListNode
     AptCIH* mpFirst;   // +0x00 first listed scene node (null when empty)
 };
 
+// ---------------------------------------------------------------------------
+// The .apt frame-placement command threaded into the placement entry points
+// (AddToDisplayList / ReplaceDisplyListItem / mergeState / placeObject). It is a
+// pair of pointers: ppPlacement[0] = the serialised PlaceObject record (its +0xC
+// dword is the placed character id, read in place from the .apt timeline data), and
+// ppPlacement[1] = the runtime placement-properties block below. The properties hold
+// live runtime pointers, so they are NAMED members (x64 widths) -- the console
+// dword offsets are documentation.
+// ---------------------------------------------------------------------------
+struct AptCharacter;
+struct AptUint32CXForm;
+struct AptFramePlacementProps
+{
+    AptCharacter*    mpCharacter;        // [0] +0x00  character to place (null == keep existing)
+    float*           mpPositionMatrix;   // [1] +0x04  src 2D-affine (6 floats), copied when mnFlags bit2
+    AptUint32CXForm* mpColorTransform;   // [2] +0x08  src packed-ARGB colour, copied when mnFlags bit3
+    int32_t          mnReserved0C;       // [3] +0x0C
+    int32_t          mnReserved10;       // [4] +0x10
+    int32_t          mnFlags;            // [5] +0x14  bit2 = has matrix, bit3 = has colour
+};
+
 struct AptDisplayList
 {
     AptDisplayListNode* mpHead;   // +0x00 pool-allocated head node (4 bytes)
@@ -107,16 +128,23 @@ struct AptDisplayList
     // placed AptCIH. ppPlacement = {placement-record, AptCharacter* to place}.
     AptCIH* AddToDisplayList(AptNativeHash* pParentHash, void** ppPlacement, AptCIH* pParentNode);
 
-    // _addToSetCaches @0x82AF46B8 -- when the placed node is a sprite/movie-clip with
-    // registered clip-event handlers, fold them into its clip-action flags, add it to
-    // the target's clip-event set cache, and (when bRunLoad) queue its load/init clip
-    // events.
-    void _addToSetCaches(uint8_t bRunLoad);
+    // _addToSetCaches @0x82AF46B8 -- when pNode is a sprite/movie-clip with registered
+    // clip-event handlers, fold their event mask into the node's clip-action flags, add
+    // it to the target's clip-event set cache (when it has load/unload handlers), and
+    // (when bRunLoad) queue its load/init clip events. STATIC: the X360 takes the scene
+    // node in r3 (no AptDisplayList `this`).
+    static void _addToSetCaches(AptCIH* pNode, uint8_t bRunLoad);
 
-    // (ReplaceDisplyListItem / mergeState / instantiateCharacter / placeObject /
-    //  placeObjectNCXForm @0x82B0B2B8/0x82B0B438/0x82B061D0/0x82B097D8/0x82B0AD28 --
-    //  the 28-33 argument placement entry points; declared with their full asm-derived
-    //  signatures + bodied in their own follow-on pass.)
+    // ReplaceDisplyListItem @0x82B0B2B8 -- reconcile the node already at a depth
+    // (pExisting) with a re-issued placement: replace it when the command names a new
+    // character (re-running AddToDisplayList), else merge the placement's colour/
+    // position onto it (unless it was ActionScript-changed). Returns the (re)placed node.
+    AptCIH* ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH* pExisting,
+                                  void** ppPlacement, AptCIH* pParentNode);
+
+    // (mergeState / instantiateCharacter / placeObject / placeObjectNCXForm
+    //  @0x82B0B438/0x82B061D0/0x82B097D8/0x82B0AD28 -- declared with their full
+    //  asm-derived signatures when bodied.)
 };
 
 // ===========================================================================

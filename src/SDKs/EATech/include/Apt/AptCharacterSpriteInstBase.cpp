@@ -68,10 +68,10 @@ AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(AptCharacter* pCharacter)
     : AptCharacterInst(pCharacter)
     // mDisplayList default-constructed here (X360: AptDisplayList::AptDisplayList(this+7))
 {
-    mnGotoFrame       = -1;
-    mnClipActionFlags = 0xC0u;   // low-byte sprite state flags (bits 6,7); clip-event mask clear
-    mnCurrentFrame    = 0;
-    mnLastActionFrame = 0;
+    mnGotoFrame         = -1;
+    mnClipActionFlags   = 0xC0u;   // low-byte sprite state flags (bits 6,7); clip-event mask clear
+    mpClipEventHandlers = nullptr; // +0x18 (no registered clip-event handlers yet)
+    mnLastActionFrame   = 0;
 
     // Per-instance property hash (AptNativeHash, capacity 8) from the shared Apt
     // pool. The X360 folds AptNativeHash::AptNativeHash(8) inline into the pooled

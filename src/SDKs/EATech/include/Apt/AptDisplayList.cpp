@@ -40,10 +40,15 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                 // DOGMA_PoolManager::Allocate/Deallocate
 #include "SDKs/EATech/include/Apt/AptPseudoCIH.h"           // gpAptPseudoDataPool (off_8324D808)
 #include "SDKs/EATech/include/Apt/AptCharacter.h"            // mpFixupLink / mnType / mpAnimationFile (placed char binding)
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h" // mnClipActionFlags / mpClipEventHandlers (_addToSetCaches)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // ExecuteInitActions
 #include "SDKs/EATech/include/Apt/AptFile.h"                 // AptMovieData (the .apt root + import table)
-#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"      // GetNewInsts / GetNewInstSize / DecNewInstSize
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"      // GetNewInsts / GetNewInstSize / DecNewInstSize / mInputSet
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"            // AptFilePtr (the placed char's animation-file bind)
+#include "SDKs/EATech/include/Apt/AptTarget.h"               // gpAptTarget->GetAnimationTarget()
+#include "SDKs/EATech/include/Apt/AptListenerSlotList.h"     // the clip-event set-cache add (_addToSetCaches)
+#include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"        // AptCXForm / AptUint32CXForm (ReplaceDisplyListItem merge)
+#include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"        // AptMatrix (ReplaceDisplyListItem position merge)
 
 // ---------------------------------------------------------------------------
 // FLAG (module-static, owned by the Apt GC layer, not yet homed): the X360 drains
@@ -360,9 +365,12 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
     AptCharacterAnimation* const pAnim =
         reinterpret_cast<AptCharacterAnimation*>(reinterpret_cast<char*>(pMovie) + 0x10);
 
-    // The .apt placement command (serialised): record +0xC = placed char id.
+    // The .apt placement command: ppPlacement[0] = the serialised PlaceObject record
+    // (its +0xC dword is the placed char id), ppPlacement[1] = the placement
+    // properties whose mpCharacter is the character to place.
     const int32_t nCharId = static_cast<const int32_t*>(ppPlacement[0])[3];
-    AptCharacter* const pPlacedChar = static_cast<AptCharacter*>(ppPlacement[1]);
+    AptCharacter* const pPlacedChar =
+        static_cast<AptFramePlacementProps*>(ppPlacement[1])->mpCharacter;
 
     pAnim->ExecuteInitActions(pParentNode, nCharId);
 
@@ -398,4 +406,148 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
     AptAnimationTarget::DecNewInstSize();   // post-increments the new-instance count
 
     return pPlaced;
+}
+
+// ---------------------------------------------------------------------------
+// ReplaceDisplyListItem @0x82B0B2B8 -- reconcile the node already at a depth
+// (pExisting) against a re-issued frame placement. When the placement names a new
+// character (props->mpCharacter set): drop the existing node, bind the placed
+// character's import file (the same AddToDisplayList rebind), and re-run
+// AddToDisplayList. Otherwise keep the node and -- unless it has been ActionScript-
+// changed -- merge the placement's colour transform and/or position matrix onto it.
+// ---------------------------------------------------------------------------
+AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH* pExisting,
+                                              void** ppPlacement, AptCIH* pParentNode)
+{
+    AptFramePlacementProps* const pProps = static_cast<AptFramePlacementProps*>(ppPlacement[1]);
+
+    if (pProps->mpCharacter != nullptr)
+    {
+        // A new character is named: replace the existing node.
+        removeObject(pExisting);
+
+        const int32_t nCharId = static_cast<const int32_t*>(ppPlacement[0])[3];   // record +0xC
+        if (nCharId != -1)
+        {
+            AptCharacter* const pPlacedChar = pProps->mpCharacter;
+            AptCharacter* const pOwnerChar =
+                const_cast<AptCharacter*>(pParentNode->GetCharacterInst()->GetRenderItem()->mpCharacter);
+            AptMovieData* const pMovie = reinterpret_cast<AptMovieData*>(pOwnerChar->mpFixupLink);
+
+            // Same import-file bind as AddToDisplayList (the X360 open-codes it here too).
+            if (pPlacedChar->mnType != 9 && pPlacedChar->mpAnimationFile == nullptr)
+            {
+                AptFilePtr* pSrc = reinterpret_cast<AptFilePtr*>(&pOwnerChar->mpAnimationFile);
+                for (int32_t i = 0; i < pMovie->mnImportCount; ++i)
+                {
+                    if (pMovie->mpImportTable[i].mnId == nCharId)
+                    {
+                        pSrc = reinterpret_cast<AptFilePtr*>(&pMovie->mpImportTable[i].mpFile);
+                        break;
+                    }
+                }
+                *reinterpret_cast<AptFilePtr*>(&pPlacedChar->mpAnimationFile) = *pSrc;
+            }
+        }
+        return AddToDisplayList(pParentHash, ppPlacement, pParentNode);
+    }
+
+    // No new character: keep the existing node, merge its visual state. An AS write
+    // (mFlagsA bit31, ASChanged) owns the transform -- never clobber it from a frame.
+    if (pExisting->GetASChanged())
+        return nullptr;
+
+    if ((pProps->mnFlags & 0x8) != 0)   // bit3: copy colour transform
+    {
+        AptCXForm* const pColor =
+            pExisting->GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
+        pColor->AptUint32CXFormCopy(pProps->mpColorTransform);
+    }
+    if ((pProps->mnFlags & 0x4) != 0)   // bit2: copy position matrix
+    {
+        AptMatrix* const pPos =
+            pExisting->GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
+        if (pProps->mpPositionMatrix != nullptr)
+            pPos->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pProps->mpPositionMatrix));
+    }
+    return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// FLAG (un-homed): the per-frame clip-event queue + the action-frame id.
+//   AptCIH_queueClipEvents -- queue the given clip events on a node for a frame.
+//   gnAptActionFrameId (dword_8324E514) -- the current AS action frame, homed in AptMovie.cpp.
+// ---------------------------------------------------------------------------
+extern AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, int nFrameId, int nFlag);
+extern int gnAptActionFrameId;
+
+// ---------------------------------------------------------------------------
+// _addToSetCaches @0x82AF46B8  (STATIC -- r3 = the scene NODE, r4 = bRunLoad)
+//
+// For a sprite/movie-clip character (type 5) with registered clip-event handlers,
+// fold each handler's event mask into the node's clip-action flags. If any handler
+// is a load/unload handler, register the node in the director's clip-event set cache
+// (idempotently). When bRunLoad, raise the load-in-progress flags, queue the load +
+// init clip events for this frame, then drop the transient flags.
+// ---------------------------------------------------------------------------
+void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
+{
+    AptCharacterInst* const pInst = pNode->GetCharacterInst();
+
+    // Only the Flash sprite / movie-clip character (type 5) carries clip handlers;
+    // the button character (type 4) and everything else return early.
+    if (pInst->GetRenderItem()->mpCharacter->mnType != 5)
+        return;
+
+    AptCharacterSpriteInstBase* const pSprite = static_cast<AptCharacterSpriteInstBase*>(pInst);
+    AptClipEventHandlerList* const pHandlers = pSprite->mpClipEventHandlers;
+    if (!pHandlers)
+        return;
+
+    // Fold each registered handler's event mask into mnClipActionFlags' high 24 bits,
+    // and note whether any handler registers a load/unload event.
+    bool bHasLoadUnload = false;
+    for (int32_t i = 0; i < pHandlers->mnCount; ++i)
+    {
+        const uint32_t nEventFlags = pHandlers->mpHandlers[i].mnEventFlags;
+        if (nEventFlags & 0x201C7u)
+        {
+            pSprite->mnClipActionFlags |= (nEventFlags << 8);
+            if (nEventFlags & 0x200C0u)
+                bHasLoadUnload = true;
+        }
+    }
+
+    // A node with load/unload handlers joins the director's clip-event set cache so
+    // the per-frame load/unload pass can find it -- added once (idempotent).
+    if (bHasLoadUnload)
+    {
+        AptAnimationTargetSet* const pSetCache = &gpAptTarget->GetAnimationTarget()->mInputSet;
+        bool bAlreadyPresent = false;
+        for (uint32_t s = 0; s < pSetCache->mnCapacity; ++s)
+        {
+            if (reinterpret_cast<AptCIH*>(pSetCache->mppSlots[s]) == pNode)
+            {
+                bAlreadyPresent = true;
+                break;
+            }
+        }
+        if (!bAlreadyPresent)
+        {
+            // The set cache's count/slot-array sub-layout is exactly what the shared
+            // fixed-slot list add operates on; reuse it (it stores the node + fires its
+            // just-placed vtable[0] hook).
+            reinterpret_cast<AptListenerSlotList<IAptListener>*>(pSetCache)
+                ->add(reinterpret_cast<IAptListener*>(pNode));
+        }
+    }
+
+    // On the placing frame, queue this node's load + init clip events.
+    if (bRunLoad)
+    {
+        pSprite->mnClipActionFlags |= 0x4020000u;
+        AptCIH_queueClipEvents(static_cast<AptValue*>(pNode), 512,     gnAptActionFrameId, 1);
+        AptCIH_queueClipEvents(static_cast<AptValue*>(pNode), 0x40000, gnAptActionFrameId, 1);
+        pSprite->mnClipActionFlags &= 0xFBFDFFFFu;
+    }
 }
