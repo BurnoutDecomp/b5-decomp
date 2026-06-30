@@ -208,6 +208,33 @@ public:
     bool IsDeveloperChallengeComplete(s32 liChallengeIndex) const;
     void SetDeveloperChallengeComplete(s32 liChallengeIndex);
 
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) for the BrnProgression::ProgressionManager TU.
+    // These three Profile methods are the ones the X360 ProgressionManager wrappers call
+    // through the embedded Profile sub-object (each wrapper asserts its arg, then the inlined
+    // Profile body asserts again at BrnProfile.h:2958/2976 -- the duplicate assert visible in
+    // the X360 ProgressionManager::SetRoadRule* disassembly proves the wrapper delegates here).
+    // Bodies live with the Profile TU; declaration-only suffices for the ProgressionManager
+    // `cl /c` gate.
+    // ------------------------------------------------------------------------
+
+    // X360: ProgressionManager::AreRoadRulesAvailable reads this medal-progress count (Profile +42512,
+    // the X360 a1[10720] read) and compares it >= 4. Trivial named-member getter; body in the Profile TU.
+    u32 GetMedalCountFromTheStart() const;
+
+    // X360: ProgressionManager::RepairUnlockedVehicle delegates to Profile::RepairUnlockedVehicle
+    // (this+0x170, lCarId) -- clears the just-repaired car's stored deform/damage. Returns the
+    // updated CarData record (the X360 hands a pointer back in r3).
+    CarData* RepairUnlockedVehicle(CgsID lCarId);
+
+    // X360: ProgressionManager::SetRoadRuleNetworkHighScores -> Profile::SetRoadRuleNetworkHighScores.
+    // Wholesale 3584-byte copy of the 64-entry ChallengeHighScoreEntry table into maNetworkChallengeData.
+    void SetRoadRuleNetworkHighScores(const BrnStreetData::ChallengeHighScoreEntry* lpaChallengeHighScores);
+
+    // X360: ProgressionManager::SetRoadRuleChallengeData -> Profile::SetRoadRuleChallengeData.
+    // Wholesale 2560-byte copy of the 64-entry ChallengePlayerScoreEntry table into maChallengeData.
+    void SetRoadRuleChallengeData(const BrnStreetData::ChallengePlayerScoreEntry* lpaChallengeScores);
+
 private:
     // ----- byte-exact member layout (offsets in comments; all X360-proven) -----
     s32   miVersionNumber;                                   // +0
