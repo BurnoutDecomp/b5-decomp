@@ -141,6 +141,27 @@ public:
         return liLive;
     }
 
+    // Allocate (front half of an alloc; recovered from the X360 CgsFileSystem::PhysicalX360Device
+    // Open @0x828F9728 / OpenDirectory @0x828F9E40, which inline this pool's claim-a-slot): pop a
+    // free index. X360: read msNumFree; when it is 0 the pool is full and -1 is returned ("Out of
+    // handles"). Otherwise take the FIRST free index (mpFreeIndices[0]) as the result, move the
+    // LAST free entry into slot 0 (the unordered-swap pop the asm does: `*free = free[numFree-1]`),
+    // bump msNumAllocated and drop msNumFree. Returns the allocated handle, or -1 when full.
+    IndexType Allocate()
+    {
+        const IndexType lsNumFree = msNumFree;
+        if (lsNumFree == 0)
+        {
+            return static_cast<IndexType>(-1);
+        }
+
+        const IndexType lsResult = mpFreeIndices[0];
+        mpFreeIndices[0] = mpFreeIndices[lsNumFree - 1];
+        ++msNumAllocated;
+        msNumFree = static_cast<IndexType>(lsNumFree - 1);
+        return lsResult;
+    }
+
     // GetObjectIndex @ 0x82662F50: recover a live object's handle from its address.
     // X360: index = (s16)((lpObject - maElements) / sizeof(T)); then range-guard
     // [0, msCapacity) ("Object not in pool", CgsIndexedPool.h:222, non-fatal) and

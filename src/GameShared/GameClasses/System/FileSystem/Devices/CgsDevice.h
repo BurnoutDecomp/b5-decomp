@@ -49,6 +49,16 @@ namespace CgsFileSystem
         virtual int Seek(int liHandle, u64 lu64Offset, int* lpiOutResult);          // op6
         virtual int Shutdown();                                                     // op9
 
+        // ---- directory enumeration interface (X360 base defaults @0x828DDEE0/F70/000) ----
+        // Not part of the worker async-op opcode table; the directory subsystem calls these on
+        // the device directly. The base supplies "Not implemented" defaults (assert + -2);
+        // concrete devices that can walk a directory (the physical disc device) override them.
+        // luMaxEntries is the caller's entry-buffer capacity; *lpiOutCount returns how many were
+        // written. lpiOutHandle (Open) yields a find-handle Read/CloseDirectory then use.
+        virtual int OpenDirectory(const char* lpcPath, void* lpEntryBuffer, int liMaxEntries, int* lpiOutCount, int* lpiOutHandle);
+        virtual int CloseDirectory(int liHandle);
+        virtual int ReadDirectory(int liHandle, void* lpEntryBuffer, int liMaxEntries, int* lpiOutCount);
+
         // ---- non-virtual helpers ----
         // @0x828D65F0. If an error callback is registered, invoke it with liError and remember
         // its result; then yield the calling thread 5ms (so a hammering retry loop does not

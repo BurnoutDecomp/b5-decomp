@@ -111,4 +111,23 @@ namespace CgsFileSystem
         return 0;   // worker-exit hook: base no-op
     }
 
+    // ---- directory enumeration "Not implemented" defaults (@0x828DDEE0/F70/000) ----
+    int Device::OpenDirectory(const char* /*lpcPath*/, void* /*lpEntryBuffer*/, int /*liMaxEntries*/, int* /*lpiOutCount*/, int* /*lpiOutHandle*/)  // @0x828DDEE0
+    {
+        CGS_ASSERT(false, "Not implemented\n");
+        return -2;
+    }
+
+    int Device::CloseDirectory(int /*liHandle*/)   // @0x828DDF70
+    {
+        CGS_ASSERT(false, "Not implemented\n");
+        return -2;
+    }
+
+    int Device::ReadDirectory(int /*liHandle*/, void* /*lpEntryBuffer*/, int /*liMaxEntries*/, int* /*lpiOutCount*/)  // @0x828DE000
+    {
+        CGS_ASSERT(false, "Not implemented\n");
+        return -2;
+    }
+
 } // namespace CgsFileSystem

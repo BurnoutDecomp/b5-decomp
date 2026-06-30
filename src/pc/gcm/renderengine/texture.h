@@ -140,5 +140,91 @@ namespace renderengine
         static ResourceDescriptor* GetResourceDescriptor(ResourceDescriptor* lpDescriptorOut,
                                                          const Parameters* lpParams);
         static Texture2D* Initialize(const ResourceDescriptor* lpDescriptor, const Parameters* lpParams);
+
+        // X360 Xbox2GetPhysicalMemorySize @0x82B610D8: lay out a GPU texture header for the
+        // serialised descriptor and return its size (XGSetTextureHeader's HRESULT-sized result).
+        // The X360 GetResourceDescriptor calls this to size slot2 of the resource descriptor when
+        // the descriptor is NOT system-memory (bit0 of word0 clear). The input is the X360
+        // descriptor dword block (word1=Width, word2=Height, word3=Levels, word4=Format); taken as
+        // const u32* because the X360 marshalling reads it positionally and its field layout is the
+        // X360 descriptor's, not the PC Texture2D::Parameters above. ADDITIVE GROW (X360 path only).
+        static u32 Xbox2GetPhysicalMemorySize(const u32* lpDescriptorDwords);
+    };
+
+    // renderengine::PixelBuffer -- the platform render-target / depth-stencil SURFACE object. On
+    // X360 a PixelBuffer wraps a GPU D3DSurface header (a tiled EDRAM surface) and carries the
+    // EDRAM placement: Initialize lays the surface header out in place via XGSetSurfaceHeader and
+    // sub-allocates EDRAM tiles + a hierarchical-Z region from the two running EDRAM allocators;
+    // Xbox2SetBaseEDRAM / Xbox2SetBaseHierarchicalZ patch the EDRAM base words; Xbox2ResolveTo
+    // resolves the tiled EDRAM surface out to a linear texture. These are X360 EDRAM/tile address
+    // & format operations (NOT VMX pipelines). Reconstructed store-for-store from the X360 ASM:
+    //   Initialize                  0x82B621A8
+    //   Xbox2ResolveTo              0x82B62300
+    //   Xbox2SetBaseEDRAM           0x82B60870
+    //   Xbox2SetBaseHierarchicalZ   0x82B60898
+    // PixelBuffer derives from Texture (it is a render-engine texture object); the surface header
+    // it manages is a separate GPU-resident block reached through the wrapper.
+    class PixelBuffer : public Texture
+    {
+    public:
+        // The on-GPU surface header XGSetSurfaceHeader fills, 52 (0x34) bytes (memset(*a1,0,0x34)).
+        // Named after the dwords the renderengine surface paths read/write; the GPU writes the rest.
+        // muEDRAMBase (+0x1C) low 12 bits = EDRAM tile base; muHierZ (+0x20) high bits (<<17) =
+        // hi-Z base; muTileWord (+0x24) packs the tiled width(<<18)/height(<<14 ,15 bits) the
+        // resolve path reads back; muKind (+0x30) = 1 for a depth-stencil surface, else colour.
+        struct SurfaceHeader
+        {
+            u32 muCommon;      // +0x00  D3DResource Common (bit31 0x80000000 set => EDRAM-resident)
+            u32 muUnused04;    // +0x04
+            u32 muUnused08;    // +0x08  (Initialize zeroes this)
+            u32 muUnused0C;    // +0x0C
+            u32 muUnused10;    // +0x10
+            u32 muFence;       // +0x14  (Initialize seeds 0xFFFF0000)
+            u32 muUnused18;    // +0x18
+            u32 muEDRAMBase;   // +0x1C  low 12 bits = EDRAM tile base address
+            u32 muHierZ;       // +0x20  high 15 bits (<<17) = hierarchical-Z base
+            u32 muTileWord;    // +0x24  packed tiled width (>>18) / height (>>14, 15 bits)
+            u32 muUnused28;    // +0x28
+            u32 muUnused2C;    // +0x2C
+            u32 muKind;        // +0x30  surface kind (1 = depth-stencil, else colour render target)
+        };
+
+        // The outer wrapper Initialize is handed: +0 -> the GPU surface header to fill.
+        struct Wrapper
+        {
+            SurfaceHeader* mpSurface;   // +0x00
+        };
+
+        // The parameters block Initialize reads (a2[0..6]):
+        //   word0 = kind (1 => depth-stencil; drives the EDRAM-tile reservation)
+        //   word1 = flags (bit0 set => no EDRAM placement, just a header)
+        //   word2 = width, word3 = height, word4 = format, word5 = multisample type, word6 = mip base
+        struct Parameters
+        {
+            u32 muKind;          // +0x00
+            u32 muFlags;         // +0x04
+            u32 muWidth;         // +0x08
+            u32 muHeight;        // +0x0C
+            u32 muFormat;        // +0x10
+            u32 muMultiSample;   // +0x14
+            u32 muMipBase;       // +0x18
+        };
+
+        static SurfaceHeader* Initialize(Wrapper* lpWrapper, const Parameters* lpParams);
+
+        // Resolve the tiled EDRAM surface (lpThis) out to a linear destination texture, clipping the
+        // resolve rect to the destination texture's width/height. liFlags is the D3D resolve-flags
+        // word; lfClearZ the clear-Z value; the trailing int args are the dest point / level / face
+        // and clear-colour the X360 resolve takes. Returns 1 (the X360 body's constant return).
+        static int Xbox2ResolveTo(SurfaceHeader* lpThis, Texture* lpDestTexture, u32 luFlags,
+                                  s32 liDestX, s32 liDestY, s32 liDestLevel, s32 liDestSlice,
+                                  s32 liClearColour, f32 lfClearZ);
+
+        // Patch the EDRAM tile base (low 12 bits of muEDRAMBase) -- only for colour/depth kinds
+        // (muKind <= 1); higher kinds are left untouched.
+        static SurfaceHeader* Xbox2SetBaseEDRAM(SurfaceHeader* lpThis, s16 li16Base);
+
+        // Patch the hierarchical-Z base (high 15 bits, <<17, of muHierZ).
+        static SurfaceHeader* Xbox2SetBaseHierarchicalZ(SurfaceHeader* lpThis, s32 liBase);
     };
 }

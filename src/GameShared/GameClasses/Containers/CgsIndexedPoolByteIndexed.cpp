@@ -33,15 +33,11 @@ namespace CgsResource
     };
 }
 
-namespace CgsFileSystem
-{
-    // 272-byte PhysicalX360Device handle record (X360 GetObjectIndex stride 0x110). Deferred;
-    // honest layout placeholder.
-    struct FileHandleRecord
-    {
-        u8 maPad00[272];
-    };
-}
+// The 272-byte PhysicalX360Device handle record (X360 GetObjectIndex stride 0x110) is now
+// homed with named fields by its owning module — see Devices/CgsDevicePhysicalX360.h. Reuse it
+// BY NAME so this pool instantiation keeps the exact 0x110 stride the GetObjectIndex asm divides
+// by (no fork; the include pins the same sizeof).
+#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalX360.h"
 
 // Pool A (12-byte element, byte index): Clear + Get.
 template void CgsContainers::IndexedPool<CgsResource::ResourcePoolRecord, 256, s8>::Clear();

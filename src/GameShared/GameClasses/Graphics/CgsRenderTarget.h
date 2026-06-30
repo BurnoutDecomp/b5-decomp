@@ -79,6 +79,11 @@ public:
     // viewport + scissor to the target's full extent.
     void SetRenderTargetState(u32 luSection);
 
+    // As SetRenderTargetState, but the viewport depth range is inverted (MinZ = 1, MaxZ = 0) for an
+    // inverted-depth pass (used by BrnRendererModule::BeginRenderEnvironmentMapFace). The body always
+    // binds section 0's render-target state; luSection mirrors the sibling's signature and is unused.
+    void SetRenderTargetStateInvertDepth(u32 luSection);
+
     // --- serialise-side description setters --------------------------------------------------------
     // These seed the render target's description before Construct() builds the post-fx target. The
     // X360 inlines them (they appear as raw stores in callers such as BrnRendererMemory::CreateBackBuffer);
