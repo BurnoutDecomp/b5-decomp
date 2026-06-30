@@ -195,7 +195,12 @@ namespace BrnNetwork
         // on failure it disconnects and forces E_SUBSTATE_DONE.
         static void ResumeCompleteCallback(bool lbSuccess, void* lpUserData);
 
+    protected:
         // ---- data members (X360 offsets in the header note) -------------------------------
+        // Exposed protected (not private) so the per-platform leaf (BrnNetwork::LoginManagerX360)
+        // can store the state-machine cursor / sign-in result members BY NAME from its own
+        // lifecycle and update overrides (X360 stores into *(this+0x04..0x20)). The X360-only
+        // mePlatformSpecificSubState member is added by the leaf, not here.
         BrnNetworkManager*       mpNetworkManager;       // +0x04
         BrnNetworkModule*        mpNetworkModule;        // +0x08
         ESubState                meSubState;             // +0x0C
