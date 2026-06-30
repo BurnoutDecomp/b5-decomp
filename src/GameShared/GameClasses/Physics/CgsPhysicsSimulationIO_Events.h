@@ -113,14 +113,17 @@ namespace PhysicsSimulationIO
 
     // Update a rigid body's per-frame state in the simulation. Queued with capacity 200 in
     // PhysicsSimulationIO::InputBuffer (X360 EventQueue<InUpdateRigidBody,200>::Construct
-    // @ 0x828A5FF8, capacity 0xC8). Same recovery caveat as InAddRigidBody: only Construct is
-    // in scope (no Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map
-    // @ 0x828A71B8 that would pin it is not in scope), so the payload is sized only to the
-    // 16-byte alignment class the asm proves (`addi r30, r31, 0x10`). Stride/field layout
-    // intentionally NOT invented.
+    // @ 0x828A5FF8, capacity 0xC8). The event STRIDE *is* now X360-attested: the matching
+    // BaseEventQueue<InUpdateRigidBody>::AddEvent @ 0x82614928 copies the element at index
+    // miLength via `slwi r9,r11,1; add r11,r11,r9` (miLength*3), `slwi r11,r11,6` (*64) ==
+    // miLength*192 (the Hex-Rays pseudocode renders this literally as `192 * v11 + *a1`). So
+    // this payload is sized to that attested 192-byte stride. Internal field layout is still
+    // NOT recovered (no DWARF/source), so it is modelled as an opaque, 16-byte-aligned byte
+    // span; the Construct body stays store-for-store faithful (it only takes &maEvents[0] ==
+    // this+0x10, stores N and clears the count) regardless of the span's internal layout.
     struct alignas(16) InUpdateRigidBody : public Event
     {
-        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+        u8 macOpaquePayload[192];  // stride 192B X360-attested (AddEvent @0x82614928); fields not recovered
     };
 
     // Update a constraint joint's limits in the simulation. Queued with capacity 36 in
@@ -136,13 +139,17 @@ namespace PhysicsSimulationIO
 
     // An output "spy" report of a resolved contact, drained from the simulation back to the game.
     // Queued with capacity 800 in PhysicsSimulationIO::OutputBuffer (X360
-    // EventQueue<OutContactSpy,800>::Construct @ 0x828A68B8, capacity 0x320). Only Construct is in
-    // scope (no Append/AddEvent to pin the stride, and the OutputBuffer::Construct offset map that
-    // would pin it is not in scope), so the payload is sized only to the 16-byte alignment class
-    // the asm proves (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT invented.
+    // EventQueue<OutContactSpy,800>::Construct @ 0x828A68B8, capacity 0x320). The event STRIDE
+    // *is* now X360-attested: the matching BaseEventQueue<OutContactSpy>::AddEvent @ 0x825E44C8
+    // and AddEventSafe @ 0x828A1B78 both copy the element with `li r9,0xE`/`mtctr r9` (14 ld/std
+    // 64-bit block moves == 14*8 == 112 bytes) at a 112-byte stride (`mulli rX,rX,0x70` ==
+    // miLength*112). So this payload is sized to that attested 112-byte stride; 112 is still
+    // 16-byte aligned, so the Construct @ 0x828A68B8 stays store-for-store faithful (it only
+    // takes &maEvents[0] == this+0x10, stores N=800 and clears the count). Internal field layout
+    // is still NOT recovered (no DWARF/source), so it is modelled as an opaque byte span.
     struct alignas(16) OutContactSpy : public Event
     {
-        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+        u8 macOpaquePayload[112];  // stride 112B X360-attested (AddEvent @0x825E44C8 / AddEventSafe @0x828A1B78); fields not recovered
     };
 
     // An output "spy" report of per-frame vehicle drive state, drained from the simulation back to
@@ -186,6 +193,95 @@ namespace PhysicsSimulationIO
     struct InRemoveJoint : public Event
     {
         u8 macOpaquePayload[8];  // stride 8B X360-attested (AddEvent @ 0x825E4208 stdx); fields not recovered
+    };
+
+    // Remove a previously-added rigid body from the simulation, addressed by its 8-byte rigid-body
+    // id/handle plus a fail-if-not-found flag. Queued with capacities 1 / 50 / 200 across the
+    // input/output buffers (X360 EventQueue<InRemoveRigidBody,N>::Construct @ 0x825A7CE8 etc.). The
+    // event STRIDE *is* X360-attested: the matching BaseEventQueue<InRemoveRigidBody>::AddEvent
+    // @ 0x825E3ED8 stores the element at `slwi r11,r11,4` (miLength*16) via two 8-byte block stores
+    // (ld/std r10 @0/@8 == 16 bytes), and Append @ 0x825A3988 block-copies at the same 16-byte stride
+    // (`slwi r11,r11,4` == miLength*16, `slwi r5,r29,4` == count*16). This matches the DWARF shape
+    // (CgsPhysicsSimulationModuleIO.h:167): { RigidBodyId mID (u64); bool mbFailIfRigidBodyNotFound; }
+    // == 8 + 1 padded to 16. So this payload is sized to that attested 16-byte stride. Field names
+    // are intentionally NOT invented; it is modelled as an opaque, 16-byte-aligned byte span and the
+    // Construct/AddEvent/Append bodies stay store-for-store faithful regardless.
+    struct alignas(16) InRemoveRigidBody : public Event
+    {
+        u8 macOpaquePayload[16];  // stride 16B X360-attested (AddEvent @0x825E3ED8); DWARF { RigidBodyId mID(u64); bool mbFailIfRigidBodyNotFound; }; fields not invented
+    };
+
+    // Install/replace the drive "spy" tap (the simulation->game per-frame vehicle-drive report
+    // channel). Queued with capacity 1 in PhysicsSimulationIO::InputBuffer (X360
+    // EventQueue<InSetDriveSpy,1>::Construct @ 0x828A6618). Only Construct is in scope (no
+    // Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map @ 0x828A71B8 that
+    // would pin it is not in scope), so the payload is sized only to the 16-byte alignment class the
+    // asm proves (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT invented.
+    struct alignas(16) InSetDriveSpy : public Event
+    {
+        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+    };
+
+    // Install/replace the joint "spy" tap (the simulation->game per-frame joint report channel).
+    // Queued with capacity 36 in PhysicsSimulationIO::InputBuffer (X360
+    // EventQueue<InSetJointSpy,36>::Construct @ 0x828A63E8, capacity 0x24). Only Construct is in
+    // scope (no Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map
+    // @ 0x828A71B8 that would pin it is not in scope), so the payload is sized only to the 16-byte
+    // alignment class the asm proves (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT
+    // invented.
+    struct alignas(16) InSetJointSpy : public Event
+    {
+        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+    };
+
+    // Install/replace the rigid-body "spy" tap (the simulation->game per-frame rigid-body report
+    // channel). Queued with capacity 200 in PhysicsSimulationIO::InputBuffer (X360
+    // EventQueue<InSetRigidBodySpy,200>::Construct @ 0x828A60D8, capacity 0xC8). Only Construct is
+    // in scope (no Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map
+    // @ 0x828A71B8 that would pin it is not in scope), so the payload is sized only to the 16-byte
+    // alignment class the asm proves (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT
+    // invented.
+    struct alignas(16) InSetRigidBodySpy : public Event
+    {
+        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+    };
+
+    // Push updated per-frame vehicle-drive dynamics into the simulation. Queued with capacity 1 in
+    // PhysicsSimulationIO::InputBuffer (X360 EventQueue<InUpdateDriveDynamics,1>::Construct
+    // @ 0x828A65A8). Only Construct is in scope (no Append/AddEvent to pin the stride, and the
+    // InputBuffer::Construct offset map @ 0x828A71B8 that would pin it is not in scope), so the
+    // payload is sized only to the 16-byte alignment class the asm proves (`addi r30, r31, 0x10`).
+    // Stride/field layout intentionally NOT invented.
+    struct alignas(16) InUpdateDriveDynamics : public Event
+    {
+        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+    };
+
+    // Update a constraint joint's frames (anchor transforms) in the simulation. Queued with
+    // capacity 36 in PhysicsSimulationIO::InputBuffer (X360
+    // EventQueue<InUpdateJointFrames,36>::Construct @ 0x828A6308, capacity 0x24). Only Construct is
+    // in scope (no Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map
+    // @ 0x828A71B8 that would pin it is not in scope), so the payload is sized only to the 16-byte
+    // alignment class the asm proves (`addi r30, r31, 0x10`). Stride/field layout intentionally NOT
+    // invented.
+    struct alignas(16) InUpdateJointFrames : public Event
+    {
+        u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+    };
+
+    // An output report pushing a rigid body's resolved per-frame state from the simulation back to
+    // the game. Queued in PhysicsSimulationIO::OutputBuffer. The event STRIDE *is* X360-attested:
+    // the matching BaseEventQueue<OutUpdateRigidBody>::AddEvent @ 0x828A66F8 copies the element at
+    // index miLength via `slwi r9,r11,1; add r11,r11,r9` (miLength*3), `slwi r11,r11,6` (*64) ==
+    // miLength*192 (a leading 8-byte ld/std of the Event base + a delegated
+    // rw::physics::RigidBody::operator=(dest+0x10, src+0x10) for the remainder == a full 192-byte
+    // element copy). So this payload is sized to that attested 192-byte stride. This is distinct
+    // from the 16-byte-input InUpdateRigidBody/192 above -- do NOT conflate. Internal field layout
+    // is still NOT recovered (no DWARF/source), so it is modelled as an opaque, 16-byte-aligned byte
+    // span; the AddEvent body stays store-for-store faithful regardless.
+    struct alignas(16) OutUpdateRigidBody : public Event
+    {
+        u8 macOpaquePayload[192];  // stride 192B X360-attested (AddEvent @0x828A66F8); fields not recovered
     };
 }
 }

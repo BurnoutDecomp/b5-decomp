@@ -50,29 +50,14 @@ namespace CgsPhysics
 {
 namespace PhysicsSimulationIO
 {
-    // The post-physics rigid-body-update event (DWARF CgsPhysicsSimulationModuleIO.h:356:
-    // OutUpdateRigidBody : public Event { RigidBodyId mID; InUpdateRigidBody::RigidBody
-    // mRigidBody; }). The DetachedPartManager forwards it to PhysicalBodyPartPool::UpdatePart,
-    // which is declared over BrnPhysics::Deformation::OutUpdateRigidBody (the deformation-side
-    // forward-decl of this SAME underlying event); the cast at the forward point bridges the two
-    // spellings.
-    //
-    // A COMPLETE type is needed here only because the queue accessor (BaseEventQueue<T>::GetEvent)
-    // indexes maEvents[i] (sizeof(T) stride). The internal field layout of mRigidBody is NOT
-    // recovered (no DWARF/source for the RigidBody payload), so it is modelled -- exactly as the
-    // sibling CgsPhysicsSimulationIO_Events.h events -- as an opaque, 16-byte-aligned byte span.
-    // FLAG: the span is sized to cover the asm-attested byte reads this event family receives
-    // (PhysicalBodyPart::Update reads the frozen flag word at event +156 and transform rows at
-    // +16/+64/+80/+96, so the event spans >= 160 bytes); the EXACT X360 element stride is NOT
-    // attested in this scope, so the inter-event spacing here is best-effort, NOT byte-exact. Only
-    // the owner byte at +4 (read below) and the forwarded event pointer are observably consumed by
-    // this TU. Adopt the real homed OutUpdateRigidBody additively when its layout lands.
-    struct alignas(16) OutUpdateRigidBody : public Event
-    {
-        // mID (RigidBodyId) occupies +0..+7 in the X360 sim event; its EntityId owner byte is at
-        // +4 (the high/owner byte of the packed entity word). The opaque tail covers mRigidBody.
-        u8 maOpaquePayload[176];   // stride NOT X360-attested; sized to cover the +156 flag read (FLAG)
-    };
+    // OutUpdateRigidBody is now HOMED in CgsPhysicsSimulationIO_Events.h (included above) as an
+    // opaque, 16-byte-aligned 192-byte span -- the element STRIDE is X360-attested off
+    // BaseEventQueue<OutUpdateRigidBody>::AddEvent @ 0x828A66F8 (`slwi r9,r11,1; add; slwi r11,r11,6`
+    // == miLength*192). The earlier local placeholder (a best-effort 176-byte span, stride NOT
+    // attested) is removed in favour of that homed type; this TU's only observed read off the event
+    // is the EntityId owner byte at +4 (well within 192), and the forwarded event pointer is
+    // re-spelled to the deformation-side BrnPhysics::Deformation::OutUpdateRigidBody the pool's
+    // UpdatePart is declared over (the cast at the forward point bridges the two spellings).
 
     class OutputBuffer
     {
