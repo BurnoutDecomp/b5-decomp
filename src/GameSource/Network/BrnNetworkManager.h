@@ -40,6 +40,11 @@ namespace BrnNetwork
     // for a given network player and read its current point-of-view score; the full layout and
     // the remaining API live in the LiveRevengeManager's own TU.
     // ADDITIVE GROW (BrnNetworkAggressiveDrivingManager TU): declared-only.
+    //
+    // Guard: when the full LiveRevengeManager header is included first (e.g. in the
+    // implementing TU), the macro BRNETWORK_LIVEREVENGEMANAGER_DEFINED is set and this
+    // minimal slice is suppressed to avoid a struct-redefinition ODR error.
+#ifndef BRNETWORK_LIVEREVENGEMANAGER_DEFINED
     class LiveRevengeManager
     {
     public:
@@ -53,6 +58,7 @@ namespace BrnNetwork
         // body lands with the LiveRevengeManager TU. ADDITIVE GROW (PostRoundManager TU).
         s32 GetNumberOfRivals() const;
     };
+#endif // BRNETWORK_LIVEREVENGEMANAGER_DEFINED
 }
 
 namespace CgsNetwork
