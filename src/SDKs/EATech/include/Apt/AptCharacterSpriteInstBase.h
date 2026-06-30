@@ -43,8 +43,11 @@
 //                                  clip-event-handler mask (Has/Set/RemoveClipAction);
 //                                  the LOW 8 bits are sprite state flags, which the
 //                                  ctor seeds to 0xC0 (bits 6,7).
-//   +0x18  mnCurrentFrame   int32  the clip's current frame; the ctor zeroes it.
-//                                  [role inferred; only zero-initialised here.]
+//   +0x18  mpClipEventHandlers  ptr  the registered clip-event-handler list (null-
+//                                  init). RECONCILED from int32 mnCurrentFrame: the
+//                                  slot is only ever zero-initialised, never read as a
+//                                  frame, and AptDisplayList::_addToSetCaches walks it
+//                                  as the handler-list pointer.
 //   +0x1C  mDisplayList     AptDisplayList  the child display list (4 bytes), the
 //                                  ctor default-constructs it (pool head node).
 //   +0x20  mnLastActionFrame int32 frame bookkeeping; the ctor zeroes it. [role
@@ -58,11 +61,33 @@
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"   // AptCharacterInst base
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"      // embedded child display list (by value)
 
+// One registered AS clip-event handler (12-byte console record): the packed
+// event-mask word the sprite folds into mnClipActionFlags, plus the handler's
+// bytecode/scope (not read by _addToSetCaches -- only the mask is). Reserved by name.
+struct AptClipEventHandler
+{
+    uint32_t mnEventFlags;   // +0x00  packed event mask (tested & 0x201C7 / & 0x200C0)
+    uint32_t mnHandlerA;     // +0x04
+    uint32_t mnHandlerB;     // +0x08
+};
+
+// The sprite instance's registered-clip-event-handler list (count + handler array).
+struct AptClipEventHandlerList
+{
+    int32_t             mnCount;       // +0x00
+    AptClipEventHandler* mpHandlers;   // +0x04
+};
+
 struct AptCharacterSpriteInstBase : public AptCharacterInst
 {
     int32_t        mnGotoFrame;        // +0x10  (-1 = none)
     uint32_t       mnClipActionFlags;  // +0x14  high 24 bits = clip-event mask
-    int32_t        mnCurrentFrame;     // +0x18
+    // +0x18: the registered clip-event-handler list (null until handlers are set).
+    // RECONCILED: this slot was modelled as `int32_t mnCurrentFrame`, but it is only
+    // ever zero-initialised (never read as a frame) and AptDisplayList::_addToSetCaches
+    // dereferences it as a pointer to the handler list -- so it is the handler-list
+    // pointer, not a frame counter.
+    AptClipEventHandlerList* mpClipEventHandlers;   // +0x18
     AptDisplayList mDisplayList;       // +0x1C  child display list (4 bytes)
     int32_t        mnLastActionFrame;  // +0x20
 
