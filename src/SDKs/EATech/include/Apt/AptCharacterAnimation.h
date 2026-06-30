@@ -99,6 +99,35 @@ struct AptCharacterAnimation
     // name is absent. Body in AptCharacterAnimation.cpp.
     int32_t GetIDFromImportFile(int32_t nImportIndex);
 
+    // --- init-action execution (the __Packages bootstrap) ------------------
+    // @0x82AEA8C8 -- ExportClassDefinitionAssets: for each frame-label whose name
+    // begins with "__Packages." (and is still pending), run the matching frame's
+    // ActionScript class-definition stream once, then mark the label consumed.
+    // pA2 is the AptCIH-at-level (r4); the asm walks the serialised label table.
+    // Returns the last sub-result (callers ignore it). Body in the .cpp.
+    void* ExportClassDefinitionAssets(void* pA2);
+
+    // @0x82AEE2D8 -- ExecuteInitAction: find the type-8 import whose id == nId,
+    // run its class-definition assets, then run that init slot's action stream and
+    // mark it consumed (negate the id). pA2 is the AptCIH-at-level (r4); nId is r5.
+    // Body in the .cpp.
+    void* ExecuteInitAction(void* pA2, int32_t nId);
+
+    // @0x82AF4340 -- ExecuteInitActions: locate the init-list bucket for character
+    // nId (directly, or via GetIDFromImportFile through the import chain), run every
+    // pending type-3 init command in it, then run the import-resolved init action.
+    // pA2 is the AptCIH (r4); nId is r5. Body in the .cpp.
+    void* ExecuteInitActions(void* pA2, int32_t nId);
+
+    // @0x82AF77B0 -- Unresolve: the inverse of Fixup. Releases the per-character
+    // animation refs, un-relocates every record's pointer slot (subtracting the load
+    // base), tears down the imports, and stamps the freed characters. nBase is the
+    // load base (r4). Returns the last sub-result. Body in the .cpp.
+    void* Unresolve(int32_t nBase);
+
+    // @0x82AD92A8 (PS3 @0x7E37A4) -- restore the init-indicator list (declared above
+    // as ResetInitIndicators); body now in the .cpp.
+
     // --- .apt load resolution (D) ------------------------------------------
     // @0x80EEC4 -- resolve this (serialised) movie root against the load base:
     // clear the resolve scratch + run the recursive Fixup. Returns the root.

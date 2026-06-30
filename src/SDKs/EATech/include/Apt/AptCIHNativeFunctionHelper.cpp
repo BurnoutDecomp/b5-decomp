@@ -28,6 +28,10 @@
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"                // GetDepth (render-item depth)
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"               // removeClonedObject
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"          // AptInteger::Create
+#include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"            // AptFloat::Create / GetFloat
+#include "SDKs/EATech/include/Apt/AptNativeHash.h"                // localToGlobal _x/_y point hash
+#include "SDKs/EATech/include/Apt/AptRenderingContext.h"          // multMatrix (local->world concat)
+#include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"             // the localToGlobal world-matrix scratch
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"           // EAStringC (the AS-arg string scratch)
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"         // the AS VM (clone / loadVariables this-ptr)
 
@@ -269,5 +273,133 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadVariables(AptValue* pContext, 
         gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&strURL);     // arg 0 -> the URL
         AptActionInterpreter_loadVariables(&gAptActionInterpreter, pContext, 0, &strURL);
     }
+    return gpUndefinedValue;
+}
+
+// ---------------------------------------------------------------------------
+// FLAG: AptCIH::GetWorldBounds (X360 sub_82AE2C58, un-homed) -- compute a scene
+// node's world-space AABB into pOutRect (left,top,right,bottom). Declared as an
+// extern shim so the AS hitTest / getBounds keep the exact (node, &rect) call shape.
+// ---------------------------------------------------------------------------
+extern void AptCIH_GetWorldBounds(AptValue* pNode, float* pOutRect);   // sub_82AE2C58
+
+// FLAG: the shape-precise point hit-test (X360 indirect through dword_8324E8A4, an
+// AptCharacter render-method slot) -- "is local point (x,y) inside the node's drawn
+// shape?". Declared as an extern shim (the indirect target is a render-data method
+// not yet homed), preserving the (node, x, y) call shape.
+extern int AptCIH_ShapeHitTest(AptValue* pNode, float fX, float fY);   // (*dword_8324E8A4)
+
+// Local: the X360 hitTest receiver/arg type gate -- value type 12 (CharacterInst
+// handle) OR 37 (CIHNone), WITHOUT the defined bit (the asm tests only meValueType,
+// unlike IsClipHandleOrCIHNone). A defined-or-not clip handle / none counts.
+static inline bool IsClipHandleOrCIHNoneAnyState(const AptValue* pValue)
+{
+    const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();
+    return eType == AptVFT_CharacterInstHandle || eType == AptVFT_CIHNone;
+}
+
+// ===========================================================================
+// sMethod_hitTest @0x82AED730 -- AS hitTest(): two overloads.
+//   .hitTest(target)        (1 arg)  -- bounding-box overlap with another clip.
+//   .hitTest(x, y [,shape]) (>=2)    -- is the world point (x,y) over this clip;
+//                                       with a truthy 3rd arg, shape-precise.
+// Returns an AptInteger 0/1.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_hitTest(AptValue* pContext, int nArgCount)
+{
+    int nResult;
+
+    if (nArgCount == 1)
+    {
+        AptValue* const pTarget = gppAptNativeArgStack[gnAptNativeArgCount - 1];   // arg 0: the other clip
+        nResult = 0;
+        if (IsClipHandleOrCIHNoneAnyState(pTarget))
+        {
+            float fThis[4];     // this node's world AABB (left,top,right,bottom)
+            float fTarget[4];   // the target's world AABB
+            AptCIH_GetWorldBounds(pContext, fThis);
+            AptCIH_GetWorldBounds(pTarget, fTarget);
+            // box overlap: target.left <= this.right && target.right >= this.left
+            //           && target.bottom >= this.top && target.top <= this.bottom
+            if (fTarget[0] <= fThis[2] && fTarget[2] >= fThis[0]
+                && fTarget[3] >= fThis[1] && fTarget[1] <= fThis[3])
+            {
+                nResult = 1;
+            }
+        }
+    }
+    else if (nArgCount <= 1)
+    {
+        nResult = 0;   // no args
+    }
+    else
+    {
+        const float fX = gppAptNativeArgStack[gnAptNativeArgCount - 1]->toFloat();   // arg 0: x
+        const float fY = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toFloat();   // arg 1: y
+
+        if (nArgCount > 2 && gppAptNativeArgStack[gnAptNativeArgCount - 3]->toInteger())
+        {
+            nResult = AptCIH_ShapeHitTest(pContext, fX, fY);   // arg 2 truthy -> shape-precise
+        }
+        else
+        {
+            float fThis[4];   // this node's world AABB
+            AptCIH_GetWorldBounds(pContext, fThis);
+            nResult = 1;
+            if (fX < fThis[0] || fX > fThis[2] || fY < fThis[1] || fY > fThis[3])
+                nResult = 0;
+        }
+    }
+    return AptInteger::Create(nResult);
+}
+
+// ===========================================================================
+// sMethod_localToGlobal @0x82AF5CE8 -- AS localToGlobal(point): transform the
+// point object's {x,y} from this node's local space into global (stage) space.
+// Reads the point's "x"/"y" hash entries, builds a translation matrix, concatenates
+// every display-list ancestor's position transform up the tree, then writes the
+// transformed translation back into the point's "x"/"y". Returns undefined.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_localToGlobal(AptValue* pContext, int nArgCount)
+{
+    if (nArgCount == 0)
+        return gpUndefinedValue;
+
+    AptValue* const pPoint = gppAptNativeArgStack[gnAptNativeArgCount - 1];   // arg 0: the point object
+
+    // The point object's "x"/"y" property keys (X360 unk_82143BF4 / unk_82143BF8).
+    EAStringC strKeyX("x");
+    EAStringC strKeyY("y");
+
+    // FLAG: the point's embedded per-instance native hash (the X360 reads it at the
+    // value's +8 -- an AptValueWithHash's hash sub-object). Declared as an extern
+    // shim so the key lookups/stores stay typed without re-narrowing the value here.
+    extern AptNativeHash* AptValue_EmbeddedNativeHash(AptValue* pValue);   // pValue + 8
+    AptNativeHash* const pHash = AptValue_EmbeddedNativeHash(pPoint);
+
+    AptValue* const pValX = pHash->Lookup(strKeyX);
+    AptValue* const pValY = pHash->Lookup(strKeyY);
+
+    // Seed the local matrix from identity, then poke in the point's local (x,y) as
+    // the translation (tx/ty); the 2x2 stays identity.
+    AptMatrix mWorld;
+    mWorld.AptMatrixCopy(&gAptIdentityMatrix);   // X360 flt_8324E2B0 seed
+    mWorld.tx = pValX->c_float()->GetFloat();
+    mWorld.ty = pValY->c_float()->GetFloat();
+
+    // Concatenate every ancestor's position transform, walking up the display list.
+    for (AptValue* pAncestor = pContext; pAncestor; )
+    {
+        AptCIH* const pNode = static_cast<AptCIH*>(pAncestor);
+        const AptMatrix* pPos = pNode->GetCharacterInst()->GetRenderItem()->GetPositionMatrixConst();
+        if (!pPos)
+            pPos = &gAptIdentityMatrix;   // null position matrix -> identity (flt_8324E2B0)
+        AptRenderingContext::multMatrix(pPos, &mWorld, &mWorld);
+        pAncestor = pNode->GetDisplayListParent();
+    }
+
+    // Write the transformed world (x,y) back into the point's "x"/"y".
+    pHash->Set(strKeyX, AptFloat::Create(mWorld.tx));
+    pHash->Set(strKeyY, AptFloat::Create(mWorld.ty));
     return gpUndefinedValue;
 }
