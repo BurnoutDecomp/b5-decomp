@@ -40,6 +40,13 @@ namespace CgsUnicode
     // caller's buffer.
     CgsUtf8* CopyN(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
                    s32 lnMaxTargetStringLength);
+
+    // ADDITIVE GROW (BrnNetworkLoginManagerBase TU): unbounded copy of a NUL-terminated UTF-8
+    // string into lpUtf8TargetString, returning the target. X360 reaches it from
+    // BrnNetwork::LoginManagerBase::UpdateDownloadingTOS (CgsUnicode::Copy(mpTOS, downloadBuffer))
+    // to copy the freshly-downloaded terms-of-service text into the manager's allocated buffer.
+    // Declared-only here; the body lives in CgsUnicode.cpp's own TU.
+    CgsUtf8* Copy(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString);
 }
 
 #endif

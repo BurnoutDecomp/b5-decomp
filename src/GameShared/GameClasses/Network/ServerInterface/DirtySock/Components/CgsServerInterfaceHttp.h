@@ -53,6 +53,21 @@ namespace CgsNetwork
         // CgsServerInterfaceHttp.h:69 -- vector deleting destructor @ 0x827DE1F0.
         virtual ~ServerInterfaceHttp();
 
+        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
+        // The login state machine downloads the terms-of-service over HTTPS through this
+        // component (X360 reaches it through *(mpNetworkManager+0x38EC) + HTTP slot):
+        //   StartHttpsDownload    -- LoginManagerBase::PrepareDownloadingTOS @ 0x825438A8
+        //                            (StartHttpsDownload(http, url, bufferSize, 2100)). The
+        //                            timeout literal 2100 matches KI_SERVER_INTERFACE_HTTP_DOWNLOAD_TIMEOUT.
+        //   GetHttpsDownloadBuffer -- LoginManagerBase::UpdateDownloadingTOS @ 0x82566320
+        //                            (returns the downloaded bytes; the BOM / leading-newline scan
+        //                            walks the returned pointer).
+        //   DestroyHttpsDownload  -- LoginManagerBase::UpdateDownloadingTOS (tear the download down).
+        // Declared-only here; the bodies live in this component's own (DirtySock) TU.
+        void StartHttpsDownload(const char* lpcUrl, s32 liBufferSize, s16 li16TimeoutMs);
+        u8*  GetHttpsDownloadBuffer();
+        void DestroyHttpsDownload();
+
     private:
         ServerInterfaceDirtySock*    mpServerInterface;       // +0x10
         EAction                      meCurrentAction;          // +0x14

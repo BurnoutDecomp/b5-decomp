@@ -214,6 +214,18 @@ namespace BrnNetwork
         // Declared-only; body lands with the full BrnNetworkManager TU.
         void OnAutoLoginProcessComplete( s32 liProcessStage );
 
+        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
+        // The login state machine raises a login-flow GUI/network event up to the rest of the
+        // manager (X360: every BrnNetwork::LoginManagerBase answer/update path calls
+        // TriggerEventFromLogin(GetNetworkManager(), <eventCode>, 0) -- e.g. AnswerAgreeTOS @
+        // 0x82566478 passes r4 == 7 (agreed) / 4 (declined) with r5 == 0; UpdateLoggingIn passes
+        // 1; UpdateDownloadingTOS passes 0). The first argument is the login-event code; the
+        // second is a payload word every recovered call site leaves 0. The event-code enum's home
+        // is the manager's own TU, so the raw s32 is exposed here (FLAG: re-type to the login-event
+        // enum once it is reconstructed). Declared-only; body lands with the full
+        // BrnNetworkManager TU.
+        void TriggerEventFromLogin( s32 liEventCode, s32 liParam );
+
     private:
         CgsNetwork::VersionDisplay mVersionDisplay;
         CgsNetwork::NetworkAdapter mNetworkAdapter;

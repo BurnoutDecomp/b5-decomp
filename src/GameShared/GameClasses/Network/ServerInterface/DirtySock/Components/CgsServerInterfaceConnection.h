@@ -83,6 +83,24 @@ namespace CgsNetwork
         bool IsLoggedIn() const;
         void DisconnectFromServer();
 
+        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
+        // The login state machine drives the connect / log-in / agreement actions on this
+        // component (X360 reaches them through *(mpNetworkManager+0x38EC), the connection slot):
+        //   ConnectToServer  -- LoginManagerBase::UpdateConnectingOnline @ 0x8254F880
+        //                       (ConnectToServer(conn, ip, port, 15000)).
+        //   LogInToServer    -- LoginManagerBase::LogInToServer @ 0x82543AD0
+        //                       (LogInToServer(conn, userName, password)).
+        //   AgreeTOS         -- LoginManagerBase::AnswerAgreeTOS @ 0x82566478
+        //                       (AgreeTOS(conn, true) -- r4 == 1).
+        //   AgreeShareInfo   -- LoginManagerBase::AnswerOpenUsAccount @ 0x82543B30
+        //                       (AgreeShareInfo(conn, mbAgreeShare1, mbAgreeShare2)).
+        // The 15000 ms connect timeout literal is the asm immediate at the call site. Declared-only
+        // here; the bodies live in this component's own (DirtySock) TUs.
+        void ConnectToServer(const char* lpcServerIP, s32 liServerPort, s32 liTimeoutMs);
+        void LogInToServer(const char* lpcUserName, const char* lpcPassword);
+        void AgreeTOS(bool lbAgree);
+        void AgreeShareInfo(bool lbAgreeShare1, bool lbAgreeShare2);
+
     private:
         ServerInterfaceDirtySock* mpServerInterface;   // +0x10
         EAction                   meCurrentAction;       // +0x14
