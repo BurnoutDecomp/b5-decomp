@@ -38,6 +38,10 @@ namespace BrnDirector
 
         VehicleRef* Construct();   // body in BrnVehicleRef.cpp
 
+        // Resolve the reference to a live vehicle object given the world context.
+        // FLAG: declaration-only (body in BrnVehicleRef.cpp); signature from X360 pseudo.
+        void* Get(const void* lpWorld) const;
+
         // Bind this reference to a specific active race car of the given ref type.
         // BrnDirector::ICEWrapper::PlayMovie calls it as Set(refType, raceCar, true).
         // FLAG: declaration-only here -- the body lands with VehicleRef's own TU (the

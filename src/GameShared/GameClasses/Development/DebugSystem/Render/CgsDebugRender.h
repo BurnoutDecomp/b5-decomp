@@ -107,6 +107,12 @@ namespace CgsDev
         //       float* + RGBA + two Vector4 corners) is asm-derived from the call.
         void DrawBox(const f32* lpTransform, RGBA lColour, Vector4 lv4MinCorner, Vector4 lv4MaxCorner);
 
+        // FLAG (header grow): DrawAxis + DrawSolidQuad added for BehaviourRig::Update.
+        // DrawAxis: draws the 3 coordinate axes of a world-space transform (asm @BehaviourRig::Update).
+        void DrawAxis(const f32* lpTransform);
+        // DrawSolidQuad: draws a world-space solid quad defined by 4 corner points + colour.
+        void DrawSolidQuad(RGBA lColour, Vector3 lv3A, Vector3 lv3B, Vector3 lv3C, Vector3 lv3D);
+
         // X360 Dispatch2D: replay the queued 2D events into lpRenderer; clear the queue if lbClear.
         void Dispatch2D(Debug2DImmediateRender* lpRenderer, bool lbClear);
 
