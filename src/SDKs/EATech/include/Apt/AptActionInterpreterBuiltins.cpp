@@ -267,7 +267,7 @@ void AptActionInterpreter::_FunctionAptActionGetUrl2(AptActionInterpreter* pInte
         const AptVirtualFunctionTable_Indices eTargetType = pTargetValue->getVtblIndex();
         const bool bStringTarget =
             (eTargetType == AptVFT_StringValue || eTargetType == AptVFT_StringObject)
-            && pTargetValue->getAllowsDelayedDeletion();
+            && pTargetValue->getIsDefined();
 
         AptValue* pNode;
         if (bStringTarget)
@@ -302,7 +302,7 @@ void AptActionInterpreter::_FunctionAptActionGetUrl2(AptActionInterpreter* pInte
     // A defined CIH-handle (type 12) or a CIH-none (type 37) target gets its full
     // slash/dot path name written back into strTarget before the load.
     const AptVirtualFunctionTable_Indices eResolvedType = pResolved->getVtblIndex();
-    if ((eResolvedType == AptVFT_CharacterInstHandle && pResolved->getAllowsDelayedDeletion())
+    if ((eResolvedType == AptVFT_CharacterInstHandle && pResolved->getIsDefined())
         || eResolvedType == AptVFT_CIHNone)
     {
         pInterp->getName(pResolved, &strTarget);
@@ -340,7 +340,7 @@ void AptActionInterpreter::_FunctionAptActionTraceStart(AptActionInterpreter* pI
 
     // A defined integer target -> pop that many further operands (its value at +8 is
     // the integer datum the console reads).
-    if (pTarget->getVtblIndex() == AptVFT_Integer && pTarget->getAllowsDelayedDeletion())
+    if (pTarget->getVtblIndex() == AptVFT_Integer && pTarget->getIsDefined())
         pInterp->stackPop(pTarget->toInteger());
 
     // Advance the PC: by the inline count when trace-bytecode skipping is on, else by

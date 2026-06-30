@@ -20,8 +20,9 @@ namespace
         u32               nQueue  = pQueue ? pQueue->mnCapacity : 0u;  // complete type
         AptIntervalTimer* pTimers = pAnim->mpIntervalTimers;       // +0x24
         u32               nTimers = pAnim->mnNumIntervalTimers;    // +0x04
-        void*             pSlots  = pAnim->mpListenerSlots;        // +0x2C
+        u32*              pInputs = pAnim->mpQueuedInputs;          // +0x2C (per-frame input ring)
+        AptValue**        pLstSlt = pAnim->mListenerSet.mppSlots;   // +0x14 (listener-set slots)
 
-        (void)pRoot; (void)pRoot2; (void)pQueue; (void)nQueue; (void)pTimers; (void)nTimers; (void)pSlots;
+        (void)pRoot; (void)pRoot2; (void)pQueue; (void)nQueue; (void)pTimers; (void)nTimers; (void)pInputs; (void)pLstSlt;
     }
 }

@@ -30,6 +30,7 @@
 class AptCIH;             // SDKs/EATech/include/Apt/AptCIH.h (the movie-clip scope)
 class AptCharacterInst;   // SDKs/EATech/include/Apt/AptCharacterInst.h
 class EAStringC;          // SDKs/EATech/include/Apt/AptString/EAString.h (path/name buffers)
+struct AptInitParmsT;     // runtime init parameters (defined in AptActionInterpreterStackOps.cpp)
 
 class AptActionInterpreter
 {
@@ -140,6 +141,13 @@ public:
     // machinery + AptScriptFunctionBase are reconstructed.
 
     // ---- lifecycle (initialize/destroy the five stacks) ------------------
+    // initialize @0x82AE39D8 -- allocate the five {count,capacity,array} stacks from
+    // the operand-stack pool (operand stack sized by iStackSize, the four call-depth
+    // stacks by iCallStackDepth), reset the per-run bookkeeping, and bring up the AS
+    // register window / frame machinery (InitializeStaticData). Body in
+    // AptActionInterpreterStackOps.cpp.
+    void initialize(const AptInitParmsT* pParms);
+
     // ~AptActionInterpreter @0x82AE3918 -- free each of the five {count,capacity,
     // array} stacks back to the operand-stack pool (Deallocate(array, count*sizeof)).
     ~AptActionInterpreter();
