@@ -44,7 +44,8 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (getBytesTotal)
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"           // spDefaultMovieCharacter/CreateMovieCharacterInst (createEmptyMovieClip)
 #include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h"      // spDefaultTextCharacter -> AptCharacter upcast (createTextField)
-#include "SDKs/EATech/include/Apt/AptTarget.h"                    // gpAptTarget->mpAnimationTarget (attachMovie TickNewInsts)
+#include "SDKs/EATech/include/Apt/AptTarget.h"                    // gpAptTarget->mpAnimationTarget/mpLinker (attachMovie/loadMovie)
+#include "SDKs/EATech/include/Apt/AptLinker.h"                    // AptLinker::Load (loadMovie)
 #include "SDKs/EATech/include/Apt/AptFile.h"                      // mFileName (getBytesTotal)
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"            // AptFloat::Create (getBytesTotal)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                       // gpAptPseudoDataPool (the TextFormat pool)
@@ -862,5 +863,51 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_createTextField(AptValue* pContext
         pTextRI->mBounds.fBottom = static_cast<float>(pTextRI->mBounds.fTop + fHeight);
     }
 
+    return gpUndefinedValue;
+}
+
+// FLAG (un-homed AS-VM callee): AptActionInterpreter::getName -- resolve the AS path
+// name of a node into pOut. Declared so loadMovie compiles against the same entry.
+extern void AptActionInterpreter_getName(AptCIH* pNode, EAStringC* pOut);   // AptActionInterpreter::getName
+
+// ===========================================================================
+// sMethod_loadMovie @0x82B06D10 -- AS loadMovie(url): load an external movie into
+// this clip. The url must be empty or end in ".swf" (case-insensitive); the ".swf"
+// suffix is stripped to form the load name, the node's AS path is resolved as the
+// load target, and the linker is asked to load it. Always returns undefined.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_loadMovie(AptValue* pContext, int /*nArgCount*/)
+{
+    AptValue* const pUrlArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
+    EAStringC lUrl;
+    pUrlArg->toString(&lUrl);
+
+    // Accept only an empty url or one ending in ".swf" (case-insensitive on s/w/f).
+    const int         nLen  = lUrl.Size();
+    const char* const pcBuf = lUrl.GetBuffer();
+    bool bAccept = (nLen == 0);
+    if (!bAccept && nLen >= 4)
+    {
+        const char* const pcExt = pcBuf + (nLen - 4);
+        bAccept = pcExt[0] == '.'
+               && (pcExt[1] == 's' || pcExt[1] == 'S')
+               && (pcExt[2] == 'w' || pcExt[2] == 'W')
+               && (pcExt[3] == 'f' || pcExt[3] == 'F');
+    }
+
+    if (bAccept)
+    {
+        // Strip the ".swf" suffix to form the load name.
+        EAStringC lFileName = lUrl;
+        if (nLen >= 4)
+            lFileName.Delete(nLen - 4, 4);
+
+        // The node's AS path is the load target name.
+        EAStringC lTargetName;
+        AptActionInterpreter_getName(static_cast<AptCIH*>(pContext), &lTargetName);
+
+        // Console arg order: Load(a2 = stripped name, a3 = target path).
+        gpAptTarget->mpLinker->Load(&lFileName, &lTargetName);
+    }
     return gpUndefinedValue;
 }
