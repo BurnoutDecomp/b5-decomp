@@ -181,6 +181,98 @@ AptTarget::AptTarget(const u32* pParams)
 // AptTarget::SetNext @0x82B6BEA0 (`stw r4,0x24(r3); blr`) are the inline one-liner
 // accessors in AptTarget.h (faithful to the X360 single-instruction bodies).
 
+// =====================================================================
+//  The Apt target-instance LIST + the create/change-current orchestration
+//  (X360 AptCreateTargetInstance @0x82B003B0 + AptChangeTargetInstance @0x82ADB768).
+//  These are the pieces CgsGui::AptAux::InitializeApt @0x82848E50 runs after the
+//  allocator/update/render inits to stand up + select the per-process Apt context;
+//  the X360 InitializeApt is itself un-reconstructed (its callees are these), so the
+//  host bring-up (BrnAptRuntimeBringUp.cpp) calls these directly. Homed here in the
+//  AptTarget TU (it owns the target globals + the ctor these drive).
+//
+//  LIST: off_8324E570 (gpAptTargetCurrent) is the HEAD of the instance list; each
+//  AptTarget is linked through +0x24 (mpField24 == NEXT) / +0x28 (mpField28 == PREV)
+//  -- so the two "role TBD" slots in AptTarget.h are now KNOWN to be the instance-
+//  list next/prev. (Member access by name; the console offsets are documentation.)
+// =====================================================================
+
+// dword_8324E57C -- the running count of created target instances (the X360 bumps it
+// in AptCreateTargetInstance). Owned here (the create path is homed here).
+int gAptTargetInstanceCount = 0;   // dword_8324E57C
+
+// ---------------------------------------------------------------------
+// AptCreateTargetInstance @0x82B003B0 -- allocate + construct a new AptTarget context
+// from the AptUpdateParams block, append it to the instance list, bump the counter,
+// and return it.
+//
+// X360 body: spin-lock unk_8324E7D0; ++dword_8324E57C; mem = Allocate(off_8324D808, 48);
+// result = sub_82B002A0(mem, params) [== the AptTarget ctor]; then if the list head
+// off_8324E570 is null set it to result, else walk the +0x24 next-chain to the tail and
+// append (tail->+0x24 = result; result->+0x28 = tail); unlock; return result.
+//
+// FLAG: the unk_8324E7D0 spin-lock is a NO-OP on the single-threaded PC boot path (the
+// Apt context is created once, on the main thread); omitted. The 48-byte allocation +
+// the ctor + the list splice are reproduced faithfully against the named AptTarget layout
+// (the console sub_82B002A0 IS the AptTarget::AptTarget ctor already homed above).
+// ---------------------------------------------------------------------
+AptTarget* AptCreateTargetInstance(const u32* pParams)
+{
+    // FLAG: spin-lock unk_8324E7D0 elided (single-threaded PC bring-up).
+
+    ++gAptTargetInstanceCount;   // ++dword_8324E57C
+
+    // Allocate the 48-byte (12-dword console) AptTarget block from the shared DOGMA pool
+    // (off_8324D808 == gpAptPseudoDataPool, wired in the host bring-up step 1) and
+    // construct it via the homed AptTarget ctor (== the console sub_82B002A0 @0x82B002A0).
+    void* pMem = gpAptPseudoDataPool->Allocate(sizeof(AptTarget));   // Allocate(pool, 48)
+    if (pMem == nullptr)
+        return nullptr;
+    AptTarget* pResult = ::new (pMem) AptTarget(pParams);
+
+    // Append to the instance list (head off_8324E570 == gpAptTargetCurrent).
+    if (gpAptTargetCurrent == nullptr)
+    {
+        gpAptTargetCurrent = pResult;   // off_8324E570 = result (first instance)
+    }
+    else
+    {
+        AptTarget* pTail = gpAptTargetCurrent;
+        while (pTail->mpField24)                       // walk +0x24 (NEXT) to the tail
+            pTail = static_cast<AptTarget*>(pTail->mpField24);
+        pTail->mpField24    = pResult;                 // tail->+0x24 = result (link NEXT)
+        pResult->mpField28  = pTail;                   // result->+0x28 = tail (link PREV)
+    }
+
+    // FLAG: spin-unlock unk_8324E7D0 elided.
+    return pResult;
+}
+
+// ---------------------------------------------------------------------
+// AptChangeTargetInstance @0x82ADB768 -- make `pTarget` the CURRENT Apt context.
+//
+// X360 body: spin-lock unk_8324E7D0; off_8324E574 = result; off_8324E578 = result;
+// unlock; return result. i.e. it stores the target into gpAptTarget (the canonical
+// "current context" every Apt subsystem dereferences) + gpAptTargetTLS.
+//
+// FLAG: the X360 sets only the two GLOBAL pointers here; the per-thread EA TLS mirror
+// (unk_8324E814 == gAptTargetTls) that GetTarget() reads is published by the (un-homed)
+// AptUpdateInitialize / per-thread setup. On the single-threaded PC port we ALSO publish
+// into that TLS mirror here (exactly as AptTarget::Shutdown does) so GetTarget() returns
+// the live context -- otherwise GetTarget() (which reads the TLS slot) would stay null.
+// The spin-lock is elided (single-threaded bring-up).
+// ---------------------------------------------------------------------
+AptTarget* AptChangeTargetInstance(AptTarget* pTarget)
+{
+    gpAptTarget    = pTarget;   // off_8324E574 = result (the canonical current context)
+    gpAptTargetTLS = pTarget;   // off_8324E578 = result
+
+    // PC: mirror into the EA TLS slot GetTarget() reads (FLAG: console does this in the
+    // un-homed AptUpdateInitialize / per-thread setup, not here).
+    gAptTargetTls.SetValue(pTarget);
+
+    return pTarget;
+}
+
 // ---------------------------------------------------------------------
 // AptTarget::Shutdown @0x82B02328 -- tear the context down. Runs the teardown
 // "as" this target (swapping the three context globals + the TLS mirror), forces

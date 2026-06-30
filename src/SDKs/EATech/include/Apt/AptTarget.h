@@ -85,6 +85,23 @@ struct AptTarget
 // aliases (current / default / per-thread-TLS), set by AptUpdateInitialize. Declared
 // extern here; defined by the Apt update TU. gpAptTarget (off_8324E574) is the
 // canonical "current context" pointer every Apt subsystem dereferences.
-extern AptTarget* gpAptTargetCurrent;   // X360 off_8324E570
-extern AptTarget* gpAptTarget;          // X360 off_8324E574
+extern AptTarget* gpAptTargetCurrent;   // X360 off_8324E570  (HEAD of the instance list)
+extern AptTarget* gpAptTarget;          // X360 off_8324E574  (the CURRENT context)
 extern AptTarget* gpAptTargetTLS;       // X360 off_8324E578
+
+// The running count of created target instances (X360 dword_8324E57C). Bumped by
+// AptCreateTargetInstance. Defined in AptTarget.cpp.
+extern int gAptTargetInstanceCount;     // X360 dword_8324E57C
+
+// ---------------------------------------------------------------------------
+// The target-instance create / select-current orchestration (X360
+// AptCreateTargetInstance @0x82B003B0 + AptChangeTargetInstance @0x82ADB768). The
+// host bring-up calls these (in lieu of the un-homed AptUpdateInitialize chain) to
+// stand up + select the per-process Apt context. Bodies in AptTarget.cpp.
+//   AptCreateTargetInstance(params) -- allocate+construct an AptTarget from the
+//       AptUpdateParams block, append it to the instance list, return it.
+//   AptChangeTargetInstance(target)  -- make `target` the current context (sets
+//       gpAptTarget/gpAptTargetTLS + the GetTarget() TLS mirror).
+// ---------------------------------------------------------------------------
+AptTarget* AptCreateTargetInstance(const u32* pParams);
+AptTarget* AptChangeTargetInstance(AptTarget* pTarget);
