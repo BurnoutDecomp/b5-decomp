@@ -165,6 +165,32 @@ struct AptCIH : public AptValueGC
     // transition) mark its value undefined, then drop the display list's reference.
     void Remove(bool bClearGCRoots);
 
+    // ---- movie-clip play-head (the per-frame timeline driver) -------------
+    // tick @0x82B0BED8 -- advance a sprite(5)/animation(9) movie-clip node one frame
+    // when its dirty bit (mFlagsA bit25) is set: optionally step the play-head
+    // (auto-play, unless stopped or the recorder gate is shut), run the new frame's
+    // place/remove commands (doFrameControls) and queue its frame actions
+    // (queueFrameActions), fire the enterFrame / construct clip events, recurse the
+    // child display list (AptDisplayList::tick), then recompute the dirty bit from
+    // whether anything still wants to tick. Returns the resulting dirty bit (0/1).
+    int tick();   // @0x82B0BED8
+
+    // jumpToFrame @0x82B0BD50 -- seek a movie-clip node's play-head to nFrame. A
+    // single-step forward replays just that frame's commands (doFrameControls); any
+    // other jump rebuilds the intervening display-list state by re-running every
+    // skipped frame into a scratch AptPseudoDisplayList and merging the result
+    // (mergeState). Finishes by queueing the landed frame's actions. No-op on a
+    // string-value placeholder, a negative frame, or a frame past the clip's end.
+    int jumpToFrame(int nFrame);   // @0x82B0BD50
+
+    // _gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core. Reads the goto
+    // target off the interpreter operand stack: a numeric value is the 1-based frame
+    // number; a string/label value resolves through the clip's label hash. Seeks via
+    // jumpToFrame, then sets/clears the clip's auto-play flag from bPlay and re-dirties
+    // the node when it stopped. Returns the shared `undefined` value. nArgCount gates
+    // the whole op (must be >= 1). Static: the X360 passes the CIH in r3, no `this`.
+    void* _gotoAndX(int nArgCount, unsigned int bPlay);   // @0x82B0D2F0
+
     // ---- packed state / flags (mFlagsA bit-fields) -----------------------
     uint32_t GetCIHState() const;       void SetCIHState(uint32_t eState);    // @0x7DF12C/0x7DF110
     int16_t  GetZombieCount() const;    void IncZombieCount();  void DecZombieCount();  // @0x7DF160/0x7DF138/0x7FB648

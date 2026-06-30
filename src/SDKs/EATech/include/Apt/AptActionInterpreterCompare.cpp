@@ -345,7 +345,6 @@ MixedCompare:
             // predicates mirror the asm's v39/v40/v43/v46/v47/v48 type-tag tests.
             const bool bTopDefStr    = IsDefinedStringType(pTop);            // v39 / v48
             const bool bUnderDefBool = IsDefinedType(pUnder, AptVFT_Boolean);// v40 / v47
-            const bool bTopDefBool   = IsDefinedType(pTop, AptVFT_Boolean);  // v43
             const bool bUnderDefStr  = IsDefinedStringType(pUnder);          // v46
 
             // v39 && !v40: both render to strings -> EAStringC string compare.
@@ -366,7 +365,7 @@ MixedCompare:
             //      LABEL_132: if (!v47) goto LABEL_136; else if (v48) goto LABEL_136.
             //      LABEL_136: v51 = (v5 - v4); LABEL_135: v2 = (v51 == 0).
             bool bLabel136 = false;
-            if (!bTopDefBool || bUnderDefStr)        // reach LABEL_132
+            if (!bTopDefStr || bUnderDefStr)         // reach LABEL_132 (asm v43 = top-is-string-defined, == bTopDefStr)
             {
                 if (!bUnderDefBool || bTopDefStr)    // !v47, or (v47 && v48)
                     bLabel136 = true;

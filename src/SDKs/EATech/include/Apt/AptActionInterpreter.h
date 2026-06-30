@@ -193,6 +193,18 @@ public:
     // non-object cases. Returns 1 on a match.
     int isObjectOfType(AptValue* pObject, AptValue* pClass);
 
+    // _createObject @0x82B08088 -- the AS `new ClassName(args...)` value-materialiser.
+    // Resolves the class value pClassName under (pScope, pTarget) via getVariable; if
+    // it is a constructible script/native class, builds the matching built-in instance
+    // (Array / String / Date / TextFormat / Color / MovieClip / XML / Error, else a
+    // generic Object) from the nArrayLenHint operands on the stack, links it to the
+    // class prototype (creating one when missing), copies the class's implemented
+    // interfaces, and -- when bConstruct -- runs the constructor body (callFunction).
+    // nArrayLenHint doubles as the constructor argument count. Returns the new value
+    // (caller owns the construction ref) or null when the class cannot be constructed.
+    AptValue* _createObject(AptValue* pScope, AptValue* pTarget, const EAStringC* pClassName,
+                            int nArrayLenHint, char bConstruct);
+
     // isFSCommand @0x82AD9148 / doFSCommand @0x82AD91A0 -- the AS getURL "FSCommand:"
     // host-callback path: detect the "FSCommand:" url prefix and dispatch the
     // command (the part after the prefix) + its argument to the host hook.

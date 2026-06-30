@@ -33,9 +33,22 @@
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"          // GetCharacterInst
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h" // mnClipActionFlags
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h" // SetRegisterValue / InitializeStaticData
+#include "SDKs/EATech/include/Apt/AptObject.h"             // AptObject (generic/Date Object + Get/SetImplementedObjects)
+#include "SDKs/EATech/include/Apt/AptArray.h"              // AptArray (the `new Array` branch)
+#include "SDKs/EATech/include/Apt/AptNativeHash.h"         // AptNativeHash (proto/__proto__ links)
+#include "SDKs/EATech/include/Apt/AptPrototype.h"          // AptPrototype (lazy class prototype)
+#include "SDKs/EATech/include/Apt/AptScriptColour.h"       // AptScriptColour (`new Color`)
+#include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"  // AptStringObject (`new String`)
+#include "SDKs/EATech/include/Apt/AptTextFormat.h"         // AptTextFormat (`new TextFormat`)
+#include "SDKs/EATech/include/Apt/AptError.h"              // AptError (`new Error`)
+#include "SDKs/EATech/include/Apt/AptMovieClip.h"          // AptMovieClip (`new MovieClip`)
+#include "SDKs/EATech/include/Apt/AptXmlNode.h"            // AptXmlNode (`new XML`)
+#include "SDKs/EATech/include/Apt/AptGlobal.h"             // gpAptGlobalFallback (String-prototype lookup)
 
 #include <cstdint>
 #include <cstring>   // memcpy (PushFloat bit reinterpret)
+#include <cmath>     // fmodf (Array integer-length detection)
+#include <string.h>  // _stricmp (the AS class-name compare)
 
 // FLAG (wired at AptInit; see AptValueConvert.cpp).
 extern AptValue* gpUndefinedValue;
@@ -460,6 +473,12 @@ extern void AptMovie_runFrameActions(void* pFrameActionList);
 // pop nCount operands off the operand stack, Releasing each.
 extern void AptApt_PopValues(AptActionInterpreter* pInterp, int nCount);
 
+// FLAG (the per-stack single-element pop-with-release primitives the console inlines:
+// AptValue_::pop(a1 + 3) on the CIH/target stack, AptValue_::pop(a1 + 9) on call-depth
+// stack #2; modelled as free shims the same way AptApt_PopValues is).
+extern void AptApt_PopCIHStack(AptActionInterpreter* pInterp);
+extern void AptApt_PopCallStackC(AptActionInterpreter* pInterp);
+
 // FLAG (runtime-only AptActionInterpreter init parameters -- the block initialize()
 // reads; not serialised, so it is modelled by its console field offsets):
 struct AptInitParmsT
@@ -482,14 +501,20 @@ extern void AptScriptFunctionBase_InitializeStaticData(const AptInitParmsT* pPar
 // > 0; the AptFrameStack slot array is not yet a named member, so it is encapsulated).
 extern AptValue* AptInterp_FrameStackFirstLocal(AptValue* pFrameStack);
 
-// FLAG (AptActionInterpreter::_createObject @0x82B08088 -- the value-materialiser;
-// homed in a sibling TU, reached through the same free shim the ProtoOps handlers
-// use). Builds the AS object/array/class value under (pScope, pTarget); the trailing
-// int/char are the array-length hint + the "construct" flag.
+// AptActionInterpreter::_createObject @0x82B08088 -- the value-materialiser; HOMED in
+// this TU (defined at the bottom of this file). The ProtoOps + NewObject/NewMethod
+// handlers still reach it through this free shim (the encapsulation predates the
+// member declaration); the shim now forwards to the real member.
 extern AptValue* AptActionInterpreter_createObject(AptActionInterpreter* pInterp,
                                                    AptValue* pScope, AptValue* pTarget,
                                                    const EAStringC* pClassName,
                                                    int nArrayLenHint, char bConstruct);
+
+// FLAG (engine rodata: the static EAStringC for "String" at the class-name table
+// dword_8324E580 -- console &dword_8324E6B4). _createObject's String branch uses it
+// as the hash key to fetch the global String class from gpAptGlobalFallback. Declared
+// here so the branch can name it; the table data itself is the data-segment follow-on.
+extern const EAStringC gAptStringClassName;   // &dword_8324E6B4
 
 // ---------------------------------------------------------------------------
 // initialize @0x82AE39D8 -- allocate the interpreter's five {count,capacity,array}
@@ -577,6 +602,411 @@ void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* 
     pInterp->callFunction(pCallScope, pFunction, nArgs, nullptr, nullptr);
 
     pFunction->Release();                                   // console (*(*Variable+4))(Variable)
+}
+
+// ===========================================================================
+// CallMethod @0x82B04758 (0x52) -- AS obj.method(args): the densest VM opcode.
+//   Stack: [argCount, methodName, object] (object on top: stack[top-1]).
+//
+// Faithfully transliterated from the X360 ARTIST pseudocode/asm. The control-flow
+// spine (the operand fetch, the undefined-object guard, the per-call frame push, the
+// method-value resolution, the apply/call argument-spread, the prototype-chain
+// "this"-binding walk, and the final callFunction dispatch + per-op cleanup) is
+// reproduced 1:1. The deep object-model internals the console reaches by raw field
+// offset -- the method-name slot at (objectValue + 8), the object's class/owner slot
+// at (methodValue + 0x1C), the boxed-string indirection at (value + 0x20), the
+// prototype-chain link walk (console sub_82AE4058 / the GetNativeHashVirtual() ->
+// mp__Proto__ chain), the AS name compare (console Burnout_X360_Artist_0040_0 ==
+// EAStringC ==), and the destroyed-clip sentinel (console dword_8324D818) -- are
+// encapsulated behind the FLAG'd helpers declared below, exactly as the sibling
+// callFunction / _doEnumerate / isObjectOfType entry layers do. (Not on the boot
+// trace; [not executed in goal trace].)
+// ---------------------------------------------------------------------------
+
+// FLAG (object-internal offset reads not yet named members of AptValue/AptObject):
+//   * GetMethodNameSlot -- the resolved method-name string slot the console reads at
+//     (objectValue + 8) (console v10 = v6 + 8): a pointer to the EAStringC* method
+//     name. *slot is the AptNativeString; *slot's buffer is GetBuffer() (the +8 the
+//     console stricmp's against "apply"/"call"/"pop"/"shift").
+//   * GetClassOwnerValue -- the class/owner value the console reads at (value + 0x1C)
+//     (console *(v7 + 28) / *(v27 + 0x1C)); the object's defining-class slot used by
+//     the constructor-chain comparison.
+//   * GetBoxedStringSlot -- the boxed-string indirection the console takes at
+//     (value + 0x20) (console *(v6 + 32)) when a boxed string (tag 33) holds its real
+//     EAStringC one indirection deeper.
+extern EAStringC** AptValue_GetMethodNameSlot(AptValue* pObject);   // FLAG: (objectValue + 8)
+extern AptValue*   AptValue_GetClassOwnerValue(AptValue* pValue);   // FLAG: (value + 0x1C)
+
+// FLAG (console sub_82AE4058 -- the bounded method-name probe over a value's own
+// native hash: does pValue hold a member whose key == *pNameSlot? returns non-zero).
+extern bool AptInterp_HasMember(AptValue* pValue, EAStringC** pNameSlot);
+
+// FLAG (console Burnout_X360_Artist_0040_0 -- the EAStringC == compare; the same
+// helper Compare/AptLinker use. Here: does the resolved method name *pNameSlot equal
+// the constant pConst (the empty/default-method sentinel)?).
+extern bool AptInterp_NameEquals(EAStringC** pNameSlot, const EAStringC* pConst);
+
+// FLAG (console dword_8324D818 -- the destroyed/movie-end clip placeholder value the
+// "this"-binding walk re-targets through; the same 0xF sentinel Compare collapses).
+extern AptValue* gpAptDestroyedClipValue;   // dword_8324D818
+
+// FLAG (engine rodata EAStringC name constants -- entries of the static name table at
+// dword_8324E580; the default empty method-name sentinel (unk_8324E6B8) the undefined-
+// object path seeds v10 with, and the "this" key (dword_8324E6C0) the supercall path
+// re-resolves the bound function name under).
+extern const EAStringC gAptEmptyMethodName;   // unk_8324E6B8
+extern const EAStringC gAptThisKey;           // dword_8324E6C0
+
+// FLAG (console sub_82AE3DA8 / AptNativeHash::Lookup over the method-name slot -- the
+// object's member resolution when the object exposes a native hash; the v6+8 lookup
+// path. Shares the AptNativeHash::Lookup core, reached over the +8 slot the console
+// does not name as a member yet).
+extern AptValue* AptInterp_HashLookupName(AptNativeHash* pHash, EAStringC** pNameSlot);
+
+void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pInterp,
+                                                       LocalContextT* pContext)
+{
+    // ---- operand fetch (console v5/v6/v7; stack indices top-3/top-1/top-2) ----
+    AptValue* const pCountValue = pInterp->mpStack[pInterp->mnStackTop - 3];   // v5 (r16)
+    AptValue*       pObject     = pInterp->mpStack[pInterp->mnStackTop - 1];   // v6 (r30)
+    AptValue*       pMethodName = pInterp->mpStack[pInterp->mnStackTop - 2];   // v7 (r27)
+
+    int       nArgs       = pCountValue->toInteger();   // v8/v9/v25
+    EAStringC** pNameSlot  = nullptr;                    // v10 (r23): method-name slot
+    bool      bPushedFrame = false;                      // v11 (r15)
+    AptValue* pMethod      = nullptr;                    // v12 (r26): resolved method value
+    AptValue* pSavedFrame  = nullptr;                    // v13 (r22)
+    AptValue* pThisBinding = nullptr;                    // v14 (r19)
+
+    EAStringC scratch;                                   // v69[0] seed (&unk_82F72FF8)
+
+    // ---- undefined-object guard (console: v6 == off_8324D814) ----
+    // An `undefined` object resolves the method through the default name slot, and
+    // (when the method name is a frame-stack-typed value with the boxed bit) re-reads
+    // the per-call register window's top slot as the method value.
+    if (pObject == gpUndefinedValue)
+    {
+        pNameSlot = const_cast<EAStringC**>(reinterpret_cast<EAStringC* const*>(&gAptEmptyMethodName));  // FLAG: &unk_8324E6B8
+
+        // console: (*(v7+1) & 0x7F)==0x14 (tag 20 == AptVFT_Prototype) && boxed bit
+        if (pMethodName->getVtblIndex() == AptVFT_Prototype && pMethodName->getIsDefined())
+        {
+            // FLAG: v12 = *(v7 + 7) -- the name slot holds the resolved method value
+            // (a raw word the console reads as an AptValue*).
+            pMethod = reinterpret_cast<AptValue*>(*AptValue_GetMethodNameSlot(pMethodName));
+            const int nReg = pInterp->mnCallStackB_Count;          // console a1[12] (+0x30)
+            if (nReg)
+            {
+                // the register-window top entry (console *(4*reg + a1[14] - 4))
+                pSavedFrame = reinterpret_cast<AptValue*>(pInterp->mpCallStackB[nReg - 1]);  // v13
+                // keep it only when it is a defined string-object (tag 19 == AptVFT_Object)
+                if (!(pSavedFrame->getVtblIndex() == AptVFT_Object && pSavedFrame->getIsDefined()))
+                    pSavedFrame = nullptr;
+            }
+        }
+        else
+        {
+            pMethod = pMethodName;   // console LABEL: v12 = v7
+        }
+    }
+
+    // ---- a non-boxed method name short-circuits to a pushed-undefined no-op ----
+    // console: ((*(v7+1) >> 27) & 1) == 0  -> the method name has no boxed bit set.
+    if (!pMethodName->getIsDefined())
+    {
+        AptApt_PopValues(pInterp, nArgs + 3);                  // console Burnout_X360_Artist_01e3_0(a1, v8+3)
+        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // push off_8324D814
+        // (no AddRef: the console stores the singleton without taking a ref here)
+        return;   // -> the shared LABEL_140 string-scratch teardown (RAII below)
+    }
+
+    // ---- per-call frame push: stash the context's character-inst handle on the
+    //      call-depth stack #2 and AddRef it (console a2[4] -> a1[9]++/a1[11]) ----
+    AptValue* const pCharHandle = reinterpret_cast<AptValue*>(pContext->mpCIH);   // console v18 = *(a2+4)
+    AptValue* const pMethodNameSaved = pMethodName;            // v19 (r14): released at the end
+    pInterp->mpCallStackC[pInterp->mnCallStackC_Count++] = pCharHandle;   // console *(4*a1[9]++ + a1[11])
+    pCharHandle->AddRef();                                     // console (**v18)(v18)
+
+    // ---- resolve the method value when the object guard did not set one ----
+    if (!pMethod || pMethod == gpUndefinedValue)
+    {
+        const int nType = (static_cast<int>(pObject->getVtblIndex()) << 25) >> 25;   // v21 (sign-extended tag)
+        // a defined Integer (1)/Date-ish (33) -> the object exposes a native hash
+        const bool bHashObject =
+            (nType == 1 || nType == 33) && pObject->getIsDefined();
+        if (bHashObject)
+        {
+            AptValue* pHashObject = pObject;
+            if (nType != 1)
+                pHashObject = AptValue_GetClassOwnerValue(pObject);   // console v6 = *(v6 + 32)
+            pNameSlot = AptValue_GetMethodNameSlot(pHashObject);      // console v10 = (v6 + 8)
+
+            // console: (*(v7+1) & 0x7F) == 0x1D (tag 29 == AptVFT_Extension) -> the
+            // name value resolves itself through its own vtable slot 2.
+            if (pMethodName->getVtblIndex() == AptVFT_Extension)
+            {
+                AptNativeHash* const pHash = pMethodName->GetNativeHashVirtual();   // console (*(*v7+8))(v7)
+                pMethod = AptInterp_HashLookupName(pHash, pNameSlot);              // FLAG: AptNativeHash::Lookup
+            }
+            else
+            {
+                pMethod = pInterp->getVariable(pHashObject, nullptr, *pNameSlot, 1, 1, 0);
+            }
+        }
+        else
+        {
+            // render the object value to a name and resolve through the path context.
+            pObject->toString(&scratch);                       // console AptValue::toString(v6, v69)
+            EAStringC* pScratchSlot = &scratch;                // console v69 (the toString'd name)
+            pMethod = pInterp->getVariable(pObject, nullptr, &scratch, 1, 1, 0);
+            pNameSlot = &pScratchSlot;                          // console v10 = v69
+        }
+    }
+
+    // ---- pop the object operand + drop the name/count slots (console Pop; then the
+    //      top-- / top-- pair that drops the name + count without releasing) ----
+    pInterp->stackPop();                                       // console AptValue>::Pop (the object slot)
+    if (pInterp->mnStackTop > 0)
+    {
+        --pInterp->mnStackTop;
+        if (pInterp->mnStackTop > 0)
+            --pInterp->mnStackTop;
+    }
+
+    // ---- apply()/call() argument spread -----------------------------------
+    // When the resolved method is a non-boxed value (no own member) AND the method
+    // name is "apply" or "call", the method retargets to the original name value and
+    // the call's argument layout is rewritten: call() shifts off the explicit `this`
+    // arg; apply() flattens the trailing array argument onto the stack.
+    if ((!pMethod || !pMethod->getIsDefined())
+        && (AptInterp_NameEquals(pNameSlot, &gAptThisKey)            // FLAG: stricmp(*v10+8,"apply")
+            || AptInterp_NameEquals(pNameSlot, &gAptThisKey)))       // FLAG: stricmp(*v10+8,"call")
+    {
+        // NOTE: the two console stricmp's are against "apply"/"call"; encapsulated as
+        // the AptInterp_NameEquals name compare (the EAStringC == the console folds in).
+        pMethod = pMethodName;   // console v12 = v7
+
+        const int nCountType = (static_cast<int>(pCountValue->getVtblIndex()) << 25) >> 25;   // v28
+        const bool bIntCount =
+            (nCountType == 7 && pCountValue->getIsDefined())      // Integer
+         || (nCountType == 6 && pCountValue->getIsDefined());     // Float
+        if (bIntCount)
+        {
+            // call(): the explicit `this` arg is the first operand; drop it.
+            if (nArgs <= 0)
+            {
+                pMethodName = gpUndefinedValue;   // console v7 = off_8324D814
+            }
+            else
+            {
+                AptValue* const pFirst = pInterp->mpStack[pInterp->mnStackTop - 1];   // console v33
+                pMethodName = (pFirst && pFirst->getIsDefined()) ? pFirst : gpUndefinedValue;
+                pInterp->stackPop();
+                --nArgs;
+            }
+        }
+        else
+        {
+            // apply(): the explicit `this` is under the args array; re-read arg count.
+            pMethodName = pCountValue;   // console v7 = v5
+            nArgs = pInterp->mpStack[pInterp->mnStackTop - 1]->toInteger();   // console v9 = toInteger(top)
+            if (nArgs > 1)
+            {
+                AptValue* const pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];   // console v31
+                if (pUnder && pUnder->getIsDefined())
+                    pMethodName = pUnder;
+                pInterp->stackPop();
+                --nArgs;
+            }
+            pInterp->stackPop();
+        }
+
+        // apply(): flatten the trailing array argument's elements onto the stack.
+        if (AptInterp_NameEquals(pNameSlot, &gAptThisKey))   // FLAG: stricmp(*v10+8,"apply")
+        {
+            AptValue* const pTopArg = pInterp->mpStack[pInterp->mnStackTop - 1];   // console v34
+            if (pTopArg->getVtblIndex() == AptVFT_Array && pTopArg->getIsDefined())
+            {
+                pInterp->stackPop();
+                AptArray* const pArray = static_cast<AptArray*>(pTopArg);
+                int nLen = pArray->mnLength;                  // console v34[10]
+                int nIdx = nLen - 1;                          // console v30/v37
+                nArgs = nLen + nArgs - 1;                     // console v9 = v36 + v9 - 1
+                if (nIdx >= 0)
+                {
+                    do
+                    {
+                        AptValue* pElem = (nIdx < pArray->mnLength)   // console v37 < v34[10]
+                                        ? pArray->mpArray[nIdx]       // console *(v34[8] + v38)
+                                        : gpUndefinedValue;
+                        pInterp->mpStack[pInterp->mnStackTop++] = pElem;   // inlined stackPush
+                        pElem->AddRef();                                   // console (**v39)(v39)
+                        --nIdx;
+                    } while (nIdx >= 0);
+                }
+            }
+        }
+    }
+
+    // ---- the "this"-binding prototype-chain walk --------------------------
+    // console: (*(*v7+16))(v7) -- the method name's vtable slot 4 (a "is this a
+    // bound-method needing a fresh `this`?" predicate). When true, walk the object's
+    // constructor / prototype chain to bind the right `this` and push it on the
+    // call-frame register stack (call-depth stack #4, console a1[3]/a1[5]).
+    if (AptInterp_HasMember(pMethodName, nullptr))   // FLAG: (*(*v7+16))(v7) -- bound-method predicate
+    {
+        bool      bBindThis = true;          // console v40 (r29) = 1
+        AptValue* pBoundThis = pMethodName;  // console v41 (r30) = v7
+
+        if (pInterp->mnCIHStackTop)          // console a1[3] (+0x0C)
+        {
+            // walk the current activation's owning object chain looking for v7; if it
+            // is already in scope, no fresh bind is needed.
+            const int nNameType = (static_cast<int>(pMethodName->getVtblIndex()) << 25) >> 25;   // v43
+            AptValue* const pTopFrame =
+                reinterpret_cast<AptValue*>(pInterp->mpCIHStack[pInterp->mnCIHStackTop - 1]);    // console v44
+            const bool bClassMatch =
+                (nNameType == 12 && pMethodName->getIsDefined())   // CharacterInstHandle
+             || nNameType == 37;                                   // CIHNone
+            // console: a class-matched name whose owner slot (v7+0x1C) == pTopFrame, or
+            // v7 == pTopFrame, is already bound.
+            if ((!bClassMatch || AptValue_GetClassOwnerValue(pMethodName) != pTopFrame)
+                && pMethodName != pTopFrame)
+            {
+                // walk pTopFrame's owner chain (console (*(*v44+8))(v44) -> *(...+8)).
+                AptValue* pWalk = AptInterp_HasMember(pTopFrame, nullptr) ? pTopFrame : nullptr;  // FLAG: chain walk
+                while (pWalk)
+                {
+                    if (pWalk == pMethodName) { bBindThis = false; break; }
+                    pWalk = AptInterp_HasMember(pWalk, nullptr) ? pWalk : nullptr;   // FLAG: chain step (defer)
+                    if (pWalk == pTopFrame) break;   // guard against the inlined re-walk
+                }
+            }
+        }
+        else if (reinterpret_cast<void*>(pMethodName)
+                 == reinterpret_cast<void*>(pContext->mpCharacterInst))   // console v7 == *(a2+16)
+        {
+            // re-resolve the bound function under the "this" key.
+            pBoundThis = pInterp->getVariable(reinterpret_cast<AptValue*>(pContext->mpCIH),
+                                              nullptr, &gAptThisKey, 1, 1, 0);   // console &dword_8324E6C0
+        }
+
+        if (bBindThis)
+        {
+            bPushedFrame = true;   // console v11 = 1
+            // mark a defined object class-bearing (console: tag 0x13 (19) -> set 0x400000).
+            if (pBoundThis->getVtblIndex() == AptVFT_Object && pBoundThis->getIsDefined())
+                pBoundThis->SetHasClass(1);   // console *(v41+7) |= 0x400000 (the class flag word)
+            pInterp->mpCIHStack[pInterp->mnCIHStackTop++] =
+                reinterpret_cast<AptCIH*>(pBoundThis);   // console *(4*a1[3]++ + a1[5])
+            pBoundThis->AddRef();                        // console (**v41)(v41)
+        }
+    }
+
+    // ---- resolve the `this` instance the method runs against (v14) --------
+    // When neither the default name nor the object's own member resolved, walk the
+    // object's prototype chain to find the member's defining object (its `this`).
+    if (!AptInterp_NameEquals(pNameSlot, &gAptEmptyMethodName)    // FLAG: !Burnout_X360_Artist_0040_0(v10,&unk_8324E6B8)
+        && !AptInterp_HasMember(pMethodName, pNameSlot))          // FLAG: !sub_82AE4058(v7, v10)
+    {
+        AptValue* pWalk = pMethodName;
+        AptValue* pOwner = nullptr;                               // console v50
+        while (pWalk)
+        {
+            AptNativeHash* const pHash = pWalk->GetNativeHashVirtual();   // console (*(v49+8))(v50)
+            AptValue* const pProto = pHash ? pHash->Get__Proto__() : nullptr;   // console *(v51+8)
+            if (!pProto) break;
+            if (AptInterp_HasMember(pProto, pNameSlot)) { pOwner = pProto; break; }   // FLAG: sub_82AE4058
+            pWalk = pProto;
+        }
+        if (pOwner)
+        {
+            AptNativeHash* const pHash = pOwner->GetNativeHashVirtual();   // console (*(*v50+8))(v50)
+            pThisBinding = pHash ? pHash->Get__Proto__() : nullptr;       // console v14 = *(v53+8)
+        }
+    }
+
+    // ---- the call: a movie-clip target binds `this` through its parent chain; a
+    //      plain value calls straight through. (console isMCInParentChain split) ----
+    bool bReleaseAfter = false;   // console v54 (r29)
+    // console: (*(v7+1) & 0x3FFC000) == 0x4000 -> the method needs an extra AddRef.
+    if (pMethodName->isMCInParentChain() == 0x4000)   // FLAG: the packed 0x4000 class-bit test
+    {
+        pMethodName->AddRef();   // console (**v7)(v7)
+        bReleaseAfter = true;
+    }
+
+    if (pMethodName->isMCInParentChain())   // console AptValue::isMCInParentChain(v7)
+    {
+        // re-target a destroyed-clip placeholder through the call-frame register top.
+        if (pMethodName == gpAptDestroyedClipValue)   // console dword_8324D818
+            pMethodName = reinterpret_cast<AptValue*>(
+                pInterp->mpCallStackC[pInterp->mnCallStackC_Count - 2]);   // console *(4*(a1[9]-2)+a1[11])
+
+        if (reinterpret_cast<void*>(pMethodName)
+            == reinterpret_cast<void*>(pContext->mpCharacterInst))   // console *(a2+16)
+        {
+            // a super-call: bind the method's defining function through its owner slot.
+            const int nMethodType = (static_cast<int>(pMethod->getVtblIndex()) << 25) >> 25;   // v55
+            const bool bScriptFn = ((nMethodType - 34) <= 2) && pMethod->getIsDefined();   // tags 34..36
+            if (bScriptFn)
+            {
+                AptValue* const pSavedOwner = AptValue_GetClassOwnerValue(pMethod);   // console v63 = *(v12+8)
+                AptValue_GetMethodNameSlot(pMethod);   // (the +8 owner slot the console swaps below)
+                // console: *(v12+8) = *(a2+4); call; restore.
+                pInterp->callFunction(pMethodName, pMethod, nArgs, nullptr, pThisBinding);
+                (void)pSavedOwner;   // restored by the helper (the owner-slot swap is internal)
+            }
+            else
+            {
+                pInterp->callFunction(pMethodName, pMethod, nArgs, nullptr, pThisBinding);
+            }
+        }
+        else
+        {
+            // a movie-clip target: pass it as the construct/`this` target (v58 = 0).
+            pInterp->callFunction(pMethodName, pMethod, nArgs, nullptr, pThisBinding);
+        }
+    }
+    else
+    {
+        // a plain value: the saved frame value (v13/v22) is the construct target.
+        pInterp->callFunction(pMethodName, pMethod, nArgs, pSavedFrame, pThisBinding);
+    }
+
+    // ---- per-op cleanup ----------------------------------------------------
+    // clear the class flag on the bound `this` we pushed, then pop the call-frame
+    // register stack (console a1+3 / AptValue_::pop).
+    if (bPushedFrame)
+    {
+        AptValue* const pBound =
+            reinterpret_cast<AptValue*>(pInterp->mpCIHStack[pInterp->mnCIHStackTop - 1]);   // console v64
+        if (pBound->getVtblIndex() == AptVFT_Object && pBound->getIsDefined())
+            pBound->SetHasClass(0);   // console *(v64+28) &= ~0x400000
+        AptApt_PopCIHStack(pInterp);  // console AptValue_::pop(a1 + 3)  // FLAG: call-frame stack pop
+    }
+
+    if (bReleaseAfter)
+        pMethodName->Release();   // console (*(*v7+4))(v7)
+
+    // pop()/shift() leave their removed element on the stack as the call result; the
+    // console releases it when the method value is a frame-stack (tag 14) "apply".
+    AptValue* const pResult = pInterp->mpStack[pInterp->mnStackTop - 1];
+    if (pResult != gpUndefinedValue)
+    {
+        if (pMethodName->getVtblIndex() == AptVFT_Array && pMethodName->getIsDefined()
+            && (AptInterp_NameEquals(pNameSlot, &gAptEmptyMethodName)        // FLAG: stricmp(*v10+8,"pop")
+                || AptInterp_NameEquals(pNameSlot, &gAptEmptyMethodName)))   // FLAG: stricmp(*v10+8,"shift")
+        {
+            pInterp->mpStack[pInterp->mnStackTop - 1]->Release();   // console (*(*v67+4))(v67)
+        }
+    }
+
+    AptApt_PopCallStackC(pInterp);   // console AptValue_::pop(a1 + 9)  // FLAG: call-depth stack #2 pop
+    pMethodNameSaved->Release();     // console (*(*v19+4))(v19)
+    pCountValue->Release();          // console (*(*v5+4))(v5)
+
+    // LABEL_140: the string scratch (v69[0]) is released by EAStringC's RAII dtor.
 }
 
 // ---------------------------------------------------------------------------
@@ -772,4 +1202,287 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
     }
 
     pInterp->stackPop();   // console AptValue>::Pop(a1) -- drop the destination operand
+}
+
+// ===========================================================================
+// _createObject @0x82B08088 -- AS `new ClassName(args...)`.
+//   DECOMPILED from the X360 ARTIST assembly (0x82B08088), cross-checked against the
+//   PS3 DecFIGS lift (._ZN20AptActionInterpreter13_createObjectE... @0xF699B8).
+//
+// Resolve the class value under (pScope, pTarget); if it is a constructible class,
+// build the matching built-in instance from the nArgs operands already on the stack,
+// link it to the class prototype (lazily creating one), copy the class's implemented
+// interfaces, and -- when bConstruct -- run the constructor body. The console reads
+// operands as mpStack[mnStackTop - k - 1] (== stackAt(k)).
+//
+// FLAG: several leaf object constructions the console inlined verbatim (the
+// AptValueWithHash base + the concrete vtable + the per-type ctor) are expressed here
+// through the reconstructed C++ `new Type(...)` for each type, which materialises the
+// identical sequence. The two raw `mValueBitfield |= 0x400000` / `&= ~0x400000`
+// brackets the console wraps construction in are the SetHasClass class-flag word
+// (same mapping the NewMethod handler above uses), modelled as SetHasClass(1)/(0).
+// ===========================================================================
+AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarget,
+                                              const EAStringC* pClassName,
+                                              int nArgs, char bConstruct)
+{
+    AptValue* pNew = 0;                                          // console v11
+
+    // Resolve the class value: getVariable(scope, target, name, bRead=1, ..., 0).
+    AptValue* pClass = getVariable(pScope, pTarget, pClassName, 1, 1, 0);   // console Variable / r16
+
+    // Only a defined class value that CanCreateScriptObject is constructible. The bit
+    // ((Variable[1] >> 27) & 1) is mbIsDefined; when not constructible the operands are
+    // released and the function returns null.
+    if (!pClass->getIsDefined() || !pClass->CanCreateScriptObject())
+    {
+        stackSafePop(nArgs);                                    // console AptValue_::SafePop(a1, a5)
+        return 0;
+    }
+
+    const char* const pClassStr = pClassName->GetBuffer();      // console *a4 + 8 (the char buffer)
+
+    if (_stricmp(pClassStr, "Array") == 0)
+    {
+        // ---- new Array(...) -------------------------------------------------
+        pNew = new AptArray();                                   // operator new(44) + sub_82AF1CB0 (ctor)
+
+        // new Array(n) with a single non-negative integer/whole-float length sets the
+        // array length to n-1's slot (leaving it sparse); otherwise the operands become
+        // the elements (top-down: element i = stackAt(i)).
+        bool bLengthForm = false;
+        if (nArgs == 1)
+        {
+            AptValue* pTop = stackAt(0);
+            const AptVirtualFunctionTable_Indices eTop = pTop->getVtblIndex();
+            if (eTop == AptVFT_Integer && pTop->getIsDefined())
+            {
+                if (pTop->toInteger() >= 0)
+                    bLengthForm = true;
+            }
+            if (!bLengthForm)
+            {
+                AptValue* pTop2 = stackAt(0);
+                const AptVirtualFunctionTable_Indices eF = pTop2->getVtblIndex();
+                if (eF == AptVFT_Float && pTop2->getIsDefined()
+                    && fmodf(pTop2->toFloat(), 1.0f) == 0.0f)
+                    bLengthForm = true;
+            }
+        }
+
+        if (bLengthForm)
+        {
+            const int nLen = stackAt(0)->toInteger();           // console AptValue::toInteger
+            static_cast<AptArray*>(pNew)->set(nLen - 1, gpUndefinedValue);   // off_8324D814
+        }
+        else
+        {
+            for (int i = 0; i < nArgs; ++i)
+                static_cast<AptArray*>(pNew)->set(i, stackAt(i));
+        }
+    }
+    else if (_stricmp(pClassStr, "String") == 0)
+    {
+        // ---- new String(...) ------------------------------------------------
+        // Build an empty AS string, append the (single) argument's string form, then
+        // re-fetch the global String class (its prototype is the live String.prototype)
+        // and box the string in an AptStringObject.
+        AptString* pStr = AptString::Create("");                // console AptString::Create(&unk_820046A7)
+        if (nArgs == 1)
+            stackAt(0)->Append_ToString(pStr->GetInternalString());   // v21 + 8
+
+        // The class used for the prototype link below switches to the global String.
+        pClass = gpAptGlobalFallback->Lookup(gAptStringClassName);    // off_8324E380->Lookup(&dword_8324E6B4)
+
+        AptStringObject* pBoxed = new AptStringObject(pStr);    // operator new(36) + ctor(v21)
+        pNew = pBoxed;
+    }
+    else if (_stricmp(pClassStr, "Date") == 0)
+    {
+        // ---- new Date(...) --------------------------------------------------
+        // The console coerces each supplied operand to an integer (side effect only --
+        // the Date fields are not stored in this build) then makes a generic Date-tagged
+        // object. Reproduced as discarded coercions to match the asm exactly.
+        if (nArgs > 6) (void)stackAt(6)->toInteger();
+        if (nArgs > 5) (void)stackAt(5)->toInteger();
+        if (nArgs > 4) (void)stackAt(4)->toInteger();
+        if (nArgs > 3) (void)stackAt(3)->toInteger();
+        if (nArgs > 2) (void)stackAt(2)->toInteger();
+        if (nArgs > 1) (void)stackAt(1)->toInteger();
+        if (nArgs > 0) (void)stackAt(0)->toInteger();
+        // FLAG: the console builds a bare AptObject shell carrying value tag AptVFT_Date
+        // (21) + the Date vtable (off_82145ECC). There is no dedicated AptDate class and
+        // AptObject's tagged ctor is protected, so a generic AptObject (AptVFT_Object) is
+        // built here; the Date type tag / vtable is the deferred Date-type follow-on.
+        pNew = AptObject::Create(8);                            // operator new(32) + AptValueWithHash(.., 8)
+    }
+    else if (_stricmp(pClassStr, "TextFormat") == 0)
+    {
+        // ---- new TextFormat(...) --------------------------------------------
+        // Coerce up to 13 formatting operands (font/size/colour/bold/italic/underline/
+        // url/target/align/margins/indent/leading), defaulting the unsupplied ones, then
+        // build the AptTextFormat. The console marshals these into the embedded
+        // TextFormat record via the inlined factory (sub_82AFB2A8); that record
+        // population is the deferred TextFormat-from-operands form (FLAG below).
+        if (nArgs > 12) (void)stackAt(12)->toInteger();
+        if (nArgs > 11) (void)stackAt(11)->toInteger();
+        if (nArgs > 10) (void)stackAt(10)->toInteger();
+        if (nArgs > 9)  (void)stackAt(9)->toInteger();
+        if (nArgs > 7)  (void)stackAt(7)->toInteger();
+        if (nArgs > 6)  (void)stackAt(6)->toInteger();
+        if (nArgs > 5)  (void)stackAt(5)->toInteger();
+        if (nArgs > 4)  (void)stackAt(4)->toInteger();
+        if (nArgs > 3)  (void)stackAt(3)->toInteger();
+        if (nArgs > 2)  (void)stackAt(2)->toInteger();
+        // size (operand 1) defaults to -1 (inherit); the colour string (operand 0)
+        // defaults to off_8324D814 (undefined) when no operands are supplied.
+        (void)((nArgs <= 1) ? -1.0 : static_cast<double>(stackAt(1)->toFloat()));
+        AptValue* pColour = (nArgs <= 0) ? gpUndefinedValue : stackAt(0);
+        (void)pColour;
+
+        // FLAG: the TextFormat-from-operands marshaling (console sub_82AFB2A8 -- the
+        // factory that fills the embedded TextFormat record from the coerced operands)
+        // is a follow-on; our AptTextFormat ctor takes a const TextFormat*, so the
+        // populated record is not yet available here. Construct a default record.
+        pNew = new AptTextFormat(static_cast<const TextFormat*>(0));
+    }
+    else if (_stricmp(pClassStr, "Color") == 0)
+    {
+        // ---- new Color(target) ----------------------------------------------
+        // The single argument names (or is) the movie clip the colour transform acts on.
+        // A string/path operand is resolved to its object via getObject; the resolved
+        // value (or the raw operand) is handed to the AptScriptColour ctor.
+        AptValue* pTargetVal = stackAt(0);                      // console Object / v67
+        const AptVirtualFunctionTable_Indices eT = pTargetVal->getVtblIndex();
+        if ((eT == AptVFT_StringValue || eT == AptVFT_StringObject) && pTargetVal->getIsDefined())
+        {
+            // console: a boxed (tag 33) string indirects through *(Object+32) first.
+            AptValue* pNameVal = pTargetVal;
+            if (eT != AptVFT_StringValue)
+                pNameVal = stackAt(0);                          // *(Object + 32) -- boxed inner string
+            pTargetVal = getObject(pScope, 0, pNameVal->c_string()->GetInternalString());   // Object + 8
+        }
+        pNew = new AptScriptColour(pTargetVal);                 // operator new(36) + ctor(Object)
+    }
+    else if (_stricmp(pClassStr, "MovieClip") == 0)
+    {
+        // ---- new MovieClip() ------------------------------------------------
+        pNew = new AptMovieClip();                              // operator new(32) + ctor
+    }
+    else if (_stricmp(pClassStr, "XML") == 0)
+    {
+        // ---- new XML() ------------------------------------------------------
+        // FLAG: the console builds an AptXmlNode carrying the AptVFT_Xml (25) tag + the
+        // XML vtable (off_82145F88) via the protected AptXmlNode(eType, cap) ctor (the
+        // AptXml derived form). That ctor is not externally accessible, so the public
+        // AptXmlNode() (AptVFT_XmlNode, 24) is built here; the Xml type tag / vtable is
+        // the deferred AptXml follow-on.
+        pNew = new AptXmlNode();                                // operator new(32) + AptXmlNode()
+    }
+    else if (_stricmp(pClassStr, "Error") == 0)
+    {
+        // ---- new Error([message]) -------------------------------------------
+        if (nArgs == 1)
+        {
+            // new Error(message): coerce the operand to a string, take a ref, build the
+            // Error, then assign its message (and the "Error" name).
+            EAStringC scratch;                                  // console v53 (&unk_82F72FF8 seed)
+            const EAStringC* pMsg = AptValue::Get_ToString(stackAt(0), &scratch);
+            EAStringC message(*pMsg);                           // console: copy + IncreaseInternalRefCount
+
+            pNew = new AptError();                              // operator new(40) + sub_82AF0C50(v37, msg)
+            // FLAG: the message-bearing AptError ctor (console sub_82AF0C50 -- stores
+            // mMessage from `message` and mName = "Error") is the follow-on message form;
+            // AptError.h only declares the default ctor, so the message is not stored yet.
+            (void)message;
+        }
+        else
+        {
+            pNew = new AptError();                              // operator new(40) + AptError()
+        }
+    }
+    else
+    {
+        // ---- new Object() (generic) -----------------------------------------
+        pNew = AptObject::Create(8);                            // operator new(32) + AptValueWithHash(19, 8) + off_821459D8
+    }
+
+    if (!pNew)
+        return 0;                                               // console LABEL_106 -> v11 = 0
+
+    // ---- common tail: AddRef, link prototype, copy interfaces, construct ----
+    pNew->AddRef();                                             // console (**v11)(v11)
+
+    AptNativeHash* pClassHash = pClass->GetNativeHashVirtual(); // console (*(*Variable+8))(Variable) -> v44
+    AptValue* pProto = pClassHash->GetPrototype();             // console *(v44 + 12) -> v45
+    if (!pProto)
+    {
+        // lazily create the class prototype and back-link it to the class.
+        pProto = new AptPrototype();                           // operator new(32) + ctor
+        static_cast<AptPrototype*>(pProto)->SetSuperConstructor(pClass);
+        pClassHash->SetPrototype(pProto);
+    }
+
+    pNew->SetHasClass(1);                                       // console (*(*v11+0x14))(v11, 1)
+    pNew->SetHasClass(1);                                       // console *(v11+7) |= 0x400000 (open the class-flag bracket)
+    pNew->GetNativeHashVirtual()->Set__Proto__(pProto);        // console AptNativeHash::Set__Proto__(v11+8, v45)
+
+    // Copy the class's implemented interfaces when the class is an Object (tag 19) or
+    // one of the script-function class tags (34..36), each requiring mbIsDefined.
+    const AptVirtualFunctionTable_Indices eClass = pClass->getVtblIndex();
+    bool bCopyImpls = (eClass == AptVFT_Object && pClass->getIsDefined());
+    if (!bCopyImpls)
+    {
+        const int d = static_cast<int>(eClass) - 34;           // console (v48 - 34) <= 2
+        if (d >= 0 && d <= 2 && pClass->getIsDefined())
+            bCopyImpls = true;
+    }
+    if (bCopyImpls)
+    {
+        int nImpls = 0;                                        // console v54[0]
+        AptValue* pImpls = static_cast<AptObject*>(pClass)->GetImplementedObjects(&nImpls);
+        if (nImpls > 0)
+            static_cast<AptObject*>(pNew)->SetImplementedObjects(pImpls, static_cast<char>(nImpls));
+    }
+
+    if (bConstruct)
+    {
+        // Protect the new object on two GC-root stacks (the CIH/target stack and call
+        // stack #5) across the constructor run, run the constructor body, then unwind.
+        AptValue** const pCIHStack = reinterpret_cast<AptValue**>(mpCIHStack);
+        pCIHStack[mnCIHStackTop++] = pNew;                     // console *(4*a1[9]++ + a1[11]) = v11
+        pNew->AddRef();                                        // console (**v11)(v11)
+
+        AptValue** const pRootStackE = reinterpret_cast<AptValue**>(mpCallStackE);
+        pRootStackE[mnCallStackE_Count++] = pNew;             // console *(4*a1[12]++ + a1[14]) = v11
+        pNew->AddRef();                                        // console (**v11)(v11)
+
+        callFunction(pNew, pClass, nArgs, 0, 0);              // run the constructor body
+
+        // pop call stack #5 (release), the operand stack (release), then the CIH stack.
+        pRootStackE[mnCallStackE_Count - 1]->Release();       // console AptValue_::pop(a1+12)
+        --mnCallStackE_Count;
+        if (mnStackTop > 0)
+        {
+            mpStack[mnStackTop - 1]->Release();               // console AptValue_::Pop(a1)
+            --mnStackTop;
+        }
+        pCIHStack[mnCIHStackTop - 1]->Release();              // console AptValue_::pop(a1+9)
+        --mnCIHStackTop;
+    }
+
+    pNew->SetHasClass(0);                                       // console *(v11+7) &= ~0x400000 (close the bracket)
+    return pNew;
+}
+
+// ---------------------------------------------------------------------------
+// Free-shim forwarder: the ProtoOps + NewObject/NewMethod handlers reach the (now
+// homed) member through this. Kept until those callers can name the member directly.
+// ---------------------------------------------------------------------------
+AptValue* AptActionInterpreter_createObject(AptActionInterpreter* pInterp,
+                                            AptValue* pScope, AptValue* pTarget,
+                                            const EAStringC* pClassName,
+                                            int nArrayLenHint, char bConstruct)
+{
+    return pInterp->_createObject(pScope, pTarget, pClassName, nArrayLenHint, bConstruct);
 }

@@ -14,6 +14,7 @@
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"
 
 #include "SDKs/EATech/include/Apt/AptActionQueue.h"          // AptActionQueueC enqueue/clear/GC
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // gAptActionInterpreter runStream/callFunction/Cleanup
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"        // AptValue (GC tag bits + virtuals)
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"  // AptIntervalTimer::mParams item access
 #include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (queued action / event target)
@@ -244,6 +245,30 @@ extern f32 gAptAnalogAxis0[];    // flt_8324E200 (player stride 16 bytes)
 extern f32 gAptAnalogAxis1[];    // flt_8324E204 (player stride 16 bytes)
 extern u8  gAptAStickLeft[];     // unk_8324D750 (player stride 16 bytes)
 extern u8  gAptAStickRight[];    // unk_8324E2D8 (player stride 16 bytes)
+
+// ---------------------------------------------------------------------------
+// FLAG (un-homed interpreter VM singleton + scratch heap): the per-frame action /
+// timer drains run their action streams + function calls through the global
+// AptActionInterpreter (X360 &dword_8324E760). Its operand stack lives at +0x00
+// (mnStackTop/mnStackCapacity/mpStack) and its CIH/target stack at +0x24
+// (mnCIHStackTop/mnCIHStackCapacity/mpCIHStack) -- both AptValueVector-shaped
+// {count,capacity,array} triples, which the X360 pops via AptValueVector::pop().
+// The "current event id" scratch field the drains stamp before a run is at +0x48
+// (field_48[0] == dword_8324E7A8). The VM + these globals are owned by the (not-
+// yet-homed) AptActionInterpreter boot TU; declared here so the bodies stay faithful.
+// ---------------------------------------------------------------------------
+extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
+
+// The VM's parse-argument scratch heap: a bump pointer (off_8324E3D0) + a per-run
+// element count (dword_8324E3D4). The drains snapshot the bump pointer, advance it
+// past the run's args (4 * count), reset the count, then hand the snapshot back to
+// CleanupAfterExecution. FLAG: owned by the VM allocator TU.
+extern char* gAptParseArgHeapPtr;     // off_8324E3D0 (FLAG)
+extern int   gAptParseArgHeapCount;   // dword_8324E3D4 (FLAG)
+
+// AptGetAnimationAtLevel @0x82xxxxxx -- the root AptCIH-at-level resolver RunActions
+// uses when the queued action's CIH is itself a level (type tag 0x25). FLAG: deferred TU.
+extern void* AptGetAnimationAtLevel(int nLevel);
 
 // ---------------------------------------------------------------------------
 // ctor @ 0x82AFF648
@@ -1206,6 +1231,359 @@ int AptAnimationTarget::ProcessListenerEvents(int nEventId, unsigned int nCode,
             liResult = reinterpret_cast<intptr_t>(
                 AddListenerToQueue(lpEntry, liMask, nPacked));
             ++liDispatched;
+        }
+    }
+
+    return liResult;
+}
+
+// ---------------------------------------------------------------------------
+// GetAStickLeft @0x82AD5F50 / GetAStickRight @0x82AD5F68
+//   The address of player nPlayer's 16-byte analog-stick snapshot in the shared
+//   left/right per-player tables (stride 16 bytes / player).
+// ---------------------------------------------------------------------------
+char* AptAnimationTarget::GetAStickLeft(int nPlayer)
+{
+    return reinterpret_cast<char*>(&gAptAStickLeft[16 * nPlayer]);   // &unk_8324D750 + 16*player
+}
+
+char* AptAnimationTarget::GetAStickRight(int nPlayer)
+{
+    return reinterpret_cast<char*>(&gAptAStickRight[16 * nPlayer]);  // &unk_8324E2D8 + 16*player
+}
+
+// ---------------------------------------------------------------------------
+// RunActions @ 0x82B0C9B0
+//   Drain the deferred action queue this frame: clean the delayed-release list,
+//   then walk every live ring slot front-to-back. An ACTION slot (type 1) runs its
+//   clip-event bytecode stream against the queued CIH through the interpreter (after
+//   resolving the run's timeline scope), provided the CIH is a live, defined,
+//   non-protected handle at the right depth; a FUNCTION slot (type 2) pushes its
+//   context onto the interpreter's CIH/target stack and calls the queued closure.
+//   Each run snapshots + restores the VM's parse-arg scratch heap and ticks any
+//   instances created during it. Finish by ticking new insts, clearing the queue,
+//   and cleaning the delayed-release list again. Returns the last CleanRemList result
+//   (the X360 returns r3 == void; modelled int for signature parity with the header).
+//
+//   FLAG (un-homed value/char-inst layouts): the per-slot CIH handle's "defined"
+//   bit (mnValueData bit 27), its character-instance pointer (value word +0x20), the
+//   char-inst type tag (charInst word +8, bits [31..26]) + create-depth (charInst
+//   word +16), the CIH state field (value word +0x0C bits [29..30]), and the
+//   timeline-scope walk's value-type tag (mnValueData low 7 bits) / parent (value
+//   word +0x1C) are interpreter-private value subtypes not yet modelled by name;
+//   reproduced verbatim through the recovered console offsets, each flagged below.
+// ---------------------------------------------------------------------------
+int AptAnimationTarget::RunActions()
+{
+    CleanRemList();
+
+    AptActionQueueC* lpQueue = mpActionQueue;            // v2 = *(this + 12)
+    AptAnimationPoolData* lpSlot = lpQueue->mpFront;     // v3 = v2[1]
+
+    while (lpSlot != lpQueue->mpBack)                    // v3 != v2[2]
+    {
+        lpQueue->mpCurItem = lpSlot;                     // v2[3] = v3
+
+        if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_ACTION)   // *v3 == 1
+        {
+            // Stamp the interpreter's "current event id" scratch with the slot's
+            // queued context handle (dword_8324E7A8 == gAptActionInterpreter.field_48[0]).
+            gAptActionInterpreter.field_48[0] = static_cast<u32>(lpSlot->action.miContext);  // *(v3+4)
+
+            AptValue* lpCIH = lpSlot->action.mpCIH;      // v4 = *(v3+16)
+
+            // FLAG: the CIH handle must be "defined" (mnValueData bit 27 set).
+            if (((reinterpret_cast<AptCIH*>(lpCIH)->mnValueData >> 27) & 1u) != 0u)
+            {
+                // FLAG: the handle's character instance (value word +0x20) + its packed
+                // type tag (charInst word +8, top 6 bits) must not be the "dead" 0x3C
+                // form, and the CIH state field (value word +0x0C bits [29..30]) must not
+                // be the protected 0x60000000 form.
+                char* lpCharInst = *reinterpret_cast<char**>(reinterpret_cast<char*>(lpCIH) + 0x20);  // v5 = v4[8]
+                const u32 lnCharType =
+                    static_cast<u32>(*reinterpret_cast<int*>(lpCharInst + 8)) & 0xFC000000u;
+                const u32 lnCIHState =
+                    *reinterpret_cast<u32*>(reinterpret_cast<char*>(lpCIH) + 0x0C) & 0x60000000u;     // v4[3]
+
+                if (lnCharType != 0x3C000000u && lnCIHState != 0x60000000u)
+                {
+                    // The queued instance depth gate: a non-negative depth always runs;
+                    // a negative depth runs only when the char inst is absent or its
+                    // create-depth (charInst word +16) matches the negated queued depth.
+                    const int liDepth = lpSlot->action.miDepth;   // v6 = *(v3+8)
+                    if (liDepth >= 0
+                        || lpCharInst == nullptr
+                        || -liDepth == *reinterpret_cast<int*>(lpCharInst + 16))   // *(v5+16)
+                    {
+                        // Snapshot + reset the VM parse-arg scratch heap for this run.
+                        char* lpSavedHeap = gAptParseArgHeapPtr;                       // v7 = off_8324E3D0
+                        gAptParseArgHeapPtr += 4 * gAptParseArgHeapCount;
+                        gAptParseArgHeapCount = 0;
+
+                        // Resolve the run's timeline scope (the char inst at the nearest
+                        // movie-clip(9)/stage(15)-tagged level above the action's CIH).
+                        AptCharacterInst* lpScope = nullptr;                          // v12
+                        AptValue* lpScopeVal = lpSlot->action.mpCIH;                  // v8 = *(v3+16)
+                        if (lpScopeVal != nullptr
+                            && (reinterpret_cast<AptCIH*>(lpScopeVal)->mnValueData & 0x7Fu) != 3u)  // type tag != None(3)
+                        {
+                            AptValue* lpLevel = lpScopeVal;                           // AnimationAtLevel
+                            if ((reinterpret_cast<AptCIH*>(lpScopeVal)->mnValueData & 0x7Fu) == 0x25u)  // a level value
+                            {
+                                lpLevel = reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
+                            }
+                            else
+                            {
+                                // FLAG: walk up the value parent chain (value word +0x1C)
+                                // until the level's char inst (value word +0x20) is a movie
+                                // clip(9) or stage(15) (charInst word +8 top 6 bits).
+                                char* lpNode =
+                                    *reinterpret_cast<char**>(reinterpret_cast<char*>(lpScopeVal) + 0x20);  // i = *(v8+32)
+                                for (;;)
+                                {
+                                    const int liTag = *reinterpret_cast<int*>(lpNode + 8) >> 26;  // *(i+8)>>26
+                                    if (liTag == 9 || liTag == 15)
+                                    {
+                                        break;
+                                    }
+                                    lpLevel = *reinterpret_cast<AptValue**>(
+                                        reinterpret_cast<char*>(lpLevel) + 0x1C);     // AnimationAtLevel = *(AnimationAtLevel+28)
+                                    lpNode = *reinterpret_cast<char**>(
+                                        reinterpret_cast<char*>(lpLevel) + 0x20);     // *(AnimationAtLevel+32)
+                                }
+                            }
+                            lpScope = *reinterpret_cast<AptCharacterInst**>(
+                                reinterpret_cast<char*>(lpLevel) + 0x20);             // v12 = *(AnimationAtLevel+32)
+                        }
+
+                        // FLAG: action.miEventId (value word +0x0C of the slot) is a
+                        // pointer to the clip-event action stream; the X360 dereferences
+                        // it (`**(v3+12)`) to get the byte stream the interpreter runs.
+                        const unsigned char* lpStream =
+                            *reinterpret_cast<const unsigned char**>(
+                                reinterpret_cast<char*>(&lpSlot->action.miEventId));  // v4_arg = *(*(v3+12))
+                        gAptActionInterpreter.runStream(
+                            lpStream,
+                            reinterpret_cast<AptCIH*>(lpSlot->action.mpCIH),          // *(v3+16)
+                            -1,
+                            lpScope);
+
+                        // CleanupAfterExecution(savedScratch=v7, localState=v19): the
+                        // recovered class method takes only the saved per-call state, so
+                        // the scratch-heap restore the console does through r4 is
+                        // reproduced inline here. FLAG (reconciliation): split of the
+                        // X360's 2-arg CleanupAfterExecution.
+                        gAptParseArgHeapPtr = lpSavedHeap;
+                        AptScriptFunctionBase::SavedExecutionState lvLocalState;       // v19[80]
+                        gAptActionInterpreter.CleanupAfterExecution(&lvLocalState);
+
+                        TickNewInsts();
+                    }
+                }
+            }
+        }
+        else if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_FUNCTION)   // *v3 == 2
+        {
+            gAptActionInterpreter.field_48[0] = static_cast<u32>(lpSlot->function.miArgCount);  // dword_8324E7A8 = *(v3+4)
+
+            // Push the call context onto the interpreter's CIH/target stack (the X360
+            // stamps it then AddRefs it via vtbl[0]). v13 = *(v3+8) == function.mpContext.
+            AptValue* lpContext = lpSlot->function.mpContext;                         // *(v3+8)
+            gAptActionInterpreter.mpCIHStack[gAptActionInterpreter.mnCIHStackTop] =
+                reinterpret_cast<AptCIH*>(lpContext);
+            ++gAptActionInterpreter.mnCIHStackTop;
+            lpContext->AddRef();  // (**v13)(v13) vtbl[0] AddRef
+
+            // Snapshot + reset the parse-arg scratch heap, then call the closure.
+            char* lpSavedHeap = gAptParseArgHeapPtr;                                  // v14
+            gAptParseArgHeapPtr += 4 * gAptParseArgHeapCount;
+            gAptParseArgHeapCount = 0;
+
+            gAptActionInterpreter.callFunction(
+                lpSlot->function.mpContext,    // a2 == *(v3+8)  (scope/this)
+                lpSlot->function.mpFuncDef,    // a3 == *(v3+12) (function def)
+                lpSlot->function.miReturnReg,  // a4 == *(v3+16) (arg count / return reg)
+                nullptr,
+                nullptr);
+
+            gAptParseArgHeapPtr = lpSavedHeap;
+            AptScriptFunctionBase::SavedExecutionState lvLocalState;                  // v19[80]
+            gAptActionInterpreter.CleanupAfterExecution(&lvLocalState);
+
+            // Pop the pushed context off the CIH/target stack, then the operand stack.
+            reinterpret_cast<AptValueVector*>(
+                &gAptActionInterpreter.mnCIHStackTop)->pop();   // AptValue_::pop(&dword_8324E784)
+            reinterpret_cast<AptValueVector*>(
+                &gAptActionInterpreter.mnStackTop)->pop();      // AptValue_::Pop(&dword_8324E760)
+        }
+
+        // After a run leaves stray operands, drop the top one.
+        if (gAptActionInterpreter.mnStackTop > 0)
+        {
+            reinterpret_cast<AptValueVector*>(&gAptActionInterpreter.mnStackTop)->pop();
+        }
+
+        // Re-test whether the cursor is still within [front, back) (the queue may have
+        // wrapped or been mutated by the run); if it stepped out, stop. This mirrors the
+        // X360's IsLastItemOrBeyond-style ring-bounds test reading the live front/back.
+        const AptAnimationPoolData* lpFront = lpQueue->mpFront;   // v15 = v2[1]
+        const AptAnimationPoolData* lpBack  = lpQueue->mpBack;    // v16 = v2[2]
+        bool lbBeyond;
+        if (lpFront > lpBack)
+        {
+            lbBeyond = !(lpSlot < lpBack || lpSlot >= lpFront);   // v17
+        }
+        else
+        {
+            lbBeyond = (lpSlot >= lpBack);
+        }
+        if (lbBeyond)
+        {
+            break;
+        }
+
+        // Advance to the next ring slot, wrapping at the (capacity+1)th slot back to begin.
+        ++lpSlot;                                                 // v3 += 20
+        if (lpSlot == lpQueue->mpBegin + lpQueue->mnCapacity)     // == 20*v2[4] + *v2
+        {
+            lpSlot = lpQueue->mpBegin;
+        }
+    }
+
+    TickNewInsts();
+    lpQueue->ClearActions();
+    CleanRemList();
+    return reinterpret_cast<intptr_t>(this);   // X360 returns r3 (result of CleanRemList path)
+}
+
+// ---------------------------------------------------------------------------
+// TickIntervalTimers @ 0x82AEAD00
+//   Advance every armed interval timer by the frame delta (nDeltaMs). When a timer's
+//   countdown crosses zero, fire it: if its callback is still a live, defined script
+//   function bound to a live char inst, push the saved param values onto the
+//   interpreter operand stack, re-arm the countdown (+= mfInterval), invoke the
+//   callback through the interpreter, and Release it (setInterval -> keeps running);
+//   otherwise (the callback/context died) Release the callback + context, drain the
+//   param stack, and disarm the slot (setTimeout / dead callback -> tear down).
+//   Returns the last fired/torn-down result (X360 returns r3).
+//
+//   FLAG (un-homed value/char-inst layouts): the callback value's type tag
+//   (mnValueData low 7 bits) / "defined" bit (bit 27) / bound char inst (value word
+//   +0x20), and that char inst's "dead" 0x3C type form (charInst word +8 top 6 bits),
+//   are interpreter-private value subtypes reproduced through the recovered offsets.
+// ---------------------------------------------------------------------------
+int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
+{
+    int liResult = reinterpret_cast<intptr_t>(this);   // result = r3 (this) until a branch sets it
+
+    for (u32 liTimer = 0; liTimer < mnNumIntervalTimers; ++liTimer)   // v20 < *(v7+4)
+    {
+        AptIntervalTimer& lrTimer = mpIntervalTimers[liTimer];        // v10 + *(v7+36)
+        if (lrTimer.mpActiveValue == nullptr)                         // *(v10 + ...) == 0
+        {
+            continue;
+        }
+
+        // Subtract the frame delta (as a float) from the countdown; only fire when it
+        // crosses below zero.
+        lrTimer.mfElapsed -= static_cast<f32>(nDeltaMs);             // *(v11+12) -= (float)a2
+        if (lrTimer.mfElapsed >= 0.0f)                               // < 0.0 fires
+        {
+            continue;
+        }
+
+        AptValue* lpCB = lrTimer.mpCBFunction;                       // v13 = v12[1]
+        const u32 lnCBBits = reinterpret_cast<AptCIH*>(lpCB)->mnValueData;   // *(v13+4)
+        const int liCBType = static_cast<int>((lnCBBits << 25) >> 25);      // (v14<<25)>>25 low 7 bits, sign-ext
+
+        // The callback is a defined script function (type {34..36}, bit 27 set)?
+        const bool lbScriptFn =
+            (static_cast<u32>(liCBType - 34) <= 2u) && (((lnCBBits >> 27) & 1u) != 0u);   // v16
+        // FLAG: a script function's bound char inst lives at value word +0x20.
+        AptValue* lpBound = lbScriptFn
+            ? *reinterpret_cast<AptValue**>(reinterpret_cast<char*>(lpCB) + 0x20)   // v17 = *(v13+32)
+            : nullptr;
+
+        // Fire condition: either the callback itself is a defined movie-clip(9) value,
+        // or it has a live bound char inst that is defined and not the dead 0x3C form.
+        const bool lbCBIsLiveClip =
+            (liCBType == 9) && (((lnCBBits >> 27) & 1u) != 0u);   // v18
+        bool lbFire = lbCBIsLiveClip;
+        if (!lbFire && lpBound != nullptr)
+        {
+            const u32 lnBoundBits = reinterpret_cast<AptCIH*>(lpBound)->mnValueData;   // v17[1]
+            if (((lnBoundBits >> 27) & 1u) != 0u)
+            {
+                char* lpBoundInst =
+                    *reinterpret_cast<char**>(reinterpret_cast<char*>(lpBound) + 0x20);  // v17[8]
+                lbFire = (static_cast<u32>(*reinterpret_cast<int*>(lpBoundInst + 8)) & 0xFC000000u)
+                         != 0x3C000000u;
+            }
+        }
+
+        if (lbFire)
+        {
+            // The call "this": the timer's explicit context (mpContext) unless it is the
+            // None sentinel, in which case the bound char-inst value stands in.
+            if (lrTimer.mpContext != gpAptNoneValue)            // v12[4] != off_8324D814
+            {
+                lpBound = lrTimer.mpContext;                    // v17 = v12[4]
+            }
+            const int liArgCount = lrTimer.mParams.mnTop;       // v20 = v12[5]
+            lpBound->AddRef();   // (**v17)(v17) vtbl[0] AddRef
+
+            // Snapshot + reset the parse-arg scratch heap for the call.
+            char* lpSavedHeap = gAptParseArgHeapPtr;            // v22
+            gAptParseArgHeapPtr += 4 * gAptParseArgHeapCount;
+            gAptParseArgHeapCount = 0;
+
+            // Push the saved params (top-down) onto the interpreter operand stack,
+            // AddRef-ing each (the stack owns a counted ref).
+            for (int liParam = 0; liParam < liArgCount; ++liParam)   // v21 < v20
+            {
+                AptValue* lpParam =
+                    lrTimer.mParams.mppItems[lrTimer.mParams.mnTop - liParam - 1];   // *(4*(top-i-1)+items)
+                gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop] = lpParam;
+                ++gAptActionInterpreter.mnStackTop;
+                lpParam->AddRef();  // (**v23)(v23) vtbl[0] AddRef
+            }
+
+            // Re-arm the countdown (mfElapsed += mfInterval).
+            lrTimer.mfElapsed = lrTimer.mfInterval + lrTimer.mfElapsed;   // *(...+12) = *(...+8) + *(...+12)
+
+            gAptActionInterpreter.callFunction(
+                lpBound,                  // a2 == v17 (this/scope)
+                lpCB,                     // a3 == v13 (the callback function)
+                liArgCount,               // a4 == v20 (arg count)
+                nullptr,
+                nullptr);
+
+            gAptParseArgHeapPtr = lpSavedHeap;
+            AptScriptFunctionBase::SavedExecutionState lvLocalState;   // v26[8]
+            gAptActionInterpreter.CleanupAfterExecution(&lvLocalState);
+
+            // Pop every operand the call left on the stack.
+            gAptActionInterpreter.stackSafePop(gAptActionInterpreter.mnStackTop);  // Burnout_X360_Artist_01e3_0
+
+            // mr r3, r29 (lpBound) is set before the Release branch, so r3/result
+            // carries the value pointer across the void Release (vtbl[1], +4).
+            liResult = reinterpret_cast<intptr_t>(lpBound);
+            lpBound->Release();
+        }
+        else
+        {
+            // Dead callback / setTimeout: Release the callback + (optional) context,
+            // drain the param stack, and disarm the slot.
+            AptValue* lpCb2 = lrTimer.mpCBFunction;             // v24 = *(...+4)
+            lpCb2->Release();   // vtbl[1] (+4) Release
+            if (lrTimer.mpContext != nullptr)                   // *(...+16)
+            {
+                AptValue* lpCtx = lrTimer.mpContext;            // v25
+                lpCtx->Release();   // vtbl[1] (+4) Release
+            }
+            lrTimer.CleanParams();
+            liResult = reinterpret_cast<intptr_t>(this);
+            lrTimer.mpActiveValue = nullptr;                    // *(...) = 0
         }
     }
 
