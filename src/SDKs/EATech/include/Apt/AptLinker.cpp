@@ -31,7 +31,10 @@ extern AptActionInterpreter gAptActionInterpreter;            // &dword_8324E760
 // true when the requested name must NOT be linked (a special/non-file name; the
 // AptFileSavedInputState name test the saved-input TU also names). Verbatim IDA
 // symbol; body its own TU.
-bool Burnout_X360_Artist_0040_0(int nLevel, EAStringC* pName);
+// (Verified against the asm @0x82AD85D8: BOTH params are EAStringC* -- the body
+//  dereferences each as a string (length@+2, buffer@+8) and compares them; it is a
+//  string-equality test, NOT an int-level argument.)
+bool Burnout_X360_Artist_0040_0(EAStringC* pName, EAStringC* pReference);
 
 // FLAG (un-homed AptCIH behavioural surface): set the character instance on a CIH
 // (@0x82B00548) and tick it (@0x82B0BED8). Declared so Update/ConvertToZombie
@@ -72,7 +75,7 @@ void ListErase(AptSingleListNode** ppHead, AptSingleListNode** ppNode);
 
 // FLAG (un-homed ctor/alloc helpers; bodies their own TUs):
 AptLinkerThingy*           MakeLinkerThingy(AptFilePtr& rFile, AptValue* pValue);   // ctor @0x82ADBF58
-AptFile*                   MakeAptFile(void* pMem, int nLevel);                     // AptFile::AptFile @0x82AE6268
+AptFile*                   MakeAptFile(void* pMem, EAStringC* pName);               // AptFile::AptFile @0x82AE6268 (a2 = the .apt name)
 AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile);             // ctor @0x82AFFDE8
 void InstallEmptyCharacterInstVtbl(AptCharacterInst* pInst);                        // *inst = &off_82145FD0
 void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst);                   // dword_8324E530 lazy init
@@ -272,7 +275,7 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
 //   control flow (the lwarx/stwcx. blocks are AptFilePtr AddRef/Release, the
 //   v96/v97/v98/v99 locals are temporary AptFilePtrs).
 // ---------------------------------------------------------------------
-void AptLinker::Load(int nLevel, EAStringC* pFileName)
+void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
 {
     AptCIH* pAnim = AptGetAnimationAtLevel(0);                                       // AptGetAnimationAtLevel(0)
     AptValue* pVar = gAptActionInterpreter.getVariable(pAnim, nullptr, pFileName,
@@ -303,7 +306,7 @@ void AptLinker::Load(int nLevel, EAStringC* pFileName)
 
         // (skipName is an empty RAII EAStringC; the X360 InitFromBuffer + the
         //  manual DecreaseInternalRefCount below are the dtor's job in this model.)
-        const bool bSkip = Burnout_X360_Artist_0040_0(nLevel, &skipName);
+        const bool bSkip = Burnout_X360_Artist_0040_0(pName, &skipName);
 
         if (!bSkip)
         {
@@ -383,7 +386,7 @@ void AptLinker::Load(int nLevel, EAStringC* pFileName)
                 AptFile* pStub = nullptr;
                 void* pMem = gpAptSharedPtrPool->Allocate(28);
                 if (pMem != nullptr)
-                    pStub = MakeAptFile(pMem, nLevel);                       // AptFile::AptFile(mem, a2)
+                    pStub = MakeAptFile(pMem, pName);                        // AptFile::AptFile(mem, a2)
                 if (pStub != nullptr)
                     AptSharedPtrIncRef(pStub);
                 AptFilePtr stubPtr; stubPtr.pData = pStub;
@@ -414,7 +417,7 @@ void AptLinker::Load(int nLevel, EAStringC* pFileName)
                 AptFile* pStub = nullptr;
                 void* pMem = gpAptSharedPtrPool->Allocate(28);
                 if (pMem != nullptr)
-                    pStub = MakeAptFile(pMem, nLevel);
+                    pStub = MakeAptFile(pMem, pName);
                 if (pStub != nullptr) AptSharedPtrIncRef(pStub);
                 pStub->mnField12 = pStub->mnState;                          // *(_R31+12) = *(_R31+8)
                 pStub->mnState   = 6;                                       // *(_R31+8) = 6

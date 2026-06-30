@@ -88,7 +88,7 @@ struct AptLinker
     // @0x82B06660 -- resolve a loadMovie: getVariable(name) for the target CIH,
     // (re)load the AptFile through the loader, and -- when it is ready -- enqueue a
     // notify + an AptLinkerThingy linking that file to the value.
-    void Load(int nLevel, EAStringC* pFileName);   // a2 == level/target id, a3 == name
+    void Load(EAStringC* pName, EAStringC* pFileName);   // a2 == name string (predicate/MakeAptFile), a3 == file resolved+loaded (asm @0x82AD85D8 proves a2 is EAStringC*, not int)
 
     // @0x82B00938 -- record that an AptFile shared ptr should be (un)linked: if the
     // file is already in mPendingFiles drop the incoming ref, else push_back it.
