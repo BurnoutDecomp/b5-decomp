@@ -1,7 +1,44 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 
 #include <cstring>   // memset
+#include <cstdlib>   // malloc / free (the PC heap leaf -- see DOGMA_Malloc below)
 #include <intrin.h>  // _Interlocked* (MSVC)
+
+// ---------------------------------------------------------------------------
+// DOGMA heap leaf primitives -- the bottom of the DOGMA pool allocator.
+//
+// On X360 these are three install-hook function pointers (dword_8324E818 /
+// dword_8324E81C / dword_8324E820) that the boot path points at the active EA
+// general heap; the dispatch is a single indirect call -- DOGMA_Malloc(48) is a
+// plain `malloc(48)` returning an unaligned-but-suitably-aligned block (see
+// AptAllocatorInitialize @ 0x82ADD118, which calls dword_8324E818(48) for the
+// pool-manager objects). The DOGMA_PoolManager above does all the real
+// sub-allocation/free-list bookkeeping; this leaf only has to hand back a raw,
+// at-least-4-byte-aligned block of the requested size and give it back.
+//
+// FLAG (PC boundary): on PC we back the leaf with the C runtime heap directly
+// (the established "PC-IO-at-the-leaf" pattern, as used by the EAStringC
+// bring-up fallback and the NFSMix MixerAllocator). malloc's guaranteed
+// max_align_t alignment (>= 16) comfortably covers DOGMA's per-free-item dword
+// bookkeeping. If/when the EA general heap is wired on PC, these three leaves
+// are the single swap point -- nothing above them changes.
+// ---------------------------------------------------------------------------
+void* DOGMA_Malloc(size_t nSize)
+{
+    return ::malloc(nSize);                  // FLAG: X360 dword_8324E818(size)
+}
+
+void DOGMA_Free(void* pBlock)
+{
+    ::free(pBlock);                          // FLAG: X360 dword_8324E81C(ptr)
+}
+
+void DOGMA_FreeSized(void* pBlock, size_t /*nSize*/)
+{
+    // The size is bookkeeping the X360 hook forwards to a sized-free heap; the C
+    // runtime heap tracks the block size itself, so the leaf ignores it.
+    ::free(pBlock);                          // FLAG: X360 dword_8324E820(ptr, size)
+}
 
 // ===========================================================================
 // DOGMA_PoolManager -- reconstructed from BURNOUT_X360_ARTIST.XEX.

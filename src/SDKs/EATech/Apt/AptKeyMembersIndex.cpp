@@ -1,6 +1,100 @@
 #include <cstddef>
 #include "SDKs/EATech/Apt/AptKeyMembersIndex.h"
 
+// ===========================================================================
+// gperf static data tables -- EXTRACTED from the decrypted X360 ARTIST.XEX
+// .rdata (file_off = 0x3000 + vaddr - 0x82000000, big-endian):
+//     asso_values[256] @ byte_82F723B0
+//     lookup[35]       @ byte_82F78FB4   (signed; direct slot >=0, dup escape <0)
+//     lengths[28]      @ byte_82F78F98   (per-slot expected keyword length)
+//     wordlist[27]     @ off_82F78EC0    (Entry{ const char* name; int data })
+// Every one of the 27 Key-object member names was verified to resolve back to
+// its own slot through the reconstructed in_word_set below (and the dup-keyed
+// pairs DOWN/HOME and PGDN/PGUP route correctly through the {base,count} table).
+//
+// The {base,count} descriptor that the negative lookup[] slots point at stores
+// the run COUNT as a NEGATED value (the X360 computes the run-end pointer as
+// `start - count*8`, i.e. count is subtracted -- see the asm `subf r6,r7,r11`).
+// The dup walk below therefore negates lookup[liDupIndex + 1] to recover the
+// real positive run length.
+// ===========================================================================
+
+// asso_values[256]: per-byte hash contribution. Default 35 (== TOTAL_KEYWORDS+...
+// the gperf "not a key byte" sentinel: a non-key byte at a key position pushes
+// the hash past MAX_HASH_VALUE). Only the bytes at the key positions of the
+// keyword set carry real weights.
+const unsigned char KeyMembersIndex::asso_values[256] =
+{
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35,  0, 35, 25, 35,  5, 35, 15, 10,  5, 35, 20, 35, 35, 15,  0,
+     0, 35, 35,  5,  0, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35,  5, 35,  0,  5,  0, 35, 20, 35,  0, 35, 35, 35, 35,  0,  0,
+    35, 35,  0,  0, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35,
+    35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35
+};
+
+// lookup[35]: hash (0..MAX_HASH_VALUE) -> wordlist slot (>=0), or a negative
+// duplicate-table escape. The dup descriptors are overlaid on the same array
+// (slots 26/27 and 30/31 double as {base,count} pairs for the dup runs).
+const signed char KeyMembersIndex::lookup[35] =
+{
+      -1,   -1,    0,    1,  -58,    4,    5,    6,    7,    8,    9,   -1,
+      10,   11,   12,   13,   14,   15,   16,  -54,   19,   20,   -1,   21,
+      22,   23,  -10,   -2,   24,   25,  -25,   -2,   -1,   -1,   26
+};
+
+// lengths[28]: per-slot expected keyword length (slot order matches wordlist;
+// the trailing 0 is the gperf sentinel). The dup path's interior pointer
+// unk_82F78FB3 indexes into this same array.
+const unsigned char KeyMembersIndex::lengths[28] =
+{
+    2, 3, 4, 4, 5, 6, 7, 8, 4, 5, 7, 13, 14, 5, 11, 7, 3, 4, 4, 5, 6, 18, 9, 20, 8, 9, 9, 0
+};
+
+// wordlist[27]: the Key-object member keywords and their per-member ids (the
+// X360 .data payload consumed by AptKey::objectMemberLookup). Entry stride is
+// 8 bytes (const char*; int), matching the X360 &wordlist[i] arithmetic.
+const KeyMembersIndex::Entry KeyMembersIndex::wordlist[27] =
+{
+    /*  0 */ { "UP",                  18  },
+    /*  1 */ { "TAB",                 17  },
+    /*  2 */ { "DOWN",                5   },
+    /*  3 */ { "HOME",                9   },
+    /*  4 */ { "SPACE",               16  },
+    /*  5 */ { "isDown",              100 },
+    /*  6 */ { "CONTROL",             3   },
+    /*  7 */ { "getAscii",            107 },
+    /*  8 */ { "LEFT",                11  },
+    /*  9 */ { "RIGHT",               14  },
+    /* 10 */ { "getCode",             102 },
+    /* 11 */ { "getController",       103 },
+    /* 12 */ { "removeListener",      105 },
+    /* 13 */ { "SHIFT",               15  },
+    /* 14 */ { "addListener",         104 },
+    /* 15 */ { "ESCAPED",             8   },
+    /* 16 */ { "END",                 6   },
+    /* 17 */ { "PGDN",                12  },
+    /* 18 */ { "PGUP",                13  },
+    /* 19 */ { "ENTER",               7   },
+    /* 20 */ { "INSERT",              10  },
+    /* 21 */ { "getAnalogStickInfo",  106 },
+    /* 22 */ { "DELETEKEY",           4   },
+    /* 23 */ { "getAnalogTriggerInfo",108 },
+    /* 24 */ { "CAPSLOCK",            2   },
+    /* 25 */ { "isToggled",           101 },
+    /* 26 */ { "BACKSPACE",           1   }
+};
+
 // gperf perfect-hash lookup with duplicate-key resolution.
 // Faithful reconstruction of the X360 pseudocode at 0x82AD5FB8. The control flow
 // (length gate, length-gated 3-position hash, direct-vs-duplicate split, per-slot
@@ -94,15 +188,18 @@ KeyMembersIndex::in_word_set( const char* lpcStr, unsigned int luLen )
 
     const int liDupIndex = -( (int)DUP_CUTOFF + 1 ) - liSlot;        // v12 = -28 - v5
     // The X360 reads a {base,count} pair from the overlaid lookup[] table:
-    //   base  = lookup[liDupIndex]      (byte_82F78FB4[v12])
-    //   count = lookup[liDupIndex + 1]  (byte_82F78FB5[v12] == lookup[v12 + 1])
-    // and walks a contiguous run of `count` wordlist entries (stride 8 bytes). It
-    // also walks the parallel lengths[] entries so each candidate's expected length
-    // can be checked before the byte compare.
-    const int          liBase    = lookup[ liDupIndex ];             // v14
-    const int          liCount   = lookup[ liDupIndex + 1 ];         // v13
-    const Entry*       lpEntry   = &wordlist[ DUP_CUTOFF + liBase ]; // v16 = &byte_82F78F98[8*v14] = &wordlist[27 + v14]
-    const Entry*       lpEnd     = lpEntry + liCount;                // v17 = v16 - 8*count region end
+    //   base  = lookup[liDupIndex]       (byte_82F78FB4[v12], sign-extended)
+    //   count = -lookup[liDupIndex + 1]  (byte_82F78FB5[v12] == lookup[v12 + 1])
+    // The run COUNT is stored NEGATED: the asm forms the run-end pointer as
+    // `end = start - count*8` (subf r6,r7,r11), so the real positive run length
+    // is -lookup[liDupIndex + 1]. The walk covers a contiguous run of `count`
+    // wordlist entries (stride 8 bytes); it also walks the parallel lengths[]
+    // entries so each candidate's expected length is checked before the byte
+    // compare.
+    const int          liBase    = lookup[ liDupIndex ];             // v14 (sign-extended)
+    const int          liCount   = -(int)lookup[ liDupIndex + 1 ];   // v13 (stored negated)
+    const Entry*       lpEntry   = &wordlist[ DUP_CUTOFF + liBase ]; // v16 = &wordlist[27 + v14]
+    const Entry*       lpEnd     = lpEntry + liCount;                // v17 = v16 + count
     const unsigned char* lpcLen  = &lengths[ DUP_CUTOFF + liBase ];  // v15 = &unk_82F78FB3 + v14
 
     for ( ; lpEntry < lpEnd; ++lpEntry, ++lpcLen )
