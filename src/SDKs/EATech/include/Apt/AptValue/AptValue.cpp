@@ -173,7 +173,7 @@ AptValue::AptValue(AptVirtualFunctionTable_Indices eType)
     setGCRoot(0);                    // X360 setGCRoot(r4) -- r4 == 0 here (leftover
                                      // from setGCMark's `li r4,0`); a fresh value
                                      // has no GC roots.
-    SetAllowDelayedDeletion(true);
+    SetAllowDelayedDeletion(false);  // X360: r4==0 (leftover from setGCMark's li r4,0) -> false
 
     // X360: the five "no delayed deletion" types skip the deferred-vector path and
     // go straight to ClearReleaseAtEnd.
@@ -219,7 +219,7 @@ AptValue::AptValue(AptVirtualFunctionTable_Indices eType, const CIH_ONLY /*eCIH*
     setIsDefined(true);
     setGCMark(false);
     setGCRoot(0);                    // X360 setGCRoot(r4), r4 == 0 (see base ctor)
-    SetAllowDelayedDeletion(true);
+    SetAllowDelayedDeletion(false);  // X360: r4==0 (leftover from setGCMark's li r4,0) -> false
 
     mValueBitfield.mnMaxRefCountHit = 0u;   // X360 `*(this+4) &= ~0x80` (rlwinm 0,25,23)
 
