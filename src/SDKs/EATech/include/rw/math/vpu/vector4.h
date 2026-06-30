@@ -113,3 +113,4 @@ namespace vpu
 }
 
 #include "SDKs/EATech/include/rw/math/vpu/detail/vector4_type_inline.h"
+#include "SDKs/EATech/include/rw/math/vpu/detail/vector4_operation_inline.h"
