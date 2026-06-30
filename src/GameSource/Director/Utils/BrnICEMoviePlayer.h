@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_UTILS_BRN_ICE_MOVIE_PLAYER_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT (BehaviourHandle::Prepare)
 #include "GameShared/GameClasses/Containers/CgsArray.h"               // Array<T,N> (mMoviePoolIndicies)
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"          // CgsContainers::ObjectPool<T,N,TIndex>
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"     // CgsResource::ID (IceMovie::mCgsID)
@@ -107,16 +108,30 @@ namespace Camera
     };
 
     // A typed handle to a behaviour owned by a BehaviourManager. The player keeps two
-    // (the in/out interpolators). All the player ever needs is to query allocation, reach
-    // the live behaviour, and clear/release through the manager -- modelled with named
+    // (the in/out interpolators) and the arbitrator/moment states each keep their own.
+    // All a holder needs is to query allocation, reach the live behaviour, allocate it
+    // through Prepare, and clear/release through the manager -- modelled with named
     // methods so callers never touch the handle's internals. The trailing storage sizes
     // the handle so it can be embedded by value.
-    // FLAG: minimal slice -- no reconstructed home yet.
+    //
+    // CANONICAL HOME (5-word layout). This is the namespace-level BrnDirector::Camera::
+    // BehaviourHandle<> template: mbAllocated(+0x00), muAllocationKey(+0x04), the behaviour-
+    // lookup helper word(+0x08), mpManager(+0x0C), mpBehaviour(+0x10) -- pinned from the
+    // X360 BehaviourHandle::Prepare @0x8224AFF0 / ::Release @0x8222DD00 asm (which store the
+    // owning manager at +0x0C and the resolved behaviour at +0x10, with the helper word at
+    // +0x08). The arbitrator/moment states inline-duplicate this same five-word layout as a
+    // nested type (BrnArbStateRankUp.h etc.); those nested copies are distinct types and are
+    // left untouched. The movie-player's interpolator handles simply never set the helper
+    // word (default 0).
+    // FLAG: the +0x08 helper word's exact role is not fully recovered (modelled as an opaque
+    //   behaviour-lookup helper index, matching the arbitrator-state copies).
     template <typename TBehaviour>
     class BehaviourHandle
     {
     public:
-        BehaviourHandle() : mbAllocated(false), muAllocationKey(0), mpManager(0), mpBehaviour(0) {}
+        BehaviourHandle()
+            : mbAllocated(false), muAllocationKey(0), muHelperIndex(0),
+              mpManager(0), mpBehaviour(0) {}
 
         // True when this handle currently owns an allocated behaviour.
         bool IsAllocated() const { return mbAllocated; }
@@ -127,14 +142,35 @@ namespace Camera
         // The live behaviour (only valid while IsAllocated()).
         TBehaviour* GetBehaviour() const { return mpBehaviour; }
 
+        // Allocate this handle onto a freshly-reserved behaviour. X360-attested
+        // (BehaviourHandle::Prepare @0x8224AFF0, called from BehaviourManager::NewBehaviour):
+        // release any behaviour the handle already holds, record the allocation key / helper /
+        // manager, mark allocated, register the manager-side hold, then resolve and cache the
+        // live behaviour pointer from the manager pool. Always returns true. Body out-of-line
+        // below (needs BehaviourManager complete).
+        bool Prepare(u32 luAllocationKey, u32 luHelperIndex, BehaviourManager* lpManager);
+
+        // Drop the manager-side hold on the behaviour and clear the handle back to empty.
+        // X360-attested (BehaviourHandle::Release @0x8222DD00, called from
+        // MomentHardStop::Update). Always returns true. Body out-of-line below.
+        bool Release();
+
         // Drop the handle to its empty state (the player clears it after releasing).
-        void Clear() { mbAllocated = false; muAllocationKey = 0; mpManager = 0; mpBehaviour = 0; }
+        void Clear()
+        {
+            mbAllocated     = false;
+            muAllocationKey = 0;
+            muHelperIndex   = 0;
+            mpManager       = 0;
+            mpBehaviour     = 0;
+        }
 
     private:
         bool              mbAllocated;     // +0x00  owns a behaviour
         u32               muAllocationKey; // +0x04  manager-side allocation key
-        BehaviourManager* mpManager;       // +0x08  owning manager
-        TBehaviour*       mpBehaviour;     // +0x0C  resolved behaviour
+        u32               muHelperIndex;   // +0x08  behaviour-lookup helper (FLAG: role not recovered)
+        BehaviourManager* mpManager;       // +0x0C  owning manager
+        TBehaviour*       mpBehaviour;     // +0x10  resolved behaviour
     };
 
     // The owner of all live camera behaviours. The player allocates / releases its two
@@ -166,6 +202,25 @@ namespace Camera
         void UnSetBehaviourUsedByHandle(u32 luAllocationKey);
         void CheckNoBehavioursAreAllocatedByState(const void* lpState);
 
+        // Re-assert the manager-side hold a freshly-allocated handle has on its behaviour,
+        // identified by the handle's allocation key. The complement of
+        // UnSetBehaviourUsedByHandle. X360-attested (called from BehaviourHandle::Prepare
+        // @0x8224B054 with this == the handle's owning manager and the allocation key in r4).
+        // DECLARATION-ONLY (body lands with the BehaviourManager TU).
+        void SetBehaviourUsedByHandle(u32 luAllocationKey);
+
+        // Resolve the manager-pool slot a handle's (helper word, allocation key) names, so the
+        // handle can cache the live behaviour pointer it holds. X360-attested
+        // (BehaviourHandle::Prepare @0x8224B08C calls the pool resolve with the helper word in
+        // r3 and the allocation key in r4, then dereferences the returned slot; the pool
+        // asserts the slot is allocated -- BrnBehaviourManager.h:589). The X360 passes the
+        // helper word as the first argument (NOT a manager `this`), so this is a static lookup;
+        // it returns the address of the slot holding the behaviour pointer. DECLARATION-ONLY
+        // (body lands with the BehaviourManager TU). FLAG: the helper word's role is not fully
+        // recovered (see BehaviourHandle).
+        template <typename TBehaviour>
+        static TBehaviour** GetBehaviourSlotFromHandle(u32 luHelperIndex, u32 luAllocationKey);
+
         // Whether the behaviour a handle owns (identified by its allocation key) is still
         // queued for its first Prepare (i.e. not yet ready to use). X360-attested
         // (BrnBehaviourManager.h:517 -- the BehaviourHandle's "is the behaviour ready?" query
@@ -190,6 +245,63 @@ namespace Camera
     // Trap-stub-free declaration only: the template body is never defined here (the real body
     // lands with the BehaviourManager TU). Naming it as a template lets the per-TU gate emit a
     // call without an inline definition; nothing instantiates a body in this header.
+
+    // ------------------------------------------------------------------------
+    // BehaviourHandle::Prepare @0x8224AFF0 -- bind this handle onto a freshly-reserved
+    // behaviour. Defined out-of-line here, where BehaviourManager is complete.
+    //
+    // X360 control flow (asm @0x8224AFF0): if the handle already owns a behaviour, release the
+    // existing manager-side hold and clear the inner slots first; record the new allocation
+    // key / helper word / manager and mark allocated; re-assert the manager-side hold; assert
+    // IsAllocated() (BrnBehaviourManager.h:589); then resolve the live behaviour pointer from
+    // the manager pool through (helper word, allocation key) and cache it. Always returns true.
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    bool BehaviourHandle<TBehaviour>::Prepare(u32 luAllocationKey, u32 luHelperIndex,
+                                              BehaviourManager* lpManager)
+    {
+        if (mbAllocated)
+        {
+            mpManager->UnSetBehaviourUsedByHandle(muAllocationKey);
+            muHelperIndex = 0;
+            mpManager     = 0;
+            mpBehaviour   = 0;
+            mbAllocated   = false;
+        }
+
+        muAllocationKey = luAllocationKey;
+        muHelperIndex   = luHelperIndex;
+        mpManager       = lpManager;
+        mbAllocated     = true;
+
+        mpManager->SetBehaviourUsedByHandle(muAllocationKey);
+
+        CGS_ASSERT(mbAllocated, "IsAllocated()");
+
+        mpBehaviour =
+            *BehaviourManager::GetBehaviourSlotFromHandle<TBehaviour>(muHelperIndex, muAllocationKey);
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHandle::Release @0x8222DD00 -- drop the manager-side hold and clear the handle
+    // back to its empty state. Defined out-of-line here, where BehaviourManager is complete.
+    // X360 control flow (asm @0x8222DD00): only acts when the handle currently owns a behaviour
+    // (mbAllocated); otherwise a no-op. Always returns true.
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    bool BehaviourHandle<TBehaviour>::Release()
+    {
+        if (mbAllocated)
+        {
+            mpManager->UnSetBehaviourUsedByHandle(muAllocationKey);
+            muHelperIndex = 0;
+            mpManager     = 0;
+            mpBehaviour   = 0;
+            mbAllocated   = false;
+        }
+        return true;
+    }
 }
 
 // ----------------------------------------------------------------------------
