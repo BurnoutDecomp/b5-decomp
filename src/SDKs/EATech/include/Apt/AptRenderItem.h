@@ -35,7 +35,7 @@
 struct AptCharacter;
 struct AptMatrix;
 struct AptCXForm;
-struct AptRenderingContext;
+class AptRenderingContext;
 enum AptMaskRenderOperation : int;   // values reconstructed with the render path (FLAG)
 
 // FLAG (homed elsewhere): the shared identity transforms returned when an item

@@ -1603,8 +1603,9 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
 // the now-homed method so there is a single definition.
 // ===========================================================================
 
-// AptCIH_tick -- AptCIH::tick @0x82B0BED8 (homed in AptCIH.cpp).
-void AptCIH_tick(AptCIH* pCIH) { pCIH->tick(); }
+// AptCIH_tick -- AptCIH::tick @0x82B0BED8 (homed in AptCIH.cpp). Returns int (tick's
+// enterFrame-stage result the AptDisplayList walk OR-s into nResult).
+int AptCIH_tick(AptCIH* pCIH) { return pCIH->tick(); }
 
 // AptCIH_GeneralisedProcess -- AptCIH::GeneralisedProcess per-node. The AptDisplayList
 // walk passes (node, nFlags) where nFlags is the walk's `a2` (the root context pointer

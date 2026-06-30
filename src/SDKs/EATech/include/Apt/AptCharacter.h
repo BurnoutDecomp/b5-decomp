@@ -35,7 +35,7 @@
 #include <cstdint>
 
 struct AptFile;   // SDKs/EATech/include/Apt/AptFile.h (mpAnimationFile is an AptFile*)
-struct AptRenderingContext;
+class AptRenderingContext;
 enum AptMaskRenderOperation : int;
 
 struct AptCharacter

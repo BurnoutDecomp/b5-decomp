@@ -30,7 +30,7 @@
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"
 
 struct AptCharacter;
-struct AptRenderingContext;
+class AptRenderingContext;
 enum AptMaskRenderOperation : int;
 
 struct AptRenderItemMorph : public AptRenderItem

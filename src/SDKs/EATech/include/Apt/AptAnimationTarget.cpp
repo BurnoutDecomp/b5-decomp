@@ -206,7 +206,7 @@ extern void (*gpAptGCTableFree)(void* p, unsigned nBytes);                      
 // FLAG (un-homed AptCIH behavioural TU): per-frame tick of a freshly-created node.
 // AptCIH::tick @0x... is behavioural surface owned by AptCIHBehaviour.cpp; declared
 // as a free-function shim (the X360 calls it with the CIH in r3) so TickNewInsts links.
-extern void AptCIH_tick(AptCIH* pCIH);
+extern int AptCIH_tick(AptCIH* pCIH);
 
 // FLAG (un-homed AptCIH behavioural TU): queue a clip-event against a CIH. The X360
 // calls AptCIH::queueClipEvents(pCIH, nEventMask, nPacked, bDeferred) -> AptValue*;
