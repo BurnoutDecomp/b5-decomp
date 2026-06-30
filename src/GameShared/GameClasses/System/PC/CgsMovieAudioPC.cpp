@@ -10,6 +10,7 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -42,7 +43,9 @@ namespace
     const int kPacketBytes = 2048;
     const int kPacketBits  = kPacketBytes * 8;
     const int kPacketHeaderBits = 32;
-    const int kSampleRate  = 48000;
+    // Set per-stream from the SNR header. The video logos are 48 kHz; the rest are
+    // 44.1 kHz. Defaults to 48 kHz for the SNR-less fallback path.
+    int       g_sampleRate  = 48000;
 
     std::uint32_t ReadBe24(const std::uint8_t* p) {
         return (std::uint32_t(p[0]) << 16) | (std::uint32_t(p[1]) << 8) | std::uint32_t(p[2]);
@@ -52,30 +55,74 @@ namespace
                (std::uint32_t(p[2]) << 8) | std::uint32_t(p[3]);
     }
 
+    struct RestoredXma {
+        std::vector<std::uint8_t> packets;
+        std::size_t samples;
+    };
+
     // EA blocked stream -> contiguous, 2048-aligned XMA2 packets.
     // [u8 flags][u24 block_size][u32 samples][u32 pseudo_size][XMA bytes @ +12]
-    std::vector<std::uint8_t> RestorePackets(const std::vector<std::uint8_t>& sns) {
-        std::vector<std::uint8_t> packets;
+    RestoredXma RestorePackets(const std::vector<std::uint8_t>& sns) {
+        RestoredXma restored;
+        restored.samples = 0;
         std::size_t offset = 0;
         while (offset < sns.size()) {
             if (sns.size() - offset < 12) throw std::runtime_error("truncated EA block header");
             const std::uint8_t  flags      = sns[offset];
             const std::uint32_t block_size = ReadBe24(&sns[offset + 1]);
             if (block_size < 12 || block_size > sns.size() - offset) throw std::runtime_error("bad EA block size");
+            const std::uint32_t samples      = ReadBe32(&sns[offset + 4]);
             const std::uint32_t pseudo_size  = ReadBe32(&sns[offset + 8]);
             const std::size_t   subblock_size = pseudo_size / 4;
             if (subblock_size < 4 || subblock_size > block_size - 8) throw std::runtime_error("bad EA XMA subblock");
             const std::size_t   data_size = subblock_size - 4;
             const std::uint8_t* source    = &sns[offset + 12];
-            packets.insert(packets.end(), source, source + data_size);
+            restored.packets.insert(restored.packets.end(), source, source + data_size);
             const std::size_t padded = (data_size + kPacketBytes - 1) / kPacketBytes * kPacketBytes;
-            packets.insert(packets.end(), padded - data_size, 0xFF);
+            restored.packets.insert(restored.packets.end(), padded - data_size, 0xFF);
+            restored.samples += samples;
             offset += block_size;
             if ((flags & 0x80) != 0) break;
         }
-        if (packets.empty() || packets.size() % kPacketBytes != 0)
+        if (restored.packets.empty() || restored.packets.size() % kPacketBytes != 0)
             throw std::runtime_error("restored XMA not packet aligned");
-        return packets;
+        return restored;
+    }
+
+    // The SNR (GenericRwacWaveContent) resource that pairs with the streamed .SNS.
+    // On X360 the game looks this up by hashed name; here it is staged next to the
+    // .SNS (same base name, ".SNR" extension). It carries the real channel count,
+    // sample rate and total sample count, plus a *prefetched* inline chunk of XMA
+    // holding the first ~0.3 s of audio (the attack) -- which is NOT in the .SNS.
+    // Decoding the .SNS alone therefore drops the attack; the prefetch must be
+    // prepended. Layout: [0x00] 16B wrapper, [0x10] EAAC header (codec/ch/rate,
+    // type/num_samples), [0x18] prefetch_samples + prefetch_size, [0x28] XMA data.
+    struct SnrHeader {
+        int channels = 0;
+        int sampleRate = 0;
+        std::uint32_t numSamples = 0;
+        std::vector<std::uint8_t> prefetch;   // raw inline XMA bytes
+        bool valid = false;
+    };
+
+    SnrHeader ParseSnr(const std::vector<std::uint8_t>& d) {
+        SnrHeader h;
+        const std::size_t kBase = 0x10;        // skip 16-byte resource wrapper
+        const std::size_t kDataOffset = 0x28;  // wrapper + EAAC(8) + extended(16)
+        if (d.size() < kDataOffset) return h;
+        const std::uint32_t h1 = ReadBe32(&d[kBase]);
+        const std::uint32_t h2 = ReadBe32(&d[kBase + 4]);
+        const int codec = int((h1 >> 24) & 0xF);
+        if (codec != 3) return h;              // 3 == EA-XMA
+        h.channels   = int((h1 >> 18) & 0x3F) + 1;
+        h.sampleRate = int(h1 & 0x3FFFF);
+        h.numSamples = h2 & 0x1FFFFFFF;
+        const std::uint32_t prefetchSize = ReadBe32(&d[kBase + 12]);  // 0x1c
+        const std::size_t avail = d.size() - kDataOffset;
+        const std::size_t bytes = std::min<std::size_t>(prefetchSize, avail);
+        h.prefetch.assign(d.begin() + kDataOffset, d.begin() + kDataOffset + bytes);
+        h.valid = true;
+        return h;
     }
 
     std::uint32_t ReadBits(const std::uint8_t* data, std::size_t bit, unsigned n) {
@@ -91,6 +138,13 @@ namespace
 
     struct FrameBits { std::vector<std::uint8_t> bits; };
 
+    std::size_t ReadFrameLength(const std::vector<std::uint8_t>& bits) {
+        std::size_t frame_bits = 0;
+        for (unsigned i = 0; i < 15; ++i)
+            frame_bits = (frame_bits << 1) | bits[i];
+        return frame_bits;
+    }
+
     std::vector<FrameBits> ExtractFrames(const std::vector<std::uint8_t>& packets) {
         std::vector<FrameBits> frames;
         std::vector<std::uint8_t> partial;
@@ -104,19 +158,32 @@ namespace
             if (!partial.empty()) {
                 const std::size_t available = kPacketBits - bit_offset;
                 const bool continuation_only = continuation_bits >= available;
-                std::size_t copied = std::min<std::size_t>(continuation_bits, available);
-                if (expected_partial_bits != 0)
-                    copied = std::min(copied, expected_partial_bits - partial.size());
-                AppendBits(partial, packet, bit_offset, copied);
-                bit_offset += copied;
-                if (expected_partial_bits == 0 && partial.size() >= 15) {
-                    expected_partial_bits = 0;
-                    for (unsigned i = 0; i < 15; ++i)
-                        expected_partial_bits = (expected_partial_bits << 1) | partial[i];
+                const std::size_t continuation_payload =
+                    std::min<std::size_t>(continuation_bits, available);
+                std::size_t copied = 0;
+                if (expected_partial_bits == 0 && partial.size() < 15) {
+                    const std::size_t needed = 15 - partial.size();
+                    const std::size_t chunk = std::min(needed, continuation_payload);
+                    AppendBits(partial, packet, bit_offset, chunk);
+                    bit_offset += chunk;
+                    copied += chunk;
+                    if (partial.size() == 15)
+                        expected_partial_bits = ReadFrameLength(partial);
+                }
+                if (expected_partial_bits != 0) {
+                    if (partial.size() > expected_partial_bits)
+                        throw std::runtime_error("split XMA frame length mismatch");
+                    const std::size_t needed = expected_partial_bits - partial.size();
+                    const std::size_t chunk = std::min(needed, continuation_payload - copied);
+                    AppendBits(partial, packet, bit_offset, chunk);
+                    bit_offset += chunk;
+                    copied += chunk;
                 }
                 if (expected_partial_bits == 0 || partial.size() > expected_partial_bits)
                     throw std::runtime_error("split XMA frame length mismatch");
                 if (partial.size() < expected_partial_bits) continue;
+                if (!continuation_only && copied != continuation_payload)
+                    throw std::runtime_error("XMA continuation overran completed frame");
                 frames.push_back({std::move(partial)});
                 partial.clear();
                 expected_partial_bits = 0;
@@ -139,13 +206,22 @@ namespace
                 frames.push_back(std::move(frame));
                 bit_offset += frame_bits;
                 if (!more_frames) break;
+                if (bit_offset + 15 > (std::size_t)kPacketBits) {
+                    const std::size_t remaining = kPacketBits - bit_offset;
+                    if (remaining != 0) {
+                        AppendBits(partial, packet, bit_offset, remaining);
+                        expected_partial_bits = 0;
+                    }
+                    break;
+                }
             }
         }
         return frames;   // a truncated trailing partial is tolerated (HW priming tail)
     }
 
     // Decode all extracted frames through the FFmpeg xmaframes leaf into stereo s16.
-    std::vector<std::int16_t> DecodeAll(const std::vector<FrameBits>& frames, int source_channels) {
+    std::vector<std::int16_t> DecodeAll(const std::vector<FrameBits>& frames, int source_channels,
+                                        std::size_t exact_samples) {
         std::vector<std::int16_t> pcm;
         const AVCodec* codec = avcodec_find_decoder(AV_CODEC_ID_XMAFRAMES);
         if (codec == nullptr) { AUDIO_LOG << "[MovieAudio] no xmaframes decoder in this FFmpeg build\n"; return pcm; }
@@ -154,7 +230,7 @@ namespace
         AVFrame* frame  = av_frame_alloc();
         AVPacket* packet = av_packet_alloc();
         if (!ctx || !frame || !packet) { AUDIO_LOG << "[MovieAudio] FFmpeg alloc failed\n"; return pcm; }
-        ctx->sample_rate = kSampleRate;
+        ctx->sample_rate = g_sampleRate;
         av_channel_layout_default(&ctx->ch_layout, source_channels);
         if (avcodec_open2(ctx, codec, nullptr) < 0) {
             AUDIO_LOG << "[MovieAudio] avcodec_open2(xmaframes) failed\n";
@@ -189,6 +265,11 @@ namespace
             av_frame_unref(frame);
         }
         av_packet_free(&packet); av_frame_free(&frame); avcodec_free_context(&ctx);
+        const std::size_t wanted_values = exact_samples * 2;
+        if (pcm.size() < wanted_values)
+            pcm.resize(wanted_values, 0);
+        else if (pcm.size() > wanted_values)
+            pcm.resize(wanted_values);
         AUDIO_LOG << "[MovieAudio] decoded " << (int)(frames.size() - failed) << "/" << (int)frames.size()
                   << " XMA frames -> " << (int)(pcm.size() / 2) << " samples\n";
         return pcm;
@@ -229,11 +310,57 @@ bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
     std::fclose(lpFile);
     if (lRead != sns.size()) { AUDIO_LOG << "[MovieAudio] short read: " << lpSnsPath << "\n"; return false; }
 
+    // Load the matching SNR (GenericRwacWaveContent) staged next to the .SNS
+    // (same base name, ".SNR"). It supplies the prefetched attack plus the
+    // authoritative channels / sample rate / total length. Without it the first
+    // ~0.3 s (the attack) is missing, since that audio lives only in the SNR.
+    g_sampleRate     = 48000;            // default for the SNR-less fallback
+    int       liDecodeChannels = liChannels;
+    SnrHeader snr;
+    {
+        std::string lSnrPath(lpSnsPath);
+        const std::size_t lDot = lSnrPath.find_last_of('.');
+        if (lDot != std::string::npos) lSnrPath.resize(lDot);
+        lSnrPath += ".SNR";
+        std::FILE* lpSnr = std::fopen(lSnrPath.c_str(), "rb");
+        if (lpSnr) {
+            std::fseek(lpSnr, 0, SEEK_END); long lSnrSize = std::ftell(lpSnr); std::fseek(lpSnr, 0, SEEK_SET);
+            if (lSnrSize > 0) {
+                std::vector<std::uint8_t> lSnrData(static_cast<std::size_t>(lSnrSize));
+                if (std::fread(lSnrData.data(), 1, lSnrData.size(), lpSnr) == lSnrData.size())
+                    snr = ParseSnr(lSnrData);
+            }
+            std::fclose(lpSnr);
+        }
+        if (snr.valid) {
+            g_sampleRate     = snr.sampleRate;
+            liDecodeChannels = snr.channels;
+            AUDIO_LOG << "[MovieAudio] SNR " << lSnrPath.c_str() << " ch=" << snr.channels
+                      << " rate=" << snr.sampleRate << " samples=" << (int)snr.numSamples
+                      << " prefetch=" << (int)snr.prefetch.size() << "B\n";
+        } else {
+            AUDIO_LOG << "[MovieAudio] no SNR for " << lpSnsPath
+                      << " -- decoding .SNS only (attack may be clipped)\n";
+        }
+    }
+
     std::vector<std::int16_t> pcm;
     try {
-        const std::vector<std::uint8_t> packets = RestorePackets(sns);
-        const std::vector<FrameBits>    frames  = ExtractFrames(packets);
-        pcm = DecodeAll(frames, liChannels);
+        RestoredXma restored = RestorePackets(sns);
+        std::size_t lTargetSamples = restored.samples;
+        // Prepend the SNR's inline prefetch (the attack) so the decode covers the
+        // whole sound; prefetch + body form one continuous XMA packet stream.
+        if (snr.valid && !snr.prefetch.empty()) {
+            std::vector<std::uint8_t> lCombined = snr.prefetch;
+            const std::size_t lPadded =
+                (lCombined.size() + kPacketBytes - 1) / kPacketBytes * kPacketBytes;
+            lCombined.resize(lPadded, 0xFF);
+            lCombined.insert(lCombined.end(), restored.packets.begin(), restored.packets.end());
+            restored.packets.swap(lCombined);
+        }
+        if (snr.valid) lTargetSamples = snr.numSamples;
+        const std::vector<FrameBits> frames = ExtractFrames(restored.packets);
+        pcm = DecodeAll(frames, liDecodeChannels, lTargetSamples);
     } catch (const std::exception& lEx) {
         AUDIO_LOG << "[MovieAudio] decode error (" << lpSnsPath << "): " << lEx.what() << "\n";
         return false;
@@ -251,10 +378,10 @@ bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
     // hundred ms the first time; doing it here (with a silent fill) keeps the later Start()
     // instant, so audio and video begin together instead of the audio lagging by the open cost.
     if (!AudioOutputPC::IsOpen())
-        AudioOutputPC::Open(kSampleRate, 2, nullptr, nullptr);   // null fill -> silence until Start()
+        AudioOutputPC::Open(g_sampleRate, 2, nullptr, nullptr);   // null fill -> silence until Start()
 
     AUDIO_LOG << "[MovieAudio] loaded " << lpSnsPath << " (" << (int)g_frames << " frames, "
-              << (int)(g_frames / kSampleRate) << " s)\n";
+              << (int)(g_frames / g_sampleRate) << " s)\n";
     return true;
 }
 
@@ -287,7 +414,7 @@ void MovieAudioPC::Start()
     if (AudioOutputPC::IsOpen())
         AudioOutputPC::SetFill(&MovieAudioPC::FillStatic, nullptr);
     else
-        AudioOutputPC::Open(kSampleRate, 2, &MovieAudioPC::FillStatic, nullptr);   // fallback
+        AudioOutputPC::Open(g_sampleRate, 2, &MovieAudioPC::FillStatic, nullptr);   // fallback
 }
 
 void MovieAudioPC::Stop()
