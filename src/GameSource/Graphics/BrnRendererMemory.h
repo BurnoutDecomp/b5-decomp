@@ -72,6 +72,11 @@ struct BrnRendererMemory
     // target to share the down-sample buffer's depth surface and use the default render-target state.
     void CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u32 luWidth, u32 luHeight);
 
+    // 0x823F4910 -- return one of the shadow-map render targets by index. The X360 asserts the index
+    // is in [0,4) and returns mapRenderTarget[liIndex + 1] (slot 0 is the anti-alias buffer; the
+    // shadow-map slots begin at slot 1). Called by ShadowMapRenderManager::Begin/EndRenderShadowMap.
+    CgsRenderTarget* GetShadowMapBuffer(s32 liIndex);
+
 private:
     // The Create* render-target helpers Construct delegates to. Bodies live in their own (already
     // attested) TUs; declared here so Construct can call them by name.
