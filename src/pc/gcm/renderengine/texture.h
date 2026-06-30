@@ -15,6 +15,19 @@ namespace renderengine
     class Texture
     {
     public:
+        // X360 renderengine::Texture::GetType @0x82B60E68 dimension classes: the GPU texture-header
+        // type bits (header+0x30 bits 21-22) decode to LINE/2D/ARRAY/CUBE/VOLUME. On the PC backend
+        // every created texture is a 2D texture (D3DTexture), so GetType returns E_TYPE_2D; the enum
+        // is kept so the lock/unlock/accessor dispatch reads the same way as the X360 spine.
+        enum Type
+        {
+            E_TYPE_LINE   = 0,   // X360 case 0
+            E_TYPE_2D     = 1,   // X360 case 1 (array-flag clear)
+            E_TYPE_ARRAY  = 2,   // X360 case 1 (array-flag set) / case 2
+            E_TYPE_CUBE   = 3,   // X360 case 3
+            E_TYPE_VOLUME = 4    // X360 default
+        };
+
         struct LockInfo
         {
             void* mpBits;
@@ -82,11 +95,30 @@ namespace renderengine
         static void GetResourceDescriptor(u32* lpDescriptorOut, const Parameters* lpParams);
         static u32  GetPixelDataSize(s32 liFormat, u32 luWidth, u32 luHeight, u32 luDepth, u32 luNumLevels);
 
-        // Width/height accessors (X360 GetWidth @0x82B60EC8, GetHeight @0x82B60F38): read the stored
-        // raster header (muWidth/muHeight). Static (take the texture by pointer) to match the X360
+        // Dimension accessors (X360 GetType @0x82B60E68, GetWidth @0x82B60EC8, GetHeight @0x82B60F38,
+        // GetDepth @0x82B60FA8): the X360 spine decodes the GPU texture-fetch-constant header; the PC
+        // raster stores width/height/depth/levels explicitly (the same precedent GetParameters uses),
+        // so these read the stored header. Static (take the texture by pointer) to match the X360
         // call form `GetWidth(texture)`. Bodied in the renderengine texture TU.
+        static Type GetType(const Texture* lpTexture);
         static u32  GetWidth(const Texture* lpTexture);
         static u32  GetHeight(const Texture* lpTexture);
+        static u32  GetDepth(const Texture* lpTexture);
+
+        // X360 GetFormat @0x82B61000: on the X360 spine this re-packs the GPU texture-fetch-constant
+        // swizzle/format bitfields back into a D3DFORMAT; the PC raster keeps the D3DFORMAT explicitly
+        // (miFormat), so this returns it directly. Used by the screenshot / massive-texture paths.
+        static s32  GetFormat(const Texture* lpTexture);
+
+        // X360 Release @0x82B62E18: tear the texture's GPU resources down (Destruct) and clear its
+        // live bit, leaving the object zeroed for reuse. The rw-resource sibling of Destroy.
+        static Texture* Release(Texture* lpTexture);
+
+        // X360 Xbox2CheckPhysicalMemoryFlags @0x82B60D28: query the physical-memory protection of the
+        // texture's pixel page and set/clear the "write-combined" header flag accordingly. An X360
+        // EDRAM/physical-memory operation; on PC (managed D3D pool, no physical page exposed) it is a
+        // no-op returning 0. Called by Texture::Initialize and the post-fx depth-target create.
+        static u32  Xbox2CheckPhysicalMemoryFlags(Texture* lpTexture);
 
         // Realise the texture: create the managed D3D9 texture into mpD3DTexture from the
         // parameters and (if lpPixelData != null) upload the mip chain. This is the PC body of

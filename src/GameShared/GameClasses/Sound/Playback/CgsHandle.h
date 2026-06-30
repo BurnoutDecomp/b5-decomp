@@ -62,6 +62,15 @@ template <typename T>
 struct Handle
 {
 public:
+    // FLAG (additive grow): default ctor -- null-initialise the owned pointer.
+    // The sound-playback Module ctor (0x827DFA98) embeds several handles and the
+    // X360 simply stores 0 into each handle word (`stw r30, 0x2258(r31)` with
+    // r30 == 0), i.e. the handle slot is value-initialised to a null mpObject with
+    // NO Acquire. This trivial null-init ctor matches that store exactly and lets a
+    // handle be a default-constructible aggregate member. Shape-only (the X360
+    // never emits a distinct Handle() out-of-line -- it is the inlined zero store).
+    Handle() : mpObject(0) {}
+
     // CgsHandle.h:199 / 209 / 217 / 226 -- ctor/copy/dtor/assign do the
     // Acquire/Release ref-counting. Declared-only (other-TU surface).
     explicit Handle(T* lpObject);
@@ -105,6 +114,14 @@ public:
     // load and adds no layout or behaviour. No own X360 address (the load is
     // inlined at every call site).
     T* GetObject() const { return mpObject; }
+
+    // FLAG (additive grow, by-name): raw owned-pointer SETTER. The sound-playback
+    // Module out-params write the freshly created object straight into the caller's
+    // handle word -- the X360 `stw r22, 0(r25)` store of the new Voice* into the
+    // out-handle's mpObject (no Acquire; the ref was already taken by CreateVoice).
+    // This setter exposes that store BY NAME; it matches the raw store and adds no
+    // layout or behaviour. No own X360 address (inlined at the store site).
+    void SetObject(T* lpObject) { mpObject = lpObject; }
 
 private:
     // CgsHandle.h:321 / 332. Ref-counting helpers. Declared-only.

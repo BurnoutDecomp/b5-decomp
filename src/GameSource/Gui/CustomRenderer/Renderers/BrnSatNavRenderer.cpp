@@ -29,6 +29,8 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // BeginAssert/FireAssert/EndAssert
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h" // Im2dRenderBuffer (SetState/Render)
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // vertex
 
 #include <cstring> // memcpy
 
@@ -145,11 +147,23 @@ void CalculateUVsForIndex(s32 liFrameNumber,
 // SatNavRenderer
 // ===========================================================================
 
+// 0x827DD468 -- the embedded-subobject constructor the manager aggregate ctor runs
+// (CustomRendererManager::CustomRendererManager). The X360 ctor sets the vptr (implicit in
+// C++) and zero-initialises the pointer / resource-descriptor member range (+0x98..+0x120
+// plus the 2-entry maIconResources/state slots at +0x128, stride 0x14), then `blr` -- it does
+// NOT call Construct(); the manager runs the virtual Construct() as a separate pass afterwards.
 SatNavRenderer::SatNavRenderer()
 {
-    // The X360 ctor IS the Construct() body; the C++ constructor delegates to it (the GUI
-    // CustomRendererManager builds components through the virtual Construct, not new/ctor).
-    SatNavRenderer::Construct();
+    // Member range the X360 ctor zeroes before the manager's Construct pass fills it.
+    mpGuiCache                 = 0;   // +0x98
+    mpMapTextureState          = 0;   // +0xAC
+    mpMapBlendState            = 0;   // +0xC4 region
+    mpMaskTextureState         = 0;
+    mpMaskBlendState           = 0;
+    mpRouteSegmentTextureState = 0;
+    mpRouteSegmentBlendState   = 0;
+    mapIconTextureStates[0]    = 0;   // +0x128 stride-0x14 loop, 2 entries
+    mapIconTextureStates[1]    = 0;
 }
 
 // 0x8245F6C8
@@ -807,6 +821,136 @@ void SatNavRenderer::RenderIconsForSatNav(CgsGraphics::Im2dRenderBuffer* lpRende
 
     RenderSatNavIcon(lfEventStartX, lfClosestHalfWidth, lfEventStartY, lfClosestHalfHeight,
                      lClosest.meSatNavIconType, lClosest.muEventTypeIndex, lpRenderBuffer);
+}
+
+// The immediate-mode renderer's default blend state every sat-nav icon quad binds (X360 reads
+// the pointer-valued global dword_83010F20; the same default-blend singleton BrnFlaptRenderer
+// binds). No reconstructed C++ home yet; declared extern as the data reference the draw reads.
+extern const CgsGraphics::BlendState* const gpDefaultImBlendState; // dword_83010F20
+
+// 0x8245A3A0 -- build the four-vertex quad (top-left, bottom-left, top-right, bottom-right) for
+// one sat-nav icon and submit it through the immediate-mode render buffer. The quad colour is the
+// renderer's map-quad colour byte-swapped to the vertex RGBA packing; the four UVs come from the
+// per-(icon-type-row, event-type-column) corner tables -- the full-icon tables for the online
+// display modes, the mini-icon tables for the profile (display-type-0) mode.
+void SatNavRenderer::RenderSatNavIcon(f32 lfX, f32 lfHalfWidth, f32 lfY, f32 lfHalfHeight,
+                                      ESatNavIconType leIconType, u32 luEventTypeIndex,
+                                      CgsGraphics::Im2dRenderBuffer* lpRenderBuffer)
+{
+    if (leIconType >= E_SATNAVICON_NUM)
+        FireSatNavAssert("leIconType < E_SATNAVICON_NUM", 1350);
+    if (luEventTypeIndex >= KU_ICON_EVENT_TYPE_COUNT)
+        FireSatNavAssert("luEventTypeIndex < KU_ICON_EVENT_TYPE_COUNT", 1351);
+    if (lpRenderBuffer == 0)
+        FireSatNavAssert("lpRenderBuffer", 1352);
+
+    // Quad corner positions: f1/f3 are the centre, f2/f4 the half-extents (X360 @0x8245A44C-A4A8).
+    const f32 lfLeft   = lfX - lfHalfWidth;
+    const f32 lfRight  = lfX + lfHalfWidth;
+    const f32 lfTop    = lfY - lfHalfHeight;
+    const f32 lfBottom = lfY + lfHalfHeight;
+
+    // Pack the map-quad colour into the vertex RGBA8. The X360 (@0x8245A468-A4B4) does a FULL
+    // byte-reverse of mMapQuadColour (+0x08): with W = B0B1B2B3 (B0=MSB) the result word is
+    // 0xB3B2B1B0, stored big-endian into RGBA8{r,g,b,a} -> r=W&0xFF, g=(W>>8)&0xFF, b=(W>>16)&0xFF,
+    // a=(W>>24)&0xFF. So for 0xE5FFFFFF -> r/g/b=0xFF, a=0xE5 (translucent white).
+    const u8 lbB0 = static_cast<u8>(mMapQuadColour >> 24);   // W MSB -> alpha
+    const u8 lbB1 = static_cast<u8>(mMapQuadColour >> 16);
+    const u8 lbB2 = static_cast<u8>(mMapQuadColour >> 8);
+    const u8 lbB3 = static_cast<u8>(mMapQuadColour);         // W LSB -> red
+    CgsGraphics::RGBA8 lColour;
+    lColour.r = lbB3;   // r <- W & 0xFF
+    lColour.g = lbB2;   // g <- (W>>8) & 0xFF
+    lColour.b = lbB1;   // b <- (W>>16) & 0xFF
+    lColour.a = lbB0;   // a <- (W>>24) & 0xFF
+
+    // Select the UV corner tables: profile (display-type-0) -> the mini-icon tables; the online
+    // modes -> the full-icon tables (X360 @0x8245A458 gate on meIconDisplayType == 0).
+    const u32 luRow = static_cast<u32>(leIconType);
+    const bool lbMiniIcons =
+        (meIconDisplayType == GuiEventEnableSatNavIcons::E_ICON_DISPLAY_TYPE_OFFLINE_EVENTS);
+
+    Vector2 lv2UvTopLeft, lv2UvBottomLeft, lv2UvTopRight, lv2UvBottomRight;
+    if (lbMiniIcons)
+    {
+        lv2UvTopLeft     = mav2MiniIconUvTopLeft[luRow][luEventTypeIndex];
+        lv2UvBottomLeft  = mav2MiniIconUvBottomLeft[luRow][luEventTypeIndex];
+        lv2UvTopRight    = mav2MiniIconUvTopRight[luRow][luEventTypeIndex];
+        lv2UvBottomRight = mav2MiniIconUvBottomRight[luRow][luEventTypeIndex];
+    }
+    else
+    {
+        lv2UvTopLeft     = mav2IconUvTopLeft[luRow][luEventTypeIndex];
+        lv2UvBottomLeft  = mav2IconUvBottomLeft[luRow][luEventTypeIndex];
+        lv2UvTopRight    = mav2IconUvTopRight[luRow][luEventTypeIndex];
+        lv2UvBottomRight = mav2IconUvBottomRight[luRow][luEventTypeIndex];
+    }
+
+    // Four vertices in (top-left, bottom-left, top-right, bottom-right) order -> a triangle strip
+    // (X360 submits primitive type 6 with 4 vertices @0x8245A5D8).
+    CgsGraphics::Basic2dColouredTexturedVertex laVertices[4];
+
+    laVertices[0].mv2Pos.x = lfLeft;   laVertices[0].mv2Pos.y = lfTop;
+    laVertices[0].mv4Colour = lColour; laVertices[0].mv2Tex0UV.x = lv2UvTopLeft.x;
+    laVertices[0].mv2Tex0UV.y = lv2UvTopLeft.y;
+
+    laVertices[1].mv2Pos.x = lfLeft;   laVertices[1].mv2Pos.y = lfBottom;
+    laVertices[1].mv4Colour = lColour; laVertices[1].mv2Tex0UV.x = lv2UvBottomLeft.x;
+    laVertices[1].mv2Tex0UV.y = lv2UvBottomLeft.y;
+
+    laVertices[2].mv2Pos.x = lfRight;  laVertices[2].mv2Pos.y = lfTop;
+    laVertices[2].mv4Colour = lColour; laVertices[2].mv2Tex0UV.x = lv2UvTopRight.x;
+    laVertices[2].mv2Tex0UV.y = lv2UvTopRight.y;
+
+    laVertices[3].mv2Pos.x = lfRight;  laVertices[3].mv2Pos.y = lfBottom;
+    laVertices[3].mv4Colour = lColour; laVertices[3].mv2Tex0UV.x = lv2UvBottomRight.x;
+    laVertices[3].mv2Tex0UV.y = lv2UvBottomRight.y;
+
+    // Bind this icon-type's texture state + the default blend state, then submit the quad
+    // (X360 SetState(texture) @0x8245A5B4, SetState(blend, dword_83010F20) @0x8245A5C4,
+    // Render(6, verts, 4) @0x8245A5D8). On the PC fold the ImRenderer<V> API is reached by name.
+    lpRenderBuffer->SetState(mapIconTextureStates[luRow]);
+    lpRenderBuffer->SetState(gpDefaultImBlendState);
+    lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
+}
+
+// 0x8245F4D8 -- rebuild the screen-space mTransform from the on-screen viewport rectangle and the
+// display aspect ratio, in place. The X360 body is hand-vectorised (VMX128 lvx128/vspltw/vsubfp/
+// vmaddfp/vperm/vsldoi): it loads the viewport descriptor (unk_82FB36A0, a Vector4 of the
+// rectangle's left/top/right/bottom screen params), computes the (right-left) / (bottom-top)
+// extents and a {2.0, -2.0} normalised-device scale, and permutes them (with the control vectors
+// unk_82CDA350 / unk_82CDA3C0) into the transform's origin + right/up basis Vector4 lanes, then
+// folds in the aspect ratio.
+//
+// SEMANTIC-LEVEL SIMD: per the BrnSatNavRenderer.h policy (and matching CgsIm2d.cpp's note on
+// Im2dTransform::TransformByAspectRatio), the VMX128 permute math has no portable PC equivalent and
+// the input rectangle (unk_82FB36A0) + permute-control vectors (unk_82CDA350/3C0) are NOT in the
+// symbol export (data segment not dumped). The reconstruction reproduces the faithful STRUCTURE --
+// zero the transform, set the normalised-device scale lanes, and call TransformByAspectRatio() --
+// and FLAGS the produced basis as data-fidelity-limited (the unrecovered viewport rect would set
+// the origin + extents). The X360 store targets (mOriginXYZ/mRightUp/mColourShift/mColourScale at
+// +0/+16/+32/+48) and the trailing TransformByAspectRatio() call are reproduced exactly.
+void SatNavRenderer::UpdateRendererTransform()
+{
+    // The X360 {2.0, -2.0} normalised-device scale literals (flt_82001C98 == 1.0,
+    // flt_82006D70 == -2.0, flt_82001D9C, flt_82001CC0 == 0.0) recovered from the asm immediates.
+    const f32 KF_NDC_SCALE_X =  2.0f; // 1.0 * 2.0 (@0x8245F5FC-F604)
+    const f32 KF_NDC_SCALE_Y = -2.0f; // 2.0 * -2.0 (@0x8245F610-F618)
+
+    // FLAG: the viewport rectangle (unk_82FB36A0) and the two vperm control vectors
+    // (unk_82CDA350 / unk_82CDA3C0) are not in the symbol export; the origin + per-axis extents
+    // they would feed are left at the normalised-device default below. The structure and the
+    // aspect-ratio fold are X360-faithful; the produced origin/extent numbers are unverified.
+    mTransform.mOriginXYZ.SetZero();
+    mTransform.mRightUp.SetZero();
+    mTransform.mColourShift.SetZero();
+    mTransform.mColourScale.SetZero();
+
+    mTransform.mRightUp.x = KF_NDC_SCALE_X;
+    mTransform.mRightUp.y = KF_NDC_SCALE_Y;
+
+    // Fold the current display aspect ratio into the transform basis in place (X360 @0x8245F6B4).
+    mTransform.TransformByAspectRatio();
 }
 
 } // namespace BrnGui

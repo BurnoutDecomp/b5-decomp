@@ -46,6 +46,18 @@ public:
     // for the AEMS param-index TUs (BrnAutoGenAemsParameterIndexes.*).
     explicit Name(const char* lkpacName) { mHash = MakeHash(lkpacName); }
 
+    // CgsCommon.h. Construct a Name directly from a raw interned value (a 32-bit
+    // Ident). FLAG: ADDITIVE home-grow for the sound-playback Module CreateVoice TU,
+    // which builds a Name from a raw submix-name word (the X360 passes the raw u32 as
+    // the `VName@12@` argument to Registry::GetEntity<VoiceSpec>). Shape-only: stores
+    // the value verbatim (no interning -- the value is already an interned Ident).
+    explicit Name(uintptr_t luValue) : mHash(luValue) {}
+
+    // CgsCommon.h. Value-equality on the interned hash. FLAG: ADDITIVE home-grow for
+    // the Module CreateVoice init-submix path, which asserts the requested factory
+    // name equals GenericRwacFactory::SK_NAME (the X360 compares the two hash words).
+    bool operator==(const Name& lkrOther) const { return mHash == lkrOther.mHash; }
+
     // CgsCommon.h. The raw interned hash value. FLAG: ADDITIVE home-grow for the
     // CgsSound::Playback::Registry TU (Registry::AddEntity reads an Entity's
     // mName/mTypeName hash words directly -- `*a2` / `a2[1]` in the X360 asm).
@@ -53,6 +65,15 @@ public:
     // trivial mHash getter so dependents can read the hash by name instead of by
     // raw offset. Shape-only -- not a recon'd standalone TU.
     uintptr_t GetValue() const { return mHash; }
+
+    // CgsCommon.h:247. Compute the interning hash of a C string and Store it.
+    // STATIC despite the DWARF/mangling (its r3 is the char*, not a `this`).
+    // FLAG (additive grow -- moved to PUBLIC): the sound-playback Module's
+    // ImportStringTable (0x826AD6B0) calls Name::MakeHash directly to intern each
+    // string it copies in, so the boot-trace MakeHash is a public static intern
+    // entry point (the X360 `bl CgsSound__Playback__Name__MakeHash` is a public
+    // call from another TU). Bodied in CgsCommon.cpp.
+    static uintptr_t MakeHash(const char* lkpacName);
 
 private:
     // CgsCommon.h:249. The interned hash value. NOT touched by MakeHash/Store
@@ -99,10 +120,6 @@ private:
 
         // Retrieve / Dump / Traverse (CgsCommon.h:301-309) DEFERRED. FLAG.
     };
-
-    // CgsCommon.h:247. Compute the interning hash of a C string and Store it.
-    // STATIC despite the DWARF/mangling (its r3 is the char*, not a `this`). FLAG.
-    static uintptr_t MakeHash(const char* lkpacName);
 };
 
 }

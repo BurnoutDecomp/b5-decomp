@@ -1,10 +1,13 @@
 #include "pc/gcm/renderengine/texture.h"
 #include "pc/gcm/renderengine/device.h"   // gDevice
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // WriteToLog (create-failure diagnostics)
+#include "rw/rwcore_structs.h"   // rw::Resource (the rw-resource Initialize overload's memory block)
 
 #include <d3d9.h>
 #include <cstring>   // memcpy
 #include <cstdio>    // snprintf
+#include <cstddef>   // offsetof
+#include <new>       // placement new (build the texture object into rw resource memory)
 
 // PC / D3D9 implementation of the renderengine 2D-texture create + upload path. The
 // X360/PS3 renderengine marshals a platform resource descriptor and a GPU surface
@@ -14,6 +17,22 @@
 
 namespace renderengine
 {
+    // Pin the Locked descriptor's recovered byte layout (pointer-invariant facts; uncalled). The
+    // X360 CgsNetworkImageConverter unpack path reads pixelData (+0x04 on X360, where the mpTexture
+    // pointer is 4 bytes), stride (+0x08) and height (+0x0E) off this block; on the x64 PC target the
+    // mpTexture/mpPixelData pointers widen so only the post-pointer field ORDER is invariant. These
+    // assert the fields the Lock(Locked*) overload fills sit where the descriptor's readers expect.
+    static void _AssertLockedLayout()
+    {
+        static_assert(offsetof(Texture::Locked, mpTexture) == 0, "Locked.mpTexture is first");
+        static_assert(offsetof(Texture::Locked, muStride) > offsetof(Texture::Locked, mpPixelData),
+                      "stride follows the pixel-data pointer");
+        static_assert(offsetof(Texture::Locked, muHeight) > offsetof(Texture::Locked, muWidth),
+                      "height follows width");
+        static_assert(offsetof(Texture::Locked, muWidth) == offsetof(Texture::Locked, muStride) + 4,
+                      "geometry block follows the stride word");
+    }
+
     // Compute the storage a texture of these parameters needs (W*H*4 for the 32-bit
     // format), recorded the same way as the other renderengine resource descriptors.
     Texture2D::ResourceDescriptor* Texture2D::GetResourceDescriptor(ResourceDescriptor* lpDescriptorOut,
@@ -256,5 +275,145 @@ namespace renderengine
         }
         lpTexture->mpD3DTexture->Release();
         lpTexture->mpD3DTexture = nullptr;
+    }
+
+    // X360 GetType @0x82B60E68 decodes header+0x30 bits 21-22 (line/2D/array/cube/volume) and, for
+    // the 2D case, header+0x20 bit 21 (the array flag). The PC raster has no GPU header: every
+    // renderengine texture the create path produces is a managed D3D 2D texture, so the type is 2D.
+    Texture::Type Texture::GetType(const Texture* /*lpTexture*/)
+    {
+        return E_TYPE_2D;
+    }
+
+    // X360 GetWidth @0x82B60EC8 / GetHeight @0x82B60F38: the X360 spine reads the packed GPU header
+    // (and returns 1 for a line texture); the PC raster stores width/height explicitly. Both X360
+    // bodies bias the stored field by +1 because the header packs (dimension-1); the PC raster
+    // already stores the true dimension (Create copies muWidth/muHeight straight through), so no bias.
+    u32 Texture::GetWidth(const Texture* lpTexture)
+    {
+        if (lpTexture == nullptr)
+        {
+            return 1u;
+        }
+        return lpTexture->muWidth;
+    }
+
+    u32 Texture::GetHeight(const Texture* lpTexture)
+    {
+        if (lpTexture == nullptr)
+        {
+            return 1u;
+        }
+        return lpTexture->muHeight;
+    }
+
+    // X360 GetDepth @0x82B60FA8: returns 1 for everything except a volume texture, where it reads the
+    // packed depth. The PC raster is always 2D (depth 1); honour the stored depth if one was set.
+    u32 Texture::GetDepth(const Texture* lpTexture)
+    {
+        if (lpTexture == nullptr || lpTexture->muDepth == 0u)
+        {
+            return 1u;
+        }
+        return lpTexture->muDepth;
+    }
+
+    // X360 GetFormat @0x82B61000: re-packs the GPU fetch-constant swizzle/format bitfields back into
+    // a D3DFORMAT. The PC raster keeps the D3DFORMAT explicitly, so return it directly.
+    s32 Texture::GetFormat(const Texture* lpTexture)
+    {
+        if (lpTexture == nullptr)
+        {
+            return -1;
+        }
+        return lpTexture->miFormat;
+    }
+
+    // X360 Lock @0x82B62B20 (Locked* overload): lock the requested mip/face surface and fill the full
+    // Locked descriptor -- the texture, the surface bits/strides, and the per-mip geometry. The X360
+    // spine dispatches on GetType to the matching D3D*Texture_LockRect; the PC raster is always a 2D
+    // texture, so it locks the 2D rect. Geometry is (dimension >> mip), floored to 1 (matching the
+    // X360's `if (!(Width >> level)) = 1`). muVolumeDepth / muSliceStride stay 0 (no volume on PC).
+    void Texture::Lock(Texture* lpTexture, s32 liLevel, s32 liFace, s32 liFlags, Locked* lpLockedOut)
+    {
+        lpLockedOut->mpTexture     = lpTexture;
+        lpLockedOut->mpPixelData   = nullptr;
+        lpLockedOut->muStride      = 0u;
+        lpLockedOut->muSliceStride = 0u;
+        lpLockedOut->mu8MipLevel   = static_cast<u8>(liLevel);
+        lpLockedOut->mu8Index      = static_cast<u8>(liFace);
+        lpLockedOut->muLockFlags   = static_cast<u32>(liFlags);
+
+        if (lpTexture != nullptr && lpTexture->mpD3DTexture != nullptr)
+        {
+            IDirect3DTexture9* lpD3DTexture = static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture);
+            D3DLOCKED_RECT lLockedRect;
+            if (SUCCEEDED(lpD3DTexture->LockRect(static_cast<UINT>(liLevel), &lLockedRect, nullptr,
+                                                 static_cast<DWORD>(liFlags))))
+            {
+                lpLockedOut->mpPixelData = lLockedRect.pBits;
+                lpLockedOut->muStride    = static_cast<u32>(lLockedRect.Pitch);
+            }
+        }
+
+        u32 luWidth = GetWidth(lpTexture) >> liLevel;
+        if (luWidth == 0u) luWidth = 1u;
+        lpLockedOut->muWidth = static_cast<u16>(luWidth);
+
+        u32 luHeight = GetHeight(lpTexture) >> liLevel;
+        if (luHeight == 0u) luHeight = 1u;
+        lpLockedOut->muHeight = static_cast<u16>(luHeight);
+
+        u32 luDepth = GetDepth(lpTexture) >> liLevel;
+        if (luDepth == 0u) luDepth = 1u;
+        lpLockedOut->muVolumeDepth = static_cast<u16>(luDepth);
+    }
+
+    // X360 Xbox2CheckPhysicalMemoryFlags @0x82B60D28: queries the physical-memory protection of the
+    // texture's pixel page (XQueryMemoryProtect) and toggles the header's write-combined flag. The PC
+    // managed-pool raster does not expose a physical page; no flag to set, so this is a no-op.
+    u32 Texture::Xbox2CheckPhysicalMemoryFlags(Texture* /*lpTexture*/)
+    {
+        return 0u;
+    }
+
+    // X360 Destruct @0x82B62D50: unbind the texture from every sampler, wait for it to go idle, and
+    // free its GPU memory. The PC backend's equivalent of freeing the GPU resource is releasing the
+    // D3D texture (Destroy); the unbind/idle wait is handled by D3D9's own reference counting.
+    void Texture::Destruct(Texture* lpTexture)
+    {
+        Destroy(lpTexture);
+    }
+
+    // X360 Release @0x82B62E18: if the texture is live, Destruct it (and, when it owns its D3D
+    // resource, release that), then clear the live word so the object can be reused. On PC the live
+    // state is simply whether mpD3DTexture is set; Destruct/Destroy clears it.
+    Texture* Texture::Release(Texture* lpTexture)
+    {
+        if (lpTexture != nullptr && lpTexture->mpD3DTexture != nullptr)
+        {
+            Destruct(lpTexture);
+        }
+        return lpTexture;
+    }
+
+    // X360 Texture::Initialize @0x82B629D8 (rw-resource overload): build the texture object into the
+    // resource memory the allocator handed out (slot0 = the object, slot2 = the page-aligned pixel
+    // data) and lay its header out from the serialised Parameters. The X360 spine writes the GPU
+    // texture header in place via Xbox2SetTextureHeader; the PC raster instead creates a managed D3D
+    // texture and (if pixel data is present) uploads it -- the same split GetResourceDescriptor /
+    // Create / Texture2D::Initialize already use. Returns the texture object (slot0).
+    Texture* Texture::Initialize(rw::Resource* lpResourceMemory, const Parameters* lpParams)
+    {
+        // Slot0 of the resource block is the Texture object's storage; slot2 is the pixel data
+        // (null when the texture is system-memory-only / created empty).
+        void* lpObjectMemory = lpResourceMemory->m_baseResources[0];
+        const void* lpPixelData = lpResourceMemory->m_baseResources[2];
+
+        Texture* lpTexture = (lpObjectMemory != nullptr)
+                                 ? new (lpObjectMemory) Texture()
+                                 : new Texture();
+        Create(lpTexture, lpParams, lpPixelData);
+        return lpTexture;
     }
 }
