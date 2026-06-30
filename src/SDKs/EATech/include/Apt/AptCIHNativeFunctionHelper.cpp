@@ -911,3 +911,118 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadMovie(AptValue* pContext, int 
     }
     return gpUndefinedValue;
 }
+
+// ---------------------------------------------------------------------------
+// FLAG (un-homed TextFormat-layer callees -- bodies in the AptTextFormat TU):
+//   AptTextFormat_ConstructRecord (sub_82AFAEB8) -- the AS `TextFormat(...)` field
+//     ctor: builds a 32-byte TextFormat record, setting mFontName (from font.toString),
+//     mfSize, mnColor, mnStyleFlags (from bold/italic/underline), mnIndent/mnLeftMargin/
+//     mnRightMargin, and mnAlign (from align.toString vs "left"/"right"/"true"/"center").
+//     -1 / the undefined value == inherit. (Field map decoded from the asm stores
+//     +0x00..+0x1C; the getters call it only with all-inherit defaults.)
+//   AptTextFormat_ConstructDefault (sub_82AFB2A8) -- allocate+base-construct an empty
+//     AptTextFormat (AptValueWithHash base) into the given GC block.
+//   AptResolveTextFieldFontName -- the serialised .apt default-font name for a text
+//     inst ("" when none); the same font-table-walk family as the static-text
+//     AptResolveTextFontCharacter resolver.
+// ---------------------------------------------------------------------------
+extern TextFormat*    AptTextFormat_ConstructRecord(TextFormat* pRecord, AptValue* pFont,
+                         float fSize, int nColor, int nBold, int nItalic, int nUnderline,
+                         int nLeftMargin, int nRightMargin, int nIndent, AptValue* pAlign);  // sub_82AFAEB8
+extern AptTextFormat* AptTextFormat_ConstructDefault(void* pBlock, AptValue* pSource, double dArg);  // sub_82AFB2A8
+extern const char*    AptResolveTextFieldFontName(AptCharacterInst* pTextInst);
+
+static const float KF_TEXTFORMAT_INHERIT_SIZE = -1.0f;   // flt_820037C8
+
+// Build the field's default (all-inherit) TextFormat record when it has none, and
+// install it. Shared by getNewTextFormat / getTextFormat (X360: Allocate(32) ->
+// sub_82AFAEB8(undefined,-1.0,-1,...) -> AptRenderItemDynamicText::SetTextFormat).
+static void EnsureFieldTextFormat(AptCIH* pNode, AptRenderItemDynamicText* pField)
+{
+    if (pField->mpTextFormat)
+        return;
+    TextFormat* pDefault = nullptr;
+    if (void* pBlock = gpAptPseudoDataPool->Allocate(sizeof(TextFormat)))   // X360 Allocate(32)
+        pDefault = AptTextFormat_ConstructRecord(static_cast<TextFormat*>(pBlock),
+            gpUndefinedValue, KF_TEXTFORMAT_INHERIT_SIZE, -1, -1, -1, -1, -1, -1, -1, gpUndefinedValue);
+    static_cast<AptRenderItemDynamicText*>(pNode->GetCharacterInst()->GetRenderItemWritable())
+        ->SetTextFormat(reinterpret_cast<AptValue*>(pDefault));
+}
+
+// Overlay the field's live colour (when the format still inherits), default font name,
+// alignment, and font size onto pResult's record. Shared tail of both getters.
+static void OverlayFieldTextAttributes(AptCIH* pNode, AptRenderItemDynamicText* pField,
+                                       AptTextFormat* pResult, bool bMaskColor)
+{
+    if (pResult->mFormat.mnColor == -1)
+    {
+        const uint32_t uColor = bMaskColor ? (pField->mTextColor & 0xFFFFFFu) : pField->mTextColor;
+        pResult->mFormat.mnColor = static_cast<int32_t>(uColor);
+    }
+
+    // Default font name from the serialised .apt font table.
+    EAStringC lFontName(AptResolveTextFieldFontName(pNode->GetCharacterInst()));
+    pResult->mFormat.mFontName = lFontName;
+
+    // Alignment = the field's packed alignment (mFlagsAndBackColor bits 3-6, signed).
+    pResult->mFormat.mnAlign = static_cast<int32_t>(pField->mFlagsAndBackColor << 25) >> 28;
+    pResult->mFormat.mfSize  = pField->mFontSize;
+}
+
+// ===========================================================================
+// sMethod_getNewTextFormat @0x82AFB9F8 -- AS getNewTextFormat(): return a fresh
+// TextFormat copy-constructed from this text field's current format, with the live
+// colour/font/align/size overlaid. Takes no args (undefined otherwise).
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_getNewTextFormat(AptValue* pContext, int nArgCount)
+{
+    if (nArgCount > 0)
+        return gpUndefinedValue;
+
+    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+    AptRenderItemDynamicText* const pField =
+        static_cast<AptRenderItemDynamicText*>(pNode->GetCharacterInst()->GetRenderItem());
+
+    EnsureFieldTextFormat(pNode, pField);
+
+    // Result copy-constructed from the field's current TextFormat record (the field's
+    // mpTextFormat is a bare TextFormat record, opaquely typed AptValue* in the header).
+    AptTextFormat* pResult = nullptr;
+    if (void* pBlock = AptTextFormat::operator new(sizeof(AptTextFormat)))   // X360 operator new(64)
+        pResult = ::new (pBlock) AptTextFormat(reinterpret_cast<const TextFormat*>(pField->mpTextFormat));
+
+    OverlayFieldTextAttributes(pNode, pField, pResult, /*bMaskColor*/false);
+    return pResult;
+}
+
+// ===========================================================================
+// sMethod_getTextFormat @0x82AFBBC0 -- AS getTextFormat(): like getNewTextFormat but
+// the result starts as a base-constructed empty TextFormat, copies the field's format
+// in, and force-marks bold/italic/underline as "defined". Accepts up to 2 args.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_getTextFormat(AptValue* pContext, int nArgCount)
+{
+    if (nArgCount > 2)
+        return gpUndefinedValue;
+
+    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+    AptRenderItemDynamicText* const pField =
+        static_cast<AptRenderItemDynamicText*>(pNode->GetCharacterInst()->GetRenderItem());
+
+    AptTextFormat* pResult = nullptr;
+    if (void* pBlock = AptTextFormat::operator new(sizeof(AptTextFormat)))   // X360 operator new(64)
+        pResult = AptTextFormat_ConstructDefault(pBlock, gpUndefinedValue, 0.0);
+
+    EnsureFieldTextFormat(pNode, pField);
+
+    // Copy the field's current format into the result, then force the three style
+    // flags to "defined" so the returned object reports concrete bold/italic/underline.
+    TextFormat_copyTextFormatObj(&pResult->mFormat,
+                                 reinterpret_cast<const TextFormat*>(pField->mpTextFormat));
+    pResult->mFormat.mnStyleFlags |= TextFormat::KU_ITALIC_DEFINED;
+    pResult->mFormat.mnStyleFlags |= TextFormat::KU_UNDERLINE_DEFINED;
+    pResult->mFormat.mnStyleFlags |= TextFormat::KU_BOLD_DEFINED;
+
+    OverlayFieldTextAttributes(pNode, pField, pResult, /*bMaskColor*/true);
+    return pResult;
+}
