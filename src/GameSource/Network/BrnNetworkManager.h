@@ -226,6 +226,121 @@ namespace BrnNetwork
         // BrnNetworkManager TU.
         void TriggerEventFromLogin( s32 liEventCode, s32 liParam );
 
+        // ====================================================================================
+        // ---- ADDITIVE GROW (BrnNetworkManager.cpp TU) -------------------------------------
+        // The top-level network manager's own lifecycle / per-frame / message-dispatch spine.
+        // All but PackOrUnpack are DECLARATION-ONLY: their X360 bodies operate entirely over
+        // the full ~613 KB BrnNetworkManager aggregate (28+ embedded manager sub-objects and
+        // dozens of fields reached by raw byte offset), which is GENUINELY UN-HOMED in this
+        // minimal slice. Materialising that layout would mean fabricating the whole class, so
+        // per the anti-fabrication rule these are declared (exact reconstructed signatures
+        // from the X360 asm) but left bodyless until the full layout is homed. FLAGGED.
+        //
+        // (TriggerEventFromLogin / GetLocalConsoleFrameRate / GetTime are already declared
+        // above by earlier ADDITIVE GROWs and are NOT re-declared here.)
+
+        // X360 @ 0x825885E8 (EXECUTED, called by Construct) -- returns the largest message size
+        // across the static message-definition table, optionally filtered to reliable-only
+        // messages. DECLARATION-ONLY (FLAGGED): the body stages a 41-entry {s32 miMessageSize;
+        // bool mbReliable} MessageDef table from pure immediates on the stack then runs a
+        // rw::math::vpu::Max<s32> reduction (BrnNetworkManager.cpp:1839..1897). Deferred rather
+        // than hand-transcribed (41 immediate rows -> fabrication risk); no manager-`this` dep.
+        s32 GetMaxMessageSize( bool lbReliableOnly );
+
+        // X360 @ 0x8258E248 -- full teardown: zeroes the session-time/round bookkeeping then
+        // tears down every embedded manager sub-object in reverse-construction order, finally
+        // chaining the CgsNetwork::NetworkManager base Destruct. DECLARATION-ONLY (FLAGGED:
+        // un-homed full layout).
+        void Destruct();
+
+        // X360 @ 0x8259AC20 -- the staged online-subsystem bring-up state machine (EPrepareStage
+        // walk, one embedded manager Prepare()'d per stage). DECLARATION-ONLY (FLAGGED: un-homed
+        // full layout + the multi-stage init pipeline).
+        bool Prepare();
+
+        // X360 @ 0x8258DC88 -- the staged online-subsystem tear-down state machine (EReleaseStage
+        // walk, mirror of Prepare). DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        bool Release();
+
+        // ---- per-frame dispatch -----------------------------------------------------------
+        // X360 @ 0x825977D0 -- snapshots the published timer status, runs the HL-update-flag
+        // handler, then ticks every embedded manager's ProcessBeforeSimulation and emits the
+        // per-frame player status/results. DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        void ProcessBeforeSimulation( s32 liUpdateFlags, f32 lfDeltaTime, const void* lpTimerStatus );
+
+        // X360 @ 0x825968C8 -- reacts to the high-level update flag bits (bit 0x200 == request
+        // disconnect: drops the server connection and queues the disconnected GUI/network
+        // events). DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        void ProcessHLUpdateFlags( s16 lu16UpdateFlags );
+
+        // X360 @ 0x825967F0 -- on a network DXT-decode request event, copies the image header and
+        // hands the compressed payload to the texture decompressor with DxtDecodeCallback.
+        // DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        void ProcessNetworkTextureDecodeEvent( const void* lpDxtDecodeRequestEvent );
+
+        // ---- session / online lifecycle hooks ---------------------------------------------
+        // X360 @ 0x82581CB0 / 0x82581D00 -- entering / leaving an online game (chain base hook,
+        // notify road-rules + launch/selected-routes/traffic/event-scores managers, reset the
+        // session start frame). DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        void OnEnterGame();
+        void OnLeaveGame();
+
+        // X360 @ 0x82581E48 -- the session is about to launch: forward to the road-rules and
+        // traffic managers. DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        void OnGameLaunching();
+
+        // X360 @ 0x82582118 -- join the in-progress game session (delegate to the embedded
+        // StateManager). DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        void JoinGameSession();
+
+        // ---- player / stats queries -------------------------------------------------------
+        // X360 @ 0x82593C70 -- true when lPlayerID is the local signed-in player (compares the
+        // server-interface local-player-info id). DECLARATION-ONLY (FLAGGED: un-homed full
+        // layout / un-homed ServerInterfacePlayerInfoDataX360 helper).
+        bool IsLocalPlayer( NetworkPlayerID lPlayerID );
+
+        // X360 @ 0x82588868 -- fills the per-frame player-results GUI buffer by walking the
+        // session player list and copying each valid player's standings record.
+        // DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        void OutputPlayerResultsInfo( void* lpOutput );
+
+        // X360 @ 0x82596018 -- fills the per-frame player-status GUI buffer.
+        // DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        void OutputPlayerStatusInfo( void* lpOutput );
+
+        // X360 @ 0x82595CD0 -- pushes one player's stats record up to the GUI (resolving the
+        // player by id, falling back to the local player's stats out of game). DECLARATION-ONLY
+        // (FLAGGED: un-homed full layout).
+        void OutputPlayerStatsToGui( NetworkPlayerID lPlayerID );
+
+        // ---- telemetry --------------------------------------------------------------------
+        // X360 @ 0x82582178 -- forward a telemetry event (with one parameter word) to the server
+        // interface's telemetry component. DECLARATION-ONLY (FLAGGED: un-homed full layout /
+        // un-homed ETelemetryHook enum). The X360 has further overloads (int / CgsID / Time&
+        // parameter); only this one is in this TU's postmortem, so only it is declared.
+        s32 CaptureTelemetryEvent( s32 leType, s32 liParameter );
+
+        // ---- raised events ----------------------------------------------------------------
+        // X360 @ 0x82598BE0 -- raise a server-interface-originated GUI/network event up to the
+        // rest of the manager. DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        void TriggerEventFromServerInterface( s32 liEventCode, s32 liParam );
+
+        // ---- callbacks (static; userdata is the manager) ----------------------------------
+        // X360 @ 0x82581BA8 -- start-time-sync "client ready" callback: when the local player is
+        // in a not-yet-started game, restart the network traffic. Static (takes the manager as
+        // userdata). DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        static u32 SyncTimeClientReadyCallback( NetworkPlayerID lClientReadyID, void* lpUserData );
+
+        // X360 @ 0x82593CD8 -- texture-decompressor completion callback: queues the decoded
+        // pixels onto the network event queue. Static (takes the manager as userdata).
+        // DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        static s32 DxtDecodeCallback( void* lpPixels, void* lpUserData );
+
+        // X360 @ 0x82599430 -- the session player-manager event callback (player joined/left
+        // etc.); routes the event to the relevant embedded managers. Static (takes the manager
+        // as userdata). DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        static s32 PlayerManagerEventCallback( void* lpUserData, s32 a2, s32 a3 );
+
     private:
         CgsNetwork::VersionDisplay mVersionDisplay;
         CgsNetwork::NetworkAdapter mNetworkAdapter;
