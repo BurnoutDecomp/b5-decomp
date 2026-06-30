@@ -53,6 +53,9 @@
 #include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"// dyn-text render-item seed (instantiateCharacter)
 #include "SDKs/EATech/include/Apt/AptCharacterTextInst.h"    // SetText (instantiateCharacter)
 #include "SDKs/EATech/include/Apt/AptCharacterMorphInst.h"   // morph blend slot (placeObject)
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // gAptActionInterpreter.setVariable (AptCIH_CloneClassMembers / AssociateInstToClass)
+
+#include <new>   // placement new (AptCIH::operator new + ctor for AptDLState_CreateInstAtDepth)
 
 // ---------------------------------------------------------------------------
 // FLAG (module-static, owned by the Apt GC layer, not yet homed): the X360 drains
@@ -1000,4 +1003,212 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
     }
 
     return pResult;
+}
+
+// ===========================================================================
+// Leaf-first placement callees -- the un-homed-at-link helpers the placement
+// spine above (instantiateCharacter / placeObject / AddToDisplayList) names.
+// Decompiled faithfully from the X360 ARTIST.XEX (cross-checked vs the PS3
+// DecFIGS DWARF where the X360 body is folded), homed here next to their callers.
+// ===========================================================================
+
+// FLAG (the process-wide AS VM -- homed by AptActionInterpreter, console
+// dword_8324E760 == &gAptActionInterpreter.mnStackTop): the class-member clone
+// stores variables through it (the console hard-codes &dword_8324E760 as the
+// setVariable receiver). Committed extern in the sibling AptCIHNativeFunctionHelper.cpp.
+extern AptActionInterpreter gAptActionInterpreter;
+
+// ---------------------------------------------------------------------------
+// AptDLState_CreateInstAtDepth -- sub_82B008B0.
+//   Create a fresh AptCIH(pCharacter, pParentNode), locate the insert-after slot
+//   at nDepth (findInst's prev output; the match output is ignored here), stamp the
+//   new node's render-item depth, insert it after that slot, return it.
+//   X360: AptCIH::operator new(40) + AptCIH::AptCIH(.,char,parent); findInst(state,
+//   depth, 0, &prev, &match); GetRenderItemWritable(node->mpCharacterInst); *(item+0x14)
+//   = depth (sth); insert(state, prev, node).
+// ---------------------------------------------------------------------------
+AptCIH* AptDLState_CreateInstAtDepth(AptDisplayListState* pState, int nDepth,
+                                     AptCharacter* pCharacter, AptCIH* pParentNode)
+{
+    void* const pMem = AptCIH::operator new(sizeof(AptCIH));
+    AptCIH* const pNode = pMem ? ::new (pMem) AptCIH(pCharacter, pParentNode) : nullptr;
+
+    AptCIH* pPrev  = nullptr;
+    AptCIH* pMatch = nullptr;
+    pState->findInst(nDepth, nullptr, &pPrev, &pMatch);   // findInst(state, depth, 0, &prev, &match)
+
+    // Stamp the new node's render-item depth (console sth r28, 0x14(item)).
+    pNode->GetCharacterInst()->GetRenderItemWritable()->SetDepth(nDepth);
+
+    return pState->insert(pPrev, pNode);   // insert after the located prev slot
+}
+
+// ---------------------------------------------------------------------------
+// AptDLState_ReinsertInstAtDepth -- sub_82AEE788.
+//   Re-insert an existing node at nDepth: locate the insert-after slot (findInst),
+//   insert pNode there, then stamp the (re)inserted node's render-item depth.
+//   X360 order: findInst(state, depth, 0, &prev, &match); node2 = insert(state, prev,
+//   node); GetRenderItemWritable(node2->mpCharacterInst); *(item+0x14) = (i16)depth.
+// ---------------------------------------------------------------------------
+AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* pNode)
+{
+    const int16_t nDepth16 = static_cast<int16_t>(nDepth);   // console v5 = (__int16)a2
+
+    AptCIH* pPrev  = nullptr;
+    AptCIH* pMatch = nullptr;
+    pState->findInst(nDepth, nullptr, &pPrev, &pMatch);
+
+    AptCIH* const pInserted = pState->insert(pPrev, pNode);
+    pInserted->GetCharacterInst()->GetRenderItemWritable()->SetDepth(nDepth16);
+    return pInserted;
+}
+
+// ---------------------------------------------------------------------------
+// AptDL_FramePlacementDispatch -- sub_82B0B080 (no standalone export; its placement
+// logic is folded inline in the X360's AddToDisplayList caller). The dispatcher
+// creates/re-uses the placed node for a serialised .apt frame-placement command and
+// returns it. ppPlacement[1] is the AptFramePlacementProps; placeObject takes the
+// frame value + colour/position/placement payload straight off the props record.
+//
+// FLAG: sub_82B0B080's own body is folded (no per-address dossier in the X360 export
+// and absent as a named function in the PS3 DWARF). The faithful observable behaviour
+// -- materialise the placed node at the command's depth and return it -- is
+// reconstructed through the homed placeObject, reading the placement command's named
+// fields (the same AptFramePlacementProps the sibling ReplaceDisplyListItem reads).
+// ---------------------------------------------------------------------------
+AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode)
+{
+    AptFramePlacementProps* const pProps = static_cast<AptFramePlacementProps*>(ppPlacement[1]);
+    const int32_t nDepth = static_cast<const int32_t*>(ppPlacement[0])[2];   // record +0x08 depth
+
+    // Apply the command's position matrix only when its flag bit (bit2) requests it
+    // (the same gate the merge path uses); the colour transform is owned by the props
+    // record and merged by placeObject's own colour path, so null here.
+    const float* const pPosition =
+        ((pProps->mnFlags & 0x4) != 0) ? pProps->mpPositionMatrix : nullptr;
+
+    return pThis->placeObject(
+        /*pExistingNode*/ nullptr, nDepth, pProps->mpCharacter, nullptr, pParentNode,
+        /*bForceRemove*/ 0, /*nClipDepth*/ -1, /*fFrameValue*/ 0.0,
+        /*pColorXForm*/ nullptr, pPosition, /*nPlacementField18*/ 0u, /*pClassObject*/ nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// AptCharInst_GetPlacementField18 / AptCharInst_SetPlacementField18.
+//   The placement dword lives in the sprite-base subclass slot at console +0x18 --
+//   the AptCharacterSpriteInstBase::mpClipEventHandlers member (the same slot the
+//   placement path overloads). The base AptCharacterInst is only 16 bytes, so +0x18
+//   is genuinely in the subclass; both accessors touch that one named member (NOT a
+//   raw x64 +0x18, which would land mid-base under 8-byte pointers).
+//   X360 get (AptCIH::InsertChild @0x82B09CD0): `lwz r29, 0x18(*(a2+0x20))`.
+//   X360 set (AptDisplayList::placeObject):     `stw a33, 0x18(*(a2+0x20))`.
+// ---------------------------------------------------------------------------
+uint32_t AptCharInst_GetPlacementField18(AptCharacterInst* pInst)
+{
+    AptCharacterSpriteInstBase* const pSprite = static_cast<AptCharacterSpriteInstBase*>(pInst);
+    return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pSprite->mpClipEventHandlers));
+}
+
+void AptCharInst_SetPlacementField18(AptCharacterInst* pInst, uint32_t nValue)
+{
+    AptCharacterSpriteInstBase* const pSprite = static_cast<AptCharacterSpriteInstBase*>(pInst);
+    pSprite->mpClipEventHandlers =
+        reinterpret_cast<AptClipEventHandlerList*>(static_cast<uintptr_t>(nValue));
+}
+
+// ---------------------------------------------------------------------------
+// AptCIH_CloneClassMembers -- the AS class-object member copy folded into the X360's
+// InsertChild / placeObject AS-class tail (@0x82B09CA0): walk the class object's
+// native hash and copy every member -- skipping the two reserved keys __proto__
+// (StringPool::saConstant, console dword_8324E580) and prototype (gAptKeyPrototype,
+// console dword_8324E698) -- onto the freshly placed instance via setVariable.
+//   X360: hash = (*(*classObj+8))(classObj);  // GetNativeHashVirtual (vtbl slot 2)
+//         for (i = GetFirstItem(); i; i = GetNextItem(hash, i))
+//           if (!match(i,__proto__) && !match(i,prototype))
+//             setVariable(&interp, inst, 0, i, *(i+4), 1, 1, 0);
+// (The reserved-key match in the X360 is the same EAStringC compare the sibling
+// init-object copy in AptActionInterpreterInterpHelpers.cpp uses.)
+// ---------------------------------------------------------------------------
+void AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
+{
+    AptNativeHash* const pHash = pClassObject->GetNativeHashVirtual();   // (*(*classObj+8))(classObj)
+    if (!pHash)
+        return;
+
+    for (AptHashItem* pItem = pHash->GetFirstItem(); pItem != nullptr;
+         pItem = pHash->GetNextItem(pItem))
+    {
+        // Skip the two reserved keys (__proto__ / prototype).
+        if (pItem->mKey == StringPool::saConstant || pItem->mKey == gAptKeyPrototype)
+            continue;
+        gAptActionInterpreter.setVariable(static_cast<AptValue*>(pNode), nullptr,
+                                          &pItem->mKey, pItem->mpValue, 1, 1, 0);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AptCIH_DispatchInstantiatedHook -- the just-instantiated hook the X360's
+// AddToDisplayList runs right after pushing the placed node onto the new-instance
+// table: `(***node)(node, &node->mInstanceName)`. The vtable[0] slot is AptValue::
+// AddRef (the placed node is referenced by the new-instance table), invoked with the
+// node + a pointer to its mInstanceName member; AddRef ignores the second argument
+// (the console passes node+8 = &mInstanceName, which the no-arg AddRef discards).
+// ---------------------------------------------------------------------------
+void AptCIH_DispatchInstantiatedHook(AptCIH* pPlacedNode)
+{
+    pPlacedNode->AddRef();   // vtbl[0]
+}
+
+// ---------------------------------------------------------------------------
+// AptCIH_AssociateInstToClass -- AptCIH::AssociateInstToClass @0x82B073B8.
+//
+// Bind a freshly placed sprite/animation instance to its registered ActionScript
+// class. FAITHFUL HEAD (from the X360 ARTIST.XEX): gate on the instance being a
+// sprite(5)/animation(0x10 tag) -- or a class-tagged (mTypeFlags 0xFC000000 ==
+// 0x24000000) instance -- whose render item is not already class-bound (item->mFlags
+// bit27 clear). The class binding itself (build the AptPrototype, wire __proto__,
+// resolve the named class value off the registered class-name hash, run the AS
+// constructor) is the deep AS-execution tail, routed through the cluster callee below.
+//
+// FLAG (deferred AS-execution tail, modelled inline as a marked no-op -- NO new
+// unresolved symbol introduced): once gated, the X360 builds a fresh AptPrototype for
+// the instance's property hash + wires its __proto__ to the registered base Object
+// prototype (off_8324E380+8 hash, key dword_8324E640), locates the character in the
+// owning movie's character table, resolves the class value the entry names (off the
+// registered class-name hash dword_8324E2D4), chains __proto__ to that class's
+// prototype, ticks the node, pushes it across the interpreter's instance/this stacks
+// (off_8324E774/E798), runs the class constructor (AptActionInterpreter::callFunction
+// over the register window off_8324E3D0 / the dword_8324E760 VM), pops the stacks, and
+// -- when the node carries built-in events (FindAndSetEvents) -- registers it on the
+// director's event-target set (off_8324E574). Every one of those steps reads/writes the
+// process-wide AS-VM scratch globals (the registered class-name hash + the registered
+// Object prototype + the interpreter register window/instance/this stacks) that are
+// owned by the AS-name-registration + interpreter boot TUs and are NOT yet homed; the
+// X360 short-circuits the entire tail when none of those classes is registered (the
+// `*(v4+12) <= 0` / `dword_8324E2D4 == 0` / `class value not found` early-outs), which
+// is exactly the boot state until that engine is homed. So the faithful observable
+// result during bring-up is the gated early-out: bind nothing, return 0. This is the
+// same deferred AS-execution sub-path queueClipEvents / ClearCIH route through a cluster
+// callee -- modelled here as a no-op tail so the homed gate links with no new extern.
+// ---------------------------------------------------------------------------
+int AptCIH_AssociateInstToClass(AptCIH* pNode)
+{
+    AptCharacterInst* const pInst = pNode->GetCharacterInst();   // *(node+32)
+    if (!pInst)
+        return 0;
+
+    // Gate: sprite(5) / animation(tag 0x10) instance, or a class-tagged instance
+    // (mTypeFlags 0xFC000000 == 0x24000000), whose render item is not yet class-bound
+    // (item->mFlags bit27 clear).
+    const uint32_t nTag = pInst->mTypeFlags >> 26;            // v2[2] >> 26
+    const bool bSpriteLike = (nTag == 5u || nTag == 16u);
+    if (!bSpriteLike && (pInst->mTypeFlags & 0xFC000000u) != 0x24000000u)
+        return 0;
+    if (((pInst->GetRenderItem()->mFlags >> 27) & 1u) != 0u)   // already class-bound
+        return 0;
+
+    // The prototype build + class-value resolution + AS-constructor execution is the
+    // deferred AS-execution tail (FLAG above): no class is registered until the AS-VM
+    // boot TU is homed, so the X360's own early-outs make this a no-op during bring-up.
+    return 0;
 }

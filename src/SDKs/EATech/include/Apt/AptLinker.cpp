@@ -800,3 +800,114 @@ int ReplaceReferences(AptValue* /*pOld*/, AptValue* /*pNew*/, AptValue** /*ppTab
 {
     return 0;   // FLAG BLOCKED: un-homed GC reference-registration subsystem
 }
+
+// =====================================================================
+//  AptLinker::PendingFileVector -- the EA BasicString<StringAsVectorEncoding<
+//  AptFilePtr>> reconstructed as a typed SBO vector of owned AptFilePtr. The two
+//  mutators the linker spine names: PushBack (append, taking a counted ref) and Swap
+//  (SBO-aware swap-assign). Decompiled faithfully from the X360 ARTIST.XEX:
+//      PushBack -> sub_82B00498 (BasicString<...>::Insert at end, grow if full)
+//      Swap     -> sub_82AFF018 (swap-assign, SBO-aware, releases temporaries)
+//  AptFilePtr is a single counted AptFile* (AptSharedPtr<AptFile>); its operator=
+//  carries the reference (incref new / decref+delete old), so the element copies below
+//  maintain the refcount exactly as the X360 does.
+// =====================================================================
+
+// PushBack -- sub_82B00498. Append a copy of rFile at the end (the X360 routes through
+// BasicString::Insert at position end = mpData + mnSize, growing the storage when the
+// logical count has reached capacity). The inline SBO buffer holds 2 elements (the
+// ctor's initial capacity); once both are used a heap block is allocated from the
+// AptSharedPtr pool (off_8324D808) and the existing elements are relocated into it.
+void AptLinker::PendingFileVector::PushBack(const AptFilePtr& rFile)
+{
+    // Capacity in usable slots: the inline SBO buffer is 2 (mnCapacity stays 0 while the
+    // vector still points at mInlineStorage); a heap block records its slot count in
+    // mnCapacity. Grow when the next index would overflow the current usable slots.
+    const int32_t nUsable = (mpData == mInlineStorage) ? 2 : mnCapacity;
+    if (mnSize >= nUsable)
+    {
+        const int32_t nNewCap = nUsable ? nUsable * 2 : 2;   // BasicString geometric grow
+        AptFilePtr* const pNew =
+            static_cast<AptFilePtr*>(gpAptSharedPtrPool->Allocate(sizeof(AptFilePtr) * nNewCap));
+
+        // Relocate the existing elements (operator= carries each counted ref to the new
+        // block; the source slots are then cleared so the old storage owns nothing).
+        for (int32_t i = 0; i < mnSize; ++i)
+        {
+            pNew[i].pData = nullptr;
+            pNew[i] = mpData[i];        // incref new == old, then nothing to decref (new slot was null)
+            mpData[i].pData = nullptr;  // old slot relinquishes (the live ref now lives in pNew)
+        }
+        // Initialise the unused tail of the new block.
+        for (int32_t i = mnSize; i < nNewCap; ++i)
+            pNew[i].pData = nullptr;
+
+        if (mpData != mInlineStorage)
+            gpAptSharedPtrPool->Deallocate(mpData, sizeof(AptFilePtr) * mnCapacity);
+
+        mpData     = pNew;
+        mnCapacity = nNewCap;
+    }
+
+    // Place the new element at the end (operator= takes the counted ref) + advance.
+    mpData[mnSize].pData = nullptr;
+    mpData[mnSize]       = rFile;
+    ++mnSize;
+}
+
+// Swap -- sub_82AFF018. Exchange this vector's {size, capacity, data} triple with
+// rOther's. SBO-aware: when either side's data pointer aliases its own inline buffer,
+// the raw pointer swap would leave the other vector pointing at this object's inline
+// storage, so the X360 relocates the inline elements element-by-element (AptFilePtr
+// operator=) through a scratch buffer and releases the temporaries. The non-SBO case
+// (both on the heap) is a plain pointer swap.
+void AptLinker::PendingFileVector::Swap(PendingFileVector& rOther)
+{
+    const bool bOtherInline = (rOther.mpData == rOther.mInlineStorage);   // a2+3 == a2[2]
+    const bool bThisInline  = (mpData == mInlineStorage);                 // result+3 == v9
+
+    // Swap the {size, capacity} scalars (v6/v7/v8 dance in the X360).
+    const int32_t nTmpSize = rOther.mnSize;
+    rOther.mnSize = mnSize;
+    const int32_t nTmpCap  = rOther.mnCapacity;
+    rOther.mnCapacity = mnCapacity;
+    AptFilePtr* const pTmpData = mpData;       // v9 = result[2] (this->mpData, captured pre-swap)
+    mnSize     = nTmpSize;
+    mnCapacity = nTmpCap;
+
+    // Re-point each data slot: an inline-owning side must keep pointing at its OWN
+    // inline buffer after the swap (the X360 v10 / `result+3==v9` tests).
+    rOther.mpData = bThisInline  ? rOther.mInlineStorage : pTmpData;
+    mpData        = bOtherInline ? mInlineStorage        : rOther.mpData;
+
+    // When either side was inline, the two inline buffers themselves must be exchanged
+    // (their contents, not their addresses). Relocate through a scratch pair, copying
+    // this <- other and other <- this via AptFilePtr operator= (refcount-correct), then
+    // release the scratch temporaries (the X360's two-iteration decref loop).
+    if (bThisInline || bOtherInline)
+    {
+        AptFilePtr scratch[2];
+        scratch[0].pData = nullptr;
+        scratch[1].pData = nullptr;
+
+        // scratch <- this inline
+        scratch[0] = mInlineStorage[0];
+        scratch[1] = mInlineStorage[1];
+        // this inline <- other inline
+        mInlineStorage[0] = rOther.mInlineStorage[0];
+        mInlineStorage[1] = rOther.mInlineStorage[1];
+        // other inline <- scratch (the original this inline)
+        rOther.mInlineStorage[0] = scratch[0];
+        rOther.mInlineStorage[1] = scratch[1];
+
+        // Release the scratch temporaries (decref + delete at zero) -- the X360's
+        // `for (i=1; i>=0; --i)` LL/SC decrement loop over the scratch block.
+        for (int32_t i = 1; i >= 0; --i)
+        {
+            AptFile* const pData = scratch[i].pData;
+            scratch[i].pData = nullptr;
+            if (pData != nullptr && AptSharedPtrDecRef(pData) == 0)
+                AptSharedPtrDelete(pData);
+        }
+    }
+}
