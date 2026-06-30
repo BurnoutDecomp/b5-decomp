@@ -315,42 +315,68 @@ namespace BrnGui
             CgsDev::Log::WriteToLog(lac);
         }
 
-        // ---- STEP 5: the AptTarget context (the engine's per-thread director) ----
-        // FLAG: the AptTarget ctor IS bodied, but the per-thread current-target wiring
-        // (gpAptTarget / gpAptTargetCurrent / gpAptTargetTLS + GetTarget()'s TLS slot)
-        // is set by the un-reconstructed AptUpdateInitialize / AptCreateTargetInstance.
-        // GetTarget() therefore returns null until that lands -- so the loader (which
-        // unregisters through GetTarget()'s loader) and the render-tree anchor have no
-        // context. We DO NOT fabricate a target here (a half-wired context would crash
-        // the loader's list mutations); instead this is the documented bail point. The
-        // bring-up is otherwise complete: the allocator + interpreter + host callback
-        // table + render buffer are all live.
+        // ---- STEP 5: the AptTarget context (the engine's per-process director) ----
+        // Create the Apt context (AptCreateTargetInstance) + select it as current
+        // (AptChangeTargetInstance) so GetTarget() returns a live context -- the X360
+        // does exactly this inside InitializeApt (`*(a1+8)=AptCreateTargetInstance(v7);
+        // AptChangeTargetInstance()`), and those two are now HOMED in AptTarget.cpp.
+        // The create-params block is the v7[8] InitializeApt @0x82848E50 builds:
+        //   v7 = {0, 1, 8, 8, 0, 512, 0, 0}
+        // The AptTarget ctor reads config from p[4]/p[7]/p[2]/p[1]/p[0]/p[3] and the
+        // animation director (MakeAptAnimationTarget) from words 0/1/2/3/5 (p[5]=512).
         if (!s_bTargetReady)
         {
-            AptTarget* lpTarget = GetTarget();
-            if (lpTarget == nullptr)
+            // Pre-existing context? (idempotent: don't create a second instance.)
+            AptTarget* lpExisting = GetTarget();
+            if (lpExisting != nullptr)
             {
-                CgsDev::Log::WriteToLog("[AptRT] step5 target: GetTarget()==null -- AptUpdateInitialize/"
-                                        "AptCreateTargetInstance UN-HOMED. Context absent; load+tick will "
-                                        "bail (FLAG). Host bring-up otherwise complete.\n");
+                s_bTargetReady = true;
+            }
+            else if (gpAptPseudoDataPool == nullptr)
+            {
+                CgsDev::Log::WriteToLog("[AptRT] step5 target: SKIP -- DOGMA pool null (allocator wiring failed).\n");
             }
             else
             {
-                s_bTargetReady = true;
-                char lac[96];
-                std::snprintf(lac, sizeof(lac), "[AptRT] step5 target: GetTarget()=%p (context live).\n",
-                              (void*)lpTarget);
-                CgsDev::Log::WriteToLog(lac);
+                static const u32 s_auAptCreateParams[8] = { 0u, 1u, 8u, 8u, 0u, 512u, 0u, 0u };  // InitializeApt v7
+                CgsDev::Log::WriteToLog("[AptRT] step5 target: AptCreateTargetInstance + AptChangeTargetInstance ...\n");
+
+                // FLAG: the AptTarget ctor builds an AptAnimationTarget director + an AptLoader
+                // + an AptLinker (all homed) from the shared DOGMA pool. If any sub-construct
+                // crosses an un-homed callee it faults HERE; bracketed by the probes so the
+                // run-log pinpoints it.
+                AptTarget* lpCreated = AptCreateTargetInstance(s_auAptCreateParams);
+                if (lpCreated == nullptr)
+                {
+                    CgsDev::Log::WriteToLog("[AptRT] step5 target: AptCreateTargetInstance returned null "
+                                            "(pool carve failed) -- FLAG.\n");
+                }
+                else
+                {
+                    AptChangeTargetInstance(lpCreated);   // sets gpAptTarget/TLS + the GetTarget() mirror
+                    AptTarget* lpNow = GetTarget();
+                    s_bTargetReady = (lpNow != nullptr);
+                    char lac[200];
+                    std::snprintf(lac, sizeof(lac),
+                        "[AptRT] step5 target: created %p, gpAptTarget set; GetTarget()=%p; "
+                        "director=%p loader=%p linker=%p.\n",
+                        (void*)lpCreated, (void*)lpNow,
+                        (void*)lpCreated->mpAnimationTarget, (void*)lpCreated->mpLoader,
+                        (void*)lpCreated->mpLinker);
+                    CgsDev::Log::WriteToLog(lac);
+                }
             }
         }
 
         // The runtime is "ready" (for channel-41 routing) once the allocator + render
-        // buffer + AptAux host are up. The target/loader being un-homed is a downstream
-        // bail, not a bring-up failure -- routing is still worth attempting so the load
-        // step's own probes fire.
+        // buffer + AptAux host are up. The target now being live (step 5) lets PlayMovie +
+        // the per-frame tick reach a real GetTarget(); a failed target is a downstream bail,
+        // not a bring-up failure.
         s_bRuntimeReady = s_bAllocatorReady && s_bAuxReady;
         CgsDev::Log::WriteToLog(s_bRuntimeReady
-            ? "[AptRT] bring-up: READY (alloc+interp+aux+renderbuf up; target/loader FLAG'd).\n"
+            ? (s_bTargetReady
+                ? "[AptRT] bring-up: READY (alloc+interp+aux+renderbuf+TARGET up; GetTarget() live).\n"
+                : "[AptRT] bring-up: READY (alloc+interp+aux+renderbuf up; target FLAG'd -- see step5).\n")
             : "[AptRT] bring-up: INCOMPLETE -- see step probes above.\n");
         return s_bRuntimeReady;
     }

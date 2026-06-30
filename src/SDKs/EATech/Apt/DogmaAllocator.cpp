@@ -154,14 +154,19 @@ DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
     }
 
     // Per-size free-list head array: one head per 4-byte size bucket up to the
-    // max allocation, plus the zero bucket. (4 * ((maxSize >> 2) + 1) bytes.)
-    mpaFirstFreeBySize = (uintptr_t**)DOGMA_Malloc(4 * ((maxSizeAllocation >> 2) + 1));
+    // max allocation, plus the zero bucket -- ((maxSize>>2)+1) buckets. FLAG (x64
+    // widening): each bucket is a uintptr_t* (the free-list head), so the array is
+    // sizeof(uintptr_t*) per bucket -- NOT the console literal 4. Allocating 4*N
+    // here left buckets 33..64 (for maxSize 256) past the block, read as garbage
+    // free-list pointers by Allocate -> returned to the caller -> access violation.
+    const size_t nFreeListBytes = sizeof(uintptr_t*) * ((maxSizeAllocation >> 2) + 1);
+    mpaFirstFreeBySize = (uintptr_t**)DOGMA_Malloc(nFreeListBytes);
 
     // First (main) pool.
     DOGMA_MemPool* pFirstPool = (DOGMA_MemPool*)DOGMA_Malloc(mainPoolSizeBytes);
     mpFirstPool = pFirstPool;
 
-    memset(mpaFirstFreeBySize, 0, 4 * ((mnMaxSizeAllocation >> 2) + 1));
+    memset(mpaFirstFreeBySize, 0, sizeof(uintptr_t*) * ((mnMaxSizeAllocation >> 2) + 1));
 
     pFirstPool->SetupPool(0, mainPoolSizeBytes);   // *v36=0; v36[1]=v36[2]=a2-15
 }
@@ -171,8 +176,9 @@ DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
 // ---------------------------------------------------------------------------
 DOGMA_PoolManager::~DOGMA_PoolManager()
 {
-    // Free the per-size free-list head array (same byte count it was allocated).
-    DOGMA_FreeSized(mpaFirstFreeBySize, 4 * ((mnMaxSizeAllocation >> 2) + 1));
+    // Free the per-size free-list head array (same byte count it was allocated --
+    // sizeof(uintptr_t*) per bucket on x64; see the ctor).
+    DOGMA_FreeSized(mpaFirstFreeBySize, sizeof(uintptr_t*) * ((mnMaxSizeAllocation >> 2) + 1));
 
     // Free every pool in the chain. (while, not do/while: an empty/deferred pool has
     // mpFirstPool == 0 -- see the 0-size guard in the ctor -- and must not be dereffed.)
@@ -271,9 +277,12 @@ void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)
     else if (mbTrackOutsideAllocations)
     {
         // -- Tracked outside allocation: wrap with an intrusive list node and
-        //    push it onto the outside-allocation list.
+        //    push it onto the outside-allocation list. FLAG (x64 widening): the node
+        //    header is pNext+pPrev = 2*sizeof(ptr) bytes (== GetStructOverHead(), 16 on
+        //    x64), and GetReturnedPointer() returns base+16; the console literal `+8`
+        //    under-allocated by 8 -> the payload overran the block. Use the real overhead.
         OutsideAllocationT* pNode =
-            (OutsideAllocationT*)DOGMA_Malloc(nAllocatedSize + 8);     // v6 = malloc(a2+8)
+            (OutsideAllocationT*)DOGMA_Malloc(nAllocatedSize + OutsideAllocationT::GetStructOverHead());
         pNode->pPrev = 0;                                              // v6[1] = 0
 
         gDogmaOutsideAllocLock.Lock();
