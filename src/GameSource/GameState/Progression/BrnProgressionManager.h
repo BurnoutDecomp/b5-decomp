@@ -4,6 +4,9 @@
 #include "BrnCommonTypes.h" // CgsID (typedef u64)
 #include "GameSource/GameState/BrnGameStateTypes.h" // BrnGameState::StuntElementType
 #include "SharedClasses/Trigger/BrnGenericRegion.h"  // BrnTrigger::GenericRegion::Type (OnDriveThru param)
+#include "BrnProfile.h"                              // BrnProgression::Profile (embedded sub-object, mProfile)
+
+#include <cstddef> // offsetof (uncalled _AssertLayout)
 
 // Foreign types the additive DriveThruManager-facing accessors route by pointer (declare-only).
 // Tags match the committed homes (CarData/ProgressionData = struct, AchievementManagerBase = class)
@@ -11,10 +14,10 @@
 namespace BrnProgression  { struct CarData; struct ProgressionData; }
 namespace BrnGameState    { class AchievementManagerBase; }
 namespace InputBuffer     { class GameActionQueue; }
+// BrnStreetData::ChallengeHighScoreEntry / ChallengePlayerScoreEntry come in via BrnProfile.h.
 
 namespace BrnProgression
 {
-class Profile;  // GetProfile() return type; full slice in BrnProfile.h
 // MINIMAL OWNING HEADER for BrnProgression::ProgressionManager.
 //
 // SCOPE: this is a deliberately *thin* slice. The full ProgressionManager is a large,
@@ -163,5 +166,134 @@ public:
     // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133512 -- a drive-thrus/rivals
     // dirty flag. FLAG: de-inlined byte poke, not a named member in the exports.
     void SetDriveThrusDirtyFlag();
+
+    // ========================================================================
+    // BODIED in this TU (BrnProgressionManager.cpp). All nine X360-asm-attested. Each reaches
+    // its members BY NAME through the layout modelled below; no raw-offset pointer arithmetic.
+    // ========================================================================
+
+    // X360 0x827DEA50. Constructor: resets the 18 manager-handle head slots to the -1 sentinel,
+    // marks the embedded Profile's index->element containers unconstructed, installs the debug
+    // component's vtable, and empties the two intrusive event lists. EXECUTED in the boot trace.
+    ProgressionManager();
+
+    // X360 0x8239DC98. Two-phase load entry: validates the output/queue/trigger/achievement
+    // pointers, loads the progression resource, wires the trigger-data + achievement back-pointers,
+    // computes landmark AI-section indices, processes the loaded preset races, registers the debug
+    // component and sets up the roaming sections. Returns true on a successful load.
+    // FLAG: a3 (mpGameStateModule back-pointer, stored at +0x2093C) and the SetupRoamingSections
+    // argument list are modelled as the void* the X360 forwards; reconcile when those TUs land.
+    bool Prepare2(void* lpOutput, void* lpGameStateModule, InputBuffer::GameActionQueue* lpReceiverQueue,
+                  void* lpTriggerData, BrnGameState::AchievementManagerBase* lpAchievementManager);
+
+    // X360 0x82311520. True when road rules are available: the player has reached medal-progress >= 4
+    // OR either road-rules-availability flag is set. (Read off the embedded Profile + two tail flags.)
+    bool AreRoadRulesAvailable() const;
+
+    // X360 0x82359850. Map an offline game-mode index (0..5) to its E_RACE_EVENT_TYPE event id. Asserts
+    // (and returns -1) for an unknown mode. Pure index->constant map, no member access.
+    s32 GetEvent(s32 liGameType) const;
+
+    // X360 0x82359960. Map an online game-mode index (0..2) to its event id. Asserts (returns -1) for an
+    // unknown mode. Pure index->constant map, no member access.
+    s32 GetOnlin(u32 luGameType) const;
+
+    // X360 0x823635C0. True when the player already owns lCarId (linear scan of the embedded Profile's
+    // owned-car list). Routes through the named Profile car accessors.
+    bool IsCarUnlocked(CgsID lCarId) const;
+
+    // RepairUnlockedVehicle(CgsID) (X360 0x82363630) is declared once above (the DriveThruManager
+    // additive grow); its body is reconstructed in this TU's .cpp.
+
+    // X360 0x823114A8. Replace the whole 64-entry road-rules challenge-score table from lpaChallengeScores
+    // (2560-byte copy). Asserts the source non-null then delegates to the embedded Profile.
+    void SetRoadRuleChallengeData(const BrnStreetData::ChallengePlayerScoreEntry* lpaChallengeScores);
+
+    // X360 0x82311430. Replace the whole 64-entry road-rules network high-score table from
+    // lpaChallengeHighScores (3584-byte copy). Asserts the source non-null then delegates to the Profile.
+    void SetRoadRuleNetworkHighScores(const BrnStreetData::ChallengeHighScoreEntry* lpaChallengeHighScores);
+
+private:
+    // ========================================================================
+    // MINIMAL MEMBER LAYOUT (field ORDER X360-attested; exact byte offsets are X360-only -- the
+    // PC build is 64-bit so the embedded Profile / pointer members are naturally wider, and every
+    // function reaches its members BY NAME, identical behaviour regardless of byte offset).
+    //
+    // SCOPE: only the members the nine bodied functions touch are named. The X360 ProgressionManager
+    // is far larger (the head region holds 18 manager-handle records whose internal field shape is
+    // NOT recovered, and the tail holds further state); those are reserved honestly rather than
+    // fabricated. This is NOT the full ProgressionManager layout.
+    // ========================================================================
+
+    // Head: 18 manager-handle records the ctor resets to the -1 sentinel (X360 ctor loop: 18 stores of
+    // -1 at +0x10, stride 0x14). FLAG: the per-record internal field shape is unrecovered; only the
+    // leading id word the ctor writes is named, the rest reserved to preserve the 20-byte X360 stride.
+    struct HandleSlot
+    {
+        s32 mi32Id;        // +0x00 -- ctor stores the -1 "unset handle" sentinel here
+        u8  mPad[16];      // +0x04 -- remaining record bytes (shape not recovered)
+    };
+    static const s32 KI_HANDLE_SLOT_COUNT = 18;
+    HandleSlot maHandleSlots[KI_HANDLE_SLOT_COUNT];   // X360 +0x10 .. +0x170
+
+    // The player's persisted profile (the X360 reaches it as the by-value sub-object at this+0x170).
+    // Every Profile-facing bodied function (IsCarUnlocked / RepairUnlockedVehicle / SetRoadRule* /
+    // AreRoadRulesAvailable's medal read) goes through this named member.
+    Profile mProfile;                                  // X360 +0x170
+
+    // Two road-rules-availability flags AreRoadRulesAvailable OR-folds (X360 +133456 / +133460).
+    // FLAG: their producers live in not-yet-reconstructed ProgressionManager TUs.
+    s32 mi32RoadRulesAvailableFlagA;                   // X360 +133456
+    s32 mi32RoadRulesAvailableFlagB;                   // X360 +133460
+
+    // Prepare2 back-pointers (X360 +0x20924 / +0x2093C / +0x20938). Typed as the X360 forwards them.
+    void*                                  mpTriggerData;        // X360 +0x20924 (a5)
+    void*                                  mpGameStateModule;    // X360 +0x2093C (a3)
+    BrnGameState::AchievementManagerBase*  mpAchievementManager; // X360 +0x20938 (a6)
+
+    // The progression debug component the ctor installs (vtable off_820CDE4C) and Prepare2 constructs +
+    // registers (X360 +133000 region, this+0x788 in the +0x20000 page). FLAG: full DebugComponent
+    // sub-layout owned by ProgressionDebugComponent's TU; reserved here, only the installed vtable named.
+    struct DebugComponentSlot
+    {
+        const void* mpVTable;   // ctor: = &off_820CDE4C
+        u8          mPad[60];   // remaining ProgressionDebugComponent bytes (not modelled here)
+    };
+    DebugComponentSlot mDebugComponent;
+
+    // Two intrusive doubly-linked-list heads the ctor empties (X360 ctor: count=0; next=prev=mid=&self;
+    // tail=0 -- the canonical empty CgsList sentinel; X360 +133348 and +133380).
+    struct IntrusiveListHead
+    {
+        s32   mi32Count;        // +0x00 (ctor: 0)
+        void* mpReserved0;      // +0x04 (ctor: 0)
+        void* mpReserved1;      // +0x08 (ctor: 0)
+        void* mpHead;           // +0x0C (ctor: &self)
+        void* mpTail;           // +0x10 (ctor: &self)
+        void* mpMid;            // +0x14 (ctor: &self)
+        void* mpReserved2;      // +0x18 (ctor: 0)
+
+        // Empty the list to the X360 ctor's self-referential sentinel state.
+        void Reset()
+        {
+            mi32Count   = 0;
+            mpReserved0 = nullptr;
+            mpReserved1 = nullptr;
+            mpHead      = this;   // X360: result[3340] = result + 33337 (&self)
+            mpTail      = this;   // X360: result[3341] = result + 33337
+            mpMid       = this;   // X360: result[3342] = result + 33337
+            mpReserved2 = nullptr;
+        }
+    };
+    IntrusiveListHead mEventListA;   // X360 +133348
+    IntrusiveListHead mEventListB;   // X360 +133380
+
+    // Pointer-INVARIANT layout facts only (host is the LLP64 gate target). The X360 byte offsets are
+    // NOT asserted: they do not survive the 32->64-bit pointer widening of the embedded Profile.
+    static void _AssertLayout()
+    {
+        static_assert(KI_HANDLE_SLOT_COUNT == 18, "X360 ctor resets exactly 18 head handle slots");
+        static_assert(sizeof(HandleSlot) == 20,   "X360 head record stride is 0x14 (20) bytes");
+    }
 };
 }
