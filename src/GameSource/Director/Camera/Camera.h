@@ -138,6 +138,14 @@ namespace BrnDirector
             // +0x9C). Crash mode requests its close-up / impact-time slow-mo through this.
             void SetRequestedTimeDilation(f32 lfTimeScale);
 
+            // ---- crash-nav (picture-paradise) effect request (BrnArbStateCrashNav::Update) ------
+            // Clear the crash-nav effect gate byte the crash-nav state zeroes on its hand-off to
+            // WAITING_TO_STOP (X360 stb 0 at mEffects +0xB7 == camera +0x11F). DECLARATION-ONLY
+            // (body lands with the Camera / CameraEffects TU); the mEffects offset is this type's
+            // own concern. FLAG: the +0xB7 byte's precise role is not recovered (modelled as a
+            // crash-nav effect gate; the byte WRITE is asm-attested).
+            void ClearCrashNavEffectGate();
+
             // FLAG: minimal-slice decl used by the ICE movie-player family. Body lands
             // with this TU's Clear (@0x8223CE70, a separate function); declaration-only.
             void Clear();
