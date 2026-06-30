@@ -220,3 +220,13 @@ void BrnRendererMemory::CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u3
 
     mapRenderTarget[E_RENDER_TARGET_BACK_BUFFER] = lpBackBuffer;
 }
+
+// 0x823F4910 -- fetch a shadow-map render target by index. The X360 asserts the index is in [0,4)
+// then returns mapRenderTarget[liIndex + 1] (the +1 skips the anti-alias slot; the shadow-map pool
+// begins at slot 1). The asm bounds the index but does NOT clamp the +1 read -- it is reproduced
+// verbatim (no added guard on the read).
+CgsRenderTarget* BrnRendererMemory::GetShadowMapBuffer(s32 liIndex)
+{
+    CGS_ASSERT(liIndex >= 0 && liIndex < 4, "liIndex >=0 && liIndex<4");
+    return mapRenderTarget[liIndex + 1];
+}
