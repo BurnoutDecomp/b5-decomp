@@ -239,3 +239,67 @@ AptCIH* AptGetAnimationAtLevel(int nLevel)
     pState->insert(nLevel, pNew);                                       // AptDisplayListState::insert(root, nLevel, node)
     return pNew;
 }
+
+// ---------------------------------------------------------------------------
+// AptResolveDefaultTextFont -- the default-font resolve folded into the X360's
+// CreateTextCharacterInst @0x82B010C0 (cross-checked vs the PS3 DecFIGS DWARF
+// AptCharacterHelper::CreateTextCharacterInst @0xF570B4, which decompiles the same
+// walk with cleaner control flow):
+//
+//   v2 = pFontOwner + 16;                  // the embedded movie root
+//   *pTemplate->mpFixupLink = **(v2 + 0x10);   // first char-table entry's first member
+//   count = *(v2 + 12);                    // character-table count
+//   if (count > 0) {
+//     table = *(v2 + 16);                  // character-table base (AptCharacter*[])
+//     for (idx = 0; idx < count; ++idx)
+//       if (**table[idx] == 3) {           // char mnType == 3 (font)
+//         *pnDefaultGlyphIndex = idx; break;
+//       }
+//   }
+//   return the resolved font character (mpFixupLink result).
+//
+// FLAG (deferred serialised-.apt layer -- raw-offset access on an un-homed type):
+// pFontOwner+16 is the serialised movie-root record embedded in the AptCharacter; its
+// layout (count@+12 / table@+16 / fixup-source@+0x10) is the .apt serialised form, NOT
+// the transcoded AptCharacterAnimation (whose named members live at +0/+4) -- so there
+// is no C++ home to name it by (no header in b5-decomp/src, no Feb-2007 source; the PS3
+// DWARF names the surrounding function but still walks these raw offsets). Reconstructed
+// faithfully BYTE-FOR-BYTE from the X360 + PS3 disasm with the offsets documented in
+// [c:0xNN] form; promote to named members when the serialised movie-root type is homed.
+// The font character is returned (stored into the template's mpFixupLink slot by the
+// caller), and the default glyph index is written through pnDefaultGlyphIndex (the X360
+// seeds it to -1 first; this routine only sets it when a type-3 font character is found).
+// ---------------------------------------------------------------------------
+AptCharacter* AptResolveDefaultTextFont(AptCharacter* pFontOwner, int32_t* pnDefaultGlyphIndex)
+{
+    if (pFontOwner == nullptr)
+        return nullptr;
+
+    // v2 = the serialised movie root embedded at pFontOwner+0x10 [c:0x10].
+    char* const pMovieRoot = reinterpret_cast<char*>(pFontOwner) + 16;
+
+    // mpFixupLink result = **(v2 + 0x10): the character-table base held at
+    // [c:movieRoot+0x10], dereferenced twice to its first AptCharacter* entry.
+    AptCharacter* const* const ppDefaultTable =
+        *reinterpret_cast<AptCharacter* const* const*>(pMovieRoot + 0x10);   // *(v2 + 0x10)
+    AptCharacter* const pFontCharacter = *ppDefaultTable;                    // **(v2 + 0x10)
+
+    // Walk the character table for the first font character (mnType == 3) and record
+    // its index as the default glyph index.
+    const int32_t nCount = *reinterpret_cast<const int32_t*>(pMovieRoot + 12);   // *(v2 + 12)
+    if (nCount > 0)
+    {
+        AptCharacter* const* const pTable =
+            *reinterpret_cast<AptCharacter* const* const*>(pMovieRoot + 16);     // *(v2 + 16)
+        for (int32_t i = 0; i < nCount; ++i)
+        {
+            if (pTable[i]->mnType == 3)   // **(4*idx + table) == 3 (font character type)
+            {
+                *pnDefaultGlyphIndex = i;
+                break;
+            }
+        }
+    }
+
+    return pFontCharacter;
+}
