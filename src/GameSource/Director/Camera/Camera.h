@@ -55,6 +55,19 @@ namespace BrnDirector
         // DWARF: Camera.h:40 (struct BrnDirector::Camera::Camera).
         struct alignas(16) Camera
         {
+            // ---- near/far-clip distance class constants (DWARF Camera.h:200-202) ----
+            // Static data members the camera's near-clip selection reads. GetNearClipDistance
+            // returns KF_SMALL_NEAR_CLIP_DISTANCE when the camera-state "small near clip"
+            // flag (mState_uFlags & 0x10000) is set, else KF_DEFAULT_NEAR_CLIP_DISTANCE.
+            // FLAG (un-recovered rodata): the X360 leaf floats (flt_82CDA55C /
+            // flt_82CDA560 / the far-clip constant) are NOT in any available rodata dump,
+            // so their VALUES are not reconstructed here. They are defined in Camera.cpp
+            // with a flagged placeholder (see the FLAG there) -- the SELECTION logic in
+            // GetNearClipDistance is fully X360-attested; only the two leaf magnitudes are
+            // unknown. Do NOT treat the placeholder magnitudes as ground truth.
+            static const f32 KF_SMALL_NEAR_CLIP_DISTANCE;    // Camera.h:200 (flt_82CDA55C)
+            static const f32 KF_DEFAULT_NEAR_CLIP_DISTANCE;  // Camera.h:201 (flt_82CDA560)
+            static const f32 KF_DEFAULT_FAR_CLIP_DISTANCE;   // Camera.h:202
             // DWARF Camera.h:185 -- the per-frame "which shot is selected" record.
             struct ShotSelectionInfo
             {
@@ -66,6 +79,15 @@ namespace BrnDirector
 
             // DWARF Camera.h:43: `typedef const Attrib::RefSpec ShotReference;`
             typedef const Attrib::RefSpec ShotReference;
+
+            // Default-constructible (the camera is brought up via Construct(), and is
+            // embedded by value in several owners that zero/Construct it themselves).
+            Camera() = default;
+
+            // X360-attested @0x821F3B88. The copy constructor -- a flat memberwise copy of
+            // the whole camera (body: Camera.cpp). Declared explicitly so the X360-attested
+            // copy has a named home; defaulting it keeps the default ctor available too.
+            Camera(const Camera& lrOther);
 
             // X360-attested @0x8220A850 (DWARF Camera.h:75). Validates the transform
             // (asserts on NaN / unreasonable position) and returns the validated-
@@ -131,6 +153,13 @@ namespace BrnDirector
             // API; declared additively for the BrnLooker consumer.
             f32  GetFOV() const;
             void SetFOV(f32 lfFOV);
+
+            // X360-attested @0x82205B68 (DWARF Camera.h:174). The active near-clip distance:
+            // the per-camera custom override when one is set, else the small/default constant
+            // selected by the camera-state flag. Body: Camera.cpp. (CameraInterpolationController
+            // ::Update reads it.)
+            f32  GetNearClipDistance() const;
+
             const rw::math::vpu::Matrix44Affine& GetTransform() const;
             void SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform);
             DepthOfField& GetDepthOfField();

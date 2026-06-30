@@ -32,6 +32,20 @@ namespace BrnDirector
 namespace Camera
 {
 
+// ----------------------------------------------------------------------------
+// Near/far-clip class constants (DWARF Camera.h:200-202).
+//
+// FLAG (un-recovered rodata): the X360 GetNearClipDistance @0x82205B68 returns the
+// floats at flt_82CDA55C (small-near-clip) and flt_82CDA560 (default-near-clip); the
+// far-clip constant is the third member. None of these leaf magnitudes appear in any
+// available rodata dump, so their VALUES are NOT reconstructed. Defined here with a
+// flagged 0.0f placeholder rather than a fabricated magnitude -- the GetNearClipDistance
+// SELECTION logic below is fully X360-attested; only these three leaf values are unknown.
+// Replace with the real magnitudes when the .rodata at 0x82CDA55C is recovered.
+const f32 Camera::KF_SMALL_NEAR_CLIP_DISTANCE   = 0.0f;  // FLAG placeholder (flt_82CDA55C)
+const f32 Camera::KF_DEFAULT_NEAR_CLIP_DISTANCE = 0.0f;  // FLAG placeholder (flt_82CDA560)
+const f32 Camera::KF_DEFAULT_FAR_CLIP_DISTANCE  = 0.0f;  // FLAG placeholder
+
 // Pointer-size-independent facts the X360 asm pins (these hold on the x64 gate too).
 // CameraEffects has no pointer members, so its 0xBC stride -- the gap the Construct asm
 // proves between the camera's effects block (+0x68) and depth-of-field (+0x124) -- is the
@@ -99,6 +113,59 @@ rw::math::vpu::Matrix44Affine* Camera::ValidateTransformWithDebugInfo()
                "Camera has unreasonable position, originated from: ");
 
     return &mTransform;
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::Camera(const Camera&) @0x821F3B88
+//
+// The copy constructor. The X360 asm is a flat field-by-field copy of the WHOLE camera
+// (no behaviour beyond the copy): five vmx loads/stores cover mTransform (64B) + mSubject
+// (16B); a run of word stores copies mpDebugInfoBehaviour..mpCrashAnalysis; a memcpy of
+// 0xBC (188) bytes copies mEffects; a 5-word loop copies mDepthOfField (0x14); a 6-word
+// loop copies mState (0x18); and the tail copies mfCustomNearClipDistance, the two
+// mShotSelectionInfo words, and the mbHasSubject / mbHasCustomNearClipDistance bytes.
+// That is exactly a memberwise copy of every member, so the de-optimised human form is
+// the implicit memberwise copy. (Console offsets +0x00..+0x15D; member parity is by name
+// on the x64 gate -- see Camera.h.)
+// ----------------------------------------------------------------------------
+Camera::Camera(const Camera& lrOther) = default;
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::SetFOV @0x821F26B8
+//
+// Set the camera field-of-view. The asm asserts the new FOV is strictly greater than 0
+// (fcmpu f31, 0.0; bgt skips the assert) -- Camera.h:424 "lfFOV > 0.0f" -- then stores it
+// to mfFOV (+0x58). The dynamic gpcMessageBuffer assert is replaced by CGS_ASSERT per the
+// project rule; the store side effect is preserved exactly.
+// ----------------------------------------------------------------------------
+void Camera::SetFOV(f32 lfFOV)
+{
+    CGS_ASSERT(lfFOV > 0.0f, "lfFOV > 0.0f");
+    mfFOV = lfFOV;
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::GetNearClipDistance @0x82205B68
+//
+// The active near-clip distance. The asm:
+//   if (mbHasCustomNearClipDistance)          return mfCustomNearClipDistance;  // +0x15D / +0x150
+//   if (mState_uFlags & 0x10000)              return KF_SMALL_NEAR_CLIP_DISTANCE; // +0x140
+//   else                                      return KF_DEFAULT_NEAR_CLIP_DISTANCE;
+// (The flags load is a 64-bit ld of mState's current-flag word at +0x140, masked to the
+// single 0x10000 bit.) FLAG: the two constant magnitudes are un-recovered rodata -- see
+// the KF_*_NEAR_CLIP_DISTANCE definitions above; the branch logic here is X360-exact.
+// ----------------------------------------------------------------------------
+f32 Camera::GetNearClipDistance() const
+{
+    if (mbHasCustomNearClipDistance)
+    {
+        return mfCustomNearClipDistance;
+    }
+    if ((mState_uFlags & 0x10000) != 0)
+    {
+        return KF_SMALL_NEAR_CLIP_DISTANCE;
+    }
+    return KF_DEFAULT_NEAR_CLIP_DISTANCE;
 }
 
 } // namespace Camera
