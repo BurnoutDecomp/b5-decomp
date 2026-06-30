@@ -218,6 +218,14 @@ namespace BrnGui
             mBootVideos.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mBootInQueue));
             mBootVideos.OnEnter();
         }
+
+        // PHASE 2: BF_LEGAL queues. The FSM itself (BRNLEGALFSM) is loaded + entered only when BF_VIDEOS
+        // signals "done" (in UpdateBootVideoFlow) -- the PC stand-in for the X360 GuiFsmController loading
+        // the next single-state FSM on the boot-videos-done state event, so BootLegal::OnEnter does not fire
+        // until the logos finish.
+        mBootLegalInQueue.Construct();
+        mBootLegalStateInterface.Construct();
+        mbBootLegalFsmReady = false;
         return true;
     }
 
@@ -316,6 +324,29 @@ namespace BrnGui
             return;   // the MovieManager bridge below belongs to BF_VIDEOS (phase 1)
         }
 
+        // ---- PHASE 2: BF_LEGAL ------------------------------------------------------------------------
+        // BootLegal (the legal / title screen) runs through the BRNLEGALFSM Lua FSM, driving its
+        // 0..10-stage machine (wait-cache -> play the title_screen02 title movie -> fade-in -> wait-start
+        // -> attract loop -> menu). The title/attract movie + the menu's Apt view-state output are the
+        // deferred render boundaries (the movie-definition prepare + the Apt engine, FLAG'd in
+        // BrnBootLegalBoundary.cpp); the flow reaching this phase + the title_screen02 request IS the
+        // BF_LEGAL milestone. [follow-on: bridge the title movie to the MovieManager + the menu Apt-view
+        // to the Apt engine so the legal/title screen renders.]
+        if (miBootPhase == 2)
+        {
+            if (!mbBootStarted)
+            {
+                CgsModule::Event lReadyEvent;
+                mBootLegalInQueue.AddEvent(&lReadyEvent, 64, static_cast<s32>(sizeof(lReadyEvent)));  // cache-ready
+                mbBootStarted = true;
+            }
+            if (mbBootLegalFsmReady)
+                mBootLegalStateMachine.CgsFsm::Fsm::Update();   // runs BootLegal through the Lua FSM
+            else
+                mBootLegal.Update();                            // fallback: drive BootLegal directly
+            return;
+        }
+
         // Entering BF_VIDEOS: the loading screen must be down (BootLoading::OnLeave dropped it; this is a
         // belt-and-suspenders in case the stop event didn't route, so no loading screen lingers over the logos).
         if (gBrnLoadingScreenShouldShow)
@@ -391,6 +422,36 @@ namespace BrnGui
             CgsModule::Event lFinishedEvent;
             mBootInQueue.AddEvent(&lFinishedEvent, 510, static_cast<s32>(sizeof(lFinishedEvent)));
             mMovieManager.AcknowledgeFinishedAndReturnToIdle();
+        }
+
+        // 6. BF_VIDEOS -> BF_LEGAL: when BootVideos signals "done" (Criterion finished), advance to the
+        //    legal/title screen. Faithful to the X360 GuiFsmController, the controller loads the NEXT phase
+        //    FSM (BRNLEGALFSM) on the boot-videos-done state event -- so run the videos FSM's transition,
+        //    release it, then load + enter BF_LEGAL. Mirrors the BF_LOADING -> BF_VIDEOS advance above.
+        if (mBootVideos.IsStateChangePending())
+        {
+            CgsFsm::Event lEvent;
+            lEvent.Construct(CgsIDCompress(mBootVideos.GetPendingEventName()));
+            mBootStateMachine.SendEvent(&lEvent);   // "done" -> NextState (no-op for the single-state BF_VIDEOS)
+            mBootVideos.ClearStateChange();
+            mBootStateMachine.Release();
+            mbBootFsmReady = false;
+
+            CgsResource::LuaCodeResource* lpLegalLua = LoadFsmLuaCode(mBootLegalPool, "FSM/BRNLEGALFSM.BUNDLE", 2);
+            mbBootLegalFsmReady = SetupBootPhase(mBootLegalStateMachine, mBootLegal, mBootLegalStateInterface,
+                                                 mBootLegalInQueue, lpLegalLua, mBootLuaHeap, CgsIDCompress("BF_LEGAL"));
+            if (!mbBootLegalFsmReady)
+            {
+                // Fallback: drive BootLegal directly (no BRNLEGALFSM) so the legal/title screen still runs.
+                mBootLegal.SetStateInterface(&mBootLegalStateInterface);
+                mBootLegal.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mBootLegalInQueue));
+                mBootLegal.OnEnter();
+            }
+            CgsDev::Log::WriteToLog(mbBootLegalFsmReady
+                ? "[GuiModule] BF_VIDEOS signalled done -> advancing to BF_LEGAL (BRNLEGALFSM Lua FSM).\n"
+                : "[GuiModule] BF_VIDEOS signalled done -> advancing to BF_LEGAL (direct fallback).\n");
+            miBootPhase   = 2;
+            mbBootStarted = false;   // re-arm cache-ready for BF_LEGAL
         }
     }
 }
