@@ -9,6 +9,7 @@
 #include "GameSource/BurnoutConstants.h"                              // EActiveRaceCarIndex
 #include "GameSource/Director/Utils/BrnVehicleRef.h"                  // BrnDirector::VehicleRef::EType
 #include "GameSource/Director/Camera/Camera.h"                        // BrnDirector::Camera::Camera (mCamera, by value)
+#include "GameSource/Director/Camera/BrnBehaviourManager.h"           // BrnDirector::Camera::BehaviourManager / BehaviourHandle<> / BehaviourInterpolate / BehaviourHelperIndex (canonical home)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnICEMoviePlayer.h
@@ -35,14 +36,11 @@
 // full so the separate AbstractPool/ObjectPool instantiation TUs can instantiate over
 // them; those pool instantiations are NOT defined here.
 //
-// FLAG (minimal-sliced unhomed deps): the camera-behaviour layer that the player drives
-//   -- BrnDirector::Camera::BehaviourManager, ::BehaviourHandle<>, ::BehaviourInterpolate
-//   (+ ::Parameters), ::BehaviourHelperIndex -- is NOT yet reconstructed. It is modelled
-//   below with the minimum named members/methods the player bodies touch, accessed by
-//   name (the camera-A/B setup is expressed as BehaviourInterpolate methods that take a
-//   helper or camera directly, rather than exposing a separate CameraReference type).
-//   Replace these minimal slices with their real homes when those Camera TUs are
-//   reconstructed; the player's member NAMES are stable.
+// The camera-behaviour layer the player drives -- BrnDirector::Camera::BehaviourManager,
+//   ::BehaviourHandle<>, ::BehaviourInterpolate (+ ::Parameters), ::BehaviourHelperIndex --
+//   now has its canonical full-layout home at GameSource/Director/Camera/BrnBehaviourManager.h
+//   (included above). The minimal slice that previously lived in this file was reconciled
+//   into that home, so there is exactly ONE definition; these types are used here by name only.
 // FLAG: BrnDirector::DebugComponent (the playlist's mpDebugComponent / SetDebugComponent)
 //   is an unreconstructed dev-tools type -- forward-declared only (pointer member).
 // ============================================================================
@@ -61,248 +59,13 @@ class DebugComponent;
 class ICEWrapper;
 
 // ----------------------------------------------------------------------------
-// FLAG: minimal slice of the Director camera-behaviour layer (no reconstructed home
-// yet). Declared here so the player can name its interpolator members and the .cpp can
-// drive them idiomatically. Methods are DECLARATION-ONLY (bodies land with the real
-// Camera TUs); pointer/handle members are sized only as needed to be embeddable.
+// The Director camera-behaviour layer the player drives (BehaviourManager,
+// BehaviourHandle<>, BehaviourInterpolate (+ Parameters), BehaviourHelperIndex) now has
+// its canonical home at GameSource/Director/Camera/BrnBehaviourManager.h, included above.
+// Those types are used here only by name (the player's interpolator members + the .cpp
+// driving them). The previous minimal slice that lived in this file has been reconciled
+// into that home so there is exactly ONE definition of BrnDirector::Camera::BehaviourManager.
 // ----------------------------------------------------------------------------
-namespace Camera
-{
-    class BehaviourManager;
-
-    // Identifies a slot in a BehaviourManager's helper-index table (the "from"/"to"
-    // helper the player records for an interpolation). It is an assignable value type;
-    // modelled here as a single index word.
-    class BehaviourHelperIndex
-    {
-    public:
-        BehaviourHelperIndex() : miIndex(-1) {}
-        s32 miIndex;
-    };
-
-    // The per-behaviour interpolator that blends one camera source into another. The
-    // player allocates two of these via the manager and drives their setup. The methods
-    // are the named operations the player's bodies invoke -- DECLARATION-ONLY (the real
-    // bodies land with the BehaviourInterpolate TU).
-    // FLAG: minimal slice -- no reconstructed home yet.
-    class BehaviourInterpolate
-    {
-    public:
-        // Per-take interpolation curve/easing parameters. Opaque here; the player only
-        // ever holds a pointer to one.
-        class Parameters {};
-
-        // 0 == cut / no pause updates, 2 == updates-during-pause.
-        void SetInterpolationMode(s32 liMode);
-        void SetParameters(const Parameters* lpParams);
-        void SetupDuration(f32 lfDuration);
-        bool HasFinished() const;
-        void SetupCameraAFromCamera(const Camera& lrCamera);
-        void SetupCameraAFromHelper(BehaviourHelperIndex lHelper, BehaviourManager& lrManager);
-        void SetupCameraBFromCamera(const Camera& lrCamera);
-        void SetupCameraBFromHelper(BehaviourHelperIndex lHelper, BehaviourManager& lrManager);
-        void Setup();
-        // The camera this interpolator is producing this frame (the player copies it into
-        // its own mCamera while the interpolator is active).
-        const Camera& GetCamera() const;
-    };
-
-    // A typed handle to a behaviour owned by a BehaviourManager. The player keeps two
-    // (the in/out interpolators) and the arbitrator/moment states each keep their own.
-    // All a holder needs is to query allocation, reach the live behaviour, allocate it
-    // through Prepare, and clear/release through the manager -- modelled with named
-    // methods so callers never touch the handle's internals. The trailing storage sizes
-    // the handle so it can be embedded by value.
-    //
-    // CANONICAL HOME (5-word layout). This is the namespace-level BrnDirector::Camera::
-    // BehaviourHandle<> template: mbAllocated(+0x00), muAllocationKey(+0x04), the behaviour-
-    // lookup helper word(+0x08), mpManager(+0x0C), mpBehaviour(+0x10) -- pinned from the
-    // X360 BehaviourHandle::Prepare @0x8224AFF0 / ::Release @0x8222DD00 asm (which store the
-    // owning manager at +0x0C and the resolved behaviour at +0x10, with the helper word at
-    // +0x08). The arbitrator/moment states inline-duplicate this same five-word layout as a
-    // nested type (BrnArbStateRankUp.h etc.); those nested copies are distinct types and are
-    // left untouched. The movie-player's interpolator handles simply never set the helper
-    // word (default 0).
-    // FLAG: the +0x08 helper word's exact role is not fully recovered (modelled as an opaque
-    //   behaviour-lookup helper index, matching the arbitrator-state copies).
-    template <typename TBehaviour>
-    class BehaviourHandle
-    {
-    public:
-        BehaviourHandle()
-            : mbAllocated(false), muAllocationKey(0), muHelperIndex(0),
-              mpManager(0), mpBehaviour(0) {}
-
-        // True when this handle currently owns an allocated behaviour.
-        bool IsAllocated() const { return mbAllocated; }
-
-        // The manager that owns this handle's behaviour (NULL when unallocated).
-        BehaviourManager* GetManager() const { return mpManager; }
-
-        // The live behaviour (only valid while IsAllocated()).
-        TBehaviour* GetBehaviour() const { return mpBehaviour; }
-
-        // Allocate this handle onto a freshly-reserved behaviour. X360-attested
-        // (BehaviourHandle::Prepare @0x8224AFF0, called from BehaviourManager::NewBehaviour):
-        // release any behaviour the handle already holds, record the allocation key / helper /
-        // manager, mark allocated, register the manager-side hold, then resolve and cache the
-        // live behaviour pointer from the manager pool. Always returns true. Body out-of-line
-        // below (needs BehaviourManager complete).
-        bool Prepare(u32 luAllocationKey, u32 luHelperIndex, BehaviourManager* lpManager);
-
-        // Drop the manager-side hold on the behaviour and clear the handle back to empty.
-        // X360-attested (BehaviourHandle::Release @0x8222DD00, called from
-        // MomentHardStop::Update). Always returns true. Body out-of-line below.
-        bool Release();
-
-        // Drop the handle to its empty state (the player clears it after releasing).
-        void Clear()
-        {
-            mbAllocated     = false;
-            muAllocationKey = 0;
-            muHelperIndex   = 0;
-            mpManager       = 0;
-            mpBehaviour     = 0;
-        }
-
-    private:
-        bool              mbAllocated;     // +0x00  owns a behaviour
-        u32               muAllocationKey; // +0x04  manager-side allocation key
-        u32               muHelperIndex;   // +0x08  behaviour-lookup helper (FLAG: role not recovered)
-        BehaviourManager* mpManager;       // +0x0C  owning manager
-        TBehaviour*       mpBehaviour;     // +0x10  resolved behaviour
-    };
-
-    // The owner of all live camera behaviours. The player allocates / releases its two
-    // interpolators through it and sets per-behaviour pause-update state. The methods are
-    // the named operations the player invokes -- DECLARATION-ONLY.
-    // FLAG: minimal slice -- no reconstructed home yet.
-    class BehaviourManager
-    {
-    public:
-        // Allocate a fresh BehaviourInterpolate into lrHandle. The trailing selectors
-        // mirror the recorded allocation request (priority / group / active).
-        void NewBehaviourInterpolate(BehaviourHandle<BehaviourInterpolate>& lrHandle,
-                                     s32 liArgA, s32 liArgB, s32 liArgC);
-        // Release the behaviour a handle owns (leaves the handle ready to Clear()).
-        void ReleaseBehaviour(BehaviourHandle<BehaviourInterpolate>& lrHandle);
-        // Whether a behaviour keeps updating while the game is paused.
-        void SetBehaviourUpdatesDuringPause(BehaviourHandle<BehaviourInterpolate>& lrHandle,
-                                            bool lbUpdatesDuringPause);
-
-        // Release-side methods the arbitrator states (e.g. ArbStateRoaming::Release) drive.
-        // X360-attested:
-        //   UnSetBehaviourUsedByHandle @0x822194B0 -- drop the manager-side hold a handle has
-        //     on its behaviour, identified by the handle's allocation key.
-        //   CheckNoBehavioursAreAllocatedByState @0x822201B0 -- debug check (asserts) that the
-        //     given state holds no behaviours at release time.
-        // DECLARATION-ONLY (bodies land with the BehaviourManager TU). lpState is the owning
-        // ArbitratorState; declared as a void* here to avoid pulling the arbitrator-state cone
-        // into the movie-player slice (the manager only uses it as an opaque owner key).
-        void UnSetBehaviourUsedByHandle(u32 luAllocationKey);
-        void CheckNoBehavioursAreAllocatedByState(const void* lpState);
-
-        // Re-assert the manager-side hold a freshly-allocated handle has on its behaviour,
-        // identified by the handle's allocation key. The complement of
-        // UnSetBehaviourUsedByHandle. X360-attested (called from BehaviourHandle::Prepare
-        // @0x8224B054 with this == the handle's owning manager and the allocation key in r4).
-        // DECLARATION-ONLY (body lands with the BehaviourManager TU).
-        void SetBehaviourUsedByHandle(u32 luAllocationKey);
-
-        // Resolve the manager-pool slot a handle's (helper word, allocation key) names, so the
-        // handle can cache the live behaviour pointer it holds. X360-attested
-        // (BehaviourHandle::Prepare @0x8224B08C calls the pool resolve with the helper word in
-        // r3 and the allocation key in r4, then dereferences the returned slot; the pool
-        // asserts the slot is allocated -- BrnBehaviourManager.h:589). The X360 passes the
-        // helper word as the first argument (NOT a manager `this`), so this is a static lookup;
-        // it returns the address of the slot holding the behaviour pointer. DECLARATION-ONLY
-        // (body lands with the BehaviourManager TU). FLAG: the helper word's role is not fully
-        // recovered (see BehaviourHandle).
-        template <typename TBehaviour>
-        static TBehaviour** GetBehaviourSlotFromHandle(u32 luHelperIndex, u32 luAllocationKey);
-
-        // Whether the behaviour a handle owns (identified by its allocation key) is still
-        // queued for its first Prepare (i.e. not yet ready to use). X360-attested
-        // (BrnBehaviourManager.h:517 -- the BehaviourHandle's "is the behaviour ready?" query
-        // asserts mbAllocated then forwards here). BrnArbStateRankUp::Prepare returns
-        // !IsBehaviourWaitingToPrepare(key) so that the rank-up state advances to ACTIVE only
-        // once its freshly-allocated take is ready. DECLARATION-ONLY (the body lands with the
-        // BehaviourManager TU; the per-TU cl /c gate does not link).
-        bool IsBehaviourWaitingToPrepare(u32 luAllocationKey) const;
-
-        // Allocate a fresh TBehaviour into lrHandle, owned by lpOwningState. X360-attested
-        // (the BrnDirector::Camera::BehaviourManager::NewBehaviour<TBehaviour> family, e.g.
-        // the BehaviourIceAnim instantiation @0x82268018 the race-intro arbitrator state
-        // drives). The trailing two selectors mirror the recorded allocation request (the
-        // X360 passes 0, 1). Generic over the handle type so the arbitrator states' own
-        // BehaviourHandle<> (a 5-word variant carrying a lookup-helper word) binds as well as
-        // this header's interpolator handle. DECLARATION-ONLY (the body lands with the
-        // BehaviourManager TU; the per-TU cl /c gate does not link).
-        template <typename TBehaviour, typename THandle>
-        void NewBehaviour(THandle& lrHandle, void* lpOwningState, s32 liArgA, s32 liArgB);
-    };
-
-    // Trap-stub-free declaration only: the template body is never defined here (the real body
-    // lands with the BehaviourManager TU). Naming it as a template lets the per-TU gate emit a
-    // call without an inline definition; nothing instantiates a body in this header.
-
-    // ------------------------------------------------------------------------
-    // BehaviourHandle::Prepare @0x8224AFF0 -- bind this handle onto a freshly-reserved
-    // behaviour. Defined out-of-line here, where BehaviourManager is complete.
-    //
-    // X360 control flow (asm @0x8224AFF0): if the handle already owns a behaviour, release the
-    // existing manager-side hold and clear the inner slots first; record the new allocation
-    // key / helper word / manager and mark allocated; re-assert the manager-side hold; assert
-    // IsAllocated() (BrnBehaviourManager.h:589); then resolve the live behaviour pointer from
-    // the manager pool through (helper word, allocation key) and cache it. Always returns true.
-    // ------------------------------------------------------------------------
-    template <typename TBehaviour>
-    bool BehaviourHandle<TBehaviour>::Prepare(u32 luAllocationKey, u32 luHelperIndex,
-                                              BehaviourManager* lpManager)
-    {
-        if (mbAllocated)
-        {
-            mpManager->UnSetBehaviourUsedByHandle(muAllocationKey);
-            muHelperIndex = 0;
-            mpManager     = 0;
-            mpBehaviour   = 0;
-            mbAllocated   = false;
-        }
-
-        muAllocationKey = luAllocationKey;
-        muHelperIndex   = luHelperIndex;
-        mpManager       = lpManager;
-        mbAllocated     = true;
-
-        mpManager->SetBehaviourUsedByHandle(muAllocationKey);
-
-        CGS_ASSERT(mbAllocated, "IsAllocated()");
-
-        mpBehaviour =
-            *BehaviourManager::GetBehaviourSlotFromHandle<TBehaviour>(muHelperIndex, muAllocationKey);
-        return true;
-    }
-
-    // ------------------------------------------------------------------------
-    // BehaviourHandle::Release @0x8222DD00 -- drop the manager-side hold and clear the handle
-    // back to its empty state. Defined out-of-line here, where BehaviourManager is complete.
-    // X360 control flow (asm @0x8222DD00): only acts when the handle currently owns a behaviour
-    // (mbAllocated); otherwise a no-op. Always returns true.
-    // ------------------------------------------------------------------------
-    template <typename TBehaviour>
-    bool BehaviourHandle<TBehaviour>::Release()
-    {
-        if (mbAllocated)
-        {
-            mpManager->UnSetBehaviourUsedByHandle(muAllocationKey);
-            muHelperIndex = 0;
-            mpManager     = 0;
-            mpBehaviour   = 0;
-            mbAllocated   = false;
-        }
-        return true;
-    }
-}
 
 // ----------------------------------------------------------------------------
 // IceMovie -- one entry in a playlist: a single ICE camera take, referenced either by
