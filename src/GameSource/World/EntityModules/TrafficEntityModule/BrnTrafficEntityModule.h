@@ -157,4 +157,215 @@ namespace BrnTraffic
         Vector4 mHalfLengths;      // :302  +0x60
         Vector4 mHalfWidths;       // :303  +0x70
     };
+
+    // =========================================================================
+    // BrnTraffic::TrafficEntityModule  (DWARF home BrnTrafficEntityModule.h:~470)
+    //
+    // KEYSTONE class home -- the TRAFFIC entity module: a CgsEntityModule subclass that owns and
+    // ticks the traffic-vehicle fleet through the scene-update interface. This slice GROWS the
+    // committed element-type header (above) ADDITIVELY with the module class itself.
+    //
+    // LAYOUT IS DWARF-OPAQUE (FOUNDATION / dossier-DWARF-gap):
+    //   The X360 DWARF DIE for this class emits ONLY its nested enums (reproduced below); it emits
+    //   NO member-field layout for the ~470KB module object. Every X360 method reaches the object
+    //   through raw, asm-attested BYTE offsets (e.g. meState @ +0x300, meRunningState @ +0x308,
+    //   the maStandard/maStatic vehicle pools at (index+85)<<7 / (index+485)<<7, the static-param
+    //   pool at 6*(index+...) , etc.). Because no faithful member layout is recoverable, the object
+    //   is modelled here as an OPAQUE fixed storage blob and the recoverable methods are bodied as
+    //   asm-attested byte-offset arithmetic over `this` (the "opaque external field by attested
+    //   offset" allowance) -- NOT as named members (which would require fabricating the layout).
+    //   The mOpaque[] size is itself NOT asm-attested as a single object total, so it is FLAGGED:
+    //   it is sized only large enough to cover the highest attested offset touched by a BODIED
+    //   method, and pinned with a static_assert; it is NOT the true sizeof and MUST be re-homed
+    //   (never trusted for placement-new of the real object) when a member layout is recovered.
+    //
+    // BODIED (asm-recoverable, attested-offset): the simple vehicle/param-pool address accessors
+    //   (GetStandardVehicle / GetStaticVehicle / GetTrailerVehicle / GetVehicleAxles /
+    //   GetStaticTrafficParam[Fro|FromFullV] / GetVehicleIndexFromStaticIndex / GetParamNeedToSlowData
+    //   / GetParamPlan), the state/flag book-keeping (IsPaused / ShouldBeHollywoodAction /
+    //   NeedToTakeActionAgainstJunctionFUP / EnterReplay / LeaveReplay / RestartTraffic), and the
+    //   stuck-timer helpers (UpdateVehicleStuckSideTime / UpdateVehicleStuckTimers).
+    //
+    // DECLARATION-ONLY + FLAGGED (NOT bodied -- would require fabricating the 470KB layout, a
+    //   multi-stage VMX pipeline, or reaching an un-homed sub-aggregate / BrnTraffic::Vehicle
+    //   interior): the constructor (raw 470KB field init + un-homed sub-aggregate ctors), the
+    //   Avoidance_* VMX scoring pipeline, CalculateAndSetSteeringUsingAvoidance, CalculateDriverGasBrake,
+    //   the DEBUG_* helpers, GetCarAssetAttribKey, GetDeterministicParamPos, GetHullRuntimeSafe
+    //   (reaches mpData->muNumHulls), GetSympCrashingTargetPos, GetTrafficPhysicsInfoForVehicl,
+    //   HideAllTraffic / UnhideAllTraffic, IsVehiclesParamAZombie, the JunctionFUP_* pair,
+    //   KillDyingVehicleEntities, PutParamInPurgatory, RebuildGeneratorList, SetVehicleTransform
+    //   (RwMath transform copy w/ VMX validity asserts), UpdateNormalPhysical, the UpdateParams_*
+    //   pipelines, and UpdateSerialiser.
+    // =========================================================================
+    struct TrafficEntityModule
+    {
+        // --- DWARF-attested nested enums (BrnTrafficEntityModule.h:486-559) -------------------
+
+        // :486
+        enum EPrepareStage
+        {
+            E_PREPARESTAGE_START       = 0,
+            E_PREPARESTAGE_MANAGER     = 1,
+            E_PREPARESTAGE_LOADINGWORLD= 2,
+            E_PREPARESTAGE_VOLUMES     = 3,
+            E_PREPARESTAGE_DEBUG       = 4,
+            E_PREPARESTAGE_DONE        = 5,
+        };
+
+        // :496
+        enum EReleaseStage
+        {
+            E_RELEASESTAGE_START   = 0,
+            E_RELEASESTAGE_MANAGER = 1,
+            E_RELEASESTAGE_DONE    = 2,
+        };
+
+        // :503
+        enum EResourceAcquireStage
+        {
+            E_RESOURCE_LOAD_BASEDATA_NOT_STARTED = 0,
+            E_RESOURCE_LOAD_BASEDATA_REQUESTED   = 1,
+            E_RESOURCE_LOAD_VEHICLELISTAQUIRE    = 2,
+            E_RESOURCE_LOAD_WFVEHICLELISTAQUIRE  = 3,
+            E_RESOURCE_LOAD_VEHICLES             = 4,
+            E_RESOURCE_WFLOAD_VEHICLES           = 5,
+            E_RESOURCE_LOAD_PHYSICS              = 6,
+            E_RESOURCE_WFLOAD_PHYSICS            = 7,
+            E_RESOURCE_LOAD_ATTRIBS              = 8,
+            E_RESOURCE_WFLOAD_ATTRIBS            = 9,
+            E_RESOURCE_LOAD_WHEELS               = 10,
+            E_RESOURCE_WFLOAD_WHEELS             = 11,
+            E_RESOURCE_ACQUIRE_COUNT             = 12,
+        };
+
+        // :521
+        enum EState
+        {
+            E_STATE_INVALID      = -1,
+            E_STATE_STARTING_UP  = 0,
+            E_STATE_RUNNING      = 1,
+            E_STATE_TEARING_DOWN = 2,
+        };
+
+        // :530
+        enum EStartingUpState
+        {
+            E_STARTINGUPSTATE_INVALID              = -1,
+            E_STARTINGUPSTATE_WAITING_FOR_PLAYER   = 0,
+            E_STARTINGUPSTATE_POPULATING           = 1,
+            E_STARTINGUPSTATE_WAITING_FOR_STREAMING= 2,
+            E_STARTINGUPSTATE_FIRST                = 0,
+            E_STARTINGUPSTATE_LAST                 = 2,
+        };
+
+        // :542
+        enum ERunningState
+        {
+            E_RUNNINGSTATE_INVALID = -1,
+            E_RUNNINGSTATE_NORMAL  = 0,
+            E_RUNNINGSTATE_PAUSED  = 1,
+        };
+
+        // :550
+        enum ETearingDownState
+        {
+            E_TEARINGDOWNSTATE_INVALID         = -1,
+            E_TEARINGDOWNSTATE_WIPING          = 0,
+            E_TEARINGDOWNSTATE_FLUSHING        = 1,
+            E_TEARINGDOWNSTATE_WAITING_TO_RESET= 2,
+        };
+
+        // :559
+        enum EEmptyTrafficPoolState
+        {
+            E_EMPTYTRAFFICPOOLSTATE_IDLE     = 0,
+            E_EMPTYTRAFFICPOOLSTATE_EMPTYING = 1,
+            E_EMPTYTRAFFICPOOLSTATE_EMPTY    = 2,
+            E_EMPTYTRAFFICPOOLSTATE_FILLING  = 3,
+        };
+
+        // --- DWARF-attested capacity / index constants (used by the bodied accessors' asserts) ---
+        static const u32 KU_MAX_STATIC_TRAFFIC   = 0xC7;  // 199
+        static const u32 KU_MAX_STANDARD_TRAFFIC = 0x190; // 400
+        static const u32 KU_MAX_TOTAL_TRAFFIC    = 0x258; // 600
+        static const u32 KU_MAX_PARAMS           = 0x190; // 400
+        static const u32 KU_PARAM_NUM_PLANS      = 2;
+        static const u32 KU_STATIC_TRAFFIC_OFFSET= 0x190; // 400
+
+        // ---------------------------------------------------------------------
+        // BODIED methods (asm-attested offset arithmetic / flag book-keeping).
+        // Pointer-returning accessors return a byte address into `this`; callers in other slices
+        // reinterpret them as the (un-homed) BrnTraffic::Vehicle / Param / StaticParam interiors.
+        // ---------------------------------------------------------------------
+        void* GetStandardVehicle(u32 luIndex);                       // @ 0x82707A38
+        void* GetStaticVehicle(u32 luIndex);                         // @ 0x827079D0
+        void* GetTrailerVehicle(s32 liIndex);                        // @ 0x82707AA0
+        void* GetVehicleAxles(u32 luIndex);                          // @ 0x82707C28
+        void* GetStaticTrafficParam(u32 luIndex);                    // @ 0x82707858
+        void* GetStaticTrafficParamFro(u32 luIndex);                 // @ 0x82707950
+        void* GetStaticTrafficParamFromFullV(u32 luIndex);           // @ 0x827078D0
+        u32   GetVehicleIndexFromStaticIndex(u32 luStaticVehicle);   // @ 0x82707D18
+        void* GetParamNeedToSlowData(u32 luParam);                   // @ 0x827077D0
+        void* GetParamPlan(u32 luParam, u32 luPlan);                 // @ 0x82707D70
+
+        bool  IsPaused();                                            // @ 0x82707560
+        bool  ShouldBeHollywoodAction();                             // @ 0x827075C8
+        bool  NeedToTakeActionAgainstJunctionFUP();                  // @ 0x82707FD0
+        void  EnterReplay();                                         // @ 0x827081D8
+        void  LeaveReplay();                                         // @ 0x82708248
+        void  RestartTraffic();                                      // @ 0x82708F98
+
+        // ---------------------------------------------------------------------
+        // DECLARATION-ONLY + FLAGGED (see header comment). Bodying these would require fabricating
+        // the 470KB member layout, a multi-stage VMX pipeline, or reaching an un-homed
+        // sub-aggregate / BrnTraffic::Vehicle interior. Declared (not bodied) so the keystone type
+        // exposes its full API and unblocks the traffic cluster.
+        // ---------------------------------------------------------------------
+        void  ctor();                                                // @ 0x827E4880 (FLAG: 470KB raw init)
+        void* Avoidance_CalculateDistancePosVelToOrig(void* lpResult);// @ 0x82708DD0 (FLAG: VMX)
+        void  Avoidance_CalculatePassingScore();                     // @ 0x827199B8 (FLAG: VMX)
+        void  CalculateAndSetSteeringUsingAvoidance();               // @ 0x8273D258 (FLAG: VMX)
+        void  CalculateDriverGasBrake();                             // @ 0x82718CD8 (FLAG)
+        void  DEBUG_AddFuzzyLogicData();                             // @ 0x82716040 (FLAG: debug)
+        void  DEBUG_RenderContactPoint();                            // @ 0x827082B8 (FLAG: debug)
+        u64   GetCarAssetAttribKey(u32 luVehicle);                   // @ 0x8273EFC8 (FLAG: Vehicle interior)
+        void  GetDeterministicParamPos(u32 luParam);                 // @ 0x82714258 (FLAG: ParamTransform)
+        void* GetHullRuntimeSafe(u32 luHull);                        // @ 0x8271DA70 (FLAG: mpData interior)
+        void  GetSympCrashingTargetPos(u32 luParam, void* lpOut);    // @ 0x82708C10 (FLAG)
+        void  GetTrafficPhysicsInfoForVehicl();                      // @ 0x82714500 (FLAG)
+        void  HideAllTraffic();                                      // @ 0x8273F418 (FLAG)
+        void  UnhideAllTraffic();                                    // @ 0x8274A500 (FLAG)
+        bool  IsVehiclesParamAZombie(u32 luVehicle);                 // @ 0x82715D70 (FLAG: Vehicle interior)
+        void  JunctionFUP_StopOffscreenTraffic(void* lpData, bool lbFlag); // @ 0x82719868 (FLAG)
+        void  JunctionFUP_TryClearupNonMovingPhysical();            // @ 0x8273F2E8 (FLAG)
+        void  KillDyingVehicleEntities();                            // @ 0x82741E40 (FLAG)
+        void  PutParamInPurgatory(u32 luParam);                      // @ 0x82716510 (FLAG: Array interior)
+        void  RebuildGeneratorList();                                // @ 0x82742DD0 (FLAG)
+        void  SetVehicleTransform(u32 luIndex, const void* lpTransform); // @ 0x827142B8 (FLAG: VMX validity)
+        void  UpdateNormalPhysical(u32 luIndex, void* lpDriverControls); // @ 0x8273EF08 (FLAG)
+        void  UpdateParams_CalcDesiredSpeed();                       // @ 0x82717928 (FLAG: VMX)
+        void  UpdateParams_TryAvoidCrashing();                       // @ 0x82716948 (FLAG: VMX)
+        void  UpdateParams_TryToReinsertParam();                     // @ 0x827247F0 (FLAG)
+        void  UpdateSerialiser();                                    // @ 0x8272DA80 (FLAG)
+        // FLAG (un-recoverable rodata): the stuck-side timer floor constant flt_82001CC0 (the fsel
+        // else-value at 0x82707FB0) is NOT attested in the dossier pseudocode, so the timer clamp
+        // cannot be reconstructed without fabricating it -- declaration-only.
+        void  UpdateVehicleStuckSideTime(s32 liFlags, s32 liMask, f32 lfReset,
+                                         f32 lfThreshold, f32* lpfTimer);   // @ 0x82707F00 (FLAG)
+        void  UpdateVehicleStuckTimers(void* lpPhysicsInfo, f32 lfReset, f32 lfThreshold); // @ 0x82708D48 (FLAG)
+
+        // Out-of-line external deps the bodied methods call (NOT this slice -- declared so the
+        // bodied .cpp links / compiles; their homes live in other slices):
+        void  EnterTearingDownState();   // @ 0x82708F70-ish -- called by RestartTraffic (decl-only here)
+
+        // FLAGGED opaque storage -- see header comment. Sized to cover the highest attested byte
+        // offset a BODIED method touches: ShouldBeHollywoodAction reads +0x7286A and
+        // NeedToTakeActionAgainstJunctionFUP reads +0x72875, so storage runs to 0x73000. This is
+        // NOT the true object size (the real ~470KB+ layout is un-homed); do NOT use
+        // sizeof(TrafficEntityModule) for the real object. mOpaque is the only storage so the type
+        // is concrete and instantiable.
+        u8 mOpaque[0x73000];   // FLAG: opaque, NOT asm-attested as the true total size
+
+        static void _AssertLayout();
+    };
 }
