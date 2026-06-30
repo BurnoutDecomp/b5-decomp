@@ -189,6 +189,16 @@ namespace CgsNetwork
         bool IsLocalPlayerInGame();
         bool IsLocalPlayerHost();
         bool IsPlayerInGame(const char* lpcName);
+
+        // ADDITIVE GROW (flagged by the BrnNetworkTeamSelectionManager group): is the player with
+        // the given id currently in the game? X360 sub_82878620 -- the by-id in-game predicate the
+        // GamerPictureManagerX360 note attributes to the (still un-homed) ServerInterfaceGamesX360
+        // override; called on the games component with a NetworkPlayerID by
+        // BrnNetwork::TeamSelectionManager's team-assignment actions (e.g.
+        // ActionAssignCoopStuntRunTeams @ 0x8254BC48). Declared here so the team-selection call
+        // site can reach it BY NAME; body is homed in the X360-derived ServerInterfaceGamesX360 TU.
+        bool IsPlayerInGameByID(s32 liPlayerID);
+
         bool IsGameLocked();
         bool IsGameStarted();
         bool IsGameServerGame();
