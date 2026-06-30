@@ -27,11 +27,16 @@
 #include "GameSource/BurnoutConstants.h"             // EActiveRaceCarIndex / EGlobalRaceCarIndex
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // BrnGameState::GameStateModuleIO::EPlayerScoringIndex
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "SharedClasses/Progression/BrnTrainingTypes.h" // BrnProgression::ETrainingType
 
 #include <cstddef>                                   // offsetof
 
 namespace BrnWorld
 {
+
+// X360-attested pending-training-request ring depth (DWARF BrnRaceCarEntityModule.h:66).
+// AddTrainingRequest asserts miPendingRequestCount < this before appending.
+const s32 KI_TRAINING_REQUEST_QUEUE_SIZE = 8;
 
 // The active-race-car output interface (real home:
 // SharedIO/BrnRaceCarEntityModuleOutputInterface.h). CopyActiveRaceCarToPlayerScoringMappingToOutput
@@ -96,7 +101,30 @@ public:
     // X360 0x822A3A20 -- (mxGameModeFlags & lxFlagMask) != 0.
     bool GetGameModeFlag(u64 lxFlagMask) const;
 
+    // ------------------------------------------------------------------------
+    // Tail-state bookkeeping bodied in BrnRaceCarEntityModule.cpp. These touch only
+    // the module's own scalar tail at attested offsets (plus, for UpdateTailgateTimer,
+    // a forward-declared sibling query), so they reconstruct BY NAME without modelling
+    // the un-homed RaceCar/ActiveRaceCar/manager interiors.
+    // ------------------------------------------------------------------------
+
+    // X360 0x822A47A8 -- append leTrainingType to mePendingTrainingRequestQueue (range +
+    // capacity asserted), bumping miPendingRequestCount. No-op if the ring is full.
+    void AddTrainingRequest(BrnProgression::ETrainingType leTrainingType);
+
+    // X360 0x822CE508 -- if the player car is tailgating any other race car, accumulate
+    // lfDeltaTime into mfCurrentTailgateDuration; otherwise reset it to 0. Returns the
+    // tailgating predicate. (Calls IsPlayerCarTailgatingOtherRaceCars, declared below.)
+    bool UpdateTailgateTimer(f32 lfDeltaTime);
+
 private:
+    // FLAG: declaration-only sibling this TU references but does not body here -- it
+    // reaches the un-homed ActiveRaceCar interior + a tailgating cone test. Declared so
+    // UpdateTailgateTimer links; its body belongs to a later race-car-interior pass.
+    bool IsPlayerCarTailgatingOtherRaceCars(
+        EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
+        const ActiveRaceCar* lpPlayerActiveRaceCar);
+
     // Compiled-never-called offsetof layout lock (see definition below).
     void LockLayout_();
 
@@ -114,16 +142,45 @@ private:
 
     // FLAG: opaque mid-object state. The full class carries the streamer/boost/near-miss/
     // crash-play managers, timers, RNGs, etc. between the active-car array and the
-    // game-mode/scoring tail below; here it is honest padding that lands the two named
-    // members at their X360-asm-proven byte offsets. The scoring functions and
-    // GetGameModeFlag are the only bodies in this TU that touch the tail.
-    u8 maTailPadA[0x18358 - 0x100E0];   // +0x100E0 (65760) .. +0x18358 (99160)
+    // game-mode/scoring tail below; here it is honest padding that lands the named
+    // members at their X360-asm-proven byte offsets. The bodied tail functions
+    // (scoring map, GetGameModeFlag, AddTrainingRequest, UpdateTailgateTimer) are the
+    // only ones in this TU that touch the tail.
+    u8 maTailPadA0[0x182F0 - 0x100E0];  // +0x100E0 (65760) .. +0x182F0 (99056)
+
+    // X360 +0x182F0 (99056). Seconds the player has been continuously tailgating another
+    // race car; UpdateTailgateTimer accumulates dt into it while tailgating, else zeroes
+    // it. DWARF BrnRaceCarEntityModule.h:357 -> float32_t.
+    f32 mfCurrentTailgateDuration;      // +0x182F0 (99056) .. +0x182F4 (99060)
+
+    u8 maTailPadA1a[0x182F8 - 0x182F4]; // +0x182F4 (99060) .. +0x182F8 (99064)
+
+    // X360 +0x182F8 (99064). The active-race-car slot the local player is driving, or
+    // E_ACTIVE_RACE_CAR_INDEX_INVALID. UpdateTailgateTimer reads it (asm `lwzx` at 0x182F8)
+    // to pick the player car. DWARF BrnRaceCarEntityModule.h:360 -> EActiveRaceCarIndex.
+    EActiveRaceCarIndex mePlayerActiveRaceCarIndex;
+                                        // +0x182F8 (99064) .. +0x182FC (99068)
+
+    u8 maTailPadA1b[0x18358 - 0x182FC]; // +0x182FC (99068) .. +0x18358 (99160)
 
     // X360 +0x18358 (99160). GetGameModeFlag reads it with a 64-bit load (`ldx`) and ANDs
     // it with the caller's mask. DWARF BrnRaceCarEntityModule.h:388 -> uint64_t.
     u64 mxGameModeFlags;                // +0x18358 (99160) .. +0x18360 (99168)
 
-    u8 maTailPadB[0x187BC - 0x18360];   // +0x18360 (99168) .. +0x187BC (100284)
+    u8 maTailPadB0[0x18374 - 0x18360];  // +0x18360 (99168) .. +0x18374 (99188)
+
+    // X360 +0x18374 (99188). Ring of training requests queued this frame, drained by the
+    // progression handler. AddTrainingRequest appends at miPendingRequestCount; each cell
+    // is a 4-byte ETrainingType (the asm `stwx` stores the 32-bit enum). DWARF
+    // BrnRaceCarEntityModule.h:401 -> BrnProgression::ETrainingType[8].
+    BrnProgression::ETrainingType mePendingTrainingRequestQueue[KI_TRAINING_REQUEST_QUEUE_SIZE];
+                                        // +0x18374 (99188) .. +0x18394 (99220)
+
+    // X360 +0x18394 (99220). Number of valid entries in mePendingTrainingRequestQueue.
+    // DWARF BrnRaceCarEntityModule.h:402 -> int32_t.
+    s32 miPendingRequestCount;          // +0x18394 (99220) .. +0x18398 (99224)
+
+    u8 maTailPadB1[0x187BC - 0x18398];  // +0x18398 (99224) .. +0x187BC (100284)
 
     // X360 +0x187BC (100284). Player-scoring-slot -> active-race-car-slot map. The X360
     // DWORD index is 0x61EF (25071). Indexed by EPlayerScoringIndex (0..7); each cell is
@@ -175,6 +232,14 @@ inline void RaceCarEntityModule::LockLayout_()
                   "mxGameModeFlags @+0x18358 (== 99160)");
     static_assert(offsetof(RaceCarEntityModule, maActiveRaceCarForPlayerScoringIndex) == 0x187BC,
                   "maActiveRaceCarForPlayerScoringIndex @+0x187BC (== 100284)");
+    static_assert(offsetof(RaceCarEntityModule, mfCurrentTailgateDuration) == 0x182F0,
+                  "mfCurrentTailgateDuration @+0x182F0 (== 99056)");
+    static_assert(offsetof(RaceCarEntityModule, mePendingTrainingRequestQueue) == 0x18374,
+                  "mePendingTrainingRequestQueue @+0x18374 (== 99188)");
+    static_assert(offsetof(RaceCarEntityModule, miPendingRequestCount) == 0x18394,
+                  "miPendingRequestCount @+0x18394 (== 99220)");
+    static_assert(offsetof(RaceCarEntityModule, mePlayerActiveRaceCarIndex) == 0x182F8,
+                  "mePlayerActiveRaceCarIndex @+0x182F8 (== 99064)");
 }
 
 }
