@@ -26,6 +26,10 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"   // AptString::Create / GetInternalString
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC::GetBuffer
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h" // SetRegisterValue / CreateFrameStack
+#include "SDKs/EATech/include/Apt/AptFrameStack.h"         // the active frame-stack value + mHash
+#include "SDKs/EATech/include/Apt/AptNativeHash.h"         // AptNativeHash::Set (catch binding)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                // ctx->mpCIH -> AptValue* upcast
 
 #include <cstdint>
 
@@ -209,4 +213,135 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
         AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+}
+
+// ===========================================================================
+// Try @0x82B05CD8 -- AS try/catch/finally: run the try sub-stream, and on a thrown
+// value (mpAbortValue set) run the catch sub-stream (binding the thrown value into
+// the catch variable/register first), then always run the finally sub-stream
+// (preserving + re-raising a pending throw across it). The three sub-streams are
+// laid out inline after a 20-byte try record at the (4-byte-aligned) PC.
+// ===========================================================================
+
+// FLAG (console Burnout_X360_Artist_01e3_0 -- the inlined stack-collapse primitive):
+// pop nCount operands off the operand stack, Releasing each. Shared with the StackOps
+// call opcodes (declared there too); used here to unwind any operands the sub-streams
+// left above the entry top.
+extern void AptApt_PopValues(AptActionInterpreter* pInterp, int nCount);
+
+// FLAG (the active AS local-variable frame stack -- console off_8324E3DC /
+// AptScriptFunctionBase::spFrameStack, a protected static). The catch-variable bind
+// reads it (and lazily creates it via CreateFrameStack) to store the caught value in
+// the current activation's locals; reached through an accessor so the protected
+// static stays encapsulated.
+extern AptFrameStack* AptScriptFunctionBase_GetActiveFrameStack();
+
+namespace
+{
+    // The inline try record (console v5, at the 4-byte-aligned PC). The three code
+    // sub-streams follow the 20-byte header: try @ +20, catch @ +20+mnTryLen, finally
+    // @ +20+mnTryLen+mnCatchLen. The flags byte gates the catch / finally / register
+    // forms; the catch payload is either a register index (mFlags bit2) or a variable
+    // name pointer (console +0x10).
+    struct AptTryRecordT
+    {
+        int32_t        mnTryLen;        // [+0x00] try block byte length
+        int32_t        mnCatchLen;      // [+0x04] catch block byte length
+        int32_t        mnFinallyLen;    // [+0x08] finally block byte length
+        uint8_t        mFlags;          // [+0x0C] bit0=has catch, bit1=has finally, bit2=catch-to-register
+        uint8_t        mPad0D[2];       // [+0x0D]
+        uint8_t        mnCatchRegister; // [+0x0F] catch register index (mFlags bit2)
+        const char*    mpCatchName;     // [+0x10] catch variable name (mFlags bit2 == 0)
+                                        // [+0x14] -> the try sub-stream begins here.
+    };
+
+    enum
+    {
+        KU_TRY_HAS_CATCH    = 0x1,
+        KU_TRY_HAS_FINALLY  = 0x2,
+        KU_TRY_CATCH_TO_REG = 0x4,
+    };
+}
+
+void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
+                                                 LocalContextT* pContext)
+{
+    const int nEntryStackTop = pInterp->mnStackTop;   // console v4 = *a1 (unwind target)
+
+    // The try record sits at the 4-byte-aligned PC; the three sub-streams follow its
+    // 20-byte header. The PC is advanced past the whole try/catch/finally body.
+    AptTryRecordT* const pRecord = reinterpret_cast<AptTryRecordT*>(
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+
+    const unsigned char* const pTryStream     = reinterpret_cast<const unsigned char*>(pRecord) + 20;
+    const unsigned char* const pCatchStream   = pTryStream + pRecord->mnTryLen;
+    const unsigned char* const pFinallyStream = pCatchStream + pRecord->mnCatchLen;
+    pContext->mpProgramCounter = pFinallyStream + pRecord->mnFinallyLen;
+
+    // Run the try block (a bounded sub-stream under the same scope / character inst).
+    pInterp->runStream(pTryStream, pContext->mpCIH, pRecord->mnTryLen, pContext->mpCharacterInst);
+
+    // --- catch: a pending throw + a catch clause binds the thrown value + runs it ---
+    AptValue* const pThrown = pInterp->mpAbortValue;   // console v9 = a1[24]
+    if (pThrown && (pRecord->mFlags & KU_TRY_HAS_CATCH))
+    {
+        if (pRecord->mFlags & KU_TRY_CATCH_TO_REG)
+        {
+            // catch into a register slot.
+            AptScriptFunctionBase::SetRegisterValue(pRecord->mnCatchRegister, pThrown);
+        }
+        else
+        {
+            // catch into a named variable: the current activation's frame-stack locals
+            // when one is live, else the run-scope variable table.
+            EAStringC catchName(pRecord->mpCatchName);   // console InitFromBuffer(v13, *(v5+16))
+            if (pInterp->mpCurrentFunction)              // console a1[15] (mpCurrentFunction) set
+            {
+                AptFrameStack* pFrame = AptScriptFunctionBase_GetActiveFrameStack();  // FLAG: off_8324E3DC
+                if (!pFrame)
+                {
+                    pInterp->mpCurrentFunction->CreateFrameStack();
+                    pFrame = AptScriptFunctionBase_GetActiveFrameStack();
+                }
+                pFrame->GetNativeHashVirtual()->Set(catchName, pThrown);  // console AptNativeHash::Set(frame+8, ...)
+            }
+            else
+            {
+                pInterp->setVariable(static_cast<AptValue*>(pContext->mpCIH), nullptr,
+                                     &catchName, pThrown, 1, 1, 0);
+            }
+        }
+
+        pInterp->mpAbortValue->Release();   // console (*(*a1[24]+4))(a1[24])
+        pInterp->mpAbortValue = nullptr;    // clear the pending throw before the catch runs
+        pInterp->runStream(pCatchStream, pContext->mpCIH, pRecord->mnCatchLen,
+                           pContext->mpCharacterInst);
+    }
+
+    // --- finally: always runs; preserve + re-raise a pending throw across it ---
+    if (pRecord->mFlags & KU_TRY_HAS_FINALLY)
+    {
+        AptValue* const pPending = pInterp->mpAbortValue;   // console v12
+        if (pPending)
+        {
+            pPending->AddRef();                 // console (**v12)(v12)
+            pInterp->mpAbortValue->Release();   // console (*(*a1[24]+4))(a1[24])
+            pInterp->mpAbortValue = nullptr;
+        }
+
+        pInterp->runStream(pFinallyStream, pContext->mpCIH, pRecord->mnFinallyLen,
+                           pContext->mpCharacterInst);
+
+        // re-raise the saved throw if the finally block did not itself throw.
+        if (pPending && !pInterp->mpAbortValue)
+        {
+            pPending->AddRef();
+            pInterp->mpAbortValue = pPending;
+            pPending->Release();
+        }
+    }
+
+    // unwind any operands the sub-streams left above the try's entry top.
+    if (pInterp->mnStackTop > nEntryStackTop)
+        AptApt_PopValues(pInterp, pInterp->mnStackTop - nEntryStackTop);   // FLAG: stack collapse
 }

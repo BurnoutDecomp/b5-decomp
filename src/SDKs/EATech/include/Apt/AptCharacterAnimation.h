@@ -109,13 +109,17 @@ struct AptCharacterAnimation
     AptCharacterAnimation* Fixup(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
 
     // --- the Fixup pointer-size dual-path (the per-record walk is shared) ------
-    // 8-byte .apt: the faithful console relocation -- add the load base to each record's
-    // file-relative pointer slot IN PLACE (a 64-bit base fits an 8-byte slot) and use the
-    // blob directly as the runtime root. FLAG: scaffold -- the per-record slot map (which
-    // fields are pointers, per character type) is the shared follow-on.
+    // Both run the same console character/import/init walk (FixupWalk in the .cpp);
+    // they differ only in the file slot WIDTH the relocation operates on.
+    // 8-byte .apt: the faithful console relocation widened to 8-byte slots -- add the
+    // load base to each record's file-relative pointer slot IN PLACE (a 64-bit base
+    // fits an 8-byte slot) and use the blob directly as the runtime root.
     AptCharacterAnimation* FixupInPlace(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
-    // 4-byte .apt: the x64 fork -- TRANSCODE the 32-bit serialised records into native
-    // 64-bit runtime structs (in-place cannot work; a 64-bit pointer won't fit a 32-bit
-    // slot). FLAG: the deep data-side keystone -- the per-record transcode is the follow-on.
+    // 4-byte .apt (the console default): the same walk relocating the 32-bit slots in
+    // place. FLAG (x64 fork): the fully faithful x64 form would transcode each 32-bit
+    // record into a native 64-bit struct, but the deferred in-place callees
+    // (AptMovie::resolve / AptLoader::Load / AptCharacter::SetupCharacter) still consume
+    // the 32-bit blob -- so this reproduces the verbatim console in-place relocation
+    // until those land (see the .cpp).
     AptCharacterAnimation* FixupTranscode(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
 };
