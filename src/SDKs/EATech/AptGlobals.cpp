@@ -204,10 +204,11 @@ extern const EAStringC gAptTypeName_MovieClip("movieclip");  // dword_8324E640
 extern const EAStringC gAptTypeName_Null     ("null");       // dword_8324E648
 extern const EAStringC gAptTypeName_Function ("function");   // dword_8324E624
 
-// gpAptThisKey -- the const pointer the AptActionRun path reads (the linker wants
-// `const EAStringC* const`).  Points at the interned gAptKeyThis above.  `extern`
-// for external linkage (a top-level-const pointer object is internal by default).
-extern const EAStringC* const gpAptThisKey = &gAptKeyThis;
+// gpAptThisKey -- the pointer the AptActionRun path reads. The reference
+// (AptActionRun.cpp:39 `extern const EAStringC* gpAptThisKey`) is a NON-const
+// pointer-to-const (mangles ?...@@3PEBVEAStringC@@EB); a top-level-const pointer
+// would mangle Q (?...@@3QEB...) and not resolve. Points at interned gAptKeyThis.
+const EAStringC* gpAptThisKey = &gAptKeyThis;
 
 // ===========================================================================
 // 9. Name / lookup rodata TABLES.  FLAG: zeroed correctly-typed storage with the

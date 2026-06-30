@@ -40,7 +40,7 @@
 #include "SDKs/EATech/include/Apt/AptObject.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC keys
 
-struct AptValue;
+class AptValue;
 
 struct AptGlobalExtensionObject : public AptObject
 {

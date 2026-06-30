@@ -43,7 +43,7 @@
 
 class EAStringC;          // SetTextValue / SetVarValue operands (string assignment)
 class AptValue;           // text-format object pass-through
-class AptCIH;             // SetText / UpdateText scope node (the display-list node)
+struct AptCIH;             // SetText / UpdateText scope node (the display-list node)
 
 struct AptCharacterTextInst : public AptCharacterInst
 {

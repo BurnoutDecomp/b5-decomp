@@ -19,7 +19,7 @@
 #include "SDKs/EATech/include/Apt/AptCIH.h"
 
 struct AptCharacter;
-struct AptValue;
+class AptValue;
 class  EAStringC;
 
 struct AptDisplayListState
