@@ -479,16 +479,10 @@ extern void AptApt_PopValues(AptActionInterpreter* pInterp, int nCount);
 extern void AptApt_PopCIHStack(AptActionInterpreter* pInterp);
 extern void AptApt_PopCallStackC(AptActionInterpreter* pInterp);
 
-// FLAG (runtime-only AptActionInterpreter init parameters -- the block initialize()
-// reads; not serialised, so it is modelled by its console field offsets):
-struct AptInitParmsT
-{
-    uint8_t  mPad00[0x20];
-    int32_t  iStackSize;        // [c:0x20] the operand-stack capacity
-    int32_t  iCallStackDepth;   // [c:0x24] the four call-depth stacks' capacity
-    uint8_t  mPad28[0x40 - 0x28];
-    uint8_t  mbSkipTraceBytecodes; // [c:0x40] -> mbSkipTraceBytecodes
-};
+// AptInitParmsT (the runtime-only AptActionInterpreter init-parameters block
+// initialize() reads) is now DEFINED in AptActionInterpreter.h (promoted out of this
+// TU so the host bring-up can construct one to call initialize -- the X360
+// AptUpdateInitialize's job). Layout unchanged; included via AptActionInterpreter.h.
 
 // FLAG (AptScriptFunctionBase::InitializeStaticData @0x82AE26C0 -- the console
 // passes the whole AptInitParmsT; the in-header member declaration takes the

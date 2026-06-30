@@ -30,7 +30,21 @@
 struct AptCIH;             // SDKs/EATech/include/Apt/AptCIH.h (the movie-clip scope)
 struct AptCharacterInst;   // SDKs/EATech/include/Apt/AptCharacterInst.h
 class EAStringC;          // SDKs/EATech/include/Apt/AptString/EAString.h (path/name buffers)
-struct AptInitParmsT;     // runtime init parameters (defined in AptActionInterpreterStackOps.cpp)
+
+// FLAG (runtime-only AptActionInterpreter init parameters -- the block initialize()
+// reads; not serialised, so it is modelled by its console field offsets). DEFINED
+// here (was a TU-local struct in AptActionInterpreterStackOps.cpp; promoted to the
+// header so the host bring-up -- BrnAptRuntimeBringUp.cpp -- can construct one to call
+// AptActionInterpreter::initialize, the X360 AptUpdateInitialize's job). Layout is
+// byte-identical to the prior local definition (console offsets 0x20/0x24/0x40).
+struct AptInitParmsT
+{
+    uint8_t  mPad00[0x20];
+    int32_t  iStackSize;        // [c:0x20] the operand-stack capacity
+    int32_t  iCallStackDepth;   // [c:0x24] the four call-depth stacks' capacity
+    uint8_t  mPad28[0x40 - 0x28];
+    uint8_t  mbSkipTraceBytecodes; // [c:0x40] -> mbSkipTraceBytecodes
+};
 
 class AptActionInterpreter
 {
