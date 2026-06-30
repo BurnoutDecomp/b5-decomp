@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::VariableEventQueue (the in-queue)
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsID, CgsIDCompress
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CgsDev::Assert (the X360 "unexpected event" assert)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // CgsDev::Log::WriteToLog (boot-flow diagnostics)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayRequest
 
@@ -186,7 +187,10 @@ namespace
     {
         u8 maBody[112];
         GuiAudioTriggerEvent() : CgsGui::GuiEvent<201>(0, 12) { for (s32 i = 0; i < 112; ++i) maBody[i] = 0; }
-        void Construct(s32 liChannel, const char* lpacAptName, const char* lpacTrigger);  // 0x... // FLAG
+        // FLAG: the X360 fills the 112-byte audio record (channel + apt/trigger-name hashes). The exact
+        // layout + the sound trigger are the deferred audio-engine boundary; modelled as a no-op so the
+        // record is emitted (the menu "Accept" sound fires once the sound engine consumes channel-201 events).
+        void Construct(s32 /*liChannel*/, const char* /*lpacAptName*/, const char* /*lpacTrigger*/) {}
     };
 }   // anonymous namespace
 }   // namespace BrnGui
@@ -244,6 +248,13 @@ namespace BootLegalCacheBoundary  // FLAG boundary helpers
 
 namespace BrnGui
 {
+    // FLAG: the legal-screen static resource list (.rdata @ off_82F25CEC, X360 count @ 0x82F25CF4 = 1).
+    // The tuple's .rdata values are not extracted; defined empty (count 0) so GetResourcesToLoad /
+    // UnloadResources iterate nothing -- the legal-screen resource preload is deferred, the flow still
+    // reaches BootLegal + the title_screen02 request.
+    const CgsGui::sResourceTuple BootLegal::maResourcesToLoad[1] = {};
+    const u32                    BootLegal::muNumResourcesToLoad  = 0u;
+
     BootLegal::BootLegal()
         : mpGuiCache(0)
         , muCurrentAttractMovieIdx(0)
@@ -492,6 +503,7 @@ namespace BrnGui
 
             PostCommand16<589>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             mpStateInterface->PlayAptMovie(KAC_TITLE_MOVIE, 1);
+            CgsDev::Log::WriteToLog("[BootLegal] STAGE_START_MOVIE -> PlayAptMovie(Title_Screen02) -- the title_screen02 Apt request reached.\n");
 
             {
                 // GuiEventPlayMusicOnMenuStream { hash = MakeHash("GunsAndRoses") } (ch via OutputGuiEvent).

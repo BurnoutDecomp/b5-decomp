@@ -5,6 +5,7 @@
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
 #include "GameSource/Gui/Flow/HUD/States/BrnBootVideos.h"               // BrnGui::BootVideos (the boot-logo state)
 #include "GameSource/Gui/Flow/HUD/States/BrnBootLoading.h"              // BrnGui::BootLoading (the boot loading state)
+#include "GameSource/Gui/Flow/HUD/States/BrnBootLegal.h"                // BrnGui::BootLegal (the boot legal/title-screen state)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"// CgsGui::StateInterface (BootVideos' channel)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // CgsModule::VariableEventQueue (BootVideos' in-queue)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateMachine.h"  // CgsGui::StateMachine (runs the boot FSM Lua script)
@@ -89,7 +90,17 @@ namespace BrnGui
         CgsResource::Pool      mBootLoadingPool;                     // holds the BRNFLOADFSM LuaCode bundle
         bool                   mbBootLoadingFsmReady;                // the BRNFLOADFSM Lua FSM loaded + entered BF_LOADING
         bool                   mbBootLoadingCompleteFed;             // fed BootLoading the loading-complete (137) input yet
-        s32                    miBootPhase;                          // 0 = BF_LOADING, 1 = BF_VIDEOS
+
+        // Phase 2 = BF_LEGAL: BootLegal (the legal / title screen that shows title_screen02) run through
+        // the BRNLEGALFSM Lua FSM, loaded when BF_VIDEOS signals "done" (the PC stand-in for the X360
+        // GuiFsmController loading the next single-state FSM on the boot-videos-done state event).
+        BootLegal              mBootLegal;                           // BF_LEGAL state
+        CgsGui::StateMachine   mBootLegalStateMachine;               // runs the BRNLEGALFSM Lua FSM
+        CgsGui::StateInterface mBootLegalStateInterface;             // BootLegal's output channel
+        CgsModule::VariableEventQueue<18432, 16> mBootLegalInQueue;  // BootLegal's input queue
+        CgsResource::Pool      mBootLegalPool;                       // holds the BRNLEGALFSM LuaCode bundle
+        bool                   mbBootLegalFsmReady;                  // the BRNLEGALFSM Lua FSM loaded + entered BF_LEGAL
+        s32                    miBootPhase;                          // 0 = BF_LOADING, 1 = BF_VIDEOS, 2 = BF_LEGAL
     };
 }
 
