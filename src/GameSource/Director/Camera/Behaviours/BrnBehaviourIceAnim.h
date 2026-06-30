@@ -100,6 +100,29 @@ public:
     // for the director-camera cone); the real home is BrnDirectorResourceManager.h.
     const void* GetEventIntroShots(s32 liEventMode, bool lbCarInFront) const;
 
+    // The event-COMPLETION shot-group for an event mode + finish line (the post-event
+    // results / winner take). @0x????: BrnArbStatePostEvent::Prepare resolves it as
+    // GetEventCompletionShots(mpGameState->meEventType, mpGameState->mFinishLineID) and
+    // asserts Num_ShotList() > 0 before driving it. Returns the shot group BY REFERENCE
+    // (the temporary the X360 builds on the caller stack; PickAppropriateShot takes it by
+    // const ref and Num_ShotList() is called on it). DECLARATION-ONLY (body in the
+    // resource-manager TU). FLAG: modelled on this minimal DirectorResourceManager slice;
+    // the real home is BrnDirectorResourceManager.h. liFinishLineID is the GameState
+    // mFinishLineID (an 8-byte CgsID); typed as s64 here to keep the camera-cone slice free
+    // of the CgsID header (the VALUE is what selects the completion group).
+    const Attrib::Gen::shotgroup& GetEventCompletionShots(s32 liEventMode,
+                                                          s64 liFinishLineID) const;
+
+    // The post-event completion MOVIE data block the ACTIVE state swaps to on a rank-up
+    // reveal. X360 (BrnArbStatePostEvent::Update case ACTIVE): the manager embeds an
+    // Attrib::Instance at +0x508 (manager + 1288); the state resolves its "ShotList"
+    // attribute via Attrib::Instance::GetAttributePointer (falling back to
+    // DefaultDataArea(0x18) when null) and hands the block to BehaviourIceAnim::ChangeMovie.
+    // Returned as an opaque pointer (the iceanim ShotReference block); the caller casts.
+    // DECLARATION-ONLY (body in the resource-manager TU). FLAG: modelled on this minimal
+    // DirectorResourceManager slice; the real home is BrnDirectorResourceManager.h.
+    void* GetPostEventMovieData() const;
+
     // The rank-up sequence's shot-group (the manager's embedded shotgroup @+0x3C8). The
     // rank-up arbitrator state (BrnArbStateRankUp) drives it: it asserts Num_ShotList() > 0
     // and indexes the shots by rival. DECLARATION-ONLY (body in the resource-manager TU).
@@ -115,6 +138,16 @@ public:
     // it at manager +1480 (+0x5C8) and resolves it through the same ShotList attribute key
     // (0x7533C0E2_15246B49) the shotgroup accessor uses.
     const Attrib::Gen::shotgroup& GetOnlineCarSelectShots() const;
+
+    // The online-race-start shot-group (the manager's embedded shotgroup @+616 / +0x268). The
+    // online-race-intro arbitrator state (BrnArbStateOnlineRaceIntro::Update / ::SetupRivalMovie)
+    // drives it: it asserts Num_ShotList() >= the ICE-movie minimum, indexes the per-rival shots
+    // and feeds each ShotList data block to a BehaviourIceAnim's SetParameters. DECLARATION-ONLY
+    // (body in the resource-manager TU). FLAG: modelled on this minimal DirectorResourceManager
+    // slice; the real home is BrnDirectorResourceManager.h. X360: ArbStateOnlineRaceIntro reads
+    // it at manager +616 (+0x268) and resolves it through the same ShotList attribute key
+    // (0x7533C0E2_15246B49 / 354708297) the shotgroup accessor uses.
+    const Attrib::Gen::shotgroup& GetOnlineRaceStartShots() const;
 };
 
 // FLAG: minimal slice of the per-frame timestep source the Update body samples. No
@@ -424,10 +457,52 @@ public:
     void SetUseCollisionPolicy(bool lbUse)            { mbUseCollisionPolicy = lbUse; }                   // +0xE28
     void SetForceLooseHeadingSpace(bool lbForce)      { mbForceHeadingSpaceToBeLooseHeadingSpace = lbForce; } // +0xE2A
 
+    // Force every motion-blur pass on for the take (X360 stb at +0xE2B). The online-race-intro
+    // arbitrator state (BrnArbStateOnlineRaceIntro) sets this on its rival/player "show" takes.
+    void SetForceMotionBlurEverything(bool lbForce)   { mbForceMotionBlurEverything = lbForce; }          // +0xE2B
+
     // The two per-take reset bytes the intro state seeds (maReset0DE4[0] / [2]; roles not
     // recovered -- the intro state sets them to gate the take's first-frame behaviour).
     void SetTakeResetByte0(u8 lu8Value)               { maReset0DE4[0] = lu8Value; }   // +0xDE4
     void SetTakeResetByte2(u8 lu8Value)               { maReset0DE4[2] = lu8Value; }   // +0xDE6
+
+    // The trailing per-take reset byte the online-race-intro state seeds with a bool the X360
+    // derives via cntlzw (maReset0DE4[3] @+0xDE7; role not recovered -- modelled as the raw
+    // attested byte store).
+    void SetTakeResetByte3(u8 lu8Value)               { maReset0DE4[3] = lu8Value; }   // +0xDE7
+
+    // ---- online-race-intro arbitrator-state pokes (BrnArbStateOnlineRaceIntro) ----------
+    // The online-race-intro "show" takes anchor the behaviour's primary (eye) and secondary
+    // (look) vehicle references to one of the intro race cars. The X360 stores, across
+    // mPrimaryVehicleRef @+0xDF0 and mSecondaryVehicleRef @+0xE00, the same 4-word ref layout:
+    //   ref+0x00 (word)  = 1                 (the ref kind: a race-car reference)
+    //   ref+0x04 (word)  = liRaceCarIndex    (asserted < BrnPhysics::Vehicle::ku8MaxNumRaceCars)
+    //   ref+0x08 (word)  = 0
+    //   ref+0x0C (byte)  = 1                 (the ref is set / valid)
+    // and asserts liRaceCarIndex < 8 (ku8MaxNumRaceCars). Exposed as named setters so the
+    // arbitrator state never reaches the (private) refs by offset. DECLARATION-ONLY (the
+    // VehicleRef configuration body lands with the VehicleRef TU; the per-TU cl /c gate does not
+    // link). FLAG: the ref-kind word's full role (==1) is the asm-attested store; the rest of the
+    // VehicleRef semantics land with the VehicleRef TU.
+    void SetPrimaryVehicleRefToRaceCarIndex(s32 liRaceCarIndex);     // +0xDF0 block
+    void SetSecondaryVehicleRefToRaceCarIndex(s32 liRaceCarIndex);   // +0xE00 block
+
+    // The online-race-intro PLAYER "show" take anchors its refs to the player rather than a
+    // numbered race car. The X360 writes the same 4-word ref layout with a different kind/index:
+    //   ref+0x00 (word)  = 0     (the ref kind: the player ref, not a numbered race car)
+    //   ref+0x04 (word)  = -1    (no race-car index)
+    //   ref+0x08 (word)  = 0
+    //   ref+0x0C (byte)  = 1     (the ref is set / valid)
+    // into mPrimaryVehicleRef @+0xDF0 / mSecondaryVehicleRef @+0xE00. Named setters; DECLARATION-
+    // ONLY (the VehicleRef body lands with the VehicleRef TU). FLAG: the ref-kind word's full
+    // role (==0 for the player ref) is the asm-attested store.
+    void SetPrimaryVehicleRefToPlayer();     // +0xDF0 block = {0, -1, 0, 1}
+    void SetSecondaryVehicleRefToPlayer();   // +0xE00 block = {0, -1, 0, 1}
+
+    // Seek the embedded key-anim controller back to its take start (mKeyAnimController @+0x680;
+    // the online-race-intro ACTIVE state rewinds the player "show" take with 0.0). Named alias of
+    // SetControllerParametricTime0To1(0.0f).
+    void RewindControllerToStart()                    { SetControllerParametricTime0To1(0.0f); }
 
     // Clear the base-behaviour "first-frame" gate the intro state resets (X360 stb 0 at the
     // base behaviour's +0x28 -- a field beyond this header's modelled base slice). DECLARATION-
@@ -443,6 +518,16 @@ public:
     // VehicleRef::SetToRaceCar body lands with the VehicleRef TU; the per-TU cl /c gate does
     // not link).
     void SetPrimaryVehicleRefToRaceCar(EActiveRaceCarIndex leRaceCar);
+
+    // ---- post-event arbitrator-state poke (BrnArbStatePostEvent::Prepare) ---------------
+    // Seed the behaviour's BYSTANDER anchor vehicle reference (mBystanderRef @+0xE10) to the
+    // fixed value the post-event take frames the winner against. X360 (Prepare @0x8226E228)
+    // stores into mBystanderRef directly: word +0x00 = 0, word +0x04 = -1, word +0x08 = 0,
+    // byte +0x0C = 1. Exposed as a named setter so the arbitrator state never pokes the
+    // (private) ref by offset. DECLARATION-ONLY (the body lands with this behaviour's TU,
+    // which owns mBystanderRef). FLAG: the four bystander-ref fields' individual roles are
+    // not recovered (modelled as a fixed post-event seed; the field WRITES are asm-attested).
+    void SetBystanderRefForPostEvent();
 
     // Seek the embedded key-anim controller's normalised playback parameter (mKeyAnimController
     // @+0x680) to lf01. The rank-up state rewinds a freshly-changed take to its start with 0.0

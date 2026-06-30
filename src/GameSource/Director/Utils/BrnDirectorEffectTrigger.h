@@ -82,6 +82,16 @@ namespace BrnDirector
         // inlined here to a named call; the body sets mCamera.mEffects' start-hook fields.
         void RequestStartEffectHook(Camera& lrCamera, const char* lpcHook, f32 lfBlend);
 
+        // Ensure NO camera-PFX hook by the given name is left playing on lrCamera: when the
+        // named hook is the live one, stop it (the complement of EnsureEffectIsPlaying). The
+        // online-race-intro arbitrator state (BrnArbStateOnlineRaceIntro::Update epilogue) calls
+        // it with "BlackFadeIn_Quick" while the game says the intro may use the result bars.
+        // DECLARATION-ONLY (the body lands with the EffectTrigger TU; the per-TU cl /c gate does
+        // not link). FLAG: modelled on the EnsureEffectIsPlaying/StopCurrentEffect family; the
+        // X360 reads the current hook from the EffectInterface and clears it if it matches.
+        void EnsureEffectIsStopped(Camera& lrCamera, const EffectInterface& lrSource,
+                                   const char* lpcHook);
+
         // The X360 inlines this RESET-then-request into ArbStateOnlineCarSelect::Update's
         // SELECTING_LIVERY case: it first clears the prior start-hook latch / secondary-latch /
         // a stale name word (mEffects start-hook latch == 0, +1 latch == 0, name-head word == 0),
