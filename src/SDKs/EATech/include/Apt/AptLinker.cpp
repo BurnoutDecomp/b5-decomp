@@ -10,6 +10,7 @@
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"     // insert
 #include "SDKs/EATech/include/Apt/AptCIH.h"                  // AptCIH ctor/new, ReplaceZombieChild, ClearCIH, SetDirtyState, ForceCleanNativeHash
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"        // AptCharacterInst, GetRenderItemWritable
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h" // mnGotoFrame / mnClipActionFlags (the linked anim inst's sprite-base)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"       // setIsDefined, setGCRoot
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // getVariable
@@ -75,7 +76,6 @@ AptFile*                   MakeAptFile(void* pMem, int nLevel);                 
 AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile);             // ctor @0x82AFFDE8
 void InstallEmptyCharacterInstVtbl(AptCharacterInst* pInst);                        // *inst = &off_82145FD0
 void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst);                   // dword_8324E530 lazy init
-void MarkRenderItemFlag(AptCharacterInst* pInst, int nFlag);                        // *(inst+20) |= flag
 void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH);                         // dword_8324E844/E830 hooks
 bool RestartPendingScanIfGrew(AptFilePtr* pEntry, AptFile* pFile);                  // pending-vector realloc guard
 
@@ -562,8 +562,15 @@ void AptLinker::Update()
                 pCIH->mFlagsA &= 0x9FFFFFFFu;                              // v61[3] &= 0x9FFFFFFF
                 AptCIH_SetCharacterInst(pCIH, /*as inst*/reinterpret_cast<AptCharacterInst*>(pAnimInst), 1);
                 pCIH->setIsDefined(true);                                  // AptValue::setIsDefined(v61,1)
-                pCIH->mpCharacterInst->mpRenderItem /*+16*/ = nullptr;     // *(v61[8]+16) = -1 (FLAG: render-item field)
-                MarkRenderItemFlag(pCIH->mpCharacterInst, 0x80);          // *(v61[8]+20) |= 0x80
+                // SetCharacterInst installed the new AptCharacterAnimationInst -- an
+                // AptCharacterSpriteInstBase. Reset its pending goto-frame to "none"
+                // (-1) and OR in sprite state-flag bit 7. The console writes both
+                // through mpCharacterInst (v61[8]): *(v61[8]+16) = -1 is mnGotoFrame,
+                // *(v61[8]+20) |= 0x80 is mnClipActionFlags -- both named members now.
+                AptCharacterSpriteInstBase* pSpriteInst =
+                    static_cast<AptCharacterSpriteInstBase*>(pCIH->mpCharacterInst);
+                pSpriteInst->mnGotoFrame        = -1;       // *(v61[8]+16) = -1
+                pSpriteInst->mnClipActionFlags |= 0x80u;    // *(v61[8]+20) |= 0x80
                 pCIH->SetDirtyState(false, false);                        // AptCIH::SetDirtyState(...,0)
                 AptCIH_tick(pCIH);                                        // AptCIH::tick
                 pCIH->SetDirtyState(true, true);                          // AptCIH::SetDirtyState(v61,1,1)
