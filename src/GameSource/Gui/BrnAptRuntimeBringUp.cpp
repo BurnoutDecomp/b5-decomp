@@ -22,6 +22,7 @@
 // ---- the D3D9 2D immediate render buffer the Apt rasteriser fills + we flush --
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (AptAux render-set only)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"  // CgsGraphics::Im2d (the PROVEN immediate render path)
+#include "pc/gcm/renderengine/texture.h"                      // renderengine::Texture (mesh texture binding -> mpD3DTexture)
 #include "rw/rwcore_structs.h"                                // rw::ResourceAllocatorRegistry::GetDefaultAllocator
 
 // ---- the synchronous bundle load + the Apt-data resource -> geometry path ----
@@ -223,6 +224,7 @@ namespace BrnGui
     static s32  RenderLoadedGeometryDirect(CgsGraphics::Im2d* lpIm2d);
     static void DumpResourceBytes(const char* lpcTag, void* lpBase, u32 luOffset,
                                   u32 luResourceSize, u32 luBytes);
+    static renderengine::Texture* ResolveMeshTexture(const u32* lpMesh, s32 liTexMode);
 
     bool AptRuntimeIsReady() { return s_bRuntimeReady; }
 
@@ -720,6 +722,41 @@ namespace BrnGui
         }
     }
 
+    // Resolve a textured mesh's renderengine::Texture* from the import-written pointer.
+    //
+    // For a texMode==1 mesh, the bundle's import-resolve (Pool::ResolveImportForEntry) wrote the
+    // imported TEXTURE resource's m_baseResources[0] -- which IS a fully-realised renderengine::
+    // Texture (its FixUp ran first and created mpD3DTexture via Texture::Create) -- as a 64-bit
+    // pointer into the mesh's texPtr slot (mesh+12). On x64 that 8-byte write also occupies mesh+16
+    // (the old numVerts slot; we recover numVerts from the vert table instead). So the texture is
+    // simply `*(renderengine::Texture**)(mesh+12)` == (lpMesh[3] | lpMesh[4]<<32). The raster has no
+    // x64 self-pointer issue (only mpD3DTexture, set at native width). Im2d::SetTexture binds
+    // texture->mpD3DTexture directly.
+    //
+    // DEFENSIVE: validate the pointer looks like a live texture (non-null, mpD3DTexture non-null)
+    // before returning it; otherwise fall back to null (untextured vertex-colour) so a bad/unresolved
+    // import never AVs in the draw. mode-0 (texId 6969 sentinel) always returns null.
+    static renderengine::Texture* ResolveMeshTexture(const u32* lpMesh, s32 liTexMode)
+    {
+        if (liTexMode != 1)
+            return nullptr;   // mode 0 / unknown -> untextured (vertex colour)
+
+        const u64 luLow  = static_cast<u64>(lpMesh[3]);   // mesh+12 low32
+        const u64 luHigh = static_cast<u64>(lpMesh[4]);   // mesh+16 high32 (the import's 8-byte write)
+        const uintptr_t luTexPtr = static_cast<uintptr_t>(luLow | (luHigh << 32));
+        if (luTexPtr == 0)
+            return nullptr;   // import unresolved -> untextured fallback
+
+        renderengine::Texture* lpTexture = reinterpret_cast<renderengine::Texture*>(luTexPtr);
+        // The pointer must look like a heap/resource address (reject obviously-bad low values) and
+        // carry a live D3D texture, else fall back to untextured (no AV).
+        if (luTexPtr < 0x10000u)
+            return nullptr;
+        if (lpTexture->mpD3DTexture == nullptr)
+            return nullptr;   // texture not realised (FixUp didn't create it) -> untextured fallback
+        return lpTexture;
+    }
+
     // Resolve + validate the movie geometry once at load time, choosing the pointer-size path.
     static void ResolveMovieGeometry(CgsResource::Entry* lpEntry)
     {
@@ -810,9 +847,10 @@ namespace BrnGui
     // Dispatch. lpIm2d is BrnRendererModule's own mIm2dRenderer (battle-tested), passed in by the
     // render hook. Im2d::Render ALWAYS draws a triangle STRIP (it ignores the primitive type) and
     // caps at 64 verts/call; a type-0 (tri-LIST) run is drawn as separate 3-vertex strips (each ==
-    // one triangle) so the list tessellation is exact. FLAG: the per-shape AS transforms/visibility/
-    // textures are absent (no stage matrix applied, untextured vertex colour) -- geometry is DRAWN at
-    // its authored coords, not animated/textured.
+    // one triangle) so the list tessellation is exact. Mode-1 meshes bind their real imported texture
+    // (ResolveMeshTexture); mode-0 draw untextured (vertex colour). FLAG: the per-shape AS transforms/
+    // visibility (the final animated layout) are absent -- geometry is DRAWN at its authored coords,
+    // textured where a texture resolves, but not animated (that needs the un-homed display-list/runStream).
     // -------------------------------------------------------------------------
     static s32 RenderLoadedGeometryDirect(CgsGraphics::Im2d* lpIm2d)
     {
@@ -849,9 +887,21 @@ namespace BrnGui
         {
             const u32* lpFile = ResolveOff<const u32>(lpFileTable[luFile], luBound);
             if (lpFile == nullptr)
+            {
+                if (lbProbe) { char lf[96]; std::snprintf(lf, sizeof(lf),
+                    "[AptRT] render: file%u SKIP (file offset out of range)\n", luFile);
+                    CgsDev::Log::WriteToLog(lf); }
                 continue;
+            }
             const u32 luNumMeshes   = lpFile[1];
             const u32 luMeshTableOff = lpFile[2];
+            if (lbProbe)
+            {
+                char lf[128];
+                std::snprintf(lf, sizeof(lf), "[AptRT] render: file%u numMeshes=%u meshTableOff=0x%X\n",
+                              luFile, luNumMeshes, luMeshTableOff);
+                CgsDev::Log::WriteToLog(lf);
+            }
             if (luNumMeshes == 0 || luNumMeshes > 65536u)
                 continue;
             const u32* lpMeshTable = ResolveOff<const u32>(luMeshTableOff, luBound);
@@ -864,41 +914,90 @@ namespace BrnGui
                 if (lpMesh == nullptr)
                     continue;
                 const s32 liMeshType    = static_cast<s32>(lpMesh[0]);   // +0
-                const u32 luNumVerts    = lpMesh[4];                     // +16
+                const s32 liTexMode     = static_cast<s32>(lpMesh[1]);   // +4
+                u32       luNumVerts    = lpMesh[4];                     // +16 (CLOBBERED for mode-1, see below)
                 const u32 luVertTableOff = lpMesh[5];                    // +20
-                if (luNumVerts < 3u || luNumVerts > 64u)
-                    continue;   // Im2d caps at 64 verts/call; tri-strip needs >=3
 
-                // The vertex table: first entry is the vertex-run offset. Verify the WHOLE run
-                // (luNumVerts * 20 bytes) lands inside the resource before reading (no AV).
+                // The vertex table: ONE u32 offset per vertex (each points at a Basic2dColoured
+                // TexturedVertex; consecutive entries are 20 bytes apart). We always derive the run
+                // start + the COUNT from this table, NOT from mesh+16 -- because for a textured
+                // (texMode==1) mesh the bundle's import-resolve wrote an 8-byte texture pointer into
+                // the texPtr slot (mesh+12), and on x64 that 8-byte write CLOBBERS mesh+16 (numVerts)
+                // with the high 32 bits of the pointer (-> a huge garbage count). So count vertices by
+                // walking the vert table while each entry is a sane, in-range, monotonically-advancing
+                // vertex offset. This recovers the real count for both clean + import-clobbered meshes.
                 const u32* lpVertTable = ResolveOff<const u32>(luVertTableOff, luBound);
                 if (lpVertTable == nullptr)
+                {
+                    if (lbProbe) { char ls[128]; std::snprintf(ls, sizeof(ls),
+                        "[AptRT] render: file%u mesh%u SKIP (vertTableOff 0x%X out of range)\n",
+                        luFile, luMesh, luVertTableOff); CgsDev::Log::WriteToLog(ls); }
                     continue;
+                }
+                const u32 luVertStride = static_cast<u32>(sizeof(CgsGraphics::Basic2dColouredTexturedVertex));
                 const u32 luVertRunOff = lpVertTable[0];
-                const u32 luRunBytes   = luNumVerts * static_cast<u32>(
-                    sizeof(CgsGraphics::Basic2dColouredTexturedVertex));
-                if (luVertRunOff == 0 || luVertRunOff >= luBound ||
-                    luRunBytes > luBound - luVertRunOff)
+                // Count consecutive verts (table[i] == table[0] + i*stride, all in-range), capped at 64
+                // (Im2d's per-call limit) -- this is the AUTHORITATIVE count, replacing the clobbered field.
+                // Bound the TABLE read itself to the resource so reading lpVertTable[lv] never over-reads.
+                u32 luCountedVerts = 0;
+                for (u32 lv = 0; lv < 64u; ++lv)
+                {
+                    // The table entry lpVertTable[lv] lives at (luVertTableOff + lv*4); stop before it
+                    // would read past the resource.
+                    if (luVertTableOff + (lv + 1u) * 4u > luBound)
+                        break;
+                    const u32 luVOff = lpVertTable[lv];
+                    if (luVOff != luVertRunOff + lv * luVertStride)
+                        break;
+                    if (luVOff == 0 || luVOff + luVertStride > luBound)
+                        break;
+                    ++luCountedVerts;
+                }
+                luNumVerts = luCountedVerts;
+
+                if (luNumVerts < 3u)
+                {
+                    if (lbProbe) { char ls[160]; std::snprintf(ls, sizeof(ls),
+                        "[AptRT] render: file%u mesh%u type=%d texMode=%d SKIP (recovered verts=%u < 3)\n",
+                        luFile, luMesh, liMeshType, liTexMode, luNumVerts); CgsDev::Log::WriteToLog(ls); }
                     continue;
+                }
+                const u32 luRunBytes = luNumVerts * luVertStride;
+                if (luVertRunOff == 0 || luVertRunOff >= luBound || luRunBytes > luBound - luVertRunOff)
+                {
+                    if (lbProbe) { char ls[160]; std::snprintf(ls, sizeof(ls),
+                        "[AptRT] render: file%u mesh%u SKIP (vert run 0x%X+%u out of range)\n",
+                        luFile, luMesh, luVertRunOff, luRunBytes); CgsDev::Log::WriteToLog(ls); }
+                    continue;
+                }
                 const CgsGraphics::Basic2dColouredTexturedVertex* lpVerts =
                     reinterpret_cast<const CgsGraphics::Basic2dColouredTexturedVertex*>(
                         s_uAptResourceBase + luVertRunOff);
 
+                // ---- TEXTURE: bind the real renderengine::Texture* for mode-1 meshes. The bundle's
+                // import-resolve wrote the imported texture resource's m_baseResources[0] (a realised
+                // renderengine::Texture, mpD3DTexture already created by its FixUp) as a 64-bit pointer
+                // into the mesh's texPtr slot (mesh+12). ResolveMeshTexture reassembles + validates it;
+                // Im2d::SetTexture binds texture->mpD3DTexture. mode-0 / unresolved -> null (untextured
+                // vertex colour). No AV (validated before binding).
+                renderengine::Texture* lpMeshTexture = ResolveMeshTexture(lpMesh, liTexMode);
+                lpIm2d->SetTexture(lpMeshTexture);
+
                 if (lbProbe)
                 {
-                    char lacm[200];
+                    char lacm[224];
                     std::snprintf(lacm, sizeof(lacm),
-                        "[AptRT] render: file%u mesh%u type=%d verts=%u runOff=0x%X v0=(%.1f,%.1f) "
-                        "-> Im2d::Render ...\n",
-                        luFile, luMesh, liMeshType, luNumVerts, luVertRunOff,
-                        lpVerts[0].mv2Pos.x, lpVerts[0].mv2Pos.y);
+                        "[AptRT] render: file%u mesh%u type=%d texMode=%d verts=%u(recovered) runOff=0x%X "
+                        "tex=%p v0=(%.1f,%.1f) -> drawn\n",
+                        luFile, luMesh, liMeshType, liTexMode, luNumVerts, luVertRunOff,
+                        (void*)lpMeshTexture, lpVerts[0].mv2Pos.x, lpVerts[0].mv2Pos.y);
                     CgsDev::Log::WriteToLog(lacm);
                 }
 
                 // Draw through the PROVEN immediate path. Im2d::Render ALWAYS draws a triangle STRIP
                 // (it ignores the primitive type). For a type-0 tri-LIST run we draw it as separate
-                // 3-vertex strips (each 3-vert strip == exactly one triangle), which reproduces the
-                // tri-list correctly. Type 1 (strips) / type 2 / others draw as one strip over the run.
+                // 3-vertex strips (each == one triangle), reproducing the list exactly. Type 1/2/other
+                // draw as one strip over the run.
                 if (liMeshType == 0)
                 {
                     for (u32 luBase = 0; luBase + 3u <= luNumVerts; luBase += 3u)
@@ -910,9 +1009,6 @@ namespace BrnGui
                 }
                 ++liMeshesSubmitted;
                 liVertsSubmitted += static_cast<s32>(luNumVerts);
-
-                if (lbProbe)
-                    CgsDev::Log::WriteToLog("[AptRT] render: Im2d::Render returned OK.\n");
             }
         }
 
