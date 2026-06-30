@@ -20,6 +20,8 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <new>   // placement new (the TextFormat copy-ctor into a pool block)
+
 #include "SDKs/EATech/include/Apt/AptCIHNativeFunctionHelper.h"
 
 #include "SDKs/EATech/include/Apt/AptCIH.h"                       // AptCIH (the scene node)
@@ -34,6 +36,12 @@
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"             // the localToGlobal world-matrix scratch
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"           // EAStringC (the AS-arg string scratch)
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"         // the AS VM (clone / loadVariables this-ptr)
+#include "SDKs/EATech/include/Apt/AptObject.h"                    // AptObject::Create (the getBounds result object)
+#include "SDKs/EATech/include/Apt/AptTextFormat.h"                // TextFormat record (setTextFormat) + AptTextFormat
+#include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"     // mpTextFormat / mStateFlags / SetAlignment / SetTextFormat
+#include "SDKs/EATech/include/Apt/AptDisplayListState.h"          // findInst / ChangeDepth / swapDepths (swapDepths)
+#include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"             // mpPositionMatrix tx/ty (getBounds)
+#include "SDKs/EATech/Apt/DogmaAllocator.h"                       // gpAptPseudoDataPool (the TextFormat pool)
 
 // ---------------------------------------------------------------------------
 // FLAG (homed by the apt VM native-call dispatch): the global native-method arg
@@ -401,5 +409,259 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_localToGlobal(AptValue* pContext, 
     // Write the transformed world (x,y) back into the point's "x"/"y".
     pHash->Set(strKeyX, AptFloat::Create(mWorld.tx));
     pHash->Set(strKeyY, AptFloat::Create(mWorld.ty));
+    return gpUndefinedValue;
+}
+
+// ---------------------------------------------------------------------------
+// FLAG (homed by the AS fixed-size pool layer): the shared Apt pseudo-data DOGMA
+// pool (X360 off_8324D808) the text-format records are allocated from -- the same
+// gpAptPseudoDataPool the sibling Apt TUs (AptActionQueue / AptAnimationTarget)
+// declare. Wired at AptInit.
+// ---------------------------------------------------------------------------
+extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
+
+// ---------------------------------------------------------------------------
+// FLAG: TextFormat::copyTextFormatObj (X360 callee of get/setTextFormat) overlays
+// pSource's format fields onto pDest in place (the non-allocating field copy, as
+// opposed to the TextFormat copy-ctor). Declared as an extern shim taking the
+// named TextFormat record so setTextFormat keeps the exact (dest, &src) call shape
+// without re-deriving the field offsets here; bodied in the AptTextFormat TU.
+// ---------------------------------------------------------------------------
+extern void TextFormat_copyTextFormatObj(TextFormat* pDest, const TextFormat* pSource);   // TextFormat::copyTextFormatObj
+
+// ===========================================================================
+// sMethod_getBounds @0x82AF5E28 -- AS getBounds([targetCoordSpace]): the receiver's
+// bounding box, optionally expressed in another node's coordinate space.
+//   .getBounds()        -- bounds in this node's own parent space.
+//   .getBounds(target)  -- bounds relative to `target`'s local origin (target must
+//                          be a DEFINED value); >1 arg -> undefined.
+// Returns a fresh AS Object { xMax, xMin, yMax, yMin } (the four edge floats), each
+// offset by the coordinate-space node's local translation (its render item's
+// position matrix tx/ty). Undefined when the (single) target argument is undefined.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_getBounds(AptValue* pContext, int nArgCount)
+{
+    if (nArgCount > 1)
+        return gpUndefinedValue;
+
+    // The coordinate-space node: the receiver by default, or the (defined) target arg.
+    AptValue* pSpaceValue = pContext;
+    if (nArgCount == 1)
+    {
+        AptValue* const pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];   // arg 0: target space
+        if (!pArg->getIsDefined())
+            return gpUndefinedValue;
+        pSpaceValue = pArg;
+    }
+
+    // Fresh AS Object (operator new(32) + AptValueWithHash(AptVFT_Object, 8) + the
+    // AptObject vtable; mClassFlags = 0) -- the X360 inlines exactly AptObject::Create.
+    AptObject* const pResult = AptObject::Create();
+
+    // The coordinate-space node's local origin (its render item's position matrix
+    // translation; null -> identity, matching localToGlobal's flt_8324E2B0 fallback).
+    AptCIH* const pSpaceNode = static_cast<AptCIH*>(pSpaceValue);
+    // The X360 reads the render item's mpPositionMatrix field directly and falls
+    // back to the identity matrix (flt_8324E2B0) when it is null -- the same raw
+    // read + flt_8324E2B0 fallback as localToGlobal above.
+    const AptMatrix* pPos = pSpaceNode->GetCharacterInst()->GetRenderItem()->mpPositionMatrix;
+    if (!pPos)
+        pPos = &gAptIdentityMatrix;
+
+    // The receiver's world AABB (left, top, right, bottom), shifted into the
+    // coordinate-space node's local frame.
+    float fRect[4];   // [0]=left [1]=top [2]=right [3]=bottom
+    AptCIH_GetWorldBounds(pContext, fRect);
+    fRect[2] -= pPos->tx;   // right  - tx
+    fRect[0] -= pPos->tx;   // left   - tx
+    fRect[1] -= pPos->ty;   // top    - ty
+    fRect[3] -= pPos->ty;   // bottom - ty
+
+    // The four AS edge members (X360 unk_8324E6CC/6D0/6D8/6DC), in the asm's order.
+    pResult->Set(EAStringC("xMax"), AptFloat::Create(fRect[2]));   // right
+    pResult->Set(EAStringC("xMin"), AptFloat::Create(fRect[0]));   // left
+    pResult->Set(EAStringC("yMax"), AptFloat::Create(fRect[3]));   // bottom
+    pResult->Set(EAStringC("yMin"), AptFloat::Create(fRect[1]));   // top
+    return pResult;
+}
+
+// ===========================================================================
+// sMethod_setTextFormat @0x82AED470 -- AS setTextFormat(format): apply the
+// TextFormat argument's defined fields to the receiver dynamic-text field. With at
+// most 3 args, when arg 0 is a DEFINED TextFormat value, its format record overlays
+// the text item's own TextFormat (creating one if the item has none), then each of
+// the source's non-inherit fields (style flags, font name, size, alignment, indent)
+// is pushed onto the render item with the matching dirty-state flags. Always returns
+// undefined. (The console packs the per-field "needs re-layout" markers into the
+// render item's mStateFlags; restored to the named accessors.)
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_setTextFormat(AptValue* pContext, int nArgCount)
+{
+    if (nArgCount > 3)
+        return gpUndefinedValue;
+
+    AptValue* const pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];   // arg 0: the TextFormat
+    if (!pArg->isTextFormat())   // (defined-bit) && meValueType == AptVFT_TextFormat (0x1C)
+        return gpUndefinedValue;
+
+    // The argument's embedded format record (the AptTextFormat wrapper's mFormat).
+    // Non-const: the X360 clamps the source's mfSize in place (stfs into v2+0x24).
+    TextFormat* const pSrc = &static_cast<AptTextFormat*>(pArg)->mFormat;
+
+    AptCharacterInst* const pInst = static_cast<AptCIH*>(pContext)->GetCharacterInst();
+
+    // The text item's current TextFormat object (X360 mpTextFormat @ +0x68, typed
+    // AptValue* in the shared header but holding a TextFormat* here -- the cast keeps
+    // the shared header untouched).
+    AptRenderItemDynamicText* pItem =
+        static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItem());
+
+    uint32_t uMergedStyle;
+    if (reinterpret_cast<TextFormat*>(pItem->mpTextFormat))
+    {
+        // The item already has a TextFormat: merge in place.
+        uMergedStyle = reinterpret_cast<TextFormat*>(pItem->mpTextFormat)->mnStyleFlags | pSrc->mnStyleFlags;
+        pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
+        TextFormat_copyTextFormatObj(reinterpret_cast<TextFormat*>(pItem->mpTextFormat), pSrc);
+    }
+    else
+    {
+        // No TextFormat yet: allocate a fresh one (copy-ctor from the source) and set it.
+        void* const lpMem = gpAptPseudoDataPool->Allocate(32);
+        TextFormat* const pNewFmt = lpMem ? new (lpMem) TextFormat(pSrc) : nullptr;
+        pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
+        pItem->SetTextFormat(reinterpret_cast<AptValue*>(pNewFmt));
+        uMergedStyle = reinterpret_cast<TextFormat*>(pItem->mpTextFormat)->mnStyleFlags | pSrc->mnStyleFlags;
+    }
+
+    // Store the merged style word back into the (writable) item's TextFormat.
+    pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
+    reinterpret_cast<TextFormat*>(pItem->mpTextFormat)->mnStyleFlags = uMergedStyle;
+
+    // Font name (when the source font is not the inherit/empty sentinel).
+    if (!pSrc->mFontName.IsEmpty())   // X360: *(v2+32) != &unk_82F72FF8 (the empty-string sentinel, not a content test)
+    {
+        pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
+        reinterpret_cast<TextFormat*>(pItem->mpTextFormat)->mFontName = pSrc->mFontName;
+    }
+
+    // Colour provided (-1 == inherit): mark the "format changed" dirty bits. (The
+    // colour itself is carried through the copied TextFormat record; here it only
+    // drives the re-layout flags, matching the X360 *(v2+0x28) test.)
+    if (pSrc->mnColor != -1)
+    {
+        pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
+        pItem->ClearStateFlags(1u);
+        pItem->SetStateFlags(0x10400u);
+    }
+
+    // Size provided (-1.0 == inherit): clamp non-positive to 1.0, write mFontSize + dirty.
+    if (pSrc->mfSize != -1.0f)
+    {
+        if (pSrc->mfSize <= 0.0f)
+            pSrc->mfSize = 1.0f;
+        pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
+        pItem->mFontSize = pSrc->mfSize;
+        pItem->ClearStateFlags(1u);
+        pItem->SetStateFlags(0x10004u);
+    }
+
+    // Alignment provided (3 == inherit): write the packed alignment field + dirty.
+    if (pSrc->mnAlign != 3)
+    {
+        pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
+        pItem->SetAlignment(pSrc->mnAlign);
+        pItem->ClearStateFlags(1u);
+        pItem->SetStateFlags(0x20004u);
+    }
+
+    // Colour again (the X360 re-tests mnColor at the tail for the layout-only flag).
+    if (pSrc->mnColor != -1)
+    {
+        pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
+        pItem->SetStateFlags(0x400u);
+    }
+
+    return gpUndefinedValue;
+}
+
+// ===========================================================================
+// sMethod_swapDepths @0x82AFBE10 -- AS swapDepths(target | depth): exchange this
+// node's depth with another node's in the parent's display list.
+//   .swapDepths(clip)   -- target a clip/CIHNone handle directly.
+//   .swapDepths(name)   -- target the node placed under that instance name.
+//   .swapDepths(depth)  -- target the node at that AS depth (+ the 0x4000 bias).
+// When the resolved target is a defined, distinct node and the receiver is a
+// sprite/animation instance, the two are swapped (list position + render depths);
+// otherwise the receiver is moved to the requested depth (ChangeDepth). Returns
+// undefined.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_swapDepths(AptValue* pContext, int nArgCount)
+{
+    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+
+    // With more than one argument the receiver itself must be a clip handle / CIHNone
+    // (X360: a2 != 1 gates on IsClipHandleOrCIHNone(this) -- when it is, bail).
+    if (nArgCount != 1 && IsClipHandleOrCIHNone(pContext))
+        return gpUndefinedValue;
+
+    AptValue* const pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];   // arg 0: the swap target
+
+    // The parent's child display-list state (parent->charInst->mDisplayList head),
+    // reinterpreted as its AptDisplayListState (both are a lone AptCIH* head).
+    AptCharacterSpriteInstBase* const pParentSprite =
+        static_cast<AptCharacterSpriteInstBase*>(pNode->GetDisplayListParent()->GetCharacterInst());
+    AptDisplayListState* const pList = pParentSprite->mDisplayList.AsState();
+
+    AptCIH* pTarget = nullptr;   // the resolved node to swap with (X360 v29)
+    AptCIH* pPrevSlot = nullptr; // findInst's insert-after out (X360 v31 scratch)
+
+    if (IsClipHandleOrCIHNone(pArg))
+    {
+        // Directly a (defined) clip handle / CIHNone -> it IS the target node.
+        pTarget = static_cast<AptCIH*>(pArg);
+    }
+    else if (pArg->isString())
+    {
+        // A name -> locate the listed node by that instance name.
+        EAStringC strName;
+        pArg->toString(&strName);
+        pList->findInst(0, &strName, &pPrevSlot, &pTarget);
+    }
+    else if (pArg->isInteger() || pArg->isFloat())
+    {
+        // A depth value -> the node at that AS depth (+ the 0x4000 bias). No-op when
+        // it is already this node's own depth.
+        const int nDepth = pArg->toInteger() + 0x4000;
+        if (nDepth == pNode->GetCharacterInst()->GetRenderItem()->GetDepth())
+            return gpUndefinedValue;
+        pList->findInst(nDepth, nullptr, &pPrevSlot, &pTarget);
+    }
+
+    // A defined, distinct target node + a sprite(5)/animation(9) PARENT -> swap.
+    if (pTarget && pTarget->getIsDefined() && pTarget != pNode)
+    {
+        AptCharacterInst* const pParentInst = pNode->GetDisplayListParent()->GetCharacterInst();
+        const uint32_t nTypeTag = pParentInst->GetTypeTag();   // *(charInst+8) >> 26
+        AptDisplayListState* const pSwapList =
+            (nTypeTag == 5 || nTypeTag == 9)
+                ? static_cast<AptCharacterSpriteInstBase*>(pParentInst)->mDisplayList.AsState()
+                : nullptr;
+        if (pSwapList)
+            pSwapList->swapDepths(pTarget, pNode);
+        return gpUndefinedValue;
+    }
+
+    // Otherwise (no swappable target): when the argument is an integer/float depth,
+    // move the receiver to that depth in the parent's list (X360 dereferences the
+    // parent charInst's display list directly).
+    if (pArg->isInteger() || pArg->isFloat())
+    {
+        AptDisplayListState* const pParentList =
+            static_cast<AptCharacterSpriteInstBase*>(pNode->GetDisplayListParent()->GetCharacterInst())
+                ->mDisplayList.AsState();
+        const int nDepth = pArg->toInteger() + 0x4000;
+        pParentList->ChangeDepth(static_cast<int16_t>(nDepth), pNode);
+    }
     return gpUndefinedValue;
 }
