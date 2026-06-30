@@ -10,6 +10,7 @@ namespace CgsNetwork
     class ServerInterfaceConnection;   // GetConnectionComponent() return type (pointer only)
     class ServerInterfaceGames;        // GetGameComponent() return type (pointer only)
     class ServerInterfacePlayerInfo;   // GetPlayerInfoComponent() return type (pointer only)
+    class ServerInterfaceServerInfo;   // GetServerInfoComponent() return type (pointer only)
 }
 
 // ===========================================================================
@@ -101,6 +102,14 @@ namespace BrnNetwork
         // it). The component itself is BrnServerInterfaceBase::mPlayerInfo; this is the named
         // accessor for it. Declared-only here; the body lives in this class's own (DirtySock) TUs.
         CgsNetwork::ServerInterfacePlayerInfo* GetPlayerInfoComponent();
+
+        // ADDITIVE GROW (BrnNetworkRoadRulesManager TU): OnAutoLogin reaches the embedded
+        // server-info component to read the road-rules client-config values (X360 reads the
+        // component pointer at *(mpServerInterface + 0x2C) and the assert names it
+        // "mpServerInterface->GetServerInfoComponent()"). The component itself is
+        // BrnServerInterfaceBase::mServerInfo; this is the named accessor for it.
+        // Declared-only here; the body lives in this class's own (DirtySock) TUs.
+        CgsNetwork::ServerInterfaceServerInfo* GetServerInfoComponent();
 
     private:
         // The one extra server-interface component this most-derived class adds over

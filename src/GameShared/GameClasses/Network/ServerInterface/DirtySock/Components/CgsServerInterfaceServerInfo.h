@@ -75,6 +75,14 @@ namespace CgsNetwork
         void GetTosUrl(char* lpcOut, s32 liOutLen);
         void GetTelemetryAuthString(char* lpcOut, s32 liOutLen);
         void GetStringFromClientConfig(const char* lpcKey, char* lpcOut, s32 liOutLen);
+
+        // ADDITIVE GROW (BrnNetworkRoadRulesManager TU): read a client-config record as a
+        // timestamp (X360 GetTimeStampFromClientConfig, called by NetworkRoadRulesManager::
+        // OnAutoLogin for "ROAD_RULES_RESET_DATE"). Returns the parsed timestamp word that the
+        // caller stores into a 4-byte network event payload. Declared-only here; the body lives
+        // in this component's own .cpp.
+        s32 GetTimeStampFromClientConfig(const char* lpcKey);
+
         bool IsNewsUpdated() const;
 
     private:

@@ -120,6 +120,15 @@ namespace BrnNetwork
         // (body lands with the full BrnNetworkManager TU).
         CgsNetwork::PlayerManager* GetPlayerManager();
 
+        // The active-race-car slot index a given network player currently occupies, or -1 when
+        // the player has no race car (X360: BrnNetwork::BrnNetworkManager::GetActiveRaceCarIndex,
+        // taken on `this` with a NetworkPlayerID; BrnNetwork::TeamSelectionManager's team-
+        // assignment actions / _TeamSelectionMessageArrivedCallback index maActiveRaceCarTeam by
+        // it -- see ActionAssignCoopStuntRunTeams @ 0x8254BC48). Declared-only here; the storage /
+        // body materialise with the full BrnNetworkManager TU. ADDITIVE GROW
+        // (BrnNetworkTeamSelectionManager TU).
+        s32 GetActiveRaceCarIndex( NetworkPlayerID lPlayerID );
+
         // The signed-in local user's controller/pad index (X360: read whole as *(this+0x60);
         // BrnNetwork::BuddyManagerX360::DoInvite compares the invite's requesting controller port
         // against it to decide whether the invite targets the LOCAL user -- see DoInvite
