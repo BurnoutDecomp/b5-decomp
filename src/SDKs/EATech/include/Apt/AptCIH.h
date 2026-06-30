@@ -43,6 +43,14 @@ struct AptCXForm;
 struct AptRect;
 struct AptNativeHash;
 
+// x64 8-byte fork: the embedded AptMovie/AptCharacterAnimation offset within a sprite/animation
+// AptCharacter (console 0x10; native-8-format widens it to 0x20). The host sets this to match the
+// loaded .apt's pointer size before ticking; AptCIH_GetClipMovie reads it. Defined in AptCIH.cpp.
+extern unsigned int gAptCharMovieOffset;
+// x64 8-byte fork: when set, AptCIH::tick SKIPS the timeline (doFrameControls/queueFrameActions/clip
+// events) because the native-8 timeline records are un-relocated/un-widened. Defined in AptCIH.cpp.
+extern unsigned int gAptSkipTimeline;
+
 struct AptCIH : public AptValueGC
 {
     EAStringC         mInstanceName;          // [2]

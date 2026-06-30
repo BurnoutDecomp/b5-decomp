@@ -41,6 +41,10 @@
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"       // AptGetAnimationAtLevel (the root level-0 CIH)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"// MakeCharacterAnimationInst (loaded movie -> live inst)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (the root display-object node)
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"       // AptAnimationTarget::GetRootDisplayList (the director's root list)
+#include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::AsState
+#include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // AptDisplayListState::mpFirst (the placed-node chain)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::GetRenderItem/GetDepth (probe)
 
 // Minimal Win32 VirtualAlloc/VirtualFree decls (NOT #include <windows.h> -- that pollutes the
 // namespace with min/max/Render/etc. macros that clash with the EA/Cgs/rw headers above). We need
@@ -74,6 +78,55 @@ extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p)
 {
     char lac[128];
     std::snprintf(lac, sizeof(lac), "[AptRT] gal: %s = %p\n", pcStep ? pcStep : "?", p);
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The per-tick step-probe sink (declared in AptCIH.cpp). Throttled to the first ~120 calls (a handful
+// of ticks) so it pinpoints the early-deref AV without flooding the per-frame log. Strong def overrides
+// the weak default in AptCIH.cpp.
+extern "C" void CgsApt_TickProbe(const char* pcStep, const void* p)
+{
+    static int s_iTickProbeBudget = 0;
+    if (s_iTickProbeBudget >= 120)
+        return;
+    ++s_iTickProbeBudget;
+    char lac[128];
+    std::snprintf(lac, sizeof(lac), "[AptRT] tick: %s = %p\n", pcStep ? pcStep : "?", p);
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The render-item-creation probe sink (declared in AptCharacterInst.cpp): logs each AptCharacterInst's
+// render-item creation -- the char inst, the character's type, the character, the created render item,
+// and the item's stored mpCharacter. Throttled. Confirms Manager_CreateItem ran + set mpCharacter.
+extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const void* pCharacter,
+                                   const void* pRenderItem, const void* pItemCharacter)
+{
+    static int s_iMkItemBudget = 0;
+    if (s_iMkItemBudget >= 32)
+        return;
+    ++s_iMkItemBudget;
+    char lac[200];
+    std::snprintf(lac, sizeof(lac),
+        "[AptRT] mkitem: charInst=%p type=%d character=%p -> renderItem=%p (item.mpCharacter=%p)\n",
+        pCharInst, nCharType, pCharacter, pRenderItem, pItemCharacter);
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The char-list probe sink (declared in AptCharacterAnimationInst.cpp): logs the embedded movie's
+// AptCharacterAnimation character-table head/count just before MakeCharacterAnimationInst would walk it
+// in IncCharacterList, plus whether the skip gate is engaged. On the native-8 path the table pointer is
+// un-relocated (a serialized offset) -- this is the exact data IncCharacterList would AV on. Throttled.
+extern "C" void CgsApt_CharListProbe(const void* pAnim, const void* pTable, int nCount, unsigned int uSkip)
+{
+    static int s_iCharListBudget = 0;
+    if (s_iCharListBudget >= 32)
+        return;
+    ++s_iCharListBudget;
+    char lac[200];
+    std::snprintf(lac, sizeof(lac),
+        "[AptRT] charlist: anim=%p table=%p count=%d skip=%u %s\n",
+        pAnim, pTable, nCount, uSkip,
+        uSkip ? "(SKIPPED -- un-relocated native-8 table)" : "(walking)");
     CgsDev::Log::WriteToLog(lac);
 }
 
@@ -242,6 +295,7 @@ namespace
     void*                  s_pFaithfulRootCIH  = nullptr;   // the root AptCIH placed on the director
     bool   s_bFaithfulAttempted    = false;
     bool   s_bFaithfulInstantiated = false;
+    s32    s_iTickFrame            = 0;     // STEP-2 per-frame tick counter (for the placement probes)
 
     // Allocate a buffer in the LOW 4 GB (32-bit-addressable) via a fixed-address VirtualAlloc probe.
     // A fixed lpAddress makes VirtualAlloc return THAT address or fail (never relocates), so any
@@ -1233,6 +1287,13 @@ namespace BrnGui
         CgsDev::Log::WriteToLog(lac);
 
         // --- 6. instantiate the movie + bind it to the root CIH -----------------------------------
+        // The native-8 movie's embedded AptCharacterAnimation character TABLE is only partly relocated
+        // by FixupInPlace, so MakeCharacterAnimationInst's IncCharacterList walk (mpCharacterTable[i]
+        // -> pCharacter->*) would read serialized 4-byte offsets as 64-bit pointers and AV. Gate it off
+        // on the native-8 path (the char-list registration is pure AS-lookup bookkeeping, not needed for
+        // the tick/render path yet); the walk resumes once the character records are fully widened. Set
+        // BEFORE MakeCharacterAnimationInst so the gate is live when IncCharacterList is reached.
+        gAptSkipCharList = (liPtrSize == 8) ? 1u : 0u;
         CgsDev::Log::WriteToLog("[AptRT] faithful: MakeCharacterAnimationInst(pFile) ...\n");
         AptCharacterAnimationInst* lpInst = MakeCharacterAnimationInst(s_pFaithfulAptFile);
         if (lpInst == nullptr)
@@ -1245,11 +1306,21 @@ namespace BrnGui
         CgsDev::Log::WriteToLog(lac);
         lpRootCIH->SetCharacterInst(reinterpret_cast<AptCharacterInst*>(lpInst), true);
 
+        // Set the embedded-movie offset for the per-frame tick (AptCIH_GetClipMovie reads
+        // character + gAptCharMovieOffset): native-8 -> 0x20, console-4 -> 0x10.
+        gAptCharMovieOffset = (liPtrSize == 8) ? 0x20u : 0x10u;
+        // The native-8 TIMELINE (frame table + place/remove records) was NOT relocated by FixupInPlace
+        // (the skipped case-5/9 movie recursion) and uses console struct offsets, so the tick's
+        // doFrameControls/queueFrameActions/clip-events would AV reading it. Set gAptSkipTimeline so the
+        // tick advances the play-head structurally but skips the timeline -- naming the un-widened
+        // timeline as the next layout to recover. (4-byte path runs the timeline faithfully.)
+        gAptSkipTimeline = (liPtrSize == 8) ? 1u : 0u;
+
         s_bFaithfulInstantiated = true;
         std::snprintf(lac, sizeof(lac),
             "[AptRT] faithful: INSTANTIATED -- root CIH %p <- animInst %p (movie root %p); "
-            "displayList live. (tick/AS render = steps 2/3, not this pass.)\n",
-            (void*)lpRootCIH, (void*)lpInst, lpDataRoot);
+            "displayList live. charMovieOff=0x%X. (STEP 2 tick next.)\n",
+            (void*)lpRootCIH, (void*)lpInst, lpDataRoot, gAptCharMovieOffset);
         CgsDev::Log::WriteToLog(lac);
     }
 
@@ -1538,20 +1609,79 @@ namespace BrnGui
         if (!s_bMovieLoaded)
             return;
 
-        // ---- TICK (FLAG: un-homed) -----------------------------------------------------
-        // The faithful per-frame tick (AptLoader::Update -> AptLinker::Update ->
-        // AptAnimationTarget RunActions/TickIntervalTimers/TickNewInsts + the display-list
-        // tick + the AS frame actions) requires a live root AptCIH bound to a loaded AptFile
-        // -- which needs the un-homed loader async-completion + the (stubbed) AptActionInterpreter
-        // runStream. Not driven here (it would fault on the partial state). When those land,
-        // tick the director + root clip here. This is the documented tick gap.
-        if (lbProbeFrame)
-            CgsDev::Log::WriteToLog("[AptRT] frame: tick skipped -- timeline/AS path un-homed "
-                                    "(loader-completion + runStream) (FLAG).\n");
+        // ---- STEP 2: TICK the instantiated faithful root CIH ---------------------------------------
+        // The homed AptCIH::tick advances the clip's play-head; for a fresh clip it runs frame 0's
+        // place/remove timeline commands (doFrameControls -> placeObject), POPULATING the display list
+        // with child AptCIHs, then queues the frame's ActionScript. We drive it on the instantiated root
+        // CIH each frame. The render-tree manager is the null stub, but AptRTM_CreateItem now falls back
+        // to the homed Manager_CreateItem factory, so each placed inst gets a real render item (carrying
+        // its character) -- which is what tick / AptCIH_GetClipMovie reach the movie through. Every deref
+        // is guarded (the engine null-safety we added) so the tick completes structurally or bails.
+        if (s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr)
+        {
+            AptCIH* lpRoot = static_cast<AptCIH*>(s_pFaithfulRootCIH);
+            // Mark the root clip "dirty" so AptCIH::tick processes it (mFlagsA bit25 == GetDirtyState,
+            // the tick gate; the ctor leaves it clear). SetDirtyState(true,...) sets bit25. (FLAG: the
+            // X360 dirties via the render-tree manager's propagation; we set it directly each frame.)
+            if (!lpRoot->GetDirtyState())
+                lpRoot->SetDirtyState(true, false);
+
+            if (s_iTickFrame < 4)   // probe the first few frames (frame 0 is where placement happens)
+            {
+                char lacp[128];
+                std::snprintf(lacp, sizeof(lacp), "[AptRT] tick: frame=%d -> AptCIH::tick(root %p) ...\n",
+                              s_iTickFrame, (void*)lpRoot);
+                CgsDev::Log::WriteToLog(lacp);
+            }
+
+            const int liTickResult = lpRoot->tick();   // advance frame 0 -> place characters
+
+            // Walk the director's root display list + count the placed nodes (the placement result).
+            s32 liNodes = 0;
+            AptTarget* lpTgt = GetTarget();
+            if (lpTgt != nullptr && lpTgt->mpAnimationTarget != nullptr)
+            {
+                AptDisplayList* lpRootList = lpTgt->mpAnimationTarget->GetRootDisplayList();
+                AptDisplayListState* lpState = (lpRootList != nullptr) ? lpRootList->AsState() : nullptr;
+                if (lpState != nullptr)
+                {
+                    for (AptCIH* lpN = lpState->mpFirst; lpN != nullptr && liNodes < 4096;
+                         lpN = lpN->GetDisplayListNext())
+                    {
+                        ++liNodes;
+                        if (s_iTickFrame < 2 && liNodes <= 6)
+                        {
+                            AptCharacterInst* lpCI = lpN->GetCharacterInst();
+                            char lacn[160];
+                            std::snprintf(lacn, sizeof(lacn),
+                                "[AptRT] tick:   node %p charInst=%p renderItem=%p depth=%d\n",
+                                (void*)lpN, (void*)lpCI,
+                                (void*)(lpCI ? lpCI->GetRenderItem() : nullptr),
+                                lpCI ? lpCI->GetDepth() : -1);
+                            CgsDev::Log::WriteToLog(lacn);
+                        }
+                    }
+                }
+            }
+
+            if (s_iTickFrame < 4)
+            {
+                char lacd[128];
+                std::snprintf(lacd, sizeof(lacd),
+                    "[AptRT] tick: frame=%d displayList nodes=%d (tick result=%d)\n",
+                    s_iTickFrame, liNodes, liTickResult);
+                CgsDev::Log::WriteToLog(lacd);
+            }
+            ++s_iTickFrame;
+        }
+        else if (lbProbeFrame)
+        {
+            CgsDev::Log::WriteToLog("[AptRT] frame: no faithful root CIH -- tick skipped (geometry "
+                                    "fallback render only) (FLAG).\n");
+        }
 
         // The RENDER moved to AptRuntimeRender (the proven immediate-mode Im2d path, driven by the
-        // renderer hook with BrnRendererModule's mIm2dRenderer). AptRuntimeUpdate now only ticks --
-        // it must NOT touch the never-exercised raw ImRenderBuffer<V> double-buffer path (which AV'd).
+        // renderer hook with BrnRendererModule's mIm2dRenderer).
     }
 
     // -------------------------------------------------------------------------
