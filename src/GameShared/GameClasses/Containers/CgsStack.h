@@ -107,10 +107,49 @@ struct Stack
         return &maData[liSlot];
     }
 
-    // Declared-only: not part of this TU (other instances / other call sites supply bodies).
-    bool        Contains(const Type& lrEntry) const;
-    Type&       operator[](s32 liIndex);
-    const Type& operator[](s32 liIndex) const;
+    // X360 Stack<T,N>::operator[](int) (e.g. Stack<u16,400> @ 0x8270C7D0, Stack<u16,1> @
+    // 0x8270CB30, Stack<u8,199> @ 0x8270C980 -- all driven by CgsAlgorithms::Shuffle). Assert
+    // constructed (CgsStack.h:213), then bounds-guard the index both ends (liIndex >= 0 @ :214,
+    // liIndex < miLength @ :215, both "Stack access overflow") before returning &maData[liIndex]
+    // (the asm computes the slot as `liIndex*sizeof(Type) + this`). Additive: the original header
+    // left this declared-only; the body is recovered from the X360 asm of the instantiations above.
+    Type& operator[](s32 liIndex)
+    {
+        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+        CGS_ASSERT(liIndex >= 0, "Stack access overflow");
+        CGS_ASSERT(liIndex < miLength, "Stack access overflow");
+        return maData[liIndex];
+    }
+    const Type& operator[](s32 liIndex) const
+    {
+        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+        CGS_ASSERT(liIndex >= 0, "Stack access overflow");
+        CGS_ASSERT(liIndex < miLength, "Stack access overflow");
+        return maData[liIndex];
+    }
+
+    // X360 Stack<T,N>::Contains(const T&) (e.g. Stack<u16,400> @ 0x8270A830, driven by
+    // BrnTraffic TrafficEntityModule::UpdateParams_UpdatePurgatoryList). Assert constructed
+    // (CgsStack.h:132 "Stack used before Construct/Clear was called"), early-out false when the
+    // stack is empty (miLength <= 0), then linear-scan maData[0..miLength) returning true on the
+    // first slot equal to lrEntry, false if none match within miLength entries. Additive: the
+    // original header left this declared-only; the body is recovered from the X360 asm above.
+    bool Contains(const Type& lrEntry) const
+    {
+        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+        if (miLength <= 0)
+        {
+            return false;
+        }
+        for (s32 li = 0; li < miLength; ++li)
+        {
+            if (maData[li] == lrEntry)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     Type maData[N];
     s32  miLength;
