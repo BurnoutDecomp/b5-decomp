@@ -27,8 +27,12 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"   // AptBoolean::Create
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"     // AptFloat::Create (PushFloat)
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"    // AptString::Create / GetInternalString
+#include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"  // gpAptOperandStackPool (off_8324D808)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC (dictionary-string temp)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                // AptCIH : AptValueGC (mpCIH -> AptValue* upcast)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"          // GetCharacterInst
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h" // mnClipActionFlags
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h" // SetRegisterValue / InitializeStaticData
 
 #include <cstdint>
 #include <cstring>   // memcpy (PushFloat bit reinterpret)
@@ -391,4 +395,381 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInter
 
     pInterp->mpStack[pInterp->mnStackTop++] = pResult;      // inlined stackPush (store + advance)
     pResult->AddRef();
+}
+
+// ===========================================================================
+// Lifecycle + call / timeline opcodes that this class home owns (the leaves of
+// the ActionScript function-call and timeline-control families).
+//   DECOMPILED from the X360 ARTIST:
+//     initialize     @0x82AE39D8 -- allocate the five operand/call stacks
+//     CallFunction   @0x82B03F78 (0x3D) -- f(args)
+//     NewMethod      @0x82B091B8 (0x53) -- new obj.method(args)
+//     CallFrame      @0x82B052A0 (0x9E) -- call the frame named by the top operand
+//     GotoFrame2     @0x82B0C688 (0x9F) -- jump to a frame/label off the stack
+//     GotoLabel      @0x82B0C598 (0x8C) -- jump to the inline frame label
+//
+// The console addresses the operand stack by 32-bit byte math (4*top+base); here
+// it is typed element indexing (mpStack[mnStackTop-1]), identical on x64 where
+// AptValue* is 8 bytes. mpStack[mnStackTop-N] is the console's *(4*(top-N)+base).
+//
+// FLAG -- deferred-subsystem shims (matching the sibling SpecialOps/Variable TUs;
+// the deep node->timeline/native-hash chains are not yet reconstructed as named
+// members, so they are encapsulated as flagged externs rather than raw console
+// offset arithmetic):
+//   * AptInterp_ResolveTargetContext (console sub_82B02F80) -- parse the path
+//     context out of a name into (out context-value, out leaf-name) under
+//     (scope, target). The same path-context resolver getObject uses.
+//   * AptInterp_LabelToFrame (console: AptNativeHash::Lookup of the node's frame-
+//     label hash, then AptValue::toInteger) -- the frame index for a label, or -1.
+//   * AptCIH_jumpToFrame / AptCIH_SetDirtyState -- the play-head seek + dirty
+//     latch (un-homed AptCIH play-head subsystem; shared with SpecialOps).
+//   * AptMovie_runFrameActions -- run a frame's queued ActionScript (the timeline
+//     VM driver; the AptMovie follow-on).
+//   * AptApt_PopValues (console Burnout_X360_Artist_01e3_0) -- pop N operands,
+//     releasing each (the stack-collapse primitive the compiler inlined).
+//   * AptInitParmsT -- the runtime init-parameters block initialize() reads
+//     (iStackSize @0x20, iCallStackDepth @0x24, byte @0x40); runtime-only, not
+//     serialised, so it is modelled as a flagged local struct.
+//
+// EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
+// ===========================================================================
+
+// FLAG (console sub_82B02F80 -- path-context resolver; the same one getObject's
+// AptActionInterpreter_ParsePathContext wraps, here in its raw asm arg shape):
+// resolve pName into (*ppOutContext, *pOutLeaf) under (pScope, pTarget).
+extern void AptInterp_ResolveTargetContext(AptValue* pScope, AptValue* pTarget,
+                                           const EAStringC* pName,
+                                           AptValue** ppOutContext, EAStringC* pOutLeaf);
+
+// FLAG (console: AptNativeHash::Lookup(node's frame-label hash, label) then
+// AptValue::toInteger): the frame index a label resolves to under pNode's timeline,
+// or -1 when absent. The node->char-inst->AptMovie->labelHash chain is not yet a
+// named-member path, so the lookup is encapsulated (AptMovie::labelToFrame is its
+// VM-free sibling).
+extern int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel);
+
+// FLAG (un-homed AptCIH play-head subsystem -- shared shims, matching SpecialOps):
+extern void AptCIH_jumpToFrame(AptCIH* pNode, int nFrame);              // @0x82B0C... seek
+extern void AptCIH_SetDirtyState(AptCIH* pNode, bool bDirty, bool bProp); // @0x82AD76B8
+
+// FLAG (the AptMovie timeline VM driver -- run a frame's queued ActionScript;
+// AptMovie::runFrameActions follow-on): drive the bound clip's frame actions.
+extern void AptMovie_runFrameActions(void* pFrameActionList);
+
+// FLAG (console Burnout_X360_Artist_01e3_0 -- the inlined stack-collapse primitive):
+// pop nCount operands off the operand stack, Releasing each.
+extern void AptApt_PopValues(AptActionInterpreter* pInterp, int nCount);
+
+// FLAG (runtime-only AptActionInterpreter init parameters -- the block initialize()
+// reads; not serialised, so it is modelled by its console field offsets):
+struct AptInitParmsT
+{
+    uint8_t  mPad00[0x20];
+    int32_t  iStackSize;        // [c:0x20] the operand-stack capacity
+    int32_t  iCallStackDepth;   // [c:0x24] the four call-depth stacks' capacity
+    uint8_t  mPad28[0x40 - 0x28];
+    uint8_t  mbSkipTraceBytecodes; // [c:0x40] -> mbSkipTraceBytecodes
+};
+
+// FLAG (AptScriptFunctionBase::InitializeStaticData @0x82AE26C0 -- the console
+// passes the whole AptInitParmsT; the in-header member declaration takes the
+// resolved register count, so the parms-shaped entry point is reached through a
+// flagged extern to keep initialize() faithful without touching that header).
+extern void AptScriptFunctionBase_InitializeStaticData(const AptInitParmsT* pParms);
+
+// FLAG (console: a FrameStack-typed (tag 14) function name owning >=1 local resolves
+// to its first slot's captured value -- *Variable[8] when Variable[10] (local count)
+// > 0; the AptFrameStack slot array is not yet a named member, so it is encapsulated).
+extern AptValue* AptInterp_FrameStackFirstLocal(AptValue* pFrameStack);
+
+// FLAG (AptActionInterpreter::_createObject @0x82B08088 -- the value-materialiser;
+// homed in a sibling TU, reached through the same free shim the ProtoOps handlers
+// use). Builds the AS object/array/class value under (pScope, pTarget); the trailing
+// int/char are the array-length hint + the "construct" flag.
+extern AptValue* AptActionInterpreter_createObject(AptActionInterpreter* pInterp,
+                                                   AptValue* pScope, AptValue* pTarget,
+                                                   const EAStringC* pClassName,
+                                                   int nArrayLenHint, char bConstruct);
+
+// ---------------------------------------------------------------------------
+// initialize @0x82AE39D8 -- allocate the interpreter's five {count,capacity,array}
+// stacks from the operand-stack pool: the operand stack (#1) sized by iStackSize,
+// the four call-depth stacks (#2..#5) by iCallStackDepth. The per-run bookkeeping
+// (abort slot, stack base, trace-skip flag) is reset, then the AS register window /
+// frame machinery is brought up (InitializeStaticData). The console allocates
+// `4 * capacity` bytes; x64-native that is `sizeof(AptValue*) * capacity`.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::initialize(const AptInitParmsT* pParms)
+{
+    mnStackCapacity = pParms->iStackSize;
+    mpStack = static_cast<AptValue**>(
+        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * pParms->iStackSize));
+
+    mnCallStackB_Capacity = pParms->iCallStackDepth;
+    mpCallStackB = static_cast<void**>(
+        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * pParms->iCallStackDepth));
+
+    mnCallStackC_Capacity = pParms->iCallStackDepth;
+    mpCallStackC = static_cast<void**>(
+        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * pParms->iCallStackDepth));
+
+    mnCIHStackCapacity = pParms->iCallStackDepth;
+    mpCIHStack = static_cast<AptCIH**>(
+        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * pParms->iCallStackDepth));
+
+    mnCallStackE_Capacity = pParms->iCallStackDepth;
+    mpCallStackE = static_cast<void**>(
+        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * pParms->iCallStackDepth));
+
+    field_69 = 0;                                   // console *(a1+105) = 0
+    mnStackBase = 0;                                // console *(a1+100) = 0
+    mbSkipTraceBytecodes = pParms->mbSkipTraceBytecodes;  // console *(a1+104) = *(a2+64)
+
+    AptScriptFunctionBase_InitializeStaticData(pParms);   // FLAG: parms-shaped entry
+}
+
+// ---------------------------------------------------------------------------
+// CallFunction @0x82B03F78 (0x3D) -- AS f(args): the top operand is the function
+// name/value, the operand under it (top-2) the argument count. When the name is a
+// string value the path context is resolved (ResolveTargetContext -> getVariable)
+// to the live function; otherwise the name value is used directly. The name +
+// count operands are popped (Burnout_X360_Artist_01e3_0(this, 2)) and callFunction
+// runs the body with the resolved scope (the resolved context, else the run scope).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* pInterp,
+                                                          LocalContextT* pContext)
+{
+    AptValue* const pCountValue = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue*       pFunction   = pInterp->mpStack[pInterp->mnStackTop - 1];
+
+    EAStringC scratch;                                      // console v19 (&unk_82F72FF8 seed)
+    const int nArgs = pCountValue->toInteger();
+    AptValue* pResolvedScope = nullptr;                     // console v10
+
+    // A FrameStack-typed name (tag 14) that owns at least one local resolves to its
+    // first slot's value (the captured function); else `undefined`.
+    if (pFunction->getVtblIndex() == AptVFT_Array && pFunction->getIsDefined())
+    {
+        // console: Variable[10] (local count) > 0 && *Variable[8] (first slot) != 0
+        AptValue* const pFirst = AptInterp_FrameStackFirstLocal(pFunction);  // FLAG: frame-stack slot
+        pFunction = pFirst ? pFirst : gpUndefinedValue;
+    }
+
+    // A string name (raw type 1 / boxed 33) is resolved through the path context.
+    // Get_ToString inlines the console's "raw type-1 -> +8, boxed 33 -> +0x20 then
+    // +8" name extraction (the same idiom the sibling dict opcodes use).
+    const AptVirtualFunctionTable_Indices eType = pFunction->getVtblIndex();
+    if ((eType == AptVFT_StringValue || eType == AptVFT_StringObject) && pFunction->getIsDefined())
+    {
+        const EAStringC* const pName = AptValue::Get_ToString(pFunction, &scratch);
+
+        AptInterp_ResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                       pName, &pResolvedScope, &scratch);
+        // console getVariable(this, resolvedContext, target, &leafName, 1, 1, 0).
+        pFunction = pInterp->getVariable(pResolvedScope, pContext->mpPendingReleaseValue,
+                                         &scratch, 1, 1, 0);
+    }
+
+    pFunction->AddRef();                                    // console (**Variable)(Variable)
+    AptApt_PopValues(pInterp, 2);                           // pop the name + count operands
+
+    AptValue* const pCallScope = pResolvedScope ? pResolvedScope : pContext->mpCIH;
+    pInterp->callFunction(pCallScope, pFunction, nArgs, nullptr, nullptr);
+
+    pFunction->Release();                                   // console (*(*Variable+4))(Variable)
+}
+
+// ---------------------------------------------------------------------------
+// NewMethod @0x82B091B8 (0x53) -- AS new <object>.<method>(args): the top operand
+// is the method name (coerced to a string), top-2 the constructor object, top-3 the
+// argument count. The name + count are popped, _createObject builds the instance
+// (with the construct flag), and the new object (or `undefined`) is pushed.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionNewMethod(AptActionInterpreter* pInterp,
+                                                       LocalContextT* pContext)
+{
+    AptValue* const pNameValue  = pInterp->mpStack[pInterp->mnStackTop - 1];  // console v7
+    AptValue* const pCtorObject = pInterp->mpStack[pInterp->mnStackTop - 2];  // console v8
+    AptValue* const pCountValue = pInterp->mpStack[pInterp->mnStackTop - 3];  // console v9
+
+    EAStringC scratch;
+    const EAStringC* const pName = AptValue::Get_ToString(pNameValue, &scratch);  // console v10
+    const int nArgs = pCountValue->toInteger();                                   // console v11
+
+    pInterp->stackPop();                                   // console Pop (name)
+    if (pInterp->mnStackTop > 0)
+        --pInterp->mnStackTop;                             // console: drop the count slot (no release)
+    pInterp->stackPop();                                   // console Pop (the object slot's ref)
+
+    AptValue* const pObject = AptActionInterpreter_createObject(   // FLAG: _createObject (un-homed)
+        pInterp, pCtorObject, pContext->mpPendingReleaseValue, pName, nArgs, 1);
+    pCtorObject->Release();                                // console (*(*v8+4))(v8)
+
+    if (pObject)
+    {
+        pInterp->mpStack[pInterp->mnStackTop++] = pObject; // inlined stackPush
+        pObject->AddRef();
+        pObject->Release();   // console: (**Object)(Object) then (*(*Object+4))(Object) -- net no ref
+    }
+    else
+    {
+        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
+        gpUndefinedValue->AddRef();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CallFrame @0x82B052A0 (0x9E) -- AS callFrame: the top operand names a frame
+// (a string label, resolved through the path context + the node's label hash) or
+// gives the frame index directly (an integer). The top operand is popped; on a
+// valid frame index the run scope's frame actions for that frame are run.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionCallFrame(AptActionInterpreter* pInterp,
+                                                       LocalContextT* pContext)
+{
+    AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    int nFrame = -1;                                       // console v4
+
+    const AptVirtualFunctionTable_Indices eType = pTop->getVtblIndex();
+    if ((eType == AptVFT_StringValue || eType == AptVFT_StringObject) && pTop->getIsDefined())
+    {
+        // a string label -> resolve the path context, then the node's label hash.
+        // Get_ToString inlines the console's raw/boxed name extraction (v9+8 / *(v5+32)+8).
+        EAStringC scratch;                                 // console v14 (&unk_82F72FF8 seed)
+        const EAStringC* const pName = AptValue::Get_ToString(pTop, &scratch);
+
+        AptValue* pResolved = nullptr;                     // console v15
+        AptInterp_ResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                       pName, &pResolved, &scratch);
+        // console: AptNativeHash::Lookup(resolved's frame-label hash, &scratch) -> toInteger
+        if (pResolved)
+            nFrame = AptInterp_LabelToFrame(static_cast<AptCIH*>(pResolved), &scratch);
+    }
+    else if (eType == AptVFT_Integer && pTop->getIsDefined())
+    {
+        nFrame = pTop->toInteger();
+    }
+
+    pInterp->stackPop();                                   // console AptValue>::Pop
+
+    if (nFrame != -1)
+        AptMovie_runFrameActions(pContext->mpCIH->GetCharacterInst());  // FLAG: AptMovie follow-on
+}
+
+// ---------------------------------------------------------------------------
+// GotoLabel @0x82B0C598 (0x8C) -- jump the bound clip to the frame named by the
+// inline string label. The target node is the run's current target slot when it is
+// a movie clip / CIHNone, else the run scope. The label is resolved against the
+// node's frame-label hash; a valid index seeks the play-head and clears the
+// "playing" bit. The inline string is a 4-byte (4-byte-aligned) operand.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionGotoLabel(AptActionInterpreter* /*pInterp*/,
+                                                       LocalContextT* pContext)
+{
+    // Align the PC up to 4, read the inline string pointer, advance the PC by 4.
+    const unsigned char* const pAligned = reinterpret_cast<const unsigned char*>(
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    const char* const szLabel = *reinterpret_cast<const char* const*>(pAligned);
+    pContext->mpProgramCounter = pAligned + 4;
+
+    EAStringC label(szLabel);   // console EAStringC::InitFromBuffer scratch (RAII Decrease)
+
+    // Pick the target node: the current-target slot when it is a clip / CIHNone,
+    // otherwise the run scope.
+    AptCIH* pNode = pContext->mpCIH;
+    if (pContext->mpPendingReleaseValue)
+    {
+        const AptVirtualFunctionTable_Indices eTgt =
+            pContext->mpPendingReleaseValue->getVtblIndex();
+        if ((eTgt == AptVFT_CharacterInstHandle && pContext->mpPendingReleaseValue->getIsDefined())
+            || eTgt == AptVFT_CIHNone)
+            pNode = static_cast<AptCIH*>(pContext->mpPendingReleaseValue);
+    }
+
+    const int nFrame = AptInterp_LabelToFrame(pNode, &label);   // FLAG: node frame-label hash
+    if (nFrame >= 0)
+    {
+        AptCIH_jumpToFrame(pNode, nFrame);                      // FLAG: play-head seek
+        // clear the "playing" bit on the node's sprite instance (console *(node+0x20)+0x14 &= ~0x40).
+        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mnClipActionFlags
+            &= ~0x40u;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GotoFrame2 @0x82B0C688 (0x9F) -- the dynamic goto: the top operand gives the
+// destination as a string label (resolved through the path context + label hash) or
+// an integer frame index. The target node is the run's current target slot (else
+// the second context slot, else the run scope) when it is a clip / CIHNone. A valid
+// index seeks the play-head; the "playing" bit is then set/cleared from the inline
+// play flag (the 4-byte-aligned operand), and a play -> dirty the node.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pInterp,
+                                                        LocalContextT* pContext)
+{
+    // Align the PC up to 4; the inline 4-byte word is the "start playing" flag.
+    const uint32_t* const pPlayFlag = reinterpret_cast<const uint32_t*>(
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPlayFlag + 1);
+
+    AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];   // console v8
+
+    // Pick the target node (console v4): the current-target slot (a2[2]=v5) first,
+    // else the run scope (a2[1]=mpCIH), each only when it is a clip / CIHNone.
+    AptCIH* pNode = nullptr;                               // console v4
+    AptValue* const pTarget = pContext->mpPendingReleaseValue;   // console v5 = a2[2]
+    if (pTarget)
+    {
+        const AptVirtualFunctionTable_Indices eTgt = pTarget->getVtblIndex();
+        if ((eTgt == AptVFT_CharacterInstHandle && pTarget->getIsDefined()) || eTgt == AptVFT_CIHNone)
+            pNode = static_cast<AptCIH*>(pTarget);
+    }
+    if (!pNode)
+    {
+        AptCIH* const pScope = pContext->mpCIH;            // console a2[1]
+        const AptVirtualFunctionTable_Indices eScope = pScope->getVtblIndex();
+        if ((eScope == AptVFT_CharacterInstHandle && pScope->getIsDefined())
+            || eScope == AptVFT_CIHNone)
+            pNode = pScope;
+    }
+
+    // Resolve the destination off the top operand.
+    int nFrame = -1;                                       // console v16
+    const AptVirtualFunctionTable_Indices eType = pTop->getVtblIndex();
+    if ((eType == AptVFT_StringValue || eType == AptVFT_StringObject) && pTop->getIsDefined())
+    {
+        // Get_ToString inlines the console's raw/boxed name extraction (v8+8 / *(v8+32)+8).
+        EAStringC scratch;                                 // console v30 (&unk_82F72FF8 seed)
+        const EAStringC* const pName = AptValue::Get_ToString(pTop, &scratch);
+
+        AptValue* pResolved = nullptr;                     // console v31
+        AptInterp_ResolveTargetContext(pContext->mpCIH, pTarget, pName,
+                                       &pResolved, &scratch);
+        if (pResolved)
+        {
+            const AptVirtualFunctionTable_Indices eRes = pResolved->getVtblIndex();
+            // console: a clip / CIHNone resolved node -> look up the label in its hash
+            if ((eRes == AptVFT_CharacterInstHandle && pResolved->getIsDefined())
+                || eRes == AptVFT_CIHNone)
+                nFrame = AptInterp_LabelToFrame(static_cast<AptCIH*>(pResolved), &scratch);
+        }
+    }
+    else if (eType == AptVFT_Integer && pTop->getIsDefined())
+    {
+        nFrame = pTop->toInteger();
+    }
+
+    if (nFrame != -1 && pNode)
+    {
+        AptCIH_jumpToFrame(pNode, nFrame);                 // FLAG: play-head seek
+        const bool bPlay = (*pPlayFlag != 0);              // console: cntlzw test of the inline word
+        AptCharacterSpriteInstBase* const pSprite =
+            static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
+        // set/clear bit 6 (0x40, "playing") from the play flag.
+        pSprite->mnClipActionFlags = (pSprite->mnClipActionFlags & ~0x40u) | (bPlay ? 0x40u : 0u);
+        if (bPlay)
+            AptCIH_SetDirtyState(pNode, true, true);       // FLAG: dirty latch
+    }
+
+    pInterp->stackPop();   // console AptValue>::Pop(a1) -- drop the destination operand
 }

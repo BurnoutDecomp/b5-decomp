@@ -89,8 +89,23 @@ struct AptLoader
     // Resolve the movie root and publish it into the AptFile (state -> loaded).
     void CompleteLoad(AptFilePtr filePtr, void* pBase, struct AptConstFile* pConstFile, void* pBlock);
 
-    // @0x82B0C... -- per-frame loader tick: pump the async request queue + publish
-    // completed loads. FLAG: body is the loader-completion follow-on TU (the request
-    // layer above); declared so AptLinker::Update (which calls it each frame) compiles.
+    // @0x82B020C8 -- per-frame loader tick: walk the weak list and advance each
+    // AptFile by its load state -- kick off the async stream for freshly-requested
+    // files (state 1 -> 2), and for files whose data has arrived and whose imports
+    // are all available (state 3) Link the movie + notify (-> state 4). Re-runs the
+    // pass while any file advanced. Body in AptLoader.cpp.
     void Update();
+
+    // @0x82B02030 -- publish a just-linked AptFile to the global Apt notification
+    // hook, then consume the passed handle. Body in AptLoader.cpp.
+    void notify(AptFilePtr* pFile);
+
+    // @0x82AFEA40 -- cancel a preloaded movie animation by file name: drop its load
+    // (and, recursively, any of its imports that no other linked movie still
+    // imports). Body in AptLoader.cpp.
+    void CancelPreloadedAnimation(const EAStringC& fileName);
+
+    // @0x82AFF958 -- teardown: cancel every still-registered preloaded animation,
+    // then drain the weak list. Body in AptLoader.cpp.
+    ~AptLoader();
 };
