@@ -39,6 +39,11 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"     // setGCRoot
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                 // DOGMA_PoolManager::Allocate/Deallocate
 #include "SDKs/EATech/include/Apt/AptPseudoCIH.h"           // gpAptPseudoDataPool (off_8324D808)
+#include "SDKs/EATech/include/Apt/AptCharacter.h"            // mpFixupLink / mnType / mpAnimationFile (placed char binding)
+#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // ExecuteInitActions
+#include "SDKs/EATech/include/Apt/AptFile.h"                 // AptMovieData (the .apt root + import table)
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"      // GetNewInsts / GetNewInstSize / DecNewInstSize
+#include "SDKs/EATech/include/Apt/AptSharedPtr.h"            // AptFilePtr (the placed char's animation-file bind)
 
 // ---------------------------------------------------------------------------
 // FLAG (module-static, owned by the Apt GC layer, not yet homed): the X360 drains
@@ -313,4 +318,84 @@ int AptDisplayList::GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t 
     }
 
     return nResult;
+}
+
+// ---------------------------------------------------------------------------
+// FLAG (un-homed callees, bodies their own TUs):
+//   AptDL_FramePlacementDispatch (sub_82B0B080) -- the frame-placement dispatcher:
+//     creates/re-uses the AptCIH for the placement and returns it. No standalone
+//     export (its placement logic is folded inline in the X360); declared as the
+//     callee whose result AddToDisplayList consumes.
+//   AptCIH_DispatchInstantiatedHook -- the X360 calls the freshly-placed node's
+//     vtable[0] with (node, &node->mInstanceName) right after pushing it to the
+//     new-instance table (the per-node "just instantiated" hook); declared as a shim
+//     so this TU compiles against that virtual without re-declaring the vtable.
+// ---------------------------------------------------------------------------
+extern AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode);
+extern void    AptCIH_DispatchInstantiatedHook(AptCIH* pPlacedNode);
+
+// ---------------------------------------------------------------------------
+// AddToDisplayList @0x82B0B150
+//
+// Run the placed character's frame init actions, bind its import file, dispatch the
+// frame placement to get the placed AptCIH, register that node under its instance
+// name in the parent's property hash, and add it to the target's "new instances to
+// tick this frame" table (running each node's just-instantiated hook).
+//
+// ppPlacement is the .apt frame-placement command: ppPlacement[0] is the placement
+// record (its +0xC dword is the placed character id), ppPlacement[1] is the
+// AptCharacter being placed. The record + the movie import table are serialised .apt
+// data (relocated in place), walked here by their fixed layout; the runtime objects
+// (the owner character / movie / placed node) are reached by named members.
+// ---------------------------------------------------------------------------
+AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPlacement, AptCIH* pParentNode)
+{
+    AptCharacterInst* const pInst = pParentNode->GetCharacterInst();
+    AptCharacter* const pOwnerChar =
+        const_cast<AptCharacter*>(pInst->GetRenderItem()->mpCharacter);
+
+    // The owner's loaded .apt root (the AptCharacter fixup back-link points at the
+    // AptMovieData) + the movie animation embedded at root+0x10.
+    AptMovieData* const pMovie = reinterpret_cast<AptMovieData*>(pOwnerChar->mpFixupLink);
+    AptCharacterAnimation* const pAnim =
+        reinterpret_cast<AptCharacterAnimation*>(reinterpret_cast<char*>(pMovie) + 0x10);
+
+    // The .apt placement command (serialised): record +0xC = placed char id.
+    const int32_t nCharId = static_cast<const int32_t*>(ppPlacement[0])[3];
+    AptCharacter* const pPlacedChar = static_cast<AptCharacter*>(ppPlacement[1]);
+
+    pAnim->ExecuteInitActions(pParentNode, nCharId);
+
+    // Bind the placed character's animation file: a non-animation character (type
+    // tag != 9) with none yet takes the import-table entry matching its id, or the
+    // owner movie's own file when there is no matching import.
+    if (nCharId != -1 && pPlacedChar->mnType != 9 && pPlacedChar->mpAnimationFile == nullptr)
+    {
+        AptFilePtr* pSrc = reinterpret_cast<AptFilePtr*>(&pOwnerChar->mpAnimationFile);
+        for (int32_t i = 0; i < pMovie->mnImportCount; ++i)
+        {
+            if (pMovie->mpImportTable[i].mnId == nCharId)
+            {
+                pSrc = reinterpret_cast<AptFilePtr*>(&pMovie->mpImportTable[i].mpFile);
+                break;
+            }
+        }
+        // mpAnimationFile is an AptFilePtr (a counted AptFile*); assign via the
+        // shared-ptr operator= so the refcount is maintained (X360 AptFile_::operator=).
+        *reinterpret_cast<AptFilePtr*>(&pPlacedChar->mpAnimationFile) = *pSrc;
+    }
+
+    AptCIH* const pPlaced = AptDL_FramePlacementDispatch(this, ppPlacement, pParentNode);
+
+    // Register the placed node under its instance name (when it has one).
+    if (!pPlaced->GetInstanceName().IsEmpty())
+        pParentHash->Set(pPlaced->GetInstanceName(), static_cast<AptValue*>(pPlaced));
+
+    // Add to the target's "new instances" table + run the per-node just-placed hook.
+    void** const pNewInsts = static_cast<void**>(AptAnimationTarget::GetNewInsts());
+    pNewInsts[AptAnimationTarget::GetNewInstSize()] = pPlaced;
+    AptCIH_DispatchInstantiatedHook(pPlaced);
+    AptAnimationTarget::DecNewInstSize();   // post-increments the new-instance count
+
+    return pPlaced;
 }

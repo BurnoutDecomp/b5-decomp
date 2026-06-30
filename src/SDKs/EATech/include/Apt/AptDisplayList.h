@@ -31,6 +31,7 @@
 
 struct AptCIH;
 struct AptDisplayListState;
+struct AptNativeHash;   // AddToDisplayList registers the placed node in the parent's property hash
 
 // The 4-byte pool-allocated head/sentinel node: its single dword is the first
 // listed entry (the AptCIH chain is then linked through the CIH display-list links).
@@ -97,6 +98,25 @@ struct AptDisplayList
     // render-item depth layer when bUseDepthLayerMask). Returns the OR of each
     // node's AptCIH::GeneralisedProcess result.
     int GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t bUseDepthLayerMask);
+
+    // ---- placement surface (bodies in AptDisplayList.cpp) ------------------
+    // AddToDisplayList @0x82B0B150 -- run the placed character's init actions, bind
+    // its import file (for a non-animation character with no file yet), dispatch the
+    // frame placement, register the placed node as a new instance, and (when it has
+    // an instance name) register it in the parent object's property hash. Returns the
+    // placed AptCIH. ppPlacement = {placement-record, AptCharacter* to place}.
+    AptCIH* AddToDisplayList(AptNativeHash* pParentHash, void** ppPlacement, AptCIH* pParentNode);
+
+    // _addToSetCaches @0x82AF46B8 -- when the placed node is a sprite/movie-clip with
+    // registered clip-event handlers, fold them into its clip-action flags, add it to
+    // the target's clip-event set cache, and (when bRunLoad) queue its load/init clip
+    // events.
+    void _addToSetCaches(uint8_t bRunLoad);
+
+    // (ReplaceDisplyListItem / mergeState / instantiateCharacter / placeObject /
+    //  placeObjectNCXForm @0x82B0B2B8/0x82B0B438/0x82B061D0/0x82B097D8/0x82B0AD28 --
+    //  the 28-33 argument placement entry points; declared with their full asm-derived
+    //  signatures + bodied in their own follow-on pass.)
 };
 
 // ===========================================================================
