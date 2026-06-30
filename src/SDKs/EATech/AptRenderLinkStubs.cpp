@@ -114,6 +114,30 @@
 #include "SDKs/EATech/include/Apt/AptXml.h"
 #include "SDKs/EATech/include/Apt/AptXmlNode.h"
 
+// ===================================================================================
+// Engine link-stub headers (the 42 off-render-path ENGINE symbols, below). These are
+// the EXISTING decls the Apt code already references; included so each stub matches the
+// canonical signature/mangling exactly. NOTE: the reconstructed BrnEAThreadX360.h is
+// deliberately NOT pulled (it declares EA::Thread::GetThreadId() returning ThreadId
+// (void*), which would collide with the int-returning EA::Thread::GetThreadId() the Apt
+// call sites reference -- AptCharacterAnimation.cpp); the EA::Thread surface is therefore
+// declared minimally inline below. job_thread.h / local_backend.h are likewise NOT pulled
+// (they transitively include BrnEAThreadX360.h); their two symbols are declared minimally.
+// ===================================================================================
+// NOTE: rwcore/filesys/device.h is deliberately NOT included -- it pulls
+// BrnEAThreadX360.h (declaring EA::Thread::GetThreadId() returning ThreadId/void*), which
+// collides with the int-returning EA::Thread::GetThreadId() the Apt call sites reference.
+// The handful of rw::core::filesys types stubbed below are declared minimally instead.
+#include "coreallocator/icoreallocator_interface.h"       // EA::Allocator::ICoreAllocator
+#include "SDKs/EATech/eajobs/job_types.h"                 // EA::Jobs enums + Detail::SchedulerBackend + Param
+#include "SDKs/EATech/eajobs/entry_point.h"               // EA::Jobs::EntryPoint
+#include "SDKs/EATech/eajobs/event.h"                     // EA::Jobs::Event
+#include "SDKs/EATech/eajobs/job.h"                       // EA::Jobs::Job
+#include "SDKs/EATech/eajobs/job_thread_handle.h"         // EA::Jobs::JobThreadHandle / JobThreadParameters
+#include "SDKs/EATech/include/Nicotine/SnapshotMixer.hpp" // Nicotine::SnapshotMixer
+#include "SDKs/EATech/include/Nicotine/SnapshotChannel.hpp" // Nicotine::SnapshotVolumeCurve
+#include "SDKs/EATech/include/NFSMix/NFSMixMaster.hpp"    // NFSMixMaster
+
 struct AptDragState;  // FLAG fwd-decl (pointer-only use)
 
     AptCharacter* AptResolveFontGlyph(AptCharacter* pFontChar, int nGlyphIndex) { return nullptr; }   // FLAG link-stub
@@ -222,3 +246,223 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void* sub_82AFD150(void* a1, int a2) { return nullptr; }   // FLAG link-stub
     void* sub_82B0AE08(void* a1, float* a2, void* a3) { return nullptr; }   // FLAG link-stub
     void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool) { return nullptr; }   // FLAG link-stub
+
+// ===================================================================================
+// ENGINE link-stubs (42) -- off the PC render-critical path. The PC bring-up is
+// single-threaded; the bundle FS uses the existing DeviceManager replay path (NOT
+// rw::core::filesys); audio mix is wired after the render works. Each is a deliberate
+// bring-up bridge to reach a RUNNING link; homed faithfully once we see which are hit.
+// ===================================================================================
+
+// ---- rw::core::filesys -------------------------------------------------------------
+// FLAG: PC-simplification. The faithful async bundle path IS rw::core::filesys per
+// async-filesystem-blueprint; PC uses the DeviceManager replay FS instead, so these
+// scheduler/handle/manager entry points are stubbed until that faithful path is wired.
+// Types declared minimally (NOT via device.h) so BrnEAThreadX360.h is not transitively
+// pulled; the minimal decls reproduce only what each stubbed symbol's mangling needs.
+namespace rw { namespace core { namespace filesys {
+
+    class  Device;
+    struct AsyncOp;
+
+    // Minimal Handle matching the asyncop.h layout the ctor zero/stores.
+    struct Handle
+    {
+        Handle(const char* lpcPath, u32 luPositionHi, Device* lpDevice);
+        u32   mField0;
+        u32   mField1;
+        u32   mbIsOpen;
+        u32   mField3;
+        void* mpDevice;
+    };
+
+    // Minimal Manager / Device / DeviceDriverVTable -- just the stubbed members.
+    struct Manager
+    {
+        Device* RegisterDevice(const void* lpDeviceDesc, int liFlags);
+        int     UnregisterDevice();
+    };
+
+    class Device
+    {
+    public:
+        static Device* GetInstance(const char* lpcPath, char* lpScratch);
+        int Wait(AsyncOp* lpOp, const void* lpTimeout);
+        int InsertOp(AsyncOp* lpOp);
+        int ChangeOpPriority(AsyncOp* lpOp, int liPriority);
+    };
+
+    struct DeviceDriverVTable
+    {
+        void* mpfnSlot0;
+        void* mpfnOpen;
+        void* mpfnClose;
+        void* mapfnReserved0C[7];
+        void* mpfnGetBlockSize;
+    };
+
+    // ctor: zero/store args into the X360 field order.
+    Handle::Handle(const char* lpcPath, u32 luPositionHi, Device* lpDevice)
+        : mField0(0)
+        , mField1(luPositionHi)
+        , mbIsOpen(0)
+        , mField3(0)
+        , mpDevice(lpDevice)
+    {
+        (void)lpcPath;   // FLAG link-stub: path not opened (DeviceManager replay path used)
+    }
+
+    Device* Manager::RegisterDevice(const void* lpDeviceDesc, int liFlags)   // FLAG link-stub
+    { (void)lpDeviceDesc; (void)liFlags; return nullptr; }
+
+    int Manager::UnregisterDevice() { return 0; }   // FLAG link-stub
+
+    Device* Device::GetInstance(const char* lpcPath, char* lpScratch)        // FLAG link-stub
+    { (void)lpcPath; (void)lpScratch; return nullptr; }
+
+    int Device::Wait(AsyncOp* lpOp, const void* lpTimeout)                    // FLAG link-stub
+    { (void)lpOp; (void)lpTimeout; return 0; }
+
+    int Device::InsertOp(AsyncOp* lpOp) { (void)lpOp; return 0; }             // FLAG link-stub
+
+    int Device::ChangeOpPriority(AsyncOp* lpOp, int liPriority)               // FLAG link-stub
+    { (void)lpOp; (void)liPriority; return 0; }
+
+    Manager* gpFileSysManager = nullptr;                                      // FLAG link-stub (off_8327F078)
+    // extern: namespace-scope const defaults to internal linkage; force external.
+    extern const DeviceDriverVTable gDeviceDriverVTable = {};                 // FLAG link-stub (zero-init driver vtable)
+
+}}}
+
+// ---- rw::collision -----------------------------------------------------------------
+// FLAG: collision, not on the Apt render path. No shared header declares
+// rw::collision::VolumeLineQuery (it lives inside volumelinequery.cpp); a minimal
+// matching declaration is provided so the GetIntersections() mangling is exact.
+namespace rw { namespace collision {
+
+    class VolumeLineQuery { public: int GetIntersections(); };   // FLAG link-stub (minimal decl for mangling)
+    int VolumeLineQuery::GetIntersections() { return 0; }        // FLAG link-stub
+
+    // The six per-type volume-handler bytes the volume vtable points at (volume.cpp
+    // declares these extern const u8). Zero-init storage -- off the Apt render path.
+    // extern: a namespace-scope `const` defaults to INTERNAL linkage in C++; the volume
+    // vtable in another TU references these as external -> force external linkage.
+    extern const u8 gVolumeHandler_82F91740 = 0;   // FLAG link-stub
+    extern const u8 gVolumeHandler_82F9176C = 0;   // FLAG link-stub
+    extern const u8 gVolumeHandler_82F91894 = 0;   // FLAG link-stub
+    extern const u8 gVolumeHandler_82F918C0 = 0;   // FLAG link-stub
+    extern const u8 gVolumeHandler_82F919A4 = 0;   // FLAG link-stub
+    extern const u8 gVolumeHandler_82F919D0 = 0;   // FLAG link-stub
+
+}}
+
+// ---- EA::Thread --------------------------------------------------------------------
+// FLAG: single-threaded PC bring-up. Locks/thread-ids/TLS/runnable are no-ops. Declared
+// minimally here (NOT via BrnEAThreadX360.h) so the int-returning GetThreadId() the Apt
+// call sites reference is the symbol defined, and so the EATech reconstructed/vendor
+// EAThread headers are not transitively pulled.
+namespace EA { namespace Thread {
+
+    // Minimal matching decls for the class members the Apt path references.
+    struct IRunnable
+    {
+        virtual ~IRunnable();
+        virtual intptr_t Run(void* pContext) = 0;   // pure: shape only; never instantiated here
+    };
+
+    class Thread
+    {
+    public:
+        enum Status { kStatusNone = 0, kStatusRunning = 1, kStatusEnded = 2 };
+        Status WaitForEnd(intptr_t* pThreadReturnValue, const int* pTimeoutAbsolute);
+    };
+
+    // Minimal ThreadLocalStorage with an INLINE trivial ctor so gAptTargetTls needs no
+    // out-of-line ctor symbol (FLAG: zeroed storage; faithful ctor does TlsAlloc).
+    class ThreadLocalStorage
+    {
+    public:
+        ThreadLocalStorage() : mTlsIndex(0) {}   // inline -- no external ctor symbol
+        bool  SetValue(const void* pData);
+        void* GetValue();
+        u32   mTlsIndex;
+    };
+
+    void Mutex_Lock(void* pMutex, void* pName)  { (void)pMutex; (void)pName; }   // FLAG link-stub (single-threaded)
+    void Mutex_Unlock(void* pMutex)             { (void)pMutex; }                // FLAG link-stub (single-threaded)
+    int  GetThreadId()                          { return 0; }                    // FLAG link-stub (single-threaded)
+
+    Thread::Status Thread::WaitForEnd(intptr_t* pThreadReturnValue, const int* pTimeoutAbsolute)
+    { (void)pThreadReturnValue; (void)pTimeoutAbsolute; return kStatusEnded; }   // FLAG link-stub
+
+    // One file-scope slot mirroring the single TLS value the bring-up needs.
+    static void* gThreadLocalStorageSlot = nullptr;   // FLAG link-stub (single-threaded TLS)
+    bool  ThreadLocalStorage::SetValue(const void* pData)
+    { gThreadLocalStorageSlot = const_cast<void*>(pData); return true; }         // FLAG link-stub
+    void* ThreadLocalStorage::GetValue() { return gThreadLocalStorageSlot; }     // FLAG link-stub
+
+    IRunnable::~IRunnable() {}   // FLAG link-stub (empty virtual dtor)
+
+}}
+
+// The Apt animation-unresolve current-target TLS object (unk_8324E814). The linker
+// wants it at GLOBAL scope (?gAptTargetTls@@3V...), NOT in EA::Thread -- it is a global
+// variable whose TYPE is EA::Thread::ThreadLocalStorage. Default-constructed via the
+// inline ctor -- FLAG: zeroed storage, no TlsAlloc (single-threaded bring-up).
+EA::Thread::ThreadLocalStorage gAptTargetTls;   // FLAG link-stub
+
+// ---- EA::Jobs ----------------------------------------------------------------------
+// FLAG: jobs run synchronously on the main thread (PC bring-up). The two LocalBackend
+// worker entry points (JobInstance::Run / JobThread::Start) are declared minimally to
+// avoid pulling job_thread.h / local_backend.h (which transitively include
+// BrnEAThreadX360.h and would collide with the int GetThreadId() above).
+namespace EA { namespace Jobs {
+
+    Event::Event() {}   // FLAG link-stub (ctor no-op)
+
+    JobThreadHandle::JobThreadHandle(Detail::SchedulerBackend* pBackend, u32 uHandle)   // FLAG link-stub
+    { (void)pBackend; (void)uHandle; }
+    JobThreadHandle::JobThreadHandle() {}   // FLAG link-stub
+
+    JobAffinity    EntryPoint::GetAffinity()    const { return JOB_AFFINITY_NONE; }    // FLAG link-stub
+    JobEnvironment EntryPoint::GetEnvironment() const { return JOB_ENVIRONMENT_LOCAL; }// FLAG link-stub
+    JobPriority    EntryPoint::GetPriority()    const { return JOB_PRIORITY_HIGH; }    // FLAG link-stub
+    void           EntryPoint::SetName(const char* lpcName) { (void)lpcName; }         // FLAG link-stub
+
+    int Job::GetNumDependencies() const { return 0; }   // FLAG link-stub
+
+    // Minimal LocalBackend-scope decls for the two worker entry points (jobs run
+    // synchronously on the main thread, so both are no-ops).
+    namespace LocalBackend {
+        class LocalBackend;
+        struct JobInstance { void Run(); };
+        class  JobThread   { public: void Start(const EA::Jobs::JobThreadParameters* pParameters, LocalBackend* pBackend); };
+
+        void JobInstance::Run() {}   // FLAG link-stub (synchronous)
+        void JobThread::Start(const EA::Jobs::JobThreadParameters* pParameters, LocalBackend* pBackend)   // FLAG link-stub
+        { (void)pParameters; (void)pBackend; }
+    }
+
+}}
+
+// ---- EA::Allocator -----------------------------------------------------------------
+namespace EA { namespace Allocator {
+    // FLAG link-stub: null default allocator. Prefer nullptr per the bring-up plan; a
+    // non-null is only needed if an immediate deref happens (then home a file-scope one).
+    ICoreAllocator* ICoreAllocator::GetDefaultAllocator() { return nullptr; }   // FLAG link-stub
+}}
+
+// ---- audio (Nicotine / NFSMixMaster) -----------------------------------------------
+// FLAG: audio mix deferred; wire after render. Mixer snapshot/map setup is no-op'd and
+// the volume curve returns unity gain until the audio path is brought up.
+namespace Nicotine {
+    void SnapshotMixer::InitSnapshots()    {}   // FLAG link-stub (audio mix deferred)
+    void SnapshotMixer::DestroySnapshots() {}   // FLAG link-stub (audio mix deferred)
+    void SnapshotMixer::SetSnapshot()      {}   // FLAG link-stub (audio mix deferred)
+    double SnapshotVolumeCurve(double lfRatio, int liCurveType)                  // FLAG link-stub
+    { (void)lfRatio; (void)liCurveType; return 1.0; }   // unity gain
+}
+
+void NFSMixMaster::InitMixMap()                  {}   // FLAG link-stub (audio mix deferred)
+void NFSMixMaster::DestroyMainMainMap()          {}   // FLAG link-stub (audio mix deferred)
+void NFSMixMaster::AssignSFXCallbacks(void* lpOwner) { (void)lpOwner; }   // FLAG link-stub (audio mix deferred)

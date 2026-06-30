@@ -10,11 +10,23 @@
 // GC teardown calls by name.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
+// saConstant: the interned `__proto__` property key (X360 dword_8324E580). The
+// AS member-op fast path compares an assigned/looked-up member name against it to
+// route the special `__proto__` slot (AptNativeHash::Set/Lookup, hash 27581).
+// Declared `static const EAStringC` here; AptNativeHash.h carries a matching
+// forward decl for the call sites. Defined in AptStringPool.cpp.
+//
+// EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
+
+#include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC saConstant
 
 class StringPool
 {
 public:
+    // saConstant @ X360 dword_8324E580 -- the interned "__proto__" key.
+    static const EAStringC saConstant;
+
     // ClearTemporaryPool @0x82AD8E20 -- release every temporary string node back
     // to its pool (the GC teardown's final step).
     static void ClearTemporaryPool();

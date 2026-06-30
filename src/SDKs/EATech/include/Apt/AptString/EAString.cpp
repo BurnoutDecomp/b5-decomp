@@ -36,6 +36,8 @@
 #include <cstring>   // strlen/strcmp/memcpy/memmove/memset/memcmp/strstr/strchr
 #include <cstdlib>   // malloc/free (the AptInit-not-yet-wired bring-up fallback)
 #include <cctype>    // tolower/toupper (the UTF8_Make{Lower,Upper} case fold)
+#include <cstdarg>   // va_start/va_end (the Format varargs collection)
+#include <cstdio>    // vsnprintf (the Format/vsFormat printf core)
 #include <string.h>  // _stricmp (MSVC strcasecmp, for the case-insensitive compares)
 
 // ---------------------------------------------------------------------------
@@ -1011,4 +1013,64 @@ EAStringC& EAStringC::UTF8_MakeUpper()
         src  = next;
     }
     return *this;
+}
+
+// ---------------------------------------------------------------------------
+// Format / vsFormat : the printf-style formatter.  X360 Format @0x82AEDE48
+// (tail-calls vsFormat) / vsFormat @0x82AE8788.
+//
+// vsFormat (the workhorse) reserves an estimate of 4*strlen(format) chars, then
+// vsnprintf's into the string's own buffer (DstBuf = GetInternalBuffer(),
+// MaxCount = m_uMaxSize); if the formatted text did not fit (vsnprintf returned
+// negative -- the console's vsnprintf signals truncation with a negative result)
+// it DOUBLES the reserve and retries. On success it null-terminates at the
+// returned length and stamps m_uSize = length, m_uHash = 0 -- exactly the X360
+// `stbx 0; sth len,2; sth 0,6` tail. ChangeBuffer here is the (reserve, 0,0,
+// CB_NO_PUSH_ZERO, 0) form the asm emits (r4=size, r5..r8=0).
+//
+// Format collects the C varargs into a va_list and forwards to vsFormat -- the
+// X360 Format only marshals the register/stack args into the &a9 arg pointer it
+// hands to vsFormat (`return EAStringC::vsFormat(this, fmt, &a9)`).
+// ---------------------------------------------------------------------------
+void EAStringC::vsFormat(const char* const pStrFormat, va_list Args)
+{
+    // Initial reserve: 4 * strlen(format) (X360 walks to the NUL then `slwi ,2`).
+    uint32_t uReserve = 4u * static_cast<uint32_t>(strlen(pStrFormat));
+
+    int iResult;
+    for (;;)
+    {
+        ChangeBuffer(uReserve, 0, 0, CB_NO_PUSH_ZERO, 0);
+        char* const pBuffer = GetInternalBuffer();           // *m_pData + 8
+        // MaxCount = m_uMaxSize (the usable char capacity of the reserved block).
+        iResult = vsnprintf(pBuffer, m_pData->m_uMaxSize, pStrFormat, Args);
+        if (iResult >= 0)
+            break;
+        uReserve *= 2;                                       // didn't fit -> grow + retry
+    }
+
+    GetInternalBuffer()[iResult] = 0;
+    m_pData->m_uSize = static_cast<uint16_t>(iResult);
+    m_pData->m_uHash = 0;
+}
+
+void EAStringC::Format(const char* const pStrFormat, ...)
+{
+    va_list Args;
+    va_start(Args, pStrFormat);
+    vsFormat(pStrFormat, Args);
+    va_end(Args);
+}
+
+// ---------------------------------------------------------------------------
+// Burnout_X360_Artist_0040_0 (ICF-folded) @0x82AD85D8 -- the case-sensitive
+// EAStringC equality the linker folded to this synthetic symbol. The X360 body
+// loads both m_pData, rejects on a m_uSize mismatch, accepts on identical
+// m_pData, then byte-compares the two buffers over m_uSize bytes -- byte-for-byte
+// EAStringC::operator==(const EAStringC&). Reconstructed as that call so the
+// folded symbol resolves to the identical behaviour.
+// ---------------------------------------------------------------------------
+bool Burnout_X360_Artist_0040_0(EAStringC* a, EAStringC* b)
+{
+    return *a == *b;
 }

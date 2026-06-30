@@ -23,6 +23,7 @@
 #include <intrin.h>  // _InterlockedExchange (the Apt non-GC value-pool spin lock)
 #include <new>       // placement new (construct an AptString into pooled storage)
 #include <stdio.h>   // sprintf (charCodeAt renders the code as decimal text)
+#include <cstdint>   // uintptr_t (the StringMembersIndex wordlist member-id payload)
 
 // FLAG (homed by the apt VM native-call dispatch): the global native-method
 // argument stack -- the dispatch layer pushes the AS call args here before
@@ -729,4 +730,147 @@ void AptString::CleanNativeFunctions()
             gapAptStringMethodCache[i] = 0;
         }
     }
+}
+
+// ===========================================================================
+// StringMembersIndex -- the gperf perfect-hash recognizer for the AS String
+// member/method names (in_word_set + hash + the gperf static tables). X360
+// in_word_set @0x82AD7918 / hash @ (inlined). MOVED here from the UNBUILT TU
+// SDKs/Packages/Apt/2.00.00/source/AptValue/AptString.cpp into this BUILT TU so
+// the recognizer this file already calls (objectMemberLookup above) actually
+// links. The table bytes are the X360 .rdata extraction (asso_values[256]
+// @byte_82F72DF8, lookup[23] @byte_82F79C08, wordlist[13] @off_82F79BA0). The
+// class itself is declared by the SDKs/Packages .../AptString.h already included
+// at the top of this file.
+// ===========================================================================
+const unsigned char StringMembersIndex::asso_values[256] =
+{
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23,  0, 23, 10,  0,  0, 10,  0, 23, 23,  0, 23, 23, 23,
+    23, 23, 14,  0,  0, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23
+};
+
+const signed char StringMembersIndex::lookup[23] =
+{
+      -1,   -1,   -1,   -1,   -1,    0,  -26,    3,   -1,    4,    5,    6,
+     -12,   -2,   -1,    7,    8,   -1,   -3,   -2,    9,  -32,   12
+};
+
+const struct StringMembersIndex::Entry StringMembersIndex::wordlist[13] =
+{
+    /*  0 */ { "split",         reinterpret_cast<void*>(static_cast<uintptr_t>(9)) },
+    /*  1 */ { "charAt",        reinterpret_cast<void*>(static_cast<uintptr_t>(2)) },
+    /*  2 */ { "concat",        reinterpret_cast<void*>(static_cast<uintptr_t>(4)) },
+    /*  3 */ { "indexOf",       reinterpret_cast<void*>(static_cast<uintptr_t>(6)) },
+    /*  4 */ { "substring",     reinterpret_cast<void*>(static_cast<uintptr_t>(11)) },
+    /*  5 */ { "charCodeAt",    reinterpret_cast<void*>(static_cast<uintptr_t>(3)) },
+    /*  6 */ { "lastIndexOf",   reinterpret_cast<void*>(static_cast<uintptr_t>(7)) },
+    /*  7 */ { "slice",         reinterpret_cast<void*>(static_cast<uintptr_t>(8)) },
+    /*  8 */ { "length",        reinterpret_cast<void*>(static_cast<uintptr_t>(1)) },
+    /*  9 */ { "substr",        reinterpret_cast<void*>(static_cast<uintptr_t>(10)) },
+    /* 10 */ { "toLowerCase",   reinterpret_cast<void*>(static_cast<uintptr_t>(12)) },
+    /* 11 */ { "toUpperCase",   reinterpret_cast<void*>(static_cast<uintptr_t>(13)) },
+    /* 12 */ { "fromCharCode",  reinterpret_cast<void*>(static_cast<uintptr_t>(5)) },
+};
+
+// --- gperf hash (asso_values[] @0x82F72DF8) ------------------------------
+// hash = asso_values[(unsigned char)str[len-1]] + asso_values[(unsigned char)str[0]] + len
+unsigned int
+StringMembersIndex::hash(const char* lpcStr, unsigned int luLen)
+{
+    return asso_values[(unsigned char)lpcStr[luLen - 1]]
+         + asso_values[(unsigned char)lpcStr[0]]
+         + luLen;
+}
+
+// gperf perfect-hash lookup with duplicate-key resolution. Faithful to the X360
+// pseudocode @0x82AD7918 (length gate 5..12, first/last-char + length hash, hash
+// gate 0x16, direct slot vs duplicate-range walk; the run COUNT is stored NEGATED
+// -- the asm forms the run end as start - count*8).
+const struct StringMembersIndex::Entry*
+StringMembersIndex::in_word_set(const char* lpcStr, unsigned int luLen)
+{
+    if (luLen - MIN_WORD_LENGTH > MAX_WORD_LENGTH - MIN_WORD_LENGTH)  // (luLen - 5) > 7
+        return 0;
+
+    const unsigned int luKey = hash(lpcStr, luLen);
+    if (luKey > MAX_HASH_VALUE)
+        return 0;
+
+    const int liIndex = lookup[luKey];
+
+    if (liIndex >= 0)
+    {
+        // Single (non-duplicate) keyword slot.
+        const struct Entry* lpEntry = &wordlist[liIndex];
+        const char* lpcName = lpEntry->name;
+        if (lpcStr[0] == lpcName[0])
+        {
+            const char* lpcS = lpcStr  + 1;
+            const char* lpcN = lpcName + 1;
+            int liDiff;
+            do
+            {
+                liDiff = (unsigned char)*lpcS - (unsigned char)*lpcN;
+                if (*lpcS == '\0')
+                    break;
+                ++lpcS;
+                ++lpcN;
+            }
+            while (liDiff == 0);
+
+            if (liDiff == 0)
+                return lpEntry;
+        }
+        return 0;
+    }
+
+    // liIndex < 0 : either an empty slot or a duplicate list.
+    if (liIndex >= -TOTAL_KEYWORDS)   // (-13..-1) -> no duplicate bucket here
+        return 0;
+
+    // Duplicate list: gperf encodes lookup[hash] == -(TOTAL_KEYWORDS + 1) - offset.
+    const int liOffset = -(TOTAL_KEYWORDS + 1) - liIndex;     // == -14 - liIndex
+    const int liBase  = lookup[liOffset];                     // base (sign-extended)
+    const int liCount = -(int)lookup[liOffset + 1];           // count (stored negated)
+
+    const struct Entry* lpEntry = &wordlist[TOTAL_KEYWORDS + liBase];
+    const struct Entry* lpEnd   = lpEntry + liCount;
+
+    for (; lpEntry < lpEnd; ++lpEntry)
+    {
+        const char* lpcName = lpEntry->name;
+        if (lpcStr[0] == lpcName[0])
+        {
+            const char* lpcS = lpcStr  + 1;
+            const char* lpcN = lpcName + 1;
+            int liDiff;
+            do
+            {
+                liDiff = (unsigned char)*lpcS - (unsigned char)*lpcN;
+                if (*lpcS == '\0')
+                    break;
+                ++lpcS;
+                ++lpcN;
+            }
+            while (liDiff == 0);
+
+            if (liDiff == 0)
+                return lpEntry;
+        }
+    }
+    return 0;
 }
