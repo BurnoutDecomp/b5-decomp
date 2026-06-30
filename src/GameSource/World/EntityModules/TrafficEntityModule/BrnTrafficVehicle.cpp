@@ -3,9 +3,12 @@
 #include "GameSource/Math/BrnMathUtils.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
+#include "GameSource/World/Traffic/BrnVehicleSoaData.h"
 #include "SharedClasses/Traffic/BrnTrafficHull.h"
 #include "SharedClasses/Traffic/BrnTrafficSection.h"
+#include "rw/math/vpu/matrix44affine_operation.h"
 #include "rw/math/vpu/vector3_operation.h"
+#include "rw/math/vpu/vector4_operation.h"
 
 namespace BrnTraffic
 {
@@ -247,5 +250,581 @@ void Vehicle::OnPhysical(BrnPhysics::Vehicle::eCrashTrafficType leCrashTrafficTy
     {
         mxFlags |= E_FLAG_LEFT_SLAMMED;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Front-axle position bridge (X360 @0x82753428): articulation point pushed
+// forward along the transform's At() axis by (fwd axle offset - trailer pivot).
+// The asm validates lTransform (per-row x==x NaN check) then does a single
+// vmaddfp: lFrontAxlePos = lArticulationPoint + At() * (fwdAxleOffset - trailerPivot).
+// ---------------------------------------------------------------------------
+Vector3 Vehicle::CalcFrontAxlePos(Matrix44Affine lTransform,
+                                  Vector3 lArticulationPoint,
+                                  const VehicleTypeRuntime* lpVehicleTypeRuntime) const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lpVehicleTypeRuntime != nullptr, "lpVehicleTypeRuntime");
+    CGS_ASSERT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )");
+
+    const f32 lfReach = lpVehicleTypeRuntime->GetForwardAxleOffset()
+                        - lpVehicleTypeRuntime->GetTrailerPivotDistance();
+    return lArticulationPoint + lTransform.At() * lfReach;
+}
+
+// ---------------------------------------------------------------------------
+// Per-frame book-keeping vector accessors. The four packed lanes are:
+//   mSpeed_DistAcrossLane_SwerveAmount_W = { Speed, DistAcrossLane, SwerveAmount, - }
+//   mPitch_Roll_Steering_WheelRot        = { Pitch, Roll, Steering, WheelRot }
+// Each getter broadcasts one lane into a VecFloat (vspltw); setters insert one
+// lane (vrlimi) leaving the others intact.
+// ---------------------------------------------------------------------------
+VecFloat Vehicle::GetSpeed() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return rw::math::vpu::Splat(mSpeed_DistAcrossLane_SwerveAmount_W.x);
+}
+
+VecFloat Vehicle::GetDistAcrossLane() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return rw::math::vpu::Splat(mSpeed_DistAcrossLane_SwerveAmount_W.y);
+}
+
+VecFloat Vehicle::GetSwerveAmount() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return rw::math::vpu::Splat(mSpeed_DistAcrossLane_SwerveAmount_W.z);
+}
+
+VecFloat Vehicle::GetSteering() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return rw::math::vpu::Splat(mPitch_Roll_Steering_WheelRot.z);
+}
+
+VecFloat Vehicle::GetWheelRot() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return rw::math::vpu::Splat(mPitch_Roll_Steering_WheelRot.w);
+}
+
+Vector4 Vehicle::GetPitch_Roll_Steering_WheelRot() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return mPitch_Roll_Steering_WheelRot;
+}
+
+Vector3 Vehicle::GetTargetPos() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return mTargetPos;
+}
+
+Vector3 Vehicle::GetLinearVelocity() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(rw::math::vpu::IsValid(mLinearVelocity), "IsValid( mLinearVelocity )");
+    return mLinearVelocity;
+}
+
+f32 Vehicle::GetSwerveTime() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return mfSwerveTime;
+}
+
+f32 Vehicle::GetRandomVal() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return mfRandomVal;
+}
+
+s32 Vehicle::GetPhysicalReason() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return miPhysicalReason;
+}
+
+EntityId Vehicle::GetSympatheticCrashTarget() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(mSympCrashTarget.muValue != 0xFFFFFFFF, "mSympCrashTarget.IsValid()");
+    return mSympCrashTarget;
+}
+
+// Headlight/indicator-bulb warmth are stored as u8 [0,255]; the asm returns
+// the byte multiplied by 1/255 (0.0039215689f) as a normalised [0,1] float.
+f32 Vehicle::GetHeadlightWarmth() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return muHeadlightWarmth * (1.0f / 255.0f);
+}
+
+f32 Vehicle::GetIndicatorBulbWarmth() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return muIndicatorBulbWarmth * (1.0f / 255.0f);
+}
+
+// ---- effect-state bit predicates (mxEffectState @+7) ----
+//   bit0 = horn, bit1 = left-indicator, bit2 = right-indicator, bit3 = headlights-flashed,
+//   bit4 = alarm, bit5 = indicating-left, bit6 = indicating-right, bit7 = flashing-headlights
+bool Vehicle::IsHornOn() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return (mxEffectState & 0x01) != 0;
+}
+
+bool Vehicle::IsAlarmOn() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return ((mxEffectState >> 4) & 1) != 0;
+}
+
+bool Vehicle::IsRightIndicatorOn() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return ((mxEffectState >> 2) & 1) != 0;
+}
+
+bool Vehicle::IsIndicatingLeft() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return ((mxEffectState >> 5) & 1) != 0;
+}
+
+bool Vehicle::IsIndicatingRight() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return ((mxEffectState >> 6) & 1) != 0;
+}
+
+bool Vehicle::IsFlashingHeadlights() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return (mxEffectState >> 7) != 0;
+}
+
+bool Vehicle::AreHeadlightsFlashed() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return ((mxEffectState >> 3) & 1) != 0;
+}
+
+bool Vehicle::AreBrakelightsOn() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return miBrakelightState > 0;
+}
+
+// ---- crash/physical classifiers. IsCrashing/IsRecoveringFromSlam/IsBeingChecked test
+// muCrashTrafficType (offset 1, asm `lbz r11,1`); IsExtremeSwerving/IsNormalPhysical test
+// miPhysicalReason (offset 0x39). The IsPhysical() assert fires only on the hit path. ----
+bool Vehicle::IsCrashing() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    if (muCrashTrafficType != 0)
+    {
+        return false;
+    }
+    CGS_ASSERT(IsPhysical(), "IsPhysical()");
+    return true;
+}
+
+bool Vehicle::IsRecoveringFromSlam() const
+{
+    if (muCrashTrafficType != 3)
+    {
+        return false;
+    }
+    CGS_ASSERT(IsPhysical(), "IsPhysical()");
+    return true;
+}
+
+bool Vehicle::IsExtremeSwerving() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    if (miPhysicalReason != 4)
+    {
+        return false;
+    }
+    CGS_ASSERT(IsPhysical(), "IsPhysical()");
+    return true;
+}
+
+bool Vehicle::IsBeingChecked() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    if (muCrashTrafficType != 1)
+    {
+        return false;
+    }
+    CGS_ASSERT(IsPhysical(), "IsPhysical()");
+    return true;
+}
+
+bool Vehicle::IsNormalPhysical() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    if (miPhysicalReason != 5)
+    {
+        return false;
+    }
+    CGS_ASSERT(IsPhysical(), "IsPhysical()");
+    return true;
+}
+
+s32 Vehicle::GetCurrentManoeuvrePhase() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(miManoeuvre >= E_MANOEUVRE_NONE, "miManoeuvre >= E_MANOEUVRE_NONE");
+    CGS_ASSERT(miManoeuvre < E_MANOEUVRE_COUNT, "miManoeuvre < E_MANOEUVRE_COUNT");
+    return miManoeuvrePhase;
+}
+
+Vehicle::Manoeuvre Vehicle::GetCurrentManoeuvre() const
+{
+    return static_cast<Manoeuvre>(miManoeuvre);
+}
+
+// ---- single-lane vector setters (insert one lane, NaN-validate the scalar) ----
+void Vehicle::SetSteering(f32 lfValue)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lfValue == lfValue, "RwMath::IsValid( lfValue )");
+    mPitch_Roll_Steering_WheelRot.z = lfValue;
+}
+
+void Vehicle::SetWheelRot(f32 lfValue)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lfValue == lfValue, "RwMath::IsValid( lfValue )");
+    mPitch_Roll_Steering_WheelRot.w = lfValue;
+}
+
+void Vehicle::SetSwerveAmount(f32 lfValue)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lfValue == lfValue, "RwMath::IsValid( lfValue )");
+    mSpeed_DistAcrossLane_SwerveAmount_W.z = lfValue;
+}
+
+void Vehicle::SetSwerveTime(f32 lfValue)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    mfSwerveTime = lfValue;
+}
+
+void Vehicle::SetTargetPos(Vector3 lTargetPos)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(rw::math::vpu::IsValid(lTargetPos), "IsValid( lTargetPos )");
+    mTargetPos = lTargetPos;
+}
+
+void Vehicle::SetLinearVelocity(Vector3 lLinearVelocity)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(rw::math::vpu::IsValid(lLinearVelocity), "IsValid( lLinearVelocity )");
+    mLinearVelocity = lLinearVelocity;
+}
+
+void Vehicle::SetPitch_Roll_Steering_WheelRot(Vector4 lValues)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lValues.x == lValues.x && lValues.y == lValues.y
+                   && lValues.z == lValues.z && lValues.w == lValues.w,
+               "RwMath::IsValid( lValues )");
+    mPitch_Roll_Steering_WheelRot = lValues;
+}
+
+// ---- effect-state bit setters / togglers ----
+void Vehicle::SetHornOn(bool lbOn)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    if (lbOn)
+    {
+        mxEffectState |= 0x01;
+    }
+    else
+    {
+        mxEffectState &= 0xFE;
+    }
+}
+
+void Vehicle::SetHeadlightsFlashed(bool lbOn)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    if (lbOn)
+    {
+        mxEffectState |= 0x08;
+    }
+    else
+    {
+        mxEffectState &= 0xF7;
+    }
+}
+
+void Vehicle::SetLeftIndicatorOn(bool lbOn)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    if (lbOn)
+    {
+        mxEffectState |= 0x02;
+    }
+    else
+    {
+        mxEffectState &= 0xFD;
+    }
+}
+
+void Vehicle::SetRightIndicatorOn(bool lbOn)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    if (lbOn)
+    {
+        mxEffectState |= 0x04;
+    }
+    else
+    {
+        mxEffectState &= 0xFB;
+    }
+}
+
+void Vehicle::ToggleLeftIndicatorOn()
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    mxEffectState ^= 0x02;
+}
+
+void Vehicle::ToggleRightIndicatorOn()
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    mxEffectState ^= 0x04;
+}
+
+// Brakelight state is a signed [-6,6] hysteresis counter: each "on" call steps
+// it up and clamps to +6 once positive, each "off" call steps down to -6.
+void Vehicle::SetBrakelightsOn(bool lbOn)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    if (lbOn)
+    {
+        miBrakelightState = static_cast<s8>(miBrakelightState + 1);
+        if (miBrakelightState > 0)
+        {
+            miBrakelightState = 6;
+        }
+    }
+    else
+    {
+        miBrakelightState = static_cast<s8>(miBrakelightState - 1);
+        if (miBrakelightState < 0)
+        {
+            miBrakelightState = -6;
+        }
+    }
+}
+
+void Vehicle::SetIndicatingLeft(bool lbOn)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(!IsIndicatingRight() || lbOn == false,
+               "!IsIndicatingRight() || lbOn == false");
+    if (((mxEffectState >> 5) & 1) != (lbOn ? 1 : 0))
+    {
+        if (lbOn)
+        {
+            mfIndicatorTimeToFlash = 0.2f;
+            mxEffectState |= 0x20;
+            SetLeftIndicatorOn(true);
+        }
+        else
+        {
+            mxEffectState &= 0xDF;
+            SetLeftIndicatorOn(false);
+        }
+    }
+}
+
+void Vehicle::SetIndicatingRight(bool lbOn)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(!IsIndicatingLeft() || lbOn == false,
+               "!IsIndicatingLeft() || lbOn == false");
+    if (((mxEffectState >> 6) & 1) != (lbOn ? 1 : 0))
+    {
+        if (lbOn)
+        {
+            mfIndicatorTimeToFlash = 0.2f;
+            mxEffectState |= 0x40;
+            SetRightIndicatorOn(true);
+        }
+        else
+        {
+            mxEffectState &= 0xBF;
+            SetRightIndicatorOn(false);
+        }
+    }
+}
+
+void Vehicle::SetPhysicalReason(s8 liReason)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    miPhysicalReason = liReason;
+}
+
+void Vehicle::SetSympatheticCrashTarget(EntityId lEntityId)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lEntityId.muValue != 0xFFFFFFFF, "lEntityId.IsValid()");
+    mSympCrashTarget = lEntityId;
+}
+
+void Vehicle::SetOrphan()
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    mxFlags |= E_FLAG_ORPHAN;
+}
+
+void Vehicle::SetFrozen(bool lbFrozen)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(IsPhysical(), "IsPhysical()");
+    if (lbFrozen)
+    {
+        mxFlags |= E_FLAG_FROZEN;
+    }
+    else
+    {
+        mxFlags &= 0xEF;
+    }
+}
+
+void Vehicle::SetCurrentManoeuvre(Manoeuvre leManoeuvre)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(static_cast<s32>(leManoeuvre) >= E_MANOEUVRE_NONE,
+               "(int32_t)leManoeuvre >= E_MANOEUVRE_NONE");
+    CGS_ASSERT(static_cast<s32>(leManoeuvre) < E_MANOEUVRE_COUNT,
+               "(int32_t)leManoeuvre < E_MANOEUVRE_COUNT");
+    if (miManoeuvre != static_cast<s8>(leManoeuvre))
+    {
+        miManoeuvrePhase = 0;
+    }
+    miManoeuvre = static_cast<s8>(leManoeuvre);
+    mfManoeuvreTime = 0.0f;
+}
+
+void Vehicle::SetCurrentManoeuvrePhase(s8 liPhase)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(miManoeuvre >= E_MANOEUVRE_NONE, "miManoeuvre >= E_MANOEUVRE_NONE");
+    CGS_ASSERT(miManoeuvre < E_MANOEUVRE_COUNT, "miManoeuvre < E_MANOEUVRE_COUNT");
+    miManoeuvrePhase = liPhase;
+}
+
+// Begin/cancel an extreme swerve only when no other manoeuvre is in progress:
+// on requests EXTREME_SWERVE iff currently NONE; off reverts to NONE iff swerving.
+void Vehicle::SetWantsToExtremeSwerve(bool lbWants)
+{
+    if (lbWants)
+    {
+        if (GetCurrentManoeuvre() != E_MANOEUVRE_NONE)
+        {
+            return;
+        }
+        miManoeuvre = E_MANOEUVRE_EXTREME_SWERVE;
+    }
+    else
+    {
+        if (GetCurrentManoeuvre() != E_MANOEUVRE_EXTREME_SWERVE)
+        {
+            return;
+        }
+        miManoeuvre = E_MANOEUVRE_NONE;
+    }
+}
+
+void Vehicle::StartGiveUpManoeuvre()
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    if (miManoeuvre != E_MANOEUVRE_GIVE_UP)
+    {
+        miManoeuvrePhase = 0;
+    }
+    mfManoeuvreTime = 0.0f;
+    miManoeuvre = E_MANOEUVRE_GIVE_UP;
+    mfHeadlightTimeToFlash = 0.40000001f;
+    SetHeadlightsFlashed(false);
+    SetLeftIndicatorOn(false);
+    SetRightIndicatorOn(false);
+}
+
+// ---------------------------------------------------------------------------
+// Physical-state transitions. Each mirrors a FastBitArray bit in the shared
+// VehicleSoaData: SetPhysical sets the mPhysicalVehicles bit + stores the parts
+// index; SetNotPhysical / SetDead clear their respective bits and reset indices.
+// ---------------------------------------------------------------------------
+void Vehicle::SetPhysical(s8 liPartsIndex, u32 luVehicle, VehicleSoaData& lSoaData)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(!IsPhysical(), "!IsPhysical()");
+    CGS_ASSERT(lSoaData.mAliveVehicles.IsBitSet(luVehicle),
+               "lSoaData.mAliveVehicles.IsBitSet( luVehicle )");
+    CGS_ASSERT(lSoaData.mPhysicalVehicles.IsBitSet(luVehicle) == IsPhysical(),
+               "lSoaData.mPhysicalVehicles.IsBitSet( luVehicle ) == IsPhysical()");
+    CGS_ASSERT(liPartsIndex >= 0, "liPartsIndex >= 0");
+
+    mxFlags |= E_FLAG_PHYSICAL;
+    lSoaData.mPhysicalVehicles.SetBit(luVehicle);
+    miPhysicalPartsIndex = liPartsIndex;
+}
+
+void Vehicle::SetNotPhysical(u32 luVehicle, VehicleSoaData& lSoaData)
+{
+    CGS_ASSERT(IsPhysical(), "IsPhysical()");
+    CGS_ASSERT(lSoaData.mPhysicalVehicles.IsBitSet(luVehicle) == IsPhysical(),
+               "lSoaData.mPhysicalVehicles.IsBitSet( luVehicle ) == IsPhysical()");
+    CGS_ASSERT(miPhysicalPartsIndex >= 0, "miPhysicalPartsIndex >= 0");
+
+    mxFlags &= 0xE7;
+    lSoaData.mPhysicalVehicles.UnSetBit(luVehicle);
+    miPhysicalPartsIndex = -1;
+    miPhysicalReason = -1;
+    muCrashTrafficType = static_cast<u8>(-1);
+}
+
+void Vehicle::SetDead(u32 luVehicle, VehicleSoaData& lSoaData)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lSoaData.mAliveVehicles.IsBitSet(luVehicle),
+               "lSoaData.mAliveVehicles.IsBitSet( luVehicle )");
+
+    mxFlags &= 0xDE;
+    lSoaData.mAliveVehicles.UnSetBit(luVehicle);
+}
+
+// ---------------------------------------------------------------------------
+// SetFlashingHeadlights (X360 @0x827536D0): DECLARATION-ONLY + FLAG.
+// The asm inlines a CgsNumeric::Random LCG step directly against the seed
+// (muSeed * 0x5851F42D4C957F2D + 1) and a (% 3) reduction to seed the flash
+// pattern -- reaching Random's private LCG by raw offset and depending on the
+// still-declaration-only RandomUInt() body. Faithful reconstruction must wait
+// for the CgsRandom TU; bodying it now would require a raw-offset hack into an
+// un-homed member, which the reconstruction rules forbid.
+// ---------------------------------------------------------------------------
+// void Vehicle::SetFlashingHeadlights(bool lbOn, CgsNumeric::Random* lpRand);
+
+// CopyEffectsFromCab (X360 @0x82704E50): a trailer mirrors its cab's effect
+// state byte and brakelight counter so its lights stay in sync.
+void Vehicle::CopyEffectsFromCab(const Vehicle* lpCab)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(IsOfTrailerSpecies(), "IsOfTrailerSpecies()");
+    CGS_ASSERT(lpCab != nullptr, "lpCab");
+
+    mxEffectState = lpCab->mxEffectState;
+    miBrakelightState = lpCab->miBrakelightState;
 }
 }

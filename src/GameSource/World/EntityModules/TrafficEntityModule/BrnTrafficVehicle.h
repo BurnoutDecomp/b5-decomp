@@ -7,6 +7,8 @@
 #include "GameSource/World/Traffic/BrnVehicleSoaData.h"
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"
 
+namespace CgsNumeric { class Random; }
+
 namespace BrnTraffic
 {
 class Hull;
@@ -101,8 +103,77 @@ public:
 
     void OnPhysical(BrnPhysics::Vehicle::eCrashTrafficType leCrashTrafficType);
 
+    // ---- inline state predicates (X360 inlines these flag/species reads at every
+    // call site; the bodies below assert against them by NAME). ----
+    bool IsAlive() const { return (mxFlags & E_FLAG_ALIVE) != 0; }
+    bool IsPhysical() const { return (mxFlags & E_FLAG_PHYSICAL) != 0; }
+    bool IsOfTrailerSpecies() const { return (muSpecies & 0xF) == E_SPECIES_TRAILER; }
+    Manoeuvre GetCurrentManoeuvre() const;
+
+    // ---- per-frame state / identity accessors (out-of-line, bodied in the .cpp) ----
     VecFloat GetSpeed() const;
     void SetSpeed(VecFloat lfSpeed);
+    VecFloat GetSwerveAmount() const;
+    VecFloat GetDistAcrossLane() const;
+    VecFloat GetSteering() const;
+    VecFloat GetWheelRot() const;
+    Vector4 GetPitch_Roll_Steering_WheelRot() const;
+    Vector3 GetTargetPos() const;
+    Vector3 GetLinearVelocity() const;
+    f32 GetSwerveTime() const;
+    f32 GetRandomVal() const;
+    s32 GetPhysicalReason() const;
+    s32 GetCurrentManoeuvrePhase() const;
+    EntityId GetSympatheticCrashTarget() const;
+    f32 GetHeadlightWarmth() const;
+    f32 GetIndicatorBulbWarmth() const;
+
+    bool IsHornOn() const;
+    bool IsAlarmOn() const;
+    bool IsRightIndicatorOn() const;
+    bool IsIndicatingLeft() const;
+    bool IsIndicatingRight() const;
+    bool IsFlashingHeadlights() const;
+    bool AreHeadlightsFlashed() const;
+    bool AreBrakelightsOn() const;
+    bool IsCrashing() const;
+    bool IsRecoveringFromSlam() const;
+    bool IsExtremeSwerving() const;
+    bool IsBeingChecked() const;
+    bool IsNormalPhysical() const;
+
+    void SetSteering(f32 lfValue);
+    void SetWheelRot(f32 lfValue);
+    void SetSwerveAmount(f32 lfValue);
+    void SetSwerveTime(f32 lfValue);
+    void SetTargetPos(Vector3 lTargetPos);
+    void SetLinearVelocity(Vector3 lLinearVelocity);
+    void SetPitch_Roll_Steering_WheelRot(Vector4 lValues);
+
+    void SetHornOn(bool lbOn);
+    void SetHeadlightsFlashed(bool lbOn);
+    void SetLeftIndicatorOn(bool lbOn);
+    void SetRightIndicatorOn(bool lbOn);
+    void ToggleLeftIndicatorOn();
+    void ToggleRightIndicatorOn();
+    void SetBrakelightsOn(bool lbOn);
+    void SetIndicatingLeft(bool lbOn);
+    void SetIndicatingRight(bool lbOn);
+    void SetFlashingHeadlights(bool lbOn, CgsNumeric::Random* lpRand);
+
+    void SetPhysicalReason(s8 liReason);
+    void SetSympatheticCrashTarget(EntityId lEntityId);
+    void SetOrphan();
+    void SetFrozen(bool lbFrozen);
+    void SetCurrentManoeuvre(Manoeuvre leManoeuvre);
+    void SetCurrentManoeuvrePhase(s8 liPhase);
+    void SetWantsToExtremeSwerve(bool lbWants);
+    void StartGiveUpManoeuvre();
+    void CopyEffectsFromCab(const Vehicle* lpCab);
+
+    void SetPhysical(s8 liPartsIndex, u32 luVehicle, VehicleSoaData& lSoaData);
+    void SetNotPhysical(u32 luVehicle, VehicleSoaData& lSoaData);
+    void SetDead(u32 luVehicle, VehicleSoaData& lSoaData);
     Vector3 CalcTowBarPos(Matrix44Affine lTransform,
                           const VehicleTypeRuntime* lpVehicleTypeRuntime) const;
     Vector3 CalcFrontAxlePos(Matrix44Affine lTransform,

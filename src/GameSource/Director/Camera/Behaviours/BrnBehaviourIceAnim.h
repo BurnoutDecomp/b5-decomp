@@ -193,7 +193,14 @@ public:
     };
 
     // Mark "the director cannot switch away from me this frame" with the given reason id.
+    // (Body homed in Behaviour.cpp.)
     void SetCantSwitchFromMeNow(void* lpInfo, s32 liReason);
+
+    // Give up: record the failure reason in the info's validity account, raise the failed
+    // flags on this behaviour and drop the "follow" request bit on the info. The Update of
+    // every concrete behaviour calls it when its anchor stops resolving. (Body in
+    // Behaviour.cpp.)
+    void Fail(void* lpInfo, s32 liReason);
 
 protected:
     // The shared head of the base block. The named flags below land inside it.
