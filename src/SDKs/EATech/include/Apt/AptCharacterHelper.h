@@ -54,6 +54,12 @@ public:
     // instance AFTER InsertChild, not to this shared template.
     static AptCIH* CreateTextCharacterInst();
 
+    // CreateMovieCharacterInst @0x82B0BC.. -- the sibling lazy builder for the shared
+    // default empty MOVIE-CLIP character template (spDefaultMovieCharacter), used by
+    // AS createEmptyMovieClip. FLAG: body its own TU; declared here so the native
+    // movie-clip methods build the template by name.
+    static AptCharacter* CreateMovieCharacterInst();
+
     // Shutdown @0x82AE2FA0 -- free both cached default templates (text + movie)
     // back to the non-GC Apt pool (each is a 68-byte block) and null the statics.
     static void Shutdown();

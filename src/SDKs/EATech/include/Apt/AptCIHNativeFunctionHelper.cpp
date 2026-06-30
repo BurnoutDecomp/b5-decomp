@@ -41,7 +41,32 @@
 #include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"     // mpTextFormat / mStateFlags / SetAlignment / SetTextFormat
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"          // findInst / ChangeDepth / swapDepths (swapDepths)
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"             // mpPositionMatrix tx/ty (getBounds)
+#include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (getBytesTotal)
+#include "SDKs/EATech/include/Apt/AptCharacterHelper.h"           // spDefaultMovieCharacter/CreateMovieCharacterInst (createEmptyMovieClip)
+#include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h"      // spDefaultTextCharacter -> AptCharacter upcast (createTextField)
+#include "SDKs/EATech/include/Apt/AptTarget.h"                    // gpAptTarget->mpAnimationTarget (attachMovie TickNewInsts)
+#include "SDKs/EATech/include/Apt/AptFile.h"                      // mFileName (getBytesTotal)
+#include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"            // AptFloat::Create (getBytesTotal)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                       // gpAptPseudoDataPool (the TextFormat pool)
+
+// ---------------------------------------------------------------------------
+// FLAG (un-homed Apt behavioural callees -- bodies in their own TUs; declared so
+// the AS movie-management methods below compile against the same entry points):
+//   AptCIH::InsertChild @0x82B09CA0 -- place pCharacter into pNode's child display
+//     list at nDepth under name pName (pSource = the cloned-from node or null,
+//     pInitObject = an optional init object). Returns the inserted child CIH.
+//   findCharacterInLibrary @0x82AD... -- resolve an exported library symbol name to
+//     a character in pNode's movie (a3 = "search imports" flag).
+//   AptAnimationTarget::TickNewInsts -- tick the just-inserted instances so they are
+//     live this frame (drains the new-instance table off_8324E544).
+//   AptHook_GetBytesTotal (gAptFuncs slot, X360 dword_8324E8AC) -- host query: total
+//     byte size of a loaded .apt by file path.
+// ---------------------------------------------------------------------------
+extern AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharacter,
+                                  int nDepth, EAStringC* pName, AptValue* pInitObject);   // AptCIH::InsertChild
+extern AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSearchImports);
+extern void AptAnimationTarget_TickNewInsts(AptAnimationTarget* pAnim);                   // AptAnimationTarget::TickNewInsts
+extern int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3);             // dword_8324E8AC
 
 // ---------------------------------------------------------------------------
 // FLAG (homed by the apt VM native-call dispatch): the global native-method arg
@@ -663,5 +688,179 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_swapDepths(AptValue* pContext, int
         const int nDepth = pArg->toInteger() + 0x4000;
         pParentList->ChangeDepth(static_cast<int16_t>(nDepth), pNode);
     }
+    return gpUndefinedValue;
+}
+
+// ===========================================================================
+// sMethod_getBytesTotal @0x82AED8E8 -- AS getBytesTotal(): the byte size of the
+// movie loaded into this node. Only an imported-animation node (character type tag
+// 9) carries a source .apt file; its name keys the host byte-size query. A node
+// with no character instance, or a non-animation node, yields 0.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_getBytesTotal(AptValue* pContext, int /*nArgCount*/)
+{
+    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+    AptCharacterInst* const pInst = pNode->GetCharacterInst();
+    if (!pInst)
+        return AptFloat::Create(0.0f);
+
+    // Build the source .apt path: only a live animation node (tag 9) has one, held
+    // in its AptCharacterAnimationInst::mAnimationFilePtr's AptFile::mFileName.
+    EAStringC lFilePath;
+    if (IsClipHandleOrCIHNone(pNode) && pInst->GetTypeTag() == 9)
+    {
+        AptCharacterAnimationInst* const pAnim = static_cast<AptCharacterAnimationInst*>(pInst);
+        lFilePath += pAnim->mAnimationFilePtr.pData->mFileName;
+    }
+
+    float fBytesTotal = 0.0f;
+    if (pInst->GetTypeTag() == 9)
+        fBytesTotal = static_cast<float>(AptHook_GetBytesTotal(lFilePath.GetBuffer(), 0, 0.0));
+
+    return AptFloat::Create(fBytesTotal);
+}
+
+// ===========================================================================
+// sMethod_createEmptyMovieClip @0x82B0BC38 -- AS createEmptyMovieClip(name, depth):
+// place a fresh empty movie-clip child (the shared default movie-clip character
+// template) at depth+0x4000 under `name`, flag it created-dynamically, and return
+// it. Requires exactly 2 args and a placed receiver (its render item has a backing
+// character); otherwise undefined.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_createEmptyMovieClip(AptValue* pContext, int nArgCount)
+{
+    if (nArgCount != 2)
+        return gpUndefinedValue;
+
+    AptValue* const pNameArg  = gppAptNativeArgStack[gnAptNativeArgCount - 1];
+    AptValue* const pDepthArg = gppAptNativeArgStack[gnAptNativeArgCount - 2];
+    const int nDepth = pDepthArg->toInteger();
+
+    EAStringC lName;
+    pNameArg->toString(&lName);
+
+    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+    if (!pNode->GetCharacterInst()->GetRenderItem()->mpCharacter)
+        return gpUndefinedValue;   // not a placed node
+
+    // Lazily build the shared default movie-clip character template.
+    if (!AptCharacterHelper::spDefaultMovieCharacter)
+        AptCharacterHelper::CreateMovieCharacterInst();
+
+    AptCIH* const pInserted = AptCIH_InsertChild(
+        pNode, nullptr, AptCharacterHelper::spDefaultMovieCharacter,
+        nDepth + 0x4000, &lName, nullptr);
+
+    if (IsClipHandleOrCIHNone(pInserted))
+        static_cast<AptCharacterSpriteInstBase*>(pInserted->GetCharacterInst())->SetCreatedDynamic(true);
+
+    return pInserted;
+}
+
+// ===========================================================================
+// sMethod_attachMovie @0x82B0D440 -- AS attachMovie(libraryName, newName, depth
+// [, initObject]): resolve the library symbol to a character, place it as a child
+// at depth+0x4000 under newName (with the optional 4th-arg init object), tick the
+// newly-created instances so they are live this frame, and return the inserted
+// child. Undefined when the library symbol is unknown.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, int nArgCount)
+{
+    AptValue* const pLibName = gppAptNativeArgStack[gnAptNativeArgCount - 1];
+    AptValue* const pNewName = gppAptNativeArgStack[gnAptNativeArgCount - 2];
+    AptValue* const pDepth   = gppAptNativeArgStack[gnAptNativeArgCount - 3];
+    AptValue* const pInitObj = (nArgCount < 4) ? nullptr
+                                               : gppAptNativeArgStack[gnAptNativeArgCount - 4];
+
+    EAStringC lLibName;
+    pLibName->toString(&lLibName);
+
+    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+
+    // A node flagged "resolve symbols against the parent's library" (render-item
+    // mFlags bit 27) looks the symbol up in its display-list parent instead.
+    AptCIH* pScope = pNode;
+    if ((pNode->GetCharacterInst()->GetRenderItem()->mFlags >> 27) & 1u)
+        pScope = pNode->GetDisplayListParent();
+
+    AptCharacter* const pCharacter = findCharacterInLibrary(pScope, &lLibName, 1);
+    if (!pCharacter)
+        return gpUndefinedValue;
+
+    EAStringC lNewName;
+    pNewName->toString(&lNewName);
+    const int nDepth = pDepth->toInteger() + 0x4000;
+
+    AptCIH* const pInserted =
+        AptCIH_InsertChild(pNode, pNode, pCharacter, nDepth, &lNewName, pInitObj);
+    AptAnimationTarget_TickNewInsts(gpAptTarget->mpAnimationTarget);
+
+    return pInserted ? pInserted : gpUndefinedValue;
+}
+
+// FLAG (un-homed AptCIH behavioural callee): set a procedural display property
+// (_x/_y/_rotation/_alpha/...) by id on the node. @0x82AE... -- declared so the AS
+// creation/positioning methods compile against the same entry point.
+extern void AptCIH_SetProceduralProperty(AptCIH* pNode, int nProperty, double fValue);
+
+// ===========================================================================
+// sMethod_createTextField @0x82B0BA40 -- AS createTextField(name, depth, x, y,
+// width, height): place a fresh empty dynamic-text field (the shared default
+// dynamic-text character) at depth+0x4000 under `name`. When the inserted node is a
+// dynamic-text instance (type tag 2), seed its render item: mark it
+// created-dynamically (mFlags bit 27) + visible, set the editable state bits
+// (mStateFlags |= 6), position it at (x, y) with the authored +2px inset via the
+// procedural _x/_y, and size its bounds rect to (width, height). Requires exactly 6
+// args; always returns undefined.
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_createTextField(AptValue* pContext, int nArgCount)
+{
+    if (nArgCount != 6)
+        return gpUndefinedValue;
+
+    AptValue* const pName   = gppAptNativeArgStack[gnAptNativeArgCount - 1];
+    AptValue* const pDepth  = gppAptNativeArgStack[gnAptNativeArgCount - 2];
+    AptValue* const pX      = gppAptNativeArgStack[gnAptNativeArgCount - 3];
+    AptValue* const pY      = gppAptNativeArgStack[gnAptNativeArgCount - 4];
+    AptValue* const pWidth  = gppAptNativeArgStack[gnAptNativeArgCount - 5];
+    AptValue* const pHeight = gppAptNativeArgStack[gnAptNativeArgCount - 6];
+
+    const int    nDepth  = pDepth->toInteger();
+    const double fX      = pX->toFloat();
+    const double fY      = pY->toFloat();
+    const double fWidth  = pWidth->toFloat();
+    const double fHeight = pHeight->toFloat();
+
+    EAStringC lName;
+    pName->toString(&lName);
+
+    // Lazily build the shared default dynamic-text character template.
+    if (!AptCharacterHelper::spDefaultTextCharacter)
+        AptCharacterHelper::CreateTextCharacterInst();
+
+    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+    AptCIH* const pInserted = AptCIH_InsertChild(
+        pNode, nullptr, AptCharacterHelper::spDefaultTextCharacter,
+        nDepth + 0x4000, &lName, nullptr);
+
+    AptCharacterInst* const pInst = pInserted->GetCharacterInst();
+    if (pInst->GetTypeTag() == 2)   // dynamic-text instance
+    {
+        // The X360 re-fetches the writable render item per access; it is idempotent
+        // within a tick, so fetch once and reuse (faithful de-optimisation).
+        AptRenderItem* const pRI = pInst->GetRenderItemWritable();
+        pRI->mFlags |= 0x08000000u;                 // bit 27: created-dynamic text field
+        pRI->SetIsVisible(true);
+
+        AptRenderItemDynamicText* const pTextRI = static_cast<AptRenderItemDynamicText*>(pRI);
+        pTextRI->mStateFlags |= 6u;                 // editable + needs-layout state bits
+
+        // Position at (x, y) with the authored +2px inset, then size the bounds rect.
+        AptCIH_SetProceduralProperty(pInserted, 0, fX + 2.0);   // _x
+        AptCIH_SetProceduralProperty(pInserted, 1, fY + 2.0);   // _y
+        pTextRI->mBounds.fRight  = static_cast<float>(pTextRI->mBounds.fLeft + fWidth);
+        pTextRI->mBounds.fBottom = static_cast<float>(pTextRI->mBounds.fTop + fHeight);
+    }
+
     return gpUndefinedValue;
 }
