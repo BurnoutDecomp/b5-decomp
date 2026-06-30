@@ -30,7 +30,7 @@
 // ===========================================================================
 
 struct AptCharacter;
-struct AptRenderingContext;
+class AptRenderingContext;
 enum AptMaskRenderOperation : int;
 
 // Wired to gAptFuncs.pfnDrawRenderingUnit (see AptRenderHooks.cpp).
