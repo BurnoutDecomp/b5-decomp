@@ -48,7 +48,7 @@
 
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // base + AptConstantPool + AptVFT_*
 
-struct AptValue;
+class AptValue;
 
 // ---------------------------------------------------------------------------
 // One entry of the DefineFunction2 register-parameter table: each declared

@@ -68,7 +68,7 @@
 #include "SDKs/EATech/include/Apt/AptObject.h"             // AptObject base + AptVFT_*
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC keys
 
-struct AptValue;
+class AptValue;
 struct AptFrameStack;   // SDKs/EATech/include/Apt/AptFrameStack.h (the captured-scope value)
 
 // The small {entries, count} pair AptScriptFunction*::GetConstantPool returns from

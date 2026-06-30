@@ -23,7 +23,7 @@
 #include <cstdint>
 
 struct AptNativeHash;
-struct AptValue;
+class AptValue;
 class  EAStringC;
 class  AptPseudoDisplayList;
 

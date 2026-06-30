@@ -44,7 +44,7 @@
 
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // base + AptConstantPool + AptVFT_*
 
-struct AptValue;
+class AptValue;
 
 // ---------------------------------------------------------------------------
 // The compiled DefineFunction (v1) record mpByteCode points at. This is a

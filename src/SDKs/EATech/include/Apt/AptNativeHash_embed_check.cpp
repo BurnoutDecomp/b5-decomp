@@ -2,7 +2,7 @@
 // method signatures compile against a TU other than AptNativeHash.cpp.
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
 
-struct AptValue;
+class AptValue;
 
 static void AptNativeHash_EmbedCheck(AptNativeHash* p, const EAStringC& key, AptValue* v)
 {

@@ -27,8 +27,8 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue::AddRef/Release
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"  // mpCurrentFunction + SavedExecutionState
 
-class AptCIH;             // SDKs/EATech/include/Apt/AptCIH.h (the movie-clip scope)
-class AptCharacterInst;   // SDKs/EATech/include/Apt/AptCharacterInst.h
+struct AptCIH;             // SDKs/EATech/include/Apt/AptCIH.h (the movie-clip scope)
+struct AptCharacterInst;   // SDKs/EATech/include/Apt/AptCharacterInst.h
 class EAStringC;          // SDKs/EATech/include/Apt/AptString/EAString.h (path/name buffers)
 struct AptInitParmsT;     // runtime init parameters (defined in AptActionInterpreterStackOps.cpp)
 
