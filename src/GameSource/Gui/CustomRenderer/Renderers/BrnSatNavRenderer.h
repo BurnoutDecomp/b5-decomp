@@ -5,18 +5,21 @@
 #include "BrnCommonTypes.h"                                    // Vector2/Vector3
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h" // base
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                // GuiEventEnableSatNavIcons::EIconDisplayType
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer (== Im2d), Im2dTransform
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"   // CgsGraphics::Im2dTransform (mTransform)
 
 // BrnGui::SatNavRenderer -- the GUI custom-render component that draws the sat-nav /
 // mini-map event icons and the player's route highlight on the live map.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (Jan-2008) against
 // references/DecFIGS/dwarfdump/.../BrnSatNavRenderer.h (full DWARF class layout).
-// All 13 ledger functions of this TU are reconstructed in BrnSatNavRenderer.cpp:
+// The ledger functions of this TU are reconstructed in BrnSatNavRenderer.cpp:
 //   Construct, Destruct, Prepare, Release, RecvEvent, GetID,
 //   GetNumIcons, GetIconInformation, InitResources, InitEventTypeUvs,
-//   InitSatNavIcons, RefreshSatNavIconInfo, RenderIconsForSatNav.
-// (Update / RenderComponent / RenderSatNavIcon / UpdateRendererTransform /
-//  SetTransparency / CalculateUVsForIndex are sibling TUs / out of scope and are
+//   InitSatNavIcons, RefreshSatNavIconInfo, RenderIconsForSatNav, plus the
+//   class:BrnGui::SatNavRenderer group: SatNavRenderer (ctor @0x827DD468),
+//   RenderSatNavIcon (@0x8245A3A0) and UpdateRendererTransform (@0x8245F4D8).
+// (Update / RenderComponent / SetTransparency are sibling TUs / out of scope and are
 //  reached here only as declared callees.)
 //
 // LAYOUT POLICY (matches the sibling renderers BoostBarRenderer / CrashNavIconRenderer):
@@ -37,7 +40,9 @@ namespace renderengine
     class BlendState;
 }
 
-namespace CgsGraphics { class Im2dRenderBuffer; }
+// CgsGraphics::Im2dRenderBuffer (== Im2d) and Im2dTransform come from the immediate-mode
+// headers included above; the in-scope RenderSatNavIcon / UpdateRendererTransform bodies
+// drive them by name.
 namespace CgsModule   { struct Event; }
 
 namespace BrnGui
@@ -128,12 +133,13 @@ namespace BrnGui
         void GetIconInformation(u32 luIndex, IconRendererSatNavIconInfo* lpInfo) const;
         void RenderIconsForSatNav(CgsGraphics::Im2dRenderBuffer* lpRenderBuffer);
 
-        // Out-of-scope callees that live in sibling TUs (declared so the bodies compile;
-        // their definitions link elsewhere).
+        // Build the screen-space mTransform from the viewport descriptor + aspect ratio
+        // (X360 @0x8245F4D8; bodied in this TU). Called by Construct() and the debug component.
         void UpdateRendererTransform();
-        // X360 float-arg ABI order (f1..f4) is (x, halfWidth, y, halfHeight): the call sites in
-        // RenderIconsForSatNav pass f1/f3 = the transformed device position and f2/f4 = the
-        // zoom-scaled per-icon half-extents (see @0x8245FD00/0x82460108).
+        // Draw one sat-nav icon quad through the immediate-mode render buffer (X360 @0x8245A3A0;
+        // bodied in this TU). X360 float-arg ABI order (f1..f4) is (x, halfWidth, y, halfHeight):
+        // the call sites in RenderIconsForSatNav pass f1/f3 = the transformed device position and
+        // f2/f4 = the zoom-scaled per-icon half-extents (see @0x8245FD00/0x82460108).
         void RenderSatNavIcon(f32 lfX, f32 lfHalfWidth, f32 lfY, f32 lfHalfHeight,
                               ESatNavIconType leIconType, u32 luEventTypeIndex,
                               CgsGraphics::Im2dRenderBuffer* lpRenderBuffer);
@@ -142,7 +148,9 @@ namespace BrnGui
         // NOTE: mbRenderEnabled lives in the base (CgsGui::CustomRenderComponentInterface).
 
         u32  mMapQuadColour;                 // h:238 RGBA (packed colour; type uncommitted)
-        u8   mTransform[40];                 // h:240 Im2dTransform (opaque blob; uncommitted)
+        CgsGraphics::Im2dTransform mTransform; // h:240 the screen-space Im2dTransform
+                                              // UpdateRendererTransform builds in place (64 bytes,
+                                              // 4 x Vector4; X360 @0x8245F6Bx writes lanes 0/16/32/48).
         EPrepareStage mePrepareStage;        // h:242
         EReleaseStage meReleaseStage;        // h:243
         u8   mRenderSatNavEvent[48];         // h:245 GuiEventRenderSatNav (opaque; memcpy'd in RecvEvent 0xD4)
