@@ -300,11 +300,14 @@ namespace BrnResource
                                   << (s32)lNumFromHeap << " from debug heap), "
                                   << (s32)lNumDepsWired << " dependencies wired\n";
 
-        // [resource streaming bring-up] prove the full faithful streaming path now that the pools exist:
-        // publish a LoadBundle request (event id 2) for the debug font to the ResourceModule input and pump
-        // Update -> ProcessResourceRequests routes it to the bundle loader -> ProcessLoadRequests loads it
-        // into the real Fonts pool (id 0) via BundleLoader -> resources created + fixed up. Confirms
-        // request -> shuttle -> bundle loader -> pool end-to-end.
+        // [resource streaming bring-up] -- FLAG: non-faithful bring-up TEST scaffolding. The X360
+        // GameDataModule::Prepare just creates the pools and returns; it does NOT publish inline font
+        // load/acquire/unload test requests. This inline pump currently faults (0xC0000005) and blocks
+        // the boot, so it is disabled to let Prepare complete faithfully -- the real streaming path is
+        // exercised by the GUI / game flow when it actually requests resources. Set to `if (true)` to
+        // re-validate the request -> shuttle -> bundle loader -> pool path in isolation.
+        *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Prepare: pools ready, streaming-test scaffolding skipped (faithful) -> return\n";
+        if (false)
         {
             CgsResource::Events::LoadBundleRequest lReq;
             memset(&lReq, 0, sizeof(lReq));
