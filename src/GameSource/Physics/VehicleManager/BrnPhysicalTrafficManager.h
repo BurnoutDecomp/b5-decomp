@@ -117,6 +117,10 @@ struct PhysicalTrafficVehicle
         E_ARTICULATE_VEHICLE_COUNT   = 3,
     };
 
+    // X360 0x825B3358: range-checked read of meArticulatedVehicleType (+36). One of
+    // PhysicalTrafficVehicle's own methods (FLAG above): bodied against the named +36 member.
+    EArticulatedVehicleType GetArticulatedVehicleType() const;
+
     Vector3                 mArticulationPointLocal;     // +0
     CgsID                   mCgsID;                      // +16 (u64; +12..15 padding)
     f32                     mfTimeSinceCheckNotify;      // +24

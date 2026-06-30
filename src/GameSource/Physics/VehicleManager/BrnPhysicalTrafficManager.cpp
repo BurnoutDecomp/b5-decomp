@@ -39,6 +39,21 @@ const PhysicalTrafficVehicle* PhysicalTrafficManager::GetTrafficVehicle(s32 liVe
 }
 
 // ---------------------------------------------------------------------------------------
+// PhysicalTrafficVehicle::GetArticulatedVehicleType (const)   @ 0x825B3358
+// X360: range-asserts meArticulatedVehicleType (+0x24 == 36) against the enum bounds
+// (cmpwi 0 / cmpwi 3 -> fires when type < E_ARTICULATE_VEHICLE_NONE or >= E_..._COUNT),
+// then returns it. One of PhysicalTrafficVehicle's own methods; bodied here against the
+// named +36 member.
+// ---------------------------------------------------------------------------------------
+PhysicalTrafficVehicle::EArticulatedVehicleType PhysicalTrafficVehicle::GetArticulatedVehicleType() const
+{
+    CGS_ASSERT(meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE
+                   && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT,
+               "meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT");
+    return meArticulatedVehicleType;
+}
+
+// ---------------------------------------------------------------------------------------
 // GetTrafficDriver   @ 0x825B4900
 // X360: result = *(this+103600) + 224 * liVehicle    (mpaTrafficDrivers[liVehicle])
 // ---------------------------------------------------------------------------------------

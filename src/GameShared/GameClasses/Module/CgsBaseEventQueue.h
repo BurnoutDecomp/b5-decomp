@@ -39,6 +39,23 @@ namespace CgsModule
             return true;
         }
 
+        // No-arg "reserve next slot" variant (X360 BaseEventQueue<T>::AddEvent(), DWARF
+        // CgsBaseEventQueue.h:358; asserts at :360/:361). Reserves the slot at the current tail,
+        // bumps miLength, and returns a reference to the freshly-reserved (uninitialised) element
+        // so the caller can fill it in place -- the X360 body computes &mpEvents[miLength], stores
+        // miLength+1 back, and returns the slot pointer. Appends UNCONDITIONALLY; the two asserts
+        // are non-gating tripwires. Used by VehicleOutputInterface::AddTrafficState (816-byte
+        // PhysicalTrafficState element). ADDITIVE GROW (flagged): new no-arg overload, no change to
+        // existing members/behaviour.
+        T& AddEvent()
+        {
+            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
+            CGS_ASSERT(GetLength() < GetMaxLength(), "GetLength() < GetMaxLength()");
+            s32 liIndex = miLength;
+            ++miLength;
+            return mpEvents[liIndex];
+        }
+
         // Bounds-gated append (X360 BaseEventQueue<T>::AddEventSafe, DWARF CgsBaseEventQueue.h:329):
         // asserts the queue owns a buffer, then returns false WITHOUT appending when already full,
         // otherwise appends a copy of lEvent, bumps miLength and returns true. The X360 build emits

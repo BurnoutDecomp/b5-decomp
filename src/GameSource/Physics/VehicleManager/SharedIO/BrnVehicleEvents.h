@@ -191,6 +191,16 @@ namespace Vehicle
         ETrafficType       meTrafficType;
         bool               mbIsCab;
         CgsID              mCgsID;
+
+        // Copy assignment @0x825B7AE8: the X360 body is a pure bitwise copy of the whole object
+        // (ld/std scalar head + VMX 16-byte block copies across the transform/velocity region +
+        // scalar tail @0x70/0x80/0x84/0x88, last store at +136). CreatePhysicalTrafficEvent is
+        // trivially copyable, so a defaulted copy-assignment reproduces it exactly; kept
+        // out-of-line in the .cpp so this ledger func has a definition site. ADDITIVE GROW
+        // (flagged): an explicitly-declared-and-defaulted operator= over the same trivial copy.
+        CreatePhysicalTrafficEvent& operator=( const CreatePhysicalTrafficEvent& );
+        CreatePhysicalTrafficEvent() = default;
+        CreatePhysicalTrafficEvent( const CreatePhysicalTrafficEvent& ) = default;
     };
 
     // Spawn a race car (player/AI/network).
@@ -350,6 +360,17 @@ namespace Vehicle
         CgsID          mCgsId_Cab;
         CgsID          mCgsId_Trailer;
         ETrafficType   meTrafficType;
+
+        // Copy assignment @0x8270BF70: the X360 body is a pure bitwise copy of the whole object --
+        // VMX 16-byte block copies across the cab/trailer matrices+vectors region [0..0xC0), then
+        // ld/std + lwz/stw scalar copies of the VolumeInstanceId/AttribKey/ResourceHandle/CgsID
+        // tail (last store at +256). CreateArticulatedTrafficEvent is trivially copyable, so a
+        // defaulted copy-assignment reproduces it exactly; kept out-of-line in the .cpp so this
+        // ledger func has a definition site. ADDITIVE GROW (flagged): an explicitly-declared-and-
+        // defaulted operator= over the same trivial copy.
+        CreateArticulatedTrafficEvent& operator=( const CreateArticulatedTrafficEvent& );
+        CreateArticulatedTrafficEvent() = default;
+        CreateArticulatedTrafficEvent( const CreateArticulatedTrafficEvent& ) = default;
     };
 }
 }
