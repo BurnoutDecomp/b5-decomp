@@ -136,6 +136,23 @@ DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
     if (minSizeAllocation < nMinimumItemSize)
         mnMinimumAllocationSize = (uint32_t)nMinimumItemSize;                  // a1[6] = v32
 
+    mnOffsetToStoreNext = nOffsetToStoreNextInFreeItem >> 2;                   // a1[4] = v30 >> 2
+    mnOffsetToStoreSize = nOffsetToStoreSizeInFreeItem >> 2;                   // a1[5] = a8 >> 2
+
+    // FLAG (PC static-init accommodation): the X360 never constructs a DOGMA pool with a
+    // 0-byte main size -- gAptValueGCPool is HEAP-allocated at AptInit (AptAllocatorInitialize
+    // @0x82ADD118), AFTER StaticInitialize() sets the item sizes, with real pool sizes. On PC
+    // gAptValueGCPool is a static object constructed (0,0) before StaticInitialize runs, so
+    // maxSizeAllocation/mainPoolSizeBytes are 0 here. A 0-size DOGMA_Malloc + SetupPool would
+    // write the pool header into a 0-byte block (heap corruption). Defer the allocation: leave
+    // the pool EMPTY until it is (re)initialized at AptInit with real sizes.
+    if (mainPoolSizeBytes == 0)
+    {
+        mpaFirstFreeBySize = 0;
+        mpFirstPool        = 0;
+        return;
+    }
+
     // Per-size free-list head array: one head per 4-byte size bucket up to the
     // max allocation, plus the zero bucket. (4 * ((maxSize >> 2) + 1) bytes.)
     mpaFirstFreeBySize = (uintptr_t**)DOGMA_Malloc(4 * ((maxSizeAllocation >> 2) + 1));
@@ -145,9 +162,6 @@ DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
     mpFirstPool = pFirstPool;
 
     memset(mpaFirstFreeBySize, 0, 4 * ((mnMaxSizeAllocation >> 2) + 1));
-
-    mnOffsetToStoreNext = nOffsetToStoreNextInFreeItem >> 2;                   // a1[4] = v30 >> 2
-    mnOffsetToStoreSize = nOffsetToStoreSizeInFreeItem >> 2;                   // a1[5] = a8 >> 2
 
     pFirstPool->SetupPool(0, mainPoolSizeBytes);   // *v36=0; v36[1]=v36[2]=a2-15
 }
@@ -160,15 +174,15 @@ DOGMA_PoolManager::~DOGMA_PoolManager()
     // Free the per-size free-list head array (same byte count it was allocated).
     DOGMA_FreeSized(mpaFirstFreeBySize, 4 * ((mnMaxSizeAllocation >> 2) + 1));
 
-    // Free every pool in the chain.
+    // Free every pool in the chain. (while, not do/while: an empty/deferred pool has
+    // mpFirstPool == 0 -- see the 0-size guard in the ctor -- and must not be dereffed.)
     DOGMA_MemPool* pPool = mpFirstPool;
-    do
+    while (pPool)
     {
         DOGMA_MemPool* pNext = pPool->GetNextPool();
         DOGMA_Free(pPool);
         pPool = pNext;
     }
-    while (pPool);
 
     // Free every tracked outside allocation.
     if (mbTrackOutsideAllocations)
