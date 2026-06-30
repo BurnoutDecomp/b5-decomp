@@ -116,6 +116,13 @@ namespace CgsSceneManager
         // This TU's single recovered function.
         bool Prepare(rw::IResourceAllocator* lpAllocator);
 
+        // @ X360 (separate TU's body) -- returns the cached-triangle window/count for the
+        // given cached-object index; tail-called by SceneManagerIO::TriangleCacheInterface::
+        // GetCache @ 0x82277810. ADDITIVE GROW (declaration only; body owned by the cache-
+        // manager TU). The IDA symbol is truncated to 'GetTrianglesForCachedObjec' by
+        // symbol-length limits; un-truncated to ...Object for the C++ home.
+        s32 GetTrianglesForCachedObject(s32 liObjectIndex);
+
         // @ X360 0x828C7508 (tail-called from SceneManagerModule::EndUpdateTriangleCache)
         // -- finish this frame's triangle-cache update against the supplied collision
         // generator + the triangle-collision scene. Declared here (its home); body owned
