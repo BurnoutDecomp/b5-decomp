@@ -360,8 +360,6 @@ private:
 
 // ============================================================================
 // BehaviourRig::SetParameters inline @0x821F3B10
-//   Kept here as the canonical anchor (the BrnBehaviourRig.cpp TU that originally
-//   bodied it still #includes this header).
 //   Asserts type tag == 2 (eBehaviourRig), stores block pointer + cached word + clears flag.
 // ============================================================================
 inline void
