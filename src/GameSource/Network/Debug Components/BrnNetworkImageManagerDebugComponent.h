@@ -25,6 +25,7 @@
 
 namespace BrnNetwork { class NetworkImageManager; }            // back-pointer only
 namespace CgsNetwork { class NetworkTextureDXTCompress; }      // back-pointer only
+namespace CgsMemory { class HeapMalloc; }                      // Prepare param (pointer-only)
 
 namespace BrnNetwork
 {
@@ -33,6 +34,11 @@ namespace BrnNetwork
     public:
         void Construct( NetworkImageManager* lpImageManager,
                         CgsNetwork::NetworkTextureDXTCompress* lpTextureCompressor );   // @ 0x82586428
+        // Prepare allocates the debug work buffers (the X360 image-manager Prepare drives the
+        // inlined CgsSound::Playback::Content::DoOnPostLoad on this sub-object). Declaration-only
+        // here (body links from this component's own TU); declared so NetworkImageManager::Prepare
+        // can gate on it BY NAME.
+        bool Prepare( CgsMemory::HeapMalloc* lpHeapMalloc );
         void Destruct();   // @ 0x825864D0
         bool Release();    // @ 0x8258B048
 
