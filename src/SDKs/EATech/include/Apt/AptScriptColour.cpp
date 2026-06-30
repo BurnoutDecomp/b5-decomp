@@ -211,13 +211,55 @@ AptValue* AptScriptColour::objectMemberLookup(AptValue* const /*pThis*/,
     return 0;
 }
 
-// sMethod_setRGB -- NOTE: this method is referenced by objectMemberLookup (it backs
-// the "setRGB" native member) but its disassembly was NOT part of this TU's dossier
-// (only its symbol address). It is therefore a separate, not-yet-reconstructed leaf:
-// declared in the header so objectMemberLookup compiles against it (taking its
-// address needs only the declaration under the per-TU `cl /c` gate); its body is its
-// own follow-on TU and is intentionally NOT fabricated here (the project rule: never
-// invent a body -- the scaffold satisfies the missing definition at link time).
+// ---------------------------------------------------------------------------
+// sMethod_setRGB @0x82?????? (PS3 EXTERNAL DecFIGS 0xF349AC) -- write the target
+// clip's colour transform from a packed 0xRRGGBB integer argument: the additive
+// (translate) R/G/B channels take the three bytes (each clamped to [0, 255]) and the
+// multiplicative (scale) R/G/B channels are zeroed, so the clip renders the flat
+// colour. The clip's render-dirty flag is set. Returns the AS "undefined" value;
+// nothing is written when the Color is unbound.
+//
+// DECOMPILED from the PS3 body: the packed colour is toInteger(top-of-arg-stack);
+// the byte extraction is the PS3 v6/BYTE1/BYTE2 (blue = code & 0xFF, green =
+// (code >> 8) & 0xFF, red = (code >> 16) & 0xFF); the fsel pair is the [0, 255]
+// clamp; the three translate writes + the scale zero + the mFlagsA bit-31 dirty set
+// match getRGB's inverse (translate = additive colour, scale = 0).
+// ---------------------------------------------------------------------------
+AptValue* AptScriptColour::sMethod_setRGB(AptScriptColour* pThis, int /*nArgCount*/)
+{
+    AptValue* pTarget = pThis->mpTarget;            // PS3: v2 = *(this + 8)
+    if (pTarget)
+    {
+        // The packed 0xRRGGBB colour sits on top of the native-call arg stack.
+        const int nCode = gppAptNativeArgStack[gnAptNativeArgCount - 1]->toInteger();
+
+        AptCharacterInst* pCharInst   = static_cast<AptCIH*>(pTarget)->mpCharacterInst;
+        AptRenderItem*    pRenderItem = pCharInst->GetRenderItemWritable();
+        AptCXForm*        pColorMatrix = pRenderItem->GetColorMatrixWritable();
+
+        // Per-byte channels (the PS3 v6 / BYTE1(v3) / BYTE2(v3)), each clamped [0,255]
+        // (the PS3 fsel(255 - c) / fsel(c + 255) pair).
+        f32 fRed   = static_cast<f32>((nCode >> 16) & 0xFF);
+        f32 fGreen = static_cast<f32>((nCode >>  8) & 0xFF);
+        f32 fBlue  = static_cast<f32>( nCode        & 0xFF);
+        if (fRed   < 0.0f)   fRed   = 0.0f;   if (fRed   > 255.0f) fRed   = 255.0f;
+        if (fGreen < 0.0f)   fGreen = 0.0f;   if (fGreen > 255.0f) fGreen = 255.0f;
+        if (fBlue  < 0.0f)   fBlue  = 0.0f;   if (fBlue  > 255.0f) fBlue  = 255.0f;
+
+        // Additive (translate) R/G/B = the colour; multiplicative (scale) R/G/B = 0.
+        pColorMatrix->translate.SetValuef(AptColorHelper::Red,   fRed);
+        pColorMatrix->translate.SetValuef(AptColorHelper::Green, fGreen);
+        pColorMatrix->translate.SetValuef(AptColorHelper::Blue,  fBlue);
+        pColorMatrix->scale.SetValuef(AptColorHelper::Red,   0.0f);   // ColorMatrix[2] = 0
+        pColorMatrix->scale.SetValuef(AptColorHelper::Green, 0.0f);   // ColorMatrix[3] = 0
+        pColorMatrix->scale.SetValuef(AptColorHelper::Blue,  0.0f);   // ColorMatrix[4] = 0
+
+        // Mark the clip's render/colour state dirty (mFlagsA bit 31).
+        static_cast<AptCIH*>(pTarget)->mFlagsA |= 0x80000000u;        // *(v2 + 12) |= 0x80000000
+    }
+
+    return gpUndefinedValue;
+}
 
 // ---------------------------------------------------------------------------
 // sMethod_getRGB @0x82AECF48 -- read the target clip's additive (translate) R/G/B

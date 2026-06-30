@@ -77,6 +77,15 @@ struct AptFile
 };
 
 // ---------------------------------------------------------------------------
+// MakeAptFile -- the AptFile::AptFile ctor @0x82AE6268 wrapped as the loader/linker
+// factory (pool-allocate 28 bytes, then construct). The X360 ctor is folded (no own
+// export symbol); body in AptFile.cpp, decompiled from the decrypted ARTIST.XEX.
+// pName is the .apt file name (an EAStringC, copied into mFileName with a refcount
+// bump). Returns the constructed AptFile (the ctor's `this`).
+// ---------------------------------------------------------------------------
+AptFile* MakeAptFile(void* pMem, EAStringC* pName);
+
+// ---------------------------------------------------------------------------
 // The loaded .apt movie root view (AptFile::mpData points here once loaded). This
 // names only the AptFile/AptLoader-touched members; the [c:] notes are the console
 // byte offsets the asm uses (widths are x64, the PC-port FLAG). RECONCILE POINT

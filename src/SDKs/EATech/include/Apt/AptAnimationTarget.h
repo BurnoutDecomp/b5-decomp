@@ -247,3 +247,12 @@ struct AptAnimationTarget
     static char* GetAStickLeft (int nPlayer);             // @0x82AD5F50
     static char* GetAStickRight(int nPlayer);             // @0x82AD5F68
 };
+
+// ---------------------------------------------------------------------------
+// MakeAptAnimationTarget -- the AptAnimationTarget::AptAnimationTarget ctor @0x82AFF648
+// wrapped as the AptTarget::AptTarget factory: placement-construct the 88-byte director
+// over a pool-allocated block from the raw AptUpdateParams dword array (reinterpreted to
+// AptAnimationTargetParams). Returns the constructed director (the ctor's `this`). Body
+// in AptAnimationTarget.cpp (next to the ctor it wraps).
+// ---------------------------------------------------------------------------
+AptAnimationTarget* MakeAptAnimationTarget(void* pMem, const u32* pParams);

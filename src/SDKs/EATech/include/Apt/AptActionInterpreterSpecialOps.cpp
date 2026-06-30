@@ -348,11 +348,11 @@ void AptActionInterpreter::_FunctionAptActionCloneSprite(AptActionInterpreter* p
     AptValue* const pParentValue = pInterp->mpStack[pInterp->mnStackTop - 3];
     const int       nDepth       = pInterp->mpStack[pInterp->mnStackTop - 1]->toInteger();
 
-    // FLAG: AptActionInterpreter::_doCloneSprite (the AS duplicateMovieClip core) is
-    // not yet homed; declared as an extern shim so this opcode keeps the exact
-    // (interpreter, scope, target, parent, name, depth, initObject=null) call shape.
+    // AptActionInterpreter::_doCloneSprite (the AS duplicateMovieClip core; homed in
+    // AptActionInterpreterInterpHelpers.cpp). Canonical signature (interpreter, AptCIH*
+    // scope, AptValue* target, parent, name, depth, initObject=null).
     extern AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* pInterp,
-                                                        AptValue* pScope, AptValue* pTarget,
+                                                        AptCIH* pScope, AptValue* pTarget,
                                                         AptValue* pParent, AptValue* pNameValue,
                                                         int nDepth, AptValue* pInitObject);
     AptActionInterpreter_doCloneSprite(pInterp, pContext->mpCIH, pContext->mpPendingReleaseValue,

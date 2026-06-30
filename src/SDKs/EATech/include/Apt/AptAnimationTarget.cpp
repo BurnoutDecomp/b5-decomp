@@ -192,7 +192,7 @@ extern void AptAnimationTargetSet_Destruct2(AptAnimationTargetSet* pSet);       
 // ---------------------------------------------------------------------------
 extern int   AptReplaceReferences(AptValue* pOld, AptValue* pNew,
                                   AptValue** ppTable, int nCount);                  // ReplaceReferences
-extern AptValue* AptUpdateZombieVector(char bClear);                               // AptUpdateZombieVector
+extern void* AptUpdateZombieVector(char bClear);                                   // AptUpdateZombieVector -- CANONICAL void* (PS3 __int64 status; AptTarget.cpp matches; was AptValue* here)
 extern void  AptValue_setGCRoot(AptValue* pValue, int bRoot);                      // AptValue::setGCRoot (free-fn form)
 
 // The GC value pool: GetAllAllocatedAptValues snapshots the live-value table the
@@ -266,9 +266,12 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 extern char* gAptParseArgHeapPtr;     // off_8324E3D0 (FLAG)
 extern int   gAptParseArgHeapCount;   // dword_8324E3D4 (FLAG)
 
-// AptGetAnimationAtLevel @0x82xxxxxx -- the root AptCIH-at-level resolver RunActions
-// uses when the queued action's CIH is itself a level (type tag 0x25). FLAG: deferred TU.
-extern void* AptGetAnimationAtLevel(int nLevel);
+// AptGetAnimationAtLevel @0x82B00788 -- the root AptCIH-at-level resolver RunActions
+// uses when the queued action's CIH is itself a level (type tag 0x25). Homed in
+// AptCharacterHelper.cpp; CANONICAL return reconciled to AptCIH* (the reinterpret_cast
+// <AptValue*> call site below is unaffected).
+struct AptCIH;
+extern AptCIH* AptGetAnimationAtLevel(int nLevel);
 
 // ---------------------------------------------------------------------------
 // ctor @ 0x82AFF648
@@ -337,6 +340,21 @@ AptAnimationTarget::AptAnimationTarget(const AptAnimationTargetParams* pParams)
     mpOnPressObject      = gpAptNoneValue;   // +0x30 (a1[12])
     mpOnRollOverObject   = gpAptNoneValue;   // +0x34 (a1[13])
     mpInputEventObject38 = gpAptNoneValue;   // +0x38 (a1[14])
+}
+
+// ---------------------------------------------------------------------------
+// MakeAptAnimationTarget -- the AptAnimationTarget::AptAnimationTarget ctor wrapped
+// as the AptTarget::AptTarget factory (the AptTarget ctor pool-allocates the 88-byte
+// director block, then constructs it). The X360 ctor (@0x82AFF648, exported as
+// AptAnimationTarget::AptAnimationTarget) returns `this`; this wrapper placement-
+// constructs over pMem and returns the director. pParams is the raw AptUpdateParams
+// dword block AptTarget::ctor hands down -- reinterpreted to the named
+// AptAnimationTargetParams the ctor reads (words 0/1/2/3/5; word 4 unused here).
+// ---------------------------------------------------------------------------
+AptAnimationTarget* MakeAptAnimationTarget(void* pMem, const u32* pParams)
+{
+    return ::new (pMem) AptAnimationTarget(
+        reinterpret_cast<const AptAnimationTargetParams*>(pParams));   // ctor returns `this`
 }
 
 // ---------------------------------------------------------------------------
@@ -1588,4 +1606,72 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
     }
 
     return liResult;
+}
+
+// ===========================================================================
+// Free-function adapters (the AptAnimationTarget_<method> shims).
+//
+// Sibling Apt TUs (AptTarget::Shutdown, AptLinker, AptCIH::SetCharacterInst) reach
+// these lifecycle/per-frame entry points through underscore-named free functions --
+// the decompile-time split form the callers were written against before the class
+// methods were homed. Each forwards verbatim into the matching AptAnimationTarget
+// member (or class-static), so the X360 call (a plain `bl` to the same body) is
+// reproduced with no behavioural change. Homed here, alongside those member bodies.
+// ===========================================================================
+
+// AptAnimationTarget_RunActions -- AptAnimationTarget::RunActions @0x82B0C9B0
+// (AptLinker / AptTarget per-frame action drain). The console returns r3; the free
+// callers discard it, so this is `void` to match the call-site declaration.
+void AptAnimationTarget_RunActions(AptAnimationTarget* pAnim)
+{
+    pAnim->RunActions();
+}
+
+// AptAnimationTarget_CleanRemList -- AptAnimationTarget::CleanRemList @0x82AEAB08.
+// The member is class-static (the rem list is a shared table); the console passes
+// the director in r3 but the body ignores it -- forwarded faithfully.
+void AptAnimationTarget_CleanRemList(AptAnimationTarget* pAnim)
+{
+    (void)pAnim;
+    AptAnimationTarget::CleanRemList();
+}
+
+// AptAnimationTarget_PreDestroy -- AptAnimationTarget::PreDestroy @0x82AFE420
+// (AptTarget::Shutdown's director teardown step).
+void AptAnimationTarget_PreDestroy(AptAnimationTarget* pAnim)
+{
+    pAnim->PreDestroy();
+}
+
+// AptAnimationTarget_RemoveTimerFunctions -- AptAnimationTarget::RemoveTimerFunctions
+// @0x82AE4320 (AptCIH::SetCharacterInst drops an animation node's timer callbacks).
+void AptAnimationTarget_RemoveTimerFunctions(AptAnimationTarget* pAnim, AptCIH* pNode)
+{
+    pAnim->RemoveTimerFunctions(pNode);
+}
+
+// AptAnimationTarget_Destruct -- ~AptAnimationTarget @0x82AFF790 (AptTarget::Shutdown
+// runs the director destructor before pool-freeing the 88-byte block).
+void AptAnimationTarget_Destruct(AptAnimationTarget* pAnim)
+{
+    pAnim->~AptAnimationTarget();
+}
+
+// ---------------------------------------------------------------------------
+// AptReplaceReferences -- BLOCKED FLAG stub. This is the AptAnimationTarget TU's
+// local name for the SAME X360/PS3 free function ReplaceReferences
+// (@0x82AE4DF0 / PS3 _Z17ReplaceReferences... @0xF219B4): retarget every live GC
+// reference from pOld to pNew. The director's PreDestroy reference cleanup calls it
+// to drop a value's references (pNew == nullptr).
+//
+// GENUINELY BLOCKED (same as the AptLinker.cpp ReplaceReferences stub): the body
+// needs the un-homed GC reference-registration subsystem (gpRefernceValue /
+// gpRefernceValueReplace / pnRefCount / sReferenceRegistrationCb swap +
+// ReferenceReplaceCb / AptRegisterGlobalReferences), none of which exist in the
+// tree. Documented no-op stub (functions_blocked) so the linker resolves it; the
+// reference remap is deferred to the GC reference-registration TU.
+// ---------------------------------------------------------------------------
+int AptReplaceReferences(AptValue* /*pOld*/, AptValue* /*pNew*/, AptValue** /*ppTable*/, int /*nCount*/)
+{
+    return 0;   // FLAG BLOCKED: un-homed GC reference-registration subsystem
 }

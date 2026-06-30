@@ -220,12 +220,13 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_startDrag(AptValue* pContext, int 
 AptValue* AptCIHNativeFunctionHelper::sMethod_removeMovieClip(AptValue* pContext, int /*nArgCount*/)
 {
     AptValue* pResolved = nullptr;
-    // FLAG: AptActionInterpreter::valueToObject (un-homed; coerces the receiver to
-    // its object value, writing the result through the out-param) -- declared as an
-    // extern shim, preserving the exact (pInterp=pContext, 0, pContext, &out) shape.
-    extern void AptActionInterpreter_valueToObject(AptValue* pInterp, int a2,
+    // AptActionInterpreter::valueToObject (homed in AptActionInterpreterInterpHelpers.cpp;
+    // coerces the value to the object it designates under (scope, target), writing it
+    // through the out-param). Canonical signature (scope, target, value, ppOut); the
+    // console reaches it here with target == 0 (a null AptValue*), receiver == pContext.
+    extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
                                                    AptValue* pValue, AptValue** ppOut);
-    AptActionInterpreter_valueToObject(pContext, 0, pContext, &pResolved);
+    AptActionInterpreter_valueToObject(pContext, nullptr, pContext, &pResolved);
 
     if (pResolved && IsClipHandleOrCIHNone(pResolved))
     {
@@ -259,18 +260,19 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_removeTextField(AptValue* pContext
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 
-// FLAG: AptActionInterpreter::_doCloneSprite (the AS duplicateMovieClip core) is
-// not yet homed; declared as an extern shim so this dispatcher keeps the exact
-// (interpreter, owner, 0, parent, nameValue, depth, initObject) call shape.
+// AptActionInterpreter::_doCloneSprite (the AS duplicateMovieClip core; homed in
+// AptActionInterpreterInterpHelpers.cpp). Canonical signature (interpreter, AptCIH*
+// scope, AptValue* target, parent, nameValue, depth, initObject); the console reaches
+// it here with scope == pContext (a CIH node) and target == 0.
 extern AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* pInterp,
-                                                    AptValue* pOwner, int a3, AptValue* pParent,
+                                                    AptCIH* pScope, AptValue* pTarget, AptValue* pParent,
                                                     AptValue* pNameValue, int nDepth, AptValue* pInitObject);
 
-// FLAG: AptActionInterpreter::loadVariables (the AS loadVariables core) is not yet
-// homed; declared as an extern shim, preserving the exact (interpreter, node, 0,
-// &urlString) call shape.
+// AptActionInterpreter::loadVariables (the AS loadVariables core; homed in
+// AptActionInterpreterInterpHelpers.cpp). Canonical signature (interpreter, scope,
+// target, &urlString); the console reaches it here with target == 0.
 extern void AptActionInterpreter_loadVariables(AptActionInterpreter* pInterp,
-                                               AptValue* pNode, int a3, EAStringC* pURL);
+                                               AptValue* pScope, AptValue* pTarget, EAStringC* pURL);
 
 // ===========================================================================
 // sMethod_duplicateMovieClip @0x82B0DEE8 -- AS duplicateMovieClip(name, depth
@@ -288,7 +290,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_duplicateMovieClip(AptValue* pCont
     const int nDepth = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();      // arg 1: AS depth
 
     return AptActionInterpreter_doCloneSprite(&gAptActionInterpreter,
-                                              pContext, 0, pContext,
+                                              static_cast<AptCIH*>(pContext), nullptr, pContext,
                                               pNameValue, nDepth + 0x4000, pInitObject);
 }
 
@@ -305,7 +307,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadVariables(AptValue* pContext, 
     {
         EAStringC strURL;                                                     // the X360 &unk_82F72FF8 empty sentinel
         gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&strURL);     // arg 0 -> the URL
-        AptActionInterpreter_loadVariables(&gAptActionInterpreter, pContext, 0, &strURL);
+        AptActionInterpreter_loadVariables(&gAptActionInterpreter, pContext, nullptr, &strURL);
     }
     return gpUndefinedValue;
 }

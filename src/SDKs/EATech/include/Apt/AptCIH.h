@@ -247,9 +247,34 @@ struct AptCIH : public AptValueGC
     // (AS .setMask, via AptCIHNativeFunctionHelper::sMethod_setMask.)
     void SetMask(AptCIH* pMaskSlave);
 
-    // GetMask @0x82AE7B48 -- FLAG (not yet homed; body its own TU): the current mask
-    // SLAVE, resolved from this master's "#!MASKMASTER!#" native-hash key.
-    AptCIH* GetMask();                                          // @0x82AE7B48
+    // GetMask @0x82AE7B48 -- the current mask SLAVE, resolved from this master's
+    // "#!MASKMASTER!#" native-hash key (or null when this node carries no mask / has no
+    // property hash). Body in AptCIHBehaviour.cpp. (X360 const; r3 = the master CIH.)
+    AptCIH* GetMask() const;                                    // @0x82AE7B48
+
+    // HasClipEvent @0x82B027C0 -- does this node's sprite-base clip-event flag set
+    // (mnClipActionFlags high bits) carry any handler in nEventMask? Body in
+    // AptCIHBehaviour.cpp.
+    bool HasClipEvent(int nEventMask);                          // @0x82B027C0
+    // HasEvent @0x82B02838 -- HasClipEvent(nEventMask) OR HasEventMember(nEventMask):
+    // the node responds to nEventMask via either a packed clip-event flag or an AS
+    // __proto__ handler.
+    bool HasEvent(int nEventMask);                              // @0x82B02838
+
+    // queueClipEvents @0x82B0... -- queue this node's handlers for nEventMask (the AS
+    // clip-event scan + dispatch). For each matching packed clip-event the handler is
+    // enqueued on the deferred-action queue stamped with nFrameId; when bDeferred and an
+    // AS __proto__ event member matches, the named child handler is enqueued instead.
+    // Returns the shared 0/`undefined`-as-int the callers ignore. Body in
+    // AptCIHBehaviour.cpp (FLAG: the AS bytecode-execution sub-path is deferred).
+    AptValue* queueClipEvents(int nEventMask, unsigned int nFrameId, int bDeferred);   // @0x82B0...
+
+    // GeneralisedProcess @0x82AE01B0(per-node) -- the per-node generalised-process pass
+    // (the deferred dirty-state / mask-matrix / AS-process callback flush). Runs the
+    // registered process callbacks, recurses sprite/animation child lists, and folds the
+    // results into this node's subtree-dirty bit (mFlagsA bit23). Returns that bit (0/1).
+    // Body in AptCIHBehaviour.cpp.
+    unsigned int GeneralisedProcess(AptCIH* pRoot, void* pContext);   // @0x82B...
 
     // SetGeneralizedProcessDirtyState @0x82ADCA50 -- mark this node's generalized-
     // process-dirty state. When dirtying: set the self bit (mFlagsA bit24) and

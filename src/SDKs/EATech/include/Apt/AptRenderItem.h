@@ -204,6 +204,14 @@ void PushMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem);
 void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem);
 void AptCharacter_render(AptCharacter* pCharacter, AptRenderingContext* pCtx,
                          AptMaskRenderOperation eOp, int nTick);
-// PushMatricesAbsolute @0x7F28B8 -- the absolute (world-space) push variant used
-// by PushRenderDataAbsolute. FLAG: homed by the render-context layer.
+// PushMatricesAbsolute @0x7F28B8 (PS3 External) -- the absolute (world-space) push
+// variant used by PushRenderDataAbsolute (resets the vertex matrix to identity, then
+// appends the item's mask position matrix). Homed in AptRenderItem.cpp.
 void PushMatricesAbsolute(AptRenderingContext* pCtx, const AptRenderItem* pItem);
+
+// Free-function render-item accessors (the AptLinker zombie-swap path). The X360
+// inlines these as raw field reads/writes + a vtbl-slot copy dispatch; homed in
+// AptRenderItem.cpp against the named members (GetDepth/SetDepth/CopyRenderDataFrom).
+int16_t AptRenderItem_GetDepth(const AptRenderItem* pItem);                          // console *(item+0x14)
+void    AptRenderItem_SetDepth(AptRenderItem* pItem, int16_t nDepth);               // console *(item+0x14)=
+void    AptRenderItem_CopyVisualFrom(AptRenderItem* pDst, const AptRenderItem* pSrc); // console (*item->vtbl[+0x14])(dst, src)

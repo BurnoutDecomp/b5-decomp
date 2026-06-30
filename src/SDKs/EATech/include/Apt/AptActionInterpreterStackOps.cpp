@@ -1486,3 +1486,63 @@ AptValue* AptActionInterpreter_createObject(AptActionInterpreter* pInterp,
 {
     return pInterp->_createObject(pScope, pTarget, pClassName, nArrayLenHint, bConstruct);
 }
+
+// ===========================================================================
+// FLAG-stub homes for the two object-internal offset accessors declared extern
+// above (AptValue_GetMethodNameSlot / AptValue_GetClassOwnerValue).
+//
+// These are NOT standalone functions in any of the three dumps (X360 ARTIST,
+// PS3 DecFIGS/External, BurnoutPR PC): they are inline pointer-arithmetic reads
+// our decompile split out of _FunctionAptActionCallMethod --
+//   GetMethodNameSlot(v6)   == "the EAStringC* method-name slot at (object + 8)"
+//   GetClassOwnerValue(v)   == "the class/owner AptValue* at (value + 0x1C)"
+// The object/value classes these index (the derived AptObject / AptValueWithHash
+// method-name + defining-class slots) have no reconstructed x64 member at those
+// console byte offsets yet, so a raw (this + 8) / (this + 0x1C) read would hit
+// the wrong x64 memory and a guessed member would be a fabrication. The whole
+// _FunctionAptActionCallMethod path is "[not executed in goal trace]" (see the
+// header of this TU), so these are homed as faithful FLAG stubs: they link and
+// keep the boot path clean, but assert if the AS call-method opcode ever reaches
+// them, pending the AptObject method-name/owner-slot member recovery.
+//   (Listed in functions_blocked: absent from all three dumps + unrecovered
+//    object layout.)
+// ===========================================================================
+EAStringC** AptValue_GetMethodNameSlot(AptValue* /*pObject*/)
+{
+    // FLAG: console (object + 8) -- the method-name EAStringC* slot; the x64 member
+    // is not recovered. Inert until the AS call-method opcode is brought up (not on
+    // the boot trace), so returning null is safe for the current goal.
+    return nullptr;
+}
+
+AptValue* AptValue_GetClassOwnerValue(AptValue* /*pValue*/)
+{
+    // FLAG: console *(value + 0x1C) -- the defining-class/owner AptValue* slot; the
+    // x64 member is not recovered. Inert until the AS call-method opcode is brought
+    // up (not on the boot trace), so returning null is safe for the current goal.
+    return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Single-element call-stack pop shims (CallMethod @0x82B04758 per-op cleanup).
+//
+// The console inlines `AptValue_::pop(<triple>)` at the two CallMethod cleanup sites:
+// each interpreter call-depth stack is a {count, capacity, AptValue** array} triple --
+// the same shape AptValueVector models -- so the pop reinterprets the member triple as
+// an AptValueVector and Releases+removes its top element. Reproduced as free shims (the
+// way AptApt_PopValues is) so the CallMethod body keeps its call-site form.
+//
+//   AptApt_PopCIHStack   -> X360 r3 = a1 + 0xC  ({mnCallStackB_Count, ..., mpCallStackB};
+//                           the call-frame register stack, console "a1 + 3" word index).
+//   AptApt_PopCallStackC -> X360 r3 = a1 + 0x24 ({mnCIHStackTop, ..., mpCIHStack}; the
+//                           CIH/target stack, console "a1 + 9" word index).
+// ---------------------------------------------------------------------------
+void AptApt_PopCIHStack(AptActionInterpreter* pInterp)
+{
+    reinterpret_cast<AptValueVector*>(&pInterp->mnCallStackB_Count)->pop();
+}
+
+void AptApt_PopCallStackC(AptActionInterpreter* pInterp)
+{
+    reinterpret_cast<AptValueVector*>(&pInterp->mnCIHStackTop)->pop();
+}

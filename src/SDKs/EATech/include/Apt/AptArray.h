@@ -94,6 +94,13 @@ struct AptArray : public AptObject
     // methods at Apt shutdown (AptUpdateShutdown).
     static void CleanNativeFunctions();
 
+    // The X360 reaches the private join renderer (toString @0x82AED040) directly from
+    // AptValue::toString's `case AptVFT_Array` across the inlined TU; that cross-TU
+    // private call is modelled by the AptValue_AptArrayToString thunk (homed in
+    // AptArray.cpp). Befriend it so it can call the private toString by name.
+    friend void AptValue_AptArrayToString(struct AptArray* pArray, class EAStringC* pOut,
+                                          const char* pSeparator);
+
 private:
     void _reserve(int32_t nCount);   // @0x7F01D0 (grow to pow2, min 8)
     // toString @0x82AED040 -- join() backing helper: render the elements (via

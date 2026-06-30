@@ -54,7 +54,9 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // @0x82AD...): queue this node's clip-event handlers (nEventMask) for deferred AS
 // execution, stamping them with nFrameId. A free-function shim (matches the
 // AptCIH_queueClipEvents AptAnimationTarget.cpp already declares).
-AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, int nFrameId, int bDeferred);
+// Canonical sig: X360/PS3 AptCIH::queueClipEvents(int, unsigned int, int) -- a3 (the
+// frame id) is UNSIGNED; reconciled across all three declaring TUs.
+AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, unsigned int nFrameId, int bDeferred);
 
 // FLAG (un-homed AptDisplayList behavioural follow-on; console AptDisplayList::mergeState
 // @0x82B0B438 -- explicitly BLOCKED in AptDisplayList.h's note): merge a rebuilt scratch
@@ -432,14 +434,15 @@ int AptCIH::tick()
         const int nFrame = pInst->mnGotoFrame;
         if (nFrame == 1 && AptCIH_GetClipMovie(pInst)->mnFrameCount == 1)
         {
-            // A single-frame clip never plays past frame 0; jump straight to the
-            // action-queue stage (LABEL_27).
+            // A single-frame clip never plays past frame 0; skip both doFrameControls
+            // and queueFrameActions, jumping to the enterFrame stage (loc_82B0C040).
             pInst->mnGotoFrame = 0;
             goto label_27;
         }
         if (nFrame == AptCIH_GetClipMovie(pInst)->mnFrameCount)
         {
-            // Wrapped past the end: loop back to the start, then LABEL_27.
+            // Wrapped past the end: loop back to the start, then skip to enterFrame
+            // (loc_82B0C040) -- NOT through queueFrameActions.
             jumpToFrame(0);
             goto label_27;
         }
@@ -454,8 +457,9 @@ int AptCIH::tick()
         pMovie->doFrameControls(&pInst->mDisplayList, this, pInst->mnGotoFrame);
     }
 
-label_27:
-    // ---- (2) queue this frame's actions (LABEL_27) ------------------------
+    // ---- (2) queue this frame's actions -----------------------------------
+    // Normal fall-through ONLY (queueFrameActions @0x82B0C034). The single-frame and
+    // end-wrap paths jump PAST this block to the enterFrame stage (label_27 below).
     {
         const uint32_t nFlags2 = pInst->mnClipActionFlags;
         if (((nFlags2 & 0x40u) != 0) || (((nFlags2 & 0x80u) != 0) && gbAptRecorderGate != 0))
@@ -469,7 +473,8 @@ label_27:
         }
     }
 
-    // ---- (3) enterFrame clip event ----------------------------------------
+label_27:
+    // ---- (3) enterFrame clip event (LABEL_27 / loc_82B0C040) --------------
     // A non-fresh clip (or a custom-control 0x24 char family) with an onEnterFrame
     // handler (clip-event mask bit 0x200, or a __proto__ event member) queues the
     // enterFrame event (mask 2).

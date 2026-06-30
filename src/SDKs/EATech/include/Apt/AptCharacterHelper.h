@@ -54,11 +54,17 @@ public:
     // instance AFTER InsertChild, not to this shared template.
     static AptCIH* CreateTextCharacterInst();
 
-    // CreateMovieCharacterInst @0x82B0BC.. -- the sibling lazy builder for the shared
-    // default empty MOVIE-CLIP character template (spDefaultMovieCharacter), used by
-    // AS createEmptyMovieClip. FLAG: body its own TU; declared here so the native
-    // movie-clip methods build the template by name.
-    static AptCharacter* CreateMovieCharacterInst();
+    // CreateMovieCharacterInst @0x82B0BC.. (PS3 @0xF56FC4) -- the sibling lazy builder
+    // for the shared default empty MOVIE-CLIP character template (spDefaultMovieCharacter,
+    // type tag 5), used by AS createEmptyMovieClip: allocate the 68-byte block from the
+    // non-GC Apt pool, zero it, stamp the movie type tag, resolve the level-0 movie's
+    // default character into mpFixupLink, and set the per-type flag. Idempotent at the
+    // call site (only called when the template is still null). Body in the .cpp.
+    //
+    // RECONCILE: returns the level-0 animation node it walked (the X360/PS3 return the
+    // AptCIH*, exactly like the sibling CreateTextCharacterInst); the lone caller
+    // (sMethod_createEmptyMovieClip) ignores the return.
+    static AptCIH* CreateMovieCharacterInst();
 
     // Shutdown @0x82AE2FA0 -- free both cached default templates (text + movie)
     // back to the non-GC Apt pool (each is a 68-byte block) and null the statics.

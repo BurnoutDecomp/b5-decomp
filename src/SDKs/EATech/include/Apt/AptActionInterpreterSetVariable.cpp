@@ -37,7 +37,7 @@ extern bool AptInterp_SetInScopeChain(AptActionInterpreter* pInterp,
 // FLAG: the frame-context fallback store (the no-scope-chain / type-12-37 / CIH
 // paths -- the interpreter frame context + AptFrameStack::CreateFrameStack).
 extern bool AptInterp_SetVariableFallback(AptActionInterpreter* pInterp, AptValue* pContext,
-                                          const EAStringC* pName, AptValue* pValue);
+                                          const EAStringC* pName, AptValue* pValue, int nDirect);
 
 int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
     const EAStringC* pName, AptValue* pValue, int nAllowScopeChain, int nSearchScopeChain, int nDirect)
@@ -86,7 +86,7 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
         }
 
         // FLAG: CIH (type 12/37) + frame-context hash fallback (AptFrameStack layer).
-        return AptInterp_SetVariableFallback(this, pContext, &name, pValue) ? 1 : 0;
+        return AptInterp_SetVariableFallback(this, pContext, &name, pValue, nDirect) ? 1 : 0;
     }
 
     // No scope-chain search: store in the context's native hash directly. (FLAG: the

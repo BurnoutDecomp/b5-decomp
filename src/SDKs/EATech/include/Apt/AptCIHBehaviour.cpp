@@ -21,6 +21,8 @@
 #include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"        // AptCurrentRenderTreeManager + Update_Item*
 #include "SDKs/EATech/include/Apt/AptTarget.h"                   // gpAptTarget (the Apt context singleton)
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"          // AptAnimationTarget (animation director)
+#include "SDKs/EATech/include/Apt/AptLinker.h"                   // AptLinker::CancelLoad (mpLinker @+0x20)
+#include "SDKs/EATech/include/Apt/AptActionQueue.h"              // AptActionQueueC::RemoveActionFor (mpActionQueue)
 #include "SDKs/EATech/include/Apt/AptRenderingContext.h"         // multMatrix + gAptIdentityMatrix
 #include "SDKs/EATech/include/Apt/AptCharacterShape.h"           // shape/static-text leaf bounds (mBounds@+0x10)
 #include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"     // dyn-text leaf bounds (GetBoundsConst)
@@ -29,6 +31,8 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                      // DOGMA_PoolManager
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"               // gpGCPoolManager Allocate/Deallocate
 #include "SDKs/EATech/Apt/AptValueGCAllocator.h"                 // AptValueGC_MemItem::SetIsAllocated
+#include "SDKs/EATech/include/Apt/AptActionQueue.h"              // AptActionQueueC (queueClipEvents enqueue)
+#include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"        // mergeState shim cast target
 
 #include <cmath>   // sqrtf
 
@@ -1277,4 +1281,465 @@ bool AptCIH::ProcessTextInst()
         }
     }
     return true;
+}
+
+// ===========================================================================
+// Behavioural batch 8 -- the un-homed AptCIH behavioural cluster ("AptCIH" link
+// cluster): the mask resolver, the clip-event predicates + queue, the generalised-
+// process per-node pass, ClearCIH teardown, and the free-function shims the sibling
+// TUs (AptDisplayList / AptLinker / AptAnimationTarget / AptCIHNativeFunctionHelper)
+// reference by name. DECOMPILED from the PS3 EXTERNAL ELF (DWARF-named) + the X360
+// ARTIST.XEX, cross-checked. EnsureStringAllocated (the deep dynamic-text/glyph layout
+// engine) stays a FLAG stub -- its body belongs with the Apt text/font subsystem TU.
+// ===========================================================================
+
+#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // (cluster shim types)
+
+// ---- FLAG (un-homed runtime singletons referenced by the deep cluster bodies; each
+// declared verbatim by its console-name equivalent, bodies/storage owned by the
+// AS-interpreter, GC, and Apt-runtime boot TUs) ------------------------------------
+// AddToRemList (console AptAnimationTarget::AddToRemList @0x82B...): queue a node that
+// is still externally referenced onto the animation director's removal list.
+void AptAnimationTarget_AddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem);
+
+// PreDestroy hook (console dword_8324E8A0): the optional process-wide pre-destroy notify
+// callback; null until a host installs it. Owned by the Apt-runtime boot TU.
+extern void (*gpAptCIHPreDestroyHook)(AptCIH* pCIH);   // dword_8324E8A0
+
+// ---------------------------------------------------------------------------
+// GetMask @0x82AE7B48 -- the current mask SLAVE of this MASTER node. The X360 first
+// gates on the master render item carrying a mask: hasMask flag (mFlags bit29 /
+// 0x20000000 at render-item +0x18 == GetHasMask) AND a non-null mask pointer
+// (render-item +0x1C == GetMask) AND this value containing a native hash (vtbl slot 3
+// == ContainsNativeHashVirtual). When all hold, it looks the slave up under the
+// "#!MASKMASTER!#" key in this master's per-instance property hash.
+// ---------------------------------------------------------------------------
+AptCIH* AptCIH::GetMask() const
+{
+    AptRenderItem* pRenderItem = mpCharacterInst->GetRenderItem();
+    if (!pRenderItem->GetHasMask() ||
+        !pRenderItem->GetMask() ||
+        !const_cast<AptCIH*>(this)->ContainsNativeHashVirtual())
+    {
+        return nullptr;
+    }
+
+    const EAStringC strMaskMaster("#!MASKMASTER!#");
+    AptNativeHash* pHash = mpCharacterInst ? mpCharacterInst->mpProperties : nullptr;
+    return pHash ? static_cast<AptCIH*>(pHash->Lookup(strMaskMaster)) : nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// HasClipEvent @0x82B027C0 -- the sprite-base clip-event flag set (the high 24 bits of
+// mnClipActionFlags, read here `>> 8`) intersected with nEventMask. The X360 reads the
+// char inst's +0x14 word unconditionally (only valid on a sprite-base node).
+// ---------------------------------------------------------------------------
+bool AptCIH::HasClipEvent(int nEventMask)
+{
+    const AptCharacterSpriteInstBase* pSpriteInst =
+        static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
+    return ((pSpriteInst->mnClipActionFlags >> 8) & static_cast<uint32_t>(nEventMask)) != 0;
+}
+
+// HasEvent @0x82B02838 -- a packed clip-event flag OR an AS __proto__ handler matches.
+bool AptCIH::HasEvent(int nEventMask)
+{
+    if (HasClipEvent(nEventMask))
+        return true;
+    return HasEventMember(nEventMask) != 0;
+}
+
+// ---------------------------------------------------------------------------
+// queueClipEvents @0x82B0... -- scan + dispatch this node's handlers for nEventMask.
+//
+// FAITHFUL CORE (from the PS3 DWARF body): no-op on a dynamic-text node (char type tag
+// 2) or when the node carries no matching handler at all (HasEvent). When the sprite's
+// per-instance clip-event record table carries an entry whose mask matches, the entry's
+// queued action is pushed onto the animation director's deferred-action queue (front for
+// enterFrame mask 2 / the keyframe-id-gated 0x20000 path, back otherwise), stamped with
+// nFrameId. The byte-code-block construction + AS-interpreter execution of a matched
+// record entry (masks 512 / 4 -> a fresh AptScriptFunctionByteCodeBlock run through
+// gAptActionInterpreter) and the bDeferred __proto__-member dispatch are the deferred
+// AS-execution sub-paths -- FLAG'd to the cluster callee below until that engine is homed.
+// ---------------------------------------------------------------------------
+
+// FLAG (un-homed AS-execution sub-path; console sub-section of AptCIH::queueClipEvents):
+// build + run the matched clip-event's byte-code block (masks 512/4) and the bDeferred
+// __proto__ event-member dispatch, through gAptActionInterpreter + AptScriptFunction-
+// ByteCodeBlock. Declared here so the homed core names it; bodied with the AS interpreter
+// execution TU. Returns 1 when a handler was dispatched.
+int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned int nFrameId,
+                                      int bDeferred);
+
+AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDeferred)
+{
+    AptCharacterInst* const pInst = mpCharacterInst;
+
+    // Dynamic-text nodes (type tag 2) never carry clip events; and a node with no
+    // matching handler at all short-circuits to 0.
+    if (pInst->GetTypeTag() == 2u || !HasEvent(nEventMask))
+        return reinterpret_cast<AptValue*>(0);
+
+    // The faithful record-table scan + the AS byte-code execution / __proto__ dispatch
+    // live in the deferred AS-execution sub-path (FLAG). The integer result the X360
+    // returns (0 / 1) is what every caller treats truthily; carried back as the shared
+    // value pointer's int role.
+    const int nRan = AptCIH_queueClipEvents_RunMatched(this, nEventMask, nFrameId, bDeferred);
+    return reinterpret_cast<AptValue*>(static_cast<intptr_t>(nRan));
+}
+
+// ---------------------------------------------------------------------------
+// GeneralisedProcess @ per-node -- the deferred generalised-process pass over one node.
+//
+// When the early-return gate is armed (AptCIH::sbGeneralisedProcessEarlyReturn) the node
+// is skipped unless it is a defined, non-dead (CIHState != 3), subtree-or-self-dirty
+// (mFlagsA bits 23/24) node whose render item is flagged dirty (mFlags bit31 set, or the
+// 0x40000000 process bit). The registered process callbacks (sCIHProcessCb[0..2]) run and
+// their results are OR'd; a sprite(5)/animation(9) recurses its child display list. The
+// fold is written back into the subtree-dirty bit (mFlagsA bit23) and returned (0/1).
+// ---------------------------------------------------------------------------
+
+// FLAG (un-homed Apt-runtime generalised-process state; console AptCIH::bEarlyReturn /
+// AptCIH::sCIHProcessCb[0..2] / AptCIH::nTreeDepth): the process gate flag, the up-to-three
+// registered per-node process callbacks, and the recursion-depth counter. Owned + installed
+// by the Apt generalised-process boot TU; declared here so the homed pass names them.
+extern bool AptCIH_sbGeneralisedProcessEarlyReturn;                                   // bEarlyReturn
+extern unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*);                 // sCIHProcessCb
+extern unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*);                // sCIHProcessCb1
+extern unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*);               // sCIHProcessCb2
+extern int AptCIH_snGeneralisedProcessTreeDepth;                                      // nTreeDepth
+
+unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
+{
+    if (AptCIH_sbGeneralisedProcessEarlyReturn)
+    {
+        if (!getIsDefined())
+            return 0;
+        if (((mFlagsA >> 29) & 3u) == 3u)         // CIHState 3 == dead
+            return 0;
+        if ((mFlagsA & 0x01800000u) == 0u)         // neither subtree (bit23) nor self (bit24) dirty
+            return 0;
+        const uint32_t nItemFlags = mpCharacterInst->GetRenderItem()->mFlags;
+        // X360: v5 >= 0 && (v5 & 0x40000000) == 0  ->  skip  (a non-dirty render item).
+        if ((nItemFlags & 0x80000000u) == 0u && (nItemFlags & 0x40000000u) == 0u)
+            return 0;
+    }
+
+    unsigned int nResult = 0;
+    if (AptCIH_sCIHProcessCb)
+        nResult = AptCIH_sCIHProcessCb(this, pRoot, pContext);
+    if (AptCIH_sCIHProcessCb1)
+        nResult = AptCIH_sCIHProcessCb1(this, pRoot, pContext) | nResult;
+    if (AptCIH_sCIHProcessCb2)
+        nResult = AptCIH_sCIHProcessCb2(this, pRoot, pContext) | nResult;
+
+    const uint32_t nType = mpCharacterInst->GetTypeTag();
+    if (nType == 5u || nType == 9u)
+    {
+        ++AptCIH_snGeneralisedProcessTreeDepth;
+        AptCharacterSpriteInstBase* pSprite =
+            static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
+        // FLAG (x64): AptDisplayList::GeneralisedProcess's first arg is the root context
+        // (a pointer in the X360) modelled as int in its existing signature; the pointer
+        // is carried through the int parameter (the DL walk only re-passes it to each
+        // node's GeneralisedProcess, never dereferencing it here).
+        const int nRootArg = static_cast<int>(reinterpret_cast<intptr_t>(pRoot));
+        nResult = static_cast<unsigned int>(
+                      pSprite->mDisplayList.GeneralisedProcess(nRootArg, -1, 0))
+                  | nResult;
+        --AptCIH_snGeneralisedProcessTreeDepth;
+    }
+
+    // Fold the OR'd result into the subtree-dirty bit (mFlagsA bit23), leaving every
+    // other bit untouched (the X360 rotate-mask idiom).
+    mFlagsA = (mFlagsA & 0xFF7FFFFFu) | ((nResult << 23) & 0x00800000u);
+    return (mFlagsA >> 23) & 1u;
+}
+
+// ===========================================================================
+// ClearCIH @0x82AF6020 -- tear down this node's placed character state.
+//
+// FAITHFUL (from the X360 ARTIST.XEX + PS3 DWARF): early-out on a transitioning
+// (CIHState == 1) or never-constructed (mFlagsA bit27 clear) node. Clear the dirty
+// bit, drop the node from the animation director's pending action/new-instance tables
+// and the input-target's drag/focus slots, drop its per-frame timer functions when it
+// is an animation (type tag 9), then -- when it is a mask master or slave -- unwire the
+// "#!MASKMASTER!#"/"#!MASKSLAVE!#" cross-links + render-item mask flags (reusing GetMask
+// / SetGeneralizedProcessDirtyState / the render-tree mask-state notify). Finally swap in
+// a fresh "none" character instance (bClearGCRoots) or null the slot, GC-tear-down + free
+// the old instance, and run the value teardown.
+//
+// FLAG: the deferred AS-execution tail (the type-5/16 unload-event dispatch +
+// callFunction, the zombie-vector push + partial GC, and the host render hook
+// dword_8324E8C8) is the deep AS-interpreter / GC sub-path -- routed through the cluster
+// callee below until that engine is homed. The observable state teardown (the mask
+// unwiring + the char-inst swap/free) is reconstructed faithfully here.
+// ===========================================================================
+
+// FLAG (un-homed action-queue / new-inst / input-target / GC sub-paths of ClearCIH;
+// console sub_82ADBD50 + __::remove + the off_8324E528 zombie vector + dword_8324E8C8
+// render hook + AptPartialGarbageCollection). Drops this node from every deferred queue
+// the director / input target hold it in, runs the unload-event + zombie/GC tail, and
+// returns nonzero when the node became a zombie (so ClearCIH skips the immediate free).
+int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool bClearGCRoots);
+
+void AptCIH::ClearCIH(bool bClearGCRoots)
+{
+    // Transitioning (CIHState == 1) or not defined -> no-op. NB the second test reads the
+    // AptValue base bitfield at +4 (mnValueData bit27 == mbIsDefined), NOT mFlagsA at +0xC.
+    // console @0x82AF6020: `lwz r11,0xC` CIHState==1, then `lwz r11,4; extrwi. r11,r11,1,4`.
+    if (((mFlagsA & 0x60000000u) == 0x20000000u) || !getIsDefined())
+        return;
+
+    SetDirtyState(false, false);
+
+    // Drop the node from the director's deferred-action / new-instance tables, the input
+    // target's drag/focus slots, the new-insts table, and (when it became externally
+    // referenced) the zombie vector + partial GC; run the unload-event tail. Returns
+    // nonzero when the node was queued as a zombie (the instance is NOT freed below).
+    const int nBecameZombie = AptCIH_ClearCIH_DrainQueuesAndZombie(this, bClearGCRoots);
+
+    // Animation node (type tag 9) -> remove its per-frame timer functions.
+    if (mpCharacterInst->GetTypeTag() == 9u && gpAptTarget != nullptr)
+        gpAptTarget->mpAnimationTarget->RemoveTimerFunctions(this);
+
+    // ---- mask MASTER teardown: this node owns a mask (render item hasMask + a slave) --
+    AptRenderItem* pRenderItem = mpCharacterInst->GetRenderItem();
+    if (pRenderItem->GetHasMask() && pRenderItem->GetMask())
+    {
+        const EAStringC strMaskMaster("#!MASKMASTER!#");
+        const EAStringC strMaskSlave("#!MASKSLAVE!#");
+        if (AptCIH* pSlave = GetMask())
+        {
+            if (AptRenderTreeManager* pManager = AptCurrentRenderTreeManager())
+                pManager->Update_ItemSetMaskState(pSlave, gnCurrUpdateTick, false);
+            pSlave->mpCharacterInst->GetRenderItemWritable()->SetIsMask(false, nullptr);
+            pSlave->SetGeneralizedProcessDirtyState(false);
+            if (AptNativeHash* pSlaveHash =
+                    pSlave->mpCharacterInst ? pSlave->mpCharacterInst->mpProperties : nullptr)
+                pSlaveHash->Unset(strMaskSlave);
+        }
+        if (AptNativeHash* pMasterHash =
+                mpCharacterInst ? mpCharacterInst->mpProperties : nullptr)
+            pMasterHash->Unset(strMaskMaster);
+        mpCharacterInst->GetRenderItemWritable()->SetHasMask(false, nullptr);
+    }
+
+    // ---- mask SLAVE teardown: this node IS a mask (render item isMask) -----------------
+    if (mpCharacterInst->GetRenderItem()->GetIsMask())
+    {
+        const EAStringC strMaskMaster("#!MASKMASTER!#");
+        const EAStringC strMaskSlave("#!MASKSLAVE!#");
+        AptNativeHash* pSlaveHash =
+            mpCharacterInst ? mpCharacterInst->mpProperties : nullptr;
+        AptCIH* pMaster = pSlaveHash
+            ? static_cast<AptCIH*>(pSlaveHash->Lookup(strMaskSlave))
+            : nullptr;
+        if (pMaster)
+        {
+            pMaster->mpCharacterInst->GetRenderItemWritable()->SetHasMask(false, nullptr);
+            mpCharacterInst->GetRenderItemWritable()->SetIsMask(false, nullptr);
+            SetGeneralizedProcessDirtyState(false);
+            if (pSlaveHash)
+                pSlaveHash->Unset(strMaskSlave);
+            if (AptNativeHash* pMasterHash =
+                    pMaster->mpCharacterInst ? pMaster->mpCharacterInst->mpProperties : nullptr)
+                pMasterHash->Unset(strMaskMaster);
+        }
+    }
+
+    // ---- char-instance teardown -------------------------------------------------------
+    AptCharacterInst* pOld = mpCharacterInst;
+    if (pOld == nullptr)
+    {
+        mFlagsA &= ~0x80000000u;
+        Release();   // X360 vtable slot +5 (the deleting-destructor path through Release)
+        return;
+    }
+
+    // When the deferred tail queued this node as a zombie, the old instance is preserved
+    // (it lives on for AS visibility); only the immediate-free path runs the swap.
+    if (nBecameZombie == 0)
+    {
+        setGCRoot(0);
+        if (bClearGCRoots)
+        {
+            // Replace the old instance with a fresh "none" + carry the render data across.
+            AptCharacterInst* pNone = AptCharacterInst::CreateCharacterInst(nullptr);
+            mpCharacterInst = pNone;
+            pNone->MoveRenderDataFrom(pOld);
+        }
+        else
+        {
+            mpCharacterInst = nullptr;
+        }
+
+        // Notify the render tree the old item was removed (when it still had one), tear
+        // down its property hash, then GC-destroy + free it.
+        if (pOld->mpRenderItem != nullptr)
+        {
+            if (AptRenderTreeManager* pManager = AptCurrentRenderTreeManager())
+                pManager->Update_ItemRemoved(pOld->GetRenderItemWritable(), gnCurrUpdateTick);
+        }
+        if (pOld->mpProperties != nullptr)
+        {
+            pOld->mpProperties->DestroyGCPointers();
+            pOld->mpProperties->~AptNativeHash();
+            gpNonGCPoolManager->Deallocate(pOld->mpProperties, sizeof(AptNativeHash));
+            pOld->mpProperties = nullptr;
+        }
+        pOld->DestroyGCPointers();
+        pOld->~AptCharacterInst();
+        gpNonGCPoolManager->Deallocate(pOld, sizeof(AptCharacterInst));
+
+        mFlagsA &= ~0x80000000u;
+        Release();
+    }
+}
+
+// ===========================================================================
+// Free-function shims -- the AptCIH_* / AptDisplayList_* entry points the sibling Apt
+// TUs reference by name (the X360 calls each with the receiver in r3). Each forwards to
+// the now-homed method so there is a single definition.
+// ===========================================================================
+
+// AptCIH_tick -- AptCIH::tick @0x82B0BED8 (homed in AptCIH.cpp).
+void AptCIH_tick(AptCIH* pCIH) { pCIH->tick(); }
+
+// AptCIH_GeneralisedProcess -- AptCIH::GeneralisedProcess per-node. The AptDisplayList
+// walk passes (node, nFlags) where nFlags is the walk's `a2` (the root context pointer
+// in the X360); the third (void* context) arg is unused by that call site (r5 carries
+// the leftover), so it is forwarded as null.
+int AptCIH_GeneralisedProcess(AptCIH* pCIH, int a2)
+{
+    // FLAG (x64): the X360 a2 is the root-context pointer; the existing free-shim/DL
+    // signatures carry it through `int`, so widen back via intptr_t (the value is only
+    // re-passed, never dereferenced through this width).
+    AptCIH* const pRoot = reinterpret_cast<AptCIH*>(static_cast<intptr_t>(a2));
+    return static_cast<int>(pCIH->GeneralisedProcess(pRoot, nullptr));
+}
+
+// AptCIH_queueClipEvents -- AptCIH::queueClipEvents (canonical (int, unsigned int, int)).
+// The console passes the CIH as an AptValue*; narrow to the node.
+AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, unsigned int nFrameId, int bDeferred)
+{
+    return static_cast<AptCIH*>(pCIH)->queueClipEvents(nEventMask, nFrameId, bDeferred);
+}
+
+// AptCIH_SetCharacterInst -- AptCIH::SetCharacterInst @0x82B00548 (homed above).
+void AptCIH_SetCharacterInst(AptCIH* pCIH, AptCharacterInst* pInst, int bFlag)
+{
+    pCIH->SetCharacterInst(pInst, bFlag != 0);
+}
+
+// AptCIH_InsertChild -- AptCIH::InsertChild @0x82B09CA0: place pCharacter into pNode's
+// child display list (mpCharacterInst->mDisplayList) at nDepth under pName. The X360
+// seeds the placement field (a6/nPlacementField18) from pSource's char-inst render-item
+// +0x18 when pSource is given, then forwards to AptDisplayList::placeObject.
+AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharacter,
+                           int nDepth, EAStringC* pName, AptValue* pInitObject)
+{
+    AptCharacterSpriteInstBase* pSpriteInst =
+        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
+    AptDisplayList* pChildList = &pSpriteInst->mDisplayList;
+
+    // console @0x82B09CD0: a SINGLE deref reads the source char-inst's subclass placement
+    // slot at +0x18 (`lwz r29,0x18(*(a2+0x20))`) -- the same field AptCharInst_SetPlacement-
+    // Field18 writes; encapsulated (subclass-specific role), NOT the render-item mFlags.
+    extern uint32_t AptCharInst_GetPlacementField18(AptCharacterInst* pInst);
+    uint32_t nPlacementField18 = 0;
+    if (pSource != nullptr)
+        nPlacementField18 = AptCharInst_GetPlacementField18(pSource->GetCharacterInst());
+
+    return pChildList->placeObject(
+        /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, pNode,
+        /*bForceRemove*/ 1, /*nClipDepth*/ -1, /*fFrameValue*/ 0.0,
+        /*pColorXForm*/ nullptr, /*pPositionMatrix*/ nullptr,
+        nPlacementField18, /*pClassObject*/ pInitObject);
+}
+
+// AptDisplayList_mergeState -- AptDisplayList::mergeState @0x82B0B438 (homed in
+// AptDisplayList.cpp). The X360 passes the source AptPseudoDisplayList directly as the
+// merge-info pointer (its [0]=inner list / [1]=owning parent are read inside), the
+// AS property hash as pParentHash, and bForward as the keep-removed flag.
+void* AptDisplayList_mergeState(AptDisplayList* pList, AptPseudoDisplayList* pScratch,
+                                void* pProperties, char bForward)
+{
+    return pList->mergeState(reinterpret_cast<void**>(pScratch),
+                             static_cast<AptNativeHash*>(pProperties), bForward);
+}
+
+// AptCIH_PreDestroyHook -- AptCIH::PreDestroy's optional notify hook (console
+// dword_8324E8A0). When a host has installed the callback, dispatch to it; else no-op.
+void AptCIH_PreDestroyHook(AptCIH* pCIH)
+{
+    if (gpAptCIHPreDestroyHook)
+        gpAptCIHPreDestroyHook(pCIH);
+}
+
+// ===========================================================================
+// AptDisplayListState::AddToDelayReleaseList @0x82AFD028 -- detach pItem from the live
+// list and (when still externally referenced) queue it on the director's removal list,
+// then release it. The X360: call the item's vtable[0] (PreDestroy/instantiated hook),
+// removeItem it from this list, AptCIH::Remove(item, bDelay), and -- when its refcount
+// field (mValueBitfield count, the 0x03FFC000 packed field > 0x4000 i.e. > 1) shows an
+// outside reference -- AddToRemList it; finally tail-call its Release (vtable[1]).
+// ===========================================================================
+// ===========================================================================
+// EnsureStringAllocated @0x82B06F08 -- FLAG STUB (the deep dynamic-text build/layout
+// engine). The PS3 DWARF body is ~200 lines that drive AptCharacterTextInst::UpdateText
+// + the glyph/TextFormat layout engine that bakes a dynamic-text field's render data
+// (resolves the inherited TextFormat off pParent, walks the glyph table, lays out lines,
+// and writes the baked render-data handle back into the render item). That whole subsystem
+// (the Apt text/font layout engine) is un-homed; reconstructing it faithfully here would
+// require homing it wholesale. Left a faithful no-op stub so ProcessTextInst / the AS
+// createTextField path LINK; the field simply keeps its prior (unresolved) render data
+// until the text engine TU lands. NOT fabricated -- a deliberate deferred-subsystem stub.
+// ===========================================================================
+void AptCIH::EnsureStringAllocated(AptCIH* /*pParent*/)
+{
+    // FLAG: deferred -- the dynamic-text/glyph layout engine (its own TU).
+}
+
+AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
+{
+    // X360: (**pItem)(pItem) -- the value's vtable[0] (PreDestroy / instantiated hook).
+    pItem->PreDestroy();
+
+    removeItem(pItem);
+    pItem->Remove(bDelay);
+
+    // refcount > 1 (an outside reference survives) -> queue on the director's rem list.
+    if (pItem->getRefCount() > 1u && gpAptTarget != nullptr)
+        AptAnimationTarget_AddToRemList(gpAptTarget->mpAnimationTarget, pItem);
+
+    pItem->Release();   // X360 vtable[1]
+    return pItem;
+}
+
+// ===========================================================================
+// Apt-context teardown shims -- the two free helpers AptCIH::Remove @0x82AFC0B0
+// calls before clearing the node. Both reach into the active Apt context
+// (gpAptTarget, console off_8324E574) and forward to the owning sub-object; the
+// X360 inlines these reads at Remove's call sites (no separate function), so the
+// free-function form is the decompile-time split. Homed here next to Remove.
+// ===========================================================================
+
+// AptApt_CancelLoad -- cancel this node's in-flight asset load through the context's
+// file linker. X360 @0x82AFC0C8: r3 = gpAptTarget->mpLinker (+0x20); r4 = pNode;
+// AptLinker::CancelLoad(linker, pNode). pNode (an AptCIH) is an AptValue, the
+// CancelLoad arg type.
+void AptApt_CancelLoad(AptCIH* pNode)
+{
+    gpAptTarget->mpLinker->CancelLoad(pNode);
+}
+
+// AptApt_RemoveActionFor -- drop every ActionScript action queued against this node.
+// X360 @0x82AFC0D8: r11 = gpAptTarget->mpAnimationTarget (+0x18); r3 =
+// animTarget->mpActionQueue (+0x0C); r4 = pNode; AptActionQueueC::RemoveActionFor(
+// queue, pNode). The console discards the AptValue* return; void here to match the
+// call-site declaration.
+void AptApt_RemoveActionFor(AptCIH* pNode)
+{
+    gpAptTarget->mpAnimationTarget->mpActionQueue->RemoveActionFor(pNode);
 }

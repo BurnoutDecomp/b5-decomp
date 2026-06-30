@@ -345,6 +345,51 @@ AptValue* AptString::sMethod_substring(AptString* pThis, int nArgCount)
     return pResult;
 }
 
+// ---------------------------------------------------------------------------
+// sMethod_substr @0x82AFCE5C (PS3 EXTERNAL DecFIGS 0xF41074) -- the legacy AS
+// String.substr(start, length): the COUNT-based cousin of slice/substring. Return
+// `length` characters starting at character `start`. A negative `start` counts back
+// from the end (start += UTF8 length). With no `length` argument the slice runs to
+// the end of the string. With no arguments at all the call is malformed -> undefined.
+// The args sit on the native-arg stack (top == start, next == length).
+//
+// DECOMPILED from the PS3 body: a2 is the script arg count (undefined when 0); start
+// is toInteger(arg-stack top), defaulting -1; the second arg's toInteger is the
+// length; the negative-start fold is `if (start < 0) start += UTF8_Size`; the extract
+// is UTF8_Mid(start, length) via the shared AptUTF8_SubString helper (a missing/large
+// length runs to the end, matching the PS3 one-arg UTF8_Mid tail).
+// ---------------------------------------------------------------------------
+AptValue* AptString::sMethod_substr(AptString* pThis, int nArgCount)
+{
+    if (nArgCount == 0)
+        return gpUndefinedValue;
+
+    int nStart  = -1;
+    int nLength = 9999999;   // no length arg -> run to the end (PS3 one-arg UTF8_Mid)
+    if (nArgCount >= 1)
+        nStart  = gppAptNativeArgStack[gnAptNativeArgCount - 1]->toInteger();
+    if (nArgCount >= 2)
+        nLength = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();
+
+    EAStringC strThis;
+    pThis->toString(&strThis);
+    const int nUtf8Size = strThis.UTF8_Size();
+
+    // PS3 (0xF41074): v10 = start + UTF8_Size; if (start < 0) start = v10 (negative -> from
+    // end). NB there is NO clamp-to-0 here: a still-negative start is passed straight into
+    // AptUTF8_SubString, whose own `iCount -= iStart; iStart = 0` GROWS the count to preserve
+    // the end. Pre-clamping start to 0 (without growing nLength) would drop |start+size| chars.
+    if (nStart < 0)
+        nStart += nUtf8Size;
+
+    EAStringC strSlice;
+    AptUTF8_SubString(&strSlice, &strThis, nStart, nLength);   // start + COUNT
+
+    AptString* pResult = AptString::Create("");
+    *pResult->GetInternalString() = strSlice;
+    return pResult;
+}
+
 // sMethod_split @0x82AFC518 -- AS String.split(separator, limit). Always returns
 // a freshly-allocated AptArray.
 //
