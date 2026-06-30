@@ -33,8 +33,9 @@
 #include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"        // DOGMA_PoolManager::Allocate/Deallocate
 
-#include <cstring>   // strlen/strcmp/memcpy/memmove/memset/memcmp
+#include <cstring>   // strlen/strcmp/memcpy/memmove/memset/memcmp/strstr/strchr
 #include <cstdlib>   // malloc/free (the AptInit-not-yet-wired bring-up fallback)
+#include <cctype>    // tolower/toupper (the UTF8_Make{Lower,Upper} case fold)
 #include <string.h>  // _stricmp (MSVC strcasecmp, for the case-insensitive compares)
 
 // ---------------------------------------------------------------------------
@@ -409,3 +410,605 @@ bool EAStringC::EqualNoCaseHash(const EAStringC& strText) const
 // ---------------------------------------------------------------------------
 void EAStringC::MemInitialize(AptUserFunctions* const callbacks) { sAptCallbacks = callbacks; }
 void EAStringC::MemUninitialize()                                { sAptCallbacks = 0; }
+
+// ===========================================================================
+// Text-manipulation suite (the Apt-driven path: substring / search / append /
+// trim / UTF-8). Bodies DECOMPILED from X360 ARTIST and cross-checked against
+// the demangled PS3 External ELF (the GCC-mangled _ZNK9EAStringC... symbols,
+// which name the StringDataC fields directly). Addresses are noted per group.
+//
+// All counts/lengths are the named 16-bit StringDataC fields (m_uSize/m_uMaxSize)
+// widened to int; the refcount machinery reuses the leaf helpers above (the same
+// console-atomic-vs-PC-plain FLAG already documented at IncreaseInternalRefCount).
+// The substring builders (Left/Mid/Right) follow the console shape exactly: take
+// a private reference on the source block, ChangeBuffer the desired slice into a
+// throw-away string, then hand its block to *this and release the temp.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// UTF-8 cursor primitives (static).  X360 0x82AD8818 / 0x82AD8860 / 0x82AD8A88 /
+// 0x82AD88D0 / 0x82AD8978.  These are the codec leaf the UTF8_* members ride on.
+// ---------------------------------------------------------------------------
+int32_t EAStringC::UTF8_GetCharacterSize(const char* const pBuffer)
+{
+    const unsigned int c = static_cast<unsigned char>(pBuffer[0]);
+    if (c <= 0x7F)
+        return 1;
+    if ((c & 0xE0) == 0xC0)
+        return 2;
+    // 0xE0 lead -> 3 bytes, anything higher -> 4 bytes.
+    return ((c & 0xF0) == 0xE0) ? 3 : 4;
+}
+
+int32_t EAStringC::UTF8_GetCharacterSize(const int32_t iCharacter)
+{
+    if (iCharacter < 0x80)    return 1;
+    if (iCharacter < 0x800)   return 2;
+    if (iCharacter < 0x10000) return 3;
+    return 4;
+}
+
+int32_t EAStringC::UTF8_GetCharacter(const char* const pBuffer)
+{
+    const unsigned int c = static_cast<unsigned char>(pBuffer[0]);
+    if (c <= 0x7F)
+        return static_cast<int32_t>(c);
+    if ((c & 0xE0) == 0xC0)
+        return static_cast<int32_t>(((c << 6) & 0x7C0) | (static_cast<unsigned char>(pBuffer[1]) & 0x3F));
+    const unsigned int b1 = static_cast<unsigned char>(pBuffer[1]);
+    if ((c & 0xF0) == 0xE0)
+        return static_cast<int32_t>((((((c << 6) & 0x3C0) | (b1 & 0x3F)) << 6)) |
+                                    (static_cast<unsigned char>(pBuffer[2]) & 0x3F));
+    return static_cast<int32_t>(
+        (((((((c << 6) & 0x1C0) | (b1 & 0x3F)) << 6) | (static_cast<unsigned char>(pBuffer[2]) & 0x3F)) << 6)) |
+        (static_cast<unsigned char>(pBuffer[3]) & 0x3F));
+}
+
+const char* EAStringC::UTF8_ReadCharacter(const char* const pBuffer, int32_t* const iCharacter)
+{
+    const unsigned int c = static_cast<unsigned char>(pBuffer[0]);
+    if (c <= 0x7F)
+    {
+        *iCharacter = static_cast<int32_t>(c);
+        return pBuffer + 1;
+    }
+    if ((c & 0xE0) == 0xC0)
+    {
+        *iCharacter = static_cast<int32_t>(((c << 6) & 0x7C0) | (static_cast<unsigned char>(pBuffer[1]) & 0x3F));
+        return pBuffer + 2;
+    }
+    const unsigned int b1 = static_cast<unsigned char>(pBuffer[1]);
+    if ((c & 0xF0) == 0xE0)
+    {
+        *iCharacter = static_cast<int32_t>((((((c << 6) & 0x3C0) | (b1 & 0x3F)) << 6)) |
+                                           (static_cast<unsigned char>(pBuffer[2]) & 0x3F));
+        return pBuffer + 3;
+    }
+    *iCharacter = static_cast<int32_t>(
+        (((((((c << 6) & 0x1C0) | (b1 & 0x3F)) << 6) | (static_cast<unsigned char>(pBuffer[2]) & 0x3F)) << 6)) |
+        (static_cast<unsigned char>(pBuffer[3]) & 0x3F));
+    return pBuffer + 4;
+}
+
+void EAStringC::UTF8_SetCharacter(char* const pBuffer, const int32_t iCharacter)
+{
+    if (iCharacter < 0x80)
+    {
+        pBuffer[0] = static_cast<char>(iCharacter);
+        return;
+    }
+    if (iCharacter < 0x800)
+    {
+        pBuffer[0] = static_cast<char>((iCharacter >> 6) | 0xC0);
+        pBuffer[1] = static_cast<char>(0x80 | (iCharacter & 0x3F));
+        return;
+    }
+    if (iCharacter < 0x10000)
+    {
+        pBuffer[0] = static_cast<char>((iCharacter >> 12) | 0xE0);
+        pBuffer[1] = static_cast<char>(0x80 | ((iCharacter >> 6) & 0x3F));
+        pBuffer[2] = static_cast<char>(0x80 | (iCharacter & 0x3F));
+        return;
+    }
+    pBuffer[0] = static_cast<char>((iCharacter >> 18) | 0xF0);
+    pBuffer[1] = static_cast<char>(0x80 | ((iCharacter >> 12) & 0x3F));
+    pBuffer[2] = static_cast<char>(0x80 | ((iCharacter >> 6) & 0x3F));
+    pBuffer[3] = static_cast<char>(0x80 | (iCharacter & 0x3F));
+}
+
+bool EAStringC::UTF8_IsValid(const int32_t iCharacter)
+{
+    return static_cast<uint32_t>(iCharacter) <= 0x10FFFFu;
+}
+
+// Encode a single code point into the (already-reserved) buffer and set the
+// string's size to its byte length.  X360 0x82AD8978.
+void EAStringC::UTF8_SetOneCharacter(const int32_t iCharacter)
+{
+    char* const buf = GetInternalBuffer();
+    const int32_t nBytes = UTF8_GetCharacterSize(iCharacter);
+    UTF8_SetCharacter(buf, iCharacter);
+    buf[nBytes]        = 0;
+    m_pData->m_uSize   = static_cast<uint16_t>(nBytes);
+    m_pData->m_uHash   = 0;
+}
+
+// ---------------------------------------------------------------------------
+// Substring builders.  X360 0x82AE8928 (Left) / 0x82AE8A20 (Mid) / Right (PS3
+// External 0x7F67DC).  Each takes a private ref on the source block, copies the
+// slice via ChangeBuffer into a temp, then transfers ownership to *this.
+// ---------------------------------------------------------------------------
+EAStringC EAStringC::Left(const int32_t iCount) const
+{
+    if (iCount <= 0)
+        return EAStringC(EMPTY_STRING);
+    if (static_cast<uint32_t>(iCount) >= m_pData->m_uSize)
+        return *this;                           // whole string fits -> share the block
+
+    EAStringC temp(*this);                      // private ref on the source block
+    temp.ChangeBuffer(iCount, 0, iCount, CB_PUSH_ZERO, iCount);
+    return temp;
+}
+
+EAStringC EAStringC::Right(const int32_t iCount) const
+{
+    if (iCount <= 0)
+        return EAStringC(EMPTY_STRING);
+    const int32_t iOffset = static_cast<int32_t>(m_pData->m_uSize) - iCount;
+    if (iOffset <= 0)
+        return *this;                           // whole string fits -> share the block
+
+    EAStringC temp(*this);
+    temp.ChangeBuffer(iCount, static_cast<uint32_t>(iOffset), iCount, CB_PUSH_ZERO, iCount);
+    return temp;
+}
+
+EAStringC EAStringC::Mid(const int32_t iFirst) const
+{
+    if (iFirst <= 0)
+        return *this;                           // from the start -> share the block
+    const int32_t iCount = static_cast<int32_t>(m_pData->m_uSize) - iFirst;
+    if (iCount <= 0)
+        return EAStringC(EMPTY_STRING);
+
+    EAStringC temp(*this);
+    temp.ChangeBuffer(iCount, static_cast<uint32_t>(iFirst), iCount, CB_PUSH_ZERO, iCount);
+    return temp;
+}
+
+EAStringC EAStringC::Mid(const int32_t iFirst, const int32_t iCount) const
+{
+    int32_t iStart = iFirst;
+    int32_t iLen   = iCount;
+    if (iFirst < 0)
+    {
+        iLen += iFirst;                          // a negative start eats into the count
+        iStart = 0;
+        if (iLen <= 0)
+            return EAStringC(EMPTY_STRING);
+    }
+    else if (iCount <= 0)
+    {
+        return EAStringC(EMPTY_STRING);
+    }
+
+    const int32_t iAvail = static_cast<int32_t>(m_pData->m_uSize) - iStart;
+    if (iAvail <= 0)
+        return EAStringC(EMPTY_STRING);
+    if (iLen > iAvail)
+        iLen = iAvail;
+
+    EAStringC temp(*this);
+    temp.ChangeBuffer(iLen, static_cast<uint32_t>(iFirst), iLen, CB_PUSH_ZERO, iLen);
+    return temp;
+}
+
+// ---------------------------------------------------------------------------
+// Search.  Find: PS3 External 0x7EEAFC (strstr-based).  LastIndexOf: X360
+// 0x82AD8BF8 (reverse scan).
+// ---------------------------------------------------------------------------
+int32_t EAStringC::Find(const char* const pStrText, const int32_t iStart) const
+{
+    if (static_cast<int32_t>(m_pData->m_uSize) > iStart)
+    {
+        const char* const base = GetInternalBuffer();
+        const int32_t      from = (iStart >= 0) ? iStart : 0;
+        const char* const hit  = strstr(base + from, pStrText);
+        if (hit)
+            return static_cast<int32_t>(hit - base);
+    }
+    return -1;
+}
+
+int32_t EAStringC::LastIndexOf(const char* const pStrText, const int32_t iStart) const
+{
+    const int32_t      iNeedle = static_cast<int32_t>(strlen(pStrText));
+    const char* const  base    = GetInternalBuffer();
+
+    // Highest index where the needle can still fit (size - (needleLen-1) - 1),
+    // clamped to the caller's start cap.
+    int32_t iPos = static_cast<int32_t>(m_pData->m_uSize) - (iNeedle - 1) - 1;
+    if (iStart < iPos)
+        iPos = iStart;
+    if (iPos < 0)
+        return -1;
+
+    for (;;)
+    {
+        const char* p = pStrText;
+        const char* q = base + iPos;
+        while (*p && *q == *p)
+        {
+            ++q;
+            ++p;
+        }
+        if (*p == 0)        // matched the whole needle
+            return iPos;
+        if (--iPos < 0)
+            return -1;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// In-place edit.  Delete: X360 0x82AE8830.  Append: X360 0x82AE86F8.
+// ---------------------------------------------------------------------------
+int32_t EAStringC::Delete(const int32_t iIndex, const int32_t iCount)
+{
+    int32_t iFrom = iIndex;
+    int32_t iTo   = iIndex + iCount;
+    if (iCount <= 0 || iTo <= 0)
+    {
+        // Nothing (or everything before 0) to keep -> empty string.
+        DecreaseInternalRefCount(m_pData);
+        m_pData = reinterpret_cast<DebugDataC*>(&s_EmptyInternalData);
+        IncreaseInternalRefCount();
+        return 0;
+    }
+
+    if (iIndex < 0)
+        iFrom = 0;
+    const int32_t iSize = static_cast<int32_t>(m_pData->m_uSize);
+    if (iTo >= iSize)
+        iTo = iSize;
+
+    if (iFrom == 0)
+    {
+        // Cut the head: keep the tail [iTo .. size).
+        const int32_t iKept = iSize - iTo;
+        ChangeBuffer(iKept, static_cast<uint32_t>(iTo), iKept, CB_PUSH_ZERO, iKept);
+        return iKept;
+    }
+
+    if (iTo != iSize)
+    {
+        // Cut a middle span: keep the head [0 .. iFrom) then splice the tail in.
+        const int32_t iTail = iSize - iTo;
+        const int32_t iKept = iTail + iFrom;
+        char* const   src   = GetInternalBuffer() + iTo;
+        ChangeBuffer(iKept, 0, iFrom, CB_NO_PUSH_ZERO, iKept);
+        memcpy(GetInternalBuffer() + iFrom, src, static_cast<size_t>(iTail) + 1);
+        return iKept;
+    }
+
+    // Cut the tail: keep the head [0 .. iFrom).
+    ChangeBuffer(iFrom, 0, iFrom, CB_PUSH_ZERO, iFrom);
+    return iFrom;
+}
+
+EAStringC& EAStringC::Append(const char* const pStrText, const uint32_t uSize)
+{
+    if (uSize)
+    {
+        // Append at most uSize chars, stopping early at a NUL.
+        uint32_t uLen = 0;
+        const char* p = pStrText;
+        while (uLen < uSize && *p)
+        {
+            ++p;
+            ++uLen;
+        }
+        if (uLen)
+        {
+            const uint32_t uOld = m_pData->m_uSize;
+            ChangeBuffer(uOld + uLen, 0, uOld, CB_PUSH_ZERO, uOld + uLen);
+            memcpy(GetInternalBuffer() + uOld, pStrText, uLen);
+            GetInternalBuffer()[uOld + uLen] = 0;
+        }
+    }
+    return *this;
+}
+
+// ---------------------------------------------------------------------------
+// Trim / suffix-remove.  TrimRight: X360 0x82AE8C58.  EndWithRemove: X360
+// 0x82AE8D00.  EndWithRemoveIgnoreCase: PS3 External 0x7F7208.
+// ---------------------------------------------------------------------------
+EAStringC& EAStringC::TrimRight(const char* const pStrText)
+{
+    const uint32_t uSize = m_pData->m_uSize;
+    uint32_t uTrim = 0;
+    const char* p = GetInternalBuffer() + uSize - 1;
+    while (uTrim < uSize)
+    {
+        if (!strchr(pStrText, static_cast<unsigned char>(*p)))
+            break;
+        --p;
+        ++uTrim;
+    }
+    *this = Left(static_cast<int32_t>(uSize - uTrim));
+    return *this;
+}
+
+bool EAStringC::EndWithRemove(const char* const pStrText)
+{
+    const uint32_t uSize   = m_pData->m_uSize;
+    const uint32_t uNeedle = static_cast<uint32_t>(strlen(pStrText));
+    if (uSize < uNeedle)
+        return false;
+    if (memcmp(GetInternalBuffer() + uSize - uNeedle, pStrText, uNeedle) != 0)
+        return false;
+    *this = Left(static_cast<int32_t>(uSize - uNeedle));
+    return true;
+}
+
+bool EAStringC::EndWithRemoveIgnoreCase(const char* const pStrText)
+{
+    const uint32_t uSize   = m_pData->m_uSize;
+    const uint32_t uNeedle = static_cast<uint32_t>(strlen(pStrText));
+    if (uSize < uNeedle || _stricmp(GetInternalBuffer() + uSize - uNeedle, pStrText) != 0)
+        return false;
+    *this = Left(static_cast<int32_t>(uSize - uNeedle));
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Concatenation.  operator+= : PS3 External _ZN9EAStringCpLEPKc / pLERKS_.
+// free operator+(const char*, const EAStringC&) : X360 0x82AE85D0.
+// ---------------------------------------------------------------------------
+EAStringC& EAStringC::operator+=(const char* const pStrText)
+{
+    const uint32_t uOld = m_pData->m_uSize;
+    if (!uOld)
+    {
+        *this = EAStringC(pStrText);
+        return *this;
+    }
+    const uint32_t uLen = static_cast<uint32_t>(strlen(pStrText));
+    if (!uLen)
+        return *this;
+    ChangeBuffer(uOld + uLen, 0, uOld, CB_NO_PUSH_ZERO, uOld + uLen);
+    memcpy(GetInternalBuffer() + uOld, pStrText, uLen + 1);
+    return *this;
+}
+
+EAStringC& EAStringC::operator+=(const EAStringC& strText)
+{
+    const uint32_t uOld = m_pData->m_uSize;
+    if (!uOld)
+    {
+        *this = strText;
+        return *this;
+    }
+    const uint32_t uAdd = strText.m_pData->m_uSize;
+    if (!uAdd)
+        return *this;
+    ChangeBuffer(uOld + uAdd, 0, uOld, CB_NO_PUSH_ZERO, uOld + uAdd);
+    memcpy(GetInternalBuffer() + uOld, strText.GetInternalBuffer(), uAdd + 1);
+    return *this;
+}
+
+EAStringC operator+(const char* const pStrText, const EAStringC& strText)
+{
+    const uint32_t uTail = strText.m_pData->m_uSize;
+    if (!uTail)
+        return EAStringC(pStrText);             // RHS empty -> just the prefix
+
+    const uint32_t uHead = static_cast<uint32_t>(strlen(pStrText));
+    if (!uHead)
+        return strText;                         // prefix empty -> share the RHS block
+
+    EAStringC result(uHead + uTail);            // reserve head+tail
+    char* const buf = result.GetInternalBuffer();
+    memcpy(buf, pStrText, uHead);
+    memcpy(buf + uHead, strText.GetInternalBuffer(), uTail);
+    buf[uHead + uTail]            = 0;
+    result.m_pData->m_uSize       = static_cast<uint16_t>(uHead + uTail);
+    result.m_pData->m_uHash       = 0;
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// UTF-8 string operations.  X360 0x82ADCFE8 / 0x82ADD040 / 0x82ADD088 /
+// 0x82AE8E70 / 0x82AE8F78 / 0x82AE8FF0 / 0x82AE9068 / 0x82AE90F0 (+ the PS3
+// static UTF8_GetBuffer(char*,int)).
+// ---------------------------------------------------------------------------
+
+// Static: advance pBuffer by iIndex code points; null if the string ends first.
+const char* EAStringC::UTF8_GetBuffer(const char* const pBuffer, const int32_t iIndex)
+{
+    if (iIndex <= 0)
+        return pBuffer;
+
+    const char* p = pBuffer;
+    int32_t     n = 0;
+    for (;;)
+    {
+        int32_t cp;
+        p = UTF8_ReadCharacter(p, &cp);
+        ++n;
+        if (cp == 0)
+            return 0;        // hit the terminator before reaching iIndex
+        if (n == iIndex)
+            return p;
+    }
+}
+
+// Member: the same skip, anchored at this string's buffer.
+const char* EAStringC::UTF8_GetBuffer(const int32_t iIndex)
+{
+    return UTF8_GetBuffer(GetInternalBuffer(), iIndex);
+}
+
+// Code-point count of this string.
+int32_t EAStringC::UTF8_Size() const
+{
+    const char* p = GetInternalBuffer();
+    int32_t     n = 0;
+    for (;;)
+    {
+        int32_t cp;
+        p = UTF8_ReadCharacter(p, &cp);
+        if (cp == 0)
+            break;
+        ++n;
+    }
+    return n;
+}
+
+int32_t EAStringC::UTF8_CharAt(const int32_t iIndex) const
+{
+    const char* const p = UTF8_GetBuffer(GetInternalBuffer(), iIndex);
+    return p ? UTF8_GetCharacter(p) : 0;
+}
+
+// Find a substring, returning a code-point (not byte) index.  The byte offset
+// from Find is converted back to a character count by re-walking the prefix.
+int32_t EAStringC::UTF8_Find(const char* const pStrText, const int32_t iStart) const
+{
+    const char* const base   = GetInternalBuffer();
+    const char* const pStart = UTF8_GetBuffer(base, iStart);
+    if (!pStart)
+        return -1;
+
+    const int32_t iByte = Find(pStrText, static_cast<int32_t>(pStart - base));
+    if (iByte < 0)
+        return -1;
+
+    // Re-walk from the start offset to convert the byte hit into a char index.
+    int32_t     iChar = iStart;
+    const char* p     = pStart;
+    while (p - base < iByte)
+    {
+        p += UTF8_GetCharacterSize(p);
+        ++iChar;
+    }
+    return iChar;
+}
+
+EAStringC EAStringC::UTF8_Mid(const int32_t iFirst) const
+{
+    int32_t iFrom = iFirst;
+    if (iFrom < 0)
+        iFrom = 0;
+    const char* const base   = GetInternalBuffer();
+    const char* const pStart = UTF8_GetBuffer(base, iFrom);
+    if (!pStart)
+        return EAStringC(EMPTY_STRING);
+    return Mid(static_cast<int32_t>(pStart - base));
+}
+
+EAStringC EAStringC::UTF8_Mid(const int32_t iFirst, const int32_t iCount) const
+{
+    int32_t iFrom = iFirst;
+    int32_t iLen  = iCount;
+    if (iFirst < 0)
+    {
+        iLen += iFirst;
+        iFrom = 0;
+        if (iLen <= 0)
+            return EAStringC(EMPTY_STRING);
+    }
+    else if (iCount <= 0)
+    {
+        return EAStringC(EMPTY_STRING);
+    }
+
+    const char* const base   = GetInternalBuffer();
+    const char* const pStart = UTF8_GetBuffer(base, iFrom);
+    if (!pStart)
+        return EAStringC(EMPTY_STRING);
+
+    const char* const pEnd = UTF8_GetBuffer(pStart, iLen);
+    if (pEnd)
+        return Mid(static_cast<int32_t>(pStart - base),
+                   static_cast<int32_t>(pEnd - pStart));
+    return Mid(static_cast<int32_t>(pStart - base));   // ran off the end -> to the tail
+}
+
+EAStringC& EAStringC::UTF8_Append(const char* const pStrText, const int32_t iSize)
+{
+    // Walk iSize code points (stopping early at a NUL) to find the byte length.
+    const char* p = pStrText;
+    int32_t     n = 0;
+    if (iSize > 0)
+    {
+        for (;;)
+        {
+            int32_t cp;
+            p = UTF8_ReadCharacter(p, &cp);
+            if (cp == 0)
+                break;
+            if (++n >= iSize)
+                break;
+        }
+    }
+    return Append(pStrText, static_cast<uint32_t>(p - pStrText));
+}
+
+EAStringC& EAStringC::UTF8_Initialize(const int32_t iCharacter)
+{
+    // Reset to empty, reserve room for one encoded code point, then write it.
+    DecreaseInternalRefCount(m_pData);
+    m_pData = reinterpret_cast<DebugDataC*>(&s_EmptyInternalData);
+
+    const uint32_t uBytes = static_cast<uint32_t>(UTF8_GetCharacterSize(iCharacter));
+    uint32_t uKeep = m_pData->m_uMaxSize;       // empty block's max size (0)
+    if (uKeep > uBytes)
+        uKeep = uBytes;
+    ChangeBuffer(uBytes, 0, uKeep, CB_PUSH_ZERO, uKeep);
+    UTF8_SetOneCharacter(iCharacter);
+    return *this;
+}
+
+EAStringC& EAStringC::UTF8_MakeLower()
+{
+    // Force a private, fully-sized copy, then lower each code point in place.
+    const uint32_t uSize = m_pData->m_uSize;
+    ChangeBuffer(uSize, 0, uSize, CB_PUSH_ZERO, uSize);
+
+    char* dst = GetInternalBuffer();
+    const char* src = dst;
+    for (;;)
+    {
+        int32_t cp;
+        const char* next = UTF8_ReadCharacter(src, &cp);
+        if (cp == 0)
+            break;
+        UTF8_SetCharacter(dst, tolower(cp));
+        dst += UTF8_GetCharacterSize(dst);
+        src  = next;
+    }
+    return *this;
+}
+
+EAStringC& EAStringC::UTF8_MakeUpper()
+{
+    const uint32_t uSize = m_pData->m_uSize;
+    ChangeBuffer(uSize, 0, uSize, CB_PUSH_ZERO, uSize);
+
+    char* dst = GetInternalBuffer();
+    const char* src = dst;
+    for (;;)
+    {
+        int32_t cp;
+        const char* next = UTF8_ReadCharacter(src, &cp);
+        if (cp == 0)
+            break;
+        // The console only upper-cases the ASCII range (<= 0x7F).
+        if (cp <= 0x7F)
+            cp = toupper(cp);
+        UTF8_SetCharacter(dst, cp);
+        dst += UTF8_GetCharacterSize(dst);
+        src  = next;
+    }
+    return *this;
+}

@@ -1,5 +1,7 @@
 #include "SDKs/Packages/Apt/2.00.00/source/AptValue/AptString.h"
 
+#include <cstdint>   // uintptr_t (the wordlist payload is the X360 dword member id)
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82AD7918
 //   (StringMembersIndex::in_word_set -- gperf perfect-hash recognizer for
 //    AptString member/method names; called by AptString::objectMemberLookup)
@@ -60,10 +62,16 @@ StringMembersIndex::in_word_set(const char* lpcStr, unsigned int luLen)
 
     // Duplicate list: gperf encodes lookup[hash] == -(TOTAL_KEYWORDS + 1) - offset.
     const int liOffset = -(TOTAL_KEYWORDS + 1) - liIndex;     // == -14 - liIndex
-    const int liBaseIndex = lookup[liOffset];                 // wordlist start index
-    const int liCount     = lookup[liOffset + 1];             // number of duplicates
+    // {base,count} descriptor overlaid on lookup[]. The X360 computes the run
+    // start as `lookup_base + base*8` (asm sets r9 = &lookup, then start = r9 +
+    // base*8); since wordlist immediately precedes lookup in .rdata this equals
+    // wordlist[TOTAL_KEYWORDS + base]. The COUNT is stored NEGATED -- the run-end
+    // pointer is `start - count*8` (asm `subf r6,r10,r11`) -- so the real run
+    // length is -lookup[liOffset + 1].
+    const int liBase  = lookup[liOffset];                     // base (sign-extended)
+    const int liCount = -(int)lookup[liOffset + 1];           // count (stored negated)
 
-    const struct Entry* lpEntry = &wordlist[liBaseIndex];
+    const struct Entry* lpEntry = &wordlist[TOTAL_KEYWORDS + liBase];
     const struct Entry* lpEnd   = lpEntry + liCount;
 
     for (; lpEntry < lpEnd; ++lpEntry)
@@ -101,3 +109,61 @@ StringMembersIndex::hash(const char* lpcStr, unsigned int luLen)
          + asso_values[(unsigned char)lpcStr[0]]
          + luLen;
 }
+
+// ===========================================================================
+// gperf static data tables -- EXTRACTED from the decrypted X360 ARTIST.XEX
+// .rdata (file_off = 0x3000 + vaddr - 0x82000000, big-endian):
+//     asso_values[256] @ byte_82F72DF8   (per-byte hash contribution; default
+//                                         23 == MAX_HASH_VALUE+1 sentinel)
+//     lookup[23]       @ byte_82F79C08   (signed; direct slot >=0, empty/dup <0;
+//                                         slots 12/13 and 18/19 double as the
+//                                         {base,count} dup descriptors)
+//     wordlist[13]     @ off_82F79BA0    (the 13 AptString method keywords; the
+//                                         X360 payload is a 4-byte member id,
+//                                         carried here in the void* mpPayload)
+// All 13 keywords were verified to resolve back to their own slot through the
+// reconstructed in_word_set above (the dup-keyed pairs route correctly).
+// ===========================================================================
+
+const unsigned char StringMembersIndex::asso_values[256] =
+{
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23,  0, 23, 10,  0,  0, 10,  0, 23, 23,  0, 23, 23, 23,
+    23, 23, 14,  0,  0, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+    23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23
+};
+
+const signed char StringMembersIndex::lookup[23] =
+{
+      -1,   -1,   -1,   -1,   -1,    0,  -26,    3,   -1,    4,    5,    6,
+     -12,   -2,   -1,    7,    8,   -1,   -3,   -2,    9,  -32,   12
+};
+
+const struct StringMembersIndex::Entry StringMembersIndex::wordlist[13] =
+{
+    /*  0 */ { "split",         reinterpret_cast<void*>(static_cast<uintptr_t>(9)) },
+    /*  1 */ { "charAt",        reinterpret_cast<void*>(static_cast<uintptr_t>(2)) },
+    /*  2 */ { "concat",        reinterpret_cast<void*>(static_cast<uintptr_t>(4)) },
+    /*  3 */ { "indexOf",       reinterpret_cast<void*>(static_cast<uintptr_t>(6)) },
+    /*  4 */ { "substring",     reinterpret_cast<void*>(static_cast<uintptr_t>(11)) },
+    /*  5 */ { "charCodeAt",    reinterpret_cast<void*>(static_cast<uintptr_t>(3)) },
+    /*  6 */ { "lastIndexOf",   reinterpret_cast<void*>(static_cast<uintptr_t>(7)) },
+    /*  7 */ { "slice",         reinterpret_cast<void*>(static_cast<uintptr_t>(8)) },
+    /*  8 */ { "length",        reinterpret_cast<void*>(static_cast<uintptr_t>(1)) },
+    /*  9 */ { "substr",        reinterpret_cast<void*>(static_cast<uintptr_t>(10)) },
+    /* 10 */ { "toLowerCase",   reinterpret_cast<void*>(static_cast<uintptr_t>(12)) },
+    /* 11 */ { "toUpperCase",   reinterpret_cast<void*>(static_cast<uintptr_t>(13)) },
+    /* 12 */ { "fromCharCode",  reinterpret_cast<void*>(static_cast<uintptr_t>(5)) },
+};
