@@ -150,6 +150,24 @@ namespace Camera
         // (BehaviourHandle::Release @0x8222DD00). Always returns true. Body out-of-line below.
         bool Release();
 
+        // Is the behaviour this handle owns still queued for its first Prepare. X360-attested:
+        // every BehaviourHandle<TBehaviour>::IsWaitingToPrepare() instantiation is byte-identical
+        //   BrnDirector::Camera::BehaviourGyroCam   @0x82212510
+        //   BrnDirector::Camera::BehaviourIceAnim   @0x822128A0
+        //   BrnDirector::Camera::BehaviourInterpo   @0x82212150
+        //   BrnDirector::Camera::BehaviourLooseAt   @0x82212A68
+        //   BrnDirector::Camera::BehaviourRoadRun   @0x82212AC8
+        //   BrnDirector::Camera::BehaviourRotateA   @0x82212B98
+        // (the truncated symbols collapse the per-behaviour-type instantiations of this one
+        // template member). Asserts the handle is allocated, then forwards the handle's
+        // allocation key to the manager. Body out-of-line below (needs BehaviourManager complete).
+        bool IsWaitingToPrepare() const;
+
+        // The boolean negation of IsWaitingToPrepare() -- "has the behaviour finished waiting and
+        // is it ready to Prepare". X360-attested BrnDirector::Camera::BehaviourAfterto @0x8222D0E8
+        // (the `IsBehaviourWaitingToPrepare(...) == 0` tail). Body out-of-line below.
+        bool IsReadyToPrepare() const;
+
         void Clear()
         {
             mbAllocated     = false;
@@ -434,6 +452,33 @@ namespace Camera
             mbAllocated   = false;
         }
         return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHandle::IsWaitingToPrepare @0x82212510 (and its byte-identical siblings) --
+    // is the owned behaviour still queued for its first Prepare. The X360 asm asserts the
+    // handle is allocated (assert text "mbIsAllocated", BrnBehaviourManager.h:517), then loads
+    // muAllocationKey (+0x04) and mpManager (+0x0C) and tail-calls the manager's
+    // IsBehaviourWaitingToPrepare(u32). The dynamic gpcMessageBuffer assert is folded to
+    // CGS_ASSERT per the project rule; the manager query side effect is preserved exactly.
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    inline bool BehaviourHandle<TBehaviour>::IsWaitingToPrepare() const
+    {
+        CGS_ASSERT(mbAllocated, "mbIsAllocated");
+        return mpManager->IsBehaviourWaitingToPrepare(muAllocationKey);
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHandle::IsReadyToPrepare @0x8222D0E8 (BrnDirector::Camera::BehaviourAfterto) --
+    // the boolean negation of IsWaitingToPrepare(): same allocated assert, then returns
+    // `IsBehaviourWaitingToPrepare(...) == 0` (the asm's clrlwi/cntlzw/extrwi boolean tail).
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    inline bool BehaviourHandle<TBehaviour>::IsReadyToPrepare() const
+    {
+        CGS_ASSERT(mbAllocated, "mbIsAllocated");
+        return mpManager->IsBehaviourWaitingToPrepare(muAllocationKey) == false;
     }
 
     // ------------------------------------------------------------------------

@@ -168,5 +168,77 @@ f32 Camera::GetNearClipDistance() const
     return KF_DEFAULT_NEAR_CLIP_DISTANCE;
 }
 
+// ============================================================================
+// FLAG MANIFEST -- class:BrnDirector::Camera postmortem bucket (29 functions)
+//
+// The postmortem bucket for this class TU groups 29 functions under TRUNCATED demangled
+// symbols ("BrnDirector::Camera::Beha", "...::BehaviourGyroCam", "...::BehaviourRenderMe",
+// ...). They are NOT BrnDirector::Camera::Camera member functions. The truncated symbols
+// collapse THREE distinct, un-homed-at-source owner families:
+//   (1) BehaviourHandle<TBehaviour> template-member instantiations (one body, many T),
+//   (2) internal Array<T,N>::operator[] / PushBack bounds machinery (per element type),
+//   (3) per-behaviour-subclass getters in GameSource/Director/Camera/Behaviours/* whose
+//       headers are not yet homed, plus two free helpers and a vector-ctor-iterator.
+//
+// RECONSTRUCTED THIS WAVE (7 funcs -- the BehaviourHandle<T> "is-waiting-to-prepare" query
+// family). Bodied as real template members on the homed BehaviourHandle<TBehaviour> in
+// BrnBehaviourManager.h (BehaviourHandle<>::IsWaitingToPrepare / ::IsReadyToPrepare),
+// reaching the homed BehaviourManager by its NAMED public IsBehaviourWaitingToPrepare(u32)
+// -- no raw offsets, no fabrication. All six "waiting" siblings are byte-identical asm:
+//   IsWaitingToPrepare():  BehaviourGyroCam @0x82212510, BehaviourIceAnim @0x822128A0,
+//                          BehaviourInterpo @0x82212150, BehaviourLooseAt @0x82212A68,
+//                          BehaviourRoadRun @0x82212AC8, BehaviourRotateA @0x82212B98
+//   IsReadyToPrepare():    BehaviourAfterto @0x8222D0E8  (the `== 0` negation)
+//
+// DECLARATION-ONLY + FLAGGED (22 funcs). Each below is un-bodyable WITHOUT fabricating an
+// un-homed owner-class layout, raw-offset-poking a committed/opaque aggregate, or homing an
+// un-recovered free function. Per the project anti-fabrication rule they are left un-bodied:
+//
+//   -- BehaviourHandle<T>::SetUp factory glue (reaches the UN-HOMED free resolver `BrnDirec`
+//      i.e. GetBehaviourSlotFromHandle's underlying lookup, storing *(handle+0x10)): -------
+//        BehaviourBystand  @0x8222F688   BehaviourFailsaf @0x822302F8
+//        BehaviourHeliCam  @0x82230240   BehaviourPasseng @0x8222F5D0
+//        BehaviourRenderM  @0x822303B0   BehaviourSpirall @0x8222FF60
+//      (FLAG: the *(handle+0x10) = *BrnDirec(manager,key) tail needs the un-homed behaviour-
+//       slot resolver; the declared GetBehaviourSlotFromHandle<T> has no body yet.)
+//
+//   -- BehaviourHandle<T>::AttachTweaker glue (reaches BehaviourManager::AttachTweaker, which
+//      is a DIFFERENT (2-arg, private) overload than the declared private AttachTweaker; the
+//      glue also reaches the OPAQUE mTweakerHelper interior): -----------------------------
+//        BehaviourDebugFl @0x82213AD0   BehaviourDebugOr @0x82213998   BehaviourFixedCa @0x82212970
+//
+//   -- BehaviourHandle<T>::SetUpdatesDuringPause glue (reaches BehaviourManager::
+//      SetBehaviourUpdatesDuringPause with the 2-arg (key,bool) form the glue uses, not the
+//      declared (BehaviourHelperIndex,bool) overload): -----------------------------------
+//        BehaviourGamepla @0x82212360
+//
+//   -- internal Array<T,N> bounds/PushBack machinery over un-homed element types (raw 24*i /
+//      4*i / 29*i strides into containers whose element layout is this glue's own concern):
+//        Beha   @0x82200460 (stride 24)   Behav  @0x821FFF30 (stride 4)
+//        BehaviourB @0x8222F740 (cap 2)   BehaviourI @0x8222FBE8 (cap 5)
+//        BehaviourR @0x8222F890 (cap 4)   BehaviourHelperIndex_28 @0x82212008 (cap 28, stride 29)
+//
+//   -- per-behaviour-subclass trivial getters; owner headers in Behaviours/* NOT homed (the
+//      returned member offsets are into un-homed subclass layouts): ----------------------
+//        BehaviourRenderMe @0x821FB280 (return *(this+0xB8))
+//        BehaviourRotateAb @0x821FB418 (return *(this+0x374))
+//        BehaviourSpiralli @0x821FB590 (return *(this+0x2D0))
+//
+//   -- free / special helpers reaching un-homed code or un-homed layouts: ----------------
+//        B @0x8222CBD8 -- a BrnDirector::MomentPlayerJumping::UpdateCamera helper that reaches
+//          the un-homed free `BrnDirector::Cam` + `BrnDirec` and pokes MomentPlayerJumping
+//          fields (+0x40/+0x41/+0x3C) by raw offset (MomentPlayerJumping is not homed here).
+//        BehaviourHelperIndex_28__28_ @0x827DE450 -- the Array<Array<BehaviourHelperIndex,28>,28>
+//          vector-constructor-iterator (28x BaseCollisionGenerator::Destruct sweep, stride
+//          116); a compiler-generated ctor-iterator, not a hand-written method.
+//        EnsureEffectIsStopped @0x821F2808 -- reaches the un-homed
+//          BrnDirector::HookNameStringWrapper::Set and raw-offset-pokes Camera-adjacent
+//          fields (+287/+288/+104/+137 on `this`, +3383/+3316 on a second un-homed object).
+//
+// Replace each FLAGGED entry with a real body when its owner family is homed: the behaviour
+// subclasses (Behaviours/*), the un-homed free resolvers (BrnDirec / BrnDirector::Cam /
+// HookNameStringWrapper), and the BehaviourManager's 2-arg private tweaker / pause overloads.
+// ============================================================================
+
 } // namespace Camera
 } // namespace BrnDirector
