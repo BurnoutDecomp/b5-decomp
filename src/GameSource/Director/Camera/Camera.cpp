@@ -180,7 +180,7 @@ f32 Camera::GetNearClipDistance() const
 //   (3) per-behaviour-subclass getters in GameSource/Director/Camera/Behaviours/* whose
 //       headers are not yet homed, plus two free helpers and a vector-ctor-iterator.
 //
-// RECONSTRUCTED THIS WAVE (7 funcs -- the BehaviourHandle<T> "is-waiting-to-prepare" query
+// RECONSTRUCTED PRIOR WAVE (7 funcs -- the BehaviourHandle<T> "is-waiting-to-prepare" query
 // family). Bodied as real template members on the homed BehaviourHandle<TBehaviour> in
 // BrnBehaviourManager.h (BehaviourHandle<>::IsWaitingToPrepare / ::IsReadyToPrepare),
 // reaching the homed BehaviourManager by its NAMED public IsBehaviourWaitingToPrepare(u32)
@@ -190,26 +190,41 @@ f32 Camera::GetNearClipDistance() const
 //                          BehaviourRoadRun @0x82212AC8, BehaviourRotateA @0x82212B98
 //   IsReadyToPrepare():    BehaviourAfterto @0x8222D0E8  (the `== 0` negation)
 //
-// DECLARATION-ONLY + FLAGGED (22 funcs). Each below is un-bodyable WITHOUT fabricating an
-// un-homed owner-class layout, raw-offset-poking a committed/opaque aggregate, or homing an
-// un-recovered free function. Per the project anti-fabrication rule they are left un-bodied:
+// RESOLVED THIS WAVE (6 funcs -- the BehaviourHandle<T>::Prepare "SetUp factory" family).
+// These are NOT new hand-written bodies: each is a per-T instantiation of the SINGLE inline
+// BehaviourHandle<TBehaviour>::Prepare(u32 key, u32 helperIndex, BehaviourManager*) already
+// committed in BrnBehaviourManager.h. They were previously FLAGGED un-bodyable because the
+// final `*(handle+0x10) = *BrnDirec(handle+8, handle+4)` tail reached an UN-HOMED free
+// resolver. That resolver is now the homed (declared) static template
+// BehaviourManager::GetBehaviourSlotFromHandle<TBehaviour>(u32 helperIndex, u32 key), which
+// the committed inline Prepare already calls BY NAME -- so all six instantiations now compile
+// and link against the inline body with zero fabrication. The asm of each is byte-identical
+// to Prepare (guard-on-mbAllocated UnSet, store key/helperIndex/manager, SetBehaviourUsedBy-
+// Handle(key), IsAllocated() assert, mpBehaviour = *GetBehaviourSlotFromHandle<T>(...)):
+//   BehaviourBystand  @0x8222F688 (BehaviourBystanderCam)   BehaviourFailsaf @0x822302F8 (BehaviourFailsafe)
+//   BehaviourHeliCam  @0x82230240 (BehaviourHeliCam)        BehaviourPasseng @0x8222F5D0 (BehaviourPassengerCam)
+//   BehaviourRenderM  @0x822303B0 (BehaviourRenderMetrics)  BehaviourSpirall @0x8222FF60 (BehaviourSpirallingDeathcam)
+// (Proven this wave by a scratch instantiation TU over the now-declared resolver + homed
+// manager; the TU compiled STATUS=pass and was deleted. No new code lands in Camera.cpp --
+// the 6 bodies live in the committed inline Prepare, this entry records that they now resolve.)
 //
-//   -- BehaviourHandle<T>::SetUp factory glue (reaches the UN-HOMED free resolver `BrnDirec`
-//      i.e. GetBehaviourSlotFromHandle's underlying lookup, storing *(handle+0x10)): -------
-//        BehaviourBystand  @0x8222F688   BehaviourFailsaf @0x822302F8
-//        BehaviourHeliCam  @0x82230240   BehaviourPasseng @0x8222F5D0
-//        BehaviourRenderM  @0x822303B0   BehaviourSpirall @0x8222FF60
-//      (FLAG: the *(handle+0x10) = *BrnDirec(manager,key) tail needs the un-homed behaviour-
-//       slot resolver; the declared GetBehaviourSlotFromHandle<T> has no body yet.)
+// DECLARATION-ONLY + FLAGGED (16 funcs). Each below is STILL un-bodyable WITHOUT fabricating
+// an un-homed owner-class layout, raw-offset-poking a committed/opaque aggregate, or homing an
+// un-recovered free function / un-reconciled manager overload. Per the anti-fabrication rule
+// they are left un-bodied:
 //
-//   -- BehaviourHandle<T>::AttachTweaker glue (reaches BehaviourManager::AttachTweaker, which
-//      is a DIFFERENT (2-arg, private) overload than the declared private AttachTweaker; the
-//      glue also reaches the OPAQUE mTweakerHelper interior): -----------------------------
+//   -- BehaviourHandle<T>::AttachTweaker glue (mpManager->AttachTweaker(muAllocationKey) on a
+//      KEY, not the declared private AttachTweaker(BehaviourHelperIndex) on a helper word; the
+//      glue also reaches the OPAQUE mTweakerHelper interior). STILL un-bodyable: adding a
+//      key-based manager overload collides with BehaviourHelperIndex's implicit s32 conversion
+//      (ambiguity) on a shared committed header other TUs consume -- deferred until the manager
+//      tweaker overload set is reconciled. NOT a missing type; a shared-header overload hazard:
 //        BehaviourDebugFl @0x82213AD0   BehaviourDebugOr @0x82213998   BehaviourFixedCa @0x82212970
 //
-//   -- BehaviourHandle<T>::SetUpdatesDuringPause glue (reaches BehaviourManager::
-//      SetBehaviourUpdatesDuringPause with the 2-arg (key,bool) form the glue uses, not the
-//      declared (BehaviourHelperIndex,bool) overload): -----------------------------------
+//   -- BehaviourHandle<T>::SetUpdatesDuringPause glue (mpManager->SetBehaviourUpdatesDuringPause
+//      (muAllocationKey, bool) -- the 2-arg (key,bool) form, not the declared
+//      (BehaviourHelperIndex,bool) overload). Same shared-header overload-ambiguity hazard as
+//      AttachTweaker above; deferred until reconciled:
 //        BehaviourGamepla @0x82212360
 //
 //   -- internal Array<T,N> bounds/PushBack machinery over un-homed element types (raw 24*i /
