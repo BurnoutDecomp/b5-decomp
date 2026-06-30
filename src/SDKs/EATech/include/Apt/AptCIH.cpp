@@ -7,14 +7,76 @@
 // The packed flag words use the console rotate+mask idiom; reconstructed here as
 // the equivalent clear-range/set bit-ops on the whole word. Scope is the node
 // core; the behavioural methods are follow-ons.
+//
+// AptCIH::`scalar deleting destructor' @0x82AE7340 -- DROPPED (compiler-generated
+// thunk, like every sibling Apt class's deleting destructor). The X360 body is the
+// canonical MSVC pattern { ~AptCIH(); if (flags & 1) AptCIH::operator delete(this,
+// 0x28); return this; } -- where 0x28 == sizeof(AptCIH) (the GC value pool block).
+// Both halves it composes already exist: the virtual ~AptCIH() (below) and
+// AptCIH::operator delete (AptCIHBehaviour.cpp). The compiler re-synthesises this
+// thunk from the virtual destructor + operator delete, so it is not hand-written.
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptCIH.h"
 #include "SDKs/EATech/include/Apt/AptCharacter.h"
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // movie-clip play-head (mnGotoFrame/mnClipActionFlags/mnLastActionFrame/mDisplayList)
+#include "SDKs/EATech/include/Apt/AptRenderItem.h"               // mpRenderItem->mpCharacter (the embedded AptMovie)
+#include "SDKs/EATech/include/Apt/AptMovie.h"                    // doFrameControls / queueFrameActions / DoTemporaryFrameControls + AptValue_toInteger
+#include "SDKs/EATech/include/Apt/AptDisplayList.h"              // child-list recursion (AptDisplayList::tick)
+#include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"        // scratch state for the multi-frame skip path
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"        // gAptActionInterpreter operand stack (_gotoAndX)
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
 #include "SDKs/EATech/include/Apt/AptDefine.h"     // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
+
+#include <new>   // placement new (the scratch AptPseudoDisplayList over pool memory)
+
+// FLAG (un-homed AS/runtime singletons -- declared verbatim by their console name
+// equivalents; bodies/definitions land with their owning TUs):
+//   gAptActionInterpreter (console &dword_8324E760) -- the AS interpreter context
+//     (its operand stack is mpStack[mnStackTop]); declared in AptActionInterpreter.h.
+//   gnAptActionFrameId    (console dword_8324E514)  -- the running AS-action frame id
+//     queueClipEvents stamps onto each queued clip event.
+//   gbAptRecorderGate     (console byte_82F733F7)   -- the input-recorder/replay gate:
+//     when shut (deterministic replay) the play-head must NOT auto-advance.
+//   gpUndefinedValue      (console off_8324D814)    -- the shared AS `undefined` value.
+extern int gnAptActionFrameId;       // console dword_8324E514
+extern unsigned char gbAptRecorderGate;   // console byte_82F733F7
+extern AptValue* gpUndefinedValue;   // console off_8324D814
+
+// FLAG (un-homed AS interpreter singleton; console &dword_8324E760): the operand
+// stack _gotoAndX reads the goto target from. Declared per-TU like its siblings
+// (AptCIHNativeFunctionHelper.cpp / AptMovie.cpp).
+extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
+
+// FLAG (homed by AptCIH's event/AS-action follow-on TU; console AptCIH::queueClipEvents
+// @0x82AD...): queue this node's clip-event handlers (nEventMask) for deferred AS
+// execution, stamping them with nFrameId. A free-function shim (matches the
+// AptCIH_queueClipEvents AptAnimationTarget.cpp already declares).
+AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, int nFrameId, int bDeferred);
+
+// FLAG (un-homed AptDisplayList behavioural follow-on; console AptDisplayList::mergeState
+// @0x82B0B438 -- explicitly BLOCKED in AptDisplayList.h's note): merge a rebuilt scratch
+// pseudo display list into this live child list. Declared as a free function taking the
+// child list so the home file can name it without editing AptDisplayList.h.
+void* AptDisplayList_mergeState(AptDisplayList* pList, AptPseudoDisplayList* pScratch,
+                                void* pProperties, char bForward);
+
+// ---------------------------------------------------------------------------
+// AptCIH_GetClipMovie -- the AptMovie timeline embedded at +0x10 inside a
+// sprite/animation AptCharacter subclass. The X360 reaches it as
+// `mpRenderItem->mpCharacter + 0x10`; the project models that un-homed subclass
+// field with the same FLAGged reinterpret AptCharacterAnimation.cpp uses (the
+// AptCharacter base header stops at +0x10). Centralised here so the three play-head
+// methods name it once.
+// FLAG (un-homed sprite/animation AptCharacter subclass): the embedded AptMovie is a
+// fixed +0x10 member the AptCharacter base type does not yet model.
+static AptMovie* AptCIH_GetClipMovie(const AptCharacterSpriteInstBase* pInst)
+{
+    AptCharacter* pCharacter = pInst->mpRenderItem->mpCharacter;
+    return reinterpret_cast<AptMovie*>(reinterpret_cast<char*>(pCharacter) + 0x10);
+}
 
 // FLAG (homed elsewhere): the optional pre-destroy notify hook (console
 // dword_1059C6D0); null until installed.
@@ -225,4 +287,296 @@ void AptCIH::SetDirtyState(bool bDirty, bool bPropagate)
             pAncestor = pNext;
         }
     }
+}
+
+// ===========================================================================
+// Movie-clip play-head -- the per-frame timeline driver (tick / jumpToFrame /
+// _gotoAndX). DECOMPILED from the X360 ARTIST.XEX, verified against the asm.
+//
+// The play-head state lives in the node's AptCharacterSpriteInstBase (the sprite/
+// movie-clip + animation char instances): the asm reaches it as mpCharacterInst's
+// dwords [4]/[5]/[8] and its embedded child list [7]. The named members are:
+//   mnGotoFrame       (+0x10, dword[4]) -- the LIVE current play-head frame. FLAG:
+//                     the header's role label (a -1 "pending goto" sentinel) is
+//                     refined here; these three functions PROVE +0x10 is the active
+//                     current-frame counter the timeline driver reads/advances.
+//   mnClipActionFlags (+0x14, dword[5]) -- the low 8 bits are sprite STATE flags:
+//                     bit6 (0x40) = "needs a frame action this tick", bit7 (0x80) =
+//                     "auto-play / freshly placed". (The high 24 bits are the AS
+//                     clip-event mask, untouched here.)
+//   mnLastActionFrame (+0x20, dword[8]) -- the frame id stamped for queueFrameActions.
+//   mDisplayList      (+0x1C, dword[7]) -- the clip's child display list.
+// ===========================================================================
+
+// jumpToFrame @0x82B0BD50 -- seek the clip's play-head to nFrame.
+int AptCIH::jumpToFrame(int nFrame)
+{
+    // No-op on the empty AptCIHNone placeholder (vtbl index 37).
+    if (getVtblIndex() == AptVFT_CIHNone)
+        return 0;
+
+    AptCharacterSpriteInstBase* pInst =
+        static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
+    if (nFrame < 0)
+        return 0;
+
+    AptMovie* pMovie = AptCIH_GetClipMovie(pInst);
+    if (nFrame >= pMovie->mnFrameCount)
+        return 0;
+
+    int nResult = 0;
+    const int nCurrent = pInst->mnGotoFrame;
+    if (nFrame != nCurrent)
+    {
+        if (nFrame == nCurrent + 1)
+        {
+            // Single step forward: just replay the one frame's commands.
+            pInst->mnGotoFrame = nFrame;
+            pMovie->doFrameControls(&pInst->mDisplayList, this, nFrame);
+        }
+        else
+        {
+            // Arbitrary jump: rebuild the intervening display-list state into a
+            // scratch pseudo list, replaying every skipped frame, then merge it.
+            void* pProperties = pInst->mpProperties;   // dword[3] (the AS property hash)
+
+            void* pScratchMem = gpAptPseudoDataPool->Allocate(8);
+            AptPseudoDisplayList* pScratch = nullptr;
+            if (pScratchMem)
+                pScratch = new (pScratchMem) AptPseudoDisplayList(this);
+
+            const char bForward = (pInst->mnGotoFrame < nFrame) ? 1 : 0;
+
+            // A freshly-placed clip (state bit7) restarts from frame 0.
+            if ((pInst->mnClipActionFlags & 0x80u) == 0x80u)
+                pInst->mnGotoFrame = 0;
+            // Never replay forward FROM a frame already at/after the target.
+            if (pInst->mnGotoFrame >= nFrame)
+                pInst->mnGotoFrame = 0;
+
+            // Replay every frame from the current play-head up to and including
+            // nFrame into the scratch list (stopping early if it would run past the
+            // clip's end). The play-head (mnGotoFrame) is the loop variable.
+            while (pInst->mnGotoFrame <= nFrame)
+            {
+                if (pInst->mnGotoFrame >= AptCIH_GetClipMovie(pInst)->mnFrameCount)
+                    break;
+                // FLAG: the X360 call site (sub_82B0BE60) only fills r3 (the AptMovie)
+                // and r4 (the scratch list); the frame index + trailing args are not
+                // re-loaded into r5/r6 at the call. Passed faithfully as the current
+                // replay frame for the AptMovie::DoTemporaryFrameControls signature.
+                pMovie->DoTemporaryFrameControls(pScratch, pInst->mnGotoFrame, 0, nullptr);
+                ++pInst->mnGotoFrame;
+            }
+
+            pInst->mnGotoFrame = nFrame;
+            AptDisplayList_mergeState(&pInst->mDisplayList, pScratch, pProperties, bForward);
+
+            if (pScratch)
+            {
+                pScratch->~AptPseudoDisplayList();
+                gpAptPseudoDataPool->Deallocate(pScratch, 8);
+            }
+        }
+
+        pInst->mnLastActionFrame = pInst->mnGotoFrame;
+        // FLAG (x64 narrowing): the X360 returns r3 -- the queueFrameActions result
+        // pointer -- as the int result the callers ignore. Carried as a non-zero
+        // "ran" marker to avoid an 8->4-byte pointer truncation on x64.
+        nResult = pMovie->queueFrameActions(this, pInst->mnGotoFrame) != nullptr;
+    }
+    return nResult;
+}
+
+// tick @0x82B0BED8 -- advance the movie-clip node one frame.
+int AptCIH::tick()
+{
+    // Only a dirtied node ticks (mFlagsA bit25).
+    if ((mFlagsA & 0x02000000u) == 0)
+        return 0;
+
+    AptCharacterSpriteInstBase* pInst =
+        static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
+
+    // Only sprite(5)/animation(9) clips have a play-head.
+    const uint32_t nType = pInst->GetTypeTag();
+    if (nType != 5 && nType != 9)
+        return (mFlagsA >> 25) & 1u;
+
+    const uint32_t nFlags = pInst->mnClipActionFlags;
+    pInst->mnLastActionFrame = 0;
+
+    const bool bNeedsAction = ((nFlags >> 6) & 1u) != 0;   // state bit6 (0x40)
+    const bool bFreshPlaced = (nFlags & 0x80u) != 0;       // state bit7 (0x80)
+
+    // ---- (1) auto-advance the play-head -----------------------------------
+    // A clip steps the play-head this frame UNLESS it has neither the pending-action
+    // bit nor (auto-play + an open recorder gate): a non-fresh stopped clip and a
+    // fresh clip in shut-gate deterministic replay both hold their frame.
+    bool bSkipStep;
+    if (!bNeedsAction)
+        bSkipStep = !(bFreshPlaced && gbAptRecorderGate != 0);
+    else
+        bSkipStep = false;
+
+    if (!bSkipStep)
+    {
+        AptRenderItem* pRenderItem = pInst->mpRenderItem;
+        // A stopped render item (mFlags bit 0x08000000; console renderItem+0x18 bit27)
+        // holds frame 0; else step to the next frame.
+        if (((pRenderItem->mFlags >> 27) & 1u) != 0)
+            pInst->mnGotoFrame = 0;
+        else
+            ++pInst->mnGotoFrame;
+
+        const int nFrame = pInst->mnGotoFrame;
+        if (nFrame == 1 && AptCIH_GetClipMovie(pInst)->mnFrameCount == 1)
+        {
+            // A single-frame clip never plays past frame 0; jump straight to the
+            // action-queue stage (LABEL_27).
+            pInst->mnGotoFrame = 0;
+            goto label_27;
+        }
+        if (nFrame == AptCIH_GetClipMovie(pInst)->mnFrameCount)
+        {
+            // Wrapped past the end: loop back to the start, then LABEL_27.
+            jumpToFrame(0);
+            goto label_27;
+        }
+        // Normal frame: fall through to the shared doFrameControls (LABEL_18/19).
+    }
+
+    // LABEL_18/19: run this frame's place/remove commands when the clip has a
+    // pending action, or it is auto-playing with an open recorder gate.
+    if (bNeedsAction || (bFreshPlaced && gbAptRecorderGate != 0))
+    {
+        AptMovie* pMovie = AptCIH_GetClipMovie(pInst);
+        pMovie->doFrameControls(&pInst->mDisplayList, this, pInst->mnGotoFrame);
+    }
+
+label_27:
+    // ---- (2) queue this frame's actions (LABEL_27) ------------------------
+    {
+        const uint32_t nFlags2 = pInst->mnClipActionFlags;
+        if (((nFlags2 & 0x40u) != 0) || (((nFlags2 & 0x80u) != 0) && gbAptRecorderGate != 0))
+        {
+            AptMovie* pMovie = AptCIH_GetClipMovie(pInst);
+            // Negate the stamped frame while the actions are queued (the X360's
+            // running-frame marker), then restore it.
+            pInst->mnLastActionFrame = -pInst->mnGotoFrame;
+            pMovie->queueFrameActions(this, pInst->mnGotoFrame);
+            pInst->mnLastActionFrame = pInst->mnGotoFrame;
+        }
+    }
+
+    // ---- (3) enterFrame clip event ----------------------------------------
+    // A non-fresh clip (or a custom-control 0x24 char family) with an onEnterFrame
+    // handler (clip-event mask bit 0x200, or a __proto__ event member) queues the
+    // enterFrame event (mask 2).
+    if ((((pInst->mnClipActionFlags & 0x80u) == 0) ||
+         ((pInst->mTypeFlags & 0xFC000000u) == 0x24000000u)) &&
+        (((pInst->mnClipActionFlags & 0x200u) != 0) || HasEventMember(2)))
+    {
+        AptCIH_queueClipEvents(this, 2, gnAptActionFrameId, 1);
+    }
+
+    // ---- (4) construct/load clip event on first placement -----------------
+    if ((pInst->mnClipActionFlags & 0x80u) != 0)
+    {
+        if (((pInst->mnClipActionFlags & 0x100u) != 0) || HasEventMember(1))
+            AptCIH_queueClipEvents(this, 1, gnAptActionFrameId, 1);
+        pInst->mnClipActionFlags &= ~0x80u;   // clear the freshly-placed bit
+    }
+
+    // ---- (5) recurse the child display list -------------------------------
+    const int nChildTick = pInst->mDisplayList.tick(-1, 0);
+
+    // ---- (6) recompute the dirty bit --------------------------------------
+    // The node stays dirty (forces bit25) when it carries an enterFrame handler;
+    // otherwise it inherits the child-list tick result -- unless it is a
+    // pending-action multi-frame clip (state bit6 set, frame count != 1), which
+    // leaves the dirty bit untouched.
+    if (((pInst->mnClipActionFlags & 0x200u) != 0) || HasEventMember(2))
+    {
+        mFlagsA |= 0x02000000u;
+    }
+    else
+    {
+        if ((pInst->mnClipActionFlags & 0x40u) != 0 &&
+            AptCIH_GetClipMovie(pInst)->mnFrameCount != 1)
+        {
+            return (mFlagsA >> 25) & 1u;
+        }
+        mFlagsA = (mFlagsA & 0xFDFFFFFFu) |
+                  ((static_cast<uint32_t>(nChildTick) << 25) & 0x02000000u);
+    }
+
+    return (mFlagsA >> 25) & 1u;
+}
+
+// _gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core (static: the CIH is
+// passed in r3, the arg count in r4, the play flag in r5).
+void* AptCIH::_gotoAndX(int nArgCount, unsigned int bPlay)
+{
+    if (nArgCount >= 1)
+    {
+        AptCharacterInst* pInst = mpCharacterInst;
+        // The goto target is the top of the interpreter operand stack.
+        AptValue* pTarget = gAptActionInterpreter.stackAt(0);
+
+        // The custom-control 0x3C char family does not seek by this path.
+        if ((pInst->mTypeFlags & 0xFC000000u) != 0x3C000000u)
+        {
+            int nFrame;
+            // A defined string-value (vtbl 1) / string-object (vtbl 33) operand names
+            // a frame LABEL; anything else is a numeric frame number. Read the value's
+            // type/defined state through the named bitfield accessors (the x64-native
+            // form of the console `(*(v6+4)<<25)>>25` / `(*(v6+4)>>27)&1`).
+            const int nVtbl = static_cast<int>(pTarget->getVtblIndex());
+            const bool bIsLabel = (nVtbl == AptVFT_StringValue || nVtbl == AptVFT_StringObject)
+                                  && pTarget->getIsDefined();
+
+            if (bIsLabel)
+            {
+                // FLAG (x64): the X360 hands AptNativeHash::Lookup the label value's
+                // embedded EAStringC (console `v6 + 8`; for a register value it first
+                // dereferences the register's stored value). AptValue::Get_ToString is
+                // the blessed value-layer accessor for that name EAStringC (returning the
+                // embedded string, or rendering the value into the scratch), used here in
+                // place of the x64-shifted raw +8 / register-deref offsets.
+                EAStringC strScratch;
+                const EAStringC* pName = AptValue::Get_ToString(pTarget, &strScratch);
+
+                AptMovie* pMovie = AptCIH_GetClipMovie(
+                    static_cast<AptCharacterSpriteInstBase*>(pInst));
+                AptValue* pLabelMatch = (pMovie->mpLabelHash && pName)
+                    ? pMovie->mpLabelHash->Lookup(*pName)
+                    : nullptr;
+                nFrame = pLabelMatch ? (pLabelMatch->toInteger() + 1) : 0;   // (-1)+1 == 0 on miss
+            }
+            else
+            {
+                nFrame = pTarget->toInteger();
+            }
+
+            // The stored/label frame is 1-based; seek to the 0-based index.
+            const int nSeek = nFrame - 1;
+            if (nSeek >= 0)
+            {
+                jumpToFrame(nSeek);
+
+                // Set/clear the clip's auto-play state bit (bit6 / 0x40 of the sprite
+                // mnClipActionFlags) from bPlay, then -- when it is PLAYING (bPlay set)
+                // -- re-dirty the node so it keeps ticking.
+                const bool bWantPlay = (bPlay != 0);
+                AptCharacterSpriteInstBase* pSprite =
+                    static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
+                pSprite->mnClipActionFlags =
+                    (pSprite->mnClipActionFlags & 0xFFFFFFBFu) | (bWantPlay ? 0x40u : 0u);
+                if (bWantPlay)
+                    SetDirtyState(true, true);
+            }
+        }
+    }
+    return gpUndefinedValue;
 }

@@ -238,4 +238,12 @@ struct AptAnimationTarget
     static int   DecNewInstSize();                        // @0x82AD5EC0 (post-increments)
     static void* GetDelayedReleaseList();                 // @0x82AD5ED8
     static int   GetDelayedReleaseListSize();             // @0x82AD5EE8
+
+    // ---- per-player analog-stick table accessors (X360 one-liners) -------------
+    // GetAStickLeft @0x82AD5F50 / GetAStickRight @0x82AD5F68 -- the address of player
+    // nPlayer's 16-byte left/right analog-stick snapshot (the tables AddAnalogInput's
+    // 0x1F5/0x1F6 cases write; stride 16 bytes / player). Static: the tables are the
+    // shared per-player arrays gAptAStickLeft/gAptAStickRight.
+    static char* GetAStickLeft (int nPlayer);             // @0x82AD5F50
+    static char* GetAStickRight(int nPlayer);             // @0x82AD5F68
 };
