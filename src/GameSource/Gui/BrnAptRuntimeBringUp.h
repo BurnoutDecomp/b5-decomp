@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 
+namespace CgsGraphics { struct Im2d; }   // the proven immediate-mode 2D renderer (the Apt render path)
+
 // =============================================================================
 // BrnAptRuntimeBringUp -- the host bring-up + per-frame driver for the EATech Apt
 // (ActionScript movie) runtime, wired into the ACTIVE BrnGui::GuiModule bridge so
@@ -43,18 +45,20 @@ namespace BrnGui
     // piece. lpacMovieName is the movie name BootLegal posted ("Title_Screen02").
     void AptRuntimePlayMovie(const char* lpacMovieName, s32 liLevelNum);
 
-    // ---- per-frame tick + render ----------------------------------------------
-    // If a movie is loaded, advance its timeline + run its ActionScript (tick) and
-    // drive the engine render dispatch so geometry fills the Im2dRenderBuffer.
+    // ---- per-frame tick -------------------------------------------------------
+    // If a movie is loaded, advance its timeline + run its ActionScript (tick). The
+    // RENDER moved to AptRuntimeRender (the proven immediate-mode path); this only ticks.
     // Called from GuiModule::Update.
     void AptRuntimeUpdate();
 
-    // ---- per-frame flush to D3D9 ----------------------------------------------
-    // Flush the Apt render buffer (the one AptRenderHandler::Render fills) to the
-    // screen via ImRenderBuffer<V>::Dispatch(). Called from the renderer hook
-    // (BrnRendererModule::Render) each frame, alongside gpActiveMovieManager. A
-    // null/empty buffer is a clean no-op.
-    void AptRuntimeFlush();
+    // ---- per-frame render to D3D9 (the PROVEN immediate-mode path) -------------
+    // Draw the loaded movie's geometry directly through the game's working immediate-mode
+    // 2D renderer (CgsGraphics::Im2d -- the SAME one the loading screen + debug HUD draw
+    // through, which owns a battle-tested per-frame DrawPrimitiveUP submission). This
+    // REPLACES the never-exercised raw ImRenderBuffer<V> Clear/BeginRendering/Swap/Dispatch
+    // path (which AV'd on first use). Called from the renderer hook (BrnRendererModule::
+    // Render) each frame with that module's mIm2dRenderer. Null/unresolved -> clean no-op.
+    void AptRuntimeRender(CgsGraphics::Im2d* lpIm2d);
 
     // True once AptRuntimeBringUp() has fully succeeded (the engine host is live).
     bool AptRuntimeIsReady();
