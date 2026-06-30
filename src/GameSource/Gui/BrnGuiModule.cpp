@@ -11,6 +11,8 @@
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"      // CgsResource::LuaCodeResource
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> (read the loading-event subtype)
 #include "GameShared/GameClasses/Fsm/CgsEvent.h"                          // CgsFsm::Event (drive BF_PROCEED through the FSM)
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::GuiEventPlayAptMovie (channel-41 payload)
+#include "GameSource/Gui/BrnAptRuntimeBringUp.h"                          // BrnGui::AptRuntime* (the Apt runtime bring-up + driver)
 
 // The loading-screen visual signal (BrnRendererModule::Render shows the loading screen while it's set).
 // The GUI BF_LOADING state now OWNS this when its FSM is live: BootLoading::Update PlayLoadingScreen
@@ -133,6 +135,42 @@ namespace BrnGui
         lpOutBase->Clear();
     }
 
+    // Route the BF_LEGAL state's emitted Apt-movie events to the Apt runtime. BootLegal emits
+    // GuiEventPlayAptMovie on channel 41 (type 18) carrying the movie name ("Title_Screen02") +
+    // level num; StateInterface::PlayAptMovie posted it. This is the channel-41 consumer the Apt
+    // runtime needed -- the parallel of RouteLoadingScreenEvents (which reads channel 40). It
+    // hands the movie name to the Apt runtime (load + tick + render). Defensive: every step the
+    // runtime takes is itself null-checked + logged + bails cleanly (see BrnAptRuntimeBringUp.cpp).
+    // NOTE: this does NOT clear the output queue -- BootLegal's other channel-41/40 outputs
+    // (apt-view-state, music, etc.) are consumed elsewhere; here we only OBSERVE channel 41.
+    static void RouteAptMovieEvents(CgsGui::StateInterface& lStateInterface)
+    {
+        CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue = lStateInterface.GetOutputEventQueue();
+        if (lpOutQueue == 0)
+            return;
+        CgsModule::VariableEventQueue<65536, 16>* lpOutBase = lpOutQueue;
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpOutBase->GetFirstEvent(&lpEvent, &liSize);
+        while (liId >= 0 && lpEvent != 0)
+        {
+            if (liId == 41)   // channel 41 = apt-movie events; BootLegal posts GuiEventPlayAptMovie (type 18)
+            {
+                const CgsGui::GuiEventPlayAptMovie* lpPlay =
+                    reinterpret_cast<const CgsGui::GuiEventPlayAptMovie*>(lpEvent);
+                if (lpPlay->muEventType == 18)   // GuiEventPlayAptMovie -> consume + (attempt to) load
+                {
+                    BrnGui::AptRuntimeBringUp();   // ensure the runtime is up (idempotent)
+                    BrnGui::AptRuntimePlayMovie(lpPlay->mpacMovieName, lpPlay->miLevelNum);
+                }
+            }
+            const CgsModule::Event* lpNext = 0;
+            liId = lpOutBase->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+        // Do NOT Clear() here: BootLegal's output queue carries other events consumed elsewhere.
+    }
+
     // Bring one boot FSM phase up: construct + wire the state into its StateMachine, then compile + enter
     // the Lua script (ScriptedFsm::Prepare -> SetState(id) -> state OnEnter). Returns true if the FSM came up.
     static bool SetupBootPhase(CgsGui::StateMachine& lStateMachine, CgsGui::State& lState,
@@ -226,6 +264,12 @@ namespace BrnGui
         mBootLegalInQueue.Construct();
         mBootLegalStateInterface.Construct();
         mbBootLegalFsmReady = false;
+
+        // Stand up the Apt runtime host (allocator + interpreter + AptAux host callback table +
+        // the render buffer) so it is live before BF_LEGAL posts PlayAptMovie("Title_Screen02").
+        // Idempotent + defensive (logs [AptRT] probes; bails cleanly at the first un-homed piece).
+        BrnGui::AptRuntimeBringUp();
+
         return true;
     }
 
@@ -344,6 +388,11 @@ namespace BrnGui
                 mBootLegalStateMachine.CgsFsm::Fsm::Update();   // runs BootLegal through the Lua FSM
             else
                 mBootLegal.Update();                            // fallback: drive BootLegal directly
+
+            // Consume BootLegal's channel-41 PlayAptMovie("Title_Screen02") output -> the Apt runtime
+            // (load the title movie), then tick the Apt runtime for this frame (advance + render).
+            RouteAptMovieEvents(mBootLegalStateInterface);
+            BrnGui::AptRuntimeUpdate();
             return;
         }
 

@@ -2,6 +2,7 @@
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
 #include "GameSource/Gui/BrnGuiMovieManager.h"   // BrnGui::gpActiveMovieManager (owns the movie player)
+#include "GameSource/Gui/BrnAptRuntimeBringUp.h" // BrnGui::AptRuntimeFlush (flush the Apt 2D render buffer to D3D9)
 
 // Minimal constructors for the off-path placeholder types embedded in BrnRendererModule
 // (Option B). The job system and the buffered dispatch frame are reconstructed with the
@@ -108,6 +109,12 @@ void BrnRendererModule::Render()
     {
         BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
     }
+
+    // Apt (ActionScript movie) render flush: the Apt runtime fills its own 2D render buffer (the
+    // one AptRenderHandler::Render appends to) when the engine render dispatch runs; flush it to
+    // D3D9 here each frame via ImRenderBuffer<V>::Dispatch (a clean no-op until geometry appears).
+    // This is how BootLegal's Title_Screen02 Apt geometry would reach the screen. [Apt render path]
+    BrnGui::AptRuntimeFlush();
 
     // (gameplay-render passes here when reconstructed; gated off during the loading screen)
 
