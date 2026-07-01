@@ -308,4 +308,23 @@ namespace CgsDev
         }
         DrawText(lpcText, lfX, lv2Position.y, lfScale, lColour);
     }
+
+    // ------------------------------------------------------------------------
+    // FLAG trap-stub bodies (link scaffold, 2026-07-01): GetVirtualScreenSize +
+    // CalcTextWidth are declared (header) and referenced by the language debug
+    // component's RenderHUD (wave f0de9b78), but not yet reconstructed. Trap
+    // bodies per the stub scaffold -- reachable only via that debug HUD panel.
+    // ------------------------------------------------------------------------
+    Vector2 Debug2DImmediateRender::GetVirtualScreenSize() const
+    {
+        __debugbreak();                       // FLAG trap-stub
+        const Vector2 lv2Zero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        return lv2Zero;
+    }
+
+    f32 Debug2DImmediateRender::CalcTextWidth(const char* /*lpcText*/, f32 /*lfScale*/) const
+    {
+        __debugbreak();                       // FLAG trap-stub
+        return 0.0f;
+    }
 }

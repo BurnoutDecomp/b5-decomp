@@ -5,18 +5,85 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnStateManager.h for the
 // dual-base inheritance rationale.
 //
-// This TU's dossier attests exactly 2 functions: GetResourceRegistrar
-// (X360 0x82696510) and the vector deleting destructor (X360 0x826FAB58).
-// GetTypeName/CreateObject/GetStaticTypeInfo/GetTypeInfo are NOT in the X360
-// ledger for this class (PS3-DecFIGS-only -- per the X360-attestation gate,
-// left undeclared/undefined here; the 8 concrete leaf managers each carry
-// their own real, attested versions).
+// This TU's dossier attests GetResourceRegistrar (X360 0x82696510) and the vector
+// deleting destructor (X360 0x826FAB58). GetTypeName (X360 0x82682AB8), CreateObject
+// (X360 0x826FB5F0) and GetStaticTypeInfo/GetTypeInfo (PS3 DecFIGS 0x822BF8, the
+// sTypeInfo descriptor) are ALSO bodied below -- the header declares them and the
+// 8 concrete leaf managers' vtables reference the base versions, so they are
+// link-required. (RESTORED 2026-07-01: a prior wave dropped these bodies while
+// keeping the header declarations, leaving 9 TUs with unresolved externals.)
 // =============================================================================
 
 namespace BrnSound
 {
 namespace Logic
 {
+
+// ---------------------------------------------------------------------------
+// GetTypeName  @ 0x82682AB8
+//
+//   lis   r11, off_82F2E7F0@ha
+//   addi  r11, r11, off_82F2E7F0@l
+//   lwz   r3,  (off_82F2E7F0)(r11)   ; r3 = "BrnStateManager"
+//   blr
+//
+// Returns the per-class RTTI type name. The X360 loads a pointer to the static
+// string literal "BrnStateManager" (the rodata at off_82F2E7F0 holds the
+// address of that C string).
+// ---------------------------------------------------------------------------
+const char* BrnStateManager::GetTypeName() const
+{
+    return "BrnStateManager";
+}
+
+// ---------------------------------------------------------------------------
+// CreateObject  @ X360 0x826FB5F0  (PS3 sTypeInfo.createObject = &CreateObject)
+//
+// The descriptor's factory hook: X360 allocates a 152-byte StateManager via
+// CgsSound::MemBase::operator new (the int arg is the operator-new flavour
+// selector, NOT `this` -- the function never reads an instance), runs the
+// StateManager ctor, then patches the BrnStateManager vptrs. The C++ `new`
+// expression performs exactly that sequence (allocate + ctor + vptr setup), so
+// the faithful PC equivalent is `new BrnStateManager`. STATIC class function so
+// its address is storable as the descriptor's free-function createObject pointer.
+// ---------------------------------------------------------------------------
+CgsSound::Logic::StateManager* BrnStateManager::CreateObject( u32 /*luType*/ )
+{
+    return new BrnStateManager();
+}
+
+// ---------------------------------------------------------------------------
+// GetStaticTypeInfo / GetTypeInfo  @ PS3 DecFIGS 0x822BF8  (`return &sTypeInfo;`)
+//
+// PS3 static-init (0x85FA1C): BrnStateManager::sTypeInfo = { ObjectID=-1,
+// "BrnStateManager", baseTypeInfo=&StateManager::sTypeInfo, createObject=&CreateObject }.
+// The 8 concrete leaves OVERRIDE this with their own descriptor; BrnStateManager's own
+// version is a vtable-filler -- a bare BrnStateManager is never created (ObjectID -1, so
+// CreateStateMan's 0..8 loop never matches it). Modelled as a function-local static
+// descriptor (ObjectID -1, name, canonical base, &CreateObject). createObject is
+// wired to the real factory (X360 0x826FB5F0 confirms the body), matching the PS3
+// descriptor field.
+// ---------------------------------------------------------------------------
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* BrnStateManager::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
+        -1, "BrnStateManager", CgsSound::Logic::StateManager::GetStaticTypeInfo(), &BrnStateManager::CreateObject);
+    return &sTypeInfo;
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* BrnStateManager::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+// ---------------------------------------------------------------------------
+// ResourcesAreReady  @ PS3 DecFIGS 0x8E8D24  -- empty (no-op). The leaves override with
+// their real resource-ready callbacks; the base does nothing (faithful to PS3).
+// (RESTORED with the RTTI bodies above -- same dropped-bodies regression.)
+// ---------------------------------------------------------------------------
+void BrnStateManager::ResourcesAreReady()
+{
+}
 
 // ---------------------------------------------------------------------------
 // GetResourceRegistrar  @ X360 0x82696510  (dossier name "GetResourceRegistr", truncated)
