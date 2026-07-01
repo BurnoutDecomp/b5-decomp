@@ -223,6 +223,46 @@ void AptActionInterpreter::_FunctionAptActionGreater(AptActionInterpreter* pInte
 }
 
 // ---------------------------------------------------------------------------
+// _FunctionAptActionLessThan2 (0x48; PS3 @0x801A28) -- ECMA `under < top`,
+// type-aware. SWF v7: any undefined operand -> undefined result (ShouldCompute).
+// Both defined strings -> strcmp(under, top) < 0; else a NaN operand -> undefined;
+// else either defined Float -> toFloat under < top; else toInteger under < top.
+// Result collapses the two operands (the console's inline pop-2 + push + AddRef).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionLessThan2(AptActionInterpreter* pInterp, LocalContextT*)
+{
+    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];   // v4
+    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];   // v5
+
+    AptValue* pResult = gpUndefinedValue;
+    if (ShouldCompute(pTop, pUnder))
+    {
+        if (IsDefinedString(pTop) && IsDefinedString(pUnder))
+        {
+            // Lexical: strcmp(under, top) < 0  <=>  under < top.
+            const char* sUnder = pUnder->c_string()->GetInternalString()->GetBuffer();
+            const char* sTop   = pTop->c_string()->GetInternalString()->GetBuffer();
+            pResult = AptBoolean::Create(strcmp(sUnder, sTop) < 0);
+        }
+        else if (isNaN(pTop) || isNaN(pUnder))   // FLAG: isNaN (value-layer follow-on)
+        {
+            pResult = gpUndefinedValue;
+        }
+        else if ((pTop->getVtblIndex()   == AptVFT_Float && pTop->getIsDefined()) ||
+                 (pUnder->getVtblIndex() == AptVFT_Float && pUnder->getIsDefined()))
+        {
+            pResult = AptBoolean::Create(pUnder->toFloat() < pTop->toFloat());
+        }
+        else
+        {
+            pResult = AptBoolean::Create(pUnder->toInteger() < pTop->toInteger());
+        }
+    }
+
+    CollapseTwo(pInterp, pResult);
+}
+
+// ---------------------------------------------------------------------------
 // _FunctionAptActionEquals2 @0x82AFA368 (0x49) -- the SWF-v7 ECMA-262 abstract
 // equality `under == top`.
 //
