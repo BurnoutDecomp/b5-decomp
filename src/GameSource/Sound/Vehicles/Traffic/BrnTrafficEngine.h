@@ -2,7 +2,12 @@
 #define BRN_SOUND_LOGIC_TRAFFIC_BRN_TRAFFIC_ENGINE_H
 
 #include "types.hpp"
-#include "GameSource/Sound/Module/LogicModule/Brn3DEffectControl.h"
+// BrnEffectObject.h FIRST: it and Brn3DEffectControl.h's transitive BrnEffectControl.h
+// share the guarded engine types (ClassTypeInfo/EffectBase); including the object home
+// first makes its superset EffectBase (with miObjectId) the one that wins for this TU.
+#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // BrnEffectObject dual base (BY NAME, for TrafficEngine)
+#include "GameSource/Sound/Module/LogicModule/Brn3DEffectControl.h" // Brn3DEffectControl base (for Traffic3DControl)
+#include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"     // CgsSound::Logic::VoiceWrapper value member (complete type)
 
 // =============================================================================
 // BrnSound::Logic::Traffic::Traffic3DControl
@@ -64,6 +69,53 @@ struct Traffic3DControl : public BrnSound::Logic::Brn3DEffectControl
 {
     Traffic3DControl() {}
     virtual ~Traffic3DControl();
+};
+
+// Forward-declare TrafficControl -- only a pointer to it is held (avoids pulling
+// BrnTrafficControl.h transitively; full definition lives in BrnTrafficControl.h).
+struct TrafficControl;
+
+// =============================================================================
+// BrnSound::Logic::Traffic::TrafficEngine
+//   GameSource/Sound/Vehicles/Traffic/BrnTrafficEngine.h (DWARF home, :42) +
+//   .cpp
+//
+// DWARF (references/DecFIGS/dwarfdump/.../BrnTrafficEngine.h:42) is AUTHORITATIVE:
+//   struct BrnSound::Logic::Traffic::TrafficEngine : public BrnSound::Logic::BrnEffectObject
+// (the dossier's "DWARF none found" is a known false negative). The X360 ctor
+// @ 0x826C9160 is MSVC's inlined full-object constructor: it inlines the
+// BrnEffectObject dual-base member zero-init, installs the two leaf vptrs directly
+// (off_820B37C4 @ this+0, off_820B3790 @ this+4 -- same shape as the committed
+// ExplosionEffect sibling), then zero-seeds its own members and constructs the
+// embedded VoiceWrapper at +0x44.
+//
+// This TU bodies the ctor (@ 0x826C9160) and its destructor (the empty out-of-line
+// ~TrafficEngine anchoring the vector-deleting-destructor thunk @ 0x826E18B8).
+// The remaining virtuals (GetTypeInfo/GetTypeName/GetStaticTypeInfo/CreateObject/
+// GetController/AttachController/Attach/UpdateParams/ProcessUpdate/Detach) are
+// SEPARATE recon slices and are DEFERRED.
+//
+// LAYOUT NOTE (X360 32-bit vs host 64-bit): the four own members land at the
+// attested ctor-tail offsets (+0x38/+0x3C/+0x40/+0x44) AFTER the BrnEffectObject
+// base on the X360; on the 64-bit host pointer/vptr widths differ, so members are
+// pinned BY NAME and DWARF declaration ORDER only, and absolute offsets are NOT
+// static_asserted. The base's inlined leaf scalar zero-inits (+0x08..+0x34) are
+// un-homed BrnEffectObject-base members (identical to the ExplosionEffect sibling),
+// produced by the base default ctor -- NOT fabricated as TrafficEngine members.
+// =============================================================================
+struct TrafficEngine : public BrnSound::Logic::BrnEffectObject
+{
+    TrafficEngine();                 // DWARF BrnTrafficEngine.h:113; ctor @ 0x826C9160
+    virtual ~TrafficEngine();        // DWARF BrnTrafficEngine.cpp:62; vector-deleting-dtor @ 0x826E18B8
+
+    // DWARF-attested members (BrnTrafficEngine.h:94-97), in declaration order.
+    uint16_t                                    mu16AemsPatchTrafficIndex; // BrnTrafficEngine.h:94 (X360 sth 0, +0x38)
+    BrnSound::Logic::Traffic::TrafficControl*   mpTrafficControl;          // BrnTrafficEngine.h:95 (X360 stw 0, +0x3C)
+    BrnSound::Logic::Traffic::Traffic3DControl* mpTraffic3DControl;        // BrnTrafficEngine.h:96 (X360 stw 0, +0x40)
+    CgsSound::Logic::VoiceWrapper               mTrafficEngineVoice;       // BrnTrafficEngine.h:97 (X360 bl VoiceWrapper ctor, this+0x44)
+
+    // FLAG: DWARF also lists sTypeInfo static + the RTTI/lifecycle virtuals listed
+    // above -- ALL OUT OF SCOPE for this TU and DEFERRED to their own slices.
 };
 
 } // namespace Traffic

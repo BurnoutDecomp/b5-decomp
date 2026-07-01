@@ -46,7 +46,16 @@ namespace Explosion
 struct ExplosionState : public BrnSound::Logic::BrnState
 {
     ExplosionState() {}
-    virtual ~ExplosionState() {}
+
+    // @ 0x826D5740 — vector deleting destructor. The X360 thunk installs
+    // ExplosionState's own vtable (off_820AE1F4), calls State::DestroyEffects()
+    // to tear down attached effects, re-installs the MemBase base vtable
+    // (off_820AA820) as the chain unwinds, and (deleting flavour) routes the
+    // storage back through the sound allocator. Observable body = the
+    // DestroyEffects() call; the vtable re-installs and allocator free are the
+    // compiler-synthesised deleting-destructor parts. Bodied out-of-line in
+    // BrnExplosionState.cpp (was an inline no-op).
+    virtual ~ExplosionState();
 
     // — per-class RTTI. DEFERRED bodies (declared for the state vtable shape).
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;
