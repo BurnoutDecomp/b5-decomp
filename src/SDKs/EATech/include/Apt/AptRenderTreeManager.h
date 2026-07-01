@@ -122,11 +122,19 @@ struct AptRenderTreeManager
     void Update_ItemFirstChildChanged(AptCIH* pCIH);
     void Update_ItemNextSiblingChanged(AptCIH* pCIH);
 
-    // Update_ItemInserted / Update_SetRootItem -- still deferred (not in this TU's
-    // decompile scope; Update_ItemMoved below calls Update_SetRootItem by name when
-    // a node has no previous/parent display-list neighbour, i.e. it becomes a root).
-    void Update_ItemInserted(AptCIH* /*pCIH*/, int /*nTick*/ = 0) {}
-    void Update_SetRootItem(AptCIH* /*pCIH*/, int /*nTick*/ = 0) {}
+    // Update_SetRootItem @0x82AE5568 -- make pNode's render item a RENDER ROOT: insert it
+    // into the per-target render-root chain whose head cell pointer is this manager's leading
+    // slot (mpRootList aliases the AptTarget's mppRenderRootAnchor via the reinterpret cast in
+    // AptCurrentRenderTreeManager). Empty slot -> _AptRenderItemRootList::Create a fresh anchor
+    // cell; otherwise InsertNewRoot appends (a no-op when the head already anchors that item).
+    // Called by Update_ItemMoved (when a node has no previous/parent display-list neighbour) and
+    // by AptDisplayListState::removeItem/insert as roots come/go.
+    void Update_SetRootItem(AptCIH* pNode, int nTick);
+
+    // Update_ItemInserted @0x82AECD70 -- a node was (re)inserted into a display list: clear its
+    // render item's deletion mark (it is alive again) then re-derive its manager links via
+    // Update_ItemMoved. (The X360 AptCharacterInst::ItemInserted forwards to this.)
+    void Update_ItemInserted(AptCIH* pNode, int nTick);
 
     // Update_ItemMoved @0x82AECD50 (helper-wrapped @0x82AECD50) -- a node moved in
     // the display list: re-derive its render item's previous-sibling / parent-first-

@@ -23,6 +23,17 @@
 #include <cstdint>
 #include <cstring>   // strstr (ExportClassDefinitionAssets' __Packages label scan)
 
+// The pass-3 import-registration probe sink (host-implemented; weak no-op default so this TU
+// links standalone). The host (BrnAptRuntimeBringUp) provides the strong definition that logs
+// each import's movie/class name + the loader handle, and then SYNC-loads the import bundle.
+#if defined(_MSC_VER)
+extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const char* pcClassName, void* pHandle);
+#pragma comment(linker, "/alternatename:CgsApt_ImportProbe=CgsApt_ImportProbeDefault")
+extern "C" void CgsApt_ImportProbeDefault(int, const char*, const char*, void*) {}
+#else
+extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const char* pcClassName, void* pHandle);
+#endif
+
 // ===========================================================================
 // Fixup walk -- un-homed callees / globals.   The serialised .apt records are the
 // in-place file blob (no recovered runtime struct), so this TU addresses them by
@@ -386,6 +397,65 @@ AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile*
     return Fixup(pBase, pConstFile, pBlock);
 }
 
+// ===========================================================================
+// AptResolveShapeGeometry -- the Step-2 case-1 shape-geometry resolve (the x64 native-8 fork
+// of gAptFuncs.pfnLoadRenderingUnit == CgsGui::AptCallbackRender::LoadRenderingUnit @0x5BAEA8).
+//
+// The console reads the GuiGeometryObject at userData+12 (a 4-byte pointer) then bsearches its
+// GuiGeometryFile* table for the file whose id == nCharacterId, returning that GuiGeometryFile*.
+// On our native-8 .apt the geometry object is instead at the AptDataHeader field[4] (native-8
+// offset +32) as a FILE-RELATIVE OFFSET, and its file pointer table is 8-byte-strided (each
+// 4-byte offset followed by 4 pad bytes -- the converter widened the pointer slots). So this:
+//   1. resolves the geometry object from the header (offset -> pointer against the resource base);
+//   2. linearly scans its 8-byte-strided file table for the file whose id matches nCharacterId,
+//      rebasing each file offset against the resource base;
+//   3. returns that GuiGeometryFile* (or null if none matches -- a safe, faithful "no unit").
+// This reproduces the console's "the shape's geometry file, keyed by character id" result.
+//
+// pBlock is the AptDataHeader (== f->mpDataBlock, threaded through Resolve). The resource base is
+// the load base the host stashed (CgsGui::gAptResourceSpanBase); the header + every geometry
+// offset is relative to it. // FLAG (x64 native-8 fork): the file-table 8-byte stride + the
+// offset-not-pointer geometry field are the converter's native-8 form, resolved here explicitly.
+static void* AptResolveShapeGeometry(void* pBlock, int32_t nCharacterId)
+{
+    if (pBlock == nullptr)
+        return nullptr;
+    const uintptr_t luBase = CgsGui::gAptResourceSpanBase;
+    const uint32_t  luSize = CgsGui::gAptResourceSpanSize;
+    if (luBase == 0)
+        return nullptr;
+
+    // The AptDataHeader field[4] (native-8 offset +32) holds the GuiGeometryObject's file offset.
+    const uint32_t luGeomObjOff =
+        static_cast<uint32_t>(*reinterpret_cast<const uint64_t*>(reinterpret_cast<char*>(pBlock) + 32));
+    if (luGeomObjOff == 0 || (luSize != 0 && luGeomObjOff + 12u > luSize))
+        return nullptr;
+
+    // GuiGeometryObject {u32 numFiles, u32 numTexPages, u32 fileTableOff} (4-byte object header).
+    const uint32_t* lpObj = reinterpret_cast<const uint32_t*>(luBase + luGeomObjOff);
+    const uint32_t luNumFiles     = lpObj[0];
+    const uint32_t luFileTableOff = lpObj[2];
+    if (luNumFiles == 0 || luNumFiles > 4096u || luFileTableOff == 0 ||
+        (luSize != 0 && luFileTableOff >= luSize))
+        return nullptr;
+
+    // The file pointer table is 8-byte-strided (native-8 fork): entry k at fileTableOff + k*8.
+    for (uint32_t lu = 0; lu < luNumFiles; ++lu)
+    {
+        const uint32_t luEntryOff = luFileTableOff + lu * 8u;
+        if (luSize != 0 && luEntryOff + 4u > luSize)
+            break;
+        const uint32_t luFileOff = *reinterpret_cast<const uint32_t*>(luBase + luEntryOff);
+        if (luFileOff == 0 || (luSize != 0 && luFileOff + 12u > luSize))
+            continue;
+        // GuiGeometryFile {u32 id, u32 numMeshes, u32 meshTableOff}.
+        const uint32_t luFileId = *reinterpret_cast<const uint32_t*>(luBase + luFileOff);
+        if (static_cast<int32_t>(luFileId) == nCharacterId)
+            return reinterpret_cast<void*>(luBase + luFileOff);   // the matching GuiGeometryFile*
+    }
+    return nullptr;   // no geometry file for this character id -> no rendering unit (safe)
+}
+
 // Fixup @0x82AFF268 (PS3 @0xF44D40) -- relocate the serialised movie root IN PLACE.
 // DECOMPILED FAITHFULLY from the X360 ARTIST.XEX + PS3 DecFIGS. SINGLE native-64-bit path
 // (we ship ONLY GUIAPT64 "1:7:8", 8-byte pointers). The console adds the load base to every
@@ -458,11 +528,26 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
 
         switch (i32At(pChar, 0x00))   // character type
         {
-            case 1:   // Shape: store the host rendering-unit handle at the geometry-id slot (+0x30).
-                // FLAG (Step 2): gAptFuncs.pfnLoadRenderingUnit reads the GuiGeometry context out of pBlock
-                // (a4) at a console offset; its faithful 64-bit form + the geometry-context arg are homed
-                // with the Fixup callees. The X360 does: *(void**)(pChar+0x30) = pfnLoadRenderingUnit(pBlock,i).
-                // Deferred here (marked boundary) -- the render path resolves geometry via the AptDataHeader.
+            case 1:   // Shape: store the host rendering-unit handle at the geometry slot (+0x20).
+                // UN-DEFERRED (Step 2, 2026-07-01). X360 @0x82AFF498-0x82AFF4B4:
+                //   *(void**)(pChar + 0x20) = gAptFuncs.pfnLoadRenderingUnit(pBlock /*a4*/, characterIndex);
+                // pfnLoadRenderingUnit (== CgsGui::AptCallbackRender::LoadRenderingUnit) bsearches the
+                // GuiGeometryObject's file table (at userData+12) for the file whose id == characterIndex
+                // and returns that GuiGeometryFile*, which AptCharacter::render later hands to
+                // DrawRenderingUnit -> AptRenderHandler::Render.
+                //
+                // FLAG (x64 native-8 fork): our .apt is native 8-byte, so the GuiGeometryObject is at the
+                // AptDataHeader's field[4] (native-8 offset +32) as a FILE-RELATIVE OFFSET (not the console
+                // +12 pointer), and its file/mesh/vertex tables are 4-byte offsets that must be rebased
+                // against the load base. AptResolveShapeGeometry (below) does that rebase once + hands
+                // pfnLoadRenderingUnit a shim userData whose +12 is the resolved GuiGeometryObject, exactly
+                // reproducing the console store. (The current bundle's geometry is empty -- every mesh has
+                // 0 vertices -- so this resolves a real, in-range GuiGeometryFile* that draws nothing; a
+                // future bundle with real shape vertices renders unchanged.)
+                {
+                    void* const lpUnit = AptResolveShapeGeometry(pBlock, i);   // pfnLoadRenderingUnit(pBlock, i)
+                    *reinterpret_cast<void**>(pChar + 0x20) = lpUnit;
+                }
                 break;
             case 2:   // Text (edit-text): relocate the text (+0x50) + variable (+0x58) string pointers.
                 reloc(pChar, 0x50);
@@ -515,22 +600,42 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
     }
 
     // ---- pass 3: the import table --------------------------------------------
+    // UN-DEFERRED (Step 3, 2026-07-01): the X360 registers each imported .apt with the loader:
+    // for each import entry, relocate its movie-name + class-name pointers, then call
+    // AptLoader::Load(gpAptTarget->mpLoader, movieName) (findFile-dedup; a miss allocates a
+    // "requested" AptFile) and assign that handle into the entry's AptFile slot (+0x18). The
+    // loader IS live now (gpAptTarget->mpLoader is initialised by AptCreateTargetInstance, and
+    // DriveFaithfulLoad already drives Load/CompleteLoad on it), so the prior "loader
+    // under-initialised -> AV" deferral is retired. The host (BrnAptRuntimeBringUp) then SYNC-
+    // loads the referenced import bundles (GuiApt\<name>.bundle) and resolves them, so
+    // charTable[importId] becomes a real character; an import bundle that is missing/unconvertable
+    // is left in the "requested" state (AptFile slot resolved but mpData null) -- an honest data
+    // boundary (an unresolved import is a real state), and the tick skips that one char safely.
     reloc(self, 0x38);   // mpImportTable
     {
         const int32_t nImports = i32At(self, 0x34);
+        AptTarget* const lpTarget = gpAptTarget;                    // off_8324E574
+        AptLoader* const lpLoader = lpTarget ? lpTarget->mpLoader : nullptr;   // [c:+0x1C]
         for (int32_t i = 0; i < nImports; ++i)
         {
-            char* const pEntry = ptrAt(self, 0x38) + i * 0x20;   // import entry: stride 0x20
+            char* const pEntry = ptrAt(self, 0x38) + i * 0x20;   // import entry: stride 0x20 (native-8)
             reloc(pEntry, 0x00);   // mpImportFileName (movie name)  -- FAITHFUL relocation
             reloc(pEntry, 0x08);   // mpClassName (import name)      -- FAITHFUL relocation
 
-            // FLAG (Step 8): the X360 next calls AptLoader::Load(movieName) on gpAptTarget->mpLoader to
-            // register the imported .apt (findFile-dedup, miss -> allocate a "requested" AptFile), then
-            // assigns the handle into the entry's AptFile slot (+0x18). The REAL loader is set up by the
-            // faithful AptAllocatorInitialize / AptCreateTargetInstance -- the current INVENTED host
-            // bring-up (BrnAptRuntimeBringUp) leaves mpLoader under-initialized, so calling the real Load
-            // here AVs. Deferred until the faithful bring-up (Step 8) replaces the invented facade; the
-            // import AptFile slot (+0x18) stays 0 (unresolved) meanwhile, resolved by the real load path.
+            // Register the imported .apt with the loader (the X360 EAStringC::InitFromBuffer +
+            // AptLoader::Load(&handle, loader, name) + AptFile::operator=(&entry+0x18, handle)).
+            const char* const pcMovieName = reinterpret_cast<const char*>(BlobPtr(pEntry, 0x00));
+            if (lpLoader != nullptr && pcMovieName != nullptr)
+            {
+                EAStringC lName(pcMovieName);
+                AptFilePtr lHandle = lpLoader->Load(lName);
+                // Assign the loader handle into the import entry's AptFile slot (+0x18, native-8).
+                AptFilePtr* const pSlot = reinterpret_cast<AptFilePtr*>(pEntry + 0x18);
+                pSlot->pData = lHandle.pData;   // share the loader's counted ref (the entry owns one)
+                CgsApt_ImportProbe(i, pcMovieName,
+                                   reinterpret_cast<const char*>(BlobPtr(pEntry, 0x08)),
+                                   lHandle.pData);
+            }
         }
     }
     return this;
