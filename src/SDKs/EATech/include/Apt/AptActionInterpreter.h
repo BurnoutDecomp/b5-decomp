@@ -400,6 +400,8 @@ public:
 
     // Delete2 0x3B : `delete name` -- clear the variable (setVariable null), push true
     static void _FunctionAptActionDelete2 (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    // Delete 0x3A : `delete object.name` -- clear the binding on the target, push true
+    static void _FunctionAptActionDelete  (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
     // Self-contained value / string / array opcodes:
     //   PushZeroSetVar 0x72 : push 0, then SetVariable;  StringLength 0x14 : top -> its length

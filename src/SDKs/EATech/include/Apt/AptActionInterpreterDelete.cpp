@@ -34,3 +34,29 @@ void AptActionInterpreter::_FunctionAptActionDelete2(AptActionInterpreter* pInte
     pInterp->mpStack[pInterp->mnStackTop++] = pResult;            // inlined stackPush
     pResult->AddRef();
 }
+
+// ---------------------------------------------------------------------------
+// Delete @PS3 0x81DF90 (0x3A) -- AS `delete object.name`. Stack: [object, name]
+// (name on top). When the target OWNS a native hash (vtbl slot 3,
+// ContainsNativeHashVirtual), render the name and clear the binding on the target
+// (setVariable with the target as the scope and a null value); then pop both
+// operands (releasing each, the console's inline 2-pop) and push `true`.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionDelete(AptActionInterpreter* pInterp,
+                                                    LocalContextT* pContext)
+{
+    AptValue* pName   = pInterp->mpStack[pInterp->mnStackTop - 1];   // v5 (top)
+    AptValue* pObject = pInterp->mpStack[pInterp->mnStackTop - 2];   // v6 (under)
+
+    if (pObject->ContainsNativeHashVirtual())                        // console vtbl+0xC
+    {
+        EAStringC scratch;
+        const EAStringC* pStr = AptValue::Get_ToString(pName, &scratch);
+        pInterp->setVariable(pObject, pContext->mpPendingReleaseValue, pStr, 0, 1, 1, 0);
+    }
+
+    pInterp->stackPop(2);                                            // release name + object
+    AptInteger* pResult = AptInteger::Create(1);                     // delete -> true
+    pInterp->mpStack[pInterp->mnStackTop++] = pResult;               // inlined stackPush
+    pResult->AddRef();
+}

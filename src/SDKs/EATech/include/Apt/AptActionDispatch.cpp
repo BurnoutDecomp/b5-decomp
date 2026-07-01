@@ -186,7 +186,7 @@ void AptActionInterpreter::InitDispatchTable()
     // this table -- every one below dispatched to the no-op stub even though
     // its faithful body existed. Wired per the extracted X360 map (0x82F73068).
     // Still on the no-op stub (genuinely unbuilt handlers): 0x05 PrevFrame,
-    // 0x28 StopDragMovie, 0x3A Delete, 0x48 LessThan2,
+    // 0x28 StopDragMovie, 0x48 LessThan2,
     // 0x5B CallFuncAndPop, 0x94 With, 0xA3 PushStringDictWord, 0xB0 DictCallFuncPop.
     // =======================================================================
 
@@ -212,6 +212,7 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x22] = &_FunctionAptActionGetProperty;
     sGlobalTable[0x23] = &_FunctionAptActionSetProperty;
     sGlobalTable[0x2B] = &_FunctionAptActionCastOp;
+    sGlobalTable[0x3A] = &_FunctionAptActionDelete;
     sGlobalTable[0x44] = &_FunctionAptActionTypeOf;
     sGlobalTable[0x46] = &_FunctionAptActionEnumerate;
     sGlobalTable[0x49] = &_FunctionAptActionEquals2;
