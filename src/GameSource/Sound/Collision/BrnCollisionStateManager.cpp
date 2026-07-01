@@ -275,6 +275,113 @@ BrnSound::Logic::ResourceRegistrar& CollisionStateManager::GetResourceRegistrar(
     return sUnhomedRegistrar;
 }
 
+// ---------------------------------------------------------------------------
+// CollisionStateManager::FindInScrapeHistory(const ScrapeInfo&)  @ 0x826889E0
+//   DWARF (BrnCollisionStateManager.h:880): non-const member returning ScrapeInfo*.
+//
+// Linear scan of the 16-slot scrape history (maScrapeHistory, DWARF h:639): for each
+// slot, the per-element ScrapeInfo::mbValid flag byte (+0x29) gates the comparison --
+// if the flag is clear, the slot is skipped WITHOUT calling operator== (mirrors the asm
+// short-circuit `!*(v5+41) || !operator==(...)`). The comparison is ScrapeInfo::
+// operator== (committed BrnCollisionDataStructures.cpp). First slot where mbValid is set
+// AND operator== returns true is returned; 16 misses returns nullptr.
+//
+// FLAG: maScrapeHistory is modelled with the COMMITTED ScrapeInfo (which carries mbValid
+// + operator==); the DWARF's full 48-byte ScrapeInfo shape (EntityId pair, CollisionTag,
+// eOrientation, etc.) is a deferred richer form -- this is a semantic-parity match on the
+// scan gate + equality, not a byte-exact element layout.
+// ---------------------------------------------------------------------------
+BrnSound::Logic::Collision::ScrapeInfo*
+CollisionStateManager::FindInScrapeHistory( const BrnSound::Logic::Collision::ScrapeInfo& rScrapeInfo )
+{
+    for ( u32 luIndex = 0; luIndex < 16u; ++luIndex )
+    {
+        BrnSound::Logic::Collision::ScrapeInfo& rSlot = maScrapeHistory[luIndex];
+
+        // asm: `!*(v5+41)` (lbz r11,0x29(r30)) short-circuits operator== when the slot's
+        // mbValid flag byte (+0x29) is clear.
+        if ( rSlot.mbValid && ( rSlot == rScrapeInfo ) )
+        {
+            return &rSlot;
+        }
+    }
+
+    return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// CollisionStateManager::PlayCollision(OutputCollision*)  @ 0x82704028
+//
+// FLAG (STUB -- deferred collision-audio domain; NOT X360-faithful): this is the
+// runtime "play a collision sound" entry point of the SAME collision-audio domain the
+// class ctor / dtor / Prepare / ResourcesAreReady / GetResourceRegistrar already defer
+// wholesale. A byte-faithful body needs types/globals NOT homed anywhere in the
+// committed tree and with no recovered host layout: OutputCollision (fields), the
+// GetRandomSampleID<Attrib::Gen::crashbin/propscrashbin> template methods over the
+// deferred crash-bin tables, the crash-splicer "voice" type (slot getters +0x14/+0xC
+// and the +0x54/+0x58 priority pair), the SoundLogicModule back-pointer (+0x2C) linked
+// list, and the collision-audio debug globals (dword_82FFB91C / off_82F2F9BC). Bodied
+// as a safe stub matching this class's established deferred-domain convention: it
+// asserts + returns 0 (the X360 abort-safe value; the boot path never calls this -- only
+// UpdateParams does, which this slice does not exercise). Revisit once the whole
+// collision-audio domain is homed together.
+// ---------------------------------------------------------------------------
+int CollisionStateManager::PlayCollision( OutputCollision* /*lpCollision*/ )
+{
+    CGS_ASSERT( false,
+                "CollisionStateManager::PlayCollision reached without the homed collision-audio "
+                "domain (OutputCollision / GetRandomSampleID<Attrib::Gen::*> / crash-voice type / "
+                "SoundLogicModule back-pointer are all deferred -- see header FLAG)" );
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// BrnSound::Logic::Collision  SelectBin name->bin-index helper  @ 0x826A0598
+//
+// Shared non-template body both CollisionStateManager::SelectBin<> instantiations
+// (SelectBin<crashbinlist,crashbin> and SelectBin<propscrashbinlist,propscrashbin>,
+// DWARF h:733) tail-call. Hashes the requested crash-bin content name (a2) with
+// CgsSound::Playback::Name::MakeHash and looks it up in a small interned name-hash
+// table starting at dword_83005F24.
+//
+//   Hash = MakeHash(a2);
+//   v6 = 0;
+//   for ( i = &dword_83005F24; Hash != *i; ++i )
+//       if ( ++v6 ) return 1;
+//   return v6;
+//
+// PPC control flow (0x826A05B8..0x826A05D4): the loop-exit `cmplwi v6,1 / blt` can never
+// re-enter once v6 has been bumped to 1, so the body runs AT MOST ONCE -- a hit on entry 0
+// returns bin index 0 (default); any miss returns bin index 1 (fallback). a1 (`this`, r3)
+// and a3/a4/a5 are DEAD in this leaf (the asm forwards ONLY a2 to MakeHash and never
+// dereferences `this`); kept in the signature for ABI documentation.
+//
+// FLAG (dword_83005F24 table UNRESOLVED): the interned crash-bin name-hash list this
+// indexes is NOT homed in this slice; modelled as a single attested slot (index 0, the
+// only load the asm performs) with a placeholder-zero sentinel rather than fabricating
+// the rest of the table.
+// ---------------------------------------------------------------------------
+namespace
+{
+    // Single attested table slot (dword_83005F24): the interned hash of the default /
+    // first crash-bin content name. Real value depends on the (unresolved) crash-bin
+    // name string table; 0 is a placeholder sentinel.
+    uintptr_t gauCollisionBinNameHashes[1] = { 0 };
+}
+
+int SelectBin( int /*a1*/, const char* lkpacName, int /*a3*/, int /*a4*/, int /*a5*/ )
+{
+    uintptr_t luHash = CgsSound::Playback::Name::MakeHash( lkpacName );
+
+    int luBinIndex = 0;
+    for ( uintptr_t* lpuEntry = gauCollisionBinNameHashes; luHash != *lpuEntry; ++lpuEntry )
+    {
+        if ( ++luBinIndex )
+            return 1;
+    }
+    return luBinIndex;
+}
+
 } // namespace Collision
 } // namespace Logic
 } // namespace BrnSound

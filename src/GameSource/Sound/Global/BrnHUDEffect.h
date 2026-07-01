@@ -2,7 +2,9 @@
 #define BRN_SOUND_LOGIC_BRN_HUD_EFFECT_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                        // Vector3 (GetSlipstreamAmount params)
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
 
 // =============================================================================
 // BrnSound::Logic::HUDEffect::GameModeData
@@ -52,10 +54,16 @@ namespace BrnSound
 namespace Logic
 {
 
-// BrnHUDEffect.h:106 (DWARF). Minimal declaration so the nested GameModeData has
-// its enclosing scope. The full HUDEffect surface (its BrnEffectObject base,
-// CustomHudVoice members, UpdateGameModeHud, RTTI hooks) is DEFERRED.
-struct HUDEffect
+// BrnHUDEffect.h:106 (DWARF). HUDEffect : public BrnSound::Logic::BrnEffectObject.
+// Grown from the previous member-less shell to the DWARF base + the two ledger
+// functions that fit this slice (ctor + GetSlipstreamAmount) plus the dtor anchor that
+// drives the compiler-synthesised vector deleting destructor + adjustor{4} thunks. The
+// full member surface (maVoices[3] VoiceWrapper, maGameModeVoices[4] CustomHudVoice,
+// mMusicStream, mHudMessageData presentationcomponent, + the effect vtable) uses
+// un-homed types and is DEFERRED / declaration-only per the ExplosionEffect/
+// StreamingEffect minimal-home convention -- NOT fabricated here. Only mGameModeData
+// (the committed nested GameModeData) is materialised as a real member.
+struct HUDEffect : public BrnSound::Logic::BrnEffectObject
 {
     // BrnHUDEffect.h:36 (DWARF). Per-game-mode HUD-audio data block.
     struct GameModeData
@@ -79,6 +87,33 @@ struct HUDEffect
         CgsSound::Utils::DataPoint<f32>   mShowtimeBoostDelta;  // :324  (+100,+104)
         bool                              mbTimeExtended;       // :327  (+108)
     };
+
+    // @ 0x826E1940 -- the anchor ctor. Bodied in BrnHUDEffect.cpp; base + members
+    // default-construct (matching the ExplosionEffect minimal-home ctor shape).
+    HUDEffect();
+
+    // @ 0x826E1E00 vector deleting destructor + @ 0x826E1BC0 adjustor{4} forward to
+    // this virtual dtor (compiler-synthesised; empty leaf anchor in the .cpp).
+    virtual ~HUDEffect();
+
+    // @ 0x82686BA8. Slipstream-audio proximity/alignment weight for the car in front.
+    // The three Vector3 args arrive in vector registers (v1/v2/v3); `this` (r3) is
+    // unused by the body. DWARF renders the return as `double`.
+    f64 GetSlipstreamAmount( Vector3 lCarInFrontVelocity,
+                             Vector3 lOwnWeightedVelocity,
+                             Vector3 lNegatedDirection );
+
+    // DWARF :338 (@ this+0x430). The per-game-mode HUD-audio data block, default-
+    // constructed by the ctor. Materialised BY NAME (its generics live in the committed
+    // CgsSoundUtils home).
+    GameModeData mGameModeData;
+
+    // FLAG: the DWARF also lists maVoices[3] (VoiceWrapper), maGameModeVoices[4]
+    // (CustomHudVoice), mMusicStream (BrnSound::Logic::MusicStream), mHudMessageData
+    // (Attrib::Gen::presentationcomponent) + trailing scalars, using types with NO
+    // committed home -> DECLARATION-ONLY / DEFERRED (NOT emitted as concrete members;
+    // same treatment as StreamingEffect::streamsettings). UpdateSlipStreaming
+    // @ 0x82701BA8 is BLOCKED (raw-offset seams into un-homed module/interface state).
 };
 
 } // namespace Logic

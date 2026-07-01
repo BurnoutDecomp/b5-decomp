@@ -41,6 +41,30 @@ Passby3DControl::~Passby3DControl()
 {
 }
 
+// ---------------------------------------------------------------------------
+// ~PassbyEffect  @ 0x826C9200  (the X360 `scalar deleting destructor')
+//
+//   bl   ~PassbyEffect                   ; run the (leaf, empty-here) destructor
+//   if (r30 & 1) {                       ; deleting flavour
+//       memset(&v5[1], 0, 16) ; v5[0] = this
+//       (*(*off_82FFB954 + 0x14))(off_82FFB954, v5)   ; sound allocator Free(this)
+//   }
+//   return this
+//
+// The single observable source-level side effect is the ~PassbyEffect() call, which
+// forwards to the inherited BrnEffectObject base destructor chain (committed at
+// GameSource/Sound/Module/LogicModule/BrnEffectObject.h) -- no member stores are
+// attested inline at this address. The (a2 & 1) tail routes the object through the
+// global sound allocator (off_82FFB954, vtable slot +0x14 == Free); that allocator is
+// not homed in this group, so the `delete` half is left to the host toolchain's
+// virtual-destructor + operator-delete lowering -- identical treatment to the committed
+// Passby3DControl (0x826E8ED0) and ExplosionEffect (0x826E8F78) scalar deleting
+// destructors.
+// ---------------------------------------------------------------------------
+PassbyEffect::~PassbyEffect()
+{
+}
+
 } // namespace Passby
 } // namespace Logic
 } // namespace BrnSound

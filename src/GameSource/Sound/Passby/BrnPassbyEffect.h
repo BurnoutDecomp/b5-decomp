@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/Brn3DEffectControl.h"
+#include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // PassbyEffect base (committed, BY NAME)
 
 // =============================================================================
 // BrnSound::Logic::Passby::Passby3DControl
@@ -60,6 +61,21 @@ struct Passby3DControl : public BrnSound::Logic::Brn3DEffectControl
 {
     Passby3DControl() {}
     virtual ~Passby3DControl();
+};
+
+// BrnPassbyEffect.h:42 (DWARF): PassbyEffect : public BrnSound::Logic::BrnEffectObject.
+// The sibling PassbyEffect object class the committed header comment above reserved.
+// Minimal home for the `scalar deleting destructor' @ 0x826C9200 slice: only the base
+// + virtual destructor are materialised; the full DWARF surface (mVoice, mAttribs,
+// mPosition, meLifetime, mpPassby3DControl, mePrepareState, muSampleId, mfPitchScale,
+// mfVolumeScale, mbPlayerIsBoosting, mbFirstUpdate + the RTTI/Prepare/Attach/
+// UpdateParams/ProcessUpdate/Detach methods) is DEFERRED to its own recon slices and is
+// NOT fabricated here. The dtor is DWARF-virtual and its body is empty -- all teardown
+// forwards to the inherited BrnEffectObject base chain.
+struct PassbyEffect : public BrnSound::Logic::BrnEffectObject
+{
+    PassbyEffect() {}
+    virtual ~PassbyEffect();   // @ 0x826C9200 -- see BrnPassbyEffect.cpp
 };
 
 } // namespace Passby

@@ -124,6 +124,95 @@ f32 CollisionEffect::GetGain() const
     return mSizeSettings.mfVolume * lfMixerOutput; // fmuls f1, f13, f0
 }
 
+// =============================================================================
+// BrnSound::Logic::Collision::Collision3DControl -- out-of-line bodies.
+// (Added to the existing CollisionEffect TU home; both classes share the DWARF
+//  source BrnCollisionEffect.h. See the header for the inheritance rationale.)
+//
+// This slice's recon'd function set is three entries:
+//   Collision3DControl()           @ 0x826E88D0
+//   CreateObject(u32)              @ 0x826F80E8
+//   `scalar deleting destructor'   @ 0x826F8168
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Collision3DControl::Collision3DControl  @ 0x826E88D0
+//
+//   bl   Brn3DEffectControl::Brn3DEffectControl   ; GRANDPARENT ctor (mEngineDataAtrib etc.)
+//   li   r10, 0 ; stw r10, 0xD0(r31)              ; mpTransform            = nullptr
+//   stw  &off_820B6240, 0(r31)                    ; primary vptr (implicit)
+//   stvx128 v0, r31, 0xE0                          ; mPositionInUserSpace   = {0,0,0}
+//   stvx128 v0, r31, 0xF0                          ; mDirectionInUserSpace  = {0,0,0}
+//   stvx128 v0, r31, 0x100                         ; mGeneratedPosition     = {0,0,0}
+//   stvx128 v0, r31, 0x110                         ; mGeneratedDirection    = {0,0,0}
+//   return r31
+//
+// The X360 body INLINES the Brn3DUserSpaceEffectControl construction: it calls the
+// grandparent Brn3DEffectControl() directly, then nulls mpTransform (+0xD0) and
+// zero-inits the four 16-byte Vector3s (+0xE0/+0xF0/+0x100/+0x110). Delegating to
+// Brn3DUserSpaceEffectControl() (which chains Brn3DEffectControl() + nulls mpTransform
+// + SetZero()s the four Vector3s) reproduces that sequence BY NAME; Collision3DControl
+// adds NO members of its own. The +0(vptr) store is the compiler-emitted leaf
+// final-overrider vptr write (the RTTI table off_820B6240 is DEFERRED to its own TU).
+// ---------------------------------------------------------------------------
+Collision3DControl::Collision3DControl()
+    : Brn3DUserSpaceEffectControl() // chains Brn3DEffectControl() + nulls mpTransform + SetZero()s the 4 Vector3s
+{
+}
+
+// ---------------------------------------------------------------------------
+// Collision3DControl::CreateObject(u32)  @ 0x826F80E8   (the factory hook)
+//
+//   if ( a1 ) { if ( MemBase::operator new(288, "Collision3DControl", 1) ) return new'd ctor; }
+//   else      { if ( MemBase::operator new(288, "Collision3DControl", 0) ) return new'd ctor; }
+//   return 0;
+//
+// The X360 allocates a 288-byte (0x120) block through CgsSound::MemBase::operator
+// new(size, tag, flavour) tagged "Collision3DControl" and placement-constructs a
+// Collision3DControl into it. Both arms call the SAME size+ctor; the `a1` argument
+// only selects the operator-new flavour (0/1). DWARF (BrnCollisionEffect.h:199)
+// attests `EffectControl* CreateObject(uint32_t)` (non-virtual, non-const).
+//
+// FLAG (allocator gate): CgsSound::MemBase does NOT model operator new(size, tag,
+// flavour) (off_82FFB954 not homed in this group), so a faithful placement-new is not
+// yet expressible. This uses the host `new`; the observable result matches. Mirrors
+// the committed CollisionStateManager::CreateObject @ 0x82701FA8. The 0x120 size is
+// documentation only and is NOT passed to the host new.
+// ---------------------------------------------------------------------------
+CgsSound::Logic::EffectControl* Collision3DControl::CreateObject( u32 /*luType*/ )
+{
+    return new Collision3DControl();
+}
+
+// ---------------------------------------------------------------------------
+// ~Collision3DControl  @ 0x826F8168  (the X360 `scalar deleting destructor')
+//
+//   stw  &off_820B3670, 0(this)                    ; leaf vptr @ entry
+//   bl   Attrib::Instance::~Instance(this + 0xB0)  ; destroy mEngineDataAtrib (base-owned)
+//   li   r9, 3 ; stw r9, 0x24(this)                ; meDetachState = E_DETACH_STATE_FINISHED
+//   stw  &off_820AA820, 0(this)                    ; final base vptr settle
+//   stb  0, 0x2D(this)                             ; (un-homed byte flag) = 0
+//   stw  0, 0x20(this)                             ; meAttachState = E_ATTACH_STATE_NONE
+//   if (a2 & 1) { deallocate via off_82FFB954 (the global sound MemBase allocator) }
+//   return this
+//
+// Every store above is produced by the compiler-generated virtual-destructor chain:
+// the leaf vptr install, the intermediate Brn3DUserSpaceEffectControl teardown
+// (trivial Vector3 members), and Brn3DEffectControl's destructor which tears down
+// mEngineDataAtrib (@ +0xB0 via the committed Attrib::Instance::~Instance) and settles
+// meDetachState/meAttachState + the final vptr. So this leaf body adds nothing of its
+// own and is empty -- identical treatment to the sibling Passby3DControl dtor
+// (BrnPassbyEffect.cpp @ 0x826E8ED0).
+//
+// FLAG: the (a2 & 1) tail invokes the global sound allocator (off_82FFB954) to free
+// the object; that allocator is not homed here, so the `delete` half is left to the
+// host toolchain (same treatment as the committed Brn3DEffectControl / Passby3DControl
+// homes).
+// ---------------------------------------------------------------------------
+Collision3DControl::~Collision3DControl()
+{
+}
+
 } // namespace Collision
 } // namespace Logic
 } // namespace BrnSound

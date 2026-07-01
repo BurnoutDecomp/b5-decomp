@@ -42,6 +42,32 @@ namespace Logic
 namespace Streaming
 {
 
+// Forward decl for StreamRequest.mpAttachment (pointer only; real home
+// BrnStreamingEffect.h -- an interface, not reconstructed here).
+class IStreamUser;
+
+// BrnStreamingStateManager.h:49 (DWARF) -- 24 bytes / 6 dwords (== X360 slot stride).
+// The maPlayRequests / maRePostRequests ring element. DISTINCT from the unrelated
+// BrnStreamingState.h StreamingRequest (StreamingState's embedded per-state request).
+struct StreamRequest
+{
+    IStreamUser* mpAttachment;   // +0x00
+    u32          mu32Priority;   // +0x04
+    f32          mfLagTolerance; // +0x08
+    f32          mfTimeStamp;    // +0x0C  (stamped in PostStreamRequest)
+    u32          mu32UniqueId;   // +0x10  (stamped in PostStreamRequest)
+    bool         mbDirty;        // +0x14  (+3 pad -> 24)
+};
+
+// BrnStreamingStateManager.h:81 (DWARF) -- 16-byte stop-request ring element.
+struct StreamStopRequest
+{
+    const IStreamUser* mpAttachment; // +0x00
+    f32                mfFadeOut;    // +0x04
+    f32                mfTimeStamp;  // +0x08
+    u32                mu32UniqueId; // +0x0C
+};
+
 class StreamingStateManager : public BrnSound::Logic::BrnStateManager
 {
 public:
@@ -67,6 +93,21 @@ public:
     virtual void                            ResourcesAreReady();    // (stub -- domain cascade; see .cpp FLAG)
     virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar(); // (stub -- module not homed; see .cpp FLAG)
 
+    // ---- request-ring API (DWARF-attested) ----
+    // Capacity of the play/stop/re-post rings (asm cmplwi cr6, count, 6).
+    enum { E_MAX_STREAM_REQUESTS = 6, E_MAX_REQUEST_RE_POSTS = 6 };
+
+    // @ 0x826834F0 (DWARF h:255). Append a play request, stamp its timestamp + unique
+    // id from the manager's running counters, then bump both.
+    void PostStreamRequest( const StreamRequest& lStreamRequest );
+
+private:
+    // @ 0x826836A8 (DWARF h:305). Append a play request to the ring + bump the count.
+    void PostStreamRequestInternal( const StreamRequest& arRequest );
+
+    // @ 0x82683750 (DWARF h:347). Append a re-post request to the ring + bump the count.
+    void RePostStreamRequest( const StreamRequest& request );
+
 private:
     // FLAG (deferred body -- ~360 bytes): the X360 object is 552 bytes (0x228). The
     // per-stream voice/parameter state (the dense f32 + int table the ctor zero-inits
@@ -78,6 +119,19 @@ private:
     // named without fabricating field meanings. Size is UNVERIFIED on host (the X360
     // 0x228 is a 32-bit fact); NOT static_asserted.
     u8 maDeferredStreamingState[1]; // placeholder for the un-reconstructed streaming-voice members
+
+    // DWARF-attested request rings (BrnStreamingStateManager.h:229-237), in declaration
+    // ORDER. The PostStreamRequest/PostStreamRequestInternal/RePostStreamRequest bodies
+    // touch these BY NAME. mfCurrentTime (the timestamp source) is the committed base
+    // member (CgsStateManager.h:253). Offsets are X360 facts; pinned BY NAME, the 0x228
+    // total NOT static_asserted on host.
+    StreamRequest     maRePostRequests[6];  // +0x098 (DWARF :229)
+    StreamRequest     maPlayRequests[6];    // +0x128 (DWARF :230; the PostStreamRequest ring)
+    StreamStopRequest maStopRequests[6];    // +0x1B8 (DWARF :231)
+    u32               muPlayRequestCount;   // +0x218 (DWARF :233)
+    u32               muStopRequestCount;   // +0x21C (DWARF :234)
+    u32               muNumRePostRequests;  // +0x220 (DWARF :235)
+    u32               muUniqueId;           // +0x224 (DWARF :237; monotonic id stamped per post)
 };
 
 } // namespace Streaming
