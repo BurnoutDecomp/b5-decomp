@@ -1393,7 +1393,15 @@ namespace BrnGui
         //       AptDisplayList::placeObjectNCXForm, which creates/inserts the placed AptCharacterInst.
         // Frame 0 of TITLE_SCREEN02 carries 12 place commands + 1 back-to-script (verified vs the
         // bundle), so the tick populates the root clip's child display list with the title's characters.
-        bool lbTickReady = true;   // UN-DEFERRED 2026-07-01: resolve64 + native-8 doFrameControls + AptMovie_PlaceCommand all homed
+        // FLAG (re-deferred 2026-07-01, boot-stability): resolve64 + native-8 doFrameControls +
+        // AptMovie_PlaceCommand are homed and frame-0 composition is PROVEN (childNodes=7, no AV).
+        // But the tick ADVANCES the 103-frame timeline and silently AVs (~25s) on a LATER frame that
+        // places the deferred pieces: the imported char (charId 30 -> charTable[30] null because
+        // Fixup pass-3 import-load is deferred) and shape chars whose geometry is deferred (case-1
+        // pfnLoadRenderingUnit). Re-enabling the full tick regresses the stable boot, so it stays
+        // deferred until the import-load + shape-geometry (+ the render-tree flush for pixels) land.
+        // The render-leaf BODIES stay faithful + committed; only the per-frame drive is deferred.
+        bool lbTickReady = false;
         if (lbTickReady && s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr)
         {
             AptCIH* lpRoot = static_cast<AptCIH*>(s_pFaithfulRootCIH);
