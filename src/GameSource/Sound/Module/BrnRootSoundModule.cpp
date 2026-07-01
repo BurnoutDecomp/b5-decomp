@@ -1,173 +1,252 @@
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint / Message filter
+#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor (START stage)
+#include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"            // CgsSound::TestBed::Allocator (the four carve globals)
 
-// BrnSound::Module::RootSoundModule -- see the header. Minimal-then-grow reconstruction of the root
-// sound module's Construct (0x826AF350) + Prepare (0x826FABF8). The real audio engine is grown on top.
+// BrnSound::Module::RootSoundModule -- see the header. Reconstructed from BURNOUT_X360_ARTIST.XEX
+// (ctor 0x827E4808, Construct 0x826AF350, Prepare 0x826FABF8), cross-checked against the DecFIGS
+// PS3 build (0x8D0570) whose symbols name every store this TU makes.
+
+// ---------------------------------------------------------------------------------------------
+// File-scope globals (DWARF BrnRootSoundModule.cpp:50-64; the PS3 Prepare names all four
+// allocators). Each Prepare stage carves one RW general resource out of the game-data
+// AllocatorList and hands it to the matching subsystem through one of these testbed wrappers:
+//   gRwacTestBedAlloc     X360 0x82FFBF78  (RWAC stage, bank 0x18 -> rw::audio::core::System)
+//   gCsisTestBedAlloc     X360 0x830086F0  (RWAC stage, bank 9    -> Csis::System)
+//   gPlaybackTestBedAlloc X360 0x8300A6F8  (PLAYBACK stage, bank 9)
+//   gLogicTestBedAlloc    X360 0x830060D0  (LOGIC stage, bank 0x19)
+//   KB_TESTBED_ALLOCATORS_VERBOSE / _SANITY  X360 0x82FFB810/0x82FFB811 (debug toggles, off)
+//   KI_DEBUG_PRINT_AUDIO_ALLOCATIONS         (debug toggle, off)
+// ---------------------------------------------------------------------------------------------
+namespace
+{
+    bool KB_TESTBED_ALLOCATORS_VERBOSE = false;
+    bool KB_TESTBED_ALLOCATORS_SANITY  = false;
+    s32  KI_DEBUG_PRINT_AUDIO_ALLOCATIONS = 0;
+
+    // Static-init names from the X360 dynamic initializers (0x82C61A88/AC8/B08: Allocator(&g,
+    // "<name>", 0); the gRwac one (0x82C61A48) was not exported -- name matched to the sibling
+    // pattern, FLAG: unverified against the binary string).
+    CgsSound::TestBed::Allocator gRwacTestBedAlloc("Rwac", 0);
+    CgsSound::TestBed::Allocator gCsisTestBedAlloc("Csis", 0);
+    CgsSound::TestBed::Allocator gPlaybackTestBedAlloc("Playback", 0);
+    CgsSound::TestBed::Allocator gLogicTestBedAlloc("Logic", 0);
+}
 
 namespace BrnSound
 {
 namespace Module
 {
-    // 0x827E4808. The X360 constructor, with the base ctor inlined by Hex-Rays:
-    //   *a1 = &off_820CE500                      -> base ModuleSingleBuffered subobject ctor:
-    //   RWMutex(a1 + 4,  0, 1)                      installs the base vtable and default-constructs
-    //   RWMutex(a1 + 70, 0, 1)                      mInputMutex (+0x10) and mOutputMutex (+0x118)
-    //                                               with RWMutex(NULL, true).
-    //   *a1 = off_820D1100                       -> our own vtable (emitted implicitly).
-    //   SoundLogicModule(a1 + 160)               -> mLogicModule   (embedded @ +0x280).
-    //   DebugComponent(a1 + 21326)               -> mDebugComponent (embedded @ +0x14D38).
-    // The two mutexes and both vtable stores are produced by the base subobject + member
-    // construction; only the bookkeeping fields below (used by the grown Construct/Prepare path)
-    // are seeded here.
+    // DWARF BrnRootSoundModule.cpp:133 (X360 dword_82FFB818).
+    s32 RootSoundModule::msiMutexLockCount = 0;
+
+    // 0x827E4808. The full X360 body:
+    //   *this = &off_820CE500;            base ModuleSingleBuffered subobject ctor -> installs the
+    //   RWMutex(this+0x10, 0, 1);         base vtable and default-constructs the input/output
+    //   RWMutex(this+0x118, 0, 1);        RWMutexes (all produced by the base ctor here)
+    //   *this = off_820D1100;             our own vtable (emitted implicitly)
+    //   SoundLogicModule(this+0x280);     mLogicModule   (member ctor, implicit)
+    //   DebugComponent(this+0x14D38);     mDebugComponent (member ctor, implicit)
+    // Nothing else: the X360 ctor leaves every state field (mpSystem, the stage words, the
+    // perfmon handles) untouched -- Construct() seeds them and always runs first on the module
+    // path, so this ctor body is intentionally empty.
     RootSoundModule::RootSoundModule()
-        : mbConstructed(false)
-        , mbPrepared(false)
-        , mpAllocator(nullptr)
-        , mePrepareStage(E_PREPSTAGE_PERFMON)
     {
     }
 
-    // 0x826AF350. The X360 ctor-path: base ModuleSingleBuffered::Construct, zero a block of state
-    // fields, init two embedded sub-objects (+0x4B8 / +0x280), build + register a Debug component,
-    // construct an event-receiver queue (+0x13900), and set the constructed flag *(this+4)=1.
-    // [minimal] mark the module constructed; the sub-objects + debug component + event queue are
-    // grown with the audio engine (S6).
+    // 0x826AF350 (vtable slot 0). Steps, in X360 order:
+    //   [0] the listing opens with `CgsSceneManager::CgsCollision::BaseCollisionGenerator::
+    //       Destruct(3)` -- a Hex-Rays/ICF artifact (r3 = the constant 3, not a `this`); the
+    //       folded callee is a no-op frame. Not a real call; nothing to reproduce.
     void RootSoundModule::Construct()
     {
-        // Faithful order from 0x826AF350 (steps that have a real PC backing are implemented; the
-        // uncommitted ones are marked grow-ins):
-        //   [skip] X360 step 1 (BaseCollisionGenerator::Destruct(3)) is a Hex-Rays/ICF artifact
-        //          (r3=3 constant, not `this`) -- not a real call.
+        // [1] *(this+0x14D18) = 0 -- clear the RWAC system handle before anything else.
+        mpSystem = 0;
 
-        // [step 3] base module construct (resets stages, builds the data buffers).
+        // [2] the module base (resets the prepare/release stage machines, constructs the two
+        //     DataBuffers, clears mbIsNewModule).
         CgsModule::ModuleSingleBuffered::Construct();
 
-        // [steps 4-5] GROW-IN: the X360 virtual-inits two embedded sub-objects -- this+0x4B8
-        //   (vtable slot 16, arg 6) and this+0x280 (slot 0) -- which live inside the embedded
-        //   SoundLogicModule (~79KB) the minimal RootSoundModule does not yet mirror. Added with
-        //   the audio engine (the Playback/Logic sub-modules).
-        // [steps 6-7] GROW-IN: BrnSound::Debug::DebugComponent::Construct(this+0x4D38, +0x4B8,
-        //   +0x280) + CgsDev::DebugComponent::Register -- the PC BrnDebugComponent only models a
-        //   default ctor (no Construct(a,b)); wired with the sub-objects above.
+        // [3] (*(vtbl(this+0x4B8) + 0x40))(this+0x4B8, 6) -- virtual-init the PLAYBACK module
+        //     (mLogicModule's CgsSound::Logic::Module engine base embeds it at +0x238) with
+        //     module-id 6. [gated] the SoundLogicModule slice does not model that engine base
+        //     yet, so there is no playback member to reach; lands with the playback-module TU.
 
-        // [step 8] the event-receiver queue @ X360 this+0x13900 (capacity 5120, align 16). Real +
-        //   faithful: Construct() performs the X360 capacity/alignment/Clear sequence.
-        mEventQueue.Construct();
-
-        // [steps 4-5, partial] bring up the embedded SoundLogicModule -- the X360 virtual-inits its
-        //   sub-objects (+0x4B8/+0x280) as part of RootSoundModule::Construct. This runs the embedded
-        //   ResourceRegistrar's bring-up (its request queues + requested/queued pools go live).
+        // [4] (*(vtbl(this+0x280)))(this+0x280) -- the logic module's Construct (vtable slot 0).
         mLogicModule.Construct();
 
-        // Bring up the scratch logic IO buffers (CgsModule::IOBuffer requires Construct before use).
-        // These back the LOGIC Prepare stage's non-null input/output -- the boot caller passes null
-        // (see the scratch-buffer note in the header). X360: the equivalent buffers are CreateIOBuffer'd
-        // on the IOBufferStack inside Prepare; the minimal model constructs owned buffers up front.
-        mLogicInputScratch.Construct();
-        mLogicOutputScratch.Construct();
+        // [5]+[6] BrnSound::Debug::DebugComponent::Construct(&mDebugComponent, this+0x4B8,
+        //     this+0x280) + CgsDev::DebugComponent::Register(&mDebugComponent) -- wire the sound
+        //     debug pages to the playback + logic modules and register the component. [gated]
+        //     Construct(playback, logic) is not in the DebugComponent slice (no export was
+        //     dumped for it) and its playback arg does not exist yet (step [3]); both land
+        //     together.
 
-        // [steps 2,9] GROW-IN: trailing state fields at X360 +0x14D18 / +0x14D1C..+0x14D2C (one
-        //   seeded to 7) -- no PC members for them in the minimal layout yet.
+        // [7] the event-receiver queue @ this+0x13900: capacity 5120, align 16, bind + Clear.
+        mReceiverQueue.Construct();
 
-        // [step 9] X360 seeds the Prepare stage word @ +0x14D20 to 0 (start of the resumable machine).
-        mePrepareStage = E_PREPSTAGE_PERFMON;
+        // [8] seed the stage machines + registry cursors (X360 this+0x14D1C..+0x14D2C).
+        mePrepareStage      = E_PREPARESTAGE_START;
+        meReleaseStage      = E_RELEASESTAGE_DONE;
+        meResourceStage     = E_RESOURCE_LOAD_NOT_STARTED;
+        mu32CurrentRegistry = 0;
+        meCurrentRegistry   = 0;
 
-        // [step 10] the constructed flag (X360 *(this+4)=1).
-        mbConstructed = true;
-
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "[Sound] RootSoundModule::Construct\n";
+        // [9] *(this+4) = 1 -- the CgsModule::Module "new module" flag: this module runs the
+        //     IOBufferStack path, so the base ModuleSingleBuffered::Prepare/Release skip their
+        //     legacy DataBuffer stages for it (which is exactly what makes the SELF stage below
+        //     complete).
+        mbIsNewModule = true;
     }
 
-    // 0x826FABF8 (vtable+64). The X360 stage machine constructs the playback + logic audio modules
-    // from the allocator, wires the IO buffers, and returns false until fully prepared. [minimal]
-    // capture the allocator for the grow-in engine; the audio-system/playback/registry stages still
-    // advance immediately, while the LOGIC stage now drives the embedded SoundLogicModule::Prepare.
-    // Faithful resumable stage machine: each frame it runs forward from the
-    // persisted mePrepareStage, falling through the stages until one reports "still preparing"
-    // (returns false -> the loading screen retries next frame) or all complete (returns true). The
-    // X360 also brackets each call with three scratch IO buffers (LogicOutputBuffer + Playback In/Out)
-    // used by the playback/logic stages; the logic input/output pair is modelled as owned scratch
-    // buffers (see header). Stage order mirrors the X360 (0,1,2,3,6,4,7). Stages 2/3/6 are guarded
-    // GROW-IN stubs that advance immediately until their engines (rw::audio::core::System, the Playback
-    // module, RegistryLoad) are built; stage 4 (LOGIC) now drives the real SoundLogicModule::Prepare.
-    bool RootSoundModule::Prepare(rw::core::GeneralResourceAllocator* lpAllocator,
-                                  void* /*lpRootInputBuffer*/, void* /*lpRootOutputBuffer*/,
-                                  void* /*lpInputData*/, void* /*lpOutputData*/)
+    // 0x826FABF8 (vtable +64). DWARF-true signature (BrnRootSoundModule.cpp:249). A resumable
+    // stage machine, run forward from mePrepareStage each call; each attempted stage stamps
+    // mePrepareStage first and stamps meReleaseStage (the "last completed stage" the Release
+    // machine unwinds from) on success. Any stage that reports "still preparing" falls to the
+    // common exit, which destroys this call's scratch IO buffers and returns false so
+    // LoadSoundModule retries next frame. Case order follows the X360 EXECUTION order
+    // (0,1,2,3,6,4,7 -- fallthrough follows source order, not case value).
+    bool RootSoundModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
+                                  CgsModule::IOBufferStack* lpInputBufferStack,
+                                  CgsModule::IOBufferStack* lpOutputBufferStack,
+                                  Io::RootInputBuffer* lpSoundModuleInputBuffer,
+                                  Io::RootOutputBuffer* lpSoundModuleOutputBuffer)
     {
-        mpAllocator = lpAllocator;
+        // X360 BrnRootSoundModule.cpp:256-259.
+        CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
+        CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
+        CGS_ASSERT(lpSoundModuleInputBuffer != 0, "lpSoundModuleInputBuffer != NULL");
+        CGS_ASSERT(lpSoundModuleOutputBuffer != 0, "lpSoundModuleOutputBuffer != NULL");
 
+        // Per-call scratch IO buffers. The X360 creates three:
+        //   Io::LogicOutputBuffer                       on the OUTPUT stack ("SoundLogic")
+        //   CgsSound::Playback::Module::Io::InputBuffer  on the INPUT stack  ("SoundPlayback")
+        //   CgsSound::Playback::Module::Io::OutputBuffer on the OUTPUT stack ("SoundPlayback"),
+        //     then Clear()s it (VariableEventQueue<4096,16>::Clear on its queue + zero its count).
+        // [gated] the playback Io pair's types are not reconstructed (they land with the
+        // playback-module TU); only the logic output scratch is created here.
+        Io::LogicOutputBuffer* lpLogicOutputBuffer = 0;
+        lpOutputBufferStack->CreateIOBuffer<Io::LogicOutputBuffer>(&lpLogicOutputBuffer, "SoundLogic");
+
+        bool lbPrepared = false;
         switch (mePrepareStage)
         {
-        case E_PREPSTAGE_PERFMON:
-            // [grow-in] X360 stage 0: CgsDev::PerfMonCpu::AddMonitor("Sound Logic") -> the CPU HUD
-            //   monitor handle. A debug-HUD nicety (its colour/budget/parent params come from the X360
-            //   body); skipped until the monitor is wired. Advance.
-            mePrepareStage = E_PREPSTAGE_BASE;
+        case E_PREPARESTAGE_START:
+            // 5-arg AddMonitor (asm 0x826FAD88: r4=0xE page, r5=0 minimum, f1=2.0 budget,
+            // r7=1 libperf-tagged; r6 is the float's reserved GPR slot, not an argument).
+            // Page 14 is the sound page of the perfmon overlay; only GENERAL(0)/MAX(24) are
+            // named in the recovered PerfMonCpuPage enum so far.
+            miLogicUpdate = CgsDev::PerfMonCpu::AddMonitor(
+                "Sound Logic", (CgsDev::PerfMonCpuPage)14, false, 2.0f, true);
             // fall through
-
-        case E_PREPSTAGE_BASE:
-            // [grow-in] X360 stage 1: the base ModuleSingleBuffered::Prepare (a resumable machine that
-            //   builds the module's input/output DataStructures via PrepareDataStructures). On PC it
-            //   never reports complete until the grown module supplies those structures, so calling it
-            //   now returns false forever and stalls the loading screen -- deferred until the module
-            //   layout + PrepareDataStructures land (with stages 2-4). Advance.
-            mePrepareStage = E_PREPSTAGE_AUDIOSYSTEM;
+        case E_PREPARESTAGE_SELF:
+            mePrepareStage = E_PREPARESTAGE_SELF;
+            // The module base's own prepare. Completes immediately for this module: Construct
+            // set mbIsNewModule, so the base skips its legacy DataBuffer stages.
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+                break;
+            meReleaseStage = E_RELEASESTAGE_SELF;
             // fall through
-
-        case E_PREPSTAGE_AUDIOSYSTEM:
-            // [grow-in] X360 stage 2: carve the rw audio allocators, rw::audio::core::System::Create-
-            //   Instance(196608), Csis::System::SetAllocator/Init, the mutex callbacks + stream path.
-            //   The whole RWAudio core + Csis allocator hook is deferred. Advance.
-            mePrepareStage = E_PREPSTAGE_PLAYBACK;
+        case E_PREPARESTAGE_RWAC:
+            mePrepareStage = E_PREPARESTAGE_RWAC;
+            // [gated] the RWAC + Csis bring-up. X360 body (PS3 names in brackets):
+            //   * carve bank 0x18 from lpAllocatorList (GetRWGeneralResource 0x823F3F98), put the
+            //     linear heap in no-coalesce mode (rw::LinearResourceAllocator::GetLinearHeapBase
+            //     + EA::Allocator::GeneralAllocator::SetOption(1,0)), SetAllocator(gRwacTestBed-
+            //     Alloc); rw::audio::core::System::CreateInstance(&gRwacTestBedAlloc, 196608) ->
+            //     mpSystem (assert "mpSystem", cpp:336); gRwacTestBedAlloc.mbTestRwac = 1.
+            //   * carve bank 9, build the "CsisPrivateHeap" sub-allocator (GetResourceDescriptor
+            //     0x2000/4 + the allocator's virtual CreateAllocator + Initialize), SetAllocator
+            //     (gCsisTestBedAlloc), Csis::System::SetAllocator + Csis::System::Init.
+            //   * rw::audio::core::System::VectorToCsisMutex(mpSystem); install MutexLockFn/
+            //     MutexUnlockFn/MutexIsLockedFn at mpSystem+0x40/+0x44/+0x3C; Lock(); the DAC
+            //     watermark *(mpSystem+0x10CC) = 100.0; SetThreadProcessor(4); Unlock().
+            //   * rw::audio::core::SndPlayer1_CgsStreamMod::spPathPrefix = "SOUND\\STREAMS\\".
+            // Blocked on: the rw::audio::core System/runtime reconstruction (no vendor System.h;
+            // bodies are console-only middleware, no PC lib) + Csis::System::SetAllocator + a
+            // populated AllocatorList (the game-data CreateAllocators is still the allocator
+            // gate). Until then this stage completes without creating the audio system
+            // (mpSystem stays null -- the boot's audio output runs through the PC movie/XAudio2
+            // path instead).
+            meReleaseStage = E_RELEASESTAGE_RWAC;
             // fall through
-
-        case E_PREPSTAGE_PLAYBACK:
-            // [grow-in] X360 stage 3: lock the audio system + CgsSound::Playback::Module::Prepare
-            //   (0x826E90C0) with a carved heap. The Playback module facade is deferred. Advance.
-            mePrepareStage = E_PREPSTAGE_REGISTRY;
+        case E_PREPARESTAGE_PLAYBACK_MODULE:
+            mePrepareStage = E_PREPARESTAGE_PLAYBACK_MODULE;
+            // [gated] X360: carve bank 9 -> gPlaybackTestBedAlloc; rw::audio::core::System::Lock
+            //   (mpSystem); virtual Prepare on the playback module (this+0x4B8, vtable +0x44 =
+            //   CgsSound::Playback::Module::Prepare 0x826E90C0) with (&gPlaybackTestBedAlloc,
+            //   lpAllocatorList->mpPlaybackParams @ +660); Unlock. A false return unwinds to the
+            //   common exit (still preparing). Blocked on: the playback module's Prepare/vtable
+            //   (the CgsSoundPlaybackModule slice has neither) + the logic module's engine base
+            //   that embeds it. Until then this stage completes without preparing playback.
+            meReleaseStage = E_RELEASESTAGE_PLAYBACK_MODULE;
             // fall through
-
-        case E_PREPSTAGE_REGISTRY:
-            // [grow-in] X360 stage 6: RootSoundModule::RegistryLoad (0x826EBA08) + a partial
-            //   BridgeLogicToRoot. Deferred. Advance.
-            mePrepareStage = E_PREPSTAGE_LOGIC;
+        case E_PREPARESTAGE_REGISTRY_LOAD:
+            mePrepareStage = E_PREPARESTAGE_REGISTRY_LOAD;
+            // [gated] X360: if (!RegistryLoad(this, lpLogicOutputBuffer)) { LockForWrite(
+            //   lpSoundModuleOutputBuffer); LockForRead(lpLogicOutputBuffer); BridgeLogicToRoot
+            //   (lpLogicOutputBuffer, lpSoundModuleOutputBuffer); unlock both; -> still
+            //   preparing }. RegistryLoad (0x826EBA08) streams the CSIS/AEMS registries through
+            //   the playback module; blocked on the playback stage above + the RootOutputBuffer
+            //   request interfaces. Until then this stage completes without loading registries.
+            meReleaseStage = E_RELEASESTAGE_REGISTRY_LOAD;
             // fall through
+        case E_PREPARESTAGE_LOGIC_MODULE:
+        {
+            mePrepareStage = E_PREPARESTAGE_LOGIC_MODULE;
+            // [gated] the allocator carve: X360 carves bank 0x19 from lpAllocatorList, puts the
+            // linear heap in no-coalesce mode and points gLogicTestBedAlloc at it
+            // (SetAllocator). Blocked on a populated AllocatorList (allocator gate);
+            // gLogicTestBedAlloc is still handed to the logic module below so the wiring shape
+            // is the X360's.
+            (void)lpAllocatorList;
 
-        case E_PREPSTAGE_LOGIC:
-            // X360 stage 4 (LABEL_22): SoundLogicModule::Prepare (0x82703C18, via vtable+0x58) with the
-            //   logic RW allocator + the input buffer (a5) + the scratch LogicOutputBuffer (v15), then
-            //   BridgeLogicToRoot under the output lock. Now REAL: drive the embedded module's Prepare
-            //   with the captured allocator + the owned scratch IO buffers (the boot caller's buffers are
-            //   null). The X360 treats the bool result as resumable -- `if (!v35) goto LABEL_26` returns
-            //   0 (still preparing) so the loading screen retries next frame; only a true result advances
-            //   the stage. The minimal SoundLogicModule::Prepare completes in one call and reports
-            //   prepared, so this advances immediately; the stall path is honoured for when its stage
-            //   machine grows resumable (Voice / state-manager build).
-            // [grow-in] the per-stage logic allocator carve (GetRWGeneralResource(a2,0x19) + SetAllocator)
-            //   and BridgeLogicToRoot (LogicOutputBuffer -> RootOutputBuffer, under the IOBuffer write lock)
-            //   are deferred until the bridge + RootOutputBuffer paths land.
-            if (!mLogicModule.Prepare(mpAllocator, &mLogicInputScratch, &mLogicOutputScratch))
-            {
-                // Still preparing -- persist at the LOGIC stage and retry next frame (X360 `goto LABEL_26`).
-                return false;
-            }
-            mePrepareStage = E_PREPSTAGE_DONE;
+            // The logic module's own prepare (X360: virtual, this+0x280 vtable +0x58 =
+            // SoundLogicModule::Prepare 0x82703C18) with the logic allocator, the ROOT input
+            // buffer and this call's logic-output scratch. The X360 treats a false return as
+            // "still preparing" -- but only AFTER the bridge/dispatch block below runs, so the
+            // module's resource requests still flow out while it loads.
+            bool lbLogicPrepared = mLogicModule.Prepare(
+                &gLogicTestBedAlloc, lpSoundModuleInputBuffer, lpLogicOutputBuffer);
+
+            // [gated] the per-call bridge + playback dispatch (X360, in order):
+            //   LockForWrite(lpSoundModuleOutputBuffer);
+            //   LockBuffersForIO(playbackIn, lpLogicOutputBuffer);        (CgsModuleUtils.h:259)
+            //   BridgeLogicToRoot(lpLogicOutputBuffer, lpSoundModuleOutputBuffer);
+            //   UnlockBuffersForIO(playbackIn, lpLogicOutputBuffer);      (CgsModuleUtils.h:272)
+            //   UnlockForWrite(lpSoundModuleOutputBuffer);
+            //   playback module Update (this+0x4B8 vtable +0x48) with (playbackIn, playbackOut);
+            //   LockForWrite(lpSoundModuleOutputBuffer);
+            //   LockBuffersForIO(lpSoundModuleInputBuffer, playbackOut);
+            //   RootOutputBuffer::GetReso... queue Append<4096,16> from the playback output's
+            //   event queue + Array<u32,3>::AppendArray(this->..., playbackOut+4);
+            //   UnlockBuffersForIO + UnlockForWrite.
+            // Blocked on: the playback Io pair + the RootOutputBuffer request interfaces +
+            // CgsModuleUtils.h (LockBuffersForIO). All land with the playback-module TU group.
+
+            if (!lbLogicPrepared)
+                break;
+            meReleaseStage = E_RELEASESTAGE_LOGIC_MODULE;
             // fall through
-
-        case E_PREPSTAGE_DONE:
+        }
+        case E_PREPARESTAGE_DONE:
+            // Fully prepared: the release machine now covers everything (START) and the prepare
+            // machine parks at DONE (a re-entered Prepare returns true again, as on the X360).
+            meReleaseStage = E_RELEASESTAGE_START;
+            mePrepareStage = E_PREPARESTAGE_DONE;
+            lbPrepared = true;
+            break;
         default:
+            // X360 BrnRootSoundModule.cpp:576.
+            CGS_ASSERT(false, "Invalid Stage\n");
             break;
         }
 
-        // All stages complete: reset the machine (X360 sets mePrepareStage=0 at done) and report prepared.
-        mePrepareStage = E_PREPSTAGE_PERFMON;
-        mbPrepared     = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "[Sound] RootSoundModule::Prepare: resumable stage machine complete "
-                                          "(perfmon/base/audio/playback/registry/logic stages grow-in) allocator="
-                                       << (lpAllocator ? "ok" : "null") << " -> prepared\n";
-        return true;
+        // Common exit (X360 LABEL_24/LABEL_26): destroy this call's scratch IO buffers -- the
+        // playback output, the playback input, then the logic output ([gated] only the logic
+        // output exists here) -- and report the machine's verdict.
+        lpOutputBufferStack->DestroyIOBuffer<Io::LogicOutputBuffer>(&lpLogicOutputBuffer);
+        return lbPrepared;
     }
 }
 }

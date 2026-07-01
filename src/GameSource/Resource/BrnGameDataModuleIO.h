@@ -101,6 +101,10 @@ namespace GameDataIO
         }
 
         AllocatorList& GetAllocatorList() { return mAllocatorList; }
+        // Const overload: the scripted module loads receive the OutputBuffer read-side (const)
+        // and pass its list to each module Prepare (const AllocatorList* -- e.g. RootSoundModule::
+        // Prepare 0x826FABF8 via LoadSoundModule 0x823E75A8).
+        const AllocatorList& GetAllocatorList() const { return mAllocatorList; }
 
     private:
         AllocatorList mAllocatorList;

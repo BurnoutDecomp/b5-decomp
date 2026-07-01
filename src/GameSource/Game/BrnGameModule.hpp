@@ -90,6 +90,12 @@ namespace BrnGame
         BrnResource::GameDataModule& GetGameDataModule() { return mGameDataModule; }
         BrnSound::Module::RootSoundModule& GetSoundModule() { return mSoundModule; }
 
+        // The per-frame update IO stacks. The scripted module loads (LoadingScriptedState::
+        // LoadXxxModule) create their per-frame module IO buffers on these, exactly as the
+        // X360 reads them off the game-module global (e.g. LoadSoundModule 0x823E75A8).
+        CgsModule::IOBufferStack* GetUpdateInputBufferStack()  { return mpUpdateInputBufferStack; }
+        CgsModule::IOBufferStack* GetUpdateOutputBufferStack() { return mpUpdateOutputBufferStack; }
+
         enum EGameUpdateStage   // h:248
         {
             E_GAMEUPDATESTAGE_PREPARE = 0,
@@ -297,4 +303,9 @@ namespace BrnGame
     // BrnGame::BrnGameModule::Release to step meReleaseStage. Declared here near the enum (the enum
     // is BrnGameModule::EReleaseStage, public) so all Release-path users of the operator see it.
     BrnGameModule::EReleaseStage operator++(BrnGameModule::EReleaseStage& leStage, int);
+
+    // The game's single BrnGameModule (the X360 game-module global off_830102D0). Defined in
+    // BrnMain.cpp next to GetMainGameDataModule/GetMainSoundModule; the loading flow reads the
+    // update IO stacks through it, as the X360 loads do off the global.
+    BrnGameModule* GetMainGameModule();
 }
