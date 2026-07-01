@@ -26,6 +26,8 @@ struct AptNativeHash;
 class AptValue;
 class  EAStringC;
 class  AptPseudoDisplayList;
+struct AptDisplayList;
+struct AptCIH;
 
 // One frame: its display-list commands (place/remove/action/label). The command
 // records are part of the serialised .apt timeline (resolved by AptMovie::resolve);
@@ -57,8 +59,12 @@ struct AptMovie
     AptMovie* DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, int nFrame, int a4, void* a5);
 
     // @0x82B0B7A0 -- run frame nFrame's commands against a live CIH: run its action
-    // streams, then apply its place/remove/back-to-script commands.
-    AptMovie* doFrameControls(void* a2, void* pParent, int nFrame);
+    // streams, then apply its place/remove/back-to-script commands. pDisplayList is the
+    // owning clip's child display list (a2, the place/remove target); pParent is the
+    // owning sprite CIH (a3). Native-8: the frame table + command records are read at the
+    // relocated native-8 offsets (mpFrames now a live pointer via resolve64), and the
+    // movie char-anim def-base is reached through pParent's named char-inst chain.
+    AptMovie* doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParent, int nFrame);
 
     // @0x82AE0228 -- queue frame nFrame's action commands onto the director queue.
     AptMovie* queueFrameActions(void* pCIH, int nFrame);
@@ -66,6 +72,23 @@ struct AptMovie
     // @0x82AF80B0 -- relocate the just-loaded timeline against the load base (and
     // build the label hash + parse each action stream). Returns the last sub-result.
     void* resolve(int nBase, void* a3, int a4);
+
+    // resolve64 -- the x64 (native-8 GUIAPT "1:7:8") fork of resolve @0x82AF80B0.
+    // Identical relocation walk as resolve(), but every serialised POINTER slot is a
+    // full 8-byte word holding a file-relative OFFSET (offset -> offset+base, in place),
+    // the frame table stride is 16 (AptMovieFrame {count@0, cmds@8}) and the command-
+    // pointer array stride is 8. Drives the ROOT + sub-movie frame-table relocation the
+    // console-32 resolve() truncates on x64 (it truncates the high x64 base into an int).
+    // Called from AptCharacterAnimation::Fixup case-5/9 on the embedded movie (char+0x20).
+    //
+    // nBase = the 8-byte load base; nResBase/nResSize bound the resource so every slot is
+    // validated (a slot holds a file-relative offset iff 0 < off < nResSize) -- a garbage/
+    // already-relocated slot is left untouched (no wild-pointer write/deref). FLAG: the AS
+    // action-stream re-parse (_parseStream) is the deferred VM transcode; resolve64
+    // relocates only the STRUCTURAL pointers (frame table, command arrays, command pointers)
+    // + the place record's instance-NAME pointer (needed by named placeObject). Frame-0
+    // place/remove placement does not depend on the AS parse.
+    void resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize);
 
     // @0x82AF4830 -- the inverse of resolve (un-relocate + tear down the label hash).
     void* unresolve(int nBase, int a3);

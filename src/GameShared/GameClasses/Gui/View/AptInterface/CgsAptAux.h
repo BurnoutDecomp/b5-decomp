@@ -176,6 +176,16 @@ namespace CgsGui
     // pConstFile->mnDataRootOffset formula. Defined in CgsAptAux.cpp.
     extern void* gAptLoadAnimRootOverride;
 
+    // FLAG (x64 native-8 relocation bounds): the AptData resource span the host stashes before
+    // LoadAnimation, so the native-8 AptMovie::resolve64 relocation walk (driven by
+    // AptCharacterAnimation::Fixup) can bounds-check every serialised offset slot -- a slot
+    // holds a file-relative offset iff (0 < off < gAptResourceSpanSize), and a relocated pointer
+    // is safe to deref iff it lands in [gAptResourceSpanBase, +gAptResourceSpanSize). This makes
+    // the walk robust against non-pointer / already-relocated / garbage slots. Defined in
+    // CgsAptAux.cpp. (base == the load base pBase == the AptData resource base on our path.)
+    extern uintptr_t gAptResourceSpanBase;
+    extern uint32_t  gAptResourceSpanSize;
+
     namespace AptCallbackVariable
     {
         // X360 0x82849660 / 0x828496A0. Guarded not-yet-implemented extern-variable callbacks.

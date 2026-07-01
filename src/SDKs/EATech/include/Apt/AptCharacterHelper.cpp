@@ -255,8 +255,15 @@ AptCIH* AptGetAnimationAtLevel(int nLevel)
     // runs AptCharacterInst::CreateCharacterInst -> the render-tree manager (AptRTM_CreateItem). If the
     // render-tree manager is not initialised (AptRenderInitialize is un-homed in our bring-up) this is
     // where it can AV -- the probes bracket each sub-step.
-    CgsApt_GalProbe("operator new(40)", nullptr);
-    void* pMem = AptCIH::operator new(40);              // AptValueGC pool
+    // FLAG (x64 size): the console allocates 40 bytes (10 console dwords) for an AptCIH; on x64
+    // the node is sizeof(AptCIH) (8-byte pointers widen it well past 40). The hardcoded 40 here
+    // under-allocated the ROOT level node, so its later members (mpDisplayListParent [7] /
+    // mpCharacterInst [8]) fell OUTSIDE the allocation and overlapped adjacent pool objects --
+    // the child-placement AddRef/insert on the root then corrupted the root's parent link (an AV
+    // in SetGeneralizedProcessDirtyState during the first frame-0 place). Use sizeof(AptCIH), the
+    // same size AptDLState_CreateInstAtDepth already uses for the placed child nodes.
+    CgsApt_GalProbe("operator new(sizeof AptCIH)", nullptr);
+    void* pMem = AptCIH::operator new(sizeof(AptCIH));  // AptValueGC pool (x64 size)
     CgsApt_GalProbe("operator new ->", pMem);
     if (pMem == nullptr)
         return nullptr;                                  // GC carve failed -> bail (no AV)

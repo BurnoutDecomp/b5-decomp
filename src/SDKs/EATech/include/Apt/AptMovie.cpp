@@ -20,6 +20,16 @@
 #include "SDKs/EATech/include/Apt/AptDefine.h"               // gpNonGCPoolManager
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 
+// ---- the native-8 place path (doFrameControls tag-3 + the place-command dispatcher) ----
+#include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::placeObjectNCXForm (the homed place spine)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (the parent node + char-inst chain)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::GetRenderItem
+#include "SDKs/EATech/include/Apt/AptRenderItem.h"            // AptRenderItem::mpCharacter
+#include "SDKs/EATech/include/Apt/AptCharacter.h"             // AptCharacter (the movie character + mpAnimationFile)
+#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"    // AptCharacterAnimation (charTable / import table)
+#include "SDKs/EATech/include/Apt/AptFile.h"                  // AptFile / AptFilePtr (the placed char's file bind)
+#include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"         // AptUint32CXForm (the place record packed colour)
+
 #include <new>   // placement new (the pool-allocated AptPseudoCIH_t nodes)
 
 int AptMovie::labelToFrame(const EAStringC* pLabel) const
@@ -104,7 +114,11 @@ extern void  AptPseudoDisplayList_Insert(void* pList, AptPseudoCIH_t* pNode);   
 extern void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId);   // AptCharacterAnimation::ExecuteInitActions
 extern void* AptFile_operator(void* pDst, void* pSrc);                   // AptFile::operator=
 extern void* sub_82AFD150(void* a1, int a2);                             // remove-object handler (unhomed)
-extern void* sub_82B0AE08(void* a1, float* a2, void* a3);               // place-object handler (unhomed)
+
+// sub_82B0AE08 @0x82B097D8's caller-side dispatcher (the place-command handler doFrameControls
+// invokes for each tag-3 record). HOMED below (2026-07-01) as AptMovie_PlaceCommand -- it reads
+// the serialised place-info record + calls the faithfully-homed AptDisplayList::placeObjectNCXForm.
+static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent);
 
 // ---------------------------------------------------------------------------
 // Command-record byte accessors. The serialised .apt command record has no
@@ -119,6 +133,7 @@ namespace
     inline void*    CmdPtr(void* pRec, int nOff)  { return *reinterpret_cast<void**>(reinterpret_cast<char*>(pRec) + nOff); }
     inline float    CmdF32(void* pRec, int nOff)  { return *reinterpret_cast<float*>(reinterpret_cast<char*>(pRec) + nOff); }
 }
+
 
 // ===========================================================================
 // DoTemporaryFrameControls @ 0x82AEEB98 -- build/refresh the interpreter's pseudo
@@ -241,56 +256,60 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
 // owning sprite CIH (a4 unused for the asm's r5 path here -> the char inst);
 // nFrame the frame index. Faithful to the asm.
 // ===========================================================================
-AptMovie* AptMovie::doFrameControls(void* a2, void* pParent, int nFrame)
+AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParent, int nFrame)
 {
-    AptMovieFrame* pFrame = &mpFrames[nFrame];         // 8*nFrame + this[1]
+    AptMovieFrame* pFrame = &mpFrames[nFrame];         // 16*nFrame + mpFrames (native-8, relocated)
 
     // ---- pass 1: run the frame's action streams (tag 8, id >= 0) ----------
+    // FLAG (deferred AS-VM): pass 1 executes tag-8 action-stream bytecode through the AS
+    // interpreter -- a native-8 AS-scope walk + runStream + register-frame save/restore. The
+    // AS bytecode transcode (resolve64 leaves tag-8 stream pointers un-relocated as a marked
+    // boundary) is the deferred VM path, so pass 1 is left as-is only when a tag-8 command
+    // exists; for the boot title timeline frame 0 carries only place (tag 3) + back-to-script
+    // (tag 5) commands (verified vs TITLE_SCREEN02.bundle), so pass 1 is a no-op there. It is
+    // preserved structurally (native-8 named-type walk) for when the AS-VM transcode lands.
     int32_t nCount = pFrame->mnCommandCount;
     if (nCount > 0)
     {
         for (int32_t i = 0; i < nCount; ++i)
         {
-            void* pCmd = pFrame->mpCommands[i];        // *(v9[1] + v10)
+            void* pCmd = pFrame->mpCommands[i];
             if (CmdI32(pCmd, 0x00) == 8 && CmdI32(pCmd, 0x04) >= 0)
             {
-                // Reserve a fresh AS register frame: save the base, advance it
-                // past the live count, then reset the live count to 0.
+                // Reserve a fresh AS register frame: save the base, advance it past the
+                // live count, then reset the live count to 0.
                 AptValue** pSavedRegs = gpAptRegisterBase;            // off_8324E3D0
                 gpAptRegisterBase = pSavedRegs + gnAptRegisterCount;  // += 4*count
                 gnAptRegisterCount = 0;
 
-                // Resolve the char inst the action runs against (walk pParent's
-                // display-list chain to the first animation/level node).
-                void* pCharInst = nullptr;
-                if (pParent)
+                // Resolve the char inst the action runs against (walk pParent's display-list
+                // chain to the first animation/level node), native-8 named-type traversal.
+                AptCharacterInst* pCharInst = nullptr;
                 {
-                    void* pNode = pParent;
-                    if ((CmdI32(pParent, 0x04) & 0x7F) == 0x25)
+                    AptCIH* pNode = pParent;
+                    if ((pParent->mFlagsA & 0x7F) == 0x25)          // a level node
                     {
                         pNode = AptGetAnimationAtLevel(0);
                     }
                     else
                     {
-                        for (void* pTagSrc = CmdPtr(pParent, 0x20); ; pTagSrc = CmdPtr(pNode, 0x20))
+                        // walk mpDisplayListParent until the char-inst type tag is 9/15.
+                        while (true)
                         {
-                            int32_t nKind = CmdI32(pTagSrc, 0x08) >> 26;   // srawi 0x1A
+                            const uint32_t nKind = pNode->GetCharacterInst()->mTypeFlags >> 26;
                             if (nKind == 9 || nKind == 15)
                                 break;
-                            pNode = CmdPtr(pNode, 0x1C);
+                            pNode = pNode->GetDisplayListParent();
                         }
                     }
-                    pCharInst = CmdPtr(pNode, 0x20);   // *(AnimationAtLevel + 32)
+                    pCharInst = pNode->GetCharacterInst();
                 }
 
                 gAptActionInterpreter.runStream(
-                    reinterpret_cast<const unsigned char*>(CmdPtr(pCmd, 0x08)),   // v11[2]
-                    reinterpret_cast<AptCIH*>(pParent),
-                    -1,
-                    reinterpret_cast<AptCharacterInst*>(pCharInst));
+                    reinterpret_cast<const unsigned char*>(CmdPtr(pCmd, 0x08)),
+                    pParent, -1, pCharInst);
 
-                // Negate the command's id so it is not re-run this frame.
-                CmdSetI32(pCmd, 0x04, -CmdI32(pCmd, 0x04));
+                CmdSetI32(pCmd, 0x04, -CmdI32(pCmd, 0x04));   // negate id: not re-run this frame
 
                 gAptActionInterpreter.CleanupAfterExecution(
                     reinterpret_cast<AptScriptFunctionBase::SavedExecutionState*>(pSavedRegs));
@@ -298,97 +317,179 @@ AptMovie* AptMovie::doFrameControls(void* a2, void* pParent, int nFrame)
         }
     }
 
-    // ---- pass 2: apply place / remove / back-to-script --------------------
+    // ---- pass 2: apply place / remove / back-to-script (native-8) ---------
+    // The movie's character-animation def-base is reached through the parent CIH's named
+    // char-inst chain: parent->charInst->renderItem->mpCharacter is the owning movie
+    // character, and its embedded AptCharacterAnimation is at (character + KU_AptEmbedded
+    // MovieOff == +0x20). charTable/importTable are read as named members off that def-base.
     nCount = pFrame->mnCommandCount;
     if (nCount > 0)
     {
+        AptCharacterInst* const pOwnerInst = pParent->GetCharacterInst();
+        AptCharacter*     const pOwnerChar = pOwnerInst->GetRenderItem()->mpCharacter;
+        AptCharacterAnimation* const pAnim = reinterpret_cast<AptCharacterAnimation*>(
+            reinterpret_cast<char*>(pOwnerChar) + KU_AptEmbeddedMovieOff);   // char + 0x20
         for (int32_t i = 0; i < nCount; ++i)
         {
-            void* pCmd = pFrame->mpCommands[i];        // *(v18[1] + v19)
-            int32_t eTag = CmdI32(pCmd, 0x00);
+            void* pCmd = pFrame->mpCommands[i];
+            const int32_t eTag = CmdI32(pCmd, 0x00);
 
             if (eTag == 3)
             {
-                // ---- place: run init actions for the placed character ------
-                // pAnim = *(*(*(*(a3+32)+4)+4)+4) + 16
-                void* p = CmdPtr(pParent, 0x20);
-                p = CmdPtr(p, 0x04);
-                p = CmdPtr(p, 0x04);
-                p = CmdPtr(p, 0x04);
-                void* pAnim = reinterpret_cast<char*>(p) + 0x10;   // r31
+                // The PlaceObject record body is pointer-aligned after the tag (native-8):
+                // body = align8(cmd+4); the placed-char id lives at body+0x08.
+                const uintptr_t luBody =
+                    (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u);
+                const int32_t nId = *reinterpret_cast<const int32_t*>(luBody + 0x08);
 
-                int32_t nId = CmdI32(pCmd, 0x0C);                  // v20[3]
+                // ---- place: run the placed character's init actions -----------
                 AptCharacterAnimation_ExecuteInitActions(pAnim, pParent, nId);
 
-                int32_t nId2 = CmdI32(pCmd, 0x0C);
-                if (nId2 != -1)
+                // Bind the placed character's animation file (native-8 named members): a
+                // placed char with no file yet takes the import-table entry matching its id,
+                // else the owning movie's own file. (The console open-codes this; it mirrors
+                // AptDisplayList::AddToDisplayList's import bind, which is already homed.)
+                if (nId != -1 && nId >= 0 && nId < pAnim->mnCharacterCount)
                 {
-                    // pSlot = *(charTable[nId2]) + 12  (an AptFile slot)
-                    void* pCharTable = CmdPtr(pAnim, 0x10);        // v22[4]
-                    void* pChar = *reinterpret_cast<void**>(reinterpret_cast<char*>(pCharTable) + 4 * nId2);
-                    void* pSlot = reinterpret_cast<char*>(pChar) + 0x0C;   // v24
-
-                    if (CmdI32(pChar, 0x0C) == 0)   // *v24 == 0 -> not yet bound
+                    AptCharacter* const pPlacedChar = pAnim->mpCharacterTable[nId];
+                    if (pPlacedChar != nullptr && pPlacedChar->mpAnimationFile == nullptr)
                     {
-                        // find the import-table entry whose id matches nId2.
-                        int32_t nImportCount = CmdI32(pAnim, 0x20);   // v22[8]
-                        int32_t nFound;
-                        if (nImportCount <= 0)
+                        AptFilePtr* pSrc = reinterpret_cast<AptFilePtr*>(&pOwnerChar->mpAnimationFile);
+                        const int32_t nImports = pAnim->mnImportCount;
+                        for (int32_t k = 0; k < nImports; ++k)
                         {
-                            nFound = -1;
-                        }
-                        else
-                        {
-                            char* pImport = reinterpret_cast<char*>(CmdPtr(pAnim, 0x24)) + 8;   // v22[9] + 8
-                            int32_t k = 0;
-                            for (;;)
+                            if (pAnim->mpImportTable[k].mnId == nId)
                             {
-                                if (*reinterpret_cast<int32_t*>(pImport) == nId2)
-                                {
-                                    nFound = k;
-                                    break;
-                                }
-                                ++k;
-                                pImport += 0x10;
-                                if (k >= nImportCount)
-                                {
-                                    nFound = -1;
-                                    break;
-                                }
+                                pSrc = reinterpret_cast<AptFilePtr*>(&pAnim->mpImportTable[k].mpFile);
+                                break;
                             }
                         }
-
-                        void* pSrcFile;
-                        if (nFound == -1)
-                        {
-                            // fall back to the movie's own animation file:
-                            // *(*(*(a3+32)+4)+4) + 12
-                            void* q = CmdPtr(pParent, 0x20);
-                            q = CmdPtr(q, 0x04);
-                            q = CmdPtr(q, 0x04);
-                            pSrcFile = reinterpret_cast<char*>(q) + 0x0C;
-                        }
-                        else
-                        {
-                            pSrcFile = reinterpret_cast<char*>(CmdPtr(pAnim, 0x24)) + 16 * nFound + 0x0C;
-                        }
-                        AptFile_operator(pSlot, pSrcFile);
+                        // AptFilePtr assign (counted) into the placed char's file slot.
+                        *reinterpret_cast<AptFilePtr*>(&pPlacedChar->mpAnimationFile) = *pSrc;
                     }
                 }
-                sub_82B0AE08(a2, reinterpret_cast<float*>(reinterpret_cast<char*>(pCmd) + 4), pParent);
+
+                // Dispatch the place: the info record is at cmd+4 (the console r31 base).
+                AptMovie_PlaceCommand(pDisplayList, reinterpret_cast<char*>(pCmd) + 4, pParent);
             }
             else if (eTag == 4)
             {
-                sub_82AFD150(a2, CmdI32(pCmd, 0x04));
+                // remove: the console remove-object handler (sub_82AFD150). FLAG: still an
+                // un-homed link-stub; frame 0 of the boot title carries no remove commands.
+                sub_82AFD150(pDisplayList, CmdI32(pCmd, 0x04));
             }
             else if (eTag == 5 && !gbAptBackToScriptFired)
             {
-                gpAptBackToScriptHook(CmdPtr(pCmd, 0x04));
+                // FLAG (host hook): gpAptBackToScriptHook (dword_8324E828) is the host
+                // "back to script" callback. It is installed by the game's GUI/HUD host on
+                // the console; our Apt bring-up does NOT install it (the FSM host callback
+                // set is out of this slice's scope), so it is null here -- guard the call
+                // (the console always has it installed). Skipping it is faithful for the
+                // title timeline (the tag-5 command hands control back to the host Lua FSM,
+                // which our bring-up drives separately).
+                if (gpAptBackToScriptHook != nullptr)
+                    gpAptBackToScriptHook(CmdPtr(pCmd, 0x04));
                 gbAptBackToScriptFired = 1;
             }
         }
     }
     return this;
+}
+
+// ===========================================================================
+// AptMovie_PlaceCommand -- sub_82B0AE08 @0x82B0AE08 (the place-command dispatcher the
+// timeline path invokes for each tag-3 record). DECOMPILED FAITHFULLY from the X360
+// ARTIST.XEX. It reads the serialised PlaceObject record and calls the faithfully-homed
+// AptDisplayList::placeObjectNCXForm to create/update the placed AptCharacterInst at the
+// record's depth + insert it into the display list. This is the decisive leaf -- it is
+// what puts a character on screen.
+//
+// RECORD LAYOUT (native-8 GUIAPT "1:7:8", from the libapt2 PlaceObject::Write). The record
+// is {tag@0, <align to pointer size>, body...}: FrameItem::Write writes the u32 tag then
+// Align()s to the pointer size, so on native-8 the BODY starts at align8(record + 4). The
+// caller passes pPlaceInfo == record + 4 (the X360 r31 == cmd+4), so the body base is
+// align8(pPlaceInfo). Body-relative field offsets (VERIFIED vs TITLE_SCREEN02.bundle frame-0):
+//   +0x00  flags   bit0 Move / bit1 HasCharacter / bit2 HasMatrix / bit3 HasColorTransform /
+//                   bit4 HasRatio / bit5 HasName / bit6 HasClipDepth / bit7 HasClipActions
+//   +0x04  depth (i32)          +0x08  charId (i32) -> movie->charTable[charId]
+//   +0x0C  matrix (mat3x2, 6 floats)                   +0x24  colorMult (u8vec4)
+//   +0x28  colorAdd (u8vec4)    +0x2C  ratio (f32)
+//   +0x30  name pointer (8B, relocated by resolve64)   +0x38  clipDepth (i32)
+//   +0x3C..+0x40 (align) clipActions pointer (8B)
+// The colour transform in the file is the PC-format {colorMult, colorAdd} pair at body+0x24
+// (an AptUint32CXForm). Console offsets (4-byte pointers) put name@+0x30/clipDepth@+0x34;
+// the 8-byte name pointer shifts clipDepth to +0x38 on native-8.
+//
+// The X360 places when the record HasCharacter (bit1) -- the plain new-place -- or Move
+// (bit0). It resolves the character, builds the EAStringC name (when HasName), and calls
+// placeObjectNCXForm. Reconstructed by ROLE using the homed placeObjectNCXForm (named types).
+// ===========================================================================
+static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent)
+{
+    // The record body is pointer-aligned after the tag (FrameItem::Write Align()); the caller
+    // passes record+4, so align it up to the 8-byte pointer boundary to reach the body base.
+    const uintptr_t luBody = (reinterpret_cast<uintptr_t>(pPlaceInfo) + 7u) & ~static_cast<uintptr_t>(7u);
+    const char* const pBody = reinterpret_cast<const char*>(luBody);
+
+    const uint32_t nFlags = *reinterpret_cast<const uint32_t*>(pBody + 0x00);
+
+    // Place when the record carries a character (bit1 HasCharacter) or is a Move (bit0);
+    // otherwise it is a no-op (the X360's `(flags&2)==0 && (flags&1)==0 -> 0`).
+    const bool bHasCharacter = (nFlags & 0x02u) != 0u;
+    const bool bMove         = (nFlags & 0x01u) != 0u;
+    if (!bHasCharacter && !bMove)
+        return nullptr;
+
+    const int32_t nDepth  = *reinterpret_cast<const int32_t*>(pBody + 0x04);
+    const int32_t nCharId = *reinterpret_cast<const int32_t*>(pBody + 0x08);
+
+    // The placed character = the owning movie's charTable[charId]. The owner movie char-anim
+    // is reached through the parent CIH's named char-inst chain (parent->charInst->renderItem
+    // ->mpCharacter is the owning movie character; its embedded AptCharacterAnimation is at
+    // char + KU_AptEmbeddedMovieOff). (Console: *(*(*(*(*(*(a3+32)+4)+4)+4)+32) + 4*charId).)
+    AptCharacter* const pOwnerChar = pParent->GetCharacterInst()->GetRenderItem()->mpCharacter;
+    AptCharacterAnimation* const pAnim = reinterpret_cast<AptCharacterAnimation*>(
+        reinterpret_cast<char*>(pOwnerChar) + KU_AptEmbeddedMovieOff);
+    AptCharacter* const pCharacter =
+        (nCharId >= 0 && nCharId < pAnim->mnCharacterCount) ? pAnim->mpCharacterTable[nCharId] : nullptr;
+
+    // FLAG (import not loaded): a null charTable entry is an IMPORTED character (from another
+    // GUIAPT bundle) whose id is in this movie's import table -- e.g. TITLE_SCREEN02 charId 30 ==
+    // import 'B5HelperComponents::TransitionComponent'. Fixup pass-3 (the import .apt load) is the
+    // DEFERRED bring-up boundary, so imported characters are not resolved and their table slot stays
+    // null. The console would place the resolved import here; on our bring-up we skip the place for
+    // that one character (placing a null character would AV in instantiateCharacter). The movie's
+    // OWN (non-import) characters still place, so the title composes minus the imported sub-clips.
+    if (pCharacter == nullptr)
+        return nullptr;
+
+    // The instance name (when HasName, bit5): the record's name pointer @body+0x30 was relocated
+    // to a live C string by resolve64. Build a bracketed EAStringC over it.
+    const EAStringC* pName = nullptr;
+    EAStringC nameStr;
+    if ((nFlags & 0x20u) != 0u)
+    {
+        const char* const pNamePtr = *reinterpret_cast<const char* const*>(pBody + 0x30);
+        if (pNamePtr != nullptr)
+        {
+            nameStr = EAStringC(pNamePtr);
+            pName = &nameStr;
+        }
+    }
+
+    // The place payload (each gated by its flag bit):
+    //   position matrix @body+0x0C (HasMatrix bit2)   colour @body+0x24 (HasColorTransform bit3)
+    //   ratio @body+0x2C (HasRatio bit4)              clipDepth @body+0x38 (native-8, 8-byte name ptr)
+    const float* const pPosition = ((nFlags & 0x04u) != 0u)
+        ? reinterpret_cast<const float*>(pBody + 0x0C) : nullptr;
+    const AptUint32CXForm* const pPackedColor = ((nFlags & 0x08u) != 0u)
+        ? reinterpret_cast<const AptUint32CXForm*>(pBody + 0x24) : nullptr;
+    const double fFrameValue = static_cast<double>(*reinterpret_cast<const float*>(pBody + 0x2C));
+    const int16_t nClipDepth = static_cast<int16_t>(*reinterpret_cast<const int32_t*>(pBody + 0x38));
+
+    return pDisplayList->placeObjectNCXForm(
+        /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, pParent,
+        /*bForceRemove*/  0, nClipDepth, fFrameValue, pPosition, /*nPlacementField18*/ 0u, pPackedColor);
 }
 
 // ===========================================================================
@@ -577,6 +678,104 @@ void* AptMovie::resolve(int nBase, void* a3, int a4)
         }
     }
     return result;
+}
+
+// ===========================================================================
+// resolve64 -- the x64 native-8 fork of resolve @0x82AF80B0.
+//
+// The GUIAPT "Apt Data:1:7:8" bundle keeps the serialised timeline in the native
+// 8-byte pointer format: every "pointer" slot is a full 8-byte word holding a
+// file-relative OFFSET, so relocation is `slot = slot + base` in place (offset ->
+// absolute pointer). This is what the console-32 resolve() cannot do on x64 (its
+// `int nBase` truncates the high x64 base). VERIFIED vs TITLE_SCREEN02.bundle: the
+// ROOT movie's framesOffset lives at movie+0x08 (== 0x5180 file-relative), the frame
+// table stride is 16 (AptMovieFrame {mnCommandCount@0, mpCommands@8}) and each frame's
+// command-pointer array is a stride-8 array of command-record offsets.
+//
+// The relocation walk is structurally identical to the console resolve() above (the
+// same label-hash build + the same per-tag inner-pointer relocations), only widened
+// to 8-byte slots / native strides. FLAG (deferred AS-VM transcode): the console calls
+// AptActionInterpreter::_parseStream to re-parse each action stream's bytecode; that
+// transcode (AptActionInterpreter_ResolveTranscode) still truncates a 64-bit base, so
+// here the stream POINTERS are relocated (kept valid) but the bytecode parse is left to
+// the AS-VM step. Frame-0 place/remove placement does not depend on the parse.
+// ===========================================================================
+void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
+{
+    // Relocate a native-8 offset slot IN PLACE, but only when it holds a plausible
+    // file-relative offset (0 < off < nResSize). A slot already carrying an absolute
+    // pointer (>= nResBase) or garbage is left untouched -- so a re-entrant call, an
+    // already-relocated field, or a non-pointer field (e.g. clipDepth == -1) never
+    // produces a wild-pointer write. Returns the resulting 64-bit pointer (or 0).
+    auto reloc64 = [nBase, nResSize](void* pRec, int nOff) -> uintptr_t
+    {
+        uintptr_t* pSlot = reinterpret_cast<uintptr_t*>(reinterpret_cast<char*>(pRec) + nOff);
+        const uintptr_t luVal = *pSlot;
+        if (luVal != 0 && luVal < nResSize)   // a live file-relative offset
+        {
+            *pSlot = nBase + luVal;
+            return *pSlot;
+        }
+        return (luVal != 0 && luVal >= nBase) ? luVal : 0;   // already-abs (kept) else none
+    };
+    // True iff luPtr is a live pointer inside the resource (safe to dereference).
+    auto inRes = [nResBase, nResSize](uintptr_t luPtr) -> bool
+    {
+        return luPtr >= nResBase && luPtr < nResBase + nResSize;
+    };
+
+    // ---- allocate + init the label hash (5 dwords, tag 2) ------------------
+    void* pHash = gpAptPseudoDataPool->Allocate(20);
+    if (pHash)
+    {
+        CmdSetI32(pHash, 0x04, 0);
+        CmdSetI32(pHash, 0x08, 0);
+        CmdSetI32(pHash, 0x0C, 0);
+        CmdSetI32(pHash, 0x10, 0);
+        CmdSetI32(pHash, 0x00, 2);
+    }
+    this->mpLabelHash = reinterpret_cast<AptNativeHash*>(pHash);
+
+    // Relocate the frame-table base (mpFrames) IN PLACE: framesOffset -> pointer.
+    const int32_t nFrames = this->mnFrameCount;
+    const uintptr_t luFrames = reloc64(this, 0x08);   // mpFrames @movie+0x08
+    if (nFrames <= 0 || luFrames == 0 || !inRes(luFrames))
+        return;
+
+    for (int32_t f = 0; f < nFrames; ++f)
+    {
+        AptMovieFrame* pFrame = &mpFrames[f];   // 16 * f + mpFrames (native-8 stride 16)
+
+        // relocate the frame's command-pointer array (mpCommands @frame+0x08).
+        const uintptr_t luCmds = reloc64(pFrame, 0x08);
+        const int32_t nCmds = pFrame->mnCommandCount;
+        if (luCmds == 0 || !inRes(luCmds) || nCmds <= 0)
+            continue;
+
+        for (int32_t i = 0; i < nCmds; ++i)
+        {
+            // relocate the command-pointer slot itself (8-byte offset -> pointer).
+            const uintptr_t luCmd = reloc64(&pFrame->mpCommands[i], 0);
+            if (luCmd == 0 || !inRes(luCmd))
+                continue;
+            void* pCmd = reinterpret_cast<void*>(luCmd);
+            const int32_t eTag = CmdI32(pCmd, 0x00);
+
+            // Relocate the ONE inner pointer the frame-0 placement path needs: a place
+            // command's instance-NAME pointer, so a named placeObject binds a live EAStringC.
+            // The PlaceObject body is pointer-aligned after the tag (native-8), so the name
+            // pointer lives at align8(cmd+4) + 0x30 (== the same body+0x30 AptMovie_PlaceCommand
+            // reads). The label hash (tag 2 name) and the AS action-stream pointers (tags 1/3/8)
+            // are the DEFERRED AS-VM transcode boundary -- resolve64 leaves them as raw offsets
+            // (the VM step relocates + parses them). Frame-0 place/remove does not read those.
+            if (eTag == 3)
+            {
+                const uintptr_t luBody =
+                    (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u);
+                reloc64(reinterpret_cast<void*>(luBody), 0x30);   // place record instance-name (bounds-guarded)
+            }
+        }
+    }
 }
 
 // ===========================================================================
