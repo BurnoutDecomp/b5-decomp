@@ -38,12 +38,14 @@ namespace Logic
 // The three vptr installs (@0/@4/@0x38) are produced STRUCTURALLY by the two
 // BrnEffectObject base sub-objects (primary @ +0, IResourceRequester @ +4) + the
 // IStreamUser interface sub-object (@ +0x38), NOT by hand-written stores. The two
-// f32=0.0f and scalar zero-inits target members whose real types/names are un-homed
-// here (mParams / mSpeechData have no committed homes); per the anti-fabrication rule
-// and the committed ExplosionEffect/StreamingEffect precedent they are DECLARATION-ONLY
-// / DEFERRED and NOT re-emitted as raw-offset stores or invented fields. The embedded
-// Attrib::Gen::speechdata sub-object (this+0x74) is likewise DEFERRED (same as
-// StreamingEffect defers its Attrib::Gen::streamsettings tail).
+// f32=0.0f and scalar zero-inits target members whose real types/names are still
+// un-homed here (mParams has no committed home); per the anti-fabrication rule and
+// the committed ExplosionEffect/StreamingEffect precedent those remain DECLARATION-ONLY
+// / DEFERRED and are NOT re-emitted as raw-offset stores or invented fields. The
+// embedded Attrib::Gen::speechdata sub-object (this+0x74) is NOW a real named member
+// (mSpeechData, see header) -- its default ctor call (speechdata(nullptr, nullptr))
+// exactly matches the asm's `Attrib::Gen::speechdata::speechdata(this+0x74, 0, 0)`, so
+// the compiler-generated member construction reproduces it with no explicit code here.
 //
 // FLAG: flt_82001CC0 == 0.0f (NOT 1.0f) -- attested project-wide and by the committed
 // sibling BrnExplosionEffect.cpp which loads the same symbol.
@@ -51,10 +53,11 @@ namespace Logic
 SpeechEffect::SpeechEffect()
     : BrnEffectObject()                       // primary @+0 + IResourceRequester @+4 vptrs, base zero-init (BY NAME)
     , BrnSound::Logic::Streaming::IStreamUser() // IStreamUser interface vptr @+0x38 (BY NAME)
+    // mSpeechData default-constructs here too (BY NAME, matches the asm's
+    // Attrib::Gen::speechdata::speechdata(this+0x74, 0, 0) call exactly).
 {
-    // The leaf scalar zero-inits (two f32 = 0.0f, several word/byte/s16 = 0), the
-    // `stw -1, +0x6C` (muQueuedContentSpec = 0xFFFFFFFF) and the tail
-    // Attrib::Gen::speechdata(this+0x74, 0, 0) construction target un-homed member
+    // The leaf scalar zero-inits (two f32 = 0.0f, several word/byte/s16 = 0) and the
+    // `stw -1, +0x6C` (muQueuedContentSpec = 0xFFFFFFFF) target un-homed member
     // sub-objects and are DEFERRED (see FLAGs) -- NOT fabricated as named field
     // assignments in this minimal home.
 }
@@ -69,13 +72,17 @@ SpeechEffect::SpeechEffect()
 //     -> recovers the primary SpeechEffect `this` from the +4 IResourceRequester
 //        sub-object pointer, then tail-forwards to the vector deleting destructor.
 //
-// Both are MSVC compiler-synthesised thunks over this virtual destructor. The leaf
-// teardown is the inherited BrnEffectObject / IStreamUser base settle (BY NAME), so this
-// anchor body is empty; the host toolchain re-synthesises the vector deleting destructor
-// + the +4 MI adjustor from this class's MI base list + virtual dtor. The (a2 & 1) tail
-// frees the object through the global sound MemBase allocator (off_82FFB954); that
-// allocator is not homed here, so the `delete` half is left to the host operator delete
-// (no fabricated allocator).
+// Both are MSVC compiler-synthesised thunks over this virtual destructor. The X360
+// asm's ONLY non-vptr-reinstall action is `Attrib::Instance::~Instance(this+0x74)` --
+// tearing down the embedded speechdata sub-object. Since mSpeechData is now a real
+// named member (see header), the compiler-generated member destruction reproduces
+// that exact call automatically; no explicit teardown code is needed here. The rest
+// of the leaf teardown is the inherited BrnEffectObject / IStreamUser base settle (BY
+// NAME), so this anchor body is empty; the host toolchain re-synthesises the vector
+// deleting destructor + the +4 MI adjustor from this class's MI base list + virtual
+// dtor. The (a2 & 1) tail frees the object through the global sound MemBase allocator
+// (off_82FFB954); that allocator is not homed here, so the `delete` half is left to
+// the host operator delete (no fabricated allocator).
 // ---------------------------------------------------------------------------
 SpeechEffect::~SpeechEffect()
 {

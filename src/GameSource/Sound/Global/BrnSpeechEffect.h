@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"             // BrnSound::Logic::Streaming::IStreamUser (third base)
+#include "GameSource/AttribSys/Generated/classes/speechdata.h"     // Attrib::Gen::speechdata (X360 +0x74 sub-object, now homed)
 
 // =============================================================================
 // BrnSound::Logic::SpeechEffect
@@ -71,10 +72,21 @@ struct SpeechEffect : public BrnEffectObject,
     // The Cr sub-object GetCr() returns the address of (X360 +0x08, past the base
     // vptr region). Modelled as a named opaque member AFTER the BrnEffectObject base
     // (whose leading vptr/data region the ctor zeroes); GetCr returns &maCr[0]. Element
-    // type DEFERRED (the asm merely takes its address). The remainder of SpeechEffect
-    // (through the ctor's +0x74 speechdata sub-object) is DEFERRED (un-homed member
-    // types) and NOT fabricated here.
+    // type DEFERRED (the asm merely takes its address).
     u8 maCr[1];
+
+    // X360 +0x74: the embedded Attrib::Gen::speechdata sub-object. Now a real named
+    // member (Attrib::Gen::speechdata landed since this TU was first minimal-homed) --
+    // its default ctor (speechdata(nullptr, nullptr)) exactly matches the X360 ctor's
+    // `Attrib::Gen::speechdata::speechdata(this+0x74, 0, 0)` call, and its implicit
+    // member dtor exactly matches ~SpeechEffect's `Attrib::Instance::~Instance(this+0x74)`
+    // asm call -- so no explicit code is needed in either SpeechEffect() or
+    // ~SpeechEffect(), the compiler-generated member lifetime does the work. The
+    // remaining DWARF members (mePlayState, mParams (VoiceWrapper::CreateParams),
+    // mbFlagSpeechIsStillPlaying, mbFirstTimeTipPlaying, meLanguage,
+    // muNextRoadRageIntroIndex, muNextStuntRunIntroIndex, muQueuedContentSpec,
+    // mbQueuedSpeechIsFirstTimeTip) still use un-homed types and stay DEFERRED.
+    Attrib::Gen::speechdata mSpeechData;
 };
 
 } // namespace Logic
