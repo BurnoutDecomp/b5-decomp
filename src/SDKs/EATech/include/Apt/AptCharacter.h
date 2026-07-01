@@ -32,6 +32,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstddef>   // offsetof (the layout static_asserts below)
 #include <cstdint>
 
 struct AptFile;   // SDKs/EATech/include/Apt/AptFile.h (mpAnimationFile is an AptFile*)
@@ -65,3 +66,13 @@ struct AptCharacter
     // hook; the imported-sub-character resolution path is deferred (see the .cpp).
     void render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick);
 };
+
+// The x64 natural alignment of the members above lays them out at EXACTLY the verified 64-bit
+// serialised character-record offsets (the console layout is the same fields at half the pointer
+// width). AptCharacterAnimation::Fixup writes the back-link into mpFixupLink @0x08 (over the
+// serialised signature), and SetupCharacter reads/writes mnRefAndFlags @0x10 + mpAnimationFile @0x18
+// (which is 0 on fresh data). Lock these so a member reorder can't silently desync the loader.
+static_assert(offsetof(AptCharacter, mnType)          == 0x00, "AptCharacter.mnType");
+static_assert(offsetof(AptCharacter, mpFixupLink)     == 0x08, "AptCharacter.mpFixupLink (Fixup back-link)");
+static_assert(offsetof(AptCharacter, mnRefAndFlags)   == 0x10, "AptCharacter.mnRefAndFlags");
+static_assert(offsetof(AptCharacter, mpAnimationFile) == 0x18, "AptCharacter.mpAnimationFile");

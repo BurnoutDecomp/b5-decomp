@@ -18,6 +18,7 @@
 #include "SDKs/EATech/include/Apt/Apt.h"            // gAptFuncs.pfnLoadRenderingUnit (case-1 shapes)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"  // EAStringC RAII (import-name bracket)
 #include "SDKs/EATech/include/Apt/AptTarget.h"      // gpAptTarget->mpLoader (the import loader)
+#include "SDKs/EATech/include/Apt/AptLoader.h"      // AptLoader::Load (the real import loader, homed)
 
 #include <cstdint>
 #include <cstring>   // strstr (ExportClassDefinitionAssets' __Packages label scan)
@@ -463,12 +464,18 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
                 break;
         }
 
-        // Post-relocation per-character init: AptCharacter::SetupCharacter(pChar) (drops the anim-file
-        // ref, clears the count, sets the type flags). FLAG (Step 2): SetupCharacter reads the record by
-        // the console AptCharacter member offsets (notably mpAnimationFile, which it AptSharedPtrDecRef's);
-        // on the 64-bit char those members sit at different offsets, so the faithful 64-bit SetupCharacter
-        // (+ the widened AptCharacter layout) is homed with the Fixup callees. Deferred here (marked).
+        // Post-relocation per-character init: AptCharacter::SetupCharacter (X360 @0x82AFE560 / PS3
+        // @0xF44BF0) -- drops the anim-file ref (mpAnimationFile@0x18), clears the ref-count half, sets
+        // the type flag half (mnRefAndFlags@0x10). The faithful body is written (AptCharacter.cpp) and the
+        // x64 AptCharacter layout is static_assert-locked (@0x18/@0x10). BLOCKED (not deferred-by-choice):
+        // the converted GUIAPT/TITLE_SCREEN02 bundle has a NON-UNIFORM char -- char[1] @res+0x4AF4 is a
+        // CONSOLE 4-byte record (signature @+0x04, not @+0x08) left un-widened by the converter, so its
+        // 64-bit anim-file slot @+0x18 holds garbage (0x100000000) and ReleaseAnimationFile AVs on it
+        // (the console reads +0x0C == 0 and is safe). This is a DATA-CONVERSION bug, not a code bug -- the
+        // Fixup relocation is correct. Re-enable this call once the bundle is uniformly 64-bit (or the
+        // faithful load path (Step 8) clarifies char[1]). Until then the movie root still instantiates.
         // reinterpret_cast<AptCharacter*>(pChar)->SetupCharacter();
+        (void)pChar;
     }
 
     // ---- pass 3: the import table --------------------------------------------
@@ -478,35 +485,16 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
         for (int32_t i = 0; i < nImports; ++i)
         {
             char* const pEntry = ptrAt(self, 0x38) + i * 0x20;   // import entry: stride 0x20
-            reloc(pEntry, 0x00);   // mpImportFileName (movie name)
-            reloc(pEntry, 0x08);   // mpClassName (import name)
+            reloc(pEntry, 0x00);   // mpImportFileName (movie name)  -- FAITHFUL relocation
+            reloc(pEntry, 0x08);   // mpClassName (import name)      -- FAITHFUL relocation
 
-            // Load the import by name (AptLoader::Load @0x82AEEA70; currently the AptLoader_LoadX360
-            // stub -> null) and assign the handle into the entry's AptFile slot (+0x18): inc new,
-            // store, dec+delete old (the console AptFilePtr::operator=). On fresh serialised data the
-            // old slot is null, so with the stub this is a faithful no-op until Step 2 homes Load.
-            const char* const pName = ptrAt(pEntry, 0x00);
-            AptFilePtr loaded;
-            loaded.pData = nullptr;
-            if (pName != nullptr)
-            {
-                EAStringC importName(pName);
-                AptLoader_LoadX360(&loaded, gpAptTarget ? gpAptTarget->mpLoader : nullptr, &importName);
-            }
-            AptFile** const pFileSlot = reinterpret_cast<AptFile**>(pEntry + 0x18);
-            AptFile* const pNew = loaded.pData;
-            AptFile* const pOld = *pFileSlot;
-            if (pNew != nullptr)
-                AptSharedPtrIncRef(pNew);
-            *pFileSlot = pNew;
-            if (pOld != nullptr && AptSharedPtrDecRef(pOld) == 0)
-                AptSharedPtrDelete(pOld);
-
-            // release the local handle (null via the stub)
-            AptFile* const pTmp = loaded.pData;
-            loaded.pData = nullptr;
-            if (pTmp != nullptr && AptSharedPtrDecRef(pTmp) == 0)
-                AptSharedPtrDelete(pTmp);
+            // FLAG (Step 8): the X360 next calls AptLoader::Load(movieName) on gpAptTarget->mpLoader to
+            // register the imported .apt (findFile-dedup, miss -> allocate a "requested" AptFile), then
+            // assigns the handle into the entry's AptFile slot (+0x18). The REAL loader is set up by the
+            // faithful AptAllocatorInitialize / AptCreateTargetInstance -- the current INVENTED host
+            // bring-up (BrnAptRuntimeBringUp) leaves mpLoader under-initialized, so calling the real Load
+            // here AVs. Deferred until the faithful bring-up (Step 8) replaces the invented facade; the
+            // import AptFile slot (+0x18) stays 0 (unresolved) meanwhile, resolved by the real load path.
         }
     }
     return this;
