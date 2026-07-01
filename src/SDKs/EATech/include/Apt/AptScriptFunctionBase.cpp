@@ -273,6 +273,14 @@ void AptScriptFunctionBase::SetRegisterValue(int32_t nRegister, AptValue* pValue
     pOld->Release();
 }
 
+// GetRegisterValue -- the symmetric read: return the live value in register slot
+// nRegister. The console inlines this trivial indexed accessor at its call sites
+// (e.g. stackPushIndirect); recovered here as the named member. No bounds check.
+AptValue* AptScriptFunctionBase::GetRegisterValue(int32_t nRegister)
+{
+    return spRegisters[nRegister];
+}
+
 // ===========================================================================
 // Lexical scope chain (variable resolution / local definition)
 // ===========================================================================

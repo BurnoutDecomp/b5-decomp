@@ -53,14 +53,10 @@
 // FLAG (wired at AptInit; see AptValueConvert.cpp).
 extern AptValue* gpUndefinedValue;
 
-// FLAG (member follow-on -- stackPushIndirect @0x7ECE34 is declared in
-// AptActionInterpreter.h only as a deferred FOLLOW-ON, not as a callable member:
-// it resolves AptVFT_Lookup (via the register array at +0x44) / AptVFT_Register
-// (via AptScriptFunctionBase::GetRegisterValue) values before pushing. _Push
-// below needs it; it is forwarded through this shim until that register/local
-// machinery is reconstructed and the member is declared. The console call is the
-// member AptActionInterpreter::stackPushIndirect(pInterp, pValue).
-extern void AptActionInterpreter_stackPushIndirect(AptActionInterpreter* pInterp, AptValue* pValue);
+// stackPushIndirect @0x7ECE34 is now a real member (homed in AptActionInterpreter.cpp):
+// it resolves AptVFT_Lookup (via the register window mpRegisters) / AptVFT_Register
+// (via AptScriptFunctionBase::GetRegisterValue) values before pushing. _Push calls the
+// member directly; the old free-function shim (AptRenderLinkStubs.cpp) is retired.
 
 // ---------------------------------------------------------------------------
 // _FunctionAptActionPop @0x7F33D0 -- discard the top value, but only while the
@@ -248,7 +244,7 @@ void AptActionInterpreter::_FunctionAptActionPush(AptActionInterpreter* pInterp,
     pCtx->mpProgramCounter = pAligned + 8;
 
     for (int32_t i = 0; i < nCount; ++i)
-        AptActionInterpreter_stackPushIndirect(pInterp, pArray[i]);   // FLAG: deferred member shim
+        pInterp->stackPushIndirect(pArray[i]);   // real member (resolves Lookup/Register)
 }
 
 // ---------------------------------------------------------------------------
