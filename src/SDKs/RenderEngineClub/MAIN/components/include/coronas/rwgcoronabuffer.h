@@ -99,6 +99,16 @@ public:
 };
 }
 
+// FLAG (naming collision, not yet reconciled): this is a vendor-slice reconstruction of
+// BrnCoronaManager::Construct's OWN layout, predating the DWARF-driven real ::BrnCoronaManager
+// class now committed at GameSource/Graphics/BrnCoronaManager.h (which owns AddCorona/
+// AddPropCorona/SetTextureAtlas). The two class bodies are never `#include`d together today (this
+// header has no includers outside its own TU), so there is no live ODR conflict, but they are the
+// SAME X360 type (BrnCoronaManager::Construct's ledger identity has no namespace qualifier) modeled
+// twice with different guessed layouts. A follow-up pass should re-derive Construct's body against
+// the real class's DWARF member layout and retire this local struct; left as-is here since that
+// requires re-verifying an already-reviewed function body, out of scope for the corona-manager .cpp
+// TU that added the real header.
 class BrnCoronaManager
 {
 public:
