@@ -56,6 +56,7 @@ class  AptValueVector;
 //    Null until those inits run; the bodies short-circuit on null.
 // ===========================================================================
 AptValue* gpUndefinedValue            = nullptr;   // off_8324D814 (the shared AS `undefined`)
+AptCIH*   gpAptEmptyCIH               = nullptr;   // dword_8324D700 (the pinned "EmptyCIH" AptCIHNone placeholder)
 AptValue* gpAptNoneValue              = nullptr;   // off_8324D814 (the AS `null`/none)
 AptValue* gpUndefinedCIH              = nullptr;   // the undefined-CIH sentinel (AptInit)
 AptValue* gpAptDestroyedClipValue     = nullptr;   // dword_8324D818
