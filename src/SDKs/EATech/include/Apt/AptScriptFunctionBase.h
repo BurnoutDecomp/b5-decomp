@@ -168,6 +168,12 @@ public:
     // `this` (the void* arg is unused); the per-slot call is Release (vtable slot 1).
     static void PopStaticData(void* pSavedBase);
 
+    // PushStaticData (PS3 @0x7E0A90) -- start a new (empty) register-block frame: return
+    // the current base as the restore point, advance the base past the current frame
+    // (base += count), and zero the count. The caller saves the returned base and later
+    // hands it to PopStaticData to pop back. (The inverse of PopStaticData.)
+    static AptValue** PushStaticData();
+
     AptValue* GetCIH() const          { return mpCIH; }
     AptValue* GetParentScope() const  { return mpParentScope; }
     // +0x24 ParentAnim accessor (the global-object frame the interpreter's variable
