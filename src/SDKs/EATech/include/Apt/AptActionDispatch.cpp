@@ -185,8 +185,8 @@ void AptActionInterpreter::InitDispatchTable()
     // (call/member/variable/timeline/proto/dict families) were never added to
     // this table -- every one below dispatched to the no-op stub even though
     // its faithful body existed. Wired per the extracted X360 map (0x82F73068).
-    // Still on the no-op stub (genuinely unbuilt): 0x94 With (PS3 body exists;
-    // the last one).
+    // Every opcode in the extracted console map now dispatches to its homed
+    // handler -- the table is COMPLETE (2026-07-01).
     // =======================================================================
 
     // -- run control / timeline --
@@ -238,6 +238,7 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x88] = &_FunctionAptActionDefineDictionary;
     sGlobalTable[0x8E] = &_FunctionAptActionDefineFunction2;
     sGlobalTable[0x8F] = &_FunctionAptActionTry;
+    sGlobalTable[0x94] = &_FunctionAptActionWith;
     sGlobalTable[0x96] = &_FunctionAptActionPush;
     sGlobalTable[0x9A] = &_FunctionAptActionGetUrl2;
     sGlobalTable[0x9B] = &_FunctionAptActionDefineFunction;

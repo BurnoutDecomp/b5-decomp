@@ -448,6 +448,7 @@ public:
     static void _FunctionAptActionCallMethodPop        (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionCallMethodSetVar     (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionCallFuncAndPop       (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionWith                 (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionDictCallFuncPop      (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionDictCallFuncSetVar   (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionDictCallMethodPop    (AptActionInterpreter* pInterp, LocalContextT* pContext);

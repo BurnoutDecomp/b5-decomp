@@ -196,6 +196,53 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncPop(AptActionInterprete
         AptApt_FlushDeferredReleases();
 }
 
+// The value->object resolver (homed in AptActionInterpreterInterpHelpers.cpp).
+extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
+                                               AptValue* pValue, AptValue** ppOut);
+
+// ---------------------------------------------------------------------------
+// With (0x94; PS3 @0x82016C) -- AS `with (obj) { ... }`. The aligned inline operand
+// is the with-block END position (console 4-byte slot; read pointer-wide per the
+// sibling inline-operand convention pending the _parseStream transcode). A defined
+// with-target resolves to its object (valueToObject) and installs the WITH-SCOPE
+// through the context's pending-release pair -- {scope object, end-of-block PC} --
+// which runStream releases exactly when the PC reaches the block end (the with
+// scope's lifetime). An undefined target skips the whole block (PC = end). Either
+// way the with-target operand is popped (Release).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionWith(AptActionInterpreter* pInterp,
+                                                  LocalContextT* pContext)
+{
+    const unsigned char* pAligned =
+        reinterpret_cast<const unsigned char*>(
+            (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    const unsigned char* pBlockEnd = *reinterpret_cast<const unsigned char* const*>(pAligned);
+
+    AptValue* pTarget = pInterp->mpStack[pInterp->mnStackTop - 1];
+    if (pTarget->getIsDefined())
+    {
+        pContext->mpProgramCounter = pAligned + 4;   // consume the operand (console stride)
+
+        AptValue* pObject = nullptr;   // FLAG: the console leaves the out slot uninitialised
+                                       // on a no-object value and AddRefs it regardless; the
+                                       // null init + guard below keep that hazard out.
+        AptActionInterpreter_valueToObject(pContext->mpCIH, nullptr, pTarget, &pObject);
+        if (pObject)
+        {
+            pContext->mpPendingReleaseValue = pObject;    // ctx[2] -- the with-scope
+            pContext->mpPendingReleasePC    = pBlockEnd;  // ctx[3] -- released at block end
+            pObject->AddRef();                            // console (**v13)(v13)
+        }
+    }
+    else
+    {
+        pContext->mpPendingReleaseValue = nullptr;        // ctx[2] = 0
+        pContext->mpProgramCounter      = pBlockEnd;      // skip the whole with-block
+    }
+
+    pInterp->stackPop();                                  // pop the with-target (Release)
+}
+
 // ---------------------------------------------------------------------------
 // CallMethodSetVar @0x82B054E8 -- CallMethod, then SetVariable, then flush.
 // ---------------------------------------------------------------------------
