@@ -69,6 +69,12 @@ struct AptMovie
     // @0x82AE0228 -- queue frame nFrame's action commands onto the director queue.
     AptMovie* queueFrameActions(void* pCIH, int nFrame);
 
+    // @PS3 0x820FA4 -- run frame nFrame's tag-1 action commands IMMEDIATELY on the
+    // VM singleton (push a register-block window, runStream each action stream with
+    // pCIH's root-animation character-inst as the run scope, pop the window). The
+    // CallFrame opcode's synchronous sibling of queueFrameActions. Body in AptMovie.cpp.
+    const AptMovie* runFrameActions(AptCIH* pCIH, int nFrame) const;
+
     // @0x82AF80B0 -- relocate the just-loaded timeline against the load base (and
     // build the label hash + parse each action stream). Returns the last sub-result.
     void* resolve(int nBase, void* a3, int a4);

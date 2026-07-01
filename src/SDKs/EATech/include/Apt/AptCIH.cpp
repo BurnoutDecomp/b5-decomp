@@ -27,6 +27,7 @@
 #include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"        // scratch state for the multi-frame skip path
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"        // gAptActionInterpreter operand stack (_gotoAndX)
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
+#include "SDKs/EATech/include/Apt/AptCharacterHelper.h"          // AptGetAnimationAtLevel (GetRootAnimation's CIHNone path)
 #include "SDKs/EATech/include/Apt/AptDefine.h"     // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 
@@ -256,6 +257,27 @@ AptNativeHash* AptCIH::GetNativeHash() const   // @0x82AD5B28
 }
 bool AptCIH::IsMask() const  { return mpCharacterInst->GetRenderItem()->GetIsMask(); }   // @0x82AD5BA0
 bool AptCIH::HasMask() const { return mpCharacterInst->GetRenderItem()->GetHasMask(); }  // @0x82AD5BB8
+
+// ---------------------------------------------------------------------------
+// GetRootAnimation @PS3 0x820F3C -- the nearest enclosing ANIMATION node. The empty
+// CIHNone placeholder (tag 0x25) resolves to the lazily-created level-0 root; any
+// other node walks its display-list parent chain ([7] mpDisplayListParent) until the
+// character-inst type tag ([8]->mTypeFlags >> 26) is 9 (animation) or 15.
+// ---------------------------------------------------------------------------
+AptCIH* AptCIH::GetRootAnimation()
+{
+    if (getVtblIndex() == AptVFT_CIHNone)          // (this[1] & 0x7F) == 0x25
+        return AptGetAnimationAtLevel(0);
+
+    AptCIH* pNode = this;
+    uint32_t uTag = pNode->mpCharacterInst->GetTypeTag();   // *(this[8]+8) >> 26
+    while (uTag != 9u && uTag != 15u)
+    {
+        pNode = pNode->mpDisplayListParent;                 // this[7]
+        uTag  = pNode->mpCharacterInst->GetTypeTag();
+    }
+    return pNode;
+}
 
 // ---------------------------------------------------------------------------
 // SetDirtyState @0x82AD76B8 -- set/clear the per-node dirty bit (mFlagsA bit 25).
