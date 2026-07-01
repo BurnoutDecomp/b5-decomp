@@ -36,6 +36,18 @@ namespace SceneManagerIO
         // @ X360 0x82277880 (body in CgsSceneManagerModuleIO.cpp). Asserts the manager is set
         // up, then returns the cached-slot's miNumCachedTriangleBatches for the given slot index.
         s32 GetNumCachedTriangleBatches(s32 liCacheSlotIndex) const;
+
+        // Append == adopt the source interface's manager pointer. Defined at
+        // CgsSceneManagerModuleIO.h:1277 in the original tree (the assert's baked
+        // file/line); the X360 build inlines it into the world buffer's
+        // AppendTriangleCacheInterface @ 0x8279BAF8 (assert-if-null then a single
+        // pointer store). Assert message verbatim from the X360 rodata (no newline).
+        void Append(const TriangleCacheInterface* lpInterfaceToAppend)
+        {
+            CGS_ASSERT(lpInterfaceToAppend->mpTriangleCacheManager != nullptr,
+                       "lpInterfaceToAppend->mpTriangleCacheManager != NULL");
+            mpTriangleCacheManager = lpInterfaceToAppend->mpTriangleCacheManager;
+        }
     };
 }
 }

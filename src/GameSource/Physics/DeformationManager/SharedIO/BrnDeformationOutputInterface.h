@@ -51,6 +51,14 @@ namespace BrnPhysics
         public:
             void Construct();
 
+            // DWARF :154 (own TU): hand-written copy assignment. X360 emits it
+            // out-of-line @ 0x823C8900; the world buffer's SetDeformationOutputInterface
+            // @ 0x827AA658 calls it directly (`mDeformationOutputInterface = *lpInterface`).
+            // Declared here so callers reverse the X360 call; bodied by this type's own TU.
+            // (The DWARF also declares Append(const DeformationOutputInterface*) at :157
+            // and Clear() at :160 -- left undeclared until an X360 body attests them.)
+            DeformationOutputInterface& operator=(const DeformationOutputInterface& lrOther);
+
             u8  maPad0[112];     // +0     unrecovered leading members (placeholder)
             u32 muClearedFlag0;  // +112   X360 a1[28]   — cleared on Construct
             CgsModule::EventQueue<JointedPartStateEvent, 50>            mJointedPartStateQueue;            // X360 +116
