@@ -8,11 +8,14 @@
 // native methods). Reconstructed leaf-first. This header now covers: the full
 // interpreter LAYOUT (the five {count,capacity,array} stacks + per-run state, from
 // initialize() @0x7F29D4), the operand-stack primitives, the per-execution context
-// (LocalContextT, from runStream @0x81BD50), and the bytecode opcode handlers built
-// so far (expression / branch / stack-push). Still the follow-on: runStream's
-// dispatch BODY (blocked on the static sGlobalTable opcode->handler table, which is
-// binary DATA not in the code-only IDA exports), getVariable/setVariable, the call/
-// member/variable handlers, and the .apt-format resolve transcode (_parseStream).
+// (LocalContextT, from runStream @0x81BD50), and the bytecode opcode handlers.
+// STATUS (corrected 2026-07-01): runStream's dispatch loop IS homed
+// (AptActionRun.cpp: reads each opcode + calls sGlobalTable[opcode](this,&ctx)); the
+// dispatch table is extracted + filled by InitDispatchTable (AptActionDispatch.cpp), so
+// the earlier "blocked on binary DATA" note was stale. getVariable/setVariable + the
+// bulk of the opcode handlers are homed. Genuine follow-on: the remaining unbuilt
+// sGlobalTable slots (still the no-op _FunctionAptActionStub) and the .apt-format
+// resolve re-parse (_parseStream). See the Apt audit for the VM-reconnection worklist.
 //
 // The console indexes the stacks with byte math (4 * top + base); here it is typed
 // element indexing (mpStack[top]), which is the same on x64 where the pointers are
