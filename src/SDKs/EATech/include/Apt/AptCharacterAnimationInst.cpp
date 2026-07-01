@@ -191,13 +191,18 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // AptSharedPtr<AptFile>::operator=(character+0xC, &held). The PS3 lift gates this
     // ref-counted store on the source not already being the destination slot
     // (`if (v5 != a3)`, v5 = a2+12) -- the standard AptSharedPtr self-assign guard.
-    // FLAG (external serialised .apt data): +0x0C is a fixed slot in the loaded movie
-    // root blob (not a modelled C++ member), addressed by its console byte offset like
-    // the other raw .apt-record accesses. lpCharacter is pFile->mpData (a resolved load,
-    // non-null here). The char table this slot lives in is relocated by Fixup.
+    // FLAG (native-8 fork -- x64 serialised .apt): a2+0xC is the console (4-byte) offset of the
+    // AptCharacter's embedded animation-file slot -- on the console 0x10-byte header that IS
+    // mpAnimationFile (type@0, sig@4, shapeID@8, mpAnimationFile@0xC). On the native-8 (widened)
+    // record the header is 0x20 and mpAnimationFile sits at +0x18 (the AptCharacter struct locks
+    // this: static_assert offsetof(AptCharacter,mpAnimationFile)==0x18). Using the console +0x0C on
+    // a widened record reads/writes the HIGH half of the +0x08 signature slot (a garbage pointer the
+    // AptSharedPtr DecRef would then dereference -> AV). So address the slot through the modelled
+    // widened member. lpCharacter is pFile->mpData (a resolved load, non-null here); the char table
+    // this slot lives in is relocated by Fixup.
     {
         AptFilePtr* lpRootFilePtr =
-            reinterpret_cast<AptFilePtr*>(reinterpret_cast<char*>(lpCharacter) + 0x0C);   // a2+0xC (v5)
+            reinterpret_cast<AptFilePtr*>(&reinterpret_cast<AptCharacter*>(lpCharacter)->mpAnimationFile); // a2+0x18 (native-8 == console a2+0xC)
         if (lpRootFilePtr != &laHeldFile)   // if (v5 != a3)
         {
             AptFile* lpOld = lpRootFilePtr->pData;

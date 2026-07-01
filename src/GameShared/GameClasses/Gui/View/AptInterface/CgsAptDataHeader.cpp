@@ -62,6 +62,16 @@ namespace CgsGui
         // order matches this struct AND the relocate is handed an untruncated
         // 64-bit base (the converter fix). On the current 4-byte / mis-shaped
         // bundle this MUST stay false or the boot AVs -- see the note above.
+        // INVESTIGATED (Steps 6+10, 2026-07-01): flipping this to true REGRESSES the boot to an early
+        // AV, INDEPENDENT of the char[1] converter fix -- because AptDataHeader's four leading fields are
+        // u32 offsets and this relocate does `field += (u32)luDelta` with a u32 base, which cannot
+        // represent the resource's HIGH x64 backing (0x7FF...): `(u32)field + (u32)base` truncates to a
+        // garbage low-4GB pointer that GuiGeometryObject::FixUp then dereferences. (Verified this session:
+        // enabling it crashed during an early apt-bundle load, before Title_Screen02.) The faithful
+        // console relocate is fundamentally 32-bit; the x64 host resolves via realBase64 + offset instead
+        // (the no-op branch below). This can only flip true if the header format becomes 64-bit-pointer
+        // (the fields widened to hold a full address) AND the base is passed untruncated -- a header/loader
+        // change beyond the char[1] data fix. Stays false on x64.
         constexpr bool KB_APT_DATAHEADER_INPLACE_FIXUP = false;
 
         // The faithful EATech in-place relocate (X360 @0x828559D8): add luDelta to
