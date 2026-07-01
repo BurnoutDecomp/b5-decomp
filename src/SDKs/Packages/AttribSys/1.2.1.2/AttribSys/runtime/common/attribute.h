@@ -45,6 +45,13 @@ namespace Attrib
         // from a parent/default), accounting for the modified flag.
         bool IsInherited();
 
+        // GetLength — element count of the array-typed value this cursor was resolved to.
+        // Used by the generated Num_<array>() accessors (surfacelist::Num_Surfaces,
+        // speechdata::Num_*, languagestreamcollection::Num_Items) which resolve an array
+        // attribute into a stack cursor and read its length. Declaration-only under the
+        // cl /c gate (body lives in its own AttribSys TU).
+        int GetLength();
+
     private:
         const Instance*   mpInstance;    // +0
         const Collection* mpCollection;  // +4

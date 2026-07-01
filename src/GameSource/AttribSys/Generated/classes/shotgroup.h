@@ -22,6 +22,7 @@
 //     Attrib::Instance::GetAttributePointer (which hands back the collection data block).
 #include "types.hpp"                                                          // u32 / s64
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"   // Attrib::FindCollection (canonical)
 
 namespace Attrib
 {
@@ -29,10 +30,6 @@ namespace Attrib
     // into the key it constructs over (codegen.cpp owns the body). Declared here so the
     // consumer (BrnArbStateRaceIntro::Prepare) can name it; declaration-only.
     u32 StringToKey(const char* pcName);
-
-    // Resolve the collection for a class/group key (the shotgroup ctor uses it; the
-    // AttribSys runtime owns the body). Declaration-only under the cl /c gate.
-    Collection* FindCollection(int liKey, void* lpOwner = nullptr);
 
 namespace Gen
 {
