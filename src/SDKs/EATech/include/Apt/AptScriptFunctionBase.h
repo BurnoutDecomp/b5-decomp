@@ -161,6 +161,13 @@ public:
     static void InitializeStaticData(int32_t nRegisterCount);   // @0x82AE26C0
     static void ShutdownStaticData();         // @0x82AE2758
 
+    // PopStaticData (PS3 @0x7E0AB8) -- pop the current register-block frame back to
+    // pSavedBase (the saved arg-heap pointer): Release each slot in the current frame +
+    // reset it to undefined, then move the base to pSavedBase and set the count to span
+    // [pSavedBase, oldBase). Verified from the PS3 asm: the base is the console method's
+    // `this` (the void* arg is unused); the per-slot call is Release (vtable slot 1).
+    static void PopStaticData(void* pSavedBase);
+
     AptValue* GetCIH() const          { return mpCIH; }
     AptValue* GetParentScope() const  { return mpParentScope; }
     // +0x24 ParentAnim accessor (the global-object frame the interpreter's variable
@@ -209,4 +216,9 @@ protected:
     static AptValue**     spRegisters;
     static int32_t        snRegisterCount;
     static int32_t        snRegisterCapacity;
+    // The register-BLOCK frame stack (X360 spRegBlockCurrentFrameBase /
+    // snRegBlockCurrentFrameCount): a moving base into the register block carved from
+    // the arg heap. PushStaticData grows it; PopStaticData pops it back to a saved base.
+    static AptValue**     spRegBlockCurrentFrameBase;
+    static int32_t        snRegBlockCurrentFrameCount;
 };

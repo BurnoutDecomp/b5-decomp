@@ -187,9 +187,10 @@ static const char* const kAptFSCommandPrefix = "FSCommand:";
 // FLAG: AptScriptFunctionBase::PopStaticData (console @0x82AE9388's tail call) -- the
 // static "restore per-call execution state" helper paired with InitializeStaticData /
 // SetupBeforeExecution. It is part of the AptScriptFunctionBase TU but is not declared
-// in that header yet (that header is out of edit scope here); declared as an extern
-// free-function FLAG so CleanupAfterExecution is faithful and links.
-extern void AptScriptFunctionBase_PopStaticData(AptScriptFunctionBase::SavedExecutionState* pSaved);
+// now the real static member AptScriptFunctionBase::PopStaticData (AptScriptFunctionBase.cpp).
+// NOTE: pSaved here is actually the saved arg-heap/register-block base (a void*), mis-typed as
+// SavedExecutionState* in this member's signature -- a documented type-debt to fix when the whole
+// runStream cluster (SetupBeforeExecution/PushStaticData) lands. PopStaticData takes it as void*.
 
 // ---------------------------------------------------------------------------
 // ~AptActionInterpreter @0x82AE3918 -- free each of the five {count,capacity,array}
@@ -226,7 +227,7 @@ void AptActionInterpreter::CleanupAfterExecution(AptScriptFunctionBase::SavedExe
         mpAbortValue->Release();
         mpAbortValue = 0;
     }
-    AptScriptFunctionBase_PopStaticData(pSaved);   // FLAG: restore-execution-state helper (extern)
+    AptScriptFunctionBase::PopStaticData(pSaved);   // real member (register-block frame pop)
 }
 
 // ---------------------------------------------------------------------------

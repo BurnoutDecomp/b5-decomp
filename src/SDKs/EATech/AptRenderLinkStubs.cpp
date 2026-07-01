@@ -243,7 +243,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptObject_SetImplementedObjects RETIRED (2026-07-01): the real member
     // AptObject::SetImplementedObjects (AptObject.cpp) is called directly; the {} stub dropped it.
     void AptScriptFunctionBase_InitializeStaticData(const AptInitParmsT* pParms) {}   // FLAG link-stub
-    void AptScriptFunctionBase_PopStaticData(AptScriptFunctionBase::SavedExecutionState* pSaved) {}   // FLAG link-stub
+    // AptScriptFunctionBase_PopStaticData RETIRED (2026-07-01): homed as the real static member
+    // AptScriptFunctionBase::PopStaticData (AptScriptFunctionBase.cpp, asm-decoded register-block pop).
     void GlobalNotificationFunction(AptFilePtr* pFile) {}   // FLAG link-stub
     void Mutex_Lock(void* pMutex, void* pName) {}   // FLAG link-stub
     void Mutex_Unlock(void* pMutex) {}   // FLAG link-stub
