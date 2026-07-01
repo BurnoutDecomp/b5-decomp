@@ -79,6 +79,21 @@ namespace CrashIO
         // Read-only access to the queued updates.
         const CrashingTrafficUpdateQueue* GetCrashingTrafficUpdateQueue() const;
 
+        // ADDITIVE GROW (X360-attested, FIGS merge-window delta -- not in the PS3 DWARF
+        // method list): replace-merge the source interface's pending updates into this
+        // one. The X360 build inlines this whole body into the world buffer's
+        // SetCrashNetworkOutputInterface @ 0x827AD310: it resets the queue length
+        // (`stw 0, +8` == BaseEventQueue::Clear) then calls the out-of-line
+        // EventQueue<CrashingTrafficUpdateEvent,24>::Append on the source queue. The
+        // clear must live here (not in the caller): the queue member is private with
+        // only a const getter, so a member mutator is the only way to produce the
+        // observed store. Mirrors the sibling BrnDirectorVehicleInputInterface::Append.
+        void Append(const NetworkOutputInterface* lpSource)
+        {
+            mCrashingTrafficUpdateQueue.Clear();
+            mCrashingTrafficUpdateQueue.Append(lpSource->mCrashingTrafficUpdateQueue);
+        }
+
     private:
         CrashingTrafficUpdateQueue mCrashingTrafficUpdateQueue;
     };
