@@ -24,6 +24,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstddef>   // offsetof (AptMovieData native-8 offset static_asserts)
 #include <cstdint>
 
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC mFileName member
@@ -90,22 +91,55 @@ AptFile* MakeAptFile(void* pMem, EAStringC* pName);
 // names only the AptFile/AptLoader-touched members; the [c:] notes are the console
 // byte offsets the asm uses (widths are x64, the PC-port FLAG). RECONCILE POINT
 // with class:AptCharacterAnimation: mpCharacterTable / mnImportCount / mpImportTable
-// are that struct's members (the AptCharacterAnimation embedded at root+0x10); the
-// export table at [c:+0x38]/[c:+0x3C] is the slot the PS3-decoded header labels the
-// init-indicator list -- the X360 FindExport/GetIDFromImportFile asm walks it as a
-// {name,id} export table (a likely PS3/X360 branch divergence).
+// are that struct's members (the AptCharacterAnimation embedded at root+0x20 on
+// native-8); the export table is the def-base initList slot the X360 FindExport /
+// GetIDFromImportFile asm walks as a {name,id} export table (the PS3 header labels
+// it the init-indicator list -- a PS3/X360 branch divergence).
+//
+// NATIVE-8 LAYOUT (2026-07-01): AptFile::mpData points at the ROOT CHARACTER HEADER
+// (the type-9 record, sig@+0x08). The movie's AptCharacterAnimation def base is at
+// root+0x20 (native-8 char header size), and every movie field below is DEF-BASE-
+// RELATIVE (charCount@def+0x18, charTable@def+0x20, importCount@def+0x34,
+// importTable@def+0x38, exportCount@def+0x40, exportTable@def+0x48 -- the same
+// offsets AptCharacterAnimation::Fixup relocates). So from mpData (the root header)
+// they sit at root+0x38 / +0x40 / +0x54 / +0x58 / +0x60 / +0x68. The struct is laid
+// out with an explicit byte prefix + static_asserts so `pMovie->field` reads land at
+// those exact native-8 offsets -- the widened form of the console 4-byte struct the
+// asm walked (charTable@+0x20/importCount@+0x30/... in the console layout). This
+// unblocks FindExport / GetIDFromImportFile / AllImportsAvailable / isFileImported /
+// CancelPreloadedAnimation on the native-8 bundle (previously they read the console
+// offsets off the ROOT header -- e.g. mnImportCount landed on the 0x09876543 sig).
+// // FLAG (x64 native-8 fork): the def-base-relative offsets + the widened
+// AptImportEntry(0x20)/AptExportEntry(0x10) strides are the converter's native-8 form.
 // ---------------------------------------------------------------------------
-struct AptExportEntry            // console record = 8 bytes {name@+0, id@+4}
+struct AptExportEntry            // native-8 record = 16 bytes {name@+0, id@+8}
 {
-    const char* mpName;          // the exported symbol name
-    int32_t     mnCharacterId;   // index into mpCharacterTable
+    const char* mpName;          // +0x00  the exported symbol name (relocated char*)
+    int32_t     mnCharacterId;   // +0x08  index into mpCharacterTable
+    int32_t     mnPad0C;         // +0x0C  (pad to the serialized 0x10 stride)
 };
+static_assert(sizeof(AptExportEntry) == 0x10, "AptExportEntry native-8 stride 0x10");
 
 struct AptMovieData
 {
-    AptCharacter**  mpCharacterTable;   // [c:+0x20]
-    int32_t         mnImportCount;      // [c:+0x30]
-    AptImportEntry* mpImportTable;      // [c:+0x34]  (16-byte AptImportEntry records)
-    int32_t         mnExportCount;      // [c:+0x38]
-    AptExportEntry* mpExportTable;      // [c:+0x3C]
+    // The root character header (type@0, sig@+0x08, ...) -- mpData points here.
+    char            _rootHeader[0x20];   // root+0x00 .. root+0x20 (the native-8 char header)
+    // The embedded AptCharacterAnimation def base begins here (root+0x20). The leading
+    // frame fields (frameCount@0x00 / mpFrames@0x08) are not used by this view.
+    char            _defHead[0x18];      // def+0x00 .. def+0x18
+    int32_t         mnCharacterCount;    // def+0x18  (root+0x38)
+    int32_t         _pad3C;              // def+0x1C  (pad to the def+0x20 pointer slot)
+    AptCharacter**  mpCharacterTable;    // def+0x20  (root+0x40)
+    char            _defMid[0x0C];       // def+0x28..0x34 (screenW/H@0x28/0x2C, ms@0x30)
+    int32_t         mnImportCount;       // def+0x34  (root+0x54)
+    AptImportEntry* mpImportTable;       // def+0x38  (root+0x58, stride 0x20)
+    int32_t         mnExportCount;       // def+0x40  (root+0x60)  (== initCount)
+    int32_t         _pad64;              // def+0x44  (pad to the def+0x48 pointer slot)
+    AptExportEntry* mpExportTable;       // def+0x48  (root+0x68, stride 0x10)  (== initList)
 };
+static_assert(offsetof(AptMovieData, mnCharacterCount) == 0x38, "AptMovieData.charCount@root+0x38");
+static_assert(offsetof(AptMovieData, mpCharacterTable) == 0x40, "AptMovieData.charTable@root+0x40");
+static_assert(offsetof(AptMovieData, mnImportCount)    == 0x54, "AptMovieData.importCount@root+0x54");
+static_assert(offsetof(AptMovieData, mpImportTable)    == 0x58, "AptMovieData.importTable@root+0x58");
+static_assert(offsetof(AptMovieData, mnExportCount)    == 0x60, "AptMovieData.exportCount@root+0x60");
+static_assert(offsetof(AptMovieData, mpExportTable)    == 0x68, "AptMovieData.exportTable@root+0x68");

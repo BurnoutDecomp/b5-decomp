@@ -501,12 +501,33 @@ AptMovie* AptMovie::queueFrameActions(void* pCIH, int nFrame)
 {
     AptMovieFrame* pFrame = &mpFrames[nFrame];         // *(this+4) + 8*nFrame
 
+    // FLAG (x64 native-8, imported-clip AS-action boundary): for an IMPORTED sprite's embedded movie,
+    // the frame's action-command array (mpCommands) / the per-command records may not be fully
+    // relocated -- the timeline relocation's ACTION-STREAM re-parse (AptMovie::resolve64 ->
+    // AptActionInterpreter::_parseStream) is un-homed, so tag-1 (action) command records in imported
+    // movies can carry un-relocated (small file-offset) pointers. Reading through them AVs. The
+    // action queue feeds the (un-homed) ActionScript VM, whose runStream never executes, so these
+    // queued actions are behaviourally inert on the current PC path. Guard the record derefs against
+    // an implausible (non-relocated) pointer and skip such commands: the nested SHAPES that
+    // doFrameControls already placed still render; only the inert AS action-queueing is skipped.
+    // This is the HONEST un-homed boundary (the AS-action timeline for imported clips), not
+    // invention -- a valid relocated command still queues faithfully.
+    auto lbPlausiblePtr = [](const void* p) -> bool
+    {
+        const uintptr_t lu = reinterpret_cast<uintptr_t>(p);
+        return lu >= 0x00010000u;   // an un-relocated .apt file offset is a small value (< 64KB..MBs)
+    };
+    if (!lbPlausiblePtr(pFrame->mpCommands))
+        return this;   // frame's command array un-relocated (imported-clip AS boundary) -- skip
+
     int32_t nCount = pFrame->mnCommandCount;
-    if (nCount > 0)
+    if (nCount > 0 && nCount <= 0x10000)   // sane command count (guards a misread count)
     {
         for (int32_t i = 0; i < nCount; ++i)
         {
             void* pCmd = pFrame->mpCommands[i];        // *(v7[1] + v8)
+            if (!lbPlausiblePtr(pCmd))
+                continue;                              // un-relocated command record -- skip (FLAG)
             if (CmdI32(pCmd, 0x00) == 1)
             {
                 // queue = off_8324E574->[+0x18]->[+0x0C]  (the director's AptActionQueueC)

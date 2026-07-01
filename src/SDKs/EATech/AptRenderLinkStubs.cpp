@@ -231,7 +231,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     bool AptKeyManagerRemoveListener(AptValue* pListener) { return false; }   // FLAG link-stub
     void AptLinker_GetUrlLoad(AptLinker* pLinker, EAStringC* pUrl, EAStringC* pTarget) {}   // FLAG link-stub
     void AptLoader_CancelAsyncLoad(void* pDataBlock) {}   // FLAG link-stub
-    void AptLoader_StartAsyncLoad(const char* pFileName, AptFilePtr* pFile) {}   // FLAG link-stub
+    // AptLoader_StartAsyncLoad is HOMED in BrnAptRuntimeBringUp.cpp (the platform stream hook: it
+    // synchronously content-loads the import bundle + drives AptCompleteAnimationAsyncLoad). The
+    // FLAG link-stub that used to live here is removed so the strong host definition is the only one.
     void AptMovie_runFrameActions(void* pFrameActionList) {}   // FLAG link-stub
     void AptObject_SetImplementedObjects(AptObject* pObject, AptArray* pInterfaces, int nCount) {}   // FLAG link-stub
     void AptScriptFunctionBase_InitializeStaticData(const AptInitParmsT* pParms) {}   // FLAG link-stub

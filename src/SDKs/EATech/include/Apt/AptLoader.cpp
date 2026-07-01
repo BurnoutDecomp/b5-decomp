@@ -517,9 +517,13 @@ void AptLoader::Update()
                     bAnyAdvanced     = true;
                     pFile->mnField12 = pFile->mnState;       // [c:+0x0C]
                     pFile->mnState   = 4;                    // [c:+0x08] linked
-                    // FLAG: root+16 is the embedded AptCharacterAnimation (extern Link hook).
+                    // The embedded AptCharacterAnimation def base is root + the pointer-size char
+                    // header. FLAG (x64 native-8): our GUIAPT bundles are native-8 (0x20 header), so
+                    // the def base is pData + 0x20 (the console 4-byte formula was pData + 0x10; the
+                    // struct static_asserts native-8 offsets, so it MUST be +0x20 here). This mirrors
+                    // CompleteLoad's `pCharAnim = pRoot + luHdrSize` (0x20 native-8).
                     AptCharacterAnimation_Link(
-                        reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pData) + 16),
+                        reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pData) + 0x20),
                         pData, pDataBlock);
 
                     AptFilePtr notifyHandle;
