@@ -41,6 +41,11 @@
 struct AptLoader;
 extern AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStringC* pName);   // AptLoader::Load @0x82AEEA70 (FLAG)
 
+// FLAG (x64 native-8 relocation bounds): the AptData resource span the host stashes so the
+// Fixup case-5/9 -> AptMovie::resolve64 walk can bounds-check every serialised offset slot
+// (defined in CgsAptAux.cpp). Declared here by name to avoid pulling the heavy CgsAptAux.h.
+namespace CgsGui { extern uintptr_t gAptResourceSpanBase; extern uint32_t gAptResourceSpanSize; }
+
 // ===========================================================================
 // Init-action execution -- un-homed globals / callees (the ActionScript VM path).
 // The init-action passes (ExportClassDefinitionAssets / ExecuteInitAction(s)) drive
@@ -469,10 +474,25 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
                 break;
             case 5:   // Sprite
             case 9:   // Movie: the embedded timeline is resolved by AptMovie::resolve (body @ char+0x20).
-                // FLAG (Step 5): AptMovie::resolve still has the 32-bit int-signature form; its faithful
-                // 64-bit rebuild (which relocates the sub-movie's frame table) is the next step. The X360
-                // calls: reinterpret_cast<AptMovie*>(pChar + 0x20)->resolve(base, pConstFile, self + 0x30).
-                // Deferred here (marked boundary) -- restored with the 64-bit resolve.
+                // STEP 5 (2026-07-01): the faithful native-8 AptMovie::resolve64 relocates the embedded
+                // movie's frame table (framesOffset -> pointer) + its command records. The X360 calls
+                // reinterpret_cast<AptMovie*>(pChar + 0x20)->resolve(base, pConstFile, self + 0x30); the
+                // x64 fork widens the base to the full 8-byte load base + walks native-8 strides. For the
+                // ROOT (charTable[0], type 9) this is where mpFrames @char+0x20+0x08 (the 0x5180 offset)
+                // becomes a live pointer -- the exact relocation doFrameControls/tick need (was the frame-
+                // table-un-relocated AV). FLAG: the AS action-stream re-parse inside resolve64 is deferred.
+                {
+                    // The relocation bounds the host stashed (CgsGui::gAptResourceSpanBase/Size);
+                    // base == the load base == the AptData resource base on our path. When the host
+                    // did not stash a span (0), fall back to base + a generous cap so the walk still
+                    // runs (offsets are all small; the discrimination only needs a cap above them).
+                    const uintptr_t luResBase = CgsGui::gAptResourceSpanBase != 0
+                        ? CgsGui::gAptResourceSpanBase : reinterpret_cast<uintptr_t>(base);
+                    const uint32_t luResSize = CgsGui::gAptResourceSpanSize != 0
+                        ? CgsGui::gAptResourceSpanSize : 0x02000000u;   // 32 MB fallback cap
+                    reinterpret_cast<AptMovie*>(pChar + 0x20)->resolve64(
+                        reinterpret_cast<uintptr_t>(base), luResBase, luResSize);
+                }
                 break;
             case 10:  // StaticText: relocate the text-record array pointer (+0x50).
                 reloc(pChar, 0x50);

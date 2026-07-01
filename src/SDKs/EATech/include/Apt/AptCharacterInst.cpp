@@ -19,6 +19,8 @@
 #include "SDKs/EATech/include/Apt/AptTarget.h"        // gpAptTarget (off_8324E574 -- the ctor's create-item guard)
 #include "SDKs/EATech/include/Apt/AptDefine.h"        // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"   // the sprite/movie-clip subtype (type 5)
+#include "SDKs/EATech/include/Apt/AptPseudoCIH.h"                 // gpAptPseudoDataPool (off_8324D808, the ctor's pool)
 
 #include <new>   // placement new (factory)
 
@@ -88,18 +90,47 @@ AptCharacterInst::~AptCharacterInst()
     }
 }
 
-// CreateCharacterInst @0x817D40 -- factory. The null-character case builds a base
-// "none" instance. FLAG: the console switches on the character type to build a
-// typed AptCharacterInst subtype (sprite/button/text/...); those subtypes are a
-// follow-on, so the base instance is used for every character for now -- the
-// render item it owns is still type-correct (AptRTM_CreateItem -> the right
-// AptRenderItem subtype), only the instance-side behaviour is base-only.
+// CreateCharacterInst @0x82AFFF70 (X360; PS3 @0x817D40) -- factory. DECOMPILED FAITHFULLY:
+// switch on the character type to build the correctly-SIZED + typed AptCharacterInst subtype.
+//   type 5 (sprite/movie-clip): Allocate(36) + AptCharacterSpriteInstBase (owns mnGotoFrame /
+//                               mnClipActionFlags / mpClipEventHandlers / mDisplayList / etc.)
+//   type 2 (dynamic text): Allocate(32) + base AptCharacterInst
+//   type 4 (button): return null (built elsewhere)
+//   type 1/10/other/null: Allocate(16) + base AptCharacterInst
+// This MUST allocate the sprite subtype for type 5: the placement path (instantiateCharacter /
+// placeObject / _addToSetCaches / AptCIH::tick) reads/writes the sprite-base members at +0x10..
+// +0x20 (mnGotoFrame / mDisplayList / ...) -- if a type-5 char got only the 16-byte base, those
+// accesses fell OUTSIDE the allocation and CORRUPTED the heap (non-deterministic AVs during the
+// first frame-0 place). Allocates from the DOGMA pool (off_8324D808 == gpAptPseudoDataPool), the
+// console's pool. FLAG: the per-type console VTABLE (off_82145FE0 etc.) is the family's manual
+// mpVTable_unused slot the reconstruction does not model (dispatch is via mTypeFlags), so it is
+// not written -- the type tag (mTypeFlags high 6 bits) still identifies the type. Text/button
+// subtype BEHAVIOUR beyond the base remains a follow-on; the render item stays type-correct.
 AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter)
 {
-    AptCharacterInst* pInst =
-        static_cast<AptCharacterInst*>(gpNonGCPoolManager->Allocate(sizeof(AptCharacterInst)));
-    new (pInst) AptCharacterInst(pCharacter);
-    return pInst;
+    const int32_t nType = pCharacter ? pCharacter->mnType : -1;
+
+    if (nType == 5)
+    {
+        // Sprite / movie-clip: the 36-byte AptCharacterSpriteInstBase (mDisplayList + play state).
+        void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterSpriteInstBase));   // 36
+        if (pMem == nullptr)
+            return nullptr;
+        return ::new (pMem) AptCharacterSpriteInstBase(pCharacter);
+    }
+    if (nType == 4)
+        return nullptr;   // button: built elsewhere (the console returns 0 here)
+
+    // Dynamic text (type 2) is 32 bytes on the console; every other type (1 / 10 / null / etc.)
+    // is the 16-byte base. The reconstruction's base AptCharacterInst covers both (the extra
+    // text-inst state is the follow-on); allocate the larger of the needed size and sizeof(base).
+    const size_t luSize = (nType == 2)
+        ? (32u > sizeof(AptCharacterInst) ? 32u : sizeof(AptCharacterInst))
+        : sizeof(AptCharacterInst);
+    void* const pMem = gpAptPseudoDataPool->Allocate(luSize);
+    if (pMem == nullptr)
+        return nullptr;
+    return ::new (pMem) AptCharacterInst(pCharacter);
 }
 
 // ---- render item ----------------------------------------------------------

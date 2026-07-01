@@ -196,7 +196,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void AptActionInterpreter_UnEscape(EAStringC* pStr) {}   // FLAG link-stub
     void AptActionInterpreter_getName(AptCIH* pNode, EAStringC* pOut) {}   // FLAG link-stub
     void AptActionInterpreter_stackPushIndirect(AptActionInterpreter* pInterp, AptValue* pValue) {}   // FLAG link-stub
-    void AptAnimationTargetSet_Construct(AptAnimationTargetSet* pSet, u16 nCapacity) {}   // FLAG link-stub
+    // AptAnimationTargetSet_Construct is now HOMED faithfully in AptAnimationTarget.cpp
+    // (sub_82AE1708: allocate the slot array + set capacity; native-8 pointer stride).
     void AptAnimationTargetSet_Destruct (AptAnimationTargetSet* pSet) {}   // FLAG link-stub
     void AptAnimationTargetSet_Destruct2(AptAnimationTargetSet* pSet) {}   // FLAG link-stub
     void AptAnimationTarget_TickNewInsts(AptAnimationTarget* pAnim) {}   // FLAG link-stub
@@ -244,7 +245,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void* AptActionInterpreter_CleanupAfterExecution(void* pVM, void* pSavedScratch, void* pLocalState) { return nullptr; }   // FLAG link-stub
     void* AptFile_operator(void* pDst, void* pSrc) { return nullptr; }   // FLAG link-stub
     void* sub_82AFD150(void* a1, int a2) { return nullptr; }   // FLAG link-stub
-    void* sub_82B0AE08(void* a1, float* a2, void* a3) { return nullptr; }   // FLAG link-stub
+    // sub_82B0AE08 (the place-command dispatcher @0x82B0AE08) is now HOMED faithfully as
+    // AptMovie_PlaceCommand in AptMovie.cpp (reads the PlaceObject record + calls the homed
+    // AptDisplayList::placeObjectNCXForm). The null link-stub is retired.
     void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool) { return nullptr; }   // FLAG link-stub
 
 // ===================================================================================

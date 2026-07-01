@@ -283,6 +283,13 @@ namespace CgsGui
     // =========================================================================
     void* gAptLoadAnimRootOverride = nullptr;   // the located root char header (x64)
 
+    // The AptData resource span (base + size) the host stashes before LoadAnimation, so the
+    // native-8 AptMovie::resolve64 relocation walk can bounds-check every serialised offset
+    // slot (see the header). Zero => the walk treats every non-zero slot as a live offset
+    // (the pre-bounds behaviour). base == the load base == the AptData resource base.
+    uintptr_t gAptResourceSpanBase = 0;
+    uint32_t  gAptResourceSpanSize = 0;
+
     // =========================================================================
     // AptCallbackFile::LoadAnimation @0x82853E68 -- the host "load this .apt now" callback.
     // DECOMPILED FAITHFULLY from BURNOUT_X360_ARTIST.XEX (the asserts name this file at

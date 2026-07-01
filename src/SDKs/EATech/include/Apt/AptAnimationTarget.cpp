@@ -77,9 +77,15 @@ void AptAnimationTarget::SetupStaticData(int nMaxNewMovieClips)
     memset(spStaticBlock, 0, 80);
 
     snMaxNewMovieClips   = nMaxNewMovieClips;
-    spNewInsts           = gpAptPseudoDataPool->Allocate(4 * nMaxNewMovieClips);
-    spDelayedReleaseList = gpAptPseudoDataPool->Allocate(4 * nMaxNewMovieClips);
-    memset(spDelayedReleaseList, 0, 4 * nMaxNewMovieClips);
+    // FLAG (x64 native-8 stride): both tables hold POINTERS (AptValue*/AptCIH*), which the
+    // runtime indexes as pointer-width entries (`AptValue** [i]` / `void** [i]`). The console
+    // pointer is 4 bytes, so it allocated 4*count; on x64 the pointer is 8 bytes, so the table
+    // must be sizeof(void*)*count -- else the 8-byte per-instance writes in instantiateCharacter/
+    // AddToDisplayList overrun the (half-size) table into adjacent pool memory (which corrupted
+    // the root CIH). Widened to the native pointer stride to match the indexed writes.
+    spNewInsts           = gpAptPseudoDataPool->Allocate(sizeof(void*) * nMaxNewMovieClips);
+    spDelayedReleaseList = gpAptPseudoDataPool->Allocate(sizeof(void*) * nMaxNewMovieClips);
+    memset(spDelayedReleaseList, 0, sizeof(void*) * nMaxNewMovieClips);
 
     snNewInstSize            = 0;
     snDelayedReleaseListSize = 0;
@@ -88,8 +94,8 @@ void AptAnimationTarget::SetupStaticData(int nMaxNewMovieClips)
 // CleanupStaticData @0x82AE42A8 -- free the three tables SetupStaticData built.
 void AptAnimationTarget::CleanupStaticData()
 {
-    gpAptPseudoDataPool->Deallocate(spNewInsts, 4 * snMaxNewMovieClips);
-    gpAptPseudoDataPool->Deallocate(spDelayedReleaseList, 4 * snMaxNewMovieClips);
+    gpAptPseudoDataPool->Deallocate(spNewInsts, sizeof(void*) * snMaxNewMovieClips);           // native-8 stride (see SetupStaticData)
+    gpAptPseudoDataPool->Deallocate(spDelayedReleaseList, sizeof(void*) * snMaxNewMovieClips); // native-8 stride
     gpAptPseudoDataPool->Deallocate(spStaticBlock, 80);
 }
 
@@ -180,7 +186,30 @@ extern AptValue* gpAptNoneValue;   // off_8324D814
 // + a u16 capacity. Declared as externs so the director ctor/dtor wire them by name;
 // bodied when that small Set TU is homed.
 // ---------------------------------------------------------------------------
-extern void AptAnimationTargetSet_Construct(AptAnimationTargetSet* pSet, u16 nCapacity);   // sub_82AE16xx (build)
+// AptAnimationTargetSet_Construct @0x82AE1708 -- HOMED (was a link-stub): build the set's
+// slot table. DECOMPILED FAITHFULLY from the X360 ARTIST.XEX:
+//   *(a1+2) = a2 (mnCapacity); if (a2) { mppSlots = Allocate(4*a2); mnCount = 0; memset(slots,0); }
+//   else { mnCount = 0; mppSlots = 0; }
+// FLAG (x64 native-8 stride): mppSlots is a POINTER array the runtime indexes as AptValue**;
+// the console allocates 4*capacity (4-byte pointers), x64 needs sizeof(void*)*capacity so the
+// indexed slot writes (_addToSetCaches' AptListenerSlotList::add) stay in bounds. Without this
+// the set was never built (the stub), so _addToSetCaches over-read/overwrote uninitialised slots.
+void AptAnimationTargetSet_Construct(AptAnimationTargetSet* pSet, u16 nCapacity)
+{
+    pSet->mnCapacity = nCapacity;
+    if (nCapacity != 0)
+    {
+        pSet->mppSlots = static_cast<AptValue**>(
+            gpAptPseudoDataPool->Allocate(sizeof(void*) * nCapacity));   // native-8 stride
+        pSet->mnCount = 0;
+        memset(pSet->mppSlots, 0, sizeof(void*) * nCapacity);
+    }
+    else
+    {
+        pSet->mnCount  = 0;
+        pSet->mppSlots = nullptr;
+    }
+}
 extern void AptAnimationTargetSet_Destruct (AptAnimationTargetSet* pSet);                  // sub_82AE1670 (listener free)
 extern void AptAnimationTargetSet_Destruct2(AptAnimationTargetSet* pSet);                  // sub_82AE1780 (input free)
 

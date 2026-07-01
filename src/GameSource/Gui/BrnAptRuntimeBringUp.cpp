@@ -908,6 +908,12 @@ namespace BrnGui
         }
         CgsGui::gAptLoadAnimRootOverride = lpRootOverride;
 
+        // Stash the AptData resource span so the native-8 AptMovie::resolve64 relocation walk
+        // (driven by AptCharacterAnimation::Fixup case-5/9) can bounds-check every serialised
+        // offset slot. base == the load base == the resource base (luBase) on our path.
+        CgsGui::gAptResourceSpanBase = luBase;
+        CgsGui::gAptResourceSpanSize = s_uAptResourceSize;
+
         // --- 2. REGISTER the header with the data handler (AptDataHandler::AddAptData) ----------
         // So the faithful FindAptData(name) inside LoadAnimation resolves it. Idempotent by name.
         // FLAG (x64): AddAptData takes the resolved name (the header's mpacMovieName is an
@@ -980,6 +986,35 @@ namespace BrnGui
             }
         }
 
+        // STEP 5 PROBE (blocker #1): confirm the ROOT movie's frame table is RELOCATED by
+        // AptCharacterAnimation::Fixup case-9 -> AptMovie::resolve64. The root def-base IS
+        // the root AptMovie (frameCount@+0x00, mpFrames@+0x08). Before the fix mpFrames held
+        // the raw file offset 0x5180; after resolve64 it is a live pointer (base + 0x5180),
+        // and frame[0].mnCommandCount should be 13 (verified vs TITLE_SCREEN02.bundle).
+        {
+            const char* lpRootMovie = reinterpret_cast<const char*>(s_pFaithfulCharAnim);
+            const int liFrameCount = *reinterpret_cast<const int*>(lpRootMovie + 0x00);
+            void** lpFrames = *reinterpret_cast<void* const*>(lpRootMovie + 0x08) ?
+                *reinterpret_cast<void** const*>(lpRootMovie + 0x08) : nullptr;
+            const unsigned long long luFramesRaw =
+                *reinterpret_cast<const unsigned long long*>(lpRootMovie + 0x08);
+            // The frame table is a relocated pointer iff it lands inside the resource span.
+            const bool lbRelocated =
+                (luFramesRaw >= s_uAptResourceBase &&
+                 luFramesRaw <  s_uAptResourceBase + s_uAptResourceSize);
+            int liFrame0Cmds = -1;
+            if (lbRelocated && lpFrames != nullptr)
+            {
+                // frame[0]: {mnCommandCount@0, mpCommands@8} (native-8 stride 16).
+                liFrame0Cmds = *reinterpret_cast<const int*>(lpFrames);
+            }
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] faithful: STEP5 frame-table: frameCount=%d mpFrames=0x%016llX relocated=%s "
+                "frame0.cmdCount=%d (want 13)\n",
+                liFrameCount, luFramesRaw, lbRelocated ? "YES" : "NO(raw-offset)", liFrame0Cmds);
+            CgsDev::Log::WriteToLog(lac);
+        }
+
         // --- 5. the root level-0 CIH on the director's root display list ---------------------------
         // AptGetAnimationAtLevel(0) searches the director's root display list then (if absent) creates
         // an AptCIH via the GC pool. Self-test the GC pool first (probe the 40-byte carve).
@@ -1035,9 +1070,10 @@ namespace BrnGui
             s_bFaithfulInstantiated = true;
             std::snprintf(lac, sizeof(lac),
                 "[AptRT] faithful: INSTANTIATED -- animInst %p bound to root CIH %p (movie root %p); "
-                "IncCharacterList walked %d chars; sprite state seeded. (STEP 2 tick next.)\n",
+                "IncCharacterList walked %d chars; sprite state seeded. dlParent(after bind)=%p\n",
                 (void*)lpAnimInst, (void*)lpRootCIH, lpFile->mpData,
-                *reinterpret_cast<const int*>(reinterpret_cast<char*>(s_pFaithfulCharAnim) + 0x18));
+                *reinterpret_cast<const int*>(reinterpret_cast<char*>(s_pFaithfulCharAnim) + 0x18),
+                (void*)lpRootCIH->GetDisplayListParent());
             CgsDev::Log::WriteToLog(lac);
         }
         else
@@ -1342,29 +1378,22 @@ namespace BrnGui
         // to the homed Manager_CreateItem factory, so each placed inst gets a real render item (carrying
         // its character) -- which is what tick / AptCIH_GetClipMovie reach the movie through. Every deref
         // is guarded (the engine null-safety we added) so the tick completes structurally or bails.
-        // FLAG (Steps 6+10 boundary, INVESTIGATED 2026-07-01): the faithful tick is NOT yet
-        // un-deferrable -- it AVs, and even fixed would place nothing, for THREE independent reasons in
-        // the console-32 AptMovie timeline engine (all verified this session by flipping lbTickReady):
-        //   (a) FRAME TABLE UN-RELOCATED. AptCIH::tick -> AptMovie::doFrameControls reads mpFrames
-        //       @def+0x08 (an 8-byte slot holding the raw file offset 0x5180); Fixup's case-9 (Movie)
-        //       relocation is deferred (AptCharacterAnimation.cpp:470) and AptMovie::resolve is the
-        //       console-32 form (int32 arithmetic + `int nBase` -- truncates the high x64 base), so
-        //       mpFrames stays a raw offset and `mpFrames[nFrame]` dereferences ~0x5180 -> AV
-        //       (confirmed: the log ends exactly at "tick: frame=0 -> AptCIH::tick(...)").
-        //   (b) CONSOLE OFFSETS INSIDE doFrameControls. Its place path reads the movie def-base at
-        //       CONSOLE offsets (pAnim = char+0x10, charTable@+0x10, importCount@+0x20, importTable@
-        //       +0x24, char animFile@+0x0C) -- all WRONG for the native-8 record (char+0x20 embed,
-        //       charTable@+0x20, importCount@+0x34, importTable@+0x38, animFile@+0x18). A native-8
-        //       fork of doFrameControls (+ ExecuteInitActions + FindInst) is required.
-        //   (c) placeObject IS AN UN-HOMED STUB. The handler that actually inserts a placed character
-        //       into the display list, sub_82B0AE08, is a link-stub returning null
-        //       (AptRenderLinkStubs.cpp:247) -- so even with (a)+(b) fixed, frame 0's place commands
-        //       would place NOTHING and the title would not compose.
-        // So the tick stays DEFERRED (the instantiation above is real + complete; the geometry fallback
-        // path is the intended on-screen route once its header-offset read is corrected). Flipping this
-        // to true REGRESSES to an AV -- re-enable only when (a) a 64-bit AptMovie::resolve, (b) the
-        // native-8 doFrameControls fork, and (c) the real sub_82B0AE08 placeObject body all land.
-        bool lbTickReady = false;   // INVESTIGATED 2026-07-01: AVs (frame table) + placeObject is a null stub -- see (a)/(b)/(c)
+        // UN-DEFERRED (2026-07-01): the three timeline-engine blockers that held the faithful tick
+        // off are ALL homed, so the tick now runs frame 0's place commands and composes the movie:
+        //   (a) FRAME TABLE RELOCATED. AptCharacterAnimation::Fixup case-5/9 now drives the native-8
+        //       AptMovie::resolve64 (AptMovie.cpp) on the embedded movie (char+0x20), relocating
+        //       mpFrames @movie+0x08 (the 0x5180 offset) + the per-frame command arrays/pointers into
+        //       live pointers. VERIFIED at load: "STEP5 frame-table: ... relocated=YES frame0.cmdCount=13".
+        //   (b) NATIVE-8 doFrameControls. AptMovie::doFrameControls (AptMovie.cpp) is re-typed to
+        //       (AptDisplayList*, AptCIH*, int) and reads the movie char-anim def-base + charTable /
+        //       import table through the parent CIH's named char-inst chain (char+0x20 embed,
+        //       charTable/importTable named members) -- the native-8 layout, not console offsets.
+        //   (c) placeObject IS HOMED. sub_82B0AE08 is decompiled faithfully as AptMovie_PlaceCommand
+        //       (AptMovie.cpp): it reads the serialised place-info record and calls the fully-homed
+        //       AptDisplayList::placeObjectNCXForm, which creates/inserts the placed AptCharacterInst.
+        // Frame 0 of TITLE_SCREEN02 carries 12 place commands + 1 back-to-script (verified vs the
+        // bundle), so the tick populates the root clip's child display list with the title's characters.
+        bool lbTickReady = true;   // UN-DEFERRED 2026-07-01: resolve64 + native-8 doFrameControls + AptMovie_PlaceCommand all homed
         if (lbTickReady && s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr)
         {
             AptCIH* lpRoot = static_cast<AptCIH*>(s_pFaithfulRootCIH);

@@ -67,6 +67,7 @@
 // ---------------------------------------------------------------------------
 extern void AptApt_FlushDeferredReleases();
 
+
 // ---------------------------------------------------------------------------
 // FLAG (un-homed AptCIH behavioural surface): the per-node tick / generalised-
 // process hooks the display-list walks (AptCIH::tick @0x82B0BED8 / AptCIH::
@@ -543,11 +544,31 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
         }
         if (!bAlreadyPresent)
         {
-            // The set cache's count/slot-array sub-layout is exactly what the shared
-            // fixed-slot list add operates on; reuse it (it stores the node + fires its
-            // just-placed vtable[0] hook).
-            reinterpret_cast<AptListenerSlotList<IAptListener>*>(pSetCache)
-                ->add(reinterpret_cast<IAptListener*>(pNode));
+            // Add the node to the set cache's first free slot (then AddRef it, the just-
+            // placed hook). NOTE: this must operate on the AptAnimationTargetSet layout
+            // ({mnCount@0 u16, mnCapacity@2 u16, mppSlots@4}), NOT via AptListenerSlotList
+            // -- those are DIFFERENT reconstructed layouts (AptListenerSlotList puts
+            // muCapacity@+8 / mppSlots@+0x10), so reinterpreting the set as an
+            // AptListenerSlotList made add() read the capacity/slot pointer from the wrong
+            // offsets and write out of bounds (heap corruption). The scan is the same
+            // forward-from-head wrap the fixed-slot add does, on the set's own fields.
+            const uint32_t luCap = pSetCache->mnCapacity;
+            if (luCap != 0)
+            {
+                uint32_t luNext = (static_cast<uint32_t>(pSetCache->mnCount) + 1u) % luCap;
+                uint32_t luScanned = 0u;
+                while (luScanned < luCap && pSetCache->mppSlots[luNext] != nullptr)
+                {
+                    luNext = (luNext + 1u) % luCap;
+                    ++luScanned;
+                }
+                if (pSetCache->mppSlots[luNext] == nullptr)   // found a free slot
+                {
+                    pSetCache->mnCount = static_cast<uint16_t>(luNext);
+                    pSetCache->mppSlots[luNext] = static_cast<AptValue*>(pNode);
+                    pNode->AddRef();   // vtable[0] (the just-placed hook)
+                }
+            }
         }
     }
 
@@ -1040,7 +1061,8 @@ AptCIH* AptDLState_CreateInstAtDepth(AptDisplayListState* pState, int nDepth,
     // Stamp the new node's render-item depth (console sth r28, 0x14(item)).
     pNode->GetCharacterInst()->GetRenderItemWritable()->SetDepth(nDepth);
 
-    return pState->insert(pPrev, pNode);   // insert after the located prev slot
+    AptCIH* const pInserted = pState->insert(pPrev, pNode);   // insert after the located prev slot
+    return pInserted;
 }
 
 // ---------------------------------------------------------------------------
