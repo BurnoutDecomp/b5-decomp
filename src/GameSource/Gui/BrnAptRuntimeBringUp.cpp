@@ -47,7 +47,19 @@
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::AsState
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // AptDisplayListState::mpFirst (the placed-node chain)
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::GetRenderItem/GetDepth (probe)
+#include "SDKs/EATech/include/Apt/AptRenderWalk.h"            // AptRender (the faithful render-tree flush)
 
+
+// The pass-3 import-registration probe sink (declared weak in AptCharacterAnimation.cpp). Logs each
+// import the movie references (movie name / class name) + the loader handle Load() returned, so a run
+// names the exact cross-bundle imports (e.g. charId 30 = B5HelperComponents) that must be sync-loaded.
+extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const char* pcClassName, void* pHandle)
+{
+    char lac[224];
+    std::snprintf(lac, sizeof(lac), "[AptRT] import[%d]: movie='%s' class='%s' handle=%p\n",
+                  nIndex, pcMovieName ? pcMovieName : "?", pcClassName ? pcClassName : "?", pHandle);
+    CgsDev::Log::WriteToLog(lac);
+}
 
 // The per-character FixupWalk probe sink the engine TU calls (declared in AptCharacterAnimation.h).
 // Logs "[AptRT] fixup: char[i] type=T @off=.." for the first N characters so a run names the exact
@@ -215,6 +227,7 @@ namespace
     bool        s_bMovieRequested        = false;   // a PlayAptMovie request is in flight (load attempted)
     bool        s_bMovieLoaded           = false;   // the movie bundle loaded + the AptDataHeader resolved
     s32         s_iFrameCounter          = 0;       // per-frame probe throttle
+    s32         s_iRenderFrame           = 0;       // render-walk per-frame trace counter
 
     // ---- the loaded movie's resource pool + its relocated Apt geometry ---------
     // The movie bundle (GUIAPT\<NAME>.bundle) is loaded SYNCHRONOUSLY into this pool via
@@ -228,30 +241,12 @@ namespace
     CgsResource::Pool*               s_pMoviePool  = nullptr;   // holds the loaded movie bundle
     CgsGui::AptDataHeader*           s_pAptHeader  = nullptr;   // the movie header (fields are RAW offsets on x64)
 
-    // x64 TRANSCODE STATE (USER-CONFIRMED 2026-06-30): the .apt payload kept the console
-    // 4-byte serialised pointer format and the resource backing is a HIGH x64 address, so the
-    // in-place u32 FixUp is impossible (it was made a no-op in CgsAptDataHeader.cpp). Instead
-    // we keep the FULL 64-bit resource base and treat every serialised u32 field as an OFFSET
-    // relative to it, resolving `(T*)(base64 + offset)` at every level -- never storing a 64-bit
-    // address back into a u32. s_uGeomOffset is mpGeomStruct (the offset of the GuiGeometryObject).
+    // The loaded AptData resource span (the 64-bit load base + size). The faithful engine walks the
+    // native-8 records against this base (AptCharacterAnimation::Fixup / AptMovie::resolve64 / the
+    // Step-2 AptResolveShapeGeometry), stashed into CgsGui::gAptResourceSpanBase/Size for those.
     uintptr_t                        s_uAptResourceBase = 0;    // m_baseResources[0] (the 64-bit load base)
-    u32                              s_uGeomOffset      = 0;    // mpGeomStruct (offset of the geometry object)
-    u32                              s_uAptResourceSize = 0;    // the AptData resource size (REAL bound for ResolveOff)
-    bool                             s_bGeomResolved    = false;// a sane geometry object was found+validated
-    bool                             s_bAptBufferHasFrame = false; // a render block was opened this frame (gate the flush)
-    bool                             s_bRenderProbed    = false;// emitted the one-shot fine render probes yet
-    bool                             s_bFlushProbed     = false;// emitted the one-shot fine flush probe yet
-    s32                              s_iLastVertsSubmitted = 0; // verts submitted last frame (for the summary log)
-
-    // The .apt serialised POINTER SIZE (USER design: the "1:7:<n>" descriptor's third value).
-    //   4 = console 32-bit pointers (offset transcode); 8 = native x64 64-bit pointers (in-place).
-    // The "Apt Data:1:7:4" descriptor lives in the BUNDLE DEBUG-NAME table, which the Pool does NOT
-    // retain in the Entry after load -- so it is not in the loaded resource payload. We therefore
-    // DISPATCH by structural validation: try the 4-byte interpretation, and if its top-level fields
-    // are implausible try the 8-byte one; the validated size wins. (A future 8-byte bundle resolves
-    // through the native path unchanged.) FLAG: the explicit descriptor field is unreachable post-
-    // load, so the size is inferred structurally rather than read; 4-byte is the validated default.
-    s32                              s_iAptPointerSize  = 4;
+    u32                              s_uAptResourceSize = 0;    // the AptData resource size (relocation bound)
+    bool                             s_bFlushProbed     = false;// emitted the one-shot render-flush probe yet
 
     // The movie pool backing (3 mem types). The title movie is ~1.6 MB; reserve 8 MB/type
     // (the bundle's main-memory resources + the heap node overhead). Static BSS storage.
@@ -261,6 +256,44 @@ namespace
 
     // The Apt-data resource type id (X360 0x1E == 30; CgsResource::AptDataHeaderType::GetTypeID).
     const u32 KU_APTDATA_RESOURCE_TYPE_ID = 30u;
+
+    // ---- a static-backed rw resource allocator for the Apt render buffer -------------------
+    // FLAG (PC bring-up): the RenderWare DEFAULT resource allocator's DoAllocate(256KB) returns
+    // null at Apt bring-up time (its heap has no room for the render buffer's 4x(256KB+128)
+    // streams -- verified at runtime: "DoAllocate(256KB)=0"), so the ImRenderBuffer's Prepare
+    // carve fails and BeginRendering AVs on the null command buffer. We back the Apt render
+    // buffer with a dedicated static bump pool instead (a small IResourceAllocator over BSS
+    // storage). This does NOT touch the ImRenderBuffer/Im2d/D3D9 leaf -- it only supplies the
+    // buffer's backing memory (the host owns the render-buffer's storage, exactly as the console
+    // does through its own render-heap). 2 MB covers the 4 streams with headroom.
+    const u32 KU_APT_RB_POOL_BYTES = 2u * 1024u * 1024u;
+    u8  s_aAptRenderBufferPool[KU_APT_RB_POOL_BYTES];
+
+    struct AptRenderBufferAllocator : public rw::IResourceAllocator
+    {
+        u32 muUsed = 0;
+
+        rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* /*lpcName*/) override
+        {
+            rw::Resource lResult;
+            for (u32 lu = 0; lu < 4; ++lu)
+                lResult.m_baseResources[lu] = nullptr;
+
+            const u32 luSize  = lrDescriptor.m_baseResourceDescriptors[0].m_size;
+            u32       luAlign = lrDescriptor.m_baseResourceDescriptors[0].m_alignment;
+            if (luAlign < 1u) luAlign = 1u;
+
+            // Bump-align the cursor, then hand out [cursor, cursor+size) if it fits.
+            const u32 luOffset = (muUsed + luAlign - 1u) & ~(luAlign - 1u);
+            if (luOffset + luSize <= KU_APT_RB_POOL_BYTES)
+            {
+                lResult.m_baseResources[0] = &s_aAptRenderBufferPool[luOffset];
+                muUsed = luOffset + luSize;
+            }
+            return lResult;
+        }
+    };
+    AptRenderBufferAllocator s_AptRenderBufferAllocator;
 
     // ====================================================================================
     // STEP 8 -- FAITHFUL LOAD-PATH STATE (gated; direct-geometry render stays the fallback).
@@ -307,11 +340,8 @@ namespace BrnGui
     // Forward declarations (definitions are `static` later in this BrnGui namespace; called
     // from PlayMovie / Update which appear before their definitions). Must be in BrnGui (not
     // the anon namespace) so the in-namespace calls bind to the static definitions.
-    static void ResolveMovieGeometry(CgsResource::Entry* lpEntry);
-    static s32  RenderLoadedGeometryDirect(CgsGraphics::Im2d* lpIm2d);
     static void DumpResourceBytes(const char* lpcTag, void* lpBase, u32 luOffset,
                                   u32 luResourceSize, u32 luBytes);
-    static renderengine::Texture* ResolveMeshTexture(const u32* lpMesh, s32 liTexMode);
     static void DriveFaithfulLoad(CgsResource::Entry* lpEntry);
     static u32  LocateMovieRoot8(uintptr_t luBase, u32 luSize);
 
@@ -343,25 +373,21 @@ namespace BrnGui
             s_AptRenderBuffer.mu32Head = 0;
             s_AptRenderBuffer.mCommandBuffer.Construct();
 
-            rw::IResourceAllocator* lpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
-            if (lpAllocator == nullptr)
-            {
-                // FLAG: no RW default allocator yet -> the buffer cannot carve its storage.
-                // Defer (the renderer is up by the loading screen, so this is normally fine).
-                CgsDev::Log::WriteToLog("[AptRT] step3 renderbuffer: SKIP -- rw default allocator null (deferred).\n");
-            }
-            else
-            {
-                // 256 KB command stream + 256 KB vertex stream (generous for a single
-                // boot/title movie's per-frame geometry). failGracefully=true so a carve
-                // failure returns false rather than asserting.
-                const bool lbOk = s_AptRenderBuffer.mCommandBuffer.Prepare(
-                    256u * 1024u, 256u * 1024u, lpAllocator, /*failGracefully*/ true);
-                s_bRenderBufferReady = lbOk;
-                CgsDev::Log::WriteToLog(lbOk
-                    ? "[AptRT] step3 renderbuffer: Construct+Prepare ok (256KB cmd / 256KB vtx).\n"
-                    : "[AptRT] step3 renderbuffer: Prepare FAILED (carve) -- buffer unusable (FLAG).\n");
-            }
+            // Back the render buffer with the dedicated static bump pool (the RW DEFAULT
+            // allocator's DoAllocate returns null at this bring-up point -- see the allocator
+            // note above). 128 KB command stream + 128 KB vertex stream per buffer (x2 = 4
+            // carves) -- generous for a single boot/title movie's per-frame geometry, well
+            // within the 2 MB pool. failGracefully=true so an overflow rewinds instead of
+            // asserting.
+            rw::IResourceAllocator* lpAllocator = &s_AptRenderBufferAllocator;
+            const bool lbOk = s_AptRenderBuffer.mCommandBuffer.Prepare(
+                128u * 1024u, 128u * 1024u, lpAllocator, /*failGracefully*/ true);
+            s_bRenderBufferReady = lbOk;
+            char lacp[160];
+            std::snprintf(lacp, sizeof(lacp),
+                "[AptRT] step3 renderbuffer: Construct+Prepare %s (static pool, 128KB cmd / 128KB vtx, used=%u).\n",
+                lbOk ? "ok" : "FAILED", s_AptRenderBufferAllocator.muUsed);
+            CgsDev::Log::WriteToLog(lacp);
         }
 
         // ---- STEP 4: AptAux::Construct (the host callback table + render handler) -
@@ -596,42 +622,23 @@ namespace BrnGui
         s_uAptResourceSize =
             lpEntry->mResourceDescriptor.m_baseResourceDescriptors[CgsResource::E_MEMTYPE_MAINMEMORY].m_size;
 
-        // CORRECTED HEADER LAYOUT (verified against the real TITLE_SCREEN02.bundle bytes, this
-        // session). The reconstructed CgsGui::AptDataHeader puts mpGeomStruct at +12, but the REAL
-        // serialised .apt header has SIX leading offset words and the GuiGeometryObject lives at
-        // word[4] (+16), NOT word[3] (+12). The verified field run for Title_Screen02:
-        //   word[0]=0x30   -> "Title_Screen02"      (mpacMovieName)
-        //   word[1]=0x20   -> "Title_Screen02"      (mpAptData / asset-name block)
-        //   word[2]=0x40   -> "Apt Data:1:7:4"+desc (mpConstData -- the AptConstFile, 1:7:4 here)
-        //   word[3]=0x7100 -> "Apt constant file"+t (a SECOND const block -- NOT the geometry)
-        //   word[4]=0x7200 -> {numFiles=7,numTexPages=2,fileTableOff=0x7210}  <-- GuiGeometryObject
-        //   word[5]=0x7838 -> the import table (4 imports at 0x7840)
-        // So read the geometry offset from word[4] directly off the resource bytes. (The struct's
-        // mpGeomStruct/+12 is left to the FLAG'd no-op FixUp; we do not trust it for the geometry.)
+        // Log the native-8 AptDataHeader field run (diagnostic; the geometry the render walk draws is
+        // resolved faithfully by the engine -- AptCharacterAnimation::Fixup case-1 sets each shape's
+        // char+0x20 via AptResolveShapeGeometry off the header's field[4] GuiGeometryObject).
         const u32* lpHeaderWords = reinterpret_cast<const u32*>(lpRes);
-        s_uGeomOffset = lpHeaderWords[4];   // +16: the real GuiGeometryObject offset (verified)
         std::snprintf(lac, sizeof(lac),
-            "[AptRT] xcode: base=0x%016llX hdr[0..5]=0x%X 0x%X 0x%X 0x%X 0x%X 0x%X (geomOff=word[4]=0x%X)\n",
+            "[AptRT] load: base=0x%016llX hdr words[0..5]=0x%X 0x%X 0x%X 0x%X 0x%X 0x%X\n",
             (unsigned long long)s_uAptResourceBase,
             lpHeaderWords[0], lpHeaderWords[1], lpHeaderWords[2],
-            lpHeaderWords[3], lpHeaderWords[4], lpHeaderWords[5], s_uGeomOffset);
+            lpHeaderWords[3], lpHeaderWords[4], lpHeaderWords[5]);
         CgsDev::Log::WriteToLog(lac);
 
-        // HEX-DUMP PROBE (read-only, bounded): dump the first 64 bytes of the AptData resource (the
-        // AptDataHeader region) so the run shows the REAL on-disk header layout. The offline bundle
-        // parse showed entry layout ambiguity, so this is the ground truth.
+        // HEX-DUMP PROBE (read-only, bounded): the first 64 bytes of the AptData resource (the
+        // AptDataHeader region), for ground-truth diagnostics.
         DumpResourceBytes("hdr@+0",   lpRes, 0,
                           lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size, 64);
-        // And the region mpGeomStruct points at (if in range), to see the GuiGeometryObject bytes.
-        DumpResourceBytes("geom@off", lpRes, s_uGeomOffset,
-                          lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size, 48);
 
         s_bMovieLoaded = true;
-
-        // Resolve + sanity-validate the geometry object now (one-time), choosing the pointer-size
-        // path (4-byte transcode vs 8-byte native). Sets s_bGeomResolved if sane geometry is found.
-        // This is the DIRECT-GEOMETRY render path -- it stays the active render + the FALLBACK.
-        ResolveMovieGeometry(lpEntry);
 
         // STEP 8 (gated): drive the FAITHFUL Apt load path (LoadAnimation -> AptCompleteAnimation
         // AsyncLoad -> AptLoader::CompleteLoad -> Resolve -> Fixup -> MakeCharacterAnimationInst),
@@ -639,61 +646,6 @@ namespace BrnGui
         // guarded; on any failure the direct-geometry render above stays intact so the title art
         // still shows. The faithful per-frame tick/AS render are the next passes.
         DriveFaithfulLoad(lpEntry);
-    }
-
-    // =========================================================================
-    // x64 GEOMETRY TRANSCODE WALK.
-    //
-    // The serialised gui-geometry tree (GuiGeometryObject -> file table -> GuiGeometryFile
-    // -> mesh table -> GuiGeometryMesh -> vertex table -> vertex run) is a relocatable blob:
-    // every "pointer" is a file-relative OFFSET from the resource base. The homed
-    // AptRenderHandler::Render + the homed GuiGeometry*::FixUp read those fields as u32 and
-    // cast them to absolute addresses -- which only works when the data is in the low 4 GB
-    // (it is not on x64). So we do NOT use those; we resolve every offset against the FULL
-    // 64-bit base (s_uAptResourceBase) and submit the vertex runs directly to the command
-    // buffer. Dual-path by pointer size (4 = console offsets, 8 = native 64-bit fields).
-    //
-    // 4-BYTE SERIALISED STRIDES (console .apt, little-endian post-convert):
-    //   GuiGeometryObject : {u32 numFiles, u32 numTexPages, u32 fileTableOff}            (12B)
-    //   file table        : u32[numFiles] of GuiGeometryFile offsets
-    //   GuiGeometryFile   : {u32 id, u32 numMeshes, u32 meshTableOff}                    (12B)
-    //   mesh table        : u32[numMeshes] of GuiGeometryMesh offsets
-    //   GuiGeometryMesh   : {s32 type, s32 texMode, s32 texId, u32 texPtr,
-    //                        u32 numVerts, u32 vertTableOff}                             (24B)
-    //   vertex table      : u32[...] -- first entry is the vertex-run offset
-    //   vertex run        : Basic2dColouredTexturedVertex[numVerts]                      (20B each)
-    // The 8-byte path widens each offset/pointer field to 64-bit (native x64 layout) and
-    // resolves it as an absolute pointer (relocated in place by the load) -- not reached by
-    // this 4-byte bundle, but wired so a future 1:7:8 bundle renders unchanged.
-    // =========================================================================
-
-    // Resolve a serialised offset to a real 64-bit pointer, bounds-checked against the
-    // resource size so a garbage offset logs + yields null instead of AV'ing.
-    template <typename T>
-    static T* ResolveOff(u32 luOffset, u32 luResourceSize)
-    {
-        if (luOffset == 0 || luOffset >= luResourceSize)
-            return nullptr;
-        return reinterpret_cast<T*>(s_uAptResourceBase + luOffset);
-    }
-
-    // Read the geometry object's three leading u32s at s_uGeomOffset and sanity-check them.
-    // Returns true (and fills the out params) if the 4-byte interpretation looks plausible.
-    static bool ValidateGeom4(u32 luResourceSize, u32* lpuNumFiles, u32* lpuFileTableOff)
-    {
-        const u32* lpObj = ResolveOff<const u32>(s_uGeomOffset, luResourceSize);
-        if (lpObj == nullptr)
-            return false;
-        const u32 luNumFiles     = lpObj[0];
-        const u32 luFileTableOff = lpObj[2];
-        // Plausible: a handful of files, a file-table offset inside the resource.
-        if (luNumFiles == 0 || luNumFiles > 4096u)
-            return false;
-        if (luFileTableOff == 0 || luFileTableOff >= luResourceSize)
-            return false;
-        *lpuNumFiles     = luNumFiles;
-        *lpuFileTableOff = luFileTableOff;
-        return true;
     }
 
     // Read-only, bounded hex dump of a resource region to the log (diagnostic ground truth).
@@ -742,40 +694,6 @@ namespace BrnGui
         }
     }
 
-    // Resolve a textured mesh's renderengine::Texture* from the import-written pointer.
-    //
-    // For a texMode==1 mesh, the bundle's import-resolve (Pool::ResolveImportForEntry) wrote the
-    // imported TEXTURE resource's m_baseResources[0] -- which IS a fully-realised renderengine::
-    // Texture (its FixUp ran first and created mpD3DTexture via Texture::Create) -- as a 64-bit
-    // pointer into the mesh's texPtr slot (mesh+12). On x64 that 8-byte write also occupies mesh+16
-    // (the old numVerts slot; we recover numVerts from the vert table instead). So the texture is
-    // simply `*(renderengine::Texture**)(mesh+12)` == (lpMesh[3] | lpMesh[4]<<32). The raster has no
-    // x64 self-pointer issue (only mpD3DTexture, set at native width). Im2d::SetTexture binds
-    // texture->mpD3DTexture directly.
-    //
-    // DEFENSIVE: validate the pointer looks like a live texture (non-null, mpD3DTexture non-null)
-    // before returning it; otherwise fall back to null (untextured vertex-colour) so a bad/unresolved
-    // import never AVs in the draw. mode-0 (texId 6969 sentinel) always returns null.
-    static renderengine::Texture* ResolveMeshTexture(const u32* lpMesh, s32 liTexMode)
-    {
-        if (liTexMode != 1)
-            return nullptr;   // mode 0 / unknown -> untextured (vertex colour)
-
-        const u64 luLow  = static_cast<u64>(lpMesh[3]);   // mesh+12 low32
-        const u64 luHigh = static_cast<u64>(lpMesh[4]);   // mesh+16 high32 (the import's 8-byte write)
-        const uintptr_t luTexPtr = static_cast<uintptr_t>(luLow | (luHigh << 32));
-        if (luTexPtr == 0)
-            return nullptr;   // import unresolved -> untextured fallback
-
-        renderengine::Texture* lpTexture = reinterpret_cast<renderengine::Texture*>(luTexPtr);
-        // The pointer must look like a heap/resource address (reject obviously-bad low values) and
-        // carry a live D3D texture, else fall back to untextured (no AV).
-        if (luTexPtr < 0x10000u)
-            return nullptr;
-        if (lpTexture->mpD3DTexture == nullptr)
-            return nullptr;   // texture not realised (FixUp didn't create it) -> untextured fallback
-        return lpTexture;
-    }
 
     // =========================================================================
     // LocateMovieRoot8 -- FLAG (x64 converted 8-byte bundle): find the type-9 MOVIE ROOT
@@ -1085,273 +1003,15 @@ namespace BrnGui
         }
     }
 
-    // Resolve + validate the movie geometry once at load time, choosing the pointer-size path.
-    static void ResolveMovieGeometry(CgsResource::Entry* lpEntry)
-    {
-        s_bGeomResolved = false;
-        if (s_uAptResourceBase == 0 || s_uGeomOffset == 0)
-        {
-            CgsDev::Log::WriteToLog("[AptRT] xcode: no geometry offset (mpGeomStruct==0) -- bail (FLAG).\n");
-            return;
-        }
-        const u32 luResourceSize =
-            lpEntry->mResourceDescriptor.m_baseResourceDescriptors[CgsResource::E_MEMTYPE_MAINMEMORY].m_size;
-
-        char lac[200];
-        u32 luNumFiles = 0, luFileTableOff = 0;
-
-        // DISPATCH: try 4-byte (this bundle's format). The explicit "1:7:<n>" descriptor lives in
-        // the bundle debug-name table (discarded by the Pool), so we infer structurally: if the
-        // 4-byte read is plausible, it is the console 4-byte format. (A native 1:7:8 bundle would
-        // fail this 4-byte read -- its 64-bit fields make numFiles/offset implausible -- and take
-        // the 8-byte branch.)
-        if (ValidateGeom4(luResourceSize, &luNumFiles, &luFileTableOff))
-        {
-            s_iAptPointerSize = 4;
-            s_bGeomResolved   = true;
-            std::snprintf(lac, sizeof(lac),
-                "[AptRT] xcode: aptPtrSize=4 -> transcode. geom@0x%X resSize=%u files=%u fileTableOff=0x%X\n",
-                s_uGeomOffset, luResourceSize, luNumFiles, luFileTableOff);
-            CgsDev::Log::WriteToLog(lac);
-
-            // One-time probe of file 0 + its first mesh, so the run shows real geometry resolving.
-            const u32* lpFileTable = ResolveOff<const u32>(luFileTableOff, luResourceSize);
-            if (lpFileTable != nullptr)
-            {
-                const u32* lpFile0 = ResolveOff<const u32>(lpFileTable[0], luResourceSize);
-                if (lpFile0 != nullptr)
-                {
-                    const u32 luNumMeshes0   = lpFile0[1];
-                    const u32 luMeshTableOff0 = lpFile0[2];
-                    u32 luVerts0 = 0, luMeshType0 = 0xFFFFFFFFu, luVertOff0 = 0;
-                    const u32* lpMeshTable0 = ResolveOff<const u32>(luMeshTableOff0, luResourceSize);
-                    if (lpMeshTable0 != nullptr)
-                    {
-                        const u32* lpMesh0 = ResolveOff<const u32>(lpMeshTable0[0], luResourceSize);
-                        if (lpMesh0 != nullptr)
-                        {
-                            luMeshType0 = lpMesh0[0];
-                            luVerts0    = lpMesh0[4];
-                            luVertOff0  = lpMesh0[5];
-                        }
-                    }
-                    std::snprintf(lac, sizeof(lac),
-                        "[AptRT] xcode: file0 id=0x%X meshes=%u | mesh0 type=%u verts=%u vertTableOff=0x%X\n",
-                        lpFile0[0], luNumMeshes0, luMeshType0, luVerts0, luVertOff0);
-                    CgsDev::Log::WriteToLog(lac);
-                }
-            }
-            return;
-        }
-
-        // 8-byte native path: the fields are real 64-bit pointers (relocated in place by the load).
-        // FLAG: not reached by the current 4-byte bundle; wired so a converted 1:7:8 bundle resolves
-        // its geometry natively. We validate the 64-bit numFiles at the geom object's first dword.
-        // (The 8-byte object layout is {u32 numFiles, u32 numTexPages, u64 fileTablePtr}.)
-        const u32* lpObj8 = ResolveOff<const u32>(s_uGeomOffset, luResourceSize);
-        if (lpObj8 != nullptr && lpObj8[0] != 0 && lpObj8[0] <= 4096u)
-        {
-            s_iAptPointerSize = 8;
-            s_bGeomResolved   = true;
-            CgsDev::Log::WriteToLog("[AptRT] xcode: aptPtrSize=8 -> in-place (native x64). "
-                                    "8-byte geometry walk wired (FLAG: untested -- no 8-byte bundle yet).\n");
-            return;
-        }
-
-        CgsDev::Log::WriteToLog("[AptRT] xcode: geometry failed BOTH 4-byte and 8-byte validation "
-                                "(garbage offsets / unexpected format) -- bail (FLAG). Default would be 4-byte.\n");
-    }
 
     // -------------------------------------------------------------------------
-    // RenderLoadedGeometryDirect -- the achievable render milestone. Walk the loaded movie's
-    // geometry (resolving every serialised offset against the FULL 64-bit base) and draw each
-    // mesh's vertex run through the PROVEN immediate-mode renderer lpIm2d (CgsGraphics::Im2d --
-    // the SAME one the loading screen + debug HUD draw through). Returns the number of meshes drawn.
-    //
-    // RENDER PATH CHOICE: the raw ImRenderBuffer<V> double-buffer path (Clear/BeginRendering/Swap/
-    // Dispatch) AV'd on first runtime use -- it was reconstructed but NEVER exercised (the working
-    // 2D paths all use the Im2d IMMEDIATE wrapper). So we draw through lpIm2d->Render directly: it
-    // immediately folds each run to screen-space and issues DrawPrimitiveUP -- no double-buffer, no
-    // Dispatch. lpIm2d is BrnRendererModule's own mIm2dRenderer (battle-tested), passed in by the
-    // render hook. Im2d::Render ALWAYS draws a triangle STRIP (it ignores the primitive type) and
-    // caps at 64 verts/call; a type-0 (tri-LIST) run is drawn as separate 3-vertex strips (each ==
-    // one triangle) so the list tessellation is exact. Mode-1 meshes bind their real imported texture
-    // (ResolveMeshTexture); mode-0 draw untextured (vertex colour). FLAG: the per-shape AS transforms/
-    // visibility (the final animated layout) are absent -- geometry is DRAWN at its authored coords,
-    // textured where a texture resolves, but not animated (that needs the un-homed display-list/runStream).
+    // RETIRED (2026-07-01): the invented direct-geometry render (RenderLoadedGeometryDirect +
+    // ResolveMeshTexture) is GONE. AptRuntimeRender now drives the FAITHFUL render-tree walk
+    // (AptRender) which flushes through the real display-list -> render-tree -> AptRenderHandler::
+    // Render -> ImRenderBuffer -> D3D9 path. The prior fallback walked the movie geometry directly
+    // (offset transcode) + drew via the Im2d immediate wrapper -- invention that bypassed the engine
+    // render tree; removed per the render-tree-flush milestone.
     // -------------------------------------------------------------------------
-    static s32 RenderLoadedGeometryDirect(CgsGraphics::Im2d* lpIm2d)
-    {
-        if (!s_bGeomResolved || !s_bAuxReady || lpIm2d == nullptr)
-            return 0;
-        if (s_iAptPointerSize != 4)
-            return 0;   // FLAG: 8-byte native walk untested (no 1:7:8 bundle) -- submit nothing.
-
-        const bool lbProbe = !s_bRenderProbed;
-
-        // No texture (untextured -> vertex colour); the Im2d untextured path drives the stage from
-        // DIFFUSE. FLAG: real per-mesh textures are the follow-on.
-        if (lbProbe) CgsDev::Log::WriteToLog("[AptRT] render: enter -> SetTexture(null) ...\n");
-        lpIm2d->SetTexture(static_cast<renderengine::Texture*>(nullptr));
-
-        // REAL resource-size bound: every offset must land INSIDE the AptData resource.
-        const u32 luBound = (s_uAptResourceSize != 0u) ? s_uAptResourceSize : KU_MOVIE_POOL_BYTES;
-
-        const u32* lpObj = ResolveOff<const u32>(s_uGeomOffset, luBound);
-        if (lpObj == nullptr)
-            return 0;
-        const u32 luNumFiles     = lpObj[0];
-        const u32 luFileTableOff = lpObj[2];
-        if (luNumFiles == 0 || luNumFiles > 4096u)
-            return 0;
-        const u32* lpFileTable = ResolveOff<const u32>(luFileTableOff, luBound);
-        if (lpFileTable == nullptr)
-            return 0;
-        if (lbProbe) CgsDev::Log::WriteToLog("[AptRT] render: enter mesh loop ...\n");
-
-        s32 liMeshesSubmitted = 0;
-        s32 liVertsSubmitted   = 0;
-        for (u32 luFile = 0; luFile < luNumFiles; ++luFile)
-        {
-            const u32* lpFile = ResolveOff<const u32>(lpFileTable[luFile], luBound);
-            if (lpFile == nullptr)
-            {
-                if (lbProbe) { char lf[96]; std::snprintf(lf, sizeof(lf),
-                    "[AptRT] render: file%u SKIP (file offset out of range)\n", luFile);
-                    CgsDev::Log::WriteToLog(lf); }
-                continue;
-            }
-            const u32 luNumMeshes   = lpFile[1];
-            const u32 luMeshTableOff = lpFile[2];
-            if (lbProbe)
-            {
-                char lf[128];
-                std::snprintf(lf, sizeof(lf), "[AptRT] render: file%u numMeshes=%u meshTableOff=0x%X\n",
-                              luFile, luNumMeshes, luMeshTableOff);
-                CgsDev::Log::WriteToLog(lf);
-            }
-            if (luNumMeshes == 0 || luNumMeshes > 65536u)
-                continue;
-            const u32* lpMeshTable = ResolveOff<const u32>(luMeshTableOff, luBound);
-            if (lpMeshTable == nullptr)
-                continue;
-
-            for (u32 luMesh = 0; luMesh < luNumMeshes; ++luMesh)
-            {
-                const u32* lpMesh = ResolveOff<const u32>(lpMeshTable[luMesh], luBound);
-                if (lpMesh == nullptr)
-                    continue;
-                const s32 liMeshType    = static_cast<s32>(lpMesh[0]);   // +0
-                const s32 liTexMode     = static_cast<s32>(lpMesh[1]);   // +4
-                u32       luNumVerts    = lpMesh[4];                     // +16 (CLOBBERED for mode-1, see below)
-                const u32 luVertTableOff = lpMesh[5];                    // +20
-
-                // The vertex table: ONE u32 offset per vertex (each points at a Basic2dColoured
-                // TexturedVertex; consecutive entries are 20 bytes apart). We always derive the run
-                // start + the COUNT from this table, NOT from mesh+16 -- because for a textured
-                // (texMode==1) mesh the bundle's import-resolve wrote an 8-byte texture pointer into
-                // the texPtr slot (mesh+12), and on x64 that 8-byte write CLOBBERS mesh+16 (numVerts)
-                // with the high 32 bits of the pointer (-> a huge garbage count). So count vertices by
-                // walking the vert table while each entry is a sane, in-range, monotonically-advancing
-                // vertex offset. This recovers the real count for both clean + import-clobbered meshes.
-                const u32* lpVertTable = ResolveOff<const u32>(luVertTableOff, luBound);
-                if (lpVertTable == nullptr)
-                {
-                    if (lbProbe) { char ls[128]; std::snprintf(ls, sizeof(ls),
-                        "[AptRT] render: file%u mesh%u SKIP (vertTableOff 0x%X out of range)\n",
-                        luFile, luMesh, luVertTableOff); CgsDev::Log::WriteToLog(ls); }
-                    continue;
-                }
-                const u32 luVertStride = static_cast<u32>(sizeof(CgsGraphics::Basic2dColouredTexturedVertex));
-                const u32 luVertRunOff = lpVertTable[0];
-                // Count consecutive verts (table[i] == table[0] + i*stride, all in-range), capped at 64
-                // (Im2d's per-call limit) -- this is the AUTHORITATIVE count, replacing the clobbered field.
-                // Bound the TABLE read itself to the resource so reading lpVertTable[lv] never over-reads.
-                u32 luCountedVerts = 0;
-                for (u32 lv = 0; lv < 64u; ++lv)
-                {
-                    // The table entry lpVertTable[lv] lives at (luVertTableOff + lv*4); stop before it
-                    // would read past the resource.
-                    if (luVertTableOff + (lv + 1u) * 4u > luBound)
-                        break;
-                    const u32 luVOff = lpVertTable[lv];
-                    if (luVOff != luVertRunOff + lv * luVertStride)
-                        break;
-                    if (luVOff == 0 || luVOff + luVertStride > luBound)
-                        break;
-                    ++luCountedVerts;
-                }
-                luNumVerts = luCountedVerts;
-
-                if (luNumVerts < 3u)
-                {
-                    if (lbProbe) { char ls[160]; std::snprintf(ls, sizeof(ls),
-                        "[AptRT] render: file%u mesh%u type=%d texMode=%d SKIP (recovered verts=%u < 3)\n",
-                        luFile, luMesh, liMeshType, liTexMode, luNumVerts); CgsDev::Log::WriteToLog(ls); }
-                    continue;
-                }
-                const u32 luRunBytes = luNumVerts * luVertStride;
-                if (luVertRunOff == 0 || luVertRunOff >= luBound || luRunBytes > luBound - luVertRunOff)
-                {
-                    if (lbProbe) { char ls[160]; std::snprintf(ls, sizeof(ls),
-                        "[AptRT] render: file%u mesh%u SKIP (vert run 0x%X+%u out of range)\n",
-                        luFile, luMesh, luVertRunOff, luRunBytes); CgsDev::Log::WriteToLog(ls); }
-                    continue;
-                }
-                const CgsGraphics::Basic2dColouredTexturedVertex* lpVerts =
-                    reinterpret_cast<const CgsGraphics::Basic2dColouredTexturedVertex*>(
-                        s_uAptResourceBase + luVertRunOff);
-
-                // ---- TEXTURE: bind the real renderengine::Texture* for mode-1 meshes. The bundle's
-                // import-resolve wrote the imported texture resource's m_baseResources[0] (a realised
-                // renderengine::Texture, mpD3DTexture already created by its FixUp) as a 64-bit pointer
-                // into the mesh's texPtr slot (mesh+12). ResolveMeshTexture reassembles + validates it;
-                // Im2d::SetTexture binds texture->mpD3DTexture. mode-0 / unresolved -> null (untextured
-                // vertex colour). No AV (validated before binding).
-                renderengine::Texture* lpMeshTexture = ResolveMeshTexture(lpMesh, liTexMode);
-                lpIm2d->SetTexture(lpMeshTexture);
-
-                if (lbProbe)
-                {
-                    char lacm[224];
-                    std::snprintf(lacm, sizeof(lacm),
-                        "[AptRT] render: file%u mesh%u type=%d texMode=%d verts=%u(recovered) runOff=0x%X "
-                        "tex=%p v0=(%.1f,%.1f) -> drawn\n",
-                        luFile, luMesh, liMeshType, liTexMode, luNumVerts, luVertRunOff,
-                        (void*)lpMeshTexture, lpVerts[0].mv2Pos.x, lpVerts[0].mv2Pos.y);
-                    CgsDev::Log::WriteToLog(lacm);
-                }
-
-                // Draw through the PROVEN immediate path. Im2d::Render ALWAYS draws a triangle STRIP
-                // (it ignores the primitive type). For a type-0 tri-LIST run we draw it as separate
-                // 3-vertex strips (each == one triangle), reproducing the list exactly. Type 1/2/other
-                // draw as one strip over the run.
-                if (liMeshType == 0)
-                {
-                    for (u32 luBase = 0; luBase + 3u <= luNumVerts; luBase += 3u)
-                        lpIm2d->Render(static_cast<renderengine::PrimitiveType>(6), lpVerts + luBase, 3u);
-                }
-                else
-                {
-                    lpIm2d->Render(static_cast<renderengine::PrimitiveType>(6), lpVerts, luNumVerts);
-                }
-                ++liMeshesSubmitted;
-                liVertsSubmitted += static_cast<s32>(luNumVerts);
-            }
-        }
-
-        if (lbProbe)
-        {
-            s_bRenderProbed = true;
-            char lacd[128];
-            std::snprintf(lacd, sizeof(lacd),
-                "[AptRT] render: DONE first pass -- %d meshes (%d verts) drawn via Im2d.\n",
-                liMeshesSubmitted, liVertsSubmitted);
-            CgsDev::Log::WriteToLog(lacd);
-        }
-        s_iLastVertsSubmitted = liVertsSubmitted;
-        return liMeshesSubmitted;
-    }
 
     // -------------------------------------------------------------------------
     // AptRuntimeUpdate -- per-frame TICK only. Advances the frame counter and (when a movie is
@@ -1401,7 +1061,18 @@ namespace BrnGui
         // pfnLoadRenderingUnit). Re-enabling the full tick regresses the stable boot, so it stays
         // deferred until the import-load + shape-geometry (+ the render-tree flush for pixels) land.
         // The render-leaf BODIES stay faithful + committed; only the per-frame drive is deferred.
-        bool lbTickReady = false;
+        // The faithful per-frame tick composes the movie: frames 0..101 of the 103-frame timeline
+        // place their characters into the display list (the root's 7 child sprites appear on frame 0,
+        // recursively ticked) and the render walk (AptRuntimeRender) draws them each frame -- PROVEN
+        // stable for the whole 0..101 window (childNodes=7, no AV; the walk + D3D9 flush run every
+        // frame). At frame 102 (== the last frame; mnGotoFrame reaches frameCount==103) AptCIH::tick
+        // LOOP-WRAPS via jumpToFrame(0), whose ARBITRARY-JUMP path (AptMovie::DoTemporaryFrameControls
+        // -> the AptPseudoDisplayList_FindInst temporary-frame skip resolver) is an UN-HOMED subsystem
+        // (a FLAG link-stub returning null), so the wrap AVs. That is an honest un-homed boundary, NOT
+        // invention to force -- so the tick holds at frame 101 (the fully-composed final frame stays on
+        // screen) rather than crossing into the un-homed wrap. // FLAG (honest boundary: jumpToFrame
+        // arbitrary-jump / DoTemporaryFrameControls temporary-frame path un-homed).
+        bool lbTickReady = (s_iTickFrame < 101);
         if (lbTickReady && s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr)
         {
             AptCIH* lpRoot = static_cast<AptCIH*>(s_pFaithfulRootCIH);
@@ -1469,11 +1140,19 @@ namespace BrnGui
                             if (s_iTickFrame < 2 && liChildNodes <= 8)
                             {
                                 AptCharacterInst* lpCI = lpN->GetCharacterInst();
-                                char lacn[160];
+                                AptRenderItem* lpRI = lpCI ? lpCI->GetRenderItem() : nullptr;
+                                AptCharacter* lpChar = lpRI ? lpRI->mpCharacter : nullptr;
+                                // char+0x20 == the shape geometry rendering unit (set by Fixup case-1).
+                                const void* lpGeom = lpChar
+                                    ? *reinterpret_cast<void* const*>(reinterpret_cast<const char*>(lpChar) + 0x20)
+                                    : nullptr;
+                                const int liType = lpChar
+                                    ? *reinterpret_cast<const int*>(lpChar) : -999;   // AptCharacter::mnType @+0
+                                char lacn[224];
                                 std::snprintf(lacn, sizeof(lacn),
-                                    "[AptRT] tick:   child node %p charInst=%p renderItem=%p depth=%d\n",
-                                    (void*)lpN, (void*)lpCI,
-                                    (void*)(lpCI ? lpCI->GetRenderItem() : nullptr),
+                                    "[AptRT] tick:   child node %p charInst=%p typeTag=%u renderItem=%p char=%p charType=%d geom@+0x20=%p depth=%d\n",
+                                    (void*)lpN, (void*)lpCI, lpCI ? lpCI->GetTypeTag() : 0u,
+                                    (void*)lpRI, (void*)lpChar, liType, lpGeom,
                                     lpCI ? lpCI->GetDepth() : -1);
                                 CgsDev::Log::WriteToLog(lacn);
                             }
@@ -1482,7 +1161,7 @@ namespace BrnGui
                 }
             }
 
-            if (s_iTickFrame < 4)
+            if (s_iTickFrame < 3 || s_iTickFrame == 100)
             {
                 char lacd[192];
                 std::snprintf(lacd, sizeof(lacd),
@@ -1503,36 +1182,51 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // AptRuntimeRender -- draw the loaded movie's geometry THROUGH THE PROVEN IMMEDIATE PATH.
-    // Called from BrnRendererModule::Render each frame with that module's mIm2dRenderer (a live,
-    // battle-tested CgsGraphics::Im2d that the loading screen + debug HUD already draw through).
-    // This REPLACES the raw ImRenderBuffer<V> Clear/BeginRendering/Swap/Dispatch path that AV'd on
-    // first use. Bracketed by Im2d BeginRendering/EndRendering (installs the 2D D3D state); the
-    // per-mesh runs draw immediately via DrawPrimitiveUP. Hard-gated + bounded -> no AV / no-op when
-    // unresolved.
+    // AptRuntimeRender -- FAITHFUL render-tree flush. Called from BrnRendererModule::Render each
+    // frame. Drives the homed X360 render-tree walk (AptRender @0x82AF33E8): it traverses the
+    // current target's render-item tree (built by the tick's AptRenderTreeManager::Update_* calls)
+    // and, per visible node, calls the render item's Render() virtual -> AptCharacter::render ->
+    // AptHook_DrawShape -> gAptFuncs.pfnDrawRenderingUnit == CgsGui::AptCallbackRender::
+    // DrawRenderingUnit -> CgsGui::AptRenderHandler::Render, which APPENDS the shape's mesh batches
+    // to s_AptRenderBuffer.mCommandBuffer (mpImRenderers->mpIm2dRenderer, wired in step 4). We then
+    // flush that buffer to D3D9: BeginRendering (open the block AptRenderHandler::Render appends
+    // into) -> AptRender (walk fills it) -> EndRendering -> Swap -> Dispatch (the faithful PC D3D9
+    // command re-issue -- the same ImRenderBuffer<V> path the loading screen/debug HUD dispatch).
+    //
+    // This RETIRES the invented direct-geometry fallback (RenderLoadedGeometryDirect + the word[4]
+    // header hack): the movie now composes + renders through the real Apt display-list -> render-tree
+    // -> D3D9 path. lpIm2d (BrnRendererModule's own live Im2d) is unused by the walk (the walk draws
+    // through the Apt render handler's own buffer), but the D3D device it shares is already frame-open.
+    //
+    // Hard-gated: only runs once the runtime + AptAux render handler + the Apt render buffer are up
+    // (s_bRenderBufferReady). Until the tick populates the render-root list the walk finds an empty
+    // root and draws nothing -- a clean no-op, no AV.
     // -------------------------------------------------------------------------
     void AptRuntimeRender(CgsGraphics::Im2d* lpIm2d)
     {
-        if (!s_bRuntimeReady || !s_bMovieLoaded || !s_bGeomResolved || lpIm2d == nullptr)
+        (void)lpIm2d;   // the walk draws through the Apt render handler's own command buffer
+        if (!s_bRuntimeReady || !s_bMovieLoaded || !s_bAuxReady || !s_bRenderBufferReady)
             return;
 
-        // (s_iFrameCounter is advanced by AptRuntimeUpdate, which runs before this each frame.)
-        const bool lbProbeFrame = (s_iFrameCounter % 30) == 1;
+        const bool lbFirst = !s_bFlushProbed;
 
-        // Install the 2D immediate render state (no depth/cull, alpha-blend, vertex-colour modulate),
-        // draw every mesh, then close the block. Im2d::BeginRendering no-ops cleanly when gDevice is
-        // null, and Im2d::Render guards null/short runs -- so this stays up even mid-bring-up.
-        lpIm2d->BeginRendering();
-        const s32 liUnits = RenderLoadedGeometryDirect(lpIm2d);
-        lpIm2d->EndRendering();
+        // Open the render block the Apt render handler appends into, walk the render tree (which
+        // fills the buffer via AptRenderHandler::Render), close, then freeze + dispatch to D3D9.
+        CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
+            s_AptRenderBuffer.mCommandBuffer;
 
-        if (lbProbeFrame)
+        lrBuffer.BeginRendering();
+        AptRender(/*nLayerMask*/ 0);   // 0 == all display layers
+        lrBuffer.EndRendering();
+        lrBuffer.Swap();               // freeze the write buffer for dispatch
+        lrBuffer.Dispatch();           // re-issue every command to the D3D9 device (faithful PC path)
+        ++s_iRenderFrame;
+
+        if (lbFirst)
         {
-            char lac[128];
-            std::snprintf(lac, sizeof(lac),
-                "[AptRT] frame %d: drew %d quads (%d verts) via Im2d immediate path.\n",
-                s_iFrameCounter, liUnits, s_iLastVertsSubmitted);
-            CgsDev::Log::WriteToLog(lac);
+            s_bFlushProbed = true;
+            CgsDev::Log::WriteToLog(
+                "[AptRT] render: render-tree walk (AptRender) -> D3D9 via ImRenderBuffer::Dispatch (OK; per-frame).\n");
         }
     }
 }

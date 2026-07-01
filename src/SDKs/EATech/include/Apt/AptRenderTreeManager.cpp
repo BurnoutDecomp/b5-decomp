@@ -19,6 +19,7 @@
 #include "SDKs/EATech/include/Apt/AptCIH.h"             // the scene node (display-list links + char inst)
 #include "SDKs/EATech/include/Apt/AptDefine.h"           // gpNonGCPoolManager
 #include "SDKs/EATech/include/Apt/AptRenderManagerItem.h" // gpAptRenderManagerPool (off_8324D808)
+#include "SDKs/EATech/include/Apt/AptTarget.h"            // gpAptTarget / mppRenderRootAnchor (the manager storage)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 
 #include <new>   // placement new
@@ -88,12 +89,24 @@ AptRenderItem* AptRenderItem::Manager_CreateItem(AptCharacter* pCharacter, int n
 // The render-tree-manager helpers AptCharacterInst calls (were FLAG'd externs).
 // ---------------------------------------------------------------------------
 
-// FLAG: the current target sim's render-tree manager (console gpCurrentTargetSim
-// + 0x2C); wired by the AptTarget/AptInit startup. Null during bring-up, in which
-// case AptCharacterInst creates no render item yet.
+// AptCurrentRenderTreeManager -- the current target's render-tree manager. The console
+// reaches it as `*(gpCurrentTargetSim + 0x2C)` (AptCharacterInst::SetRootItem @0x82AE66A0:
+// `lwz r11, off_8324E574; lwz r3, 0x2C(r11)`), i.e. the value stored in the AptTarget's
+// mppRenderRootAnchor slot. That slot IS the render-tree manager: it is a one-pointer cell
+// (AptTarget ctor pool-allocates it, zeroed) that holds the head cell of the per-target
+// _AptRenderItemRootList chain, and the manager's Update_*/Render_* methods operate on that
+// head (the manager's leading member, mpRootList, aliases the head-cell pointer). So the
+// "manager this pointer" is simply the anchor slot address, reinterpret-cast. Null until the
+// Apt context (gpAptTarget) is stood up by AptCreateTargetInstance -> then live, so every
+// placed node's render item links into the render tree the AptRender walk traverses.
 AptRenderTreeManager* AptCurrentRenderTreeManager()
 {
-    return 0;
+    if (gpAptTarget == nullptr)
+        return nullptr;
+    // The anchor slot (mppRenderRootAnchor == *(target+0x2C)) reinterpreted as the manager:
+    // its first member (mpRootList) IS the head-cell-slot the console addresses, so the
+    // Render_GetRoot / Update_SetRootItem head-cell reads/writes land on the same storage.
+    return reinterpret_cast<AptRenderTreeManager*>(gpAptTarget->mppRenderRootAnchor);
 }
 
 AptRenderItem* AptRTM_CreateItem(AptRenderTreeManager* pMgr, AptCharacter* pCharacter, int nTick)
@@ -783,4 +796,59 @@ struct AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode
 {
     pMgr->Update_ItemMoved(pNode, nTick);
     return pNode;
+}
+
+// ---------------------------------------------------------------------------
+// Update_SetRootItem @0x82AE5568 -- make pNode's render item a render ROOT.
+//
+// The manager's leading member (mpRootList) aliases the AptTarget's mppRenderRootAnchor
+// head-cell slot (see AptCurrentRenderTreeManager). This inserts pNode's writable render
+// item into that per-target root chain:
+//   * empty chain (head cell null) -> _AptRenderItemRootList::Create a fresh anchor cell
+//     for the item and store it as the head;
+//   * non-empty -> InsertNewRoot appends a cell for the item at the tail (no-op when the
+//     head cell already anchors that exact item).
+// Both take a counted reference on the item (the cell owns it). A pNode with no character
+// instance (hence no render item) is skipped -- there is nothing to root.
+//
+// (pNode==null is tolerated: AptDisplayListState::removeItem calls Update_SetRootItem(pNext)
+// with pNext possibly null when the removed node was the sole/last root; a null node roots
+// nothing, matching the console's guarded deref.)
+// ---------------------------------------------------------------------------
+void AptRenderTreeManager::Update_SetRootItem(AptCIH* pNode, int /*nTick*/)
+{
+    if (pNode == nullptr)
+        return;
+    AptCharacterInst* lpInst = pNode->GetCharacterInst();   // *(node+0x20)
+    if (lpInst == nullptr)
+        return;
+
+    AptRenderItem* lpItem = lpInst->GetRenderItemWritable();
+    if (lpItem == nullptr)
+        return;
+
+    // The head-cell slot is the manager's leading member (aliases mppRenderRootAnchor's cell).
+    _AptRenderItemRootList*& lrpHead =
+        *reinterpret_cast<_AptRenderItemRootList**>(&mpRootList);
+
+    if (lrpHead == nullptr)
+        lrpHead = _AptRenderItemRootList::Create(lpItem);   // first root -> fresh anchor cell
+    else
+        lrpHead = lrpHead->InsertNewRoot(lpItem);           // append (no-op if already anchored)
+}
+
+// ---------------------------------------------------------------------------
+// Update_ItemInserted @0x82AECD70 -- a node was (re)inserted into a display list.
+//
+// X360 AptCharacterInst::ItemInserted: clear the node's render item's deletion mark (it is
+// alive again) then Update_ItemMoved re-derives its manager links (first-child / previous-
+// /next-sibling, or root). Reproduced here (the AptDisplayListState insert path calls this).
+// ---------------------------------------------------------------------------
+void AptRenderTreeManager::Update_ItemInserted(AptCIH* pNode, int nTick)
+{
+    AptCharacterInst* lpInst = pNode->GetCharacterInst();   // *(node+0x20)
+    if (lpInst == nullptr)
+        return;
+    lpInst->GetRenderItemWritable()->Manager_SetDeletionMark(false);
+    Update_ItemMoved(pNode, nTick);
 }
