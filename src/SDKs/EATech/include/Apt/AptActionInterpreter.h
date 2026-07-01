@@ -485,6 +485,7 @@ public:
     static void _FunctionAptActionGetProperty          (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionSetProperty          (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionEnumerate            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionEnumerate2           (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionCastOp               (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionTypeOf               (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
