@@ -10,6 +10,7 @@
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"                // BrnGraphics::EffectsArbitrator
 #include "GameSource/Graphics/BrnSunCorona.h"                        // BrnSunCorona (mSunCorona, embedded by value)
+#include "GameSource/Graphics/BrnCoronaManager.h"                    // BrnCoronaManager (mCoronaManager, embedded by value)
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"   // CgsModule::ModuleSingleBuffered (real base)
 
 // EA::Jobs::Job is still an off-path placeholder (the renderer's sort/dispatch jobs do not run
@@ -126,9 +127,8 @@ struct BrnBlobbyShadowManager
 {
 };
 
-struct BrnCoronaManager
-{
-};
+// BrnCoronaManager is the real type (GameSource/Graphics/BrnCoronaManager.h, included above) --
+// mCoronaManager is embedded by value below, which needs the complete type, not a stub.
 
 struct CgsBlendStateFactory
 {

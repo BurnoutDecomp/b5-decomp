@@ -69,7 +69,11 @@
 namespace BrnNetwork { enum EPaybackType : s32; }
 namespace CgsGraphics { struct DispatchFrame; }
 namespace BrnBlobbyShadowManager { struct BrnBlobbyShadowBuffer; }
-namespace BrnCoronaManager { struct BrnSubmissionInterface; }
+// BrnCoronaManager is a CLASS (GameSource/Graphics/BrnCoronaManager.h), not a namespace -- only
+// BrnSubmissionInterface* (a nested type) is used here, by pointer, so it is forward-declared as a
+// nested class inside a partial BrnCoronaManager declaration (AGENTS.md forward-declaration
+// exception (b): pointer-only use, avoids pulling in the full corona-manager header cascade).
+class BrnCoronaManager { public: class BrnSubmissionInterface; };
 
 namespace BrnWorld
 {
