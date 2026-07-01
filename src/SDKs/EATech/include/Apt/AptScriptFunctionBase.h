@@ -150,6 +150,11 @@ public:
     // bytecode addresses), growing the live-register high-water mark. @0x82AD6690
     static void SetRegisterValue(int32_t nRegister, AptValue* pValue);
 
+    // Read flat register slot nRegister (the symmetric read side of SetRegisterValue;
+    // the tiny indexed accessor the console inlines -- stackPushIndirect resolves an
+    // AptVFT_Register value through it). No bounds check (matches the console).
+    static AptValue* GetRegisterValue(int32_t nRegister);
+
     // ---- static execution-state lifetime ---------------------------------------
     // Allocate (nRegisterCount) the flat register window from the operand-stack pool
     // (the console reads the count from the AptInitParmsT it is passed).

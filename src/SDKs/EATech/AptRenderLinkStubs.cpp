@@ -195,7 +195,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void  AptValue_setGCRoot(AptValue* pValue, int bRoot) {}   // FLAG link-stub
     void AptActionInterpreter_UnEscape(EAStringC* pStr) {}   // FLAG link-stub
     void AptActionInterpreter_getName(AptCIH* pNode, EAStringC* pOut) {}   // FLAG link-stub
-    void AptActionInterpreter_stackPushIndirect(AptActionInterpreter* pInterp, AptValue* pValue) {}   // FLAG link-stub
+    // AptActionInterpreter_stackPushIndirect RETIRED (2026-07-01): homed as the real member
+    // AptActionInterpreter::stackPushIndirect in AptActionInterpreter.cpp; caller uses the member.
     // AptAnimationTargetSet_Construct is now HOMED faithfully in AptAnimationTarget.cpp
     // (sub_82AE1708: allocate the slot array + set capacity; native-8 pointer stride).
     void AptAnimationTargetSet_Destruct (AptAnimationTargetSet* pSet) {}   // FLAG link-stub

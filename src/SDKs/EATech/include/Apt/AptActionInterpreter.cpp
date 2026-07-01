@@ -17,6 +17,9 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"       // AptLookup::GetIndex (Lookup indirection)
+#include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"     // AptRegister::GetIndex (Register indirection)
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetRegisterValue (Register indirection)
 
 // ---------------------------------------------------------------------------
 // stackPush @0x7F1790 -- store at top, advance, AddRef.
@@ -117,6 +120,23 @@ void AptActionInterpreter::stackPopAndPush(int nCount, AptValue* pValue)
         mpStack[mnStackTop - nCount] = pValue;
         mnStackTop = mnStackTop - nCount + 1;
     }
+}
+
+// ---------------------------------------------------------------------------
+// stackPushIndirect @0x7ECE34 -- push pValue, first resolving an indirection.
+// A Lookup value (tag 8, defined) reads the interpreter's per-run register window
+// mpRegisters[index]; a Register value (tag 4, defined) reads the AS function
+// register file via AptScriptFunctionBase::GetRegisterValue(index). The push is
+// the console's inlined stackPush (store/advance/AddRef), reproduced via stackPush.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
+{
+    if (pValue->isLookup())            // AptVFT_Lookup (tag 8) && defined
+        pValue = mpRegisters[static_cast<AptLookup*>(pValue)->GetIndex()];
+    else if (pValue->isRegister())     // AptVFT_Register (tag 4) && defined
+        pValue = AptScriptFunctionBase::GetRegisterValue(static_cast<AptRegister*>(pValue)->GetIndex());
+
+    stackPush(pValue);
 }
 
 // ===========================================================================

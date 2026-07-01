@@ -149,10 +149,12 @@ public:
     void       throwValue(AptValue* pValue) { pValue->AddRef(); mpAbortValue = pValue; }
     void       clearThrownValue() { mpAbortValue->Release(); mpAbortValue = 0; }
 
-    // FOLLOW-ON: stackPushIndirect @0x7ECE34 resolves AptVFT_Lookup (via the
-    // register array at +0x44) / AptVFT_Register (via AptScriptFunctionBase::
-    // GetRegisterValue) values before pushing. Deferred until that register/local
-    // machinery + AptScriptFunctionBase are reconstructed.
+    // stackPushIndirect @0x7ECE34 -- push a value, first resolving an indirection:
+    // an AptVFT_Lookup value (tag 8) indexes the interpreter's per-run register
+    // window (mpRegisters); an AptVFT_Register value (tag 4) indexes the AS function
+    // register file (AptScriptFunctionBase::GetRegisterValue). Anything else pushes
+    // as-is. The push itself is the inlined stackPush (store/advance/AddRef).
+    void       stackPushIndirect(AptValue* pValue);
 
     // ---- lifecycle (initialize/destroy the five stacks) ------------------
     // initialize @0x82AE39D8 -- allocate the five {count,capacity,array} stacks from
