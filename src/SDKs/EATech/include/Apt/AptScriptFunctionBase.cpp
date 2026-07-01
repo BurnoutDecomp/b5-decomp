@@ -304,6 +304,19 @@ void AptScriptFunctionBase::PopStaticData(void* pSavedBase)
     snRegBlockCurrentFrameCount = static_cast<int32_t>(pOldBase - static_cast<AptValue**>(pSavedBase));
 }
 
+// PushStaticData (PS3 @0x7E0A90) -- start a new empty register-block frame: return the
+// current base (the caller's restore point), advance the base past the current frame,
+// and zero the count. DECOMPILED from PS3 pseudocode (base += 4*count on the console;
+// typed AptValue** arithmetic gives the x64-correct element stride). The inverse of
+// PopStaticData.
+AptValue** AptScriptFunctionBase::PushStaticData()
+{
+    AptValue** const pOldBase = spRegBlockCurrentFrameBase;
+    spRegBlockCurrentFrameBase = spRegBlockCurrentFrameBase + snRegBlockCurrentFrameCount;
+    snRegBlockCurrentFrameCount = 0;
+    return pOldBase;
+}
+
 // ===========================================================================
 // Lexical scope chain (variable resolution / local definition)
 // ===========================================================================
