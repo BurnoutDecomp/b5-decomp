@@ -84,10 +84,21 @@ struct AptLoader
     // @0x7F2AE4 -- unlink the node owning pFile from the list (called by ~AptFile).
     void Invalidate(AptFile* pFile);
 
-    // @0x80EF2C -- the async load-completion: a streamed .apt blob (pBase) + its
-    // header (pConstFile) + the raw block (pBlock) have arrived for filePtr.
-    // Resolve the movie root and publish it into the AptFile (state -> loaded).
-    void CompleteLoad(AptFilePtr filePtr, void* pBase, struct AptConstFile* pConstFile, void* pBlock);
+    // @0x80EF2C (X360 @0x82AFF9E8) -- the async load-completion: a streamed .apt blob
+    // (pBase) + its const-file header (pConstFile) + the AptDataHeader (pBlock == a5)
+    // have arrived for filePtr. Relocate the movie root, Resolve it, and publish it into
+    // the AptFile (state -> loaded). pBlock is the AptDataHeader (X360 a5): it flows all
+    // the way to Fixup so the case-1 pfnLoadRenderingUnit reads AptData+12 (the geometry).
+    //
+    // pPreResolvedRoot: // FLAG (x64 converted bundle). The console derives the movie root
+    // as pBase + pConstFile->mnDataRootOffset (def base at root+16 for the 4-byte format).
+    // Our converted 8-byte .apt's dataRootOffset does NOT locate the type-9 movie root (its
+    // console layout diverged), so the host pre-locates the root CHARACTER HEADER (via the
+    // 0x09876543 signature scan) and passes it here; when null the faithful console formula
+    // is used. The def base (the AptCharacterAnimation) is root + the pointer-size header
+    // (0x20 native-8 / 0x10 console-4).
+    void CompleteLoad(AptFilePtr filePtr, void* pBase, struct AptConstFile* pConstFile,
+                      void* pBlock, void* pPreResolvedRoot = nullptr);
 
     // @0x82B020C8 -- per-frame loader tick: walk the weak list and advance each
     // AptFile by its load state -- kick off the async stream for freshly-requested
@@ -109,3 +120,14 @@ struct AptLoader
     // then drain the weak list. Body in AptLoader.cpp.
     ~AptLoader();
 };
+
+// ---------------------------------------------------------------------------
+// AptCompleteAnimationAsyncLoad @0x82AFFD38 -- the async-completion glue the
+// AptCallbackFile::LoadAnimation host callback calls once a movie's .apt data is in
+// memory. Pins the handle, forwards to gpAptTarget->mpLoader->CompleteLoad(handle,
+// pBase, pConstFile, pAptDataHeader), then drops the pin. Body in AptLoader.cpp.
+// pAptDataHeader is the AptDataHeader (X360 a4 -> CompleteLoad a5 -> Resolve/Fixup a4).
+// pPreResolvedRoot is the x64 converted-bundle root-header override (FLAG; default null).
+struct AptConstFile;
+void AptCompleteAnimationAsyncLoad(AptFilePtr* pHandle, void* pBase, struct AptConstFile* pConstFile,
+                                   void* pAptDataHeader, void* pPreResolvedRoot = nullptr);

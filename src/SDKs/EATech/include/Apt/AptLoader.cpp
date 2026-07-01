@@ -257,8 +257,27 @@ void AptLoader::Invalidate(AptFile* pFile)
     MutexAptLoader.Unlock();
 }
 
-// CompleteLoad @0x80EF2C -- a streamed .apt has arrived; resolve + publish it.
-void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pConstFile, void* pBlock)
+// CompleteLoad @0x82AFF9E8 (PS3 @0x80EF2C) -- a streamed .apt has arrived; resolve +
+// publish it. DECOMPILED FAITHFULLY from BURNOUT_X360_ARTIST.XEX. The X360 args are
+// (a1=this loader, a2=&handle, a3=pBase, a4=pConstFile, a5=pAptDataHeader):
+//
+//   if (!a3) { dispose(*a2); return; }                    // pBase null guard
+//   v15 = a4->mnDataRootOffset; if (v15) v15 += a3;       // relocate the root in place
+//   a4->mnDataRootOffset = v15;
+//   Resolve(v15 + 16, a3, a4, a5);                        // Resolve(defBase, pBase, pConstFile, a5)
+//   f = *a2;
+//   f[4] = a3;   // mpResolveContext = pBase   (+0x10)
+//   f[6] = a5;   // mpDataBlock      = a5       (+0x18)  <-- THE AptDataHeader (not the raw block)
+//   f[5] = a4->mnDataRootOffset;   // mpData = pRoot      (+0x14)
+//   f->mnState = 3; f->mnField12 = prevState;
+//   a4->mnDataRootOffset -= a3;                           // un-relocate the offset back
+//   dword_8324E840(a4);                                   // the load-complete hook (FLAG)
+//   dispose(*a2);
+//
+// pBlock (a5) is the AptDataHeader: it is what f->mpDataBlock is set to AND what flows to
+// Resolve->Fixup so the case-1 pfnLoadRenderingUnit reads AptData+12 (the geometry object).
+void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pConstFile,
+                             void* pBlock, void* pPreResolvedRoot)
 {
     if (!pBase)
     {
@@ -269,32 +288,87 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
         return;
     }
 
-    // The data root, and the movie's AptCharacterAnimation embedded at root+16.
-    // FLAG: the console relocates the offset in place in the 32-bit file slot;
-    // x64 computes the absolute address and stores a 64-bit pointer in the AptFile.
-    // The +pBase relocation is GUARDED on a nonzero offset (asm @0x82AFFA44 beq):
-    // a zero data-root offset leaves the root null.
-    void* pRoot = pConstFile->mnDataRootOffset
-                      ? static_cast<char*>(pBase) + pConstFile->mnDataRootOffset
-                      : nullptr;
+    // The data root (the movie root CHARACTER HEADER), and the movie's embedded
+    // AptCharacterAnimation def base at root + the pointer-size header.
+    // FLAG (x64 fork): the console relocates a4->mnDataRootOffset in place in the 32-bit
+    // file slot (v15 += a3, stored back, then subtracted off again after Resolve); x64
+    // computes the absolute address without the 32-bit write-back. The +pBase relocation is
+    // GUARDED on a nonzero offset (asm @0x82AFFA44 beq): a zero offset leaves the root null.
+    //
+    // FLAG (x64 converted 8-byte bundle): our converted .apt's mnDataRootOffset does not
+    // locate the type-9 movie root (its console layout diverged), so the host pre-locates the
+    // root character header (signature scan) and passes it in pPreResolvedRoot; the def base is
+    // root + the native-8 header (0x20). The console 4-byte formula (pBase + dataRootOffset,
+    // def base at root+16) is used when no pre-resolved root is supplied.
+    void* pRoot;
+    unsigned int luHdrSize;
+    if (pPreResolvedRoot != nullptr)
+    {
+        pRoot     = pPreResolvedRoot;                         // FLAG (x64): host-located root header
+        luHdrSize = (pConstFile->GetPointerSizeBytes() == 8) ? 0x20u : 0x10u;
+    }
+    else
+    {
+        pRoot     = pConstFile->mnDataRootOffset
+                        ? static_cast<char*>(pBase) + pConstFile->mnDataRootOffset
+                        : nullptr;
+        luHdrSize = 16u;                                      // console 4-byte header
+    }
     AptCharacterAnimation* pCharAnim =
-        reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pRoot) + 16);
+        reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pRoot) + luHdrSize);
 
+    // Resolve the (serialised) movie root against the load base. a5 (pBlock == the
+    // AptDataHeader) is threaded through Resolve -> Fixup faithfully.
     pCharAnim->Resolve(pBase, pConstFile, pBlock);
 
     AptFile* f = filePtr.pData;
-    f->mpDataBlock      = pBlock;
-    f->mpData           = pRoot;
-    f->mpResolveContext = pBase;
+    f->mpResolveContext = pBase;    // f[4]  (+0x10)  = pBase
+    f->mpDataBlock      = pBlock;   // f[6]  (+0x18)  = a5 (the AptDataHeader)  <-- item 2 fix
+    f->mpData           = pRoot;    // f[5]  (+0x14)  = the movie root
     f->mnField12        = f->mnState;   // record the previous state
     f->mnState          = 3;            // loaded / resolved
 
-    // FLAG: the console then notifies/frees through the load hook (dword_1059C670).
+    // FLAG: the console then notifies/frees through the load-complete hook (dword_8324E840(a4)).
 
     // Release the by-value handle the callee owns (asm normal-exit @0x82AFFAC0:
     // *a2=0 + DecRef + AptSharedPtrDelete), mirroring AllImportsAvailable.
     AptSharedPtr<AptFile>::Dispose(filePtr.pData);
     filePtr.pData = nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// AptCompleteAnimationAsyncLoad @0x82AFFD38 -- the async-completion glue between the
+// AptCallbackFile::LoadAnimation host callback and AptLoader::CompleteLoad.
+// DECOMPILED FAITHFULLY from BURNOUT_X360_ARTIST.XEX.
+//
+//   The X360 (a1=&handle, a2=pBase, a3=pConstFile, a4=pAptDataHeader):
+//     if (*a1) IncRef(*a1);                                 // pin the handle
+//     AptLoader::CompleteLoad(gpAptTarget->mpLoader, a1, a2, a3, a4);
+//     r = *a1; *a1 = 0; if (r && --r.count == 0) AptSharedPtrDelete(r);   // drop the pin
+//     return r;
+//
+// The loader is gpAptTarget->mpLoader (X360 *(off_8324E574 + 7) == gpAptTarget[+0x1C]).
+// pPreResolvedRoot is threaded through for the x64 converted-bundle root location (FLAG;
+// see CompleteLoad) -- it is not a console argument (defaulted null on the console path).
+// ---------------------------------------------------------------------------
+void AptCompleteAnimationAsyncLoad(AptFilePtr* pHandle, void* pBase, AptConstFile* pConstFile,
+                                   void* pAptDataHeader, void* pPreResolvedRoot)
+{
+    // Pin the handle for the duration of the completion (asm's leading lwarx/stwcx. IncRef).
+    if (pHandle->pData)
+        AptSharedPtrIncRef(pHandle->pData);
+
+    // Forward to the loader's CompleteLoad. The by-value AptFilePtr the callee consumes is a
+    // copy of *pHandle (the asm passes v15 = a copy of *a1).
+    AptFilePtr laHandle;
+    laHandle.pData = pHandle->pData;
+    gpAptTarget->mpLoader->CompleteLoad(laHandle, pBase, pConstFile, pAptDataHeader, pPreResolvedRoot);
+
+    // Drop the pin (asm's trailing lwarx/stwcx. DecRef + delete-if-zero), and null the handle.
+    AptFile* pConsumed = pHandle->pData;
+    pHandle->pData = nullptr;
+    if (pConsumed && AptSharedPtrDecRef(pConsumed) == 0)
+        AptSharedPtrDelete(pConsumed);
 }
 
 // AllImportsAvailable @0x82AEB270 -- true when every import referenced by `file`'s

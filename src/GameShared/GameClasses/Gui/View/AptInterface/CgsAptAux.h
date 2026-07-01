@@ -161,7 +161,20 @@ namespace CgsGui
         // pfnGetBytesLoaded(const char*, AptGetBytesEnum).)
         s32 GetBytesTotal(const char* lpacFileName, AptGetBytesEnum leWhich);
         s32 GetBytesLoaded(const char* lpacFileName, AptGetBytesEnum leWhich);
+
+        // X360 0x82853E68 (gAptFuncs pfnLoadAnimation). Load a registered .apt movie: validate
+        // the data handler, FindAptData(name), assert its state, then drive the faithful async
+        // completion (AptCompleteAnimationAsyncLoad -> AptLoader::CompleteLoad -> Resolve ->
+        // Fixup) with the header's mpAptData/mpConstData and the AptDataHeader (a5). The handle
+        // is passed by reference (the asm's `*a2` reads); the gAptFuncs slot passes it by value
+        // -- installing this into the slot on x64 is a follow-on (the by-value/by-ref ABI differ).
+        void LoadAnimation(const char* lpacName, AptFilePtr* lpHandle);
     }
+
+    // FLAG (x64 converted 8-byte bundle): the located movie-root character header the host
+    // stashes before LoadAnimation (see CgsAptAux.cpp). Null => CompleteLoad uses the console
+    // pConstFile->mnDataRootOffset formula. Defined in CgsAptAux.cpp.
+    extern void* gAptLoadAnimRootOverride;
 
     namespace AptCallbackVariable
     {
