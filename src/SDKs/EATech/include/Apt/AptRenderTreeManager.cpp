@@ -24,10 +24,19 @@
 #include <new>   // placement new
 
 // ---------------------------------------------------------------------------
-// Manager_CreateItem @0x814094 -- allocate the render-item subtype for a
-// character's type (the Manager_CreateItem switch). Each case pool-allocates the
-// sized subtype, whose ctor stamps the render-type flag + vtable; an unhandled
-// type (and the deferred dynamic-text case) returns null, as the console does.
+// Manager_CreateItem @0x82AF4BF8 (X360 ARTIST; PS3 @0x814094) -- allocate the
+// render-item subtype for a character's type (the Manager_CreateItem switch).
+// Each case DOGMA-pool-allocates (off_8324D808 == gpNonGCPoolManager) the sized
+// subtype and its ctor stamps the render-type flag + vtable; an unhandled type
+// returns null, as the console does. This is the DE-INLINED form of the X360
+// factory: the X360 inlines each subtype's ctor as base-ctor + a manual vtable
+// store + an insrwi/rlwimi render-type-flag stamp (with the sprite/animation
+// cases also writing the +0x34 render-data slot); those inlines are reversed here
+// into the concrete subtype ctors (AptRenderItemShape/Sprite/Morph/Animation/
+// StaticText/DynamicText/Level), which do exactly base-ctor+vtable+flag(+field) --
+// the sizes match the X360 (shape/staticText/level 52, sprite/morph/animation 56,
+// dynamicText 112). Called DIRECTLY by AptCharacterInst::AptCharacterInst (needs no
+// render-tree manager -- it only pool-allocates off the character).
 // ---------------------------------------------------------------------------
 AptRenderItem* AptRenderItem::Manager_CreateItem(AptCharacter* pCharacter, int nTick)
 {
@@ -89,16 +98,13 @@ AptRenderTreeManager* AptCurrentRenderTreeManager()
 
 AptRenderItem* AptRTM_CreateItem(AptRenderTreeManager* pMgr, AptCharacter* pCharacter, int nTick)
 {
-    // x64 bring-up: AptCurrentRenderTreeManager() is a FLAG'd null stub until the target sim /
-    // render-tree manager is initialised (AptRenderInitialize, un-homed). Update_CreateItem is the
-    // manager's DOUBLE-BUFFERED wrapper around the homed AptRenderItem::Manager_CreateItem factory --
-    // which itself needs NO manager (it just pool-allocates the typed render item from the character).
-    // So when the manager is null we call the factory DIRECTLY: this gives every AptCharacterInst a
-    // real render item (carrying mpCharacter), which is what AptCIH::tick / AptCIH_GetClipMovie reach
-    // the clip's movie through. FLAG: no double-buffering until the manager lands; the single render
-    // item is created in place. (The console always routes through the live manager.)
-    if (pMgr == nullptr)
-        return AptRenderItem::Manager_CreateItem(pCharacter, nTick);
+    // The manager's DOUBLE-BUFFERED wrapper around the Manager_CreateItem factory (the console
+    // AptRenderTreeManager::Update_CreateItem path, used when a live render-tree manager owns the
+    // per-tick revisions). NOTE: AptCharacterInst::AptCharacterInst NO LONGER routes through here --
+    // it now matches the X360 ctor faithfully (guard on gpAptTarget, call AptRenderItem::
+    // Manager_CreateItem DIRECTLY), so the prior INVENTED null-manager fallback (call the factory when
+    // pMgr==0) is removed. This helper stays for the manager-driven path once the render-tree manager
+    // lands; with no live manager yet it is currently unused.
     return pMgr->Update_CreateItem(pCharacter, nTick);
 }
 
