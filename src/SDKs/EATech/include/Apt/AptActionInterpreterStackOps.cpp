@@ -459,7 +459,8 @@ extern int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel);
 
 // FLAG (un-homed AptCIH play-head subsystem -- shared shims, matching SpecialOps):
 extern void AptCIH_jumpToFrame(AptCIH* pNode, int nFrame);              // @0x82B0C... seek
-extern void AptCIH_SetDirtyState(AptCIH* pNode, bool bDirty, bool bProp); // @0x82AD76B8
+// AptCIH_SetDirtyState retired: the real member AptCIH::SetDirtyState (AptCIH.cpp) is
+// used directly at the call site (the free-function {} stub silently dropped the dirty latch).
 
 // FLAG (the AptMovie timeline VM driver -- run a frame's queued ActionScript;
 // AptMovie::runFrameActions follow-on): drive the bound clip's frame actions.
@@ -1188,7 +1189,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
         // set/clear bit 6 (0x40, "playing") from the play flag.
         pSprite->mnClipActionFlags = (pSprite->mnClipActionFlags & ~0x40u) | (bPlay ? 0x40u : 0u);
         if (bPlay)
-            AptCIH_SetDirtyState(pNode, true, true);       // FLAG: dirty latch
+            pNode->SetDirtyState(true, true);              // real member (dirty latch)
     }
 
     pInterp->stackPop();   // console AptValue>::Pop(a1) -- drop the destination operand
