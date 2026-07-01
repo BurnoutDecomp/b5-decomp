@@ -21,25 +21,6 @@
 // The instantiation step-probe sink (host-implemented; weak no-op default in AptCharacterHelper.cpp).
 extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p);
 
-// gAptSkipCharList -- the character-list-bookkeeping skip gate (mirrors gAptSkipTimeline). On the
-// native-8 (GUIAPT64) faithful path the movie's embedded AptCharacterAnimation character TABLE
-// (mpCharacterTable / mnCharacterCount, read from the def-base region) is only PARTLY relocated --
-// FixupInPlace skipped its records -- so IncCharacterList's `mpCharacterTable[i]` reads serialized
-// 4-byte offsets as 64-bit pointers (garbage) and AVs on the first entry. IncCharacterList is pure
-// AS-lookup bookkeeping (it ref-counts the embedded characters + binds their animation-file slot);
-// it is NOT needed for the tick/render path right now, so the host sets this to 1 on the native-8
-// path to SKIP it cleanly (with the ref-count balance preserved). The registration resumes once the
-// movie's character records are fully widened/relocated. Default 0 (console/4-byte path runs it).
-unsigned int gAptSkipCharList = 0u;
-
-// CharList probe sink (host-implemented; weak no-op default just below). Logs the embedded animation's
-// table head/count just before IncCharacterList would walk it, so the skip decision is observable.
-extern "C" void CgsApt_CharListProbe(const void* pAnim, const void* pTable, int nCount, unsigned int uSkip);
-#if defined(_MSC_VER)
-extern "C" void CgsApt_CharListProbeDefault(const void*, const void*, int, unsigned int) {}
-#pragma comment(linker, "/alternatename:CgsApt_CharListProbe=CgsApt_CharListProbeDefault")
-#endif
-
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"            // GetRenderItemWritable / mpRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"               // mpCharacter
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"       // ClearCharacterList / ResetInitIndicators / IncCharacterList
@@ -47,32 +28,31 @@ extern "C" void CgsApt_CharListProbeDefault(const void*, const void*, int, unsig
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"                // AptSharedPtrIncRef / AptSharedPtrDecRef / AptSharedPtrDelete
 #include "SDKs/EATech/include/Apt/AptFile.h"                     // AptFile (the shared pointee)
 #include "SDKs/EATech/include/Apt/AptCharacter.h"                // AptCharacter base (the embedded movie root follows it)
-#include "SDKs/EATech/include/Apt/AptCIH.h"                      // gAptCharMovieOffset (native-8 header size 0x20)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                      // KU_AptEmbeddedMovieOff (native-8 header size 0x20)
 
 // ---------------------------------------------------------------------------
 // AptMovieCharacter_GetAnimation -- a movie/animation AptCharacter embeds its
 // AptCharacterAnimation movie root by value immediately after the AptCharacter base
-// (X360: `addi r3, mpCharacter, 0x10; blr` -- the embedded timeline at char+0x10,
-// the same "char+16" embedded movie AptMovie.h documents). The owning character-
-// subtype that would carry it as a named `AptCharacterAnimation mAnimation;` member
-// has no home header yet, so -- per the header FLAG -- the embedded root is reached
-// through this single accessor instead of a raw cast at the call sites.
+// (X360: `addi r3, mpCharacter, 0x10; blr` -- the embedded timeline, the same embedded
+// movie AptMovie.h documents). The owning character-subtype that would carry it as a
+// named `AptCharacterAnimation mAnimation;` member has no home header yet, so -- per the
+// header FLAG -- the embedded root is reached through this single accessor instead of a
+// raw cast at the call sites.
 //
 // FLAG (x64 fork): the console embeds it at the literal +0x10 (== console
 // sizeof(AptCharacter)); on the x64 gate the SERIALIZED header widens to 0x20 under the
-// 8-byte pointer rule (the .apt converter's GUIAPT64 layout), which is NOT necessarily
-// the host C++ sizeof(AptCharacter). The embedded-root offset is therefore taken from the
-// host-set gAptCharMovieOffset (the SAME def-base offset AptCIH_GetClipMovie uses: 0x20
-// native-8 / 0x10 console) so the returned AptCharacterAnimation* lands on the real
-// def-base region (where mnFrameCount=103 / the character table live). Using the literal
-// console sizeof here mis-pointed the embedded root on native-8 and AV'd. Null-safe.
+// 8-byte pointer rule (the .apt converter's GUIAPT64 "1:7:8" layout). The embedded-root
+// offset is therefore KU_AptEmbeddedMovieOff (0x20 -- the SAME def-base offset
+// AptCIH_GetClipMovie uses; VERIFIED vs TITLE_SCREEN02.bundle), so the returned
+// AptCharacterAnimation* lands on the real def-base region (where the frame count / the
+// fixed-up character table live). Null-safe.
 // ---------------------------------------------------------------------------
 AptCharacterAnimation* AptMovieCharacter_GetAnimation(AptCharacter* pCharacter)
 {
     if (pCharacter == nullptr)
         return nullptr;
     return reinterpret_cast<AptCharacterAnimation*>(
-        reinterpret_cast<char*>(pCharacter) + gAptCharMovieOffset);   // [c:0x10] addi r3, mpCharacter, <hdrSize>
+        reinterpret_cast<char*>(pCharacter) + KU_AptEmbeddedMovieOff);   // [c:0x10] addi r3, mpCharacter, <hdrSize>
 }
 
 // ---------------------------------------------------------------------------
@@ -158,10 +138,11 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
 //   *this = off_82145FE8;                       // AnimInst vtable (automatic codegen)
 //   *(this+0x28) = 0;                           // mAnimationFilePtr.pData = 0
 //   *(this+0x24) = 0;                           // mAnimationState_unknown = 0
-//   AptSharedPtr<AptFile>::operator=(a2+0xC, a3);   // (a2's embedded AptFilePtr) = a3
-//   AptSharedPtr<AptFile>::operator=(this+0x28, a3);// mAnimationFilePtr = a3
+//   if(a2+0xC != a3) AptSharedPtr<AptFile>::operator=(a2+0xC, a3);   // (a2's embedded AptFilePtr) = a3
+//   if(this+0x28 != a3) AptSharedPtr<AptFile>::operator=(this+0x28, a3);// mAnimationFilePtr = a3
 //   held = a3; if(held) incref(held);               // pinned copy of the file
-//   AptCharacterAnimation::IncCharacterList(this->mpRenderItem->mpCharacter + 0x10, &held);
+//   AptCharacterAnimation::IncCharacterList(this->mpRenderItem->mpCharacter + <embed>, &held);
+//     (<embed> = char+0x10 console / char+0x20 native-8 == KU_AptEmbeddedMovieOff)
 //   if(held && --held.count==0) AptSharedPtrDelete(held);   // drop the pin
 //   return this;
 //
@@ -206,96 +187,77 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     pInst->mAnimationFilePtr.pData = nullptr;    // *(this+0x28) = 0 (pre-op= clear)
     pInst->mAnimationState_unknown = 0;          // *(this+0x24) = 0
 
-    // FLAG (raw-offset poke into the loaded movie root): the X360 also assigns the
-    // held file into the AptFilePtr the movie root carries at +0x0C
-    // (AptSharedPtr<AptFile>::operator=(character+0xC, &held)). That slot is part of
-    // the loaded .apt data the parser produces; reached only once mpData is non-null
-    // (a resolved load). Modelled as the same ref-counted store the operator= emits.
-    // 8-byte SKIP (gAptSkipCharList): the native-8 AptCharacter header is widened
-    // (0x10->0x20), so the +0x0C console offset is WRONG -- it lands in the char
-    // header (signature/count), and the garbage lpOld would AV in AptSharedPtrDecRef.
-    // The slot's data is also un-relocated (FixupInPlace skipped the movie records).
-    // Skip the store; ref-balance is preserved by the mAnimationFilePtr assign below +
-    // the stack laHeldFile dtor. Resumes once the char record offsets are widened.
-    if (lpCharacter != nullptr && gAptSkipCharList == 0u)
+    // (1) @0x82AFFDF8..: the movie root's own embedded AptFilePtr (a2+0xC) = a3.
+    // AptSharedPtr<AptFile>::operator=(character+0xC, &held). The PS3 lift gates this
+    // ref-counted store on the source not already being the destination slot
+    // (`if (v5 != a3)`, v5 = a2+12) -- the standard AptSharedPtr self-assign guard.
+    // FLAG (external serialised .apt data): +0x0C is a fixed slot in the loaded movie
+    // root blob (not a modelled C++ member), addressed by its console byte offset like
+    // the other raw .apt-record accesses. lpCharacter is pFile->mpData (a resolved load,
+    // non-null here). The char table this slot lives in is relocated by Fixup.
     {
         AptFilePtr* lpRootFilePtr =
-            reinterpret_cast<AptFilePtr*>(reinterpret_cast<char*>(lpCharacter) + 0x0C);   // a2+0xC
-        AptFile* lpOld = lpRootFilePtr->pData;
-        lpRootFilePtr->pData = laHeldFile.pData;
-        if (laHeldFile.pData != nullptr)
-            AptSharedPtrIncRef(laHeldFile.pData);
-        if (lpOld != nullptr && AptSharedPtrDecRef(lpOld) == 0)
-            AptSharedPtrDelete(lpOld);
+            reinterpret_cast<AptFilePtr*>(reinterpret_cast<char*>(lpCharacter) + 0x0C);   // a2+0xC (v5)
+        if (lpRootFilePtr != &laHeldFile)   // if (v5 != a3)
+        {
+            AptFile* lpOld = lpRootFilePtr->pData;
+            lpRootFilePtr->pData = laHeldFile.pData;
+            if (laHeldFile.pData != nullptr)
+                AptSharedPtrIncRef(laHeldFile.pData);
+            if (lpOld != nullptr && AptSharedPtrDecRef(lpOld) == 0)
+                AptSharedPtrDelete(lpOld);
+        }
     }
 
-    // mAnimationFilePtr = held (ref-counted assign).
+    // (2) @0x82AFFE20..: mAnimationFilePtr (this+0x28) = a3 (same operator=, same
+    // self-assign guard `if (v6 != a3)`, v6 = a1+40).
     {
-        AptFile* lpOld = pInst->mAnimationFilePtr.pData;
-        pInst->mAnimationFilePtr.pData = laHeldFile.pData;
-        if (laHeldFile.pData != nullptr)
-            AptSharedPtrIncRef(laHeldFile.pData);
-        if (lpOld != nullptr && AptSharedPtrDecRef(lpOld) == 0)
-            AptSharedPtrDelete(lpOld);
+        if (&pInst->mAnimationFilePtr != &laHeldFile)   // if (v6 != a3)
+        {
+            AptFile* lpOld = pInst->mAnimationFilePtr.pData;
+            pInst->mAnimationFilePtr.pData = laHeldFile.pData;
+            if (laHeldFile.pData != nullptr)
+                AptSharedPtrIncRef(laHeldFile.pData);
+            if (lpOld != nullptr && AptSharedPtrDecRef(lpOld) == 0)
+                AptSharedPtrDelete(lpOld);
+        }
     }
 
-    // (3)+(4) @0x82AFFE38..74: form the by-value IncCharacterList argument (copy held
-    // + incref it -- the pin sp+0x50), then IncCharacterList over the movie embedded in
-    // the current render item's character (char+0x10). IncCharacterList takes the
-    // AptFilePtr BY VALUE (a shallow copy; its body does not release the arg), so the
-    // pin's incref is the argument's hand-off -- the asm leaves sp+0x50 un-decref'd
-    // after the call (it is balanced by the table reference IncCharacterList keeps),
-    // so no separate drop is emitted here.
-    // NULL-SAFE (x64 bring-up): this reaches the movie's character list through the instance's RENDER
-    // ITEM (pInst->mpRenderItem->mpCharacter). With the render-tree manager the null stub, mpRenderItem
-    // is null, so skip IncCharacterList (it only ref-counts the embedded character table) when there is
-    // no render item / character. FLAG: the character-list incref resumes once the RTM lands.
+    // (3) @0x82AFFE38..74: form the by-value IncCharacterList argument (copy *a3 into a
+    // stack AptFilePtr + incref it -- the pin sp+0x50), then IncCharacterList over the
+    // AptCharacterAnimation embedded in the current render item's character (the movie
+    // root at char + KU_AptEmbeddedMovieOff). IncCharacterList takes the AptFilePtr BY
+    // VALUE (a shallow copy; its body does not release the arg -- see the by-value
+    // signature in AptCharacterAnimation::IncCharacterList), so the pin's incref is the
+    // argument hand-off; the asm re-reads *a3, increfs, calls, then drops it below.
+    // The render item + its character are always live here (Manager_CreateItem built the
+    // render item in the base ctor). This walk assumes a converter-clean, uniformly-64-bit
+    // movie def-base; on the current TITLE_SCREEN02 bundle it is NOT (char[1] un-widened +
+    // the def-base charCount/table at +0x18/+0x20 vs the runtime struct's +0x0C/+0x10), so
+    // the host facade DEFERS calling this factory until the converter fix (see
+    // BrnAptRuntimeBringUp: the movie-root instantiation is held off with the tick). The
+    // body here stays the faithful, un-gated console decompile.
     CgsApt_GalProbe("MakeCAI: IncCharacterList (renderItem)", pInst->mpRenderItem);
-    if (pInst->mpRenderItem != nullptr && pInst->mpRenderItem->mpCharacter != nullptr)
-    {
-        AptFilePtr laIncArg;
-        laIncArg.pData = laHeldFile.pData;
-        if (laIncArg.pData != nullptr)
-            AptSharedPtrIncRef(laIncArg.pData);       // lwarx/+1/stwcx. @0x82AFFE50
+    AptFilePtr laIncArg;
+    laIncArg.pData = laHeldFile.pData;                // v16[0] = *a3
+    if (laIncArg.pData != nullptr)
+        AptSharedPtrIncRef(laIncArg.pData);           // lwarx/+1/stwcx. @0x82AFFE50
+    AptMovieCharacter_GetAnimation(pInst->mpRenderItem->mpCharacter)
+        ->IncCharacterList(laIncArg);                 // IncCharacterList(*(mpRenderItem->mpChar)+embed, v16) @0x82AFFE74
 
-        // SKIP GATE (native-8) -- checked BEFORE touching the embedded animation. On the native-8 path
-        // the whole AS character-list registration is deferred: we do NOT call AptMovieCharacter_GetAnimation
-        // and do NOT read the animation's mpCharacterTable/mnCharacterCount at all (the char records the
-        // table points at are un-relocated -- both the table walk in IncCharacterList AND any read of the
-        // table head would touch un-widened data). We just keep the ref-count balanced: IncCharacterList
-        // takes the arg by value and does NOT release it (the table would keep the reference), so when the
-        // walk is skipped that table reference is never taken -- therefore drop the pin we just incref'd.
-        if (gAptSkipCharList != 0u)
-        {
-            // Confirm the corrected embedded-animation pointer (pure pointer arithmetic via the fixed
-            // gAptCharMovieOffset -- NO deref of the un-relocated table), so the run shows GetAnimation now
-            // lands on the def-base. Logged through the GalProbe sink (anim ptr only).
-            CgsApt_GalProbe("MakeCAI: GetAnimation(def-base, native-8)",
-                            AptMovieCharacter_GetAnimation(pInst->mpRenderItem->mpCharacter));
-            CgsApt_CharListProbe(nullptr, nullptr, -1, gAptSkipCharList);   // (no table deref on skip)
-            if (laIncArg.pData != nullptr && AptSharedPtrDecRef(laIncArg.pData) == 0)
-                AptSharedPtrDelete(laIncArg.pData);
-        }
-        else
-        {
-            // Console / fully-relocated path: resolve the embedded animation (now via the correct
-            // gAptCharMovieOffset def-base) and run the faithful character-list registration.
-            AptCharacterAnimation* lpAnim =
-                AptMovieCharacter_GetAnimation(pInst->mpRenderItem->mpCharacter);
-            CgsApt_CharListProbe(lpAnim,
-                                 lpAnim != nullptr ? static_cast<const void*>(lpAnim->mpCharacterTable) : nullptr,
-                                 lpAnim != nullptr ? lpAnim->mnCharacterCount : -1,
-                                 gAptSkipCharList);
-            if (lpAnim != nullptr)
-                lpAnim->IncCharacterList(laIncArg);   // @0x82AFFE74
-            else if (laIncArg.pData != nullptr && AptSharedPtrDecRef(laIncArg.pData) == 0)
-                AptSharedPtrDelete(laIncArg.pData);   // balance the incref if there is no animation
-        }
+    // Drop the by-value pin (v16[0]): the asm decrefs it after the call and deletes at
+    // zero (IncCharacterList kept its own table references, not this arg).
+    {
+        AptFile* lpArg = laIncArg.pData;
+        laIncArg.pData = nullptr;                     // v16[0] = 0
+        if (lpArg != nullptr && AptSharedPtrDecRef(lpArg) == 0)
+            AptSharedPtrDelete(lpArg);
     }
 
-    // (5) @0x82AFFE78..AC: consume the passed-in reference -- read held, null it,
-    // decref, delete at zero. This is the ctor consuming a3 (the caller handed it an
-    // incref'd AptFilePtr(pFile) it no longer owns).
+    // (4) consume the passed-in reference (the ctor's a3): read held, null it, decref,
+    // delete at zero -- the caller handed the ctor an incref'd AptFilePtr(pFile) it no
+    // longer owns. (In the folded X360 ctor this is the caller's a3 lifetime; the Make*
+    // wrapper owns that hand-off here.)
     {
         AptFile* lpHeld = laHeldFile.pData;
         laHeldFile.pData = nullptr;

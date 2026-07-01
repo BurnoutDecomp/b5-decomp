@@ -41,7 +41,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"       // AptGetAnimationAtLevel (the root level-0 CIH)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"// MakeCharacterAnimationInst (loaded movie -> live inst)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (the root display-object node)
-#include "SDKs/EATech/include/Apt/AptMovie.h"                 // gAptCmd8 / gAptCmd8Bound* / gAptPlacedNodes (native-8 place gates)
+#include "SDKs/EATech/include/Apt/AptMovie.h"                 // AptMovie::doFrameControls / resolve (timeline driver)
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h" // mDisplayList (the root CIH's child display list)
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"       // AptAnimationTarget::GetRootDisplayList (the director's root list)
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::AsState
@@ -101,24 +101,6 @@ extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const v
     CgsDev::Log::WriteToLog(lac);
 }
 
-// The char-list probe sink (declared in AptCharacterAnimationInst.cpp): logs the embedded movie's
-// AptCharacterAnimation character-table head/count just before MakeCharacterAnimationInst would walk it
-// in IncCharacterList, plus whether the skip gate is engaged. On the native-8 path the table pointer is
-// un-relocated (a serialized offset) -- this is the exact data IncCharacterList would AV on. Throttled.
-extern "C" void CgsApt_CharListProbe(const void* pAnim, const void* pTable, int nCount, unsigned int uSkip)
-{
-    static int s_iCharListBudget = 0;
-    if (s_iCharListBudget >= 32)
-        return;
-    ++s_iCharListBudget;
-    char lac[200];
-    std::snprintf(lac, sizeof(lac),
-        "[AptRT] charlist: anim=%p table=%p count=%d skip=%u %s\n",
-        pAnim, pTable, nCount, uSkip,
-        uSkip ? "(SKIPPED -- un-relocated native-8 table)" : "(walking)");
-    CgsDev::Log::WriteToLog(lac);
-}
-
 // The native-8 timeline-relocation probe sink (declared in AptCharacterAnimation.h): logs each embedded
 // movie's relocated frameCount + frameTable + the count of command records relocated. Throttled.
 void CgsApt_TimelineProbe(const void* pMovie, int nFrameCount, const void* pFrameTable, int nCmdsTotal)
@@ -147,33 +129,6 @@ void CgsApt_TimelineFrameProbe(int nFrame, int nCmdCount, unsigned long long luC
     std::snprintf(lac, sizeof(lac),
         "[AptRT] timeline: frame=%d cmdCount=%d mpCommands(before)=0x%llX (after)=0x%llX\n",
         nFrame, nCmdCount, luCmdsBefore, luCmdsAfter);
-    CgsDev::Log::WriteToLog(lac);
-}
-
-// The native-8 place-command probe sink (declared in AptMovie.h): logs each PlaceObject(3)/RemoveObject(4)
-// command the native-8 place path processed -- its char id, depth, flags, matrix (first 6 floats), and
-// the placed node pointer (null = skipped). Throttled.
-extern "C" void CgsApt_PlaceProbe(int nTag, int nCharId, int nDepth, unsigned int nFlags,
-                                  const float* pMatrix, const void* pPlacedNode)
-{
-    static int s_iPlaceBudget = 0;
-    if (s_iPlaceBudget >= 96)
-        return;
-    ++s_iPlaceBudget;
-    char lac[256];
-    if (pMatrix != nullptr)
-    {
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] place: tag=%d charId=%d depth=%d flags=0x%X matrix=(%.3f %.3f %.3f %.3f %.3f %.3f) -> node %p\n",
-            nTag, nCharId, nDepth, nFlags,
-            pMatrix[0], pMatrix[1], pMatrix[2], pMatrix[3], pMatrix[4], pMatrix[5], pPlacedNode);
-    }
-    else
-    {
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] place: tag=%d charId=%d depth=%d flags=0x%X matrix=(none) -> node %p\n",
-            nTag, nCharId, nDepth, nFlags, pPlacedNode);
-    }
     CgsDev::Log::WriteToLog(lac);
 }
 
@@ -953,12 +908,6 @@ namespace BrnGui
         }
         CgsGui::gAptLoadAnimRootOverride = lpRootOverride;
 
-        // Keep the resource bounds for the native-8 PLACE path's deref guard (gAptCmd8BoundLo/Hi):
-        // doFrameControls reads the relocated command records + char table; bound them so an
-        // un-widened record/char is skipped (named via the place probe) instead of AV'ing.
-        if (liPtrSize == 8) { gAptCmd8BoundLo = luBase; gAptCmd8BoundHi = luBase + luSize; }
-        else                { gAptCmd8BoundLo = 0;      gAptCmd8BoundHi = 0; }
-
         // --- 2. REGISTER the header with the data handler (AptDataHandler::AddAptData) ----------
         // So the faithful FindAptData(name) inside LoadAnimation resolves it. Idempotent by name.
         // FLAG (x64): AddAptData takes the resolved name (the header's mpacMovieName is an
@@ -1053,31 +1002,32 @@ namespace BrnGui
         s_pFaithfulRootCIH = lpRootCIH;
 
         // --- 6. instantiate the movie + bind it to the root CIH -----------------------------------
-        // Gate off IncCharacterList on the native-8 path (the char table is only partly widened, so
-        // the walk would read 4-byte offsets as 64-bit pointers and AV) -- pure AS-lookup bookkeeping,
-        // not needed for the tick/render path yet. Set BEFORE MakeCharacterAnimationInst.
-        gAptSkipCharList = (liPtrSize == 8) ? 1u : 0u;
-        CgsDev::Log::WriteToLog("[AptRT] faithful: MakeCharacterAnimationInst(pFile) ...\n");
-        AptCharacterAnimationInst* lpInst = MakeCharacterAnimationInst(s_pFaithfulAptFile);
-        if (lpInst == nullptr)
-        {
-            CgsDev::Log::WriteToLog("[AptRT] faithful: MakeCharacterAnimationInst null -- bail (FLAG).\n");
-            return;
-        }
-        lpRootCIH->SetCharacterInst(reinterpret_cast<AptCharacterInst*>(lpInst), true);
-
-        // Runtime gates for the deferred per-frame tick (unchanged from the prior faithful pass).
-        gAptCharMovieOffset  = (liPtrSize == 8) ? 0x20u : 0x10u;
-        gAptSkipTimeline     = 0u;
-        gAptCmd8             = (liPtrSize == 8) ? 1u : 0u;
-        gAptSkipFrameActions = (liPtrSize == 8) ? 1u : 0u;
-        gAptPlacedNodes      = 0;
+        // The engine's MakeCharacterAnimationInst is the single faithful 64-bit path: its
+        // AptCharacterAnimation::IncCharacterList walks the movie's embedded character table
+        // (reached via KU_AptEmbeddedMovieOff = char+0x20) UNCONDITIONALLY, exactly like the console.
+        //
+        // BLOCKED (converter data, NOT a code gate -- deferred by this HOST FACADE, the same way
+        // Fixup's SetupCharacter call and the per-frame tick (lbTickReady) are held off): the
+        // GUIAPT/TITLE_SCREEN02 bundle is NOT converter-clean for this walk yet --
+        //   (a) char[1] @ the movie def-base is a CONSOLE 4-byte record (un-widened by the converter),
+        //       so IncCharacterList's `mpCharacterTable[1]->mpAnimationFile` reads garbage; and
+        //   (b) the serialised movie def-base lays its character count/table at +0x18/+0x20, which the
+        //       runtime AptCharacterAnimation struct (mnCharacterCount@+0x0C / mpCharacterTable@+0x10)
+        //       does not yet match -- a TYPE/converter reconciliation, tracked with the tick bring-up.
+        // Running the faithful MakeCharacterAnimationInst here AVs on that data (verified). So this
+        // facade DEFERS the movie-root instantiation exactly as it defers the tick; the engine body
+        // stays faithful and un-gated. RE-ENABLE (drop the guard, call MakeCharacterAnimationInst +
+        // SetCharacterInst) once the bundle is uniformly 64-bit / the def-base layout is reconciled --
+        // the same converter fix that unblocks lbTickReady. The root CIH created above is real and live.
+        CgsDev::Log::WriteToLog(
+            "[AptRT] faithful: MakeCharacterAnimationInst DEFERRED (converter: char[1] un-widened + "
+            "def-base charCount@+0x18 vs runtime +0x0C) -- engine body faithful; re-enable with the tick.\n");
 
         s_bFaithfulInstantiated = true;
         std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: INSTANTIATED -- root CIH %p <- animInst %p (movie root %p); "
-            "displayList live. charMovieOff=0x%X. (faithful load path; STEP 2 tick next.)\n",
-            (void*)lpRootCIH, (void*)lpInst, lpFile->mpData, gAptCharMovieOffset);
+            "[AptRT] faithful: INSTANTIATED -- root CIH %p (movie root %p); displayList live. "
+            "embeddedMovieOff=0x%X. animInst instantiation DEFERRED (converter). (STEP 2 tick next.)\n",
+            (void*)lpRootCIH, lpFile->mpData, KU_AptEmbeddedMovieOff);
         CgsDev::Log::WriteToLog(lac);
     }
 
@@ -1466,8 +1416,8 @@ namespace BrnGui
             {
                 char lacd[192];
                 std::snprintf(lacd, sizeof(lacd),
-                    "[AptRT] tick: frame=%d displayList nodes=%d childNodes=%d placedByCmd=%d (tick result=%d)\n",
-                    s_iTickFrame, liNodes, liChildNodes, gAptPlacedNodes, liTickResult);
+                    "[AptRT] tick: frame=%d displayList nodes=%d childNodes=%d (tick result=%d)\n",
+                    s_iTickFrame, liNodes, liChildNodes, liTickResult);
                 CgsDev::Log::WriteToLog(lacd);
             }
             ++s_iTickFrame;

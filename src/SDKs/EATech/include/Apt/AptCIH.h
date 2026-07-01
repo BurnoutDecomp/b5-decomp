@@ -43,13 +43,14 @@ struct AptCXForm;
 struct AptRect;
 struct AptNativeHash;
 
-// x64 8-byte fork: the embedded AptMovie/AptCharacterAnimation offset within a sprite/animation
-// AptCharacter (console 0x10; native-8-format widens it to 0x20). The host sets this to match the
-// loaded .apt's pointer size before ticking; AptCIH_GetClipMovie reads it. Defined in AptCIH.cpp.
-extern unsigned int gAptCharMovieOffset;
-// x64 8-byte fork: when set, AptCIH::tick SKIPS the timeline (doFrameControls/queueFrameActions/clip
-// events) because the native-8 timeline records are un-relocated/un-widened. Defined in AptCIH.cpp.
-extern unsigned int gAptSkipTimeline;
+// FLAG (x64 fork): the offset of the AptMovie/AptCharacterAnimation body embedded by value inside a
+// sprite/animation AptCharacter. The console reaches it at char+0x10 (== the console sizeof(AptCharacter)
+// header); on the x64 gate the serialised AptCharacter header widens under the 8-byte pointer rule
+// (GUIAPT64 "1:7:8" layout) so the embedded body lands at char+0x20 (VERIFIED vs TITLE_SCREEN02.bundle:
+// movie/sprite body @ char+0x20, where the fixed-up frame count + character table live). We ship ONLY
+// the 8-byte format, so this is a compile-time constant (single native-64 path, matching Fixup). Read by
+// AptCIH_GetClipMovie + AptMovieCharacter_GetAnimation.
+static const unsigned int KU_AptEmbeddedMovieOff = 0x20u;
 
 struct AptCIH : public AptValueGC
 {

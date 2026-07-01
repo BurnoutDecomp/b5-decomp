@@ -77,15 +77,19 @@ struct AptCharacterAnimation;
 // ---------------------------------------------------------------------------
 // FLAG (un-homed accessor -- the owning character-subclass type is not in the
 // ledger yet): an animation/movie AptCharacter embeds its AptCharacterAnimation
-// movie root by value at char+0x10 (immediately after the 16-byte AptCharacter
-// base; AptMovie.h documents the same "char+16" embedded timeline). The destructor
-// drives that embedded movie's table teardown. The owning character-subtype that
-// would carry it as a named `AptCharacterAnimation mAnimation;` member has no home
-// header / ledger entry yet, so -- exactly like the AptCharacterInst.h render-tree-
-// manager helpers (AptRTM_*) that route the un-homed gpCurrentTargetSim+offset
-// access by name -- the embedded movie is reached through this single named
-// accessor instead of a raw +0x10 cast. X360: `addi r3, mpCharacter, 0x10`.
-// Homed by the movie-character TU when it is recovered.
+// movie root by value immediately after the AptCharacter base (AptMovie.h documents
+// the same embedded timeline). The destructor + ctor drive that embedded movie's
+// table teardown/registration. The owning character-subtype that would carry it as a
+// named `AptCharacterAnimation mAnimation;` member has no home header / ledger entry
+// yet, so -- exactly like the AptCharacterInst.h render-tree-manager helpers (AptRTM_*)
+// that route the un-homed gpCurrentTargetSim+offset access by name -- the embedded
+// movie is reached through this single named accessor instead of a raw cast.
+//
+// FLAG (x64 fork): the console reaches it as `addi r3, mpCharacter, 0x10` (the console
+// sizeof(AptCharacter)). On the x64 gate the serialised AptCharacter header widens
+// under the 8-byte pointer rule (GUIAPT64 "1:7:8" layout) so the embedded body lands
+// at char+0x20 -- the same def-base offset AptCIH_GetClipMovie uses (KU_AptEmbeddedMovieOff,
+// AptCIH.h). Where the fixed-up character table / frame count live. Null-safe.
 // ---------------------------------------------------------------------------
 AptCharacterAnimation* AptMovieCharacter_GetAnimation(AptCharacter* pCharacter);
 
@@ -131,11 +135,3 @@ struct AptCharacterAnimationInst : public AptCharacterSpriteInstBase
 // ---------------------------------------------------------------------------
 struct AptFile;
 AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile);
-
-// gAptSkipCharList -- character-list-bookkeeping skip gate (companion to gAptSkipTimeline in AptCIH.h).
-// Set to 1 on the native-8 (GUIAPT64) faithful path: the movie's embedded AptCharacterAnimation
-// character table is only partly relocated by FixupInPlace, so MakeCharacterAnimationInst's
-// IncCharacterList walk would AV on `mpCharacterTable[i]`. When set, that walk is skipped cleanly with
-// the ref-count kept balanced; the registration resumes once the character records are fully widened.
-// Default 0 (console/4-byte path runs IncCharacterList normally).
-extern unsigned int gAptSkipCharList;
