@@ -245,5 +245,66 @@ BrnSound::Logic::ResourceRegistrar& AIVehicleStateManager::GetResourceRegistrar(
     return sUnhomedRegistrar;
 }
 
+// ---------------------------------------------------------------------------
+// AIVehicleStateManager::GetLoopModelContent(s32, u32)  @ 0x826987A8
+//
+// X360 body (SELF-CONTAINED -- decompiled store-for-store): returns the address of
+// the per-(AI-engine, loop) loop-model content spec, guarded by three tripwires:
+//   assert( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES );
+//   assert( lLoopIndex < DualGinsuEffect::KI_MAX_LOOPS );
+//   lpContent = &maLoopContentSpecs[liAIEngineIndex][lLoopIndex];
+//   assert( lpContent->IsLoaded() );
+//   return lpContent;
+//
+// Address arithmetic: the asm computes `this + 12*(10*liAIEngineIndex + lLoopIndex
+// + 13)` -- 13 is the maLoopContentSpecs base in Content units, 10 the inner
+// dimension (KI_MAX_LOOPS), 12 the Content stride. Expressed BY NAME as the natural
+// row-major access. The assert STRING names DualGinsuEffect::KI_MAX_LOOPS verbatim
+// (X360 rodata); the assert CONDITION uses this class's KI_MAX_LOOPS (== 10 == the
+// X360 DualGinsuEffect::KI_MAX_LOOPS). Called by DualGinsuEffect::Attach.
+// ---------------------------------------------------------------------------
+const CgsSound::Logic::Content* AIVehicleStateManager::GetLoopModelContent( s32 liAIEngineIndex, u32 lLoopIndex )
+{
+    CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
+                "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES" );
+
+    CGS_ASSERT( lLoopIndex < static_cast<u32>( KI_MAX_LOOPS ),
+                "lLoopIndex < BrnSound::Vehicles::Engines::DualGinsuEffect::KI_MAX_LOOPS" );
+
+    const CgsSound::Logic::Content* lpContent = &maLoopContentSpecs[ liAIEngineIndex ][ lLoopIndex ];
+
+    CGS_ASSERT( lpContent->IsLoaded(),
+                "maLoopContentSpecs[liAIEngineIndex][lLoopIndex].IsLoaded()" );
+
+    return lpContent;
+}
+
+// ---------------------------------------------------------------------------
+// AIVehicleStateManager::GetDecelGinsuContent(s32)  @ 0x82698910
+//
+// X360 body (SELF-CONTAINED -- decompiled store-for-store): returns the address of
+// the per-AI-engine Ginsu deceleration content spec, guarded by two tripwires:
+//   assert( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES );
+//   lpContent = &maGinsuDecelContentSpecs[liAIEngineIndex];
+//   assert( lpContent->IsLoaded() );
+//   return lpContent;
+//
+// Address arithmetic: the asm computes `this + 12*(liAIEngineIndex + 68)` -- 68 is
+// the maGinsuDecelContentSpecs base in Content units (12-byte stride). Expressed BY
+// NAME as &maGinsuDecelContentSpecs[idx]. Called by DualGinsuEffect::Attach.
+// ---------------------------------------------------------------------------
+const CgsSound::Logic::Content* AIVehicleStateManager::GetDecelGinsuContent( s32 liAIEngineIndex )
+{
+    CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
+                "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES" );
+
+    const CgsSound::Logic::Content* lpContent = &maGinsuDecelContentSpecs[ liAIEngineIndex ];
+
+    CGS_ASSERT( lpContent->IsLoaded(),
+                "maGinsuDecelContentSpecs[liAIEngineIndex].IsLoaded()" );
+
+    return lpContent;
+}
+
 } // namespace Vehicles
 } // namespace BrnSound

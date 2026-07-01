@@ -50,6 +50,15 @@ namespace Module { struct SoundLogicModule; }
 namespace MusicEffect
 {
 
+// ADDITIVE GROW (Wave 5: JunkyardInAirEffect::meJunkyardAmbience). DWARF
+// BrnMusicEffect.h:24 -- the junkyard-ambience selector enum. Zero-risk additive
+// (a new enum in the existing MusicEffect namespace; no layout/member change).
+enum EJunkyardAmbience
+{
+    E_JUNKYARD_AMBIENCE_NONE        = 0,
+    E_JUNKYARD_AMBIENCE_NEW_PROFILE = 1,
+};
+
 // BrnMusicEffect.h (DWARF home). Per-attach EaTrax streaming-layer state block.
 struct EaTraxData
 {
