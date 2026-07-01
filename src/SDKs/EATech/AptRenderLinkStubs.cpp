@@ -239,7 +239,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // synchronously content-loads the import bundle + drives AptCompleteAnimationAsyncLoad). The
     // FLAG link-stub that used to live here is removed so the strong host definition is the only one.
     void AptMovie_runFrameActions(void* pFrameActionList) {}   // FLAG link-stub
-    void AptObject_SetImplementedObjects(AptObject* pObject, AptArray* pInterfaces, int nCount) {}   // FLAG link-stub
+    // AptObject_SetImplementedObjects RETIRED (2026-07-01): the real member
+    // AptObject::SetImplementedObjects (AptObject.cpp) is called directly; the {} stub dropped it.
     void AptScriptFunctionBase_InitializeStaticData(const AptInitParmsT* pParms) {}   // FLAG link-stub
     void AptScriptFunctionBase_PopStaticData(AptScriptFunctionBase::SavedExecutionState* pSaved) {}   // FLAG link-stub
     void GlobalNotificationFunction(AptFilePtr* pFile) {}   // FLAG link-stub
