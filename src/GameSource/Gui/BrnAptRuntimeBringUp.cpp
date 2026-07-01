@@ -712,22 +712,20 @@ namespace BrnGui
             return;
         }
 
-        // ---- SYNCHRONOUS bundle load: GUIAPT64\<NAME>.bundle (the NATIVE x64 faithful path) ------
-        // USER (2026-06-30): 32-bit apts are in GUIAPT32, 64-bit apts in GUIAPT64. The GUIAPT64
-        // bundle's AptData carries the "Apt Data:1:7:8" descriptor -- NATIVE 8-byte pointers, so
-        // AptCharacterAnimation::FixupInPlace relocates IN PLACE at the real (high) resource address
-        // with NO low-4GB copy + NO transcode, and the dataRoot+16 char-anim layout is the converter's
-        // native one. (The old GUIAPT/ path was the 4-byte console bundle that kept landing in string
-        // tables.) Load it through BundleLoader::LoadBundle; the AptData resource (type 0x1E == 30) is
-        // FixUp'd by the registered CgsResource::AptDataHeaderType handler.
+        // ---- SYNCHRONOUS bundle load: GUIAPT\<NAME>.BUNDLE (the FAITHFUL bundle path) ------------
+        // FAITHFULNESS (2026-06-30, user): the GUIAPT32/GUIAPT64 split was NON-FAITHFUL test
+        // scaffolding -- the original game loads apt movies from GUIAPT\. Our PC build's GUIAPT
+        // bundle carries the converted "Apt Data:1:7:8" (native 8-byte) data, so the path stays
+        // faithful (GUIAPT) while the data content is the x64-converted form. Load through
+        // BundleLoader::LoadBundle; the AptData resource (type 0x1E == 30) is FixUp'd by the
+        // registered CgsResource::AptDataHeaderType handler.
         CgsResource::RegisterAllResourceTypes();   // idempotent: ensure AptDataHeaderType (0x1E) is live
 
-        // Build "GUIAPT64/<UPPERCASE NAME>.BUNDLE". (FLAG: GUIAPT32 holds the 4-byte variant; we
-        // prefer 64 -- the loader returns <=0 if missing, which bails cleanly to no-render.)
+        // Build the FAITHFUL bundle path "GuiApt\<NAME>.bundle" -- the exact format string the X360
+        // apt loader uses (verified @0x828504B0), name passed as-is (Windows resolves case/separator).
+        // The loader returns <=0 if missing -> bails cleanly.
         char lacBundlePath[160];
-        std::snprintf(lacBundlePath, sizeof(lacBundlePath), "GUIAPT64/%s.BUNDLE", s_acLoadedMovieName);
-        for (char* lpc = lacBundlePath + 9; *lpc; ++lpc)   // upper-case the movie-name segment
-            if (*lpc >= 'a' && *lpc <= 'z') *lpc = static_cast<char>(*lpc - 'a' + 'A');
+        std::snprintf(lacBundlePath, sizeof(lacBundlePath), "GuiApt\\%s.bundle", s_acLoadedMovieName);
 
         s_pMoviePool = &s_MoviePoolStorage;
         CgsResource::Pool::InitOptions lOptions;
