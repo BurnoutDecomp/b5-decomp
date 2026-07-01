@@ -207,7 +207,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY) {}   // FLAG link-stub
     void AptApt_PopValues(AptActionInterpreter* pInterp, int nCount) {}   // FLAG link-stub
     void AptCIH_GetWorldBounds(AptValue* pNode, float* pOutRect) {}   // FLAG link-stub
-    void AptCIH_SetDirtyState(AptCIH* pNode, bool bDirty, bool bProp) {}   // FLAG link-stub
+    // AptCIH_SetDirtyState RETIRED (2026-07-01): the real member AptCIH::SetDirtyState
+    // (AptCIH.cpp, faithful) is called directly; the {} stub silently dropped the dirty latch.
     void AptCIH_SetProceduralProperty(AptCIH* pNode, int nProperty, double fValue) {}   // FLAG link-stub
     void AptCIH_jumpToFrame(AptCIH* pNode, int nFrame) {}   // FLAG link-stub
     // AptCIH_tick is now homed faithfully in AptCIHBehaviour.cpp (forwards to AptCIH::tick).
