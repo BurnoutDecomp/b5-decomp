@@ -185,8 +185,8 @@ void AptActionInterpreter::InitDispatchTable()
     // (call/member/variable/timeline/proto/dict families) were never added to
     // this table -- every one below dispatched to the no-op stub even though
     // its faithful body existed. Wired per the extracted X360 map (0x82F73068).
-    // Still on the no-op stub (genuinely unbuilt handlers): 0x28 StopDragMovie,
-    // 0x5B CallFuncAndPop, 0x94 With, 0xB0 DictCallFuncPop.
+    // Still on the no-op stub (genuinely unbuilt): 0x94 With (PS3 body exists;
+    // the last one).
     // =======================================================================
 
     // -- run control / timeline --
@@ -205,6 +205,7 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x24] = &_FunctionAptActionCloneSprite;
     sGlobalTable[0x25] = &_FunctionAptActionRemoveSprite;
     sGlobalTable[0x27] = &_FunctionAptActionStartDragMovie;
+    sGlobalTable[0x28] = &_FunctionAptActionStopDragMovie;
     sGlobalTable[0x45] = &_FunctionAptActionTargetPath;
     sGlobalTable[0x8B] = &_FunctionAptActionSetTarget;
 
@@ -225,6 +226,7 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x43] = &_FunctionAptActionInitObject;
     sGlobalTable[0x52] = &_FunctionAptActionCallMethod;
     sGlobalTable[0x53] = &_FunctionAptActionNewMethod;
+    sGlobalTable[0x5B] = &_FunctionAptActionCallFuncAndPop;
     sGlobalTable[0x5C] = &_FunctionAptActionCallFuncSetVar;
     sGlobalTable[0x5D] = &_FunctionAptActionCallMethodPop;
     sGlobalTable[0x5E] = &_FunctionAptActionCallMethodSetVar;
@@ -249,6 +251,7 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0xA7] = &_FunctionAptActionPushStringSetMember;
     sGlobalTable[0xAE] = &_FunctionAptActionStringDictByteGetVar;
     sGlobalTable[0xAF] = &_FunctionAptActionStringDictByteGetMember;
+    sGlobalTable[0xB0] = &_FunctionAptActionDictCallFuncPop;
     sGlobalTable[0xB1] = &_FunctionAptActionDictCallFuncSetVar;
     sGlobalTable[0xB2] = &_FunctionAptActionDictCallMethodPop;
     sGlobalTable[0xB3] = &_FunctionAptActionDictCallMethodSetVar;
