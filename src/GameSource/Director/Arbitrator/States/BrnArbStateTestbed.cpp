@@ -20,22 +20,37 @@
 // ActivateIceCam are reconstructed faithfully (they only touch this state's OWN members + the
 // shared spTestbed singleton). The remaining four functions index aggregates whose LAYOUT is NOT
 // homed in the committed tree and are therefore DECLARATION-ONLY (see the per-function FLAG blocks):
-//   * Update -- a 15-way behaviour-allocation dispatch over the un-homed BehaviourManager pool and
+//   * Update -- a 15-way behaviour-allocation dispatch over the BehaviourManager pool and
 //     the un-homed Camera::Behaviour::Parameters block (its leading type-tag word selects the
-//     behaviour). Each arm calls BehaviourManager::NewBehaviour<TBehaviour> then resolves the live
-//     behaviour through unrecovered manager-pool accessor thunks (the X360 sub_821Fxxxx helpers)
-//     and seeds it via the behaviour's SetParameters. Reconstructing the body faithfully needs the
-//     BehaviourManager pool layout + the per-behaviour resolve thunks, none of which are homed; a
-//     body would have to fabricate them. Per the project's no-raw-offset-poke-into-an-un-homed-
-//     aggregate + no-fabrication rules it is left declaration-only.
+//     behaviour). RE-VERIFIED (2026-07-01): BrnBehaviourManager.h is now a real layout home and
+//     BehaviourManager::NewBehaviour<T> is declared there, BUT every arm also calls a live-behaviour
+//     RESOLVE thunk after allocation (X360 sub_821FCFB8 / BehaviourManager::BehaviourHan / ::BehaviourH
+//     / ::BehaviourHandle_cl / etc. -- truncated/mangled, one per behaviour type) that is still
+//     [todo]/unresolved (confirmed via `work stubs --list`: 15 NewBehaviour<T> instantiations + the
+//     resolve thunks + several behaviour SetParameters overloads -- BehaviourRig, BehaviourHeliCam,
+//     BehaviourBystanderCam, BehaviourGyroCam, BehaviourFailsafe, BehaviourPassengerCam,
+//     BehaviourFixedCam, BehaviourRotateAboutVehicle, BehaviourLooseAttachment, BehaviourRoadRunner --
+//     are all still unresolved; only Aftertouch/AftertouchCrash/SpirallingDeathcam/GameplayExternal
+//     SetParameters are RECOVERED). It also needs SerialiseBehaviourParameters<DebugMenuSerialiser>
+//     (see below, still un-homed) via RegisterParameters. A body would have to fabricate the resolve
+//     thunks; per the project's no-fabrication rule it stays declaration-only.
 //   * RegisterParameters / UnregisterParameters -- both forward to
 //     BrnDirector::Camera::SerialiseBehaviourParameters<BrnDirector::Camera::DebugMenuSerialiser>,
 //     which has no reconstructed home (the serialiser template + the DebugMenuSerialiser visitor are
-//     un-homed). Declaration-only until that TU lands.
+//     un-homed -- RE-VERIFIED 2026-07-01, no hits anywhere under b5-decomp/src). Declaration-only
+//     until that TU lands.
 //   * RegisterIceAnimsWithDebugComponent -- registers each shot-group ICE-anim take as a debug-menu
 //     callback through the un-homed BrnDirector::DebugComponent (CgsDev::DebugComponent::
-//     RegisterFunction) and indexes the un-homed DirectorResourceManager aggregate
-//     (*(resources+560)+10064 / *(resources+544)). Declaration-only until DebugComponent lands.
+//     RegisterFunction) and indexes the un-homed... wait, DirectorResourceManager IS homed
+//     (BrnDirectorResourceManager.h) but the two fields the asm indexes off it
+//     (*(resources+560)+10064 -> an ICEAuthor take-edit table, *(resources+544) -> the ICEList) are
+//     not among its reconstructed named members yet, so they cannot be reached by name. RE-VERIFIED
+//     (2026-07-01): BrnDirector::DebugComponent is STILL only forward-declared (no .cpp/.h home
+//     anywhere in b5-decomp/src -- confirmed distinct from the unrelated CgsDev::DebugComponent and
+//     BrnSound::DebugComponent, which do exist). CgsSceneManager::CgsCollision::
+//     BaseCollisionGenerator::Destruct and Attrib::Attribute::GetLength are also still [todo]
+//     (confirmed via `work stubs --list`). Declaration-only until DebugComponent (and the two
+//     collision/attrib callees) land.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -149,9 +164,14 @@ namespace BrnDirector
     //   FLAG: a 15-way behaviour-allocation dispatch (switch on meState, then on the activated
     //   Camera::Behaviour::Parameters type-tag word) that calls BehaviourManager::NewBehaviour<T>
     //   into each owned handle, resolves the live behaviour through unrecovered manager-pool accessor
-    //   thunks (X360 sub_821Fxxxx), and seeds it via the behaviour's SetParameters. The
-    //   BehaviourManager pool layout + those resolve thunks are NOT homed; the +0x2B0 parameter
-    //   block is the un-homed Camera::Behaviour::Parameters. No faithful body without fabrication.
+    //   thunks (X360 sub_821Fxxxx / BehaviourManager::BehaviourHan / ::BehaviourH / etc.), and seeds
+    //   it via the behaviour's SetParameters. RE-VERIFIED (2026-07-01): BrnBehaviourManager.h now
+    //   homes the BehaviourManager pool LAYOUT + declares NewBehaviour<T>, but the per-behaviour
+    //   resolve thunks are still [todo]/unrecovered, as are most of the per-behaviour SetParameters
+    //   overloads this switch needs (only Aftertouch/AftertouchCrash/SpirallingDeathcam/
+    //   GameplayExternal are RECOVERED) and SerialiseBehaviourParameters<DebugMenuSerialiser> (via
+    //   RegisterParameters). The +0x2B0 parameter block is the un-homed Camera::Behaviour::Parameters.
+    //   No faithful body without fabrication.
 
     // RegisterParameters @0x82263F08 -- DECLARATION-ONLY.
     //   FLAG: forwards to BrnDirector::Camera::SerialiseBehaviourParameters<DebugMenuSerialiser>
@@ -166,10 +186,15 @@ namespace BrnDirector
     // RegisterIceAnimsWithDebugComponent @0x8226BDB8 -- DECLARATION-ONLY.
     //   FLAG: walks the shot-group's ICE-anim ShotList (Attrib::Instance / Attrib::Gen::iceanim --
     //   homed), resolves each take through ICE::ICEAuthor::FindEditedTakeFromGuid /
-    //   BrnResource::ICEList::GetICETakeDataFromGuid (homed) indexed off the un-homed
-    //   DirectorResourceManager aggregate (*(resources+560)+10064 / *(resources+544)), and registers
-    //   each as a debug-menu callback bound to ActivateIceCam through the un-homed
-    //   BrnDirector::DebugComponent (CgsDev::DebugComponent::RegisterFunction). The DebugComponent +
-    //   DirectorResourceManager field layouts the asm indexes are not homed; declaration-only until
-    //   they land.
+    //   BrnResource::ICEList::GetICETakeDataFromGuid (homed) indexed off two fields
+    //   (*(resources+560)+10064 / *(resources+544)) that are not yet among
+    //   BrnDirector::DirectorResourceManager's reconstructed named members (the aggregate itself IS
+    //   homed -- BrnDirectorResourceManager.h -- but not these two fields), and registers each as a
+    //   debug-menu callback bound to ActivateIceCam through the un-homed BrnDirector::DebugComponent
+    //   (CgsDev::DebugComponent::RegisterFunction). RE-VERIFIED (2026-07-01): BrnDirector::
+    //   DebugComponent is still forward-declared only, no reconstructed home anywhere in
+    //   b5-decomp/src (distinct from CgsDev::DebugComponent and BrnSound::DebugComponent, which DO
+    //   exist). CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct and
+    //   Attrib::Attribute::GetLength are also still [todo]. Declaration-only until DebugComponent
+    //   (+ those two callees + the two DirectorResourceManager fields) land.
 }
