@@ -457,6 +457,7 @@ public:
     // shortcut forms of Push + the Get/Set fused ops):
     static void _FunctionAptActionPush                 (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushStringDictByte   (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushStringDictWord   (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushStringGetMember  (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushStringGetVar     (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushStringSetMember  (AptActionInterpreter* pInterp, LocalContextT* pContext);
@@ -470,6 +471,7 @@ public:
     static void _FunctionAptActionGotoFrame2           (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionGotoLabel            (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionNextFrame            (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPrevFrame            (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPlay                 (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionStop                 (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionCloneSprite          (AptActionInterpreter* pInterp, LocalContextT* pContext);

@@ -185,14 +185,14 @@ void AptActionInterpreter::InitDispatchTable()
     // (call/member/variable/timeline/proto/dict families) were never added to
     // this table -- every one below dispatched to the no-op stub even though
     // its faithful body existed. Wired per the extracted X360 map (0x82F73068).
-    // Still on the no-op stub (genuinely unbuilt handlers): 0x05 PrevFrame,
-    // 0x28 StopDragMovie, 0x5B CallFuncAndPop, 0x94 With, 0xA3 PushStringDictWord,
-    // 0xB0 DictCallFuncPop.
+    // Still on the no-op stub (genuinely unbuilt handlers): 0x28 StopDragMovie,
+    // 0x5B CallFuncAndPop, 0x94 With, 0xB0 DictCallFuncPop.
     // =======================================================================
 
     // -- run control / timeline --
     sGlobalTable[0x00] = &_FunctionAptActionReturn;
     sGlobalTable[0x04] = &_FunctionAptActionNextFrame;
+    sGlobalTable[0x05] = &_FunctionAptActionPrevFrame;
     sGlobalTable[0x06] = &_FunctionAptActionPlay;
     sGlobalTable[0x07] = &_FunctionAptActionStop;
     sGlobalTable[0x81] = &_FunctionAptActionGotoFrame;
@@ -242,6 +242,7 @@ void AptActionInterpreter::InitDispatchTable()
 
     // -- string-dictionary push / fused forms --
     sGlobalTable[0xA2] = &_FunctionAptActionPushStringDictByte;
+    sGlobalTable[0xA3] = &_FunctionAptActionPushStringDictWord;
     sGlobalTable[0xA4] = &_FunctionAptActionPushStringGetVar;
     sGlobalTable[0xA5] = &_FunctionAptActionPushStringGetMember;
     sGlobalTable[0xA6] = &_FunctionAptActionPushStringSetVar;

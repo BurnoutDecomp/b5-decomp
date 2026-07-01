@@ -266,6 +266,23 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictByte(AptActionInterpr
 }
 
 // ---------------------------------------------------------------------------
+// _FunctionAptActionPushStringDictWord (0xA3; PS3 @0x7F3FF4) -- push the dictionary
+// string a big-endian inline WORD indexes (the byte form's 16-bit sibling; the
+// console masks the scaled index to 16 bits -- typed indexing of the u16 here).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushStringDictWord(AptActionInterpreter* pInterp,
+                                                                LocalContextT* pCtx)
+{
+    const unsigned char* p = pCtx->mpProgramCounter;
+    const unsigned int nIndex = (static_cast<unsigned int>(p[0]) << 8) | p[1];   // big-endian u16
+    pCtx->mpProgramCounter += 2;
+
+    AptValue* pEntry = pInterp->mpRegisters[nIndex];        // console: *((4*idx & 0x3FFFC) + a1[17])
+    pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
+    pEntry->AddRef();
+}
+
+// ---------------------------------------------------------------------------
 // _FunctionAptActionPushStringGetMember @0x82B056E8 -- build an AptString from the
 // inline dictionary string, push it, then run the GetMember opcode (object[name]).
 // ---------------------------------------------------------------------------
