@@ -145,10 +145,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_nextFrame(AptValue* pContext, int 
     AptCharacterSpriteInstBase* const pSprite =
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
 
-    // FLAG: AptCIH::jumpToFrame (un-homed play-head seek) -- declared as an extern
-    // shim so this method compiles with the exact (node, mnGotoFrame + 1) seek.
-    extern void AptCIH_jumpToFrame(AptCIH* pNode, int nFrame);   // AptCIH::jumpToFrame @0x82B0...
-    AptCIH_jumpToFrame(pNode, pSprite->mnGotoFrame + 1);
+    // Seek the node's play-head (the real member AptCIH::jumpToFrame, AptCIH.cpp).
+    pNode->jumpToFrame(pSprite->mnGotoFrame + 1);
 
     pSprite->mnClipActionFlags &= ~KU_CLIP_PLAYING;
     return gpUndefinedValue;

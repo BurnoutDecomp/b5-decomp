@@ -175,8 +175,7 @@ static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
 
 // FLAG (un-homed AptCIH play-head seek -- declared as an extern shim, matching the
 // sibling AptCIHNativeFunctionHelper.cpp): seek the node's timeline to nFrame.
-//   AptCIH::jumpToFrame @0x82B0C... (X360).
-extern void AptCIH_jumpToFrame(AptCIH* pNode, int nFrame);
+//   AptCIH::jumpToFrame @0x82B0C... (X360) -- now the real member, called directly.
 
 // FLAG (un-homed AptActionInterpreter::valueToObject -- declared as an extern shim,
 // matching the sibling AptCIHNativeFunctionHelper.cpp): coerce pValue to the object
@@ -260,7 +259,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pIn
 
     if (pNode && pNode->getVtblIndex() != AptVFT_None)
     {
-        AptCIH_jumpToFrame(pNode, *pFrame);   // FLAG: un-homed play-head seek
+        pNode->jumpToFrame(*pFrame);          // real member (play-head seek)
         // clear the "playing" bit on the node's sprite instance.
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mnClipActionFlags
             &= ~KU_CLIP_PLAYING;
@@ -283,7 +282,7 @@ void AptActionInterpreter::_FunctionAptActionNextFrame(AptActionInterpreter* /*p
     AptCharacterSpriteInstBase* const pSprite =
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
 
-    AptCIH_jumpToFrame(pNode, pSprite->mnGotoFrame + 1);   // FLAG: un-homed play-head seek
+    pNode->jumpToFrame(pSprite->mnGotoFrame + 1);          // real member (play-head seek)
     pSprite->mnClipActionFlags &= ~KU_CLIP_PLAYING;
 }
 
