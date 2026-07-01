@@ -54,11 +54,10 @@ extern AptValue* gpUndefinedValue;                                              
 
 // ---- process-wide execution state (X360 .data globals) --------------------
 AptFrameStack* AptScriptFunctionBase::spFrameStack     = 0;   // off_8324E3DC
-AptValue**     AptScriptFunctionBase::spRegisters      = 0;   // off_8324E3D0
-int32_t        AptScriptFunctionBase::snRegisterCount  = 0;   // dword_8324E3D4 (live high-water)
-int32_t        AptScriptFunctionBase::snRegisterCapacity = 0; // dword_8324E3D8 (allocated slots)
-AptValue**     AptScriptFunctionBase::spRegBlockCurrentFrameBase  = 0;   // register-block frame base
-int32_t        AptScriptFunctionBase::snRegBlockCurrentFrameCount = 0;   // register-block frame slot count
+AptValue**     AptScriptFunctionBase::spRegBlockBase             = 0;   // dword_8324E3CC (heap anchor)
+AptValue**     AptScriptFunctionBase::spRegBlockCurrentFrameBase = 0;   // off_8324E3D0 (moving window base)
+int32_t        AptScriptFunctionBase::snRegBlockCurrentFrameCount = 0;  // dword_8324E3D4 (live window count)
+int32_t        AptScriptFunctionBase::snRegisterBlockSize        = 0;   // dword_8324E3D8 (allocated slots)
 
 // ===========================================================================
 // Construction / destruction
@@ -267,20 +266,20 @@ void AptScriptFunctionBase::CleanupAfterExecution(SavedExecutionState* pSaved)
 // growing the live high-water mark (AddRef new, Release the displaced value).
 void AptScriptFunctionBase::SetRegisterValue(int32_t nRegister, AptValue* pValue)
 {
-    if (nRegister + 1 > snRegisterCount)
-        snRegisterCount = nRegister + 1;
-    AptValue* pOld = spRegisters[nRegister];
-    spRegisters[nRegister] = pValue;
+    if (nRegister + 1 > snRegBlockCurrentFrameCount)
+        snRegBlockCurrentFrameCount = nRegister + 1;
+    AptValue* pOld = spRegBlockCurrentFrameBase[nRegister];
+    spRegBlockCurrentFrameBase[nRegister] = pValue;
     pValue->AddRef();
     pOld->Release();
 }
 
 // GetRegisterValue -- the symmetric read: return the live value in register slot
-// nRegister. The console inlines this trivial indexed accessor at its call sites
-// (e.g. stackPushIndirect); recovered here as the named member. No bounds check.
+// nRegister of the current window. The console inlines this trivial indexed accessor
+// at its call sites (e.g. stackPushIndirect); recovered here as the named member.
 AptValue* AptScriptFunctionBase::GetRegisterValue(int32_t nRegister)
 {
-    return spRegisters[nRegister];
+    return spRegBlockCurrentFrameBase[nRegister];
 }
 
 // PopStaticData (PS3 @0x7E0AB8) -- pop the current register-block frame back to
@@ -376,19 +375,28 @@ void AptScriptFunctionBase::SetInLocalScope(const EAStringC& key, AptValue* pVal
 // slots) from the operand-stack pool and fill it with `undefined`.
 void AptScriptFunctionBase::InitializeStaticData(int32_t nRegisterCount)
 {
-    snRegisterCapacity = nRegisterCount;
-    spRegisters = reinterpret_cast<AptValue**>(
-        gpAptOperandStackPool->Allocate(4 * nRegisterCount));
+    // X360 @0x82AE26C0: cap = *(parms+0x30); block = Allocate(4*cap); anchor
+    // (dword_8324E3CC) AND the moving window base (off_8324E3D0) both start at the
+    // block; every slot is seeded with the `undefined` singleton (off_8324D814);
+    // count = 0. x64: 8-byte AptValue* slots (the console allocates 4*cap bytes).
+    snRegisterBlockSize = nRegisterCount;
+    AptValue** lpBlock = reinterpret_cast<AptValue**>(
+        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * nRegisterCount));
+    spRegBlockBase             = lpBlock;
+    spRegBlockCurrentFrameBase = lpBlock;
     for (int32_t i = 0; i < nRegisterCount; ++i)
-        spRegisters[i] = gpUndefinedValue;
-    snRegisterCount = 0;
+        lpBlock[i] = gpUndefinedValue;
+    snRegBlockCurrentFrameCount = 0;
 }
 
 // ShutdownStaticData @0x82AE2758 -- return the register array to the pool.
 void AptScriptFunctionBase::ShutdownStaticData()
 {
-    gpAptOperandStackPool->Deallocate(spRegisters, 4 * snRegisterCapacity);
-    spRegisters = 0;
+    // Free the one flat block through the fixed anchor (dword_8324E3CC) -- the moving
+    // window base may have advanced past it. x64: 8-byte slots (console 4*).
+    gpAptOperandStackPool->Deallocate(spRegBlockBase, sizeof(AptValue*) * snRegisterBlockSize);
+    spRegBlockBase             = 0;
+    spRegBlockCurrentFrameBase = 0;
 }
 
 // RegisterReferences @0x82AE27B0 -- GC-mark the embedded hash + the scope pointers.

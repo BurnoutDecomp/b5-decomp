@@ -481,11 +481,10 @@ extern void AptApt_PopCallStackC(AptActionInterpreter* pInterp);
 // TU so the host bring-up can construct one to call initialize -- the X360
 // AptUpdateInitialize's job). Layout unchanged; included via AptActionInterpreter.h.
 
-// FLAG (AptScriptFunctionBase::InitializeStaticData @0x82AE26C0 -- the console
-// passes the whole AptInitParmsT; the in-header member declaration takes the
-// resolved register count, so the parms-shaped entry point is reached through a
-// flagged extern to keep initialize() faithful without touching that header).
-extern void AptScriptFunctionBase_InitializeStaticData(const AptInitParmsT* pParms);
+// AptScriptFunctionBase::InitializeStaticData @0x82AE26C0 is the real static member
+// (allocates the register block + seeds it undefined); the console passes the whole
+// AptInitParmsT and reads the count at +0x30 (now the recovered iRegisterCount field),
+// so initialize() below passes pParms->iRegisterCount. The parms-shaped shim is retired.
 
 // FLAG (console: a FrameStack-typed (tag 14) function name owning >=1 local resolves
 // to its first slot's captured value -- *Variable[8] when Variable[10] (local count)
@@ -541,7 +540,9 @@ void AptActionInterpreter::initialize(const AptInitParmsT* pParms)
     mnStackBase = 0;                                // console *(a1+100) = 0
     mbSkipTraceBytecodes = pParms->mbSkipTraceBytecodes;  // console *(a1+104) = *(a2+64)
 
-    AptScriptFunctionBase_InitializeStaticData(pParms);   // FLAG: parms-shaped entry
+    // X360 InitializeStaticData(parms) reads the register count at parms+0x30
+    // (@0x82AE26C0); the member takes the resolved count.
+    AptScriptFunctionBase::InitializeStaticData(pParms->iRegisterCount);
 }
 
 // ---------------------------------------------------------------------------

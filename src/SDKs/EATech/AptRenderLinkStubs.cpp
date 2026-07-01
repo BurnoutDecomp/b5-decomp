@@ -242,7 +242,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void AptMovie_runFrameActions(void* pFrameActionList) {}   // FLAG link-stub
     // AptObject_SetImplementedObjects RETIRED (2026-07-01): the real member
     // AptObject::SetImplementedObjects (AptObject.cpp) is called directly; the {} stub dropped it.
-    void AptScriptFunctionBase_InitializeStaticData(const AptInitParmsT* pParms) {}   // FLAG link-stub
+    // AptScriptFunctionBase_InitializeStaticData RETIRED (2026-07-01): the real static member
+    // AptScriptFunctionBase::InitializeStaticData allocates the register block at boot (the {}
+    // stub left the block unallocated, so the AS register file never existed).
     // AptScriptFunctionBase_PopStaticData RETIRED (2026-07-01): homed as the real static member
     // AptScriptFunctionBase::PopStaticData (AptScriptFunctionBase.cpp, asm-decoded register-block pop).
     void GlobalNotificationFunction(AptFilePtr* pFile) {}   // FLAG link-stub

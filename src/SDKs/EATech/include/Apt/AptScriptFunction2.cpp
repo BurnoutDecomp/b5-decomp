@@ -169,9 +169,9 @@ void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
     pSaved->mpSavedFrameStack = AptScriptFunctionBase::spFrameStack;
     AptScriptFunctionBase::spFrameStack = 0;
 
-    pSaved->mpSavedRegisters = AptScriptFunctionBase::spRegisters;
-    AptScriptFunctionBase::spRegisters += AptScriptFunctionBase::snRegisterCount;
-    AptScriptFunctionBase::snRegisterCount = 0;
+    // Push a fresh register window for this call (the inlined console sequence is
+    // exactly PushStaticData: save the base, advance past the live window, zero count).
+    pSaved->mpSavedRegisters = AptScriptFunctionBase::PushStaticData();
 
     const uint16_t uFlags = mpByteCode->muPreloadFlags;
     int32_t nReg = 1;
@@ -233,16 +233,8 @@ void AptScriptFunction2::CleanupAfterExecution(SavedExecutionState* pSaved)
 {
     AptScriptFunctionBase::CleanupAfterExecution(pSaved);
 
-    for (int32_t i = 0; i < AptScriptFunctionBase::snRegisterCount; ++i)
-    {
-        AptValue* pValue = AptScriptFunctionBase::spRegisters[i];
-        AptScriptFunctionBase::spRegisters[i] = gpUndefinedValue;
-        pValue->Release();
-    }
-
-    // The console computes (spRegisters - savedRegisters) as a 4-byte-pointer byte
-    // difference >> 2; on x64 the AptValue** subtraction is already in elements.
-    AptScriptFunctionBase::snRegisterCount =
-        static_cast<int32_t>(AptScriptFunctionBase::spRegisters - pSaved->mpSavedRegisters);
-    AptScriptFunctionBase::spRegisters = pSaved->mpSavedRegisters;
+    // Pop this call's register window back to the saved base (the inlined console
+    // sequence -- release each bound slot + reset it to `undefined`, then restore the
+    // base with the count spanning [savedBase, oldBase) -- is exactly PopStaticData).
+    AptScriptFunctionBase::PopStaticData(pSaved->mpSavedRegisters);
 }

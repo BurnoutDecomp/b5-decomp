@@ -15,7 +15,7 @@
 #include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"    // AptPseudoDisplayList
 #include "SDKs/EATech/include/Apt/AptActionQueue.h"          // AptActionQueueC
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // AptActionInterpreter
-#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // spRegisters / snRegisterCount (the AS register frame)
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // PushStaticData/PopStaticData (the AS register window)
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"     // AptInteger::Create
 #include "SDKs/EATech/include/Apt/AptDefine.h"               // gpNonGCPoolManager
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
@@ -96,12 +96,11 @@ extern unsigned char gbAptBackToScriptFired;    // byte_8324D807  (FLAG)
 // raw function pointer invoked through the ctr in the asm).
 extern void (*gpAptBackToScriptHook)(void* pPayload);   // dword_8324E828 (FLAG)
 
-// FLAG: the AS register-frame globals (off_8324E3D0 / dword_8324E3D4). These are
-// the same objects AptScriptFunctionBase::spRegisters / ::snRegisterCount name,
-// but those statics are protected; declared here under their underlying linkage
-// names so doFrameControls can save/restore the register frame around runStream.
-extern AptValue** gpAptRegisterBase;    // off_8324E3D0  == AptScriptFunctionBase::spRegisters
-extern int        gnAptRegisterCount;   // dword_8324E3D4 == AptScriptFunctionBase::snRegisterCount
+// The AS register-window globals (off_8324E3D0 / dword_8324E3D4) are
+// AptScriptFunctionBase::spRegBlockCurrentFrameBase / snRegBlockCurrentFrameCount;
+// save/restore around runStream is the public PushStaticData()/PopStaticData() pair
+// (the duplicate gpAptRegisterBase/gnAptRegisterCount externs -- the latter also
+// colliding with AptRegister.cpp's config global of the same name -- are retired).
 
 // FLAG (deferred VM / display-list callees -- owned by other TUs, declared with the
 // raw-but-faithful call-site signatures so the timeline driver links):

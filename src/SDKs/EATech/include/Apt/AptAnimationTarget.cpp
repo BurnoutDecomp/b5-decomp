@@ -288,12 +288,11 @@ extern u8  gAptAStickRight[];    // unk_8324E2D8 (player stride 16 bytes)
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 
-// The VM's parse-argument scratch heap: a bump pointer (off_8324E3D0) + a per-run
-// element count (dword_8324E3D4). The drains snapshot the bump pointer, advance it
-// past the run's args (4 * count), reset the count, then hand the snapshot back to
-// CleanupAfterExecution. FLAG: owned by the VM allocator TU.
-extern char* gAptParseArgHeapPtr;     // off_8324E3D0 (FLAG)
-extern int   gAptParseArgHeapCount;   // dword_8324E3D4 (FLAG)
+// The "parse-arg scratch heap" IS the AS register-block window (off_8324E3D0 /
+// dword_8324E3D4 == AptScriptFunctionBase::spRegBlockCurrentFrameBase /
+// snRegBlockCurrentFrameCount, the PS3-authoritative names): each run pushes a fresh
+// window (PushStaticData) and CleanupAfterExecution pops it back (PopStaticData).
+// The old gAptParseArgHeapPtr/Count duplicate globals are retired.
 
 // AptGetAnimationAtLevel @0x82B00788 -- the root AptCIH-at-level resolver RunActions
 // uses when the queued action's CIH is itself a level (type tag 0x25). Homed in
@@ -1362,10 +1361,9 @@ int AptAnimationTarget::RunActions()
                         || lpCharInst == nullptr
                         || -liDepth == *reinterpret_cast<int*>(lpCharInst + 16))   // *(v5+16)
                     {
-                        // Snapshot + reset the VM parse-arg scratch heap for this run.
-                        char* lpSavedHeap = gAptParseArgHeapPtr;                       // v7 = off_8324E3D0
-                        gAptParseArgHeapPtr += 4 * gAptParseArgHeapCount;
-                        gAptParseArgHeapCount = 0;
+                        // Push a fresh register-block window for this run (the console
+                        // inlines PushStaticData: save the base, advance, zero the count).
+                        AptValue** lpSavedHeap = AptScriptFunctionBase::PushStaticData();   // v7 = off_8324E3D0
 
                         // Resolve the run's timeline scope (the char inst at the nearest
                         // movie-clip(9)/stage(15)-tagged level above the action's CIH).
@@ -1420,9 +1418,10 @@ int AptAnimationTarget::RunActions()
                         // the scratch-heap restore the console does through r4 is
                         // reproduced inline here. FLAG (reconciliation): split of the
                         // X360's 2-arg CleanupAfterExecution.
-                        gAptParseArgHeapPtr = lpSavedHeap;
-                        AptScriptFunctionBase::SavedExecutionState lvLocalState;       // v19[80]
-                        gAptActionInterpreter.CleanupAfterExecution(&lvLocalState);
+                        // Pop the window back to the saved base (X360: the interpreter's
+                        // 2-arg CleanupAfterExecution(this, savedBase) -- the earlier
+                        // dummy-SavedExecutionState split is retired).
+                        gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
 
                         TickNewInsts();
                     }
@@ -1441,10 +1440,9 @@ int AptAnimationTarget::RunActions()
             ++gAptActionInterpreter.mnCIHStackTop;
             lpContext->AddRef();  // (**v13)(v13) vtbl[0] AddRef
 
-            // Snapshot + reset the parse-arg scratch heap, then call the closure.
-            char* lpSavedHeap = gAptParseArgHeapPtr;                                  // v14
-            gAptParseArgHeapPtr += 4 * gAptParseArgHeapCount;
-            gAptParseArgHeapCount = 0;
+            // Push a fresh register-block window, then call the closure (the console
+            // inlines PushStaticData here).
+            AptValue** lpSavedHeap = AptScriptFunctionBase::PushStaticData();         // v14
 
             gAptActionInterpreter.callFunction(
                 lpSlot->function.mpContext,    // a2 == *(v3+8)  (scope/this)
@@ -1453,9 +1451,8 @@ int AptAnimationTarget::RunActions()
                 nullptr,
                 nullptr);
 
-            gAptParseArgHeapPtr = lpSavedHeap;
-            AptScriptFunctionBase::SavedExecutionState lvLocalState;                  // v19[80]
-            gAptActionInterpreter.CleanupAfterExecution(&lvLocalState);
+            // Pop the window back to the saved base (the 2-arg console form).
+            gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
 
             // Pop the pushed context off the CIH/target stack, then the operand stack.
             reinterpret_cast<AptValueVector*>(
@@ -1579,10 +1576,8 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
             const int liArgCount = lrTimer.mParams.mnTop;       // v20 = v12[5]
             lpBound->AddRef();   // (**v17)(v17) vtbl[0] AddRef
 
-            // Snapshot + reset the parse-arg scratch heap for the call.
-            char* lpSavedHeap = gAptParseArgHeapPtr;            // v22
-            gAptParseArgHeapPtr += 4 * gAptParseArgHeapCount;
-            gAptParseArgHeapCount = 0;
+            // Push a fresh register-block window for the call (inlined PushStaticData).
+            AptValue** lpSavedHeap = AptScriptFunctionBase::PushStaticData();   // v22
 
             // Push the saved params (top-down) onto the interpreter operand stack,
             // AddRef-ing each (the stack owns a counted ref).
@@ -1605,9 +1600,8 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
                 nullptr,
                 nullptr);
 
-            gAptParseArgHeapPtr = lpSavedHeap;
-            AptScriptFunctionBase::SavedExecutionState lvLocalState;   // v26[8]
-            gAptActionInterpreter.CleanupAfterExecution(&lvLocalState);
+            // Pop the window back to the saved base (the 2-arg console form).
+            gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
 
             // Pop every operand the call left on the stack.
             gAptActionInterpreter.stackSafePop(gAptActionInterpreter.mnStackTop);  // Burnout_X360_Artist_01e3_0

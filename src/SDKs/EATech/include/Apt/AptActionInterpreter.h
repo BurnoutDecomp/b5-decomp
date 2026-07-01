@@ -45,7 +45,11 @@ struct AptInitParmsT
     uint8_t  mPad00[0x20];
     int32_t  iStackSize;        // [c:0x20] the operand-stack capacity
     int32_t  iCallStackDepth;   // [c:0x24] the four call-depth stacks' capacity
-    uint8_t  mPad28[0x40 - 0x28];
+    uint8_t  mPad28[0x30 - 0x28];
+    int32_t  iRegisterCount;    // [c:0x30] the AS register-block slot capacity (the
+                                //   X360 InitializeStaticData @0x82AE26C0 reads
+                                //   *(parms+48); default config word[12] == 128)
+    uint8_t  mPad34[0x40 - 0x34];
     uint8_t  mbSkipTraceBytecodes; // [c:0x40] -> mbSkipTraceBytecodes
 };
 
@@ -174,8 +178,11 @@ public:
     // ---- run scaffolding / native call dispatch --------------------------
     // CleanupAfterExecution @0x82AE9388 -- end-of-run cleanup: drop the pending
     // thrown value (mpAbortValue: render its string form then Release + clear) and
-    // restore the AptScriptFunctionBase per-call execution state (PopStaticData).
-    void CleanupAfterExecution(AptScriptFunctionBase::SavedExecutionState* pSaved);
+    // pop the register-block window back to pSavedBase (PopStaticData). The X360
+    // form is (this, a2): a2 is the register-window base the caller saved before the
+    // run (PushStaticData's return), so the arg is the void* base -- NOT a
+    // SavedExecutionState (that mis-typing was an earlier reconstruction guess).
+    void CleanupAfterExecution(void* pSavedBase);
 
     // callFunction @0x82AE3C08 -- invoke an AS callable value pFunction with nArgs
     // operands already on the stack (the function body run / native callback / new
