@@ -110,7 +110,7 @@ extern AptCIH* AptGetAnimationAtLevel(int nLevel);                       // _Apt
 extern void* AptPseudoDisplayList_FindInst(void* pList, void* pSource,   // AptPseudoDisplayList::FindInst
                                            unsigned char* pOutHit, void** ppExisting,
                                            void* pContext, void* pInfo);
-extern void  AptPseudoDisplayList_Insert(void* pList, AptPseudoCIH_t* pNode);   // (AptPseudoDisplayList::Insert)
+// AptPseudoDisplayList_Insert retired: the real member AptPseudoDisplayList::Insert is called directly.
 extern void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId);   // AptCharacterAnimation::ExecuteInitActions
 extern void* AptFile_operator(void* pDst, void* pSrc);                   // AptFile::operator=
 extern void* sub_82AFD150(void* a1, int a2);                             // remove-object handler (unhomed)
@@ -223,7 +223,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                             reinterpret_cast<void*>(static_cast<intptr_t>(CmdI32(pCmd, 0x08))),  // a4 (r6) = v13[2] -> lpContext (+0x08)
                             pCharacter);                               // v17
             }
-            AptPseudoDisplayList_Insert(pPseudoList, pNode);
+            pPseudoList->Insert(pNode);   // real member
         }
         else if (eTag == 4)
         {
@@ -238,7 +238,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                             reinterpret_cast<void*>(static_cast<intptr_t>(CmdI32(pCmd, 0x04))),  // a4 (r6) = v13[1] -> lpContext (+0x08)
                             nullptr);                                   // r7 = 0
             }
-            AptPseudoDisplayList_Insert(pPseudoList, pNode);
+            pPseudoList->Insert(pNode);   // real member
         }
         // any other tag (incl. the tag==3 break-without-place asm fallthrough):
         // continue to the next command.

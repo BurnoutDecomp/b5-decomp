@@ -180,7 +180,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId) {}   // FLAG link-stub
     void  AptFreeFontUnit(void* pUnit) {}   // FLAG link-stub
     void  AptFreeRenderingUnit(void* pUnit) {}   // FLAG link-stub
-    void  AptPseudoDisplayList_Insert(void* pList, AptPseudoCIH_t* pNode) {}   // FLAG link-stub
+    // AptPseudoDisplayList_Insert RETIRED (2026-07-01): homed member AptPseudoDisplayList::Insert
+    // (AptPseudoDisplayList.cpp, faithful list-insert) called directly in AptMovie; the {} stub dropped it.
     // The 6-arg place-command resolver the temporary-frame timeline path calls (X360
     // DoTemporaryFrameControls @0x82AEEB98 reaches it for the place tag). It is the
     // larger AptDisplayListState::findInst-family callee (X360 @0x82AD99F0 takes this
