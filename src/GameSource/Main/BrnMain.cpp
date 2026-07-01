@@ -1,36 +1,146 @@
 #ifdef WIN32
 #include <Windows.h>
+#include <shlobj.h>   // SHGetSpecialFolderPathA / SHCreateDirectoryExA (getGameSaveDir, TUB 0x53A910)
 #endif
 
 #include <GameShared/GameClasses/System/CgsHardwareInit.h>
+
+#include <cstdio>    // std::snprintf (CgsCore::SnPrintf stand-in for the config strings)
+#include <cstdlib>   // std::exit (the TUB save-dir failure path)
 
 #include "pc/gcm/renderengine/device.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
-// The top-level game module. In the full engine this is owned by the game's module/heap
-// system; here it is the single instance the boot path constructs and drives.
+// ============================================================================================
+// The PC boot shell. Two references govern this TU:
+//   * BURNOUT_X360_ARTIST.XEX `main` 0x827E60D8 -- the AUTHORITATIVE engine boot spine:
+//       stack-test log -> PrintConsoleMemory("Game startup memory usage") ->
+//       HardwareInit::InitializeHardware -> Allocators::InitMemoryMap ->
+//       BrnRendererModule::DeviceInitialise -> Allocators::Construct ->
+//       allocate BrnGameModule (0x9A1300 bytes, align 128, from the boot allocator) ->
+//       DebugMemoryInit -> placement-ctor -> store in the game-module global (off_830102D0) ->
+//       construct+prepare the FIVE IO buffer stacks (UpdateInput/UpdateOutput 0x780000,
+//       ResourceInput 0x40000, ResourceOutput 0x20000, Dispatch 0x18000; align 128) ->
+//       gm->Construct() (vtable+0) -> loop gm->Prepare(in,out,resIn,resOut,dispatch)
+//       (vtable+64, 0x823DB848) until true -> the frame loop `while (!terminated)
+//       gm->vtable+16()` -> loop gm->Release() (vtable+8) until true -> gm->Destruct()
+//       (vtable+12).
+//   * TUB_Burnout_PC_External.exe WinMain 0x79D580 (+ loadConfig 0x7CC610 / saveConfig
+//     0x7CCCD0 / getGameSaveDir 0x53A910) -- the reference for the PC-ONLY shell shape
+//     (BPR/TUB are reference-only for platform layers): IsAlreadyRunning guard,
+//     Device::Initialize, loadConfig (config.ini), InitializeHardware(lpCmdLine), the
+//     memory-map/allocator bring-up, Device::Start, the same game-module allocation +
+//     five stacks, Construct, "-skipvideos", the Prepare loop.
+// What is still gated here (allocator layer + BrnGameModule::Prepare(5 stacks) + the
+// threaded frame pump) is flagged at each site below.
+// ============================================================================================
+
+// The top-level game module. [gated] X360 main/TUB WinMain allocate this from the boot
+// resource allocator (X360: descriptor 0x9A1300/128 -> off_830102D0; TUB: gHeapResourceAllocator
+// -> gpBurnoutGame) after Allocators::Construct; until the allocator layer lands on this path,
+// the single instance is a file-static (zero-init BSS + ctor, so vtables/stages are valid).
 static BrnGame::BrnGameModule gGameModule;
 
 // The loading flow (case 8) prepares the game's one GameDataModule through this accessor.
 namespace BrnGame { BrnResource::GameDataModule* GetMainGameDataModule() { return &gGameModule.GetGameDataModule(); } }
 // The loading flow (stage 4) loads the game's one RootSoundModule through this accessor.
 namespace BrnGame { BrnSound::Module::RootSoundModule* GetMainSoundModule() { return &gGameModule.GetSoundModule(); } }
+// The game-module global itself (X360 off_830102D0 / TUB gpBurnoutGame); the scripted module
+// loads read the update IO stacks through it.
+namespace BrnGame { BrnGameModule* GetMainGameModule() { return &gGameModule; } }
 
+#ifdef WIN32
+namespace
+{
+    // TUB 0x53A910. Resolve "<CSIDL_LOCAL_APPDATA>\Criterion Games\Burnout Paradise\<lpcFile>".
+    // TUB passes the hardware-init window as the SHGetSpecialFolderPathA owner; the PC slice
+    // passes null (the folder resolve does not need a window).
+    void getGameSaveDir(char* lpcPath, const char* lpcFile)
+    {
+        lpcPath[0] = '\0';
+        SHGetSpecialFolderPathA(0, lpcPath, CSIDL_LOCAL_APPDATA, TRUE);
+        size_t luLen = strlen(lpcPath);
+        if (luLen > 0 && lpcPath[luLen - 1] != '\\' && lpcPath[luLen - 1] != '/')
+            strcat(lpcPath, "\\");
+        strcat(lpcPath, "Criterion Games");
+        strcat(lpcPath, "\\");
+        strcat(lpcPath, "Burnout Paradise");
+        strcat(lpcPath, "\\");
+        strcat(lpcPath, lpcFile);
+    }
+}
+#endif
+
+// TUB loadConfig 0x7CC610: ensure the save directory exists (error box + exit(-808) on
+// failure), then read config.ini. Implemented for the settings whose globals are
+// reconstructed (renderengine::gDisplayWidth/gDisplayHeight/gAdapterIndex/gAntiAliasing).
+// [gated] the remaining TUB reads -- AspectRatio (a 7-entry name table + gAspectRatioIndex
+// match loop), AdapterName, Shadows/EnvironmentMap/MotionBlur/Textures (0..2 clamps),
+// GammaCorrection (0..3.0f), Brightness/Contrast (0..100), SSAO, NumMonitors/CarMonitor,
+// HUDFullWidth, OverallQuality, the Telemetry checksum block -- wait on their globals'
+// homes in the PC renderer/settings layer.
 void LoadConfig()
 {
-    // TODO: Implement LoadConfig
+#ifdef WIN32
+    char lacPath[MAX_PATH];
+    getGameSaveDir(lacPath, "");
+    int liResult = SHCreateDirectoryExA(0, lacPath, 0);
+    if (liResult != ERROR_SUCCESS && liResult != ERROR_ALREADY_EXISTS && liResult != ERROR_FILE_EXISTS)
+    {
+        char lacText[260];
+        std::snprintf(lacText, sizeof(lacText),
+                      "Error trying to create Directory for the Save Game : %s\n\n Error Code : %d",
+                      lacPath, liResult);
+        MessageBoxA(0, lacText, "Directory Creation Error", MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
+        std::exit(-808);
+    }
+
+    getGameSaveDir(lacPath, "config.ini");
+    renderengine::gDisplayWidth  = GetPrivateProfileIntA("Display", "Width",  renderengine::gDisplayWidth,  lacPath);
+    renderengine::gDisplayHeight = GetPrivateProfileIntA("Display", "Height", renderengine::gDisplayHeight, lacPath);
+    renderengine::gAdapterIndex  = GetPrivateProfileIntA("Display", "AdapterIndex", renderengine::gAdapterIndex, lacPath);
+
+    // TUB clamps AntiAliasing to [0,16].
+    s32 liAntiAliasing = GetPrivateProfileIntA("Settings", "AntiAliasing", renderengine::gAntiAliasing, lacPath);
+    if (liAntiAliasing < 0)  liAntiAliasing = 0;
+    if (liAntiAliasing > 16) liAntiAliasing = 16;
+    renderengine::gAntiAliasing = liAntiAliasing;
+#endif
 }
 
+// TUB saveConfig 0x7CCCD0: validateMultiMonitors [gated -- multi-monitor globals], then write
+// config.ini. Mirrors LoadConfig's reconstructed subset; the remaining TUB writes are gated
+// with their reads (see LoadConfig).
 void SaveConfig()
 {
-    // TODO: Implement SaveConfig
+#ifdef WIN32
+    char lacPath[MAX_PATH];
+    getGameSaveDir(lacPath, "config.ini");
+    char lacValue[128];
+    std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gDisplayWidth);
+    WritePrivateProfileStringA("Display", "Width", lacValue, lacPath);
+    std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gDisplayHeight);
+    WritePrivateProfileStringA("Display", "Height", lacValue, lacPath);
+    std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gAdapterIndex);
+    WritePrivateProfileStringA("Display", "AdapterIndex", lacValue, lacPath);
+    std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gAntiAliasing);
+    WritePrivateProfileStringA("Settings", "AntiAliasing", lacValue, lacPath);
+#endif
 }
 
 void EnginePrepare()
 {
     // First log line of the run (also guarantees the log file is created on every boot).
     *CgsDev::Log::gpDebugPrint << "==== Burnout Paradise starting ====\n";
+
+    // [gated] X360 main 0x827E60D8 / TUB WinMain run the memory-map + allocator bring-up here
+    // (Allocators::InitMemoryMap / MemoryMap::FixUp, Allocators::Construct + the global
+    // graphics/resource/system/debug carves), then allocate the game module + the five IO
+    // buffer stacks from it and drive gm->Prepare(5 stacks) (vtable+64, X360 0x823DB848) in a
+    // loop until prepared. Until the allocator layer + that Prepare land, the game module is
+    // the file-static above and the update stacks are scratch-backed in BrnGameModule::
+    // Construct.
 
     // Create the D3D9 device on the window opened by InitializeHardware, then construct
     // the game's modules (the renderer module builds the loading-screen renderer).
@@ -44,9 +154,14 @@ void EngineUpdate()
     // Main loop: pump the window messages and, when idle, drive the real per-frame spine -
     // OnCompletionOfVsyncWait (decide this frame's sim-step count) -> UpdateThread (GamePrepare
     // once, then GameMain, which runs the active flow state's per-substep Update -> the loading
-    // FSM advances its scripted load) -> DispatchThread (render the loading screen). The full
-    // engine splits update + dispatch across threads with vsync sync; this runs them inline for
-    // the single-threaded boot. Runs until the window closes.
+    // FSM advances its scripted load) -> DispatchThread (render the loading screen). Runs until
+    // the window closes.
+    //
+    // [gated] the X360 frame loop is `while (!*(gm+10094112)) gm->vtable+16(gm)` (main
+    // 0x827E60D8): one virtual per frame that drives the update/dispatch/resource THREADS
+    // through CgsSystem::ThreadLayout with vsync sync; the terminated flag at +10094112 ends
+    // it. Until the threading core + that vtable entry land, the same IThreadClass hooks run
+    // inline single-threaded here.
     MSG lMsg;
     ZeroMemory(&lMsg, sizeof(lMsg));
     while (lMsg.message != WM_QUIT)
@@ -70,34 +185,48 @@ void EngineUpdate()
 void EngineRelease()
 {
     SaveConfig();
-    // TODO: Implement EngineRelease
+
+    // [gated] X360 main 0x827E60D8 ends with `while (!gm->Release());` (vtable+8 --
+    // BrnGameModule::Release, reconstructed) then gm->Destruct() (vtable+12 -- also
+    // reconstructed). Driving them now would hang: the placeholder engine modules
+    // (Input/World/GameState/Director/Effects/Network) release through the module base,
+    // whose ReleaseDataStructures placeholder reports false forever (and their real
+    // release ordering needs the un-modelled game-module state words). Wire the loop in
+    // when the placeholder modules grow real Release paths.
 }
 
 void GameRelease()
 {
     CgsSystem::HardwareInit::ReleaseHardware();
 
-    // TODO: Implement GameRelease
+    // [gated] the X360 gm->Destruct() (0x823BC868, reconstructed as BrnGameModule::Destruct)
+    // belongs here, but it destructs every engine module including the placeholders (see
+    // EngineRelease). The process exits right after, so the teardown is deferred with it.
 }
 
 #ifdef WIN32
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow )
 {
+    // TUB WinMain 0x79D580 shape: single-instance guard, device enumeration, config.ini,
+    // hardware/window init, then the engine spine.
     if (!CgsSystem::HardwareInit::IsAlreadyRunning())
     {
         renderengine::Device::Initialize();
         LoadConfig();
 
-        // TODO: these values are probably supposed to be set in global space or just used directly where needed
-        //lpSubKey = "SOFTWARE\\EA Games\\Burnout(TM) Paradise The Ultimate Box\\";
-        //lpValueName = "locale";
+        // [gated] TUB reads the registry locale here (HKLM "SOFTWARE\\EA Games\\Burnout(TM)
+        // Paradise The Ultimate Box\\", value "locale") for the language select; the locale
+        // consumer (the language/font system) is not reconstructed yet.
 
         CgsSystem::HardwareInit::InitializeHardware(lpCmdLine);
 
-        // The XAudio2 PC backend (CgsSystem::AudioOutputPC) is now opened on demand by the
-        // first real audio source -- the boot-movie sound streams (BrnGui::MovieManager ->
-        // CgsSystem::MovieAudioPC). The temporary 440 Hz boot test tone has served its
-        // purpose (output path confirmed by ear) and is removed.
+        // The XAudio2 PC backend (CgsSystem::AudioOutputPC) is opened on demand by the first
+        // real audio source -- the boot-movie sound streams (BrnGui::MovieManager ->
+        // CgsSystem::MovieAudioPC).
+
+        // [gated] TUB latches "-skipvideos" from lpCmdLine into the game module
+        // (gpBurnoutGame->mbSkipVideos) right after Construct; the mbSkipVideos member and
+        // its boot-video consumer are not in this layout yet.
 
         EnginePrepare();
         EngineUpdate();

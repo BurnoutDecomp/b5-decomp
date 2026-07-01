@@ -5,15 +5,16 @@ namespace BrnGame
     // BrnGame::BrnCpuMonitors::Construct @ 0x823A90A8
     // Initialise the CPU perfmon handle block: every monitor handle is set to the
     // -1 "no monitor registered" sentinel. The X360 Construct does ONLY this -- the
-    // actual CgsDev::PerfMonCpu::AddMonitor registration that fills these handles
-    // happens later in the owning BrnGameModule spine, not here. Store-for-store: 39
-    // stw(-1) at offsets {0,4,0xC..0x9C} -- the +0x8 word (mReserved08) is deliberately
-    // NOT written (asm hole), so touching only the 39 named handles reproduces the asm.
+    // AddMonitor registration that fills all 40 handles happens right after, in
+    // BrnGameModule::Construct (0x823C9EA8). Store-for-store: 39 stw(-1) at offsets
+    // {0,4,0xC..0x9C} -- +0x08 (miUT_NetworkAIRaceCar, per the corrected 40-field
+    // layout) is NOT sentinel-seeded by the asm; it is AddMonitor'd immediately
+    // after, so the miss is benign and reproduced here.
     void BrnCpuMonitors::Construct()
     {
         miUT_TotalUpdate      = -1;
         miUT_EachUpdate       = -1;
-        miUT_NetworkAIRaceCar = -1;
+        // (miUT_NetworkAIRaceCar deliberately not written -- the X360 sentinel fill skips +0x08.)
         miUT_Network          = -1;
         miUT_GameState        = -1;
         miUT_GUI              = -1;
@@ -27,6 +28,7 @@ namespace BrnGame
         miUT_CrashManager     = -1;
         miUT_Physics          = -1;
         miUT_World            = -1;
+        miUT_Replay           = -1;
         miUT_Resource         = -1;
         miUT_DebugManager     = -1;
         miUT_RenderAll        = -1;

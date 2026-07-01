@@ -49,39 +49,34 @@ namespace BrnGame
         , miLanguageCycleTimerHi(0)
         , mpCgsGuiModule(0)
     {
-        mCpuMonitors.Construct();
+        // (The X360 ctor does not touch mCpuMonitors -- Construct() sentinel-fills and
+        // registers the monitors, at its X360 position.)
     }
 
     BrnGameModule::~BrnGameModule()
     {
     }
 
-    // @ BrnGameModule.cpp:155 - construct the game's modules. Loading-screen path: the renderer
-    // module (which constructs the loading-screen renderer) and the flow state machine, then
-    // enter the initial loading screen (SetState runs the state's OnEnter, which raises the
-    // renderer's loading-screen signal). The full Construct (all 11 modules + IO buffer stacks
-    // + worker threads) is reconstructed incrementally.
+    // @ BrnGameModule.cpp:155 (X360 0x823C9EA8) - construct the game module: base, debug
+    // systems, the CPU monitor registrations, then EVERY engine module (X360 order), then the
+    // flow state machine. Sites the X360 body has that are still gated on unreconstructed
+    // members/subsystems are flagged inline.
     void BrnGameModule::Construct()
     {
-        // The X360 Construct (0x823C9EA8) calls the module base's Construct first (then
-        // CheckClassSizes + field init). The base Construct just resets the prepare/release
-        // stages + constructs the two DataBuffers (flag/pointer init only - boot-safe).
+        // X360 step 1: the module base (resets the prepare/release stages + constructs the two
+        // DataBuffers -- flag/pointer init only).
         CgsModule::ModuleSingleBuffered::Construct();
 
-        // Construct the owned GameDataModule (the loading flow's case 8 then Prepares this same
-        // instance via BrnGame::GetMainGameDataModule()). Construct currently just marks it a new
-        // module type; the real resource bring-up (banks/pools/allocators) lands in step 5b.
-        mGameDataModule.Construct(0);
+        // [gated] X360 steps 2-3: CheckClassSizes, then the game-state field seeds at
+        // +10094156..+10097260 (release stage = 7, module counts 11/4, the engine-modules-loaded
+        // flag = 0) -- those words fall in this layout's omitted member ranges.
 
-        // Construct the owned RootSoundModule (the loading flow's stage 4 then Prepares this same
-        // instance via BrnGame::GetMainSoundModule()). The X360 dispatches RootSoundModule::Construct
-        // (0x826AF350) via the module list; here it is constructed directly with the other engine
-        // modules. (The audio engine -- Playback/Logic sub-modules -- grows on top of Prepare.)
-        mSoundModule.Construct();
-
-        // Per-frame IO buffer stacks the update spine pushes/pops GUI+director buffers on. The
-        // full Construct owns these via the module IO system + the hardware memory arena; for
-        // the boot/loading path they are backed by fixed scratch blocks here.
+        // Per-frame IO buffer stacks the update spine + the scripted module loads allocate their
+        // per-frame IO buffers on. [PC stand-in] On the X360 these five stacks are OWNED BY main()
+        // (0x827E60D8) -- UpdateInput/UpdateOutput 0x780000, ResourceInput 0x40000, ResourceOutput
+        // 0x20000, Dispatch 0x18000 bytes, align 128, carved from the boot allocator -- and handed
+        // to BrnGameModule::Prepare (vtable +64, 0x823DB848), which stores them at +10055424..
+        // Until that Prepare + the allocator layer land, two fixed scratch blocks stand in.
         static CgsModule::IOBufferStack sUpdateInputStack;
         static CgsModule::IOBufferStack sUpdateOutputStack;
         static u8 saUpdateInputMem[64 * 1024];
@@ -93,33 +88,107 @@ namespace BrnGame
         mpUpdateInputBufferStack = &sUpdateInputStack;
         mpUpdateOutputBufferStack = &sUpdateOutputStack;
 
-        // Construct the renderer (which constructs the loading-screen renderer) and the flow
-        // state machine, then enter the initial loading screen (OnEnter raises the renderer's
-        // loading-screen signal). The full Construct also builds the 11 engine modules + worker
-        // threads; reconstructed incrementally.
-        mRenderModule.Construct();
-
-        // Bring up the in-game debug systems (the perfmon HUD + its 2D renderer) so the debug overlay
-        // draws over the loading screen. Construct wires the debug singleton + UI + the manager pools;
-        // ConstructRenderer builds the 2D debug renderer (mp2dRender). BrnRendererModule::Render then
-        // drives DebugManager::Render each frame through the singleton (mpInstance set here).
+        // X360 step 4: the debug manager (params block seeded from unk_820DC120 + overrides +
+        // Allocators::mpInternalDebugAllocator as the RW allocator; the PC slice passes DEFAULT).
+        // ConstructRenderer is the PC bring-up of the 2D debug renderer so the overlay draws over
+        // the loading screen. [gated] the "Force Quit to Start Menu" debug toggle + the FOPEN
+        // "%sMAP_ARTIST.BIN" memory-map name globals that follow on the X360.
         mDebugManager.Construct(&CgsDev::DebugManagerConstructParameters::DEFAULT);
         mDebugManager.ConstructRenderer();
+
+        // X360 step 5: sentinel-fill the CPU monitor handle block (BrnCpuMonitors::Construct
+        // 0x823A90A8), then register all 40 monitors. Rows are (name, page, minimum, budget-ms,
+        // libperf-tagged), transcribed store-for-store from 0x823C9EA8 (the 5-arg AddMonitor:
+        // on PPC the float budget occupies the r6 slot, so r7 is the libperf flag).
+        mCpuMonitors.Construct();
+        {
+            using CgsDev::PerfMonCpu::AddMonitor;
+            typedef CgsDev::PerfMonCpuPage EPage;
+            mCpuMonitors.miUT_TotalUpdate      = AddMonitor("UT: Total simulation",          (EPage)0,  false, 210.0f, false);
+            mCpuMonitors.miUT_EachUpdate       = AddMonitor("UT: Each sim step",             (EPage)0,  false,  70.0f, true);
+            mCpuMonitors.miUT_NetworkAIRaceCar = AddMonitor("      Network + AI + Racecar",  (EPage)0,  false,  10.0f, true);
+            mCpuMonitors.miUT_Network          = AddMonitor("         Network",              (EPage)0,  false,   3.0f, true);
+            mCpuMonitors.miUT_AI               = AddMonitor("         AI",                   (EPage)0,  false,   5.0f, true);
+            mCpuMonitors.miUT_RaceCar          = AddMonitor("         RaceCar",              (EPage)0,  false,   3.0f, true);
+            mCpuMonitors.miUT_GameState        = AddMonitor("      GameState",               (EPage)0,  false,   3.0f, true);
+            mCpuMonitors.miUT_Replay           = AddMonitor("      Replay",                  (EPage)0,  false,   3.0f, true);
+            mCpuMonitors.miUT_GUI              = AddMonitor("      GUI",                     (EPage)0,  false,   2.0f, true);
+            mCpuMonitors.miUT_Director         = AddMonitor("      Director",                (EPage)0,  false,   5.0f, true);
+            mCpuMonitors.miUT_Sound            = AddMonitor("      Sound",                   (EPage)0,  false,   5.0f, true);
+            mCpuMonitors.miUT_Effects          = AddMonitor("      Effects",                 (EPage)0,  false,   0.5f, true);
+            mCpuMonitors.miUT_Traffic          = AddMonitor("      Traffic",                 (EPage)0,  false,   8.0f, true);
+            mCpuMonitors.miUT_Triggers         = AddMonitor("      Triggers",                (EPage)0,  false,   0.5f, true);
+            mCpuMonitors.miUT_CrashManager     = AddMonitor("      CrashManager",            (EPage)0,  false,   1.0f, true);
+            mCpuMonitors.miUT_Physics          = AddMonitor("      Physics",                 (EPage)0,  false,  28.0f, true);
+            mCpuMonitors.miUT_World            = AddMonitor("      World",                   (EPage)0,  false,   4.0f, true);
+            mCpuMonitors.miUT_Resource         = AddMonitor("UT: ResourceSystem",            (EPage)0,  false,   5.0f, false);
+            mCpuMonitors.miUT_RenderAll        = AddMonitor("UT: Render",                    (EPage)0,  false,  15.0f, false);
+            mCpuMonitors.miUT_FrustumTesting   = AddMonitor("      FrustumTests",            (EPage)0,  false,   2.0f, false);
+            mCpuMonitors.miUT_RenderMainScreen = AddMonitor("      RenderMainScreen",        (EPage)0,  false,   7.0f, false);
+            mCpuMonitors.miUT_RenderShadowMap  = AddMonitor("      RenderShadows",           (EPage)0,  false,   1.5f, false);
+            mCpuMonitors.miUT_RenderEnvMap     = AddMonitor("      RenderEnvMap",            (EPage)0,  false,   1.5f, false);
+            mCpuMonitors.miUT_RenderFX         = AddMonitor("      RenderEffects",           (EPage)0,  false,   1.0f, false);
+            mCpuMonitors.miUT_RenderGUI        = AddMonitor("      RenderGUI",               (EPage)0,  false,   2.0f, false);
+            mCpuMonitors.miDT_DispatchToGpu    = AddMonitor("DT: DispatchToGPU",             (EPage)0,  false,  95.0f, false);
+            mCpuMonitors.miUT_ThreadSync       = AddMonitor("UT: Thread sync",               (EPage)0,  false,  10.0f, false);
+            mCpuMonitors.miUT_WaitOnDispatch   = AddMonitor("      WaitOnDispatch",          (EPage)0,  false,  10.0f, false);
+            mCpuMonitors.miUT_DebugManager     = AddMonitor("UT: Debug manager",             (EPage)0,  false,   0.0f, false);
+            mCpuMonitors.miUT_RaceCar_SQ       = AddMonitor("RC SceneQueries",               (EPage)12, false,   0.5f, true);
+            mCpuMonitors.miUT_Traffic_SQ       = AddMonitor("Traf SceneQueries",             (EPage)2,  false,   0.5f, true);
+            mCpuMonitors.miUT_Triggers_SQ      = AddMonitor("Trigger SceneQueries",          (EPage)5,  false,   0.5f, true);
+            mCpuMonitors.miUT_GameState_Bridge = AddMonitor("GameState Bridges",             (EPage)11, false,   0.1f, true);
+            mCpuMonitors.miUT_GUI_Bridge       = AddMonitor("GUI Bridges",                   (EPage)11, false,   0.1f, true);
+            mCpuMonitors.miUT_AI_Bridge        = AddMonitor("AI Bridges",                    (EPage)11, false,   0.1f, true);
+            mCpuMonitors.miUT_RaceCar_Bridge   = AddMonitor("RaceCar Bridges",               (EPage)11, false,   0.1f, true);
+            mCpuMonitors.miUT_Traffic_Bridge   = AddMonitor("Traffic Bridges",               (EPage)11, false,   0.1f, true);
+            mCpuMonitors.miUT_Director_Bridge  = AddMonitor("Bridges",                       (EPage)13, false,   0.1f, true);
+            mCpuMonitors.miUT_Director_SQ      = AddMonitor("Scene Queries",                 (EPage)13, false,   1.0f, true);
+            mCpuMonitors.miUT_SoundUpdate      = AddMonitor("Sound",                         (EPage)14, false,  10.0f, true);
+        }
+
+        // X360 step 6: construct EVERY engine module, in the X360 call order (member offsets
+        // confirmed by GameRelease 0x823F03C8's typed per-module IO buffers). Modules whose real
+        // Construct exists run it; the placeholder modules run the module base's Construct (which
+        // is also what makes their Release/Destruct paths well-defined).
+        mSoundModule.Construct();        // +0x8A7F00  RootSoundModule::Construct 0x826AF350 (slot 0)
+        mRenderModule.Construct();       // +0x004400  BrnRendererModule::Construct (direct call)
+        mGameDataModule.Construct();     // +0x5F4A00  GameDataModule::Construct 0x82671B90 (slot 0, NO args)
+        mWorldModule.Construct();        // +0x010E80  [gated] X360 passes &mCpuMonitors (slot +64);
+                                         //            the WorldModule placeholder takes none yet.
+        mInputModule.Construct();        // +0x6E9430  (slot 0; placeholder -> base)
+        mGuiModule.Construct();          // +0x6EA820  [gated] X360 slot +84 with two sub-objects
+                                         //            (+0x65A1D0/+0x65A1F4, inside the GameData
+                                         //            module); the movie-hosting slice takes none.
+        mGameStateModule.Construct();    // +0x669380  (slot 0; placeholder -> base)
+        mEffectsModule.Construct();      // +0x878A00  (slot 0; placeholder -> base)
+        mDirectorModule.Construct();     // +0x6B0C90  [gated] X360 slot +64; placeholder -> base.
+        mReplayModule.Construct();       // +0x8BD680  (slot 0; ReplayModule -> base)
+        mNetworkModule.Construct();      // +0x8C39C0  [gated] X360 slot +64 with arg 0; placeholder -> base.
+
+        // [gated] X360 steps 7-9: the DebugComponentPerfMonCpu::SetPageName table (pages 0-23:
+        // "General".."Flapt"), the vsync-rate 50/60 M_CGS_PERFMON_CPU_SETGAMEFREQUENCY check, the
+        // event-receiver queue @+10094268 (capacity 1024, align 16), the update/lookback timers +
+        // CgsSystem::FrameRateManager::Construct, and the Debug/Framerate + Debug/Sim (Step/Play
+        // via StepFrameCB/PlayFrameCB) + screenshot debug-interface registrations, and the two
+        // replay serialisers (DirectorBridgeSerialiser/GameModuleSerialiser::Construct) -- their
+        // members/subsystems are not in this layout yet.
 
         // NOTE: the bitmap debug font is NOT brought up here -- the D3D device does not exist yet at
         // Construct time (Device::Start's create lands later), so the atlas raster's FixUp would get a
         // null device and produce a textureless font. It is brought up from DispatchThread instead,
         // once the render path has the device live (see below).
 
+        // X360 step 10: the main game flow controller (GameMainFlowController::Construct
+        // @+10094180), then the PC boot enters the initial loading screen (OnEnter raises the
+        // renderer's loading-screen signal).
         mMainFlowStateMachine.Construct();
         mMainFlowStateMachine.SetState(BrnGameMainFlowController::E_MGS_INITIAL_LOADING_SCREEN);
 
-        // GUI module (movie-hosting slice): construct + load VIDEOS\VIDEOLIST.BUNDLE (metadata only, so no
-        // device needed at Construct), and publish gpActiveMovieManager so the renderer draws the active
-        // movie. The X360 loads the GuiModule via the loading flow's LoadGUIModule stage + drives it through
-        // the module dispatch; this is the minimal hookup (construct here, Update in GameMain). It stays
-        // idle until a 508 GuiEventPlayVideo is queued (BrnBootVideos in Phase 3).
-        mGuiModule.Construct();
+        // GUI module Prepare (movie-hosting slice): load VIDEOS\VIDEOLIST.BUNDLE (metadata only, no
+        // device needed) + publish gpActiveMovieManager so the renderer draws the active movie. The
+        // X360 prepares the GuiModule via the loading flow's LoadGUIModule stage + the module
+        // dispatch; this is the minimal PC hookup (Update runs in GameMain). It stays idle until a
+        // 508 GuiEventPlayVideo is queued (BrnBootVideos in Phase 3).
         mGuiModule.Prepare();
     }
 
@@ -224,15 +293,25 @@ namespace BrnGame
         return leOld;
     }
 
-    // @ BrnGameModule.cpp:1580 - one-time per-game-instance prepare (the full body loads the
-    // global texture dictionary + game-state module). The loading-screen renderer's own assets
-    // are loaded by the renderer; this returns done so UpdateThread advances to the main loop.
+    // @ BrnGameModule.cpp:1580 (X360 0x823EFBD0) - one-time per-game-instance prepare: under the
+    // GameData IO buffer locks, a resumable stage machine that (1) queues LoadBundle requests for
+    // "shaders.bndl", "GlobalTextureDictionary.bin" and "Language\\Fonts\\Default.font" through
+    // the GameData input's RequestInterface<32768>, (2) waits for the 3 loads + acquires the
+    // "gamedb://...blobbyshadow.TextureConfig2d" resource, then (3) runs the per-module game
+    // prepares. [gated] the whole body rides the GameData request/bundle-streaming path (the
+    // module's file IO + bank/pool population, still the allocator gate) and the game-module IO
+    // buffer members -- none in this layout yet. Returns done so UpdateThread advances; the
+    // loading-screen renderer loads its own assets meanwhile.
     bool BrnGameModule::GamePrepare()
     {
         return true;
     }
 
-    // @ BrnGameModule.cpp:2650 - teardown counterpart of GamePrepare. Returns done.
+    // @ BrnGameModule.cpp:2650 (X360 0x823F03C8) - teardown counterpart of GamePrepare: under the
+    // GameData IO locks, an 11-stage resumable release that drives the per-module game releases
+    // (incl. the World release with a scratch BrnWorldIO::UpdateOutputBuffer and the GameState
+    // release with a scratch GameStateModuleIO::OutputBuffer, both on the update output stack).
+    // [gated] same dependencies as GamePrepare. Returns done.
     bool BrnGameModule::GameRelease()
     {
         return true;
@@ -335,12 +414,13 @@ namespace BrnGame
             s32 liStep = 0;
             do
             {
-                // FLAG: ARTIST 0x823CB498 brackets Create/DestroyStaticIOBuffers with the
-                // monitor at mCpuMonitors+0x10 (=miUT_Network), not +0x14 (miUT_GameState). Fixed.
-                PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Network);
+                // ARTIST 0x823CB498 brackets Create/DestroyStaticIOBuffers with the monitor at
+                // mCpuMonitors+0x10 -- under the corrected 40-field layout (no +0x08 hole,
+                // miUT_Replay @+0x40) that handle is miUT_GameState.
+                PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
                 CreateStaticIOBuffers();
                 mFrameRateManager.miPrevNumSimulationStepsRequired = liStep + 1;
-                PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Network);
+                PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
 
                 PerfMonCpu::StartMonitor(mCpuMonitors.miUT_EachUpdate);
                 BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
@@ -356,9 +436,9 @@ namespace BrnGame
 
                 if (liStep != miNumSimFramesRequired - 1)
                 {
-                    PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Network);
+                    PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
                     DestroyStaticIOBuffers();
-                    PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Network);
+                    PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
                 }
 
                 ++liStep;

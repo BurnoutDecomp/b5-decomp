@@ -402,8 +402,12 @@ namespace BrnResource
 
     bool GameDataModule::CreateAllocators(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return true; }
 
-    void GameDataModule::Construct(const void* /*lpInitOptions*/)
+    void GameDataModule::Construct()
     {
+        // X360 0x82671B90 first runs the module base's Construct (stage/DataBuffer reset; it
+        // clears mbIsNewModule, which is re-raised below).
+        CgsModule::ModuleSingleBuffered::Construct();
+
         mbIsNewModule = true;   // X360 *(this+4)=1 (new module type; base Prepare skips the old IO path)
 
         // [5b] Bring up the resource memory system. This is an incrementally-populated stand-in for the

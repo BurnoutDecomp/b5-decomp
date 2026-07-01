@@ -4,8 +4,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"   // DebugManager::Update during load
 #include "GameSource/Resource/BrnGameDataModule.h"   // GameDataModule + BrnGame::GetMainGameDataModule()
+#include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (LoadSoundModule args)
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // RootSoundModule + BrnGame::GetMainSoundModule() (stage 4)
-#include "GameSource/Resource/BrnResourceAllocator.h"     // BrnResource::GetGameDataGeneralAllocator() (stage 4)
+#include "GameSource/Game/BrnGameModule.hpp"         // BrnGame::GetMainGameModule() (the update IO stacks)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -57,6 +58,52 @@ void LoadingScriptedState::OnLeave() {}
 void LoadingScriptedState::Update() {}
 void LoadingScriptedState::Render() {}
 void LoadingScriptedState::FinishLoading() {}
+
+// @ 0x823E75A8 - one frame of the sound-module load. The X360 body:
+//   * CreateIOBuffer<Io::RootInputBuffer>(gm->mpUpdateInputBufferStack,  &lpRootIn,  "Sound")
+//     CreateIOBuffer<Io::RootOutputBuffer>(gm->mpUpdateOutputBufferStack, &lpRootOut, "Sound")
+//   * prepared = gm->mSoundModule.Prepare(lpGameDataOutputBuffer->GetAllocatorList(),
+//                    gm->mpUpdateInputBufferStack, gm->mpUpdateOutputBufferStack,
+//                    lpRootIn, lpRootOut)                                   (vtable +64)
+//   * still preparing: LockForRead(lpRootOut); append the RootOutputBuffer's AttribSys queue
+//     (VariableEventQueue<32768,16>::Append<2048,16>) + its resource-request interface
+//     (AppendRequestInterface<4096>) into lpGameDataInputBuffer; UnlockForRead.
+//   * destroy the two buffers (output first) and return `prepared`.
+bool LoadingScriptedState::LoadSoundModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                                           const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
+{
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
+    CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+
+    BrnSound::Module::Io::RootInputBuffer*  lpRootInputBuffer  = 0;
+    BrnSound::Module::Io::RootOutputBuffer* lpRootOutputBuffer = 0;
+    lpUpdateInputStack->CreateIOBuffer<BrnSound::Module::Io::RootInputBuffer>(&lpRootInputBuffer, "Sound");
+    lpUpdateOutputStack->CreateIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(&lpRootOutputBuffer, "Sound");
+
+    // [follow-on] The loading state's per-frame GameData IO bracket (the X360 Update creates the
+    // GameData input/output buffers each frame and threads them through every LoadXxxModule) is
+    // not reconstructed yet, so the buffers arrive null here; the allocator list is then null and
+    // Prepare's carve stages stay allocator-gated (see BrnRootSoundModule.cpp).
+    const BrnResource::GameDataIO::AllocatorList* lpAllocatorList =
+        lpGameDataOutputBuffer ? &lpGameDataOutputBuffer->GetAllocatorList() : 0;
+
+    bool lbPrepared = BrnGame::GetMainSoundModule()->Prepare(
+        lpAllocatorList, lpUpdateInputStack, lpUpdateOutputStack,
+        lpRootInputBuffer, lpRootOutputBuffer);
+
+    if (!lbPrepared && lpGameDataInputBuffer)
+    {
+        // Still preparing: forward the module's resource requests into the GameData input.
+        // [gated] the RootOutputBuffer request interfaces + getters (the X360's
+        // GetAttribSysRequestInterface / GetResourceRequestInterface reads under LockForRead)
+        // are still the minimal Io slice; the forwarding lands when those members do.
+    }
+
+    lpUpdateOutputStack->DestroyIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(&lpRootOutputBuffer);
+    lpUpdateInputStack->DestroyIOBuffer<BrnSound::Module::Io::RootInputBuffer>(&lpRootInputBuffer);
+    return lbPrepared;
+}
 
 // --- MainGameFlowStateInitialLoadingScreen (the boot loading screen) --------------------
 MainGameFlowStateInitialLoadingScreen::MainGameFlowStateInitialLoadingScreen()
@@ -167,12 +214,12 @@ void MainGameFlowStateInitialLoadingScreen::Update()
             AdvanceLoadingStage(E_LOADINGSTAGE_SOUND_MODULE);
         break;
     case E_LOADINGSTAGE_SOUND_MODULE:
-        // X360: LoadSoundModule (0x823E75A8) -> RootSoundModule::Prepare (vtable+64) with the GameData
-        // general allocator + the Root IO buffers. Now a REAL load: drive RootSoundModule::Prepare each
-        // frame until it reports prepared, then advance. [minimal] the X360 LoadSoundModule also creates
-        // RootInput/RootOutput IO buffers via the IOBufferStack + forwards the module's resource requests
-        // into the GameData input on the still-preparing path; those are grown when Prepare consumes them
-        // (Prepare currently reports prepared immediately).
+        // X360: LoadSoundModule (0x823E75A8) -- the real per-frame load: create the Root sound IO
+        // buffer pair on the update IO stacks, drive RootSoundModule::Prepare (vtable+64) until it
+        // reports prepared, forwarding its resource requests meanwhile, then advance. [follow-on]
+        // the X360 Update threads this frame's GameData input/output buffers into every
+        // LoadXxxModule (the per-frame GameData IO bracket at the top of the real Update body);
+        // that bracket isn't reconstructed yet, so the args are null (see LoadSoundModule).
         {
             static bool s_bLoggedSoundLoad = false;
             if (!s_bLoggedSoundLoad)
@@ -181,7 +228,7 @@ void MainGameFlowStateInitialLoadingScreen::Update()
                 if (CgsDev::Message::gxMessageFilterFlags & 1)
                     *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading stage 4 (SoundModule) -- real load\n";
             }
-            if (BrnGame::GetMainSoundModule()->Prepare(BrnResource::GetGameDataGeneralAllocator(), 0, 0, 0, 0))
+            if (LoadSoundModule(0, 0))
                 AdvanceLoadingStage(E_LOADINGSTAGE_NETWORK);
         }
         break;

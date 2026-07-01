@@ -29,6 +29,10 @@ extern bool gBrnLoadingScreenShouldShow;
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }
 
+// The GameData per-frame IO payloads the scripted-load helpers thread through (pointer-only
+// here; the helper bodies include the real home, GameSource/Resource/BrnGameDataModuleIO.h).
+namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct OutputBuffer; } }
+
 // --- base -------------------------------------------------------------------------------
 struct MainGameFlowState
 {
@@ -64,6 +68,16 @@ struct LoadingScriptedState : public MainGameFlowState
     virtual void FinishLoading();   // vtable +16
 
 protected:
+    // X360 0x823E75A8 (DWARF BrnGameMainFlowStates.h:58 / BrnLoadingScriptedState.cpp:733).
+    // One frame of the sound-module load: create the Root sound IO buffer pair on the game
+    // module's update IO stacks, drive RootSoundModule::Prepare (vtable +64) with the
+    // GameData allocator list, and -- while it reports "still preparing" -- forward the
+    // module's resource requests out of the RootOutputBuffer into the GameData input buffer.
+    // Returns true once the module reports prepared. The sibling LoadXxxModule helpers
+    // (DWARF :43-:74) are reconstructed with the stages that drive them.
+    bool LoadSoundModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                         const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
+
     ELoadingStateStage meLoadingStateStage;
     bool               mbLoadingPaused;
 };

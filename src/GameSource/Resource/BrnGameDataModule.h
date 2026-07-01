@@ -39,7 +39,8 @@ namespace BrnResource
         // [DIAG] ctor moved to the .cpp with logging to prove whether it runs + sets mbIsNewModule.
         GameDataModule();
 
-        void Construct(const void* lpInitOptions);   // deferred
+        void Construct();   // 0x82671B90 (slot 0; the X360 takes NO arguments -- the old
+                            // `const void* lpInitOptions` param here was fabricated)
         bool Prepare(void* lpInputBuffer, void* lpOutputBuffer);   // 0x82673F38
         bool Release();                               // deferred
         void Destruct();                              // deferred
