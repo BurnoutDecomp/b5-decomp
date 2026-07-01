@@ -43,8 +43,14 @@
 
 #include "SDKs/EATech/include/Apt/AptCIH.h"   // AptCIH base (+ its GC operator new/delete)
 
+int AptValueInitialize();   // AptInit.cpp @0x82B02800 -- the designated singleton bootstrap
+
 class AptCIHNone : public AptCIH
 {
+    // The console's value-singleton bootstrap constructs the one pinned "EmptyCIH"
+    // placeholder (dword_8324D700 = new AptCIHNone) -- the sole external ctor user.
+    friend int ::AptValueInitialize();
+
 protected:
     // @0x82B00DC8 -- the X360 ctor:
     //   AptCIH::AptCIH(this, /*pCharacter*/0, /*pParent*/0);  // base node ctor

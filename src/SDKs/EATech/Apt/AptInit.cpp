@@ -53,6 +53,8 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"        // AptBoolean::Initialize (befriended)
 #include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"         // AptLookup::Initialize
 #include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"       // AptRegister::Initialize + gnAptRegisterCount
+#include "SDKs/EATech/include/Apt/AptCIHNone.h"                 // AptCIHNone (the "EmptyCIH" placeholder; befriended)
+#include "SDKs/EATech/include/Apt/AptString/EAString.h"         // EAStringC ("EmptyCIH" name assignment)
 
 // StringPool::Initialize is reached through this free wrapper (AptStringPool.cpp): the
 // full StringPool.h cannot be included here (the interpreter headers already carry
@@ -315,14 +317,16 @@ void* AptCommonInitialize(void* pConfig)
 //   3. AptLookup::Initialize()   (the slot-indexed lookup table)
 //   4. AptRegister::Initialize() (the AS register-value file; reads gnAptRegisterCount,
 //      published from the config block by AptUpdateInitialize before this runs)
-// FLAG (deferred -- the remaining singletons): AptCIHNone "EmptyCIH" (dword_8324D700),
-// AptRenderingContext, AptExtern, AptKey, AptGlobal(+ExtensionObject), the AptString
-// empties and the 7 AS native-function singletons still have protected bootstraps not
-// yet exposed to this TU; they keep their documented null pre-init state (the engine
-// short-circuits on null) until each is befriended/homed. Returns 0 (the console's
-// r3 == the last ReleaseValues result).
+//   5. gpAptEmptyCIH (dword_8324D700) = a pinned AptCIHNone named "EmptyCIH" (the
+//      absent-CIH placeholder handle; befriended)
+// FLAG (deferred -- the remaining singletons): AptRenderingContext, AptExtern, AptKey,
+// AptGlobal(+ExtensionObject), the AptString empties and the 7 AS native-function
+// singletons still have protected bootstraps not yet exposed to this TU; they keep
+// their documented null pre-init state (the engine short-circuits on null) until each
+// is befriended/homed. Returns 0 (the console's r3 == the last ReleaseValues result).
 // ===========================================================================
 extern AptValue* gpUndefinedValue;   // off_8324D814 (defined in AptGlobals.cpp)
+extern AptCIH*   gpAptEmptyCIH;      // dword_8324D700 (defined in AptGlobals.cpp)
 
 int AptValueInitialize()
 {
@@ -332,6 +336,15 @@ int AptValueInitialize()
     AptBoolean::Initialize();
     AptLookup::Initialize();
     AptRegister::Initialize();
+
+    // dword_8324D700 -- the shared "EmptyCIH" placeholder handle: a pinned AptCIHNone
+    // (X360: AptCIH::operator new(40) + AptCIHNone(); then InitFromBuffer("EmptyCIH")
+    // assigned into the node's instance-name slot [+8] with the RAII temp released).
+    if (gpAptEmptyCIH == nullptr)
+    {
+        gpAptEmptyCIH = new AptCIHNone();
+        gpAptEmptyCIH->mInstanceName = EAStringC("EmptyCIH");
+    }
 
     // FLAG (deferred): the remaining singletons (see the header comment) stay null.
     return 0;
