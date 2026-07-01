@@ -1009,19 +1009,20 @@ namespace BrnGui
         // BLOCKED (converter data, NOT a code gate -- deferred by this HOST FACADE, the same way
         // Fixup's SetupCharacter call and the per-frame tick (lbTickReady) are held off): the
         // GUIAPT/TITLE_SCREEN02 bundle is NOT converter-clean for this walk yet --
-        //   (a) char[1] @ the movie def-base is a CONSOLE 4-byte record (un-widened by the converter),
-        //       so IncCharacterList's `mpCharacterTable[1]->mpAnimationFile` reads garbage; and
-        //   (b) the serialised movie def-base lays its character count/table at +0x18/+0x20, which the
-        //       runtime AptCharacterAnimation struct (mnCharacterCount@+0x0C / mpCharacterTable@+0x10)
-        //       does not yet match -- a TYPE/converter reconciliation, tracked with the tick bring-up.
+        //   char[1] @ the movie def-base is a CONSOLE 4-byte record (un-widened by the converter),
+        //   so IncCharacterList's `mpCharacterTable[1]->mpAnimationFile` reads garbage.
+        // (The struct/offset mismatch that ALSO blocked this is now FIXED: the runtime
+        // AptCharacterAnimation struct is the serialized 64-bit def-base -- charCount@+0x18 /
+        // charTable@+0x20, matching Fixup -- so IncCharacterList reads the correct offsets; only
+        // the un-widened char[1] DATA bug remains, hence the deferral stands.)
         // Running the faithful MakeCharacterAnimationInst here AVs on that data (verified). So this
         // facade DEFERS the movie-root instantiation exactly as it defers the tick; the engine body
         // stays faithful and un-gated. RE-ENABLE (drop the guard, call MakeCharacterAnimationInst +
-        // SetCharacterInst) once the bundle is uniformly 64-bit / the def-base layout is reconciled --
-        // the same converter fix that unblocks lbTickReady. The root CIH created above is real and live.
+        // SetCharacterInst) once the bundle is uniformly 64-bit (char[1] widened) -- the same
+        // converter fix that unblocks lbTickReady. The root CIH created above is real and live.
         CgsDev::Log::WriteToLog(
-            "[AptRT] faithful: MakeCharacterAnimationInst DEFERRED (converter: char[1] un-widened + "
-            "def-base charCount@+0x18 vs runtime +0x0C) -- engine body faithful; re-enable with the tick.\n");
+            "[AptRT] faithful: MakeCharacterAnimationInst DEFERRED (converter: char[1] un-widened) -- "
+            "struct now serialized-64 (charCount@+0x18); engine body faithful; re-enable with the tick.\n");
 
         s_bFaithfulInstantiated = true;
         std::snprintf(lac, sizeof(lac),

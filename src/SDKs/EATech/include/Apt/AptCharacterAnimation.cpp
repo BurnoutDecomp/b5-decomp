@@ -252,27 +252,24 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
     (void)pData;        // console a2 (r4) -- the asm never reads it
     (void)pDataBlock;   // console a3 (r5) -- the asm never reads it
 
-    void* const pThis = pCharAnim;
-
     // ---- pass 1: resolve the import table -------------------------------------
-    const int32_t nImports = BlobI32(pThis, 0x20);          // mnImportCount (this[8])
+    // The def-base head fields (importCount/table, charCount/table) are read through
+    // the serialized 64-bit AptCharacterAnimation struct (charCount@0x18, charTable@
+    // 0x20, importCount@0x34, importTable@0x38 -- the same offsets Fixup relocates).
+    const int32_t nImports = pCharAnim->mnImportCount;      // [c:0x20] mnImportCount
     if (nImports > 0)
     {
         for (int32_t i = 0; i < nImports; ++i)
         {
-            void* pEntry = BlobAt(BlobPtr(pThis, 0x24), i * 16);   // mpImportTable[i] (this[9])
-            const int32_t nId = BlobI32(pEntry, 0x08);             // importEntry.mnId
+            AptImportEntry& rEntry = pCharAnim->mpImportTable[i];   // [c:0x24] stride 0x20
+            const int32_t nId = rEntry.mnId;                       // importEntry.mnId
 
             // FindExport(entry.mpFile, entry.mpClassName): the imported movie's export
-            // table resolves the class name to a character. entry.mpFile is the import's
-            // loaded AptFile (+0xC), entry.mpClassName is +4.
-            AptFile* const pImportFile = reinterpret_cast<AptFile*>(BlobPtr(pEntry, 0x0C));
-            const char* const pClassName = reinterpret_cast<const char*>(BlobPtr(pEntry, 0x04));
-            AptCharacter* const pResolved = pImportFile->FindExport(pClassName);
+            // table resolves the class name to a character.
+            AptCharacter* const pResolved = rEntry.mpFile->FindExport(rEntry.mpClassName);
 
-            // Store the resolved character into mpCharacterTable[importId] (the char
-            // table is a host AptCharacter** -- the Unresolve slot-store convention).
-            AptCharacter** const pTable = reinterpret_cast<AptCharacter**>(BlobPtr(pThis, 0x10));
+            // Store the resolved character into mpCharacterTable[importId].
+            AptCharacter** const pTable = pCharAnim->mpCharacterTable;   // [c:0x10] charTable
             pTable[nId] = pResolved;
 
             // If it resolved, copy the import's AptFile into the resolved character's
@@ -283,7 +280,7 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
                 // AptFilePtr assign (char->mpAnimationFile = entry.mpFile): only when
                 // the slots differ. inc new, dec+delete old (the console operator=).
                 AptFile** pCharSlot  = &pChar->mpAnimationFile;       // resolvedChar +0xC
-                AptFile** pEntrySlot = reinterpret_cast<AptFile**>(BlobAt(pEntry, 0x0C)); // importEntry +0xC
+                AptFile** pEntrySlot = &rEntry.mpFile;                // importEntry AptFile slot
                 if (pCharSlot != pEntrySlot)
                 {
                     AptFile* const pNew = *pEntrySlot;
@@ -302,10 +299,10 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
     }
 
     // ---- pass 2: turn stored cross-reference INDICES into character pointers ----
-    const int32_t nChars = BlobI32(pThis, 0x0C);            // mnCharacterCount (this[3])
+    const int32_t nChars = pCharAnim->mnCharacterCount;    // [c:0x0C] mnCharacterCount
     if (nChars > 0)
     {
-        AptCharacter** const pTable = reinterpret_cast<AptCharacter**>(BlobPtr(pThis, 0x10));
+        AptCharacter** const pTable = pCharAnim->mpCharacterTable;   // [c:0x10] charTable
         for (int32_t i = 0; i < nChars; ++i)
         {
             void* pChar = pTable[i];
@@ -320,11 +317,15 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
                     // Type-8 import character: its two cross-reference INDEX fields
                     // (+0x10, +0x14) name characters by table index; rewrite them to
                     // live pointers via mpCharacterTable.
-                    AptCharacter** const pT = reinterpret_cast<AptCharacter**>(BlobPtr(pThis, 0x10));
+                    AptCharacter** const pT = pCharAnim->mpCharacterTable;
                     // FLAG (x64 fork): +0x10 and +0x14 are adjacent 4-byte index fields
                     // on the console; an 8-byte host pointer written at +0x10 would clobber
                     // +0x14, so both indices are read BEFORE either pointer is stored (the
                     // console writes 4-byte slots, so ordering was immaterial there).
+                    // FLAG (deferred sub-record): the type-8 char-entry cross-reference field
+                    // offsets (+0x10/+0x14) are the CONSOLE record layout; their GUIAPT64
+                    // widening lands with the char-entry sub-record recovery (this Link pass is
+                    // the deferred cross-reference resolution, not the runtime instantiation path).
                     const int32_t nIdx0 = BlobI32(pChar, 0x10);
                     const int32_t nIdx1 = BlobI32(pChar, 0x14);
                     BlobPtrRef(pChar, 0x10) = pT[nIdx0];
@@ -336,12 +337,14 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
             {
                 // Type-3 character: an ARRAY of cross-reference indices (count @+0x14,
                 // array @+0x18); rewrite each entry to a live character pointer.
+                // FLAG (deferred sub-record): +0x14/+0x18 are the console char-entry offsets
+                // (see the type-8 note); GUIAPT64 widening lands with the sub-record recovery.
                 const int32_t nRefs = BlobI32(pChar, 0x14);
                 if (nRefs > 0)
                 {
                     for (int32_t r = 0; r < nRefs; ++r)
                     {
-                        AptCharacter** const pT = reinterpret_cast<AptCharacter**>(BlobPtr(pThis, 0x10));
+                        AptCharacter** const pT = pCharAnim->mpCharacterTable;
                         void* pArr = BlobPtr(pChar, 0x18);                 // char[6] (the index array)
                         const int32_t nIdx = BlobI32(pArr, r * 4);
                         *reinterpret_cast<void**>(BlobAt(pArr, r * 4)) = pT[nIdx];
@@ -363,11 +366,9 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
 //   Fixup();
 //   v8 = *(a3+28); if (v8) v8 -= a3; *(a3+28) = v8;   // un-relocate mnSecondaryOffset
 //
-// CRITICAL (x64): `*(a1+48) = 0` is a 4-BYTE stw at this+0x30 -- it must NOT be an 8-byte
-// pointer clear. On our 8-byte serialised def-base layout the importCount lives at +0x34
-// (right after the +0x30 scratch), so clearing 8 bytes at +0x30 would ZERO importCount.
-// The typed `mpResolveState` member is a void* (8 bytes on x64), so it is cleared as an
-// explicit 4-byte int at +0x30 to match the console stw and preserve importCount@+0x34.
+// x64 (matches the console `*(a1+48)=0` 4-byte stw): mnResolveScratch is the 4-byte int
+// at the serialised def-base +0x30 (the "ms" slot); importCount sits at +0x34 right after
+// it, so this clears exactly the scratch word without touching importCount.
 //
 // FLAG (x64): the pConstFile->mnSecondaryOffset in-place relocate/un-relocate around Fixup
 // is a 32-bit-slot += 64-bit-base write-back that x64 cannot perform; it is a temporary state
@@ -375,10 +376,8 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
 // and un-relocate on this path, so it is omitted (as the prior homing already flagged).
 AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile* pConstFile, void* pBlock)
 {
-    // Faithful 4-byte clear of the resolve-state scratch at this+0x30 (the console `*(a1+48)=0`
-    // stw). Writing the 8-byte `mpResolveState` member would clobber the serialised importCount
-    // at +0x34 -- see the note above.
-    *reinterpret_cast<int32_t*>(reinterpret_cast<char*>(this) + 0x30) = 0;
+    // Clear the resolve-state scratch at the serialised def-base +0x30 (console `*(a1+48)=0`).
+    mnResolveScratch = 0;
     return Fixup(pBase, pConstFile, pBlock);
 }
 
@@ -599,29 +598,32 @@ namespace
 
 // ExportClassDefinitionAssets @0x82AEA8C8 -- run each pending "__Packages." class-
 // definition frame-label exactly once (then mark it consumed by negating its
-// indicator). this[c:0x28]/[c:0x2C] is the label/indicator list (stride 8: {name@+0,
-// indicator@+4}); this[c:+4] is the timeline-command table the matching action stream
-// lives in. FAITHFUL to the asm; the VM globals are FLAGged externs.
+// indicator). this[c:0x28]/[c:0x2C] is the label/indicator list (an AptInitEntry list:
+// {name@+0, indicator@8}); this[c:+4] is the timeline-command table the matching action
+// stream lives in. The def-base head fields are read through the serialized 64-bit struct
+// (initCount@0x40, initList@0x48, framesOffset@0x08). FAITHFUL to the asm; the VM globals
+// are FLAGged externs.
 void* AptCharacterAnimation::ExportClassDefinitionAssets(void* pA2)
 {
     void* result = nullptr;
 
-    const int32_t nLabels = BlobI32(this, 0x28);            // *(this+0x28)
+    const int32_t nLabels = mnInitListCount;                // [c:0x28] initCount
     for (int32_t iLabel = 0; iLabel < nLabels; ++iLabel)
     {
-        void* pEntry = BlobAt(BlobPtr(this, 0x2C), iLabel * 8);   // mpInitList + i*8
+        AptInitEntry& rEntry = mpInitList[iLabel];          // [c:0x2C] initList (stride 0x10)
 
         // indicator < 0 -> already consumed -> stop the whole walk (asm: blt -> exit).
-        if (BlobI32(pEntry, 0x04) < 0)
+        if (rEntry.mnIndicator < 0)
             break;
 
         // strstr(name, "__Packages.") -- only the package-definition labels qualify.
-        result = const_cast<char*>(::strstr(reinterpret_cast<const char*>(BlobPtr(pEntry, 0x00)), "__Packages."));
+        // (the label entry reuses the init-entry ptr slot as the frame-label name)
+        result = const_cast<char*>(::strstr(reinterpret_cast<const char*>(rEntry.mpInitObject), "__Packages."));
         if (result)
         {
             // Find the type-8 timeline command whose id [+4] == this label's indicator.
-            const int32_t nIndicator = BlobI32(BlobAt(BlobPtr(this, 0x2C), iLabel * 8), 0x04);
-            void* pCmdHdr = BlobPtr(this, 0x04);             // *(this+4)
+            const int32_t nIndicator = rEntry.mnIndicator;
+            void* pCmdHdr = mpFrames;                        // [c:0x04] framesOffset (the command table)
             const int32_t nCmds = BlobI32(pCmdHdr, 0x00);    // *( *(this+4) )
             if (nCmds > 0)
             {
@@ -651,7 +653,7 @@ void* AptCharacterAnimation::ExportClassDefinitionAssets(void* pA2)
 
         consumeLabel:
             // Mark the label consumed: indicator = -indicator.
-            int32_t& rIndicator = BlobI32Ref(BlobAt(BlobPtr(this, 0x2C), iLabel * 8), 0x04);
+            int32_t& rIndicator = mpInitList[iLabel].mnIndicator;
             rIndicator = -rIndicator;
         }
     }
@@ -665,7 +667,7 @@ void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
 {
     void* result = nullptr;
 
-    void* pCmdHdr = BlobPtr(this, 0x04);                 // *(this+4)
+    void* pCmdHdr = mpFrames;                            // [c:0x04] framesOffset (command table)
     const int32_t nCmds = BlobI32(pCmdHdr, 0x00);        // *( *(this+4) )
     if (nCmds <= 0)
         return result;
@@ -693,7 +695,7 @@ void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
 
     // stream = *(*(4*iCmd + *(*(this+4)+4)) + 8) -- re-read the table (the asm reloads
     // *(this+4) after the call) and index the matched command's +8 stream.
-    void** pCmdTable2 = reinterpret_cast<void**>(BlobPtr(BlobPtr(this, 0x04), 0x04));
+    void** pCmdTable2 = reinterpret_cast<void**>(BlobPtr(mpFrames, 0x04));   // [c:0x04] framesOffset
     void* pStream = BlobPtr(pCmdTable2[iCmd], 0x08);
     AptActionInterpreter_runStream(&gAptActionInterpreterVM, pStream, pA2, -1, pScope);
 
@@ -708,30 +710,31 @@ void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
 // ExecuteInitActions @0x82AF4340 -- locate the init-list bucket for character nId
 // (either directly in mpImportTable [c:0x24]/[c:0x20], or by chasing the import via
 // GetIDFromImportFile), then run every pending type-3 init command in that bucket and
-// finally the import-resolved init action. FAITHFUL to the asm; the bucket records are
-// the serialised import/init blobs addressed by their console offsets.
+// finally the import-resolved init action. FAITHFUL to the asm; the def-base head fields
+// are read through the serialized 64-bit struct (importCount@0x34, importTable@0x38 stride
+// 0x20). FLAG (deferred sub-record): the deeper import->AptFile->embedded-movie chase keeps
+// the console record offsets pending the AptFile/embedded-movie sub-record recovery -- this
+// init-action VM path is deferred (never runtime-reached in the current bring-up).
 void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
 {
     void* result = nullptr;
     int32_t nResolvedId = nId;                            // v5 (r27)
     void* pBucketOwner  = this;                           // v6 (r28)
 
-    // Locate nId in mpImportTable (entry stride 0x10, id at entry+8 console).
+    // Locate nId in mpImportTable (the serialized 64-bit import entry: id at +0x10).
     int32_t iSlot = -1;
-    const int32_t nImports = BlobI32(this, 0x20);         // *(this+0x20)
+    const int32_t nImports = mnImportCount;               // [c:0x20] importCount
     // v9 default = *(*(*(pA2+0x20)+4)+4) + 0x10 (the supplied CIH's init bucket).
     void* pBucket = BlobAt(BlobPtr(BlobPtr(BlobPtr(pA2, 0x20), 0x04), 0x04), 0x10);
     if (nImports > 0)
     {
-        void* pImports = BlobAt(BlobPtr(this, 0x24), 0x08);   // mpImportTable + 8
         for (int32_t i = 0; i < nImports; ++i)
         {
-            if (BlobI32(pImports, 0x00) == nId)
+            if (mpImportTable[i].mnId == nId)             // [c:0x24] importTable, id@+8 console
             {
                 iSlot = i;
                 break;
             }
-            pImports = BlobAt(pImports, 0x10);
         }
     }
 
@@ -742,10 +745,13 @@ void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
         if (nResolvedId != -1)
         {
             // pBucketOwner = imported movie root; pBucket = its init list for the id.
-            void* pImportEntry = BlobAt(BlobPtr(this, 0x24), iSlot * 0x10);   // mpImportTable + iSlot*16
-            void* pImportedRoot = BlobPtr(BlobPtr(pImportEntry, 0x0C), 0x14);  // *( *(entry+0xC)+0x14 )
+            AptImportEntry& rImportEntry = mpImportTable[iSlot];   // [c:0x24] importTable (stride 0x20)
+            // FLAG (deferred sub-record): entry.mpFile (the AptFile @+0x18 GUIAPT64) is chased
+            // into its embedded movie (+0x14) and then root+0x10/+0x20 -- these AptFile/embedded-
+            // movie offsets stay the console record layout pending their sub-record recovery.
+            void* pImportedRoot = BlobPtr(rImportEntry.mpFile, 0x14);          // *( entry.mpFile+0x14 )
             pBucketOwner = BlobAt(pImportedRoot, 0x10);                        // root+0x10 (addi r28,r11,0x10)
-            void* pInitTable = BlobPtr(pBucketOwner, 0x10);                    // *(pBucketOwner+0x10) == *(root+0x20) (lwz r11,0x10(r28))
+            void* pInitTable = BlobPtr(pBucketOwner, 0x10);                    // *(pBucketOwner+0x10) == *(root+0x20)
             pBucket = BlobAt(BlobPtr(pInitTable, nResolvedId * 4), 0x10);
         }
     }
@@ -788,11 +794,19 @@ void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
 // their console byte offsets (the FLAGged opaque-record handling). nBase is the load
 // base subtracted off every relocated slot. The atomic ref-count drops + the VM
 // deferred-release queue are FLAGged (console interlocked / single VM thread).
+//
+// FLAG (GUIAPT64 transcode pending): this teardown walk still addresses the def-base +
+// its tables at the CONSOLE record offsets/strides (charCount@0x0C, charTable@0x10 walked
+// with a 4-byte slot stride, importTable stride 0x10, initList stride 8). It is the exact
+// inverse of the CONSOLE Fixup; the matching GUIAPT64 in-place transcode (the inverse of
+// AptCharacterAnimation::Fixup's 64-bit offsets/strides above) lands when the movie-UNLOAD
+// path is enabled -- Unresolve is never reached in the current (load-only, instantiation-
+// deferred) bring-up. mnResolveScratch@0x30 is at the SAME offset in both layouts.
 void* AptCharacterAnimation::Unresolve(int32_t nBase)
 {
     void* result = nullptr;
 
-    mpResolveState = 0;                                   // *(this+0x30) = 0
+    mnResolveScratch = 0;                                // *(this+0x30) = 0
 
     // ---- pass 1: release each character's animation file (or rewrite type-8 ids) --
     const int32_t nChars1 = BlobI32(this, 0x0C);
@@ -1084,7 +1098,7 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
     BlobI32Ref(this, 0x24) = BlobI32(this, 0x24) ? (BlobI32(this, 0x24) - nBase) : 0;
     BlobI32Ref(this, 0x2C) = BlobI32(this, 0x2C) ? (BlobI32(this, 0x2C) - nBase) : 0;
 
-    mpResolveState = 0;                                  // *(this+0x30) = 0
+    mnResolveScratch = 0;                                // *(this+0x30) = 0
     return result;
 }
 
@@ -1092,6 +1106,12 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
 // negative while the instance ran. Two passes: (1) per type-5/9 character, find the
 // embedded movie's pending type-8 label and un-negate it; (2) per init-list entry,
 // un-negate any negative indicator. FAITHFUL to the asm.
+//
+// FLAG (GUIAPT64 transcode pending): like Unresolve, this addresses the def-base + its
+// tables at the CONSOLE record offsets/strides (charCount@0x0C / charTable@0x10 at a
+// 4-byte slot stride, initCount@0x28 / initList@0x2C at stride 8). It runs only on the
+// AptCharacterAnimationInst teardown (deferred with the instantiation), so the console
+// form is kept; the GUIAPT64 offset/stride transcode lands with the un-defer.
 void AptCharacterAnimation::ResetInitIndicators()
 {
     // ---- pass 1: the type-5/9 characters' embedded label tables -------------------
