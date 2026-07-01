@@ -447,6 +447,8 @@ public:
     static void _FunctionAptActionCallMethod           (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionCallMethodPop        (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionCallMethodSetVar     (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionCallFuncAndPop       (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionDictCallFuncPop      (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionDictCallFuncSetVar   (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionDictCallMethodPop    (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionDictCallMethodSetVar (AptActionInterpreter* pInterp, LocalContextT* pContext);
@@ -477,6 +479,7 @@ public:
     static void _FunctionAptActionCloneSprite          (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionRemoveSprite         (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionStartDragMovie       (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionStopDragMovie        (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionSetTarget            (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionSetTarget2           (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionTargetPath           (AptActionInterpreter* pInterp, LocalContextT* pContext);

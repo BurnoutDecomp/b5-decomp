@@ -486,6 +486,21 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
 }
 
 // ---------------------------------------------------------------------------
+// StopDragMovie (0x28; PS3 @0x7E9FA8) -- end the current drag: Release the held
+// drag target (the console's target->[+0x18]->[+0x3C] slot, the same slot
+// StartDragMovie's AptDragState::mpDragTarget encapsulates) and reset it to the
+// `undefined` singleton.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionStopDragMovie(AptActionInterpreter* /*pInterp*/,
+                                                           LocalContextT* /*pContext*/)
+{
+    AptDragState* const pDrag = AptApt_GetDragState();  // FLAG: host drag-state singleton
+    if (pDrag->mpDragTarget)
+        pDrag->mpDragTarget->Release();
+    pDrag->mpDragTarget = gpUndefinedValue;
+}
+
+// ---------------------------------------------------------------------------
 // SetTarget @0x82B093C8 -- AS SetTarget opcode: redirect the run's "current target"
 // to the inline-encoded path. An empty path clears the target (releasing the prior
 // one). A path beginning with '/' or '.' is walked relative to the run scope ('..'

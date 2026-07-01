@@ -162,6 +162,41 @@ void AptActionInterpreter::_FunctionAptActionCallMethodPop(AptActionInterpreter*
 }
 
 // ---------------------------------------------------------------------------
+// CallFuncAndPop (0x5B; PS3 @0x823970) -- CallFunction, drop the result, drain the
+// deferred-release vector once the operand stack has fully unwound. CallMethodPop's
+// function-call sibling.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionCallFuncAndPop(AptActionInterpreter* pInterp,
+                                                            LocalContextT* pContext)
+{
+    _FunctionAptActionCallFunction(pInterp, pContext);
+    pInterp->stackPop();                  // drop the call result (Release)
+    if (pInterp->mnStackTop == 0)
+        AptApt_FlushDeferredReleases();   // console: vector-count && top==0 -> ReleaseValues
+}
+
+// ---------------------------------------------------------------------------
+// DictCallFuncPop (0xB0; PS3 @0x8237BC) -- push the dictionary entry an inline BYTE
+// indexes (the inlined stackPush + AddRef), CallFunction, drop the result, drain on
+// stack-empty. The fused dict-push + CallFuncAndPop form.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionDictCallFuncPop(AptActionInterpreter* pInterp,
+                                                             LocalContextT* pContext)
+{
+    const unsigned int nIndex = *pContext->mpProgramCounter;   // inline byte dict index
+    pContext->mpProgramCounter += 1;
+
+    AptValue* pEntry = pInterp->mpRegisters[nIndex];           // console: *(4*idx + a1[17])
+    pInterp->mpStack[pInterp->mnStackTop++] = pEntry;          // inlined stackPush
+    pEntry->AddRef();
+
+    _FunctionAptActionCallFunction(pInterp, pContext);
+    pInterp->stackPop();                                       // drop the call result (Release)
+    if (pInterp->mnStackTop == 0)
+        AptApt_FlushDeferredReleases();
+}
+
+// ---------------------------------------------------------------------------
 // CallMethodSetVar @0x82B054E8 -- CallMethod, then SetVariable, then flush.
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionCallMethodSetVar(AptActionInterpreter* pInterp,
