@@ -647,7 +647,8 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
                 // x64 fork widens the base to the full 8-byte load base + walks native-8 strides. For the
                 // ROOT (charTable[0], type 9) this is where mpFrames @char+0x20+0x08 (the 0x5180 offset)
                 // becomes a live pointer -- the exact relocation doFrameControls/tick need (was the frame-
-                // table-un-relocated AV). FLAG: the AS action-stream re-parse inside resolve64 is deferred.
+                // table-un-relocated AV). FLAG: _parseStream (XB1 sub_14084A920) inside resolve64 is the
+                // remaining AS gate -- the VM is live (2026-07-01); see AptMovie.cpp's resolve64 FLAG.
                 {
                     // The relocation bounds the host stashed (CgsGui::gAptResourceSpanBase/Size);
                     // base == the load base == the AptData resource base on our path. When the host

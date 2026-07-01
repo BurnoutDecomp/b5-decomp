@@ -792,14 +792,16 @@ void* AptMovie::resolve(int nBase, void* a3, int a4)
 // so that after resolve64 NO command record (root OR imported) holds an un-relocated
 // file offset, and doFrameControls / queueFrameActions / placeObject read them safely.
 //
-// FLAG (deferred AS-VM EXECUTION -- honest boundary): the console additionally calls
-// AptActionInterpreter::_parseStream to re-parse each action stream's BYTECODE; that
-// transcode (AptActionInterpreter_ResolveTranscode) still truncates a 64-bit base, and
-// the interpreter's runStream is stubbed. So here the stream POINTERS are relocated
-// (kept valid -- the record reads never AV) but the bytecode is NEITHER parsed NOR run:
-// the action-stream *contents* stay as raw offsets and no _parseStream/runStream fires.
-// An un-run AS action queue is a valid state; the statically-placed nested shapes/images
-// compose without the VM (they need only their records relocated, which this now does).
+// FLAG (deferred _parseStream -- the LAST gate before real AS execution): the console
+// additionally calls AptActionInterpreter::_parseStream to re-parse each action stream's
+// BYTECODE (resolving inline operands -- dictionary strings, function bodies, branch
+// targets -- into live pointers). STATUS 2026-07-01: the VM itself is LIVE (runStream +
+// the complete 119-opcode dispatch table + the init passes all wired), but _parseStream
+// (XB1 sub_14084A920, ~466 lines, native x64) is not yet homed -- so stream POINTERS are
+// relocated (record reads never AV) while the bytecode CONTENTS stay as raw serialized
+// operands. Until _parseStream lands, streams must not be dispatched (the handlers'
+// pointer-wide inline-operand reads assume parsed streams). An un-run AS action queue is
+// a valid state; statically-placed nested shapes/images compose without the VM.
 // ===========================================================================
 void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
 {
@@ -885,10 +887,10 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
             // block+0x04 (not xb1 block+0x08). The record STRIDE (16) + stream slot (rec+0x08) match XB1
             // exactly. So the offsets below are XB1-derived STRUCTURE at our-bundle byte positions.
             //
-            // FLAG (deferred AS-VM EXECUTION): XB1 calls sub_14084A920 (its _parseStream) on each action
-            // stream; here the stream POINTERS are relocated (reads never AV) but the BYTECODE is NEITHER
-            // parsed NOR run (runStream is stubbed) -- no _parseStream fires. An un-run AS action queue is
-            // a valid state; the statically-placed nested shapes/images compose without the VM.
+            // FLAG (deferred _parseStream): XB1 calls sub_14084A920 (its _parseStream) on each action
+            // stream; here the stream POINTERS are relocated (reads never AV) but the BYTECODE stays
+            // un-parsed (raw serialized operands). The VM is live (2026-07-01) -- _parseStream is the
+            // remaining gate; see the resolve64 header FLAG above.
             switch (eTag)
             {
                 case 1:   // ACTION: relocate the action-stream pointer (@cmd+0x08). NOT parsed.
