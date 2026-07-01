@@ -314,9 +314,10 @@ namespace CgsGui
         lpParams->pCurrString = reinterpret_cast<AptAssetString>(this);
 
         // ---- pick the font ----------------------------------------------------------------
-        const CgsResource::SafeResourceHandle<CgsResource::Font>* lpFontHandle =
-            const_cast<FontCollection*>(lpFonts)->FindFont(lpParams->szFontName);
-        mTextObject.mpFont = *lpFontHandle;
+        // (FindFont is DWARF-attested const, returning a const handle reference.)
+        const CgsResource::SafeResourceHandle<CgsResource::Font>& lFontHandle =
+            lpFonts->FindFont(lpParams->szFontName);
+        mTextObject.mpFont = lFontHandle;
 
         // The B5DotMat dot-matrix font's "dfheic" variant gets a special cyan text colour AND a 1.2x
         // font-height bump (X360 0x82854A40 lines 432-434: *v26 = -16730881; *(a1+8) = *(a1+8) * 1.2).

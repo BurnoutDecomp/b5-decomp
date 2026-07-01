@@ -125,4 +125,27 @@ namespace CgsLanguage
         CGS_ASSERT(mpcDefaultFontName != 0, "Invalid Default Font Name in Language Manager");
         return mpcDefaultFontName;
     }
+
+    // ------------------------------------------------------------------------
+    // FLAG trap-stub bodies (link scaffold, 2026-07-01): the ten Format*String
+    // members below are declared (DWARF) and referenced by the debug component's
+    // RenderHUD (CgsLanguageManagerDebugComponent.cpp, pulled in by the by-value
+    // mDebugComponent member landed in wave f0de9b78), but their reconstructions
+    // have not landed yet. Trap bodies per the stub scaffold -- reachable only
+    // through the debug language HUD, never on the boot path. Replace each with
+    // its faithful decompile.
+    // ------------------------------------------------------------------------
+    void LanguageManager::FormatIntegerString(char*, s32, s32) const                      { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatXoverYString(char*, s32, s32, s32) const                  { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatPercentageString(char*, s32, s32) const                   { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatCurrencyString(char*, s32, s32) const                     { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatDateString(char*, s32, s32, s32, s32) const               { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatHoursMinutesAndSecondsString(char*, f32, s32) const       { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatMinutesAndSecondsString(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatMinutesAndSecondsAndHundredsString(char*, f32, s32) const { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatSecondsAndHundredsString(char*, f32, s32) const           { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatSecondsString(char*, f32, s32) const                      { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatSmallDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatLargeDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
+    f32  LanguageManager::GetDistanceDisplayScale() const                                 { __debugbreak(); return 1.0f; }   // FLAG trap-stub
 }
