@@ -314,6 +314,18 @@ void AptActionInterpreter::_FunctionAptActionEnumerate(AptActionInterpreter* pIn
 }
 
 // ---------------------------------------------------------------------------
+// _FunctionAptActionEnumerate2 (0x55; PS3 @0x81C488) -- the ECMA `for..in` form.
+// The console body is identical to Enumerate's (both tail-call _doEnumerate with
+// ctx.mpCIH + ctx.mpPendingReleaseValue); kept as its own handler, faithful to
+// the two distinct console functions (ICF-folded on X360).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionEnumerate2(AptActionInterpreter* pInterp,
+                                                        LocalContextT* pContext)
+{
+    pInterp->_doEnumerate(pContext->mpCIH, pContext->mpPendingReleaseValue);
+}
+
+// ---------------------------------------------------------------------------
 // _FunctionAptActionCastOp @0x82AEA818 (0x2B) -- AS `(Class) obj`. Stack:
 // [object, class] (class on top). When `object instanceof class`, collapse both
 // operands to the object (an in-place downcast); otherwise (or when fewer than two
