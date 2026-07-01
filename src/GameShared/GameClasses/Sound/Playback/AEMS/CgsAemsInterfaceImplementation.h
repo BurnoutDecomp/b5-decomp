@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 #include "SDKs/EATech/include/snd/sndo.h" // Snd9::IAemsSamplePlayer (the base)
+#include "GameShared/GameClasses/Sound/Playback/CgsFactory.h" // Factory (AemsRWSampleFactory base)
 
 // ============================================================================
 // GameShared/GameClasses/Sound/Playback/aems/CgsAemsInterfaceImplementation.h
@@ -49,6 +50,7 @@ namespace core
 {
     class Voice;   // RenderWare audio voice (forward-declared; dtor reads nothing)
     class PlugIn;  // RenderWare audio plug-in (forward-declared)
+    class PlugInRegistry;  // RenderWare plug-in registry (AemsRWSampleFactory member)
 }
 }
 }
@@ -62,6 +64,16 @@ namespace Playback
     struct Environment;
     struct System;
     struct AemsPlayerVoice;
+    struct AemsPlayerInputAccessor;   // AemsRWSampleFactory::CreateInstance arg (ptr).
+
+    // CgsAemsInterfaceImplementation.h (DWARF). A 12-byte plug-in config slot the
+    // AemsRWSampleFactory holds three of, by value. Modelled as an opaque 12-byte
+    // block (its fields are not read by the destructor TU). FLAG: minimal by-value
+    // member -- full layout DEFERRED to the PlugInConfig home.
+    struct PlugInConfig
+    {
+        u8 mau8Opaque[12];
+    };
 
     // CgsAemsInterfaceImplementation.h:102 (DWARF):
     //   AemsRWSamplePlayer : public Snd9::IAemsSamplePlayer
@@ -117,6 +129,44 @@ namespace Playback
         PauseState                mPauseState;          // :172
         u8                        mNumChannels;         // :173
         u8                        mNumPannerVoices;     // :174
+    };
+
+    // ========================================================================
+    // CgsAemsInterfaceImplementation.h:48 (DWARF). AemsRWSampleFactory : public
+    // Factory -- the AEMS sample-player factory. Added for the Wave-6 scalar-deleting
+    // destructor TU (@0x826C2848). All members are trivially destructible (a
+    // PlugInConfig[3] block, an rw PlugInRegistry*, and nine PlugInHandle words), so
+    // the class destructor body is empty; the Factory base dtor does the teardown.
+    // PlugInConfig / rw::audio::core::PlugInRegistry are engine collaborators with
+    // their own homes -- forward-declared here (the dtor touches none of them).
+    // Members pinned BY NAME + SEQUENCE (host-width FLAG).
+    // ========================================================================
+    struct AemsRWSampleFactory : public Factory
+    {
+        AemsRWSampleFactory(Name aName, Environment& arEnvironment);   // own TU
+
+        // CgsAemsInterfaceImplementation.cpp:460 (own TUs; declared for vtable shape).
+        virtual Snd9::IAemsSamplePlayer* CreateInstance(void* apParams, int aiNumOutputs,
+                                                        const int* apOutputs, const char* apcName,
+                                                        int aiValue,
+                                                        const AemsPlayerInputAccessor* apAccessor);
+        virtual void Release();                                        // own TU
+
+        // CgsAemsInterfaceImplementation.h:48 @ 0x826C2848 (scalar-deleting dtor).
+        virtual ~AemsRWSampleFactory();
+
+    private:
+        // Layout faithful to DWARF (CgsAemsInterfaceImplementation.h:84..95).
+        PlugInConfig                     maAemsSubMixPlugInConfig[3]; // :84
+        rw::audio::core::PlugInRegistry* mpPlugInRegistry;            // :87
+        u32 mGainHandle;      // :88  PlugInRegistry::PlugInHandle
+        u32 mPan2DHandle;     // :89
+        u32 mRouteHandle;     // :90
+        u32 mSendHandle;      // :91
+        u32 mSndPlayer1Handle;// :92
+        u32 mRechannelHandle; // :93
+        u32 mResampleHandle;  // :94
+        u32 mSubMixHandle;    // :95
     };
 
 } // namespace Playback

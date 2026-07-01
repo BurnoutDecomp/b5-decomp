@@ -4,11 +4,18 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h" // Entity (ContentSpec base)
+
+#include <cstddef> // size_t
 
 namespace CgsSound
 {
 namespace Playback
 {
+
+    // Forward declaration -- ContentSpec::GetContentType returns a resolved
+    // ContentType (full home in CgsDataStructures.h).
+    struct ContentType;
     enum EContentState
     {
         E_CONTENT_STATE_INVALID = 0,
@@ -48,8 +55,29 @@ namespace Playback
         ContentDisposer* GetContentDisposer();
     };
 
-    struct ContentSpec
+    // CgsDataStructures.h:425 (DWARF). ContentSpec : public Entity. The serialised
+    // content specification: a resolved ContentType* (+8), the packed load
+    // method/time bytes, and an inline full-path buffer beginning at +0x10 (the
+    // X360 GetPath()/GetPathZone read `this + 16`). Members pinned BY NAME +
+    // SEQUENCE (host-width FLAG: the pointer member widens on the 64-bit host).
+    struct ContentSpec : public Entity
     {
+        // '|' path-zone separator (DWARF CgsDataStructures.h:1792 / :430).
+        static const char SK_PATH_SEPERATOR = '|';
+
+        // @ 0x826927C8. Return the resolved ContentType (assert present + resolved).
+        // @ 0x826928C8. Copy the au32Zone'th '|'-separated path zone into apcPathOut.
+        const ContentType& GetContentType() const;
+        bool GetPathZone(u32 au32Zone, char* apcPathOut, size_t auMaxLen) const;
+
+        // The inline full path (starts at +0x10; the X360 reads `this + 16`).
+        const char* GetPath() const { return macFullPath; }
+
+        const ContentType* mpContentType;   // (+0x8)  resolved content type
+        u16                mu16PathLength;   // (+0xC)  full-path byte length
+        u8                 mu8LoadMethod;    // (+0xE)
+        u8                 mu8LoadTime;      // (+0xF)
+        char               macFullPath[1];   // (+0x10) inline '|'-joined path buffer
     };
 
     class Object
@@ -63,10 +91,28 @@ namespace Playback
         u32 mu32RefCount;
     };
 
+    class Voice;   // fwd -- Content attach/detach hooks take a Voice + Slot.
+    class Slot;
+
     struct Content : public Object
     {
         Content(Factory& lFactory, const ContentSpec& lContentSpec, u32 lu32DataSize);
         virtual ~Content();
+
+        // The spec this content was created from (read by Slot::Attach to match the
+        // slot's authored ContentClass). ADDITIVE grow (by-name accessor).
+        const ContentSpec& GetContentSpec() const { return mContentSpec; }
+
+        // @ 0x826A2458. Drop a load reference when detached from a voice slot;
+        // commits the unload (via DoUnload) on the last reference, then hands off to
+        // Slot::HandleDetach. Bodied in CgsObject.cpp.
+        void OnDetach(Voice& arVoice, Slot& arSlot);
+
+        // Attach/unload hooks the detach path uses. FLAG (DEFER): declared-only --
+        // bodied in their own Content TUs. OnAttach takes a load reference; DoUnload
+        // performs the type-specific unload and returns success.
+        void OnAttach(Voice& arVoice, Slot& arSlot);
+        bool DoUnload();
 
         // FLAG (committed-home DEFECT corrected to match DWARF ground truth):
         // CgsContent.h DWARF (line 141/301) declares Content::DoDispose() returning
@@ -103,12 +149,10 @@ namespace Playback
     {
     }
 
-    inline Content::~Content()
-    {
-        CGS_ASSERT(mu16LoadCount == 1, "Destroying content while it's still loaded. This is a Bad thing.");
-
-        CGS_ASSERT(mu32RefCount == 0, "0 == mu32RefCount");
-    }
+    // ~Content() is defined OUT-OF-LINE in CgsContentDtor.cpp so the compiler emits
+    // the single Content::~Content symbol the X360 vector-deleting destructor
+    // (@0x82692A70) and the subclass dtors call. (Was inline; moved for Wave-6 item
+    // 76 -- the load-count / ref-count asserts move with it. No layout change.)
 
     inline void Content::DoDispose()
     {
