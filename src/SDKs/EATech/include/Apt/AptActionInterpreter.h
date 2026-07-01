@@ -286,6 +286,7 @@ public:
     static void _FunctionAptActionEquals  (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionLessThan(AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionGreater (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionLessThan2(AptActionInterpreter* pInterp, LocalContextT* pContext);
 
     // Bitwise ops -- coerce both operands to integers and push AptInteger(under OP
     // top); the shift ops take top as the shift amount. (Their stack collapse IS
