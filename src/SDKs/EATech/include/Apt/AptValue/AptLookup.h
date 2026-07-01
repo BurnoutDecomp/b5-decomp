@@ -108,6 +108,12 @@ public:
     // @0x82AD7838 -- tear the pool down (destruct + free the array) and clear it.
     static void Shutdown();
 
+    // Pool-table access for the stream parser (_parseStream resolves a serialized
+    // Lookup constant record to &pool[idx] when the table exists and idx < count):
+    // the class-owned read of the fixed table the console addresses directly.
+    static AptLookup* GetPoolEntry(int nIndex) { return &spLookupTable[nIndex]; }
+    static bool       PoolHolds(int nIndex)    { return spLookupTable != 0 && nIndex < siNumLookups; }
+
 protected:
     // @0x82AE5F90 -- base AptValueNoGC(AptVFT_Lookup), clear mnIndex, mark the value
     // defined, and pin its reference count to MAX_REFCOUNT (pool entries are never

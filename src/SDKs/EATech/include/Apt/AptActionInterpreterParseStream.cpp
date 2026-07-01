@@ -1,0 +1,354 @@
+// ===========================================================================
+// EATech Apt -- AptActionInterpreter::_parseStream: the action-stream operand
+// resolver (and its inverse).
+//
+//   DECOMPILED from the Xbox One build (the x64-primary Apt rung):
+//     _parseStream == XB1 sub_14084A920 (~466 pseudocode lines), verified against
+//     the assembly dump (parse tree, record strides, the float-case branch).
+//
+// One pass over an action bytecode stream: `op = *pc++`, opcode 0x00 terminates.
+// For every operand-carrying opcode, resolve its serialized inline operands IN
+// PLACE (file-relative offsets -> live pointers, constant-record indices -> live
+// AptValue*s) -- or, with a null parse context, do the exact inverse (un-rebase +
+// release) for the movie-unload path. Until a stream has been through this parser
+// it must NOT be dispatched: runStream's handlers read the PARSED form.
+//
+// Direction: pConstCtx != 0 -> RESOLVE (+nBase; constants built);
+//            pConstCtx == 0 -> UNRESOLVE (-nBase; constants released/re-indexed).
+//
+// The GUIAPT64 stream operand records are 8-ALIGNED with 8-byte pointer slots
+// (the XB1 asm: `(pc+7) & ~7`, qword loads) -- unlike the 4-aligned console form.
+//
+// The parse CONTEXT (pConstCtx) is the movie's serialized constant block: its
+// record table lives at ctx+0x28 [xb1:+40] as 16-byte records {i64 type,
+// i64 payload}. FLAG: the GUIAPT64 const-header is not yet a recovered type, so
+// the ctx is walked with the documented serialised-blob offset idiom (the same
+// exception Fixup/resolve64 use); home it when the header type lands.
+//
+// Constant-record types (the Push/DefineDictionary entry resolution):
+//   1 string   : payload = ctx-relative offset -> rebase, AptString::Create
+//                (interned; arrives with its own counted ref), un-rebase back.
+//   6 float    : 0.0f collapses to the pooled AptInteger::Create(0) (the XB1
+//                vucomiss branch -- faithful quirk); else AptFloat::Create(f).
+//   7 integer  : AptInteger::Create(payload).
+//   8 lookup   : &AptLookup pool[idx] when the pool holds idx, else null.
+//   5 boolean  : the shared AptBoolean singleton (Create(payload != 0)).
+//   4 register : &AptRegister file[idx] when the file holds idx, else null.
+//   3          : the shared `undefined` singleton.
+//   (other)    : null.
+// Each resolved value is written into the stream's entry slot and AddRef'd --
+// UNLESS it is a defined string (Create's ref transfers). Every 16 entries, and
+// after every resolve-direction opcode, the GC deferred-release vector drains.
+//
+// EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
+// ===========================================================================
+
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"       // AptString::Create
+#include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"      // AptInteger::Create
+#include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"        // AptFloat::Create
+#include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"      // AptBoolean::Create (the shared pair)
+#include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"       // AptLookup::GetPoolEntry/PoolHolds
+#include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"     // AptRegister::GetFileEntry/FileHolds
+#include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"  // gValuesToRelease drain
+
+#include <cstdint>
+
+extern AptValue*          gpUndefinedValue;    // off_8324D814 / xb1 qword_14147A010
+extern AptGCReleaseVector gValuesToRelease;    // off_8324E51C / xb1 qword_14147A410
+
+// FLAG (dormant unresolve path): the per-string return to the temporary string pool
+// (xb1 sub_14083F2A0). The pool's per-string release entry point is not yet homed
+// (StringPool exposes only ClearTemporaryPool); reached only on movie UNLOAD.
+extern void AptStringPool_ReleaseString(AptString* pString);
+
+namespace
+{
+    // The 8-aligned operand cursor (xb1: (pc + 7) & ~7).
+    inline unsigned char* Align8(unsigned char* p)
+    {
+        return reinterpret_cast<unsigned char*>(
+            (reinterpret_cast<uintptr_t>(p) + 7) & ~static_cast<uintptr_t>(7));
+    }
+
+    inline uintptr_t& Slot(unsigned char* p, int nOff = 0)
+    {
+        return *reinterpret_cast<uintptr_t*>(p + nOff);
+    }
+    inline int64_t& Slot64(unsigned char* p, int nOff = 0)
+    {
+        return *reinterpret_cast<int64_t*>(p + nOff);
+    }
+
+    // ±base with the null-stays-null guard every xb1 slot rebase carries.
+    inline void Rebase(uintptr_t& rSlot, uintptr_t nBase, bool bUnresolve)
+    {
+        if (rSlot != 0)
+            rSlot = bUnresolve ? (rSlot - nBase) : (rSlot + nBase);
+        else
+            rSlot = 0;
+    }
+
+    // Resolve one serialized constant record (16-byte {i64 type, i64 payload} at
+    // ctx-table[16 * idx]) to its live AptValue*. pCtx = the const block base (the
+    // string payloads are ctx-relative).
+    AptValue* ResolveConstRecord(unsigned char* pRec, unsigned char* pCtx)
+    {
+        const int64_t nType = Slot64(pRec, 0x00);
+
+        if (nType == 1)   // string: rebase payload against the ctx, intern, un-rebase
+        {
+            uintptr_t& rPayload = Slot(pRec, 0x08);
+            if (rPayload)
+                rPayload += reinterpret_cast<uintptr_t>(pCtx);
+            AptValue* pValue = AptString::Create(reinterpret_cast<const char*>(rPayload));
+            if (rPayload)
+                rPayload -= reinterpret_cast<uintptr_t>(pCtx);
+            else
+                rPayload = 0;
+            return pValue;
+        }
+
+        switch (nType)
+        {
+            case 6:   // float: 0.0f collapses to the pooled integer 0 (xb1 vucomiss quirk)
+            {
+                const float fValue = *reinterpret_cast<const float*>(pRec + 0x08);
+                if (fValue == 0.0f)
+                    return AptInteger::Create(0);
+                return AptFloat::Create(fValue);
+            }
+            case 7:   // integer
+                return AptInteger::Create(static_cast<int>(Slot64(pRec, 0x08)));
+            case 8:   // lookup-pool entry
+            {
+                const int nIndex = static_cast<int>(Slot64(pRec, 0x08));
+                return AptLookup::PoolHolds(nIndex) ? AptLookup::GetPoolEntry(nIndex) : 0;
+            }
+            case 5:   // boolean: the shared singleton pair
+                return AptBoolean::Create(Slot64(pRec, 0x08) != 0);
+            case 4:   // register-file entry
+            {
+                const int nIndex = static_cast<int>(Slot64(pRec, 0x08));
+                return AptRegister::FileHolds(nIndex) ? AptRegister::GetFileEntry(nIndex) : 0;
+            }
+            case 3:
+                return gpUndefinedValue;
+            default:
+                return 0;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// _parseStream (xb1 sub_14084A920) -- see the header comment. pnValueCount is the
+// threaded resolved-value counter the callers accumulate (resolve: ++ per entry;
+// unresolve: the sequential re-serialize index written back into each slot).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
+                                        void* pConstCtx, int64_t* pnValueCount)
+{
+    const bool bUnresolve = (pConstCtx == 0);
+
+    if (bUnresolve)
+        gValuesToRelease.ReleaseValues();   // xb1: sub_14083ED90(&vector) on entry
+
+    unsigned char* pc = pStream;
+    unsigned int   nOp = *pc++;
+    if (nOp == 0)
+        return;
+
+    while (true)
+    {
+        bool bDrain = !bUnresolve;   // LABEL_69 runs after every RESOLVE-direction op
+
+        switch (nOp)
+        {
+            // ---- 4-byte inline payload, unaligned -------------------------------
+            case 0x77:   // TraceStart
+            case 0xB4:   // PushFloat
+            case 0xB7:   // PushDWord
+                pc += 4;
+                bDrain = false;
+                break;
+
+            // ---- 4-byte inline payload, 8-aligned -------------------------------
+            case 0x81:   // GotoFrame
+            case 0x87:   // StoreRegister
+            case 0x99:   // BranchAlways
+            case 0x9D:   // BranchIfTrue
+            case 0x9F:   // GotoFrame2
+            case 0xB8:   // BranchIfFalse
+                pc = Align8(pc) + 4;
+                bDrain = false;
+                break;
+
+            // ---- one inline byte -------------------------------------------------
+            case 0xA2: case 0xAE: case 0xAF: case 0xB0:
+            case 0xB1: case 0xB2: case 0xB3: case 0xB5:
+                pc += 1;
+                bDrain = false;
+                break;
+
+            // ---- one inline big-endian word --------------------------------------
+            case 0xA3: case 0xB6:
+                pc += 2;
+                bDrain = false;
+                break;
+
+            // ---- GetUrl: two 8-byte string pointers ------------------------------
+            case 0x83:
+            {
+                unsigned char* pRec = Align8(pc);
+                pc = pRec + 16;
+                Rebase(Slot(pRec, 0x00), nBase, bUnresolve);   // url
+                Rebase(Slot(pRec, 0x08), nBase, bUnresolve);   // target
+                break;
+            }
+
+            // ---- one 8-byte string pointer ---------------------------------------
+            case 0x8B:   // SetTarget
+            case 0x8C:   // GotoLabel
+            case 0xA1:   // (PushString: the direct string form)
+            case 0xA4: case 0xA5: case 0xA6: case 0xA7:   // PushString{Get,Set}{Var,Member}
+            {
+                unsigned char* pRec = Align8(pc);
+                pc = pRec + 8;
+                Rebase(Slot(pRec, 0x00), nBase, bUnresolve);
+                break;
+            }
+
+            // ---- With: PC-relative end-of-block ----------------------------------
+            case 0x94:
+            {
+                unsigned char* pRec = Align8(pc);
+                pc = pRec + 8;
+                // The serialized slot is relative to the POST-OPERAND PC; resolve to
+                // the absolute end pointer (xb1: *slot += pc / -= pc).
+                if (bUnresolve)
+                    Slot(pRec, 0x00) -= reinterpret_cast<uintptr_t>(pc);
+                else
+                    Slot(pRec, 0x00) += reinterpret_cast<uintptr_t>(pc);
+                break;
+            }
+
+            // ---- Try: 24-byte record ---------------------------------------------
+            case 0x8F:
+            {
+                unsigned char* pRec = Align8(pc);
+                pc = pRec + 24;
+                // flag bit2 (+0x0C) = catch-in-register: no name pointer to relocate.
+                if ((*reinterpret_cast<uint32_t*>(pRec + 0x0C) & 4u) == 0)
+                    Rebase(Slot(pRec, 0x10), nBase, bUnresolve);   // catch-variable name
+                break;
+            }
+
+            // ---- DefineFunction / DefineFunction2: 48-byte record ----------------
+            case 0x8E:   // DefineFunction2 (16-byte {reg, name} arg records)
+            case 0x9B:   // DefineFunction  (8-byte flat name pointers)
+            {
+                unsigned char* pRec = Align8(pc);
+                pc = pRec + 48;
+
+                Rebase(Slot(pRec, 0x00), nBase, bUnresolve);       // function name
+                if (!bUnresolve)
+                    Rebase(Slot(pRec, 0x10), nBase, false);        // arg table (resolve first)
+
+                const int64_t nArgs = Slot64(pRec, 0x08);
+                unsigned char* pArgs = reinterpret_cast<unsigned char*>(Slot(pRec, 0x10));
+                if (nArgs > 0 && pArgs)
+                {
+                    const int nStride  = (nOp == 0x8E) ? 16 : 8;
+                    const int nNameOff = (nOp == 0x8E) ? 8  : 0;
+                    for (int64_t i = 0; i < nArgs; ++i)
+                        Rebase(Slot(pArgs + i * nStride, nNameOff), nBase, bUnresolve);
+                }
+
+                if (bUnresolve)
+                {
+                    Rebase(Slot(pRec, 0x10), nBase, true);         // arg table (unresolve last)
+                    // xb1 poison stamps over the (now-dead) runtime slots.
+                    Slot64(pRec, 0x20) = static_cast<int64_t>(0x98BADCF2u);
+                    Slot64(pRec, 0x28) = 0x12345678;
+                }
+                break;
+            }
+
+            // ---- Push / DefineDictionary: the constant-entry block ---------------
+            case 0x88:   // DefineDictionary (the movie's string/constant dictionary)
+            case 0x96:   // Push (the multi-value operand block)
+            {
+                unsigned char* pRec = Align8(pc);
+                pc = pRec + 16;
+
+                const int64_t nCount = Slot64(pRec, 0x00);
+
+                if (bUnresolve)
+                {
+                    // Release each live entry (a defined string returns to the pool --
+                    // a boxed one through its internal AptString at +0x40), then write
+                    // the sequential re-serialize index; finally un-rebase the table.
+                    unsigned char* pTable = reinterpret_cast<unsigned char*>(Slot(pRec, 0x08));
+                    for (int64_t i = 0; i < nCount; ++i)
+                    {
+                        AptValue* pValue = *reinterpret_cast<AptValue**>(pTable + i * 8);
+                        if (pValue->isString())
+                        {
+                            AptValue* pRaw = pValue;
+                            if (pRaw->getVtblIndex() != AptVFT_StringValue)
+                                pRaw = *reinterpret_cast<AptValue**>(
+                                    reinterpret_cast<char*>(pRaw) + 0x40);   // the boxed slot
+                            AptStringPool_ReleaseString(static_cast<AptString*>(pRaw));
+                        }
+                        else
+                        {
+                            pValue->Release();
+                        }
+                        Slot64(pTable + i * 8, 0) = *pnValueCount;
+                        ++*pnValueCount;
+                    }
+                    Rebase(Slot(pRec, 0x08), nBase, true);
+                    break;
+                }
+
+                // RESOLVE: rebase the table, then turn each serialized constant index
+                // into its live AptValue* (through the ctx's 16-byte record table).
+                Rebase(Slot(pRec, 0x08), nBase, false);
+                unsigned char* pTable = reinterpret_cast<unsigned char*>(Slot(pRec, 0x08));
+                unsigned char* pCtx   = static_cast<unsigned char*>(pConstCtx);
+                unsigned char* pConstTable =
+                    reinterpret_cast<unsigned char*>(Slot(pCtx, 0x28));   // [xb1: ctx+40] FLAG: blob idiom
+
+                for (int64_t i = 0; i < nCount; ++i)
+                {
+                    const int64_t nConstIndex = Slot64(pTable + i * 8, 0);
+                    ++*pnValueCount;
+
+                    AptValue* pValue =
+                        ResolveConstRecord(pConstTable + 16 * nConstIndex, pCtx);
+
+                    *reinterpret_cast<AptValue**>(pTable + i * 8) = pValue;
+                    // AddRef -- unless a defined string (Create's ref transferred).
+                    if (pValue && !pValue->isString())
+                        pValue->AddRef();
+
+                    if ((i % 16) == 0)
+                        gValuesToRelease.ReleaseValues();   // the periodic drain
+                }
+                break;
+            }
+
+            default:
+                bDrain = false;
+                break;
+        }
+
+        if (bDrain)
+            gValuesToRelease.ReleaseValues();   // LABEL_69: the per-op resolve drain
+
+        nOp = *pc++;
+        if (nOp == 0)
+            return;
+    }
+}

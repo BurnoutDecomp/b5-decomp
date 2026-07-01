@@ -98,6 +98,12 @@ public:
 
     s32 GetIndex() const { return mnIndex; }
 
+    // Register-file access for the stream parser (_parseStream resolves a serialized
+    // Register constant record to &file[idx] when the file exists and idx < count):
+    // the class-owned read of the fixed file the console addresses directly.
+    static AptRegister* GetFileEntry(s32 nIndex) { return &spRegisters[nIndex]; }
+    static bool         FileHolds(s32 nIndex)    { return spRegisters != 0 && nIndex < snRegisterCount; }
+
 private:
     // [0x08] this slot's ordinal position in the register file. The ctor zeroes
     // it; Initialize stamps each slot with its index. (vtable @0x00,
