@@ -15,15 +15,16 @@
 // dual-vptr pair -- primary EffectControl @ this+0, IResourceRequester sub-object
 // @ this+4 -- plus a third IShiftingActivator sub-object vptr @ +0x38).
 //
-// FLAG (MINIMAL home): this slice bodies only AIWheelControl's ctor (@ 0x826E55A8)
-// and its vector deleting destructor anchor (@ 0x826E5608). AIWheelControl adds NO
-// data members over WheelControl (DWARF BrnWheelControl.h:129 -- only the RTTI
-// factory + overrides). WheelControl's full member surface (WheelSide[2], the
-// road-noise/skid effect sub-objects, the IShiftingActivator interface) is UN-HOMED
-// and DEFERRED; only the base spine needed for AIWheelControl's construction is
-// modelled here, mirroring the committed ExplosionEffect / TrafficControl minimal-
-// home convention. The tri-base vptr installs are produced STRUCTURALLY by the
-// WheelControl base + the virtual dtors, not by hand.
+// FLAG (MINIMAL home): this slice bodies WheelControl's own vector deleting
+// destructor anchor (@ 0x826D00A0), AIWheelControl's ctor (@ 0x826E55A8), and its
+// vector deleting destructor anchor (@ 0x826E5608). AIWheelControl adds NO data
+// members over WheelControl (DWARF BrnWheelControl.h:129 -- only the RTTI factory +
+// overrides). WheelControl's full member surface (WheelSide[2], the road-noise/skid
+// effect sub-objects, the IShiftingActivator interface) is UN-HOMED and DEFERRED;
+// only the base spine needed to construct/destroy the leaves is modelled here,
+// mirroring the committed ClutchControl / TrafficControl minimal-home convention.
+// The tri-base vptr installs are produced STRUCTURALLY by the WheelControl base +
+// the virtual dtors, not by hand.
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE;
 // absolute offsets are NOT static_asserted across pointer members on the 64-bit host.
@@ -43,7 +44,7 @@ namespace Wheels
 struct WheelControl : public BrnSound::Logic::BrnEffectControl
 {
     WheelControl() {}
-    virtual ~WheelControl() {}
+    virtual ~WheelControl();   // anchor for the vector deleting destructor @ 0x826D00A0
 };
 
 // BrnWheelControl.h:129 (DWARF): AIWheelControl : public WheelControl. Adds no data

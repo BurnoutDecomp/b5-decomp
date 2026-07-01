@@ -48,6 +48,14 @@ namespace Vehicle
         // UNLESS the slot is already flagged for creation this frame (a create+remove cancels).
         void FlagJointToBeRemoved(s32 liJointIndex, const InRemoveJoint& lrRemoveJointEvent);
 
+        // @0x825C26F0 (DWARF GetCreateJointEvent, BrnPhysicalTrafficManagerIO.h:90): asserted
+        // accessor for the create-joint request stashed in slot liJointIndex by FlagJointToBeCreated.
+        const InAddJoint& GetCreateJointEvent(s32 liJointIndex) const;
+
+        // @0x825C2860 (DWARF GetRemoveJointEvent, BrnPhysicalTrafficManagerIO.h:95): asserted
+        // accessor for the remove-joint request stashed in slot liJointIndex by FlagJointToBeRemoved.
+        const InRemoveJoint& GetRemoveJointEvent(s32 liJointIndex) const;
+
     private:
         InAddJoint                             maCreatedJointEvents[KI_MAX_ARTICULATED_TRAFFIC_VEHICLES]; // @0x0010 (stride 192)
         InRemoveJoint                          maRemovedJointEvents[KI_MAX_ARTICULATED_TRAFFIC_VEHICLES]; // @0x0790 (stride 8)

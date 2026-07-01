@@ -390,6 +390,36 @@ namespace CgsGraphics
     }
 
     // -------------------------------------------------------------------------
+    // SetState(RasterizerState*) @0x824599C0 - append a 16-byte
+    // {type:IM_CMD_SET_STATE_RASTERIZER} command binding a rasterizer state.
+    // Decompiled from the <BasicColouredVertex> (Im3dUntex) instantiation. The X360
+    // body asserts lpRasterizerState is non-null and that we are inside a
+    // BeginRendering/EndRendering block before appending (both are diagnostic-only
+    // guards with no effect on the produced stream when they hold, matching the
+    // convention already used for BeginRendering/EndRendering above -- dropped here);
+    // an overflowing append rewinds exactly like SetTexture/SetProgram.
+    // -------------------------------------------------------------------------
+    template <typename V>
+    void ImRenderBuffer<V>::SetState(const renderengine::RasterizerState* lpRasterizerState)
+    {
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        if (muCommandBufferSize >= luPos + 16u)
+        {
+            ImCommandSetStateRasterizer* lpCommand =
+                reinterpret_cast<ImCommandSetStateRasterizer*>(
+                    mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand->muSize = 16u;
+            lpCommand->muType = IM_CMD_SET_STATE_RASTERIZER;   // 6
+            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            lpCommand->mpRasterizerState = lpRasterizerState;
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // SetTextureState - append a 16-byte {type:IM_CMD_SET_STATE_TEXTURE} command
     // binding a resolved renderengine::TextureState. Decompiled from the inline
     // writer in AptRenderHandler::Render @0x5CB230 (LABEL_19): it stores muType=9,
@@ -880,4 +910,32 @@ namespace CgsGraphics
     // were read from.
     // -------------------------------------------------------------------------
     template struct ImRenderBuffer<Basic2dColouredTexturedVertex>;
+
+    // -------------------------------------------------------------------------
+    // Explicit instantiation (PER MEMBER, not whole-struct): the untextured 3D
+    // buffer (ledger key `class:CgsGraphics::BasicColouredVertex>`). Only the
+    // members X360-ARTIST-attests for this instantiation are instantiated here --
+    // Dispatch() is deliberately NOT instantiated: the X360 ARTIST attests a
+    // DIFFERENT Dispatch (@0x823FF0D8, cited against CgsIm3dRenderBuffer.h, not this
+    // template's header) that walks the buffer via a virtual HandleCommand call and
+    // belongs to an unhomed Im3dRenderBuffer subclass, not this template's own
+    // fixed-function PC dispatch fold -- instantiating this file's Dispatch<V> for V=
+    // BasicColouredVertex would silently substitute an unattested body. Likewise
+    // Clear/Construct/Release/Destruct/IsInARenderingBlock/AllocVertices/
+    // RenderFromStaticVertexBuffer/RenderStart/RenderEnd/SetTexture/SetProgram/
+    // SetTextureState/PushMaskGeometry/EndMask/GetFirstCommand/GetNextCommand are not
+    // X360-attested for <BasicColouredVertex> by this TU and are left uninstantiated
+    // (the wave-30 BasicColouredVertex lesson -- see the file-header note above).
+    // -------------------------------------------------------------------------
+    template bool ImRenderBuffer<BasicColouredVertex>::Prepare(
+        u32, u32, rw::IResourceAllocator*, bool);
+    template void ImRenderBuffer<BasicColouredVertex>::BeginRendering();
+    template void ImRenderBuffer<BasicColouredVertex>::EndRendering();
+    template void ImRenderBuffer<BasicColouredVertex>::Render(
+        renderengine::PrimitiveType, const BasicColouredVertex*, u32);
+    template void ImRenderBuffer<BasicColouredVertex>::SetState(
+        const renderengine::RasterizerState*);
+    template void ImRenderBuffer<BasicColouredVertex>::SetTransform(const Im2dTransform&);
+    template void ImRenderBuffer<BasicColouredVertex>::Swap();
+    template void ImRenderBuffer<BasicColouredVertex>::SetBufferFullRewindToLastEndRender();
 }

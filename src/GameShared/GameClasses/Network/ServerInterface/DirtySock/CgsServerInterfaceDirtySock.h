@@ -217,6 +217,20 @@ namespace CgsNetwork
             return maComponents[E_COMPONENTS_RANKINGS].mpComponent;
         }
 
+        // ADDITIVE GROW (flagged by the CgsNetworkAdapterX360 group): the connection
+        // component slot accessor (E_COMPONENTS_CONNECTION == slot 0, this+0x04 on the
+        // X360 32-bit layout). CgsNetwork::NetworkAdapterX360::Update (X360 0x8288BEC0)
+        // reads *(mpServerInterface + 4) to reach the ServerInterfaceConnection component
+        // before walking into it for the DirtySock lobby-disconnect handle. Exposed as a
+        // named accessor (same base-pointer component-accessor idiom as
+        // GetRankingsComponent/GetGameComponent above); callers reinterpret_cast the shared
+        // ServerInterfaceComponent base to the concrete ServerInterfaceConnection leaf.
+        // maComponents stays private; layout unchanged.
+        ServerInterfaceComponent* GetConnectionComponent() const
+        {
+            return maComponents[E_COMPONENTS_CONNECTION].mpComponent;
+        }
+
         // ADDITIVE GROW (flagged by the ServerInterfaceGames group): the ping-regions
         // component slot accessor + the games component's ConnAPI-callback registration.
         // ServerInterfaceGames::CreateGame reads the ping-regions component to append the

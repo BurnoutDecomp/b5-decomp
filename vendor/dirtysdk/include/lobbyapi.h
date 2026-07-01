@@ -55,6 +55,12 @@ s32 LobbyApiSetCallback(LobbyApiRefT* pLobbyApi, s32 iChannel,
 // LobbyApiSetCallback).
 s32 LobbyApiClearCallback(LobbyApiRefT* pLobbyApi, s32 iCallback);
 
+// Disconnect from the lobby (DirtySDK 5.5.3 core/source/lobby/lobbyapi.c:1477,
+// `extern void LobbyApiDisconnect(LobbyApiRefT*, int32_t)`). iCode is the disconnect
+// reason code (0 == normal/no-reason on the CgsNetworkAdapterX360 duplicate-login kick
+// call site).
+void LobbyApiDisconnect(LobbyApiRefT* pLobbyApi, s32 iCode);
+
 #ifdef __cplusplus
 }
 #endif

@@ -78,28 +78,84 @@ namespace rw
 
 namespace core
 {
-    // PC leaf: pass-through (the GeneralAllocator's bookkeeping lives in this object, not the heap).
-    ResourceDescriptor* GeneralResourceAllocator::GetResourceDescriptor(ResourceDescriptor* lpOut, const ResourceDescriptor* lpIn)
+    // EA::Allocator::GeneralAllocator's own in-heap bookkeeping overhead (X360 ctor/GetResourceDescriptor
+    // both round up by this many bytes before carving the main heap's initial core out of the front of
+    // the adopted region). Named from the literal 0xA38 in the ctor/GetResourceDescriptor asm.
+    static const uint32_t KU_GENERAL_ALLOCATOR_OVERHEAD = 2616u;
+
+    // Default-construct: the two EA GeneralAllocators + field_0x0 all default-construct themselves
+    // (member init list); m_hasPhysical starts false until Initialize()/the 2-arg ctor adopts a region.
+    GeneralResourceAllocator::GeneralResourceAllocator()
+        : m_hasPhysical(false)
+    {
+    }
+
+    // X360 ctor @0x82BC0AA8: adopt the resource regions immediately (same math as Initialize() -- the
+    // X360 in fact tail-calls this ctor from both the ctor path and the out-of-line Initialize wrapper).
+    GeneralResourceAllocator::GeneralResourceAllocator(const Resource& lrResource, const ResourceDescriptor& lrCapacity)
+        : m_hasPhysical(false)
+    {
+        Initialize(lrResource, lrCapacity);
+    }
+
+    // X360 dtor @0x82BC0A50: destroys m_physicalAllocator then m_mainAllocator (reverse declaration
+    // order) and restores the IResourceAllocator vtable -- both fall out of ordinary member teardown
+    // now that field_0x0 / m_mainAllocator / m_physicalAllocator are real members; nothing to hand-code.
+    GeneralResourceAllocator::~GeneralResourceAllocator()
+    {
+    }
+
+    // GetResourceDescriptor @0x82BC0E28: copy the input 5-entry descriptor through, then accumulate a
+    // synthetic requirement of { size = round_up(m_alignment[0], KU_GENERAL_ALLOCATOR_OVERHEAD),
+    // alignment = m_alignment[0] } into entry 0 via the committed operator+= (entries 1..4 of the
+    // synthetic operand are the additive identity, so they pass through unchanged).
+    ::rw::BaseResourceDescriptors<5>* GeneralResourceAllocator::GetResourceDescriptor(::rw::BaseResourceDescriptors<5>* lpOut, const ::rw::BaseResourceDescriptors<5>* lpIn)
     {
         *lpOut = *lpIn;
+
+        ::rw::BaseResourceDescriptors<5> lOverhead;
+        for (uint32_t lu = 0; lu < 5; ++lu)
+        {
+            lOverhead.m_baseResourceDescriptors[lu].m_size      = 0;
+            lOverhead.m_baseResourceDescriptors[lu].m_alignment = 1;
+        }
+        const uint32_t luAlignment0 = lpIn->m_baseResourceDescriptors[0].m_alignment;
+        lOverhead.m_baseResourceDescriptors[0].m_size      = (luAlignment0 - 1 + KU_GENERAL_ALLOCATOR_OVERHEAD) & ~(luAlignment0 - 1);
+        lOverhead.m_baseResourceDescriptors[0].m_alignment = luAlignment0;
+
+        *lpOut += lOverhead;
         return lpOut;
     }
 
-    // Adopt the resource regions into the main (and optional physical) EA GeneralAllocator(s).
+    // Adopt the resource regions into the main (and optional physical) EA GeneralAllocator(s). X360
+    // ctor asm @0x82BC0AA8: SetOption(kOptionEnableSystemAlloc, 0) then Init(pInitialCore, nSize,
+    // bShouldFreeInitialCore=false, bShouldTrace=false) on the main allocator, where pInitialCore is the
+    // pool-0 base offset by the KU_GENERAL_ALLOCATOR_OVERHEAD padding (rounded up to the pool's
+    // alignment) and nSize is the pool-0 capacity UNREDUCED by that padding (matches the asm literally:
+    // r5 = a3[0] with no subtraction). The physical heap (pool index 2) is adopted the same way only if
+    // its capacity is non-zero; otherwise it is Shutdown() and m_hasPhysical stays false.
     void GeneralResourceAllocator::Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity)
     {
-        m_mainAllocator.Shutdown();
-        m_mainAllocator.Init();
-        if (lrResource.m_baseResources[0] && lrCapacity.m_baseResourceDescriptors[0].m_size)
-            m_mainAllocator.AddCore(lrResource.m_baseResources[0], lrCapacity.m_baseResourceDescriptors[0].m_size);
+        m_mainAllocator.SetOption(EA::Allocator::GeneralAllocator::kOptionEnableSystemAlloc, 0);
+        {
+            const uint32_t luAlignment0 = lrCapacity.m_baseResourceDescriptors[0].m_alignment;
+            const uint32_t luPadding0   = (luAlignment0 - 1 + KU_GENERAL_ALLOCATOR_OVERHEAD) & ~(luAlignment0 - 1);
+            void* lpCore0 = static_cast<char*>(lrResource.m_baseResources[0]) + luPadding0;
+            m_mainAllocator.Init(lpCore0, lrCapacity.m_baseResourceDescriptors[0].m_size,
+                                  /*bShouldFreeInitialCore=*/false, /*bShouldTrace=*/false, 0, 0);
+        }
 
-        // optional physical/graphics heap over the third region (X360 uses resource[2]/capacity[4];
-        // PC leaf uses capacity[2] of the 4-pool typedef -- reconcile in step 5).
-        m_hasPhysical = (lrResource.m_baseResources[2] != 0 && lrCapacity.m_baseResourceDescriptors[2].m_size != 0);
-        m_physicalAllocator.Shutdown();
-        m_physicalAllocator.Init();
+        m_hasPhysical = (lrCapacity.m_baseResourceDescriptors[2].m_size != 0);
         if (m_hasPhysical)
-            m_physicalAllocator.AddCore(lrResource.m_baseResources[2], lrCapacity.m_baseResourceDescriptors[2].m_size);
+        {
+            m_physicalAllocator.SetOption(EA::Allocator::GeneralAllocator::kOptionEnableSystemAlloc, 0);
+            m_physicalAllocator.Init(lrResource.m_baseResources[2], lrCapacity.m_baseResourceDescriptors[2].m_size,
+                                      /*bShouldFreeInitialCore=*/false, /*bShouldTrace=*/false, 0, 0);
+        }
+        else
+        {
+            m_physicalAllocator.Shutdown();
+        }
     }
 
     void* GeneralResourceAllocator::Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment)

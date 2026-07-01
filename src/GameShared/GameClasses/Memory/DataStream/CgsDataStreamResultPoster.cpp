@@ -4,6 +4,70 @@
 
 namespace CgsMemory
 {
+    // X360 0x82867FF0.
+    // Binds this poster to lpReader and registers it as a user of the reader's
+    // stream. numUsers is packed into bits 48-51 of the reader's mEncodedStatus
+    // (KU_NUM_USERS_BIT/MASK); this atomically increments just that nibble via a
+    // compare-and-swap retry loop, preserving the numResults (bits 0-23) and
+    // dataBufferUsed (bits 24-47) fields untouched.
+    //
+    // Same CAS idiom as AddResults / DataStreamCommandReader::Construct, using
+    // the committed Futex::AtomicUint64 (GetValue/SetValueConditional) rather
+    // than the raw ldarx/stdcx the X360 asm inlines.
+    void DataStreamResultPoster::Construct(DataStreamResultReader* lpReader)
+    {
+        mpReader = lpReader;
+
+        for (;;)
+        {
+            const u64 luCurrEncoded = lpReader->mEncodedStatus.GetValue();
+
+            const u32 luNumUsers = static_cast<u32>(
+                (luCurrEncoded >> DataStreamResultReader::KU_NUM_USERS_BIT) &
+                DataStreamResultReader::KU_NUM_USERS_MAX);
+
+            const u64 luNewEncoded =
+                (luCurrEncoded & ~DataStreamResultReader::KU_NUM_USERS_MASK) |
+                (((static_cast<u64>(luNumUsers) + 1) &
+                  DataStreamResultReader::KU_NUM_USERS_MAX) <<
+                 DataStreamResultReader::KU_NUM_USERS_BIT);
+
+            if (lpReader->mEncodedStatus.SetValueConditional(luNewEncoded, luCurrEncoded))
+            {
+                break;
+            }
+        }
+    }
+
+    // X360 0x82868070.
+    // Unregisters this poster as a user of its bound reader's stream: atomically
+    // decrements the reader's packed numUsers nibble via the same compare-and-
+    // swap retry loop as Construct, preserving numResults and dataBufferUsed.
+    void DataStreamResultPoster::Destruct()
+    {
+        DataStreamResultReader* lpReader = mpReader;
+
+        for (;;)
+        {
+            const u64 luCurrEncoded = lpReader->mEncodedStatus.GetValue();
+
+            const u32 luNumUsers = static_cast<u32>(
+                (luCurrEncoded >> DataStreamResultReader::KU_NUM_USERS_BIT) &
+                DataStreamResultReader::KU_NUM_USERS_MAX);
+
+            const u64 luNewEncoded =
+                (luCurrEncoded & ~DataStreamResultReader::KU_NUM_USERS_MASK) |
+                (((static_cast<u64>(luNumUsers) - 1) &
+                  DataStreamResultReader::KU_NUM_USERS_MAX) <<
+                 DataStreamResultReader::KU_NUM_USERS_BIT);
+
+            if (lpReader->mEncodedStatus.SetValueConditional(luNewEncoded, luCurrEncoded))
+            {
+                break;
+            }
+        }
+    }
+
     // X360 0x828680F0.
     // Atomically reserves liResultCount slots at the end of the reader's result
     // stream, then block-copies the records in. The reader's packed status word

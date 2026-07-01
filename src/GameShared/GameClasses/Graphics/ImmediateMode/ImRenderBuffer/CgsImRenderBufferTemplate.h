@@ -4,6 +4,7 @@
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator / ResourceDescriptor / Resource
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"  // renderengine::PrimitiveType / Texture / TextureState fwd-decls
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"  // CgsGraphics::Basic2dColouredTexturedVertex
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredVertex.h"  // CgsGraphics::BasicColouredVertex
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"  // CgsGraphics::Im2dTransform (the SetTransform command payload)
 
 // =============================================================================
@@ -28,6 +29,24 @@
 // GetFirstCommand @0x57E024, GetNextCommand @0x57E040, IsInARenderingBlock @0x5CEEA0,
 // SetBufferFullRewindToLastEndRender @0x24DD54). Cross-checked vs the X360 ARTIST
 // addresses noted in the task.
+//
+// A SECOND instantiation, <BasicColouredVertex> (the untextured 3D buffer behind
+// CgsGraphics::Im3dUntex / Im3dRenderBufferUntex), is X360-ARTIST-attested for a
+// subset of members (ledger key `class:CgsGraphics::BasicColouredVertex>`):
+// Prepare @0x824045B0, BeginRendering @0x82459650, EndRendering @0x82459738,
+// Render @0x82459828, SetState(RasterizerState*) @0x824599C0, SetTransform
+// @0x82459CA8, Swap @0x823F9558, SetBufferFullRewindToLastEndRender @0x82449310.
+// Every one of these X360 bodies byte-matches this template's PS3-sourced layout
+// (mpWriteBuffer @32, mpDispatchBuffer @36, muVertexBufferSize @44,
+// muCommandBufferSize @48, mbInRenderBlock @52, muLastEndRenderPos @60,
+// mbBufferIsFull @64, mbFailGracefully @65 - console byte offsets), confirming this
+// is the SAME ImRenderBuffer<V> template, not a fork. Only the X360-attested members
+// are explicitly instantiated for <BasicColouredVertex> (see the .cpp) - the wave-30
+// lesson: per-member instantiation, never a blind whole-struct `template struct`.
+// (AddProgram / Construct / SetProgram / EndRendering / SetTransform(const void*) for
+// `CgsGraphics::BasicColouredVertex>` belong to a DIFFERENT template, ImRenderer<V> -
+// see CgsIm3dUntex.cpp - NOT this one; the ledger's flat function-name grouping
+// conflated the two instantiations under one TU id.)
 //
 // The actual GPU submission (ImRenderBuffer<V>::Dispatch / Im2dRenderBuffer::Dispatch
 // @0x575BD4) is the PLATFORM LEAF: on the PS3 it writes the RSX push-buffer through
@@ -269,6 +288,12 @@ namespace CgsGraphics
         // ----- state setters (append a command) -----
         void SetTexture(renderengine::Texture* lpTexture);                                   // @0x24ED54
         void SetProgram(s8 li8Program);                                                      // @0x24ECC8
+        // Append a 16-byte {type:IM_CMD_SET_STATE_RASTERIZER} command binding a rasterizer
+        // state. Decompiled from the <BasicColouredVertex> (Im3dUntex) instantiation
+        // (X360 @0x824599C0): asserts lpRasterizerState is non-null and we are inside a
+        // BeginRendering/EndRendering block, then the same 16-byte overflow-checked append
+        // as SetTexture/SetProgram (payload @ +8 is the state pointer).
+        void SetState(const renderengine::RasterizerState* lpRasterizerState);               // @0x824599C0
         // Append a 16-byte {type:IM_CMD_SET_STATE_TEXTURE} command binding a resolved
         // renderengine::TextureState. Decompiled from the inline writer in
         // AptRenderHandler::Render @0x5CB230 (stores muType=9, muSize=16, the state ptr @ +8).
@@ -333,4 +358,16 @@ namespace CgsGraphics
     // submits (the <Basic2dColouredTexturedVertex> explicit instantiation - 20-byte
     // pos+RGBA8+UV vertex). This is the family this TU reconstructs.
     typedef ImRenderBuffer<Basic2dColouredTexturedVertex> Im2dColouredTexturedRenderBuffer;
+
+    // The untextured 3D immediate buffer (the <BasicColouredVertex> explicit
+    // instantiation - 16-byte pos+RGBA8 vertex) X360-attested for
+    // `class:CgsGraphics::BasicColouredVertex>` (see the top-of-file note). NOT aliased
+    // to the committed `CgsGraphics::Im3dRenderBufferUntex` name (CgsIm3d.h) - that name
+    // is already wired to `Im3dUntex` (the ImRenderer<V>-derived renderer) by
+    // BrnRendererModuleIO.h / BrnProgressBarRenderer.cpp's real, already-compiling call
+    // sites (`->SetTransform(Matrix44)`, a DIFFERENT overload than this type's
+    // SetTransform(const Im2dTransform&)); re-pointing that name would break those
+    // callers. This is the buffer's own real type, reachable by writing out the
+    // template explicitly: ImRenderBuffer<BasicColouredVertex>.
+    typedef ImRenderBuffer<BasicColouredVertex> BasicColouredVertexRenderBuffer;
 }

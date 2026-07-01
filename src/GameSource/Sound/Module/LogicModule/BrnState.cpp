@@ -12,20 +12,22 @@ namespace Logic
 {
 
 // ---------------------------------------------------------------------------
-// GetTypeName  @ 0x82682A98
+// `scalar deleting destructor'  @ 0x826C84D8  (the ONLY function this TU's
+// dossier attests for BrnState)
 //
-//   lis   r11, off_82F2E7E0@ha
-//   addi  r11, r11, off_82F2E7E0@l
-//   lwz   r3,  (off_82F2E7E0)(r11)   ; r3 = "BrnState"
-//   blr
+//   *a1 = off_820AE1F4              ; re-install BrnState's own vtable
+//   CgsSound::Logic::State::DestroyEffects()
+//   *a1 = &off_820AA820             ; re-install State's vtable before free
+//   if (a2 & 1) operator delete(a1) ; the "deleting" half of the thunk
 //
-// Returns the per-class RTTI type name. The X360 loads a pointer to the static
-// string literal "BrnState" (the rodata at off_82F2E7E0 holds the address of
-// that C string).
+// The two vtable-pointer stores + the conditional operator-delete call are the
+// standard scalar-deleting-destructor thunk shape (compiler-synthesized here
+// from `virtual ~BrnState()`); the one real, named side effect is the call
+// into the base's DestroyEffects(), reproduced below by name.
 // ---------------------------------------------------------------------------
-const char* BrnState::GetTypeName() const
+BrnState::~BrnState()
 {
-    return "BrnState";
+    DestroyEffects();
 }
 
 } // namespace Logic

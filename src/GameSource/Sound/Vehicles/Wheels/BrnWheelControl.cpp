@@ -1,12 +1,13 @@
 #include "GameSource/Sound/Vehicles/Wheels/BrnWheelControl.h"
 
 // =============================================================================
-// BrnSound::Vehicles::Wheels::AIWheelControl -- out-of-line bodies.
+// BrnSound::Vehicles::Wheels::WheelControl / AIWheelControl -- out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnWheelControl.h for the
 // WheelControl base rationale and the minimal-home FLAG. This TU's recon'd function
-// set is two entries:
-//   AIWheelControl()               @ 0x826E55A8
-//   `vector deleting destructor'   @ 0x826E5608  (-> ~AIWheelControl anchor)
+// set is three entries:
+//   WheelControl::`vector deleting destructor'    @ 0x826D00A0  (-> ~WheelControl anchor)
+//   AIWheelControl::AIWheelControl                @ 0x826E55A8
+//   AIWheelControl::`vector deleting destructor'  @ 0x826E5608  (-> ~AIWheelControl anchor)
 // =============================================================================
 
 namespace BrnSound
@@ -15,6 +16,37 @@ namespace Vehicles
 {
 namespace Wheels
 {
+
+// ---------------------------------------------------------------------------
+// ~WheelControl  @ 0x826D00A0  (the X360 `vector deleting destructor')
+//
+//   stw  off_820AF544, 0x38(r31)   ; IShiftingActivator sub-object vptr @ +0x38
+//   stw  off_820AEA6C, 0(r31)      ; primary vptr (EffectControl path)
+//   stw  off_820AEA38, 4(r31)      ; (transient) base-class IResourceRequester vptr
+//   li   r6, 3 ; stw r6, 0x28(r31) ; meDetachState = E_DETACH_STATE_FINISHED
+//   stw  off_820AA820, 4(r31)      ; final IResourceRequester sub-object vptr
+//   stb  0, 0x31(r31)              ; mbResourcesReady = false
+//   stw  0, 0x24(r31)              ; meAttachState = E_ATTACH_STATE_NONE
+//   if (a2 & 1) { ... deallocate via off_82FFB954 (the MemBase allocator) }
+//   return this
+//
+// Identical inherited-member teardown to the committed BrnEffectControl vector
+// deleting destructor (@ 0x826AEF68) -- meDetachState (+0x28), mbResourcesReady
+// (+0x31), meAttachState (+0x24) -- plus the leading vptr stores, which are the
+// compiler-emitted devirtualization of the WheelControl / BrnEffectControl /
+// IResourceRequester / IShiftingActivator base sub-objects (produced implicitly by
+// the destructor chain here, so the BODY is the observable member teardown, which
+// is empty: WheelControl adds no data members of its own to this dtor's ledger
+// function -- the full WheelSide/WheelData/etc. member surface is UN-HOMED and
+// DEFERRED per the FLAG in BrnWheelControl.h, so it is not torn down here).
+// FLAG: the (a2 & 1) tail invokes the global sound allocator (off_82FFB954) to free
+// the object; that allocator is not homed here, so operator-delete dispatch is left
+// to the host toolchain (the `delete` half of the X360 vector deleting destructor),
+// mirroring the committed BrnEffectControl / ClutchControl / AIWheelControl siblings.
+// ---------------------------------------------------------------------------
+WheelControl::~WheelControl()
+{
+}
 
 // ---------------------------------------------------------------------------
 // AIWheelControl::AIWheelControl  @ 0x826E55A8

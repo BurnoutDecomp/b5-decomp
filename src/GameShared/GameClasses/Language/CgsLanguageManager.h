@@ -1,16 +1,60 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Language/CgsSku.h"                            // CgsLanguage::ELanguage
+#include "GameShared/GameClasses/Fonts/CgsUnicode.h"                           // CgsUnicode::CgsUtf8 (== u8)
+#include "GameShared/GameClasses/Containers/CgsHashTable.h"                    // CgsContainers::HashTable/HashTableElement
+#include "GameShared/GameClasses/Containers/CgsLinkedList.h"                   // CgsContainers::LinkedListHelper/LinkedListNode
+#include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                       // CgsMemory::HeapMalloc
+#include "GameShared/GameClasses/Language/CgsLanguageManagerDebugComponent.h"  // CgsLanguage::LanguageManagerDebugComponent (by-value member)
 
-// CgsLanguage::LanguageManager - localisation/units manager. Only the metric-units
-// query needed by the in-scope GUI code is declared here; the full manager (string
-// tables, distance/speed formatting, etc.) is a large out-of-scope object. Members
-// and the metric flag are from the DecFIGS DWARF (CgsLanguageManager.h).
+namespace CgsResource { struct LanguageResource; }
+
+// CgsLanguage::LanguageManager - localisation/units manager: owns the loaded string table (a
+// fixed-13-bin hash of hashed-key -> UTF-8 string), the dynamic (formatted/allocated) string
+// bookkeeping, the per-locale format separators/templates, and an embedded debug HUD.
+//
+// LAYOUT (DecFIGS DWARF, CgsLanguageManager.h:65 -- member order/names/types), gated against the
+// X360 ARTIST ctor @ 0x827DF9C8, which attests the offsets below (X360 32-bit-pointer build; per
+// the x64-gate rule in AGENTS.md this reconstruction uses NAMED members, not raw offsets, so the
+// x64 compile naturally has different spacing/size -- byte-exactness is not the goal):
+//   +0x00   meLanguage                      (CgsLanguage::ELanguage; NOT touched by this ctor)
+//   +0x04   mpcDefaultFontName               (const char*; NOT touched by this ctor -- read by GetDefaultFont)
+//   +0x08   mStrings                         (HashIDStringArray = HashTable<u32,const CgsUtf8*,13>; ctor seeds
+//                                             each of the 13 bins' miCount to the uninitialised sentinel)
+//   +0xA8   mDynamicStringElements           (DynamicHashElementsList = LinkedListHelper<HashTableElement*,1024>;
+//                                             ctor seeds miNumNodes=1024 then InternalInit's the free/live sublists)
+//   +0x30C4 mDynamicStringPointerElements    (same type as above; ctor repeats the same seed/Init pair)
+//   +0x60E0 mpStringElements, mpLanguageAllocator, mpResource, mePrepareStage, meReleaseStage,
+//           mbIsUsingMetricUnits, mrLargeDistanceConversion (+0x60F8), mrSmallDistanceConversion, and
+//           the 21 per-locale format-string pointers (mpGeneral*/mpTimeFormat*/mpDistanceFormat*) --
+//           NOT touched by this ctor (populated by Construct(), a separate not-yet-reconstructed
+//           function); mrLargeDistanceConversion's offset independently matches the
+//           GetDistanceDisplayScale accessor comment below (InGameMessageRenderer usage)
+//   +0x6154 mDebugComponent                  (LanguageManagerDebugComponent, by value; the ctor manually
+//                                             stamps its vtable pointer -- the CgsDev::DebugComponent base
+//                                             ctor folded/inlined into this one)
 namespace CgsLanguage
 {
     class LanguageManager
     {
     public:
+        // CgsLanguageManager.h:98 (DWARF).
+        enum EPrepareStage
+        {
+            E_PREPARESTAGE_START   = 0,
+            E_PREPARESTAGE_MANAGER = 1,
+            E_PREPARESTAGE_DONE    = 2,
+        };
+
+        // CgsLanguageManager.h:105 (DWARF).
+        enum EReleaseStage
+        {
+            E_RELEASESTAGE_START   = 0,
+            E_RELEASESTAGE_MANAGER = 1,
+            E_RELEASESTAGE_DONE    = 2,
+        };
+
         // ADDITIVE GROW (GuiFlow-consumers group): the localised-value format selector
         // (DWARF: CgsLanguageManager.h:84 `enum ParameterFormatType`). The GUI text
         // fields pass it to LanguageManager::FormatParameter / TextField::SetLocalisedText
@@ -44,6 +88,14 @@ namespace CgsLanguage
             E_FORMAT_LARGE_DISTANCE_LONG        = 20,
             E_FORMAT_COUNT                      = 21,
         };
+
+        // X360 0x827DF9C8. Seeds the two 1024-node dynamic-string LinkedListHelper pools (their free
+        // sublists own every node, their live sublists start empty) and every mStrings hash bin's
+        // miCount sentinel, then stamps mDebugComponent's vtable pointer. meLanguage,
+        // mpcDefaultFontName, mpResource, the allocator/format-string pointers and the metric flag
+        // are left untouched here (populated by Construct(), not yet reconstructed). See ViewModule.h
+        // for the by-value-member call site (CgsGui::ViewModule::ViewModule).
+        LanguageManager();
 
         void SetUseMetricUnits(bool lbUseMetric);
         bool IsUsingMetricUnits() const;
@@ -94,5 +146,55 @@ namespace CgsLanguage
         // small or large distance string reads better (X360 reads it as a float member at +0x60F8;
         // exposed as a named accessor so callers don't poke the raw offset).
         f32 GetDistanceDisplayScale() const;
+
+        // X360 0x824434C0. Returns the loaded default font name (mpcDefaultFontName), asserting first
+        // that Construct()/PrepareDefaultFont() has already set it (a null default font is a
+        // programming error, not a recoverable runtime state -- the assert fires and the function
+        // still returns the null pointer, matching the X360 body exactly).
+        const char* GetDefaultFont() const;
+
+    private:
+        // CgsLanguageManager.h:52 (DWARF).
+        typedef CgsContainers::HashTable<u32, const CgsUnicode::CgsUtf8*, 13> HashIDStringArray;
+        // CgsLanguageManager.h:54 (DWARF).
+        typedef CgsContainers::LinkedListHelper<CgsContainers::HashTableElement<u32, const CgsUnicode::CgsUtf8*>*, 1024> DynamicHashElementsList;
+
+        CgsLanguage::ELanguage meLanguage;                    // +0x00 -- NOT touched by the ctor
+        const char*            mpcDefaultFontName;             // +0x04 -- NOT touched by the ctor; read by GetDefaultFont
+        HashIDStringArray      mStrings;                       // +0x08
+        DynamicHashElementsList mDynamicStringElements;        // +0xA8
+        DynamicHashElementsList mDynamicStringPointerElements; // +0x30C4
+        CgsContainers::HashTableElement<u32, const CgsUnicode::CgsUtf8*>* mpStringElements; // +0x60E0 -- NOT touched by the ctor
+        CgsMemory::HeapMalloc*        mpLanguageAllocator;     // +0x60E4 -- NOT touched by the ctor
+        CgsResource::LanguageResource* mpResource;              // +0x60E8 -- NOT touched by the ctor
+        EPrepareStage           mePrepareStage;                 // +0x60EC -- NOT touched by the ctor
+        EReleaseStage           meReleaseStage;                 // +0x60F0 -- NOT touched by the ctor
+        bool                    mbIsUsingMetricUnits;           // +0x60F4 -- NOT touched by the ctor
+        f32                     mrLargeDistanceConversion;      // +0x60F8 -- NOT touched by the ctor
+        f32                     mrSmallDistanceConversion;      // +0x60FC -- NOT touched by the ctor
+
+        const CgsUnicode::CgsUtf8* mpGeneralDecimalSeparator;      // +0x6100
+        const CgsUnicode::CgsUtf8* mpGeneralThousandsSeparator;    // +0x6104
+        const CgsUnicode::CgsUtf8* mpGeneralPercentage;            // +0x6108
+        const CgsUnicode::CgsUtf8* mpGeneralXOverY;                // +0x610C
+        const CgsUnicode::CgsUtf8* mpGeneralCurrencySeparator;     // +0x6110
+        const CgsUnicode::CgsUtf8* mpGeneralCurrency;              // +0x6114
+        const CgsUnicode::CgsUtf8* mpTimeFormatDate;                // +0x6118
+        const CgsUnicode::CgsUtf8* mpTimeFormatAll;                 // +0x611C
+        const CgsUnicode::CgsUtf8* mpTimeFormatHrsMinsSecs;         // +0x6120
+        const CgsUnicode::CgsUtf8* mpTimeFormatMinsSecsHnds;        // +0x6124
+        const CgsUnicode::CgsUtf8* mpTimeFormatMinsSecs;            // +0x6128
+        const CgsUnicode::CgsUtf8* mpTimeFormatSecsHnds;            // +0x612C
+        const CgsUnicode::CgsUtf8* mpTimeFormatSecs;                // +0x6130
+        const CgsUnicode::CgsUtf8* mpTimeFormatSecsLong;            // +0x6134
+        const CgsUnicode::CgsUtf8* mpTimeFormatMinSecsMidText;      // +0x6138
+        const CgsUnicode::CgsUtf8* mpTimeFormatMinsSecsMidText;     // +0x613C
+        const CgsUnicode::CgsUtf8* mpDistanceFormatShort;           // +0x6140
+        const CgsUnicode::CgsUtf8* mpDistanceFormatShortL;          // +0x6144
+        const CgsUnicode::CgsUtf8* mpDistanceFormatLong;            // +0x6148
+        const CgsUnicode::CgsUtf8* mpDistanceFormatLongL;           // +0x614C
+        const CgsUnicode::CgsUtf8* mpDistanceFormatIsMetric;        // +0x6150
+
+        LanguageManagerDebugComponent mDebugComponent;              // +0x6154 -- vtable stamped by the ctor
     };
 }

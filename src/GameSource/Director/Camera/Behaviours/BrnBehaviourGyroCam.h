@@ -56,7 +56,15 @@ enum EBehaviourTypeGyroCam
 //   BrnPhysics::Vehicle::ku8MaxNumRaceCars is 8 (the asm at 0x821F40F0 compares the race-car
 //   index against 8). Replace with the real BrnPhysics::Vehicle constant when that TU lands;
 //   the VALUE (8) is asm.
+// Guarded: BrnBehaviourBystanderCam.h / BrnBehaviourLooseAttachment.h each independently
+// (re)declare this same identically-valued unnamed enum in this namespace (a latent ODR risk
+// that only surfaces once a single TU includes more than one of them -- as BrnArbStateTakedown.cpp
+// now does for GyroCam + LooseAttachment). The guard makes the second inclusion a no-op instead
+// of a redefinition error; each sibling header carries the identical guard.
+#ifndef BRNDIRECTOR_CAMERA_KU_MAX_NUM_RACE_CARS_DEFINED
+#define BRNDIRECTOR_CAMERA_KU_MAX_NUM_RACE_CARS_DEFINED
 enum { KU_MAX_NUM_RACE_CARS = 8 };
+#endif
 
 class BehaviourGyroCam
 {

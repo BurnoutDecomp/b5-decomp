@@ -7,6 +7,7 @@
 #include "GameSource/Director/Utils/BrnVehicleRef.h"         // BrnDirector::VehicleRef (the VehicleRef members)
 #include "SDKs/Packages/ICE/ICEData.hpp"                     // ICE::ICETake / ICE::ICETakeData (controller take + take data)
 #include "SharedClasses/DataLists/ICEList.h"                 // BrnResource::ICEList::GetICETakeDataFromGuid
+#include "GameSource/AttribSys/Generated/classes/iceanim.h"  // Attrib::Gen::iceanim (the real/canonical home)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h
@@ -148,6 +149,25 @@ public:
     // it at manager +616 (+0x268) and resolves it through the same ShotList attribute key
     // (0x7533C0E2_15246B49 / 354708297) the shotgroup accessor uses.
     const Attrib::Gen::shotgroup& GetOnlineRaceStartShots() const;
+
+    // ADDITIVE GROW (BrnArbStateDriveThru::Prepare @0x8226E938): the five drive-thru shop
+    // shot-groups (the manager embeds one shotgroup per shop kind, at per-type offsets, NOT a
+    // contiguous array -- ArbStateDriveThru::Prepare itself switches on GameState::meDriveThruType
+    // to pick which one to read, so that switch stays in Prepare; these are just the five named
+    // per-type slots it reads). X360 offsets:
+    //   GetDriveThruAutoPartsShots  -> manager +1032 (+0x408)  E_DRIVETHRU_AUTO_PARTS(1)
+    //   GetDriveThruBodyShopShots   -> manager +1000 (+0x3E8)  E_DRIVETHRU_BODY_SHOP(2)
+    //   GetDriveThruGasStationShots -> manager +984  (+0x3D8)  E_DRIVETHRU_GAS_STATION(3)
+    //   GetDriveThruTuningShopShots -> manager +1048 (+0x418)  E_DRIVETHRU_TUNING_SHOP(4)
+    //   GetDriveThruTireShopShots   -> manager +1016 (+0x3F8)  E_DRIVETHRU_TIRE_SHOP(5) (also
+    //     the fallback Prepare's default case asserts "unhandled drivethru type" then reads)
+    // DECLARATION-ONLY (body in the resource-manager TU). FLAG: modelled on this minimal
+    // DirectorResourceManager slice; the real home is BrnDirectorResourceManager.h.
+    const Attrib::Gen::shotgroup& GetDriveThruAutoPartsShots() const;
+    const Attrib::Gen::shotgroup& GetDriveThruBodyShopShots() const;
+    const Attrib::Gen::shotgroup& GetDriveThruGasStationShots() const;
+    const Attrib::Gen::shotgroup& GetDriveThruTuningShopShots() const;
+    const Attrib::Gen::shotgroup& GetDriveThruTireShopShots() const;
 };
 
 // FLAG: minimal slice of the per-frame timestep source the Update body samples. No
@@ -201,6 +221,16 @@ public:
     // every concrete behaviour calls it when its anchor stops resolving. (Body in
     // Behaviour.cpp.)
     void Fail(void* lpInfo, s32 liReason);
+
+    // ADDITIVE GROW (BrnArbStateDriveThru::Update @0x82235DB0): a public read of the shared
+    // "flag C" byte (+0x0C -- see mbBaseFlagC below / Behaviour.cpp's SetCantSwitchFromMeNow /
+    // Fail, which both write it). X360: `lbz r11, 0xC(r3)` on the live Behaviour* an unnamed
+    // handle-resolution helper (sub_821FCDA8, owning TU not yet identified) hands back; the
+    // drive-thru state gates its hand-off-to-roaming transition on this byte. FLAG: the exact
+    // semantic role of mbBaseFlagC (beyond "written true by Fail / cleared by
+    // SetCantSwitchFromMeNow") is not fully recovered; exposed as a named read so the consumer
+    // never pokes the base by offset.
+    bool GetBaseFlagC() const { return mbBaseFlagC; }
 
 protected:
     // The shared head of the base block. The named flags below land inside it.
@@ -349,23 +379,14 @@ public:
 
 // ----------------------------------------------------------------------------
 // The attrib-block "iceanim" parameters SetParameters reads (the take guid lives at the
-// instance's +0xC). FLAG: this is the generated Attrib::Gen::iceanim accessor family; its
-// home is the AttribSys generated layer. Modelled here as the minimal named accessor the
-// body uses, declaration-only (the per-TU `cl /c` gate does not link).
+// instance's +0xC). Attrib::Gen::iceanim's real (canonical) home is
+// GameSource/AttribSys/Generated/classes/iceanim.h (included above) -- ClassKey()/
+// GetClassKey() already live there; GetAnimGuid() is ADDITIVE GROW there (the accessor this
+// behaviour's SetParameters/ChangeMovie need). This file previously carried its OWN local
+// `struct iceanim` redefinition (a fork); removed here in favour of the real header, which a
+// second local definition would collide with once a TU includes both together (e.g.
+// BrnArbStateTakedown.cpp, via BrnSimpleIceTakedownPlayer.h).
 // ----------------------------------------------------------------------------
-namespace Attrib { namespace Gen {
-    struct iceanim
-    {
-        // The class key the parameters must carry (SetParameters asserts equality).
-        static s64 ClassKey();
-        // The instance's STORED class-key tag (the leading 8 bytes of the parameter
-        // block). SetParameters compares this against ClassKey(); mirrors the inline
-        // *reinterpret_cast<const s64*>(this) form the generated home uses.
-        s64 GetClassKey() const { return *reinterpret_cast<const s64*>(this); }
-        // The take guid carried by the parameter block (instance +0xC).
-        s32 GetAnimGuid() const;
-    };
-}}
 
 namespace BrnDirector { namespace Camera {
 
@@ -535,6 +556,15 @@ public:
     // which owns mBystanderRef). FLAG: the four bystander-ref fields' individual roles are
     // not recovered (modelled as a fixed post-event seed; the field WRITES are asm-attested).
     void SetBystanderRefForPostEvent();
+
+    // ADDITIVE GROW (BrnArbStateTakedown.cpp -- SimpleIceTakedownPlayer::Prepare @0x8226CF38).
+    // Bind the bystander anchor vehicle reference (mBystanderRef @+0xE10) to a specific race car,
+    // the same 4-word {kind=1, index, 0, valid=1} pattern as SetSecondaryVehicleRefToRaceCarIndex
+    // (X360 asserts liRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars, BrnVehicleRef.h:222,
+    // same as that sibling setter). DECLARATION-ONLY (the body lands with this behaviour's TU,
+    // which owns mBystanderRef); exposed as a named setter so the takedown player never pokes
+    // the (private) ref by offset.
+    void SetBystanderRefToRaceCarIndex(s32 liRaceCarIndex);
 
     // Seek the embedded key-anim controller's normalised playback parameter (mKeyAnimController
     // @+0x680) to lf01. The rank-up state rewinds a freshly-changed take to its start with 0.0

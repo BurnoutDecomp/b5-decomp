@@ -15,8 +15,9 @@
 // CgsSound::Logic::StateManager (the primary base carrying the per-class RTTI
 // hooks GetTypeInfo/GetTypeName, returning ClassTypeInfo<CgsSound::Logic::
 // StateManager>) AND BrnSound::Logic::IResourceRequester (the streaming-resource
-// interface, sub-object vptr after the primary). This TU bodies only
-// GetTypeName().
+// interface, sub-object vptr after the primary). This TU bodies GetTypeName(),
+// the vector-deleting destructor (X360 0x826FAB58), and GetResourceRegistrar()
+// (X360 0x82696510).
 //
 // ODR FOLD (2026-06-25): this header previously carried its OWN minimal
 // `struct StateManager` + `template ClassTypeInfo` slice (a placeholder used only
@@ -55,19 +56,29 @@ namespace Logic
 // cross-header ODR.
 
 // BrnStateManager.h:59 (DWARF): BrnStateManager : public StateManager (primary,
-// RTTI hooks) + public IResourceRequester (sub-object). GetTypeName() is bodied
-// in this TU's .cpp. The IResourceRequester pure virtuals and the CPU-monitor
-// bookkeeping are declared/elided for home completeness but not bodied here.
+// RTTI hooks) + public IResourceRequester (sub-object). GetTypeName(), the vector-
+// deleting destructor, and GetResourceRegistrar() are bodied in this TU's .cpp
+// (real, attested X360 addresses); ResourcesAreReady() is bodied as a faithful
+// PS3-DecFIGS no-op. Both IResourceRequester pure virtuals are therefore overridden
+// with concrete bodies here, so BrnStateManager is concrete (not abstract).
 //
 // The primary base is now the FULL canonical CgsSound::Logic::StateManager (the
-// content-pool/RTTI/ctor keystone in CgsStateManager.h). BrnStateManager remains
-// abstract (the two IResourceRequester pure virtuals are declared but not bodied
-// here); the concrete leaf managers override+body them.
+// content-pool/RTTI/ctor keystone in CgsStateManager.h).
 struct BrnStateManager : public CgsSound::Logic::StateManager,
                          public IResourceRequester
 {
     BrnStateManager() : miCpuMonitor(0) {}
-    virtual ~BrnStateManager() {}
+
+    // `vector deleting destructor'  @ X360 0x826FAB58 -- bodied out-of-line in the
+    // .cpp (see there for the asm rationale). Structurally identical to the base
+    // CgsSound::Logic::StateManager's own vector-deleting destructor (0x826FAAB8,
+    // CgsStateManagerDtor.cpp / CgsStateManager.cpp): BrnStateManager adds no member
+    // requiring explicit teardown (miCpuMonitor is a scalar), so the compiler
+    // re-derives the SAME `off_820B66E4`-vtable-store + `+0x30 ~ObjectPool` + MemBase
+    // vtable re-install + conditional allocator-free shape the base already has --
+    // the observable work (destroying the inherited mContentPool) happens via the
+    // implicit base-destructor chain, matching the established base-class precedent.
+    virtual ~BrnStateManager();
 
     // BrnStateManager.cpp:34 — per-class RTTI. Introduced here (the full base does
     // not declare them); the leaves override these. Returns the canonical
@@ -85,9 +96,19 @@ struct BrnStateManager : public CgsSound::Logic::StateManager,
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
     static CgsSound::Logic::StateManager*                                 CreateObject( u32 luType );
 
-    // IResourceRequester overrides — declared for home completeness; not bodied
-    // by this group (outside this TU's func set).
-    virtual void               ResourcesAreReady();
+    // IResourceRequester overrides.
+    // ResourcesAreReady  @ PS3 DecFIGS 0x8E8D24 -- empty no-op (faithful to PS3;
+    // not individually X360-attested in this TU's dossier). The leaves override
+    // with their real resource-ready callbacks.
+    virtual void ResourcesAreReady();
+
+    // GetResourceRegistrar  @ X360 0x82696510 (Hex-Rays name-truncated to
+    // "GetResourceRegistr" in the dossier -- this IS the declared override).
+    // Bodied out-of-line in the .cpp: forwards to the owning module's embedded
+    // registrar via mpLogicModule, mirroring the sibling BrnEffectObject::
+    // GetResourceRegistrar @ 0x82696850 (same tail-call-through-IResourceRequester
+    // shape, same mpLogicModule field the base CgsSound::Logic::StateManager already
+    // declares protected/by-name).
     virtual ResourceRegistrar& GetResourceRegistrar();
 
 private:

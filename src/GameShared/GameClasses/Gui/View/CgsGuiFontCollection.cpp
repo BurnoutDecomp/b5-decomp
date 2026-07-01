@@ -7,6 +7,17 @@
 #include <cstring>   // strncpy, strstr
 
 // =============================================================================
+// CgsGui::FontCollection::AddFont -- BURNOUT_X360_ARTIST.XEX @ 0x82853030.
+//
+// Simple free-slot insertion: scan maFonts[] for the first empty (default/IsNull)
+// slot and copy the incoming handle into it. If all KI_MAX_FONTS slots are already
+// occupied, fire an assert ("No room to add font <name>", CgsGuiFontCollection.cpp:86)
+// and return without writing anything (the X360 build streams the font's typeface
+// name into the assert message via StrStream; per this project's established
+// convention -- see CgsResourcePtr.cpp::Propogate's gpcMessageBuffer/StrStream note --
+// a StrStream-built assert message collapses to the plain CGS_ASSERT string, dropping
+// the baked file/line/streamed-name plumbing for semantic parity).
+//
 // CgsGui::FontCollection::FindFont -- BURNOUT_X360_ARTIST.XEX @ 0x82853168.
 //
 // Faithful decompile of the X360 lookup. The collection is an array of typed Font
@@ -28,6 +39,12 @@
 // (a 4-byte skew vs the DWARF layout). We access the named member for x64 parity.
 // FLAG: [c:+0x150] vs the committed Font's macTypefaceFamilyName @ [c:+0x14C] -- a
 // console-build offset skew; the NAMED field is the correct, portable target.
+//
+// DWARF attests FindFont as a const method returning
+// `const SafeResourceHandle<CgsResource::Font>&` (CgsGuiFontCollection.h:65); nothing
+// in the X360 body mutates the collection, so the const-qualified reconstruction below
+// is semantic-parity-safe (it replaces an earlier mis-declaration as a non-const
+// method returning a mutable pointer).
 // =============================================================================
 
 namespace CgsGui
@@ -50,7 +67,24 @@ namespace CgsGui
         const int KI_NUM_FALLBACKS = sizeof(gskaFontFallbacks) / sizeof(gskaFontFallbacks[0]);
     }
 
-    CgsResource::SafeResourceHandle<CgsResource::Font>* FontCollection::FindFont(const char* lpcFontName)
+    void FontCollection::AddFont(CgsResource::SafeResourceHandle<CgsResource::Font>& lTypeface)
+    {
+        // Scan for the first free (empty/default) slot and copy the handle into it.
+        for (int i = 0; i < KI_MAX_FONTS; ++i)
+        {
+            if (!maFonts[i].IsNull())   // [c:slot == {dword_8305F174,_8305F178}? -> occupied]
+                continue;
+
+            maFonts[i] = lTypeface;   // [c:*v9 = *a2; v9[1] = a2[1]] -- memberwise handle copy
+            return;
+        }
+
+        // No free slot: fire the "No room to add font <name>" assert and drop the handle
+        // (CgsGuiFontCollection.cpp:86; see file-header note on the StrStream collapse).
+        CGS_ASSERT(false, "No room to add font");
+    }
+
+    const CgsResource::SafeResourceHandle<CgsResource::Font>& FontCollection::FindFont(const char* lpcFontName) const
     {
         // FindFont asserts (CgsGuiFontCollection.cpp:100).
         CGS_ASSERT(lpcFontName != nullptr, "lpcFontName");
@@ -79,7 +113,7 @@ namespace CgsGui
 
             const CgsResource::Font* lpFont = maFonts[i].Get();   // [c:sub_827EF870 -> Font*]
             if (std::strstr(acNameLower, lpFont->macTypefaceFamilyName))   // [c:font + 0x150]
-                return &maFonts[i];
+                return maFonts[i];
         }
 
         // ---- Pass 2: fallback table. For each {pattern, fallbackName} pair whose pattern
@@ -97,7 +131,7 @@ namespace CgsGui
 
                 const CgsResource::Font* lpFont = maFonts[i].Get();
                 if (std::strstr(gskaFontFallbacks[f].mpcFallbackName, lpFont->macTypefaceFamilyName))
-                    return &maFonts[i];
+                    return maFonts[i];
             }
             // No slot matched this triggered fallback -> fall through to the next pair
             // (X360 LABEL_26: v13 += 2).
@@ -107,6 +141,6 @@ namespace CgsGui
         // slot is the empty/default handle (CgsGuiFontCollection.cpp:144), then returns the
         // collection's first slot regardless (a degenerate, never-null result).
         CGS_ASSERT(!maFonts[0].IsNull(), "NO FONTS REGISTERED");
-        return &maFonts[0];
+        return maFonts[0];
     }
 }
