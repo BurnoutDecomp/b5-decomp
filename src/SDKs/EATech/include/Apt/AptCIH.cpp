@@ -451,7 +451,21 @@ int AptCIH::tick()
         {
             // Wrapped past the end: loop back to the start, then skip to the enterFrame
             // stage (LABEL_27) -- NOT through queueFrameActions.
-            jumpToFrame(0);
+            // FLAG (un-homed native-8 leaf -- honest boundary): the console loops via
+            // jumpToFrame(0), whose arbitrary-jump path replays the intervening frames through
+            // AptMovie::DoTemporaryFrameControls + the AptPseudoDisplayList temporary-frame skip
+            // resolver. That subsystem still reads command records at CONSOLE (4-byte) offsets and
+            // is NOT ported to the native-8 GUIAPT layout (verified via crash dump: DoTemporary
+            // FrameControls -> CmdPtr reads a straddled/misaligned pointer 0x180400d000007ff6 -> AV).
+            // Until it is homed (its own follow-on), a multi-frame nested clip that reaches its end
+            // would AV on the wrap. So the wrap RESETS the play-head to frame 0 directly (a plain
+            // loop) instead of the arbitrary-jump replay: the next tick's frame-0 doFrameControls
+            // re-composes the clip's frame-0 content, which is the same on-screen result for a
+            // looping clip (the replay-merge only matters for a mid-timeline SEEK, not a loop-to-0).
+            // (The console additionally re-queues the label-0 actions via jumpToFrame's queueFrame
+            // Actions tail; that is AS-VM work which is deferred here, so the plain reset is faithful
+            // to the "un-run action queue" state.) Then fall to the enterFrame stage (label_27).
+            pInst->mnGotoFrame = 0;
             goto label_27;
         }
         // Normal frame: fall through to the shared doFrameControls (LABEL_18/19).
