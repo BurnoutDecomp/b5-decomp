@@ -11,7 +11,10 @@
 
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"  // VehiclePhysics::AddAirRam / GetTransform (full-physics body)
+#include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::IsValid(Vector3)
+#include "rw/math/vpu/matrix44affine_operation.h"                        // rw::math::vpu::IsValid(Matrix44Affine), TransformPoint
 
 namespace BrnPhysics
 {
@@ -328,6 +331,104 @@ bool PhysicalTrafficManager::ValidateAndFixUpTrafficTrafficContact(void* lpConta
     lru64IdA = (lru64IdA & 0x00000000FFFFFFFFull) | (static_cast<u64>(luPhysIdA) << 32);
     lru64IdB = (lru64IdB & 0x00000000FFFFFFFFull) | (static_cast<u64>(luPhysIdB) << 32);
     return true;
+}
+
+// =========================================================================================
+// PhysicalTrafficVehicle wave-7 methods (their own ledger funcs; homed here alongside the
+// already-committed GetArticulatedVehicleType). Reconstructed from BURNOUT_X360_ARTIST.XEX.
+//
+// FLAG (type coherence): mpVehicleBody is stored as SimpleVehiclePhysics* in this TU's opaque
+// slice; on console TrafficPhysics : VehiclePhysics : SimpleVehiclePhysics so it is the same
+// object, but the committed slices do not model that inheritance. GetFullTrafficPhysics /
+// AddAirRam / GetArticulationPointWorldSpace therefore reinterpret_cast the raw +0x1C pointer to
+// the concrete body type, mirroring the X360 raw pointer load. (The manager header's opaque
+// `struct TrafficPhysics` and the real class in TrafficPhysics.h stay distinct; this TU only casts.)
+// =========================================================================================
+
+// PhysicalTrafficVehicle::GetFullTrafficPhysics   @0x825C0148  (dossier symbol 'GetFullTraffic')
+//   Assert mu8PhysicalType (+0x32) < COUNT; assert the vehicle is fully-physical -> IsFullyPhysical();
+//   return mpVehicleBody (+0x1C) as the concrete full-physics body.
+TrafficPhysics* PhysicalTrafficVehicle::GetFullTrafficPhysics()
+{
+    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
+               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
+    CGS_ASSERT(mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL, "IsFullyPhysical()");
+    return reinterpret_cast<TrafficPhysics*>(mpVehicleBody);
+}
+
+// PhysicalTrafficVehicle::AddAirRam   @0x826152E0
+//   Assert mu8PhysicalType < COUNT; only when the vehicle is FULLY physical (leType == 0) forward
+//   the two Vector3 args into the full-physics body's VehiclePhysics::AddAirRam.
+void PhysicalTrafficVehicle::AddAirRam(u32 luFlags, f32 lfFactor, f32 lfDecay,
+                                       Vector3 lvCustomImpulse, Vector3 lvCustomPosition,
+                                       f32 lfTimerTillFire)
+{
+    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
+               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
+    if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
+    {
+        // X360: GetFullTraffic() returns *(this+0x1C)=mpVehicleBody; VehiclePhysics::AddAirRam(body,...).
+        reinterpret_cast<VehiclePhysics*>(GetFullTrafficPhysics())->AddAirRam(
+            luFlags, lfFactor, lfDecay, lvCustomImpulse, lvCustomPosition, lfTimerTillFire);
+    }
+}
+
+// PhysicalTrafficVehicle::IsSimple (const)   @0x825B33B8
+//   Assert mu8PhysicalType < COUNT; return leType == SIMPLE (the `cntlzw(leType-1)>>5` idiom).
+bool PhysicalTrafficVehicle::IsSimple() const
+{
+    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
+               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
+    return mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_SIMPLE;
+}
+
+// PhysicalTrafficVehicle::SetCheckOwner   @0x825C01B8
+//   Assert the car has not already been checked (miCheckOwner at +0x33 == 0xFF sentinel) ->
+//   '!HasBeenChecked()'; store the owner byte.
+void PhysicalTrafficVehicle::SetCheckOwner(EActiveRaceCarIndex leCheckOwner)
+{
+    CGS_ASSERT(!HasBeenChecked(), "!HasBeenChecked()");
+    miCheckOwner = static_cast<s8>(leCheckOwner);
+}
+
+// PhysicalTrafficVehicle::GetArticulationPointLocalSpace (const)   @0x825C0538
+//   Range-assert meArticulatedVehicleType; assert it is CAB or TRAILER; assert the stored local
+//   point is finite; return mArticulationPointLocal (+0). Pure member read -- no body type needed.
+Vector3 PhysicalTrafficVehicle::GetArticulationPointLocalSpace() const
+{
+    CGS_ASSERT(meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE
+                   && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT,
+               "meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT");
+    CGS_ASSERT(GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_CAB
+                   || GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_TRAILER,
+               "GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_CAB || GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_TRAILER");
+    CGS_ASSERT(rw::math::vpu::IsValid(mArticulationPointLocal),
+               "RwMathVPU::IsValid( mArticulationPointLocal )");
+    return mArticulationPointLocal;
+}
+
+// PhysicalTrafficVehicle::GetArticulationPointWorldSpace (const)   @0x825C0220
+//   Same type + local-point finiteness asserts as the local-space accessor, plus a finiteness
+//   assert over the vehicle body's transform (GetPhysics()->GetTransform()). Then transforms
+//   mArticulationPointLocal by that transform (vmaddfp cascade == TransformPoint) and returns the
+//   world-space point. GetPhysics() returns *(this+0x1C)=mpVehicleBody.
+Vector3 PhysicalTrafficVehicle::GetArticulationPointWorldSpace() const
+{
+    CGS_ASSERT(meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE
+                   && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT,
+               "meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT");
+    CGS_ASSERT(GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_CAB
+                   || GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_TRAILER,
+               "GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_CAB || GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_TRAILER");
+    CGS_ASSERT(rw::math::vpu::IsValid(mArticulationPointLocal),
+               "RwMathVPU::IsValid( mArticulationPointLocal )");
+
+    const rw::math::vpu::Matrix44Affine& lrTransform =
+        reinterpret_cast<const VehiclePhysics*>(mpVehicleBody)->GetTransform();
+    CGS_ASSERT(rw::math::vpu::IsValid(lrTransform),
+               "RwMathVPU::IsValid( GetPhysics()->GetTransform() )");
+
+    return rw::math::vpu::TransformPoint(lrTransform, mArticulationPointLocal);
 }
 
 }   // namespace Vehicle

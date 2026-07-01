@@ -16,6 +16,7 @@
 
 #include "types.hpp"
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Vector2 (16-byte, 4 named lanes)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"   // BrnPhysics::Vehicle::Wheel::TireGripCurve
 
 namespace BrnPhysics
 {
@@ -42,18 +43,23 @@ namespace Vehicle
         // have no PC implementation.) Out-of-line in the .cpp (ledger func definition site).
         rw::math::vpu::Vector2 GetPointOnGraph(f32 lfSlipRatio, f32 lfGripCoefficient) const;
 
+        // @+0x00 (DWARF B5PhysicsHandlingDebugComponent.h:221): the grip curve this graph plots,
+        // set by Prepare(). Read by GripCurveDebugWindow::GetCoefficientRange/GetSlipRatioRange.
+        const Wheel::TireGripCurve* GetGripCurve() const { return mpGripCurve; }
+
     private:
-        // +0x00: screen member zeroed by Construct() (rw::math::vpu::Vector2). Not touched by
-        // this TU. FLAGGED PLACEHOLDER -- owner of Construct must confirm its role/name.
-        rw::math::vpu::Vector2 mScreenAnchor0x00;
+        // +0x00 (DWARF B5PhysicsHandlingDebugComponent.h:178-181): the grip-curve source pointer set
+        // by Prepare(const Wheel::TireGripCurve*). On the X360 this is a 4-byte pointer occupying the
+        // first word of the +0x00..+0x10 slot; padded here so mAxisTopLeft stays at +0x10.
+        const Wheel::TireGripCurve* mpGripCurve;
+        u8                          mPad0x00[16 - sizeof(const Wheel::TireGripCurve*)];
 
         rw::math::vpu::Vector2 mAxisTopLeft;     // +0x10: top-left screen corner of the axis box
         rw::math::vpu::Vector2 mAxisRanges;      // +0x20: .x = slip-ratio range, .y = grip range
         rw::math::vpu::Vector2 mAxisDimensions;  // +0x30: .x = box width (px), .y = box height (px)
 
-        // +0x40 onward: grip-curve source pointer set by Prepare(const Wheel::TireGripCurve*)
-        // plus any further state. Not touched by this TU. FLAGGED PLACEHOLDER -- the
-        // Prepare/Render owner must add (GROW) these without disturbing the offsets above.
+        // +0x40 onward: any further Render/window state. Not touched by this TU. FLAGGED PLACEHOLDER
+        // -- the Render owner must add (GROW) these without disturbing the offsets above.
     };
 }
 }

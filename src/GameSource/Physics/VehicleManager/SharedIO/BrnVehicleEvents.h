@@ -371,6 +371,68 @@ namespace Vehicle
         CreateArticulatedTrafficEvent& operator=( const CreateArticulatedTrafficEvent& );
         CreateArticulatedTrafficEvent() = default;
         CreateArticulatedTrafficEvent( const CreateArticulatedTrafficEvent& ) = default;
+
+        // X360 0x825B3030 / 0x825B3108: project the cab / trailer half of this articulated event
+        // onto a CreatePhysicalTrafficEvent (bodied in CreateArticulatedTrafficEvent.cpp).
+        void GetCreateCabEvent( CreatePhysicalTrafficEvent* lpCreateCabEvent ) const;
+        void GetCreateTrailerEvent( CreatePhysicalTrafficEvent* lpCreateTrailerEvent ) const;
+    };
+
+    // Apply an air-ram impulse to a vehicle (jump/ram stunt effect). DWARF BrnVehicleEvents.h:586.
+    // alignas(16) (carries Vector3Plus/Vector3). sizeof==64, matching the X360 EventQueue<...,20>
+    // maEvents element stride (VolumeInstanceId(8)@0 + u32@8 + f32@12 + Vector3Plus(16)@16 +
+    // Vector3(16)@32 + f32@48, rounded up to 64). Element of the VehicleEffectsInputInterface
+    // mAirRamQueue.
+    struct alignas(16) CreateAirRamEvent
+    {
+        VolumeInstanceId mVolumeId;              // @0
+        u32              muEffectFlags;          // @8
+        f32              mfDecay;                // @12
+        Vector3Plus      mDirectionAndMagnitude; // @16
+        Vector3          mPosition;              // @32
+        f32              mfStartTime;            // @48
+    };
+
+    // Apply a spin impulse to a vehicle (air-spin stunt effect). DWARF BrnVehicleEvents.h:620.
+    // alignas(16) (carries Vector3). sizeof==48 (VolumeInstanceId 8 -> Vector3 padded to @16 ->
+    // f32 @32, rounded up to 48), matching the X360 EventQueue<...,10> / Append 48*count stride.
+    // Element of the VehicleEffectsInputInterface mSpinQueue.
+    struct alignas(16) CreateSpinEvent
+    {
+        VolumeInstanceId mVolumeId;  // @0
+        Vector3          mForce;     // @16 (padded from 8; Vector3 is alignas(16))
+        f32              mfTime;     // @32
+    };
+
+    // Result of a CreateVehicle request (which volume instance, success/fail). DWARF
+    // BrnVehicleEvents.h:542. VolumeInstanceId is 8-byte aligned so the trailing bool pads out to
+    // sizeof==16, matching the X360 EventQueue<...,8> / AddEvent / Append 16-byte element copy.
+    // Element of the VehicleManagerOutputInterface mCreateVehicleResultQueue.
+    struct CreateVehicleResult
+    {
+        VolumeInstanceId mVolumeInstanceID;  // @0
+        bool             mbSuccess;          // @8
+    };
+
+    // Spawn/register a world-fixture vehicle at a fixed transform. DWARF BrnVehicleEvents.h:702.
+    // alignas(16) (Matrix44Affine). Matrix44Affine(64)@0 + VolumeInstanceId(8)@64 == 72, rounded
+    // up to sizeof==80. Element of the PhysicsModuleIO InputBuffer's mCreateWorldEventQueue.
+    struct alignas(16) CreateWorldEvent
+    {
+        Matrix44Affine   mInitialTransform;   // @0
+        VolumeInstanceId mVolumeInstanceId;   // @64
+    };
+
+    // Reset a race car to a fixed position after a wreck. DWARF BrnVehicleEvents.h:625.
+    // alignas(16) (carries Vector3). EActiveRaceCarIndex(4)@0 + bool@4 + Vector3(16)@16 ->
+    // sizeof==32, matching the X360 EventQueue<...,8> / AddEvent / Append 32-byte element stride
+    // (the RaceCarResetEvent queue spanning +0x5B0..+0x6C0 in VehicleManagerOutputInterface).
+    // Element of the VehicleManagerOutputInterface mRaceCarResetEventQueue.
+    struct alignas(16) RaceCarResetEvent
+    {
+        EActiveRaceCarIndex meActiveRaceCarIndex;   // @0
+        bool                mbResettingAfterWreck;  // @4
+        Vector3             mResetPosition;         // @16 (padded from 5; Vector3 is alignas(16))
     };
 }
 }
