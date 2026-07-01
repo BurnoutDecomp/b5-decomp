@@ -178,6 +178,12 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void      AptExtern_SetMember(const char* szName, const char* szValue) {}   // FLAG link-stub
     // AptActionInterpreter_runStream RETIRED (IGNITION 2026-07-01): the init passes call the real
     // member gAptActionInterpreter.runStream (AptActionRun.cpp dispatch loop) -- ActionScript executes.
+
+    // FLAG link-stub (dormant movie-UNLOAD path): the per-string return to the temporary
+    // string pool (xb1 sub_14083F2A0), reached only by _parseStream's unresolve direction;
+    // StringPool exposes only ClearTemporaryPool so far. Home with the unload bring-up.
+    class AptString;
+    void AptStringPool_ReleaseString(AptString* pString) { (void)pString; }
     void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId) {}   // FLAG link-stub
     void  AptFreeFontUnit(void* pUnit) {}   // FLAG link-stub
     void  AptFreeRenderingUnit(void* pUnit) {}   // FLAG link-stub

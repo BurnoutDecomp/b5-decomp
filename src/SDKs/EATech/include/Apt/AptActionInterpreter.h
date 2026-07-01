@@ -98,6 +98,14 @@ public:
     const unsigned char* runStream(const unsigned char* pStream, AptCIH* pCIH,
                                    int nLength, AptCharacterInst* pCharInst);
 
+    // _parseStream (XB1 sub_14084A920) -- resolve an action stream's serialized
+    // inline operands IN PLACE (offsets -> pointers, constant indices -> live
+    // AptValue*s); pConstCtx == 0 runs the exact inverse (movie unload). A stream
+    // must pass through this before runStream may dispatch it. pnValueCount is the
+    // threaded resolved-value counter. Body in AptActionInterpreterParseStream.cpp.
+    static void _parseStream(unsigned char* pStream, uintptr_t nBase,
+                             void* pConstCtx, int64_t* pnValueCount);
+
     // getVariable @0x82B03430 (X360) / 0x819814 (PS3) -- resolve a variable/property
     // by name against a scope: dynamic "$" vars, the path context (getContext +
     // findChild), the function scope chain, the object member lookup, and the global
