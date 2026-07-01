@@ -1,4 +1,5 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Engine.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstring>   // std::memcpy
 
@@ -101,25 +102,41 @@ namespace Vehicle
 
     // ---------------------------------------------------------------------------------------
     // GetMaxWheelAngularVelocity  @0x825BFDA0
-    //   The rev limiter mapped through the current gearing. The X360 first clamps the
-    //   ratio*Differential denominator against a tiny floor (stru_8208F620 select pattern) so the
-    //   division never blows up, then forms the reciprocal via vrefp + two Newton refinements and
-    //   multiplies by MaxRPM:
-    //     denom = Differential * gearRatio[mu8CurrentGear]
-    //     result = MaxRPM * (1/denom)                              (reciprocal, Newton-refined)
-    //   stored broadcast across the caller's Vector4 result. (mu8CurrentGear @+0xC0; gear[curr] @
-    //   16*(curr+4)+this; Differential @+0x10.x; MaxRPM @+0x20.z.) No separate RPM_TO_RADS rodata
-    //   symbol enters the product -- it is folded into MaxRPM's stored units. The denominator floor
-    //   constant (stru_8208F620) is an internal guard; modelled here as a plain zero-guard.
+    //   The rev limiter mapped through the current gearing. The X360:
+    //     denom = gearRatio[mu8CurrentGear] * Differential            (asserted non-zero)
+    //     result = MaxRPM / (gearRatio * Differential * flt_82F2A3E0) (vrefp + 2 Newton refinements)
+    //   stored broadcast across the caller's Vector4 result (stvx128 into the sret buffer).
+    //   (mu8CurrentGear @+0xC0; gear[curr] @ 16*(curr+4)+this; Differential @+0x10.x; MaxRPM @+0x20.z.)
+    //
+    //   The X360 emits an inlined RwMathVPU::IsZero(denom) assert guard first: it splats the
+    //   |denom| > epsilon (stru_8208F620) compare into an int and cmpwi/bne to the assert.
+    //
+    //   FLAG (assert message): the rodata string aRwmathvpuIszer_1 is TRUNCATED in the export
+    //   ('!RwMathVPU::IsZero(mAttribs.GetGearRati'...). Only the attested prefix is reproduced; the
+    //   tail past the truncation is NOT recoverable, so it is NOT fabricated here.
+    //
+    //   FLAG (denominator factor): the reciprocal block multiplies in an extra constant flt_82F2A3E0
+    //   (un-homed .rdata, almost certainly RPM->rad/s = 2*pi/60). Its numeric value is not in the
+    //   export, so it is carried as a FLAGGED placeholder (faithful-but-inert); the asserted
+    //   denominator (gearRatio*Differential) is exact.
     // ---------------------------------------------------------------------------------------
     Vector4 Engine::GetMaxWheelAngularVelocity() const
     {
+        static const f32 KF_RPM_TO_WHEEL_OMEGA = 1.0f;   // FLAG: un-homed flt_82F2A3E0 denom factor
+
         const f32 lfDifferential = mAttribs.GetDifferential();
         const f32 lfGearRatio    = mAttribs.GetGearRatio(static_cast<s32>(mu8CurrentGear));
         const f32 lfMaxRPM       = mAttribs.GetMaxRPM();
 
-        const f32 lfDenominator  = lfDifferential * lfGearRatio;
-        const f32 lfResult       = (lfDenominator != 0.0f) ? (lfMaxRPM / lfDenominator) : 0.0f;
+        // asm: the stru_8208F620 vcmpgtfp select feeding the cmpwi/bne is the inlined
+        // RwMathVPU::IsZero(gearRatio * Differential) assert guard.
+        // FLAG: rodata message TRUNCATED in the export; reproduced verbatim as attested.
+        const f32 lfAssertDenom = lfGearRatio * lfDifferential;
+        CGS_ASSERT(lfAssertDenom != 0.0f,
+                   "!RwMathVPU::IsZero(mAttribs.GetGearRati");
+
+        const f32 lfDenominator = lfAssertDenom * KF_RPM_TO_WHEEL_OMEGA;
+        const f32 lfResult      = (lfDenominator != 0.0f) ? (lfMaxRPM / lfDenominator) : 0.0f;
 
         return Vector4{ lfResult, lfResult, lfResult, lfResult };
     }

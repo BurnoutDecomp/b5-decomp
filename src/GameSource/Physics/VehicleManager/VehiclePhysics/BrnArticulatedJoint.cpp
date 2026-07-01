@@ -34,5 +34,40 @@ namespace Vehicle
         mParentToJointTransform = lrParentToJointTransform;  // 4x 16B row copy (lvx128/stvx128)
         mJointId = lJointId;                                 // std r26, 0x40(r28) -- full u64
     }
+
+    // @0x825B4690  BrnPhysics::Vehicle::ArticulatedJointId::Set
+    //   Packs the cab EntityId (high dword), the trailer's 14-bit entity index (bits[29:16]) and
+    //   the vehicle (joint-pool) index (low 16 bits) into mu64RawId. Asserts both halves are
+    //   traffic vehicles (owner byte == 2) and that they are distinct (their 14-bit entity indices
+    //   at bit 10 differ).
+    void ArticulatedJointId::Set(u16 luVehicleIndex, EntityId lCab, EntityId lTrailer)
+    {
+        CGS_ASSERT((lCab.muValue >> 24) == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
+                   "lCabPhysicsEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+        CGS_ASSERT((lTrailer.muValue >> 24) == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
+                   "lTrailerPhysicsEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+        CGS_ASSERT((((lCab.muValue >> 10) ^ (lTrailer.muValue >> 10)) & 0x3FFF) != 0,
+                   "lCabPhysicsEntityId.GetEntityIndex() != lTrailerPhysicsEntityId.GetEntityIndex()");
+
+        const u16 lu16TrailerEntityIndex = static_cast<u16>((lTrailer.muValue >> 10) & 0x3FFF);
+
+        mu64RawId = (static_cast<u64>(lCab.muValue) << 32)
+                  | (static_cast<u64>(lu16TrailerEntityIndex) << 16)
+                  | static_cast<u64>(luVehicleIndex);
+    }
+
+    // @0x825B4798  BrnPhysics::Vehicle::ArticulatedJointId::GetCabEntityId
+    //   The cab EntityId is the high 32 bits of the packed 64-bit joint id
+    //   (`ld r11,0(r4); srdi r11,r11,32; stw r11,0(out)`). Asserts the extracted id owns a traffic
+    //   vehicle (owner byte == 2).
+    EntityId ArticulatedJointId::GetCabEntityId() const
+    {
+        EntityId lCabEntityId;
+        lCabEntityId.muValue = static_cast<u32>(mu64RawId >> 32);
+
+        CGS_ASSERT((lCabEntityId.muValue >> 24) == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
+                   "lCabEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+        return lCabEntityId;
+    }
 }
 }

@@ -1,0 +1,181 @@
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+
+// BrnPhysics::Vehicle::VehicleInputInterface -- the bodied ledger functions homed by this group.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. Each enqueue builds its event inline in declaration
+// order (matching the DWARF field/param order) then AddEvent()s it into the owning queue.
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+    // Owner-type byte (EntityId bits 24..31) for a traffic vehicle (== BrnWorld::
+    // E_ENTITYTYPE_TRAFFIC_VEHICLE, value 2). Local constant mirroring the committed
+    // BrnPhysicalTrafficManager.h convention (the World-module enum owns the full type).
+    static const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;
+
+    // @0x822CC1E8  VehicleInputInterface::CreateRaceCar
+    //   Enqueues a spawn-race-car request and returns the index of the freshly-appended slot
+    //   (queue.miLength - 1). The event's field order is identical to this method's parameter
+    //   order (DWARF BrnVehicleInputInterface.h:73).
+    s32 VehicleInputInterface::CreateRaceCar(
+            VolumeInstanceId lVolumeInstanceId,
+            Matrix44Affine   lInitialTransform,
+            Vector3          lInitialVelocity,
+            Vector3          lAngularVelocity,
+            Attribute::Key   lCarAssetAttribKey,
+            ResourceHandle   lModelHandle,
+            ResourceHandle   lGraphicsHandle,
+            BrnWorld::ERaceCarType leRaceCarType,
+            f32              lfDeformAmount,
+            BrnPhysics::Deformation::DeformationResetType leBaseDeformationType,
+            bool             lbDisablePhysicsStateReset,
+            s32              liCarStrengthStat)
+    {
+        CreateRaceCarEvent lEvent;
+        lEvent.mVolumeInstanceID          = lVolumeInstanceId;
+        lEvent.mInitialTransform          = lInitialTransform;
+        lEvent.mInitialVelocity           = lInitialVelocity;
+        lEvent.mAngularVelocity           = lAngularVelocity;
+        lEvent.mCarAssetAttribKey         = lCarAssetAttribKey;
+        lEvent.mModelHandle               = lModelHandle;
+        lEvent.mGraphicsHandle            = lGraphicsHandle;
+        lEvent.meRaceCarType              = leRaceCarType;
+        lEvent.mfDeformAmount             = lfDeformAmount;
+        lEvent.meBaseDeformationType      = leBaseDeformationType;
+        lEvent.mbDisablePhysicsStateReset = lbDisablePhysicsStateReset;
+        lEvent.miCarStrengthStat          = liCarStrengthStat;
+
+        mCreateRaceCarEventQueue.AddEvent(lEvent);
+        return mCreateRaceCarEventQueue.GetLength() - 1;
+    }
+
+    // @0x822CC2A0  VehicleInputInterface::ResetRaceCar
+    //   Enqueues a reset-vehicle request (transform/velocity/deformation reset after a wreck).
+    //   NOTE: the DWARF signature (:161) carries a u8 + THREE bool params but ResetVehicleEvent has
+    //   only three bool fields (and the asm stores exactly three bytes), so one boolean parameter is
+    //   unused. The three struct bools are filled in declaration order from the leading boolean
+    //   params; the trailing bool is accepted for signature fidelity but not stored.
+    void VehicleInputInterface::ResetRaceCar(
+            u32              luRaceCarIndex,
+            Matrix44Affine   lInitialTransform,
+            Vector3          lInitialVelocity,
+            Vector3          lAngularVelocity,
+            u8               lu8ResetTransform,
+            bool             lbResetDeformation,
+            bool             lbResettingAfterWreck,
+            f32              lfRoadRageHowCloseToWrecked,
+            bool             lbResetTransform,
+            BrnPhysics::Deformation::DeformationResetType leDeformationResetType)
+    {
+        ResetVehicleEvent lEvent;
+        lEvent.miRaceCarIndex              = luRaceCarIndex;
+        lEvent.mInitialTransform           = lInitialTransform;
+        lEvent.mInitialVelocity            = lInitialVelocity;
+        lEvent.mAngularVelocity            = lAngularVelocity;
+        lEvent.mbResetTransform            = (lu8ResetTransform != 0);
+        lEvent.mbResetDeformation          = lbResetDeformation;
+        lEvent.mbResettingAfterWreck       = lbResettingAfterWreck;
+        lEvent.mfRoadRageHowCloseToWrecked = lfRoadRageHowCloseToWrecked;
+        lEvent.meDeformationResetType      = leDeformationResetType;
+        (void)lbResetTransform;
+
+        mResetRaceCarEventQueue.AddEvent(lEvent);
+    }
+
+    // @0x822B4770  VehicleInputInterface::SetRaceCarAddedForCollision
+    //   Marks the given active-race-car slot as added-for-collision by setting its bit in the
+    //   mRaceCarsAddedForCollision BitArray<8>. The inlined bounds guard is reduced to the static
+    //   expression per the committed convention. DWARF return type is void.
+    void VehicleInputInterface::SetRaceCarAddedForCollision(EActiveRaceCarIndex leRaceCarIndex)
+    {
+        CGS_ASSERT(static_cast<u32>(leRaceCarIndex) < 8u, "Index < Number of bits");
+        mRaceCarsAddedForCollision.SetBit(static_cast<u32>(leRaceCarIndex));
+    }
+
+    // @0x8271D138  VehicleInputInterface::SetTrafficCrashing
+    //   Enqueues a 'traffic vehicle is now crashing' event. Asserts the entity is a traffic vehicle
+    //   (owner byte == 2), then appends a SetTrafficCrashingEvent with mbCrashing = true.
+    void VehicleInputInterface::SetTrafficCrashing(EntityId lEntityId)
+    {
+        CGS_ASSERT((lEntityId.muValue >> 24) == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
+                   "lEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+
+        SetTrafficCrashingEvent lEvent;
+        lEvent.mEntityId  = lEntityId;
+        lEvent.mbCrashing = true;
+        mSetTrafficCrashingEventQueue.AddEvent(lEvent);
+    }
+
+    // @0x8271D1B8  VehicleInputInterface::SetTrafficNotCrashing
+    //   As SetTrafficCrashing but with mbCrashing = false, routed through the SAME queue.
+    void VehicleInputInterface::SetTrafficNotCrashing(EntityId lEntityId)
+    {
+        CGS_ASSERT((lEntityId.muValue >> 24) == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
+                   "lEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+
+        SetTrafficCrashingEvent lEvent;
+        lEvent.mEntityId  = lEntityId;
+        lEvent.mbCrashing = false;
+        mSetTrafficCrashingEventQueue.AddEvent(lEvent);
+    }
+
+    // @0x82592FD0  VehicleInputInterface::operator=
+    //   Hand-written copy-assignment (called from BrnNetworkModule::ProcessBeforeSimulation). For
+    //   each embedded EventQueue member it Clear()s this side then Append()s the source's live
+    //   events ('replace with a copy of the source's queue'). The two non-queue members (the
+    //   TriangleCacheInterface manager pointer and the race-cars-added-for-collision BitArray) are
+    //   copied directly. The X360 walks the members in layout order (TriangleCache between the
+    //   line-test and CreateRaceCar queues, the BitArray last). Returns *this.
+    VehicleInputInterface& VehicleInputInterface::operator=(const VehicleInputInterface& lrOther)
+    {
+        mLineTestResultsQueue.Clear();
+        mLineTestResultsQueue.Append(lrOther.mLineTestResultsQueue);
+
+        mTriangleCacheInterface = lrOther.mTriangleCacheInterface;   // single-pointer copy
+
+        mCreateRaceCarEventQueue.Clear();
+        mCreateRaceCarEventQueue.Append(lrOther.mCreateRaceCarEventQueue);
+
+        mRemoveRaceCarEventQueue.Clear();
+        mRemoveRaceCarEventQueue.Append(lrOther.mRemoveRaceCarEventQueue);
+
+        mResetRaceCarEventQueue.Clear();
+        mResetRaceCarEventQueue.Append(lrOther.mResetRaceCarEventQueue);
+
+        mValidateRaceCarEventQueue.Clear();
+        mValidateRaceCarEventQueue.Append(lrOther.mValidateRaceCarEventQueue);
+
+        mSetRaceCarCollisionEventQueue.Clear();
+        mSetRaceCarCollisionEventQueue.Append(lrOther.mSetRaceCarCollisionEventQueue);
+
+        mSetRaceCarCullingGroupEventQueue.Clear();
+        mSetRaceCarCullingGroupEventQueue.Append(lrOther.mSetRaceCarCullingGroupEventQueue);
+
+        mNetworkCarsAddedRemovedForCollisionQueue.Clear();
+        mNetworkCarsAddedRemovedForCollisionQueue.Append(lrOther.mNetworkCarsAddedRemovedForCollisionQueue);
+
+        mCreateTrafficEventQueue.Clear();
+        mCreateTrafficEventQueue.Append(lrOther.mCreateTrafficEventQueue);
+
+        mCreateArticulatedTrafficEventQueue.Clear();
+        mCreateArticulatedTrafficEventQueue.Append(lrOther.mCreateArticulatedTrafficEventQueue);
+
+        mSetTrafficCrashingEventQueue.Clear();
+        mSetTrafficCrashingEventQueue.Append(lrOther.mSetTrafficCrashingEventQueue);
+
+        mRemoveCrashedTrafficEventQueue.Clear();
+        mRemoveCrashedTrafficEventQueue.Append(lrOther.mRemoveCrashedTrafficEventQueue);
+
+        mUpdateNetworkTrafficEventQueue.Clear();
+        mUpdateNetworkTrafficEventQueue.Append(lrOther.mUpdateNetworkTrafficEventQueue);
+
+        mImpactEventQueue.Clear();
+        mImpactEventQueue.Append(lrOther.mImpactEventQueue);
+
+        mRaceCarsAddedForCollision = lrOther.mRaceCarsAddedForCollision;   // BitArray<8> copy
+
+        return *this;
+    }
+}
+}

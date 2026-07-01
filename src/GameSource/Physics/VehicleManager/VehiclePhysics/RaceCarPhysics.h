@@ -236,6 +236,12 @@ namespace Vehicle
         // @+0x1430 (BY NAME). A short-lived slam/steer envelope scalar Update also drives on the
         // engine-only path (the asm's `this->float1430`).
         f32 mfSlamSteerEnvelope;
+
+        // @+0x1440 (BY NAME; DWARF RaceCarPhysics.h:414). The collision normal that caused the
+        // current crash, snapshotted when the crash begins; read out by GetNormalCausingCrash
+        // (asm: lvx128 v0, this, 0x1440). The ~0x1440 bytes of preceding base+VehiclePhysics+
+        // RaceCarPhysics state are not padded here.
+        Vector3 mCrashNormal;
     };
 
     // =========================================================================================

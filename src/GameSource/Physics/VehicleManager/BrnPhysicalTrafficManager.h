@@ -29,6 +29,7 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"              // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"          // CgsModule::IOBufferStack
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
+#include "GameSource/BurnoutConstants.h"                              // EActiveRaceCarIndex
 
 namespace BrnPhysics
 {
@@ -120,6 +121,22 @@ struct PhysicalTrafficVehicle
     // X360 0x825B3358: range-checked read of meArticulatedVehicleType (+36). One of
     // PhysicalTrafficVehicle's own methods (FLAG above): bodied against the named +36 member.
     EArticulatedVehicleType GetArticulatedVehicleType() const;
+
+    // ---- wave-7 methods (bodied in BrnPhysicalTrafficManager.cpp) ----------------------------
+    // @0x825C0148: assert fully-physical and return mpVehicleBody as the concrete full-physics body.
+    TrafficPhysics* GetFullTrafficPhysics();
+    // @0x826152E0: forward an air-ram impulse to the full-physics body (only when FULLY physical).
+    void            AddAirRam(u32 luFlags, f32 lfFactor, f32 lfDecay,
+                              Vector3 lvCustomImpulse, Vector3 lvCustomPosition, f32 lfTimerTillFire);
+    // @0x825B33B8: true iff this is a SIMPLE (non-full-physics) traffic vehicle.
+    bool            IsSimple() const;
+    // @0x825C01B8: latch the active-race-car that "checked" this vehicle (asserts not already checked).
+    void            SetCheckOwner(EActiveRaceCarIndex leCheckOwner);
+    // has miCheckOwner been set to a valid race-car (!= 0xFF sentinel)?
+    bool            HasBeenChecked() const { return miCheckOwner != -1; }
+    // @0x825C0220 / @0x825C0538: the articulation point in world / local space.
+    Vector3         GetArticulationPointWorldSpace() const;
+    Vector3         GetArticulationPointLocalSpace() const;
 
     Vector3                 mArticulationPointLocal;     // +0
     CgsID                   mCgsID;                      // +16 (u64; +12..15 padding)

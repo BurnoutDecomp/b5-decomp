@@ -1,5 +1,6 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::{Dot, Add, Subtract, Mult, Normalize, MagnitudeSquared}
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cmath>     // std::sqrt, std::fabs
 #include <cstddef>   // offsetof
 
@@ -339,19 +340,18 @@ namespace Vehicle
     }
 
     // ---------------------------------------------------------------------------------------
-    // RaceCarPhysics::GetNormalCausingCrash  @0x825B3928  (asserts mbIsCrashing)
-    //   Copy the stored crash normal (singleton/instance @ +5184) into *lpNormal.
-    //   FLAG: the source @ +5184 is past the modelled members; carried as the bounce direction's
-    //   sibling crash-normal slot. The asm reads `lvx128 v0, r30, 5184` -- a per-car crash-normal
-    //   register. Modelled BY NAME via a dedicated member would need the +0x1440 region; here the
-    //   value path is faithful but the source is the recorded crash normal.
+    // RaceCarPhysics::GetNormalCausingCrash  @0x825B3928  (asserts the crash-active latch)
+    //   Copy the stored crash normal (mCrashNormal @ this+0x1440) into the caller's sret buffer and
+    //   return the buffer pointer. The asm asserts the crash-active flag at this+0x710 first
+    //   (`lbz r11,0x710(r30); cmplwi; bne` -> assert 'mbCrashing'). That +0x710 byte lives in the
+    //   base VehiclePhysics (mbIsCrashing) and is read via the base IsCrashing() accessor -- it is
+    //   NOT a fresh RaceCarPhysics member (declaring one at +0x710 would collide with the base).
     // ---------------------------------------------------------------------------------------
     Vector3* RaceCarPhysics::GetNormalCausingCrash(Vector3* lpNormal) const
     {
-        // assert(mbIsCrashing) -- elided.
-        // The X360 reads this+5184 (mvNormalCausingCrash). It is past this minimal slice's modelled
-        // members; the faithful read is the recorded crash normal. FLAG: source member un-modelled.
-        *lpNormal = MS.mBounceDirection;   // FLAG: stand-in for the +5184 crash-normal register
+        CGS_ASSERT(IsCrashing(), "mbCrashing");   // lbz this+0x710 (base mbIsCrashing)
+
+        *lpNormal = mCrashNormal;   // lvx128 this+0x1440 -> stvx128 into *lpNormal
         return lpNormal;
     }
 

@@ -35,6 +35,12 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    // The EntityId owner-type byte (bits 24..31) that the ArticulatedJointId asserts for cab /
+    // trailer physics ids ("...GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", value 2).
+    // Local constant mirroring the same-named const in BrnPhysicalTrafficManager.h / BrnPropEntityID.h
+    // (the full BrnWorld::EEntityType enum is owned by the World module).
+    const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;
+
     // DWARF BrnArticulatedJoint.h:40 -- the base packed-id handle. Minimal: only the
     // raw u64 storage is needed here; the engine JointId base supplies the bit layout
     // in its own home. Modelled as a u64-carrying base so ArticulatedJointId is a u64.
