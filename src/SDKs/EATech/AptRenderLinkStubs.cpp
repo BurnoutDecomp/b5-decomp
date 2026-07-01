@@ -202,7 +202,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void AptAnimationTargetSet_Destruct (AptAnimationTargetSet* pSet) {}   // FLAG link-stub
     void AptAnimationTargetSet_Destruct2(AptAnimationTargetSet* pSet) {}   // FLAG link-stub
     void AptAnimationTarget_TickNewInsts(AptAnimationTarget* pAnim) {}   // FLAG link-stub
-    void AptApt_FlushDeferredReleases() {}   // FLAG link-stub
+    // AptApt_FlushDeferredReleases RETIRED (2026-07-01): homed in AptGC.cpp as the real
+    // gValuesToRelease.ReleaseValues() drain (the {} stub silently dropped every GC drain).
     AptValue* AptApt_LoadVariablesFetch(const char* pUrl) { return 0; }   // FLAG link-stub (host URL fetch; null until installed)
     void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY) {}   // FLAG link-stub
     void AptApt_PopValues(AptActionInterpreter* pInterp, int nCount) {}   // FLAG link-stub
