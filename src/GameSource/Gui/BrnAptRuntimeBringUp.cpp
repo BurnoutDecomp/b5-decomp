@@ -1006,30 +1006,47 @@ namespace BrnGui
         // AptCharacterAnimation::IncCharacterList walks the movie's embedded character table
         // (reached via KU_AptEmbeddedMovieOff = char+0x20) UNCONDITIONALLY, exactly like the console.
         //
-        // BLOCKED (converter data, NOT a code gate -- deferred by this HOST FACADE, the same way
-        // Fixup's SetupCharacter call and the per-frame tick (lbTickReady) are held off): the
-        // GUIAPT/TITLE_SCREEN02 bundle is NOT converter-clean for this walk yet --
-        //   char[1] @ the movie def-base is a CONSOLE 4-byte record (un-widened by the converter),
-        //   so IncCharacterList's `mpCharacterTable[1]->mpAnimationFile` reads garbage.
-        // (The struct/offset mismatch that ALSO blocked this is now FIXED: the runtime
-        // AptCharacterAnimation struct is the serialized 64-bit def-base -- charCount@+0x18 /
-        // charTable@+0x20, matching Fixup -- so IncCharacterList reads the correct offsets; only
-        // the un-widened char[1] DATA bug remains, hence the deferral stands.)
-        // Running the faithful MakeCharacterAnimationInst here AVs on that data (verified). So this
-        // facade DEFERS the movie-root instantiation exactly as it defers the tick; the engine body
-        // stays faithful and un-gated. RE-ENABLE (drop the guard, call MakeCharacterAnimationInst +
-        // SetCharacterInst) once the bundle is uniformly 64-bit (char[1] widened) -- the same
-        // converter fix that unblocks lbTickReady. The root CIH created above is real and live.
-        CgsDev::Log::WriteToLog(
-            "[AptRT] faithful: MakeCharacterAnimationInst DEFERRED (converter: char[1] un-widened) -- "
-            "struct now serialized-64 (charCount@+0x18); engine body faithful; re-enable with the tick.\n");
-
-        s_bFaithfulInstantiated = true;
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: INSTANTIATED -- root CIH %p (movie root %p); displayList live. "
-            "embeddedMovieOff=0x%X. animInst instantiation DEFERRED (converter). (STEP 2 tick next.)\n",
-            (void*)lpRootCIH, lpFile->mpData, KU_AptEmbeddedMovieOff);
-        CgsDev::Log::WriteToLog(lac);
+        // RE-ENABLED (Steps 6+10, 2026-07-01): the converter char[1] data bug is FIXED -- the
+        // GUIAPT/TITLE_SCREEN02 bundle is now uniformly 64-bit (every character carries signature
+        // @+0x08; char[1] is a clean widened Image with mpAnimationFile@+0x18 == 0), via the libapt2
+        // Movie::Write pointer-alignment fix / the fix_title_screen02.py byte-patch. So
+        // IncCharacterList's `mpCharacterTable[1]->mpAnimationFile` reads a null slot and the walk is
+        // safe. The struct/offset match (serialized-64 def-base: charCount@+0x18 / charTable@+0x20)
+        // was already in place. This mirrors AptLinker::Update pass 2 (@0x82B0D028, AptLinker.cpp:558-584):
+        // MakeCharacterAnimationInst(pFile) -> AptCIH::SetCharacterInst(animInst, moveRenderData) ->
+        // seed the sprite-instance state (mnGotoFrame = -1 "none", mnClipActionFlags |= 0x80) the tick
+        // reads. The initial in-line tick AptLinker::Update also does is driven per-frame by
+        // AptRuntimeUpdate (Step 3) instead. DEFENSIVE: guarded; a null animInst leaves the empty root
+        // CIH in place (game stays up, geometry fallback still available).
+        AptCharacterAnimationInst* lpAnimInst = MakeCharacterAnimationInst(lpFile);
+        if (lpAnimInst != nullptr)
+        {
+            lpRootCIH->mFlagsA &= 0x9FFFFFFFu;                     // clear the transition state bits (v61[3] &= 0x9FFFFFFF)
+            lpRootCIH->SetCharacterInst(reinterpret_cast<AptCharacterInst*>(lpAnimInst),
+                                        /*bMoveRenderData*/ true); // install the anim inst on the root node
+            // Seed the freshly-installed sprite instance's play state for the tick (AptLinker.cpp:583-584).
+            AptCharacterSpriteInstBase* lpSprite =
+                static_cast<AptCharacterSpriteInstBase*>(lpRootCIH->GetCharacterInst());
+            if (lpSprite != nullptr)
+            {
+                lpSprite->mnGotoFrame        = -1;                 // *(v61[8]+16) = -1  (no pending goto)
+                lpSprite->mnClipActionFlags |= 0x80u;             // *(v61[8]+20) |= 0x80
+            }
+            s_bFaithfulInstantiated = true;
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] faithful: INSTANTIATED -- animInst %p bound to root CIH %p (movie root %p); "
+                "IncCharacterList walked %d chars; sprite state seeded. (STEP 2 tick next.)\n",
+                (void*)lpAnimInst, (void*)lpRootCIH, lpFile->mpData,
+                *reinterpret_cast<const int*>(reinterpret_cast<char*>(s_pFaithfulCharAnim) + 0x18));
+            CgsDev::Log::WriteToLog(lac);
+        }
+        else
+        {
+            CgsDev::Log::WriteToLog(
+                "[AptRT] faithful: MakeCharacterAnimationInst returned null -- root CIH stays empty "
+                "(game up; geometry fallback). (FLAG)\n");
+            s_bFaithfulInstantiated = false;
+        }
     }
 
     // Resolve + validate the movie geometry once at load time, choosing the pointer-size path.
@@ -1325,14 +1342,29 @@ namespace BrnGui
         // to the homed Manager_CreateItem factory, so each placed inst gets a real render item (carrying
         // its character) -- which is what tick / AptCIH_GetClipMovie reach the movie through. Every deref
         // is guarded (the engine null-safety we added) so the tick completes structurally or bails.
-        // FLAG (Step 5/6): AptCIH::tick -> AptMovie::doFrameControls reads the movie's frame table
-        // (framesOffset@def+0x08). Step 1's faithful Fixup does NOT relocate that -- the frame table is
-        // AptMovie::resolve / AptLoader::CompleteLoad's job, not Fixup's (the invented AptRelocateTimeline8
-        // wrongly relocated it here, which is why the tick "worked" before). Until the faithful 64-bit
-        // resolve/CompleteLoad lands, framesOffset is an un-relocated file offset, so ticking would AV.
-        // Deferred here (marked boundary); the instantiated display list + the geometry fallback still
-        // render. Set lbTickReady = true (or remove the guard) when Step 5/6 relocates the frame table.
-        bool lbTickReady = false;   // non-const: flip (or remove the guard) when Step 5/6 lands
+        // FLAG (Steps 6+10 boundary, INVESTIGATED 2026-07-01): the faithful tick is NOT yet
+        // un-deferrable -- it AVs, and even fixed would place nothing, for THREE independent reasons in
+        // the console-32 AptMovie timeline engine (all verified this session by flipping lbTickReady):
+        //   (a) FRAME TABLE UN-RELOCATED. AptCIH::tick -> AptMovie::doFrameControls reads mpFrames
+        //       @def+0x08 (an 8-byte slot holding the raw file offset 0x5180); Fixup's case-9 (Movie)
+        //       relocation is deferred (AptCharacterAnimation.cpp:470) and AptMovie::resolve is the
+        //       console-32 form (int32 arithmetic + `int nBase` -- truncates the high x64 base), so
+        //       mpFrames stays a raw offset and `mpFrames[nFrame]` dereferences ~0x5180 -> AV
+        //       (confirmed: the log ends exactly at "tick: frame=0 -> AptCIH::tick(...)").
+        //   (b) CONSOLE OFFSETS INSIDE doFrameControls. Its place path reads the movie def-base at
+        //       CONSOLE offsets (pAnim = char+0x10, charTable@+0x10, importCount@+0x20, importTable@
+        //       +0x24, char animFile@+0x0C) -- all WRONG for the native-8 record (char+0x20 embed,
+        //       charTable@+0x20, importCount@+0x34, importTable@+0x38, animFile@+0x18). A native-8
+        //       fork of doFrameControls (+ ExecuteInitActions + FindInst) is required.
+        //   (c) placeObject IS AN UN-HOMED STUB. The handler that actually inserts a placed character
+        //       into the display list, sub_82B0AE08, is a link-stub returning null
+        //       (AptRenderLinkStubs.cpp:247) -- so even with (a)+(b) fixed, frame 0's place commands
+        //       would place NOTHING and the title would not compose.
+        // So the tick stays DEFERRED (the instantiation above is real + complete; the geometry fallback
+        // path is the intended on-screen route once its header-offset read is corrected). Flipping this
+        // to true REGRESSES to an AV -- re-enable only when (a) a 64-bit AptMovie::resolve, (b) the
+        // native-8 doFrameControls fork, and (c) the real sub_82B0AE08 placeObject body all land.
+        bool lbTickReady = false;   // INVESTIGATED 2026-07-01: AVs (frame table) + placeObject is a null stub -- see (a)/(b)/(c)
         if (lbTickReady && s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr)
         {
             AptCIH* lpRoot = static_cast<AptCIH*>(s_pFaithfulRootCIH);

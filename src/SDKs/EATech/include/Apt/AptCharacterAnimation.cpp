@@ -484,15 +484,14 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
         // Post-relocation per-character init: AptCharacter::SetupCharacter (X360 @0x82AFE560 / PS3
         // @0xF44BF0) -- drops the anim-file ref (mpAnimationFile@0x18), clears the ref-count half, sets
         // the type flag half (mnRefAndFlags@0x10). The faithful body is written (AptCharacter.cpp) and the
-        // x64 AptCharacter layout is static_assert-locked (@0x18/@0x10). BLOCKED (not deferred-by-choice):
-        // the converted GUIAPT/TITLE_SCREEN02 bundle has a NON-UNIFORM char -- char[1] @res+0x4AF4 is a
-        // CONSOLE 4-byte record (signature @+0x04, not @+0x08) left un-widened by the converter, so its
-        // 64-bit anim-file slot @+0x18 holds garbage (0x100000000) and ReleaseAnimationFile AVs on it
-        // (the console reads +0x0C == 0 and is safe). This is a DATA-CONVERSION bug, not a code bug -- the
-        // Fixup relocation is correct. Re-enable this call once the bundle is uniformly 64-bit (or the
-        // faithful load path (Step 8) clarifies char[1]). Until then the movie root still instantiates.
-        // reinterpret_cast<AptCharacter*>(pChar)->SetupCharacter();
-        (void)pChar;
+        // x64 AptCharacter layout is static_assert-locked (@0x18/@0x10).
+        // RE-ENABLED (Steps 6+10, 2026-07-01): the converter char[1] data bug is FIXED -- the GUIAPT/
+        // TITLE_SCREEN02 bundle is now uniformly 64-bit (every character carries signature @+0x08; char[1]
+        // @res+0x4AF4 is a clean widened Image with mpAnimationFile@+0x18 == 0), via the libapt2
+        // Movie::Write pointer-alignment fix (tools/assets/bundles/libapt2_apt_convert.patch) / the
+        // fix_title_screen02.py byte-patch. So SetupCharacter's ReleaseAnimationFile reads a null anim-file
+        // slot and is safe on every character. This is the faithful console call, restored.
+        reinterpret_cast<AptCharacter*>(pChar)->SetupCharacter();
     }
 
     // ---- pass 3: the import table --------------------------------------------
