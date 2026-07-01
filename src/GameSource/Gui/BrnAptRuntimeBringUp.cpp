@@ -175,6 +175,14 @@ extern void*              gpAptValueGCPool;        // off_8324D834 (type-erased 
 // The interpreter VM singleton (X360 &dword_8324E760) -- defined in AptGlobals.cpp.
 extern AptActionInterpreter gAptActionInterpreter;
 
+// The Apt input-recorder/replay gate (X360 byte_82F733F7; defined in AptGlobals.cpp, default 0).
+// When SHUT (0) a freshly-placed clip's play-head does NOT auto-advance (deterministic replay);
+// when OPEN (1) fresh clips step + run doFrameControls, placing their nested content. Normal play
+// runs with the gate OPEN -- the console opens it outside replay recording. The bring-up opens it
+// so the imported sprite CONTAINERS recurse + place their nested shapes/images. // FLAG: set to the
+// normal-play value (the replay-recorder subsystem that would toggle it is out of this slice).
+extern unsigned char gbAptRecorderGate;   // byte_82F733F7
+
 namespace
 {
     using namespace BrnGui;
@@ -326,6 +334,55 @@ namespace
     bool   s_bFaithfulInstantiated = false;
     s32    s_iTickFrame            = 0;     // STEP-2 per-frame tick counter (for the placement probes)
 
+    // ====================================================================================
+    // STEP 3 -- IMPORT CONTENT-LOAD (the cross-bundle imports the title's visible content lives in).
+    //
+    // TITLE_SCREEN02's 7 placed chars are type-5 SPRITE CONTAINERS whose content is 100% in 5
+    // IMPORT bundles (B5MenuItem / B5HelperComponents / B5ControllerButtons / B5HelpItem). The
+    // parent movie's Fixup pass-3 REGISTERS each import with the loader (AptLoader::Load -> a
+    // "requested" AptFile, mnState==1) but does NOT stream its data -- on the console that is the
+    // async .apt stream kicked off by AptLoader::Update state 1->2 (AptLoader_StartAsyncLoad), whose
+    // completion (AptCompleteAnimationAsyncLoad -> CompleteLoad -> Resolve -> Fixup) fills the import
+    // in. PC has no async stream, so AptLoader_StartAsyncLoad is HOMED below to load the import bundle
+    // SYNCHRONOUSLY + drive that same completion. AptLoader::Update (the faithful console state
+    // machine) then drives the whole recursive import graph bottom-up: leaf imports 3->4 (Link),
+    // then the parent 3->4 -> AptCharacterAnimation_Link -> AptFile::FindExport -> the referenced
+    // export char lands in the parent's charTable[importId]. Everything except StartAsyncLoad's
+    // platform I/O is the faithful console flow.
+    //
+    // Each import bundle is itself a "1:7:8" apt movie with the SAME converter bugs as the title
+    // (char[1] mis-align + mnDataRootOffset); they are byte-patched offline by
+    // tools/assets/bundles/fix_apt_bundle.py (validated to reproduce fix_title_screen02.py). So the
+    // synchronous load reads a corrected bundle -- the movie root locates + the char table is clean.
+    //
+    // The loaded import bundles must stay RESIDENT (the parent references their chars every frame),
+    // so each gets a persistent pool + AptData span, kept in this small name-keyed registry (dedup:
+    // an import referenced by >1 movie loads once). Static BSS storage (no runtime heap growth).
+    // ====================================================================================
+    const u32 KU_MAX_IMPORT_BUNDLES  = 8u;                        // the title graph pulls ~6-8 distinct
+    const u32 KU_IMPORT_POOL_BYTES   = 2u * 1024u * 1024u;        // per-import pool (largest import ~282KB)
+
+    struct ImportBundleSlot
+    {
+        char              macName[64];       // the movie name (e.g. "B5HelperComponents"), lower-cmp key
+        CgsResource::Pool Pool;              // the resident pool holding the import bundle
+        uintptr_t         luBase;            // the AptData resource base (the native-8 load base)
+        u32               luSize;            // the AptData resource size (relocation bound)
+        void*             lpHeader;          // the AptDataHeader (== the resource base)
+        bool              lbUsed;
+    };
+    // STEP 4 gate: drive the nested-content dirty propagation (dirty the placed sprite containers so
+    // they tick + place their nested shapes/images). OFF -- the imported clips' per-frame ActionScript
+    // action path is un-homed and AVs when the containers tick (see the call site). Flip to true once
+    // the ActionScript timeline subsystem is homed. // FLAG (honest un-homed boundary).
+    const bool KB_NESTED_DIRTY_PROPAGATION = false;
+
+    ImportBundleSlot s_aImportBundles[KU_MAX_IMPORT_BUNDLES];
+    // Per-import pool backing (one E_MEMTYPE_NUMTYPES x KU_IMPORT_POOL_BYTES block per slot).
+    u8 s_aImportPoolBacking[KU_MAX_IMPORT_BUNDLES][CgsResource::E_MEMTYPE_NUMTYPES][KU_IMPORT_POOL_BYTES];
+    u32  s_uImportBundleCount = 0;
+    bool s_bImportReentryGuard = false;   // guard AptLoader::Update re-entrancy while a load is in flight
+
     // NOTE: the Apt allocator/interpreter/target bring-up (the invented Steps 1/2/5 that
     // used to live here -- a local AptAllocatorInitialize + WireAllocatorGlobals + the
     // interpreter init + AptCreateTargetInstance) is RETIRED: it is now the faithful
@@ -344,6 +401,19 @@ namespace BrnGui
                                   u32 luResourceSize, u32 luBytes);
     static void DriveFaithfulLoad(CgsResource::Entry* lpEntry);
     static u32  LocateMovieRoot8(uintptr_t luBase, u32 luSize);
+    // STEP 3 (import content-load): synchronously load the import bundle named `lpacMovieName`
+    // (GuiApt\<NAME>.bundle) into a resident pool, register its AptDataHeader with the data handler,
+    // and drive AptCompleteAnimationAsyncLoad on `lpFile` so the import's AptFile is fully
+    // loaded+resolved (mpData = root, mnState = 3). Returns true on success (idempotent: a second
+    // call for the same name is a no-op that still completes the handle). Called by the homed
+    // AptLoader_StartAsyncLoad (the platform stream hook).
+    static bool LoadImportBundle(const char* lpacMovieName, AptFilePtr* lpFile);
+    // STEP 4 (nested-content dirty propagation): recursively mark every sprite/animation node in a
+    // clip's child display list dirty so the NEXT tick recurses into it + runs its doFrameControls
+    // (placing its own nested shapes/images). The console propagates the dirty bit through the
+    // render-tree manager on placement; this stands in for that propagation. // FLAG: propagation
+    // stand-in (the render-tree-manager dirty propagation on placement is the deferred piece).
+    static void PropagateDirtyToChildren(AptCIH* lpNode, int nDepth);
 
     bool AptRuntimeIsReady() { return s_bRuntimeReady; }
 
@@ -904,6 +974,31 @@ namespace BrnGui
             }
         }
 
+        // --- STEP 3: CONTENT-LOAD THE IMPORTS -----------------------------------------------------
+        // The parent's Fixup pass-3 just REGISTERED each import (AptLoader::Load -> "requested"
+        // AptFile). Drive the faithful console loader state machine (AptLoader::Update): the homed
+        // AptLoader_StartAsyncLoad synchronously loads each import bundle + completes it (state 1->3),
+        // then Update links the graph bottom-up (leaf imports 3->4, then the parent 3->4 ->
+        // AptCharacterAnimation_Link -> AptFile::FindExport -> parent charTable[importId] populated).
+        // After this, the parent's charTable holds the real imported characters, so the instantiation
+        // + tick below place the title's visible content (not null slots). Guarded: a missing/
+        // unconvertable import is left "requested" (an honest data boundary); Update skips it and the
+        // parent still links (that one char stays null + the tick skips it safely).
+        if (lpTarget->mpLoader != nullptr)
+        {
+            const int liImportCount = *reinterpret_cast<const int*>(
+                reinterpret_cast<char*>(s_pFaithfulCharAnim) + 0x34);   // def+0x34 importCount
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] faithful: STEP3 content-load %d import(s) via AptLoader::Update ...\n",
+                liImportCount);
+            CgsDev::Log::WriteToLog(lac);
+            lpTarget->mpLoader->Update();   // drives StartAsyncLoad (load) + Link for every import
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] faithful: STEP3 content-load done. import bundles resident=%u.\n",
+                s_uImportBundleCount);
+            CgsDev::Log::WriteToLog(lac);
+        }
+
         // STEP 5 PROBE (blocker #1): confirm the ROOT movie's frame table is RELOCATED by
         // AptCharacterAnimation::Fixup case-9 -> AptMovie::resolve64. The root def-base IS
         // the root AptMovie (frameCount@+0x00, mpFrames@+0x08). Before the fix mpFrames held
@@ -986,6 +1081,11 @@ namespace BrnGui
                 lpSprite->mnClipActionFlags |= 0x80u;             // *(v61[8]+20) |= 0x80
             }
             s_bFaithfulInstantiated = true;
+            // Open the input-recorder/replay gate (normal-play value) so the freshly-placed imported
+            // sprite CONTAINERS auto-advance + run doFrameControls, recursing to place their nested
+            // shapes/images (the title's actual visible content lives inside those imported sprites).
+            // FLAG: the replay-recorder subsystem that would drive this is out of scope; set once here.
+            gbAptRecorderGate = 1;
             std::snprintf(lac, sizeof(lac),
                 "[AptRT] faithful: INSTANTIATED -- animInst %p bound to root CIH %p (movie root %p); "
                 "IncCharacterList walked %d chars; sprite state seeded. dlParent(after bind)=%p\n",
@@ -1000,6 +1100,213 @@ namespace BrnGui
                 "[AptRT] faithful: MakeCharacterAnimationInst returned null -- root CIH stays empty "
                 "(game up; geometry fallback). (FLAG)\n");
             s_bFaithfulInstantiated = false;
+        }
+    }
+
+    // =========================================================================
+    // LoadImportBundle -- STEP 3: synchronously content-load ONE import movie by name and drive its
+    // AptFile through the faithful completion (AptCompleteAnimationAsyncLoad -> CompleteLoad ->
+    // Resolve -> Fixup), so the import's AptFile::mpData points at its resolved movie root
+    // (mnState == 3). This is the PC substitute for the console's async .apt stream (the stream that
+    // AptLoader_StartAsyncLoad kicks off + whose completion the stream subsystem posts). The import
+    // bundle stays resident (registered in s_aImportBundles). Idempotent by name.
+    //
+    // The import bundle is a "1:7:8" apt movie corrected offline by fix_apt_bundle.py (so its char
+    // table + movie root are clean). The load mirrors AptRuntimePlayMovie's parent load exactly:
+    // BundleLoader::LoadBundle -> the AptData (0x1E) resource -> AddAptData(name) -> LocateMovieRoot8
+    // -> AptCompleteAnimationAsyncLoad. // FLAG (x64 converted bundle): the movie-root location uses
+    // the signature scan (LocateMovieRoot8) exactly as the parent path does.
+    // =========================================================================
+    static bool LoadImportBundle(const char* lpacMovieName, AptFilePtr* lpFile)
+    {
+        char lac[256];
+        if (lpacMovieName == nullptr || lpacMovieName[0] == '\0')
+            return false;
+
+        // Dedup: already resident? (an import referenced by >1 movie loads once). If so, just
+        // complete the passed handle against the resident span (its AptFile may be a fresh
+        // "requested" handle from a second referencing movie's Fixup pass-3).
+        ImportBundleSlot* lpSlot = nullptr;
+        for (u32 lu = 0; lu < s_uImportBundleCount; ++lu)
+        {
+            if (s_aImportBundles[lu].lbUsed &&
+                _stricmp(s_aImportBundles[lu].macName, lpacMovieName) == 0)
+            {
+                lpSlot = &s_aImportBundles[lu];
+                break;
+            }
+        }
+
+        if (lpSlot == nullptr)
+        {
+            // Fresh import: allocate a slot + load the bundle.
+            if (s_uImportBundleCount >= KU_MAX_IMPORT_BUNDLES)
+            {
+                std::snprintf(lac, sizeof(lac),
+                    "[AptRT] import-load: registry full (%u) -- cannot load '%s' (FLAG).\n",
+                    KU_MAX_IMPORT_BUNDLES, lpacMovieName);
+                CgsDev::Log::WriteToLog(lac);
+                return false;
+            }
+            lpSlot = &s_aImportBundles[s_uImportBundleCount];
+            std::strncpy(lpSlot->macName, lpacMovieName, sizeof(lpSlot->macName) - 1);
+            lpSlot->macName[sizeof(lpSlot->macName) - 1] = '\0';
+            lpSlot->lbUsed = true;
+
+            // Build "GuiApt\<NAME>.bundle" (Windows resolves case; the files are UPPERCASE).
+            char lacPath[160];
+            std::snprintf(lacPath, sizeof(lacPath), "GuiApt\\%s.bundle", lpacMovieName);
+
+            // Init the resident pool (same options as the parent movie pool).
+            CgsResource::Pool::InitOptions lOptions;
+            lOptions.miId   = 4;
+            lOptions.mpcName = "AptImport";
+            u8 (*lpBacking)[KU_IMPORT_POOL_BYTES] = s_aImportPoolBacking[s_uImportBundleCount];
+            for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+            {
+                lOptions.maHeapInfo[lt].muMaxNodes       = 256u;
+                lOptions.maHeapInfo[lt].muHeapMemorySize = KU_IMPORT_POOL_BYTES - 64u * 1024u;
+                lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
+                lOptions.mResource.m_baseResources[lt]   = lpBacking[lt];
+                lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = KU_IMPORT_POOL_BYTES;
+                lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
+            }
+            lOptions.muMaxResources         = 64u;
+            lOptions.muMaxImports           = 64u;
+            lOptions.miRefCountThreshold    = 0;
+            lOptions.miNumDependencies      = 0;
+            lOptions.miBankId               = 0;
+            lOptions.mbAllowDefragmentation = false;
+            lpSlot->Pool.InitPool(&lOptions);
+
+            CgsResource::BundleLoader lLoader;
+            const s32 liLoaded = lLoader.LoadBundle(lacPath, &lpSlot->Pool,
+                                                    CgsResource::ResolveResourceType);
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] import-load: '%s' -> %d resources.\n", lacPath, liLoaded);
+            CgsDev::Log::WriteToLog(lac);
+            if (liLoaded <= 0)
+            {
+                CgsDev::Log::WriteToLog("[AptRT] import-load: bundle missing/unreadable -- import left "
+                                        "'requested' (FLAG: honest data boundary).\n");
+                lpSlot->lbUsed = false;
+                return false;
+            }
+
+            s32 liIndex = -1;
+            CgsResource::Entry* lpEntry =
+                lpSlot->Pool.FindFirstResourceOfType(KU_APTDATA_RESOURCE_TYPE_ID, &liIndex);
+            void* lpRes = (lpEntry != nullptr)
+                ? lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] : nullptr;
+            if (lpRes == nullptr)
+            {
+                CgsDev::Log::WriteToLog("[AptRT] import-load: no AptData resource -- left 'requested' (FLAG).\n");
+                lpSlot->lbUsed = false;
+                return false;
+            }
+            lpSlot->lpHeader = lpRes;
+            lpSlot->luBase   = reinterpret_cast<uintptr_t>(lpRes);
+            lpSlot->luSize   =
+                lpEntry->mResourceDescriptor.m_baseResourceDescriptors[CgsResource::E_MEMTYPE_MAINMEMORY].m_size;
+
+            // Register the header with the data handler so a faithful FindAptData(name) resolves it.
+            CgsGui::AptAux* lpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
+            if (lpAptAux != nullptr)
+                lpAptAux->mAptDataHandler.AddAptData(
+                    reinterpret_cast<CgsGui::AptDataHeader*>(lpRes), lpSlot->macName);
+
+            ++s_uImportBundleCount;
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] import-load: '%s' resident base=0x%016llX size=%u (slot %u).\n",
+                lpSlot->macName, (unsigned long long)lpSlot->luBase, lpSlot->luSize,
+                s_uImportBundleCount - 1);
+            CgsDev::Log::WriteToLog(lac);
+        }
+
+        // Drive the faithful completion for this handle against the resident span. Locate the movie
+        // root (signature scan) + read the const-file (for the pointer-size + the resolve context).
+        const u32 luConstOff = static_cast<u32>(*reinterpret_cast<const u64*>(lpSlot->luBase + 16u));
+        if (luConstOff == 0 || luConstOff >= lpSlot->luSize)
+        {
+            CgsDev::Log::WriteToLog("[AptRT] import-load: constData offset out of range -- bail (FLAG).\n");
+            return false;
+        }
+        AptConstFile* lpConstFile = reinterpret_cast<AptConstFile*>(lpSlot->luBase + luConstOff);
+        void* lpBase = lpConstFile;   // pBase == aptDataOffset (the converted-bundle collapse; see LoadAnimation)
+
+        const u32 luRootHdrOff = LocateMovieRoot8(lpSlot->luBase, lpSlot->luSize);
+        if (luRootHdrOff == 0)
+        {
+            CgsDev::Log::WriteToLog("[AptRT] import-load: no type-9 movie root found -- bail (FLAG).\n");
+            return false;
+        }
+        void* lpRootOverride = reinterpret_cast<void*>(lpSlot->luBase + luRootHdrOff);
+
+        // Stash THIS import's span so its Fixup case-5/9 (AptMovie::resolve64) bounds-checks correctly.
+        // (Each import relocates against its own base; restore the parent's span after -- Update may
+        // continue driving the parent's link, which reads the parent span.)
+        const uintptr_t luPrevSpanBase = CgsGui::gAptResourceSpanBase;
+        const uint32_t  luPrevSpanSize = CgsGui::gAptResourceSpanSize;
+        CgsGui::gAptResourceSpanBase = lpSlot->luBase;
+        CgsGui::gAptResourceSpanSize = lpSlot->luSize;
+        CgsGui::gAptLoadAnimRootOverride = lpRootOverride;
+
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] import-load: complete '%s' handle=%p base=0x%016llX root@0x%X ...\n",
+            lpSlot->macName, (void*)(lpFile ? lpFile->pData : nullptr),
+            (unsigned long long)lpSlot->luBase, luRootHdrOff);
+        CgsDev::Log::WriteToLog(lac);
+
+        // AptCompleteAnimationAsyncLoad(handle, pBase, pConstFile, pAptDataHeader, pPreResolvedRoot)
+        // -> CompleteLoad -> Resolve -> Fixup: sets the import AptFile's mpData = root, mnState = 3.
+        AptCompleteAnimationAsyncLoad(lpFile, lpBase, lpConstFile, lpSlot->lpHeader, lpRootOverride);
+
+        CgsGui::gAptLoadAnimRootOverride = nullptr;
+        CgsGui::gAptResourceSpanBase = luPrevSpanBase;
+        CgsGui::gAptResourceSpanSize = luPrevSpanSize;
+        return true;
+    }
+
+    // =========================================================================
+    // PropagateDirtyToChildren -- STEP 4 dirty propagation (the missing piece for nested content).
+    //
+    // The root CIH is dirtied each frame (host), so its tick runs frame-0's place commands + places
+    // the top-level sprite CONTAINERS. Those placed children come out with mnClipActionFlags 0xC0
+    // (needs-action + fresh) but mFlagsA bit25 (dirty) CLEAR, so AptCIH::tick early-returns on them
+    // (its first line gates on the dirty bit) and they never run THEIR doFrameControls -> their nested
+    // shapes/images are never placed. On the console the render-tree-manager propagates the dirty bit
+    // down as nodes are placed; that propagation is the deferred piece. This walks a clip's child
+    // display list and SetDirtyState(true) every sprite/animation node (recursively), so the next tick
+    // recurses into each + places its content -- cascading one display-list level per frame until the
+    // whole tree is composed. // FLAG: stand-in for the render-tree-manager placement dirty propagation.
+    // =========================================================================
+    static void PropagateDirtyToChildren(AptCIH* lpNode, int nDepth)
+    {
+        if (lpNode == nullptr || nDepth > 12)   // depth cap (guards against a pathological cycle)
+            return;
+        AptCharacterInst* lpCI = lpNode->GetCharacterInst();
+        if (lpCI == nullptr)
+            return;
+        const uint32_t luTag = lpCI->GetTypeTag();
+        if (luTag != 5 && luTag != 9)           // only sprite/animation clips carry a child list
+            return;
+        AptCharacterSpriteInstBase* lpSprite = static_cast<AptCharacterSpriteInstBase*>(lpCI);
+        AptDisplayListState* lpState = lpSprite->mDisplayList.AsState();
+        if (lpState == nullptr)
+            return;
+        for (AptCIH* lpChild = lpState->mpFirst; lpChild != nullptr;
+             lpChild = lpChild->GetDisplayListNext())
+        {
+            AptCharacterInst* lpChildCI = lpChild->GetCharacterInst();
+            if (lpChildCI == nullptr)
+                continue;
+            const uint32_t luChildTag = lpChildCI->GetTypeTag();
+            if (luChildTag == 5 || luChildTag == 9)
+            {
+                if (!lpChild->GetDirtyState())
+                    lpChild->SetDirtyState(true, false);   // dirty so its next tick places its content
+                PropagateDirtyToChildren(lpChild, nDepth + 1);   // recurse deeper as levels appear
+            }
         }
     }
 
@@ -1092,6 +1399,21 @@ namespace BrnGui
 
             const int liTickResult = lpRoot->tick();   // advance frame 0 -> place characters
 
+            // STEP 4 (gated OFF -- honest un-homed boundary): propagate dirty into the freshly-placed
+            // sprite CONTAINERS so their next tick recurses + places their nested content. This DOES
+            // place the nested shapes (doFrameControls succeeds), but the imported clips' PER-FRAME
+            // ActionScript-action path crosses an un-homed boundary: AptMovie::resolve64's action-stream
+            // re-parse (AptActionInterpreter::_parseStream) is un-homed, so tag-1 action-command records
+            // in the imported movies carry un-relocated pointers, and the AS VM (runStream) that would
+            // drain the queued actions is stubbed. Dirtying the containers therefore ticks them into
+            // that un-homed AS-action territory and eventually AVs (~frame 1, deep in an imported clip's
+            // queueFrameActions -- guarded for the common case but not exhaustively). Enabling this is
+            // the last mile once the ActionScript timeline subsystem is homed. Kept OFF so the boot
+            // stays STABLE at the "imports content-loaded + top-level containers placed" milestone.
+            // // FLAG: nested imported-clip composition blocked on the un-homed ActionScript timeline.
+            if (KB_NESTED_DIRTY_PROPAGATION)
+                PropagateDirtyToChildren(lpRoot, 0);
+
             // Walk the director's root display list + count the placed nodes (the placement result).
             s32 liNodes = 0;
             AptTarget* lpTgt = GetTarget();
@@ -1148,12 +1470,31 @@ namespace BrnGui
                                     : nullptr;
                                 const int liType = lpChar
                                     ? *reinterpret_cast<const int*>(lpChar) : -999;   // AptCharacter::mnType @+0
-                                char lacn[224];
+                                // DIAG: the child's dirty bit (mFlagsA bit25), its sprite play-state
+                                // flags (mnClipActionFlags), and its OWN nested display-list count --
+                                // to see whether the imported sprite CONTAINERS place their content.
+                                const unsigned luFlagsA = lpN->mFlagsA;
+                                unsigned luClipFlags = 0;
+                                s32 liGrandKids = -1;
+                                if (lpCI != nullptr && (lpCI->GetTypeTag() == 5 || lpCI->GetTypeTag() == 9))
+                                {
+                                    AptCharacterSpriteInstBase* lpChildSprite =
+                                        static_cast<AptCharacterSpriteInstBase*>(lpCI);
+                                    luClipFlags = lpChildSprite->mnClipActionFlags;
+                                    AptDisplayListState* lpGK = lpChildSprite->mDisplayList.AsState();
+                                    liGrandKids = 0;
+                                    if (lpGK != nullptr)
+                                        for (AptCIH* lpG = lpGK->mpFirst; lpG != nullptr && liGrandKids < 4096;
+                                             lpG = lpG->GetDisplayListNext())
+                                            ++liGrandKids;
+                                }
+                                char lacn[288];
                                 std::snprintf(lacn, sizeof(lacn),
-                                    "[AptRT] tick:   child node %p charInst=%p typeTag=%u renderItem=%p char=%p charType=%d geom@+0x20=%p depth=%d\n",
+                                    "[AptRT] tick:   child node %p charInst=%p typeTag=%u char=%p charType=%d geom@+0x20=%p depth=%d dirty=%d clipFlags=0x%X grandKids=%d\n",
                                     (void*)lpN, (void*)lpCI, lpCI ? lpCI->GetTypeTag() : 0u,
-                                    (void*)lpRI, (void*)lpChar, liType, lpGeom,
-                                    lpCI ? lpCI->GetDepth() : -1);
+                                    (void*)lpChar, liType, lpGeom,
+                                    lpCI ? lpCI->GetDepth() : -1,
+                                    (luFlagsA >> 25) & 1u, luClipFlags, liGrandKids);
                                 CgsDev::Log::WriteToLog(lacn);
                             }
                         }
@@ -1229,4 +1570,30 @@ namespace BrnGui
                 "[AptRT] render: render-tree walk (AptRender) -> D3D9 via ImRenderBuffer::Dispatch (OK; per-frame).\n");
         }
     }
+}
+
+// =============================================================================
+// AptLoader_StartAsyncLoad (dword_8324E838) -- the platform "kick off the .apt stream" hook the
+// faithful AptLoader::Update calls on the state 1->2 (requested -> loading) transition. On the
+// console this starts an ASYNC stream whose completion posts AptCompleteAnimationAsyncLoad; PC has
+// no such stream, so it is HOMED here to load the import bundle SYNCHRONOUSLY + drive that exact
+// completion inline (the import AptFile ends at mnState == 3, resolved). This is the ONE genuinely
+// platform-specific piece of the import content-load: the loader STATE MACHINE (AptLoader::Update)
+// + the completion (AptCompleteAnimationAsyncLoad -> CompleteLoad -> Resolve -> Fixup) + the link
+// (AptCharacterAnimation_Link -> FindExport) are all the faithful console flow.
+//
+// This STRONG definition overrides the FLAG link-stub previously in AptRenderLinkStubs.cpp (removed).
+// pFile->mFileName is the movie name AptLoader::Update passes as pFileName (== the import to load).
+// =============================================================================
+void AptLoader_StartAsyncLoad(const char* pFileName, AptFilePtr* pFile)
+{
+    // Re-entrancy guard: LoadImportBundle drives AptCompleteAnimationAsyncLoad which does NOT
+    // re-enter Update, but a nested import's own Fixup pass-3 could register further imports; those
+    // are picked up by the driving Update's outer re-pass, so a single synchronous load here is
+    // safe. The guard just prevents an accidental recursive StartAsyncLoad on the same in-flight file.
+    if (s_bImportReentryGuard)
+        return;
+    s_bImportReentryGuard = true;
+    BrnGui::LoadImportBundle(pFileName, pFile);
+    s_bImportReentryGuard = false;
 }
