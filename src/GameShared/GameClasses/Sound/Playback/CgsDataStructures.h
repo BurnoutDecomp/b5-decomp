@@ -105,8 +105,19 @@ private:
 // Get/SetSlotSchema/... and its own flexible ParameterSchema*/SlotSchema* arrays)
 // is DEFERRED to the FeatureSchema TU. The leading three counts match the DWARF
 // member order (CgsDataStructures.h:1075-1077) and the +8/+0xC/+0x10 asm reads.
+// Forward declarations for the FeatureSchema flexible-array element types. Full
+// homes below (ParameterSchema/SlotSchema are Entity subclasses).
+struct ParameterSchema;
+struct SlotSchema;
+
 struct FeatureSchema : public Entity
 {
+    // CgsDataStructures.h (DWARF). This fixer/entity's interned type-name -- the
+    // fixer hooks compare a fixed entity's mTypeName against it. DECLARED for the
+    // fixer TUs; the interned-Name DEFINITION lives with the registration TU
+    // (DEFERRED). FLAG.
+    static const Name SK_TYPE_NAME;
+
     u32 mu32ParameterSchemaCount;   // CgsDataStructures.h:1075  (+0x8)
     u32 mu32SlotSchemaCount;        // CgsDataStructures.h:1076  (+0xC)
     u32 mu32OutputParamCount;       // CgsDataStructures.h:1077  (+0x10)
@@ -114,6 +125,33 @@ struct FeatureSchema : public Entity
     u32 GetParameterSchemaCount() const { return mu32ParameterSchemaCount; }
     u32 GetSlotSchemaCount() const      { return mu32SlotSchemaCount; }
     u32 GetOutputParamCount() const     { return mu32OutputParamCount; }
+
+    // CgsDataStructures.h. The ParameterSchema* then SlotSchema* pointers share one
+    // trailing flexible array starting at dword +5 (+0x14): parameters occupy
+    // [5 .. 5+ParameterSchemaCount), slots follow. FLAG (host-width: the element
+    // widens to 8 bytes on a 64-bit host, so +0x14 is X360-only -- pinned BY NAME).
+    const void* mapSchema[1];       // CgsDataStructures.h (+0x14)
+
+    // @ 0x82691AB8 / 0x82691BE0. Resolved sub-schema accessors (assert in-range +
+    // resolved -- low tag bit clear). Bodied in CgsFeatureSchema.cpp.
+    const ParameterSchema* GetParameterSchema(u32 au32Index) const;
+    const SlotSchema*      GetSlotSchema(u32 au32Index) const;
+
+    // Address-of accessors the resolve/unresolve fixers index BY NAME. Parameters
+    // start at dword [5]; slots start at [5 + mu32ParameterSchemaCount].
+    const ParameterSchema** GetParameterSchemaAddress(u32 au32Index)
+    {
+        return reinterpret_cast<const ParameterSchema**>(&mapSchema[au32Index]);
+    }
+    const SlotSchema** GetSlotSchemaAddress(u32 au32Index)
+    {
+        return reinterpret_cast<const SlotSchema**>(
+            &mapSchema[mu32ParameterSchemaCount + au32Index]);
+    }
+
+private:
+    // @ 0x82680A30. Const address of slot au32Index, used by GetSlotSchema.
+    const SlotSchema* const* GetSlotSchemaAddress(u32 au32Index) const;
 };
 
 // CgsDataStructures.h:1233. A playback voice schema: an Entity carrying a count
@@ -148,20 +186,23 @@ struct VoiceSchema : public Entity
     // Bodied store-for-store from the X360 SetFeatureSchema @ 0x82692058.
     void SetFeatureSchema(u32 au32Index, const FeatureSchema& arSchema);
 
-private:
     // CgsDataStructures.h:1362. Address of feature-schema slot au32Index in the
     // trailing flexible array (the X360 `&v3[a2 + 6]`). Named accessor replacing
-    // the raw dword index.
+    // the raw dword index. PUBLIC: the EntityFixer<VoiceSchema> resolve/relocate
+    // hooks fix these slot pointers in place.
     const FeatureSchema** GetFeatureSchemaAddress(u32 au32Index)
     {
         return &mapFeatureSchema[au32Index];
     }
 
+    // The three running totals the resolve/unresolve fixers recompute in place
+    // (serialization-managed accumulators, mutated by EntityFixer<VoiceSchema>).
     u32 mu32FeatureSchemaCount;     // CgsDataStructures.h:1373  (+0x8)
     u32 mu32SlotCount;              // CgsDataStructures.h:1374  (+0xC)
     u32 mu32ParameterCount;         // CgsDataStructures.h:1375  (+0x10)
     u32 mu32OutputParamCount;       // CgsDataStructures.h:1376  (+0x14)
 
+private:
     // CgsDataStructures.h. The trailing flexible array of resolved/unresolved
     // FeatureSchema pointers. On X360 it begins at +0x18 (the `a1 + 6` dword base
     // in the ctor and `&v3[a2 + 6]` in SetFeatureSchema). Modelled as a 1-length
@@ -169,6 +210,127 @@ private:
     // mu32FeatureSchemaCount. FLAG (host-width: the array element widens to 8 bytes
     // on a 64-bit host, so the +0x18 base is X360-only -- pinned BY NAME).
     const FeatureSchema* mapFeatureSchema[1];
+};
+
+// ============================================================================
+// ADDITIVE HOME-GROW (Sound group, Wave 6): the remaining CgsSound::Playback
+// serialised-entity types the ContentType/ContentSpec/SlotSchema/ParameterSchema/
+// VoiceSpec fixer + accessor TUs read, plus the EntityFixer<T> concrete-fixer
+// template. All are Entity subclasses (mName @+0, mTypeName @+4, committed
+// CgsRegistry.h) -- NOT forked. Members are pinned BY NAME + SEQUENCE (host-width
+// FLAG: pointer members widen on the 64-bit host; no absolute-offset static_assert).
+// Each SK_TYPE_NAME is DECLARED here for the fixer type-name compares; its interned
+// DEFINITION lives with the registration TU (DEFERRED).
+// ============================================================================
+
+// CgsDataStructures.h. Parameter direction, compared by EntityFixer<FeatureSchema>::
+// DoResolve when it recomputes the output-parameter total.
+enum EParameterDirection
+{
+    E_PARAMETER_INPUT  = 0,
+    E_PARAMETER_OUTPUT = 1
+};
+
+// CgsDataStructures.h:382 (DWARF). The content-class entity a ContentType / Slot /
+// SlotSchema resolves to. Modelled minimally -- only used as the T of the member-
+// pointer relocators (its layout is not read by any Wave-6 TU).
+struct ContentClass : public Entity
+{
+    static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
+};
+
+// CgsDataStructures.h:440 (DWARF). ContentType : public Entity. Carries the resolved
+// ContentClass* it points at, at +8.
+struct ContentType : public Entity
+{
+    static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
+
+    // @ 0x82691778. Return the resolved ContentClass; asserts present + resolved
+    // (low tag bit clear). Bodied in CgsDataStructures.cpp.
+    const ContentClass& GetContentClass() const;
+
+    // CgsDataStructures.h:531 (+0x8). The resolved content class. On disk an
+    // index with bit0 set as the "unresolved / pointer-context" sentinel; once
+    // resolved a real ContentClass*. DWARF name+type.
+    const ContentClass* mpContentClass;   // (+0x8)
+};
+
+// CgsDataStructures.h (DWARF). A parameter sub-schema entity: an Entity carrying its
+// direction. Only GetDirection() is read (by EntityFixer<FeatureSchema>::DoResolve).
+struct ParameterSchema : public Entity
+{
+    static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
+
+    EParameterDirection GetDirection() const { return meDirection; }
+
+    // The parameter direction word the resolve pass tests == E_PARAMETER_OUTPUT.
+    // FLAG (host/offset): pinned BY NAME; the exact byte offset is DEFERRED to the
+    // full ParameterSchema home (only the accessor is load-bearing in Wave 6).
+    EParameterDirection meDirection;
+};
+
+// CgsDataStructures.h (DWARF). A slot sub-schema entity carrying a resolved
+// ContentClass* at +8 (same layout role as ContentType::mpContentClass).
+struct SlotSchema : public Entity
+{
+    static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
+
+    const ContentClass** GetContentClassAddress()
+    {
+        return &mpContentClass;
+    }
+
+    const ContentClass* mpContentClass;   // (+0x8)
+};
+
+// CgsDataStructures.h:1631+ (DWARF). VoiceSpec : public Entity. The serialised voice
+// specification: a resolved VoiceSchema* (at +8) plus a send-unit count byte. The
+// count accessors forward the schema's accumulated totals; the fixers walk the send
+// table by mu8SendCount.
+struct VoiceSpec : public Entity
+{
+    static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
+
+    // @ 0x82692398 / 0x82692498 / 0x82692598. Resolved-schema count forwarders
+    // (assert mpVoiceSchema present + resolved). Bodied in CgsVoiceSpec.cpp.
+    u32 GetSlotCount() const;
+    u32 GetParameterCount() const;
+    u32 GetOutputParameterCount() const;
+
+    // The trailing send/tail-unit count byte the operator-new size math and the
+    // fixer send loops read (lbz 0xC(spec)). Two names for the same byte (send count
+    // for the RWAC voice, tail-unit count for the AEMS voice) -- both forward it.
+    u32 GetSendCount() const     { return mu8SendCount; }
+    u32 GetTailUnitCount() const { return mu8SendCount; }
+
+    // CgsDataStructures.h (+0x8). The resolved voice schema. Low tag bit set while
+    // still a serialized index; a live VoiceSchema* once resolved.
+    const VoiceSchema* mpVoiceSchema;   // (+0x8)
+    u8                 mu8SendCount;    // (+0xC)
+};
+
+// ============================================================================
+// CgsDataStructures.h (DWARF). EntityFixer<T> -- the concrete per-entity fixer,
+// an IEntityFixer subclass parameterised on the entity type T it serialises. Every
+// Do* override compares the fixed entity's mTypeName against T::SK_TYPE_NAME, then
+// walks/relocates T's member pointers. The bodies are bodied per-T in their own
+// fixer TUs (CgsVoiceSchemaFixer.cpp, CgsFeatureSchemaFixer.cpp, CgsSlotSchema.cpp,
+// CgsParameterSchemaFixer.cpp, CgsVoiceSpec.cpp, CgsContentSpecFixer.cpp, and the
+// ContentType overrides in CgsDataStructures.cpp). Declared here so those out-of-
+// line definitions have a class to attach to; the ctor/dtor that self-register on
+// IEntityFixer::spHead are DEFERRED.
+// ============================================================================
+template <typename T>
+struct EntityFixer : public IEntityFixer
+{
+    // IEntityFixer virtual interface, specialised per T. Bodied in the per-T TUs.
+    virtual Name DoGetTypeName() const;
+    virtual void DoUnresolve(Entity& arEntity) const;
+    virtual void DoResolve(Entity& arEntity, const Registry& arRegistry) const;
+    virtual void DoRelocate(Entity& arEntity, u8* apu8Base,
+                            const Registry& arFrom, const Registry& arTo) const;
+    virtual void DoFixUp(Entity& arEntity) const;
+    virtual void DoFixDown(Entity& arEntity) const;
 };
 
 }

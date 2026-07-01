@@ -12,6 +12,8 @@
 
 #include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
 namespace CgsSound
 {
 namespace Playback
@@ -52,6 +54,77 @@ const IEntityFixer* IEntityFixer::GetFixer(Name aName)
         if (lpFixer == 0)                                   // cmplwi r31,0 ; bne loop
             return 0;                                       // li r3,0
     }
+}
+
+// ============================================================================
+// CgsSound::Playback::ContentType::GetContentClass  @ 0x82691778
+//
+// Return the resolved ContentClass this ContentType points at. Two debug guards:
+// mpContentClass must be non-null (CgsDataStructures.h:499) and fully resolved --
+// the low bit is the "stored as index in a pointer context" sentinel (:500). The
+// X360 second assert streams a dynamic Name-bearing message; under the house
+// CGS_ASSERT front-end it collapses to the leading static rodata fragment.
+// Called by Slot::Attach.
+// ============================================================================
+const ContentClass& ContentType::GetContentClass() const
+{
+    CGS_ASSERT(mpContentClass != 0, "mpContentClass");
+    CGS_ASSERT((reinterpret_cast<uintptr_t>(mpContentClass) & 1) == 0,
+               "This Data Structure is not resolved. (Name ");
+    return *mpContentClass;
+}
+
+// ============================================================================
+// EntityFixer<ContentType> fix hooks  (X360 @ 0x826918C8 / 0x82691878 /
+// 0x826ABE58 / 0x826ABD78 / 0x826ABDF0). Each asserts the fixed entity's mTypeName
+// equals ContentType::SK_TYPE_NAME; the relocate/resolve/unresolve hooks then
+// fix the ContentType's mpContentClass member pointer between registries.
+// ============================================================================
+template <>
+void EntityFixer<ContentType>::DoFixDown(Entity& arEntity) const
+{
+    CGS_ASSERT(arEntity.mTypeName.GetValue() == ContentType::SK_TYPE_NAME.GetValue(),
+               "ContentType::SK_TYPE_NAME == lEntity.GetTypeName()");
+}
+
+template <>
+void EntityFixer<ContentType>::DoFixUp(Entity& arEntity) const
+{
+    CGS_ASSERT(arEntity.mTypeName.GetValue() == ContentType::SK_TYPE_NAME.GetValue(),
+               "ContentType::SK_TYPE_NAME == lEntity.GetTypeName()");
+}
+
+template <>
+void EntityFixer<ContentType>::DoRelocate(Entity& arEntity, u8* apu8Base,
+                                          const Registry& arFrom,
+                                          const Registry& arTo) const
+{
+    CGS_ASSERT(arEntity.mTypeName.GetValue() == ContentType::SK_TYPE_NAME.GetValue(),
+               "ContentType::SK_TYPE_NAME == lEntity.GetTypeName()");
+
+    Entity::RelocateMemberPointer<ContentClass>(
+        &static_cast<ContentType&>(arEntity).mpContentClass, apu8Base, arFrom, arTo);
+}
+
+template <>
+void EntityFixer<ContentType>::DoResolve(Entity& arEntity,
+                                         const Registry& arRegistry) const
+{
+    CGS_ASSERT(arEntity.mTypeName.GetValue() == ContentType::SK_TYPE_NAME.GetValue(),
+               "ContentType::SK_TYPE_NAME == lEntity.GetTypeName()");
+
+    Entity::ResolveMemberPointer<ContentClass>(
+        &static_cast<ContentType&>(arEntity).mpContentClass, arRegistry);
+}
+
+template <>
+void EntityFixer<ContentType>::DoUnresolve(Entity& arEntity) const
+{
+    CGS_ASSERT(arEntity.mTypeName.GetValue() == ContentType::SK_TYPE_NAME.GetValue(),
+               "ContentType::SK_TYPE_NAME == lEntity.GetTypeName()");
+
+    Entity::UnresolveMemberPointer<ContentClass>(
+        &static_cast<ContentType&>(arEntity).mpContentClass);
 }
 
 }

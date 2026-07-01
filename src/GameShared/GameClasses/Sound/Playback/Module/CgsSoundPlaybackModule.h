@@ -144,6 +144,29 @@ private:
 // the requested factory name. Opaque here -- only used as an opaque key/handle.
 class VoiceSpec;
 
+// FLAG (DEFER): the content-creation spec entity, looked up out of the registry by
+// name in Module::CreateContent. Opaque here.
+class ContentSpec;
+
+// ---------------------------------------------------------------------------
+// FLAG (DEFER): minimal Playback::Content slice for Module::CreateContent. The
+// module wires the freshly-created content's ident (X360 +0x10) and owner iface
+// (X360 +0x14) BY NAME (mirroring the CgsContent.h member names mIdent /
+// mpLoadService), then refs/releases it. Full Content home is CgsContent.h; this
+// minimal slice avoids ODR-colliding with the header's minimal Factory/Voice slices
+// (they are DIFFERENT definitions than CgsContent.h's -- no single TU sees both).
+// ---------------------------------------------------------------------------
+class Content : public Object
+{
+public:
+    void SetIdent(u32 lu32Ident) { mIdent = lu32Ident; }   // X360 +0x10
+    void SetOwner(void* lpOwner) { mpLoadService = lpOwner; } // X360 +0x14
+
+private:
+    u32   mIdent;         // X360 +0x10
+    void* mpLoadService;  // X360 +0x14
+};
+
 // ---------------------------------------------------------------------------
 // FLAG (DEFER): minimal Playback::Factory slice. Module::C dereferences the
 // environment's factory handle and calls the templated CreateVoice. The concrete
@@ -158,6 +181,11 @@ public:
     // bodied in the Factory TU.
     template <typename T>
     int CreateVoice(const VoiceSpec* lpSpec, Handle<T>* lphVoiceOut, u32 lu32SlotName);
+
+    // Module::CreateContent asks the resolved factory to create content from a spec
+    // into an out-handle. Returns -1 on failure (the asm `cmpwi r3,-1`). FLAG
+    // (DEFER): declared-only, bodied in the Factory TU.
+    int CreateContent(const ContentSpec* lpSpec, Handle<Content>* lphContentOut);
 };
 
 // FLAG (DEFER): the RWAC + AEMS factories each own their own registry, but at
@@ -244,6 +272,14 @@ public:
     void C(Handle<Voice>* lphVoiceOut, u32 lu32SlotName, const Name& lFactoryName,
            u32 lu32SubmixName);
 
+    // Module::CreateContent @ 0x826C12A8. Resolve the owning factory (by class name)
+    // + the content spec (by name) out of the environment, ask the factory to create
+    // the content, wire its ident + owner iface, ref/release it, and release the
+    // transient factory handle. Mirror of Module::C. Returns lppContentOut.
+    Content** CreateContent(Content** lppContentOut, u32 lu32Ident,
+                            const Name& lContentClassName,
+                            const Name& lContentSpecName);
+
 private:
     void*                mpVtbl;            // X360 +0x0000  primary vptr
     EA::Thread::RWMutex  mInputLock;        // X360 +0x0010
@@ -258,6 +294,23 @@ private:
     bool                 mbReserved;        // X360 +0x2298
     StringTableChunk*    mpStringTableHead; // X360 +0x26FC
 };
+
+// CgsSoundPlaybackModule.h. The Module's content-preparation pipeline stage counter.
+// operator++ @ 0x82681C70 post-increments it (unconditionally, before the bound
+// assert) and returns the old stage. E_PREPARESTAGE_DONE == 4 (distinct from the
+// CgsSound::Logic operator++ bound of 6).
+enum EPrepareStage
+{
+    E_PREPARESTAGE_0    = 0,
+    E_PREPARESTAGE_1    = 1,
+    E_PREPARESTAGE_2    = 2,
+    E_PREPARESTAGE_3    = 3,
+    E_PREPARESTAGE_DONE = 4
+};
+
+// @ 0x82681C70. Post-increment the prepare-stage enum (stored unconditionally,
+// before the bound assert); returns the saved OLD stage.
+EPrepareStage operator++(EPrepareStage& leEnumIndex, int);
 
 } // namespace Module
 } // namespace Playback

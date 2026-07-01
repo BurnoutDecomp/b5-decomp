@@ -28,7 +28,39 @@ struct Entity
 {
     Name mName;      // CgsDataStructures.h:201  (+0) interned entry name
     Name mTypeName;  // CgsDataStructures.h:202  (+4) interned entry type-name
+
+    // CgsDataStructures.h:178/187/198 (DWARF). The serialization member-pointer
+    // fixup helpers, static templates on Entity. A serialized entity stores every
+    // referenced entity pointer as a low-bit-tagged interned-Name index; these
+    // convert between that index form and a live pointer:
+    //   Resolve   -- index -> live pointer (look the Name up in the registry)
+    //   Unresolve -- live pointer -> index (re-tag)
+    //   Relocate  -- rebase a live pointer between two registry data blobs
+    // The fixer TUs (EntityFixer<ContentType>::Do*, EntityFixer<SlotSchema>::Do*)
+    // call these as Entity::ResolveMemberPointer<ContentClass>(&slot, registry),
+    // etc. FLAG (DEFER): declared-only -- bodied in their own Entity TU.
+    template <typename T>
+    static void ResolveMemberPointer(const T** appMember, const class Registry& arRegistry);
+    template <typename T>
+    static void UnresolveMemberPointer(const T** appMember);
+    template <typename T>
+    static void RelocateMemberPointer(const T** appMember, u8* apu8Base,
+                                      const class Registry& arFrom,
+                                      const class Registry& arTo);
 };
+
+// CgsDataStructures.h:178/187/198 (DWARF). Namespace-scope free-function template
+// forms of the member-pointer fixup helpers. Several fixers (EntityFixer<VoiceSpec>,
+// EntityFixer<VoiceSchema>, EntityFixer<FeatureSchema>) call the UNqualified free
+// templates rather than the Entity:: statics -- the X360 mangling attests both
+// exist. FLAG (DEFER): declared-only, bodied in their own TU.
+template <typename T>
+void ResolveMemberPointer(const T** appMember, const Registry& arRegistry);
+template <typename T>
+void UnresolveMemberPointer(const T** appMember);
+template <typename T>
+void RelocateMemberPointer(const T** appMember, u8* apu8Base,
+                           const Registry& arFrom, const Registry& arTo);
 
 // CgsRegistry.h:42. The sizing descriptor passed to Registry construction.
 struct RegistrySpec
@@ -79,6 +111,14 @@ public:
     // on success, false if the table is full. Bodied store-for-store from the
     // X360 AddEntity @ 0x82692DA0.
     bool AddEntity(const Entity& lEntity);
+
+    // CgsRegistry.h (DWARF). Type-checked entity lookup by interned Name. FLAG
+    // (DEFER): declared-only template forwarder -- the resolve-pass fixers look a
+    // serialized-index Name up to recover its live entity; the X360 `bl
+    // Registry::GetEntity<T>` body lives in its own Registry TU. Non-const Name&
+    // per DWARF. Returns 0 when the name is not present.
+    template <typename T>
+    const T* GetEntity(Name& arName) const;
 };
 
 }

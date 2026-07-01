@@ -307,6 +307,100 @@ void Module::C(Handle<Voice>* lphVoiceOut, u32 lu32SlotName, const Name& lFactor
     lpFactory->Release();
 }
 
+// ---------------------------------------------------------------------------
+// Module::CreateContent  @ 0x826C12A8
+//
+// Mirror of the sibling Module::C (CreateVoice @0x826D7B00). Resolves the owning
+// Factory (by lContentClassName) and the ContentSpec (by lContentSpecName) out of the
+// environment, asks the factory to CreateContent, wires the created Content's ident
+// (+0x10 = mIdent) and owner iface (+0x14 = mpLoadService, = this+0x22C when non-null),
+// stores it into *lppContentOut, refs it, and releases the transient factory handle.
+// On failure it clears *lppContentOut and releases the factory handle.
+//
+// FLAG: the X360 streams an assert message on the failure path; reconstructed as a
+// plain CGS_ASSERT(false, <leading literal>) exactly as Module::C reduced its own
+// streamed voice-create failure -- the StrStream interpolation + trailing \n dropped.
+// ---------------------------------------------------------------------------
+Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
+                                const Name& lContentClassName,
+                                const Name& lContentSpecName)
+{
+    Environment* lpEnvironment = mhEnvironment.GetObject();
+    CGS_ASSERT(lpEnvironment, "mpObject");
+
+    // Resolve the owning content factory handle by class name.
+    Handle<Factory> lhFactory;
+    Environment::GetFactoryHandle(&lhFactory, lpEnvironment, &lContentClassName);
+    Factory* lpFactory = lhFactory.GetObject();
+
+    const ContentSpec* lpContentSpec = 0;
+    if (lpFactory)
+    {
+        Environment* lpEnv2 = mhEnvironment.GetObject();
+        CGS_ASSERT(lpEnv2, "mpObject");
+        Registry* lpRegistry = lpEnv2->GetRegistry();
+        CGS_ASSERT(lpRegistry, "mpRegistry");
+        lpContentSpec = RegistryGetEntity<ContentSpec>(lpRegistry, Name(lContentSpecName));
+    }
+
+    if (!lpFactory || !lpContentSpec)
+    {
+        CGS_ASSERT(false, "E_COMMAND_CONTENT_CREATE failed with content spec ");
+        *lppContentOut = 0;
+        if (lpFactory)
+            lpFactory->Release();
+        return lppContentOut;
+    }
+
+    Handle<Content> lhContent;
+    if ((*lhFactory).CreateContent(lpContentSpec, &lhContent) == -1)
+    {
+        if (lhContent.GetObject())
+            lhContent.GetObject()->Release();
+        CGS_ASSERT(false, "E_COMMAND_CONTENT_CREATE failed with content spec ");
+        *lppContentOut = 0;
+        if (lpFactory)
+            lpFactory->Release();
+        return lppContentOut;
+    }
+
+    // Wire the freshly created content's owner fields.
+    (*lhContent).SetIdent(lu32Ident);                                   // Content +0x10
+    void* lpOwner = this ? reinterpret_cast<char*>(this) + 0x22C : 0;
+    (*lhContent).SetOwner(lpOwner);                                     // Content +0x14
+
+    Content* lpContent = lhContent.GetObject();
+    *lppContentOut = lpContent;
+    if (!lpContent)
+    {
+        if (lpFactory)
+            lpFactory->Release();
+        return lppContentOut;
+    }
+
+    lpContent->Acquire();   // X360: ++*(content+4) inline
+    lpContent->Release();
+    lpFactory->Release();
+    return lppContentOut;
+}
+
+// ---------------------------------------------------------------------------
+// operator++(Module::EPrepareStage&, int)  @ 0x82681C70
+//   old=*a1; new=old+1; *a1=new (stored UNCONDITIONALLY, before the guard);
+//   assert(new <= E_PREPARESTAGE_DONE); return old. The increment applies even on the
+//   assert path; the return is always the saved OLD stage.
+// ---------------------------------------------------------------------------
+EPrepareStage operator++(EPrepareStage& leEnumIndex, int)
+{
+    const EPrepareStage leOldEnumIndex = leEnumIndex;
+    leEnumIndex = static_cast<EPrepareStage>(static_cast<s32>(leEnumIndex) + 1);
+
+    CGS_ASSERT(leEnumIndex <= E_PREPARESTAGE_DONE,
+               "leEnumIndex <= Module::E_PREPARESTAGE_DONE");
+
+    return leOldEnumIndex;
+}
+
 } // namespace Module
 } // namespace Playback
 } // namespace CgsSound
