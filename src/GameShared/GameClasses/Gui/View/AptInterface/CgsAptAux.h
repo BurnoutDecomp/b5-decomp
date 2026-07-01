@@ -83,6 +83,13 @@ namespace CgsGui
         // render-slot installs reference the CgsAptCallbackRender.cpp family this TU defines.
         void ConstructApt();
 
+        // X360 0x82848E50 (CgsGui::AptAux::InitializeApt) -- the keystone Apt runtime
+        // bring-up AptAux::Prepare runs after AptAux::Construct: build the AptUpdate /
+        // AptCreateTarget param blocks, then in order AptAllocatorInitialize ->
+        // AptUpdateInitialize -> AptRenderInitialize -> AptCreateTargetInstance ->
+        // AptChangeTargetInstance -> [the ext-object phase]. Body in CgsAptAux.cpp.
+        void InitializeApt();
+
         // ---- AptAux head (guest offsets recovered from AptAux::Construct @0x5C4B6C) -------
         // The two leading state words AptAux::Construct seeds (`*a1 = 0; *(a1+4) = 3`). Their
         // meaning is owned by the apt-engine bookkeeping; only that they are set is in scope.

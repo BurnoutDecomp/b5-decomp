@@ -3,6 +3,9 @@
 #include "SDKs/EATech/include/Apt/Apt.h"                                         // AptUserFunctions gAptFuncs (the host table)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the host-callback asserts)
 
+#include "SDKs/EATech/Apt/AptInit.h"                                            // Apt bring-up entry points (InitializeApt callees)
+#include "SDKs/EATech/include/Apt/AptTarget.h"                                  // AptCreateTargetInstance / AptChangeTargetInstance
+
 #include <cstring>   // memset (zero-install the gAptFuncs slots)
 
 // =============================================================================
@@ -147,6 +150,72 @@ namespace CgsGui
         // undeclared Apt C-API -- AptLoadAnimation / AptPartialGarbageCollection / ... -- or on
         // CgsGui::AptCommunicator, neither of which has a reconstructed home). They remain null
         // (the ctor's value-init); installing them is a follow-on once those families land.
+    }
+
+    // -------------------------------------------------------------------------
+    // AptAux::InitializeApt - X360 0x82848E50. The keystone Apt runtime bring-up
+    // AptAux::Prepare @0x828503E0 runs (after AptDataHandler::Prepare + AptAux::Construct).
+    //
+    // Faithful to the X360 body: build the AptUpdateInitialize config block (v8[15] +
+    // trailing bytes) and the AptCreateTargetInstance config block (v7[8]), then in ORDER:
+    //   1. AptAllocatorInitialize(0x10000, 0x4000, 0x10000, 0x4000)
+    //   2. updated = AptUpdateInitialize(v8, 0)
+    //   3. AptRenderInitialize(updated)
+    //   4. *(this+8) = AptCreateTargetInstance(v7)          [the AptAux target cache]
+    //   5. AptChangeTargetInstance(that target)
+    //   6. ext-object phase: AptExtObject::operator new(16); ctor(6); *p = off_820E0A20;
+    //      *(this+109664) = p; AptRegisterExtension(p)      [FLAG'd -- see below]
+    //
+    // The v8 / v7 values are transcribed verbatim from the @0x82848E50 asm store set.
+    // -------------------------------------------------------------------------
+    void AptAux::InitializeApt()
+    {
+        // v8[15] -- the AptUpdateInitialize config block (X360 sp+0x70..; + trailing bytes
+        // v9..v13 == byte[60..64], all 0 except v12 == byte[63] == 1). 17 words so byte[64]
+        // (the interpreter skip-trace flag at config +0x40) is addressable.
+        //   [0]0 [1]512 [2]8 [3]256 [4]0 [5]0 [6]656 [7]1 [8]384 [9]8 [10]624 [11]1024
+        //   [12]128 [13]128 [14]8  + bytes {0,0,0,1,0}.
+        unsigned int lauUpdateCfg[17] = {
+            0u, 512u, 8u, 256u, 0u, 0u, 656u, 1u,
+            384u, 8u, 624u, 1024u, 128u, 128u, 8u, 0u, 0u
+        };
+        reinterpret_cast<unsigned char*>(lauUpdateCfg)[63] = 1u;   // v12 (byte[63]) == 1
+
+        // v7[8] -- the AptCreateTargetInstance config block (X360 sp+0x50..).
+        //   [0]0 [1]1 [2]8 [3]8 [4]0 [5]512 [6]? [7]?  (words 6,7 are uninitialised stack
+        //   in the console; seeded 0 here -- the same values the prior working bring-up used).
+        unsigned int lauCreateCfg[8] = { 0u, 1u, 8u, 8u, 0u, 512u, 0u, 0u };
+
+        // 1. AptAllocatorInitialize(0x10000, 0x4000, 0x10000, 0x4000).
+        AptAllocatorInitialize(0x10000, 0x4000, 0x10000, 0x4000);
+
+        // 2. updated = AptUpdateInitialize(v8, 0).
+        int liUpdated = AptUpdateInitialize(lauUpdateCfg, 0);
+
+        // 3. AptRenderInitialize(updated).  (the arg is carried through but unread.)
+        AptRenderInitialize(liUpdated);
+
+        // 4. *(this+8) = AptCreateTargetInstance(v7); 5. AptChangeTargetInstance(target).
+        AptTarget* lpTarget = AptCreateTargetInstance(lauCreateCfg);
+        // FLAG (partial AptAux slice): the console caches the created target at *(this+8);
+        // this AptAux slice models only mAptDataHandler/mRenderHandler (the +8 word overlaps
+        // mAptDataHandler), so the cache store is OMITTED. The target is globally reachable
+        // via GetTarget() (AptChangeTargetInstance publishes it into gpAptTarget + the TLS
+        // mirror), which is what every downstream reader actually uses -- so the observable
+        // "current context" is set faithfully without corrupting the partial-slice AptAux.
+        AptChangeTargetInstance(lpTarget);
+
+        // 6. FLAG (ext-object phase deferred): the console then builds the AS extension object
+        //    (AptExtObject::operator new(16); AptExtObject(6); *p = off_820E0A20 [its vtable];
+        //    *(this+109664) = p) and registers it via AptRegisterExtension(p). AptRegister-
+        //    Extension @0x82AF7330 dereferences off_8324E37C (== gpGlobalExtensionObject) +8
+        //    to reach the AS extension object's native hash -- but gpGlobalExtensionObject is
+        //    built by AptValueInitialize @0x82B02800, which is FLAG-deferred (its ~15 value
+        //    singletons have protected reconstruction ctors; see AptInit.cpp). With the
+        //    extension object null, AptRegisterExtension would null-deref, and the +109664
+        //    cache member is outside this AptAux slice. So the whole ext-object phase is
+        //    OMITTED here; it comes online with AptValueInitialize. (The runtime is otherwise
+        //    fully bootstrapped: allocators + update + render + the live AptTarget context.)
     }
 
     // =========================================================================

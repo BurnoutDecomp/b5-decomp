@@ -30,6 +30,18 @@
 // ---------------------------------------------------------------------------
 extern unsigned int gAptCommonConfig[17];   // unk_82F733B8 (68 bytes + the trailing byte[64])
 
+// AptAllocatorInitialize @0x82ADD118 -- StaticInitialize the GC value-type sizes, then
+// construct the shared non-GC (DOGMA) pool (off_8324D808) + the GC value pool
+// (off_8324D834), and wire every Apt pool-pointer global off them. `a1/a2` = GC
+// main/overflow bytes, `a3/a4` = DOGMA main/overflow. InitializeApt calls it with
+// (0x10000, 0x4000, 0x10000, 0x4000). Returns the GC pool. Body in AptInit.cpp.
+void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogmaOvf);
+
+// InitializeApt @0x82848E50 -- the keystone host bring-up: the exact 6-call sequence
+// (allocator + update + render + create-target + change-target + [ext-object]). `pAptAux`
+// is the CgsGui::AptAux instance (the console's a1); the create-target result is stored
+// into it. Homed in CgsAptAux.cpp (where AptAux::Construct/ConstructApt live).
+
 // AptSetSimulationThreadID @0x82AD8F90 / AptSetRenderThreadID @0x82AD8EF0 -- record
 // the calling thread's id into the sim/render thread-id slot (dword_8324E500 /
 // dword_8324E504) under the shared thread-id spin lock. `a1` is the X360 pointer arg
