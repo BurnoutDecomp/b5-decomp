@@ -16,6 +16,7 @@
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
 #include "SDKs/EATech/include/Apt/AptCIH.h"            // SetMaskedItem/ItemMoved take the scene node
 #include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"  // AptCurrentRenderTreeManager + Update_*
+#include "SDKs/EATech/include/Apt/AptTarget.h"        // gpAptTarget (off_8324E574 -- the ctor's create-item guard)
 #include "SDKs/EATech/include/Apt/AptDefine.h"        // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 
@@ -32,18 +33,31 @@ extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const v
                                    const void* pRenderItem, const void* pItemCharacter);
 #endif
 
-// ctor @0x81431C
+// ctor @0x82AF7E70 (X360 ARTIST; PS3 @0x81431C)
+//   *this = off_82145F80;                              // vtable (family models it as the
+//                                                      //   manual mpVTable_unused; not written)
+//   mpProperties = 0;                                  // a1[3] (this+0xC)
+//   Item = 0;
+//   if ( off_8324E574 )                                // if (gpAptTarget)  -- the create-item guard
+//       Item = AptRenderItem::Manager_CreateItem(pCharacter, dword_8324E520);
+//   mpRenderItem = Item;                               // a1[1] (this+0x4)
+//   mTypeFlags = ((pCharacter ? pCharacter->mnType : 15) << 26) | (mTypeFlags & 0x3FFFFFF);
+//   if ( Item ) Item->AddReference();                  // atomic ++Item[9] (render item ref count)
+//
+// FAITHFUL create-item dispatch (was an invented AptRTM_CreateItem null-manager fallback): the
+// X360 ctor guards on gpAptTarget (off_8324E574 -- the current AS animation target) and calls the
+// AptRenderItem::Manager_CreateItem FACTORY DIRECTLY. That factory needs no render-tree manager (it
+// just DOGMA-pool-allocates the typed render item off the character), so there is no manager routing
+// here at all; the render item is created iff an Apt target is active. gpAptTarget is live once the
+// bring-up runs AptCreateTargetInstance/AptChangeTargetInstance (BrnAptRuntimeBringUp), so every
+// AptCharacterInst gets a real, type-correct render item carrying mpCharacter.
 AptCharacterInst::AptCharacterInst(AptCharacter* pCharacter)
 {
     mpProperties = nullptr;
 
-    // CREATE THE RENDER ITEM. BUGFIX (x64 bring-up): the original guard
-    //   `if (AptRenderTreeManager* pMgr = AptCurrentRenderTreeManager()) pItem = AptRTM_CreateItem(...)`
-    // short-circuited when the manager is the FLAG'd null stub, so the render item was NEVER created
-    // and mpRenderItem stayed null (-> the tick / render path had nothing). AptRTM_CreateItem now
-    // handles a null manager internally (falling back to the homed AptRenderItem::Manager_CreateItem
-    // factory, which needs no manager), so call it UNCONDITIONALLY and store the result.
-    AptRenderItem* pItem = AptRTM_CreateItem(AptCurrentRenderTreeManager(), pCharacter, gnCurrUpdateTick);
+    AptRenderItem* pItem = nullptr;
+    if (gpAptTarget)   // off_8324E574 -- create the render item only when an Apt target is active
+        pItem = AptRenderItem::Manager_CreateItem(pCharacter, gnCurrUpdateTick);
     mpRenderItem = pItem;
 
     CgsApt_MkItemProbe(this, pCharacter ? pCharacter->mnType : -1, pCharacter, pItem,
