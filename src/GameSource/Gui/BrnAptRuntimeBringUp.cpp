@@ -424,6 +424,34 @@ namespace
         // The type-erased GC-pool view the engine stamps (off_8324D834).
         gpAptValueGCPool = s_pGCPool;
     }
+
+    // AptAllocatorInitialize @0x82ADD118 -- FAITHFUL decompile. StaticInitialize, then construct the
+    // non-GC (DOGMA) pool manager into off_8324D808 and the GC (AptValueGC) pool manager into
+    // off_8324D834. X360 sig (a1=GC main, a2=GC ovf, a3=DOGMA main, a4=DOGMA ovf); AptAux::InitializeApt
+    // calls it with (0x10000,0x4000,0x10000,0x4000). The X360 allocates each manager via the base
+    // allocator dword_8324E818(48); on PC that hook is not installed at bring-up, so we back them with
+    // process-lifetime static storage (marked PC allocation -- same lifetime as the console heap pools).
+    // FLAG (x64): byte_82144A18 is zeroed so StaticInitialize leaves the GC maxSize 0 -> override the GC
+    // size statics with x64-correct values BEFORE the GC pool ctor reads them (else AptCIH/AptValue
+    // allocs take the invalid 0-bucket path and AV). WireAllocatorGlobals sets off_8324D808/off_8324D834
+    // (+ the operand/pseudo/render/shared/single-list aliases the engine reads off the non-GC pool).
+    void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogmaOvf)
+    {
+        AptValueGC_PoolManager::StaticInitialize();
+        gAptValueGCMinItemSize = 4u;
+        gAptValueGCMaxItemSize = 256u;
+        static DOGMA_PoolManager s_DogmaStorage(nDogmaMain, nDogmaOvf,
+                                                /*minSize*/ 4, /*maxSize*/ 256,
+                                                /*nOffsetToStoreNextInFreeItem*/ 0,
+                                                /*bStoreFreeBlockSize*/ false,
+                                                /*nOffsetToStoreSizeInFreeItem*/ 0,
+                                                /*bTrackOutsideAllocations*/ true);
+        s_pDogmaPool = &s_DogmaStorage;
+        static AptValueGC_PoolManager s_GCStorage(nGcMain, nGcOvf);
+        s_pGCPool = &s_GCStorage;
+        WireAllocatorGlobals();
+        return s_pGCPool;
+    }
 }
 
 namespace BrnGui
@@ -465,40 +493,17 @@ namespace BrnGui
         // and wire every global the engine reads off them.
         if (!s_bAllocatorReady)
         {
-            // StaticInitialize() derives the GC tuning statics from byte_82144A18 (the per-VFT
-            // object-size table). That table is un-homed (ZEROED in AptGlobals.cpp), so it leaves
-            // gAptValueGCMaxItemSize = 0 (and min = (u8)1000000 = 64) -> the GC pool's DOGMA ctor
-            // gets maxSize=0 -> its per-size free-list array is sized for 0 buckets and the in-pool
-            // carve path is never valid -> AptCIH::operator new(40) AVs (the crash in
-            // AptGetAnimationAtLevel(0)). FIX (x64, option-b): run StaticInitialize for the faithful
-            // bits, then OVERRIDE the size statics with x64-correct values BEFORE the GC pool ctor
-            // reads them, so the pool sizes its free-list array for a real max (256) and every AptValue
-            // alloc (AptCIH 40B / AptString / *Inst) takes the correct in-pool path.
-            AptValueGC_PoolManager::StaticInitialize();
-            // FLAG (x64 GC sizing): byte_82144A18 is zeroed -> override the derived statics.
-            // gAptValueGCSizeOffset / gAptValueGCStoreSizeFlag keep StaticInitialize's values (4 / 0,
-            // the AptValueGC_MemItem "size word @ +4" layout); only min/max are corrected.
-            gAptValueGCMinItemSize = 4u;     // smallest GC item bucket (4-byte granularity)
-            gAptValueGCMaxItemSize = 256u;   // covers AptCIH(40)/AptString/*Inst on x64 (generous)
-
-            static DOGMA_PoolManager s_DogmaStorage(KU_DOGMA_MAIN, KU_DOGMA_OVERFLOW,
-                                                    /*minSize*/ 4, /*maxSize*/ 256,
-                                                    /*nOffsetToStoreNextInFreeItem*/ 0,
-                                                    /*bStoreFreeBlockSize*/ false,
-                                                    /*nOffsetToStoreSizeInFreeItem*/ 0,
-                                                    /*bTrackOutsideAllocations*/ true);
-            s_pDogmaPool = &s_DogmaStorage;
-
-            // The GC pool ctor reads gAptValueGCMin/MaxItemSize (now overridden) for its DOGMA base.
-            static AptValueGC_PoolManager s_GCStorage(KU_GC_MAIN, KU_GC_OVERFLOW);
-            s_pGCPool = &s_GCStorage;
-
-            WireAllocatorGlobals();
+            // FAITHFUL: the extracted AptAllocatorInitialize @0x82ADD118 (StaticInitialize + construct
+            // the DOGMA non-GC + AptValueGC pools + WireAllocatorGlobals). AptAux::InitializeApt calls it
+            // with (GC main, GC ovf, DOGMA main, DOGMA ovf). The x64 GC-size override + PC static backing
+            // live inside the function (marked FLAGs there). This retires the inline invented body -- the
+            // first of the faithful bring-up entry points (Step 8) to replace BrnAptRuntimeBringUp.
+            AptAllocatorInitialize(KU_GC_MAIN, KU_GC_OVERFLOW, KU_DOGMA_MAIN, KU_DOGMA_OVERFLOW);
             s_bAllocatorReady = true;
 
             char lac[160];
             std::snprintf(lac, sizeof(lac),
-                "[AptRT] step1 allocators: DOGMA(main=0x%X ovf=0x%X)=%p, GC(main=0x%X ovf=0x%X)=%p, wired.\n",
+                "[AptRT] step1 allocators (AptAllocatorInitialize): DOGMA(0x%X/0x%X)=%p GC(0x%X/0x%X)=%p wired.\n",
                 (unsigned)KU_DOGMA_MAIN, (unsigned)KU_DOGMA_OVERFLOW, (void*)s_pDogmaPool,
                 (unsigned)KU_GC_MAIN, (unsigned)KU_GC_OVERFLOW, (void*)s_pGCPool);
             CgsDev::Log::WriteToLog(lac);
