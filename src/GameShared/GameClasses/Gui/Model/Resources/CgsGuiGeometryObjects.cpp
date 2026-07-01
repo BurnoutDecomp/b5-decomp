@@ -1,18 +1,24 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. Load-/unload-time pointer relocation for
-// the gui-geometry resource tree (object -> files -> meshes -> vertices). Every stored
-// pointer is a 32-bit offset-from-base; FixUp adds the load delta as it descends, and
-// FixDown subtracts it back to offsets as it descends. The descend/rebase order is
-// faithful to the X360 pseudocode (FixUp rebases the parent table, then the child;
-// FixDown rebases the children, then the parent table). Pointer tables are walked as
-// u32* (the on-disk pointer width), matching the project resource FixUp idiom.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. Load-/unload-time pointer relocation for the
+// gui-geometry resource tree {object -> files -> meshes -> vertices}. Every stored pointer is a
+// 32-bit offset-from-base; FixUp adds the load delta as it descends, FixDown subtracts it back.
+// The descend/rebase order is faithful to the X360 pseudocode (FixUp: parent table then child;
+// FixDown: children then parent table).
+//
+// FLAG (x64 native-8 fork): our shipped .apt is GUIAPT64 "1:7:8" (8-byte pointers), so the geometry
+// tree is WIDENED -- the file/mesh/vertex pointer TABLES are 8-byte-strided (a 4-byte offset + 4 pad
+// per entry) and the in-struct pointer fields are 8 bytes. These CONSOLE bodies walk the tables as
+// 4-byte u32* and so do NOT rebase the native-8 layout correctly. They are reached ONLY by the GATED
+// in-place AptDataHeader relocate (CgsAptDataHeader.cpp, KB_APT_DATAHEADER_INPLACE_FIXUP == false),
+// which is OFF on x64 -- so they never run at runtime here. The runtime native-8 rebase that DOES run
+// is AptFixupGeometryFileNative8 (AptCharacterAnimation.cpp), driven from AptResolveShapeGeometry.
+// These bodies are kept (compiling against the widened struct) so the gated console path builds; they
+// are the faithful console form, reinstated for a future 4-byte-pointer standalone GuiGeometry resource.
 
 namespace CgsResource
 {
-    // @ 0x828500E0 - rebase one file's mesh tree by adding luDelta. Parent-then-child
-    // order: bring the mesh pointer table into range, then each mesh's vertex table,
-    // then each vertex pointer.
+    // @0x828500E0 - rebase one file's mesh tree by adding luDelta (console 4-byte-stride walk).
     GuiGeometryFile* GuiGeometryFile::FixUp(u32 luDelta)
     {
         const u32 luMeshCount = muNumberOfMeshes;
@@ -25,7 +31,7 @@ namespace CgsResource
             {
                 lpaMeshPointers[luMeshIter] += luDelta;
                 GuiGeometryMesh* lpMesh =
-                    reinterpret_cast<GuiGeometryMesh*>(lpaMeshPointers[luMeshIter]);
+                    reinterpret_cast<GuiGeometryMesh*>(static_cast<uintptr_t>(lpaMeshPointers[luMeshIter]));
 
                 const u32 luVertexCount = lpMesh->muNumberOfVerticies;
                 lpMesh->mppVerticies += luDelta;
@@ -40,9 +46,7 @@ namespace CgsResource
         return this;
     }
 
-    // @ 0x82858308 - un-relocate one file's mesh tree by subtracting luDelta. Child-then-
-    // parent order: each vertex pointer, then the mesh's vertex table, then the mesh
-    // pointer entry, finally the mesh pointer table.
+    // @0x82858308 - un-relocate one file's mesh tree by subtracting luDelta.
     GuiGeometryFile* GuiGeometryFile::FixDown(u32 luDelta)
     {
         if (muNumberOfMeshes != 0)
@@ -51,7 +55,7 @@ namespace CgsResource
             for (u32 luMeshIter = 0; luMeshIter < muNumberOfMeshes; ++luMeshIter)
             {
                 GuiGeometryMesh* lpMesh =
-                    reinterpret_cast<GuiGeometryMesh*>(lpaMeshPointers[luMeshIter]);
+                    reinterpret_cast<GuiGeometryMesh*>(static_cast<uintptr_t>(lpaMeshPointers[luMeshIter]));
 
                 if (lpMesh->muNumberOfVerticies != 0)
                 {
@@ -68,8 +72,7 @@ namespace CgsResource
         return this;
     }
 
-    // @ 0x82852FC8 - rebase the whole object by adding luDelta. Parent-then-child:
-    // bring the file pointer table into range, then each file pointer, then descend.
+    // @0x82852FC8 - rebase the whole object by adding luDelta.
     GuiGeometryObject* GuiGeometryObject::FixUp(u32 luDelta)
     {
         const bool lbHasFiles = (muNumberOfFiles != 0);
@@ -81,14 +84,14 @@ namespace CgsResource
             for (u32 luFileIter = 0; luFileIter < muNumberOfFiles; ++luFileIter)
             {
                 lpaFilePointers[luFileIter] += luDelta;
-                reinterpret_cast<GuiGeometryFile*>(lpaFilePointers[luFileIter])->FixUp(luDelta);
+                reinterpret_cast<GuiGeometryFile*>(
+                    static_cast<uintptr_t>(lpaFilePointers[luFileIter]))->FixUp(luDelta);
             }
         }
         return this;
     }
 
-    // @ 0x8285B828 - un-relocate the whole object by subtracting luDelta. Child-then-
-    // parent: descend each file, subtract its pointer entry, then the file pointer table.
+    // @0x8285B828 - un-relocate the whole object by subtracting luDelta.
     GuiGeometryObject* GuiGeometryObject::FixDown(u32 luDelta, bool lbEndianSwap)
     {
         (void)lbEndianSwap;   // carried for resource-interface parity; not used by the walk
@@ -98,7 +101,8 @@ namespace CgsResource
             u32* lpaFilePointers = reinterpret_cast<u32*>(mppGeometryFiles);
             for (u32 luFileIter = 0; luFileIter < muNumberOfFiles; ++luFileIter)
             {
-                reinterpret_cast<GuiGeometryFile*>(lpaFilePointers[luFileIter])->FixDown(luDelta);
+                reinterpret_cast<GuiGeometryFile*>(
+                    static_cast<uintptr_t>(lpaFilePointers[luFileIter]))->FixDown(luDelta);
                 lpaFilePointers[luFileIter] -= luDelta;
             }
         }

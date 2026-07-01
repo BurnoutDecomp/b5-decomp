@@ -74,14 +74,15 @@ namespace CgsGui
         Im2dCommandBuffer*            lpBuffer = lrHandler.GetCommandBuffer();
         const CgsGraphics::Im2dTransform& lrTransform = lrHandler.GetVertexTransform();
 
-        const u32* lpMeshTable = reinterpret_cast<const u32*>(
-            static_cast<uintptr_t>(lpFile->mppGeometryMeshes));
+        // FLAG (x64 native-8 fork): 8-byte-strided mesh table + 8-byte mppGeometryMeshes (rebased
+        // offset->pointer by AptFixupGeometryFileNative8), indexed as uintptr_t entries.
+        const uintptr_t* lpMeshTable =
+            reinterpret_cast<const uintptr_t*>(lpFile->mppGeometryMeshes);
 
         for (u32 luMesh = 0; luMesh < lpFile->muNumberOfMeshes; ++luMesh)
         {
             CgsResource::GuiGeometryMesh* lpMesh =
-                reinterpret_cast<CgsResource::GuiGeometryMesh*>(
-                    static_cast<uintptr_t>(lpMeshTable[luMesh]));
+                reinterpret_cast<CgsResource::GuiGeometryMesh*>(lpMeshTable[luMesh]);
 
             // The bound texture id: the mesh's mpTexture when its texture mode (mesh+4) is set,
             // else the render handler's white fallback (guest p_mRenderHandler+128). The console

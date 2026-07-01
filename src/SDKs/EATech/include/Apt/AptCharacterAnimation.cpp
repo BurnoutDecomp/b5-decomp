@@ -19,6 +19,7 @@
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"  // EAStringC RAII (import-name bracket)
 #include "SDKs/EATech/include/Apt/AptTarget.h"      // gpAptTarget->mpLoader (the import loader)
 #include "SDKs/EATech/include/Apt/AptLoader.h"      // AptLoader::Load (the real import loader, homed)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"  // native-8 shape-geometry rebase
 
 #include <cstdint>
 #include <cstring>   // strstr (ExportClassDefinitionAssets' __Packages label scan)
@@ -416,6 +417,74 @@ AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile*
 // the load base the host stashed (CgsGui::gAptResourceSpanBase); the header + every geometry
 // offset is relative to it. // FLAG (x64 native-8 fork): the file-table 8-byte stride + the
 // offset-not-pointer geometry field are the converter's native-8 form, resolved here explicitly.
+// ---------------------------------------------------------------------------
+// AptFixupGeometryFileNative8 -- the native-8 fork of GuiGeometryFile::FixUp @0x828500E0.
+//
+// The console FixUp descends {file -> mesh table -> mesh -> vertex table} adding the load delta to
+// every 32-bit offset in place. Our native-8 (GUIAPT64 "1:7:8") geometry has WIDENED pointer fields
+// (8 bytes) and 8-byte-strided pointer TABLES (a 4-byte offset + 4 pad per entry), so the strides
+// differ from the console body -- reproduced here with the native-8 widths (layout verified from the
+// loaded bundle). IDEMPOTENT: every slot that still holds a file-relative OFFSET (value < luSize, the
+// same offset-vs-pointer discriminator CgsAptAux uses) is promoted to (luBase + offset); a slot that
+// already holds a live pointer (value >= luSize) is left alone. So calling it once per shape id -- as
+// AptResolveShapeGeometry does -- rebases a shared file exactly once regardless of how many characters
+// reference it. // FLAG (x64 native-8 fork): the widened struct + 8-byte table stride are the
+// converter's native-8 form; the descend order is faithful to the console FixUp.
+static void AptFixupGeometryFileNative8(CgsResource::GuiGeometryFile* pFile,
+                                        uintptr_t luBase, uint32_t luSize)
+{
+    if (pFile == nullptr)
+        return;
+    // A rebased pointer is >= luSize (out of the [0,size) offset range); an unrebased offset is < size.
+    auto lbIsOffset = [luSize](uintptr_t luVal) -> bool { return luVal != 0 && luVal < luSize; };
+
+    // (1) file -> mesh pointer table (file+0x08, 8-byte field; the table is 8-byte-strided).
+    if (lbIsOffset(pFile->mppGeometryMeshes))
+        pFile->mppGeometryMeshes += luBase;
+    if (pFile->mppGeometryMeshes == 0)
+        return;
+
+    const uint32_t luMeshCount = pFile->muNumberOfMeshes;
+    CgsResource::GuiGeometryPtrTableEntry* lpMeshTbl =
+        reinterpret_cast<CgsResource::GuiGeometryPtrTableEntry*>(pFile->mppGeometryMeshes);
+
+    for (uint32_t luMesh = 0; luMesh < luMeshCount && luMesh < 4096u; ++luMesh)
+    {
+        // (2) mesh-table entry k (8-byte slot): file-relative mesh offset -> mesh pointer.
+        //     Promote the whole 8-byte slot to a live pointer written across {lo,pad}.
+        uintptr_t luMeshPtr;
+        {
+            const uint32_t luMeshOff = lpMeshTbl[luMesh].muOffsetOrPtrLo;
+            uintptr_t* lpSlot = reinterpret_cast<uintptr_t*>(&lpMeshTbl[luMesh]);
+            if (lbIsOffset(*lpSlot))
+                *lpSlot = luBase + luMeshOff;   // fold the 4-byte offset into the full 8-byte pointer
+            luMeshPtr = *lpSlot;
+        }
+        if (luMeshPtr == 0)
+            continue;
+        CgsResource::GuiGeometryMesh* lpMesh =
+            reinterpret_cast<CgsResource::GuiGeometryMesh*>(luMeshPtr);
+
+        // (3) mesh -> vertex pointer table (mesh+0x20, 8-byte field).
+        if (lbIsOffset(lpMesh->mppVerticies))
+            lpMesh->mppVerticies += luBase;
+        if (lpMesh->mppVerticies == 0 || lpMesh->muNumberOfVerticies == 0)
+            continue;
+
+        // (4) vertex-table entries (8-byte-strided): each holds a file-relative offset to a vertex run.
+        //     The render walk reads the FIRST entry as the pointer to the contiguous vertex run, so
+        //     rebase every entry (faithful to the console, which rebases all vertex pointers).
+        CgsResource::GuiGeometryPtrTableEntry* lpVtxTbl =
+            reinterpret_cast<CgsResource::GuiGeometryPtrTableEntry*>(lpMesh->mppVerticies);
+        for (uint32_t luV = 0; luV < lpMesh->muNumberOfVerticies && luV < 65536u; ++luV)
+        {
+            uintptr_t* lpVSlot = reinterpret_cast<uintptr_t*>(&lpVtxTbl[luV]);
+            if (lbIsOffset(*lpVSlot))
+                *lpVSlot = luBase + lpVtxTbl[luV].muOffsetOrPtrLo;
+        }
+    }
+}
+
 static void* AptResolveShapeGeometry(void* pBlock, int32_t nCharacterId)
 {
     if (pBlock == nullptr)
@@ -451,7 +520,16 @@ static void* AptResolveShapeGeometry(void* pBlock, int32_t nCharacterId)
         // GuiGeometryFile {u32 id, u32 numMeshes, u32 meshTableOff}.
         const uint32_t luFileId = *reinterpret_cast<const uint32_t*>(luBase + luFileOff);
         if (static_cast<int32_t>(luFileId) == nCharacterId)
-            return reinterpret_cast<void*>(luBase + luFileOff);   // the matching GuiGeometryFile*
+        {
+            // Rebase the file's internal offset tables (mesh table, mesh vertex tables) offset->pointer
+            // in place BEFORE handing it to the render walk -- the console runs GuiGeometryObject::FixUp
+            // at load; on our .apt path the geometry is embedded (never FixUp'd), so this native-8 fork
+            // does the same descend. Idempotent, so a shared file is rebased once.
+            CgsResource::GuiGeometryFile* const lpFile =
+                reinterpret_cast<CgsResource::GuiGeometryFile*>(luBase + luFileOff);
+            AptFixupGeometryFileNative8(lpFile, luBase, luSize);
+            return lpFile;   // the matching GuiGeometryFile* (internal tables now live pointers)
+        }
     }
     return nullptr;   // no geometry file for this character id -> no rendering unit (safe)
 }

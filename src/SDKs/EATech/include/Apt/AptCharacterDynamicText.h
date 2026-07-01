@@ -59,8 +59,18 @@ struct AptCharacterDynamicText : public AptCharacter
 
     // [c:0x3C] the asset's default text contents (null -> the empty string ""). Read
     // by AptCharacterTextInst::SetText / UpdateText when the bound AS variable does
-    // not resolve to a string.
+    // not resolve to a string. (Burnout wiki AptCharacterText.szInitialText: 4-byte
+    // char* @c:0x2C, 8-byte char* @native:0x30 relative to the AptCharacterText region;
+    // struct-absolute 0x50 on x64 -- the authored region starts at the 0x20-byte base end.)
     const char* mpDefaultText;
 
-    int32_t     mnAuthoredReserved5; // [c:0x40] (authored; template stamps 0)
+    // [c:0x40] the name of the AS VARIABLE this text field binds to (Burnout wiki
+    // AptCharacterText.szVariable: "Name of the variable where the text is stored").
+    // It is a POINTER, not a reserved dword -- an 8-byte char* on native-8 (struct-absolute
+    // 0x58), the wiki's szVariable @ AptCharacterText+0x38. The X360 reads it as a pointer
+    // too (instantiateCharacter @0x82B061D0: `v55 = *(char + 0x40); InitFromBuffer(&s, v55)`
+    // -> RenderItem mVarValue @+56); the empty default is the shared "" byte (unk_82143A3E).
+    // (Was mis-typed int32_t, which TRUNCATED the relocated 8-byte pointer to its low 32 bits
+    // and AV'd in EAStringC::InitFromBuffer when a nested dynamic-text char was placed.)
+    const char* mpVariableName;
 };
