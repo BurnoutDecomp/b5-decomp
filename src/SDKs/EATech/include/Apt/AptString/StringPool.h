@@ -27,6 +27,12 @@ public:
     // saConstant @ X360 dword_8324E580 -- the interned "__proto__" key.
     static const EAStringC saConstant;
 
+    // Initialize @0x82AE3630 -- allocate the interned AS-name table + the string-pool
+    // bucket array (sized to the config's string-pool count). Called once by
+    // AptCommonInitialize during the Apt bring-up. Body in AptInit.cpp (beside the
+    // other bring-up entry points). `nBucketCount` is the config bucket count.
+    static void Initialize(int nBucketCount);
+
     // ClearTemporaryPool @0x82AD8E20 -- release every temporary string node back
     // to its pool (the GC teardown's final step).
     static void ClearTemporaryPool();

@@ -10,10 +10,12 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include "SDKs/EATech/include/Apt/AptString/StringPool.h"   // StringPool (saConstant + ClearTemporaryPool)
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"   // StringPool (saConstant + ClearTemporaryPool + Initialize)
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"     // AptString (the pooled node) + gpNonGCPoolManager
+#include "SDKs/EATech/Apt/DogmaAllocator.h"                 // DOGMA_PoolManager (StringPool::Initialize bucket array)
 
 #include <intrin.h>   // _InterlockedExchange (the Apt string-pool spin lock)
+#include <cstring>    // memset (StringPool::Initialize bucket-array clear)
 
 // ---------------------------------------------------------------------------
 // saConstant -- the interned "__proto__" key.
@@ -25,6 +27,55 @@
 // const-char* ctor (InitFromBuffer) builds the same interned content.
 // ---------------------------------------------------------------------------
 const EAStringC StringPool::saConstant("__proto__");
+
+// The shared fixed-size pool the bucket array is carved from (off_8324D808).
+extern DOGMA_PoolManager* gpAptPseudoDataPool;
+
+// The string-pool bucket array + count (off_8324E4F4 / dword_8324E4F8). Owned here.
+namespace
+{
+    void*        gpAptStringPoolBuckets = nullptr;   // off_8324E4F4
+    unsigned int gnAptStringPoolCount   = 0;         // dword_8324E4F8
+}
+
+// ---------------------------------------------------------------------------
+// StringPool::Initialize @0x82AE3630 -- allocate the interned AS-name string table +
+// the string-pool bucket array. Called once by AptCommonInitialize (AptInit.cpp) at
+// the Apt bring-up. Homed here (this TU owns the full StringPool.h + no AptNativeHash.h
+// mini-StringPool collision; AptInit.cpp reaches it through the AptStringPool_Initialize
+// free wrapper below to avoid pulling the full StringPool.h into its interpreter-header
+// include set).
+//
+// X360 (under the interned-table spin lock unk_8324E7D4): walk the 256-entry AS-name
+// table dword_8324E580, pointing each entry at its 264-byte StaticStringHelperT record
+// in the rodata block unk_82F733FC (stride 0x108), then off_8324E4F4 = pool->Allocate(
+// 4 * nCount); memset(0); dword_8324E4F8 = nCount.
+//
+// FLAG (rodata): the AS-name table CONTENTS come from the un-recovered rodata block
+// unk_82F733FC (the same table AptGlobals.cpp defines as gAptASNameTable + FLAGs as
+// engine/rodata-generated). The string-record population is FLAG'd (left to the
+// constant-string data); the STRUCTURAL bucket-array allocation below is faithful.
+// `nBucketCount` == the config bucket count (config word[11]).
+// ---------------------------------------------------------------------------
+void StringPool::Initialize(int nBucketCount)
+{
+    // FLAG: the AS-name table (dword_8324E580 == gAptASNameTable) string-record
+    // population from the rodata block unk_82F733FC is engine/rodata data (un-
+    // recovered); left to the constant-string registration. The structural bucket-
+    // array allocation is faithful.
+    gpAptStringPoolBuckets = gpAptPseudoDataPool->Allocate(sizeof(void*) * static_cast<unsigned>(nBucketCount));
+    if (gpAptStringPoolBuckets != nullptr)
+        std::memset(gpAptStringPoolBuckets, 0, sizeof(void*) * static_cast<unsigned>(nBucketCount));
+    gnAptStringPoolCount = static_cast<unsigned int>(nBucketCount);
+}
+
+// AptStringPool_Initialize -- the free wrapper AptCommonInitialize calls (so AptInit.cpp
+// need not include the full StringPool.h alongside the interpreter headers, which carry
+// AptNativeHash.h's incompatible mini `class StringPool`).
+void AptStringPool_Initialize(int nBucketCount)
+{
+    StringPool::Initialize(nBucketCount);
+}
 
 // ---------------------------------------------------------------------------
 // The AptString recycle free-list head (X360 off_8324E4FC / PS3 StringPool::
