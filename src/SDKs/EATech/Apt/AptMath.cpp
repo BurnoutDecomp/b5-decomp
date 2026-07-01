@@ -19,30 +19,33 @@
 namespace
 {
     // X360 .data: the single global clip stack.
-    u16   gsnClipStackIndex = 0;   // word_8324E390
-    int   giClipStackBase   = 0;   // dword_8324E384  (16-aligned entry array)
-    int   giClipStackRaw    = 0;   // dword_8324E388  (raw allocation pointer)
-    u16   gsnClipStackDepth = 0;   // word_8324E38C
+    // FLAG (x64): the console stores the entry-array pointers as 32-bit ints; on x64
+    // the heap base is 64-bit, so the base/raw pointer slots are widened to intptr_t
+    // (a 32-bit int would truncate the base -> the makeUnit write corrupts memory).
+    u16      gsnClipStackIndex = 0;   // word_8324E390
+    intptr_t giClipStackBase   = 0;   // dword_8324E384  (16-aligned entry array)
+    intptr_t giClipStackRaw    = 0;   // dword_8324E388  (raw allocation pointer)
+    u16      gsnClipStackDepth = 0;   // word_8324E38C
 }
 
 namespace AptMath
 {
 
 // @0x82AD5D08 -- base + 0x70 * top index.
-int ClipStackGetTop()
+intptr_t ClipStackGetTop()
 {
     return 0x70 * gsnClipStackIndex + giClipStackBase;
 }
 
 // @0x82AD5CB0 -- pre-increment index, return new top pointer.
-int ClipStackPush()
+intptr_t ClipStackPush()
 {
     gsnClipStackIndex = static_cast<u16>(gsnClipStackIndex + 1);
     return 0x70 * gsnClipStackIndex + giClipStackBase;
 }
 
 // @0x82AD5CD8 -- pre-decrement index, return new top pointer.
-int ClipStackPop()
+intptr_t ClipStackPop()
 {
     gsnClipStackIndex = static_cast<u16>(gsnClipStackIndex - 1);
     return 0x70 * gsnClipStackIndex + giClipStackBase;
@@ -93,20 +96,22 @@ void ClipStackMakeUnit()
 }
 
 // @0x82AE2470 -- allocate and reset the clip stack for `nDepth` entries.
-int ClipStackInit(int nDepth)
+intptr_t ClipStackInit(int nDepth)
 {
     const u16 lsnDepth = static_cast<u16>(nDepth);
 
     // pool->Allocate(112*nDepth + 16); the raw pointer is kept then 16-aligned up.
-    int liRaw = reinterpret_cast<int>(
+    // FLAG (x64): the raw pointer is captured as intptr_t (not int) so the 64-bit heap
+    // base is not truncated; the 16-align math is identical.
+    intptr_t liRaw = reinterpret_cast<intptr_t>(
         gpAptSharedPtrPool->Allocate(static_cast<size_t>(0x70 * nDepth + 0x10)));
 
     giClipStackRaw = liRaw;
 
-    int liBase = liRaw;
+    intptr_t liBase = liRaw;
     if ((liRaw & 0xF) != 0)              // clrlwi. r10, r11, 28
     {
-        liBase = (liRaw + 0x10) & ~0xF;  // 16-align up
+        liBase = (liRaw + 0x10) & ~static_cast<intptr_t>(0xF);  // 16-align up
     }
     giClipStackBase = liBase;
 

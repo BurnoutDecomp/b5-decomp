@@ -37,8 +37,10 @@
 #include <cstdint>   // intptr_t
 #include <new>       // placement new (AptTarget)
 
-// ---- the shared fixed-size pool --------------------------------------------
+// ---- the shared fixed-size pool + the value pools --------------------------
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                     // DOGMA_PoolManager::Allocate / DOGMA_FreeSized
+#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"              // AptValueGC_PoolManager + gAptValueGC*ItemSize
+#include "SDKs/EATech/include/Apt/AptDefine.h"                  // gpNonGCPoolManager / gpGCPoolManager
 
 // ---- the leaves AptCommonInitialize calls ----------------------------------
 #include "SDKs/EATech/Apt/AptMath.h"                            // AptMath::ClipStackInit
@@ -147,6 +149,76 @@ extern AptActionInterpreter gAptActionInterpreter;
 // gAptFuncs (dword_8324E818) -- the host user-function table, defined in CgsAptAux.cpp.
 struct AptUserFunctions;
 extern AptUserFunctions gAptFuncs;
+
+// The Apt pool-pointer globals AptAllocatorInitialize wires (all alias off_8324D808;
+// the GC-view is off_8324D834). Defined in AptGlobals.cpp; wired here.
+extern DOGMA_PoolManager* gpAptOperandStackPool;   // off_8324D808 (operand-stack arrays)
+extern DOGMA_PoolManager* gpAptRenderManagerPool;  // off_8324D808
+extern DOGMA_PoolManager* gpAptSharedPtrPool;      // off_8324D808
+extern DOGMA_PoolManager* gpAptSingleListPool;     // off_8324D808
+extern void*              gpAptValueGCPool;        // off_8324D834 (type-erased GC-pool view)
+
+// ===========================================================================
+// AptAllocatorInitialize @0x82ADD118 -- construct the Apt value pools + wire the
+// pool-pointer globals.
+//
+// X360: AptValueGC_PoolManager::StaticInitialize(); mem = dword_8324E818(48) [the base
+// allocator hook]; off_8324D808 = DOGMA_PoolManager(mem, dogmaMain, dogmaOvf, 4, 256,
+// 0, 0, 0); mem2 = dword_8324E818(48); off_8324D834 = AptValueGC_PoolManager(mem2,
+// gcMain, gcOvf). AptAux::InitializeApt calls it (0x10000, 0x4000, 0x10000, 0x4000).
+//
+// FLAG (PC): the base allocator hook dword_8324E818(48) is not installed at bring-up,
+// so the two managers are backed by process-lifetime static storage (same lifetime as
+// the console heap pools). FLAG (x64): byte_82144A18 is zeroed so StaticInitialize
+// leaves the GC maxSize 0 -> override the GC size statics with x64-correct values
+// (4/256) before the GC pool ctor reads them, else AptValue allocs take the invalid
+// 0-bucket path and AV. WireAllocatorGlobals sets off_8324D808/off_8324D834 (+ the
+// operand/pseudo/render/shared/single-list aliases the engine reads off the non-GC
+// pool). The DOGMA fixed-size params (minSize 4, maxSize 256, 0/0/0,
+// bTrackOutsideAllocations 1) are transcribed from the @0x82ADD118 asm.
+// ===========================================================================
+namespace
+{
+    DOGMA_PoolManager*      s_pDogmaPool = nullptr;   // off_8324D808
+    AptValueGC_PoolManager* s_pGCPool    = nullptr;   // off_8324D834
+
+    void WireAllocatorGlobals()
+    {
+        // The five operand/pseudo/render/shared/single-list pool aliases all point at
+        // the one shared DOGMA pool (faithful: X360 off_8324D808).
+        gpAptOperandStackPool  = s_pDogmaPool;
+        gpAptPseudoDataPool    = s_pDogmaPool;
+        gpAptRenderManagerPool = s_pDogmaPool;
+        gpAptSharedPtrPool     = s_pDogmaPool;
+        gpAptSingleListPool    = s_pDogmaPool;
+
+        // The non-GC value pool (AptDefine.h gpNonGCPoolManager) also aliases the DOGMA
+        // pool; the GC value pool pointer (gpGCPoolManager) points at the AptValueGC pool.
+        gpNonGCPoolManager = s_pDogmaPool;
+        gpGCPoolManager    = s_pGCPool;
+
+        // The type-erased GC-pool view the engine stamps (off_8324D834).
+        gpAptValueGCPool = s_pGCPool;
+    }
+}
+
+void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogmaOvf)
+{
+    AptValueGC_PoolManager::StaticInitialize();
+    gAptValueGCMinItemSize = 4u;      // FLAG (x64): override the byte_82144A18-derived 0
+    gAptValueGCMaxItemSize = 256u;    // FLAG (x64): "                                   "
+    static DOGMA_PoolManager s_DogmaStorage(nDogmaMain, nDogmaOvf,
+                                            /*minSize*/ 4, /*maxSize*/ 256,
+                                            /*nOffsetToStoreNextInFreeItem*/ 0,
+                                            /*bStoreFreeBlockSize*/ false,
+                                            /*nOffsetToStoreSizeInFreeItem*/ 0,
+                                            /*bTrackOutsideAllocations*/ true);   // FLAG (PC): static backing
+    s_pDogmaPool = &s_DogmaStorage;
+    static AptValueGC_PoolManager s_GCStorage(nGcMain, nGcOvf);   // FLAG (PC): static backing
+    s_pGCPool = &s_GCStorage;
+    WireAllocatorGlobals();
+    return s_pGCPool;
+}
 
 // ===========================================================================
 // AptSetSimulationThreadID @0x82AD8F90 / AptSetRenderThreadID @0x82AD8EF0
@@ -273,9 +345,9 @@ void* AptRenderInitialize(int /*a1*/)
     if (!gbAptCommonInitDone)
         AptCommonInitialize(&gAptCommonConfig[0]);
 
-    int liTop = AptMath::ClipStackInit(128);
-    gbAptRenderInitDone = 1;                         // dword_8324E510 = 1
-    AptSetRenderThreadID(liTop);                     // console passes the clip-top ptr as the id arg
+    intptr_t liTop = AptMath::ClipStackInit(128);    // x64: pointer-width (see AptMath FLAG)
+    gbAptRenderInitDone = 1;                          // dword_8324E510 = 1
+    AptSetRenderThreadID(static_cast<int>(liTop));    // console passes the clip-top ptr; the arg is unused
 
     AptUpdateRenderMutex().Unlock();
 

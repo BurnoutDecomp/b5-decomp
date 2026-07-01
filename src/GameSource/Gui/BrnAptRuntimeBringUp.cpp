@@ -375,83 +375,13 @@ namespace
         return nullptr;
     }
 
-    // The X360 interpreter stack sizes (CgsGui::AptAux::InitializeApt @0x82848E50:
-    // AptUpdateInitialize's v8 block -> the AptActionInterpreter init parms). The
-    // interpreter's operand-stack capacity / call-stack depth are carried in that
-    // param block (v8[1]=512 etc); the AptScriptFunctionBase register window count is
-    // v8[3]=256. We size the operand stack generously (the engine reads iStackSize for
-    // the operand stack and iCallStackDepth for the four call-depth stacks).
-    const s32 KI_APT_STACK_SIZE       = 512;   // operand-stack capacity
-    const s32 KI_APT_CALLSTACK_DEPTH  = 64;    // four call-depth stacks' capacity
-
-    // The Apt allocator sizes -- VERBATIM from AptAllocatorInitialize @0x82ADD118's
-    // single caller (InitializeApt @0x82848E50 passes AptAllocatorInitialize(0x10000,
-    // 0x4000, 0x10000, 0x4000)): a1/a2 = AptValueGC main/overflow, a3/a4 = DOGMA
-    // main/overflow. The DOGMA fixed-size params (minSize 4, maxSize 256, the three
-    // free-item bookkeeping offsets 0/0/0, bTrackOutsideAllocations 1) are transcribed
-    // from the @0x82ADD118 asm (li r6,4 / li r7,0x100 / li r8,0 / li r9,0 / li r10,0 /
-    // stb r11(=1)).
-    const size_t KU_DOGMA_MAIN     = 0x10000;  // 64 KB main pool
-    const size_t KU_DOGMA_OVERFLOW = 0x4000;   // 16 KB overflow
-    const size_t KU_GC_MAIN        = 0x10000;  // 64 KB GC main pool
-    const size_t KU_GC_OVERFLOW    = 0x4000;   // 16 KB GC overflow
-
-    // The single shared DOGMA fixed-size pool (the X360 off_8324D808 all five
-    // gpApt*Pool aliases point at) + the AptValueGC pool (off_8324D834). Held as raw
-    // storage we placement-construct so we control lifetime + can wire the globals.
-    DOGMA_PoolManager*      s_pDogmaPool = nullptr;
-    AptValueGC_PoolManager* s_pGCPool    = nullptr;
-
-
-    // ---- the Apt allocator + interpreter globals the engine reads (declared in the
-    //      Apt SDK; defined in AptGlobals.cpp / AptTarget.cpp; null until WE wire them,
-    //      because the X360 AptInit that wires them is un-reconstructed) -------------
-    void WireAllocatorGlobals()
-    {
-        // The five operand/pseudo/render/shared/single-list pool aliases all point at
-        // the one shared DOGMA pool (faithful: X360 off_8324D808).
-        gpAptOperandStackPool  = s_pDogmaPool;
-        gpAptPseudoDataPool    = s_pDogmaPool;
-        gpAptRenderManagerPool = s_pDogmaPool;
-        gpAptSharedPtrPool     = s_pDogmaPool;
-        gpAptSingleListPool    = s_pDogmaPool;
-
-        // The non-GC value pool (AptDefine.h gpNonGCPoolManager) also aliases the DOGMA
-        // pool; the GC value pool pointer (gpGCPoolManager) points at the AptValueGC pool.
-        gpNonGCPoolManager = s_pDogmaPool;
-        gpGCPoolManager    = s_pGCPool;
-
-        // The type-erased GC-pool view the engine stamps (off_8324D834).
-        gpAptValueGCPool = s_pGCPool;
-    }
-
-    // AptAllocatorInitialize @0x82ADD118 -- FAITHFUL decompile. StaticInitialize, then construct the
-    // non-GC (DOGMA) pool manager into off_8324D808 and the GC (AptValueGC) pool manager into
-    // off_8324D834. X360 sig (a1=GC main, a2=GC ovf, a3=DOGMA main, a4=DOGMA ovf); AptAux::InitializeApt
-    // calls it with (0x10000,0x4000,0x10000,0x4000). The X360 allocates each manager via the base
-    // allocator dword_8324E818(48); on PC that hook is not installed at bring-up, so we back them with
-    // process-lifetime static storage (marked PC allocation -- same lifetime as the console heap pools).
-    // FLAG (x64): byte_82144A18 is zeroed so StaticInitialize leaves the GC maxSize 0 -> override the GC
-    // size statics with x64-correct values BEFORE the GC pool ctor reads them (else AptCIH/AptValue
-    // allocs take the invalid 0-bucket path and AV). WireAllocatorGlobals sets off_8324D808/off_8324D834
-    // (+ the operand/pseudo/render/shared/single-list aliases the engine reads off the non-GC pool).
-    void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogmaOvf)
-    {
-        AptValueGC_PoolManager::StaticInitialize();
-        gAptValueGCMinItemSize = 4u;
-        gAptValueGCMaxItemSize = 256u;
-        static DOGMA_PoolManager s_DogmaStorage(nDogmaMain, nDogmaOvf,
-                                                /*minSize*/ 4, /*maxSize*/ 256,
-                                                /*nOffsetToStoreNextInFreeItem*/ 0,
-                                                /*bStoreFreeBlockSize*/ false,
-                                                /*nOffsetToStoreSizeInFreeItem*/ 0,
-                                                /*bTrackOutsideAllocations*/ true);
-        s_pDogmaPool = &s_DogmaStorage;
-        static AptValueGC_PoolManager s_GCStorage(nGcMain, nGcOvf);
-        s_pGCPool = &s_GCStorage;
-        WireAllocatorGlobals();
-        return s_pGCPool;
-    }
+    // NOTE: the Apt allocator/interpreter/target bring-up (the invented Steps 1/2/5 that
+    // used to live here -- a local AptAllocatorInitialize + WireAllocatorGlobals + the
+    // interpreter init + AptCreateTargetInstance) is RETIRED: it is now the faithful
+    // CgsGui::AptAux::InitializeApt @0x82848E50 (CgsAptAux.cpp), which chains the homed
+    // AptAllocatorInitialize/AptUpdateInitialize/AptRenderInitialize/AptCreateTargetInstance/
+    // AptChangeTargetInstance (SDKs/EATech/Apt/AptInit.cpp). AptRuntimeBringUp() below drives
+    // it after the (host-adaptor) render buffer + AptAux::Construct are up.
 }
 
 namespace BrnGui
@@ -486,60 +416,6 @@ namespace BrnGui
         if (!s_bBringUpAttempted)
             CgsDev::Log::WriteToLog("[AptRT] bring-up: begin.\n");
         s_bBringUpAttempted = true;
-
-        // ---- STEP 1: the Apt allocators (DOGMA fixed-size + AptValueGC pools) -----
-        // StaticInitialize() computes the per-VFT min/max object sizes the GC pool
-        // needs from byte_82144A18; then construct both pools with the real X360 sizes
-        // and wire every global the engine reads off them.
-        if (!s_bAllocatorReady)
-        {
-            // FAITHFUL: the extracted AptAllocatorInitialize @0x82ADD118 (StaticInitialize + construct
-            // the DOGMA non-GC + AptValueGC pools + WireAllocatorGlobals). AptAux::InitializeApt calls it
-            // with (GC main, GC ovf, DOGMA main, DOGMA ovf). The x64 GC-size override + PC static backing
-            // live inside the function (marked FLAGs there). This retires the inline invented body -- the
-            // first of the faithful bring-up entry points (Step 8) to replace BrnAptRuntimeBringUp.
-            AptAllocatorInitialize(KU_GC_MAIN, KU_GC_OVERFLOW, KU_DOGMA_MAIN, KU_DOGMA_OVERFLOW);
-            s_bAllocatorReady = true;
-
-            char lac[160];
-            std::snprintf(lac, sizeof(lac),
-                "[AptRT] step1 allocators (AptAllocatorInitialize): DOGMA(0x%X/0x%X)=%p GC(0x%X/0x%X)=%p wired.\n",
-                (unsigned)KU_DOGMA_MAIN, (unsigned)KU_DOGMA_OVERFLOW, (void*)s_pDogmaPool,
-                (unsigned)KU_GC_MAIN, (unsigned)KU_GC_OVERFLOW, (void*)s_pGCPool);
-            CgsDev::Log::WriteToLog(lac);
-        }
-
-        // ---- STEP 2: the AptActionInterpreter (the ActionScript VM stacks) -------
-        // initialize() allocates the five {count,capacity,array} stacks from the
-        // operand-stack pool (now non-null). Needs gpAptOperandStackPool wired (step 1).
-        if (!s_bInterpreterReady)
-        {
-            if (gpAptOperandStackPool == nullptr)
-            {
-                CgsDev::Log::WriteToLog("[AptRT] step2 interpreter: SKIP -- operand-stack pool null (allocator wiring failed).\n");
-            }
-            else
-            {
-                AptInitParmsT lParms;
-                std::memset(&lParms, 0, sizeof(lParms));
-                lParms.iStackSize          = KI_APT_STACK_SIZE;
-                lParms.iCallStackDepth     = KI_APT_CALLSTACK_DEPTH;
-                lParms.mbSkipTraceBytecodes = 1;   // trace bytecodes skipped on a release host
-
-                // FLAG: AptActionInterpreter::initialize tail-calls AptScriptFunctionBase_
-                // InitializeStaticData (the AS register window) -- that path reaches the
-                // register/frame machinery which is only partly reconstructed. If it faults
-                // it does so HERE; this is logged before + after so the run-log brackets it.
-                CgsDev::Log::WriteToLog("[AptRT] step2 interpreter: calling AptActionInterpreter::initialize ...\n");
-                gAptActionInterpreter.initialize(&lParms);
-                s_bInterpreterReady = true;
-                char lac[128];
-                std::snprintf(lac, sizeof(lac),
-                    "[AptRT] step2 interpreter: initialized (stack=%d callstack=%d).\n",
-                    KI_APT_STACK_SIZE, KI_APT_CALLSTACK_DEPTH);
-                CgsDev::Log::WriteToLog(lac);
-            }
-        }
 
         // ---- STEP 3: the Apt render buffer (the D3D9 2D buffer the engine fills) --
         // Construct + Prepare the ImRenderBuffer<V> that AptRenderHandler::Render
@@ -611,68 +487,67 @@ namespace BrnGui
             CgsDev::Log::WriteToLog(lac);
         }
 
-        // ---- STEP 5: the AptTarget context (the engine's per-process director) ----
-        // Create the Apt context (AptCreateTargetInstance) + select it as current
-        // (AptChangeTargetInstance) so GetTarget() returns a live context -- the X360
-        // does exactly this inside InitializeApt (`*(a1+8)=AptCreateTargetInstance(v7);
-        // AptChangeTargetInstance()`), and those two are now HOMED in AptTarget.cpp.
-        // The create-params block is the v7[8] InitializeApt @0x82848E50 builds:
-        //   v7 = {0, 1, 8, 8, 0, 512, 0, 0}
-        // The AptTarget ctor reads config from p[4]/p[7]/p[2]/p[1]/p[0]/p[3] and the
-        // animation director (MakeAptAnimationTarget) from words 0/1/2/3/5 (p[5]=512).
-        if (!s_bTargetReady)
+        // ---- STEP 5: the FAITHFUL Apt runtime bring-up (AptAux::InitializeApt) ----
+        // This retires the invented Steps 1/2/5 (allocator wiring, interpreter init,
+        // target create) with the single faithful CgsGui::AptAux::InitializeApt @0x82848E50,
+        // homed in CgsAptAux.cpp. It runs, in the console's exact order:
+        //   AptAllocatorInitialize(0x10000,0x4000,0x10000,0x4000)  (the pools + wiring)
+        //   AptUpdateInitialize(v8, 0)                             (config + AS interpreter)
+        //   AptRenderInitialize(updated)                           (clip stack + render pool)
+        //   AptCreateTargetInstance(v7) + AptChangeTargetInstance  (the live director context)
+        // (the ext-object phase is FLAG'd inside InitializeApt -- it needs the deferred
+        //  AptValueInitialize singletons). Matches the X360 lifecycle: AptAux::Construct
+        //  (above, at "ctor" time) then AptAux::Prepare -> InitializeApt.
+        //
+        // Requires AptAux::Construct to have published the singleton (step 4). Idempotent:
+        // once a live GetTarget() exists the runtime is already up (do not re-run).
+        if (!s_bAllocatorReady)
         {
-            // Pre-existing context? (idempotent: don't create a second instance.)
-            AptTarget* lpExisting = GetTarget();
-            if (lpExisting != nullptr)
+            if (!s_bAuxReady)
             {
-                s_bTargetReady = true;
+                CgsDev::Log::WriteToLog("[AptRT] step5 InitializeApt: DEFERRED -- AptAux::Construct not done "
+                                        "(render buffer waiting on rw allocator).\n");
             }
-            else if (gpAptPseudoDataPool == nullptr)
+            else if (GetTarget() != nullptr)
             {
-                CgsDev::Log::WriteToLog("[AptRT] step5 target: SKIP -- DOGMA pool null (allocator wiring failed).\n");
+                // Already initialised (a prior pass / another caller). Mark up.
+                s_bAllocatorReady   = true;
+                s_bInterpreterReady = true;
+                s_bTargetReady      = true;
+                CgsDev::Log::WriteToLog("[AptRT] step5 InitializeApt: already up (GetTarget() live).\n");
             }
             else
             {
-                static const u32 s_auAptCreateParams[8] = { 0u, 1u, 8u, 8u, 0u, 512u, 0u, 0u };  // InitializeApt v7
-                CgsDev::Log::WriteToLog("[AptRT] step5 target: AptCreateTargetInstance + AptChangeTargetInstance ...\n");
+                CgsDev::Log::WriteToLog("[AptRT] step5 InitializeApt: calling AptAux::InitializeApt "
+                                        "(alloc + update + render + target) ...\n");
+                s_AptAux.InitializeApt();
 
-                // FLAG: the AptTarget ctor builds an AptAnimationTarget director + an AptLoader
-                // + an AptLinker (all homed) from the shared DOGMA pool. If any sub-construct
-                // crosses an un-homed callee it faults HERE; bracketed by the probes so the
-                // run-log pinpoints it.
-                AptTarget* lpCreated = AptCreateTargetInstance(s_auAptCreateParams);
-                if (lpCreated == nullptr)
-                {
-                    CgsDev::Log::WriteToLog("[AptRT] step5 target: AptCreateTargetInstance returned null "
-                                            "(pool carve failed) -- FLAG.\n");
-                }
-                else
-                {
-                    AptChangeTargetInstance(lpCreated);   // sets gpAptTarget/TLS + the GetTarget() mirror
-                    AptTarget* lpNow = GetTarget();
-                    s_bTargetReady = (lpNow != nullptr);
-                    char lac[200];
-                    std::snprintf(lac, sizeof(lac),
-                        "[AptRT] step5 target: created %p, gpAptTarget set; GetTarget()=%p; "
-                        "director=%p loader=%p linker=%p.\n",
-                        (void*)lpCreated, (void*)lpNow,
-                        (void*)lpCreated->mpAnimationTarget, (void*)lpCreated->mpLoader,
-                        (void*)lpCreated->mpLinker);
-                    CgsDev::Log::WriteToLog(lac);
-                }
+                // Reflect the faithful init into the facade's step flags (for the channel-41
+                // readiness gate + the log). InitializeApt wires the pools + interpreter and
+                // publishes the target into GetTarget().
+                s_bAllocatorReady   = (gpAptOperandStackPool != nullptr);
+                s_bInterpreterReady = s_bAllocatorReady;
+                AptTarget* lpNow    = GetTarget();
+                s_bTargetReady      = (lpNow != nullptr);
+                char lac[220];
+                std::snprintf(lac, sizeof(lac),
+                    "[AptRT] step5 InitializeApt: done. pools=%s GetTarget()=%p%s\n",
+                    s_bAllocatorReady ? "wired" : "NULL(FLAG)", (void*)lpNow,
+                    s_bTargetReady
+                        ? " (director+loader+linker live)"
+                        : " (target null -- FLAG; see the InitializeApt/AptTarget path)");
+                CgsDev::Log::WriteToLog(lac);
             }
         }
 
         // The runtime is "ready" (for channel-41 routing) once the allocator + render
-        // buffer + AptAux host are up. The target now being live (step 5) lets PlayMovie +
-        // the per-frame tick reach a real GetTarget(); a failed target is a downstream bail,
-        // not a bring-up failure.
+        // buffer + AptAux host are up (all done by/through InitializeApt + step 3/4). The
+        // target being live lets PlayMovie + the per-frame tick reach a real GetTarget().
         s_bRuntimeReady = s_bAllocatorReady && s_bAuxReady;
         CgsDev::Log::WriteToLog(s_bRuntimeReady
             ? (s_bTargetReady
-                ? "[AptRT] bring-up: READY (alloc+interp+aux+renderbuf+TARGET up; GetTarget() live).\n"
-                : "[AptRT] bring-up: READY (alloc+interp+aux+renderbuf up; target FLAG'd -- see step5).\n")
+                ? "[AptRT] bring-up: READY (InitializeApt: alloc+interp+render+TARGET up; GetTarget() live).\n"
+                : "[AptRT] bring-up: READY (InitializeApt: alloc+interp+render up; target FLAG'd).\n")
             : "[AptRT] bring-up: INCOMPLETE -- see step probes above.\n");
         return s_bRuntimeReady;
     }

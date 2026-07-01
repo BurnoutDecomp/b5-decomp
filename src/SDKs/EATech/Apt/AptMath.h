@@ -47,21 +47,27 @@ struct AptClipMatrixEntry
 
 namespace AptMath
 {
+    // FLAG (x64): the console carries the clip-stack entry pointers as 32-bit ints
+    // (base + 0x70*index). On x64 the heap base is a 64-bit address, so these MUST be
+    // pointer-width (intptr_t) -- a 32-bit int would TRUNCATE the base and the makeUnit
+    // write would corrupt memory. Widened to intptr_t (the pervasive Apt x64-port rule);
+    // the arithmetic is identical, only the width changes.
+
     // Allocate + reset the clip stack for `nDepth` entries. X360 @0x82AE2470:
     // pool-allocates (112*nDepth + 16) bytes from the shared Apt pool, 16-byte
     // aligns the base, records depth, zeroes the index, then makes the bottom
     // entry the unit transform. Returns the bottom-entry pointer that
     // ClipStackMakeUnit yields.
-    int ClipStackInit(int nDepth);
+    intptr_t ClipStackInit(int nDepth);
 
-    // Pointer (as int) to the current top entry: base + 0x70 * index.
-    int ClipStackGetTop();
+    // Pointer (as intptr_t) to the current top entry: base + 0x70 * index.
+    intptr_t ClipStackGetTop();
 
     // Pre-increment the index, return the new top-entry pointer.
-    int ClipStackPush();
+    intptr_t ClipStackPush();
 
     // Pre-decrement the index, return the new top-entry pointer.
-    int ClipStackPop();
+    intptr_t ClipStackPop();
 
     // Initialise the current top entry to the identity transform + opaque-white
     // colour scale (255) + zero colour translate. X360 @0x82ADC548.
