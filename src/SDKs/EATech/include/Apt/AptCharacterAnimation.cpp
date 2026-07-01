@@ -19,6 +19,7 @@
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"  // EAStringC RAII (import-name bracket)
 #include "SDKs/EATech/include/Apt/AptTarget.h"      // gpAptTarget->mpLoader (the import loader)
 #include "SDKs/EATech/include/Apt/AptLoader.h"      // AptLoader::Load (the real import loader, homed)
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"  // PushStaticData (the register-block window push)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"  // native-8 shape-geometry rebase
 
 #include <cstdint>
@@ -77,12 +78,11 @@ extern void* gAptActionInterpreterVM;                                           
 extern void  AptActionInterpreter_runStream(void* pVM, void* pStream, void* pCIH, int nFrame, void* pScope);   // @0x81BD50 (FLAG)
 extern void* AptActionInterpreter_CleanupAfterExecution(void* pVM, void* pSavedScratch, void* pLocalState);    // @0x82AE9388 (FLAG)
 
-// The VM's parse-argument scratch heap: a bump pointer (off_8324E3D0) + a per-run
-// element count (dword_8324E3D4). The init passes snapshot the bump pointer, advance
-// it past the run's args, then hand the snapshot back to CleanupAfterExecution.
-// FLAG: owned by the VM allocator TU.
-extern void* gAptParseArgHeapPtr;     // off_8324E3D0 (FLAG)
-extern int   gAptParseArgHeapCount;   // dword_8324E3D4 (FLAG)
+// The "parse-arg scratch heap" IS the AS register-block window (off_8324E3D0 /
+// dword_8324E3D4 == AptScriptFunctionBase::spRegBlockCurrentFrameBase /
+// snRegBlockCurrentFrameCount): each init-action run pushes a fresh window
+// (PushStaticData) and CleanupAfterExecution pops it back. The old
+// gAptParseArgHeapPtr/Count duplicate globals are retired.
 
 // AptGetAnimationAtLevel @0x82B00788 -- the root AptCIH-at-level resolver the init
 // passes use when the supplied CIH is itself a level (type 0x25). Homed in
@@ -840,9 +840,8 @@ void* AptCharacterAnimation::ExportClassDefinitionAssets(void* pA2)
 
                 // Run the matched command's action stream on the VM singleton.
                 {
-                    void* pSavedScratch = gAptParseArgHeapPtr;
-                    gAptParseArgHeapPtr   = BlobAt(gAptParseArgHeapPtr, 4 * gAptParseArgHeapCount);
-                    gAptParseArgHeapCount = 0;
+                    // Push a fresh register-block window (inlined PushStaticData on the console).
+                    void* pSavedScratch = AptScriptFunctionBase::PushStaticData();
 
                     void* pScope  = ResolveAnimationScope(pA2);
                     void* pStream = BlobPtr(pCmdTable[iCmd], 0x08);   // cmd+8 = the stream
@@ -889,9 +888,8 @@ void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
     // Export this class's __Packages assets first, then run the init stream.
     ExportClassDefinitionAssets(pA2);
 
-    void* pSavedScratch = gAptParseArgHeapPtr;
-    gAptParseArgHeapPtr   = BlobAt(gAptParseArgHeapPtr, 4 * gAptParseArgHeapCount);
-    gAptParseArgHeapCount = 0;
+    // Push a fresh register-block window (inlined PushStaticData on the console).
+    void* pSavedScratch = AptScriptFunctionBase::PushStaticData();
 
     void* pScope = ResolveAnimationScope(pA2);
 

@@ -108,7 +108,8 @@ AptValue* gpAptNativeFn_8324E494 = nullptr;
 // 3. Operand-stack / register / native-arg state + the deferred-release vector
 //    pointer.  VM state, owned by AptInit / the interpreter boot.
 // ===========================================================================
-AptValue**      gpAptRegisterBase          = nullptr;   // off_8324E3D0 (AptScriptFunctionBase::spRegisters)
+// (gpAptRegisterBase retired 2026-07-01: off_8324E3D0 is
+//  AptScriptFunctionBase::spRegBlockCurrentFrameBase -- the one canonical global.)
 AptValue**      gppAptNativeArgStack        = nullptr;   // off_8324E768
 AptString*      gpStringPoolFreeList        = nullptr;   // off_8324E4FC (string-pool free list head)
 AptValueVector* gpAptDeferredReleaseVector  = nullptr;   // off_8324E51C
@@ -316,7 +317,8 @@ int gbAptSavedInputActive       = 0;   // dword_8324D7F0 (int-typed flag)
 int gnAptActionFrameId          = 0;   // dword_8324E514
 int gnAptNativeArgCount         = 0;   // dword_8324E760
 int gnCurrUpdateTick            = 0;
-int gAptParseArgHeapCount       = 0;   // dword_8324E3D4
+// (gAptParseArgHeapCount retired 2026-07-01: dword_8324E3D4 is
+//  AptScriptFunctionBase::snRegBlockCurrentFrameCount.)
 
 int32_t gAptMouseX  = 0;   // dword_8324E534
 int32_t gAptMouseY  = 0;   // dword_8324E538
@@ -327,16 +329,9 @@ uint32_t gAptKeyLastEvent        = 0;   // dword_8324E7A8
 uint32_t gnAptGCThreadId_Ctor    = 0;   // dword_8324E500
 uint32_t gnAptGCThreadId_Release = 0;   // dword_8324E504
 
-// The VM parse-argument scratch heap bump pointer (X360 off_8324E3D0). The
-// EXISTING source declares it under TWO type spellings at global scope (an ODR
-// quirk carried verbatim from the two consumers):
-//   AptAnimationTarget.cpp:266   extern char* gAptParseArgHeapPtr;   ->  ?gAptParseArgHeapPtr@@3PEADEA
-//   AptCharacterAnimation.cpp:66 extern void* gAptParseArgHeapPtr;   ->  ?gAptParseArgHeapPtr@@3PEAXEA
-// Both are unresolved externals. C++ cannot define one identifier twice, so we
-// define the char* symbol here and alias the void* symbol onto the SAME storage
-// via /alternatename (faithful -- both are the one console address off_8324E3D0).
-char* gAptParseArgHeapPtr = nullptr;   // off_8324E3D0 (char* spelling)
-#pragma comment(linker, "/alternatename:?gAptParseArgHeapPtr@@3PEAXEA=?gAptParseArgHeapPtr@@3PEADEA")
+// (gAptParseArgHeapPtr + its /alternatename ODR bridge retired 2026-07-01: the "parse-arg
+//  scratch heap" bump pointer off_8324E3D0 IS AptScriptFunctionBase::spRegBlockCurrentFrameBase
+//  -- the register-block window base. Consumers now use PushStaticData/PopStaticData.)
 
 // ===========================================================================
 // 15. Pointer / thread-id / mutex scalars (void* and typed).  Null / 0.

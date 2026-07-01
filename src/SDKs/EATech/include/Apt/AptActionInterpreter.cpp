@@ -184,13 +184,10 @@ extern void (*gpAptFSCommandHook)(const char* pCommand, const char* pArgs);
 // constant in the X360 .rodata; reproduced verbatim.
 static const char* const kAptFSCommandPrefix = "FSCommand:";
 
-// FLAG: AptScriptFunctionBase::PopStaticData (console @0x82AE9388's tail call) -- the
-// static "restore per-call execution state" helper paired with InitializeStaticData /
-// SetupBeforeExecution. It is part of the AptScriptFunctionBase TU but is not declared
-// now the real static member AptScriptFunctionBase::PopStaticData (AptScriptFunctionBase.cpp).
-// NOTE: pSaved here is actually the saved arg-heap/register-block base (a void*), mis-typed as
-// SavedExecutionState* in this member's signature -- a documented type-debt to fix when the whole
-// runStream cluster (SetupBeforeExecution/PushStaticData) lands. PopStaticData takes it as void*.
+// AptScriptFunctionBase::PopStaticData (console @0x82AE9388's tail call) is the real
+// static member (AptScriptFunctionBase.cpp): pop the register-block window back to the
+// saved base. The arg is the void* window base (PushStaticData's return) -- the earlier
+// SavedExecutionState* mis-typing is resolved (2026-07-01).
 
 // ---------------------------------------------------------------------------
 // ~AptActionInterpreter @0x82AE3918 -- free each of the five {count,capacity,array}
@@ -218,7 +215,7 @@ AptActionInterpreter::~AptActionInterpreter()
 // is dropped, Release the value, and clear the slot; then restore the script
 // function's per-call execution state (PopStaticData on the saved-state record).
 // ---------------------------------------------------------------------------
-void AptActionInterpreter::CleanupAfterExecution(AptScriptFunctionBase::SavedExecutionState* pSaved)
+void AptActionInterpreter::CleanupAfterExecution(void* pSavedBase)
 {
     if (mpAbortValue)
     {
@@ -227,7 +224,9 @@ void AptActionInterpreter::CleanupAfterExecution(AptScriptFunctionBase::SavedExe
         mpAbortValue->Release();
         mpAbortValue = 0;
     }
-    AptScriptFunctionBase::PopStaticData(pSaved);   // real member (register-block frame pop)
+    // Pop the register-block window back to the base the caller saved before the run
+    // (X360: return PopStaticData(a2)).
+    AptScriptFunctionBase::PopStaticData(pSavedBase);
 }
 
 // ---------------------------------------------------------------------------

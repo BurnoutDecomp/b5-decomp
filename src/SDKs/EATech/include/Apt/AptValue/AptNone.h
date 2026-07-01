@@ -31,8 +31,14 @@
 #include "SDKs/EATech/include/Apt/AptDefine.h"           // gpNonGCPoolManager + AptNonGC*SaveSize
 #include "SDKs/EATech/Apt/DogmaAllocator.h"              // DOGMA_PoolManager::Allocate/Deallocate
 
+int AptValueInitialize();   // AptInit.cpp @0x82B02800 -- the designated singleton bootstrap
+
 class AptNone : public AptValueNoGC
 {
+    // The console's value-singleton bootstrap constructs the one pinned `undefined`
+    // instance (off_8324D814 = new AptNone) -- the sole external user of the ctor.
+    friend int ::AptValueInitialize();
+
 public:
     static void* operator new(size_t size)              { return gpNonGCPoolManager->Allocate(size); }
     static void  operator delete(void* p, size_t size)  { gpNonGCPoolManager->Deallocate(p, size); }

@@ -46,7 +46,13 @@
 #include "SDKs/EATech/Apt/AptMath.h"                            // AptMath::ClipStackInit
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"         // AptAnimationTarget::SetupStaticData
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"    // AptValueVector (ctor)
-#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"       // AptActionInterpreter::initialize + AptInitParmsT
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"       // AptActionInterpreter::initialize + InitDispatchTable + AptInitParmsT
+
+// ---- the value singletons AptValueInitialize builds -------------------------
+#include "SDKs/EATech/include/Apt/AptValue/AptNone.h"           // AptNone (the `undefined` singleton; befriended)
+#include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"        // AptBoolean::Initialize (befriended)
+#include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"         // AptLookup::Initialize
+#include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"       // AptRegister::Initialize + gnAptRegisterCount
 
 // StringPool::Initialize is reached through this free wrapper (AptStringPool.cpp): the
 // full StringPool.h cannot be included here (the interpreter headers already carry
@@ -300,26 +306,34 @@ void* AptCommonInitialize(void* pConfig)
 // ===========================================================================
 // AptValueInitialize @0x82B02800 -- the AS value-singleton bootstrap.
 //
-// FLAG (deferred -- protected reconstruction ctors): the console builds ~15 AS value
-// singletons here (AptNone/AptBoolean/AptLookup/AptRegister/AptCIHNone/AptRendering-
-// Context/AptExtern/AptKey/AptGlobal/AptGlobalExtensionObject/AptString + 7 AS native
-// functions) and drains the common-init deferred-release vector. In the reconstructed
-// Apt types those singleton ctors + the *::Initialize entry points are `protected`
-// (they are engine-internal, constructed within the class hierarchy -- not by an
-// external TU). Homing this faithfully would require befriending AptValueInitialize
-// into each of those classes; that is out of this bring-up's scope. The singletons
-// therefore stay null -- exactly the documented pre-init state (AptGlobals.cpp:
-// "null until AptInit runs; the bodies short-circuit on null") -- and the boot stays
-// stable. This is the honest faithfulness boundary for the value-singleton bootstrap;
-// AptUpdateInitialize calls it (below) as the no-op it is until the value types expose
-// their bootstrap to this TU. Returns 0 (the console's r3 == the last ReleaseValues
-// result; with no singletons built there is nothing to release).
+// The console builds the AS value singletons here and drains the common-init
+// deferred-release vector. WIRED (2026-07-01), in the console's exact leading order:
+//   1. off_8324D814 (gpUndefinedValue) = a pooled AptNone -- the shared `undefined`
+//      (X360: Allocate(off_8324D808, 8) then AptNone::AptNone(); the pooled operator
+//      new + the befriended protected ctor reproduce that on x64 widths).
+//   2. AptBoolean::Initialize()  (the shared true/false pair; befriended)
+//   3. AptLookup::Initialize()   (the slot-indexed lookup table)
+//   4. AptRegister::Initialize() (the AS register-value file; reads gnAptRegisterCount,
+//      published from the config block by AptUpdateInitialize before this runs)
+// FLAG (deferred -- the remaining singletons): AptCIHNone "EmptyCIH" (dword_8324D700),
+// AptRenderingContext, AptExtern, AptKey, AptGlobal(+ExtensionObject), the AptString
+// empties and the 7 AS native-function singletons still have protected bootstraps not
+// yet exposed to this TU; they keep their documented null pre-init state (the engine
+// short-circuits on null) until each is befriended/homed. Returns 0 (the console's
+// r3 == the last ReleaseValues result).
 // ===========================================================================
+extern AptValue* gpUndefinedValue;   // off_8324D814 (defined in AptGlobals.cpp)
+
 int AptValueInitialize()
 {
-    // FLAG (deferred): the value-singleton bootstrap (protected reconstruction ctors)
-    // is not reproduced here; the AptGlobals.cpp value singletons keep their null
-    // pre-init state (the engine short-circuits on null). See the header comment.
+    if (gpUndefinedValue == nullptr)
+        gpUndefinedValue = new AptNone();   // pooled operator new (gpNonGCPoolManager)
+
+    AptBoolean::Initialize();
+    AptLookup::Initialize();
+    AptRegister::Initialize();
+
+    // FLAG (deferred): the remaining singletons (see the header comment) stay null.
     return 0;
 }
 
@@ -391,6 +405,12 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     // memcpy(&unk_82F733B8, params, 68).
     std::memcpy(&gAptCommonConfig[0], lpParams, 68);
 
+    // dword_82F733E8 (config +0x30, word 12) -- the AS register count. The console
+    // reads the config slot in place (AptRegister::Initialize / InitializeStaticData
+    // both read +0x30); our reconstruction carries it as the gnAptRegisterCount
+    // global, published here so those readers see the configured value (default 128).
+    gnAptRegisterCount = static_cast<s32>(lpParams[12]);
+
     // if (!off_82F733B0) off_82F733B0 = &unk_82F72FF8.
     if (gpAptConfigDefault == nullptr)
         gpAptConfigDefault = &gAptEmptyDefaultSentinel[0];
@@ -430,10 +450,16 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     // AptValueInitialize() -- FLAG-deferred (protected value ctors; see its body).
     AptValueInitialize();
 
+    // Fill the opcode->handler dispatch table before the interpreter comes up. The
+    // console ships sGlobalTable as pre-initialised static DATA; the extracted map is
+    // filled at the same bring-up point here (equivalent result; unbuilt opcodes get
+    // the no-op stub).
+    AptActionInterpreter::InitDispatchTable();
+
     // AptActionInterpreter::initialize(&dword_8324E760, params). The homed initialize
-    // takes a const AptInitParmsT* and reads the config block at +0x20/+0x24/+0x40 --
-    // the SAME layout as the AptUpdateParams (iStackSize == word[8], iCallStackDepth
-    // == word[9], skip-trace == byte[64]). Reinterpret the params block as it.
+    // takes a const AptInitParmsT* and reads the config block at +0x20/+0x24/+0x30/
+    // +0x40 -- the SAME layout as the AptUpdateParams (iStackSize == word[8],
+    // iCallStackDepth == word[9], iRegisterCount == word[12], skip-trace == byte[64]).
     gAptActionInterpreter.initialize(reinterpret_cast<const AptInitParmsT*>(lpParams));
 
     // Build the 28-byte single-list free node (dword_8324D810). The console pool-

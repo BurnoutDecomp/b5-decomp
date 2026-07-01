@@ -90,7 +90,7 @@ public:
     struct SavedExecutionState
     {
         AptFrameStack* mpSavedFrameStack;   // +0x00  previous spFrameStack
-        AptValue**     mpSavedRegisters;    // +0x04  previous spRegisters base
+        AptValue**     mpSavedRegisters;    // +0x04  previous spRegBlockCurrentFrameBase (the caller's window)
     };
 
     // ---- shared overridable script-function interface --------------------------
@@ -216,15 +216,25 @@ protected:
     // The current local-variable frame stack (off_8324E3DC); CreateFrameStack
     // installs it and SetArgument inserts into its locals.
     static AptFrameStack* spFrameStack;
-    // The flat AS register array base (off_8324E3D0) + the live-register count
-    // high-water mark (dword_8324E3D4) + the allocated capacity (dword_8324E3D8,
-    // used by ShutdownStaticData to free the array).
-    static AptValue**     spRegisters;
-    static int32_t        snRegisterCount;
-    static int32_t        snRegisterCapacity;
-    // The register-BLOCK frame stack (X360 spRegBlockCurrentFrameBase /
-    // snRegBlockCurrentFrameCount): a moving base into the register block carved from
-    // the arg heap. PushStaticData grows it; PopStaticData pops it back to a saved base.
+    // The AS register BLOCK (names are the PS3-authoritative statics of this class):
+    //   spRegBlockBase             (dword_8324E3CC) -- the fixed heap anchor: the start
+    //                              of the one flat block InitializeStaticData allocates
+    //                              (ShutdownStaticData frees through it).
+    //   spRegBlockCurrentFrameBase (off_8324E3D0)   -- the MOVING current-frame window
+    //                              base into that block. SetRegisterValue/GetRegisterValue
+    //                              index the current window through it; PushStaticData
+    //                              advances it past the live window; PopStaticData pops it
+    //                              back to a saved base (releasing the window's values).
+    //   snRegBlockCurrentFrameCount(dword_8324E3D4) -- the live slot count of the current
+    //                              window (SetRegisterValue's high-water mark).
+    //   snRegisterBlockSize        (dword_8324E3D8) -- the allocated slot capacity.
+    // NOTE (reconciliation 2026-07-01): earlier reconstructions carried the SAME two
+    // console globals under invented names -- `spRegisters`/`snRegisterCount` here and
+    // `gAptParseArgHeapPtr`/`gAptParseArgHeapCount` in AptGlobals (both commented
+    // off_8324E3D0/dword_8324E3D4) -- so the register writes and the frame push/pop
+    // operated on DIFFERENT C++ variables. Unified under the PS3 symbol names.
+    static AptValue**     spRegBlockBase;
     static AptValue**     spRegBlockCurrentFrameBase;
     static int32_t        snRegBlockCurrentFrameCount;
+    static int32_t        snRegisterBlockSize;
 };
