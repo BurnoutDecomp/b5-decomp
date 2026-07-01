@@ -20,6 +20,7 @@
 #include "SDKs/EATech/include/Apt/AptTarget.h"      // gpAptTarget->mpLoader (the import loader)
 #include "SDKs/EATech/include/Apt/AptLoader.h"      // AptLoader::Load (the real import loader, homed)
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"  // PushStaticData (the register-block window push)
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"   // gAptActionInterpreter (runStream/CleanupAfterExecution)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"  // native-8 shape-geometry rebase
 
 #include <cstdint>
@@ -74,9 +75,12 @@ namespace CgsGui { extern uintptr_t gAptResourceSpanBase; extern uint32_t gAptRe
 // class (AptActionInterpreter.h) models the same two methods, but the init passes call
 // them on the GLOBAL singleton with the console arg shapes, so they are bridged here.
 // FLAG: gAptActionInterpreterVM + these two thunks land with the VM TU.
-extern void* gAptActionInterpreterVM;                                                  // dword_8324E760 (FLAG)
-extern void  AptActionInterpreter_runStream(void* pVM, void* pStream, void* pCIH, int nFrame, void* pScope);   // @0x81BD50 (FLAG)
-extern void* AptActionInterpreter_CleanupAfterExecution(void* pVM, void* pSavedScratch, void* pLocalState);    // @0x82AE9388 (FLAG)
+// The VM singleton (dword_8324E760) is the real AptActionInterpreter object
+// gAptActionInterpreter (AptGlobals.cpp), initialised at boot by AptUpdateInitialize;
+// the init passes call its runStream/CleanupAfterExecution members directly. (The
+// void*-placeholder gAptActionInterpreterVM + the two {} free-function stubs are
+// retired -- IGNITION 2026-07-01: init-action ActionScript now actually executes.)
+extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 
 // The "parse-arg scratch heap" IS the AS register-block window (off_8324E3D0 /
 // dword_8324E3D4 == AptScriptFunctionBase::spRegBlockCurrentFrameBase /
@@ -845,10 +849,17 @@ void* AptCharacterAnimation::ExportClassDefinitionAssets(void* pA2)
 
                     void* pScope  = ResolveAnimationScope(pA2);
                     void* pStream = BlobPtr(pCmdTable[iCmd], 0x08);   // cmd+8 = the stream
-                    AptActionInterpreter_runStream(&gAptActionInterpreterVM, pStream, pA2, -1, pScope);
+                    // X360 runStream(&dword_8324E760, stream, a2, -1, scope) -> the member
+                    // (pStream, pCIH = a2, nLength = -1, pCharInst = the resolved scope).
+                    gAptActionInterpreter.runStream(
+                        static_cast<const unsigned char*>(pStream),
+                        reinterpret_cast<AptCIH*>(pA2), -1,
+                        reinterpret_cast<AptCharacterInst*>(pScope));
 
-                    char savedLocalState;   // var_60 -- the asm's CleanupAfterExecution out arg
-                    result = AptActionInterpreter_CleanupAfterExecution(&gAptActionInterpreterVM, pSavedScratch, &savedLocalState);
+                    // Pop the register-block window (the X360 2-arg CleanupAfterExecution;
+                    // r3 carries PopStaticData's incidental return -- every caller ignores it).
+                    gAptActionInterpreter.CleanupAfterExecution(pSavedScratch);
+                    result = pSavedScratch;
                 }
             }
 
@@ -897,10 +908,16 @@ void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
     // *(this+4) after the call) and index the matched command's +8 stream.
     void** pCmdTable2 = reinterpret_cast<void**>(BlobPtr(mpFrames, 0x04));   // [c:0x04] framesOffset
     void* pStream = BlobPtr(pCmdTable2[iCmd], 0x08);
-    AptActionInterpreter_runStream(&gAptActionInterpreterVM, pStream, pA2, -1, pScope);
+    // X360 runStream(&dword_8324E760, stream, a2, -1, scope) -> the member.
+    gAptActionInterpreter.runStream(
+        static_cast<const unsigned char*>(pStream),
+        reinterpret_cast<AptCIH*>(pA2), -1,
+        reinterpret_cast<AptCharacterInst*>(pScope));
 
-    char savedLocalState;   // var_40
-    result = AptActionInterpreter_CleanupAfterExecution(&gAptActionInterpreterVM, pSavedScratch, &savedLocalState);
+    // Pop the register-block window (X360 2-arg CleanupAfterExecution; the incidental
+    // r3 return is ignored by every caller).
+    gAptActionInterpreter.CleanupAfterExecution(pSavedScratch);
+    result = pSavedScratch;
 
     // Mark consumed: entry[1] = -entry[1].
     BlobI32Ref(pEntry, 0x04) = -BlobI32(pEntry, 0x04);

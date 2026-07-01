@@ -340,7 +340,8 @@ uint32_t gnAptGCThreadId_Release = 0;   // dword_8324E504
 AptCIH**  gAptMaskAncestorScratch = nullptr;   // mask-ancestor scratch array
 AptTarget* gpCurrentAptTarget     = nullptr;   // off_8324E574
 
-void* gAptActionInterpreterVM  = nullptr;   // dword_8324E760 (void* view of the VM)
+// (gAptActionInterpreterVM retired 2026-07-01: dword_8324E760 IS the gAptActionInterpreter
+//  object above -- the null void* "view" was a placeholder from before the VM was live.)
 void* gAptDeferredReleaseQueue = nullptr;   // off_8324E2C8
 void* gAptRenderThreadId       = nullptr;   // dword_8324E504 (EA::Thread::ThreadId == void*)
 void* gAptUnresolveMutex       = nullptr;   // unk_8324E728

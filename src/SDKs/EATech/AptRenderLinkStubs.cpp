@@ -176,7 +176,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void      AptApt_AnimationReleaseCharacterRef(AptValue* pAnimation) {}   // FLAG link-stub
     void      AptApt_PrepareCallContextScope(AptValue* pCallContext) {}   // FLAG link-stub
     void      AptExtern_SetMember(const char* szName, const char* szValue) {}   // FLAG link-stub
-    void  AptActionInterpreter_runStream(void* pVM, void* pStream, void* pCIH, int nFrame, void* pScope) {}   // FLAG link-stub
+    // AptActionInterpreter_runStream RETIRED (IGNITION 2026-07-01): the init passes call the real
+    // member gAptActionInterpreter.runStream (AptActionRun.cpp dispatch loop) -- ActionScript executes.
     void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId) {}   // FLAG link-stub
     void  AptFreeFontUnit(void* pUnit) {}   // FLAG link-stub
     void  AptFreeRenderingUnit(void* pUnit) {}   // FLAG link-stub
@@ -253,7 +254,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void TextFormat_copyTextFormatObj(TextFormat* pDest, const TextFormat* pSource) {}   // FLAG link-stub
     void escape(EAStringC* pString) {}   // FLAG link-stub
     void unescape(EAStringC* pString) {}   // FLAG link-stub
-    void* AptActionInterpreter_CleanupAfterExecution(void* pVM, void* pSavedScratch, void* pLocalState) { return nullptr; }   // FLAG link-stub
+    // AptActionInterpreter_CleanupAfterExecution RETIRED (IGNITION 2026-07-01): the real member
+    // (thrown-value drop + PopStaticData window pop) is called directly with the saved base.
     void* AptFile_operator(void* pDst, void* pSrc) { return nullptr; }   // FLAG link-stub
     void* sub_82AFD150(void* a1, int a2) { return nullptr; }   // FLAG link-stub
     // sub_82B0AE08 (the place-command dispatcher @0x82B0AE08) is now HOMED faithfully as
