@@ -81,8 +81,8 @@ AptCIH* AptCharacterHelper::CreateTextCharacterInst()
     pTemplate->mnAuthoredReserved2 = 0;                          // [c:0x30]
     pTemplate->mnAuthoredReserved3 = 0;                          // [c:0x34]
     pTemplate->mnAuthoredReserved4 = 0;                          // [c:0x38]
-    pTemplate->mpDefaultText = nullptr;                          // [c:0x3C]
-    pTemplate->mnAuthoredReserved5 = 0;                          // [c:0x40]
+    pTemplate->mpDefaultText = nullptr;                          // [c:0x3C] szInitialText
+    pTemplate->mpVariableName = nullptr;                         // [c:0x40] szVariable (a char*, not a dword)
     // No default glyph resolved yet (the X360 seeds the index to -1 before the walk).
     pTemplate->mnDefaultGlyphIndex = -1;                         // [c:0x20]
 

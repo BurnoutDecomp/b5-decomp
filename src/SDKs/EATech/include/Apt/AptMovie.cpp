@@ -272,8 +272,26 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
     // gap -- resolve64 is XB1-verified. Skip the frame: the 16 well-formed nested movies still tick
     // + place their content; only the 3 malformed movies are skipped (their sub-content stays
     // unplaced). The real fix is in the offline bundle byte-patcher (out of this slice's scope).
-    if (pFrame->mnCommandCount > 0 && pFrame->mpCommands == nullptr)
-        return this;
+    // The malformation also appears as a NON-NULL but INVALID command-array pointer: a few DEEP nested
+    // movies in the current bundle have frame+0x08 holding garbage (observed 0x0000000100000000 -- a
+    // 4-byte value straddled into the high half of the native-8 slot, the same 4->8 widening class),
+    // which resolve64 leaves as a bogus pointer. Dereferencing mpCommands[i] then AVs (crash dump:
+    // doFrameControls, `mov rax,[mpCommands+i*8]` with mpCommands=0x100000000). Guard BOTH null and a
+    // non-plausible pointer (below the heap floor, or with any bit above bit-47 set -- no user-mode x64
+    // heap/resource pointer looks like that). Skip such a frame (same deferred converter-data boundary).
+    {
+        // A well-formed relocated command pointer = (resource/heap base) + offset. On Win64 the .apt's
+        // resource span + the game heap sit in the terabyte range (observed bases 0x00007FF6xxxxxxxx and
+        // 0x000002xx_xxxxxxxx), so a valid mpCommands is ALWAYS well above 4 GB. The straddle garbage is
+        // exactly 0x0000000100000000 (a 4-byte '1' landing in the high dword, low dword 0) -- it passes a
+        // naive "in canonical range" test, so discriminate on the terabyte floor + a non-zero low dword.
+        const uintptr_t luCmds = reinterpret_cast<uintptr_t>(pFrame->mpCommands);
+        const bool bCmdsPlausible =
+            (luCmds > 0x0000000200000000ull) && ((luCmds >> 47) == 0u) &&
+            ((luCmds & 0xFFFFFFFFull) != 0u);
+        if (pFrame->mnCommandCount > 0 && !bCmdsPlausible)
+            return this;
+    }
 
     // ---- pass 1: run the frame's action streams (tag 8, id >= 0) ----------
     // FLAG (deferred AS-VM EXECUTION): pass 1 would execute tag-8 action-stream bytecode through the
@@ -295,8 +313,38 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
     {
         AptCharacterInst* const pOwnerInst = pParent->GetCharacterInst();
         AptCharacter*     const pOwnerChar = pOwnerInst->GetRenderItem()->mpCharacter;
+        // The placed charIds resolve against the ROOT movie's SHARED charTable, reached through the
+        // owning char's mpFixupLink back-link (char+0x08, which Fixup writes = charTable[0], the root
+        // char) -- NOT the nested sprite's own +0x20 timeline, which carries no charTable. This is the
+        // console's 4th deref: X360 doFrameControls @0x82B0B7A0 does `*(mpCharacter+4)` (= mpFixupLink)
+        // then `+0x10` (= embedded movie) -> charTable (asm: three `lwz r11,4(r11)` + `addi r11,0x10`).
+        // native-8: mpFixupLink@0x08, embedded movie @+0x20. (No-op for the root char, whose
+        // mpFixupLink points at itself; corrects every nested sprite, whose link points at the root.)
+        AptCharacter* const pRootChar = pOwnerChar->mpFixupLink;
         AptCharacterAnimation* const pAnim = reinterpret_cast<AptCharacterAnimation*>(
-            reinterpret_cast<char*>(pOwnerChar) + KU_AptEmbeddedMovieOff);   // char + 0x20
+            reinterpret_cast<char*>(pRootChar) + KU_AptEmbeddedMovieOff);   // rootChar + 0x20
+
+        // FLAG (deferred DEEP-NESTING boundary -- honest data guard, NOT a logic change): the
+        // mpFixupLink back-link reaches a root/import-root movie with a SHARED charTable for the
+        // level-1 containers (verified: charCount 41 local / 7 import, a live charTable pointer). For
+        // some DEEPER nested containers (a type-5 sprite placed INSIDE another container), the native-8
+        // back-link does not reach a charTable-bearing root -- pAnim->mpCharacterTable reads garbage
+        // (observed 0x100000000) and mnCharacterCount is absurd, so indexing charTable[charId] AVs.
+        // Reconstructing the deep-nesting charTable resolution (the render-tree-manager's per-level
+        // owner chain) is a follow-on; until then, skip a frame whose owner movie has no sane charTable
+        // (the same offset-vs-pointer / plausibility discrimination the Apt bring-up uses for deferred
+        // data, e.g. CgsAptAux gAptResourceSpanBase). The level-1 containers (valid charTable) still
+        // place their nested content; only the deep containers' sub-content stays unplaced.
+        {
+            const int32_t   nSanityCount = pAnim->mnCharacterCount;
+            const uintptr_t luTablePtr   = reinterpret_cast<uintptr_t>(pAnim->mpCharacterTable);
+            const bool bSaneCharTable =
+                (nSanityCount > 0 && nSanityCount <= 0x10000) &&
+                (luTablePtr >= 0x10000u) && ((luTablePtr >> 47) == 0u);   // a real heap/resource ptr
+            if (!bSaneCharTable)
+                return this;   // deferred deep-nesting owner -- skip this frame's placements (safe)
+        }
+
         for (int32_t i = 0; i < nCount; ++i)
         {
             void* pCmd = pFrame->mpCommands[i];
@@ -416,10 +464,23 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     // ->mpCharacter is the owning movie character; its embedded AptCharacterAnimation is at
     // char + KU_AptEmbeddedMovieOff). (Console: *(*(*(*(*(*(a3+32)+4)+4)+4)+32) + 4*charId).)
     AptCharacter* const pOwnerChar = pParent->GetCharacterInst()->GetRenderItem()->mpCharacter;
+    // Resolve against the ROOT movie's shared charTable via the mpFixupLink back-link (char+0x08),
+    // matching the X360 `*(*(*(*(a3+32)+4)+4)+4)+0x10` chain (the console comment above): the nested
+    // sprite's own +0x20 has no charTable. mpFixupLink is charTable[0] (the root char), written by
+    // Fixup for every character (@0x82AFF268). native-8: mpFixupLink@0x08, embedded movie @+0x20.
+    AptCharacter* const pRootChar = pOwnerChar->mpFixupLink;
     AptCharacterAnimation* const pAnim = reinterpret_cast<AptCharacterAnimation*>(
-        reinterpret_cast<char*>(pOwnerChar) + KU_AptEmbeddedMovieOff);
+        reinterpret_cast<char*>(pRootChar) + KU_AptEmbeddedMovieOff);
+    // Same deferred deep-nesting guard as doFrameControls (see the FLAG there): a deep nested
+    // container's back-link may not reach a charTable-bearing root (garbage mpCharacterTable /
+    // mnCharacterCount), so validate the table before indexing it.
+    const uintptr_t luAnimTablePtr = reinterpret_cast<uintptr_t>(pAnim->mpCharacterTable);
+    const bool bAnimSane =
+        (pAnim->mnCharacterCount > 0 && pAnim->mnCharacterCount <= 0x10000) &&
+        (luAnimTablePtr >= 0x10000u) && ((luAnimTablePtr >> 47) == 0u);
     AptCharacter* const pCharacter =
-        (nCharId >= 0 && nCharId < pAnim->mnCharacterCount) ? pAnim->mpCharacterTable[nCharId] : nullptr;
+        (bAnimSane && nCharId >= 0 && nCharId < pAnim->mnCharacterCount)
+            ? pAnim->mpCharacterTable[nCharId] : nullptr;
 
     // FLAG (import not loaded): a null charTable entry is an IMPORTED character (from another
     // GUIAPT bundle) whose id is in this movie's import table -- e.g. TITLE_SCREEN02 charId 30 ==
@@ -476,11 +537,16 @@ AptMovie* AptMovie::queueFrameActions(void* pCIH, int nFrame)
         return this;
 
     // FLAG (converter-malformed frame table -- same honest data boundary as doFrameControls): a few
-    // nested sprite movies in the apt_convert-produced bundle have their command-array pointer at
-    // frame+0x04 instead of the native-8 frame+0x08, so resolve64 leaves mpCommands null. Skip such a
-    // frame (a counted frame with null commands never occurs in a well-formed native-8 movie).
-    if (pFrame->mpCommands == nullptr)
-        return this;
+    // nested sprite movies in the apt_convert-produced bundle have a MALFORMED command-array pointer
+    // (null, OR non-null garbage like 0x100000000 -- the 4->8 widening straddle). Skip such a frame
+    // (a counted frame with a non-plausible command pointer never occurs in a well-formed native-8
+    // movie); guard both null and a non-plausible pointer, matching doFrameControls.
+    {
+        const uintptr_t luCmds = reinterpret_cast<uintptr_t>(pFrame->mpCommands);
+        if (luCmds <= 0x0000000200000000ull || (luCmds >> 47) != 0u ||
+            (luCmds & 0xFFFFFFFFull) == 0u)
+            return this;
+    }
 
     for (int32_t i = 0; i < nCount; ++i)
     {

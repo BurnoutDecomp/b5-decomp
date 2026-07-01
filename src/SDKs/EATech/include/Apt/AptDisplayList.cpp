@@ -705,7 +705,10 @@ AptRenderItem* AptDisplayList::instantiateCharacter(int nDepth, AptCharacter* pC
 
             const char* const pTextDefault = pAuthored->mpDefaultText;
             pText->mTextValue = EAStringC(pTextDefault ? pTextDefault : "");
-            const char* const pVarDefault = reinterpret_cast<const char*>(pAuthored->mnAuthoredReserved5);
+            // szVariable is an 8-byte char* on native-8 (wiki AptCharacterText.szVariable), read
+            // directly -- NOT reinterpret_cast'd from a 4-byte int, which truncated the relocated
+            // pointer and AV'd in InitFromBuffer. Matches the X360 `*(char+0x40)` pointer read.
+            const char* const pVarDefault = pAuthored->mpVariableName;
             pText->mVarValue = EAStringC(pVarDefault ? pVarDefault : "");
 
             pText->SetAlignment(pAuthored->mnAuthoredReserved0);

@@ -389,8 +389,12 @@ namespace CgsGui
         // mpTexture, mpTexturePtr, muNumberOfVerticies, mppVerticies}. (The console reads the table
         // as 32-bit words; on the x64 host the resource fix-up has already rebased them into real
         // pointers, so they are read through the typed table.)
-        const u32* lpMeshTable = reinterpret_cast<const u32*>(
-            static_cast<uintptr_t>(lpGeometry->mppGeometryMeshes));
+        // The mesh pointer table. FLAG (x64 native-8 fork): the table is 8-byte-strided (each entry a
+        // GuiGeometryPtrTableEntry -- a rebased pointer in the low 8 bytes), and mppGeometryMeshes is an
+        // 8-byte field (rebased offset->pointer by AptFixupGeometryFileNative8 at resolve time). Indexed
+        // as uintptr_t entries -- NOT the console's 4-byte u32 table.
+        const uintptr_t* lpMeshTable =
+            reinterpret_cast<const uintptr_t*>(lpGeometry->mppGeometryMeshes);
 
         // The per-mesh primitive topology (X360 v37 @ [sp+50h]). The guest initialises it to 4
         // (0x82859548: `li r10, 4; stw r10, var_250`) BEFORE the loop and carries it across
@@ -401,8 +405,7 @@ namespace CgsGui
         for (u32 luMesh = 0; luMesh < lpGeometry->muNumberOfMeshes; ++luMesh)
         {
             CgsResource::GuiGeometryMesh* lpMesh =
-                reinterpret_cast<CgsResource::GuiGeometryMesh*>(
-                    static_cast<uintptr_t>(lpMeshTable[luMesh]));
+                reinterpret_cast<CgsResource::GuiGeometryMesh*>(lpMeshTable[luMesh]);
             CGS_ASSERT(lpMesh != 0, "Invalid Mesh in AptRenderHandler::Render");
 
             // Pick the primitive topology from the mesh type (miMeshType == mesh+0). The X360
@@ -436,21 +439,25 @@ namespace CgsGui
             //   >= 3 -> invalid. (X360 routes mode 1/2 through SetState(TextureState*), mode 0
             //   through SetTexture(white).)
             const s32 liTextureMode = lpMesh->miTextureMode;
-            const u32 luTextureId   = lpMesh->mpTexture;   // mesh+12 (the GuiTexture id / raster key)
+            // FLAG (x64 native-8 fork): mpTexture is the 8-byte GuiTexture pointer (mesh+0x10), already
+            // resolved by the converter (not the console's 4-byte id at mesh+0xC). The texture-state
+            // cache is keyed by this value (id/raster key); carried as uintptr_t.
+            const uintptr_t luTextureId = lpMesh->mpTexture;
 
-            if (liTextureMode == 1)
+            if (liTextureMode == 1 || liTextureMode == 2)
             {
-                CGS_ASSERT(luTextureId != 0, "lpGuiMesh->mMeshHeader.mpTexture!=NULL");
-                renderengine::TextureState* lpState =
-                    ResolveTextureState(mClampTextureCache, luTextureId, /*clamp*/ true);
-                lpBuffer->SetTextureState(lpState);   // SetState == 16-byte SET_STATE_TEXTURE command
-            }
-            else if (liTextureMode == 2)
-            {
-                CGS_ASSERT(luTextureId != 0, "lpGuiMesh->mMeshHeader.mpTexture!=NULL");
-                renderengine::TextureState* lpState =
-                    ResolveTextureState(mWrapTextureCache, luTextureId, /*clamp*/ false);
-                lpBuffer->SetTextureState(lpState);
+                // FLAG (x64 native-8 fork -- deferred texture-cache widening, honest boundary): on
+                // native-8 the mesh's mpTexture is an 8-BYTE resolved GuiTexture pointer (mesh+0x10),
+                // but the console texture-state cache (ResolveTextureState / BuildTextureStateParameters
+                // / TextureStateCache) is keyed by a 4-BYTE id and binds the id-as-raster. Passing the
+                // 8-byte pointer through the u32 key would TRUNCATE it (wrong key + an invalid bound
+                // raster -> garbage/AV). Widening the whole TextureStateCache (HashTable<u32,...,25>) +
+                // BuildTextureStateParameters to uintptr_t keys is the native-8 texture-binding leaf,
+                // deferred. Until then the textured shapes draw with the WHITE fallback (the same bind
+                // the texMode-0 path uses) so the geometry composes (untextured) without the truncation.
+                // (void)luTextureId -- not routed through the u32 cache on this fork.
+                (void)luTextureId;
+                lpBuffer->SetTexture(static_cast<renderengine::Texture*>(mpWhiteTexture));
             }
             else if (liTextureMode == 0)
             {
@@ -463,13 +470,15 @@ namespace CgsGui
             }
 
             // Draw the mesh's static vertex run (the vertices already live in the resource's vertex
-            // buffer, so RenderFromStaticVertexBuffer points straight at them -- no copy). The X360
-            // reads the run pointer as **(mesh+20): mppVerticies is a pointer table whose first
-            // entry is the vertex run; muNumberOfVerticies (mesh+16) is the count.
-            u32* const* lppVertexTable = reinterpret_cast<u32* const*>(
-                static_cast<uintptr_t>(lpMesh->mppVerticies));
+            // buffer, so RenderFromStaticVertexBuffer points straight at them -- no copy). FLAG (x64
+            // native-8 fork): the vertex pointer TABLE (mesh+0x20, mppVerticies, now a live pointer via
+            // AptFixupGeometryFileNative8) is 8-byte-strided; its FIRST entry (rebased) is the contiguous
+            // vertex run. muNumberOfVerticies (mesh+0x18) is the count. The vertex format is the 20-byte
+            // Basic2dColouredTexturedVertex (pos8 + rgba8_4 + uv8), matching the native run stride.
+            const uintptr_t* lppVertexTable =
+                reinterpret_cast<const uintptr_t*>(lpMesh->mppVerticies);
             const CgsGraphics::Basic2dColouredTexturedVertex* lpVertices =
-                reinterpret_cast<const CgsGraphics::Basic2dColouredTexturedVertex*>(*lppVertexTable);
+                reinterpret_cast<const CgsGraphics::Basic2dColouredTexturedVertex*>(lppVertexTable[0]);
             lpBuffer->RenderFromStaticVertexBuffer(lePrimitiveType, lpVertices,
                                                    lpMesh->muNumberOfVerticies);
         }
