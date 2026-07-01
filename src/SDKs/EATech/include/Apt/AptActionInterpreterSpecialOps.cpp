@@ -287,6 +287,22 @@ void AptActionInterpreter::_FunctionAptActionNextFrame(AptActionInterpreter* /*p
 }
 
 // ---------------------------------------------------------------------------
+// PrevFrame (0x05; PS3 @0x8293BC) -- step the run scope's play-head back one frame
+// (jumpToFrame(mnGotoFrame - 1)) and clear the clip's "playing" bit. NextFrame's
+// exact mirror.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPrevFrame(AptActionInterpreter* /*pInterp*/,
+                                                       LocalContextT* pContext)
+{
+    AptCIH* const pNode = pContext->mpCIH;
+    AptCharacterSpriteInstBase* const pSprite =
+        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
+
+    pNode->jumpToFrame(pSprite->mnGotoFrame - 1);          // real member (play-head seek)
+    pSprite->mnClipActionFlags &= ~KU_CLIP_PLAYING;
+}
+
+// ---------------------------------------------------------------------------
 // Play @0x82ADD690 -- start the play-head of a (non-level) clip. When the run scope
 // is a defined node whose instance is not a level instance: prefer the "current
 // target" slot (ctx.mpPendingReleaseValue) when it is a clip / CIHNone -- set its
