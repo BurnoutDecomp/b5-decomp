@@ -458,7 +458,7 @@ extern void AptInterp_ResolveTargetContext(AptValue* pScope, AptValue* pTarget,
 extern int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel);
 
 // FLAG (un-homed AptCIH play-head subsystem -- shared shims, matching SpecialOps):
-extern void AptCIH_jumpToFrame(AptCIH* pNode, int nFrame);              // @0x82B0C... seek
+// AptCIH_jumpToFrame retired: the real member AptCIH::jumpToFrame (AptCIH.cpp) is used directly.
 // AptCIH_SetDirtyState retired: the real member AptCIH::SetDirtyState (AptCIH.cpp) is
 // used directly at the call site (the free-function {} stub silently dropped the dirty latch).
 
@@ -1110,7 +1110,7 @@ void AptActionInterpreter::_FunctionAptActionGotoLabel(AptActionInterpreter* /*p
     const int nFrame = AptInterp_LabelToFrame(pNode, &label);   // FLAG: node frame-label hash
     if (nFrame >= 0)
     {
-        AptCIH_jumpToFrame(pNode, nFrame);                      // FLAG: play-head seek
+        pNode->jumpToFrame(nFrame);                             // real member (play-head seek)
         // clear the "playing" bit on the node's sprite instance (console *(node+0x20)+0x14 &= ~0x40).
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mnClipActionFlags
             &= ~0x40u;
@@ -1182,7 +1182,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
 
     if (nFrame != -1 && pNode)
     {
-        AptCIH_jumpToFrame(pNode, nFrame);                 // FLAG: play-head seek
+        pNode->jumpToFrame(nFrame);                        // real member (play-head seek)
         const bool bPlay = (*pPlayFlag != 0);              // console: cntlzw test of the inline word
         AptCharacterSpriteInstBase* const pSprite =
             static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());

@@ -211,7 +211,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptCIH_SetDirtyState RETIRED (2026-07-01): the real member AptCIH::SetDirtyState
     // (AptCIH.cpp, faithful) is called directly; the {} stub silently dropped the dirty latch.
     void AptCIH_SetProceduralProperty(AptCIH* pNode, int nProperty, double fValue) {}   // FLAG link-stub
-    void AptCIH_jumpToFrame(AptCIH* pNode, int nFrame) {}   // FLAG link-stub
+    // AptCIH_jumpToFrame RETIRED (2026-07-01): homed member AptCIH::jumpToFrame (AptCIH.cpp,
+    // faithful play-head seek) called directly at all 5 VM sites; the {} stub dropped every seek.
     // AptCIH_tick is now homed faithfully in AptCIHBehaviour.cpp (forwards to AptCIH::tick).
 
     // ---- AptCIH "link cluster" deferred sub-paths: the deep callees the now-homed
