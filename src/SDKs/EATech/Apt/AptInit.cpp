@@ -55,6 +55,12 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"       // AptRegister::Initialize + gnAptRegisterCount
 #include "SDKs/EATech/include/Apt/AptCIHNone.h"                 // AptCIHNone (the "EmptyCIH" placeholder; befriended)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"         // EAStringC ("EmptyCIH" name assignment)
+#include "SDKs/EATech/include/Apt/AptRenderingContext.h"        // AptRenderingContext (the shared render context)
+#include "SDKs/EATech/include/Apt/AptValue/AptExtern.h"         // AptExtern (the extern-interface singleton)
+#include "SDKs/EATech/include/Apt/AptKey.h"                     // AptKey (the Key manager singleton)
+#include "SDKs/EATech/include/Apt/AptGlobal.h"                  // AptGlobal (the _global fallback scope)
+#include "SDKs/EATech/include/Apt/AptGlobalExtensionObject.h"   // AptGlobalExtensionObject (_global extension)
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"         // AptString::Create (the shared empty string)
 
 // StringPool::Initialize is reached through this free wrapper (AptStringPool.cpp): the
 // full StringPool.h cannot be included here (the interpreter headers already carry
@@ -325,8 +331,14 @@ void* AptCommonInitialize(void* pConfig)
 // their documented null pre-init state (the engine short-circuits on null) until each
 // is befriended/homed. Returns 0 (the console's r3 == the last ReleaseValues result).
 // ===========================================================================
-extern AptValue* gpUndefinedValue;   // off_8324D814 (defined in AptGlobals.cpp)
-extern AptCIH*   gpAptEmptyCIH;      // dword_8324D700 (defined in AptGlobals.cpp)
+extern AptValue* gpUndefinedValue;            // off_8324D814 (defined in AptGlobals.cpp)
+extern AptCIH*   gpAptEmptyCIH;               // dword_8324D700 (defined in AptGlobals.cpp)
+extern void*     gpAptRenderingContext;       // dword_8324E2AC (defined in AptGlobals.cpp)
+extern AptValue* gpAptExternObject;           // off_8324E2CC  ("")
+extern AptValue* gpAptKeyObject;              // off_8324E2A8  ("")
+// (gpAptGlobalFallback off_8324E380 is declared by AptGlobal.h, included above)
+extern AptValue* gpAptGlobalExtensionObject;  // off_8324E37C  ("")
+extern AptValue* gpAptStringObject;           // off_8324D82C  ("")
 
 int AptValueInitialize()
 {
@@ -346,7 +358,48 @@ int AptValueInitialize()
         gpAptEmptyCIH->mInstanceName = EAStringC("EmptyCIH");
     }
 
-    // FLAG (deferred): the remaining singletons (see the header comment) stay null.
+    // dword_8324E2AC -- the shared AptRenderingContext (console Allocate(off_8324D808,
+    // 1096) + placement ctor; x64 uses sizeof over the same pool).
+    if (gpAptRenderingContext == nullptr)
+    {
+        void* lpBlock = gpAptPseudoDataPool->Allocate(sizeof(AptRenderingContext));
+        gpAptRenderingContext = lpBlock ? new (lpBlock) AptRenderingContext() : nullptr;
+    }
+
+    // off_8324E2CC -- the extern-interface singleton (console Allocate(8) + placement;
+    // the class's pooled operator new reproduces it).
+    if (gpAptExternObject == nullptr)
+        gpAptExternObject = new AptExtern();
+
+    // off_8324E2A8 -- the Key manager singleton (+AddRef, faithful to the asm's vtbl[0]).
+    if (gpAptKeyObject == nullptr)
+    {
+        gpAptKeyObject = new AptKey();
+        gpAptKeyObject->AddRef();
+    }
+
+    // off_8324E380 -- the _global fallback scope (+AddRef). The console wraps these in
+    // interlocked one-shot latches (unk_8324E71C/..E720); single-threaded init here, so
+    // the idempotent null-checks are the equivalent one-time guard.
+    if (gpAptGlobalFallback == nullptr)
+    {
+        gpAptGlobalFallback = new AptGlobal();
+        gpAptGlobalFallback->AddRef();
+    }
+
+    // off_8324E37C -- the _global extension object (+AddRef).
+    if (gpAptGlobalExtensionObject == nullptr)
+    {
+        gpAptGlobalExtensionObject = new AptGlobalExtensionObject();
+        gpAptGlobalExtensionObject->AddRef();
+    }
+
+    // off_8324D82C -- the shared empty AptString (Create(&unk_820046A7) == Create("")).
+    if (gpAptStringObject == nullptr)
+        gpAptStringObject = AptString::Create("");
+
+    // FLAG (deferred): the remaining singletons -- the 7 AS native-function singletons
+    // + the tail of @0x82B02800 (prototype seeding etc.) -- stay null until homed.
     return 0;
 }
 
