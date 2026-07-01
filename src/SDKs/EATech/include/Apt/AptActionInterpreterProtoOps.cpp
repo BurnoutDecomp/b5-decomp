@@ -34,9 +34,8 @@
 #include <new>      // placement new (operator new + ctor at the GC-pool slot)
 
 // FLAG (AptObject layer -- Adriwin's class:AptObject TU): record the interface
-// prototypes a class implements (console AptObject::SetImplementedObjects). Not
-// yet a member of the reconstructed AptObject, so encapsulated as a free helper.
-extern void AptObject_SetImplementedObjects(AptObject* pObject, AptArray* pInterfaces, int nCount);
+// prototypes a class implements (the real member AptObject::SetImplementedObjects,
+// AptObject.cpp) -- called directly below; the free-helper shim is retired.
 
 // FLAG (AptActionInterpreter::_createObject @0x82B08088 -- the value-materialiser).
 // It is a (private) member of the interpreter in the console, but is NOT declared in
@@ -118,7 +117,7 @@ void AptActionInterpreter::_FunctionAptActionImplementsOp(AptActionInterpreter* 
             pInterfaces->set(i, pProto);
         }
         if (pClass->GetNativeHashVirtual())
-            AptObject_SetImplementedObjects(static_cast<AptObject*>(pClass), pInterfaces, nCount);  // FLAG
+            static_cast<AptObject*>(pClass)->SetImplementedObjects(pInterfaces, nCount);  // real member
     }
 
     pInterp->stackPop(nCount + 2);
