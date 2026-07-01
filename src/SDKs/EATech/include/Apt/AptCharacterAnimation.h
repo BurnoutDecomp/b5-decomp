@@ -30,21 +30,6 @@
 
 struct AptFile;
 
-// FIXUP RESOURCE BOUNDS (defensive guard for the native 8-byte FixupInPlace on real data). When
-// set to [lo, hi) the FixupWalk's per-character pass skips any relocated record that lands outside
-// the resource (a converter-left string in a table slot would otherwise AV). 0 disables the guard
-// (faithful console behaviour). Defined in AptCharacterAnimation.cpp; set by the host before Fixup.
-extern uintptr_t gAptFixupBoundLo;
-extern uintptr_t gAptFixupBoundHi;
-
-// Per-Fixup diagnostics (the host resets them before each Fixup, reads them after): how many records
-// the bounds guard skipped + how many type-5/9 sub-movie recursions were skipped on the native-8 path.
-extern int gAptFixupSkipped;
-extern int gAptFixupSkippedMovies;
-extern int gAptFixupProbeChars;
-// Per-character probe sink, implemented by the host (logs "[AptRT] fixup: char[i] type=T @off=..").
-void CgsApt_FixupProbe(int nCharIndex, int nType, long long nCharOffset);
-
 // One import: pull character `mnId` from `mpImportFileName`'s export `mpClassName`.
 // Console record = 16 bytes {name@+0, class@+4, id@+8, AptFilePtr@+12}.
 struct AptImportEntry
@@ -147,23 +132,8 @@ struct AptCharacterAnimation
     // @0x80EEC4 -- resolve this (serialised) movie root against the load base:
     // clear the resolve scratch + run the recursive Fixup. Returns the root.
     AptCharacterAnimation* Resolve(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
-    // @0x80E9E4 -- relocate/resolve the serialised character tree. On x64 the strategy
-    // depends on the .apt's pointer size (AptConstFile::GetPointerSizeBytes): this is the
-    // DISPATCHER (body in AptCharacterAnimation.cpp) over the two paths below.
+    // @0x82AFF268 (PS3 @0xF44D40) -- relocate the serialised movie root IN PLACE against
+    // the load base (the aptDataOffset memory address). SINGLE native-64-bit path (GUIAPT64
+    // "1:7:8" only); the console dual-path/transcode is gone. Faithful body in the .cpp.
     AptCharacterAnimation* Fixup(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
-
-    // --- the Fixup pointer-size dual-path (the per-record walk is shared) ------
-    // Both run the same console character/import/init walk (FixupWalk in the .cpp);
-    // they differ only in the file slot WIDTH the relocation operates on.
-    // 8-byte .apt: the faithful console relocation widened to 8-byte slots -- add the
-    // load base to each record's file-relative pointer slot IN PLACE (a 64-bit base
-    // fits an 8-byte slot) and use the blob directly as the runtime root.
-    AptCharacterAnimation* FixupInPlace(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
-    // 4-byte .apt (the console default): the same walk relocating the 32-bit slots in
-    // place. FLAG (x64 fork): the fully faithful x64 form would transcode each 32-bit
-    // record into a native 64-bit struct, but the deferred in-place callees
-    // (AptMovie::resolve / AptLoader::Load / AptCharacter::SetupCharacter) still consume
-    // the 32-bit blob -- so this reproduces the verbatim console in-place relocation
-    // until those land (see the .cpp).
-    AptCharacterAnimation* FixupTranscode(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
 };
