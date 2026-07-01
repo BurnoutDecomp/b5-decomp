@@ -372,10 +372,16 @@ namespace
         bool              lbUsed;
     };
     // STEP 4 gate: drive the nested-content dirty propagation (dirty the placed sprite containers so
-    // they tick + place their nested shapes/images). OFF -- the imported clips' per-frame ActionScript
-    // action path is un-homed and AVs when the containers tick (see the call site). Flip to true once
-    // the ActionScript timeline subsystem is homed. // FLAG (honest un-homed boundary).
-    const bool KB_NESTED_DIRTY_PROPAGATION = false;
+    // they tick + place their nested shapes/images). ENABLED (2026-07-01): AptMovie::resolve64 now
+    // relocates EVERY per-frame command record's pointer slots (tag-1 Action / tag-2 Label / tag-3
+    // PlaceObject name+clipActions / tag-8 Morph) at the native-8 offsets, so a nested container's
+    // doFrameControls / queueFrameActions read their records WITHOUT AV. The ActionScript VM
+    // EXECUTION stays deferred (resolve64 relocates the action-stream POINTERS but does not parse or
+    // run the bytecode; runStream is stubbed) -- the statically-placed nested shapes/images do not
+    // need the VM to execute, only their records relocated. // FLAG: an un-run AS action queue is a
+    // valid state (the movie just doesn't advance via script); dynamically script-attached content
+    // is the deferred VM last-mile.
+    const bool KB_NESTED_DIRTY_PROPAGATION = true;
 
     ImportBundleSlot s_aImportBundles[KU_MAX_IMPORT_BUNDLES];
     // Per-import pool backing (one E_MEMTYPE_NUMTYPES x KU_IMPORT_POOL_BYTES block per slot).
@@ -1367,19 +1373,28 @@ namespace BrnGui
         // Fixup pass-3 import-load is deferred) and shape chars whose geometry is deferred (case-1
         // pfnLoadRenderingUnit). Re-enabling the full tick regresses the stable boot, so it stays
         // deferred until the import-load + shape-geometry (+ the render-tree flush for pixels) land.
-        // The render-leaf BODIES stay faithful + committed; only the per-frame drive is deferred.
-        // The faithful per-frame tick composes the movie: frames 0..101 of the 103-frame timeline
-        // place their characters into the display list (the root's 7 child sprites appear on frame 0,
-        // recursively ticked) and the render walk (AptRuntimeRender) draws them each frame -- PROVEN
-        // stable for the whole 0..101 window (childNodes=7, no AV; the walk + D3D9 flush run every
-        // frame). At frame 102 (== the last frame; mnGotoFrame reaches frameCount==103) AptCIH::tick
-        // LOOP-WRAPS via jumpToFrame(0), whose ARBITRARY-JUMP path (AptMovie::DoTemporaryFrameControls
-        // -> the AptPseudoDisplayList_FindInst temporary-frame skip resolver) is an UN-HOMED subsystem
-        // (a FLAG link-stub returning null), so the wrap AVs. That is an honest un-homed boundary, NOT
-        // invention to force -- so the tick holds at frame 101 (the fully-composed final frame stays on
-        // screen) rather than crossing into the un-homed wrap. // FLAG (honest boundary: jumpToFrame
-        // arbitrary-jump / DoTemporaryFrameControls temporary-frame path un-homed).
-        bool lbTickReady = (s_iTickFrame < 101);
+        // The render-leaf BODIES stay faithful + committed; the per-frame drive is now ENABLED
+        // (2026-07-01): the faithful per-frame tick composes the movie AND recurses into the nested
+        // imported sprite CONTAINERS (KB_NESTED_DIRTY_PROPAGATION), so the title's actual visible
+        // content (the "Paradise City" logo art, which lives one display-list level deeper inside the
+        // imported clips) places + draws (PROVEN via screenshot). The prior AV blockers are closed:
+        //   - resolve64 now relocates EVERY per-frame command record's pointer slots (XB1-verified),
+        //     so a nested container's doFrameControls/queueFrameActions read their records without AV;
+        //   - the AS-VM EXECUTION stays deferred (relocated stream POINTERS, but runStream is stubbed
+        //     and never runs -- an un-run action queue is a valid state);
+        //   - the LOOP-WRAP (frame == frameCount -> jumpToFrame(0)) no longer AVs: jumpToFrame's
+        //     arbitrary-jump path (AptMovie::DoTemporaryFrameControls + the AptPseudoDisplayList
+        //     temporary-frame skip resolver) is UN-HOMED for the native-8 layout, so AptCIH::tick's
+        //     wrap now RESETS the play-head to frame 0 directly (a plain loop) instead of the
+        //     un-homed replay-merge -- see the FLAG in AptCIH::tick.
+        // lbTickReady is TRUE every frame (the tick + nested recursion run continuously, stable 60s).
+        // FLAG (honest boundaries that remain): (a) 3 nested sprite movies have a CONVERTER-malformed
+        // frame table (command-array ptr at frame+0x04 not native-8 frame+0x08) and are safely skipped
+        // (doFrameControls/queueFrameActions null-mpCommands guard) -- their sub-content stays unplaced;
+        // (b) without the AS VM to GATE the transitions (hold-on-label / wait-for-input), the timeline
+        // auto-advances through its transin/fade/transout frames, so the title is transient rather than
+        // held. Both are the deferred AS-VM / offline-bundle-fix follow-ons, not invention.
+        bool lbTickReady = true;
         if (lbTickReady && s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr)
         {
             AptCIH* lpRoot = static_cast<AptCIH*>(s_pFaithfulRootCIH);
@@ -1399,18 +1414,19 @@ namespace BrnGui
 
             const int liTickResult = lpRoot->tick();   // advance frame 0 -> place characters
 
-            // STEP 4 (gated OFF -- honest un-homed boundary): propagate dirty into the freshly-placed
-            // sprite CONTAINERS so their next tick recurses + places their nested content. This DOES
-            // place the nested shapes (doFrameControls succeeds), but the imported clips' PER-FRAME
-            // ActionScript-action path crosses an un-homed boundary: AptMovie::resolve64's action-stream
-            // re-parse (AptActionInterpreter::_parseStream) is un-homed, so tag-1 action-command records
-            // in the imported movies carry un-relocated pointers, and the AS VM (runStream) that would
-            // drain the queued actions is stubbed. Dirtying the containers therefore ticks them into
-            // that un-homed AS-action territory and eventually AVs (~frame 1, deep in an imported clip's
-            // queueFrameActions -- guarded for the common case but not exhaustively). Enabling this is
-            // the last mile once the ActionScript timeline subsystem is homed. Kept OFF so the boot
-            // stays STABLE at the "imports content-loaded + top-level containers placed" milestone.
-            // // FLAG: nested imported-clip composition blocked on the un-homed ActionScript timeline.
+            // STEP 4 (ENABLED 2026-07-01): propagate dirty into the freshly-placed sprite CONTAINERS
+            // so their next tick recurses + places their nested content. This places the nested shapes
+            // (doFrameControls succeeds). The prior AV boundary is CLOSED: AptMovie::resolve64 now
+            // relocates every per-frame command record's pointer slots at the native-8 offsets (tag-1
+            // Action stream ptr @cmd+0x08, tag-2 Label name ptr @cmd+0x08, tag-3 PlaceObject name
+            // @body+0x30 + clipActions block @body+0x40 + its record-array/stream ptrs, tag-8 Morph
+            // stream ptr @cmd+0x08), so a nested container's doFrameControls / queueFrameActions read
+            // their records without dereferencing an un-relocated file offset. // FLAG (deferred AS-VM
+            // EXECUTION): the action-stream *contents* (the AS bytecode) stay un-parsed and un-run --
+            // resolve64 relocates only the record POINTERS, and the interpreter's runStream is stubbed,
+            // so queued actions never execute. An un-run AS action queue is a valid state; statically
+            // placed nested shapes/images compose without the VM. Dynamically script-attached content
+            // (content the AS bytecode would attach at runtime) is the remaining VM last-mile.
             if (KB_NESTED_DIRTY_PROPAGATION)
                 PropagateDirtyToChildren(lpRoot, 0);
 

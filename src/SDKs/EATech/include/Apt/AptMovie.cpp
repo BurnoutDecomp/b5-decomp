@@ -260,69 +260,37 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
 {
     AptMovieFrame* pFrame = &mpFrames[nFrame];         // 16*nFrame + mpFrames (native-8, relocated)
 
+    // FLAG (converter-malformed frame table -- honest data boundary, NOT invention): a well-formed
+    // native-8 frame with mnCommandCount > 0 always has a non-null mpCommands (resolve64 relocated
+    // its offset -> pointer). A few NESTED sprite movies in the current apt_convert-produced bundle
+    // (verified: char[15]/[23]/[36] of TITLE_SCREEN02) have a MALFORMED frame table -- the command-
+    // array pointer was written at frame+0x04 (4-byte) instead of the native-8 frame+0x08, so their
+    // frame+0x08 slot reads 0 and resolve64 (correctly reading the native-8 slot) leaves mpCommands
+    // null. Dereferencing mpCommands[i] on such a frame is a NULL read (confirmed via crash dump:
+    // doFrameControls+0xF9, `mov rax,[rcx+rax*8]` with rcx=mpCommands=0). This is a CONVERTER data
+    // bug (the same 4-byte pointer-widening misalignment class as the char[1] fix), not a resolve64
+    // gap -- resolve64 is XB1-verified. Skip the frame: the 16 well-formed nested movies still tick
+    // + place their content; only the 3 malformed movies are skipped (their sub-content stays
+    // unplaced). The real fix is in the offline bundle byte-patcher (out of this slice's scope).
+    if (pFrame->mnCommandCount > 0 && pFrame->mpCommands == nullptr)
+        return this;
+
     // ---- pass 1: run the frame's action streams (tag 8, id >= 0) ----------
-    // FLAG (deferred AS-VM): pass 1 executes tag-8 action-stream bytecode through the AS
-    // interpreter -- a native-8 AS-scope walk + runStream + register-frame save/restore. The
-    // AS bytecode transcode (resolve64 leaves tag-8 stream pointers un-relocated as a marked
-    // boundary) is the deferred VM path, so pass 1 is left as-is only when a tag-8 command
-    // exists; for the boot title timeline frame 0 carries only place (tag 3) + back-to-script
-    // (tag 5) commands (verified vs TITLE_SCREEN02.bundle), so pass 1 is a no-op there. It is
-    // preserved structurally (native-8 named-type walk) for when the AS-VM transcode lands.
-    int32_t nCount = pFrame->mnCommandCount;
-    if (nCount > 0)
-    {
-        for (int32_t i = 0; i < nCount; ++i)
-        {
-            void* pCmd = pFrame->mpCommands[i];
-            if (CmdI32(pCmd, 0x00) == 8 && CmdI32(pCmd, 0x04) >= 0)
-            {
-                // Reserve a fresh AS register frame: save the base, advance it past the
-                // live count, then reset the live count to 0.
-                AptValue** pSavedRegs = gpAptRegisterBase;            // off_8324E3D0
-                gpAptRegisterBase = pSavedRegs + gnAptRegisterCount;  // += 4*count
-                gnAptRegisterCount = 0;
-
-                // Resolve the char inst the action runs against (walk pParent's display-list
-                // chain to the first animation/level node), native-8 named-type traversal.
-                AptCharacterInst* pCharInst = nullptr;
-                {
-                    AptCIH* pNode = pParent;
-                    if ((pParent->mFlagsA & 0x7F) == 0x25)          // a level node
-                    {
-                        pNode = AptGetAnimationAtLevel(0);
-                    }
-                    else
-                    {
-                        // walk mpDisplayListParent until the char-inst type tag is 9/15.
-                        while (true)
-                        {
-                            const uint32_t nKind = pNode->GetCharacterInst()->mTypeFlags >> 26;
-                            if (nKind == 9 || nKind == 15)
-                                break;
-                            pNode = pNode->GetDisplayListParent();
-                        }
-                    }
-                    pCharInst = pNode->GetCharacterInst();
-                }
-
-                gAptActionInterpreter.runStream(
-                    reinterpret_cast<const unsigned char*>(CmdPtr(pCmd, 0x08)),
-                    pParent, -1, pCharInst);
-
-                CmdSetI32(pCmd, 0x04, -CmdI32(pCmd, 0x04));   // negate id: not re-run this frame
-
-                gAptActionInterpreter.CleanupAfterExecution(
-                    reinterpret_cast<AptScriptFunctionBase::SavedExecutionState*>(pSavedRegs));
-            }
-        }
-    }
+    // FLAG (deferred AS-VM EXECUTION): pass 1 would execute tag-8 action-stream bytecode through the
+    // AS interpreter (runStream). resolve64 relocates the tag-8 stream POINTER (@cmd+0x10 per the XB1
+    // resolve), so the record read is safe, but runStream is STUBBED and executing an action stream is
+    // precisely the deferred VM boundary -- so pass 1's EXECUTION is deferred (an un-run action queue
+    // is a valid state, and the movie just does not advance via script). The title's nested frames
+    // carry no tag-8 commands (verified vs the bundle), so this is a no-op for the title regardless.
+    // The faithful runStream body (X360 @0x82B0B7A0 pass 1 / its XB1 twin) lands together with the
+    // AptActionInterpreter VM; it is intentionally not called here.
 
     // ---- pass 2: apply place / remove / back-to-script (native-8) ---------
     // The movie's character-animation def-base is reached through the parent CIH's named
     // char-inst chain: parent->charInst->renderItem->mpCharacter is the owning movie
     // character, and its embedded AptCharacterAnimation is at (character + KU_AptEmbedded
     // MovieOff == +0x20). charTable/importTable are read as named members off that def-base.
-    nCount = pFrame->mnCommandCount;
+    int32_t nCount = pFrame->mnCommandCount;
     if (nCount > 0)
     {
         AptCharacterInst* const pOwnerInst = pParent->GetCharacterInst();
@@ -493,55 +461,50 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
 }
 
 // ===========================================================================
-// queueFrameActions @ 0x82AE0228 -- queue every action (tag 1) command of frame
-// nFrame onto the current animation target's director action queue (deferred until
-// the queue drains). pCIH (a2) is the bound target/this. Faithful to the asm.
+// queueFrameActions @ 0x82AE0228 -- for every action (tag 1) command of frame nFrame,
+// enqueue its action-stream onto the current animation target's director action queue
+// (`gpAptTarget->[+0x18]->[+0x0C]`, an AptActionQueueC), deferred until the AS VM drains
+// the queue. pCIH (a2) is the bound target/this. Faithful to the asm; the enqueue itself
+// is the DEFERRED AS-VM boundary (see the FLAG below).
 // ===========================================================================
 AptMovie* AptMovie::queueFrameActions(void* pCIH, int nFrame)
 {
     AptMovieFrame* pFrame = &mpFrames[nFrame];         // *(this+4) + 8*nFrame
 
-    // FLAG (x64 native-8, imported-clip AS-action boundary): for an IMPORTED sprite's embedded movie,
-    // the frame's action-command array (mpCommands) / the per-command records may not be fully
-    // relocated -- the timeline relocation's ACTION-STREAM re-parse (AptMovie::resolve64 ->
-    // AptActionInterpreter::_parseStream) is un-homed, so tag-1 (action) command records in imported
-    // movies can carry un-relocated (small file-offset) pointers. Reading through them AVs. The
-    // action queue feeds the (un-homed) ActionScript VM, whose runStream never executes, so these
-    // queued actions are behaviourally inert on the current PC path. Guard the record derefs against
-    // an implausible (non-relocated) pointer and skip such commands: the nested SHAPES that
-    // doFrameControls already placed still render; only the inert AS action-queueing is skipped.
-    // This is the HONEST un-homed boundary (the AS-action timeline for imported clips), not
-    // invention -- a valid relocated command still queues faithfully.
-    auto lbPlausiblePtr = [](const void* p) -> bool
-    {
-        const uintptr_t lu = reinterpret_cast<uintptr_t>(p);
-        return lu >= 0x00010000u;   // an un-relocated .apt file offset is a small value (< 64KB..MBs)
-    };
-    if (!lbPlausiblePtr(pFrame->mpCommands))
-        return this;   // frame's command array un-relocated (imported-clip AS boundary) -- skip
+    const int32_t nCount = pFrame->mnCommandCount;
+    if (nCount <= 0)
+        return this;
 
-    int32_t nCount = pFrame->mnCommandCount;
-    if (nCount > 0 && nCount <= 0x10000)   // sane command count (guards a misread count)
+    // FLAG (converter-malformed frame table -- same honest data boundary as doFrameControls): a few
+    // nested sprite movies in the apt_convert-produced bundle have their command-array pointer at
+    // frame+0x04 instead of the native-8 frame+0x08, so resolve64 leaves mpCommands null. Skip such a
+    // frame (a counted frame with null commands never occurs in a well-formed native-8 movie).
+    if (pFrame->mpCommands == nullptr)
+        return this;
+
+    for (int32_t i = 0; i < nCount; ++i)
     {
-        for (int32_t i = 0; i < nCount; ++i)
-        {
-            void* pCmd = pFrame->mpCommands[i];        // *(v7[1] + v8)
-            if (!lbPlausiblePtr(pCmd))
-                continue;                              // un-relocated command record -- skip (FLAG)
-            if (CmdI32(pCmd, 0x00) == 1)
-            {
-                // queue = off_8324E574->[+0x18]->[+0x0C]  (the director's AptActionQueueC)
-                void* pDirector = CmdPtr(gpAptTarget, 0x18);   // *(off_8324E574 + 0x18)
-                AptActionQueueC* pQueue =
-                    reinterpret_cast<AptActionQueueC*>(CmdPtr(pDirector, 0x0C));
-                // AddActionBack(queue, &v9[1] (the action payload), pCIH, frameId).
-                // FLAG: the console passes the address pCmd+4 in r4 (the int iEventId
-                // slot); the .apt event-id payload is read from there. Cast faithfully.
-                pQueue->AddActionBack(
-                    static_cast<s32>(reinterpret_cast<intptr_t>(reinterpret_cast<char*>(pCmd) + 4)),
-                    reinterpret_cast<AptCIH*>(pCIH), gnAptActionFrameId);
-            }
-        }
+        void* pCmd = pFrame->mpCommands[i];            // *(v7[1] + v8)  (relocated by resolve64)
+        if (CmdI32(pCmd, 0x00) != 1)
+            continue;                                  // only tag-1 ACTION commands are queued
+
+        // FLAG (DEFERRED AS-VM EXECUTION -- honest boundary, NOT a pointer-guard hack): the record
+        // is now fully relocated by AptMovie::resolve64 (its action-stream pointer @cmd+0x08 is a live
+        // pointer), so reading it here is SAFE. The console would AddActionBack this action onto the
+        // director's queue (queue == gpAptTarget->[+0x18]->[+0x0C]); that queue is drained by the
+        // ActionScript interpreter's runStream, which is STUBBED in this bring-up. So the enqueue is
+        // the deferred VM's entry point: an enqueued action that never executes is inert, and the
+        // director-queue offset chain (console +0x18/+0x0C) reaches the un-reconstructed AS-runtime
+        // director layout on x64 (verified: *(director+0x0C) reads a straddled non-pointer value ->
+        // dereferencing it AVs). Deferring the enqueue is therefore the faithful "un-run AS action
+        // queue" state -- the statically-placed nested shapes/images (which doFrameControls already
+        // placed) still render; only the AS action does not advance the clip via script. The enqueue
+        // (and its runStream execution) land together when the ActionScript VM is homed.
+        //
+        // The faithful console enqueue is preserved (commented) so it re-activates with the VM:
+        //   void* pDirector = CmdPtr(gpAptTarget, 0x18);                 // *(gpAptTarget + 0x18)
+        //   AptActionQueueC* pQueue = CmdPtr(pDirector, 0x0C);           // *(director   + 0x0C)
+        //   pQueue->AddActionBack(pCmd + 4, (AptCIH*)pCIH, gnAptActionFrameId);
     }
     return this;
 }
@@ -715,11 +678,22 @@ void* AptMovie::resolve(int nBase, void* a3, int a4)
 //
 // The relocation walk is structurally identical to the console resolve() above (the
 // same label-hash build + the same per-tag inner-pointer relocations), only widened
-// to 8-byte slots / native strides. FLAG (deferred AS-VM transcode): the console calls
-// AptActionInterpreter::_parseStream to re-parse each action stream's bytecode; that
-// transcode (AptActionInterpreter_ResolveTranscode) still truncates a 64-bit base, so
-// here the stream POINTERS are relocated (kept valid) but the bytecode parse is left to
-// the AS-VM step. Frame-0 place/remove placement does not depend on the parse.
+// to 8-byte slots / native strides. It now relocates EVERY per-frame command record's
+// pointer slots at the native-8 offsets -- tag-1 Action (action-stream ptr @cmd+0x08),
+// tag-2 FrameLabel (name ptr @cmd+0x08, registered into the label hash), tag-3
+// PlaceObject (name @body+0x30 + clipActions block @body+0x40, and the clipActions
+// record-array + per-record stream pointers), tag-8 Morph (stream ptr @cmd+0x08) --
+// so that after resolve64 NO command record (root OR imported) holds an un-relocated
+// file offset, and doFrameControls / queueFrameActions / placeObject read them safely.
+//
+// FLAG (deferred AS-VM EXECUTION -- honest boundary): the console additionally calls
+// AptActionInterpreter::_parseStream to re-parse each action stream's BYTECODE; that
+// transcode (AptActionInterpreter_ResolveTranscode) still truncates a 64-bit base, and
+// the interpreter's runStream is stubbed. So here the stream POINTERS are relocated
+// (kept valid -- the record reads never AV) but the bytecode is NEITHER parsed NOR run:
+// the action-stream *contents* stay as raw offsets and no _parseStream/runStream fires.
+// An un-run AS action queue is a valid state; the statically-placed nested shapes/images
+// compose without the VM (they need only their records relocated, which this now does).
 // ===========================================================================
 void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
 {
@@ -782,18 +756,93 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
             void* pCmd = reinterpret_cast<void*>(luCmd);
             const int32_t eTag = CmdI32(pCmd, 0x00);
 
-            // Relocate the ONE inner pointer the frame-0 placement path needs: a place
-            // command's instance-NAME pointer, so a named placeObject binds a live EAStringC.
-            // The PlaceObject body is pointer-aligned after the tag (native-8), so the name
-            // pointer lives at align8(cmd+4) + 0x30 (== the same body+0x30 AptMovie_PlaceCommand
-            // reads). The label hash (tag 2 name) and the AS action-stream pointers (tags 1/3/8)
-            // are the DEFERRED AS-VM transcode boundary -- resolve64 leaves them as raw offsets
-            // (the VM step relocates + parses them). Frame-0 place/remove does not read those.
-            if (eTag == 3)
+            // Relocate EVERY per-command inner POINTER slot -- so that after resolve64 NO command
+            // record (root OR imported) holds an un-relocated file offset, and doFrameControls /
+            // queueFrameActions / placeObject can read them without an AV. The relocation walk +
+            // per-tag pointer SET is decompiled from the FAITHFUL native-64-bit build: the Xbox One
+            // remaster's AptMovie unresolve twin sub_14085EE40 (@0x14085EE40, .ida-exports/
+            // Burnout_External_Xbox_One.exe) -- the native-8 build that loads these SAME GUIAPT
+            // bundles single-path. It walks frames (stride 16), commands (stride 8), and switches on
+            // the tag with these inner-pointer relocations (XB1 offsets shown as [xb1:0xNN]):
+            //   case 1 ACTION : stream ptr [xb1:cmd+0x08] + _parseStream(stream)
+            //   case 2 LABEL  : name ptr   [xb1:cmd+0x08]
+            //   case 3 PLACE  : clipActions block ptr [xb1:cmd+0x48]; walk block {count@+0x00;
+            //                   recArrayPtr@+0x08}, records STRIDE 16 with stream ptr @rec+0x08 +
+            //                   _parseStream(each); then name ptr [xb1:cmd+0x38]
+            //   case 8 MORPH  : stream ptr [xb1:cmd+0x10] + _parseStream(stream); un-negate id@+0x08
+            //
+            // OUR-BUNDLE OFFSET DELTA (verified vs TITLE_SCREEN02.bundle): the tag-1/tag-2 stream/name
+            // pointers sit at the same cmd+0x08 as XB1, but the apt_convert-produced tag-3 PLACE record
+            // is 4 bytes "earlier" than the true native-8 layout (the converter's body alignment differs):
+            // our name is at body+0x30 (== cmd+0x34, not xb1 cmd+0x38), our clipActions block at
+            // body+0x40 (== cmd+0x44, not xb1 cmd+0x48), and the block's record-array pointer at
+            // block+0x04 (not xb1 block+0x08). The record STRIDE (16) + stream slot (rec+0x08) match XB1
+            // exactly. So the offsets below are XB1-derived STRUCTURE at our-bundle byte positions.
+            //
+            // FLAG (deferred AS-VM EXECUTION): XB1 calls sub_14084A920 (its _parseStream) on each action
+            // stream; here the stream POINTERS are relocated (reads never AV) but the BYTECODE is NEITHER
+            // parsed NOR run (runStream is stubbed) -- no _parseStream fires. An un-run AS action queue is
+            // a valid state; the statically-placed nested shapes/images compose without the VM.
+            switch (eTag)
             {
-                const uintptr_t luBody =
-                    (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u);
-                reloc64(reinterpret_cast<void*>(luBody), 0x30);   // place record instance-name (bounds-guarded)
+                case 1:   // ACTION: relocate the action-stream pointer (@cmd+0x08). NOT parsed.
+                    reloc64(pCmd, 0x08);
+                    break;
+
+                case 2:   // LABEL: relocate the name pointer (@cmd+0x08) + register name -> frame f.
+                {
+                    const uintptr_t luName = reloc64(pCmd, 0x08);
+                    if (luName != 0 && inRes(luName) && this->mpLabelHash != nullptr)
+                    {
+                        // Console/XB1: InitFromBuffer(&scratch, name); Set(hash, scratch, AptInteger::Create(f)).
+                        // Structural (the label hash the labelToFrame lookup reads), NOT VM.
+                        EAStringC label(reinterpret_cast<const char*>(luName));
+                        AptInteger* pIdx = AptInteger::Create(f);
+                        this->mpLabelHash->Set(label, pIdx);
+                    }
+                    break;
+                }
+
+                case 3:   // PLACE: relocate the instance-NAME (@body+0x30) + the clipActions block (@body+0x40).
+                {
+                    const uintptr_t luBody =
+                        (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u);
+                    void* const pBody = reinterpret_cast<void*>(luBody);
+                    reloc64(pBody, 0x30);                          // place record instance-name
+                    const uintptr_t luClip = reloc64(pBody, 0x40); // place record clipActions/init-action block
+
+                    // Walk the clipActions block's records (XB1 case-3 inner loop): the block is
+                    // {count@+0x00 (i32); recArrayPtr@block+0x04 (native-8 ptr; xb1 block+0x08)}; each
+                    // record is STRIDE 16 (XB1 v17+=16) with its action-stream pointer at rec+0x08 (an
+                    // 8-byte native-8 slot). Relocate the record-array pointer + each record's stream
+                    // pointer so a clipActions read never AVs; the stream CONTENTS stay un-parsed
+                    // (VM deferred) -- XB1's sub_14084A920 (_parseStream) is NOT called.
+                    if (luClip != 0 && inRes(luClip))
+                    {
+                        void* const pClip = reinterpret_cast<void*>(luClip);
+                        const int32_t nRecs = CmdI32(pClip, 0x00);
+                        const uintptr_t luRecs = reloc64(pClip, 0x04);   // record-array ptr @block+0x04 (our bundle)
+                        if (luRecs != 0 && inRes(luRecs) && nRecs > 0 && nRecs <= 0x1000)
+                        {
+                            for (int32_t k = 0; k < nRecs; ++k)
+                            {
+                                // rec+0x08 == the action-stream pointer (native-8 8-byte slot; STRIDE 16).
+                                const uintptr_t luRec = luRecs + static_cast<uintptr_t>(16) * k;
+                                if (!inRes(luRec) || (luRec + 16) > (nResBase + nResSize))
+                                    continue;
+                                reloc64(reinterpret_cast<void*>(luRec), 0x08);   // stream ptr (bounds-guarded; NOT parsed)
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case 8:   // MORPH: relocate the action-stream pointer (@cmd+0x10 per XB1). NOT parsed.
+                    reloc64(pCmd, 0x10);
+                    break;
+
+                default:  // tag 4 REMOVE / tag 5 BACK-TO-SCRIPT carry no relocatable inner pointer.
+                    break;
             }
         }
     }
