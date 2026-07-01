@@ -41,6 +41,8 @@
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"       // AptGetAnimationAtLevel (the root level-0 CIH)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"// MakeCharacterAnimationInst (loaded movie -> live inst)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (the root display-object node)
+#include "SDKs/EATech/include/Apt/AptMovie.h"                 // gAptCmd8 / gAptCmd8Bound* / gAptPlacedNodes (native-8 place gates)
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h" // mDisplayList (the root CIH's child display list)
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"       // AptAnimationTarget::GetRootDisplayList (the director's root list)
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::AsState
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // AptDisplayListState::mpFirst (the placed-node chain)
@@ -127,6 +129,64 @@ extern "C" void CgsApt_CharListProbe(const void* pAnim, const void* pTable, int 
         "[AptRT] charlist: anim=%p table=%p count=%d skip=%u %s\n",
         pAnim, pTable, nCount, uSkip,
         uSkip ? "(SKIPPED -- un-relocated native-8 table)" : "(walking)");
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The native-8 timeline-relocation probe sink (declared in AptCharacterAnimation.h): logs each embedded
+// movie's relocated frameCount + frameTable + the count of command records relocated. Throttled.
+void CgsApt_TimelineProbe(const void* pMovie, int nFrameCount, const void* pFrameTable, int nCmdsTotal)
+{
+    static int s_iTimelineBudget = 0;
+    if (s_iTimelineBudget >= 32)
+        return;
+    ++s_iTimelineBudget;
+    char lac[176];
+    std::snprintf(lac, sizeof(lac),
+        "[AptRT] timeline: movie=%p frameCount=%d frameTable=%p commands=%d\n",
+        pMovie, nFrameCount, pFrameTable, nCmdsTotal);
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// Per-frame (frame 0) timeline probe sink (declared in AptCharacterAnimation.h): the frame's command
+// count + mpCommands pointer before/after relocation (offset -> in-resource pointer). Throttled.
+void CgsApt_TimelineFrameProbe(int nFrame, int nCmdCount, unsigned long long luCmdsBefore,
+                              unsigned long long luCmdsAfter)
+{
+    static int s_iTLFrameBudget = 0;
+    if (s_iTLFrameBudget >= 16)
+        return;
+    ++s_iTLFrameBudget;
+    char lac[176];
+    std::snprintf(lac, sizeof(lac),
+        "[AptRT] timeline: frame=%d cmdCount=%d mpCommands(before)=0x%llX (after)=0x%llX\n",
+        nFrame, nCmdCount, luCmdsBefore, luCmdsAfter);
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The native-8 place-command probe sink (declared in AptMovie.h): logs each PlaceObject(3)/RemoveObject(4)
+// command the native-8 place path processed -- its char id, depth, flags, matrix (first 6 floats), and
+// the placed node pointer (null = skipped). Throttled.
+extern "C" void CgsApt_PlaceProbe(int nTag, int nCharId, int nDepth, unsigned int nFlags,
+                                  const float* pMatrix, const void* pPlacedNode)
+{
+    static int s_iPlaceBudget = 0;
+    if (s_iPlaceBudget >= 96)
+        return;
+    ++s_iPlaceBudget;
+    char lac[256];
+    if (pMatrix != nullptr)
+    {
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] place: tag=%d charId=%d depth=%d flags=0x%X matrix=(%.3f %.3f %.3f %.3f %.3f %.3f) -> node %p\n",
+            nTag, nCharId, nDepth, nFlags,
+            pMatrix[0], pMatrix[1], pMatrix[2], pMatrix[3], pMatrix[4], pMatrix[5], pPlacedNode);
+    }
+    else
+    {
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] place: tag=%d charId=%d depth=%d flags=0x%X matrix=(none) -> node %p\n",
+            nTag, nCharId, nDepth, nFlags, pPlacedNode);
+    }
     CgsDev::Log::WriteToLog(lac);
 }
 
@@ -619,18 +679,22 @@ namespace BrnGui
     // -------------------------------------------------------------------------
     void AptRuntimePlayMovie(const char* lpacMovieName, s32 liLevelNum)
     {
-        if (lpacMovieName == nullptr)
+        if (lpacMovieName == nullptr || lpacMovieName[0] == '\0')
         {
-            CgsDev::Log::WriteToLog("[AptRT] PlayMovie: null movie name -- ignored.\n");
+            // null / empty channel-41 name: a spurious re-post (BootLegal interleaves empty events).
+            // Ignore it -- do NOT clobber the loaded-movie name or trigger a (failed) reload.
             return;
         }
 
-        // LOAD-ONCE GUARD: the channel-41 event re-fires EVERY frame (BootLegal keeps the
-        // movie playing), so without this guard the bundle would be (re)loaded thousands of
-        // times. Load each distinct movie exactly once; once loaded, ignore the re-fires.
-        if (s_bMovieRequested && std::strncmp(s_acLoadedMovieName, lpacMovieName,
-                                              sizeof(s_acLoadedMovieName) - 1) == 0)
-            return;   // same movie already attempted -- silent (avoids per-frame log spam)
+        // LOAD-ONCE GUARD: the channel-41 event re-fires EVERY frame (BootLegal keeps the movie
+        // playing), so without this guard the bundle would be (re)loaded thousands of times, each
+        // allocating CgsResource pool entries until the pool overflows. Load each distinct movie
+        // exactly once; once REQUESTED or LOADED, ignore re-fires of the same name. (Guarding on
+        // s_bMovieLoaded too is essential: an interleaved empty event used to reset s_bMovieRequested,
+        // so the same movie reloaded every cycle and exhausted CgsResourcePool.)
+        if ((s_bMovieRequested || s_bMovieLoaded) &&
+            std::strncmp(s_acLoadedMovieName, lpacMovieName, sizeof(s_acLoadedMovieName) - 1) == 0)
+            return;   // same movie already attempted/loaded -- silent (avoids per-frame reload+spam)
 
         std::strncpy(s_acLoadedMovieName, lpacMovieName, sizeof(s_acLoadedMovieName) - 1);
         s_acLoadedMovieName[sizeof(s_acLoadedMovieName) - 1] = '\0';
@@ -1175,28 +1239,55 @@ namespace BrnGui
         AptCharacterAnimation* lpCharAnim =
             reinterpret_cast<AptCharacterAnimation*>(luBase + luCAOff);
 
-        // Set the defensive fixup bounds so EVERY relocation/deref in the FixupWalk that lands outside
-        // the resource is SKIPPED (not read/written) instead of AV'ing. Reset the per-Fixup diagnostics.
-        gAptFixupBoundLo = luBase;
-        gAptFixupBoundHi = luBase + luSize;
-        gAptFixupSkipped = 0; gAptFixupSkippedMovies = 0; gAptFixupProbeChars = 0;
+        // --- 3. Fixup the movie: relocate the serialised root IN PLACE against the load base. -------
+        // The faithful Fixup (single native-64-bit path, no bounds guards) relocates every file offset
+        // to a live pointer. The relocation base is the memory address of aptDataOffset (the "Apt
+        // Data:1:7:8" magic) -- serialised offsets are file-relative to THAT, not the resource start.
+        // Locate it by scanning the loaded resource for the magic. FLAG (Step 9): AptDataHeader::FixUp
+        // will supply aptDataOffset directly; until then the bring-up finds it here.
+        uintptr_t luAptDataOff = 0;
+        {
+            static const char kMagic[] = "Apt Data:1:7:8";
+            const u32 kMagicLen = (u32)(sizeof(kMagic) - 1);
+            for (u32 s = 0; s + kMagicLen <= luSize; ++s)
+            {
+                const char* p = reinterpret_cast<const char*>(luBase + s);
+                u32 k = 0;
+                for (; k < kMagicLen; ++k) { if (p[k] != kMagic[k]) break; }
+                if (k == kMagicLen) { luAptDataOff = luBase + s; break; }
+            }
+        }
+        void* lpFixupBase = reinterpret_cast<void*>(luAptDataOff ? luAptDataOff : luBase);
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] faithful: Fixup base (aptDataOffset)=0x%llX; calling Fixup on charAnim@0x%X ...\n",
+            (unsigned long long)reinterpret_cast<uintptr_t>(lpFixupBase), luCAOff);
+        CgsDev::Log::WriteToLog(lac);
+        AptCharacterAnimation* lpFixed = lpCharAnim->Fixup(lpFixupBase, lpConstFile, lpFixupBase);
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] faithful: Fixup COMPLETED. charCount@+0x18=%d importCount@+0x34=%d\n",
+            *reinterpret_cast<const int*>(reinterpret_cast<char*>(lpCharAnim) + 0x18),
+            *reinterpret_cast<const int*>(reinterpret_cast<char*>(lpCharAnim) + 0x34));
+        CgsDev::Log::WriteToLog(lac);
 
-        // --- 3. Fixup the movie (dispatches on ptr-size: FixupInPlace[8] / FixupTranscode[4]) -------
-        // The bounds guard makes every per-character read/write safe (skip-not-AV), so FixupInPlace
-        // COMPLETES (relocating what it safely can) even where a per-type record offset is still
-        // console-width. The per-character [AptRT] fixup: probes name the chars/types it walked.
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: calling Fixup (ptrSize=%d, %s) on charAnim@0x%X (bounds [0x%llX,0x%llX)) ...\n",
-            liPtrSize, (liPtrSize == 8) ? "FixupInPlace" : "FixupTranscode", luCAOff,
-            (unsigned long long)gAptFixupBoundLo, (unsigned long long)gAptFixupBoundHi);
-        CgsDev::Log::WriteToLog(lac);
-        AptCharacterAnimation* lpFixed = nullptr;
-        lpFixed = lpCharAnim->Fixup(lpResolveBase, lpConstFile, lpResolveBase);
-        gAptFixupBoundLo = 0; gAptFixupBoundHi = 0;   // clear the guard (Fixup done)
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: Fixup COMPLETED (no AV). skippedRecords=%d skippedMovies=%d probedChars=%d\n",
-            gAptFixupSkipped, gAptFixupSkippedMovies, gAptFixupProbeChars);
-        CgsDev::Log::WriteToLog(lac);
+        // --- 3b. THE FRAME TIMELINE is NOT relocated here. -----------------------------------------
+        // FLAG (Step 5/6): the root movie's frame table (framesOffset@def+0x08) + the case-5/9 sub-movie
+        // timelines are relocated by the faithful AptMovie::resolve (called from Fixup) + AptLoader::
+        // CompleteLoad -- NOT by a host routine. The invented AptRelocateTimeline8* + the frame-array
+        // "fallback" (a wrong-base artifact: the old code used the resource start, so def+0x08 read a
+        // mis-based offset) are gone. Until the 64-bit AptMovie::resolve lands, the timeline stays
+        // un-resolved (the geometry fallback still renders); the composed animation arrives with Step 5/6.
+        // Keep the resource bounds for the native-8 PLACE path's deref guard (gAptCmd8BoundLo/Hi):
+        // doFrameControls reads the relocated command records + char table; bound them so an un-widened
+        // record/char is skipped (named via the place probe) instead of AV'ing. Only on the native-8 path.
+        if (liPtrSize == 8)
+        {
+            gAptCmd8BoundLo = luBase;
+            gAptCmd8BoundHi = luBase + luSize;
+        }
+        else
+        {
+            gAptCmd8BoundLo = 0; gAptCmd8BoundHi = 0;
+        }
         s_pFaithfulCharAnim = lpFixed;
         if (lpFixed == nullptr)
         {
@@ -1309,12 +1400,16 @@ namespace BrnGui
         // Set the embedded-movie offset for the per-frame tick (AptCIH_GetClipMovie reads
         // character + gAptCharMovieOffset): native-8 -> 0x20, console-4 -> 0x10.
         gAptCharMovieOffset = (liPtrSize == 8) ? 0x20u : 0x10u;
-        // The native-8 TIMELINE (frame table + place/remove records) was NOT relocated by FixupInPlace
-        // (the skipped case-5/9 movie recursion) and uses console struct offsets, so the tick's
-        // doFrameControls/queueFrameActions/clip-events would AV reading it. Set gAptSkipTimeline so the
-        // tick advances the play-head structurally but skips the timeline -- naming the un-widened
-        // timeline as the next layout to recover. (4-byte path runs the timeline faithfully.)
-        gAptSkipTimeline = (liPtrSize == 8) ? 1u : 0u;
+        // The native-8 TIMELINE is now RELOCATED (FixupWalk case-5/9) and the PLACE path is widened
+        // (AptMovie::doFrameControls / gAptCmd8). So:
+        //   * CLEAR gAptSkipTimeline -> doFrameControls runs frame 0 and PLACES its characters.
+        //   * SET gAptCmd8 -> doFrameControls reads the x64 command-record offsets + uses placeObjectNCXForm.
+        //   * SET gAptSkipFrameActions -> queueFrameActions + the AS clip events stay skipped (the AS
+        //     director queue / interpreter scope is the NEXT pass).
+        gAptSkipTimeline     = 0u;
+        gAptCmd8             = (liPtrSize == 8) ? 1u : 0u;
+        gAptSkipFrameActions = (liPtrSize == 8) ? 1u : 0u;
+        gAptPlacedNodes      = 0;
 
         s_bFaithfulInstantiated = true;
         std::snprintf(lac, sizeof(lac),
@@ -1617,7 +1712,15 @@ namespace BrnGui
         // to the homed Manager_CreateItem factory, so each placed inst gets a real render item (carrying
         // its character) -- which is what tick / AptCIH_GetClipMovie reach the movie through. Every deref
         // is guarded (the engine null-safety we added) so the tick completes structurally or bails.
-        if (s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr)
+        // FLAG (Step 5/6): AptCIH::tick -> AptMovie::doFrameControls reads the movie's frame table
+        // (framesOffset@def+0x08). Step 1's faithful Fixup does NOT relocate that -- the frame table is
+        // AptMovie::resolve / AptLoader::CompleteLoad's job, not Fixup's (the invented AptRelocateTimeline8
+        // wrongly relocated it here, which is why the tick "worked" before). Until the faithful 64-bit
+        // resolve/CompleteLoad lands, framesOffset is an un-relocated file offset, so ticking would AV.
+        // Deferred here (marked boundary); the instantiated display list + the geometry fallback still
+        // render. Set lbTickReady = true (or remove the guard) when Step 5/6 relocates the frame table.
+        bool lbTickReady = false;   // non-const: flip (or remove the guard) when Step 5/6 lands
+        if (lbTickReady && s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr)
         {
             AptCIH* lpRoot = static_cast<AptCIH*>(s_pFaithfulRootCIH);
             // Mark the root clip "dirty" so AptCIH::tick processes it (mFlagsA bit25 == GetDirtyState,
@@ -1664,12 +1767,45 @@ namespace BrnGui
                 }
             }
 
+            // Also count the ROOT CIH's CHILD display list -- doFrameControls places into the animInst's
+            // own mDisplayList (the sprite/animation child list), not the director root. This is where the
+            // native-8 place path's nodes land.
+            s32 liChildNodes = 0;
+            {
+                AptCharacterInst* lpRootCI = lpRoot->GetCharacterInst();
+                if (lpRootCI != nullptr)
+                {
+                    AptCharacterSpriteInstBase* lpSprite =
+                        static_cast<AptCharacterSpriteInstBase*>(lpRootCI);
+                    AptDisplayListState* lpChildState = lpSprite->mDisplayList.AsState();
+                    if (lpChildState != nullptr)
+                    {
+                        for (AptCIH* lpN = lpChildState->mpFirst; lpN != nullptr && liChildNodes < 4096;
+                             lpN = lpN->GetDisplayListNext())
+                        {
+                            ++liChildNodes;
+                            if (s_iTickFrame < 2 && liChildNodes <= 8)
+                            {
+                                AptCharacterInst* lpCI = lpN->GetCharacterInst();
+                                char lacn[160];
+                                std::snprintf(lacn, sizeof(lacn),
+                                    "[AptRT] tick:   child node %p charInst=%p renderItem=%p depth=%d\n",
+                                    (void*)lpN, (void*)lpCI,
+                                    (void*)(lpCI ? lpCI->GetRenderItem() : nullptr),
+                                    lpCI ? lpCI->GetDepth() : -1);
+                                CgsDev::Log::WriteToLog(lacn);
+                            }
+                        }
+                    }
+                }
+            }
+
             if (s_iTickFrame < 4)
             {
-                char lacd[128];
+                char lacd[192];
                 std::snprintf(lacd, sizeof(lacd),
-                    "[AptRT] tick: frame=%d displayList nodes=%d (tick result=%d)\n",
-                    s_iTickFrame, liNodes, liTickResult);
+                    "[AptRT] tick: frame=%d displayList nodes=%d childNodes=%d placedByCmd=%d (tick result=%d)\n",
+                    s_iTickFrame, liNodes, liChildNodes, gAptPlacedNodes, liTickResult);
                 CgsDev::Log::WriteToLog(lacd);
             }
             ++s_iTickFrame;
