@@ -1,0 +1,79 @@
+#ifndef BRN_SOUND_VEHICLES_ENGINES_HYBRID_EXHAUST_CONTROL_H
+#define BRN_SOUND_VEHICLES_ENGINES_HYBRID_EXHAUST_CONTROL_H
+
+#include "types.hpp"
+#include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"   // committed BrnEffectControl dual base (BY NAME)
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"            // CgsSound::Utils::Average / DataPoint (BY NAME)
+#include "GameSource/AttribSys/Generated/classes/vehicleengine.h"  // Attrib::Gen::vehicleengine member (BY NAME)
+
+// =============================================================================
+// BrnSound::Vehicles::Engines::HybridExhaustControl  (+ leaf HybridEngineControl)
+//   GameSource/Sound/Vehicles/Engines/BrnHybridExhaustControl.{h,cpp}  (DWARF home)
+//   HybridEngineControl lives in BrnHybridEngineControl.{h,cpp} (its own DWARF home).
+//
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. DWARF (BrnHybridEngineControl.h:81):
+//   HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
+// The hybrid (loop + Ginsu) exhaust engine sound CONTROL. It cross-fades a loop-model
+// bank against accel/decel Ginsu grains, tracking physics/audio RPM deltas.
+//
+// FLAG (opaque crossfade span): mDecelCrossfadeMix is DWARF-typed
+// BrnSound::Vehicles::Engines::Graph and maCrossFadesPoints is Vector2[6]; the
+// committed Graph's mpaPoints is Point* (not Vector2*), so the ctor's
+// `mpaPoints = &maCrossFadesPoints[0]` is a CONTESTED type binding. Per the anti-
+// fabrication rule the crossfade-mix + its point array are modelled as an opaque byte
+// span (documented) rather than forcing an incompatible Graph/Vector2 binding. The
+// cleanly-homed members (the two Attrib::Gen::vehicleengine attribute instances, the
+// Average<3,f32>, the three DataPoint<f32>, the EngineMix pair, the scalar thresholds,
+// and the four control back-pointers) are pinned BY NAME. Absolute offsets NOT asserted.
+//
+// LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE.
+// =============================================================================
+
+namespace BrnSound
+{
+namespace Vehicles
+{
+namespace Engines
+{
+
+struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
+{
+    // DWARF BrnHybridEngineControl.h:52. The per-source engine mix weights.
+    struct EngineMix
+    {
+        EngineMix() : Loop(0.0f), AccelGinsu(0.0f), DecelGinsu(0.0f), Cutoff(0.0f) {}
+        f32 Loop;
+        f32 AccelGinsu;
+        f32 DecelGinsu;
+        f32 Cutoff;
+    };
+
+    HybridExhaustControl();             // @ 0x826AF938
+    virtual ~HybridExhaustControl();    // anchor for the vector deleting destructor @ 0x826AFA60
+
+    // @ 0x826B34E0 -- RTTI factory hook. Returns the +4 IResourceRequester base view.
+    static BrnSound::Logic::IResourceRequester* Create( bool abFlavour );
+
+    // ---- members in DWARF order (offsets are X360 facts, not asserted on host) ----
+    void*                    mpPhysicsControl;
+    void*                    mpEngineControl;
+    void*                    mpShiftControl;
+    void*                    mpClutchControl;
+    Attrib::Gen::vehicleengine mVehicleEngineAttributes;                 // h:99 (this+0x48,0,0)
+    Attrib::Gen::vehicleengine mMasterVehicleEngineComponentAttributes;  // h:102 (this+0x58,0,0)
+    CgsSound::Utils::Average<3u, f32> mAverageDeltaRPM;                  // h:105
+    CgsSound::Utils::DataPoint<f32>   mPhysicsDeltaRpm;                  // h:108
+    CgsSound::Utils::DataPoint<f32>   mAudioDeltaRpm;                    // h:111
+    CgsSound::Utils::DataPoint<f32>   mGinsuRpm;                         // h:114
+    u8                       mau8DecelCrossfadeMix[8 + 6 * 8];           // h:117 Graph + h:120 Vector2[6] (opaque; see FLAG)
+    f32                      mfPercentOfAccelThreshold;                  // h:123
+    f32                      mfPercentOfDecelThreshold;                  // h:126
+    EngineMix                mFinalEngineMix;                           // h:129
+    EngineMix                mFinalEngineVolume;                        // h:132
+};
+
+} // namespace Engines
+} // namespace Vehicles
+} // namespace BrnSound
+
+#endif // BRN_SOUND_VEHICLES_ENGINES_HYBRID_EXHAUST_CONTROL_H

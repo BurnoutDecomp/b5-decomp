@@ -39,6 +39,38 @@
 // ~860 bytes of AI-engine state are deferred (see FLAG).
 // =============================================================================
 
+// ADDITIVE GROW (Wave 5: AIVehicleStateManager content-spec accessors).
+// CgsSound::Logic::Content -- the per-(AI engine, loop) content SPEC descriptor the
+// AI-engine sound manager stores in its maLoop/GinsuAccel/GinsuDecelContentSpecs
+// tables. DWARF (BrnAIVehicleStateManager.h) qualifies these arrays as
+// `CgsSound::Logic::Content`; the X360 addresses them with a 12-byte element stride
+// (the slwi/add *12 chain in GetDecelGinsuContent @ 0x82698910 /
+// GetLoopModelContent @ 0x826987A8). This is DISTINCT from the reference-counted
+// CgsSound::Playback::Content (CgsContent.h) and is not otherwise homed, so a
+// minimal 12-byte descriptor with the accessed IsLoaded() query is modelled here.
+// FLAG: minimal un-homed home; the three opaque words are pinned by the attested
+// 12-byte stride only, not by named members.
+namespace CgsSound
+{
+namespace Logic
+{
+struct Content
+{
+    Content() : mau32Opaque() {}
+
+    // Queried by GetDecelGinsuContent / GetLoopModelContent tripwires (the loaded
+    // assert on the resolved spec). Deferred body -- returns true (the specs are
+    // asserted loaded on the boot path that reaches these accessors).
+    bool IsLoaded() const;
+
+    // 12-byte element (the X360 *12 stride). Members deferred (un-homed layout).
+    u32 mau32Opaque[3];
+};
+
+inline bool Content::IsLoaded() const { return true; }
+} // namespace Logic
+} // namespace CgsSound
+
 namespace BrnSound
 {
 namespace Vehicles
@@ -47,6 +79,17 @@ namespace Vehicles
 class AIVehicleStateManager : public BrnSound::Logic::BrnStateManager
 {
 public:
+    // DWARF BrnAIVehicleStateManager.h:27. The number of distinct AI-car engine
+    // audio slots (maLoop/GinsuAccel/GinsuDecelContentSpecs outer dimension).
+    static const s32 KI_NUMBER_OF_AUDIO_AI_ENGINES = 5;
+
+    // DWARF (BrnDualGinsuEffect.h: KI_MAX_LOOPS = 10). Homed on this class because
+    // the committed BrnDualGinsuEffect.h models DualGinsuEffect as a namespace and
+    // does not export the constant; used as the maLoopContentSpecs inner dimension
+    // and the GetLoopModelContent bound (its assert STRING still names
+    // DualGinsuEffect::KI_MAX_LOOPS verbatim -- X360 rodata).
+    static const s32 KI_MAX_LOOPS = 10;
+
     // BrnAIVehicleStateManager.cpp:354 (assert text). The AI-engine-loading sub-state
     // machine ResourcesAreReady (0x82684038) advances. The asserted-valid states are
     // E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB (==1) and
@@ -87,22 +130,33 @@ public:
     virtual void                            ResourcesAreReady();    // @ 0x82684038 (real -- self-contained)
     virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar(); // (stub -- module not homed; see .cpp FLAG)
 
+    // ---- content-spec accessors (DualGinsuEffect::Attach queries these). ----
+    // @ 0x826987A8 (DWARF h:148). Return &maLoopContentSpecs[engine][loop], guarded.
+    const CgsSound::Logic::Content* GetLoopModelContent( s32 liAIEngineIndex, u32 lLoopIndex );
+    // @ 0x82698910 (DWARF h:186). Return &maGinsuDecelContentSpecs[engine], guarded.
+    const CgsSound::Logic::Content* GetDecelGinsuContent( s32 liAIEngineIndex );
+    // DWARF h:168 -- declared for home completeness (not bodied this slice).
+    const CgsSound::Logic::Content* GetAccelGinsuContent( s32 liAIEngineIndex );
+
 private:
     // +0x08: the AI-engine-loading sub-state (read at result[2] by ResourcesAreReady
     // @ 0x82684038). The only member named by a recovered body; modelled by name.
     EAIEngineLoadingState meAIEngineLoadingState;
 
-    // FLAG (deferred body -- ~860 bytes): the X360 object is 880 bytes (0x370). The
-    // remaining AI-engine state (per-AI-car engine component handles, the engine-voice
-    // assignment table consumed via VehicleStateManager::GetAIEngineAssignment, the AI
-    // engine loading bookkeeping driven by PrepareAIEngineLoading @ 0x826E2708, the
-    // per-frame voice state touched by UpdateParams @ 0x826CA578) is NOT modelled in
-    // this minimal shell -- those domains (AI engine audio) are not reconstructed. The
-    // shell exists only to be a CONCRETE, registrable leaf whose Prepare() returns true
-    // for PrepareStateManagersOnBoot. A single opaque pad keeps the deferred state
-    // honestly named without fabricating field meanings. Size is UNVERIFIED on host
-    // (the X360 0x370 is a 32-bit fact); NOT static_asserted.
-    u8 maDeferredAIEngineState[1]; // placeholder for the un-reconstructed AI-engine members
+    // DWARF-attested content-spec tables (BrnAIVehicleStateManager.h:128-130):
+    //   Content[5][10], Content[5], Content[5]. The GetLoopModelContent /
+    //   GetDecelGinsuContent bodies index these BY NAME (row-major), replacing the
+    //   old opaque pad. Their absolute offsets are NOT asserted on the 64-bit host.
+    CgsSound::Logic::Content maLoopContentSpecs[KI_NUMBER_OF_AUDIO_AI_ENGINES][KI_MAX_LOOPS];
+    CgsSound::Logic::Content maGinsuAccelContentSpecs[KI_NUMBER_OF_AUDIO_AI_ENGINES];
+    CgsSound::Logic::Content maGinsuDecelContentSpecs[KI_NUMBER_OF_AUDIO_AI_ENGINES];
+
+    // FLAG (deferred body -- the remaining AI-engine state): the X360 object is 880
+    // bytes (0x370). The AI engine component handles, the engine-voice assignment
+    // table, the loading bookkeeping (PrepareAIEngineLoading @ 0x826E2708), and the
+    // per-frame voice state (UpdateParams @ 0x826CA578) are NOT modelled in this
+    // slice. The three Content tables above are the members the recovered accessors
+    // name; the rest is deferred (AI engine audio domain).
 };
 
 } // namespace Vehicles

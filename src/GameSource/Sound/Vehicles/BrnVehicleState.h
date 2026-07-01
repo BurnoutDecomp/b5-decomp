@@ -34,8 +34,31 @@ namespace BrnSound
 {
 namespace Vehicles
 {
+
+// ADDITIVE GROW (Wave 5: Engines::PhysicsControl accessors). The raw per-car physics
+// data blob PhysicsControl caches (mpVehiclePhysicsData) and hands back via
+// GetRawPhysicsData(). Opaque here (only pointed-to), so a forward declaration is
+// sufficient; its full layout is a separate recon slice. FLAG: opaque forward.
+struct VehicleData;
+
 namespace VehicleState
 {
+
+// ADDITIVE GROW (Wave 5: Engines::PhysicsControl). DWARF BrnVehicleState.h:43 -- the
+// engine-component selector the PhysicsControl key/name accessors take.
+enum EEngineComponentType
+{
+    E_ENGINE   = 0,
+    E_EXHAUST  = 1,
+    E_MAX_TYPES = 2,
+};
+
+// DWARF BrnVehicleState.h:175. Free function (VehicleState is a namespace): resolve
+// the human-readable component name for a given VehicleState + component type.
+// Declared BY NAME so PhysicsControl::GetEngineComponentName can forward to it; its
+// own body is a separate un-homed recon slice (the VehicleState pointer is opaque).
+// FLAG: declaration-only forward -- not bodied here.
+const char* GetEngineComponentName( const void* lpVehicleState, EEngineComponentType aeComponentType );
 
 // BrnVehicleState.h (assert-cited region). Upper bound for the active-race-car
 // index the attach path validates against (cmpwi r30, 8). The assert text is
