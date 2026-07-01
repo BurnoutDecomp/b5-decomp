@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"   // BrnSound::Logic::BrnStateManager (committed base)
+#include "GameSource/Sound/Collision/BrnCollisionDataStructures.h" // BrnSound::Logic::Collision::ScrapeInfo (committed; maScrapeHistory element)
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"       // CgsSound::Playback::Name::MakeHash (SelectBin helper)
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionStateManager
@@ -44,6 +46,17 @@ namespace Logic
 namespace Collision
 {
 
+// Deferred collision-event descriptor (homed elsewhere; PlayCollision takes a pointer
+// only). DWARF (BrnCollisionStateManager.h:143/:511) declares it `struct OutputCollision`.
+struct OutputCollision;
+
+// SelectBin name->bin-index helper  @ 0x826A0598. Free function (the asm never uses
+// its r3 as `this`) -- the shared body both CollisionStateManager::SelectBin<>
+// template instantiations tail-call. Hashes the requested crash-bin content name and
+// looks it up in a small interned name-hash table; returns bin index 0 (default) on a
+// hit at entry 0, else 1 (fallback). See BrnCollisionStateManager.cpp.
+int SelectBin( int a1, const char* lkpacName, int a3, int a4, int a5 );
+
 class CollisionStateManager : public BrnSound::Logic::BrnStateManager
 {
 public:
@@ -71,6 +84,15 @@ public:
     virtual void                            ResourcesAreReady();    // (stub -- domain cascade; see .cpp FLAG)
     virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar(); // (stub -- module not homed; see .cpp FLAG)
 
+    // FindInScrapeHistory @ 0x826889E0 (DWARF h:880 -- the NON-const overload). Linear
+    // scan of the 16-slot scrape history; returns the first VALID slot that compares
+    // equal to rScrapeInfo, else nullptr.
+    BrnSound::Logic::Collision::ScrapeInfo* FindInScrapeHistory( const BrnSound::Logic::Collision::ScrapeInfo& rScrapeInfo );
+
+    // PlayCollision @ 0x82704028 (STUB -- collision-audio domain not homed; see .cpp
+    // FLAG). Non-virtual; called only by UpdateParams. Hex-Rays signature is int; kept.
+    int PlayCollision( OutputCollision* lpCollision );
+
 private:
     // FLAG (deferred body -- ~33KB; the WHOLE collision domain): the X360 object is
     // 33408 bytes (0x8280). The collision-audio state -- a SelectionHistory<512>
@@ -88,6 +110,15 @@ private:
     // field meanings. Size is UNVERIFIED on host (the X360 0x8280 is a 32-bit fact);
     // NOT static_asserted.
     u8 maDeferredCollisionState[1]; // placeholder for the un-reconstructed collision-audio members
+
+    // DWARF (BrnCollisionStateManager.h:639). The 16-entry scrape history ring
+    // FindInScrapeHistory scans (X360 offset +0x1E40, stride 48). Modelled with the
+    // COMMITTED ScrapeInfo (BrnCollisionDataStructures.h) -- which carries the mbValid
+    // flag + operator== FindInScrapeHistory needs -- rather than fabricating a second
+    // same-FQN ScrapeInfo. FLAG: the committed ScrapeInfo is not the DWARF's full 48-byte
+    // shape (it defers several fields), so the exact per-slot layout is a semantic-parity
+    // approximation; members are pinned BY NAME, offsets NOT static_asserted on host.
+    BrnSound::Logic::Collision::ScrapeInfo maScrapeHistory[16];
 };
 
 } // namespace Collision

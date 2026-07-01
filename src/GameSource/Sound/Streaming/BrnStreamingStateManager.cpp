@@ -241,6 +241,72 @@ BrnSound::Logic::ResourceRegistrar& StreamingStateManager::GetResourceRegistrar(
     return sUnhomedRegistrar;
 }
 
+// ---------------------------------------------------------------------------
+// StreamingStateManager::PostStreamRequest(const StreamRequest&)  @ 0x826834F0
+//   DWARF (BrnStreamingStateManager.h:255): void PostStreamRequest(const StreamRequest&).
+//   (Hex-Rays `float*(float*,float*)` mislabels `this` as `result`; return is void.)
+//
+// Guard that the 6-deep play-request ring isn't full, append the request at
+// maPlayRequests[muPlayRequestCount], stamp its timestamp from the manager's current
+// time (base CgsStateManager::mfCurrentTime) and its id from the running unique-id
+// counter, then bump both counters. Per-slot stride == sizeof(StreamRequest) (24 B).
+// The X360 6-word straight-line copy is expressed as a struct assignment. Assert
+// message is X360 rodata reproduced VERBATIM (no trailing \n; path/line dropped).
+// ---------------------------------------------------------------------------
+void StreamingStateManager::PostStreamRequest( const StreamRequest& lStreamRequest )
+{
+    CGS_ASSERT( muPlayRequestCount < E_MAX_STREAM_REQUESTS,
+                "muPlayRequestCount < E_MAX_STREAM_REQUESTS" );
+
+    maPlayRequests[muPlayRequestCount] = lStreamRequest;
+
+    maPlayRequests[muPlayRequestCount].mfTimeStamp  = mfCurrentTime;
+    maPlayRequests[muPlayRequestCount].mu32UniqueId = muUniqueId;
+    ++muUniqueId;
+
+    ++muPlayRequestCount;
+}
+
+// ---------------------------------------------------------------------------
+// StreamingStateManager::PostStreamRequestInternal(const StreamRequest&)  @ 0x826836A8
+//   DWARF (BrnStreamingStateManager.h:305): private void (const StreamRequest&).
+//
+// Appends a pending play request to the maPlayRequests ring then bumps the count. The
+// X360 BeginAssert/FireAssert/EndAssert triple is a NON-GATING tripwire (both branches
+// of cmplwi>=6 join at the copy+increment), so it collapses to a single non-gating
+// CGS_ASSERT. The raw 6-word copy is expressed as a struct assignment. Message VERBATIM
+// (no trailing \n).
+// ---------------------------------------------------------------------------
+void StreamingStateManager::PostStreamRequestInternal( const StreamRequest& arRequest )
+{
+    CGS_ASSERT( muPlayRequestCount < E_MAX_STREAM_REQUESTS,
+                "muPlayRequestCount < E_MAX_STREAM_REQUESTS" );
+
+    maPlayRequests[muPlayRequestCount] = arRequest;
+    ++muPlayRequestCount;
+}
+
+// ---------------------------------------------------------------------------
+// StreamingStateManager::RePostStreamRequest(const StreamRequest&)  @ 0x82683750
+//   DWARF (BrnStreamingStateManager.h:347): private void (const StreamRequest&).
+//
+//   if ( muNumRePostRequests >= E_MAX_REQUEST_RE_POSTS ) CGS_ASSERT(false, "...");
+//   maRePostRequests[muNumRePostRequests] = request;   // 24-byte (6 DWORD) copy
+//   ++muNumRePostRequests;
+//
+// Appends a re-post request to the maRePostRequests ring (24-byte stride) then bumps
+// muNumRePostRequests. Assert collapses the BeginAssert/FireAssert/EndAssert triple ->
+// one CGS_ASSERT; message reproduced VERBATIM from FireAssert rodata (no trailing \n).
+// ---------------------------------------------------------------------------
+void StreamingStateManager::RePostStreamRequest( const StreamRequest& request )
+{
+    CGS_ASSERT( muNumRePostRequests < E_MAX_REQUEST_RE_POSTS,
+                "muNumRePostRequests < E_MAX_REQUEST_RE_POSTS" );
+
+    maRePostRequests[muNumRePostRequests] = request;
+    ++muNumRePostRequests;
+}
+
 } // namespace Streaming
 } // namespace Logic
 } // namespace BrnSound

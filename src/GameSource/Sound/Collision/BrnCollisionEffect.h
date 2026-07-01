@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // BrnSound::Logic::BrnEffectObject (committed base, reused BY NAME)
+#include "GameSource/Sound/Module/LogicModule/Brn3DUserSpaceEffectControl.h" // Collision3DControl base (BY NAME)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"           // CgsSound::Logic::Voice (mCrashVoice)
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"                 // Nicotine::DMixIO (GetGain reads the latched dmix handle)
 
@@ -135,6 +136,38 @@ private:
 
     // BrnCollisionEffect.h:163 (DWARF). Size-specific volume/pitch (defaults 1.0/1.0).
     SizeSpecificSettings mSizeSettings;
+};
+
+// =============================================================================
+// BrnSound::Logic::Collision::Collision3DControl
+//   (shares this DWARF source home, BrnCollisionEffect.h:38 -- a DISTINCT class from
+//    the CollisionEffect object above: Collision3DControl is the effect CONTROL.)
+//
+// DWARF (BrnCollisionEffect.h:179):
+//   struct Collision3DControl : public BrnSound::Logic::Brn3DUserSpaceEffectControl
+// (DWARF-authoritative base -- NOT Brn3DEffectControl; the intermediate UserSpace base
+//  owns mpTransform + the four Vector3s the ctor zero-inits.) Collision3DControl adds
+// NO data members of its own per DWARF.
+//
+// This slice bodies three ledger functions (in BrnCollisionEffect.cpp):
+//   Collision3DControl()           @ 0x826E88D0  (ctor -- chains Brn3DUserSpaceEffectControl())
+//   CreateObject(u32)              @ 0x826F80E8  (the RTTI factory hook)
+//   `scalar deleting destructor'   @ 0x826F8168  (empty leaf -- all teardown from the
+//        inherited ~Brn3DUserSpaceEffectControl / ~Brn3DEffectControl chain)
+//
+// FLAG (shape vs full surface): the RTTI GetTypeInfo/GetTypeName/GetStaticTypeInfo
+// surface is DEFERRED (outside this slice); only the inheritance spine, the ctor, the
+// CreateObject factory and the virtual dtor are materialised. X360 byte offsets are
+// NOT static_asserted on the 64-bit host (pointer/vptr widths differ).
+// =============================================================================
+struct Collision3DControl : public BrnSound::Logic::Brn3DUserSpaceEffectControl
+{
+    Collision3DControl();          // @ 0x826E88D0
+    virtual ~Collision3DControl(); // @ 0x826F8168
+
+    // BrnCollisionEffect.h:199 (DWARF) -- the RTTI factory hook (@ 0x826F80E8).
+    // Non-virtual, non-const; returns the EffectControl* base view.
+    static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
 };
 
 } // namespace Collision
