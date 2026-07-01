@@ -179,4 +179,73 @@ void AptActionInterpreter::InitDispatchTable()
     // -- local-variable definition --
     sGlobalTable[0x3C] = &_FunctionAptActionDefineLocal;
     sGlobalTable[0x41] = &_FunctionAptActionDefineLocal2;
+
+    // =======================================================================
+    // WIRED 2026-07-01: the 47 handlers homed by the later interpreter waves
+    // (call/member/variable/timeline/proto/dict families) were never added to
+    // this table -- every one below dispatched to the no-op stub even though
+    // its faithful body existed. Wired per the extracted X360 map (0x82F73068).
+    // Still on the no-op stub (genuinely unbuilt handlers): 0x05 PrevFrame,
+    // 0x28 StopDragMovie, 0x3A Delete, 0x48 LessThan2, 0x55 Enumerate2,
+    // 0x5B CallFuncAndPop, 0x94 With, 0xA3 PushStringDictWord, 0xB0 DictCallFuncPop.
+    // =======================================================================
+
+    // -- run control / timeline --
+    sGlobalTable[0x00] = &_FunctionAptActionReturn;
+    sGlobalTable[0x04] = &_FunctionAptActionNextFrame;
+    sGlobalTable[0x06] = &_FunctionAptActionPlay;
+    sGlobalTable[0x07] = &_FunctionAptActionStop;
+    sGlobalTable[0x81] = &_FunctionAptActionGotoFrame;
+    sGlobalTable[0x8C] = &_FunctionAptActionGotoLabel;
+    sGlobalTable[0x9E] = &_FunctionAptActionCallFrame;
+    sGlobalTable[0x9F] = &_FunctionAptActionGotoFrame2;
+
+    // -- target / sprite --
+    sGlobalTable[0x20] = &_FunctionAptActionSetTarget2;
+    sGlobalTable[0x24] = &_FunctionAptActionCloneSprite;
+    sGlobalTable[0x25] = &_FunctionAptActionRemoveSprite;
+    sGlobalTable[0x27] = &_FunctionAptActionStartDragMovie;
+    sGlobalTable[0x45] = &_FunctionAptActionTargetPath;
+    sGlobalTable[0x8B] = &_FunctionAptActionSetTarget;
+
+    // -- property / member / type --
+    sGlobalTable[0x22] = &_FunctionAptActionGetProperty;
+    sGlobalTable[0x23] = &_FunctionAptActionSetProperty;
+    sGlobalTable[0x2B] = &_FunctionAptActionCastOp;
+    sGlobalTable[0x44] = &_FunctionAptActionTypeOf;
+    sGlobalTable[0x46] = &_FunctionAptActionEnumerate;
+    sGlobalTable[0x49] = &_FunctionAptActionEquals2;
+
+    // -- calls / construction --
+    sGlobalTable[0x3D] = &_FunctionAptActionCallFunction;
+    sGlobalTable[0x40] = &_FunctionAptActionNewObject;
+    sGlobalTable[0x43] = &_FunctionAptActionInitObject;
+    sGlobalTable[0x52] = &_FunctionAptActionCallMethod;
+    sGlobalTable[0x53] = &_FunctionAptActionNewMethod;
+    sGlobalTable[0x5C] = &_FunctionAptActionCallFuncSetVar;
+    sGlobalTable[0x5D] = &_FunctionAptActionCallMethodPop;
+    sGlobalTable[0x5E] = &_FunctionAptActionCallMethodSetVar;
+
+    // -- functions / exception / misc --
+    sGlobalTable[0x33] = &_FunctionAptActionAsciiToChar;
+    sGlobalTable[0x77] = &_FunctionAptActionTraceStart;
+    sGlobalTable[0x83] = &_FunctionAptActionGetUrl;
+    sGlobalTable[0x88] = &_FunctionAptActionDefineDictionary;
+    sGlobalTable[0x8E] = &_FunctionAptActionDefineFunction2;
+    sGlobalTable[0x8F] = &_FunctionAptActionTry;
+    sGlobalTable[0x96] = &_FunctionAptActionPush;
+    sGlobalTable[0x9A] = &_FunctionAptActionGetUrl2;
+    sGlobalTable[0x9B] = &_FunctionAptActionDefineFunction;
+
+    // -- string-dictionary push / fused forms --
+    sGlobalTable[0xA2] = &_FunctionAptActionPushStringDictByte;
+    sGlobalTable[0xA4] = &_FunctionAptActionPushStringGetVar;
+    sGlobalTable[0xA5] = &_FunctionAptActionPushStringGetMember;
+    sGlobalTable[0xA6] = &_FunctionAptActionPushStringSetVar;
+    sGlobalTable[0xA7] = &_FunctionAptActionPushStringSetMember;
+    sGlobalTable[0xAE] = &_FunctionAptActionStringDictByteGetVar;
+    sGlobalTable[0xAF] = &_FunctionAptActionStringDictByteGetMember;
+    sGlobalTable[0xB1] = &_FunctionAptActionDictCallFuncSetVar;
+    sGlobalTable[0xB2] = &_FunctionAptActionDictCallMethodPop;
+    sGlobalTable[0xB3] = &_FunctionAptActionDictCallMethodSetVar;
 }
