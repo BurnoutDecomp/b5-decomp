@@ -57,6 +57,8 @@ AptFrameStack* AptScriptFunctionBase::spFrameStack     = 0;   // off_8324E3DC
 AptValue**     AptScriptFunctionBase::spRegisters      = 0;   // off_8324E3D0
 int32_t        AptScriptFunctionBase::snRegisterCount  = 0;   // dword_8324E3D4 (live high-water)
 int32_t        AptScriptFunctionBase::snRegisterCapacity = 0; // dword_8324E3D8 (allocated slots)
+AptValue**     AptScriptFunctionBase::spRegBlockCurrentFrameBase  = 0;   // register-block frame base
+int32_t        AptScriptFunctionBase::snRegBlockCurrentFrameCount = 0;   // register-block frame slot count
 
 // ===========================================================================
 // Construction / destruction
@@ -279,6 +281,27 @@ void AptScriptFunctionBase::SetRegisterValue(int32_t nRegister, AptValue* pValue
 AptValue* AptScriptFunctionBase::GetRegisterValue(int32_t nRegister)
 {
     return spRegisters[nRegister];
+}
+
+// PopStaticData (PS3 @0x7E0AB8) -- pop the current register-block frame back to
+// pSavedBase. DECOMPILED from the PS3 asm: r3 (the console method's `this`) IS the
+// saved base (the arg is unused); each slot's value is Released (vtable slot 1) and
+// reset to gpUndefinedValue; then the base moves to pSavedBase and the count spans
+// [pSavedBase, oldBase). pSavedBase is the saved arg-heap pointer the interpreter
+// captured before the run (spRegBlockCurrentFrameBase tracks gAptParseArgHeapPtr).
+// The console counts 4-byte slots ((old-new)>>2); typed AptValue** subtraction gives
+// the element count directly (x64-correct: 8-byte slots).
+void AptScriptFunctionBase::PopStaticData(void* pSavedBase)
+{
+    AptValue** const pOldBase = spRegBlockCurrentFrameBase;
+    for (int32_t i = 0; i < snRegBlockCurrentFrameCount; ++i)
+    {
+        AptValue* const pValue = pOldBase[i];
+        pOldBase[i] = gpUndefinedValue;
+        pValue->Release();
+    }
+    spRegBlockCurrentFrameBase  = static_cast<AptValue**>(pSavedBase);
+    snRegBlockCurrentFrameCount = static_cast<int32_t>(pOldBase - static_cast<AptValue**>(pSavedBase));
 }
 
 // ===========================================================================
