@@ -32,16 +32,6 @@
 
 #include <new>   // placement new (the scratch AptPseudoDisplayList over pool memory)
 
-// The per-tick step-probe sink (host-implemented; weak no-op default below so this TU links even
-// when no host defines it). Names each early tick deref + its pointer so a run isolates the AV.
-#if defined(_MSC_VER)
-extern "C" void CgsApt_TickProbe(const char* pcStep, const void* p);
-#pragma comment(linker, "/alternatename:CgsApt_TickProbe=CgsApt_TickProbeDefault")
-extern "C" void CgsApt_TickProbeDefault(const char*, const void*) {}
-#else
-extern "C" void CgsApt_TickProbe(const char* pcStep, const void* p);
-#endif
-
 // FLAG (un-homed AS/runtime singletons -- declared verbatim by their console name
 // equivalents; bodies/definitions land with their owning TUs):
 //   gAptActionInterpreter (console &dword_8324E760) -- the AS interpreter context
@@ -76,34 +66,20 @@ void* AptDisplayList_mergeState(AptDisplayList* pList, AptPseudoDisplayList* pSc
                                 void* pProperties, char bForward);
 
 // ---------------------------------------------------------------------------
-// AptCIH_GetClipMovie -- the AptMovie timeline embedded at +0x10 inside a
-// sprite/animation AptCharacter subclass. The X360 reaches it as
-// `mpRenderItem->mpCharacter + 0x10`; the project models that un-homed subclass
-// field with the same FLAGged reinterpret AptCharacterAnimation.cpp uses (the
-// AptCharacter base header stops at +0x10). Centralised here so the three play-head
-// methods name it once.
+// AptCIH_GetClipMovie -- the AptMovie timeline embedded inside a sprite/animation
+// AptCharacter subclass. The X360 reaches it as `mpRenderItem->mpCharacter + 0x10`;
+// the project models that un-homed subclass field with the same FLAGged reinterpret
+// AptCharacterAnimation.cpp uses (the AptCharacter base header stops before it).
+// Centralised here so the three play-head methods name it once.
 // FLAG (un-homed sprite/animation AptCharacter subclass): the embedded AptMovie is a
-// fixed +0x10 member the AptCharacter base type does not yet model.
-// x64 8-byte fork: the embedded AptMovie/AptCharacterAnimation sits at character + this offset.
-// Console (4-byte) = 0x10; native-8 widens the AptCharacter base header so it lands at 0x20. The host
-// sets gAptCharMovieOffset to the right value for the loaded .apt (default 0x10). Declared in AptCIH.h.
-unsigned int gAptCharMovieOffset = 0x10u;
-
-// x64 8-byte fork: the AptMovie TIMELINE (frame table + place/remove command records) is in the
-// native-8 serialised format, which FixupInPlace SKIPPED relocating (the case-5/9 movie recursion) and
-// whose AptMovie/AptMovieFrame struct member offsets are console-4-byte. So doFrameControls /
-// queueFrameActions would read un-relocated offsets as pointers -> AV. The host sets gAptSkipTimeline=1
-// for the native-8 path; AptCIH::tick then SKIPS those two timeline calls (the play-head still advances,
-// the display list stays empty) and logs it -- naming the un-widened timeline as the next layout to
-// recover. 0 = run the timeline faithfully (the 4-byte path).
-unsigned int gAptSkipTimeline = 0u;
-
+// fixed member the AptCharacter base type does not yet model.
+// FLAG (x64 fork): the console reaches it at char+0x10; the 8-byte GUIAPT64 "1:7:8"
+// layout widens the AptCharacter header so it lands at char+0x20 (KU_AptEmbeddedMovieOff,
+// AptCIH.h). We ship only the 8-byte format, so this is the single native-64 offset.
 static AptMovie* AptCIH_GetClipMovie(const AptCharacterSpriteInstBase* pInst)
 {
-    if (pInst->mpRenderItem == nullptr || pInst->mpRenderItem->mpCharacter == nullptr)
-        return nullptr;   // NULL-SAFE (x64 bring-up): no render item / character -> no clip movie
     AptCharacter* pCharacter = pInst->mpRenderItem->mpCharacter;
-    return reinterpret_cast<AptMovie*>(reinterpret_cast<char*>(pCharacter) + gAptCharMovieOffset);
+    return reinterpret_cast<AptMovie*>(reinterpret_cast<char*>(pCharacter) + KU_AptEmbeddedMovieOff);
 }
 
 // FLAG (homed elsewhere): the optional pre-destroy notify hook (console
@@ -417,109 +393,73 @@ int AptCIH::jumpToFrame(int nFrame)
 }
 
 // tick @0x82B0BED8 -- advance the movie-clip node one frame.
+//
+// FLAG (x64 bring-up -- deferred, not gated): the console tick dereferences the char
+// inst (a1+32), its render item (v6[1]), the render item's character and the embedded
+// clip movie (char + embed) WITHOUT null guards -- everything is always live in the
+// shipped game. On our partial bring-up the render-tree / AS scope is not fully stood up
+// yet, so this faithful body is NOT ticked at boot: the host driver holds it off
+// (BrnAptRuntimeBringUp AptRuntimeUpdate: lbTickReady=false) until the converter delivers
+// a uniformly-64-bit bundle. The body below is the single faithful X360 decompile.
 int AptCIH::tick()
 {
     // Only a dirtied node ticks (mFlagsA bit25).
     if ((mFlagsA & 0x02000000u) == 0)
         return 0;
 
-    // NULL-SAFE (x64 bring-up) + PROBE: tick's early reads (the char inst, its render item, the clip
-    // movie via the render item's character) are unguarded in the console (everything is always live);
-    // on our partial bring-up they can be null. Probe + guard each so the run NAMES the faulting deref
-    // and tick early-returns (advances nothing) rather than AV'ing.
-    CgsApt_TickProbe("tick: charInst", mpCharacterInst);
-    if (mpCharacterInst == nullptr)
-        return 0;
-
     AptCharacterSpriteInstBase* pInst =
-        static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
+        static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);   // v6 = *(a1+32)
 
-    // Only sprite(5)/animation(9) clips have a play-head.
+    // Only sprite(5)/animation(9) clips have a play-head (v6[2] >> 26 == 5 or 9).
     const uint32_t nType = pInst->GetTypeTag();
-    CgsApt_TickProbe("tick: typeTag", reinterpret_cast<const void*>(static_cast<uintptr_t>(nType)));
     if (nType != 5 && nType != 9)
-        return (mFlagsA >> 25) & 1u;
+        return (mFlagsA >> 25) & 1u;   // LABEL_44
 
-    // The render item (Manager_CreateItem made it) + its character + the clip movie (char +
-    // gAptCharMovieOffset). Probe + guard each: a null render item / character means no movie to tick.
-    CgsApt_TickProbe("tick: renderItem", pInst->mpRenderItem);
-    if (pInst->mpRenderItem == nullptr)
-        return 0;
-    CgsApt_TickProbe("tick: renderItem->mpCharacter", pInst->mpRenderItem->mpCharacter);
-    if (pInst->mpRenderItem->mpCharacter == nullptr)
-        return 0;
-    {
-        AptMovie* const pProbeMovie = AptCIH_GetClipMovie(pInst);
-        CgsApt_TickProbe("tick: clipMovie", pProbeMovie);
-        if (pProbeMovie == nullptr)
-            return 0;
-        const int nProbeFrames = pProbeMovie->mnFrameCount;
-        CgsApt_TickProbe("tick: frameCount",
-                         reinterpret_cast<const void*>(static_cast<intptr_t>(nProbeFrames)));
-        // A sane frame count is the green light to proceed; an insane one means the render-item ->
-        // character -> movie chain does not reach the fixed-up AptCharacterAnimation -> bail (no AV).
-        if (nProbeFrames <= 0 || nProbeFrames > 100000)
-            return 0;
-    }
+    const uint32_t nFlags = pInst->mnClipActionFlags;   // v11 = v6[5]
+    pInst->mnLastActionFrame = 0;                        // v6[8] = 0
 
-    const uint32_t nFlags = pInst->mnClipActionFlags;
-    pInst->mnLastActionFrame = 0;
-
-    const bool bNeedsAction = ((nFlags >> 6) & 1u) != 0;   // state bit6 (0x40)
+    const bool bNeedsAction = ((nFlags >> 6) & 1u) != 0;   // v12 = (v11 >> 6) & 1  (state bit6 0x40)
     const bool bFreshPlaced = (nFlags & 0x80u) != 0;       // state bit7 (0x80)
 
+    AptMovie* const pClipMovie = AptCIH_GetClipMovie(pInst);   // *(v6[1]+4) + embed
+
     // ---- (1) auto-advance the play-head -----------------------------------
-    // A clip steps the play-head this frame UNLESS it has neither the pending-action
-    // bit nor (auto-play + an open recorder gate): a non-fresh stopped clip and a
-    // fresh clip in shut-gate deterministic replay both hold their frame.
-    bool bSkipStep;
-    if (!bNeedsAction)
-        bSkipStep = !(bFreshPlaced && gbAptRecorderGate != 0);
-    else
-        bSkipStep = false;
-
-    // NULL-SAFE (x64 bring-up): the play-head logic + doFrameControls all reach the clip's movie via
-    // AptCIH_GetClipMovie (char + gAptCharMovieOffset). If there is no render item / character it is
-    // null -- skip the whole frame-control section + jump to the enterFrame stage rather than AV.
-    AptMovie* const pClipMovie = AptCIH_GetClipMovie(pInst);
-    if (pClipMovie == nullptr)
-        goto label_27;
-
-    if (!bSkipStep)
+    // The play-head steps this frame when the clip needs an action (v12), or it is
+    // auto-playing (bit7) with an open recorder gate. A non-fresh stopped clip and a
+    // fresh clip in shut-gate deterministic replay both hold their frame (LABEL_18/19).
+    const bool bStep = bNeedsAction || (bFreshPlaced && gbAptRecorderGate != 0);
+    if (bStep)
     {
-        AptRenderItem* pRenderItem = pInst->mpRenderItem;
-        // A stopped render item (mFlags bit 0x08000000; console renderItem+0x18 bit27)
-        // holds frame 0; else step to the next frame.
-        if (pRenderItem != nullptr && ((pRenderItem->mFlags >> 27) & 1u) != 0)
+        AptRenderItem* pRenderItem = pInst->mpRenderItem;   // v14 = v6[1]
+        // A stopped render item (mFlags bit 0x08000000; console *(v14+24) bit27) holds
+        // frame 0; else step to the next frame.
+        if (((pRenderItem->mFlags >> 27) & 1u) != 0)
             pInst->mnGotoFrame = 0;
         else
             ++pInst->mnGotoFrame;
 
-        const int nFrame = pInst->mnGotoFrame;
+        const int nFrame = pInst->mnGotoFrame;             // v15 = v6[4]
         const int nFrameCount = pClipMovie->mnFrameCount;
         if (nFrame == 1 && nFrameCount == 1)
         {
             // A single-frame clip never plays past frame 0; skip both doFrameControls
-            // and queueFrameActions, jumping to the enterFrame stage (loc_82B0C040).
+            // and queueFrameActions, jumping to the enterFrame stage (LABEL_27).
             pInst->mnGotoFrame = 0;
             goto label_27;
         }
         if (nFrame == nFrameCount)
         {
-            // Wrapped past the end: loop back to the start, then skip to enterFrame
-            // (loc_82B0C040) -- NOT through queueFrameActions.
+            // Wrapped past the end: loop back to the start, then skip to the enterFrame
+            // stage (LABEL_27) -- NOT through queueFrameActions.
             jumpToFrame(0);
             goto label_27;
         }
         // Normal frame: fall through to the shared doFrameControls (LABEL_18/19).
     }
 
-    // LABEL_18/19: run this frame's place/remove commands when the clip has a pending action, or it is
-    // auto-playing with an open recorder gate. SKIPPED on the native-8 path (gAptSkipTimeline): the
-    // timeline's frame table + command records were not relocated by FixupInPlace (the skipped case-5/9
-    // recursion) and use console struct offsets, so reading them would AV. FLAG: this is the un-widened
-    // 8-byte TIMELINE -- the next record layout to recover (then placement runs + populates the list).
-    if ((bNeedsAction || (bFreshPlaced && gbAptRecorderGate != 0)) && gAptSkipTimeline == 0u)
+    // LABEL_18/19: run this frame's place/remove commands when the clip has a pending
+    // action (v12), or it is auto-playing (bit7) with an open recorder gate.
+    if (bNeedsAction || (bFreshPlaced && gbAptRecorderGate != 0))
     {
         pClipMovie->doFrameControls(&pInst->mDisplayList, this, pInst->mnGotoFrame);
     }
@@ -528,46 +468,35 @@ int AptCIH::tick()
     // Normal fall-through ONLY (queueFrameActions @0x82B0C034). The single-frame and
     // end-wrap paths jump PAST this block to the enterFrame stage (label_27 below).
     {
-        const uint32_t nFlags2 = pInst->mnClipActionFlags;
-        if ((((nFlags2 & 0x40u) != 0) || (((nFlags2 & 0x80u) != 0) && gbAptRecorderGate != 0)) &&
-            gAptSkipTimeline == 0u)   // SKIP on native-8 (un-relocated timeline -> would AV)
+        const uint32_t nFlags2 = pInst->mnClipActionFlags;   // v16 = v6[5]
+        if (((nFlags2 & 0x40u) != 0) || (((nFlags2 & 0x80u) != 0) && gbAptRecorderGate != 0))
         {
-            // pClipMovie is non-null here (the goto label_27 above bailed on null).
             // Negate the stamped frame while the actions are queued (the X360's
             // running-frame marker), then restore it.
-            pInst->mnLastActionFrame = -pInst->mnGotoFrame;
+            pInst->mnLastActionFrame = -pInst->mnGotoFrame;   // v6[8] = -v6[4]
             pClipMovie->queueFrameActions(this, pInst->mnGotoFrame);
-            pInst->mnLastActionFrame = pInst->mnGotoFrame;
+            pInst->mnLastActionFrame = pInst->mnGotoFrame;    // v6[8] = v6[4]
         }
     }
 
 label_27:
     // ---- (3)+(4) clip events (enterFrame / construct-load) ----------------
-    // These reach the AS property hash (HasEventMember walks the __proto__ chain) + queue AS clip
-    // events. On the native-8 bring-up the __proto__ wiring is skipped (gpAptGlobalFallback null) and
-    // the AS interpreter scope is partial, so they are SKIPPED on the skip-timeline path (still clearing
-    // the freshly-placed bit so the state machine progresses). FLAG: clip events resume with the AS
-    // interpreter scope + class registry.
-    if (gAptSkipTimeline == 0u)
+    // (3) enterFrame clip event: a non-fresh clip (or the 0x24 custom-control family)
+    // with an onEnterFrame handler (clip-event mask bit 0x200 or a __proto__ event
+    // member) queues its enterFrame handlers.
+    if ((((pInst->mnClipActionFlags & 0x80u) == 0) ||
+         ((pInst->mTypeFlags & 0xFC000000u) == 0x24000000u)) &&
+        (((pInst->mnClipActionFlags & 0x200u) != 0) || HasEventMember(2)))
     {
-        // (3) enterFrame clip event: a non-fresh clip (or 0x24 custom-control family) with an
-        // onEnterFrame handler (clip-event mask bit 0x200 or a __proto__ event member).
-        if ((((pInst->mnClipActionFlags & 0x80u) == 0) ||
-             ((pInst->mTypeFlags & 0xFC000000u) == 0x24000000u)) &&
-            (((pInst->mnClipActionFlags & 0x200u) != 0) || HasEventMember(2)))
-        {
-            AptCIH_queueClipEvents(this, 2, gnAptActionFrameId, 1);
-        }
-        // (4) construct/load clip event on first placement.
-        if ((pInst->mnClipActionFlags & 0x80u) != 0)
-        {
-            if (((pInst->mnClipActionFlags & 0x100u) != 0) || HasEventMember(1))
-                AptCIH_queueClipEvents(this, 1, gnAptActionFrameId, 1);
-        }
+        AptCIH_queueClipEvents(this, 2, gnAptActionFrameId, 1);
     }
-    // Always clear the freshly-placed bit so the clip's state machine progresses (faithful on both paths).
+    // (4) construct/load clip event on first placement; then clear the freshly-placed bit.
     if ((pInst->mnClipActionFlags & 0x80u) != 0)
+    {
+        if (((pInst->mnClipActionFlags & 0x100u) != 0) || HasEventMember(1))
+            AptCIH_queueClipEvents(this, 1, gnAptActionFrameId, 1);
         pInst->mnClipActionFlags &= ~0x80u;
+    }
 
     // ---- (5) recurse the child display list -------------------------------
     const int nChildTick = pInst->mDisplayList.tick(-1, 0);
