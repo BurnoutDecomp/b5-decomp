@@ -134,6 +134,31 @@ namespace Streaming
         , mu104(0)
     {
     }
+
+    // ---------------------------------------------------------------------------
+    // StreamingState::~StreamingState  @ 0x826C9B28  (scalar deleting destructor)
+    //
+    //   stw  off_820AE1F4, 0(this)                 ; install StreamingState's own vtable
+    //   bl   CgsSound::Logic::State::DestroyEffects ; (this in r3) tear down attached effects
+    //   stw  off_820AA820, 0(this)                  ; re-install the MemBase base vtable
+    //   if (flags & 1)                              ; deleting flavour
+    //       <sound allocator>.Free(this)            ; via off_82FFB954, vtable slot +0x14
+    //   return this
+    //
+    // Mirrors the committed sibling BrnSound::Logic::GlobalState scalar deleting
+    // destructor (BrnGlobalState.cpp @ 0x826D2250): the two vtable installs and the
+    // conditional allocator-routed free (off_82FFB954, vtable slot +0x14) are MSVC's
+    // compiler-synthesised deleting-destructor thunk, re-emitted from this virtual
+    // destructor + operator delete -- NOT hand-written. The single observable
+    // source-level side effect is the DestroyEffects() call on the State base, reused
+    // BY NAME. State::DestroyEffects() body is un-homed (a separate sound-logic recon
+    // slice, recovered call target CgsSound::Logic::State::DestroyEffects @ the
+    // 0x826C9B50 bl); declaration-only in CgsState.h -- no body is fabricated here.
+    // ---------------------------------------------------------------------------
+    StreamingState::~StreamingState()
+    {
+        DestroyEffects();
+    }
 } // namespace Streaming
 } // namespace Logic
 

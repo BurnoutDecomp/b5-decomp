@@ -109,6 +109,14 @@ struct State : public CgsSound::MemBase
     // CgsState.h:245 @ 0x826916D8. True when apv is this state's attachment.
     virtual bool IsAttachedToThis(void* apvAttachment);
 
+    // CgsSound::Logic::State::DestroyEffects -- tears down the state's attached
+    // effect objects. Called by the State-derived scalar deleting destructors
+    // (X360 `bl ...DestroyEffects`, e.g. StreamingState @ 0x826C9B50,
+    // GlobalState @ 0x826D2278). Body is un-homed (a separate sound-logic recon
+    // slice); declaration-only here so the destructors can call it BY NAME. Do NOT
+    // body here.
+    void DestroyEffects();
+
     // CgsState.h:363 (DWARF) @ 0x8268DF08. Register a per-class RTTI descriptor into
     // State's static ClassTypeInfo<State> array. Scans for the first empty slot
     // (cap KU_SIZEOF_CLASS_ARRAY == 16); only asserts "Too Many Class registations"
@@ -175,7 +183,15 @@ namespace Streaming
     struct StreamingState : public CgsSound::Logic::State
     {
         StreamingState();
-        virtual ~StreamingState() {}
+
+        // @ 0x826C9B28 -- scalar deleting destructor. Installs StreamingState's own
+        // vtable (off_820AE1F4), calls State::DestroyEffects() to tear down attached
+        // effects, re-installs the MemBase base vtable (off_820AA820), and (deleting
+        // flavour) routes the storage back through the sound allocator. Observable
+        // body = the DestroyEffects() call; the vtable installs + conditional
+        // allocator free are the compiler-synthesised deleting-destructor parts.
+        // Bodied out-of-line in CgsState.cpp (was an inline no-op).
+        virtual ~StreamingState();
 
         // Derived members at the observed X360 offsets (+84..). Modelled by name.
         s32 mi84;   // +84   seeded 0

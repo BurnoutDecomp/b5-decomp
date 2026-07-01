@@ -33,6 +33,17 @@ namespace CgsSound
 namespace Logic
 {
 
+// SHARED minimal engine-effect types (ClassTypeInfo + EffectBase). These are also
+// declared by the sibling BrnEffectControl.h; both were independent minimal homes of
+// the same un-homed CgsSound::Logic engine types and were never co-included in one TU
+// until TrafficEngine (BrnEffectObject base) landed alongside Traffic3DControl
+// (BrnEffectControl base). To let the two headers coexist without an ODR clash, both
+// gate these definitions on the SAME guard macro -- whichever header is included first
+// defines them; the second skips. BrnEffectObject.h's EffectBase is a superset of
+// BrnEffectControl.h's (adds miObjectId/GetObjectId), so it satisfies both consumers.
+#ifndef CGS_SOUND_LOGIC_EFFECT_ENGINE_TYPES_DEFINED
+#define CGS_SOUND_LOGIC_EFFECT_ENGINE_TYPES_DEFINED
+
 // Per-class RTTI descriptor. CgsEffectBase.h:313 (DWARF). Templated on the leaf
 // class; only the shape (id/name/base/factory) is load-bearing here.
 // FLAG: minimal — the owning CgsEffectBase home is not yet reconstructed; this
@@ -102,6 +113,8 @@ struct EffectBase
     EDetachState meDetachState;
     void*        mpLogicModule; // CgsSound::Logic::Module* (opaque here)
 };
+
+#endif // CGS_SOUND_LOGIC_EFFECT_ENGINE_TYPES_DEFINED
 
 // CgsEffectBase.h:772 (DWARF). EffectObject : public EffectBase. Carries the
 // per-class RTTI hook used by BrnEffectObject's GetTypeInfo/CreateObject.

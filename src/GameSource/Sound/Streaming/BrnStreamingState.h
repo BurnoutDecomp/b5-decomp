@@ -58,7 +58,11 @@ struct StreamingState
     // guard (`lbz r11, 0x48(state)`).
     bool IsAttached() const { return mbAttached; }
 
-    StreamingRequest& GetRequest() { return mRequest; }
+    // StreamingState::Get  @ 0x82683A00 (asm/DWARF: "Get", called by
+    // StreamingStateManager::GetFreeState). Asserts IsAttached() (non-gating
+    // CGS_ASSERT tripwire) then returns the embedded Request at +0x54.
+    // Out-of-line body: BrnStreamingState.cpp.
+    StreamingRequest& GetRequest();
 
     // -- FLAGGED layout (offsets are X360 facts; leading-span types DEFERRED) --
     u8               maLeading[0x48];   // +0x00..0x47 (opaque: voice/content/load state)
