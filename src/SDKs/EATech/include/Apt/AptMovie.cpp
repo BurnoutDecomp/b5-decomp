@@ -574,6 +574,47 @@ AptMovie* AptMovie::queueFrameActions(void* pCIH, int nFrame)
     return this;
 }
 
+// ---------------------------------------------------------------------------
+// runFrameActions @PS3 0x820FA4 -- run frame nFrame's tag-1 ACTION commands
+// IMMEDIATELY on the VM singleton (the CallFrame opcode's synchronous sibling of
+// queueFrameActions): for each action command, push a fresh register-block window
+// (the console's PrepareForExecution is a pure thunk to PushStaticData), runStream
+// the command's action stream with pCIH's root-animation character-inst as the run
+// scope (GetRootAnimation()[8] on the console), then pop the window back
+// (CleanupAfterExecution). The console re-reads the frame record each iteration
+// (the stream may mutate the timeline); reproduced. Returns `this` (the console's
+// incidental r3; the CallFrame caller ignores it).
+// ---------------------------------------------------------------------------
+const AptMovie* AptMovie::runFrameActions(AptCIH* pCIH, int nFrame) const
+{
+    for (int32_t i = 0; ; ++i)
+    {
+        // Re-read the frame record every iteration (console: reloads *(this+4)+8*n).
+        const AptMovieFrame& lFrame = mpFrames[nFrame];
+        if (i >= lFrame.mnCommandCount)
+            break;
+
+        void* pCmd = lFrame.mpCommands[i];
+        if (CmdI32(pCmd, 0x00) != 1)
+            continue;                              // only tag-1 ACTION commands run
+
+        // PrepareForExecution(&gAptActionInterpreter, &setup) == PushStaticData.
+        void* pSavedBase = AptScriptFunctionBase::PushStaticData();
+
+        AptCharacterInst* pInst = nullptr;
+        if (pCIH)
+            pInst = pCIH->GetRootAnimation()->GetCharacterInst();   // console [8] on the root
+
+        // The action stream pointer: console cmd[1] (+4); native-8 record slot +0x08
+        // (relocated live by resolve64 -- same slot queueFrameActions reads).
+        gAptActionInterpreter.runStream(
+            static_cast<const unsigned char*>(CmdPtr(pCmd, 0x08)), pCIH, -1, pInst);
+
+        gAptActionInterpreter.CleanupAfterExecution(pSavedBase);
+    }
+    return this;
+}
+
 // ===========================================================================
 // resolve @ 0x82AF80B0 -- relocate the (just-loaded) timeline against the load base
 // nBase: allocate the label hash, add the base to every file-relative pointer slot

@@ -240,7 +240,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptLoader_StartAsyncLoad is HOMED in BrnAptRuntimeBringUp.cpp (the platform stream hook: it
     // synchronously content-loads the import bundle + drives AptCompleteAnimationAsyncLoad). The
     // FLAG link-stub that used to live here is removed so the strong host definition is the only one.
-    void AptMovie_runFrameActions(void* pFrameActionList) {}   // FLAG link-stub
+    // AptMovie_runFrameActions RETIRED (2026-07-01): homed as the real const member
+    // AptMovie::runFrameActions(AptCIH*, int) (AptMovie.cpp, PS3 @0x820FA4 -- the invented
+    // void* shim shape was wrong); the CallFrame handler calls it on the clip's embedded movie.
     // AptObject_SetImplementedObjects RETIRED (2026-07-01): the real member
     // AptObject::SetImplementedObjects (AptObject.cpp) is called directly; the {} stub dropped it.
     // AptScriptFunctionBase_InitializeStaticData RETIRED (2026-07-01): the real static member

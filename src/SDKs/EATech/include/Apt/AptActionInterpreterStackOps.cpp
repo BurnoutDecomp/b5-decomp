@@ -29,8 +29,10 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"    // AptString::Create / GetInternalString
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"  // gpAptOperandStackPool (off_8324D808)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC (dictionary-string temp)
-#include "SDKs/EATech/include/Apt/AptCIH.h"                // AptCIH : AptValueGC (mpCIH -> AptValue* upcast)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                // AptCIH : AptValueGC (mpCIH -> AptValue* upcast) + KU_AptEmbeddedMovieOff
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"          // GetCharacterInst
+#include "SDKs/EATech/include/Apt/AptRenderItem.h"             // mpRenderItem->mpCharacter (the clip's embedded movie chain)
+#include "SDKs/EATech/include/Apt/AptMovie.h"                  // AptMovie::runFrameActions (the CallFrame driver)
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h" // mnClipActionFlags
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h" // SetRegisterValue / InitializeStaticData
 #include "SDKs/EATech/include/Apt/AptObject.h"             // AptObject (generic/Date Object + Get/SetImplementedObjects)
@@ -462,9 +464,8 @@ extern int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel);
 // AptCIH_SetDirtyState retired: the real member AptCIH::SetDirtyState (AptCIH.cpp) is
 // used directly at the call site (the free-function {} stub silently dropped the dirty latch).
 
-// FLAG (the AptMovie timeline VM driver -- run a frame's queued ActionScript;
-// AptMovie::runFrameActions follow-on): drive the bound clip's frame actions.
-extern void AptMovie_runFrameActions(void* pFrameActionList);
+// AptMovie::runFrameActions is now the real const member (AptMovie.cpp, @PS3 0x820FA4);
+// the CallFrame handler below calls it on the bound clip's embedded movie directly.
 
 // FLAG (console Burnout_X360_Artist_01e3_0 -- the inlined stack-collapse primitive):
 // pop nCount operands off the operand stack, Releasing each.
@@ -1075,7 +1076,17 @@ void AptActionInterpreter::_FunctionAptActionCallFrame(AptActionInterpreter* pIn
     pInterp->stackPop();                                   // console AptValue>::Pop
 
     if (nFrame != -1)
-        AptMovie_runFrameActions(pContext->mpCIH->GetCharacterInst());  // FLAG: AptMovie follow-on
+    {
+        // Console: runFrameActions(<node->charInst->renderItem->character + movie body>,
+        // node, nFrame) -- the bound clip's embedded AptMovie (the same char+movie-off
+        // chain AptCIH_GetClipMovie models), run against the node.
+        AptCIH* const pNode = pContext->mpCIH;
+        AptCharacter* const pCharacter =
+            pNode->GetCharacterInst()->mpRenderItem->mpCharacter;
+        const AptMovie* const pMovie = reinterpret_cast<const AptMovie*>(
+            reinterpret_cast<const char*>(pCharacter) + KU_AptEmbeddedMovieOff);
+        pMovie->runFrameActions(pNode, nFrame);
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -77,6 +77,12 @@ struct AptCIH : public AptValueGC
     const EAStringC& GetInstanceName() const { return mInstanceName; }   // @0x7DF0A8
     void SetInstanceName(const EAStringC& strName) { mInstanceName = strName; }  // @0x7F56B4
 
+    // GetRootAnimation @PS3 0x820F3C -- the nearest enclosing ANIMATION node: the
+    // empty CIHNone placeholder resolves to the level-0 root (AptGetAnimationAtLevel(0));
+    // otherwise walk mpDisplayListParent until the node's character-inst type tag is
+    // 9 (animation) or 15. Body in AptCIH.cpp.
+    AptCIH* GetRootAnimation();
+
     // ---- character instance / delegated visual reads ----------------------
     AptCharacterInst* GetCharacterInst() const { return mpCharacterInst; }  // @0x7DF174
     int16_t GetDepth() const;   // @0x7EA024 (through the char inst's render item)
