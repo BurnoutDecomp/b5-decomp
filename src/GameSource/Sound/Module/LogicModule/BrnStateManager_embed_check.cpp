@@ -1,7 +1,7 @@
 // Tiny embed check: exercise the BrnStateManager RTTI surface and the bodied
-// GetTypeName. BrnStateManager still carries un-bodied pure virtuals
-// (IResourceRequester), so it is exercised through a reference/pointer rather
-// than instantiated. Not part of the shipped TU.
+// GetTypeName. BrnStateManager is concrete (all IResourceRequester overrides are
+// bodied); exercised through a reference/pointer to avoid pulling in a real
+// StateManager construction context. Not part of the shipped TU.
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"
 
 namespace

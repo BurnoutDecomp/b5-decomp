@@ -9,6 +9,41 @@
 
 namespace CgsLanguage
 {
+    // X360 0x827DF9C8 CgsLanguage::LanguageManager::LanguageManager.
+    //
+    // Faithful decompile of the member-wise init the ctor actually performs: it does NOT
+    // zero-initialise the whole object (meLanguage / mpcDefaultFontName / mpResource / the
+    // allocator+format-string pointers / the metric flag are left untouched -- populated later by
+    // Construct(), not yet reconstructed), it only:
+    //   1. Seeds every mStrings hash bin's BaseLinkedList::miCount to the uninitialised sentinel
+    //      (0x7FFFFFFF) -- the mpFirst/mpLast halves of each bin are left at whatever the compiler's
+    //      implicit member-wise construction already put there, matching the asm (only miCount is
+    //      explicitly stored in this loop).
+    //   2. Seeds mDynamicStringElements: miNumNodes = 1024, then InternalInit's its free sublist over
+    //      the embedded node pool (free list owns every node) and its live sublist empty.
+    //   3. Repeats step 2 for mDynamicStringPointerElements.
+    //   4. Stamps mDebugComponent's vtable pointer (the CgsDev::DebugComponent base ctor folded/
+    //      inlined into this one on the X360 build).
+    LanguageManager::LanguageManager()
+    {
+        // mStrings' 13 bins are each a BaseLinkedList; the X360 explicitly pokes every bin's miCount
+        // to the uninitialised sentinel (0x7FFFFFFF) because on that build the manager is placed into
+        // raw/uninitialised memory. Here mStrings is a plain by-value member, so the implicit
+        // member-wise construction already default-constructs each Bin via
+        // BaseLinkedList::BaseLinkedList() -- which sets mpFirst=mpLast=0, miCount=sentinel -- the
+        // exact state the X360 loop stamps. No explicit action is needed for mStrings.
+
+        // mDynamicStringElements / mDynamicStringPointerElements: seed miNumNodes=1024, then
+        // InternalInit the free sublist over the embedded node pool (free list owns every node) and
+        // the live sublist empty. Matches the X360's two back-to-back InternalInit call pairs.
+        mDynamicStringElements.Construct();
+        mDynamicStringPointerElements.Construct();
+
+        // mDebugComponent's vtable pointer is stamped by its own (CgsDev::DebugComponent-derived)
+        // default constructor as part of this object's member-wise construction -- reproducing the
+        // X360's inlined base-class vtable store with no explicit action needed here.
+    }
+
     bool LanguageManager::IsUsingMetricUnits() const
     {
         return false;
@@ -77,5 +112,17 @@ namespace CgsLanguage
     const u8* LanguageManager::FindStringByHash(unsigned int /*luHash*/) const
     {
         return 0;
+    }
+
+    // X360 0x824434C0 CgsLanguage::LanguageManager::GetDefaultFont.
+    //
+    // Faithful decompile: assert the loaded default font name is non-null (mpcDefaultFontName,
+    // set up by PrepareDefaultFont() during Construct(), not yet reconstructed), then return it --
+    // the X360 returns the pointer either way, even after a failed assert (asserts are
+    // non-fatal/continue in this codebase).
+    const char* LanguageManager::GetDefaultFont() const
+    {
+        CGS_ASSERT(mpcDefaultFontName != 0, "Invalid Default Font Name in Language Manager");
+        return mpcDefaultFontName;
     }
 }

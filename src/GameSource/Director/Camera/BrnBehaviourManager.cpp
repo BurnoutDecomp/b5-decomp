@@ -11,9 +11,13 @@
 // the spine; DecFIGS DWARF gave the declaration shape; the Feb-2007 partial was style
 // only (it has no source for this TU).
 //
-// SCOPE OF THIS WAVE (postmortem dossier = exactly 10 functions):
+// SCOPE (re-verified wave; the ledger's per-TU function list is a stale raw-offset snapshot --
+// see the committed member names above for ground truth):
 //   FAITHFULLY BODIED (operate purely on the homed manager members + committed APIs):
 //     * BehaviourManager::CheckNoBehavioursAreAllocatedByState  @0x822201B0
+//     * BehaviourManager::IsBehaviourWaitingToPrepare           @0x82208170  (pure BitArray<28>
+//         book-keeping query -- see the field-pick FLAG on its body: name-matched, not yet
+//         independently byte-offset cross-checked against a second asm site)
 //
 //   DECLARATION-ONLY + FLAGGED (each reaches an un-homed opaque interior, an un-homed
 //   template family, or a multi-stage VMX pipeline -- bodying any of these would require
@@ -40,12 +44,33 @@
 //     * BehaviourManager::UpdateAllBehaviours    @0x82251960  VMX-PIPELINE
 //         (vrlimi128/vperm/vcmpgtfp attitude bands + responder time accumulator) --
 //         NEVER scalar-paraphrased
+//     * BehaviourManager::AttachTweaker          @0x822082A8  (re-verified this wave now that
+//         Utils::Tweaker is real (BrnCameraTweaker.h): still reaches an un-homed Behaviour
+//         interior -- `(*(**v7 + 24))(*v7, &mTweakerHelper.mTweaker)` is a virtual dispatch
+//         through the pooled object's OWN vtable (mpObject's vptr, not the manager's), i.e. the
+//         un-homed Behaviour::SetupTweaker(Utils::Tweaker&) virtual (BrnBehaviourIceAnim.h:442
+//         declares one instance of it). AttachTweaker/DetachTweaker are also declared PRIVATE in
+//         the committed header, with no public entry point exercised by any already-committed
+//         caller, so there is no way to body this without inventing the Behaviour vtable slot.
+//     * BehaviourManager::DetachTweaker / DetachAllTweakers @0x82208330 (DetachAllTweakers):
+//         same un-homed-interior blocker -- `*(mBehaviourHelperPool[...].mBehaviourPoolHandle.
+//         mpObject + 0xA) = 0` is a raw write into the pooled Behaviour object's own private
+//         interior, not a BehaviourHelper/BehaviourManager member.
+//     * BehaviourManager::BehaviourManager() (the implicit/compiler-generated default ctor;
+//         X360 @0x827E26A8, called from MainDirector::MainDirector): writes the two AbstractPool
+//         vptrs (mLargeBehaviourPool/mSmallBehaviourPool -- already handled by the implicit
+//         default ctor now that neither AbstractPool nor BehaviourManager declares one) plus
+//         three more -1 sentinel stores and a `BehaviourHelperIndex(28)` array-ctor call at
+//         offsets that do NOT independently cross-check against any already-homed member (they
+//         land inside the still-opaque OpaqueSub responder/rotation-controller region per the
+//         header's own FLAG note) -- left to the implicit default ctor rather than adding an
+//         explicit one that would have to guess which opaque region each -1 belongs to.
 //
 //   The declaration-only methods are intentionally NOT defined here; their out-of-line
 //   bodies land when the Behaviour interior / the responder+rotation-controller sub-types /
 //   the AllocateBehaviour<> template / the VMX attitude pipeline are homed. Leaving them
-//   undefined keeps the TU honest (no fabricated bodies) while the one faithfully-recovered
-//   method below links.
+//   undefined keeps the TU honest (no fabricated bodies) while the faithfully-recovered
+//   methods below link.
 // ----------------------------------------------------------------------------
 
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"
@@ -100,6 +125,49 @@ namespace Camera
     {
         CheckNoBehavioursAreAllocatedByState(
             const_cast<ArbitratorState*>(static_cast<const ArbitratorState*>(lpState)));
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::IsBehaviourWaitingToPrepare  @0x82208170
+    //
+    // Is the behaviour identified by luAllocationKey still queued for its first Prepare (i.e.
+    // still set in the "needs preparing" book-keeping set). This is the query every
+    // BehaviourHandle<T>::IsWaitingToPrepare / ::IsReadyToPrepare instantiation forwards to
+    // (BrnBehaviourManager.h, out-of-line template bodies) -- purely homed-member book-keeping,
+    // no un-homed Behaviour interior involved.
+    //
+    // Faithful to the X360 asm: first assert is the DWARF-attested
+    // "mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)" (BrnBehaviourManager.h:218); the
+    // second is the BitArray<28> bounds guard the CgsBitArray.h header documents as being the
+    // CALLER's responsibility (its own IsBitSet is assert-free / header-inline). Both asserts are
+    // non-fatal tripwires (the X360 keeps going after EndAssert()), so they are modelled as
+    // CGS_ASSERT rather than early-outs, matching the fall-through control flow in the asm. The
+    // tail `(*&v4 << SBYTE3(v14)) & v14) != 0` is Hex-Rays' rendering of the inlined
+    // BitArray<28>::IsBitSet bit-test (single 64-bit field since 28 < 64) at console offset
+    // 0x14AB0 relative to `this`.
+    //
+    // FLAG (semantic, not byte-offset-proven, field pick): the asm gives a single cross-check
+    // point, not enough alone to disambiguate WHICH of the four packed BitArray<28> members
+    // (mBehaviourNeedsPreparingFlags / mBehaviourNeedsReleasingFlags /
+    // mBehaviourUpdateDuringPauseFlags / mBehaviourUsedByHandleFlags) offset 0x14AB0 lands on --
+    // no other committed function reads that offset independently yet. mBehaviourNeedsPreparingFlags
+    // is picked on the strength of the name match (function "IsBehaviourWaitingToPrepare" <->
+    // member "NeedsPreparing") the same way CheckNoBehavioursAreAllocatedByState above matches
+    // mBehaviourUsedByHandleFlags by name; re-verify against a second independent asm cross-check
+    // (e.g. whichever function turns out to SET this flag) before treating the field choice as
+    // fully pinned. The rich dynamic message the X360 streams for the bounds assert is reduced to
+    // a plain CGS_ASSERT string per the project's asserts rule.
+    // ------------------------------------------------------------------------
+    bool BehaviourManager::IsBehaviourWaitingToPrepare(u32 luAllocationKey) const
+    {
+        const BehaviourHelperIndex lBehaviourIndex(static_cast<s32>(luAllocationKey));
+
+        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex),
+                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)");
+        CGS_ASSERT(luAllocationKey < mBehaviourNeedsPreparingFlags.GetCapacity(),
+                   "invalid index : luAllocationKey < capacity");
+
+        return mBehaviourNeedsPreparingFlags.IsBitSet(luAllocationKey);
     }
 }
 } // namespace BrnDirector

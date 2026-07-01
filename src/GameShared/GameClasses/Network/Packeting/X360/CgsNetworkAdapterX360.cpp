@@ -15,6 +15,9 @@
 #include "GameShared/GameClasses/Network/Packeting/X360/CgsNetworkAdapterX360.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h"  // ServerInterfaceConnection::GetServerInterface
+#include "lobbyapi.h"   // LobbyApiRefT, LobbyApiDisconnect
+#include "GameSource/Network/BrnNetworkManager.h"   // BrnNetwork::BrnNetworkManager::GetLocalUserControllerPort
 
 // ----------------------------------------------------------------------------------------
 // DirtySock (DirtySDK) network-connection API. These are platform-SDK free functions; the
@@ -39,9 +42,9 @@ extern "C"
 // compares against). Declared in its XDK shape; provided by the platform layer.
 extern "C" int XUserGetSigninState(int liUserIndex);
 
-// X360 online-lobby disconnect hook (Demonware/Lobby glue), reached through the server
-// interface's connection component. SDK-side body.
-extern "C" int LobbyApiDisconnect(int liHandle, int liReason);
+// LobbyApiDisconnect (the X360 online-lobby disconnect hook, Demonware/Lobby glue) is
+// declared in the DirtySDK vendor shim "lobbyapi.h" (included above), matching its real
+// SDK signature (LobbyApiRefT*, int32_t) rather than a locally re-typed shim.
 
 namespace CgsNetwork
 {
@@ -210,9 +213,13 @@ void NetworkAdapterX360::Update()
     CgsDev::PerfMonCpu::StartMonitor(miConnectPerfMon);
     if (mePrepareState == E_FULLY_PREPARED && !mbConnecting)
     {
-        // mpNetworkManager's active-user index lives at +0x60 (asm lwz r3,0x60(r11)); the
-        // NetworkManager layout is owned by its own home, so the attested offset is read here.
-        const s32 liUserIndex = *reinterpret_cast<s32*>(static_cast<u8*>(mpNetworkManager) + 0x60);
+        // mpNetworkManager's active-user index (asm lwz r3,0x60(r11)) is
+        // BrnNetworkManager::GetLocalUserControllerPort() -- the same X360 +0x60 member that
+        // accessor documents (BrnNetworkManager.h), reached here through the concrete Brn
+        // manager type by name instead of a raw offset cast.
+        BrnNetwork::BrnNetworkManager* lpNetworkManager =
+            static_cast<BrnNetwork::BrnNetworkManager*>(mpNetworkManager);
+        const s32 liUserIndex = lpNetworkManager->GetLocalUserControllerPort();
         if (liUserIndex > -1 && XUserGetSigninState(liUserIndex) == KI_SIGNIN_STATE_LIVE)
         {
             CGS_ASSERT(mpEnvironment != nullptr, "Environment to use not set up");
@@ -239,17 +246,16 @@ void NetworkAdapterX360::Update()
             NetConnDisconnect();
 
             CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-            CGS_ASSERT(*reinterpret_cast<void**>(static_cast<u8*>(mpServerInterface) + 4) != nullptr,
+            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != nullptr,
                        "mpServerInterface->GetConnectionComponent()");
 
-            // mpServerInterface->GetConnectionComponent()->...->mLobbyHandle (asm walks
-            // +0x04 -> +0x10 -> +0x78). Reconstructed as the attested pointer walk; the
-            // intermediate types belong to the ServerInterface / connection-component homes.
-            u8* lpServerInterface  = static_cast<u8*>(mpServerInterface);
-            u8* lpConnComponent    = *reinterpret_cast<u8**>(lpServerInterface + 4);
-            u8* lpConnInner        = *reinterpret_cast<u8**>(lpConnComponent + 16);
-            int liLobbyHandle      = *reinterpret_cast<int*>(lpConnInner + 120);
-            LobbyApiDisconnect(liLobbyHandle, 0);
+            // mpServerInterface->GetConnectionComponent()->GetServerInterface()->GetLobbyAPIRef()
+            // (asm walks +0x04 -> +0x10 -> +0x78): the connection component's owning DirtySock
+            // interface's lobby-API ref handle, named via the real component types instead of
+            // the raw pointer chain.
+            ServerInterfaceConnection* lpConnection = static_cast<ServerInterfaceConnection*>(
+                mpServerInterface->GetConnectionComponent());
+            LobbyApiDisconnect(lpConnection->GetServerInterface()->GetLobbyAPIRef(), 0);
         }
     }
     CgsDev::PerfMonCpu::StopMonitor(miDisconnectPerfMon);

@@ -10,6 +10,7 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStateOnlineCarSelect.h" // BrnDirector::ArbStateOnlineCarSelect (real layout)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.h" // BrnDirector::ArbStateOnlineRaceIntro (real layout)
 #include "GameSource/Director/Arbitrator/States/BrnArbStatePostEvent.h" // BrnDirector::ArbStatePostEvent (real layout)
+#include "GameSource/Director/Arbitrator/States/BrnArbStateDriveThru.h" // BrnDirector::ArbStateDriveThru (real layout)
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                // BrnDirector::SharedPlaylists
 
 // ----------------------------------------------------------------------------
@@ -39,14 +40,14 @@ namespace BrnDirector
     // name; the container does not touch any per-state member.)
     //
     // ArbStateRoaming, ArbStateCrashMode, ArbStateRaceIntro, ArbStateRankUp,
-    // ArbStateOnlineCarSelect, ArbStateOnlineRaceIntro and ArbStatePostEvent now have their
-    // real layouts (BrnArbStateRoaming.h / BrnArbStateCrashMode.h / BrnArbStateRaceIntro.h /
-    // BrnArbStateRankUp.h / BrnArbStateOnlineCarSelect.h / BrnArbStateOnlineRaceIntro.h /
-    // BrnArbStatePostEvent.h, #included above) -- de-forked from the placeholders so each TU and
-    // the container share one definition.
+    // ArbStateOnlineCarSelect, ArbStateOnlineRaceIntro, ArbStatePostEvent and ArbStateDriveThru
+    // now have their real layouts (BrnArbStateRoaming.h / BrnArbStateCrashMode.h /
+    // BrnArbStateRaceIntro.h / BrnArbStateRankUp.h / BrnArbStateOnlineCarSelect.h /
+    // BrnArbStateOnlineRaceIntro.h / BrnArbStatePostEvent.h / BrnArbStateDriveThru.h,
+    // #included above) -- de-forked from the placeholders so each TU and the container share
+    // one definition.
     class ArbStateCrashing        : public ArbitratorState {};
     class ArbStateTakedown        : public ArbitratorState {};
-    class ArbStateDriveThru       : public ArbitratorState {};
     class ArbStateCarSelect       : public ArbitratorState {};
 
     class ArbitratorStateContainer

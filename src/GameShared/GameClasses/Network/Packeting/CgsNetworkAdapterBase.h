@@ -27,6 +27,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::EServerType
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // CgsNetwork::ServerInterfaceDirtySock (mpServerInterface's real type)
 
 namespace CgsNetwork
 {
@@ -97,10 +98,24 @@ namespace CgsNetwork
         // --- layout (X360 asm offsets) ----------------------------------------------------
         // +0x00 is the vtable pointer (implicit, from the virtuals above).
         void* mpMessageSentCallbackFunction; // +0x04
-        void* mpNetworkManager;              // +0x08  (NetworkManager*; X360 Update reads its
-                                             //        active-user index @+0x60 -- a foreign
-                                             //        layout, read via the attested offset)
-        void* mpServerInterface;             // +0x0C  (ServerInterface*)
+        void* mpNetworkManager;              // +0x08  (NetworkManager*; the concrete Brn manager
+                                             //        type -- BrnNetwork::BrnNetworkManager --
+                                             //        lives above this header and would cycle back
+                                             //        through it, so this member stays void* here
+                                             //        and subclasses that need it cast to the named
+                                             //        type -- e.g. NetworkAdapterX360::Update casts
+                                             //        to BrnNetwork::BrnNetworkManager* and calls
+                                             //        its GetLocalUserControllerPort() accessor
+                                             //        (the X360 +0x60 active-user index) instead of
+                                             //        an offset-cast read)
+        ServerInterfaceDirtySock* mpServerInterface;   // +0x0C -- the DirtySock server-interface
+                                             //        facade (CgsNetwork::ServerInterface derives
+                                             //        from ServerInterfaceDirtySockX360 <-
+                                             //        ServerInterfaceDirtySock; see
+                                             //        CgsServerInterface.h). Named-typed so
+                                             //        subclasses (e.g. NetworkAdapterX360::Update)
+                                             //        reach its components via GetConnectionComponent()
+                                             //        etc. instead of raw offset casts.
         u8              mPad10[8];           // +0x10  FLAGGED reserve (FakeNetworkConditions
                                              //        + meLastError region, not field-attested)
         EServerType     meServerType;        // +0x18

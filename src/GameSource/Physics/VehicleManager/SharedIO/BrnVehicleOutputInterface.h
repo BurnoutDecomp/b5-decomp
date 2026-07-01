@@ -126,6 +126,17 @@ namespace Vehicle
         // @0x825C0658: queue a "physical-traffic vehicle crashed" event and return its slot index.
         s32 AddCrashedTrafficEvent(VolumeInstanceId lVolumeInstanceID, EntityId lCrasherEntityID);
 
+        // @0x827A9B20: hand-written copy assignment. Clears each event queue member (miLength = 0,
+        // the same store-8-zero the generic BaseEventQueue<T>::Clear() does) then Append()s the
+        // matching member from lOther onto it -- i.e. "become a copy of lOther's live events" rather
+        // than a raw memberwise copy (a plain-copy operator= would also duplicate mpEvents/miMaxLength,
+        // which are per-instance backing-buffer bookkeeping the X360 body deliberately leaves alone).
+        // The trailing VehicleGuiOutputMessages (@0x79C, 3 bools) and WheelFFSpring (@0x874, 2 floats)
+        // are plain block copies (no Append -- they are not queues), reconstructed as named-member
+        // assignment. Called by *::InputBuffer_PostPhysics::SetVehicleManagerOutputInterface and
+        // WorldModule::BridgePhysicsToOutput.
+        VehicleManagerOutputInterface& operator=(const VehicleManagerOutputInterface& lOther);
+
     private:
         TrafficCrashedEventQueue     mCrashedTrafficEventQueue;     // @0x0000  (DWARF :176)
         TrafficSlammedEventQueue     mSlammedTrafficEventQueue;     // @0x0150  (DWARF :177)

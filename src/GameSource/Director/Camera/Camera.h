@@ -89,6 +89,17 @@ namespace BrnDirector
             // copy has a named home; defaulting it keeps the default ctor available too.
             Camera(const Camera& lrOther);
 
+            // BrnDirector::Camera::Camera::operator= -- the copy-assignment counterpart of the
+            // X360-attested copy constructor above (`Camera::Camera::operator_` in the ARTIST
+            // pseudocode; every arbitrator-state Update copies a behaviour-produced camera into
+            // its live `mCamera` with it, e.g. `lrCamera = mSomeHandle.GetProducedCamera();`).
+            // No separate asm export exists for it in the available dumps (Hex-Rays elides
+            // trivial memberwise-copy specials), but it is the same flat field-by-field copy as
+            // the copy constructor by construction (a POD-of-PODs aggregate with no owning
+            // resources), so the compiler-generated default is exact parity. Declared explicitly
+            // (rather than left implicit) so it has a named, documented home.
+            Camera& operator=(const Camera& lrOther) = default;
+
             // X360-attested @0x8220A850 (DWARF Camera.h:75). Validates the transform
             // (asserts on NaN / unreasonable position) and returns the validated-
             // transform pointer that SetCameraMatrix forwards (X360 asm; see the

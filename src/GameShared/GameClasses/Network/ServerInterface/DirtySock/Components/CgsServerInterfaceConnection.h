@@ -83,6 +83,14 @@ namespace CgsNetwork
         bool IsLoggedIn() const;
         void DisconnectFromServer();
 
+        // ADDITIVE GROW (CgsNetworkAdapterX360 group): the owning DirtySock server
+        // interface (== mpServerInterface, the +0x10 member). CgsNetwork::NetworkAdapterX360
+        // ::Update (X360 0x8288BEC0) walks *(GetConnectionComponent() + 0x10) to reach it,
+        // then reads its +0x78 lobby-API ref (ServerInterfaceDirtySock::GetLobbyAPIRef()) to
+        // drive LobbyApiDisconnect on a duplicate-login kick. Exposed by name instead of
+        // widening friendship; the member stays private and the layout is unchanged.
+        ServerInterfaceDirtySock* GetServerInterface() const { return mpServerInterface; }
+
         // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
         // The login state machine drives the connect / log-in / agreement actions on this
         // component (X360 reaches them through *(mpNetworkManager+0x38EC), the connection slot):

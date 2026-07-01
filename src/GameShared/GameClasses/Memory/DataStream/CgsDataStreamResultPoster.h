@@ -14,8 +14,10 @@
 // Futex::AtomicUint64 mEncodedStatus), then block-copies the new records into
 // the reader's result buffer.
 //
-// X360 home (reconstructed in this pass):
+// X360 homes (reconstructed in this pass):
 //   AddResults @ 0x828680F0
+//   Construct  @ 0x82867FF0
+//   Destruct   @ 0x82868070
 //
 // Layout: a single member mpReader @ +0 (verified against the AddResults
 // pseudocode: `r10 = *this` reads mpReader, then dereferences the reader's
@@ -28,9 +30,19 @@ namespace CgsMemory
         // Reconstructed in this pass.
         s32 AddResults(void* lpResults, s32 liResultCount);
 
+        // Reconstructed in this pass (X360 0x82867FF0). Binds this poster to
+        // lpReader and registers it as a user of the reader's stream: atomically
+        // increments the reader's packed numUsers nibble (bits 48-51 of
+        // mEncodedStatus) via a compare-and-swap retry loop, preserving the
+        // numResults and dataBufferUsed fields.
+        void Construct(DataStreamResultReader* lpReader);
+
+        // Reconstructed in this pass (X360 0x82868070). Atomically decrements
+        // the bound reader's packed numUsers nibble via the same compare-and-
+        // swap retry loop as Construct (unregisters this poster as a user).
+        void Destruct();
+
         // Declared-only (not reconstructed in this TU pass).
-        void  Construct(DataStreamResultReader* lpReader);
-        void  Destruct();
         void* AllocateData(s32 liSize, s32 liAlignment);
         s32   AddResult(void* lpResult);
         u32   GetResultSize() const;

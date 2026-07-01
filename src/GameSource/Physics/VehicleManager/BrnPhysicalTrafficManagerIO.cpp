@@ -38,5 +38,42 @@ namespace Vehicle
             mRemovedJointBitArray.SetBit(static_cast<u32>(liJointIndex));
         }
     }
+
+    // @0x825C26F0  ArticulatedJointCreateBuffer::GetCreateJointEvent (DWARF name/signature,
+    //   BrnPhysicalTrafficManagerIO.h:90; returns const InAddJoint&, ABI-returned as the element
+    //   pointer -- Hex-Rays shows `192*liJointIndex + this + 16`, i.e. &maCreatedJointEvents[idx]).
+    //   Two X360 bounds checks precede the payload read: a bare "liJointIndex >= 0 &&
+    //   liJointIndex < kiMaxArticulatedTrafficVehicles" tripwire (BrnPhysicalTrafficManagerIO.h:210)
+    //   and the inlined CgsBitArray formatted-message bounds assert (CgsBitArray.h:203) -- both are
+    //   the SAME logical [0,10) bound, collapsed to one CGS_ASSERT here (matching the
+    //   FlagJointToBeCreated/FlagJointToBeRemoved convention above). Then asserts the slot is
+    //   actually flagged for creation ("mCreatedJointBitArray.IsBitSet( liJointIndex )",
+    //   BrnPhysicalTrafficManagerIO.h:211) before returning the stashed request.
+    const ArticulatedJointCreateBuffer::InAddJoint&
+    ArticulatedJointCreateBuffer::GetCreateJointEvent(s32 liJointIndex) const
+    {
+        CGS_ASSERT(liJointIndex >= 0 && liJointIndex < KI_MAX_ARTICULATED_TRAFFIC_VEHICLES,
+                   "liJointIndex >= 0 && liJointIndex < kiMaxArticulatedTrafficVehicles");
+        CGS_ASSERT(mCreatedJointBitArray.IsBitSet(static_cast<u32>(liJointIndex)),
+                   "mCreatedJointBitArray.IsBitSet( liJointIndex )");
+        return maCreatedJointEvents[liJointIndex];
+    }
+
+    // @0x825C2860  ArticulatedJointCreateBuffer::GetRemoveJointEvent (DWARF name/signature,
+    //   BrnPhysicalTrafficManagerIO.h:95; returns const InRemoveJoint&). Hex-Rays shows
+    //   `8*(liJointIndex + 242) + this` == this + 0x790 + 8*liJointIndex, i.e.
+    //   &maRemovedJointEvents[idx]. Same bounds-check collapse as GetCreateJointEvent above
+    //   (BrnPhysicalTrafficManagerIO.h:221 tripwire + CgsBitArray.h:203 inlined bounds assert ->
+    //   one CGS_ASSERT), then asserts the slot is flagged for removal
+    //   ("mRemovedJointBitArray.IsBitSet( liJointIndex )", BrnPhysicalTrafficManagerIO.h:222).
+    const ArticulatedJointCreateBuffer::InRemoveJoint&
+    ArticulatedJointCreateBuffer::GetRemoveJointEvent(s32 liJointIndex) const
+    {
+        CGS_ASSERT(liJointIndex >= 0 && liJointIndex < KI_MAX_ARTICULATED_TRAFFIC_VEHICLES,
+                   "liJointIndex >= 0 && liJointIndex < kiMaxArticulatedTrafficVehicles");
+        CGS_ASSERT(mRemovedJointBitArray.IsBitSet(static_cast<u32>(liJointIndex)),
+                   "mRemovedJointBitArray.IsBitSet( liJointIndex )");
+        return maRemovedJointEvents[liJointIndex];
+    }
 }
 }

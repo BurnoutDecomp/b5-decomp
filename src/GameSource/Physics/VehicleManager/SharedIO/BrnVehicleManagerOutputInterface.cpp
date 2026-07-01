@@ -44,5 +44,52 @@ namespace Vehicle
         // return miLength - 1 (index of the just-added event).
         return mCrashedTrafficEventQueue.GetLength() - 1;
     }
+
+    // @0x827A9B20  VehicleManagerOutputInterface::operator=
+    //   (dossier 'VehicleManagerOutputInt' is a truncated name.) For each of the seven
+    //   EventQueue<T,N> members: reset the live count (X360 `*(this+offset) = 0`, the same
+    //   store-8-zero BaseEventQueue<T>::Clear() does -- this+offset lands exactly on each queue's
+    //   miLength field) then Append() the matching member from lOther onto it, i.e. "become a copy
+    //   of lOther's live events" rather than a raw memberwise copy (which would also duplicate the
+    //   per-instance mpEvents/miMaxLength backing-buffer bookkeeping the X360 body deliberately
+    //   leaves alone -- matching the committed VehicleOutputInterface::operator= precedent above).
+    //   The trailing VehicleGuiOutputMessages (@0x79C, 3 bools) and WheelFFSpring (@0x874, 2 floats)
+    //   are plain block copies (not queues), reconstructed as named-member struct assignment (both
+    //   are trivial PODs, so `=` reproduces the X360's byte/word copies exactly). Returns *this.
+    //   Called by *::InputBuffer_PostPhysics::SetVehicleManagerOutputInterface and
+    //   WorldModule::BridgePhysicsToOutput.
+    VehicleManagerOutputInterface&
+    VehicleManagerOutputInterface::operator=(const VehicleManagerOutputInterface& lOther)
+    {
+        mCrashedTrafficEventQueue.Clear();                                   // @+0x000
+        mCrashedTrafficEventQueue.Append(lOther.mCrashedTrafficEventQueue);
+
+        mSlammedTrafficEventQueue.Clear();                                   // @+0x150
+        mSlammedTrafficEventQueue.Append(lOther.mSlammedTrafficEventQueue);
+
+        mFineTrafficCrashedEventQueue.Clear();                               // @+0x2F0
+        mFineTrafficCrashedEventQueue.Append(lOther.mFineTrafficCrashedEventQueue);
+
+        mRaceCarCrashEventQueue.Clear();                                     // @+0x3A0
+        mRaceCarCrashEventQueue.Append(lOther.mRaceCarCrashEventQueue);
+
+        mRaceCarResetEventQueue.Clear();                                     // @+0x5B0
+        mRaceCarResetEventQueue.Append(lOther.mRaceCarResetEventQueue);
+
+        mCreateVehicleResultQueue.Clear();                                   // @+0x6C0
+        mCreateVehicleResultQueue.Append(lOther.mCreateVehicleResultQueue);
+
+        mTrafficTypeRequestQueue.Clear();                                    // @+0x750
+        mTrafficTypeRequestQueue.Append(lOther.mTrafficTypeRequestQueue);
+
+        mVehicleGuiOutputMessages = lOther.mVehicleGuiOutputMessages;        // @+0x79C (3 bools)
+
+        mRemovedTrafficEventQueue.Clear();                                   // @+0x7A0
+        mRemovedTrafficEventQueue.Append(lOther.mRemovedTrafficEventQueue);
+
+        mWheelFFSpring = lOther.mWheelFFSpring;                              // @+0x874 (2 floats)
+
+        return *this;
+    }
 }
 }

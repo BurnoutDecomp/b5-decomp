@@ -272,7 +272,7 @@ namespace BrnDirector
             // flash first and advance next frame.
             const SharedCameraContainer& lrSharedCameraContainer = *lrSharedInfo.mpSharedCameraContainer;
             const bool lbSkipFlash =
-                lrSharedCameraContainer.mbPrimaryActive && lrSharedCameraContainer.mbPrimarySuspended;
+                !lrSharedCameraContainer.mbPrimaryActive || lrSharedCameraContainer.mbPrimarySuspended;
 
             if (!lbSkipFlash)
             {

@@ -168,6 +168,19 @@ namespace Camera
         // (the `IsBehaviourWaitingToPrepare(...) == 0` tail). Body out-of-line below.
         bool IsReadyToPrepare() const;
 
+        // ADDITIVE GROW (BrnArbStateTakedown.cpp): the camera this handle's live behaviour
+        // produced this frame. X360-attested: every one of the several de-inlined
+        // `sub_821FCxxx`/`sub_821FDxxx` accessors this project's arbitrator states call
+        // (e.g. @0x821FCD40, @0x821FCEE0, @0x821FD450, @0x821FD780) is byte-identical --
+        // assert IsAllocated(), then resolve the manager pool slot through
+        // GetBehaviourSlotFromHandle<TBehaviour>(muHelperIndex, muAllocationKey) and return the
+        // Camera embedded 16 bytes (console) into that slot (BehaviourHelper::mCamera, the
+        // member right after the type-erased pool handle -- see BehaviourHelper below). Modelled
+        // here by reusing BehaviourHelper's own accessor via the resolved slot pointer, so the
+        // 16-byte offset is never poked directly. Body out-of-line below (needs BehaviourManager
+        // complete).
+        const Camera& GetProducedCamera() const;
+
         void Clear()
         {
             mbAllocated     = false;
@@ -321,6 +334,18 @@ namespace Camera
         // binds as well as this header's interpolator handle. DECLARATION-ONLY.
         template <typename TBehaviour, typename THandle>
         void NewBehaviour(THandle& lrHandle, void* lpOwningState, s32 liArgA, s32 liArgB);
+
+        // ADDITIVE GROW (BrnArbStateDriveThru::Prepare @0x8226E938): the ATTRIBUTE-TAKING
+        // overload of NewBehaviour<TBehaviour>. X360-attested distinct calling convention from
+        // the 4-explicit-arg family above (r3=manager, r4=lpAttributeData, r5=&lrHandle,
+        // r6=lpOwningState, r7=liArgA, r8=liArgB -- the attribute-data pointer is inserted right
+        // after `this`, shifting the rest one register over). Used where TBehaviour is the
+        // generic BrnDirector::Camera::Behaviour base (not a concrete behaviour type already
+        // pinned at the call site), so the manager needs the attrib block to pick which concrete
+        // behaviour to allocate. DECLARATION-ONLY (body lands with the BehaviourManager TU).
+        template <typename TBehaviour, typename THandle>
+        void NewBehaviour(THandle& lrHandle, const void* lpAttributeData, void* lpOwningState,
+                          s32 liArgA, s32 liArgB);
 
     private:
         void RefCountLogDump(const BehaviourHelperIndex& lrHelper) const;
@@ -480,6 +505,19 @@ namespace Camera
         CGS_ASSERT(mbAllocated, "mbIsAllocated");
         return mpManager->IsBehaviourWaitingToPrepare(muAllocationKey) == false;
     }
+
+    // BehaviourHandle::GetProducedCamera declaration (see the class body above): DECLARATION-
+    // ONLY, no out-of-line definition here. X360-attested (e.g. @0x821FCD40 / @0x821FCEE0 /
+    // @0x821FD450 / @0x821FD780) to assert IsAllocated() then resolve the manager pool slot this
+    // handle names and return the Camera embedded 16 bytes (console) into it
+    // (BehaviourHelper::mCamera, right after the type-erased pool handle). Reconstructing the
+    // body faithfully needs GetBehaviourSlotFromHandle<TBehaviour>'s own pointer arithmetic back
+    // to its owning BehaviourHelper slot, and GetBehaviourSlotFromHandle is ITSELF declaration-
+    // only (its real body -- how the (helper index, allocation key) pair resolves into the pool
+    // -- lands with the BehaviourManager TU); deriving GetProducedCamera's body without it would
+    // mean fabricating that resolution rather than reusing a named one. Left declaration-only;
+    // BrnArbStateTakedown.cpp (the first consumer) only needs the declaration to compile against
+    // under the per-TU cl /c gate.
 
     // ------------------------------------------------------------------------
     // _BehaviourManagerAssertLayout -- NEVER CALLED. Pins the DWARF member ordering. The DWARF

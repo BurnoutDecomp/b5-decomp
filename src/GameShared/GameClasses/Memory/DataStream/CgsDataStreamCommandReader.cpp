@@ -4,6 +4,71 @@
 
 namespace CgsMemory
 {
+    // X360 0x82867830.
+    // Binds this reader to lpPoster and registers it as a user of the poster's
+    // stream. numUsers is packed into bits 24-27 of the poster's mEncodedStatus
+    // (KU_NUM_USERS_BIT/MASK); this atomically increments just that nibble via a
+    // compare-and-swap retry loop, preserving the nextCommand field (bits 0-23)
+    // untouched. Also sets miLastCommandIndex = -1 (X360 sentinel init; see header).
+    //
+    // Same CAS idiom as ReadCom / DataStreamResultPoster::AddResults, using the
+    // committed Futex::AtomicUint64 (GetValue/SetValueConditional) rather than
+    // the raw ldarx/stdcx the X360 asm inlines.
+    void DataStreamCommandReader::Construct(DataStreamCommandPoster* lpPoster)
+    {
+        mpPoster = lpPoster;
+        miLastCommandIndex = -1;
+
+        for (;;)
+        {
+            const u64 luCurrEncoded = lpPoster->mEncodedStatus.GetValue();
+
+            const u32 luNumUsers = static_cast<u32>(
+                (luCurrEncoded >> DataStreamCommandPoster::KU_NUM_USERS_BIT) &
+                DataStreamCommandPoster::KU_NUM_USERS_MAX);
+
+            const u64 luNewEncoded =
+                (luCurrEncoded & ~DataStreamCommandPoster::KU_NUM_USERS_MASK) |
+                (((static_cast<u64>(luNumUsers) + 1) &
+                  DataStreamCommandPoster::KU_NUM_USERS_MAX) <<
+                 DataStreamCommandPoster::KU_NUM_USERS_BIT);
+
+            if (lpPoster->mEncodedStatus.SetValueConditional(luNewEncoded, luCurrEncoded))
+            {
+                break;
+            }
+        }
+    }
+
+    // X360 0x828678B0.
+    // Unregisters this reader as a user of its bound poster's stream: atomically
+    // decrements the poster's packed numUsers nibble via the same compare-and-
+    // swap retry loop as Construct, preserving the nextCommand field.
+    void DataStreamCommandReader::Destruct()
+    {
+        DataStreamCommandPoster* lpPoster = mpPoster;
+
+        for (;;)
+        {
+            const u64 luCurrEncoded = lpPoster->mEncodedStatus.GetValue();
+
+            const u32 luNumUsers = static_cast<u32>(
+                (luCurrEncoded >> DataStreamCommandPoster::KU_NUM_USERS_BIT) &
+                DataStreamCommandPoster::KU_NUM_USERS_MAX);
+
+            const u64 luNewEncoded =
+                (luCurrEncoded & ~DataStreamCommandPoster::KU_NUM_USERS_MASK) |
+                (((static_cast<u64>(luNumUsers) - 1) &
+                  DataStreamCommandPoster::KU_NUM_USERS_MAX) <<
+                 DataStreamCommandPoster::KU_NUM_USERS_BIT);
+
+            if (lpPoster->mEncodedStatus.SetValueConditional(luNewEncoded, luCurrEncoded))
+            {
+                break;
+            }
+        }
+    }
+
     // X360 0x82867920.
     // Atomically claims the next command slot from the poster's stream and copies
     // it out. The poster's packed status word (mEncodedStatus) carries

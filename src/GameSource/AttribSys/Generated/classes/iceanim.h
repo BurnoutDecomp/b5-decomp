@@ -27,6 +27,15 @@ namespace Gen
         // *reinterpret_cast<const s64*>(lpIceAnim)). The class-key asserts compare this
         // against ClassKey().
         s64 GetClassKey() const { return *reinterpret_cast<const s64*>(this); }
+
+        // ADDITIVE GROW (BrnBehaviourIceAnim.h's SetParameters/ChangeMovie consumers): the take
+        // guid carried by this parameter block (instance +0xC, past the 8-byte class-key head
+        // GetClassKey() reads). FLAG: declaration-only here -- this class is used as a raw
+        // serialised attrib-data block by its consumers (the class-key IS the object's own
+        // leading bytes, not reached through Instance::mpAttributeData), so the +0xC field is
+        // this object's own concern; no body is fabricated. The consuming behaviour's own TU
+        // provides the body when it is reconstructed.
+        s32 GetAnimGuid() const;
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::iceanim

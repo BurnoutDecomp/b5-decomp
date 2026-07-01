@@ -122,6 +122,15 @@ namespace BrnReplays
         ESerialiserContext GetContext() const          { return meContext; }
         const char*        GetName() const             { return macName; }
 
+        // ADDITIVE GROW: the raw static-buffer pointer every leaf serialiser's
+        // GetStaticLayout() (e.g. BrnReplays::GuiModuleSerialiser::GetStaticLayout,
+        // BrnReplayGuiModuleSerialiser.cpp @0x82410D90) returns after asserting
+        // miStaticBufferSize is big enough and reinterpreting this pointer as its own
+        // static-layout type. Exposed here (the base's own member) so cross-TU callers
+        // that only need the raw buffer (not a leaf-typed accessor) can reach it without
+        // forking BaseSerialiser's storage locally.
+        void* GetStaticBuffer() const { return mpStaticBuffer; }
+
     protected:
         // SetMode @ 0x8264B0F8. Private in the leak; protected here so the embed
         // check and (future) construction path can drive the mode while it stays

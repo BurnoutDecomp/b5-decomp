@@ -4,6 +4,9 @@
 #include "types.hpp"
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44Affine
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // CgsModule::ModuleSingleBuffered (the base; vtable + the two RWMutexes the ctor constructs inline via its DataBuffers)
+#include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h" // EA::Allocator::ITaggedAllocator (IInternalAllocator's base)
+
+namespace CgsMemory { class HeapMalloc; }   // GameShared/GameClasses/Memory/CgsHeapMalloc.h (fwd; avoids a cross-module include cycle)
 
 // ============================================================================
 // GameSource/Effects/Particles/ParticleModule.h
@@ -72,6 +75,75 @@ namespace BrnParticle
         u8  mPad60[0x04];                          // +0x60
         u16 muFlags;                               // +0x64 - ePPEFlag* bitmask
         u8  mPad66[0x0A];                          // +0x66 - pad to the 0x70 array stride
+    };
+
+    // BrnParticle::IInternalAllocator -- ParticleModule's private EA::Allocator::
+    // ITaggedAllocator front-end onto a CgsMemory::HeapMalloc (DWARF home
+    // ParticleModule.cpp:108). The Lion runtime (cLionBlockAlloc / LionSmallAlloc)
+    // allocates through an EA::Allocator::ITaggedAllocator*; this class is the
+    // concrete adapter ParticleModule hands it, forwarding onto mpHeapMalloc.
+    //
+    // TWO-VTABLE DTOR NOTE (why the deleting dtor stores at both this+0 AND
+    // this+4). IInternalAllocator's own scalar deleting destructor (X360
+    // 0x822898A0) is NOT the single-store pattern every other single-inheritance
+    // allocator front-end in this codebase uses (compare CgsGraphics::
+    // MoviePlayerCoreAllocator::`vector deleting destructor' @0x827DBAC0 and
+    // EA::Allocator::IAllocator::~IAllocator @0x82277E80, each of which stores
+    // exactly one vtable pointer at this+0). Here the asm stores TWO vtable
+    // pointers:
+    //   *(this+4) = off_8200FDB4   -- the EA::Allocator::IAllocator vtable
+    //                                  (the SAME constant IAllocator's own
+    //                                  destructor stores into *its* this+0 --
+    //                                  see SDKs/.../iallocator.cpp)
+    //   *(this+0) = off_8200F5B4   -- IInternalAllocator's own (derived) vtable
+    // and both the vector-deleting-destructor and the Free thunk are
+    // ADJUSTOR{4} thunks (`addi r3,r3,-4` before tail-calling the this-relative-
+    // to-primary body). An adjustor thunk with a non-zero `this` delta is the
+    // PPC/Itanium-ABI signature of a call arriving through a SECONDARY base
+    // subobject: the compiler lays IAllocator's vtable slot down as its own
+    // (non-primary) sub-object at +0x4 inside IInternalAllocator, distinct from
+    // IInternalAllocator's own primary vtable at +0x0, and thunks calls that
+    // arrive via the IAllocator-shaped secondary pointer back to the primary
+    // `this` before dispatching. The DWARF's single `: public ITaggedAllocator`
+    // line names only the primary base (matching every X360-ledger-attested
+    // method here, which all resolve through the primary vtable at +0x0); no
+    // second C++-source base is added, since the X360 ledger attests no method
+    // reached only through the secondary IAllocator pointer -- the secondary
+    // slot is a compiler-emitted ABI artifact of the ITaggedAllocator/IAllocator
+    // pure-interface chain, not a distinct user-written base to model.
+    class IInternalAllocator : public EA::Allocator::ITaggedAllocator
+    {
+    public:
+        IInternalAllocator(CgsMemory::HeapMalloc* lpHeapMalloc);
+
+        // Out-of-line destructor: anchors the vtable. See the two-vtable-dtor
+        // note above -- the X360 deleting-destructor thunk block (scalar dtor
+        // @0x822898A0, its vector-deleting-destructor adjustor{4} thunk
+        // @0x82289890, and the Free adjustor{4} thunk @0x82289898) is entirely
+        // compiler-generated from this virtual ~dtor; no owned resources are
+        // released here (mpHeapMalloc is owned elsewhere).
+        virtual ~IInternalAllocator();
+
+        // ITaggedAllocator overrides. DECLARE-ONLY: not attested individually in
+        // the X360 ledger (only Free and the dtor thunks are function-tracked
+        // for this TU) -- bodying them would fabricate behavior. HeapMalloc-
+        // backed allocation only exposes a 2-arg Malloc(size, alignment), so a
+        // faithful Alloc body cannot be written without guessing the tag/name/
+        // flags -> alignment mapping.
+        virtual void* Alloc(size_t anSize, const char* apName, u32 auFlags) override;
+        virtual void* Alloc(size_t anSize, const char* apName, u32 auFlags,
+                            u32 auAlign, u32 auAlignOffset) override;
+        virtual void* Alloc(size_t anSize, const EA::TagValuePair& arTags) override;
+
+        // X360 0x822898A0 (adjustor{4} thunk @0x82289898 tail-calls this).
+        virtual void  Free(void* apData, size_t anSize) override;
+
+        // AddRef/Release: DECLARE-ONLY (not X360-ledger-attested for this TU).
+        virtual s32   AddRef() override;
+        virtual s32   Release() override;
+
+    private:
+        CgsMemory::HeapMalloc* mpHeapMalloc;   // ParticleModule.cpp:155 -- the backing heap
     };
 
     // The particle / LION effects module -- a full CgsModule::ModuleSingleBuffered.
