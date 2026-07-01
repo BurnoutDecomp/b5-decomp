@@ -48,19 +48,6 @@
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // AptDisplayListState::mpFirst (the placed-node chain)
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::GetRenderItem/GetDepth (probe)
 
-// Minimal Win32 VirtualAlloc/VirtualFree decls (NOT #include <windows.h> -- that pollutes the
-// namespace with min/max/Render/etc. macros that clash with the EA/Cgs/rw headers above). We need
-// a LOW-4GB buffer for FixupTranscode's in-place 32-bit Reloc32 (the codebase has no low allocator;
-// VirtualAlloc with a fixed lpAddress below 0x100000000 is the only way -- see the low-mem analysis).
-extern "C" __declspec(dllimport) void* __stdcall VirtualAlloc(void* lpAddress, size_t dwSize,
-                                                              unsigned long flAllocationType,
-                                                              unsigned long flProtect);
-extern "C" __declspec(dllimport) int   __stdcall VirtualFree(void* lpAddress, size_t dwSize,
-                                                             unsigned long dwFreeType);
-#define BRNAPT_MEM_COMMIT    0x1000u
-#define BRNAPT_MEM_RESERVE   0x2000u
-#define BRNAPT_MEM_RELEASE   0x8000u
-#define BRNAPT_PAGE_READWRITE 0x04u
 
 // The per-character FixupWalk probe sink the engine TU calls (declared in AptCharacterAnimation.h).
 // Logs "[AptRT] fixup: char[i] type=T @off=.." for the first N characters so a run names the exact
@@ -321,59 +308,35 @@ namespace
     const u32 KU_APTDATA_RESOURCE_TYPE_ID = 30u;
 
     // ====================================================================================
-    // STEP 1 -- FAITHFUL INSTANTIATION STATE (gated; direct-geometry render stays the fallback).
+    // STEP 8 -- FAITHFUL LOAD-PATH STATE (gated; direct-geometry render stays the fallback).
     //
-    // The faithful path runs the WHOLE .apt through the homed AptCharacterAnimation::FixupTranscode
-    // (the 4-byte->x64 in-place relocate) to produce a live AptCharacterAnimation, then instantiates
-    // it as a root AptCIH on the director's root display list via the homed chain:
-    //   AptGetAnimationAtLevel(0) -> MakeCharacterAnimationInst(pFile) -> root->SetCharacterInst(inst).
+    // DriveFaithfulLoad drives the REAL Apt load path (retiring the invented signature-scan +
+    // hand-rolled AptFile synthesis):
+    //   AptDataHandler::AddAptData(header) -> AptLoader::Load(name) ->
+    //   AptCallbackFile::LoadAnimation(name,&h) -> AptCompleteAnimationAsyncLoad ->
+    //   AptLoader::CompleteLoad -> AptCharacterAnimation::Resolve -> Fixup;  then
+    //   AptGetAnimationAtLevel(0) -> MakeCharacterAnimationInst(pFile) -> root->SetCharacterInst.
     //
-    // x64 KEY: FixupTranscode's Reloc32 writes (offset + base) back into 32-bit slots, so the blob
-    // MUST live in the LOW 4 GB (else the 64-bit base truncates -> garbage). The codebase has no low
-    // allocator, so we copy the .apt resource into a VirtualAlloc'd low-4GB buffer and run the fixup
-    // there. The geometry it references (LoadRenderingUnit -> GuiGeometryFile*) is in that SAME low
-    // copy, so those host-pointer stores into 32-bit slots are ALSO lossless. (Imports go through the
-    // AptLoader_LoadX360 stub -> null, harmless.)
+    // Our GUIAPT bundle is the native 8-byte ("Apt Data:1:7:8") format: the Fixup relocates the
+    // movie root IN PLACE at the real (high) resource address -- no low-4GB copy, no transcode
+    // (8-byte slots hold full x64 addresses). The ONE FLAG'd x64 piece that remains is the
+    // movie-root location: the converted bundle's AptConstFile::mnDataRootOffset does not locate
+    // the type-9 root, so the host scans for the 0x09876543 signature (LocateMovieRoot8) and hands
+    // CompleteLoad the root header; everything else in the chain is faithful.
     //
-    // DEFENSIVE: the whole faithful path is one-shot + heavily guarded; ANY failure leaves
+    // DEFENSIVE: the whole path is one-shot + heavily guarded; ANY failure leaves
     // s_bFaithfulInstantiated false and the direct-geometry render (s_bGeomResolved) intact, so the
-    // game stays up + still shows the title art. The faithful per-frame TICK + RENDER are steps 2/3
-    // (NOT this pass) -- this pass only stands up the AptCharacterAnimation + root AptCIH tree.
+    // game stays up + still shows the title art. The faithful per-frame TICK + RENDER are the next
+    // passes (NOT this one) -- this only stands up the AptCharacterAnimation + root AptCIH tree.
     // ====================================================================================
-    const bool KB_FAITHFUL_PATH_ENABLED = true;   // master gate (GUIAPT64 native 1:7:8). 8-byte serialized
-                                                  // layout now pinned (natural x64 widening) -- FixupWalk
-                                                  // widened + movie root located by 0x09876543 signature.
-                                                  // OFF: faithful instantiation blocked on the converted
-                                                  // .apt container layout (AptCharacterAnimation root not
-                                                  // at console dataRoot+16); restore the working geometry
-                                                  // render until the converted-.apt root offset is known.
+    const bool KB_FAITHFUL_PATH_ENABLED = true;   // master gate for the faithful load path.
 
-    void*  s_pLowAptCopy        = nullptr;   // VirtualAlloc'd low-4GB copy of the .apt resource
-    u32    s_uLowAptCopyBytes   = 0;
-    AptCharacterAnimation* s_pFaithfulCharAnim = nullptr;   // FixupTranscode result (the movie root)
-    AptFile*               s_pFaithfulAptFile  = nullptr;   // synthesised loaded-file handle (mpData = root)
+    AptCharacterAnimation* s_pFaithfulCharAnim = nullptr;   // the movie-root def base (post-Fixup)
+    AptFile*               s_pFaithfulAptFile  = nullptr;   // the loaded AptFile handle (mpData = root)
     void*                  s_pFaithfulRootCIH  = nullptr;   // the root AptCIH placed on the director
     bool   s_bFaithfulAttempted    = false;
     bool   s_bFaithfulInstantiated = false;
     s32    s_iTickFrame            = 0;     // STEP-2 per-frame tick counter (for the placement probes)
-
-    // Allocate a buffer in the LOW 4 GB (32-bit-addressable) via a fixed-address VirtualAlloc probe.
-    // A fixed lpAddress makes VirtualAlloc return THAT address or fail (never relocates), so any
-    // non-null result is < 0x100000000. Returns null if no low region of luBytes is free.
-    static void* AllocLow4GB(u32 luBytes)
-    {
-        const uintptr_t kGran  = 0x10000u;            // 64 KB allocation granularity
-        const uintptr_t kLimit = 0x100000000ull;
-        u32 luRounded = (luBytes + static_cast<u32>(kGran) - 1u) & ~(static_cast<u32>(kGran) - 1u);
-        for (uintptr_t luAddr = 0x00100000u; luAddr + luRounded <= kLimit; luAddr += kGran)
-        {
-            void* lpMem = VirtualAlloc(reinterpret_cast<void*>(luAddr), luRounded,
-                                       BRNAPT_MEM_RESERVE | BRNAPT_MEM_COMMIT, BRNAPT_PAGE_READWRITE);
-            if (lpMem != nullptr)
-                return lpMem;   // guaranteed < 4 GB by the fixed lpAddress
-        }
-        return nullptr;
-    }
 
     // NOTE: the Apt allocator/interpreter/target bring-up (the invented Steps 1/2/5 that
     // used to live here -- a local AptAllocatorInitialize + WireAllocatorGlobals + the
@@ -394,9 +357,8 @@ namespace BrnGui
     static void DumpResourceBytes(const char* lpcTag, void* lpBase, u32 luOffset,
                                   u32 luResourceSize, u32 luBytes);
     static renderengine::Texture* ResolveMeshTexture(const u32* lpMesh, s32 liTexMode);
-    static void TryFaithfulInstantiate(CgsResource::Entry* lpEntry);
-    static bool ValidateCharAnimRoot(uintptr_t luBase, u32 luCAOff, u32 luSize, int liPtrSize, u32* lpuScoreOut);
-    static u64  ReadSlot(uintptr_t luBase, u32 luOff, int liPtrSize);
+    static void DriveFaithfulLoad(CgsResource::Entry* lpEntry);
+    static u32  LocateMovieRoot8(uintptr_t luBase, u32 luSize);
 
     bool AptRuntimeIsReady() { return s_bRuntimeReady; }
 
@@ -716,11 +678,12 @@ namespace BrnGui
         // This is the DIRECT-GEOMETRY render path -- it stays the active render + the FALLBACK.
         ResolveMovieGeometry(lpEntry);
 
-        // STEP 1 (gated): attempt the FAITHFUL instantiation (FixupTranscode -> AptCharacterAnimation
-        // -> root AptCIH on the director). One-shot + heavily guarded; on any failure the direct-
-        // geometry render above stays intact so the title art still shows. The faithful per-frame
-        // tick/AS render are steps 2/3 (next passes) -- this only stands up the display tree.
-        TryFaithfulInstantiate(lpEntry);
+        // STEP 8 (gated): drive the FAITHFUL Apt load path (LoadAnimation -> AptCompleteAnimation
+        // AsyncLoad -> AptLoader::CompleteLoad -> Resolve -> Fixup -> MakeCharacterAnimationInst),
+        // retiring the invented signature-scan + hand-rolled AptFile synthesis. One-shot + heavily
+        // guarded; on any failure the direct-geometry render above stays intact so the title art
+        // still shows. The faithful per-frame tick/AS render are the next passes.
+        DriveFaithfulLoad(lpEntry);
     }
 
     // =========================================================================
@@ -859,101 +822,85 @@ namespace BrnGui
         return lpTexture;
     }
 
-    // Read a TOff-wide (4 or 8) pointer SLOT from a serialised record (the file offset, pre-fixup),
-    // mirroring exactly how FixupWalk<TOff>::SlotPtr reads it. liPtrSize is the .apt pointer size.
-    static u64 ReadSlot(uintptr_t luBase, u32 luOff, int liPtrSize)
-    {
-        if (liPtrSize == 8)
-            return *reinterpret_cast<const u64*>(luBase + luOff);
-        return static_cast<u64>(*reinterpret_cast<const u32*>(luBase + luOff));
-    }
-
-    // Validate a candidate AptCharacterAnimation BEFORE handing it to the homed Fixup -- the Fixup
-    // blindly derefs the character table, so a bad charTable/charCount AVs. POINTER-SIZE AWARE: the
-    // FixupWalk reads charCount as a 4-byte int at +0x0C and the pointer slots (charTable +0x10,
-    // importTable +0x24, initList +0x2C) at the .apt's TOff width (4 or 8) with the table stride ==
-    // TOff. We read with the SAME widths so the validation matches exactly what Fixup will touch.
-    // Requires: sane charCount (1..512), an in-range charTable, and EVERY table entry an in-range
-    // offset to a record whose type word is a known Apt character type. Returns true + a confidence
-    // score only when it really looks like a char anim (so a string/import region is rejected).
-    static bool ValidateCharAnimRoot(uintptr_t luBase, u32 luCAOff, u32 luSize, int liPtrSize,
-                                     u32* lpuScoreOut)
-    {
-        if (lpuScoreOut) *lpuScoreOut = 0;
-        if (luCAOff == 0 || luCAOff + 0x30u > luSize)
-            return false;
-        const u32 luStride = (liPtrSize == 8) ? 8u : 4u;
-        const u32 luCharCount = *reinterpret_cast<const u32*>(luBase + luCAOff + 0x0Cu);     // +0x0C count
-        const u64 luCharTable64 = ReadSlot(luBase, luCAOff + 0x10u, liPtrSize);              // +0x10 table off
-        if (luCharCount == 0 || luCharCount > 512u)
-            return false;
-        if (luCharTable64 == 0 || luCharTable64 >= luSize || (luCharTable64 & 3u) != 0)
-            return false;
-        if (luCharTable64 + static_cast<u64>(luCharCount) * luStride > luSize)
-            return false;
-        const u32 luCharTable = static_cast<u32>(luCharTable64);
-
-        // Every char-table entry (Fixup walks all of them): an in-range offset to a record whose type
-        // word is a known Apt character type (1 shape, 2 button/morph, 3 text, 5 sprite, 9 movie,
-        // 10 font, 15, or 0 placeholder). Reject on the first bad one so Fixup never AVs.
-        u32 luScore = 0;
-        for (u32 lk = 0; lk < luCharCount; ++lk)
-        {
-            const u64 luEntry = ReadSlot(luBase, luCharTable + lk * luStride, liPtrSize);
-            if (luEntry == 0) { ++luScore; continue; }   // null entry allowed
-            if (luEntry >= luSize || (luEntry & 3u) != 0)
-                return false;
-            const u32 luType = *reinterpret_cast<const u32*>(luBase + static_cast<u32>(luEntry));
-            if (luType == 0u || luType == 1u || luType == 2u || luType == 3u ||
-                luType == 5u || luType == 9u || luType == 10u || luType == 15u)
-                ++luScore;
-            else
-                return false;
-        }
-        // The init-list + import-table FixupWalk also walks: counts sane + table offsets in-range.
-        const u32 luImpCount  = *reinterpret_cast<const u32*>(luBase + luCAOff + 0x20u);
-        const u64 luImpTable  = ReadSlot(luBase, luCAOff + 0x24u, liPtrSize);
-        const u32 luInitCount = *reinterpret_cast<const u32*>(luBase + luCAOff + 0x28u);
-        const u64 luInitList  = ReadSlot(luBase, luCAOff + 0x2Cu, liPtrSize);
-        const u32 luImpStride  = (liPtrSize == 8) ? 0x18u : 0x10u;   // {name*,class*,id,AptFile*}
-        const u32 luInitStride = (liPtrSize == 8) ? 0x10u : 0x08u;   // {ptr, int32 indicator}
-        if (luImpCount > 4096u || luInitCount > 4096u)
-            return false;
-        if (luImpCount > 0u && (luImpTable == 0u || luImpTable >= luSize ||
-                                luImpTable + static_cast<u64>(luImpCount) * luImpStride > luSize))
-            return false;
-        if (luInitCount > 0u && (luInitList == 0u || luInitList >= luSize ||
-                                 luInitList + static_cast<u64>(luInitCount) * luInitStride > luSize))
-            return false;
-
-        if (lpuScoreOut) *lpuScoreOut = luScore;
-        return luScore >= ((luCharCount < 4u) ? luCharCount : 4u);
-    }
-
     // =========================================================================
-    // STEP 1 -- FAITHFUL INSTANTIATION (gated, one-shot, heavily guarded).
+    // LocateMovieRoot8 -- FLAG (x64 converted 8-byte bundle): find the type-9 MOVIE ROOT
+    // character header by scanning for the 0x09876543 character signature. Returns the byte
+    // offset (from luBase) of the ROOT CHARACTER HEADER (mnType==9 lives here), or 0.
     //
-    // Copy the .apt resource into a LOW-4GB buffer, run the homed AptCharacterAnimation::Fixup
-    // (FixupTranscode, the 4-byte path) over it to produce a live AptCharacterAnimation, synthesise
-    // a loaded AptFile around it, and instantiate it as a root AptCIH on the director's root display
-    // list (AptGetAnimationAtLevel(0) -> MakeCharacterAnimationInst -> SetCharacterInst). On ANY
-    // failure: bail cleanly (s_bFaithfulInstantiated stays false), leaving the direct-geometry render
-    // intact. Per-step [AptRT] faithful: probes so the run shows exactly how far it got.
+    // The console locates the root via pConstFile->mnDataRootOffset (def base at root+16 for
+    // the 4-byte format), but our converted 8-byte .apt's dataRootOffset reads 0xB0, which is
+    // NOT the movie root (the console data layout diverged in conversion). So the host scans:
+    // for each signature hit, header = sig-8, def base = header+0x20 (native-8), and the movie
+    // root is the UNIQUE type-9 record with sane screen dims. This is the ONE genuinely
+    // un-homable-as-console piece; everything downstream (CompleteLoad/Resolve/Fixup) is faithful.
+    // For TITLE_SCREEN02 the only validating hit is the char header @res+0x4930 (def base 0x4950:
+    // charCount=41, w=1280, h=720, ms=33). CompleteLoad derives def base = root + 0x20.
     // =========================================================================
-    static void TryFaithfulInstantiate(CgsResource::Entry* lpEntry)
+    static u32 LocateMovieRoot8(uintptr_t luBase, u32 luSize)
     {
+        const u32 kHdrToDefBase = 0x20u;   // native-8 character header size (def base @ header+0x20)
+        for (u32 luScan = 8u; luScan + 4u <= luSize; luScan += 4u)
+        {
+            if (*reinterpret_cast<const u32*>(luBase + luScan) != 0x09876543u)
+                continue;
+            const u32 luHdr  = luScan - 8u;                                     // sig @ header+8
+            const u32 luType = *reinterpret_cast<const u32*>(luBase + luHdr);   // header+0 type
+            const u32 luDB   = luHdr + kHdrToDefBase;
+            if (luDB + 0x50u > luSize)
+                continue;
+            const u32 luW  = *reinterpret_cast<const u32*>(luBase + luDB + 0x28u);
+            const u32 luH  = *reinterpret_cast<const u32*>(luBase + luDB + 0x2Cu);
+            const u32 luMs = *reinterpret_cast<const u32*>(luBase + luDB + 0x30u);
+            const u32 luCC = *reinterpret_cast<const u32*>(luBase + luDB + 0x18u);
+            if (luType == 9u && luW >= 320u && luW <= 2048u && luH >= 240u && luH <= 1536u &&
+                luMs >= 10u && luMs <= 100u && luCC >= 1u && luCC <= 512u)
+            {
+                char lac[176];
+                const u32 luFC = *reinterpret_cast<const u32*>(luBase + luDB + 0x00u);
+                std::snprintf(lac, sizeof(lac),
+                    "[AptRT] faithful: movie root sig@0x%X charHdr@0x%X defbase@0x%X type=9 "
+                    "frameCount=%u charCount=%u w=%u h=%u ms=%u\n",
+                    luScan, luHdr, luDB, luFC, luCC, luW, luH, luMs);
+                CgsDev::Log::WriteToLog(lac);
+                return luHdr;   // the ROOT CHARACTER HEADER offset
+            }
+        }
+        return 0;
+    }
+
+    // =========================================================================
+    // DriveFaithfulLoad -- STEP 8: drive the FAITHFUL Apt load path (retires the invented
+    // TryFaithfulInstantiate signature-scan + hand-rolled AptFile synthesis). Chain:
+    //
+    //   AddAptData(header)  ->  AptLoader::Load(name)  ->  AptCallbackFile::LoadAnimation(name,&h)
+    //       -> AptCompleteAnimationAsyncLoad -> AptLoader::CompleteLoad -> Resolve -> Fixup
+    //   then AptGetAnimationAtLevel(0) -> MakeCharacterAnimationInst(pFile) -> SetCharacterInst.
+    //
+    // The invented pieces that are GONE: the hand-rolled AptFile (now real, via AptLoader::Load
+    // + CompleteLoad's field stores), the invented Fixup invocation (now driven by CompleteLoad
+    // -> Resolve), and the invented instantiation orchestration. The ONE FLAG'd x64 piece that
+    // stays is the movie-root location (LocateMovieRoot8) -- the converted 8-byte bundle's
+    // dataRootOffset does not locate the root, so the host scans + hands CompleteLoad the root.
+    //
+    // On ANY failure: bail cleanly (s_bFaithfulInstantiated stays false), leaving the
+    // direct-geometry render (s_bGeomResolved) intact so the title art still shows.
+    // =========================================================================
+    static void DriveFaithfulLoad(CgsResource::Entry* lpEntry)
+    {
+        (void)lpEntry;
         if (!KB_FAITHFUL_PATH_ENABLED || s_bFaithfulAttempted)
             return;
         s_bFaithfulAttempted = true;
 
         char lac[224];
-        CgsDev::Log::WriteToLog("[AptRT] faithful: STEP 1 instantiation begin.\n");
+        CgsDev::Log::WriteToLog("[AptRT] faithful: STEP 8 load-path begin.\n");
 
-        // Need a live Apt context (the director) + the GC pool (the root CIH allocates from it).
+        // Need a live Apt context (the director + loader) + the GC pool (the root CIH allocates
+        // from it). GetTarget()->mpLoader is the faithfully-initialised AptLoader.
         AptTarget* lpTarget = GetTarget();
-        if (lpTarget == nullptr || lpTarget->mpAnimationTarget == nullptr)
+        if (lpTarget == nullptr || lpTarget->mpAnimationTarget == nullptr || lpTarget->mpLoader == nullptr)
         {
-            CgsDev::Log::WriteToLog("[AptRT] faithful: no Apt director (GetTarget/mpAnimationTarget null) "
+            CgsDev::Log::WriteToLog("[AptRT] faithful: no Apt director/loader (GetTarget null) "
                                     "-- bail, fallback to direct geometry (FLAG).\n");
             return;
         }
@@ -963,286 +910,139 @@ namespace BrnGui
             return;
         }
 
-        // --- 1. determine the .apt pointer size + the working base ---------------------------------
-        // GUIAPT64 is NATIVE 8-byte ("Apt Data:1:7:8"): FixupInPlace relocates IN PLACE at the REAL
-        // (high) resource address -- no low-4GB copy, no transcode (8-byte slots hold full x64
-        // addresses). GUIAPT32 is 4-byte: FixupTranscode needs the low-4GB copy. We detect the size
-        // from the const-file signature and pick the base accordingly.
+        // The AptData resource IS the AptDataHeader; the header sits at the resource base.
         const u32 luSize = s_uAptResourceSize;
-        void* lpHigh = reinterpret_cast<void*>(s_uAptResourceBase);
-        if (luSize == 0 || lpHigh == nullptr)
+        const uintptr_t luBase = s_uAptResourceBase;
+        if (luSize == 0 || luBase == 0 || s_pAptHeader == nullptr)
         {
-            CgsDev::Log::WriteToLog("[AptRT] faithful: no resource bytes -- bail (FLAG).\n");
+            CgsDev::Log::WriteToLog("[AptRT] faithful: no resource bytes / header -- bail (FLAG).\n");
             return;
         }
 
-        // The header's mpConstData field is itself pointer-sized; read it ptr-size-aware. We first
-        // peek the const-file at BOTH the 4-byte (word[2]) and 8-byte (u64[2]) header positions to
-        // find the "Apt Data:1:7:N" signature, then trust GetPointerSizeBytes().
-        // Read the constData offset at the 8-byte header position first (GUIAPT64 is the target).
-        u32 luConstOff = static_cast<u32>(*reinterpret_cast<const u64*>(s_uAptResourceBase + 16u)); // u64[2]
+        // Peek the const-file pointer size (the "Apt Data:1:7:N" signature). Our converted bundle
+        // is native 8-byte; read mpConstData at its 8-byte header position (u64 @ +16).
+        const u32 luConstOff = static_cast<u32>(*reinterpret_cast<const u64*>(luBase + 16u));
         if (luConstOff == 0 || luConstOff >= luSize)
-            luConstOff = reinterpret_cast<const u32*>(s_uAptResourceBase)[2];   // fall back to 4-byte word[2]
-        if (luConstOff >= luSize)
         {
             CgsDev::Log::WriteToLog("[AptRT] faithful: constData offset out of range -- bail (FLAG).\n");
             return;
         }
-        AptConstFile* lpConstFileHigh =
-            reinterpret_cast<AptConstFile*>(s_uAptResourceBase + luConstOff);
-        const int liPtrSize = lpConstFileHigh->GetPointerSizeBytes();   // 8 (GUIAPT64) or 4 (GUIAPT32)
+        AptConstFile* lpConstFile = reinterpret_cast<AptConstFile*>(luBase + luConstOff);
+        const int liPtrSize = lpConstFile->GetPointerSizeBytes();   // 8 (native) or 4 (console)
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] faithful: header@0x%llX constFile@0x%X ptrSize=%d (%u bytes).\n",
+            (unsigned long long)luBase, luConstOff, liPtrSize, luSize);
+        CgsDev::Log::WriteToLog(lac);
 
-        // Working base: 8-byte -> the REAL resource address (in-place); 4-byte -> a low-4GB copy.
-        uintptr_t luBase;
+        // --- 1. LOCATE the movie-root character header (FLAG: x64 converted bundle) ------------
+        // CompleteLoad needs the root header (mpData) -- our converted bundle's dataRootOffset does
+        // not locate it, so the host scans (see LocateMovieRoot8). Stash it for LoadAnimation ->
+        // CompleteLoad (via gAptLoadAnimRootOverride). On the 4-byte console path leave it null so
+        // CompleteLoad uses the faithful pBase + dataRootOffset formula.
+        void* lpRootOverride = nullptr;
         if (liPtrSize == 8)
         {
-            luBase = s_uAptResourceBase;   // FixupInPlace relocates in place at the real address
-            std::snprintf(lac, sizeof(lac),
-                "[AptRT] faithful: GUIAPT64 1:7:8 native -> FixupInPlace at real base 0x%016llX (%u bytes).\n",
-                (unsigned long long)luBase, luSize);
-            CgsDev::Log::WriteToLog(lac);
-        }
-        else
-        {
-            s_pLowAptCopy = AllocLow4GB(luSize);
-            if (s_pLowAptCopy == nullptr || reinterpret_cast<uintptr_t>(s_pLowAptCopy) >= 0x100000000ull)
+            const u32 luRootHdrOff = LocateMovieRoot8(luBase, luSize);
+            if (luRootHdrOff == 0)
             {
-                std::snprintf(lac, sizeof(lac),
-                    "[AptRT] faithful: low-4GB alloc FAILED (%p) -- 4-byte transcode impossible -- bail (FLAG).\n",
-                    s_pLowAptCopy);
-                CgsDev::Log::WriteToLog(lac);
+                CgsDev::Log::WriteToLog("[AptRT] faithful: no sane type-9 movie root found "
+                                        "-- bail to fallback, game stays up (FLAG).\n");
                 return;
             }
-            s_uLowAptCopyBytes = luSize;
-            std::memcpy(s_pLowAptCopy, lpHigh, luSize);
-            luBase = reinterpret_cast<uintptr_t>(s_pLowAptCopy);
-            // re-point the const file into the low copy.
-            luConstOff = luConstOff;   // same offset, different base
-            std::snprintf(lac, sizeof(lac),
-                "[AptRT] faithful: GUIAPT32 1:7:4 -> low copy @ 0x%08X (%u bytes), FixupTranscode.\n",
-                static_cast<u32>(luBase), luSize);
-            CgsDev::Log::WriteToLog(lac);
+            lpRootOverride = reinterpret_cast<void*>(luBase + luRootHdrOff);
         }
+        CgsGui::gAptLoadAnimRootOverride = lpRootOverride;
 
-        AptConstFile* lpConstFile = reinterpret_cast<AptConstFile*>(luBase + luConstOff);
-        // mnDataRootOffset: the reconstructed AptConstFile reads it as a u32 at +0x14 (the 4-byte
-        // format). For the 8-byte format the signature is 16 bytes followed by a u64 data-root offset,
-        // so read it ptr-size-aware (u64 @ const+16 for 8-byte; the struct field for 4-byte).
-        u32 luDataRootOff = (liPtrSize == 8)
-            ? static_cast<u32>(*reinterpret_cast<const u64*>(luBase + luConstOff + 16u))
-            : lpConstFile->mnDataRootOffset;
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: constFile@0x%X ptrSize=%d dataRootOff=0x%X.\n",
-            luConstOff, liPtrSize, luDataRootOff);
-        CgsDev::Log::WriteToLog(lac);
-
-        // --- 2. locate the MOVIE ROOT (def base) -- VERIFIED scheme -------------------------------
-        // USER (2026-06-30, verified vs the real GUIAPT64/TITLE_SCREEN02 bytes): the const-file
-        // dataRootOffset does NOT point at the movie root on the native bundle (it reads 0xB0). Instead
-        // SCAN for the character signature 0x09876543: for each hit header = sigOff-8, def-base =
-        // header+0x20 (native-8; +0x10 console). The MOVIE ROOT is the UNIQUE type-9 record with sane
-        // screen dims (w 320..2048, h 240..1536, ms 10..100). For TITLE_SCREEN02 that's the only one of
-        // 36 signatures that validates (def-base @res+0x4950: charCount=41, w=1280, h=720, ms=33).
-        // The FixupWalk reads its def-base via the (now ptr-size-aware) AptOffsets; we hand it the def
-        // base directly as `pThis`. [4-byte path: keep the CompleteLoad dataRoot+16 location.]
-        u32 luCAOff = 0;   // byte offset of the AptCharacterAnimation def base
-        if (liPtrSize == 8)
-        {
-            const u32 kHdrToDefBase = 0x20u;   // native-8 character header size (def base @ header+0x20)
-            for (u32 luScan = 0; luScan + 4u <= luSize; luScan += 4u)
-            {
-                if (*reinterpret_cast<const u32*>(luBase + luScan) != 0x09876543u)
-                    continue;
-                const u32 luHdr = luScan - 8u;             // sig @ header+8
-                if (luScan < 8u) continue;
-                const u32 luType = *reinterpret_cast<const u32*>(luBase + luHdr);   // header+0 type
-                const u32 luDB   = luHdr + kHdrToDefBase;
-                if (luDB + 0x50u > luSize) continue;
-                const u32 luW  = *reinterpret_cast<const u32*>(luBase + luDB + 0x28u);
-                const u32 luH  = *reinterpret_cast<const u32*>(luBase + luDB + 0x2Cu);
-                const u32 luMs = *reinterpret_cast<const u32*>(luBase + luDB + 0x30u);
-                const u32 luCC = *reinterpret_cast<const u32*>(luBase + luDB + 0x18u);
-                if (luType == 9u && luW >= 320u && luW <= 2048u && luH >= 240u && luH <= 1536u &&
-                    luMs >= 10u && luMs <= 100u && luCC >= 1u && luCC <= 512u)
-                {
-                    luCAOff = luDB;
-                    const u32 luFC = *reinterpret_cast<const u32*>(luBase + luDB + 0x00u);
-                    std::snprintf(lac, sizeof(lac),
-                        "[AptRT] faithful: movie root sig@0x%X defbase@0x%X type=9 frameCount=%u "
-                        "charCount=%u w=%u h=%u ms=%u\n",
-                        luScan, luDB, luFC, luCC, luW, luH, luMs);
-                    CgsDev::Log::WriteToLog(lac);
-                    break;
-                }
-            }
-            if (luCAOff == 0)
-                CgsDev::Log::WriteToLog("[AptRT] faithful: 8-byte signature scan found no sane type-9 "
-                                        "movie root -- bail to fallback (FLAG).\n");
-        }
-        else
-        {
-            // 4-byte (GUIAPT32) path: the CompleteLoad-faithful dataRoot+16, validated.
-            if (luDataRootOff != 0 && luDataRootOff + 16u + 0x30u <= luSize)
-            {
-                const u32 luTry = luDataRootOff + 16u;
-                u32 luScore = 0;
-                if (ValidateCharAnimRoot(luBase, luTry, luSize, 4, &luScore))
-                    luCAOff = luTry;
-            }
-            if (luCAOff == 0)
-            {
-                for (u32 luScan = 16u; luScan + 0x30u <= luSize; luScan += 4u)
-                {
-                    u32 luScore = 0;
-                    if (ValidateCharAnimRoot(luBase, luScan, luSize, 4, &luScore)) { luCAOff = luScan; break; }
-                }
-            }
-        }
-
-        if (luCAOff == 0)
-        {
-            CgsDev::Log::WriteToLog("[AptRT] faithful: no valid AptCharacterAnimation found -- bail to "
-                                    "geometry fallback, game stays up (FLAG).\n");
-            return;
-        }
-
-        // The def base IS what the (ptr-size-aware) FixupWalk reads as `pThis`. The movie-root CHARACTER
-        // header (where mnType==9 lives, read by the AptCharacterInst ctor) is at def-base - headerSize
-        // (native-8 header 0x20; console 0x10). pFile->mpData must point at that CHARACTER header (not
-        // the def base) -- MakeCharacterAnimationInst builds the inst over `(AptCharacter*)mpData`.
-        const u32 luHdrSize = (liPtrSize == 8) ? 0x20u : 0x10u;
-        const u32 luCharHdrOff = (luCAOff >= luHdrSize) ? (luCAOff - luHdrSize) : luCAOff;
-        void* lpResolveBase = reinterpret_cast<void*>(luBase);
-        void* lpDataRoot    = reinterpret_cast<void*>(luBase + luCharHdrOff);  // movie-root character header
-        AptCharacterAnimation* lpCharAnim =
-            reinterpret_cast<AptCharacterAnimation*>(luBase + luCAOff);
-
-        // --- 3. Fixup the movie: relocate the serialised root IN PLACE against the load base. -------
-        // The faithful Fixup (single native-64-bit path, no bounds guards) relocates every file offset
-        // to a live pointer. The relocation base is the memory address of aptDataOffset (the "Apt
-        // Data:1:7:8" magic) -- serialised offsets are file-relative to THAT, not the resource start.
-        // Locate it by scanning the loaded resource for the magic. FLAG (Step 9): AptDataHeader::FixUp
-        // will supply aptDataOffset directly; until then the bring-up finds it here.
-        uintptr_t luAptDataOff = 0;
-        {
-            static const char kMagic[] = "Apt Data:1:7:8";
-            const u32 kMagicLen = (u32)(sizeof(kMagic) - 1);
-            for (u32 s = 0; s + kMagicLen <= luSize; ++s)
-            {
-                const char* p = reinterpret_cast<const char*>(luBase + s);
-                u32 k = 0;
-                for (; k < kMagicLen; ++k) { if (p[k] != kMagic[k]) break; }
-                if (k == kMagicLen) { luAptDataOff = luBase + s; break; }
-            }
-        }
-        void* lpFixupBase = reinterpret_cast<void*>(luAptDataOff ? luAptDataOff : luBase);
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: Fixup base (aptDataOffset)=0x%llX; calling Fixup on charAnim@0x%X ...\n",
-            (unsigned long long)reinterpret_cast<uintptr_t>(lpFixupBase), luCAOff);
-        CgsDev::Log::WriteToLog(lac);
-        AptCharacterAnimation* lpFixed = lpCharAnim->Fixup(lpFixupBase, lpConstFile, lpFixupBase);
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: Fixup COMPLETED. charCount@+0x18=%d importCount@+0x34=%d\n",
-            *reinterpret_cast<const int*>(reinterpret_cast<char*>(lpCharAnim) + 0x18),
-            *reinterpret_cast<const int*>(reinterpret_cast<char*>(lpCharAnim) + 0x34));
-        CgsDev::Log::WriteToLog(lac);
-
-        // --- 3b. THE FRAME TIMELINE is NOT relocated here. -----------------------------------------
-        // FLAG (Step 5/6): the root movie's frame table (framesOffset@def+0x08) + the case-5/9 sub-movie
-        // timelines are relocated by the faithful AptMovie::resolve (called from Fixup) + AptLoader::
-        // CompleteLoad -- NOT by a host routine. The invented AptRelocateTimeline8* + the frame-array
-        // "fallback" (a wrong-base artifact: the old code used the resource start, so def+0x08 read a
-        // mis-based offset) are gone. Until the 64-bit AptMovie::resolve lands, the timeline stays
-        // un-resolved (the geometry fallback still renders); the composed animation arrives with Step 5/6.
         // Keep the resource bounds for the native-8 PLACE path's deref guard (gAptCmd8BoundLo/Hi):
-        // doFrameControls reads the relocated command records + char table; bound them so an un-widened
-        // record/char is skipped (named via the place probe) instead of AV'ing. Only on the native-8 path.
-        if (liPtrSize == 8)
+        // doFrameControls reads the relocated command records + char table; bound them so an
+        // un-widened record/char is skipped (named via the place probe) instead of AV'ing.
+        if (liPtrSize == 8) { gAptCmd8BoundLo = luBase; gAptCmd8BoundHi = luBase + luSize; }
+        else                { gAptCmd8BoundLo = 0;      gAptCmd8BoundHi = 0; }
+
+        // --- 2. REGISTER the header with the data handler (AptDataHandler::AddAptData) ----------
+        // So the faithful FindAptData(name) inside LoadAnimation resolves it. Idempotent by name.
+        // FLAG (x64): AddAptData takes the resolved name (the header's mpacMovieName is an
+        // un-relocated offset on x64); we pass s_acLoadedMovieName.
+        CgsGui::AptAux* lpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
+        if (lpAptAux == nullptr)
         {
-            gAptCmd8BoundLo = luBase;
-            gAptCmd8BoundHi = luBase + luSize;
-        }
-        else
-        {
-            gAptCmd8BoundLo = 0; gAptCmd8BoundHi = 0;
-        }
-        s_pFaithfulCharAnim = lpFixed;
-        if (lpFixed == nullptr)
-        {
-            CgsDev::Log::WriteToLog("[AptRT] faithful: Fixup returned null -- bail (FLAG).\n");
+            CgsDev::Log::WriteToLog("[AptRT] faithful: AptAux singleton null -- bail (FLAG).\n");
+            CgsGui::gAptLoadAnimRootOverride = nullptr;
             return;
         }
+        lpAptAux->mAptDataHandler.AddAptData(reinterpret_cast<CgsGui::AptDataHeader*>(s_pAptHeader),
+                                             s_acLoadedMovieName);
+        CgsDev::Log::WriteToLog("[AptRT] faithful: AddAptData(header) registered.\n");
+
+        // --- 3. REGISTER / look up the AptFile handle (AptLoader::Load) --------------------------
+        // Load returns a handle owning ONE counted reference. We keep it (laOwned) and hand a
+        // COPY to LoadAnimation (which consumes its copy, per the console by-value slot). The owned
+        // handle survives, and after CompleteLoad it points at the loaded movie (mpData = root).
+        EAStringC lNameStr(s_acLoadedMovieName);
+        AptFilePtr laOwned = lpTarget->mpLoader->Load(lNameStr);
+        if (laOwned.pData == nullptr)
         {
-            // Read the counts via the SERIALISED def-base offsets the Fixup walks (ptr-size aware:
-            // 8-byte -> charCount+0x18, importCount+0x34, initCount+0x40; 4-byte -> +0x0C/+0x20/+0x28).
-            // RE-VALIDATE they are sane post-fixup.
-            const u32 luOffCC = (liPtrSize == 8) ? 0x18u : 0x0Cu;
-            const u32 luOffIC = (liPtrSize == 8) ? 0x34u : 0x20u;
-            const u32 luOffNC = (liPtrSize == 8) ? 0x40u : 0x28u;
-            const u32 luPostCharCount = *reinterpret_cast<const u32*>(luBase + luCAOff + luOffCC);
-            const u32 luPostImpCount  = *reinterpret_cast<const u32*>(luBase + luCAOff + luOffIC);
-            const u32 luPostInitCount = *reinterpret_cast<const u32*>(luBase + luCAOff + luOffNC);
+            CgsDev::Log::WriteToLog("[AptRT] faithful: AptLoader::Load returned null handle -- bail (FLAG).\n");
+            CgsGui::gAptLoadAnimRootOverride = nullptr;
+            return;
+        }
+
+        AptFilePtr laForCallback;
+        laForCallback.pData = laOwned.pData;
+        AptSharedPtrIncRef(laForCallback.pData);   // the callback consumes this copy (keep laOwned alive)
+
+        // --- 4. DRIVE the faithful load: LoadAnimation -> AsyncLoad -> CompleteLoad -> Resolve ->
+        //        Fixup. The Fixup relocates the movie root in place (charCount/importCount set). ---
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] faithful: LoadAnimation('%s', handle=%p) [rootOverride=%p] ...\n",
+            s_acLoadedMovieName, (void*)laForCallback.pData, lpRootOverride);
+        CgsDev::Log::WriteToLog(lac);
+        CgsGui::AptCallbackFile::LoadAnimation(s_acLoadedMovieName, &laForCallback);
+        CgsGui::gAptLoadAnimRootOverride = nullptr;   // one-shot; done
+
+        // The owned handle's AptFile is now loaded (CompleteLoad set mpData = root, state = 3).
+        AptFile* lpFile = laOwned.pData;
+        if (lpFile == nullptr || lpFile->mpData == nullptr)
+        {
+            CgsDev::Log::WriteToLog("[AptRT] faithful: post-LoadAnimation AptFile not loaded "
+                                    "(mpData null) -- bail (FLAG).\n");
+            return;
+        }
+        s_pFaithfulAptFile  = lpFile;
+        s_pFaithfulCharAnim = reinterpret_cast<AptCharacterAnimation*>(
+            static_cast<char*>(lpFile->mpData) + ((liPtrSize == 8) ? 0x20 : 0x10));   // def base
+
+        // "Fixup COMPLETED" marker (read the counts the Fixup walk populated at the def base).
+        {
+            const u32 luOffCC = (liPtrSize == 8) ? 0x18u : 0x0Cu;   // charCount
+            const u32 luOffIC = (liPtrSize == 8) ? 0x34u : 0x20u;   // importCount
+            const int liCC = *reinterpret_cast<const int*>(
+                reinterpret_cast<char*>(s_pFaithfulCharAnim) + luOffCC);
+            const int liIC = *reinterpret_cast<const int*>(
+                reinterpret_cast<char*>(s_pFaithfulCharAnim) + luOffIC);
             std::snprintf(lac, sizeof(lac),
-                "[AptRT] faithful: Fixup -> charAnim %p (chars=%u imports=%u init/export=%u)\n",
-                (void*)lpFixed, luPostCharCount, luPostImpCount, luPostInitCount);
+                "[AptRT] faithful: Fixup COMPLETED. charCount@+0x18=%d importCount@+0x34=%d (via CompleteLoad)\n",
+                liCC, liIC);
             CgsDev::Log::WriteToLog(lac);
-            if (luPostCharCount == 0u || luPostCharCount > 512u ||
-                luPostImpCount > 4096u || luPostInitCount > 4096u)
+            if (liCC <= 0 || liCC > 512 || liIC < 0 || liIC > 4096)
             {
                 CgsDev::Log::WriteToLog("[AptRT] faithful: post-fixup counts INSANE -- bail to fallback (FLAG).\n");
                 return;
             }
         }
 
-        // --- 4. synthesise a loaded AptFile around the fixed-up root (MakeCharacterAnimationInst reads
-        //        pFile->mpData as the movie root) -------------------------------------------------
-        // The instantiation reads pFile->mpData (the AptMovieData root, whose +0x10 is the embedded
-        // AptCharacterAnimation). We point mpData at lpDataRoot (the root; charAnim is at +16).
-        s_pFaithfulAptFile = static_cast<AptFile*>(gpNonGCPoolManager->Allocate(sizeof(AptFile)));
-        if (s_pFaithfulAptFile == nullptr)
-        {
-            CgsDev::Log::WriteToLog("[AptRT] faithful: AptFile alloc failed -- bail (FLAG).\n");
-            return;
-        }
-        std::memset(s_pFaithfulAptFile, 0, sizeof(AptFile));
-        s_pFaithfulAptFile->mnRefCount      = 1;
-        s_pFaithfulAptFile->mnState         = 4;          // loaded
-        s_pFaithfulAptFile->mnField12       = 1;
-        s_pFaithfulAptFile->mpData          = lpDataRoot;    // the movie root (charAnim @ +16)
-        s_pFaithfulAptFile->mpResolveContext = lpResolveBase; // the real (8-byte) or low-copy (4-byte) base
-        s_pFaithfulAptFile->mpDataBlock     = lpResolveBase;
-
         // --- 5. the root level-0 CIH on the director's root display list ---------------------------
-        // SELF-TEST the GC pool first: AptGetAnimationAtLevel(0) allocates an AptCIH(40) from the GC
-        // pool (gpGCPoolManager). With the x64 size-statics override above (max=256), a 40-byte carve
-        // must succeed. Probe it BEFORE the engine call so the run shows whether the GC alloc is the
-        // crash (vs the display-list search). Free the probe alloc so it does not leak the slot.
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: GC pool self-test: gcMax=%u gcMin=%u sizeOff=%u; Allocate(40) ...\n",
-            (unsigned)gAptValueGCMaxItemSize, (unsigned)gAptValueGCMinItemSize,
-            (unsigned)gAptValueGCSizeOffset);
-        CgsDev::Log::WriteToLog(lac);
-        if (gpGCPoolManager == nullptr)
-        {
-            CgsDev::Log::WriteToLog("[AptRT] faithful: GC pool null -- bail (FLAG).\n");
-            return;
-        }
+        // AptGetAnimationAtLevel(0) searches the director's root display list then (if absent) creates
+        // an AptCIH via the GC pool. Self-test the GC pool first (probe the 40-byte carve).
         {
             void* lpGCTest = gpGCPoolManager->Allocate(40);
-            std::snprintf(lac, sizeof(lac), "[AptRT] faithful: GC Allocate(40) = %p %s\n",
-                          lpGCTest, lpGCTest ? "(ok)" : "(FAILED)");
-            CgsDev::Log::WriteToLog(lac);
             if (lpGCTest == nullptr)
             {
                 CgsDev::Log::WriteToLog("[AptRT] faithful: GC pool cannot carve 40 bytes -- bail (FLAG).\n");
                 return;
             }
-            gpGCPoolManager->Deallocate(lpGCTest, 40);   // return the probe slot
+            gpGCPoolManager->Deallocate(lpGCTest, 40);
         }
-
-        // FLAG: AptGetAnimationAtLevel(0) searches the director's root display list then (if absent)
-        // creates an AptCIH via AptCIH::operator new(40) -> the GC pool (now correctly sized) and derefs
-        // mpCharacterInst->mpRenderItem. Guarded below (null -> bail to fallback).
         CgsDev::Log::WriteToLog("[AptRT] faithful: AptGetAnimationAtLevel(0) (create root CIH) ...\n");
         AptCIH* lpRootCIH = AptGetAnimationAtLevel(0);
         if (lpRootCIH == nullptr)
@@ -1251,17 +1051,11 @@ namespace BrnGui
             return;
         }
         s_pFaithfulRootCIH = lpRootCIH;
-        std::snprintf(lac, sizeof(lac), "[AptRT] faithful: root CIH %p created on director's root list.\n",
-                      (void*)lpRootCIH);
-        CgsDev::Log::WriteToLog(lac);
 
         // --- 6. instantiate the movie + bind it to the root CIH -----------------------------------
-        // The native-8 movie's embedded AptCharacterAnimation character TABLE is only partly relocated
-        // by FixupInPlace, so MakeCharacterAnimationInst's IncCharacterList walk (mpCharacterTable[i]
-        // -> pCharacter->*) would read serialized 4-byte offsets as 64-bit pointers and AV. Gate it off
-        // on the native-8 path (the char-list registration is pure AS-lookup bookkeeping, not needed for
-        // the tick/render path yet); the walk resumes once the character records are fully widened. Set
-        // BEFORE MakeCharacterAnimationInst so the gate is live when IncCharacterList is reached.
+        // Gate off IncCharacterList on the native-8 path (the char table is only partly widened, so
+        // the walk would read 4-byte offsets as 64-bit pointers and AV) -- pure AS-lookup bookkeeping,
+        // not needed for the tick/render path yet. Set BEFORE MakeCharacterAnimationInst.
         gAptSkipCharList = (liPtrSize == 8) ? 1u : 0u;
         CgsDev::Log::WriteToLog("[AptRT] faithful: MakeCharacterAnimationInst(pFile) ...\n");
         AptCharacterAnimationInst* lpInst = MakeCharacterAnimationInst(s_pFaithfulAptFile);
@@ -1270,20 +1064,10 @@ namespace BrnGui
             CgsDev::Log::WriteToLog("[AptRT] faithful: MakeCharacterAnimationInst null -- bail (FLAG).\n");
             return;
         }
-        std::snprintf(lac, sizeof(lac), "[AptRT] faithful: animInst %p; SetCharacterInst on root CIH ...\n",
-                      (void*)lpInst);
-        CgsDev::Log::WriteToLog(lac);
         lpRootCIH->SetCharacterInst(reinterpret_cast<AptCharacterInst*>(lpInst), true);
 
-        // Set the embedded-movie offset for the per-frame tick (AptCIH_GetClipMovie reads
-        // character + gAptCharMovieOffset): native-8 -> 0x20, console-4 -> 0x10.
-        gAptCharMovieOffset = (liPtrSize == 8) ? 0x20u : 0x10u;
-        // The native-8 TIMELINE is now RELOCATED (FixupWalk case-5/9) and the PLACE path is widened
-        // (AptMovie::doFrameControls / gAptCmd8). So:
-        //   * CLEAR gAptSkipTimeline -> doFrameControls runs frame 0 and PLACES its characters.
-        //   * SET gAptCmd8 -> doFrameControls reads the x64 command-record offsets + uses placeObjectNCXForm.
-        //   * SET gAptSkipFrameActions -> queueFrameActions + the AS clip events stay skipped (the AS
-        //     director queue / interpreter scope is the NEXT pass).
+        // Runtime gates for the deferred per-frame tick (unchanged from the prior faithful pass).
+        gAptCharMovieOffset  = (liPtrSize == 8) ? 0x20u : 0x10u;
         gAptSkipTimeline     = 0u;
         gAptCmd8             = (liPtrSize == 8) ? 1u : 0u;
         gAptSkipFrameActions = (liPtrSize == 8) ? 1u : 0u;
@@ -1292,8 +1076,8 @@ namespace BrnGui
         s_bFaithfulInstantiated = true;
         std::snprintf(lac, sizeof(lac),
             "[AptRT] faithful: INSTANTIATED -- root CIH %p <- animInst %p (movie root %p); "
-            "displayList live. charMovieOff=0x%X. (STEP 2 tick next.)\n",
-            (void*)lpRootCIH, (void*)lpInst, lpDataRoot, gAptCharMovieOffset);
+            "displayList live. charMovieOff=0x%X. (faithful load path; STEP 2 tick next.)\n",
+            (void*)lpRootCIH, (void*)lpInst, lpFile->mpData, gAptCharMovieOffset);
         CgsDev::Log::WriteToLog(lac);
     }
 

@@ -354,13 +354,31 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
     }
 }
 
-// Resolve @0x80EEC4 -- resolve the (serialised) movie root against the load base.
+// Resolve @0x82AFF5E0 (PS3 @0x80EEC4) -- resolve the (serialised) movie root against the
+// load base. DECOMPILED FAITHFULLY from BURNOUT_X360_ARTIST.XEX. The X360 (a1=this,
+// a2=pBase, a3=pConstFile; the 4th reg r6 == CompleteLoad's a5 (the AptDataHeader) is
+// carried untouched into Fixup, so it is threaded here as pBlock):
+//   v4 = *(a3+28); if (v4) v4 += a3; *(a3+28) = v4;   // relocate pConstFile->mnSecondaryOffset
+//   *(a1+48) = 0;                                      // clear the resolve-state scratch (4-byte stw)
+//   Fixup();
+//   v8 = *(a3+28); if (v8) v8 -= a3; *(a3+28) = v8;   // un-relocate mnSecondaryOffset
+//
+// CRITICAL (x64): `*(a1+48) = 0` is a 4-BYTE stw at this+0x30 -- it must NOT be an 8-byte
+// pointer clear. On our 8-byte serialised def-base layout the importCount lives at +0x34
+// (right after the +0x30 scratch), so clearing 8 bytes at +0x30 would ZERO importCount.
+// The typed `mpResolveState` member is a void* (8 bytes on x64), so it is cleared as an
+// explicit 4-byte int at +0x30 to match the console stw and preserve importCount@+0x34.
+//
+// FLAG (x64): the pConstFile->mnSecondaryOffset in-place relocate/un-relocate around Fixup
+// is a 32-bit-slot += 64-bit-base write-back that x64 cannot perform; it is a temporary state
+// only AptMovie::resolve (case-5/9, DEFERRED) reads, and nothing reads it between the relocate
+// and un-relocate on this path, so it is omitted (as the prior homing already flagged).
 AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile* pConstFile, void* pBlock)
 {
-    // FLAG: the console relocates pConstFile->mnSecondaryOffset in place (+= base)
-    // around the Fixup; x64 computes addresses without the 32-bit write-back, so
-    // only the scratch clear + the Fixup remain here.
-    mpResolveState = 0;
+    // Faithful 4-byte clear of the resolve-state scratch at this+0x30 (the console `*(a1+48)=0`
+    // stw). Writing the 8-byte `mpResolveState` member would clobber the serialised importCount
+    // at +0x34 -- see the note above.
+    *reinterpret_cast<int32_t*>(reinterpret_cast<char*>(this) + 0x30) = 0;
     return Fixup(pBase, pConstFile, pBlock);
 }
 

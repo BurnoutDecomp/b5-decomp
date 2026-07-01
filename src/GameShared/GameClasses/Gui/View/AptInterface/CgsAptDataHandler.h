@@ -46,8 +46,18 @@ namespace CgsGui
         // valid and the block pointer is non-null, then frees it via mpAllocator->Free.
         void  AptFree(void* lpBlock);
 
-        // The remaining methods (Construct / Prepare / Release / Destruct / FindAptData /
-        // AddAptData / RemoveAptData) are homed by their own ledger TUs; declared there.
+        // X360 0x828518F0 (CgsAptDataHandler.cpp). Look up a registered AptDataHeader by its
+        // movie name (hash the name, linear-scan the (hash,header) table); null if absent.
+        AptDataHeader* FindAptData(const char* lpacName);
+
+        // X360 0x82851990 (CgsAptDataHandler.cpp). Register a loaded AptDataHeader keyed by
+        // its movie name (idempotent -- returns the existing header if already registered).
+        // lpacName is the resolved name string (// FLAG x64: the console reads it from the
+        // header's relocated mpacMovieName, which is an un-relocated offset on x64).
+        AptDataHeader* AddAptData(AptDataHeader* lpHeader, const char* lpacName);
+
+        // The remaining methods (Construct / Prepare / Release / Destruct / RemoveAptData)
+        // are homed by their own ledger TUs; declared there.
 
     private:
         s32                 miNumLoadedAptData;                      // +0x000 (h:97)

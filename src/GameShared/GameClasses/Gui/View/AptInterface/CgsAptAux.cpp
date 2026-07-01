@@ -1,12 +1,17 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"  // the render + render-flag callback family
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"       // CgsGui::AptDataHeader (LoadAnimation's FindAptData result)
 #include "SDKs/EATech/include/Apt/Apt.h"                                         // AptUserFunctions gAptFuncs (the host table)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the host-callback asserts)
 
 #include "SDKs/EATech/Apt/AptInit.h"                                            // Apt bring-up entry points (InitializeApt callees)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                                  // AptCreateTargetInstance / AptChangeTargetInstance
+#include "SDKs/EATech/include/Apt/AptLoader.h"                                  // AptCompleteAnimationAsyncLoad (LoadAnimation forwards to it)
+#include "SDKs/EATech/include/Apt/AptSharedPtr.h"                               // AptSharedPtrIncRef/DecRef/Delete (LoadAnimation refcount)
+#include "SDKs/EATech/include/Apt/AptConstFile.h"                               // AptConstFile (the resolved const-file pointer type)
 
 #include <cstring>   // memset (zero-install the gAptFuncs slots)
+#include <cstdint>   // uintptr_t / uint64_t (x64 header-field resolution)
 
 // =============================================================================
 // CgsGui::AptAux / CgsGui::AptAuxPointer + the Apt host user-function table.
@@ -266,6 +271,93 @@ namespace CgsGui
     {
         CGS_ASSERT(false, "AptCallbackFile::GetBytesLoaded() has not been implemented but is being used, please implement before utilising.");
         return 0;
+    }
+
+    // =========================================================================
+    // FLAG (x64 converted 8-byte bundle): the host bring-up pre-locates the movie-root
+    // CHARACTER HEADER (0x09876543 signature scan -- it has the resource size the scan
+    // needs) and stashes it here before calling LoadAnimation. The console reads the root
+    // via pConstFile->mnDataRootOffset, but our converted .apt's dataRootOffset does not
+    // locate the type-9 movie root (its console layout diverged). When null, CompleteLoad
+    // falls back to the faithful console formula. Reset to null by the host after each load.
+    // =========================================================================
+    void* gAptLoadAnimRootOverride = nullptr;   // the located root char header (x64)
+
+    // =========================================================================
+    // AptCallbackFile::LoadAnimation @0x82853E68 -- the host "load this .apt now" callback.
+    // DECOMPILED FAITHFULLY from BURNOUT_X360_ARTIST.XEX (the asserts name this file at
+    // lines 830/833/838). The X360 body (a1 = name, a2 = &handle):
+    //   assert(mpAptAuxInst valid);                                    // "Invalid AptDataHandler..."
+    //   AptData = FindAptData(&mAptDataHandler, a1); assert(AptData);  // "Could not locate AptDataHeader..."
+    //   assert(AptData[5] == 1 || AptData[5] == 2);                    // "File not in a state..."
+    //   v24 = *a2; if (v24) IncRef(v24);                              // pin the handle
+    //   AptCompleteAnimationAsyncLoad(&v24, AptData[1], AptData[2], AptData);
+    //   AptData[5] = 2;                                               // state -> ACTIVE
+    //   r = *a2; *a2 = 0; if (r && --r.count == 0) AptSharedPtrDelete(r);   // drop the original
+    //
+    // AptData[1]/AptData[2] are the header's mpAptData / mpConstData; AptData (the header)
+    // is threaded as a5 all the way to Fixup (LoadRenderingUnit reads AptData+12 = geometry).
+    //
+    // FLAG (x64 fork): the console's mpAptData/mpConstData are relocated 32-bit pointers; our
+    // converted header keeps them as raw file OFFSETS in 8-byte fields (the no-op FixUp -- see
+    // CgsAptDataHeader.cpp). The resource base == the header address (the header sits at the
+    // resource start), so they resolve as headerAddr + offset. The reloc base passed as pBase
+    // is mpConstData (== the "Apt Data:1:7:8" aptDataOffset the Fixup relocates against) -- the
+    // converted bundle collapses pBase and pConstFile to that one address (verified), unlike the
+    // console where pBase == mpAptData. The a2-by-reference form matches the asm's `*a2` reads.
+    // =========================================================================
+    void AptCallbackFile::LoadAnimation(const char* lpacName, AptFilePtr* lpHandle)
+    {
+        AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
+        CGS_ASSERT(lpAptAux != nullptr, "Invalid AptDataHandler in AptCallbackFile::LoadAnimation");
+
+        AptDataHeader* lpAptData = lpAptAux->mAptDataHandler.FindAptData(lpacName);
+        CGS_ASSERT(lpAptData != nullptr,
+                   "Could not locate AptDataHeader in AptCallbackFile::LoadAnimation Check file has been loaded");
+        if (lpAptData == nullptr)
+            return;
+
+        // FLAG (x64 converted 8-byte bundle): the console asserts AptData[5] (meCurrentState) is
+        // LOADED(1)/ACTIVE(2) and then sets it to ACTIVE(2). Our converted header is 8-byte-widened,
+        // so meCurrentState does NOT sit at the u32-struct's +20 (that overlaps mpConstData's high
+        // half at +16); its real offset is ambiguous in the converted layout. The state precondition
+        // is moot here anyway -- the host loads the .apt SYNCHRONOUSLY before this call, so it is
+        // always fully loaded, and the host's own load-once guard replaces the console's state=2
+        // re-load gate. So the on-disk state read/write is skipped (not asserted / not written) to
+        // avoid corrupting the widened mpConstData field. The rest of the control flow is faithful.
+
+        // Resolve the header's serialised offset fields to real pointers (x64 substitute for the
+        // console's relocated mpAptData/mpConstData -- FLAG). The header sits at the resource base,
+        // so base == the header address. Read the fields at their 8-byte positions (the converted
+        // 8-byte header: mpAptData @ +8, mpConstData @ +16).
+        const uintptr_t luHeaderBase = reinterpret_cast<uintptr_t>(lpAptData);
+        const uintptr_t luConstOff   = static_cast<uintptr_t>(
+            *reinterpret_cast<const uint64_t*>(luHeaderBase + 16u));   // mpConstData (u64 @ +16)
+        void* lpConstFile = reinterpret_cast<void*>(luHeaderBase + luConstOff);   // == aptDataOffset
+        // FLAG (x64 converted bundle): pBase == mpConstData (the aptDataOffset the Fixup relocates
+        // against), NOT mpAptData -- the converted bundle collapses them to that one address.
+        void* lpBase = lpConstFile;
+
+        // Pin the caller's handle (the asm's leading lwarx/stwcx. IncRef on *a2).
+        AptFilePtr laHandle;
+        laHandle.pData = lpHandle->pData;
+        if (laHandle.pData)
+            AptSharedPtrIncRef(laHandle.pData);
+
+        // Forward to the async-completion glue (-> AptLoader::CompleteLoad -> Resolve -> Fixup).
+        AptCompleteAnimationAsyncLoad(&laHandle, lpBase,
+                                      reinterpret_cast<AptConstFile*>(lpConstFile),
+                                      /*pAptDataHeader (a5)*/ lpAptData,
+                                      /*pPreResolvedRoot (x64 FLAG)*/ gAptLoadAnimRootOverride);
+
+        // (The console then sets AptData[5] = 2 (ACTIVE). FLAG-skipped -- see the state note above:
+        // the widened header's state slot is ambiguous and the host's load-once guard covers it.)
+
+        // Drop the caller's original handle reference (the asm's trailing DecRef + null on *a2).
+        AptFile* lpConsumed = lpHandle->pData;
+        lpHandle->pData = nullptr;
+        if (lpConsumed && AptSharedPtrDecRef(lpConsumed) == 0)
+            AptSharedPtrDelete(lpConsumed);
     }
 
     // ---- Variable -----------------------------------------------------------
