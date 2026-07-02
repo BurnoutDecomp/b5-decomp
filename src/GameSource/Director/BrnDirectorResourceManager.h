@@ -90,6 +90,13 @@ public:
     const Attrib::Gen::shotgroup& GetNormalCrashShots() const;
     const Attrib::Gen::shotgroup& GetSlowCrashShots() const;
 
+    // The two crash-moment shotgroup banks right after the trio above (X360
+    // manager+1448/+1464, the same 16-byte stride -- MomentStationaryCrash::Update
+    // @0x82272EA8 picks between them by its tumbling latch). ADDITIVE GROW:
+    // declaration-only (the member bank + bodies land with this manager's own TU).
+    const Attrib::Gen::shotgroup& GetTumblingCrashShots() const;     // +1448
+    const Attrib::Gen::shotgroup& GetStationaryCrashShots() const;   // +1464
+
 private:
     // X360 members preceding mICEResourceMgr occupy 552 bytes. Their concrete
     // resource queue/handle types are owned by their respective TUs.

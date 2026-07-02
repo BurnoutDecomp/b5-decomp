@@ -27,7 +27,7 @@ namespace BrnDirector
     {
         const s32 KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN = 2;
         const f32 KF_UNIT                          = 1.0f;   // flt_82001C98
-        const f32 KF_TAKEDOWN_START_HOOK_BLEND     = 0.2857143f;   // flt_8200177C (case DRIVEBY/ACTIVE constant)
+        const f32 KF_TAKEDOWN_SIM_TIME_SCALE     = 0.2857143f;   // flt_8200177C (case DRIVEBY/ACTIVE constant)
     }
 
     // ------------------------------------------------------------------------
@@ -79,7 +79,7 @@ namespace BrnDirector
     // whichever of the two gyro cams (left/right shooter seat) is currently the "behaviour
     // driven" one -- i.e. whichever produced camera has KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN set --
     // request the one-shot "Takedown" start hook the first frame, then hold at the fixed
-    // KF_TAKEDOWN_START_HOOK_BLEND blend amount until mfActiveTime passes 3s, at which point the
+    // KF_TAKEDOWN_SIM_TIME_SCALE blend amount until mfActiveTime passes 3s, at which point the
     // state advances to FINISHED (the terminal hold just keeps redrawing whichever gyro cam is
     // still selected).
     // ------------------------------------------------------------------------
@@ -122,7 +122,7 @@ namespace BrnDirector
                 Camera::RequestStartEffectHook(lOutCamera, "Takedown", KF_UNIT);
             }
 
-            lOutCamera.mEffects.mfStartHookBlendAmount = KF_TAKEDOWN_START_HOOK_BLEND;
+            lOutCamera.mEffects.mfSimTimeScale = KF_TAKEDOWN_SIM_TIME_SCALE;
 
             if (mfActiveTime > 3.0f)
             {

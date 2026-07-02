@@ -73,8 +73,8 @@ namespace Camera
         CameraEffects lResult;
         std::memcpy(&lResult, &lLhs, sizeof(lResult));
 
-        lResult.mfStartHookBlendAmount =
-            Lerp(lLhs.mfStartHookBlendAmount, lRhs.mfStartHookBlendAmount, lfT);
+        lResult.mfSimTimeScale =
+            Lerp(lLhs.mfSimTimeScale, lRhs.mfSimTimeScale, lfT);
         lResult.mfRaceEndEffectAmount =
             Lerp(lLhs.mfRaceEndEffectAmount, lRhs.mfRaceEndEffectAmount, lfT);
         lResult.mMotionBlurData =

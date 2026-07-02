@@ -312,6 +312,14 @@ public:
     virtual void SetupTweaker(Utils::Tweaker& lrTweaker);
     virtual const char* GetName() const;
 
+    // GROWN for MomentHardStop::Update @0x82271438 (the moment reads its two
+    // candidates through the type-erased Behaviour base): the failed flag, the
+    // two switch gates, and the debug parameters name (+0x09/+0x0B/+0x0C/+0x10).
+    bool HasFailed() const          { return mbHasFailed; }
+    bool CanSwitchToMeNow() const   { return mbCanSwitchToMeNow; }
+    bool CanSwitchFromMeNow() const { return mbCanSwitchFromMeNow; }
+    const char* GetDebugParametersName() const { return mpcDebugParametersName; }
+
     // Timestep type selector (DWARF Behaviour.h:334).
     BrnDirector::Timestep::EType GetTimestepType() const { return meTimestepType; }
     void SetTimestepType(BrnDirector::Timestep::EType leType) { meTimestepType = leType; }

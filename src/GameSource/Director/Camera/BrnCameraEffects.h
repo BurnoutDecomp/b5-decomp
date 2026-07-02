@@ -64,8 +64,14 @@ struct CameraEffects
     //   zeroes bytes/words at +0x50/+0x78/+0x7C and floats at +0x90/+0x94. NOMINAL span.
     u8  maReserved50[0x9C - 0x50];
 
-    // +0x9C: start-hook blend amount. Construct sets it to 1.0f.
-    f32 mfStartHookBlendAmount;                 // +0x9C
+    // +0x9C: the requested sim-time (timestep) scale. Construct sets it to 1.0f
+    //   (normal speed). RECONCILED 2026-07 (was "mfStartHookBlendAmount", an
+    //   uncited name): MomentHardStop::Update @0x82271788 stores its DWARF-named
+    //   mfUltraSloMoTimestepScale here (the crash ultra-slomo, 0.005..0.01), and
+    //   ArbStateTakedown writes 2/7 (~0.286 -- the takedown slow-mo) -- both are
+    //   TIME scales, matching the un-homed "CameraEffects::SetSimTimeScale" the
+    //   arbitrator FLAG lists. Interpolate's lerp fits a time-scale blend equally.
+    f32 mfSimTimeScale;                         // +0x9C
 
     // +0xA0: fade colour / overlay lead word (Construct zeroes it). NOMINAL span.
     u8  maReservedA0[0xA4 - 0xA0];
@@ -78,7 +84,7 @@ struct CameraEffects
 
     // +0xA8: race-end effect amount (DWARF member name mfRaceEndEffectAmount,
     //   BrnCameraEffects.cpp's DWARF member list). X360-attested: CameraEffects::
-    //   Interpolate @0x8220B050 lerps this float the same way as mfStartHookBlendAmount
+    //   Interpolate @0x8220B050 lerps this float the same way as mfSimTimeScale
     //   (fsubs/fmadds pair at +0xA8, alongside the +0x9C pair) -- a real interpolated
     //   field, not filler. Construct zeroes it.
     f32 mfRaceEndEffectAmount;                  // +0xA8

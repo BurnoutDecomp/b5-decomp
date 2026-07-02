@@ -43,6 +43,28 @@ namespace BrnDirector
 {
 
 // ----------------------------------------------------------------------------
+// BrnDirector::CrashAnalysis -- the 8-byte per-crash analysis record the tracker
+// publishes and the hard-stop moment snapshots (Camera.h forward-declares it;
+// Camera::mpCrashAnalysis points at a moment's snapshot). MINIMAL SLICE grown by
+// the MomentHardStop TU (@0x82271438's reads): the flag word's attested bits and
+// the byte-5 side pick; the remaining bytes are named neutrally. GROW in place.
+// ----------------------------------------------------------------------------
+struct CrashAnalysis
+{
+    // +0x00 -- crash direction/type bits (the shot-selector's event-flag word):
+    //   bit 1 Left, bit 2 Right, bit 6 Front, bit 7 Rear (the "Hardstop:" log
+    //   line), bit 3 <the ultra-slo-mo eligibility>, bit 5 <the hard-stop
+    //   eligibility gate>. Roles of the rest not yet recovered.
+    u32 mxFlags;
+
+    u8  mau4;            // +0x04 (not consumed by the reconstructed bodies)
+    u8  mbUseLeftSide;   // +0x05 (the "Use L"/"Use R" preferred-side pick)
+    u8  mau6;            // +0x06
+    u8  mau7;            // +0x07
+};
+
+
+// ----------------------------------------------------------------------------
 // FLAG: minimal slice of the per-car score block the tracker embeds (CarScoreData has a real
 //   reconstructed home at GameSource/GameState/BrnGameStateSharedIO.h, but pulling that whole
 //   GameState IO tree into this per-TU `cl /c` gate would drag an unrelated dependency cone;
