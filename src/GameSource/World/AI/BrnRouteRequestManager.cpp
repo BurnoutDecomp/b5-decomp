@@ -130,11 +130,12 @@ AStarDistanceFunction RouteRequestManager::ChooseDistanceFunction(
     // The X360 self-equality NaN cascades on every Flatten output are rw::math::vpu::IsValid
     // tripwires (folded out, like BrnMathUtils.cpp); behaviour is unchanged.
 
-    // lbDrivingAway: the car's |X heading component| exceeds the projection of the offset onto
-    // the heading. Reconstructed from the asm dot(diff,dir) compare:
-    //   absDir.x > (diff.x*dir.x + diff.y*dir.y)
+    // lbDrivingAway: the projection of the offset onto the heading falls short of the same
+    // "countryside" divide used for the Euclidean early-out. Reconstructed from the asm compare
+    // (both operands loaded from the SAME {200.0,0,0,0} literal buffer used just below):
+    //   KF_HACK_CONTRYSIDE_DIVIDE > (diff.x*dir.x + diff.y*dir.y)
     const f32  lfHeadingDot  = lDiff.x * lDir.x + lDiff.y * lDir.y;
-    const bool lbDrivingAway = lAbsDir.x > lfHeadingDot;
+    const bool lbDrivingAway = KF_HACK_CONTRYSIDE_DIVIDE > lfHeadingDot;
 
     // Both endpoints in the countryside half -> plain Euclidean.
     if (KF_HACK_CONTRYSIDE_DIVIDE > lEnd.x && KF_HACK_CONTRYSIDE_DIVIDE > lStart.x)

@@ -131,7 +131,7 @@ f32 RaceBalancingManager::ComputeParSpeed(GraphType leGraphType, const AICar* lp
 // Turns the par speed into the speed the opponent should actually drive: nudges it up when the
 // racer is behind its scheduled par time and down when ahead, within a bounded multiplier band
 // (wider when the car is OUT_OF_RANGE), then caps the result at the player's max speed (except
-// for an out-of-range car that is already ahead of the player).
+// for an out-of-range car that is NOT already ahead of the player).
 // ===========================================================================================
 f32 RaceBalancingManager::ComputeTargetSpeed(GraphType leGraphType, const AICar* lpAICar,
                                              const AISectionsData* lpAISectionsData) const
@@ -178,9 +178,10 @@ f32 RaceBalancingManager::ComputeTargetSpeed(GraphType leGraphType, const AICar*
             lfSpeed = lfParSpeed * lfMultiplier;
         }
 
-        // Cap at the player's max speed, EXCEPT when an out-of-range car is already ahead of
-        // the player (those are allowed to keep pulling away).
-        if (!(lpAICar->GetState() != E_AI_CAR_STATE_IN_RANGE && lpAICar->IsAheadOfPlayer()))
+        // Cap at the player's max speed, EXCEPT when an out-of-range car is NOT already ahead
+        // of the player (those laggards are allowed to run uncapped to catch back up; an
+        // out-of-range car that IS ahead still gets capped, same as an in-range car).
+        if (!(lpAICar->GetState() != E_AI_CAR_STATE_IN_RANGE && !lpAICar->IsAheadOfPlayer()))
         {
             const f32 lfMaxPlayerSpeed = lpAICar->GetMaxPlayerSpeed();
             if (lfSpeed > lfMaxPlayerSpeed)
