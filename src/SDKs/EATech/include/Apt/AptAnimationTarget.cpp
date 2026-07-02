@@ -18,12 +18,14 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"        // AptValue (GC tag bits + virtuals)
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"  // AptIntervalTimer::mParams item access
 #include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (queued action / event target)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst (typed drain reads)
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // mDisplayList head GC mark walk
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager::Allocate/Deallocate
 
 #include <cstring>   // memset
 #include <cstdint>   // intptr_t (the X360 fastcall `return r3` / array-cookie math)
 #include <new>       // placement new (inline-construct the queue / timers / display list)
+
 
 // The shared Apt fixed-size pool (X360 off_8324D808); defined by the Apt pseudo-data
 // layer (same handle AptActionQueue / AptCharacterSpriteInstBase allocate from).
@@ -309,8 +311,10 @@ AptAnimationTarget::AptAnimationTarget(const AptAnimationTargetParams* pParams)
     mnNumIntervalTimers = pParams->mnNumIntervalTimers;   // a1[1] = *a2
     mnQueuedInputsCap   = pParams->mnQueuedInputsCap;     // a1[2] = a2[1]
 
-    AptAnimationTargetSet_Construct(&mListenerSet, pParams->mnListenerSetSize);  // __(a1+4, a2[2])
-    AptAnimationTargetSet_Construct(&mInputSet,    pParams->mnInputSetSize);     // sub_82AE1708(a1+6, a2[3])
+    AptAnimationTargetSet_Construct(&mListenerSet,
+        static_cast<u16>(pParams->mnListenerSetSize));   // __(a1+4, a2[2]) -- low u16 of the word
+    AptAnimationTargetSet_Construct(&mInputSet,
+        static_cast<u16>(pParams->mnInputSetSize));      // sub_82AE1708(a1+6, a2[3])
 
     // The root display list (a1+0x20) is the inline member mDisplayList; its ctor
     // (AptDisplayList::AptDisplayList) is invoked automatically as a member
@@ -465,14 +469,14 @@ void AptAnimationTarget::PreDestroy()
 // ===========================================================================
 //  Deferred-action queue thunks (each tail-jumps into mpActionQueue) @0x82ADC608..
 // ===========================================================================
-AptValue* AptAnimationTarget::AddActionBack(s32 iEventId, AptCIH* pCIH, s32 iContext)
+AptValue* AptAnimationTarget::AddActionBack(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext)
 {
-    return mpActionQueue->AddActionBack(iEventId, pCIH, iContext);
+    return mpActionQueue->AddActionBack(pEventStreamSlot, pCIH, iContext);
 }
 
-AptValue* AptAnimationTarget::AddActionFront(s32 iEventId, AptCIH* pCIH, s32 iContext)
+AptValue* AptAnimationTarget::AddActionFront(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext)
 {
-    return mpActionQueue->AddActionFront(iEventId, pCIH, iContext);
+    return mpActionQueue->AddActionFront(pEventStreamSlot, pCIH, iContext);
 }
 
 AptValue* AptAnimationTarget::AddFunctionBack(AptValue* pContext, AptValue* pFuncDef,
@@ -566,16 +570,18 @@ void AptAnimationTarget::TickNewInsts()
         }
 
         // Tick the node only when it is a sprite(5) / custom-control(16) character
-        // instance still at the "freshly created" depth sentinel (-1).
-        // FLAG (un-homed AptCharacterInst layout): the type tag (charInst[+8] >> 26)
-        // and the create-depth (charInst[+16]) are read through the recovered offsets
-        // off the CIH's character instance; AptCharacterInst is not modelled by name.
-        void* lpCharInst =
-            *reinterpret_cast<void**>(reinterpret_cast<char*>(lpCIH) + 0x20);  // mpCharacterInst (CIH word 8)
-        const int liTypeTag =
-            *reinterpret_cast<int*>(reinterpret_cast<char*>(lpCharInst) + 8) >> 26;
+        // instance still at the "freshly created" depth sentinel (-1). Named members
+        // (2026-07-01; were the console raw offsets +0x20/+8/+16 applied to the x64
+        // objects -- garbage reads): CIH word[8] == mpCharacterInst, charInst word[2]
+        // == mTypeFlags, charInst word[4] == mnCreateDepth.
+        AptCharacterInst* lpCharInst = lpCIH->mpCharacterInst;
+        if (lpCharInst == nullptr)
+        {
+            continue;   // no bound instance: nothing to tick (guard for the x64 gate)
+        }
+        const int liTypeTag = static_cast<int>(lpCharInst->GetTypeTag());
         if ((liTypeTag == 5 || liTypeTag == 16)
-            && *reinterpret_cast<int*>(reinterpret_cast<char*>(lpCharInst) + 16) == -1)
+            && lpCharInst->mnCreateDepth == -1)
         {
             AptCIH_tick(lpCIH);                                 // AptCIH::tick
             lpInsts = static_cast<AptValue**>(spNewInsts);     // reload (tick may realloc)
@@ -1326,9 +1332,11 @@ int AptAnimationTarget::RunActions()
     AptActionQueueC* lpQueue = mpActionQueue;            // v2 = *(this + 12)
     AptAnimationPoolData* lpSlot = lpQueue->mpFront;     // v3 = v2[1]
 
+
     while (lpSlot != lpQueue->mpBack)                    // v3 != v2[2]
     {
         lpQueue->mpCurItem = lpSlot;                     // v2[3] = v3
+
 
         if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_ACTION)   // *v3 == 1
         {
@@ -1337,19 +1345,19 @@ int AptAnimationTarget::RunActions()
             gAptActionInterpreter.field_48[0] = static_cast<u32>(lpSlot->action.miContext);  // *(v3+4)
 
             AptValue* lpCIH = lpSlot->action.mpCIH;      // v4 = *(v3+16)
+            AptCIH*   lpNode = reinterpret_cast<AptCIH*>(lpCIH);
 
-            // FLAG: the CIH handle must be "defined" (mnValueData bit 27 set).
-            if (((reinterpret_cast<AptCIH*>(lpCIH)->mnValueData >> 27) & 1u) != 0u)
+            // The CIH handle must be "defined" (mnValueData bit 27 set).
+            if (((lpNode->mnValueData >> 27) & 1u) != 0u)
             {
-                // FLAG: the handle's character instance (value word +0x20) + its packed
-                // type tag (charInst word +8, top 6 bits) must not be the "dead" 0x3C
-                // form, and the CIH state field (value word +0x0C bits [29..30]) must not
-                // be the protected 0x60000000 form.
-                char* lpCharInst = *reinterpret_cast<char**>(reinterpret_cast<char*>(lpCIH) + 0x20);  // v5 = v4[8]
-                const u32 lnCharType =
-                    static_cast<u32>(*reinterpret_cast<int*>(lpCharInst + 8)) & 0xFC000000u;
-                const u32 lnCIHState =
-                    *reinterpret_cast<u32*>(reinterpret_cast<char*>(lpCIH) + 0x0C) & 0x60000000u;     // v4[3]
+                // Named members (2026-07-01; were the console raw offsets on x64
+                // objects): the bound character instance (CIH word[8]) must not be
+                // the "dead" 0x3C type form, and the CIH state (mFlagsA bits 29-30,
+                // CIH word[3]) must not be the protected 0x60000000 form.
+                AptCharacterInst* lpCharInst = lpNode->mpCharacterInst;   // v5 = v4[8]
+                const u32 lnCharType = (lpCharInst != nullptr)
+                    ? (lpCharInst->mTypeFlags & 0xFC000000u) : 0x3C000000u;
+                const u32 lnCIHState = lpNode->mFlagsA & 0x60000000u;     // v4[3]
 
                 if (lnCharType != 0x3C000000u && lnCIHState != 0x60000000u)
                 {
@@ -1359,7 +1367,7 @@ int AptAnimationTarget::RunActions()
                     const int liDepth = lpSlot->action.miDepth;   // v6 = *(v3+8)
                     if (liDepth >= 0
                         || lpCharInst == nullptr
-                        || -liDepth == *reinterpret_cast<int*>(lpCharInst + 16))   // *(v5+16)
+                        || -liDepth == lpCharInst->mnCreateDepth)   // *(v5+16) == charInst word[4]
                     {
                         // Push a fresh register-block window for this run (the console
                         // inlines PushStaticData: save the base, advance, zero the count).
@@ -1379,34 +1387,37 @@ int AptAnimationTarget::RunActions()
                             }
                             else
                             {
-                                // FLAG: walk up the value parent chain (value word +0x1C)
-                                // until the level's char inst (value word +0x20) is a movie
-                                // clip(9) or stage(15) (charInst word +8 top 6 bits).
-                                char* lpNode =
-                                    *reinterpret_cast<char**>(reinterpret_cast<char*>(lpScopeVal) + 0x20);  // i = *(v8+32)
+                                // Walk up the display-list parent chain (CIH word[7])
+                                // until the node's char-inst type tag (charInst word[2]
+                                // top 6 bits) is a movie clip(9) or stage(15). Named
+                                // members (2026-07-01; were the console raw offsets
+                                // +0x1C/+0x20/+8 on the x64 objects).
+                                AptCharacterInst* lpWalkInst =
+                                    reinterpret_cast<AptCIH*>(lpScopeVal)->mpCharacterInst;  // i = *(v8+32)
                                 for (;;)
                                 {
-                                    const int liTag = *reinterpret_cast<int*>(lpNode + 8) >> 26;  // *(i+8)>>26
+                                    const int liTag = (lpWalkInst != nullptr)
+                                        ? static_cast<int>(lpWalkInst->GetTypeTag()) : 9;    // *(i+8)>>26
                                     if (liTag == 9 || liTag == 15)
                                     {
                                         break;
                                     }
-                                    lpLevel = *reinterpret_cast<AptValue**>(
-                                        reinterpret_cast<char*>(lpLevel) + 0x1C);     // AnimationAtLevel = *(AnimationAtLevel+28)
-                                    lpNode = *reinterpret_cast<char**>(
-                                        reinterpret_cast<char*>(lpLevel) + 0x20);     // *(AnimationAtLevel+32)
+                                    lpLevel = reinterpret_cast<AptValue*>(
+                                        reinterpret_cast<AptCIH*>(lpLevel)->mpDisplayListParent);  // CIH word[7]
+                                    lpWalkInst = reinterpret_cast<AptCIH*>(lpLevel)->mpCharacterInst;
                                 }
                             }
-                            lpScope = *reinterpret_cast<AptCharacterInst**>(
-                                reinterpret_cast<char*>(lpLevel) + 0x20);             // v12 = *(AnimationAtLevel+32)
+                            lpScope = reinterpret_cast<AptCIH*>(lpLevel)->mpCharacterInst;    // v12 = *(AnimationAtLevel+32)
                         }
 
-                        // FLAG: action.miEventId (value word +0x0C of the slot) is a
-                        // pointer to the clip-event action stream; the X360 dereferences
-                        // it (`**(v3+12)`) to get the byte stream the interpreter runs.
+                        // The queued slot holds the ADDRESS of the command record's
+                        // action-stream pointer slot; dereference it to get the byte
+                        // stream the interpreter runs (console `**(v3+12)` -- the
+                        // double indirection lets a re-resolved/mutated command record
+                        // supply the CURRENT stream pointer at run time).
                         const unsigned char* lpStream =
-                            *reinterpret_cast<const unsigned char**>(
-                                reinterpret_cast<char*>(&lpSlot->action.miEventId));  // v4_arg = *(*(v3+12))
+                            *static_cast<const unsigned char* const*>(
+                                lpSlot->action.mpEventStreamSlot);   // v4_arg = *(*(v3+12))
                         gAptActionInterpreter.runStream(
                             lpStream,
                             reinterpret_cast<AptCIH*>(lpSlot->action.mpCIH),          // *(v3+16)

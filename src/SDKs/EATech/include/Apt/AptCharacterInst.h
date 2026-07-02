@@ -67,6 +67,11 @@ struct AptCharacterInst
     AptRenderItem* mpRenderItem;      // [1]
     uint32_t       mTypeFlags;        // [2] (char type tag in bits 26-31)
     AptNativeHash* mpProperties;      // [3]
+    // [4] console +0x10 -- the creation-depth sentinel the per-frame drains read:
+    // -1 marks a freshly-created (not-yet-ticked) instance (TickNewInsts' nested-tick
+    // gate + RunActions' negative-depth match). FLAG: the ctor's seeding of this word
+    // is not yet homed (reads see 0 until it lands, so the -1 gates simply don't fire).
+    int32_t        mnCreateDepth;     // [4]
 
     explicit AptCharacterInst(AptCharacter* pCharacter);   // @0x81431C
     ~AptCharacterInst();                                    // @0x7F8414
