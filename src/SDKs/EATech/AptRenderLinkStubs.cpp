@@ -148,7 +148,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptApt_GetDragState RETIRED (2026-07-02): homed in
     // AptActionInterpreterSpecialOps.cpp (the view over the director's
     // mpDragMC..mGrabOffset run -- X360 StartDragMovie @0x82B03B00).
-    AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStringC* pName) { return nullptr; }   // FLAG link-stub
+    // AptLoader_LoadX360 RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
+    // (the by-value-return wrapper over the homed AptLoader::Load).
     // AptScriptFunctionBase_GetActiveFrameStack RETIRED (2026-07-02): homed in AptFrameStack.cpp.
     // AptValue_EmbeddedNativeHash RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp (the AptValueWithHash mHash @+8).
     // AptInterp_GetNodeFrameContextHash RETIRED (2026-07-02): homed in AptActionInterpreterInterpHelpers.cpp
@@ -180,7 +181,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // Apt_atoff RETIRED (2026-07-02): homed in AptValueConvert.cpp
     // (PS3 @0x7E2990 == (float)strtod; the stub's 0 broke every string->number).
     int    AptValueGCPool_GetAllocatedCount(void* pPool) { return 0; }   // FLAG link-stub
-    int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3) { return 0; }   // FLAG link-stub
+    // AptHook_GetBytesTotal RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
+    // (the host gAptFuncs.pfnGetBytesTotal dispatch @+0x94).
     // AptActionInterpreter_InstanceOfChainWalk RETIRED (2026-07-02): homed in
     // AptActionInterpreter.cpp (the X360 isObjectOfType @0x82AEA5B8 object arm).
     // AptCIH_ShapeHitTest RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp

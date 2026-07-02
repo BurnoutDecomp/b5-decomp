@@ -50,6 +50,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacter.h"                 // the movie character (KU_AptEmbeddedMovieOff)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"        // the def base (findCharacterInLibrary)
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"                 // AptFilePtr op= (the export file-assign)
+#include "SDKs/EATech/include/Apt/AptLoader.h"                    // AptLoader::Load (the LoadX360 wrapper)
 #include <string.h>                                               // _stricmp (the library-name compares)
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"           // spDefaultMovieCharacter/CreateMovieCharacterInst (createEmptyMovieClip)
 #include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h"      // spDefaultTextCharacter -> AptCharacter upcast (createTextField)
@@ -261,6 +262,34 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
         }
     }
     return gpUndefinedValue;   // off_8324D814
+}
+
+// ---------------------------------------------------------------------------
+// AptHook_GetBytesTotal (HOMED 2026-07-02, retiring the return-0 stub). The
+// X360 dispatches the host gAptFuncs.pfnGetBytesTotal slot (+0x94,
+// dword_8324E8AC) -- the loader-progress query behind AS getBytesTotal().
+// The trailing (int, double) shim args were call-thunk artifacts; the typed
+// slot takes (path, mode). Null slot answers 0 -- the un-installed-host
+// boundary, the same convention as pfnPointHitTest.
+// ---------------------------------------------------------------------------
+int AptHook_GetBytesTotal(const char* pcFilePath, int a2, double /*a3*/)
+{
+    if (gAptFuncs.pfnGetBytesTotal != nullptr)
+        return gAptFuncs.pfnGetBytesTotal(pcFilePath,
+                                          static_cast<AptGetBytesEnum>(a2));
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// AptLoader_LoadX360 (HOMED 2026-07-02, retiring the null stub). A plain
+// by-value-return wrapper over the homed AptLoader::Load (find-or-register
+// the .apt file handle) -- the X360's out-param calling shape kept for the
+// call sites.
+// ---------------------------------------------------------------------------
+AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStringC* pName)
+{
+    *pOut = pLoader->Load(*pName);
+    return pOut;
 }
 
 // ---------------------------------------------------------------------------
