@@ -106,3 +106,115 @@ void* AptIntervalTimer::_vector_deleting_destructor_(AptIntervalTimer* pArray, c
     }
     return pArray;
 }
+
+// ===========================================================================
+// The interval-table impls (HOMED 2026-07-02, retiring the AptRenderLinkStubs
+// nulls). The entry layer (AptActionInterpreter::cbCallMethod_setInterval /
+// _clearInterval) reads the guard args; these do the table work.
+// ===========================================================================
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"       // the timer table owner
+#include "SDKs/EATech/include/Apt/AptTarget.h"                // gpAptTarget
+#include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"      // the returned id value
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"       // the method-name form
+
+extern AptValue** gppAptNativeArgStack;   // off_8324E768 (the operand-stack items)
+extern int32_t    gnAptNativeArgCount;    // dword_8324E760 (the live count)
+extern AptValue*  gpUndefinedValue;       // off_8324D814
+
+// ---------------------------------------------------------------------------
+// AptActionInterpreter_SetIntervalImpl -- the body of cbCallMethod_setInterval
+// @0x82B019D8 past the defined-guard. Claim the first free AptIntervalTimer
+// slot (mpActiveValue == null); the claim stores the literal-1 SENTINEL into
+// the gate (the X360 `stw 1` -- RemoveTimerFunctions/clearInterval only test
+// null/non-null) and seeds mpContext = undefined. Two argument forms:
+//   * a callable top (script function 34..36 or a native function, defined):
+//     fn = top, period = arg[count-2], 2 args consumed;
+//   * otherwise object+method: name = arg[count-2] (its embedded EAStringC,
+//     the same +8 idiom as gotoAndX), fn = top->findChild(name), mpContext =
+//     the object, period = arg[count-3], 3 consumed. The asm binds the
+//     findChild result unguarded (a console invariant: the method exists).
+// Both arms AddRef the bound fn + context, store toFloat(period) into
+// mfInterval AND mfElapsed (the countdown seed), stamp the id, then push each
+// trailing arg (top-down) into mParams with an AddRef. Returns the new
+// AptInteger id, or the undefined singleton when the table has no free slot.
+// ---------------------------------------------------------------------------
+AptValue* AptActionInterpreter_SetIntervalImpl(AptValue* pCallback, int nArgCount)
+{
+    const s32 nId = AptIntervalTimer::GenerateId();
+
+    AptAnimationTarget* const pDir = gpAptTarget->mpAnimationTarget;
+    u32 iSlot = 0;
+    for (; iSlot < pDir->mnNumIntervalTimers; ++iSlot)
+        if (pDir->mpIntervalTimers[iSlot].mpActiveValue == nullptr)
+            break;
+    if (iSlot == pDir->mnNumIntervalTimers)
+        return gpUndefinedValue;   // table full (the X360 tail check)
+
+    AptIntervalTimer& rTimer = pDir->mpIntervalTimers[iSlot];
+    rTimer.mpActiveValue = reinterpret_cast<AptValue*>(1);   // the claim sentinel
+    rTimer.mpContext     = gpUndefinedValue;
+
+    AptValue* pFn       = pCallback;
+    AptValue* pInterval = gppAptNativeArgStack[gnAptNativeArgCount - 2];
+    int       nConsumed = 2;
+
+    const AptVirtualFunctionTable_Indices eType = pCallback->getVtblIndex();
+    const bool bCallable =
+        ((static_cast<u32>(eType) - AptVFT_ScriptFunction1) <= 2u
+            && pCallback->getIsDefined())
+        || (eType == AptVFT_NativeFunction && pCallback->getIsDefined());
+    if (!bCallable)
+    {
+        // The object + method-name form.
+        AptString* const pName =
+            static_cast<AptString*>(gppAptNativeArgStack[gnAptNativeArgCount - 2]);
+        pInterval = gppAptNativeArgStack[gnAptNativeArgCount - 3];
+        pFn = pCallback->findChild(pName->GetInternalString(), nullptr);
+        rTimer.mpContext = pCallback;
+        nConsumed = 3;
+    }
+
+    rTimer.mpCBFunction = pFn;
+    rTimer.mpCBFunction->AddRef();
+    rTimer.mpContext->AddRef();
+
+    const f32 fPeriod = pInterval->toFloat();
+    rTimer.mfInterval = fPeriod;
+    rTimer.mfElapsed  = fPeriod;
+    rTimer.miId       = nId;
+
+    // The trailing args, top-down, each AddRef'd into the param stack.
+    for (int j = 0; j < nArgCount - nConsumed; ++j)
+    {
+        AptValue* const pArg =
+            gppAptNativeArgStack[gnAptNativeArgCount - j - nConsumed - 1];
+        rTimer.mParams.mppItems[rTimer.mParams.mnTop++] = pArg;
+        pArg->AddRef();
+    }
+
+    return AptInteger::Create(nId);
+}
+
+// ---------------------------------------------------------------------------
+// AptActionInterpreter_ClearIntervalImpl -- the body of cbCallMethod_
+// clearInterval @0x82AE3AE0 past the guard: scan the WHOLE table (no early
+// break); every armed slot whose id matches is torn down -- Release the
+// callback (vtbl[1]), Release the context when non-null, clear the gate,
+// CleanParams (Release + pop every queued param), and zero the id.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter_ClearIntervalImpl(int nId)
+{
+    AptAnimationTarget* const pDir = gpAptTarget->mpAnimationTarget;
+    for (u32 i = 0; i < pDir->mnNumIntervalTimers; ++i)
+    {
+        AptIntervalTimer& rTimer = pDir->mpIntervalTimers[i];
+        if (rTimer.mpActiveValue == nullptr || rTimer.miId != nId)
+            continue;
+        rTimer.mpCBFunction->Release();
+        if (rTimer.mpContext != nullptr)
+            rTimer.mpContext->Release();
+        rTimer.mpActiveValue = nullptr;
+        rTimer.CleanParams();
+        rTimer.miId = 0;
+    }
+}

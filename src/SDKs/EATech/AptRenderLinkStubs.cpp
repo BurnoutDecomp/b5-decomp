@@ -151,7 +151,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     AptNativeHash* AptValue_EmbeddedNativeHash(AptValue* pValue) { return nullptr; }   // FLAG link-stub
     AptNativeHash* AptInterp_GetNodeFrameContextHash(AptValue* pContext) { return nullptr; }   // FLAG link-stub
     AptTextFormat* AptTextFormat_ConstructDefault(void* pBlock, AptValue* pSource, double dArg) { return nullptr; }   // FLAG link-stub
-    AptValue* AptActionInterpreter_SetIntervalImpl(AptValue* pCallback, int nArgCount) { return nullptr; }   // FLAG link-stub
+    // AptActionInterpreter_SetIntervalImpl RETIRED (2026-07-02): homed in
+    // AptIntervalTimer.cpp (the X360 cbCallMethod_setInterval @0x82B019D8 body).
     // AptApt_DeriveFunctionAnimation RETIRED (2026-07-01): homed in AptScriptFunctionBase.cpp
     // (== AptCIH::GetRootAnimation, the enclosing-timeline walk).
     AptValue* AptApt_GetRootContext() { return nullptr; }   // FLAG link-stub
@@ -182,7 +183,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     uint32_t AptValue_CurrentThreadId() { return 0; }   // FLAG link-stub
     unsigned int AptGetSwfVersion() { return {}; }   // FLAG link-stub
     unsigned int AptRand() { return {}; }   // FLAG link-stub
-    void      AptActionInterpreter_ClearIntervalImpl(int nId) {}   // FLAG link-stub
+    // AptActionInterpreter_ClearIntervalImpl RETIRED (2026-07-02): homed in
+    // AptIntervalTimer.cpp (the X360 cbCallMethod_clearInterval @0x82AE3AE0 body).
     void      AptApt_AnimationAddCharacterRef(AptValue* pAnimation) {}   // FLAG link-stub
     void      AptApt_AnimationReleaseCharacterRef(AptValue* pAnimation) {}   // FLAG link-stub
     void      AptApt_PrepareCallContextScope(AptValue* pCallContext) {}   // FLAG link-stub
