@@ -53,11 +53,12 @@ namespace BrnDirector
         mStateContainer.ConstructAll();
 
         // 2. seed the shared-camera container. The X360 inlines its field init here: the
-        //    primary gameplay camera starts active and not suspended, with its handle
-        //    book-keeping cleared. Reached BY NAME; the full container init lands with the
-        //    SharedCameraContainer TU (this TU only seeds the two attested selection flags).
-        mSharedCameraContainer.mbPrimaryActive    = true;   // X360 stb 1, +0x14560 (container +0x00)
-        mSharedCameraContainer.mbPrimarySuspended = false;  // X360 stb 0, +0x14561 (container +0x01)
+        //    external gameplay camera starts selected, with no lookback override and the
+        //    handle book-keeping cleared. Reached BY NAME; the full container init lands with
+        //    the SharedCameraContainer TU (this TU only seeds the two attested selection
+        //    flags -- DWARF names, BrnDirectorArbitratorSharedCameraContainer.h:90/91).
+        mSharedCameraContainer.mbUseGameplayExternal = true;   // X360 stb 1, +0x14560 (container +0x00)
+        mSharedCameraContainer.mbLookbackOverride    = false;  // X360 stb 0, +0x14561 (container +0x01)
 
         // 3-5. the three special-cam states (vtable slot 0 == Construct).
         mArbStateCrashNav.Construct();

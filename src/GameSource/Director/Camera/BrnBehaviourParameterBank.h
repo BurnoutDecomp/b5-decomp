@@ -2,6 +2,8 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BRN_BEHAVIOUR_PARAMETER_BANK_H
 
 #include "types.hpp"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"    // BehaviourGameplayBumper::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"  // BehaviourGameplayExternal::Parameters
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourParameterBank.h
@@ -54,6 +56,37 @@ namespace BrnDirector
         u8                         maReservedHead[0x2334];           // +0x0000 .. +0x2333
         LookAroundCarCamParameters maLookAroundCarCamParameters;     // +0x2334
     };
+
+    namespace Camera
+    {
+        // BrnDirector::Camera::BehaviourParameterBank (PS3 DWARF: the type of the local
+        // `lrBehaviourParameterBank` in SharedCameraContainer::Prepare, and of the
+        // BehaviourManager's embedded :325 sub-object at X360 manager +0x12530). MINIMAL
+        // SLICE: only the two named fetches SharedCameraContainer::Prepare @0x82263D50 needs.
+        // The X360 inlines them to fixed bank offsets -- the external ("chase") block at
+        // bank+0x2488 and the bumper block at bank+0x2538 == +0x2488 + 0xB0
+        // (sizeof(BehaviourGameplayExternal::Parameters)), so the two blocks are adjacent.
+        // Both accessors are DECLARATION-ONLY (their trivial fetch bodies need the bank
+        // layout, which is un-homed -- same status as the manager's opaque :325 slot).
+        // The PS3 DWARF names the bumper fetch GetGameplayBumperCameraParamsForCar with the
+        // X360 ABI showing NO car argument (a fixed-offset fetch): the DWARF name is kept
+        // with the X360 arity. FLAG: the external accessor's name is inferred by symmetry
+        // (its PS3 hint line is truncated).
+        //
+        // Relationship to BrnDirector::NamedParameters (above) is NOT pinned: the arbitrator
+        // shared context reaches named parameter blocks through mpNamedParameters (+0x2334
+        // block) and the manager reaches these two through its own +0x12530 bank; whether
+        // those are the same object is left to the bank's own TU.
+        class BehaviourParameterBank
+        {
+        public:
+            // X360 bank+0x2538: the bumper-cam ("in car") gameplay parameter block.
+            const BehaviourGameplayBumper::Parameters& GetGameplayBumperCameraParamsForCar() const;
+
+            // X360 bank+0x2488: the external ("chase") gameplay parameter block.
+            const BehaviourGameplayExternal::Parameters& GetGameplayExternalCameraParamsForCar() const;
+        };
+    }
 }
 
 #endif // GAMESOURCE_DIRECTOR_CAMERA_BRN_BEHAVIOUR_PARAMETER_BANK_H

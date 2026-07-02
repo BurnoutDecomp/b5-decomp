@@ -97,8 +97,13 @@ namespace CgsGui
         // Bodied by its own ledger TU; declared here for the Animator caller surface.
         AnimChannelData* GetChannelData(s32 liChannel);
 
-        // The remaining AnimData methods (Construct / Clear / AddAnimationChannel) are
-        // homed by their own ledger TUs; declared there. This slice models the layout so
-        // the Array<AnimData,N> container instantiations have a complete element type.
+        // ADDITIVE GROW (BrnGui::Animator::Construct @0x824EA318): the two builder
+        // methods that caller drives. Bodies land with their own ledger TUs; the X360
+        // caller's ABI pins the shapes: Construct takes no args (re-initialises both
+        // embedded Arrays); AddAnimationChannel takes the target animator channel and
+        // the 24-byte AnimChannelData BY VALUE (the X360 passes it in r5/r6/r7 as three
+        // 64-bit register pairs).
+        void Construct();
+        void AddAnimationChannel(AnimatorChannel leChannel, AnimChannelData lChannelData);
     };
 }

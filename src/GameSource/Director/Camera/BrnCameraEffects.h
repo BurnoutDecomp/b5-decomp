@@ -62,17 +62,44 @@ struct CameraEffects
     // +0x9C: start-hook blend amount. Construct sets it to 1.0f.
     f32 mfStartHookBlendAmount;                 // +0x9C
 
-    // +0xA0 .. +0xAF: fade colour / overlay / race-end amount block. Construct zeroes
-    //   +0xA0/+0xA4/+0xA8/+0xAC. NOMINAL span.
-    u8  maReservedA0[0xB0 - 0xA0];
+    // +0xA0: fade colour / overlay lead word (Construct zeroes it). NOMINAL span.
+    u8  maReservedA0[0xA4 - 0xA0];
 
-    // +0xB0: game-camera blend amount. Construct sets it to 1.0f.
-    f32 mfGameCameraBlend;                      // +0xB0
+    // +0xA4: the camera-lag (inertia) amount (DWARF member name mfCameraLag).
+    //   X360-attested: BrnDirector::InertiaController::Update @0x8221ECD0 reads
+    //   camera+0x10C (== effects +0xA4) as a float and slerps the camera toward its
+    //   previous transform by (1 - this value). Construct zeroes it.
+    f32 mfCameraLag;
 
-    // +0xB4 .. +0xBB: time-of-day float (+0xB4, zeroed) and the trailing flag/enum bytes
-    //   (+0xB7/+0xB8/+0xB9/+0xBA zeroed; +0xBB the final pad). NOMINAL span; pads the
-    //   block to the X360-proven 0xBC stride.
-    u8  maReservedB4[0xBC - 0xB4];
+    // +0xA8: race-end amount word (Construct zeroes it). NOMINAL span.
+    u8  maReservedA8[0xAC - 0xA8];
+
+    // +0xAC / +0xB0 / +0xB4: the camera-shake request triple (DWARF names
+    //   mfShakeAmplitude / mfShakeFrequency / mu8ShakeType, BrnCameraEffects.cpp's DWARF
+    //   member list). X360-attested as a coherent triple:
+    //   * PerlinShakeController::Update @0x8221E798 reads camera+0x114/+0x118
+    //     (== effects +0xAC/+0xB0) as the shake AMPLITUDE (compared > 0) and FREQUENCY
+    //     (multiplied into the Perlin-noise phase), via the DWARF-named
+    //     Camera::GetEffects()/CameraEffects::GetShakeAmplitude() accessors;
+    //   * Camera::SetImpactShake(amplitude, frequency, shakeType) writes +0xAC/+0xB0/+0xB4
+    //     in argument order (see Camera.h);
+    //   * Construct zeroes the amplitude and sets +0xB0 to 1.0f -- the default shake
+    //     frequency. (+0xB0 was previously guessed as a "game-camera blend"; the DWARF
+    //     order puts mfGameCameraBlend elsewhere in the PS3 0xD8-sized block, which the
+    //     X360 0xBC layout does not carry at this offset.)
+    f32 mfShakeAmplitude;                       // +0xAC (zeroed by Construct)
+    f32 mfShakeFrequency;                       // +0xB0 (Construct sets 1.0f)
+    u8  mu8ShakeType;                           // +0xB4
+
+    // +0xB5 .. +0xBB: trailing flag/enum bytes (+0xB7/+0xB8/+0xB9/+0xBA zeroed; +0xBB the
+    //   final pad). NOMINAL span; pads the block to the X360-proven 0xBC stride.
+    u8  maReservedB5[0xBC - 0xB5];
+
+    // The shake-request read accessors (DWARF: CameraEffects::GetShakeAmplitude is named
+    // by the PerlinShakeController::Update hint; GetShakeFrequency by symmetry).
+    f32 GetShakeAmplitude() const { return mfShakeAmplitude; }
+    f32 GetShakeFrequency() const { return mfShakeFrequency; }
+    f32 GetCameraLag() const      { return mfCameraLag; }
 };
 
 } // namespace Camera

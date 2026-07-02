@@ -181,6 +181,12 @@ namespace BrnDirector
 
             const rw::math::vpu::Matrix44Affine& GetTransform() const;
             void SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform);
+
+            // The per-frame effects block (DWARF-named accessor: the PS3 hint for
+            // PerlinShakeController::Update calls Camera::GetEffects() then
+            // CameraEffects::GetShakeAmplitude()).
+            const CameraEffects& GetEffects() const { return mEffects; }
+            CameraEffects&       GetEffects()       { return mEffects; }
             DepthOfField& GetDepthOfField();
             const DepthOfField& GetDepthOfField() const;
 

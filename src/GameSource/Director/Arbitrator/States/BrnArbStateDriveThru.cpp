@@ -265,14 +265,15 @@ namespace BrnDirector
                 break;
             }
 
-            // X360: `!mpSharedCameraContainer->mbPrimaryActive || mpSharedCameraContainer->
-            // mbPrimarySuspended` selects whether to skip straight to the hand-off (when the
-            // primary gameplay camera is active AND suspended, the flash has already played
-            // elsewhere -- go straight to CHANGING_TO_ROAMING); otherwise play the one-shot
-            // flash first and advance next frame.
+            // X360: `!mpSharedCameraContainer->mbUseGameplayExternal || mpSharedCameraContainer->
+            // mbLookbackOverride` selects whether to skip straight to the hand-off (when the
+            // external gameplay camera is deselected or lookback-overridden, the flash has
+            // already played elsewhere -- go straight to CHANGING_TO_ROAMING); otherwise play
+            // the one-shot flash first and advance next frame. (DWARF member names,
+            // BrnDirectorArbitratorSharedCameraContainer.h:90/91.)
             const SharedCameraContainer& lrSharedCameraContainer = *lrSharedInfo.mpSharedCameraContainer;
             const bool lbSkipFlash =
-                !lrSharedCameraContainer.mbPrimaryActive || lrSharedCameraContainer.mbPrimarySuspended;
+                !lrSharedCameraContainer.mbUseGameplayExternal || lrSharedCameraContainer.mbLookbackOverride;
 
             if (!lbSkipFlash)
             {
