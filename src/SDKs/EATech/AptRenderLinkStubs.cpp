@@ -150,7 +150,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     AptNativeHash* AptInterp_GetNodeFrameContextHash(AptValue* pContext) { return nullptr; }   // FLAG link-stub
     AptTextFormat* AptTextFormat_ConstructDefault(void* pBlock, AptValue* pSource, double dArg) { return nullptr; }   // FLAG link-stub
     AptValue* AptActionInterpreter_SetIntervalImpl(AptValue* pCallback, int nArgCount) { return nullptr; }   // FLAG link-stub
-    AptValue* AptApt_DeriveFunctionAnimation(AptValue* pCIH) { return nullptr; }   // FLAG link-stub
+    // AptApt_DeriveFunctionAnimation RETIRED (2026-07-01): homed in AptScriptFunctionBase.cpp
+    // (== AptCIH::GetRootAnimation, the enclosing-timeline walk).
     AptValue* AptApt_GetRootContext() { return nullptr; }   // FLAG link-stub
     AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay) { return nullptr; }   // FLAG link-stub
     AptValue* AptExtern_GetMember(const char* szName) { return nullptr; }   // FLAG link-stub

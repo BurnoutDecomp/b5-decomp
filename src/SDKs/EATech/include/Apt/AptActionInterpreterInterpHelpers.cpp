@@ -467,7 +467,7 @@ void AptActionInterpreter_EnumerateMembers(AptActionInterpreter* pInterp,
              pItem = pHash->GetNextItem(pItem))
         {
             // console: skip the two reserved keys (dword_8324E580 / dword_8324E698).
-            if (pItem->mKey == StringPool::saConstant || pItem->mKey == gAptKeyPrototype)
+            if (pItem->mKey == StringPool::saConstant[0] || pItem->mKey == gAptKeyPrototype)
                 continue;
 
             AptString* const pStr = AptString::Create("");           // console AptString::Create(&unk_820046A7)
@@ -619,7 +619,7 @@ AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* /*pInterp*/,
                     for (AptHashItem* pItem = pHash->GetFirstItem(); pItem != nullptr;
                          pItem = pHash->GetNextItem(pItem))
                     {
-                        if (pItem->mKey == StringPool::saConstant || pItem->mKey == gAptKeyPrototype)
+                        if (pItem->mKey == StringPool::saConstant[0] || pItem->mKey == gAptKeyPrototype)
                             continue;   // skip the two reserved keys
                         gAptActionInterpreter.setVariable(static_cast<AptValue*>(pClone), nullptr,
                                                           &pItem->mKey, pItem->mpValue, 1, 1, 0);

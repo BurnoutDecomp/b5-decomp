@@ -18,15 +18,109 @@
 #include <cstring>    // memset (StringPool::Initialize bucket-array clear)
 
 // ---------------------------------------------------------------------------
-// saConstant -- the interned "__proto__" key.
+// saConstant -- the interned AS-name TABLE (X360 dword_8324E580, 88 entries).
 //
-// The console seeds it from a precompiled StaticStringHelperT in StringPool::
-// Initialize (PS3 0x7F7A70: `operator=(StaticStringHelperT&)` over sStringPoolData);
-// the only value the engine ever compares against (case-insensitively) is the
-// "__proto__" key, so it is reconstructed here as that literal. EAStringC's
-// const-char* ctor (InitFromBuffer) builds the same interned content.
+// The 88 names are GROUND TRUTH from the TARGET binary: the 264-byte
+// StaticStringHelperT record block sStringPoolData @0x82F733FC (stride 264,
+// end 0x82F78EBC => 88 records) is written by the CRT initializer
+// sub_82C71F10 (each record: {u16 refCount=1, u16 length, u16 flags=1, u16 0,
+// char data[256]}); every literal below was recovered from that initializer's
+// store set ([19] "_up" = the packed dword 0x5F757000, [85] "XML" =
+// 0x584D4C00, [66] "onReleaseOutside" via its copy loop; the rest are its
+// strcpy/qword stores in record order). StringPool::Initialize then points
+// saConstant[i] at record i (PS3 0x7F7A70's operator= loop) -- collapsed here
+// to interning each literal at Initialize (the same observable content).
 // ---------------------------------------------------------------------------
-const EAStringC StringPool::saConstant("__proto__");
+EAStringC StringPool::saConstant[StringPool::KU_CONSTANT_COUNT] = {
+    EAStringC("__proto__"),
+    EAStringC("_alpha"),
+    EAStringC("_currentframe"),
+    EAStringC("_down"),
+    EAStringC("_droptarget"),
+    EAStringC("_focusrect"),
+    EAStringC("_framesloaded"),
+    EAStringC("_global"),
+    EAStringC("_height"),
+    EAStringC("_highquality"),
+    EAStringC("_left"),
+    EAStringC("_name"),
+    EAStringC("_quality"),
+    EAStringC("_right"),
+    EAStringC("_rotation"),
+    EAStringC("_soundbuftime"),
+    EAStringC("_target"),
+    EAStringC("_totalframes"),
+    EAStringC("_type"),
+    EAStringC("_up"),
+    EAStringC("_url"),
+    EAStringC("_visible"),
+    EAStringC("_width"),
+    EAStringC("_x"),
+    EAStringC("_xmouse"),
+    EAStringC("_xscale"),
+    EAStringC("_y"),
+    EAStringC("_ymouse"),
+    EAStringC("_yscale"),
+    EAStringC("aa"),
+    EAStringC("ab"),
+    EAStringC("array"),
+    EAStringC("ba"),
+    EAStringC("bb"),
+    EAStringC("boolean"),
+    EAStringC("center"),
+    EAStringC("color"),
+    EAStringC("controller"),
+    EAStringC("date"),
+    EAStringC("error"),
+    EAStringC("false"),
+    EAStringC("function"),
+    EAStringC("ga"),
+    EAStringC("gb"),
+    EAStringC("getRGB"),
+    EAStringC("getTransform"),
+    EAStringC("left"),
+    EAStringC("loadvars"),
+    EAStringC("movieclip"),
+    EAStringC("none"),
+    EAStringC("null"),
+    EAStringC("number"),
+    EAStringC("object"),
+    EAStringC("onData"),
+    EAStringC("onDragOut"),
+    EAStringC("onDragOver"),
+    EAStringC("onEnterFrame"),
+    EAStringC("onKeyDown"),
+    EAStringC("onKeyUp"),
+    EAStringC("onLoad"),
+    EAStringC("onMouseDown"),
+    EAStringC("onMouseMove"),
+    EAStringC("onMouseUp"),
+    EAStringC("onMouseWheel"),
+    EAStringC("onPress"),
+    EAStringC("onRelease"),
+    EAStringC("onReleaseOutside"),
+    EAStringC("onRollOut"),
+    EAStringC("onRollOver"),
+    EAStringC("onUnload"),
+    EAStringC("prototype"),
+    EAStringC("ra"),
+    EAStringC("rb"),
+    EAStringC("right"),
+    EAStringC("setRGB"),
+    EAStringC("setTransform"),
+    EAStringC("sound"),
+    EAStringC("string"),
+    EAStringC("super"),
+    EAStringC("textformat"),
+    EAStringC("this"),
+    EAStringC("true"),
+    EAStringC("undefined"),
+    EAStringC("xMax"),
+    EAStringC("xMin"),
+    EAStringC("XML"),
+    EAStringC("yMax"),
+    EAStringC("yMin")
+};
 
 // The shared fixed-size pool the bucket array is carved from (off_8324D808).
 extern DOGMA_PoolManager* gpAptPseudoDataPool;
@@ -59,10 +153,9 @@ namespace
 // ---------------------------------------------------------------------------
 void StringPool::Initialize(int nBucketCount)
 {
-    // FLAG: the AS-name table (dword_8324E580 == gAptASNameTable) string-record
-    // population from the rodata block unk_82F733FC is engine/rodata data (un-
-    // recovered); left to the constant-string registration. The structural bucket-
-    // array allocation is faithful.
+    // (The 88 AS names are statically interned at the saConstant definition above --
+    // the same proven EAStringC(const char*) pattern the old single __proto__ key
+    // used; the console's Initialize-time record assignment collapses to it.)
     gpAptStringPoolBuckets = gpAptPseudoDataPool->Allocate(sizeof(void*) * static_cast<unsigned>(nBucketCount));
     if (gpAptStringPoolBuckets != nullptr)
         std::memset(gpAptStringPoolBuckets, 0, sizeof(void*) * static_cast<unsigned>(nBucketCount));

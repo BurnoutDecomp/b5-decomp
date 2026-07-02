@@ -35,13 +35,13 @@
 AptScriptFunctionByteCodeBlock::AptScriptFunctionByteCodeBlock(void* pByteCode,
                                                                int32_t nByteCodeSize,
                                                                AptConstantPool constantPool,
-                                                               int32_t nArgumentInfo,
+                                                               const char* pFunctionName,
                                                                AptValue* pCIH,
                                                                AptValue* pCallContext)
     : AptScriptFunctionBase(AptVFT_ScriptFunctionByteCodeBlock, pCallContext, pCIH, /*bMakePrototype*/ false)
     , mpByteCode(pByteCode)
     , mnByteCodeSize(nByteCodeSize)
-    , mnArgumentInfo(nArgumentInfo)
+    , mpFunctionName(pFunctionName)
     , mConstantPool(constantPool)
 {
 }

@@ -1180,7 +1180,7 @@ void AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
          pItem = pHash->GetNextItem(pItem))
     {
         // Skip the two reserved keys (__proto__ / prototype).
-        if (pItem->mKey == StringPool::saConstant || pItem->mKey == gAptKeyPrototype)
+        if (pItem->mKey == StringPool::saConstant[0] || pItem->mKey == gAptKeyPrototype)
             continue;
         gAptActionInterpreter.setVariable(static_cast<AptValue*>(pNode), nullptr,
                                           &pItem->mKey, pItem->mpValue, 1, 1, 0);
