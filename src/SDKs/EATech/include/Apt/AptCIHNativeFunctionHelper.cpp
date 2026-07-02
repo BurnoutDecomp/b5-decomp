@@ -259,6 +259,25 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
     return gpUndefinedValue;   // off_8324D814
 }
 
+// ---------------------------------------------------------------------------
+// AptInterp_LabelToFrame (HOMED 2026-07-02, retiring the stub -1). The frame-
+// label resolve the GotoLabel/GotoFrame2 opcode handlers extracted: the node's
+// clip movie's label hash (the X360 @0x82B0C618 chain: charInst -> render item
+// -> character -> embedded movie word[2]), Lookup(label) -> toInteger, or -1
+// on a miss / no hash. Returns the 0-based frame (the callers' >= 0 gate and
+// the +1/-1 label arithmetic live at the call sites, matching the asm).
+// ---------------------------------------------------------------------------
+int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel)
+{
+    const AptCharacter* const pChar =
+        pNode->GetCharacterInst()->GetRenderItem()->mpCharacter;
+    const AptMovie* const pMovie = reinterpret_cast<const AptMovie*>(
+        reinterpret_cast<const char*>(pChar) + KU_AptEmbeddedMovieOff);
+    AptNativeHash* const pLabels = pMovie->mpLabelHash;
+    AptValue* const pHit = pLabels ? pLabels->Lookup(*pLabel) : nullptr;
+    return pHit ? pHit->toInteger() : -1;
+}
+
 AptValue* AptCIHNativeFunctionHelper::sMethod_gotoAndPlay(AptValue* pContext, int nArgCount)
 {
     return AptCIH_gotoAndX(pContext, nArgCount, 1);

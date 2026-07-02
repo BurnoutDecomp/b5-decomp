@@ -171,7 +171,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3) { return 0; }   // FLAG link-stub
     int AptActionInterpreter_InstanceOfChainWalk(AptValue* pObject, AptValue* pClass) { return 0; }   // FLAG link-stub
     int AptCIH_ShapeHitTest(AptValue* pNode, float fX, float fY) { return 0; }   // FLAG link-stub
-    int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel) { return 0; }   // FLAG link-stub
+    // AptInterp_LabelToFrame RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
+    // (the clip movie's label-hash lookup, X360 @0x82B0C618 chain).
     int GetThreadId() { return 0; }   // FLAG link-stub
     uint32_t AptValue_CurrentThreadId() { return 0; }   // FLAG link-stub
     unsigned int AptGetSwfVersion() { return {}; }   // FLAG link-stub
