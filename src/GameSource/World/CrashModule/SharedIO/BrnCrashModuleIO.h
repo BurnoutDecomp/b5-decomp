@@ -27,6 +27,8 @@
 
 namespace BrnWorld
 {
+    namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; }   // BrnRaceCarEntityModuleOutputInterface.h
+
 namespace CrashIO
 {
     // BrnCrashModuleIO.h:208 -- the crash module's post-physics output buffer.
@@ -88,6 +90,14 @@ namespace CrashIO
     struct InputBuffer_PreScene : public CgsModule::IOBuffer
     {
         struct ReadInterfaceStorage { unsigned char maBytes[1]; };
+
+        // Latch the race-car module's pre-scene active-car view. ADDITIVE GROW: real
+        // X360 symbol (BrnWorld::CrashIO::InputBuffer_PreScene::SetActiveRaceCarInterface,
+        // called by WorldModule::BridgeEntityModulesToCrashModule_PreScene @0x827A50D4);
+        // declaration-only (its own ledger function). Pointer-only use of the
+        // interface type (home: BrnRaceCarEntityModuleOutputInterface.h).
+        void SetActiveRaceCarInterface(
+            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpInterface);
 
         // 0x827BB3D8 -- read-lock tripwire; returns this + 0x3CD0.
         const ReadInterfaceStorage* GetReadInterface() const;

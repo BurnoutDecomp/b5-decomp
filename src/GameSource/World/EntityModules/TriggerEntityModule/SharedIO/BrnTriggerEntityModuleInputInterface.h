@@ -12,6 +12,7 @@
 
 #include "BrnCommonTypes.h"                                       // u32, Vector3, Matrix44Affine
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::Event / VariableEventQueue
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue (remove queue)
 #include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"  // CgsSceneManager::SceneQueryId
 
 namespace BrnWorld
@@ -95,17 +96,36 @@ namespace TriggerEntityModuleIO
     // ADDITIVE GROW (Process* TU): the management input interface aggregate -- the add + remove
     // trigger queues the world bridge fills each frame. The X360 ProcessAddTriggerEvents drains
     // GetAddTriggerEventQueue() (the first embedded member, a VariableEventQueue<131072,16>).
-    // FLAG: the remove queue (EventQueue<InRemoveTriggerEvent,256>) follows; owned by its own TU.
+    // ADDITIVE GROW 2 (WorldBridgeInputToEntityModules TU): the remove queue
+    // (EventQueue<InRemoveTriggerEvent,256>) is X360-pinned at +131088 -- immediately after the
+    // add queue (sizeof(VariableEventQueue<131072,16>) == 16-byte header + 131072 buffer), the
+    // offset BridgeInputToEntityModules @0x827ADF88 adds (`addis/ori 0x20010`) before calling
+    // BaseEventQueue<InRemoveTriggerEvent>::Append on it. Append() below reproduces the bridge's
+    // inlined X360 whole-interface merge (VariableEventQueue<131072,16>::Append<131072,16> on the
+    // add queues, then the InRemoveTriggerEvent queue Append at +131088).
     class TriggerManagementInputInterface
     {
     public:
-        typedef CgsModule::VariableEventQueue<131072, 16> AddTriggerQueue;
+        typedef CgsModule::VariableEventQueue<131072, 16>           AddTriggerQueue;
+        typedef CgsModule::EventQueue<InRemoveTriggerEvent, 256>    RemoveTriggerQueue;
 
         const AddTriggerQueue& GetAddTriggerEventQueue() const { return mAddTriggerEventQueue; }
         AddTriggerQueue&       GetAddTriggerEventQueue()       { return mAddTriggerEventQueue; }
 
+        const RemoveTriggerQueue& GetRemoveTriggerEventQueue() const { return mRemoveTriggerEventQueue; }
+        RemoveTriggerQueue&       GetRemoveTriggerEventQueue()       { return mRemoveTriggerEventQueue; }
+
+        // X360 header-inline (BridgeInputToEntityModules @0x827AE52C/@0x827AE540): merge the
+        // source interface's add queue then its remove queue into this one.
+        void Append(const TriggerManagementInputInterface& lrSource)
+        {
+            mAddTriggerEventQueue.Append(lrSource.mAddTriggerEventQueue);
+            mRemoveTriggerEventQueue.Append(lrSource.mRemoveTriggerEventQueue);
+        }
+
     private:
-        AddTriggerQueue mAddTriggerEventQueue;   // +0 (X360 GetFirstEvent target)
+        AddTriggerQueue    mAddTriggerEventQueue;      // +0      (X360 GetFirstEvent target)
+        RemoveTriggerQueue mRemoveTriggerEventQueue;   // +131088 (X360 bridge Append target)
     };
 }
 }

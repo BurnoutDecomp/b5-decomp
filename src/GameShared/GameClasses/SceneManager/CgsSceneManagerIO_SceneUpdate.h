@@ -64,6 +64,12 @@ namespace SceneManagerIO
         void SetVolumeInstanceTransform(VolumeInstanceId lVolumeInstanceId, const Matrix44Affine& lTransform);
         void RemoveAllEntities();
 
+        // ADDITIVE GROW (FLAG -- declared-only, body owned by InSceneUpdateInterface's own
+        // TU): the whole-interface merge the physics->scene world bridge drives
+        // (WorldModule::BridgePhysicsSceneUpdateToScene @0x827ABA40 tail-calls it, X360
+        // callee @0x827ABABC's target; one of the DWARF-listed Append accessors).
+        void Append(const InSceneUpdateInterface& lrOther);
+
         unsigned char maReserved[256];
     };
 }

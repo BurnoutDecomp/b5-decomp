@@ -49,6 +49,7 @@ namespace PhysicsModuleIO
         struct VehicleOutputInterfaceStorage        { unsigned char maBytes[1]; };
         struct PropOutputInterfaceStorage           { unsigned char maBytes[1]; };
         struct DeformationOutputInterfaceStorage    { unsigned char maBytes[1]; };
+        struct SceneInputInterfaceStorage           { unsigned char maBytes[1]; };
         struct ContactSpyInterfaceStorage           { unsigned char maBytes[1]; };
 
         // ---- accessors owned/bodied by this group --------------------------------------
@@ -59,6 +60,10 @@ namespace PhysicsModuleIO
         PropOutputInterfaceStorage*                 GetPropManagerOutputInterface();          // +71792,  write
         DeformationOutputInterfaceStorage*          GetDeformationOutputInterface();          // +148656, write
         ContactSpyInterfaceStorage*                 GetContactSpyInterface();                 // +998192, write
+        // ADDITIVE GROW (BridgePhysicsSceneUpdateToScene @0x827ABAA8): the scene-update
+        // sub-interface (DWARF :385), read-locked. @0x8279F838 -> +179424 -- this pins
+        // the previously-unpinned mSceneInputInterface offset.
+        const SceneInputInterfaceStorage*           GetSceneInputInterface() const;           // +179424, read
 
         static void _AssertLayout();
 
@@ -74,10 +79,35 @@ namespace PhysicsModuleIO
         // gap to mDeformationOutputInterface: +71793 .. +148656.
         unsigned char                        maDeformationPad[148656 - 71793]; // ...
         DeformationOutputInterfaceStorage    mDeformationOutputInterface;      // +148656 :383
-        // mDeformationOutputInterfaceForEntityModules (:384) + mSceneInputInterface (:385)
-        // folded into this padding: +148657 .. +998192.
-        unsigned char                        maEntityAndSceneAndPad[998192 - 148657]; // ... :384/:385
+        // mDeformationOutputInterfaceForEntityModules (:384) folded: +148657 .. +179423.
+        unsigned char                        maEntityModulesPad[179424 - 148657];     // ... :384
+        SceneInputInterfaceStorage           mSceneInputInterface;             // +179424 :385 (0x8279F838)
+        // gap to mContactSpyInterface: +179425 .. +998191.
+        unsigned char                        maScenePad[998192 - 179425];      // ...
+
         ContactSpyInterfaceStorage           mContactSpyInterface;             // +998192 :386
+    };
+
+    // ================================================================================
+    // BrnPhysics::PhysicsModuleIO::InputBuffer (DWARF BrnPhysicsModuleIO.h) -- MINIMAL
+    // slice for the one accessor the world bridges drive:
+    //   GetVehicle() @ 0x8279ED28  write-lock (bit 3, "Not locked for writing\n",
+    //   assert line 276) -> this + 368  (the embedded vehicle-input interface the
+    //   crash bridge Appends into; real type BrnPhysics::Vehicle::VehicleInputInterface,
+    //   kept as opaque storage here per this header's convention -- adopt the real
+    //   member type when the InputBuffer's own TU lands).
+    // ================================================================================
+    class InputBuffer : public CgsModule::IOBuffer
+    {
+    public:
+        struct VehicleInputInterfaceStorage { unsigned char maBytes[1]; };
+
+        // @ 0x8279ED28 -- write-lock tripwire, then the vehicle-input sub-interface.
+        VehicleInputInterfaceStorage* GetVehicle();   // +368, write
+
+    private:
+        u8                           maStatusPad[367];        // +1..+367 (force +368)
+        VehicleInputInterfaceStorage mVehicleInputInterface;  // +368
     };
 }
 }

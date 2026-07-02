@@ -369,7 +369,7 @@ void MainGameFlowStateCheckDiskSpace::OnEnter()
     // the stamp has no modelled target yet; the flag writes + assert above are faithful.
 }
 void MainGameFlowStateCheckDiskSpace::OnLeave() {}
-void MainGameFlowStateCheckDiskSpace::Update() {}
+// Update @ 0x823F2D28 lives in its DWARF home TU, BrnGameMainFlowCheckDiskSpace.cpp.
 void MainGameFlowStateCheckDiskSpace::Render() {}
 
 MainGameFlowStateMemoryCard::MainGameFlowStateMemoryCard() {}

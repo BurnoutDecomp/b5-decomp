@@ -5,6 +5,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer (base; lock state machine)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h" // CgsModule::EventQueue<T,N> (AudioCarLoadedDataQueue)
+#include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h" // AudioEffectsMessageQueue (adopted real type)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // AudioCarDataLoadedEvent (queue element)
 
 // =============================================================================
@@ -100,9 +101,19 @@ namespace Io
         const AudioCarLoadedDataQueue& GetCarDataLoadedQueue() const { return mAudioCarDataLoadedQueue; }
         AudioCarLoadedDataQueue&       GetCarDataLoadedQueue()       { return mAudioCarDataLoadedQueue; }
 
+        // GetAudioEffectsMessageQueue (BrnPreUpdateSharedIo.h:200/:206) -- X360
+        // header-inlines (BrnGame::BrnGameModule::BridgeSoundToTraining @0x823C63C0
+        // folds the const one to GetPreUpdateOutput()+0x2A0).
+        const AudioEffectsMessageQueue& GetAudioEffectsMessageQueue() const { return mAudioEffectsMessageQueue; }
+        AudioEffectsMessageQueue&       GetAudioEffectsMessageQueue()       { return mAudioEffectsMessageQueue; }
+
         u8                      maGuiOutEventQueueStorage[0x110];     // @ +0x000 mGuiOutEventQueue
         AudioCarLoadedDataQueue mAudioCarDataLoadedQueue;            // @ +0x110 (0x190 wide)
-        u8                      maAudioEffectsMessageQueueStorage[0x90]; // @ +0x2A0 mAudioEffectsMessageQueue
+        // Adopted real type (was named opaque u8[0x90] storage): the committed
+        // AudioEffectsMessageQueue (SharedIO/BrnPreUpdateSharedIo.h) is pointer-free
+        // (inline buffer + s32 cursors), so its host sizeof stays the X360 0x90 and
+        // SetPreUpdateOutput's whole-region memcpy remains valid.
+        AudioEffectsMessageQueue mAudioEffectsMessageQueue;          // @ +0x2A0 mAudioEffectsMessageQueue
 
         static void _AssertLayout()
         {

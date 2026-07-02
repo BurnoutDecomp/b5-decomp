@@ -36,6 +36,7 @@
 #pragma once
 
 #include "types.hpp"                                              // s8/s16/s32/u8/u16/u32/f32
+#include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT (per-race-car inline getters)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"            // CgsModule::IOBuffer base
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<N,16>
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue<T,N>
@@ -287,6 +288,74 @@ namespace BrnWorldIO
         // ---- active payback -------------------------------------------------------
         void SetActivePaybackType(BrnNetwork::EPaybackType);                                            // :317 W (0x823B4F50)
         void SetActivePaybackAggressor(EActiveRaceCarIndex);                                            // :319 W (0x823B5000)
+
+        // ---- ADDITIVE GROW (WorldBridgeInputToEntityModules TU): the consumer-side --
+        // getters BridgeInputToEntityModules @0x827ADF88 drains the buffer through.
+        //
+        // (a) Out-of-line const (read-lock) getters -- real X360 symbols, their own
+        //     ledger functions (declaration-only here). Truncated Hex-Rays names are
+        //     resolved by the member each returns / the setter each pairs with.
+        const TimerStatusInterface*             GetTimerStatusInterface() const;             // :271 R (asm-named)
+        const PlayerVehicleControls*            GetPlayerVehicleControls() const;            // :283 R (asm-named)
+        BrnNetwork::EPaybackType                GetActivePaybackType() const;                // :316 R (asm-named)
+        EActiveRaceCarIndex                     GetActivePaybackAggressor() const;           // :318 R (asm-named)
+        const TakedownEventQueue*               GetTakedownEventQueue() const;               // :272 R (IDA "UpdateInputBuffer_")
+        const OnlineScoringInterface*           GetOnlineScoringInterface() const;           // :300 R (IDA sub_827A3D98)
+        const TriggerManagementInputInterface*  GetTriggerManagementInputInterface() const;  // :276 R (IDA "UpdateInputB")
+        const TriggerQueryInputInterface*       GetTriggerQueryInputInterface() const;       // :278 R (IDA sub_827A39A8)
+        const GameActionQueue*                  GetGameActionQueue() const;                  // :265 R (IDA "UpdateInputBuffer")
+
+        // (b) Per-active-race-car getters -- X360 HEADER-INLINES (the bridge's asm has
+        //     no bl for them, only the range-assert pairs citing THIS header's X360
+        //     lines, folded to static text below per the project assert convention).
+        u16 GetRaceCarColourIndex(EActiveRaceCarIndex leActiveRaceCarIndex) const            // X360 h:696/:697
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mau16RaceCarColourIndex[leActiveRaceCarIndex];
+        }
+        bool IsRaceCarColourIndexValid(EActiveRaceCarIndex leActiveRaceCarIndex) const       // X360 h:715/:716
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mabRaceCarColourIndexValid[leActiveRaceCarIndex];
+        }
+        u16 GetRaceCarPaintFinishIndex(EActiveRaceCarIndex leActiveRaceCarIndex) const       // X360 h:752/:753
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mau16RaceCarPaintFinishIndex[leActiveRaceCarIndex];
+        }
+        bool IsRaceCarPaintFinishValid(EActiveRaceCarIndex leActiveRaceCarIndex) const       // X360 h:771/:772 (PS3 DWARF name)
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mabRaceCarPaintFinishIndexValid[leActiveRaceCarIndex];
+        }
+        bool GetLostContact(EActiveRaceCarIndex leActiveRaceCarIndex) const                  // X360 h:791 (combined form)
+        {
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT && leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                       "( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )");
+            return mabLostContactThisFrame[leActiveRaceCarIndex];
+        }
+        bool GetRegainedContact(EActiveRaceCarIndex leActiveRaceCarIndex) const              // X360 h:809 (combined form)
+        {
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT && leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                       "( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )");
+            return mabRegainedContactThisFrame[leActiveRaceCarIndex];
+        }
+        bool GetCarSelectStatus(EActiveRaceCarIndex leActiveRaceCarIndex) const              // X360 h:829/:830
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mabCarSelectStatus[leActiveRaceCarIndex];
+        }
+        bool IsCarSelectStatusValid(EActiveRaceCarIndex leActiveRaceCarIndex) const          // X360 h:839/:840
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mabCarSelectStatusValid[leActiveRaceCarIndex];
+        }
 
     private:
         // ---- FROZEN LAYOUT (DWARF :324..354 order; leading arrays X360-offset-proven) ----

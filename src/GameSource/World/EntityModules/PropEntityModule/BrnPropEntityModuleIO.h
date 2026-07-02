@@ -29,6 +29,10 @@
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"  // BrnPhysics::ContactSpy::ContactSpyInterface (mContactSpyInterface, by value)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"   // BrnPhysics::Props::UpdatePropEvent (queue element)
 
+// The replay-status payload InputBuffer_PreScene::SetReplayStatusInterface latches (pointer-only
+// use; home GameSource/Replays/BrnReplayStatusInterface.h).
+namespace BrnReplays { namespace ReplayIO { struct StatusInterface; } }
+
 namespace BrnWorld
 {
 namespace PropEntityIO
@@ -269,6 +273,52 @@ namespace PropEntityIO
         // mSceneInputInterface span (:752) folded into this padding up to the +833008 start.
         unsigned char               maSceneInputAndPad[833008 - 820912 - 1]; // ... :752
         PropInputInterfaceStorage   mPropInputInterface;               // +833008 :753
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::InputBuffer_PreScene
+    // (ADDITIVE GROW: WorldBridgeInputToEntityModules TU)
+    // ========================================================================
+    // MINIMAL SLICE for the pre-scene INPUT buffer WorldModule::BridgeInputToEntityModules
+    // @0x827ADF88 fills:
+    //   * SetReplayStatusInterface -- real out-of-line X360 symbol (its own ledger function;
+    //     declaration-only). The payload type is the committed BrnReplays::ReplayIO::
+    //     StatusInterface (pointer-only use here).
+    //   * the game-action-derived block @ +0x780..+0x792. Setter NAMES + semantics are the
+    //     PS3 DecFIGS DWARF's (BrnWorldBridgesUnity.cpp dump: SetIsOnline / SetEasySmashProps /
+    //     SetPropProgressionEnabled / SendingPropProgression / SetHitPropsBitArray /
+    //     SetCurrentTimestep / ResetProps -- real PS3 symbols); the X360 bridge INLINES them
+    //     (direct stb/stw/stfs), which pins the member offsets below. Modelled as X360-style
+    //     header-inlines over offset-pinned members.
+    // FLAG: muHitPropsBitArray is a 32-bit console word (likely a BitArray handle/pointer on
+    // the 32-bit targets); kept as the raw copied word -- resolve when the prop TU lands.
+    // The interior between the IOBuffer status byte and +0x780 (the replay-status payload
+    // etc.) is opaque pad owned by the buffer's own TUs.
+    class InputBuffer_PreScene : public CgsModule::IOBuffer
+    {
+    public:
+        void SetReplayStatusInterface(const BrnReplays::ReplayIO::StatusInterface* lpReplayStatusInterface);
+
+        // X360 header-inlines (inlined into BridgeInputToEntityModules @0x827ADF88).
+        void SetHitPropsBitArray(u32 luHitPropsBitArray)          { muHitPropsBitArray = luHitPropsBitArray; mbHitPropsBitArrayValid = true; }
+        void SetCurrentTimestep(f32 lfTimeStep)                   { mfCurrentTimestep = lfTimeStep; }
+        void SetIsOnline(bool lbIsOnline)                         { mbIsOnline = lbIsOnline; }
+        void SetEasySmashProps(bool lbEasySmashProps)             { mbEasySmashProps = lbEasySmashProps; }
+        void SetPropProgressionEnabled(bool lbEnabled)            { mbPropProgressionEnabled = lbEnabled; }
+        void SendingPropProgression()                             { mbSendingPropProgression = true; }
+        void ResetProps()                                         { mbResetProps = true; }
+
+    private:
+        u8   maPad[0x77F];                     // +0x001..+0x77F (payload owned by own TUs)
+        u32  muHitPropsBitArray;               // +0x780  (SetHitPropsBitArray; see FLAG)
+        f32  mfCurrentTimestep;                // +0x784  (SetCurrentTimestep: sim timestep * multiplier)
+        u8   maPad788[5];                      // +0x788..+0x78C
+        bool mbIsOnline;                       // +0x78D  (SetIsOnline: game mode is an online mode)
+        bool mbEasySmashProps;                 // +0x78E  (SetEasySmashProps)
+        bool mbPropProgressionEnabled;         // +0x78F  (SetPropProgressionEnabled)
+        bool mbSendingPropProgression;         // +0x790  (SendingPropProgression latch)
+        bool mbHitPropsBitArrayValid;          // +0x791  (set alongside muHitPropsBitArray)
+        bool mbResetProps;                     // +0x792  (ResetProps latch)
     };
 
     // ========================================================================

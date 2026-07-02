@@ -69,6 +69,12 @@ namespace Vehicle
         // @0x822B4770: mark an active-race-car slot as added-for-collision.
         void SetRaceCarAddedForCollision(EActiveRaceCarIndex leRaceCarIndex);
 
+        // Append the other interface's staged events onto this one (queue-merge).
+        // ADDITIVE GROW: real X360 symbol (BrnPhysics::Vehicle::VehicleInputInterface::
+        // Append, called by WorldModule::BridgeCrashModuleToPhysicsModule @0x827AACEC);
+        // declaration-only (its own ledger function).
+        void Append(const VehicleInputInterface& lrOther);
+
         // @0x82592FD0: hand-written copy assignment (Clear()+Append() per queue).
         VehicleInputInterface& operator=(const VehicleInputInterface& lrOther);
 
