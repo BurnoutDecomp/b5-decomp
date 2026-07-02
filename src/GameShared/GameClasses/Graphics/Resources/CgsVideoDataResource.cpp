@@ -31,11 +31,11 @@ namespace CgsResource
 
     void VideoDataResource::VideoFile::FixUp()
     {
-        // X360 0x827FB340: *(field) += field_address. mpcName sits at offset 0 of the VideoFile, so its
+        // X360 0x827FB340: *(field) += field_address, unconditionally (no null check in the ASM --
+        // straight-line code for all 6 fields). mpcName sits at offset 0 of the VideoFile, so its
         // stored self-relative offset is rebased by &mpcName (== the VideoFile address) -> absolute.
-        if (mpcName != 0)
-            mpcName = reinterpret_cast<const char*>(reinterpret_cast<uintptr_t>(&mpcName)
-                                                    + reinterpret_cast<uintptr_t>(mpcName));
+        mpcName = reinterpret_cast<const char*>(reinterpret_cast<uintptr_t>(&mpcName)
+                                                + reinterpret_cast<uintptr_t>(mpcName));
     }
 
     // ---- VideoDataResource -------------------------------------------------------------

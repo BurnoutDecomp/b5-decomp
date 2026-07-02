@@ -73,8 +73,10 @@ void PackedOobb::ToMatrix(rw::math::vpu::Matrix44& roMatrix) const
     f32 lfQw = SignedFixedToFloat(mPackedBB.mauLane[3]);
 
     // normalise: lenSq = dot4(q,q); inv = 1/sqrt(lenSq) (vrsqrtefp + 2 NR).
+    // The asm is straight-line VMX with no compare/branch guarding lenSq == 0
+    // (vrsqrtefp is evaluated unconditionally), so no zero-guard belongs here.
     const f32 lfLenSq = lfQx * lfQx + lfQy * lfQy + lfQz * lfQz + lfQw * lfQw;
-    const f32 lfInv = (lfLenSq > 0.0f) ? (1.0f / std::sqrt(lfLenSq)) : 0.0f;
+    const f32 lfInv = 1.0f / std::sqrt(lfLenSq);
     lfQx *= lfInv;
     lfQy *= lfInv;
     lfQz *= lfInv;

@@ -47,7 +47,6 @@ void ShaderConstantTable::AddShaderConstantArray(u32 luIndex, const char* lpcNam
     const u32 luBufferSize = static_cast<u32>(strlen(lpcName)) + 1u;
     const u32 luStringLength = static_cast<u32>(strlen(lpcName));
     char* lpHeapName = new char[luBufferSize];
-    lpHeapName[0] = 0;
     CGS_ASSERT(luStringLength < luBufferSize, "luStringLength < luBufferSize");
     strcpy(lpHeapName, lpcName);
 
