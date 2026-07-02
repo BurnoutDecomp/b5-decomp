@@ -26,7 +26,9 @@ namespace BrnParticle
             u32 luIndex = 0;
             do
             {
-                u8 luChar = (u8)std::tolower( (unsigned char)lpcName[luIndex] );
+                // X360 sign-extends the byte (extsb) before calling tolower, i.e. it passes
+                // a plain (signed) `char` widened to int, not a zero-extended unsigned byte.
+                u8 luChar = (u8)std::tolower( lpcName[luIndex] );
                 ++luIndex;
                 luHash = 0x01000193 * ( luChar ^ luHash );
             }
