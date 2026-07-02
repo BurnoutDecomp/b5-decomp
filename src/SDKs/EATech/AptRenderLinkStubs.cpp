@@ -183,7 +183,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     const char*    AptResolveTextFieldFontName(AptCharacterInst* pTextInst) { return nullptr; }   // FLAG link-stub
     // Apt_atoff RETIRED (2026-07-02): homed in AptValueConvert.cpp
     // (PS3 @0x7E2990 == (float)strtod; the stub's 0 broke every string->number).
-    int    AptValueGCPool_GetAllocatedCount(void* pPool) { return 0; }   // FLAG link-stub
+    // AptValueGCPool_GetAllocatedCount RETIRED (2026-07-02): homed in
+    // AptValueGCPoolManager.cpp (the DOGMA mnItemsAllocated counter).
     // AptHook_GetBytesTotal RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
     // (the host gAptFuncs.pfnGetBytesTotal dispatch @+0x94).
     // AptActionInterpreter_InstanceOfChainWalk RETIRED (2026-07-02): homed in
@@ -305,7 +306,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // sub_82B0AE08 (the place-command dispatcher @0x82B0AE08) is now HOMED faithfully as
     // AptMovie_PlaceCommand in AptMovie.cpp (reads the PlaceObject record + calls the homed
     // AptDisplayList::placeObjectNCXForm). The null link-stub is retired.
-    void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool) { return nullptr; }   // FLAG link-stub
+    // AptValueGC_PoolManager_GetAllAllocatedAptValues RETIRED (2026-07-02): homed in
+    // AptValueGCPoolManager.cpp (the CleanAll pool-walk snapshotted flat).
 
 // ===================================================================================
 // ENGINE link-stubs (42) -- off the PC render-critical path. The PC bring-up is

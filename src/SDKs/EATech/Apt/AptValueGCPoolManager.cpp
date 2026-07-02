@@ -258,3 +258,41 @@ AptValue* AptValueGC_PoolManager::GetNextAptValue(AptValue* pCurrent)
             const_cast<uint8_t*>(static_cast<const uint8_t*>(pFirstOutside) + 8));
     return nullptr;
 }
+
+// ===========================================================================
+// The two GC-pool introspection accessors (HOMED 2026-07-02, retiring the
+// AptRenderLinkStubs nulls -- the plan's Phase-1 GC-substrate list items).
+//   * GetAllocatedCount: the live-allocation counter the DOGMA base maintains
+//     (mnItemsAllocated -- the X360 callers read *(pool + 0x28)).
+//   * GetAllAllocatedAptValues: the caller pairs the SAME pool walk CleanAll
+//     uses (GetFirstAptValue/GetNextAptValue) into a flat snapshot; the
+//     console returns its internal live-table pointer, which the DOGMA port
+//     does not keep as a flat array -- snapshot into a static scratch sized
+//     by the live count (single-threaded bring-up; the sole caller,
+//     AptReplaceReferences' zombie-survivor fixup, consumes it immediately).
+// ===========================================================================
+int AptValueGCPool_GetAllocatedCount(void* pPool)
+{
+    return static_cast<int>(
+        static_cast<AptValueGC_PoolManager*>(pPool)->mnItemsAllocated);
+}
+
+void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool)
+{
+    AptValueGC_PoolManager* const pMgr =
+        static_cast<AptValueGC_PoolManager*>(pPool);
+    static void** spSnapshot = nullptr;
+    static size_t snCapacity = 0;
+    const size_t nCount = pMgr->mnItemsAllocated;
+    if (nCount > snCapacity)
+    {
+        delete[] spSnapshot;
+        spSnapshot = new void*[nCount ? nCount : 1];
+        snCapacity = nCount ? nCount : 1;
+    }
+    size_t i = 0;
+    for (AptValue* p = pMgr->GetFirstAptValue(); p != nullptr && i < snCapacity;
+         p = pMgr->GetNextAptValue(p))
+        spSnapshot[i++] = p;
+    return spSnapshot;
+}
