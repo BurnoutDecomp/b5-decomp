@@ -469,9 +469,10 @@ namespace Vehicle
 
         // ----- ADDITIVE GROW (surface-response group): the per-surface grip/drag/roughness
         //       lookups. Each reads a 6-bit surface id from a RoadContact CollisionTag
-        //       (luSurfaceId = (mCollisionTag.muValue >> 12) & 0x3F -- the X360 reads byte+2 of the
-        //       tag then >>4 &0x3F; expressed here against the numeric muValue so it is endian-
-        //       independent), indexes a global per-surface property table, and blends with a lane
+        //       (luSurfaceId = (mCollisionTag.muValue >> 4) & 0x3F -- the X360 reads the HALFWORD at
+        //       tag+2, i.e. the low 16 bits of the big-endian muValue, then >>4 &0x3F; matches
+        //       UpdateInWaterBehaviour's identical extraction for the same CollisionTag type),
+        //       indexes a global per-surface property table, and blends with a lane
         //       of mpAttribs->mvSurfaceBlend.
         //       FLAG (runtime data): the per-surface tables (grip unk_82FB8890, drag unk_82FB8BD0,
         //       roughness unk_82FB8DE0, the global roughness scale unk_82FB9220 and the optional
@@ -1021,7 +1022,10 @@ namespace Vehicle
         void ApplyShowtimeContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition,
                                          bool lbZeroResponse);                                               // @0x825D4E00
         void AddSlam(bool lbTaper, f32 lfDuration, f32 lfSteer, f32 lfRecoveryTime, s8 li8RaceCarId);        // @0x825D4870
-        void AddShunt(s8 li8RaceCarId);                                                                      // @0x825FC630
+        // __fastcall with three VMX128 float args the Hex-Rays signature drops: speed-increase delta,
+        // shunt direction (stored verbatim, not normalized), and a Life-register seed splat.
+        void AddShunt(f32 lfSpeedIncrease, const Vector3& lvShuntDirection, f32 lfLifeSeed,
+                     s8 li8RaceCarId);                                                                       // @0x825FC630
         void UpdateSlam(f32* lpControlsCopy, f32 lfFrameTime);                                               // @0x825D4950
         void GetImpulsesFromLocalImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition,
                                          Vector3& lrJWorld, Vector3& lrAngularJWorld) const;  // declare-only (base)

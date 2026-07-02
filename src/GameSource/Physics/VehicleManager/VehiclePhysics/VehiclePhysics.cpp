@@ -160,12 +160,14 @@ namespace Vehicle
     //   NEVER fabricated. The debug "properties loaded" + surface-id-bound asserts are elided.
     // ---------------------------------------------------------------------------------------
 
-    // luSurfaceId = (tag.muValue >> 12) & 0x3F. The X360 reads byte+2 of the CollisionTag (the low
-    // byte of the material tag) then >>4 &0x3F; expressed against the numeric muValue that is the
-    // endian-independent >>12 &0x3F.
+    // luSurfaceId = (tag.muValue >> 4) & 0x3F. 0x825D5148-50: `lhz r11,0x596(r27) ; srwi r11,r11,4 ;
+    // clrlwi r31,r11,26` -- a HALFWORD load at tag+2 (the low 16 bits of the big-endian muValue),
+    // then >>4 &0x3F, i.e. bits 4-9 of muValue -- NOT the byte+2 >>4 framing this used to assume
+    // (which produced >>12). Matches UpdateInWaterBehaviour's (muValue >> 4) & 0x3F for the same
+    // extraction (0x825B81E4 region), so the two stay consistent.
     static inline s32 SurfaceIdFromTag(CollisionTag lTag)
     {
-        return static_cast<s32>((lTag.muValue >> 12) & 0x3Fu);
+        return static_cast<s32>((lTag.muValue >> 4) & 0x3Fu);
     }
 
     // FLAG: the per-surface property tables are runtime-loaded scratch globals (un-homed); the
@@ -260,8 +262,12 @@ namespace Vehicle
     //     lvRough = GetSurfaceRoughness(wheel)                          (flagged-inert table)
     //     lfFactor = mpAttribs->mvBaseParams.z                          (per-vehicle road-noise scale)
     //     lfSpeed  = mfSpeedMPH (+0x6C0)                                (speed gate, v124)
-    //     The VMX cascade forms (1/lfFactor reciprocal-Newton refine), multiplies the wheel noise by
-    //     roughness*factor, by lfSpeed, clamps to 1.0 (vminfp v0,v0,v127=1.0) and accumulates into the
+    //     0x825F69E0 region: `vspltw128 v126,(attribs+112),2 ; vrefp128 v0,v126` + two Newton refines
+    //     -> v125 = 1/lfFactor (a RECIPROCAL -- lfFactor DIVIDES, it does not multiply). The tail
+    //     multiplies the speed-scaled ratio by roughness AFTER the 1.0 clamp:
+    //     `vmulfp128 v0,v0,v124(speed) ; vminfp128 v0,v0,v127(1.0) ; vmulfp128 v0,v13(roughness),v0`
+    //     -- i.e. noise = (preDraw + wheelDraw) * roughness * min(speed / factor, 1.0); the 1.0 clamp
+    //     applies to the speed/factor RATIO alone, not to the whole product. Accumulates into the
     //     wheel's leading SIMD region (lvx128/vmaddfp/stvx128 at wheel+0).
     //   The scalar noise term + roughness/factor/speed product + the 1.0 clamp are recovered faithfully;
     //   the exact wheel-register destination lanes are partial (see Wheel::AddRoadNoise FLAG).
@@ -276,6 +282,12 @@ namespace Vehicle
         const f32 lfFactor = mpAttribs->mvBaseParams.z;   // per-vehicle road-noise scale (.z lane)
         const f32 lfSpeed  = mfSpeedMPH;                  // +0x6C0 body-frame speed (MPH)
 
+        // speedRatio = min(speed / factor, 1.0) -- the asm's vrefp reciprocal + Newton refine of
+        // lfFactor, multiplied by speed, THEN clamped to 1.0 (before the roughness multiply below).
+        f32 lfSpeedRatio = (lfFactor != 0.0f) ? (lfSpeed / lfFactor) : 0.0f;
+        if (lfSpeedRatio > KF_ONE)
+            lfSpeedRatio = KF_ONE;
+
         for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
         {
             const EVehicleDrivenWheel leWheel = static_cast<EVehicleDrivenWheel>(liWheel);
@@ -289,11 +301,9 @@ namespace Vehicle
             // Surface roughness (.x lane representative; flagged-inert until the table is recovered).
             const f32 lfRoughness = GetSurfaceRoughness(leWheel).x;
 
-            // noise = clamp( wheelDraw * roughness * factor * speed, ..., 1.0 ). The asm's reciprocal-
-            // Newton cascade on lfFactor is the canonical scale build; the vminfp clamps to 1.0.
-            f32 lfNoise = lfWheelDraw * lfRoughness * lfFactor * lfSpeed;
-            if (lfNoise > KF_ONE)
-                lfNoise = KF_ONE;
+            // noise = wheelDraw * roughness * clamp(speed/factor, 1.0) -- roughness multiplies AFTER
+            // the speed/factor ratio has already been clamped to 1.0.
+            const f32 lfNoise = lfWheelDraw * lfRoughness * lfSpeedRatio;
 
             // Accumulate into the wheel's road-noise register (vmaddfp -> stvx128 at wheel base).
             // FLAG (partial): exact destination lanes overlap Wheel-owned blobs -- see Wheel::AddRoadNoise.
@@ -483,9 +493,12 @@ namespace Vehicle
     //   the kill stays disabled until recovered: the surface-id extraction, the depth-test shape and the
     //   exact zeroed rows are EXACT. NEVER fabricated. The two control/dt args exist to match the DWARF
     //   phase-chain signature; the body reads neither.
-    //   FLAG (slice): only mLinearVelocity (+0x50) is pinned in this minimal slice. The X360 also zeroes
-    //   +0x60 / +0xF0 / +0x100 / +0x110 / +0x120 -- those rows are owned by the base / full-class members
-    //   not pinned here, so they are a faithful comment pending their pins (no fabricated member access).
+    //   0x825B81E4-8214: `vspltisw v0,0` then six stvx128 stores to +0x50/+0x60/+0xF0/+0x100/+0x110/
+    //   +0x120. mLinearVelocity(+0x50), mLocalVelocity(+0x60), mLinearImpulseAccumulator(+0x100) and
+    //   mAngularImpulseAccumulatorRow(+0x120) ARE pinned members of this slice and are zeroed below;
+    //   +0xF0 (the ExternalPhysicsBody world-space torque accumulator, only exposed via the ADD-only
+    //   AddWorldSpaceTorque) and +0x110 (not pinned anywhere in this slice) are owned by a base/other
+    //   TU with no settable accessor here -- left as a faithful comment, not fabricated.
     // -------------------------------------------------------------------------------------
     void VehiclePhysics::UpdateInWaterBehaviour(const BrnPlayerDriverControls* /*lpControls*/,
                                                 VecFloat /*lvfDeltaTime*/)
@@ -498,12 +511,15 @@ namespace Vehicle
         if (!(mfWaterDepth < KF_WATER_DROWN_DEPTH))
             return;
 
-        // Hard kill: zero the velocity row pinned in this slice.
+        // Hard kill: zero every row pinned in this slice (+0x50/+0x60/+0x100/+0x120).
         static const Vector3 KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };
-        SetLinearVelocity(KV_ZERO);
-        // FLAG: the X360 also zeroes mAngularVelocity(+0x60) and the
-        // mTotalTorque/mTotalLinearImpulse/mTotalAngularImpulse accumulators (+0xF0/+0x100/+0x110) and
-        // the +0x120 row -- not pinned in this slice; faithful comment pending their member pins.
+        SetLinearVelocity(KV_ZERO);              // +0x50
+        mLocalVelocity = KV_ZERO;                // +0x60
+        mLinearImpulseAccumulator = KV_ZERO;     // +0x100
+        mAngularImpulseAccumulatorRow = KV_ZERO; // +0x120
+        // FLAG: the X360 also zeroes the +0xF0 world-space torque accumulator (ExternalPhysicsBody,
+        // ADD-only here via AddWorldSpaceTorque -- no settable accessor) and the +0x110 row (not
+        // pinned in this slice) -- not fabricated, pending their member pins in the owning TU.
     }
 
     // -------------------------------------------------------------------------------------
@@ -610,17 +626,20 @@ namespace Vehicle
     //         then NORMALIZE (vrsqrtefp+Newton).
     //   MAGNITUDE: mpAttribs->mvBaseParams.x (lane0 @ mpAttribs+0x70) * lfFactor * 50.0;
     //              mImpulse = normalize(direction) * magnitude.
-    //   POSITION (v127'): bit8(0x100) custom -> lvCustomPosition; else transform-column seeds at
-    //     this+0x6A0 with bit-selected lane negations (0x200 / 0x400 .z-neg / 0x800 .x-neg / 0x1000).
+    //   POSITION (v127'): bit8(0x100) custom -> lvCustomPosition; else seeds from mHalfExtent
+    //     (this+0x6A0, already pinned) with bit-selected lane negations: 0x200 -> +z, 0x400 -> -z,
+    //     0x800 -> -x, 0x1000 -> +x (vrlimi128 masks 2/8; 0x825FE118 region).
     //   SLOT: first free bit of mUsedAirRams; if none free, evict the active slot with smallest stored
-    //         |mPosition|^2 (the X360 FLT_MAX-seeded argmin). Store the fields + SetBit(slot).
+    //         |mImpulse|^2 (`_R25=this+0x1160=mAirRamEffect[0].mImpulse`, stride 48B, the X360
+    //         FLT_MAX-seeded argmin over the LOADED mImpulse row -- not mPosition). Store the fields
+    //         + SetBit(slot).
     //
-    //   FLAG (rodata): the +X/+Y/+Z body-axis seed vectors (unk_82181510 / gIVector / unk_82181520) and
-    //   the +0x6A0 transform-column position seeds are un-homed .rdata / un-pinned members -> flagged-0
-    //   placeholders. The 50.0 scale, the (attribLane * lfFactor) product, the normalize, the slot
-    //   allocation and the field stores are EXACT; the axis/position seeds stay 0 until recovered (an
-    //   axis-flag-only ram assembles a zero direction, an offset-flag-only ram a zero position) -- NEVER
-    //   fabricated. A custom impulse (bit0/bit2) and a custom position (bit8) path are fully exact.
+    //   FLAG (rodata): the +X/+Y/+Z body-axis seed vectors (unk_82181510 / gIVector / unk_82181520) for
+    //   the axis-flag direction path (bits 0x8/0x10/0x20) are un-homed .rdata -> flagged-0 placeholders;
+    //   the direction stays 0 until recovered (an axis-flag-only ram assembles a zero direction) --
+    //   NEVER fabricated. The 50.0 scale, the (attribLane * lfFactor) product, the normalize, the
+    //   mHalfExtent position seeds, the |mImpulse|^2 eviction and the field stores are EXACT. A custom
+    //   impulse (bit0/bit2) and a custom position (bit8) path are fully exact.
     //   The IsValid()/"must specify an axis" debug asserts are elided (debug-build guards).
     // -------------------------------------------------------------------------------------
     void VehiclePhysics::AddAirRam(u32 luFlags, f32 lfFactor, f32 lfDecay,
@@ -670,11 +689,21 @@ namespace Vehicle
         {
             lvPosition = lvCustomPosition;
         }
-        // else: the transform-column position seeds (this+0x6A0, lane-negation per bit 0x200..0x1000)
-        // are not pinned in this minimal slice -> position stays the origin (flagged-inert). The bit
-        // selection logic is faithful; the seed rows stay 0 until pinned. NEVER fabricated.
+        else
+        {
+            // Non-custom position seeds come from mHalfExtent (this+0x6A0, already pinned in this
+            // header): bit 0x200 -> +z, bit 0x400 -> -z, bit 0x800 -> -x, bit 0x1000 -> +x (vrlimi128
+            // masks 2/8 insert into lanes .z/.x; the negated variants vxor the sign bit first).
+            if (luFlags & 0x200u)        lvPosition.z = mHalfExtent.z;
+            else if (luFlags & 0x400u)   lvPosition.z = -mHalfExtent.z;
+            if (luFlags & 0x800u)        lvPosition.x = -mHalfExtent.x;
+            else if (luFlags & 0x1000u)  lvPosition.x = mHalfExtent.x;
+        }
 
-        // ----- choose a slot: first free, else evict the smallest-|position| active slot -----
+        // ----- choose a slot: first free, else evict the smallest-|impulse| active slot -----
+        // 0x825FE118 loop: `_R25 = _R17 + 1112` (= this+0x1160 = mAirRamEffect[0].mImpulse, stride 12
+        // dwords/48B) ; `vmsum3fp128 v0,v0,v0` on the LOADED mImpulse row -- the argmin is over
+        // |mImpulse|^2, not |mPosition|^2.
         s32 liSlot = -1;
         for (u32 lu = 0; lu < KU_MAX_AIR_RAMS; ++lu)
         {
@@ -685,7 +714,7 @@ namespace Vehicle
             f32 lfMinMagSq = 3.4028235e38f;   // FLT_MAX (asm v81 seed)
             for (u32 lu = 0; lu < KU_MAX_AIR_RAMS; ++lu)
             {
-                const f32 lfMagSq = vpu::MagnitudeSquared(mAirRamEffect[lu].mPosition);
+                const f32 lfMagSq = vpu::MagnitudeSquared(mAirRamEffect[lu].mImpulse);
                 if (lfMagSq < lfMinMagSq) { lfMinMagSq = lfMagSq; liSlot = static_cast<s32>(lu); }
             }
         }
@@ -762,13 +791,15 @@ namespace Vehicle
     //   1. lbRearWheelsOnGround = maWheels[2].onGround (+0x318) && maWheels[3].onGround (+0x3F8).
     //   2. if (!controls.boost @+0x3B) goto reset.
     //   3. if (mfSpeedMPH < 5.0)  goto reset.                       [flt_8200426C boost floor]
-    //   4. if (lbRearWheelsOnGround && mfSpeedMPH >= MaxBoostSpeed*throttle) -> at cap, no force.
-    //   5. kick-eligible = (TimeBoosting==0) && (TimeSinceLastBoostKick > 2.0) &&
+    //   4. if (!lbRearWheelsOnGround) goto reset.                   [0x825FAD84-90: master gate --
+    //      airborne rear wheels take the RESET path, not just "skip the cap check".]
+    //   5. if (mfSpeedMPH >= MaxBoostSpeed*throttle) -> at cap, no force (timers still advance).
+    //   6. kick-eligible = (TimeBoosting==0) && (TimeSinceLastBoostKick > 2.0) &&
     //                      (BoostKickMaxStartSpeed >= mfSpeedMPH).  [flt_82001D9C cooldown]
     //      if eligible: CurrentBoostKickTime =
     //          clamp(BoostKickMaxTime*(1 - mfSpeedMPH/BoostKickMaxStartSpeed)^2,
     //                BoostKickMinTime, BoostKickMaxTime).            [flt_82001C98 = 1.0]
-    //   6. mbInBoostKick = (CurrentBoostKickTime > TimeBoosting);
+    //   7. mbInBoostKick = (CurrentBoostKickTime > TimeBoosting);
     //      mbInBoostKick ? ApplyBoostKickForce(dt) : ApplyNormalBoostForce(dt).
     //      TimeBoosting += dt.
     //   reset path: TimeBoosting=0 ; CurrentBoostKickTime=0 ; TimeSinceLastBoostKick += dt.
@@ -781,19 +812,25 @@ namespace Vehicle
         Vector4& lrBoost = mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime;
         const VehicleAttribs::BoostAttribs& lrBA = mpAttribs->mBoostAttribs;
 
-        // Rear-axle traction: both rear wheels (indices 2,3) on the ground.
+        // Rear-axle traction: both rear wheels (indices 2,3) on the ground. This is a MASTER gate
+        // (0x825FAD84-90: `beq loc_825FAFB0` on either wheel being airborne) -- with either rear
+        // wheel off the ground the function takes the reset path below and applies no force at all,
+        // it does not merely skip the speed-cap comparison.
         const bool lbRearWheelsOnGround =
             maWheels[eRearLeftWheel].GetRoadContact().mbIsOnGround &&
             maWheels[eRearRightWheel].GetRoadContact().mbIsOnGround;
 
         // The boost button (asm reads controls byte +0x3B; mbBoostBounce in the committed layout).
-        // Below the 5.0-mph floor no boost ever applies. Either -> the "not boosting" reset path.
-        const bool lbApply = lpControls->mbBoostBounce && (mfSpeedMPH >= KF_BOOST_SPEED_FLOOR);
+        // Below the 5.0-mph floor, or with the rear wheels airborne, no boost ever applies this
+        // frame -- either -> the "not boosting" reset path.
+        const bool lbApply = lpControls->mbBoostBounce
+                           && (mfSpeedMPH >= KF_BOOST_SPEED_FLOOR)
+                           && lbRearWheelsOnGround;
 
         if (lbApply)
         {
-            // Throttle-scaled speed cap (only while the rear wheels grip). At/above the cap, the
-            // timers still advance but no force is applied this frame.
+            // Throttle-scaled speed cap. At/above the cap, the timers still advance but no force is
+            // applied this frame.
             // FLAG (control offset): the X360 reads throttle at controls+0x34, which the committed
             // BrnPlayerDriverControls layout labels miVehicleIDToMerge; the semantic throttle field is
             // mfRequestedGas. Behaviour (cap = MaxBoostSpeed * throttle) is faithful; the source offset
@@ -802,9 +839,7 @@ namespace Vehicle
             const f32 lfMaxBoostSpeed =
                 lrBA.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.y;
 
-            bool lbApplyForce = true;
-            if (lbRearWheelsOnGround && (mfSpeedMPH >= lfMaxBoostSpeed * lfThrottle))
-                lbApplyForce = false;   // already at the boost cap -- skip the force, advance timers
+            const bool lbApplyForce = (mfSpeedMPH < lfMaxBoostSpeed * lfThrottle);
 
             if (lbApplyForce)
             {
@@ -1017,11 +1052,13 @@ namespace Vehicle
         const f32 lfTarget = lfForwardSpeed + lfClampedDelta;
 
         // Per-axle reciprocal (the X360 vrefp+double-Newton of the wheel slip-register .w lane). The
-        // front pair share wheel0's reciprocal, the rear pair share wheel2's.
+        // front pair share wheel0's reciprocal, the rear pair share wheel2's. 0x825D4B44-50: the
+        // reciprocal is UNGUARDED (no zero-select in the asm) -- a zero slip lane produces +/-inf,
+        // which the IEEE-754 division below reproduces naturally.
         const f32 lfSlipFront = maWheels[eFrontLeftWheel].mSlipVariables.w;
         const f32 lfSlipRear  = maWheels[eRearLeftWheel ].mSlipVariables.w;
-        const f32 lfRecipFront = (lfSlipFront != 0.0f) ? (1.0f / lfSlipFront) : 0.0f;
-        const f32 lfRecipRear  = (lfSlipRear  != 0.0f) ? (1.0f / lfSlipRear)  : 0.0f;
+        const f32 lfRecipFront = 1.0f / lfSlipFront;
+        const f32 lfRecipRear  = 1.0f / lfSlipRear;
 
         const f32 lfForceFront = lfRecipFront * lfTarget;
         const f32 lfForceRear  = lfRecipRear  * lfTarget;
@@ -1072,13 +1109,16 @@ namespace Vehicle
     //   steering angle and speed/drift-blends it.
     //
     //   asm: if (!*(this+4946)) -> return cached (mvSteeringAngle_..._.x).
-    //        else build `dir = abs(SteeringReg) packed; if (dir > epsilon)` recompute:
+    //        else build `dir = abs(mLinearVelocity) packed; if (dir > epsilon)` recompute:
     //          unitVel = normalize(mLinearVelocity)              (vrsqrtefp + Newton, zero-guarded)
-    //          c       = clamp(dot(unitVel, fwd=mTransform.zAxis), 0, 1)
+    //          c       = clamp(dot(unitVel, fwd=mTransform.zAxis), -1, 1)   [0x825D40FC-100: vmaxfp
+    //                    against -1.0 (vcsxwfp of -1), NOT 0 -- caps reverse-travel angles at 180 deg]
     //          angle   = acos(c)                                  (XMVectorACos)
     //          if (dot(unitVel, right=mTransform.xAxis) < 0) angle = -angle    (signed)
     //          blend   = clamp(angle, -clampK, +clampK) with DriftScale authority shrink, then clamped
     //                    to unk_82FB9020.
+    //   Guard: 0x825D4058-84 loads THIS+0x50 (mLinearVelocity), not the +0xFE0 steering register --
+    //   the per-component |mLinearVelocity| lanes are tested against the epsilon splat.
     f32 VehiclePhysics::GetSteeringAngle() const
     {
         // cached lane (.x of the steering register @+0xFE0).
@@ -1088,18 +1128,18 @@ namespace Vehicle
         if (mu8DriftState == eDriftState_None)
             return lfCached;
 
-        // The world steering-direction guard: |steering reg lanes| vs a small epsilon (flagged). With the
-        // epsilon inert (0), the guard is effectively always taken when drifting; faithful to the branch.
-        const f32 lfSteerMag = (mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y >= 0.0f)
-                                 ? mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y
-                                 : -mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y;
-        if (!(lfSteerMag > KF_DRIFT_STEER_EPSILON))
+        // The world steering-direction guard: |mLinearVelocity| (this+0x50, NOT the +0xFE0 steering
+        // register) vs a small epsilon (flagged). With the epsilon inert (0), the guard is effectively
+        // always taken when drifting; faithful to the branch.
+        const f32 lfVelMag = (mLinearVelocity.y >= 0.0f) ? mLinearVelocity.y : -mLinearVelocity.y;
+        if (!(lfVelMag > KF_DRIFT_STEER_EPSILON))
             return lfCached;
 
         // Recompute the signed world steering angle.
         const Vector3 lUnitVel = vpu::Normalize(mLinearVelocity);   // zero-guarded
         f32 lfDot = vpu::Dot(lUnitVel, mTransform.zAxis);           // fwd axis @+0x30
-        if (lfDot < 0.0f) lfDot = 0.0f;
+        // 0x825D40FC-100: clamp to [-1, 1] (vmaxfp against -1.0, NOT 0.0).
+        if (lfDot < -1.0f) lfDot = -1.0f;
         if (lfDot > 1.0f) lfDot = 1.0f;
 
         f32 lfAngle = std::acos(lfDot);                            // XMVectorACos
@@ -1182,33 +1222,35 @@ namespace Vehicle
     }
 
     // @0x825CFC68  VehiclePhysics::ModifyControlsForDrift
-    //   While sliding (mu8DriftState != 0) and the original controls do NOT force-come-out-of-drift,
-    //   re-maps the steer input toward the drift control, signed by the drift direction. The blend
-    //   weights come from mpAttribs->mvDriftParams1 (@+0x120) lanes .z/.w.
-    //   asm: sign = (mu8DriftState==1) ? +1 : -1; t = back_chain * brake^2 (the BrakeScale lane);
-    //        steer' = ((-(t-1)*sign) + blend*(driftCtl + t) + t) * brakeScale.
+    //   While sliding (mu8DriftState != 0) and the ORIGINAL controls mode is NOT 1 (0x825CFC74-7C:
+    //   `lwz r10,0x44(r4) ; cmpwi cr6,r10,1 ; beqlr cr6` -- returns when mode==1, i.e. proceeds only
+    //   when mode != 1), re-signs and re-maps the steer input by the drift direction. The blend
+    //   weights come from mpAttribs->mvDriftParams1 (@+0x120) lanes .z (zLane) and .w (wLane).
+    //   asm (0x825CFCC4-825CFD14): sign = (mu8DriftState==1) ? +1 : -1 ; s = sign * steer ;
+    //     gas = controls.mfGas (+0x04) ; wGas = wLane * gas ;
+    //     steer' = sign * ( (1 - wLane*gas^2) * max(s,0) + (zLane + wGas) * min(s,0) + wGas ).
     void VehiclePhysics::ModifyControlsForDrift(BrnPlayerDriverControls& lrControls) const
     {
         if (mu8DriftState == eDriftState_None)
             return;
-        if (lrControls.GetMode() != 1)   // *(a2+68) != 1 gate (the original-controls drift override)
+        if (lrControls.GetMode() == 1)   // *(a2+68) == 1 gate (proceeds only when mode != 1)
             return;
 
         const f32 lfSign = (mu8DriftState == eDriftState_FacingLeft) ? 1.0f : -1.0f;
 
-        // the two drift remap weights (mpAttribs->mvDriftParams1 @+0x120 .w and .z).
-        const f32 lfWeightW = mpAttribs->mvDriftParams1.w;
+        // the two drift remap weights (mpAttribs->mvDriftParams1 @+0x120 .z and .w).
         const f32 lfWeightZ = mpAttribs->mvDriftParams1.z;
-        (void)lfWeightZ;
+        const f32 lfWeightW = mpAttribs->mvDriftParams1.w;
 
-        // t = (raw steer) * brakeScale^2 style term the asm builds from *(a2+4) (brake) and back_chain.
-        const f32 lfBrake = lrControls.mfBrake;                    // *(a2+4)
-        const f32 lfT     = lfBrake * lfBrake;                     // (a2+4)^2 (the BrakeScale-style term)
-        const f32 lfDriftCtl = lrControls.mfSteering;              // the steer being remapped (*(a2+16))
+        const f32 lfGas    = lrControls.mfGas;                     // *(a2+4)
+        const f32 lfWGas   = lfWeightW * lfGas;                    // wLane * gas
+        const f32 lfSigned = lfSign * lrControls.mfSteering;       // s = sign * steer (*(a2+16))
+        const f32 lfPos    = (lfSigned > 0.0f) ? lfSigned : 0.0f;  // max(s, 0)
+        const f32 lfNeg    = (lfSigned < 0.0f) ? lfSigned : 0.0f;  // min(s, 0)
 
-        const f32 lfMapped = ((-(lfT - 1.0f) * lfSign)
-                              + (lfWeightW * (lfDriftCtl + lfT))
-                              + lfT) * lfWeightW;
+        const f32 lfMapped = lfSign * ((1.0f - lfWeightW * lfGas * lfGas) * lfPos
+                                      + (lfWeightZ + lfWGas) * lfNeg
+                                      + lfWGas);
         lrControls.mfSteering = lfMapped;                          // *(a2+16) = mapped
     }
 
@@ -1284,7 +1326,13 @@ namespace Vehicle
             if (lfHandBrakeInput < 0.1f)
             {
                 const bool lbReleaseByDrift  = (mu8DriftState != eDriftState_None);
-                const bool lbReleaseByOnTime = (lfOnTime > KF_HANDBRAKE_ONTIME_RELEASE);
+                // KF_HANDBRAKE_ONTIME_RELEASE is a flagged-0 placeholder (unk_82FB8B00, un-homed).
+                // With a real nonzero threshold `onTime > threshold` is normally false; naively
+                // comparing against 0 makes it true on nearly every frame (onTime only grows), the
+                // opposite of "faithful-but-inert" -- guard the comparison like this TU's other
+                // flagged-0 constants so the release path stays disabled until the value is recovered.
+                const bool lbReleaseByOnTime = (KF_HANDBRAKE_ONTIME_RELEASE != 0.0f)
+                                             && (lfOnTime > KF_HANDBRAKE_ONTIME_RELEASE);
                 if (lbReleaseByDrift || lbReleaseByOnTime)
                 {
                     mbHandBrake = false;
@@ -1406,11 +1454,14 @@ namespace Vehicle
 
     // @0x8261F728  VehiclePhysics::UpdateDriftState
     //   The drift state machine. Runs CheckForEnteringDrift (owned elsewhere -- declare-only), then a
-    //   battery of ExitDrift guards while drifting (mu8DriftState != 0 AND the original controls do not
-    //   force-come-out-of-drift). The guards (in asm order):
+    //   battery of ExitDrift guards while drifting (mu8DriftState != 0 AND controls.mbHorn (+0x3E) is
+    //   NOT set -- 0x8261F74C reads r31=controls, not the mode byte). The guards (in asm order):
     //     1. drift slip too small        (drift attrib slip lane > current slip -> exit)
-    //     2. airborne too long           (off-ground & TimeWithoutTraction over a cap -> exit)
-    //     3. no wheels on ground         (none of the four on-ground flags set)
+    //     2. airborne too long           (mbHandBrake (this+0x1358) && TimeWithoutTraction over a cap
+    //                                    -> exit; NOT gated on mbAllWheelsHaveTraction==false)
+    //     3. wheel adhesive-limit fold   (all 4 wheels' mbBrokenAdhesiveLimit @wheel+0xD5 -> a vsel
+    //                                    CurrentDriftAngle accumulate; NOT a RoadContact.mbIsOnGround
+    //                                    test and NOT a direct exit branch)
     //     4. slip-ratio below threshold  (steering^4 vs a slip lane -> exit)
     //     5. exit timers                 (mi8NumWorldCollisions > 0, miNumCollisions > 0 -> exit)
     //     6. attribs limit               (per-car drift slip limit * slip-time-gain vs seed slip -> exit)
@@ -1426,8 +1477,10 @@ namespace Vehicle
         // CheckForEnteringDrift may latch a NEW drift this frame (owned by another TU -- declare-only).
         CheckForEnteringDrift(lpControls, lfSlipAngle, lfSpeed, lfSpeed, lfSteeringDir);
 
-        // only run the exit battery while drifting and not force-coming-out.
-        const bool lbForceOut = lpControls ? (lpControls->GetMode() != 1) : false;
+        // only run the exit battery while drifting and not force-coming-out. 0x8261F74C: `lbz
+        // r11,0x3E(r31)` where r31=controls -- reads controls.mbHorn (+0x3E), NOT the mode byte
+        // (+0x44); force-out is gated on the horn button, not GetMode().
+        const bool lbForceOut = lpControls ? lpControls->mbHorn : false;
         if (mu8DriftState == eDriftState_None || lbForceOut)
             return;
 
@@ -1436,19 +1489,24 @@ namespace Vehicle
             && KF_DRIFT_SLIP_EXIT_LIMIT > 0.0f)
         { ExitDrift(); return; }
 
-        // 2. airborne too long: if not on ground, TimeWithoutTraction (@+0x1060 .z) over a cap (1.0 in asm).
-        if (mbAllWheelsHaveTraction == false)
+        // 2. airborne too long: gated on mbHandBrake (this+0x1358), NOT mbAllWheelsHaveTraction==false
+        // (0x8261F78C: `lbz r9,0x1358(r3)`). TimeWithoutTraction (@+0x1060 .w) vs a cap.
+        if (mbHandBrake)
         {
             if (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.w > 1.0f)
             { ExitDrift(); return; }
         }
 
-        // 3. no wheels on ground -> exit.
-        const bool lbAnyOnGround = maWheels[eFrontLeftWheel].GetRoadContact().mbIsOnGround
-                                 || maWheels[eFrontRightWheel].GetRoadContact().mbIsOnGround
-                                 || maWheels[eRearLeftWheel].GetRoadContact().mbIsOnGround
-                                 || maWheels[eRearRightWheel].GetRoadContact().mbIsOnGround;
-        // (the asm folds this into the CurrentDriftAngle accumulate; the on-ground OR feeds a vsel.)
+        // 3. NOT an on-ground test: 0x8261F7C0-E4 reads each wheel's mbBrokenAdhesiveLimit (wheel+0xD5,
+        // stride 0xE0 -- Wheel.h's pinned member), not RoadContact.mbIsOnGround (wheel+0x28). The
+        // "all four wheels still have adhesive grip" result feeds a vsel-based CurrentDriftAngle
+        // accumulate (unk_8327F240 permute table), not a direct ExitDrift branch -- structural, not a
+        // simple exit condition; the accumulate itself is not store-faithfully recoverable here.
+        const bool lbAllWheelsHaveAdhesive = !maWheels[eFrontLeftWheel].mbBrokenAdhesiveLimit
+                                           && !maWheels[eFrontRightWheel].mbBrokenAdhesiveLimit
+                                           && !maWheels[eRearLeftWheel].mbBrokenAdhesiveLimit
+                                           && !maWheels[eRearRightWheel].mbBrokenAdhesiveLimit;
+        (void)lbAllWheelsHaveAdhesive;   // feeds the un-reconstructed vsel CurrentDriftAngle accumulate
 
         // 4. slip-ratio below threshold: steering^4 vs the CappedDriftScale lane (flagged compare).
         {
@@ -1497,7 +1555,6 @@ namespace Vehicle
                 { ExitDrift(); return; }
             }
         }
-        (void)lbAnyOnGround;
     }
 
     // @0x825FA748  VehiclePhysics::UpdateDriftScale
@@ -2140,8 +2197,9 @@ namespace Vehicle
     if (lbZeroResponse)
     {
         ++mi8NumWorldCollisions;   // +0x1353 (crashed-contact count)
-        // zero the CarCarResponse lane (.x of the +0x1070 register)
-        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.y = 0.0f;   // VERIFIER-FIX: lane .y
+        // 0x825D4DA4-AC: `lvx128 v13,(this+0x1070) ; vrlimi128 v13,0,1,0 ; stvx128` -- mask 1 inserts
+        // into lane 3 (.w = SecondsSinceLastWallContact), not lane .y.
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w = 0.0f;
     }
     else
     {
@@ -2158,38 +2216,41 @@ namespace Vehicle
 
 // [partial] ApplyWallContactImpulse  @ FLAGS: INLINE literals 0.65/0.70 (tangential restitution, low/high closing speed) are EXACT, used as the literal values; rodata: the tangential-projection scale (unk_82CDA350) is un-homed -> the per-axis projection magnitude is flagged-inert; the restitution selection + counter bumps + lane zero are exact
     // @0x825FEA18  BrnPhysics::Vehicle::VehiclePhysics::ApplyWallContactImpulse
-    //   ++mi8NumWorldCollisions(+0x1353) ; ++miNumCollisions(+0x1354) ; zero +0x1070 lane .x.
+    //   ++mi8NumWorldCollisions(+0x1353) ; ++miNumCollisions(+0x1354) ; zero +0x1070 lane .w.
     //   (asserts the contact position is WORLD_SPACE -- debug guard, elided.)
     //   The contact impulse is pre-scaled by 0.25 (vcfsx(1,1)=0.5 applied twice: v126 = imp*0.5*0.5).
-    //   Closing speed = dot3(contactNormal, contact-relative velocity) [the asm's vmsum3fp128 of the
-    //   three body-axis projections at this+0x40/+0x20/+0x30 against (v125 - this+0x40)]; the
-    //   tangential restitution is then 0.65 normally, 0.70 when closing speed > 0.65 (both INLINE
-    //   literals 0.64999998 / 0.69999999). The tangential component is scaled by the chosen
-    //   restitution, then GetImpulsesFromLocalImpulse + AddWorldSpace{,Angular}Impulse banks it.
+    //   "Closing speed" = the SECOND VMX argument's (lvContactNormal, spilled at &a23) .y lane directly
+    //   (0x825FEAB4-C0: `lvx128 v11,&a23 ; vspltw v11,v11,1 ; vcmpgtfp. v11,0.65,v11`) -- the function
+    //   never loads mLinearVelocity (+0x50), so this is NOT dot(velocity, normal); the tangential
+    //   restitution is then 0.70 when 0.65 > argY (i.e. argY < 0.65), else 0.65 (both INLINE literals
+    //   0.64999998 / 0.69999999). The tangential component is scaled by the chosen restitution, then
+    //   GetImpulsesFromLocalImpulse + AddWorldSpace{,Angular}Impulse banks it.
     //
     // FIDELITY: PARTIAL. The restitution SELECTION with the inline 0.65/0.70 literals, the closing-
-    // speed test, the two counter bumps and the +0x1070 lane-zero are exact. The per-axis VMX
-    // tangential-projection magnitude (which axes, the 0.25 pre-scale routing, the unk_82CDA350
-    // permute) is not store-faithfully recoverable from the degenerate VMX export -> the projection
-    // is reproduced structurally; the restitution is applied to the supplied local impulse. The
-    // un-homed projection permute vector stays inert. NEVER fabricated.
+    // speed test operand (lvContactNormal.y, not a velocity dot), the two counter bumps and the
+    // +0x1070 lane-zero are exact. The per-axis VMX tangential-projection magnitude (which axes, the
+    // 0.25 pre-scale routing, the unk_82CDA350 permute, the body-axis-projected local position) is not
+    // store-faithfully recoverable from the degenerate VMX export -> the projection is reproduced
+    // structurally; the restitution is applied to the supplied local impulse. The un-homed projection
+    // permute vector stays inert. NEVER fabricated.
     void VehiclePhysics::ApplyWallContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactNormal, bool lbContactPositionNotWorldSpace)
     {
     ++mi8NumWorldCollisions;   // +0x1353
     ++miNumCollisions;         // +0x1354
-    mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.y = 0.0f;   // VERIFIER-FIX: lane .y   // +0x1070 lane .x
+    // mask 1 -> lane .w (SecondsSinceLastWallContact), matching ApplyCrashedContactImpulse
+    // (0x825FEA6C-74) and the mask convention cross-validated across this TU.
+    mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w = 0.0f;
 
     // SPEED-DEPENDENT tangential restitution (inline literals).
     static const f32 KF_WALL_RESTITUTION_LOW  = 0.64999998f;   // 0.65 -- normal closing speed
     static const f32 KF_WALL_RESTITUTION_HIGH = 0.69999999f;   // 0.70 -- closing speed > 0.65
     static const f32 KF_WALL_CLOSING_SPEED_THRESHOLD = 0.64999998f;   // the 0.65 compare splat
 
-    // closing speed along the wall normal (contact-relative velocity . normal)
-    const f32 lfClosingSpeed = mLinearVelocity.x * lvContactNormal.x
-                             + mLinearVelocity.y * lvContactNormal.y
-                             + mLinearVelocity.z * lvContactNormal.z;
+    // "closing speed" IS the lvContactNormal.y lane of the argument itself (0x825FEAB4-C0), NOT a dot
+    // product against mLinearVelocity -- the function never loads +0x50.
+    const f32 lfClosingSpeed = lvContactNormal.y;
 
-    const f32 lfRestitution = (lfClosingSpeed < KF_WALL_CLOSING_SPEED_THRESHOLD)   // VERIFIER-FIX: 0.70 when closing speed < 0.65
+    const f32 lfRestitution = (lfClosingSpeed < KF_WALL_CLOSING_SPEED_THRESHOLD)
                                   ? KF_WALL_RESTITUTION_HIGH
                                   : KF_WALL_RESTITUTION_LOW;
 
@@ -2232,7 +2293,8 @@ namespace Vehicle
     if (lbZeroResponse)
     {
         ++mi8NumWorldCollisions;   // +0x1353
-        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.y = 0.0f;   // VERIFIER-FIX: lane .y
+        // mask 1 -> lane .w (SecondsSinceLastWallContact); 0x825D4E44-4C.
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w = 0.0f;
     }
 
     Vector3 lvJ;
@@ -2268,20 +2330,25 @@ namespace Vehicle
     AddWorldSpaceAngularImpulse(lvAngularJ);
     }
 
-// [clean] AddSlam  @ FLAGS: rodata: flt_82F2A294 (the air-time taper denominator) is un-homed -> flagged-0 placeholder; with it 0 the taper divide is guarded so the base scale stays 4.0 (faithful-but-inert taper). The rate-limit 0.5, base 4.0, fsel clamps and all member stores are exact
+// [clean] AddSlam  @ FLAGS: rodata: flt_82F2A294 (the air-time taper denominator) is un-homed -> flagged-0 placeholder; with it 0 the taper divide is guarded so the base scale stays 0.0 (faithful-but-inert taper, since clamp01(ratio) at ratio==0 -> 0.0). The rate-limit 0.5, base 4.0, fsel clamps and all member stores are exact
     // @0x825D4870  BrnPhysics::Vehicle::VehiclePhysics::AddSlam
     //   Rate-limit: only (re)arm when mfSlamLife <= 0 OR (mfTotalSlamTime - mfSlamLife) >= 0.5
     //   (>= 0.5 s since the current slam started).
-    //   base scale = 4.0 ; if ( lbTaper ): taper = clamp(1 - airTime/flt_82F2A294, 0, 1) via two
-    //     fsel clamps; base *= taper. (airTime read from this+0x6C0 region per the asm lvx128.)
+    //   base scale = 4.0 ; if ( lbTaper ): taper = clamp(airTime/flt_82F2A294, 0, 1) via two
+    //     fsel clamps (the ratio ITSELF is clamped and multiplied, "1 - ratio" is only the fsel
+    //     comparison operand for the upper-bound branch, never part of the multiplicand); base *= taper.
+    //     (airTime read from this+0x6C0 region per the asm lvx128.)
     //   mi8SlamNumber = min(mi8SlamNumber + 1, 2) ;
     //   mfTotalSlamTime = mfSlamLife = lfDuration ; mi8SlammingRaceCarId = li8RaceCarId ;
     //   mfRecoveryTime = lfRecoveryTime ;
     //   mfSteering = mfOriginalSteering = base * lfSteer ; mbSlamActive(+0x135D) = true.
     //
-    // fsel(a,b,c) = (a >= 0) ? b : c. The taper is clamp01(1 - airTime/K). FLAG: flt_82F2A294 is
-    // un-homed rodata -> flagged-0; with K==0 the divide is guarded (taper left at 1.0) so the base
-    // scale stays the exact 4.0. NEVER fabricated.
+    // fsel(a,b,c) = (a >= 0) ? b : c. 0x825D48E8-4900: f0=ratio ; f11=-f0 ; fsel f0,f11,0.0,f0 (low
+    // clamp of the RATIO: ratio<=0 -> 0.0, else ratio) ; f11 = 1.0-f0 ; fsel f0,f11,f0,1.0 (high clamp:
+    // f0<=1.0 -> f0 unchanged, else 1.0) ; f12 = f0 * 4.0. The multiplicand is the clamped RATIO itself
+    // (grows with air time), never (1-ratio). FLAG: flt_82F2A294 is un-homed rodata -> flagged-0; with
+    // K==0 the divide is guarded (taper left at 0.0, matching ratio==0/K==0) so the scale is exact-but-
+    // inert. NEVER fabricated.
     void VehiclePhysics::AddSlam(bool lbTaper, f32 lfDuration, f32 lfSteer, f32 lfRecoveryTime, s8 li8RaceCarId)
     {
     static const f32 KF_SLAM_RATE_LIMIT = 0.5f;            // inline 0.5 -- min gap between slams
@@ -2295,12 +2362,13 @@ namespace Vehicle
     f32 lfScale = KF_SLAM_BASE_SCALE;
     if (lbTaper)
     {
-        // taper = clamp01(1 - airTime / K). With K flagged-0, leave taper at 1.0 (guarded divide).
-        f32 lfTaper = 1.0f;
+        // taper = clamp01(airTime / K), the RATIO itself (grows with air time). With K flagged-0,
+        // leave taper at 0.0 (guarded divide; matches the asm's ratio==0/K==0 degenerate case).
+        f32 lfTaper = 0.0f;
         if (KF_SLAM_TAPER_DENOM != 0.0f)
         {
             const f32 lfAirTime = mfSpeedMPH;   // this+0x6C0 lane the asm splats (air-time/speed source)
-            lfTaper = 1.0f - (lfAirTime / KF_SLAM_TAPER_DENOM);
+            lfTaper = lfAirTime / KF_SLAM_TAPER_DENOM;
             if (lfTaper < 0.0f) lfTaper = 0.0f;   // fsel clamp low
             if (lfTaper > 1.0f) lfTaper = 1.0f;   // fsel clamp high
         }
@@ -2321,21 +2389,27 @@ namespace Vehicle
     mbSlamActive          = true;                // +0x135D
     }
 
-// [partial] AddShunt  @ FLAGS: the active-shunt gates (desiredSpeed>0, Life>0, speed-increase>1.0), the desiredSpeed clamp (vminfp against unk_82FB8B30), the Life-lane store and mi8SlammingRaceCarId store are exact; the velocity-PERPENDICULAR direction VMX build (Gram-Schmidt against mLinearVelocity) is structural; rodata: the desired-speed clamp ceiling unk_82FB8B30 and the seed vector unk_82FB90A0 are un-homed -> flagged-inert
+// [partial] AddShunt  @ FLAGS: the active-shunt gates (desiredSpeed>0, Life>0, speed-increase>1.0), the desiredSpeed clamp (vminfp against unk_82FB8B30), the Life-lane store and mi8SlammingRaceCarId store are exact; rodata: the desired-speed clamp ceiling unk_82FB8B30 and the Life seed vector unk_82FB90A0 are un-homed -> flagged-inert
     // @0x825FC630  BrnPhysics::Vehicle::VehiclePhysics::AddShunt
+    //   __fastcall with THREE VMX128 float args the pseudocode drops (v1=speed-increase delta,
+    //   v2=shunt direction, v3=Life seed splat) alongside the char li8RaceCarId.
     //   Gate: if the shunt is already active (mDirectionPlusDesiredSpeed.w (+0x1130 lane3) > 0 AND
-    //   mv4_Life..x (+0x1140 lane0 = Life) > 0) AND the existing speed-increase (lane0) > 1.0, do
-    //   NOT overwrite (the existing, stronger shunt wins). Otherwise (re)arm:
-    //     direction = normalize(velocity-perpendicular component)   [vmsum3fp128/vmulfp/vsubfp build]
-    //     desiredSpeed = min(currentForwardSpeed + delta, unk_82FB8B30 ceiling)
-    //     store direction into +0x1130 lanes, desiredSpeed into +0x1130 lane .w,
-    //     Life-register seed into +0x1140 (vrlimi inserts lane3 then the unk_82FB90A0 lane),
+    //   mv4_Life..x (+0x1140 lane0 = Life) > 0) AND the existing Life (lane0) > 1.0, do NOT overwrite
+    //   (the existing, stronger shunt wins). Otherwise (re)arm (0x825FC6C4-73C):
+    //     direction (+0x1130 xyz) = lfvShuntDirection ARGUMENT v2 verbatim (NOT a computed
+    //       perpendicular/normalize -- `vmr v11,v2 ; vrlimi128 v11,v10,1,0` only re-inserts the OLD
+    //       .w lane into v11, xyz stay the raw v2 argument).
+    //     desiredSpeed (+0x1130 .w) = min(dot3(v2, mLinearVelocity - mUpAxis*dot(mUpAxis,mLinearVelocity))
+    //       + lfSpeedIncrease, unk_82FB8B30 ceiling)   [strips the UP component off velocity, dots
+    //       the STRIPPED velocity against the direction ARGUMENT v2, not a self-derived direction]
+    //     +0x1140 .y = lfLifeSeed ARGUMENT v3 (vrlimi128 mask4) ; +0x1140 .x = unk_82FB90A0 seed lane
+    //       (vrlimi128 mask8, un-homed -> flagged-inert).
     //     mi8SlammingRaceCarId(+0x13E0) = li8RaceCarId.
     //
-    // FIDELITY: PARTIAL. The gating, the desiredSpeed clamp, the Life store and the id store are
-    // exact; the perpendicular-direction VMX build is reproduced structurally (the un-homed clamp
-    // ceiling + seed vector stay inert). NEVER fabricated.
-    void VehiclePhysics::AddShunt(s8 li8RaceCarId)
+    // FIDELITY: PARTIAL. The gating, the argument-verbatim direction store, the desiredSpeed dot/clamp,
+    // the Life-seed-argument store and the id store are exact; the un-homed unk_82FB8B30 ceiling and
+    // unk_82FB90A0 seed lane stay flagged-inert. NEVER fabricated.
+    void VehiclePhysics::AddShunt(f32 lfSpeedIncrease, const Vector3& lvShuntDirection, f32 lfLifeSeed, s8 li8RaceCarId)
     {
     static const f32 KF_SHUNT_ACTIVE_QUIT_THRESHOLD = 1.0f;   // inline vcfsx(1,0)=1.0 compare
 
@@ -2346,43 +2420,37 @@ namespace Vehicle
     if (lbActive)
     {
         // an already-active, sufficiently-strong shunt is not overwritten
-        if (lfExistingLife > KF_SHUNT_ACTIVE_QUIT_THRESHOLD)   // VERIFIER-FIX: gate on Life lane (+0x1140 .x)
+        if (lfExistingLife > KF_SHUNT_ACTIVE_QUIT_THRESHOLD)
             return;
     }
 
     // ---- (re)arm ----
-    // Velocity-perpendicular direction: strip the forward component (Gram-Schmidt against
-    // mLinearVelocity), then normalize. The exact VMX lane routing is structural; the un-homed
-    // seed/clamp vectors are inert.
     static const f32 KF_SHUNT_DESIRED_SPEED_CEIL = 0.0f;   // FLAG: un-homed unk_82FB8B30 (clamp ceiling)
 
-    Vector3 lvForward = mTransform.Up();   // VERIFIER-FIX: strip the +0x20 UP axis (not At()/+0x30)
-    const f32 lfFwdDot = lvForward.x * mLinearVelocity.x + lvForward.y * mLinearVelocity.y
-                       + lvForward.z * mLinearVelocity.z;
-    Vector3 lvPerp = { mLinearVelocity.x - lvForward.x * lfFwdDot,
-                       mLinearVelocity.y - lvForward.y * lfFwdDot,
-                       mLinearVelocity.z - lvForward.z * lfFwdDot,
-                       0.0f };
-    // normalize(lvPerp) -- zero stays zero (the X360 vrsqrtefp+Newton with zero guard)
-    const f32 lfPerpMagSq = lvPerp.x * lvPerp.x + lvPerp.y * lvPerp.y + lvPerp.z * lvPerp.z;
-    if (lfPerpMagSq > 0.0f)
-    {
-        const f32 lfInv = 1.0f / std::sqrt(lfPerpMagSq);
-        lvPerp.x *= lfInv; lvPerp.y *= lfInv; lvPerp.z *= lfInv;
-    }
+    // Strip the UP-axis component off the linear velocity (this+0x20 = mUpAxis, NOT the direction
+    // argument): velocity-minus-up = mLinearVelocity - mUpAxis * dot(mUpAxis, mLinearVelocity).
+    const Vector3& lvUp = mUpAxis;
+    const f32 lfUpDot = lvUp.x * mLinearVelocity.x + lvUp.y * mLinearVelocity.y + lvUp.z * mLinearVelocity.z;
+    const Vector3 lvVelMinusUp{ mLinearVelocity.x - lvUp.x * lfUpDot,
+                                mLinearVelocity.y - lvUp.y * lfUpDot,
+                                mLinearVelocity.z - lvUp.z * lfUpDot,
+                                0.0f };
 
-    // desiredSpeed = min(currentForwardSpeed + delta, ceiling). delta/ceiling source is un-homed;
-    // with the ceiling flagged-0 the min pins desiredSpeed at the (inert) ceiling -- faithful shape.
-    f32 lfDesiredSpeed = lfFwdDot;
+    // desiredSpeed = min(dot3(direction argument, velocity-minus-up) + speedIncrease, ceiling).
+    const f32 lfDot = lvShuntDirection.x * lvVelMinusUp.x + lvShuntDirection.y * lvVelMinusUp.y
+                     + lvShuntDirection.z * lvVelMinusUp.z;
+    f32 lfDesiredSpeed = lfDot + lfSpeedIncrease;
     if (KF_SHUNT_DESIRED_SPEED_CEIL != 0.0f && lfDesiredSpeed > KF_SHUNT_DESIRED_SPEED_CEIL)
         lfDesiredSpeed = KF_SHUNT_DESIRED_SPEED_CEIL;
 
-    // store direction + desired speed into mDirectionPlusDesiredSpeed (+0x1130)
-    mShuntEffect.mDirectionPlusDesiredSpeed.SetVector3(lvPerp);
+    // store the direction ARGUMENT verbatim + desired speed into mDirectionPlusDesiredSpeed (+0x1130).
+    mShuntEffect.mDirectionPlusDesiredSpeed.SetVector3(lvShuntDirection);
     mShuntEffect.mDirectionPlusDesiredSpeed.SetPlus(lfDesiredSpeed);
 
-    // seed the Life register (+0x1140); the SpeedIncreaseToQuit lane comes from the un-homed seed.
-    mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = lfDesiredSpeed;   // Life lane (vrlimi lane0)
+    // +0x1140 .y = the Life-seed ARGUMENT; .x = the un-homed unk_82FB90A0 seed lane (flagged-inert).
+    static const f32 KF_SHUNT_LIFE_SEED_LANE = 0.0f;   // FLAG: un-homed unk_82FB90A0 lane0
+    mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = KF_SHUNT_LIFE_SEED_LANE;
+    mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y = lfLifeSeed;
 
     mi8SlammingRaceCarId = li8RaceCarId;   // +0x13E0
     }
@@ -2478,14 +2546,17 @@ namespace Vehicle
 
 // [partial] SetCrashing  @ FLAGS: the SIMD state-row zeroing (drift/boost bank +0xFE0..+0x1040), the +0x10F4 = -1 slam marker, the mu8DriftState/+0x135E byte clears and the base-chain to SimpleVehiclePhysics::SetCrashing are exact; the final contact/weight-vector recompute (mpAttribs+0x280 / +0x30 columns) is structural; the per-lane vrlimi insert routing of the recomputed weight vector is the structural part
     // @0x825FD088  BrnPhysics::Vehicle::VehiclePhysics::SetCrashing  (virtual override)
-    //   Zeroes selected lanes of the drift/boost SIMD bank: +0x1000 (vrlimi lane1=0), +0x1010
-    //   (lane2=0), +0x1020 (lane8 i.e. .w=0), +0x1030 (.w = 1.0 then lane1=0), +0x1040 (lane8=0),
-    //   +0xEF0 (lane2=0). Clears mu8DriftState path: *(this+4946)=0 (mu8DriftState +0x1352).
-    //   Sets the slam marker mDriftFlags(+0x10F4) = -1 (stb -1). Chains to
+    //   Zeroes selected lanes of the drift/boost SIMD bank (vrlimi128 mask convention 8=.x,4=.y,2=.z,
+    //   1=.w, cross-validated against ApplyBoostKickForce/UpdateBoost in this TU): +0x1000 mask1 ->
+    //   .w=DriftScale=0 ; +0x1010 mask2 -> .z=TimeDrifting=0 ; +0x1020 mask8 -> .x=DesiredDriftAngleScale=0 ;
+    //   +0x1030 mask8 -> .x=LatDriftForceFactor=1.0, then mask1 -> .w=CurrentDriftAngle=0 ;
+    //   +0x1040 mask8 -> .x=SideForceMag=0 (pre-base-call). Clears mu8DriftState: *(this+4946)=0
+    //   (mu8DriftState +0x1352). Sets the slam marker mDriftFlags(+0x10F4) = -1 (stb -1). Chains to
     //   SimpleVehiclePhysics::SetCrashing() (sets mbIsCrashing +0x710, rebuilds wheel reciprocal mass).
-    //   Then *(this+4958)=0 (+0x135E byte) and recomputes a contact/weight vector from
-    //   mpAttribs+0x280 (vspltw .w) and the body axes (+0x30 columns), inserting it lane-by-lane into
-    //   the +0xEF0 register.
+    //   POST-base-call: +0x1040 mask4 -> .y=TimeBoosting=0 (0x825FD158-160, a SECOND +0x1040 write the
+    //   committed body previously omitted). Then *(this+4958)=0 (+0x135E byte) and recomputes a
+    //   contact/weight vector from mpAttribs+0x280 (vspltw .w) and the body axes (+0x30 columns),
+    //   inserting it lane-by-lane into the +0xEF0 register.
     //
     // FIDELITY: PARTIAL. The state-row zeroing, the -1 slam marker, the byte clears and the base
     // chain are exact; the final weight-vector recompute is reproduced structurally (the un-homed
@@ -2495,12 +2566,12 @@ namespace Vehicle
     *reinterpret_cast<u8*>(reinterpret_cast<u8*>(this) + 0x1352) = 0;   // mu8DriftState (cleared)
 
     // zero the drift/boost bank lanes the asm clears (named-member lane writes where pinned)
-    mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y = 0.0f;                 // +0x1000 lane1
-    mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z = 0.0f;    // +0x1010 lane2
-    mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.w = 0.0f; // +0x1020 .w
-    mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w = 1.0f; // +0x1030 .w = 1.0
-    mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.y = 0.0f; // +0x1030 lane1 = 0
-    mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.w = 0.0f; // +0x1040 .w
+    mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w = 0.0f;                 // +0x1000 mask1 -> .w
+    mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z = 0.0f;    // +0x1010 mask2 -> .z
+    mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.x = 0.0f; // +0x1020 mask8 -> .x
+    mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.x = 1.0f; // +0x1030 mask8 -> .x = 1.0
+    mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w = 0.0f; // +0x1030 mask1 -> .w = 0
+    mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.x = 0.0f; // +0x1040 mask8 -> .x
 
     // slam marker: mDriftFlags = -1
     mDriftFlags.mu8DriftFlags = static_cast<u8>(0xFFu);   // stb -1 (0x10F4)
@@ -2509,6 +2580,9 @@ namespace Vehicle
     // FLAG (slice): this minimal VehiclePhysics has no real SimpleVehiclePhysics base; the base
     // SetCrashing is the committed declare-only entry -- modelled as the IsCrashing()-arming call.
     // SimpleVehiclePhysics::SetCrashing();   // (base entry; owned by the base TU)
+
+    // second +0x1040 write, AFTER the base-class chain (0x825FD158-160): mask4 -> .y = TimeBoosting = 0.
+    mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.y = 0.0f; // +0x1040 mask4 -> .y
 
     *reinterpret_cast<u8*>(reinterpret_cast<u8*>(this) + 0x135E) = 0;   // +0x135E byte clear
 

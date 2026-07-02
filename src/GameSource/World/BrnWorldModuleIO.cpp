@@ -71,11 +71,14 @@ void UpdateInputBuffer::SetRegainedContact(EActiveRaceCarIndex leActiveRaceCarIn
     mabRegainedContactThisFrame[leActiveRaceCarIndex] = true;
 }
 
-// X360 0x823A8530 (:245) -- store car-select status + mark valid.
+// X360 0x823A8530 (:245) -- store car-select status + mark valid. Unlike its SetLostContact/
+// SetRegainedContact siblings (one combined assert), the X360 body fires two SEPARATE asserts
+// here (bge then blt, each its own BeginAssert/FireAssert/EndAssert) -- modelled as two
+// CGS_ASSERTs to match.
 void UpdateInputBuffer::SetCarSelectStatus(EActiveRaceCarIndex leActiveRaceCarIndex, bool lbStatus)
 {
-    CGS_ASSERT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) && (leActiveRaceCarIndex >= 0),
-               "( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex >= 0 )");
+    CGS_ASSERT(leActiveRaceCarIndex >= 0,                            "leActiveRaceCarIndex >= 0");
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
     mabCarSelectStatus[leActiveRaceCarIndex]      = lbStatus;
     mabCarSelectStatusValid[leActiveRaceCarIndex] = true;
 }
@@ -104,10 +107,13 @@ const VehicleDriverInputInterface* UpdateInputBuffer::GetVehicleDriverInputInter
 }
 
 // X360 0x823DB6C0 (:263 W) -- merge the source vehicle-driver-input interface (+142272).
+// The X360 forwards `this` (the interface's leading mDriverUpdateQueue member) straight into
+// BrnPhysics::Vehicle::VehicleDriverInputInterface::Append, a thin queue-merge; modelled via the
+// committed type's own GetUpdateDriverQueue()->Append(...) (VariableEventQueue<5040,16>::Append).
 void UpdateInputBuffer::AppendVehicleDriverInputInterface(const VehicleDriverInputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    mVehicleDriverInputInterface.Append(lpInterface);
+    mVehicleDriverInputInterface.GetUpdateDriverQueue()->Append(*lpInterface->GetUpdateDriverQueue());
 }
 
 // ---- game-action queue ------------------------------------------------------
@@ -120,59 +126,46 @@ GameActionQueue* UpdateInputBuffer::GetGameActionQueue()
 }
 
 // X360 0x823C8B80 (:267 W) -- merge a source game-action queue into ours (+147572).
-// The X360 dispatches VariableEventQueue<13312,16>::Append(this->mGameActionQueue, src);
-// a queue merge = walk the source events and add each to our queue (store-for-store).
+// The X360 dispatches VariableEventQueue<13312,16>::Append<13312,16>(this->mGameActionQueue, src)
+// directly (a single bulk memcpy of the source's packed bytes + one overflow check), with no
+// null/self guard. Call the committed bulk Append by name instead of re-walking events one by one.
 void UpdateInputBuffer::AppendGameActionQueue(const GameActionQueue* lpQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    if (lpQueue && lpQueue != &mGameActionQueue)
-    {
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (liType >= 0)
-        {
-            mGameActionQueue.AddEvent(lpEvent, liType, liSize);
-            liType = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
-        }
-    }
+    mGameActionQueue.Append(*lpQueue);
 }
 
 // ---- timer status -----------------------------------------------------------
 
-// X360 0x823B47E0 (:270 W) -- copy the source timer-status block into +160900.
+// X360 0x823B47E0 (:270 W) -- copy the source timer-status block into +160900..+160948.
 void UpdateInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    mTimerStatusInterface = *lpInterface;   // store-for-store (11-word block)
+    mTimerStatusInterface = *lpInterface;   // store-for-store (12-word block)
 }
 
 // ---- takedown event queue ---------------------------------------------------
 
 // X360 0x823C8C38 (:273 W) -- merge a source takedown-event queue into ours (+160952).
+// The X360 dispatches BrnGameState::TakedownEvent_::Append, the committed
+// CgsModule::EventQueue<TakedownEvent,8> (== BaseEventQueue<TakedownEvent>) instantiation's own
+// Append merge -- called by name.
 void UpdateInputBuffer::AppendTakedownEventQueue(const TakedownEventQueue* lpQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    mTakedownEventQueue.Append(lpQueue);
+    mTakedownEventQueue.Append(*lpQueue);
 }
 
 // ---- trigger query interface ------------------------------------------------
 
 // X360 0x823C8CF0 (:279 W) -- merge a source trigger-query queue into ours (+293412).
+// The X360 dispatches VariableEventQueue<4096,16>::Append<4096,16>(this->mTriggerQueryInputInterface,
+// src) directly (a single bulk memcpy + one overflow check), with no null/self guard. Call the
+// committed bulk Append by name instead of re-walking events one by one.
 void UpdateInputBuffer::AppendTriggerQueryInputInterface(const TriggerQueryInputInterface* lpQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    if (lpQueue && lpQueue != &mTriggerQueryInputInterface)
-    {
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (liType >= 0)
-        {
-            mTriggerQueryInputInterface.AddEvent(lpEvent, liType, liSize);
-            liType = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
-        }
-    }
+    mTriggerQueryInputInterface.Append(*lpQueue);
 }
 
 // ---- traffic / crash network interfaces -------------------------------------
@@ -186,12 +179,15 @@ const TrafficNetworkInputInterface* UpdateInputBuffer::GetTrafficNetworkInterfac
 
 // X360 0x823C8DA8 (:285 W) -- update the traffic-network interface (member @+301644).
 // FAITHFULNESS NOTE: the X360 does NOT blanket-copy the interface; it performs a SELECTIVE
-// 3-field update within the member -- zero a u32 flag at member+8, ActivateHullEvent::Append
-// the source's activate-hull queue into the member's queue, and copy a status byte at
-// member+0x6C (this+301752). TrafficNetworkInputInterface has no committed home yet, so its
-// internal sub-layout is un-modelled and those three ops are abstracted into the placeholder's
-// Set(); the member touched + offsets are correct. Re-model the 3 ops by name when the real
-// TrafficNetworkInputInterface home (it embeds the wave-A ActivateHullEvent queue) lands.
+// 3-field update within the member -- zero the queue's miLength at member+8 (BaseEventQueue::
+// Clear()), BaseEventQueue<ActivateHullEvent>::Append the source's activate-hull queue into the
+// member's queue, and copy the mbDiverged byte at member+0x6C (this+301752). The canonical home
+// (BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface, BrnTrafficNetworkInterfaces.h) IS
+// committed and byte-confirms this 3-op shape, but it only exposes a const GetActivateHullQueue()
+// + SetDiverged/HasDiverged -- no public mutator lets an outside caller Clear()+Append() its
+// private queue. That mutator must be grown onto BrnTrafficNetworkInterfaces.h/.cpp (a different
+// TU) before the 3 ops can be re-modelled by name here; until then this stays a local placeholder
+// abstracted into Set(). The member touched + offsets are correct.
 void UpdateInputBuffer::SetTrafficNetworkInterface(const TrafficNetworkInputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
@@ -206,10 +202,12 @@ const CrashNetworkInputInterface* UpdateInputBuffer::GetCrashNetworkInterface() 
 }
 
 // X360 0x823C8E70 (:288 W) -- set the crash-network interface (+301760).
+// The X360 forwards to BrnWorld::CrashIO::NetworkInputInterface::operator= (bitset copy + a
+// clear+merge per race-car crashing-traffic queue), the committed type's own operator=.
 void UpdateInputBuffer::SetCrashNetworkInterface(const CrashNetworkInputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    mCrashNetworkInterface.Set(lpInterface);
+    mCrashNetworkInterface = *lpInterface;
 }
 
 // ---- debug controller -------------------------------------------------------
@@ -302,10 +300,13 @@ const ReplayStatusInterface* UpdateInputBuffer::GetReplayStatusInterface() const
 }
 
 // X360 0x823B4DF0 (:311 W) -- set the replay-status interface (+320276).
+// The X360 forwards to BrnReplays::ReplayIO::StatusInterface::operator= (member-wise copy: status
+// flags, all 6 reels, the two current-reel indices, and the trailing debug alpha), the committed
+// type's own operator=.
 void UpdateInputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    mReplayStatusInterface.Set(lpInterface);
+    mReplayStatusInterface = *lpInterface;
 }
 
 // ---- player vehicle controls ------------------------------------------------

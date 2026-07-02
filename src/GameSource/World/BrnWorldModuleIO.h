@@ -45,6 +45,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_TriangleCache.h"                   // CgsSceneManager::SceneManagerIO::TriangleCacheInterface
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h"                          // CgsAttribSys::AttribSysIO::AttribSysRequestInterface (<2048>-shaped)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"                  // BrnPhysics::Vehicle::VehicleOutputInterface / VehicleManagerOutputInterface
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"             // BrnPhysics::Vehicle::VehicleDriverInputInterface
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"                                // BrnPhysics::ContactSpy::ContactSpyInterface
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"          // BrnPhysics::Deformation::DeformationOutputInterface
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"                                 // BrnPhysics::Props::PropUpdateNotification
@@ -52,6 +53,7 @@
 #include "GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.h"                         // BrnDirector::BrnDirectorVehicleInputInterface
 #include "GameSource/Effects/SharedIO/BrnEffectsEnvironmentInterface.h"                            // BrnEffects::EffectsEnvironmentInterface
 #include "GameSource/Replays/BrnReplayRequestInterface.h"                                          // BrnReplays::ReplayIO::RequestInterface
+#include "GameSource/Replays/BrnReplayStatusInterface.h"                                           // BrnReplays::ReplayIO::StatusInterface
 #include "GameSource/Sound/Module/SharedIO/BrnSoundRootSharedIO.h"                                 // BrnSound::Module::Io::SoundWorldLoadEvent
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"                                  // BrnAI::AIModuleIO::AICarOutputInterface
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"                                         // BrnAI::RouteMapModuleIO::RouteResponseQueue
@@ -65,6 +67,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h"       // BrnTraffic::BrnTrafficIO::TrafficTypeResponse
 #include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h"           // BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface
 #include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityStatusInterface.h"   // BrnWorld::WorldEntityIO::StatusInterface
+#include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"                          // BrnGameState::TakedownEvent
 
 #include <cstddef>   // offsetof
 #include <cstring>   // memcpy
@@ -86,10 +89,12 @@ namespace BrnWorldIO
     // Real layouts/sizes are grown by each payload's own TU; sizes here are NOMINAL.
     // ------------------------------------------------------------------------
 
-    // VehicleInputInterface / VehicleDriverInputInterface (mGameSource Physics/Vehicle homes).
-    // Embedded BY VALUE; AppendVehicleInputInterface/AppendVehicleDriverInputInterface call
-    // their Append(const T*) which merges the source interface's pending input. Modelled as a
-    // sized slice with that single by-name entry point.
+    // VehicleInputInterface (BrnPhysics::Vehicle home not yet exposing the X360-attested
+    // AppendVehicleInputInterface entry point). AppendVehicleInputInterface calls a distinct
+    // "VehicleInputInterface::Append" symbol -- separate from the committed operator= (Clear()+
+    // Append() per queue) -- whose full per-queue merge body has not been recovered yet. Modelled
+    // as a sized slice with that single by-name entry point until Append() is grown onto the
+    // canonical BrnPhysics::Vehicle::VehicleInputInterface home.
     struct VehicleInputInterface
     {
         void Append(const VehicleInputInterface* lpSource)
@@ -101,15 +106,13 @@ namespace BrnWorldIO
         u8 maPayload[256];   // NOMINAL -- grown by BrnVehicleInputInterface TU
     };
 
-    struct VehicleDriverInputInterface
-    {
-        void Append(const VehicleDriverInputInterface* lpSource)
-        {
-            if (lpSource && lpSource != this)
-                std::memcpy(maPayload, lpSource->maPayload, sizeof(maPayload));
-        }
-        u8 maPayload[256];   // NOMINAL -- grown by BrnVehicleDriverInputInterface TU
-    };
+    // VehicleDriverInputInterface: canonical home is committed
+    // (GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h). X360
+    // AppendVehicleDriverInputInterface forwards `this` (the interface's base, i.e. its leading
+    // mDriverUpdateQueue member) straight into BrnPhysics::Vehicle::VehicleDriverInputInterface::
+    // Append, a thin queue-merge -- modelled via the committed type's own
+    // GetUpdateDriverQueue()->Append(...) in the accessor body below.
+    typedef BrnPhysics::Vehicle::VehicleDriverInputInterface VehicleDriverInputInterface;
 
     // Trigger query input interface = VariableEventQueue<4096,16> (X360 Append into +293412
     // dispatches CgsModule::VariableEventQueue<4096,16>::Append). Reused by name.
@@ -127,11 +130,14 @@ namespace BrnWorldIO
         u8 maPayload[64];    // NOMINAL
     };
 
-    // TimerStatusInterface (X360 SetTimerStatusInterface copies 11 words from the source into
-    // this+160900..; modelled as a fixed POD the setter memcpy-copies field-for-field).
+    // TimerStatusInterface (X360 SetTimerStatusInterface copies 12 words from the source into
+    // this+160900..+160948; modelled as a fixed POD the setter struct-assignment-copies field-
+    // for-field). NOTE: an earlier revision modelled only 11 words (44 bytes); the X360 body
+    // actually stores through offset 0x2C (asm: lfs/stfs f0,0x14(r10/r9) at the tail of the
+    // second 6-field block, i.e. base+0x18+0x14 = base+0x2C), so the 12th word is load-bearing.
     struct TimerStatusInterface
     {
-        f32 maData[11];      // X360 copies *a2 .. *(a2+44): 11 words
+        f32 maData[12];      // X360 copies *a2 .. *(a2+48): 12 words
     };
 
     // RaceCarRaceDistanceInterface (X360 SetRaceCarRaceDistanceInterface copies 10 words).
@@ -152,8 +158,15 @@ namespace BrnWorldIO
         u8 maData[164];      // X360 SetOnlineScoringInterface copies 164 bytes
     };
 
-    // TrafficNetworkInputInterface (X360 SetTrafficNetworkInterface fires an ActivateHullEvent
-    // Append into +301644 then copies a trailing word). Modelled with an Append+Set entry.
+    // TrafficNetworkInputInterface: the canonical home (BrnTraffic::BrnTrafficIO::
+    // TrafficNetworkInputInterface, GameSource/World/EntityModules/TrafficEntityModule/SharedIO/
+    // BrnTrafficNetworkInterfaces.h) IS committed and byte-confirms the X360 body (queue header
+    // Clear() = the member+8 zero-store, BaseEventQueue<ActivateHullEvent>::Append = the merge,
+    // mbDiverged @ offset 0x6C = the trailing byte copy) -- but it exposes no public mutator for
+    // its private mActivateHullQueue/mbDiverged (only a const GetActivateHullQueue() and
+    // SetDiverged/HasDiverged, none of which allow a Clear()+Append() merge from outside). Adding
+    // that mutator belongs to BrnTrafficNetworkInterfaces.h/.cpp (a different TU), so this stays a
+    // local sized-slice placeholder here. Modelled with a Set entry pending that mutator landing.
     struct TrafficNetworkInputInterface
     {
         void Set(const TrafficNetworkInputInterface* lpSource)
@@ -164,17 +177,12 @@ namespace BrnWorldIO
         u8 maPayload[256];   // NOMINAL
     };
 
-    // CrashNetworkInputInterface (X360 SetCrashNetworkInterface forwards to the crash
-    // NetworkInputInterface operator= at +301760). Modelled with a Set entry.
-    struct CrashNetworkInputInterface
-    {
-        void Set(const CrashNetworkInputInterface* lpSource)
-        {
-            if (lpSource && lpSource != this)
-                std::memcpy(maPayload, lpSource->maPayload, sizeof(maPayload));
-        }
-        u8 maPayload[128];   // NOMINAL
-    };
+    // CrashNetworkInputInterface: canonical home is committed
+    // (GameSource/World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h). X360
+    // SetCrashNetworkInterface forwards to BrnWorld::CrashIO::NetworkInputInterface::operator=
+    // (bitset copy + per-race-car queue clear+merge), which is the committed type's own
+    // operator=.
+    typedef BrnWorld::CrashIO::NetworkInputInterface CrashNetworkInputInterface;
 
     // PlayerVehicleControls (X360 SetPlayerVehicleControls memcpy 60 bytes into +317264).
     struct PlayerVehicleControls
@@ -188,17 +196,12 @@ namespace BrnWorldIO
         u8 maData[212];      // NOMINAL (between +317324 and +317536)
     };
 
-    // ReplayStatusInterface (X360 SetReplayStatusInterface forwards to StatusInterface operator=
-    // at +320276). Modelled with a Set entry.
-    struct ReplayStatusInterface
-    {
-        void Set(const ReplayStatusInterface* lpSource)
-        {
-            if (lpSource && lpSource != this)
-                std::memcpy(maPayload, lpSource->maPayload, sizeof(maPayload));
-        }
-        u8 maPayload[64];    // NOMINAL
-    };
+    // ReplayStatusInterface: canonical home is committed (GameSource/Replays/
+    // BrnReplayStatusInterface.h). X360 SetReplayStatusInterface forwards to
+    // BrnReplays::ReplayIO::StatusInterface::operator= (member-wise copy: status flags, all 6
+    // reels, the two current-reel indices, and the trailing debug alpha), the committed type's
+    // own operator=.
+    typedef BrnReplays::ReplayIO::StatusInterface ReplayStatusInterface;
 
     // RequestInterface (mWorldEntityRequestInterface; X360 returns &member, both const R and
     // non-const W overloads). Modelled as a sized slice (accessed by-name only).
@@ -211,18 +214,11 @@ namespace BrnWorldIO
     // source queue. GameActionQueue = VariableEventQueue<13312,16> (X360 +147572 Append).
     typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueue;
 
-    // TakedownEventQueue: X360 +160952 Append dispatches BrnGameState::TakedownEvent_::Append
-    // (a BaseEventQueue<TakedownEvent>-style merge). Modelled here as a sized slice exposing the
-    // Append(const TakedownEventQueue*) merge entry the accessor calls by name.
-    struct TakedownEventQueue
-    {
-        void Append(const TakedownEventQueue* lpSource)
-        {
-            if (lpSource && lpSource != this)
-                std::memcpy(maPayload, lpSource->maPayload, sizeof(maPayload));
-        }
-        u8 maPayload[256];   // NOMINAL -- grown by the canonical TakedownEvent queue TU
-    };
+    // TakedownEventQueue: X360 +160952 Append dispatches BrnGameState::TakedownEvent_::Append,
+    // which is the committed CgsModule::EventQueue<BrnGameState::TakedownEvent, 8> instantiation's
+    // (== BaseEventQueue<TakedownEvent>) own Append merge (GameSource/GameState/TakedownManager/
+    // BrnTakedownManagerTypes.h + EventQueue_TakedownEvent_8.cpp). Reused by name.
+    typedef CgsModule::EventQueue<BrnGameState::TakedownEvent, 8> TakedownEventQueue;
 
     // ========================================================================
     // BrnWorldIO::UpdateInputBuffer  (DWARF BrnWorldModuleIO.h:184)

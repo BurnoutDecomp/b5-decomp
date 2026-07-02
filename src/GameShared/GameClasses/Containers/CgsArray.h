@@ -6,8 +6,12 @@
 #include <cstdlib>   // std::qsort (Array<T,N>::QSort)
 
 // Array<T, N> - a thin fixed-size array wrapper used across the Cgs containers
-// (e.g. StateLoadingHelper's request dirty list). Recovered from the DecFIGS DWARF,
-// which spells it as the unqualified Array<T,N>.
+// (e.g. StateLoadingHelper's request dirty list). The DecFIGS DWARF spells this
+// CgsContainers::Array<T,N> (matches the X360 manglings, e.g.
+// '?$Array@VRaceBalancingGraph@BrnAI@@$06@CgsContainers@@'); it is committed here
+// as the unqualified Array<T,N> to match the established convention used by every
+// existing instantiation site across the repo (renaming/namespacing would be a
+// repo-wide, cross-TU change and is out of scope for this TU).
 //
 // X360 layout note (recovered from CgsArray.h assert sites in the X360 build, e.g.
 // BrnGameState::StartLocation,8>::Ge @ 0x822AE208 and

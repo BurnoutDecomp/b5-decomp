@@ -338,7 +338,8 @@ namespace CgsNetwork
         CGS_ASSERT(lpSelf != 0, "lpLobbyComponent");
         ConnApiControl(lpSelf->mpServerInterface->GetConnAPIRef(),
                        KI_CONN_CTRL_DISCONNECT, 0, 0, gServerInterfaceErrorData);
-        if (lpSelf->IsLocalPlayerInGame())
+        bool lbLocalPlayerInGame = lpSelf->IsLocalPlayerInGame();
+        if (lbLocalPlayerInGame)
         {
             s32 liError = a2[3];
             if (liError)
@@ -347,7 +348,9 @@ namespace CgsNetwork
                 return 1;
             }
         }
-        return lpSelf->IsLocalPlayerInGame() ? 1 : 0;
+        // asm makes exactly one IsLocalPlayerInGame() call and reuses its result for both
+        // the branch and the fall-through return -- no second query.
+        return lbLocalPlayerInGame ? 1 : 0;
     }
 
     s32 ServerInterfaceGames::SearchForGamesCallback(s32 /*a1*/, s32* a2, ServerInterfaceGames* lpSelf)
@@ -379,9 +382,11 @@ namespace CgsNetwork
         return 0;
     }
 
-    void ServerInterfaceGames::EventStatusCallback(s32 /*a1*/, s32* a2, ServerInterfaceGames** a3)
+    void ServerInterfaceGames::EventStatusCallback(s32 /*a1*/, s32* a2, ServerInterfaceGames* a3)
     {
-        ServerInterfaceGames* lpSelf = *a3;
+        // Prepare registers `this` directly as the callback user data (LobbyApiSetCallback's
+        // 4th arg); a3 IS the games component, not a pointer to it.
+        ServerInterfaceGames* lpSelf = a3;
         switch (a2[2])     // a2 + 8 -> the lobby event tag
         {
         case KI_EVENT_TAG_PLAYERS:
@@ -599,15 +604,19 @@ namespace CgsNetwork
 
     void* ServerInterfaceGames::KickPlayerByID(s32 liPlayerID, s32 liReason, char lbBan)
     {
+        bool lbLocalPlayerInGame = false;
         for (s32 i = 0; ; ++i)
         {
-            CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
+            lbLocalPlayerInGame = IsLocalPlayerInGame();
+            CGS_ASSERT(lbLocalPlayerInGame, "IsLocalPlayerInGame()");
             if (i >= mLastGameRecord.iCount)
                 break;
             if (mLastGameRecord.aPlayers[i].iIdent == liPlayerID)
                 return KickPlayer(mLastGameRecord.aPlayers[i].strPers, liReason, lbBan);
         }
-        return reinterpret_cast<void*>(static_cast<intptr_t>(IsLocalPlayerInGame() ? 1 : 0));
+        // asm falls straight to the epilogue on loop exhaustion, reusing the last
+        // IsLocalPlayerInGame() result from the assert check above -- no second query.
+        return reinterpret_cast<void*>(static_cast<intptr_t>(lbLocalPlayerInGame ? 1 : 0));
     }
 
     void ServerInterfaceGames::SetGameServerConnectionType(s32 liConnectionType)
@@ -664,7 +673,7 @@ namespace CgsNetwork
     {
         DirtySockDebugLog("DirtySockLobby: SendGameResult");
 
-        char lacSelf[8];
+        char lacSelf[576];
         LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_USERINFO,
                        lacSelf, KI_STATUS_BUF_SIZE);
 
@@ -679,11 +688,12 @@ namespace CgsNetwork
                        "strlen( mLastGameRecord.strAuth ) > 0");
         }
 
-        char lacReport[1] = { 0 };
         lpcBuffer[0] = 0;
         TagFieldSetEpoch(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "WHEN",
                          static_cast<s32>(mLastGameRecord.uWhen));
-        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "REPT", lacReport);
+        // REPT is the reporting (local) player's persona name -- lacSelf+8, same offset
+        // IsLocalPlayerInGame reads for its own LobbyNameCmp against the self-status buffer.
+        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "REPT", lacSelf + 8);
         TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "AUTH", mLastGameRecord.strAuth);
         TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "VENUE", 0);
         TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SKU", mpServerInterface->GetSKU());
@@ -795,12 +805,15 @@ namespace CgsNetwork
             if (lbPlayersJoined || lbPlayersLeft)
                 RaiseServerInterfaceEvent(mpServerInterface, KI_EVT_PLAYERS_CHANGED, 0);
 
-            // Slots / privilege change -> push a latency-update control.
-            if (mLastGameRecord.bMaxsize != lNewRecord.bMaxsize ||
+            // Slots / privilege change -> push a latency-update control. asm sign-extends
+            // bMaxsize (extsb) before comparing/subtracting.
+            const s8 liMaxsize    = static_cast<s8>(mLastGameRecord.bMaxsize);
+            const s8 liNewMaxsize = static_cast<s8>(lNewRecord.bMaxsize);
+            if (liMaxsize != liNewMaxsize ||
                 mLastGameRecord.iPrivSlots != lNewRecord.iPrivSlots)
             {
                 ConnApiControl(mpServerInterface->GetConnAPIRef(), KI_CONN_CTRL_LATENCY,
-                               mLastGameRecord.bMaxsize - mLastGameRecord.iPrivSlots,
+                               liMaxsize - mLastGameRecord.iPrivSlots,
                                mLastGameRecord.iPrivSlots, 0);
             }
 
@@ -953,7 +966,10 @@ namespace CgsNetwork
             if (i >= mLastGameRecord.iCount)
                 break;
             if (mLastGameRecord.aPlayers[i].iIdent == liPlayerID)
-                lpOut->SerialiseFromPlayer(&mLastGameRecord.aPlayers[i]); return lpOut;
+            {
+                lpOut->SerialiseFromPlayer(&mLastGameRecord.aPlayers[i]);
+                return lpOut;
+            }
         }
         CGS_ASSERT(false, "This player is not in the game");
         return 0;
@@ -970,7 +986,10 @@ namespace CgsNetwork
             if (i >= mLastGameRecord.iCount)
                 break;
             if (LobbyNameCmp(lpcName, mLastGameRecord.aPlayers[i].strPers) == 0)
-                lpOut->SerialiseFromPlayer(&mLastGameRecord.aPlayers[i]); return lpOut;
+            {
+                lpOut->SerialiseFromPlayer(&mLastGameRecord.aPlayers[i]);
+                return lpOut;
+            }
         }
         CGS_ASSERT(false, "This player is not in the game");
         return 0;
@@ -978,7 +997,7 @@ namespace CgsNetwork
 
     bool ServerInterfaceGames::IsLocalPlayerInGame()
     {
-        char lacSelf[16];
+        char lacSelf[576];
         LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_USERINFO,
                        lacSelf, KI_STATUS_BUF_SIZE);
         if (mLastGameRecord.iCount <= 0)
@@ -1033,8 +1052,9 @@ namespace CgsNetwork
         CgsNetwork::DirtySock::GameManagerRefT* lpGm = mpServerInterface->GetGameManagerRef();
         if (lpGm)
             return GameManagerStatus(lpGm, KI_GM_SELECT_ISSERVER, 0, 0) == 1;
-        // No game-manager: a "game server" game iff the first host name byte equals '@' (64).
-        return mLastGameRecord.aPlayers[0].iIdent == 64;
+        // No game-manager: a "game server" game iff the first player's persona name starts
+        // with '@' (64) -- asm reads the SIGNED first byte of aPlayers[0].strPers.
+        return static_cast<s8>(mLastGameRecord.aPlayers[0].strPers[0]) == 64;
     }
 
     // ===================================================================

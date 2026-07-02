@@ -235,7 +235,7 @@ namespace CgsNetwork
         static s32   LeaveGameCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
         static s32   SearchForGamesCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
         static s32   ReceivedGameEvent(ServerInterfaceGames* lpSelf, s32* a2);
-        static void  EventStatusCallback(s32 a1, s32* a2, ServerInterfaceGames** a3);
+        static void  EventStatusCallback(s32 a1, s32* a2, ServerInterfaceGames* a3);
         static void* GameManagerCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
         static s32   FoundGamesSort(ServerInterfaceGames* lpSelf, void* a2,
                                     ServerInterfaceGameParamsBase* lpA,

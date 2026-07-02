@@ -1,5 +1,6 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"
 
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "GameSource/Math/BrnMathUtils.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
@@ -479,7 +480,8 @@ s32 Vehicle::GetCurrentManoeuvrePhase() const
     CGS_ASSERT(IsAlive(), "IsAlive()");
     CGS_ASSERT(miManoeuvre >= E_MANOEUVRE_NONE, "miManoeuvre >= E_MANOEUVRE_NONE");
     CGS_ASSERT(miManoeuvre < E_MANOEUVRE_COUNT, "miManoeuvre < E_MANOEUVRE_COUNT");
-    return miManoeuvrePhase;
+    // X360 returns the phase byte zero-extended (lbz with no extsb @0x8270E7A8).
+    return static_cast<u8>(miManoeuvrePhase);
 }
 
 Vehicle::Manoeuvre Vehicle::GetCurrentManoeuvre() const
@@ -631,7 +633,7 @@ void Vehicle::SetIndicatingLeft(bool lbOn)
     CGS_ASSERT(IsAlive(), "IsAlive()");
     CGS_ASSERT(!IsIndicatingRight() || lbOn == false,
                "!IsIndicatingRight() || lbOn == false");
-    if (((mxEffectState >> 5) & 1) != (lbOn ? 1 : 0))
+    if (IsIndicatingLeft() != lbOn)
     {
         if (lbOn)
         {
@@ -652,7 +654,7 @@ void Vehicle::SetIndicatingRight(bool lbOn)
     CGS_ASSERT(IsAlive(), "IsAlive()");
     CGS_ASSERT(!IsIndicatingLeft() || lbOn == false,
                "!IsIndicatingLeft() || lbOn == false");
-    if (((mxEffectState >> 6) & 1) != (lbOn ? 1 : 0))
+    if (IsIndicatingRight() != lbOn)
     {
         if (lbOn)
         {
@@ -755,7 +757,7 @@ void Vehicle::StartGiveUpManoeuvre()
     }
     mfManoeuvreTime = 0.0f;
     miManoeuvre = E_MANOEUVRE_GIVE_UP;
-    mfHeadlightTimeToFlash = 0.40000001f;
+    mfIndicatorTimeToFlash = 0.40000001f;
     SetHeadlightsFlashed(false);
     SetLeftIndicatorOn(false);
     SetRightIndicatorOn(false);
@@ -806,15 +808,37 @@ void Vehicle::SetDead(u32 luVehicle, VehicleSoaData& lSoaData)
 }
 
 // ---------------------------------------------------------------------------
-// SetFlashingHeadlights (X360 @0x827536D0): DECLARATION-ONLY + FLAG.
-// The asm inlines a CgsNumeric::Random LCG step directly against the seed
-// (muSeed * 0x5851F42D4C957F2D + 1) and a (% 3) reduction to seed the flash
-// pattern -- reaching Random's private LCG by raw offset and depending on the
-// still-declaration-only RandomUInt() body. Faithful reconstruction must wait
-// for the CgsRandom TU; bodying it now would require a raw-offset hack into an
-// un-homed member, which the reconstruction rules forbid.
+// SetFlashingHeadlights (X360 @0x827536D0): starting a flash resets the flash
+// timer, raises effect-state bit7, zeroes the flash state, and draws a fresh
+// three-way flash pattern from the shared RNG. The asm inlines
+// CgsNumeric::Random::RandomUInt() (return muSeed >> 32, then
+// muSeed = muSeed * 0x5851F42D4C957F2D + 1 @0x827537D0..E4) followed by the
+// unsigned %3 reduction (mulhwu 0xAAAAAAAB idiom @0x827537E8). The if-condition
+// reads the bit via inlined IsFlashingHeadlights() (its IsAlive assert fires at
+// header line 0x6DD @0x82753754). Both paths end in SetHeadlightsFlashed(false).
 // ---------------------------------------------------------------------------
-// void Vehicle::SetFlashingHeadlights(bool lbOn, CgsNumeric::Random* lpRand);
+void Vehicle::SetFlashingHeadlights(bool lbOn, CgsNumeric::Random* lpRand)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lpRand != nullptr, "lpRand");
+
+    if (IsFlashingHeadlights() != lbOn)
+    {
+        if (lbOn)
+        {
+            mfHeadlightTimeToFlash = 0.0f;
+            mxEffectState |= 0x80;
+            muHeadlightFlashState = 0;
+            muHeadlightFlashPattern = static_cast<u8>(lpRand->RandomUInt() % 3);
+            SetHeadlightsFlashed(false);
+        }
+        else
+        {
+            mxEffectState &= 0x7F;
+            SetHeadlightsFlashed(false);
+        }
+    }
+}
 
 // CopyEffectsFromCab (X360 @0x82704E50): a trailer mirrors its cab's effect
 // state byte and brakelight counter so its lights stay in sync.
