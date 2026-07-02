@@ -127,6 +127,11 @@ namespace CgsGuiModuleIO
         // X360 0x8250C718: write-lock (bit 3); asserts the source queue ptr is non-null,
         // then bulk-appends it into mOutEvents. Returns the Append result (int/bool).
         int AddGuiOutEvents(const GuiEventQueueSmall* lpSourceQueue);
+        // X360 0x8285AE20 (ADDITIVE GROW, GuiModule::BridgeFromModelToOutput): the
+        // 18432-byte-source overload -- same write-lock + "Invalid event queue pointer
+        // sent to OutputBuffer::AddGuiOutEvents" assert (CgsGuiModuleIO.h:251), then
+        // Append<18432,16> into mOutEvents. DECLARATION-ONLY (its own ledger function).
+        int AddGuiOutEvents(const GuiEventQueue* lpSourceQueue);
         // X360 0x823B41D8: const overload -- read-lock (bit 4) handle to the trailing game-action
         // queue at this+0x5024 (20516). X360 0x824F7968: non-const overload -- write-lock (bit 3)
         // handle to the same member. Both bodied in CgsGuiModuleIO_OutputBuffer_Getters.cpp.

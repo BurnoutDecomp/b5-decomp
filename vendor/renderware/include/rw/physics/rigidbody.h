@@ -62,6 +62,24 @@ namespace physics
         RigidBody& operator=(const RigidBody& rOther);   // @ 0x825E3410
         RigidBody* DynamicUpdate();                      // @ 0x82BC2B78 (declared-only)
 
+        // ADDITIVE GROW (BrnPhysics::ExternalPhysicsBody::ReadPropertiesFromRenderware
+        // @0x825A2280, which reads these four properties back out of the body):
+        //   mIfull  = {Ixx, Ixy, Ixz | mInvm in w}   (the tensor's first row + inv mass)
+        //   mIsplt  = {Izz, Iyy, Iyz | mState in w}  (the remaining unique tensor terms)
+        // The full symmetric world inertia tensor reassembles as rows
+        //   {Ixx,Ixy,Ixz} / {Ixy,Iyy,Iyz} / {Ixz,Iyz,Izz} -- exactly the two vperm masks
+        // (.rdata 0x8208C2A0/B0: {A.z,B.z,B.x,A.w} / {A.y,B.y,B.z,A.w}) the caller applies.
+        const rw::math::vpu::Vector4& GetInertiaFull() const  { return mIfull; }
+        const rw::math::vpu::Vector4& GetInertiaSplit() const { return mIsplt; }
+        float GetInverseMass() const { return mIfull.w; }   // mInvm (packed in mIfull.w)
+
+        // The body's LOCAL inverse-inertia diagonal vector. On the console this pointer is
+        // packed into the mUp.w scalar lane (the caller loads it as `lwz +0x5C`) -- the same
+        // pointer-in-a-float-lane console packing the DynamicUpdate note above describes, so
+        // it cannot be an inline lane read on the 64-bit PC. DECLARED-ONLY: the PC body lands
+        // with the SDK reconstruction, where the packed lane gets its PC-side storage answer.
+        const rw::math::vpu::Vector4* GetLocalInvInertiaDiagonal() const;
+
     private:
         // Member SEQUENCE per the DWARF (rigidbody.h:419..459). Each Vector field is a 16-byte
         // SIMD register whose w-lane carries the adjacent scalar in the console packing; here

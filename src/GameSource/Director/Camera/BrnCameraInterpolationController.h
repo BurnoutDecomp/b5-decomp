@@ -20,7 +20,9 @@
 // brought in). See BrnCameraInterpolationController.cpp for the asm-level register map.
 
 #include "types.hpp"
-#include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44Affine
+#include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44Affine / Matrix33 / Vector4 (VecFloat lane)
+#include "BrnCommonTypes.h"      // Matrix33 / VecFloat aliases
+#include "GameSource/Director/Camera/Utils/BrnInterpolater.h"   // Camera::Utils::Interpolater
 
 namespace BrnDirector
 {
@@ -28,6 +30,28 @@ namespace BrnDirector
     // function takes its matrices by pointer; no instance members are touched by it).
     struct CameraInterpolationController
     {
+        // The blend parameter set of the rotate-about-pivot camera interpolation mode
+        // (DWARF BrnCameraInterpolationController.h:75 -- the DWARF file attribution for
+        // this class is Shots/ShotControllers/; this committed home predates it).
+        struct RotateAboutPivotParams
+        {
+            Matrix33 mLookatLocalRotation;   // h:76 (+0x00)
+            Matrix33 mLookAtRotation;        // h:77 (+0x30)
+            f32      mfRadius;               // h:79 (+0x60)
+
+            // @0x8221E9D0 (DWARF h:88; static -- the X360 ABI carries no `this`:
+            // r3/r4 = the two sources, v1 = t, r5/r6 = the two interpolaters, r7 = out).
+            // Blend lhs->rhs: each rotation via its direction-preserving interpolater,
+            // the radius linearly. Bodied in BrnCameraInterpolationController.cpp
+            // (ledger TU SDKs/.../matrix33_type_inline.h, a DWARF misattribution).
+            static void Interpolate(const RotateAboutPivotParams& lrFrom,
+                                    const RotateAboutPivotParams& lrTo,
+                                    VecFloat lvT,
+                                    Camera::Utils::Interpolater& lrInterpolaterA,
+                                    Camera::Utils::Interpolater& lrInterpolaterB,
+                                    RotateAboutPivotParams* lpOut);
+        };
+
         // @0x821F8220. Build a rotation-about-pivot affine in *lpResult from the two source
         // matrices. r3=lpResult (four stvx128 rows @ stride 16), r5=lpSource (lvx128 rows at
         // +0x00/+0x10/+0x20/+0x30/+0x50/+0x60 -- the +0x60 scalar is negated into the build),

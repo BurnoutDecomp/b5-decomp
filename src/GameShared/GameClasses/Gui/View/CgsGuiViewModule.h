@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEventQueueBase (AddViewState source)
 
 // ============================================================================
 // b5-decomp/src/GameShared/GameClasses/Gui/View/CgsGuiViewModule.h
@@ -105,6 +106,17 @@ namespace CgsGui
         // X360 0x82858988 -- clear the frame to the configured clear-screen colour/alpha
         // before the derived view renders (non-virtual; called first by RenderInternal).
         void RenderBlackScreen();
+
+        // ADDITIVE GROW (GuiModule::BridgeFromInputToView @0x8285B088): build the view
+        // state for one frame from an inbound GUI-event queue + the view input buffer.
+        // The X360 emits it as a member template parameterised on the source queue
+        // (??$AddViewState@$0IAAA@$0BA@@ViewModule@CgsGui@@QAAXPBV?$GuiEventQueueBase@...
+        // == AddViewState<32768,16>(const GuiEventQueueBase<32768,16>*,
+        // ViewIO::InputBuffer*), returning void). DECLARATION-ONLY (the instantiation
+        // body is its own ledger function).
+        template <s32 BUFSIZE, s32 ALIGN>
+        void AddViewState(const GuiEventQueueBase<BUFSIZE, ALIGN>* lpGuiEvents,
+                          ViewIO::InputBuffer* lpInput);
 
         // -------------------------------------------------------------------------------
         // Named accessors for the owned sub-objects a DERIVED module needs to wire up

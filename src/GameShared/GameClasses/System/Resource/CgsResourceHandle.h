@@ -20,7 +20,21 @@ namespace CgsResource
         // source pool entry. Out-of-line in the X360 ARTIST build (@0x828D8438); declared
         // here, defined in CgsResourceHandle.cpp.
         ID GetResourceId() const;
+
+        // ADDITIVE GROW (ColourCalibrationScreen::Update @0x8246AA28, whose inlined
+        // "mColourCalibrationTextureHandle != CgsResource::NULLResourceHandle" assert is
+        // this pairwise compare): handles are equal when both stored pointers match.
+        bool operator==(const ResourceHandle& lrOther) const
+        {
+            return mpResourceMemory == lrOther.mpResourceMemory &&
+                   mpSourceEntry == lrOther.mpSourceEntry;
+        }
+        bool operator!=(const ResourceHandle& lrOther) const { return !(*this == lrOther); }
     };
+
+    // The null handle sentinel (X360 .data qword @0x82FB3688, initial value {NULL, NULL} --
+    // read from the decrypted XEX). Defined in CgsResourceHandle.cpp.
+    extern const ResourceHandle NULLResourceHandle;
 
     // ========================================================================
     // CgsResource::SafeResourceHandle<ResourceType> — a typed wrapper over a

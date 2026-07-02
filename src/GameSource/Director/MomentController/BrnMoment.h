@@ -78,6 +78,11 @@ namespace BrnDirector
         // DECLARATION-ONLY (no bodies here) except where a default body is attested;
         // pure-virtual where the DWARF marks the slot abstract. The per-TU `cl /c`
         // gate does not link, so undefined virtuals are fine.
+        // Body recovered from the MomentFailSafe::Construct override @0x8225F190, which
+        // inlines it verbatim (reset the state machine, latch the concrete type through
+        // the live vtable, clear the inhibit flag, construct the embedded camera) --
+        // every concrete moment's Construct carries this same inlined base. Defined
+        // inline below.
         virtual void  Construct();
         virtual bool  Prepare(/* Camera::BehaviourManager& */ void* lrBehaviourController) = 0;
         virtual void  Update(f32 lfTimeStep,
@@ -106,6 +111,10 @@ namespace BrnDirector
         void SetState(EState leState) { meState = leState; }
         Camera::Camera& GetNonConstCamera() { return mCamera; }
 
+        // ADDITIVE GROW (MomentFailSafe::Update @0x8220A2B0, which clears it while
+        // searching): protected setter for the switch-to gate.
+        void SetCanSwitchToMeNow(bool lbCanSwitch) { mbCanSwitchToMeNow = lbCanSwitch; }
+
         // DWARF member layout (BrnMoment.h:243..256). Offsets are NOMINAL beyond the
         // by-name access used here -- see the size FLAG at the top of this file.
         Camera::Camera mCamera;        // BrnMoment.h:243
@@ -126,6 +135,18 @@ namespace BrnDirector
         mbIsInhibited = true;
         Release();
         SetState(E_STATE_INVALID_SEARCHING);
+    }
+
+    inline void Moment::Construct()
+    {
+        // Recovered from the inlined instance in MomentFailSafe::Construct @0x8225F190:
+        // meState = INACTIVE, meType latched through the live vtable's GetInstanceType
+        // (the asm's indirect call through vtbl slot 7), clear the inhibit flag, and
+        // construct the embedded camera.
+        meState       = E_STATE_INVALID_INACTIVE;
+        meType        = GetInstanceType();
+        mbIsInhibited = false;
+        mCamera.Construct();
     }
 
     // ----------------------------------------------------------------------------

@@ -43,6 +43,11 @@ namespace CgsModule
 
         s32 GetCount() const { return miCount; }
 
+        // ADDITIVE GROW (ColourCalibrationScreen::Update @0x8246AA28, whose baked assert
+        // text "mReceiverQueue.GetLength() == 1" attests the original accessor NAME):
+        // the DWARF-era spelling of the count read.
+        s32 GetLength() const { return miCount; }
+
     protected:
         u8*  mpBuffer;        // [0] backing buffer base address (set by Construct)
         s32  miWriteOffset;   // [1] current write byte-offset (also the drain end)
