@@ -16,6 +16,13 @@ class ObjectPool
 public:
     static const s32 KI_CAPACITY = N;
 
+    // Reset the pool to its all-free state. ADDITIVE GROW: the per-instantiation
+    // bodies are real X360 symbols (e.g. SceneManagerEntity<10000,s32>::Clear /
+    // VolumeInstance<5048,s32>::Clear called by EntityManager::Prepare
+    // @0x828C5FDC/@0x828C5FE8); declaration-only here (each instantiation's body
+    // is its own ledger function).
+    void Clear();
+
     // Pop the next free slot index, mark it allocated, and return it (-1 when the pool is empty).
     TIndex AllocateObject()
     {
