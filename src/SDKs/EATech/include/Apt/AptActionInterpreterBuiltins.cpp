@@ -11,6 +11,10 @@
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"   // AptBoolean::Create (shared true/false)
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"        // the isNaN string arm
+#include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"  // the boxed string form
+#include <cctype>    // isdigit (the isNaN scan)
+#include <cstdlib>   // strtol (the isNaN hex arm)
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"    // AptString::Create / c_string / GetInternalString
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC (the URL/target scratch + operands)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                // AptCIH : AptValueGC (mpCIH -> AptValue* upcast)
@@ -33,7 +37,6 @@ extern AptValue* gpUndefinedValue;
 // FLAG (value-layer follow-ons; bodies own their TUs). isNaN already has a committed
 // extern in AptActionInterpreterStringOps2.cpp; escape/unescape are the X360 _escape
 // @0x82AEE008 / _unEscape @0x82AEE110 (percent-encode / decode an EAStringC in place).
-extern bool isNaN(AptValue* pValue);
 extern void escape(EAStringC* pString);
 extern void unescape(EAStringC* pString);
 
@@ -47,6 +50,97 @@ extern unsigned int AptGetSwfVersion();
 // loadVariables branch forwards to it.
 extern void AptActionInterpreter_loadVariables(AptActionInterpreter* pInterp,
                                                AptValue* pNode, AptValue* pPendingRelease, EAStringC* pURL);
+
+// ---------------------------------------------------------------------------
+// isNaN (the value test) @0x82AF9768 -- HOMED 2026-07-02, retiring the
+// return-false stub. The full ECMA-ish Not-a-Number classification:
+//   * a DEFINED Integer (7) or Float (6) is a number -> false;
+//   * a DEFINED string (1/33): empty -> NaN; "0x..." parses via strtol(16)
+//     (NaN when the parse leaves a tail); otherwise the LAST char must be a
+//     digit or one of -+e. and the FIRST a digit or .-+ (else NaN), then the
+//     body scan from index 1: a second '.' falls through the 'e' compare into
+//     isdigit('.') == NaN (the shipped trick); an 'e' at index 1, or at index
+//     2 behind a leading sign, is NaN; a sign is only consumed immediately
+//     after 'e'; any other non-digit is NaN; a clean scan -> a number;
+//   * any other DEFINED non-Boolean value -> NaN;
+//   * undefined / Boolean -> NaN exactly when the movie is SWF7
+//     (AptGetSwfVersion() == 7 -- the SWF7 undefined-coercion change).
+// ---------------------------------------------------------------------------
+bool isNaN(AptValue* pValue)
+{
+    const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();
+    const bool bDefined = pValue->getIsDefined();
+
+    if ((eType == AptVFT_Integer || eType == AptVFT_Float) && bDefined)
+        return false;
+
+    if ((eType == AptVFT_StringValue || eType == AptVFT_StringObject) && bDefined)
+    {
+        AptString* const pStr =
+            (eType == AptVFT_StringValue)
+                ? static_cast<AptString*>(pValue)
+                : static_cast<AptString*>(
+                      static_cast<AptStringObject*>(pValue)->GetBoxedString());
+        const EAStringC* const pS = pStr->GetInternalString();
+        const char* const p = pS->GetBuffer();
+        const int n = pS->GetLength();
+
+        if (n == 0)
+            return true;
+
+        if (n > 2 && p[0] == '0' && p[1] == 'x')
+        {
+            char* pEnd = nullptr;
+            (void)strtol(p, &pEnd, 16);
+            return *pEnd != 0;
+        }
+
+        const unsigned char cLast = static_cast<unsigned char>(p[n - 1]);
+        if (cLast != '-' && cLast != '+' && cLast != 'e' && cLast != '.'
+            && !isdigit(cLast))
+            return true;
+        const unsigned char cFirst = static_cast<unsigned char>(p[0]);
+        if (cFirst != '.' && cFirst != '-' && cFirst != '+' && !isdigit(cFirst))
+            return true;
+
+        bool bDotSeen = false;
+        for (int i = 1; i < n; ++i)
+        {
+            const char c = p[i];
+            if (c == '.' && !bDotSeen)
+            {
+                bDotSeen = true;   // the first dot is fine; a second falls through
+                continue;          // (the shipped code re-enters the 'e' compare,
+            }                      // where isdigit('.') == 0 classifies it NaN)
+            if (c == 'e' && i != 1)
+            {
+                if (i == 2 && (p[0] == '+' || p[0] == '-'))
+                    return true;   // "e" right behind a bare sign
+                const int nNext = i + 1;
+                if (nNext < n)
+                {
+                    const char c2 = p[nNext];
+                    if (c2 == '-' || c2 == '+')
+                    {
+                        ++i;       // consume the exponent sign
+                        continue;
+                    }
+                    if (!isdigit(static_cast<unsigned char>(c2)))
+                        return true;
+                }
+                continue;
+            }
+            if (!isdigit(static_cast<unsigned char>(c)))
+                return true;
+        }
+        return false;
+    }
+
+    if (bDefined && eType != AptVFT_Boolean)
+        return true;
+
+    return AptGetSwfVersion() == 7;   // dword_8324E530 == 7 (the SWF7 arm)
+}
 
 // ---------------------------------------------------------------------------
 // cbCallMethod_isNaN @0x82AF99E8 -- AS isNaN(x): true with no argument, or when the
