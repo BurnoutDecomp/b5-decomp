@@ -109,8 +109,8 @@ namespace RendererIO
         CgsGraphics::Im3dRenderBuffer*                  GetIm3dRenderBufferRacePosition() const;   // @ 0x823B38F0
         CgsGraphics::Im3dRenderBuffer*                  GetIm3dRenderBufferMenusAndHud() const;    // @ 0x823B3998
         BrnEffectsFrame*                                GetBaseEffectsFrame() const;               // @ 0x823B3B90
-        BrnEffectsFrame*                                GetWorldEffectsFrame(s32 liSlot) const;    // @ 0x823B3C38
-        BrnEffectsFrame*                                GetFXEventsEffectsFrame(s32 liSlot) const; // @ 0x823B3D10
+        BrnEffectsFrame*                                GetWorldEffectsFrame(u8 luSlot) const;    // @ 0x823B3C38
+        BrnEffectsFrame*                                GetFXEventsEffectsFrame(u8 luSlot) const; // @ 0x823B3D10
         BrnShaderConstantsFrame*                        GetShaderConstantsFrame() const;           // @ 0x823B3DE8
         BrnBlobbyShadowManager::BrnBlobbyShadowBuffer*  GetBlobbyShadowBuffer() const;             // @ 0x823B3E90
         BrnCoronaManager::BrnSubmissionInterface*       GetCoronaSubmissionInterface() const;      // @ 0x823B3F38
@@ -128,8 +128,8 @@ namespace RendererIO
         void SetIm3dRenderBufferRacePosition(CgsGraphics::Im3dRenderBuffer* lpBuffer);             // @ 0x823FB100
         void SetIm3dRenderBufferMenusAndHud(CgsGraphics::Im3dRenderBuffer* lpBuffer);              // @ 0x823FB1A8
         void SetBaseEffectsFrame(BrnEffectsFrame* lpFrame);                                        // @ 0x823FB3A0
-        void SetWorldEffectsFrame(s32 liSlot, BrnEffectsFrame* lpFrame);                           // @ 0x823FB448
-        void SetFXEventsEffectsFrame(s32 liSlot, BrnEffectsFrame* lpFrame);                        // @ 0x823FB528
+        void SetWorldEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame);                           // @ 0x823FB448
+        void SetFXEventsEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame);                        // @ 0x823FB528
         void SetShaderConstantsFrame(BrnShaderConstantsFrame* lpFrame);                            // @ 0x823FB608
         void SetBlobbyShadowBuffer(BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBuffer);       // @ 0x823FB6B0
         void SetCoronaSubmissionInterface(BrnCoronaManager::BrnSubmissionInterface* lpInterface);  // @ 0x823FB758
