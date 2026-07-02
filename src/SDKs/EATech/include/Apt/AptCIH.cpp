@@ -376,8 +376,12 @@ int AptCIH::jumpToFrame(int nFrame)
             // children absent from the replay. Staged off until that chain is
             // verified; the boundary seek in the else remains the live path.
             // (4th-round retest 2026-07-02: STILL crashes with the DrainQueues
-            // AndZombie drain homed -- the residual is deeper inside the merge
-            // reconcile's removeObject/render-tree calls on merge-removed nodes.)
+            // AndZombie drain homed. 5th-round probes pinpointed the residual to
+            // the INSTRUCTION: the merge's nosrc-remove arm -> removeObject ->
+            // AddToDelayReleaseList -> Remove completes fully -> the final
+            // Release() drops the node 1 -> 0 and the FIRST-EVER true AptCIH
+            // deletion (the vector-deleting-destructor -> ~AptCIH -> GC-pool
+            // free chain) crashes. That deletion chain is the next target.)
             if (false)
             {
             void* pProperties = pInst->mpProperties;   // dword[3] (the AS property hash)
