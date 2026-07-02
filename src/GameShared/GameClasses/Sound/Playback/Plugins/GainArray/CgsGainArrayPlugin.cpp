@@ -49,17 +49,17 @@ namespace CgsSound { namespace Playback { namespace Plugins {
 
     struct GainArray
     {
-        void* mpVtable;        // [0]  word 0 (byte 0x00)
-        u32   mau1[2];         // [1..2]
-        u8    mau2Pad[8];      // [3..4] bytes 0x0C..0x13
-        u32   mau3;            // [5] byte 0x14
-        u32   mau4[2];         // [6..7] bytes 0x18..0x1F
-        u8    mau5Pad0x20;     // byte 0x20
+        void* mpVtable;        // byte 0x00
+        u32   mau1[2];         // bytes 0x04..0x0B
+        f32*  mpGainBlock;     // byte 0x0C (stw r9,0xC(r3)) -- gain block self-pointer
+        u32   mau3;            // byte 0x10
+        u32   mau4[2];         // bytes 0x14..0x1B
+        u32   mau5;            // byte 0x1C
+        u8    mau6Pad0x20;     // byte 0x20
         u8    mu1Count;        // byte 0x21 (lbz r26,0x21) -- channel count
         u16   mu2Pad0x22;      // bytes 0x22..0x23
-        u32   mau6;            // byte 0x24
-        f32*  mpGainBlock;     // gain block self-pointer (word 9 region)
-        f32   maBlock[18];     // [10..27]  byte 0x28 .. byte 0x6F
+        u32   mau7;            // byte 0x24
+        f32   maBlock[18];     // byte 0x28 .. byte 0x6F
 
         static int CreateInstance(GainArray* lpInstance);
         static int GetSize();

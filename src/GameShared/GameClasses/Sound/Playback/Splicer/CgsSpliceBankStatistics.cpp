@@ -68,11 +68,13 @@ namespace
         const VTable* mpVTable; // +0x00
     };
 
-    // 24-byte free descriptor: block pointer in word 0, remaining five words zero.
+    // 20-byte free descriptor: block pointer in word 0, remaining four words zero.
+    // (asm: 5 zero-stores at var_30+{0,4,8,0xC,0x10}, then var_30+0 overwritten with
+    // the block pointer -- net 1 pointer word + 4 zero words, not 5.)
     struct SpliceFreeRequest
     {
         void* mpBlock;        // [0]
-        s32   maiZero[5];     // [1..5]
+        s32   maiZero[4];     // [1..4]
     };
 }
 
@@ -81,7 +83,7 @@ SpliceBankStatistics::~SpliceBankStatistics()
     if (mpBuffer)
     {
         SpliceFreeRequest lRequest;
-        for (int li = 0; li < 5; ++li)
+        for (int li = 0; li < 4; ++li)
             lRequest.maiZero[li] = 0;
         lRequest.mpBlock = mpBuffer;
 

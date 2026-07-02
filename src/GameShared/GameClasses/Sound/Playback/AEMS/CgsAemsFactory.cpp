@@ -8,10 +8,11 @@
 // CsisPrint @ 0x8268A018:
 //   if (CgsDev::Message::gxMessageFilterFlags & 1)
 //       (*gpDebugPrint)[vslot 1](gpDebugPrint, str ? str : "<NULLSTRING>");
-//   return str;
 // The X360 calls the gpDebugPrint stream's second vtable slot, which is the
 // committed DebugPrint::operator<<(const char*) (CgsLog.h). So the print routes
 // through `*gpDebugPrint << text` exactly as the engine logging convention.
+// DWARF (CgsAemsFactory.cpp:397) confirms this is `protected` and returns
+// `void`; the tail-called vtable slot's own return value is not propagated.
 //
 // FindPatchMonitor @ 0x82689E98:
 //   if (muPatchMonitorCount == 0) return 0;
@@ -37,13 +38,12 @@ namespace Playback
 // ---------------------------------------------------------------------------
 // AemsFactory::CsisPrint(const char* lpcText)  @ 0x8268A018
 // ---------------------------------------------------------------------------
-const char* AemsFactory::CsisPrint(const char* lpcText)
+void AemsFactory::CsisPrint(const char* lpcText)
 {
     if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
     {
         *CgsDev::Log::gpDebugPrint << (lpcText ? lpcText : "<NULLSTRING>");
     }
-    return lpcText;
 }
 
 // ---------------------------------------------------------------------------
