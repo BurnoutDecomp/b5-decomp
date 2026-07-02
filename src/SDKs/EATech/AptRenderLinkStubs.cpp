@@ -162,7 +162,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // reap over gpAptZombieVector -- XB1 sub_140830A40; the vector itself is
     // allocated by AptUpdateInitialize from config word 14). The old "absent
     // from all dumps" claim was false -- the whole subsystem is in the XB1.
-    AptValue* AptValue_GetMCParent(AptValue* pValue) { return nullptr; }   // FLAG link-stub
+    // AptValue_GetMCParent RETIRED (2026-07-02): the shim was a reconstruction
+    // invention -- the shipped isMCInParentChain @0x82AD8458 walks
+    // GetNativeHashVirtual()->mp__Proto__ directly (corrected in AptValue.cpp).
     bool         isNaN(AptValue* pValue) { return false; }   // FLAG link-stub
     bool AptLinker_isFileImported(AptLinker* pLinker, AptFilePtr* ppCandidate) { return false; }   // FLAG link-stub
     const char*    AptResolveTextFieldFontName(AptCharacterInst* pTextInst) { return nullptr; }   // FLAG link-stub

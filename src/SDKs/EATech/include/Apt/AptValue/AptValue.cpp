@@ -16,6 +16,7 @@
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"   // the deferred-release vector
+#include "SDKs/EATech/include/Apt/AptNativeHash.h"              // mp__Proto__ (the MC parent-chain walk)
 
 #include <intrin.h>   // _InterlockedExchange (the Apt GC flag lock)
 
@@ -128,7 +129,7 @@ void AptValue::ForceDelete()
 //   gnAptGCThreadId_Ctor / gnAptGCThreadId_Release -- the captured GC thread ids
 //       the ctor (X360 dword_8324E500) and Release (X360 dword_8324E504) compare
 //       the current thread against. Distinct globals in the binary; kept distinct.
-//   AptValue_GetMCParent / the current-target globals back isMCInParentChain.
+//   the current-target globals back isMCInParentChain.
 // These are declared (not defined) here; the per-TU gate is compile-only and the
 // Apt GC is brought up in a later phase, so each remains null/inert until then.
 // ---------------------------------------------------------------------------
@@ -142,12 +143,6 @@ extern uint32_t        gnAptGCThreadId_Release;      // dword_8324E504
 // dormant (matching the inert ctor path before the collector is up).
 extern uint32_t AptValue_CurrentThreadId();
 
-// AptValue_GetMCParent @vtbl(GetParent slot +8) -- fetch this value's MovieClip
-// parent via its virtual GetParent. FLAG: the AptValue X360 vtable carries a
-// GetParent virtual at slot +8 that the reconstructed header does not yet model
-// (the AptCIH display-tree hierarchy is a follow-on); routed through this FLAG'd
-// helper rather than fabricating a vtable slot. Null until the CIH tree is live.
-extern AptValue* AptValue_GetMCParent(AptValue* pValue);
 
 // The active script "current target" MovieClips the parent-chain walk stops at
 // (X360 dword_8324D818 = the highlighted/current target, dword_8324D830 = the
@@ -343,8 +338,12 @@ void AptValue::Release()
 // ---------------------------------------------------------------------------
 int AptValue::isMCInParentChain() const
 {
-    AptValue* lpTarget = gpAptCurrentTargetMC;   // X360 r31 = dword_8324D818
-    AptValue* lpRoot   = gpAptRootTargetMC;       // X360 r30 = dword_8324D830
+    // CORRECTED 2026-07-02 against the shipped asm: the walk is
+    // `hash = vtbl[2]() (GetNativeHashVirtual); node = hash->mp__Proto__ (+8)`
+    // -- NOT a "GetParent" virtual + raw +8 read (that shim was a
+    // reconstruction invention; retired from AptRenderLinkStubs).
+    AptValue* const lpTarget = gpAptCurrentTargetMC;   // X360 r31 = dword_8324D818
+    AptValue* const lpRoot   = gpAptRootTargetMC;      // X360 r30 = dword_8324D830
 
     AptValue* lpNode = const_cast<AptValue*>(this);
     if (lpNode == lpTarget)
@@ -352,13 +351,11 @@ int AptValue::isMCInParentChain() const
 
     for (;;)
     {
-        // X360 v4 = GetParent(); if null, stop. Then node = v4->parent (+8).
-        AptValue* lpParent = AptValue_GetMCParent(lpNode);   // FLAG: GetParent vtbl slot
-        if (lpParent == 0)
+        AptNativeHash* const lpHash = lpNode->GetNativeHashVirtual();   // vtbl[2]
+        if (lpHash == nullptr)
             break;
-        // X360 reads `a1 = *(v4 + 8)` -- the parent record's own parent link.
-        lpNode = *reinterpret_cast<AptValue**>(reinterpret_cast<char*>(lpParent) + 8);
-        if (lpNode == 0)
+        lpNode = lpHash->mp__Proto__;                                   // hash +8
+        if (lpNode == nullptr)
             break;
         if (lpNode == lpTarget)
             return 1;
