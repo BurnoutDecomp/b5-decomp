@@ -726,22 +726,37 @@ void InstallEmptyCharacterInstVtbl(AptCharacterInst* /*pInst*/)
 }
 
 // ---------------------------------------------------------------------
-// EnsureAnimFrameRateCached -- lazy-init the module frame-rate cache
-// (X360 dword_8324E530): on first link of an animation inst, read the imported
-// movie's serialised .apt header tag at animInst->file->header+0xA: when it is 58
-// the frame rate is header[+0xB]-48, else the default 6.
+// EnsureAnimFrameRateCached -- HOMED 2026-07-02: the global is NOT a frame
+// rate; dword_8324E530 is the module SWF-VERSION cache (the AS interpreter's
+// AptGetSwfVersion() == 7 semantic switches read it -- undefined-compare /
+// string-coercion behaviour changed in SWF7). The lazy init parses the .apt
+// text header the file's resolve context points at -- "Apt Data:1:7:8" --
+// where byte 0xA is the ':' before the version digit and byte 0xB is the
+// digit itself ('7' - 48 == 7); a header without the tag defaults to 6.
 //   X360: if(!dword_8324E530){ v62=*(*(animInst+40)+16); if(*(v62+10)==58)
 //          v63=*(v62+11)-48; else v63=6; dword_8324E530=v63; }
-// The serialised .apt header byte-record (the `*(file+16)` blob) has no
-// reconstructable C++ home (no header in b5-decomp/src, no DWARF -- the same
-// deferred serialised-.apt layer as AptResolveDefaultTextFont), and the frame-rate
-// cache global is owned by that deferred layer. FLAG: deferred -- the cache stays
-// at its default until the serialised-.apt header layer is homed; no functional
-// effect on the link pass (the value is only read by the un-homed timeline tick).
+// (animInst+40 == mAnimationFilePtr; file+16 == mpResolveContext.) The old
+// misreading deferred this as "the frame-rate cache"; the misnomered function
+// name is kept for the call-site contract.
 // ---------------------------------------------------------------------
-void EnsureAnimFrameRateCached(AptCharacterAnimationInst* /*pInst*/)
+int gnAptSwfVersion = 0;   // dword_8324E530 (the module SWF-version cache)
+
+unsigned int AptGetSwfVersion()
 {
-    // dword_8324E530 lazy init -- deferred with the serialised-.apt header layer.
+    return static_cast<unsigned int>(gnAptSwfVersion);
+}
+
+void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst)
+{
+    if (gnAptSwfVersion == 0)
+    {
+        const unsigned char* const pHeader =
+            static_cast<const unsigned char*>(
+                pInst->mAnimationFilePtr.pData->mpResolveContext);
+        gnAptSwfVersion = (pHeader != nullptr && pHeader[0xA] == 58)
+                              ? (pHeader[0xB] - 48)
+                              : 6;
+    }
 }
 
 // ---------------------------------------------------------------------

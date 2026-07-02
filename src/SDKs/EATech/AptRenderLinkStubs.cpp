@@ -182,7 +182,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // (the clip movie's label-hash lookup, X360 @0x82B0C618 chain).
     int GetThreadId() { return 0; }   // FLAG link-stub
     uint32_t AptValue_CurrentThreadId() { return 0; }   // FLAG link-stub
-    unsigned int AptGetSwfVersion() { return {}; }   // FLAG link-stub
+    // AptGetSwfVersion RETIRED (2026-07-02): homed in AptLinker.cpp -- the
+    // dword_8324E530 SWF-version cache (parsed from the .apt "Apt Data:1:7:8"
+    // header at first link; NOT a frame rate as previously misread).
     // AptRand RETIRED (2026-07-02): homed in AptRandom.cpp (the X360 MT19937
     // variant @0x82AE04F0 -- custom tempering b 0x9D2C56FF, auto-seed 0x1105).
     // AptActionInterpreter_ClearIntervalImpl RETIRED (2026-07-02): homed in
