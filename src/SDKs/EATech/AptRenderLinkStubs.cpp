@@ -183,7 +183,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     int GetThreadId() { return 0; }   // FLAG link-stub
     uint32_t AptValue_CurrentThreadId() { return 0; }   // FLAG link-stub
     unsigned int AptGetSwfVersion() { return {}; }   // FLAG link-stub
-    unsigned int AptRand() { return {}; }   // FLAG link-stub
+    // AptRand RETIRED (2026-07-02): homed in AptRandom.cpp (the X360 MT19937
+    // variant @0x82AE04F0 -- custom tempering b 0x9D2C56FF, auto-seed 0x1105).
     // AptActionInterpreter_ClearIntervalImpl RETIRED (2026-07-02): homed in
     // AptIntervalTimer.cpp (the X360 cbCallMethod_clearInterval @0x82AE3AE0 body).
     void      AptApt_AnimationAddCharacterRef(AptValue* pAnimation) {}   // FLAG link-stub
