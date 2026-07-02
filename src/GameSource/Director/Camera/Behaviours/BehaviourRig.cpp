@@ -114,7 +114,7 @@ BehaviourRig::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
     mbIsPrepared = false;
 
-    CGS_ASSERT(mAttachedToRef.mpRef != nullptr, "mAttachedToRef.HasBeenSet()");
+    CGS_ASSERT(mAttachedToRef.mbSet, "mAttachedToRef.HasBeenSet()");   // (+0xC set-flag; the old model called it mpRef)
     CGS_ASSERT(mpParameters != nullptr, "mpParameters != NULL");
 
     mAccelSpring.BrnPhysics::Spring1D::Prepare(

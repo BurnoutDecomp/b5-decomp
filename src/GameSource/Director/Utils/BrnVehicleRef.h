@@ -33,8 +33,14 @@ namespace BrnDirector
             E_NUM_TYPES               = 4
         };
 
-        u8    mPad0[12];   // +0x00  opaque
-        void* mpRef;       // +0x0C  cleared reference
+        // LAYOUT (X360, pinned by Set @0x8252D7F8 / operator!= @0x821F2A38: word @+0,
+        // word @+4 (-1 outside the race-car case), word @+8 (the nearest-player ref
+        // slot), BYTE @+0xC (lbz/stb)). Supersedes the earlier "12-byte pad + mpRef
+        // @+0x0C" guess -- the +0xC field is a one-byte set-flag, not a pointer.
+        EType meType;           // +0x00  which reference kind is live
+        s32   miRaceCarIndex;   // +0x04  the bound race car (-1 outside E_RACE_CAR)
+        u32   muRef;            // +0x08  the nearest-player ref slot (E_RACE_CAR_NEAREST_PLAYER)
+        bool  mbSet;            // +0x0C  reference-populated flag
 
         VehicleRef* Construct();   // body in BrnVehicleRef.cpp
 
@@ -42,12 +48,17 @@ namespace BrnDirector
         // FLAG: declaration-only (body in BrnVehicleRef.cpp); signature from X360 pseudo.
         void* Get(const void* lpWorld) const;
 
-        // Bind this reference to a specific active race car of the given ref type.
-        // BrnDirector::ICEWrapper::PlayMovie calls it as Set(refType, raceCar, true).
-        // FLAG: declaration-only here -- the body lands with VehicleRef's own TU (the
-        // per-TU `cl /c` gate does not link). The trailing bool carries its literal role
-        // (the recorded call passes 1). Grow with the real signature when that TU lands.
-        void Set(EType leType, EActiveRaceCarIndex leRaceCar, bool lbA);
+        // @0x8252D7F8 (class TU; body in BrnVehicleRef.cpp) -- bind the reference.
+        // The trailing word is stored only for E_RACE_CAR_NEAREST_PLAYER (the X360
+        // ICEWrapper::PlayMovie call site passes 1 there).
+        void Set(EType leType, EActiveRaceCarIndex leRaceCar, u32 luRef);
+
+        // Bind to a specific race car. Its own ledger function (declaration-only;
+        // the BehaviourIceAnim named-setter note records the de-inlined call shape).
+        void SetToRaceCar(EActiveRaceCarIndex leRaceCar);
+
+        // @0x821F2A38 (class TU; body in BrnVehicleRef.cpp) -- memberwise inequality.
+        bool operator!=(const VehicleRef& lrOther) const;
     };
 }
 

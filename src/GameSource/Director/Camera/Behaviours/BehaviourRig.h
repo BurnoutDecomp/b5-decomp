@@ -240,7 +240,8 @@ class Behaviour
 {
 public:
     // FLAG: nested VehicleRef extends BrnDirector::VehicleRef with BehaviourSharedInfo
-    //   resolution. Inherits the 12-byte opaque pad + mpRef; adds no data members.
+    //   resolution. Inherits the base's four fields (meType/miRaceCarIndex/muRef/mbSet,
+    //   asm-retyped by the VehicleRef class TU); adds no data members.
     class VehicleRef : public BrnDirector::VehicleRef
     {
     public:

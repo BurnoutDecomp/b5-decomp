@@ -25,6 +25,7 @@ namespace BrnGui
     // dereferences their full type in this TU -- it stores/returns the pointer).
     struct FreeburnChallengeManager;
     struct BurnoutSkillsManager;   // GetBurnoutSkillsManager return (pointer only)
+    struct OptionsDataProfile;     // GetOptionsDataProfile return (pointer only; home BrnCrashNavOptions.h family)
     struct HudMessageController;
     struct HudMessageDirector;
     struct MapIconManager;
@@ -254,6 +255,12 @@ namespace BrnGui
         s32 GetGameMode() const                                  { return meGameModeType; }
         s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
         s32 GetActiveRoadRule() const                            { return meActiveRoadRule; }
+
+        // The player-options profile block (X360 far member @0xB878/47224 -- past the
+        // modelled tail; both CrashNavOptions::SetSettingsFromProfile @0x824B8028 and
+        // OnlineGameRoomPlayerInfo::ShowSettingsOptions @0x82485140 inline the fetch).
+        // DECLARATION-ONLY per the far-member convention (body links from the GuiCache TU).
+        OptionsDataProfile* GetOptionsDataProfile();   // X360 far member @0xB878
         const BurnoutSkillsManager* GetBurnoutSkillsManager() const { return mpSkillsManager; }
 
         // DWARF h:1203 -- the checkpoint count for the current event (muCheckpointsInEvent).

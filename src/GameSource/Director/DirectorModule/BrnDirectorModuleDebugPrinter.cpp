@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"            // CgsDev::DebugUI::DebugUI::GetMetrics
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"             // CgsDev::DebugUI::Metrics
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"        // CgsDev::DebugRender
+#include "GameSource/Director/MomentController/BrnMoment.h"                             // BrnDirector::Moment (PrintName virtual GetName dispatch)
 
 // ============================================================================
 // GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.cpp
@@ -70,6 +71,13 @@ namespace BrnDirector
         mDebugPrinterInfo.mfY += mDebugPrinterInfo.mfLineSize;
 
         CgsDev::DebugManager::ThreadSafeRelease(&lDebugInterface.GetDebugManager());
+    }
+
+    // X360 0x82218D50 (class:BrnDirector::DebugPrinter TU). Resolve the moment's display
+    // name through its live vtable (slot 6, `lwz r11,0x18(vtbl); bctrl`) and draw it.
+    void DebugPrinter::PrintName(const Moment& lrMoment, CgsDev::RGBA luColour)
+    {
+        ActualPrint(lrMoment.GetName(), luColour);
     }
 
     // X360 0x8221BAC8. Replay every live pool entry, in mStringIndices order, through the printer's
