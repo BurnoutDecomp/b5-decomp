@@ -32,6 +32,7 @@
 
 #include "types.hpp"                                   // u8/s8/u32 widths, f32
 #include "BrnCommonTypes.h"                             // Vector3, CgsID
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle
 #include "GameSource/BurnoutConstants.h"                // EActiveRaceCarIndex
 #include "SharedClasses/World/BrnWorldRegion.h"         // BrnWorld::ECounty / EDistrict
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
@@ -294,6 +295,14 @@ public:
     // returns r3 == the CgsIDCompress result). Called by ~45 overlay-request sites.
     CgsID Construct(const char* lpcOverlayId);
 
+    // ADDITIVE GROW (GuiOverlaysDirector::HandleOverlayRequest @0x825162C8, which loads
+    // the request's leading qword): the compressed overlay id Construct stored over the
+    // first param record's head.
+    CgsID GetOverlayId() const
+    {
+        return *reinterpret_cast<const CgsID*>(maMessages[0].maHead);
+    }
+
     // @0x824EB948 -- copy message param liIndex into lOut. Asserts liIndex < miNumMessages
     // ("Index isn't used in Overlay.") and liIndex >= 0 ("Index isn't valid."). Returns the
     // SPrintf result (the X360 returns r3 from CgsCore::SPrintf).
@@ -385,6 +394,19 @@ struct GuiNewBurnoutHudMessageEvent : public CgsGui::GuiEvent<527>
     BrnGameState::BurnoutSkillzData::EBurnoutSkillType meSkill;    // BrnGuiEventTypeDefs.h:6363
     EActiveRaceCarIndex                            meNewOwner;     // BrnGuiEventTypeDefs.h:6364
     EActiveRaceCarIndex                            mePreviousOwner;// BrnGuiEventTypeDefs.h:6365
+};
+
+// The "drive the brightness/contrast-calibration post-fx" GUI out-event the colour-
+// calibration screen publishes (X360-attested by the AddGuiOutEvent instantiation
+// @0x82465D98: AddEvent(&event, /*id*/546, /*X360 record*/12) -- a ResourceHandle qword
+// plus the restore flag; no GuiEvent header rides in the X360 image, so the type id is
+// carried by GetEventType() alone, matching the CgsGuiModuleIO AddGuiOutEvent generic).
+struct GuiOptionsBrightnessContrastPostFxControl : public CgsModule::Event
+{
+    CgsResource::ResourceHandle mColourCalibrationTextureHandle;  // +0x00 (the X360 qword)
+    bool                        mbRestoreDefaults;                // +0x08 (1 = tear the post-fx down)
+
+    s32 GetEventType() const { return 546; }
 };
 
 // The "activate / deactivate the CrashNav (front-end map) flow" GUI event. X360-attested

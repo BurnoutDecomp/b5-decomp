@@ -134,6 +134,16 @@ namespace GameDataIO
         // challenge list. X360 0x8250BBE0 (<32768>). miPoolId == 5, meType == DATA, mId baked.
         bool GetFreeburnChallengeList(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
                                       s32 liEventId);
+
+        // Push a CgsResource AcquireResourceRequest (type 4) acquiring a named,
+        // already-loaded resource from a pool. X360: inlined into
+        // BrnGui::ColourCalibrationScreen::Update @0x8246AA28 (<32768>): record
+        // { mpUser, miEventId, miPoolId, mResourceId = HashString(name) | poolId<<48 },
+        // AddEvent type 4, X360 record 24 bytes. FLAG: the arg split (the caller passes
+        // the literal resource name) and the id's packed top nibble == the pool id are
+        // from that single attested site.
+        bool AcquireResource(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                             s32 liEventId, s32 liPoolId, const char* lpcResourceName);
     };
 }
 }

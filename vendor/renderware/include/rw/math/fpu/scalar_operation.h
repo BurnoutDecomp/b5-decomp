@@ -46,6 +46,11 @@ namespace fpu
     {
         return lfValue <= KF_IS_ZERO_TOLERANCE && lfValue >= -KF_IS_ZERO_TOLERANCE;
     }
+
+    // ADDITIVE GROW (SmoothMover::UpdateWithLimits* @0x8220D608/@0x8220D820, the
+    // "RwMathFPU::IsValid(...)" tripwires): finite-value check -- the console emits it
+    // as the fcmpu f0,f0 NaN self-compare, reproduced exactly.
+    inline bool IsValid(float lfValue) { return lfValue == lfValue; }
 }
 }
 }

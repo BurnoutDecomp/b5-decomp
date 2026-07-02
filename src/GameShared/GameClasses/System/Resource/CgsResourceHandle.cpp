@@ -22,4 +22,8 @@ namespace CgsResource
         CGS_ASSERT(mpSourceEntry != 0, "mpSourceEntry != NULL");
         return mpSourceEntry->mID;
     }
+
+    // The null handle sentinel (X360 .data qword @0x82FB3688 == {NULL, NULL}, read from the
+    // decrypted XEX). Compared against by e.g. ColourCalibrationScreen::Update.
+    const ResourceHandle NULLResourceHandle = { 0, 0 };
 }

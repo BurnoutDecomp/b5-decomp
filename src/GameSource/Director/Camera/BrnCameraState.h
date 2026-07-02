@@ -65,12 +65,21 @@ public:
     // raw field.
     bool IsFlagSet(u32 luIndex) const { return mCurrentFlags.IsBitSet(luIndex); }
 
+    // ADDITIVE GROW (BrnDirector::MomentFailSafe::Update @0x8220A2B0): set one bit of
+    // the head bookkeeping set (see mHeadFlags below).
+    void SetHeadFlag(u32 luIndex) { mHeadFlags.SetBit(luIndex); }
+
     // FLAG: only the members the flag methods touch are modelled, at their asm-attested offsets;
     //   the 8-byte CameraState head at +0x00 (not touched by this slice) is a reserved span. The
     //   full member set lands with this type's own ledger TU. Members are public so the file-scope
     //   offsetof pins in the .cpp can verify the size-stable bit-field offsets (all are pointer-
     //   width-independent here, so the layout is exact).
-    u8 maReserved00[0x08];                       // +0x00  CameraState head (not modelled here)
+    // +0x00: the 8-byte head bookkeeping field. Remodelled from the previous opaque
+    // reserved span to a third BitArray-shaped field (same 8 bytes, same placement):
+    // BrnDirector::MomentFailSafe::Update @0x8220A2B0 sets one bit of it with the same
+    // ld/oris/std qword bit math the two attested BitArrays use (bit index 18 at that
+    // site). FLAG: the head set's ROLE is not yet recovered -- named neutrally.
+    CgsContainers::BitArray<KU_NUM_FLAGS> mHeadFlags;
 
     // +0x08: the current per-flag state (SetFlag/ClearFlag target; HasChanged first operand).
     CgsContainers::BitArray<KU_NUM_FLAGS> mCurrentFlags;

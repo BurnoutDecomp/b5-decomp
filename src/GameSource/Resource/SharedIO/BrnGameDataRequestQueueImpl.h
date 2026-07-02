@@ -268,6 +268,34 @@ namespace GameDataIO
 
         return mRequestQueue.AddEvent(&lEvent, 49);
     }
+
+    // -------- AcquireResource (inlined into ColourCalibrationScreen::Update @0x8246AA28,
+    //          <32768>) --------
+    // ASM (the inlined record build): rec[0] = lpUser (&the caller's receiver queue),
+    // rec[1] = liEventId (0x91449 at the site), rec[2] = liPoolId (9),
+    // rec@+0x10 (qword) = CgsResource::ID::HashString(name) | (u64)poolId << 48;
+    // AddEvent(&rec, /*type*/4, /*X360 size*/24). FLAG: the id's packed top nibble equals
+    // the pool id at the one attested site. mbCheckRefCount lies outside the X360 24-byte
+    // record; set false here for PC determinism.
+    template <s32 N>
+    bool RequestInterface<N>::AcquireResource(
+            CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+            s32 liEventId, s32 liPoolId, const char* lpcResourceName)
+    {
+        CgsResource::Events::AcquireResourceRequest lEvent;
+        lEvent.mpUser          = lpReceiverQueue;
+        lEvent.miEventId       = liEventId;
+        lEvent.miPoolId        = liPoolId;
+        // The hash rides zero-extended in the id's low word with the pool id packed in
+        // the top nibble (the X360 std of the HashString result OR'd with poolId << 48).
+        lEvent.mResourceId     = CgsResource::ID(
+            static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
+                reinterpret_cast<const u8*>(lpcResourceName))))
+            | (static_cast<u64>(liPoolId) << 48));
+        lEvent.mbCheckRefCount = false;
+
+        return mRequestQueue.AddEvent(&lEvent, 4);
+    }
 }
 }
 

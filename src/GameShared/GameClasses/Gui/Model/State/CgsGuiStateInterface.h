@@ -46,6 +46,23 @@ namespace CgsGui
         s32                       miUserData;
     };
 
+    // The "play a music stream on the menu" GUI event. X360-attested by the
+    // OutputGuiEvent<GuiEventPlayMusicOnMenuStream> instantiation @0x82476C00: record
+    // { muHeader0 = 8, muEventType = 23, muHeader2 = 12 } + { the sound-name hash,
+    // two flag bytes }, channel 40, 20 bytes. (BrnGui::Credits posts it with
+    // CgsSound::Playback::Name::MakeHash("Credits") and both flags clear.)
+    struct GuiEventPlayMusicOnMenuStream : public GuiEvent<23>
+    {
+        u32  muStreamNameHash;   // +0x0C  (CgsSound::Playback::Name::MakeHash result)
+        bool mbFlagA;            // +0x10  (roles not recovered; Credits passes false/false)
+        bool mbFlagB;            // +0x11
+
+        explicit GuiEventPlayMusicOnMenuStream(u32 luStreamNameHash,
+                                               bool lbFlagA = false, bool lbFlagB = false)
+            : GuiEvent<23>(8, 12)
+            , muStreamNameHash(luStreamNameHash), mbFlagA(lbFlagA), mbFlagB(lbFlagB) {}
+    };
+
     // The "suspend / resume network processing" GUI event. X360-attested by the
     // OutputGuiEvent<CgsGui::GuiEventNetworkSuspension> instantiation @0x82493A88: the
     // queued record is { muHeader0 = 4 (payload bytes), muEventType = 45, muHeader2 = 12

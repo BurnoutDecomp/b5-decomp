@@ -41,6 +41,12 @@ namespace CgsModule
 
     class BaseVariableEventQueue
     {
+    public:
+        // ADDITIVE GROW (CgsGui::GuiModule's ctor @0x827E54B0, whose single-byte zero
+        // store targets exactly this leading flag of the embedded load-notification
+        // queue): put the queue in the not-yet-Constructed state.
+        void MarkUnconstructed() { mbIsConstructed = false; }
+
     protected:
         bool mbIsConstructed;
     };

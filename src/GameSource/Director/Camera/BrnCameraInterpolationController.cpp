@@ -48,4 +48,34 @@ namespace BrnDirector
         // [VMX KEYSTONE -- UNRECONSTRUCTED] no fabricated arithmetic; *lpResult unchanged.
         return lpResult;
     }
+
+    // ------------------------------------------------------------------------------------
+    // RotateAboutPivotParams::Interpolate @0x8221E9D0 (ledger TU SDKs/EATech/include/rw/
+    // math/vpu/detail/matrix33_type_inline.h -- a DWARF file-attribution artifact; this is
+    // the class home). Reconstructed from the X360 asm:
+    //   DirectionPreservingSLerp(&out33, &lrFrom+0x00, &lrTo+0x00, &iA+0x00, &iA+0x10) v1=t
+    //     -> copy 3 rows to lpOut+0x00        (mLookatLocalRotation)
+    //   DirectionPreservingSLerp(&out33, &lrFrom+0x30, &lrTo+0x30, &iB+0x00, &iB+0x10) v1=t
+    //     -> copy 3 rows to lpOut+0x30        (mLookAtRotation)
+    //   lpOut+0x60 = from.mfRadius + (to.mfRadius - from.mfRadius) * t  (vsubfp/vmaddfp)
+    // The X360 DirectionPreservingSLerp helper receives the interpolater's two members
+    // (&mLastAxis, &mbWasInvertedLastTime) split out -- that is the inlined shell of
+    // Camera::Utils::Interpolater::Interpolate(Matrix33, Matrix33, VecFloat) (DWARF
+    // BrnInterpolater.h:57), expressed here through that named member.
+    // ------------------------------------------------------------------------------------
+    void CameraInterpolationController::RotateAboutPivotParams::Interpolate(
+        const RotateAboutPivotParams& lrFrom, const RotateAboutPivotParams& lrTo,
+        VecFloat lvT,
+        Camera::Utils::Interpolater& lrInterpolaterA,
+        Camera::Utils::Interpolater& lrInterpolaterB,
+        RotateAboutPivotParams* lpOut)
+    {
+        lpOut->mLookatLocalRotation =
+            lrInterpolaterA.Interpolate(lrFrom.mLookatLocalRotation, lrTo.mLookatLocalRotation, lvT);
+        lpOut->mLookAtRotation =
+            lrInterpolaterB.Interpolate(lrFrom.mLookAtRotation, lrTo.mLookAtRotation, lvT);
+
+        // Radius: per-lane linear blend (the asm's vsubfp + vmaddfp on the splatted lane).
+        lpOut->mfRadius = lrFrom.mfRadius + (lrTo.mfRadius - lrFrom.mfRadius) * lvT.x;
+    }
 }

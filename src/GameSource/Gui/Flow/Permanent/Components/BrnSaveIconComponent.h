@@ -2,48 +2,51 @@
 #define BRN_SAVE_ICON_COMPONENT_H
 
 #include "types.hpp"
+#include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h"  // BrnGui::FlaptIconComponent (base)
 
 // ============================================================================
 // GameSource/Gui/Flow/Permanent/Components/BrnSaveIconComponent.h
 //
-// BrnGui::BrnSaveIconComponent -- the "saving..." spinner icon shown while the
-// game writes to storage. MINIMAL home: only the methods the
-// AlwaysAvailableComponentsManager (which embeds it BY VALUE) calls are
-// declared.
+// BrnGui::BrnSaveIconComponent -- the always-available "saving..." spinner icon: a
+// FlaptIconComponent that slides itself in/out on the AnimIn/AnimOut timeline labels
+// and tracks its own visible state. DWARF home BrnSaveIconComponent.h:59.
 //
-// Layout note: in the X360 manager Construct the call into this component's
-// Construct is dispatched THROUGH THE VTABLE (lwz r11,0(r3); lwz r11,0(r11);
-// bctrl) -- so the component is polymorphic with a vptr at +0 and Construct is
-// its first virtual. PrepareFlapt then calls Prepare directly (a non-virtual
-// member). Embedded-by-value footprint = 0x18 (manager places mShowtimeMessage
-// at 0x10124 -> 0x1013C). Inner fields uncommitted; modelled as opaque storage
-// after the vptr. FLAG: footprint-only placeholder type.
+// This home was previously a footprint-only placeholder (opaque 0x18 storage) grown
+// by the AlwaysAvailableComponentsManager TU; the BrnSaveIconComponent TU upgraded it
+// to the real DWARF shape, which reproduces that footprint exactly: the polymorphic
+// FlaptIconComponent base (vptr @+0x00, sizeof 0x14 -- the manager's vtable-dispatched
+// Construct is the base's slot-0 virtual) plus meComponentState @+0x14 == 0x18.
+//
+// This TU bodies Prepare/ShowSaveIcon/HideSaveIcon (BrnSaveIconComponent.cpp);
+// Update (DWARF cpp:65) is its own ledger function (declaration-only here).
 // ============================================================================
-
-namespace CgsGui { class StateInterface; }
-namespace BrnFlapt { struct FileRef; }
 
 namespace BrnGui
 {
-    class BrnSaveIconComponent
+    class BrnSaveIconComponent : public FlaptIconComponent
     {
     public:
-        // @0x824F3628 Construct site: VIRTUAL (slot 0). r4="SaveIcon_mc",
-        // r5=&StateInterface, r6=0.
-        virtual void Construct(const char* lpcMovieClipName,
-                               CgsGui::StateInterface* lpStateInterface,
-                               s32 liFlags);
+        // DWARF BrnSaveIconComponent.h:80.
+        enum ComponentState
+        {
+            E_CS_INVISIBLE = 0,
+            E_CS_VISIBLE   = 1,
+        };
 
-        // PrepareFlapt site (direct call): r4="SaveIcon_mc", r5=FileRef.
-        void Prepare(const char* lpcMovieClipName, const BrnFlapt::FileRef& lFile);
+        // @0x82424E28 (this TU, DWARF h:66) -- bind the icon clip (the inlined
+        // FlaptIconComponent::Prepare chain), blank it and hide it. Non-virtual (the
+        // PrepareFlapt call site dispatches it directly).
+        void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile);
+
+        // DWARF h:70 / cpp:65 -- declaration-only (its own ledger function).
+        void Update();
+
+        // @0x824163A8 / @0x82416400 (this TU, DWARF h:73/h:76).
+        void ShowSaveIcon();
+        void HideSaveIcon();
 
     private:
-        // Guest footprint 0x1013C - 0x10124 == 0x18 (24 bytes), of which +0x00 is
-        // the vptr (the virtual above). The inner fields are uncommitted; this
-        // opaque storage preserves the embedded layout. Byte size is not
-        // load-bearing on the 64-bit host (pointers widen), so the storage is
-        // sized to the guest data region; accessed only by name.
-        u8 maComponentStorage[0x14];
+        ComponentState meComponentState;   // DWARF h:86 (X360 this+0x14)
     };
 }
 
