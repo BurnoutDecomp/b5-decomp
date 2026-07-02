@@ -27,7 +27,7 @@ AptPseudoData_t::AptPseudoData_t(const AptPlaceObjectInfo_t* lpSource,
     mpData          = lpData;
     mi16CharacterId = li16CharacterId;
     muxFlags        = luxFlags;
-    mi16Depth       = lpSource->mi16Depth;
+    mi16Depth       = static_cast<s16>(lpSource->mi32Depth);   // native-8 i32 depth
 
     mpMatrix         = (luxFlags & 0x04u)
                            ? const_cast<u8*>(lpSource->maMatrix)
@@ -35,6 +35,8 @@ AptPseudoData_t::AptPseudoData_t(const AptPlaceObjectInfo_t* lpSource,
     mpColorTransform = (luxFlags & 0x08u)
                            ? const_cast<u8*>(lpSource->maColorTransform)
                            : nullptr;
-    miClipActionValue = (luxFlags & 0x80u) ? lpSource->miClipActionValue : 0;
+    // The console captured its 4-byte clip-actions value; the native-8 pointer
+    // does not fit and the slot is unread by the merge overlay -- see the header.
+    miClipActionValue = 0;
     mfRatio           = (luxFlags & 0x10u) ? lpSource->mfRatio           : 0.0f;
 }

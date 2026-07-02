@@ -23,6 +23,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // movie-clip play-head (mnGotoFrame/mnClipActionFlags/mnLastActionFrame/mDisplayList)
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"               // mpRenderItem->mpCharacter (the embedded AptMovie)
 #include "SDKs/EATech/include/Apt/AptMovie.h"                    // doFrameControls / queueFrameActions / DoTemporaryFrameControls + AptValue_toInteger
+
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"              // child-list recursion (AptDisplayList::tick)
 #include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"        // scratch state for the multi-frame skip path
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"        // gAptActionInterpreter operand stack (_gotoAndX)
@@ -365,19 +366,20 @@ int AptCIH::jumpToFrame(int nFrame)
             // Arbitrary jump: rebuild the intervening display-list state into a
             // scratch pseudo list, replaying every skipped frame, then merge it.
             //
-            // FLAG (staged -- the pseudo/merge sub-cluster): DoTemporaryFrameControls
-            // itself is native-8 now (2026-07-02), but its CONSUMERS -- the
-            // AptPseudoCIH_t ctor's record reads + AptDisplayList_mergeState's
-            // reconcile -- still carry console-form reads (re-enabling the replay
-            // crashed at the first AS gotoAndPlay). Until that sub-cluster is
-            // ported, the boundary-skip below stays: the play-head seeks directly;
-            // the target frame's actions still queue; the next tick's
-            // doFrameControls composes the target frame's content.
+            // FLAG (staged -- 3rd round, 2026-07-02): the replay pipeline is now
+            // native-8 through SIX fixed layers (the AptPlaceObjectInfo_t re-lay,
+            // the snapshot ctor, mergeState's source head, the node/scratch pool
+            // sizes, AddToDisplayList/ReplaceDisplyListItem's record id + embedded
+            // -anim chain, the dispatcher's depth word) and the REPLAY completes --
+            // the remaining crash is INSIDE mergeState's reconcile, suspected in the
+            // bulk removeObject -> ClearCIH teardown it exercises for existing
+            // children absent from the replay. Staged off until that chain is
+            // verified; the boundary seek in the else remains the live path.
             if (false)
             {
             void* pProperties = pInst->mpProperties;   // dword[3] (the AS property hash)
 
-            void* pScratchMem = gpAptPseudoDataPool->Allocate(8);
+            void* pScratchMem = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoDisplayList));   // [c: 8]
             AptPseudoDisplayList* pScratch = nullptr;
             if (pScratchMem)
                 pScratch = new (pScratchMem) AptPseudoDisplayList(this);
@@ -412,7 +414,7 @@ int AptCIH::jumpToFrame(int nFrame)
             if (pScratch)
             {
                 pScratch->~AptPseudoDisplayList();
-                gpAptPseudoDataPool->Deallocate(pScratch, 8);
+                gpAptPseudoDataPool->Deallocate(pScratch, sizeof(AptPseudoDisplayList));   // [c: 8]
             }
             }
             else

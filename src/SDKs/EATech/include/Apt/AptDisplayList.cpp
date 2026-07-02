@@ -368,32 +368,48 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
     AptCharacter* const pOwnerChar =
         const_cast<AptCharacter*>(pInst->GetRenderItem()->mpCharacter);
 
-    // The owner's loaded .apt root (the AptCharacter fixup back-link points at the
-    // AptMovieData) + the movie animation embedded at root+0x10.
-    AptMovieData* const pMovie = reinterpret_cast<AptMovieData*>(pOwnerChar->mpFixupLink);
-    AptCharacterAnimation* const pAnim =
-        reinterpret_cast<AptCharacterAnimation*>(reinterpret_cast<char*>(pMovie) + 0x10);
+    // NATIVE-8 (2026-07-02; the console read the embedded animation at root+0x10 and
+    // the record id at dword[3] -- both the 4-byte layout): the fixup back-link's
+    // embedded AptCharacterAnimation sits at +KU_AptEmbeddedMovieOff (0x20), the
+    // record id at cmd+0x10 (the 8-aligned body's +0x08). Sanity-guarded like the
+    // sibling PlaceCommand chain.
+    AptCharacter* const pRootChar = pOwnerChar->mpFixupLink;
+    AptCharacterAnimation* const pAnim = (pRootChar != nullptr)
+        ? reinterpret_cast<AptCharacterAnimation*>(
+              reinterpret_cast<char*>(pRootChar) + KU_AptEmbeddedMovieOff)
+        : nullptr;
 
-    // The .apt placement command: ppPlacement[0] = the serialised PlaceObject record
-    // (its +0xC dword is the placed char id), ppPlacement[1] = the placement
-    // properties whose mpCharacter is the character to place.
-    const int32_t nCharId = static_cast<const int32_t*>(ppPlacement[0])[3];
+    // ppPlacement[0] = the serialised PlaceObject record (native-8: charId @ +0x10);
+    // ppPlacement[1] = the placement properties (or the pseudo-snapshot pun) whose
+    // mpCharacter is the character to place (null when the placement names none).
+    const int32_t nCharId = static_cast<const int32_t*>(ppPlacement[0])[4];   // [c: dword 3]
     AptCharacter* const pPlacedChar =
         static_cast<AptFramePlacementProps*>(ppPlacement[1])->mpCharacter;
 
-    pAnim->ExecuteInitActions(pParentNode, nCharId);
+    bool bAnimSane = false;
+    if (pAnim != nullptr)
+    {
+        const uintptr_t luTablePtr = reinterpret_cast<uintptr_t>(pAnim->mpCharacterTable);
+        bAnimSane =
+            (pAnim->mnCharacterCount > 0 && pAnim->mnCharacterCount <= 0x10000) &&
+            (luTablePtr >= 0x10000u) && ((luTablePtr >> 47) == 0u);
+    }
+
+    if (bAnimSane)
+        pAnim->ExecuteInitActions(pParentNode, nCharId);
 
     // Bind the placed character's animation file: a non-animation character (type
     // tag != 9) with none yet takes the import-table entry matching its id, or the
     // owner movie's own file when there is no matching import.
-    if (nCharId != -1 && pPlacedChar->mnType != 9 && pPlacedChar->mpAnimationFile == nullptr)
+    if (nCharId != -1 && pPlacedChar != nullptr && bAnimSane
+        && pPlacedChar->mnType != 9 && pPlacedChar->mpAnimationFile == nullptr)
     {
         AptFilePtr* pSrc = reinterpret_cast<AptFilePtr*>(&pOwnerChar->mpAnimationFile);
-        for (int32_t i = 0; i < pMovie->mnImportCount; ++i)
+        for (int32_t i = 0; i < pAnim->mnImportCount; ++i)
         {
-            if (pMovie->mpImportTable[i].mnId == nCharId)
+            if (pAnim->mpImportTable[i].mnId == nCharId)
             {
-                pSrc = reinterpret_cast<AptFilePtr*>(&pMovie->mpImportTable[i].mpFile);
+                pSrc = reinterpret_cast<AptFilePtr*>(&pAnim->mpImportTable[i].mpFile);
                 break;
             }
         }
@@ -435,23 +451,27 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
         // A new character is named: replace the existing node.
         removeObject(pExisting);
 
-        const int32_t nCharId = static_cast<const int32_t*>(ppPlacement[0])[3];   // record +0xC
+        const int32_t nCharId = static_cast<const int32_t*>(ppPlacement[0])[4];   // native-8 +0x10 [c: +0xC]
         if (nCharId != -1)
         {
             AptCharacter* const pPlacedChar = pProps->mpCharacter;
             AptCharacter* const pOwnerChar =
                 const_cast<AptCharacter*>(pParentNode->GetCharacterInst()->GetRenderItem()->mpCharacter);
-            AptMovieData* const pMovie = reinterpret_cast<AptMovieData*>(pOwnerChar->mpFixupLink);
+            AptCharacter* const pRootChar = pOwnerChar->mpFixupLink;
+            AptCharacterAnimation* const pAnim = (pRootChar != nullptr)
+                ? reinterpret_cast<AptCharacterAnimation*>(
+                      reinterpret_cast<char*>(pRootChar) + KU_AptEmbeddedMovieOff)
+                : nullptr;
 
             // Same import-file bind as AddToDisplayList (the X360 open-codes it here too).
-            if (pPlacedChar->mnType != 9 && pPlacedChar->mpAnimationFile == nullptr)
+            if (pAnim != nullptr && pPlacedChar->mnType != 9 && pPlacedChar->mpAnimationFile == nullptr)
             {
                 AptFilePtr* pSrc = reinterpret_cast<AptFilePtr*>(&pOwnerChar->mpAnimationFile);
-                for (int32_t i = 0; i < pMovie->mnImportCount; ++i)
+                for (int32_t i = 0; i < pAnim->mnImportCount; ++i)
                 {
-                    if (pMovie->mpImportTable[i].mnId == nCharId)
+                    if (pAnim->mpImportTable[i].mnId == nCharId)
                     {
-                        pSrc = reinterpret_cast<AptFilePtr*>(&pMovie->mpImportTable[i].mpFile);
+                        pSrc = reinterpret_cast<AptFilePtr*>(&pAnim->mpImportTable[i].mpFile);
                         break;
                     }
                 }
@@ -879,8 +899,16 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
     AptCIH* const pParentNode = static_cast<AptCIH*>(ppMergeInfo[1]);
 
     AptCIH* pNode = mpHead ? mpHead->mpFirst : nullptr;
-    AptMergeSourceNode* pSrc =
-        *reinterpret_cast<AptMergeSourceNode**>(static_cast<char*>(ppMergeInfo[0]) + 0xC);
+    // The source chain head: the pseudo list's head NODE's mpNext (the head node
+    // itself is a sentinel). The console read the raw +0xC (AptPseudoCIH_t::mpNext's
+    // 32-bit offset); on x64 the link is the typed member at its native position.
+    // Each chain node is an AptPseudoCIH_t read through the AptMergeSourceNode pun
+    // (mpRecord==mpSource, mpProps==mpPseudoData snapshot overlaying the props,
+    // mnDepth==mpContext's depth word, mpNext -- the layouts align on both ABIs).
+    AptMergeSourceNode* pSrc = ppMergeInfo[0] != nullptr
+        ? reinterpret_cast<AptMergeSourceNode*>(
+              reinterpret_cast<AptPseudoCIH_t*>(ppMergeInfo[0])->mpNext)
+        : nullptr;
 
     while (pNode)
     {
@@ -1120,7 +1148,7 @@ AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, 
 AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode)
 {
     AptFramePlacementProps* const pProps = static_cast<AptFramePlacementProps*>(ppPlacement[1]);
-    const int32_t nDepth = static_cast<const int32_t*>(ppPlacement[0])[2];   // record +0x08 depth
+    const int32_t nDepth = static_cast<const int32_t*>(ppPlacement[0])[3];   // native-8 depth @cmd+0x0C (body+4) [c: dword 2]
 
     // Apply the command's position matrix only when its flag bit (bit2) requests it
     // (the same gate the merge path uses); the colour transform is owned by the props
