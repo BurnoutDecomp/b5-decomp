@@ -38,6 +38,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"     // CgsGui::GuiEvent<N> (event payload base)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResource.h" // PopupStyle/PopupIcons/GuiPopupParameter
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessage.h"     // HudMessageParamTypes/HudMessageParameter
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BurnoutSkillzData (by value)
 
 namespace BrnGui
@@ -441,6 +442,55 @@ struct GuiEventEnableSatNavIcons
         E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS  = 4,
         E_ICON_DISPLAY_TYPE_COUNT                 = 5,
     };
+};
+
+// ===================================================================================
+// BrnGui::GuiHudMessage -- one HUD message on its way to the message director: the
+// hashed message id plus up to 4 formatted parameters per display string (3 strings).
+// DWARF home BrnGuiEventTypeDefs.h:5610 (GuiEvent<152>). The Construct/AddParam
+// bodies are REAL X360 functions, their own ledger rows (declaration-only here;
+// AddParam(type, string, const char*) is the @0x824EB??? family the analyzer drives,
+// the s32 overload @0x824EB508). X360 sizeof 840 (the analyzer's delayed-message
+// memcpy length @0x8251E3xx).
+// ===================================================================================
+struct GuiHudMessage : public CgsGui::GuiEvent<152>
+{
+    static const s32 KI_NUMBER_OF_STRINGS     = 3;   // DWARF h:5613
+    static const s32 KI_MAX_PARAMS_PER_STRING = 4;   // DWARF h:5614
+
+    CgsID mMessageIdHash;   // DWARF h:5616 (public)
+
+    // DWARF h:5621/h:5626 -- hash lpcMessageId (or adopt the hash) and clear the
+    // parameter counts.
+    void Construct(const char* lpcMessageId);
+    void Construct(CgsID lMessageIdHash);
+
+    // DWARF h:5633/h:5640/h:5647 -- append one parameter to display string
+    // liStringIndex.
+    void AddParam(CgsGui::HudMessageParamTypes leType, s32 liStringIndex, const char* lpcValue);
+    void AddParam(CgsGui::HudMessageParamTypes leType, s32 liStringIndex, s32 liValue);
+    void AddParam(CgsGui::HudMessageParamTypes leType, s32 liStringIndex, f32 lfValue);
+
+    // DWARF h:5654 (GetParam) -- its own ledger function.
+    void GetParam(CgsGui::HudMessageParameter* lpOut, s32 liStringIndex, s32 liParamIndex) const;
+
+private:
+    s32                        maiNoOfParams[KI_NUMBER_OF_STRINGS];                          // DWARF h:5663
+    CgsGui::HudMessageParameter maaParams[KI_NUMBER_OF_STRINGS][KI_MAX_PARAMS_PER_STRING];   // DWARF h:5664
+};
+
+// ===================================================================================
+// BrnGui::GuiLiveRevengeUpdateEvent -- an online live-revenge status change. DWARF
+// home BrnGuiEventTypeDefs.h:3722 (GuiEvent<364>); consumed by
+// HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E1F0 (which reads the four
+// payload fields in declaration order).
+// ===================================================================================
+struct GuiLiveRevengeUpdateEvent : public CgsGui::GuiEvent<364>
+{
+    s32                 miDifference;                   // DWARF h:3725 (the points delta)
+    s32                 meNewStatus;                    // DWARF h:3726 (BrnNetwork LiveRevengeStatus; raw s32 -- enum home pending)
+    EActiveRaceCarIndex meAggressorActiveRaceCarIndex;  // DWARF h:3727
+    EActiveRaceCarIndex meVictimActiveRaceCarIndex;     // DWARF h:3728
 };
 
 // ===================================================================================

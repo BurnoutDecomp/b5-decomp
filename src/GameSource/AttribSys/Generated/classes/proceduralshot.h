@@ -19,6 +19,26 @@ namespace Gen
     {
     public:
         explicit proceduralshot(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // The 64-bit class-key tag identifying a proceduralshot ShotList element
+        // (ShotSelector::GetCrashShot @0x82239900 builds 0x9B2E3C86_E02737B0 with
+        // insrdi and cmpld-compares the RefSpec's leading qword against it; the low
+        // word is the 32-bit ClassName::proceduralshot key the ctor asserts).
+        static s64 ClassKey() { return static_cast<s64>(0x9B2E3C86E02737B0ULL); }
+
+        // ADDITIVE GROW (ShotSelector::GetCrashShot @0x82239928): construct over a
+        // ShotList RefSpec element (the real X360 ctor symbol takes the RefSpec + the
+        // owner). Declaration-only (bodied with the generated AttribSys layer).
+        proceduralshot(const Attrib::RefSpec& lrRefSpec, void* lpOwner);
+
+        // ADDITIVE GROW (ShotSelector::GetCrashShot @0x8223992C..34): the generated
+        // per-attribute reads on the resolved layout block -- SuitableFor (event-flag
+        // mask, layout +0x00) and ShotProperties (property mask, layout +0x08; the
+        // proceduralshot layout differs from iceanim's). DWARF spells both as
+        // generated accessors; modelled as plain u32 reads per the minimal-recon
+        // convention.
+        u32 SuitableFor() const     { return reinterpret_cast<const u32*>(GetLayoutPointer())[0]; }
+        u32 ShotProperties() const  { return reinterpret_cast<const u32*>(GetLayoutPointer())[2]; }
     };
 
     // Chain the Instance ctor, assert the collection's class is

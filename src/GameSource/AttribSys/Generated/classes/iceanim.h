@@ -28,6 +28,19 @@ namespace Gen
         // against ClassKey().
         s64 GetClassKey() const { return *reinterpret_cast<const s64*>(this); }
 
+        // ADDITIVE GROW (ShotSelector::GetCrashShot @0x822398EC): construct over a
+        // ShotList RefSpec element (the real X360 ctor symbol takes the RefSpec + the
+        // owner). Declaration-only (bodied with the generated AttribSys layer).
+        iceanim(const Attrib::RefSpec& lrRefSpec, void* lpOwner);
+
+        // ADDITIVE GROW (ShotSelector::GetCrashShot @0x822398F0..F8): the generated
+        // per-attribute reads on the resolved layout block -- SuitableFor (the shot's
+        // event-flag mask, layout +0x00) and ShotProperties (the property mask, layout
+        // +0x04). DWARF spells both as generated accessors (iceanim.h:199/:193);
+        // modelled as plain u32 reads per the minimal-recon convention.
+        u32 SuitableFor() const     { return reinterpret_cast<const u32*>(GetLayoutPointer())[0]; }
+        u32 ShotProperties() const  { return reinterpret_cast<const u32*>(GetLayoutPointer())[1]; }
+
         // ADDITIVE GROW (BrnBehaviourIceAnim.h's SetParameters/ChangeMovie consumers): the take
         // guid carried by this parameter block (instance +0xC, past the 8-byte class-key head
         // GetClassKey() reads). FLAG: declaration-only here -- this class is used as a raw

@@ -2,63 +2,77 @@
 #define GAMESOURCE_DIRECTOR_UTILS_BRN_SHOT_SELECTOR_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<s32,50> (the three shot lists)
+#include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<s32,50> (the per-group time lists)
+#include "GameSource/Director/Camera/Camera.h"            // Camera::Camera::ShotSelectionInfo / ShotReference
 
 // ============================================================================
 // GameSource/Director/Utils/BrnShotSelector.h
 //
-// BrnDirector::ShotSelector -- the director helper that picks camera "shots". It owns three
-// fixed-capacity (50-slot) int lists -- one per shot category/priority bucket -- and a back
-// pointer to the director that owns it. HOME for the ShotSelector class slice this TU bodies
-// (Construct @0x8221B410). The rest of the selector's behaviour (the shot-picking queries)
-// lands with its own TUs; this header models only what Construct touches, BY NAME.
+// BrnDirector::ShotSelector - picks the crash-camera shot for an event: it scores
+// every shot in the chosen group's attrib ShotList (event-flag suitability first,
+// then property suitability, then least-recently-used) and keeps per-shot use-time
+// stamps. Class shape + member names from the DecFIGS DWARF (BrnShotSelector.h),
+// gated on the X360 ledger.
 //
-// ----------------------------------------------------------------------------
-// LAYOUT (pinned from BrnDirector::ShotSelector::Construct @0x8221B410):
-//   Construct stores the owner pointer (a2) at +0x268, then runs an outer loop THREE times
-//   over an Array<int,50> stride of 0xCC (204 == 50*4 elements + the +0xC8 count word):
-//     iteration k: array base = this + k*0xCC
-//        stw 50, 0xC8(base)        ; the array's live-element count word -> full (50)
-//        for i in 0..49:  GetItem(base, i) ; *result = 0   ; zero every slot
-//   So the three Array<int,50> live at +0x000 / +0x0CC / +0x198 and the owner pointer at
-//   +0x268. (Array<int,50> layout: s32 maElements[50] @+0x00, s32 miCount @+0xC8 -- the
-//   committed CgsArray.h shape, matching the *(base + 0xC8) = 50 count store.)
-//
-//   +0x000  Array<s32,50>  maShotLists[0]
-//   +0x0CC  Array<s32,50>  maShotLists[1]
-//   +0x198  Array<s32,50>  maShotLists[2]
-//   +0x264  (4-byte gap / alignment; not written by Construct)
-//   +0x268  void*          mpOwner       (the owning director, a2)
+// Members reconciled to the DWARF names when GetCrashShot landed (the earlier
+// Construct-only home spelled them maShotLists / <alignment gap> / void* mpOwner):
+//   +0x000/+0x0CC/+0x198  maaShotTimes[3]   (Array<s32,50>; count word @+0xC8 each --
+//                          Construct @0x8221B410 sets each full(50) then zeroes slots)
+//   +0x264                miCurrentTimeID   ("now"; GetCrashShot seeds its
+//                                            least-recent compare with it)
+//   +0x268                mpResourceManager (const DirectorResourceManager* -- the
+//                                            DWARF Construct parameter type)
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
 {
+    class DirectorResourceManager;   // GameSource/Director/BrnDirectorResourceManager.h
 
 class ShotSelector
 {
 public:
+    // DWARF BrnShotSelector.h -- the crash-energy shot groups.
+    enum EGroup
+    {
+        E_GROUP_LOW_ENERGY_CRASH  = 0,
+        E_GROUP_NORMAL_CRASH      = 1,
+        E_GROUP_HIGH_ENERGY_CRASH = 2,
+        E_NUM_GROUPS              = 3,
+    };
 
-    // Number of shot lists (the outer loop runs three times). Each list holds up to 50 ints.
     static const u32 KU_NUM_SHOT_LISTS = 3;
     static const u32 KU_SHOT_LIST_SIZE = 50;
 
-    // Initialise the selector: record the owning director, then bring all three shot lists to
-    // their full (50-element) state with every slot zeroed. @0x8221B410.
-    //
-    // FLAG: the owner argument is modelled as an opaque void* -- Construct only stores the
-    //   pointer (stw r4, 0x268(this)); the owner type (the director/MainDirector) lands with
-    //   its own TU. Replace the void* with the real owner type when that TU is reconstructed;
-    //   the stored offset (+0x268) is pinned from asm.
-    void Construct(void* lpOwner);
+    // Initialise the selector: record the resource manager, then bring all three
+    // time lists to their full (50-element) state with every slot zeroed. @0x8221B410.
+    // (Parameter reconciled to the DWARF's const DirectorResourceManager*; the body
+    // is the same stw r4, 0x268.)
+    void Construct(const DirectorResourceManager* lpResourceManager);
+
+    // DWARF cpp:73 / cpp:89 -- their own ledger functions (declaration-only here).
+    bool Prepare();
+    void Update(const Camera::Camera& lrSelectedCamera);
+
+    // @0x822396F8 (this TU, DWARF cpp:121) -- score the group's ShotList and return
+    // the best shot (Camera::ShotReference* == const Attrib::RefSpec*); the winning
+    // {group, index} pair lands in lpShotSelectionInfoOut.
+    Camera::Camera::ShotReference* GetCrashShot(u32 lxCrashEventFlags,
+                                                Camera::Camera::ShotSelectionInfo* lpShotSelectionInfoOut,
+                                                u32 lxPreferredShotProperties,
+                                                u32 lxExcludedShotProperties,
+                                                u32 lxRequiredShotProperties,
+                                                EGroup leShotGroup) const;
 
 private:
+    // DWARF cpp:313 / cpp:322 -- their own ledger functions (declaration-only here).
+    s32 GetLastUsedIndex(const Camera::Camera::ShotSelectionInfo& lrShotSelectionInfo) const;
+    void SetLastUsedToNow(const Camera::Camera::ShotSelectionInfo& lrShotSelectionInfo);
 
-    // FLAG: the three lists' role names (priority/category buckets) are not attested by this
-    //   TU -- Construct treats them identically (full + zeroed). Modelled as an indexable array
-    //   of three Array<int,50>; the per-list semantics land with the shot-query TUs.
-    Array<s32, KU_SHOT_LIST_SIZE> maShotLists[KU_NUM_SHOT_LISTS];   // +0x000 / +0x0CC / +0x198
-    u8                            maReserved264[0x268 - 0x264];     // +0x264  alignment gap (not written)
-    void*                         mpOwner;                          // +0x268  owning director (a2)
+    // DWARF: Array<int32_t,50u>[3] maaShotTimes -- per-group per-shot "time last
+    // used" stamps, indexed [group][shot index].
+    Array<s32, KU_SHOT_LIST_SIZE>  maaShotTimes[KU_NUM_SHOT_LISTS];   // +0x000 / +0x0CC / +0x198
+    s32                            miCurrentTimeID;                    // +0x264
+    const DirectorResourceManager* mpResourceManager;                  // +0x268
 };
 
 } // namespace BrnDirector

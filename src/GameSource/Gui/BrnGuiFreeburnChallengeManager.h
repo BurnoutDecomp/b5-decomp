@@ -94,6 +94,17 @@ struct FreeburnChallengeManager
     f32  GetCurrentContributionOverall() const;                                       // @0x824F4160
     BrnResource::ChallengeListEntryAction::EChallengeDataType GetCurrentTargetType() const; // @0x8240EF50
 
+    // ADDITIVE GROW (PlayerPositionSingle::RenderValue @0x824220C4, which inlines all
+    // three; DWARF decls h:148/h:152). IsRunning/IsShowingResults are the two live
+    // display states the HUD value renderer draws for.
+    bool IsRunning() const        { return meInternalState == E_INTERNAL_STATE_RUNNING; }
+    bool IsShowingResults() const { return meInternalState == E_INTERNAL_STATE_RESULTS; }
+
+    // FLAG: accessor name not DWARF-attested (the count read is inlined
+    // @0x82422100); the member itself is the DWARF miTargetsCount.
+    s32 GetTargetsCount() const   { return miTargetsCount; }
+
+
 private:
     // ---- layout (DWARF order; word offsets X360-verified through miCurrentAction) ----
     GuiCache*                  mpGuiCache;             // :198  @0x00  a1[0]

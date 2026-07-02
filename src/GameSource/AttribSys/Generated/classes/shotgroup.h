@@ -70,6 +70,20 @@ namespace Gen
         // and hands back the collection data block -- the staged key/index are dead in the
         // called body. liShotIndex mirrors that index selector for provenance.
         const void* GetShotListData(s32 liShotIndex) const;
+
+        // ShotList(index) -- the RefSpec for the index'th shot in this group's ShotList
+        // (DWARF BrnShotSelector.cpp:169 names the generated accessor). ADDITIVE GROW
+        // (ShotSelector::GetCrashShot @0x82239894, which drives it through the REAL
+        // indexed Attrib::Instance::GetAttributePointer(key, index) overload -- unlike
+        // the two provenance forwarders above -- with the 24-byte DefaultDataArea
+        // null-element fallback @0x822398A0).
+        const Attrib::RefSpec* ShotList(u32 luIndex) const
+        {
+            const void* lpElement = GetAttributePointer(0x7533C0E215246B49ULL, luIndex);
+            if (lpElement == 0)
+                lpElement = DefaultDataArea(0x18u);
+            return reinterpret_cast<const Attrib::RefSpec*>(lpElement);
+        }
     };
 
     // X360 ctor @0x82208620: Collection = FindCollection(948423623, owner); chain the
