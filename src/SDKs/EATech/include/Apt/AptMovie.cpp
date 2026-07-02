@@ -160,53 +160,83 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
     if (nCount <= 0)
         return this;
 
+    // NATIVE-8 PORT (2026-07-02; was the console 4-byte transliteration whose
+    // straddled reads AV'd -- the reason jumpToFrame's replay was boundary-skipped).
+    // The place-record body offsets are the SAME native-8 map PlaceCommand /
+    // resolve64 case-3 use: body = align8(cmd+4); {flags@0, depth@+4, charId@+8,
+    // matrix@+0x0C, colour@+0x24, ratio@+0x2C, name@+0x30, clipDepth@+0x38,
+    // clipActions@+0x40}. The console shadow offsets are kept in comments.
     for (int32_t i = 0; i < nCount; ++i)
     {
         void* pCmd = pFrame->mpCommands[i];            // *(v11[1] + v12)
+        // The same converter-malformed command-pointer guard as doFrameControls.
+        {
+            const uintptr_t luCmd = reinterpret_cast<uintptr_t>(pCmd);
+            if (luCmd < 0x10000u || (luCmd >> 47) != 0u || (luCmd & 0xFFFFFFFFull) == 0u)
+                continue;
+        }
         int32_t eTag = CmdI32(pCmd, 0x00);             // *v13
 
         if (eTag == 3)
         {
             // ---- place command --------------------------------------------
-            int32_t   nHit  = 0;                       // var_5C (BYREF)
-            unsigned char chMode = 0;                  // var_60 (BYREF)
-            void* pExisting = nullptr;                  // var_60 alias used as the existing-node out
-            // FindInst fills the existing-node pointer (var_60) + a flag (var_5C).
-            AptPseudoDisplayList_FindInst(pPseudoList, CmdPtr(pCmd, 0x08),
-                                          &chMode, &pExisting, a5,
-                                          reinterpret_cast<char*>(pCmd) + 4);   // v13 + 1
+            const uintptr_t luBody =
+                (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u);
+            char* const pBody = reinterpret_cast<char*>(luBody);
 
-            int32_t nResolvedId = CmdI32(pCmd, 0x0C);  // v13[3]
+            const int32_t nFlags = *reinterpret_cast<const int32_t*>(pBody + 0x00);
+            const int32_t nDepth = *reinterpret_cast<const int32_t*>(pBody + 0x04);   // [c: cmd+0x08]
+
+            unsigned char chMode = 0;                  // var_60 (BYREF)
+            void* pExisting = nullptr;                  // the existing-node out
+            // FindInst keys by the placement depth (the console passes the depth word).
+            AptPseudoDisplayList_FindInst(pPseudoList,
+                                          reinterpret_cast<void*>(static_cast<intptr_t>(nDepth)),
+                                          &chMode, &pExisting, a5, pBody);
+
+            int32_t nResolvedId = *reinterpret_cast<const int32_t*>(pBody + 0x08);   // [c: cmd+0x0C]
             void* pCharacter = nullptr;
             if (nResolvedId != -1)
             {
-                // pCharacter = pAnim->charTable[nResolvedId]
-                // *(*(*(*(*(*(v9+32)+4)+4)+4)+32) + 4*v19)
-                void* p = CmdPtr(pListOwner, 0x20);
-                p = CmdPtr(p, 0x04);
-                p = CmdPtr(p, 0x04);
-                p = CmdPtr(p, 0x04);
-                void* pTable = CmdPtr(p, 0x20);
-                pCharacter = *reinterpret_cast<void**>(reinterpret_cast<char*>(pTable) + 4 * nResolvedId);
+                // pCharacter = the owning movie's charTable[nResolvedId] -- the same
+                // native-8 owner chain PlaceCommand uses (owner char -> mpFixupLink ->
+                // embedded anim @+0x20), with its sane-table guard.
+                AptCIH* pOwnerCIH = static_cast<AptCIH*>(pListOwner);
+                AptCharacterInst* pOwnerInst =
+                    (pOwnerCIH != nullptr) ? pOwnerCIH->mpCharacterInst : nullptr;
+                AptCharacter* pOwnerChar =
+                    (pOwnerInst != nullptr && pOwnerInst->mpRenderItem != nullptr)
+                        ? pOwnerInst->mpRenderItem->mpCharacter : nullptr;
+                AptCharacter* pRootChar =
+                    (pOwnerChar != nullptr) ? pOwnerChar->mpFixupLink : nullptr;
+                if (pRootChar != nullptr)
+                {
+                    AptCharacterAnimation* pAnim = reinterpret_cast<AptCharacterAnimation*>(
+                        reinterpret_cast<char*>(pRootChar) + KU_AptEmbeddedMovieOff);
+                    const uintptr_t luTablePtr =
+                        reinterpret_cast<uintptr_t>(pAnim->mpCharacterTable);
+                    const bool bSane =
+                        (pAnim->mnCharacterCount > 0 && pAnim->mnCharacterCount <= 0x10000) &&
+                        (luTablePtr >= 0x10000u) && ((luTablePtr >> 47) == 0u);
+                    if (bSane && nResolvedId >= 0 && nResolvedId < pAnim->mnCharacterCount)
+                        pCharacter = pAnim->mpCharacterTable[nResolvedId];
+                }
             }
 
             if (pExisting && nResolvedId == -1)
             {
                 // ---- merge the place fields onto the existing node ---------
-                // r8 (the place-info record) = pCmd + 4 (var_60-2's source).
-                char* pInfo = reinterpret_cast<char*>(pCmd) + 4;   // v18 == r8
-                int32_t nFlags = CmdI32(pInfo, 0x00);              // *v18
-
-                // *(*(pExisting+4)+4) (the node's pseudo-data matrix/colour block).
+                // (native-8 field positions; console shadows: matrix word info+12,
+                // colour word info+36, clipDepth info+56, ratio info+44.)
                 void* pData = CmdPtr(pExisting, 0x04);
 
-                int32_t v21 = (nFlags & 4)  ? *reinterpret_cast<int32_t*>(pInfo + 12) : CmdI32(pData, 0x04);
+                int32_t v21 = (nFlags & 4)  ? *reinterpret_cast<int32_t*>(pBody + 0x0C) : CmdI32(pData, 0x04);
                 CmdSetI32(pData, 0x04, v21);
-                int32_t v22 = (nFlags & 8)  ? *reinterpret_cast<int32_t*>(pInfo + 36) : CmdI32(pData, 0x08);
+                int32_t v22 = (nFlags & 8)  ? *reinterpret_cast<int32_t*>(pBody + 0x24) : CmdI32(pData, 0x08);
                 CmdSetI32(pData, 0x08, v22);
-                int32_t v23 = (nFlags & 0x80) ? *reinterpret_cast<int32_t*>(pInfo + 56) : CmdI32(pData, 0x0C);
+                int32_t v23 = (nFlags & 0x80) ? *reinterpret_cast<int32_t*>(pBody + 0x38) : CmdI32(pData, 0x0C);
                 CmdSetI32(pData, 0x0C, v23);
-                float   v24 = (nFlags & 0x10) ? *reinterpret_cast<float*>(pInfo + 44) : CmdF32(pData, 0x10);
+                float   v24 = (nFlags & 0x10) ? *reinterpret_cast<float*>(pBody + 0x2C) : CmdF32(pData, 0x10);
                 *reinterpret_cast<float*>(reinterpret_cast<char*>(pData) + 0x10) = v24;
 
                 CmdSetI32(pData, 0x14, CmdI32(pData, 0x14) | nFlags);
@@ -221,7 +251,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                 pNode = new (pBlock) AptPseudoCIH_t(
                             reinterpret_cast<AptCharacterInfo_t*>(pCmd),
                             static_cast<short>(nFrame),               // a3 (r5) = nFrame -> li16CharacterId
-                            reinterpret_cast<void*>(static_cast<intptr_t>(CmdI32(pCmd, 0x08))),  // a4 (r6) = v13[2] -> lpContext (+0x08)
+                            reinterpret_cast<void*>(static_cast<intptr_t>(nDepth)),  // a4 (r6) = the depth [c: cmd+0x08]
                             pCharacter);                               // v17
             }
             pPseudoList->Insert(pNode);   // real member
