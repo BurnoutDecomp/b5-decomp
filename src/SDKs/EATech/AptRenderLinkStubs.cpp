@@ -154,7 +154,10 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptValue_EmbeddedNativeHash RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp (the AptValueWithHash mHash @+8).
     // AptInterp_GetNodeFrameContextHash RETIRED (2026-07-02): homed in AptActionInterpreterInterpHelpers.cpp
     // (setVariable @0x82B03374: the display PARENT's char-inst property hash -- the enclosing clip's scope).
-    AptTextFormat* AptTextFormat_ConstructDefault(void* pBlock, AptValue* pSource, double dArg) { return nullptr; }   // FLAG link-stub
+    // AptTextFormat_ConstructDefault RETIRED (2026-07-02): homed in
+    // AptTextFormat.cpp (sub_82AFB2A8 == the public ctor + the homed
+    // ConstructRecord with the all-inherit tail). THE LAST ENGINE STUB --
+    // everything remaining in this file is the genuine PC-leaf KEEP list.
     // AptActionInterpreter_SetIntervalImpl RETIRED (2026-07-02): homed in
     // AptIntervalTimer.cpp (the X360 cbCallMethod_setInterval @0x82B019D8 body).
     // AptApt_DeriveFunctionAnimation RETIRED (2026-07-01): homed in AptScriptFunctionBase.cpp

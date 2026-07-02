@@ -31,6 +31,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptTextFormat.h"
+#include <new>   // placement new (ConstructDefault)
 
 #include <cstring>   // strcmp (align keyword classify in AptTextFormat_ConstructRecord)
 
@@ -133,6 +134,29 @@ AptTextFormat::AptTextFormat(const TextFormat* pSource)
     : AptObject(AptVFT_TextFormat, 8)
     , mFormat(pSource)
 {
+}
+
+// ---------------------------------------------------------------------------
+// AptTextFormat_ConstructDefault -- sub_82AFB2A8 (HOMED 2026-07-02, retiring
+// the LAST engine link-stub). The X360: AptValueWithHash(0x1C == AptVFT_
+// TextFormat, hash cap 8) base-construct into the given GC block, install the
+// AptTextFormat vtable, zero the +0x1C class-flags byte (all of which IS the
+// public ctor above), then build the embedded record via the field ctor
+// (sub_82AFAEB8 == the homed AptTextFormat_ConstructRecord) with the caller's
+// font value + size and the forwarded argument tail -- the sole call site
+// (getNewTextFormat) passes the all-inherit set.
+// ---------------------------------------------------------------------------
+TextFormat* AptTextFormat_ConstructRecord(TextFormat* pRecord, AptValue* pFont,
+    float fSize, int nColor, int nBold, int nItalic, int nUnderline,
+    int nLeftMargin, int nRightMargin, int nIndent, AptValue* pAlign);   // defined below
+
+AptTextFormat* AptTextFormat_ConstructDefault(void* pBlock, AptValue* pSource, double dArg)
+{
+    AptTextFormat* const pThis = ::new (pBlock) AptTextFormat(nullptr);
+    AptTextFormat_ConstructRecord(&pThis->mFormat, pSource,
+                                  static_cast<float>(dArg),
+                                  -1, -1, -1, -1, -1, -1, -1, gpUndefinedValue);
+    return pThis;
 }
 
 // ---------------------------------------------------------------------------
