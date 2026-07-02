@@ -14,8 +14,10 @@
 //       Lock; fetch + assert the static layout; on RECORDING write the static
 //       buffer out, on PLAYING read it in (4784 bytes); Unlock.
 //   Write           @ 0x82650600:
-//       Lock; if the static layout exists, dispatch the no-arg Write()/Read()
-//       overloads on RECORDING/PLAYING; Unlock.
+//       Lock; if the static layout exists, write it out (4784 bytes) on
+//       RECORDING or read it in (4784 bytes) on PLAYING; Unlock. (r4/r5 at the
+//       Write/Read call sites still hold the static layout ptr + 4784 from the
+//       GetStaticLayout call above -- NOT the no-arg overloads.)
 //
 // EffectsSerialiser is a leaf replay serialiser deriving from the shared
 // BaseSerialiser: Construct parameterises BaseSerialiser::Construct with this
@@ -56,13 +58,9 @@ namespace BrnReplays
         void Lock();
         int  Unlock();
 
-        // Sized transfer overloads (used by Read()).
+        // Sized transfer overloads (used by Read() and Write()).
         int Write(const void* lpData, int nSize);
         int Read(void* lpData, int nSize);
-
-        // No-arg transfer overloads (used by Write()).
-        int Write();
-        int Read();
     };
 
     struct EffectsSerialiser : BaseSerialiser
@@ -110,15 +108,16 @@ namespace BrnReplays
     {
         BaseSerialiser::Lock();
 
-        if (GetStaticLayout())
+        void* lpStatic = GetStaticLayout();
+        if (lpStatic)
         {
             switch (meMode)
             {
             case E_MODE_RECORDING:
-                BaseSerialiser::Write();
+                BaseSerialiser::Write(lpStatic, 4784);
                 break;
             case E_MODE_PLAYING:
-                BaseSerialiser::Read();
+                BaseSerialiser::Read(lpStatic, 4784);
                 break;
             default:
                 break;

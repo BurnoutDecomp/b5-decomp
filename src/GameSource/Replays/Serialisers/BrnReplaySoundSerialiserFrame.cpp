@@ -17,8 +17,8 @@ namespace BrnReplays
     // @ 0x8264CA58
     SoundSerialiserFrame& SoundSerialiserFrame::operator=(const SoundSerialiserFrame& lOther)
     {
-        if (this != &lOther)
-            std::memcpy(maPayload, lOther.maPayload, sizeof(maPayload));
+        // The X360 asm copies unconditionally with no self-assignment check.
+        std::memcpy(maPayload, lOther.maPayload, sizeof(maPayload));
         return *this;
     }
 }
