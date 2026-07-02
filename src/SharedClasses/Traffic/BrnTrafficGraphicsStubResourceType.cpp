@@ -57,13 +57,18 @@ namespace BrnTraffic
         switch (luImportIndex)
         {
             case 0:
+                // X360 offset of mpVehicleGraphics is 0 (first 4-byte pointer slot).
                 *lppOutResource = lpStub->mpVehicleGraphics;
-                *lpuOutOffset = static_cast<uint32_t>(offsetof(GraphicsStub, mpVehicleGraphics));
+                *lpuOutOffset = 0u;
                 break;
 
             case 1:
+                // X360 offset of mpWheelGraphics is 4 (second 4-byte pointer slot).
+                // NOT offsetof(GraphicsStub, mpWheelGraphics): on a 64-bit host that
+                // member sits at byte 8 because the pointers are 8 bytes wide here,
+                // but the asm always stores the literal X360 (32-bit) offset 4.
                 *lppOutResource = lpStub->mpWheelGraphics;
-                *lpuOutOffset = static_cast<uint32_t>(offsetof(GraphicsStub, mpWheelGraphics));
+                *lpuOutOffset = 4u;
                 break;
 
             default:
