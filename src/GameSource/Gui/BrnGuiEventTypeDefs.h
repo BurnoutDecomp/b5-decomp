@@ -37,6 +37,7 @@
 #include "SharedClasses/World/BrnWorldRegion.h"         // BrnWorld::ECounty / EDistrict
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"     // CgsGui::GuiEvent<N> (event payload base)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResource.h" // PopupStyle/PopupIcons/GuiPopupParameter
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BurnoutSkillzData (by value)
 
 namespace BrnGui
@@ -440,6 +441,98 @@ struct GuiEventEnableSatNavIcons
         E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS  = 4,
         E_ICON_DISPLAY_TYPE_COUNT                 = 5,
     };
+};
+
+// ===================================================================================
+// BrnGui::GuiOverlayFullInfoRequest -- "send me the current overlay's full info"
+// (posted by BaseOverlayState::Update's WFINIT phase @0x824B2BD8: a header-only
+// record {muHeader0=1, muEventType=186, muHeader2=12} on channel 40, 16 bytes;
+// answered by the overlays director's full-info response on 187).
+// ===================================================================================
+struct GuiOverlayFullInfoRequest : public CgsGui::GuiEvent<186>
+{
+    // +0x0C -- pads the wire record to the X360's 16 bytes (AddEvent size 0x10
+    // @0x824B2BDC). The X360 never writes this word (the queued copy carries stack
+    // garbage past the 12-byte header), so it is deliberately left uninitialised.
+    u32 muPad0C;
+
+    GuiOverlayFullInfoRequest() : CgsGui::GuiEvent<186>(1, 12) {}
+};
+
+// ===================================================================================
+// BrnGui::GuiOverlayCompleteEvent -- "this overlay finished" (posted by the running
+// overlay state on leave; consumed by the overlays director). DWARF home
+// BrnGuiEventTypeDefs.h:5833. EVENT-ID DIVERGENCE: the PS3 DWARF bases it on
+// GuiEvent<187>, but on X360 the overlay wire ids are shifted by two -- the full-info
+// response rides id 187 and this complete event rides id 189 (BaseOverlayState::OnLeave
+// @0x824B2DC8 posts {muHeader0=16, muEventType=189, muHeader2=16} + a 16-byte payload
+// on channel 40, 32 bytes total; GuiOverlaysDirector::Update @0x82520668 dispatches the
+// hidden notification on 189). X360 wins.
+// ===================================================================================
+struct GuiOverlayCompleteEvent : public CgsGui::GuiEvent<189>
+{
+    // DWARF BrnGuiEventTypeDefs.h:5837 -- how the overlay was left.
+    enum LeaveMethod
+    {
+        E_LEAVEMETHOD_NONE   = 0,
+        E_LEAVEMETHOD_OK     = 1,
+        E_LEAVEMETHOD_CANCEL = 2,
+        E_LEAVEMETHOD_COUNT  = 3,
+    };
+
+    CgsID       mOverlayId;     // +0x10 (DWARF h:5846; 8-aligned past the 12-byte header,
+                                //        matching the X360 record: payload offset 16)
+    LeaveMethod meLeaveMethod;  // +0x18 (DWARF h:5847)
+
+    // Headers per the OnLeave record: payload size 16, payload offset 16.
+    GuiOverlayCompleteEvent() : CgsGui::GuiEvent<189>(16, 16) {}
+
+    // DWARF h:5859 Construct(CgsID, LeaveMethod) -- fill the payload (the string-keyed
+    // h:5853 overload is its own ledger function; not attested in this slice).
+    void Construct(CgsID lOverlayId, LeaveMethod leLeaveMethod)
+    {
+        mOverlayId    = lOverlayId;
+        meLeaveMethod = leLeaveMethod;
+    }
+};
+
+// ===================================================================================
+// BrnGui::GuiOverlayFullInfoResponse -- the full overlay description record the
+// overlays director keeps (current + buffered) and publishes to the overlay flow on
+// event 187 (the PS3 DWARF bases it on GuiEvent<185>; on X360 the id is carried
+// out-of-band by AddEvent(., 187, 448) and the queued record starts straight at
+// mNameId -- BaseOverlayState::UpdateWFInfo @0x824B25D0 reads the id at payload +0x00).
+// DWARF home BrnGuiEventTypeDefs.h:5768; member names/order verbatim from the DWARF.
+// X360-pinned offsets: mNameId @+0x00 / macName @+0x08 (GuiOverlaysDirector::
+// HandleOverlayRequest @0x825162C8), meStyle @+0x18 (posted as the event-185 payload
+// word by the director's Update), meIcon @+0x1C and macTitleId/macMessageId/
+// maMessageParams/miMessageParamsUsed @+0x20/+0x40/+0x60/+0xE8 (BaseOverlayState::
+// SetupOverlay @0x824B1690); the button tail -- Param @+0xEC/+0x154 BEFORE Id
+// @+0x130/+0x198, used-flags @+0x150/+0x1B8 -- by BaseOkOverlayState::SetupOverlay
+// @0x824B1BC0 / BaseOkCancelOverlayState::SetupOverlay @0x824B1C78 (the PS3 DWARF
+// lists Id before Param inside each button block; the X360 loads win). Natural
+// layout; X360 sizeof 448 (0x1C0).
+// ===================================================================================
+struct GuiOverlayFullInfoResponse
+{
+    static const s32 MKI_MAX_LENGTH_OF_STRING_ID   = 32;   // DWARF h:5772
+    static const s32 MKI_MAX_LENGTH_OF_FLASH_FRAME = 32;   // DWARF h:5773
+    static const s32 MKI_MAX_PARAMS_IN_MESSAGE     = 2;    // DWARF h:5774
+
+    CgsID                     mNameId;                                       // +0x00 (0 == empty slot)
+    char                      macName[13];                                   // +0x08 (printable overlay name)
+    CgsGui::PopupStyle        meStyle;                                       // +0x18
+    CgsGui::PopupIcons        meIcon;                                        // +0x1C
+    char                      macTitleId[MKI_MAX_LENGTH_OF_STRING_ID];       // +0x20 (title loc-string id)
+    char                      macMessageId[MKI_MAX_LENGTH_OF_STRING_ID];     // +0x40 (message loc-string id)
+    CgsGui::GuiPopupParameter maMessageParams[MKI_MAX_PARAMS_IN_MESSAGE];    // +0x60 (0x44 stride)
+    s32                       miMessageParamsUsed;                           // +0xE8
+    CgsGui::GuiPopupParameter mButton1Param;                                 // +0xEC (type @+0xEC, text @+0xF0)
+    char                      macButton1Id[MKI_MAX_LENGTH_OF_STRING_ID];     // +0x130 (button-1 loc-string id)
+    bool                      mbButon1ParamUsed;                             // +0x150 (DWARF spelling)
+    CgsGui::GuiPopupParameter mButton2Param;                                 // +0x154 (type @+0x154, text @+0x158)
+    char                      macButton2Id[MKI_MAX_LENGTH_OF_STRING_ID];     // +0x198
+    bool                      mbButon2ParamUsed;                             // +0x1B8 (-> pad to 0x1C0)
 };
 
 } // namespace BrnGui

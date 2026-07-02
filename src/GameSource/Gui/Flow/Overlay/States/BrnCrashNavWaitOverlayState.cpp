@@ -1,26 +1,18 @@
-#include "types.hpp"
+#include "GameSource/Gui/Flow/Overlay/States/BrnCrashNavWaitOverlayState.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x824B1D90
-//   (BrnGui::CrashNavWaitOverlayState::FillInPopupType)
-//
-// Behaviour-faithful to the X360 pseudocode:
-//     *(result + 268) = "CrashNav";
-//     return result;
-//
-// Stamps the popup-type identifier string into the overlay state at +0x10C and
-// returns `this`. The surrounding object is opaque here, so the slot is addressed
-// by its original byte offset through a raw view of `this`.
+// (BrnGui::CrashNavWaitOverlayState::FillInPopupType): a single store of the
+// class's flash-file-id literal into mpcFlashFileId (X360 this+0x10C).
+// Upgraded from the earlier opaque offset-cast shim (this+268) once the real
+// BaseOverlayState hierarchy landed -- the member is now written BY NAME.
 
 namespace BrnGui
 {
-    struct CrashNavWaitOverlayState
-    {
-        CrashNavWaitOverlayState* FillInPopupType();
-    };
+    const char CrashNavWaitOverlayState::KPC_CRASH_NAV_FRAME_LABEL[9] = "CrashNav";
 
-    CrashNavWaitOverlayState* CrashNavWaitOverlayState::FillInPopupType()
+    // @ 0x824B1D90
+    void CrashNavWaitOverlayState::FillInPopupType()
     {
-        *reinterpret_cast<const char**>(reinterpret_cast<u8*>(this) + 268) = "CrashNav";
-        return this;
+        mpcFlashFileId = KPC_CRASH_NAV_FRAME_LABEL;
     }
 }

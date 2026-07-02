@@ -49,6 +49,12 @@ namespace BrnGui
         void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile,
                      const char* lacParentName);
 
+        // GetTransitionMovieClipRef -- the transition clip handle. ADDITIVE GROW
+        // (BrnGui::BaseOverlayState::SetupOverlayComponents @0x824B18B8, which inlines
+        // it: the searched ref is this+0x44 == &mTransitionMovieClipRef, and the assert
+        // text names the DWARF accessor's result "lpTransitionMovieClipRef").
+        BrnFlapt::MovieClipRef* GetTransitionMovieClipRef() { return &mTransitionMovieClipRef; }
+
         // RunOverlay (BrnOverlayComponent.h:141, header-inline on the X360 -- the
         // InvisibleOverlayState::OnEnter asm carries its body: the flash-id assert then
         // the string-keyed GotoAndPlayLabel @0x8246F3E8 on the component's clip): jump
@@ -58,6 +64,13 @@ namespace BrnGui
             CGS_ASSERT(NULL != lpcOverlayFlashId, "NULL != lpcOverlayFlashId");
             mAptRef.GotoAndPlayLabel(lpcOverlayFlashId);
         }
+
+        // RunOverlay(flash id, frame label) @ 0x824B1690's caller family -- the
+        // out-of-line overload @0x824B1498 (assert @h:115): play the overlay movie on
+        // the popup family's flash label, rebind the transition clip to the
+        // "singleOverlay_mc" child present on that frame, and play the phase label
+        // ("waiting"/"transin"/"transout") on it. Bodied in BrnOverlayComponent.cpp.
+        void RunOverlay(const char* lpcOverlayFlashId, const char* lpcFrameLabel);
 
     private:
         // TransitionCompleteCallback @0x8241C198 -- the apt timeline callback the overlay

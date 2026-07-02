@@ -46,6 +46,16 @@ namespace BrnFlapt
 
     struct MovieClipRef
     {
+        // ---- validity ------------------------------------------------------
+        // ADDITIVE GROW (BrnGui::BaseOverlayState::SetupOverlayComponents
+        // @0x824B18B8, which inlines both: the `lwz 0(ref)` null-check behind the
+        // "true == lpTransitionMovieClipRef->IsValid( )" assert text, and the
+        // paired zero stores of BaseOverlayState's reset path; DWARF declares both
+        // on MovieClipRef -- BrnFlaptMovieClipRef.h:15). A ref is valid when it
+        // points at a live instance; SetInvalid clears both handles.
+        bool IsValid() const   { return NULL != mpMovieClipInst; }
+        void SetInvalid()      { mpMovieClipInst = NULL; mpTransform = NULL; }
+
         // ---- named-child lookups -------------------------------------------
         // FindChildMovieClip @ 0x8246C740 : hash lpcName, forward to the
         // instance, which writes the located child's MovieClipRef into lpOutRef

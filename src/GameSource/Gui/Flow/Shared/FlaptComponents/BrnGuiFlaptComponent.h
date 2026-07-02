@@ -72,6 +72,12 @@ namespace BrnGui
                      const BrnFlapt::FileRef& lFile,
                      const char* lacParentName);
 
+        // SetInvalid -- drop the bound clip. ADDITIVE GROW (the DWARF declares it,
+        // BrnGuiFlaptComponent.h:30; the X360 always inlines it -- the per-component
+        // mAptRef zero-pairs in BrnGui::BaseOverlayState's reset path
+        // @0x824B1F0C/@0x824B2020/@0x824B2E50).
+        void SetInvalid() { mAptRef.SetInvalid(); }
+
     protected:
         // +0x00 : the GUI state channel this component talks to (subclass Construct
         // stores lpStateInterface here; only stored in this cluster).

@@ -122,6 +122,21 @@ namespace CgsLanguage
         bool AddString(const char* lpcStringId, const u8* lpcString);
         bool AddStringPointer(const char* lpcStringId, const u8* lpcString);
 
+        // X360 0x828651A0 / 0x82866450 (DWARF CgsLanguageManager.h:200/:231). Resolve
+        // lpcSourceText through the given format (E_FORMAT_ID_LOOKUP resolves it as a
+        // loc-string id) into a local 1KB buffer, then AddString the result under
+        // lpcStringId. The vararg overload formats liNumParams positional parameters
+        // into the resolved string first; each vararg pair is (const char* text,
+        // ParameterFormatType) -- the overlay popups pass their GuiPopupParameter's
+        // text + raw type word (BaseOk/OkCancelOverlayState::SetupOverlay
+        // @0x824B1BC0/@0x824B1C78, the "TEMP_POPUP_STRING1/2" button labels).
+        // ADDITIVE GROW: declaration-only (their bodies are this TU's own ledger
+        // functions, not yet reconstructed).
+        bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
+                              ParameterFormatType leType);
+        bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
+                              ParameterFormatType leType, s32 liNumParams, ...);
+
         // X360 0x82864950 / 0x828640B0. Remove the string added by AddString, by id or by a
         // precomputed hash. Returns false when no matching dynamic-string entry is found.
         // Bodies link from this TU.

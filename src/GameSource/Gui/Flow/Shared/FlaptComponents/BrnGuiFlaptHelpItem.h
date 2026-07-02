@@ -65,6 +65,13 @@ namespace BrnGui
         // child button icons ("ButtonLeft"/"ButtonRight") and bind the "TextField".
         void Prepare(const char* lacName, const BrnFlapt::FileRef& lFlaptFile);
 
+        // Prepare(const MovieClipRef*) @ 0x82428188 -- rebind the help item onto an
+        // already-located movie clip: adopt lpMovieClipRef, find+set up the two child
+        // button icons, and bind the "TextField". DWARF shape BrnGuiFlaptHelpItem.h:48.
+        // ADDITIVE GROW: its body is this TU's own ledger function (declaration-only
+        // here); called by BrnGui::BaseOverlayState::SetupOverlayComponents @0x824B18B8.
+        void Prepare(const BrnFlapt::MovieClipRef* lpMovieClipRef);
+
         // SetItem @ 0x8241D338 -- set the help text and both flanking button glyphs.
         void SetItem(const char* lpText,
                      FlaptButtonIconComponent::EPadButton leButtonLeft,
