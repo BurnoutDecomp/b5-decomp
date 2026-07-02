@@ -1099,7 +1099,7 @@ void BrnAI::AIAggression::UpdateAggressionStateFallPast(const AICar* lpPlayerCar
             // X360 inlines mRandom's [1,2) ring draw; the (((r-1)+1)*0.5) folds to r*0.5,
             // the fsel clamps to a minimum floor.
             meAggressionState = E_AI_AGGRESSION_STATE_SPURT_FORWARD;   // 12
-            const f32 lfRoll = mRandom.RandomFloat() * 0.5f;
+            const f32 lfRoll = (1.0f + mRandom.RandomFloat()) * 0.5f;
             mfStateTime = (lfRoll >= 0.0f) ? lfRoll : KF_FALL_PAST_SPURT_MIN_TIME;
             return;
         }
