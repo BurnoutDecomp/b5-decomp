@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // CgsResource::ID::HashString -- faithful to ARTIST 0x828D84A8: a reflected CRC32 (polynomial 0xEDB88320,
 // init 0xFFFFFFFF, final bitwise-NOT) over the string LOWERCASED (A-Z -> a-z first). The X360 uses a
@@ -6,12 +7,19 @@
 // numerically identical and self-contained (the table's definition was never carried over). Resource ids
 // are therefore case-insensitive name hashes -- VIDEOLIST.BUNDLE's VideoDataResource ids are HashString of
 // the (lowercased) video names (e.g. "eafranchise", "criterion").
+//
+// The ASM only asserts on a NULL lpcString (CGS_ASSERT below) -- it does NOT early-return for NULL, and
+// falls through to dereference it regardless (matches the project's CGS_ASSERT idiom: log-and-continue).
+// The empty-string case ("" -> luChar == 0 on the first iteration) IS a genuine early-out in the ASM
+// (loc_828D8568 returns the untouched initial r9 == 0), so that check stays.
 
 namespace CgsResource
 {
     s32 ID::HashString(const u8* lpString)
     {
-        if (lpString == 0 || *lpString == 0)
+        CGS_ASSERT(lpString != 0, "lpcString != NULL");
+
+        if (*lpString == 0)
             return 0;
 
         u32 luCrc = 0xFFFFFFFFu;

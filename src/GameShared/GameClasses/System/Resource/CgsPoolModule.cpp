@@ -315,10 +315,11 @@ namespace CgsResource
             lParams.muMaxDistributionRequests   = KU_MAX_DISTRIBUTION_COMMANDS; // 0xFFFF
             lParams.muMaxLinearHeapNodes        = KU_MAX_POOL_ENTRIES;          // 36863
             lParams.muMaxRelocateSources        = KU_MAX_POOL_ENTRIES;          // 36863
-            // X360 v11[12] = a1+26432 (Relocator), v11[13] = a1+26688 (RelocationParams). Those embedded
-            // sub-objects live in mPadRelocator (un-reconstructed Relocator type); pass their address.
+            // X360 v11[12] = a1+26432 (Relocator @ byte 105728), v11[13] = a1+26688 (RelocationParams @
+            // byte 106752) -- a 1024-byte gap (26688-26432 DWORDs * 4). Those embedded sub-objects live in
+            // mPadRelocator (un-reconstructed Relocator type); pass their address at the correct offsets.
             lParams.mpRelocator        = reinterpret_cast<CgsMemory::Relocator*>(mPadRelocator);
-            lParams.mpRelocationParams = reinterpret_cast<CgsMemory::RelocationParams*>(mPadRelocator + 256);
+            lParams.mpRelocationParams = reinterpret_cast<CgsMemory::RelocationParams*>(mPadRelocator + 1024);
 
             mEmergencyFragState.Begin(&lParams);
             mProcessState = E_UPDATESTATE_EMERGENCYFRAG;   // X360 a1[26316] = 6
