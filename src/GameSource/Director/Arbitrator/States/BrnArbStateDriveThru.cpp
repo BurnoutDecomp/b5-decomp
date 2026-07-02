@@ -46,7 +46,9 @@ namespace BrnDirector
 
         // The two trailing selectors the BehaviourManager::NewBehaviour<TBehaviour> allocation
         // request carries (X360 li r7,0 / li r8,1). Same as the sibling arbitrator states.
-        const s32 KI_NEW_BEHAVIOUR_ARG_A = 0;
+        // (ARG_A retyped with the NewBehaviour owner-slot reconcile: the r7 slot
+        // carries the owning-object pointer -- NULL at this site.)
+        const void* const KI_NEW_BEHAVIOUR_ARG_A = 0;
         const s32 KI_NEW_BEHAVIOUR_ARG_B = 1;
 
         // The dirty-flag bit Update raises on the state's camera while a behaviour is driving

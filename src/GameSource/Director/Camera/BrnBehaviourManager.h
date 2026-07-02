@@ -393,9 +393,12 @@ namespace Camera
         // generic BrnDirector::Camera::Behaviour base (not a concrete behaviour type already
         // pinned at the call site), so the manager needs the attrib block to pick which concrete
         // behaviour to allocate. DECLARATION-ONLY (body lands with the BehaviourManager TU).
+        // (RETYPED 2026-07: the r7 arg was modelled `s32 liArgA`, but
+        // MomentHardStop::Update @0x82271438 passes the owning MOMENT pointer there --
+        // the same owner slot as the 4-arg family's `const void* lpOwner`.)
         template <typename TBehaviour, typename THandle>
         void NewBehaviour(THandle& lrHandle, const void* lpAttributeData, void* lpOwningState,
-                          s32 liArgA, s32 liArgB);
+                          const void* lpOwner, s32 liArgB);
 
     private:
         void RefCountLogDump(const BehaviourHelperIndex& lrHelper) const;

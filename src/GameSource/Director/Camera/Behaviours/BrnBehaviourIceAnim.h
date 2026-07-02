@@ -140,6 +140,16 @@ public:
     // (0x7533C0E2_15246B49) the shotgroup accessor uses.
     const Attrib::Gen::shotgroup& GetOnlineCarSelectShots() const;
 
+    // The two crash-moment shotgroup banks (X360 manager +1448/+1464, the 16-byte
+    // stride after the fast/normal/slow crash trio) and the guid->take resolver
+    // (@0x821F69A8). GROWN for MomentStationaryCrash::Update @0x82272EA8.
+    // DECLARATION-ONLY (bodies in the resource-manager TU). FLAG: modelled on this
+    // minimal DirectorResourceManager slice; the real home is
+    // BrnDirectorResourceManager.h (which carries the same decls).
+    const Attrib::Gen::shotgroup& GetTumblingCrashShots() const;     // +1448
+    const Attrib::Gen::shotgroup& GetStationaryCrashShots() const;   // +1464
+    ICE::ICETakeData* GetKeyAnimFromGuid(s32 liGuid) const;          // @0x821F69A8
+
     // The online-race-start shot-group (the manager's embedded shotgroup @+616 / +0x268). The
     // online-race-intro arbitrator state (BrnArbStateOnlineRaceIntro::Update / ::SetupRivalMovie)
     // drives it: it asserts Num_ShotList() >= the ICE-movie minimum, indexes the per-rival shots
@@ -472,6 +482,15 @@ public:
 
     // True once the controller has finished playing or the behaviour has failed.
     bool HasFinishedOrFailed() const;
+
+    // GROWN for MomentStationaryCrash::Update @0x82272EA8 (the moment polls its
+    // candidate through the Behaviour-base head bytes): the DWARF base names for
+    // +0x09 / +0x0B. NOTE: the +0x0B byte the slice models as mbMotionBlurGate IS
+    // the base's mbCanSwitchToMeNow (Behaviour.h DWARF); the behaviour raising it
+    // from Update is it signalling readiness -- the member keeps the slice name
+    // pending its own-TU reconcile.
+    bool HasFailed() const        { return mbFailed; }
+    bool CanSwitchToMeNow() const { return mbMotionBlurGate; }
 
     // The camera this behaviour produced this frame (mLastCamera). The arbitrator states
     // copy it into their own mCamera while the behaviour is driving (the X360 reaches it
