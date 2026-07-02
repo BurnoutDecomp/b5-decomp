@@ -64,13 +64,23 @@ namespace CgsGraphics
         mbAutosize    = false;
     }
 
-    // X360 0x827EEF58: shrink the font height so the string fits mv2TopLeft..mv2BottomRight. The full
-    // fit-search is deferred; this keeps the requested height and points the current-height at the
-    // autosized field (as the X360 does). Debug text leaves mbAutosize=false, so this path is inert.
+    // Faithful port of X360 0x827EEF58: pick the autosized font height so the string fits the box
+    // width. If the box is already wide enough (boxWidth >= mfStringWidth * mfFontHeight) the height
+    // is kept; otherwise it is scaled down and floored at 15.0. Only mfAutosizedFontHeight (+0x0C) is
+    // written -- the asm does NOT touch mpfCurrentFontHeight (+0x10).
     void TextObject::CalculateAutosizing()
     {
-        mfAutosizedFontHeight = mfFontHeight;
-        mpfCurrentFontHeight  = &mfAutosizedFontHeight;
+        const f32 lfBoxWidth = mv2BottomRight.mX - mv2TopLeft.mX;   // f12
+        const f32 lfStringSpan = mfStringWidth * mfFontHeight;      // f11
+
+        if (lfBoxWidth >= lfStringSpan)
+        {
+            mfAutosizedFontHeight = mfFontHeight;
+            return;
+        }
+
+        const f32 lfScaled = mfFontHeight / ((lfStringSpan + 5.0f) / lfBoxWidth);
+        mfAutosizedFontHeight = (15.0f >= lfScaled) ? 15.0f : lfScaled;   // fsel: max(15.0, lfScaled)
     }
 
     // Faithful port of X360 0x827F7C10. Counts the wrapped lines of mpUtf8String laid out in
