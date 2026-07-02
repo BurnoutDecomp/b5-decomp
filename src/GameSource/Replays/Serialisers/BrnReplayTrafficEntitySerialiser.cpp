@@ -126,12 +126,16 @@ namespace BrnReplays
             TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
             std::memset(lpLayout, 0, KU_STATIC_BUFFER_SIZE);
 
-            // asm: store an (uninitialised) value into the bit-array fields and the
-            // info-valid word; the project-faithful reset is to clear them. The bit
-            // arrays start cleared by the memset above; re-assert the empty state.
+            // asm: the bit-array fields and the info-valid word are re-zeroed (redundant
+            // after the memset, kept for faithfulness), and the 2-byte traffic-light state
+            // is set to 0xFFFF (`sth -1,0x94(r11)` @0x826534A4 -- an explicit -1, NOT a
+            // clear). The bit arrays start cleared by the memset above; re-assert the empty
+            // state, then stamp the traffic-light state to its 0xFFFF sentinel.
             lpLayout->mVehicleUpdateBits.UnSetAll();
             lpLayout->mPhysicsBits.UnSetAll();
             std::memset(&lpLayout->mInfoValid, 0, sizeof(lpLayout->mInfoValid));
+            lpLayout->maTrafficLightState[0] = 0xFF;
+            lpLayout->maTrafficLightState[1] = 0xFF;
 
             mbStaticLayoutCleared = true;
         }
@@ -212,18 +216,19 @@ namespace BrnReplays
     }
 
     // @0x82707320
-    // Store the 8-byte physics-bits word (with its high half set to 0x10000 -- the
-    // X360 `HIDWORD(v7) = 0x10000`) and copy the 102800-byte physics-info block.
+    // Store the 8-byte physics-bits word verbatim and copy the 102800-byte physics-info
+    // block. The X360 does a plain `ld r10,0(a2)` / `std r10,0xF0(layout)` -- the whole
+    // 64-bit *lpBits is copied unchanged. (The Hex-Rays `HIDWORD(v7) = 0x10000` is a
+    // decompiler mis-model of `lis r9,1; ori r31,r9,0x9190` building the 0x19190 == 102800
+    // memcpy size in r31; there is no high-dword rewrite in the raw asm.)
     void TrafficEntitySerialiser::SetPhysicsData(const u64* lpBits, const void* lpaPhysicsInfo)
     {
         CGS_ASSERT(lpBits != nullptr, "lpBits");
         CGS_ASSERT(lpaPhysicsInfo != nullptr, "lpaPhysicsInfo");
 
         TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
-        // asm: load *a2 (low 32 bits of the bits word), force the high dword to 0x10000,
-        // store the combined 64-bit value into mPhysicsBits' first field.
-        const u64 lu64Bits = (static_cast<u64>(0x10000u) << 32)
-                           | (*lpBits & 0xFFFFFFFFull);
+        // asm: ld r10,0(a2) ; std r10,0xF0(layout) -- copy all 8 bytes of *lpBits as-is.
+        const u64 lu64Bits = *lpBits;
         std::memcpy(&lpLayout->mPhysicsBits, &lu64Bits, sizeof(lu64Bits));
 
         std::memcpy(lpLayout->maPhysicsInfo, lpaPhysicsInfo, KU_PHYSICS_INFO_TOTAL);
@@ -361,7 +366,9 @@ namespace BrnReplays
         }
         u8 luByte = 0;
         BaseSerialiser::ReadByte(&luByte);
-        lpFrame->muReadSlotsValid = (luByte != 0) ? 0u : 1u; // cntlzw>>5 ^ 1 idiom
+        // asm 0x8265E7C8-0x8265E7DC: cntlzw(byte); extrwi ,1,26 (== (clz>>5)&1 == (byte==0));
+        // xori ,1  -> stored value is (byte != 0) ? 1 : 0.
+        lpFrame->muReadSlotsValid = (luByte != 0) ? 1u : 0u; // ((cntlzw(byte)>>5)&1) ^ 1
         BaseSerialiser::Read(&lpFrame->muReadSlotsWord, 4);
     }
 

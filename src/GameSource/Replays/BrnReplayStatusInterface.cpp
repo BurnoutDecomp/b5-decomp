@@ -1,7 +1,7 @@
 #include "GameSource/Replays/BrnReplayStatusInterface.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include <cstring>
 
@@ -50,20 +50,40 @@ namespace ReplayIO
     }
 
     // @ 0x823A6488
-    // Member-wise assignment. The X360 body inlines the per-reel name copy as the
-    // bounded CgsStringUtils CopyString (the "String ... is too long" guard at
-    // CgsStringUtils.h:65, buffer size 256); reconstructed here via CgsCore::StrCpy
-    // which carries that same bounded-copy assert. The used flag and the scalar
-    // tail (record/playback reel + debug alpha) are copied verbatim.
+    // Member-wise assignment. The X360 body inlines the per-reel name copy as a raw
+    // NUL-terminated byte copy guarded by an over-length assert (CgsStringUtils.h:65):
+    // it strlen()s the source name, and if that length is >= sizeof(macName) (256) it
+    // fires "String <name> is too long. Buffer size = 256, string length = <len>\n"
+    // through the CgsDev::Assert machinery (built via a stack StrStream, matching the
+    // CgsNetwork::PlayerName::Construct precedent) -- it does NOT silently truncate
+    // like CgsCore::StrCpy. The copy itself is then an unbounded strcpy either way.
+    // The mbUsed flag and the scalar tail (record/playback reel + debug alpha) are
+    // copied verbatim.
     StatusInterface& StatusInterface::operator=(const StatusInterface& rOther)
     {
         mxStatusFlags = rOther.mxStatusFlags;
 
         for (s32 liReel = 0; liReel < KI_NUMREELS; ++liReel)
         {
-            CgsCore::StrCpy(maReels[liReel].macName,
-                            sizeof(maReels[liReel].macName),
-                            rOther.maReels[liReel].macName);
+            const char* lpcSrcName = rOther.maReels[liReel].macName;
+
+            if (std::strlen(lpcSrcName) >= sizeof(maReels[liReel].macName))
+            {
+                CgsDev::Assert::BeginAssert();
+                char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lStrStream << "String " << (lpcSrcName ? lpcSrcName : "<NULLSTRING>")
+                           << " is too long. Buffer size = " << static_cast<s32>(sizeof(maReels[liReel].macName))
+                           << ", string length = " << static_cast<s32>(std::strlen(lpcSrcName))
+                           << "\n";
+                CgsDev::Assert::FireAssert(
+                    lacMessageBuffer,
+                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+                    65);
+                CgsDev::Assert::EndAssert();
+            }
+
+            std::strcpy(maReels[liReel].macName, lpcSrcName);
             maReels[liReel].mbUsed = rOther.maReels[liReel].mbUsed;
         }
 
