@@ -62,7 +62,7 @@ void GuiOverlaysDirector::HandleOverlayRequest(const GuiOverlayRequest* lpReques
         // Already showing one: park the request in the buffered slot (warning when that
         // overwrites an as-yet-unshown queued overlay; category bit 0 of the message
         // filter gates the debug print, exactly as the X360 does).
-        if (mBufferedOverlay.mOverlayId != 0)
+        if (mBufferedOverlay.mNameId != 0)
         {
             char lacRequestName[16];
             CgsIDConvertToString(lpRequest->GetOverlayId(), lacRequestName);
@@ -74,7 +74,7 @@ void GuiOverlaysDirector::HandleOverlayRequest(const GuiOverlayRequest* lpReques
                     << "WARNING - OVERWRITING A QUEUED OVERLAY!\n    Adding overlay named "
                     << lacRequestName
                     << " over queued overlay "
-                    << mBufferedOverlay.macOverlayName
+                    << mBufferedOverlay.macName
                     << "\n\n";
             }
         }
@@ -83,11 +83,12 @@ void GuiOverlaysDirector::HandleOverlayRequest(const GuiOverlayRequest* lpReques
     else
     {
         // Idle: make it the current overlay and announce it (event 185 carries the
-        // request word).
+        // popup style word -- DWARF-reconciled name; the X360 posts the response's
+        // +0x18 word).
         SetUpOverlayInfo(&mCurrentOverlay, lpRequest);
-        u32 luRequestId = mCurrentOverlay.muOverlayRequestId;
+        u32 luStyle = static_cast<u32>(mCurrentOverlay.meStyle);
         mbInOverlay = true;
-        mOutputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&luRequestId), 185, 4);
+        mOutputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&luStyle), 185, 4);
     }
 }
 
@@ -98,10 +99,10 @@ void GuiOverlaysDirector::HandleWaitFinishRequest(const GuiOverlayWaitFinishRequ
         return;
 
     // Cancel a matching buffered overlay outright.
-    if (mBufferedOverlay.mOverlayId == lpRequest->mOverlayId)
-        mBufferedOverlay.mOverlayId = 0;
+    if (mBufferedOverlay.mNameId == lpRequest->mOverlayId)
+        mBufferedOverlay.mNameId = 0;
 
-    if (mCurrentOverlay.mOverlayId == lpRequest->mOverlayId)
+    if (mCurrentOverlay.mNameId == lpRequest->mOverlayId)
     {
         if (mbIsWaitRequestValid)
         {
@@ -164,25 +165,25 @@ void GuiOverlaysDirector::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuf
         {
             const GuiOverlayHiddenNotification* lpHidden =
                 reinterpret_cast<const GuiOverlayHiddenNotification*>(lpEvent);
-            if (lpHidden->mOverlayId == mCurrentOverlay.mOverlayId)
+            if (lpHidden->mOverlayId == mCurrentOverlay.mNameId)
             {
                 mbInOverlay          = false;
                 mbIsWaitRequestValid = false;
 
-                if (mBufferedOverlay.mOverlayId != 0)
+                if (mBufferedOverlay.mNameId != 0)
                 {
                     // Promote the buffered overlay; an online transition overlay also
                     // arms the entering-online splash countdown.
-                    if (IsOnlineTransitionOverlay(mBufferedOverlay.mOverlayId))
+                    if (IsOnlineTransitionOverlay(mBufferedOverlay.mNameId))
                         miFramesToShowEnteringOnline = KI_FRAMES_TO_SHOW_ENTERING_FREEBURN;
 
                     std::memcpy(&mCurrentOverlay, &mBufferedOverlay,
                                 sizeof(GuiOverlayFullInfoResponse));
-                    u32 luRequestId = mCurrentOverlay.muOverlayRequestId;
-                    mBufferedOverlay.mOverlayId = 0;
+                    u32 luStyle = static_cast<u32>(mCurrentOverlay.meStyle);
+                    mBufferedOverlay.mNameId = 0;
                     mbInOverlay = true;
                     mOutputQueue.AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&luRequestId), 185, 4);
+                        reinterpret_cast<const CgsModule::Event*>(&luStyle), 185, 4);
                 }
             }
             break;
@@ -207,10 +208,10 @@ void GuiOverlaysDirector::Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuf
             break;
 
         case 322:  // entering the online state: drop a buffered online-transition overlay
-            if (mBufferedOverlay.mOverlayId != 0 &&
-                IsOnlineTransitionOverlay(mBufferedOverlay.mOverlayId))
+            if (mBufferedOverlay.mNameId != 0 &&
+                IsOnlineTransitionOverlay(mBufferedOverlay.mNameId))
             {
-                mBufferedOverlay.mOverlayId = 0;
+                mBufferedOverlay.mNameId = 0;
             }
             break;
 

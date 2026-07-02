@@ -58,6 +58,31 @@ namespace BrnFlapt
         // documented external-API integer per the conventions.
         bool SetLocalisedText(f32 lfValue, s32 liFormatType);
 
+        // SetInvalid -- clear all three handles. ADDITIVE GROW (the DWARF declares it,
+        // BrnFlaptTextFieldRef.h:18/99; the X360 always inlines it -- e.g. the three
+        // zero stores per text field in BrnGui::BaseOverlayState's reset path
+        // @0x824B1F0C/@0x824B2020/@0x824B2E50).
+        void SetInvalid()
+        {
+            mpTextFieldInstance = NULL;
+            mpParentMovie       = NULL;
+            mpTransform         = NULL;
+        }
+
+        // SetLocalisedText(const char*, StringIdType, count, params, formats)
+        // @ 0x8246D158 -- look the string id up and format it with liNumParams
+        // positional parameters: lppcParams are the parameter strings, lpeParamFormatTypes
+        // the matching CgsLanguage::LanguageManager::ParameterFormatType per parameter
+        // (raw integers per this home's house style). The body asserts the field is
+        // valid ("Text field is invalid in TextField::SetLocalisedText", cpp:221) and
+        // 0 < liNumParams < 4 ("Wrong number of Parameters int SetLocalisedText",
+        // cpp:222). DWARF shape BrnFlaptTextFieldRef.h:54. Bodied in its own sibling
+        // TU (declaration-only here); used by BaseOverlayState::SetupOverlay for
+        // parameterised popup messages.
+        bool SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
+                              s32 liNumParams, const char* const* lppcParams,
+                              const s32* lpeParamFormatTypes);
+
         // SetLocalisedText(const char*, StringIdType) @ 0x8246CD00 -- look a localised
         // string up by id through the language manager and display it. The overload
         // taking a string id; liStringIdType is the raw id-type integer the X360 uses
