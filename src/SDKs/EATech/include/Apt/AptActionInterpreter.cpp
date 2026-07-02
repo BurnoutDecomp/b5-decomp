@@ -159,6 +159,8 @@ void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
+#include "SDKs/EATech/include/Apt/AptObject.h"        // DoesImplementObject (the instanceof walk)
+#include "SDKs/EATech/include/Apt/AptNativeHash.h"    // mpPrototype / mp__Proto__ (the instanceof walk)
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"     // AptString::Create / GetInternalString
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"     // EAStringC
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                 // DOGMA_PoolManager::Deallocate
@@ -324,7 +326,60 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
 // that are not yet reconstructed as named members; the walk is declared extern so
 // this entry layer is faithful and links.
 // ---------------------------------------------------------------------------
-extern int AptActionInterpreter_InstanceOfChainWalk(AptValue* pObject, AptValue* pClass);  // FLAG: proto/interface walk
+// AptActionInterpreter_InstanceOfChainWalk -- HOMED 2026-07-02 from the X360
+// isObjectOfType @0x82AEA5B8's object arm (retiring the return-0 link-stub).
+// The needle is pClass's prototype: GetNativeHashVirtual()->mpPrototype (+0xC;
+// the asm reads it unguarded -- the caller's is-object gate guarantees a hash).
+// Three arms:
+//   * a CIH-family pObject (vtbl 12 defined / 37): walk the ENTIRE hash
+//     __proto__ (+8) chain, latching result=1 on a needle match WITHOUT early
+//     exit (the shipped loop keeps walking);
+//   * a defined Object (vtbl 19): AptObject::DoesImplementObject(needle) --
+//     the own-prototype + interface-table reachability test;
+//   * anything else: an identity walk down the __proto__ chain (step first --
+//     the object itself is never compared), bailing when a hop is not a
+//     defined object (the in-loop vtbl[+0xC] predicate) or the chain ends.
+int AptActionInterpreter_InstanceOfChainWalk(AptValue* pObject, AptValue* pClass)
+{
+    int nResult = 0;
+
+    AptNativeHash* const pClassHash = pClass->GetNativeHashVirtual();   // vtbl[2]
+    AptValue* const pNeedle = pClassHash->mpPrototype;                  // +0xC
+
+    const AptVirtualFunctionTable_Indices eType = pObject->getVtblIndex();
+    if ((eType == AptVFT_CharacterInstHandle && pObject->getIsDefined())
+        || eType == AptVFT_CIHNone)
+    {
+        // CIH-family chain walk (no early exit on a match).
+        AptValue* p = pObject;
+        for (;;)
+        {
+            AptNativeHash* const pHash = p->GetNativeHashVirtual();
+            p = pHash ? pHash->mp__Proto__ : nullptr;                   // +8
+            if (p == nullptr)
+                break;
+            if (p == pNeedle)
+                nResult = 1;
+        }
+        return nResult;
+    }
+
+    if (eType == AptVFT_Object && pObject->getIsDefined())
+        return static_cast<AptObject*>(pObject)->DoesImplementObject(pNeedle) ? 1 : 0;
+
+    // Generic identity walk (step, then compare).
+    for (AptValue* p = pObject;;)
+    {
+        AptNativeHash* const pHash = p->GetNativeHashVirtual();
+        p = pHash ? pHash->mp__Proto__ : nullptr;
+        if (p == nullptr)
+            return 0;
+        if (p == pNeedle)
+            return 1;
+        if (!(p->getIsDefined() && p->isObject()))   // the in-loop object predicate
+            return 0;
+    }
+}
 
 int AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
 {

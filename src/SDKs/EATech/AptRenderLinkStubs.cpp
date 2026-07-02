@@ -169,7 +169,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     float        Apt_atoff(const char* pStr) { return 0; }   // FLAG link-stub
     int    AptValueGCPool_GetAllocatedCount(void* pPool) { return 0; }   // FLAG link-stub
     int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3) { return 0; }   // FLAG link-stub
-    int AptActionInterpreter_InstanceOfChainWalk(AptValue* pObject, AptValue* pClass) { return 0; }   // FLAG link-stub
+    // AptActionInterpreter_InstanceOfChainWalk RETIRED (2026-07-02): homed in
+    // AptActionInterpreter.cpp (the X360 isObjectOfType @0x82AEA5B8 object arm).
     int AptCIH_ShapeHitTest(AptValue* pNode, float fX, float fY) { return 0; }   // FLAG link-stub
     // AptInterp_LabelToFrame RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
     // (the clip movie's label-hash lookup, X360 @0x82B0C618 chain).
