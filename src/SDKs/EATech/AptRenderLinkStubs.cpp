@@ -142,7 +142,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
 
     AptCharacter* AptResolveFontGlyph(AptCharacter* pFontChar, int nGlyphIndex) { return nullptr; }   // FLAG link-stub
     AptCharacter* AptResolveTextFontCharacter(AptCharacter* pFontOwner, int nFontIndex) { return nullptr; }   // FLAG link-stub
-    AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSearchImports) { return nullptr; }   // FLAG link-stub
+    // findCharacterInLibrary RETIRED (2026-07-02): homed in
+    // AptCIHNativeFunctionHelper.cpp (the X360 @0x82AFDF58 parent-chain
+    // export/import library resolve).
     AptDragState* AptApt_GetDragState() { return nullptr; }   // FLAG link-stub
     AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStringC* pName) { return nullptr; }   // FLAG link-stub
     // AptScriptFunctionBase_GetActiveFrameStack RETIRED (2026-07-02): homed in AptFrameStack.cpp.

@@ -47,6 +47,9 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"      // the operand-stack view (gotoAndX)
 #include "SDKs/EATech/include/Apt/AptMovie.h"                     // mpLabelHash (label -> frame)
 #include "SDKs/EATech/include/Apt/AptCharacter.h"                 // the movie character (KU_AptEmbeddedMovieOff)
+#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"        // the def base (findCharacterInLibrary)
+#include "SDKs/EATech/include/Apt/AptSharedPtr.h"                 // AptFilePtr op= (the export file-assign)
+#include <string.h>                                               // _stricmp (the library-name compares)
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"           // spDefaultMovieCharacter/CreateMovieCharacterInst (createEmptyMovieClip)
 #include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h"      // spDefaultTextCharacter -> AptCharacter upcast (createTextField)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                    // gpAptTarget->mpAnimationTarget/mpLinker (attachMovie/loadMovie)
@@ -257,6 +260,73 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
         }
     }
     return gpUndefinedValue;   // off_8324D814
+}
+
+// ---------------------------------------------------------------------------
+// findCharacterInLibrary @0x82AFDF58 (HOMED 2026-07-02, retiring the null
+// stub). Resolve an exported library symbol name to its AptCharacter: walk
+// pNode's display-parent chain; at each node, take its character's owning def
+// base (the character's mpFixupLink back-link -- charTable[0], the root --
+// plus KU_AptEmbeddedMovieOff), then
+//   * scan the EXPORT list (mpInitList: name @+0, id @+8, stride 0x10) with a
+//     case-insensitive compare against pName; a hit returns
+//     charTable[id], first assigning the STARTING node's character's
+//     AptFile into the hit's null mpAnimationFile slot (the ref-counted
+//     AptFilePtr assignment -- console AptFile::operator=(char+0xC, ...));
+//   * when bSearchImports (always true past the first node), scan the IMPORT
+//     table (mpImportTable: class name @+8, id @+0x10, stride 0x20); a hit
+//     returns charTable[id] directly.
+// Null when the chain is exhausted.
+// ---------------------------------------------------------------------------
+AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSearchImports)
+{
+    // The starting node's character (the export-hit file-assign source).
+    const AptCharacter* const pSourceChar =
+        pNode->GetCharacterInst()->GetRenderItem()->mpCharacter;
+
+    for (AptCIH* pWalk = pNode; pWalk != nullptr;
+         pWalk = pWalk->GetDisplayListParent(), bSearchImports = 1)
+    {
+        const AptCharacter* const pChar =
+            pWalk->GetCharacterInst()->GetRenderItem()->mpCharacter;
+        AptCharacterAnimation* const pDef =
+            reinterpret_cast<AptCharacterAnimation*>(
+                reinterpret_cast<char*>(pChar->mpFixupLink) + KU_AptEmbeddedMovieOff);
+
+        // ---- the EXPORT list --------------------------------------------------
+        for (int32_t i = 0; i < pDef->mnInitListCount; ++i)
+        {
+            const AptInitEntry& rEntry = pDef->mpInitList[i];
+            if (_stricmp(pName->GetBuffer(),
+                         static_cast<const char*>(rEntry.mpInitObject)) == 0)
+            {
+                AptCharacter* const pFound =
+                    pDef->mpCharacterTable[rEntry.mnIndicator];
+                if (pFound->mpAnimationFile == nullptr)
+                {
+                    // The ref-counted AptFilePtr assignment (IncRef the source).
+                    reinterpret_cast<AptFilePtr*>(&pFound->mpAnimationFile)
+                        ->operator=(
+                            *reinterpret_cast<const AptFilePtr*>(
+                                &pSourceChar->mpAnimationFile));
+                }
+                return pFound;
+            }
+        }
+
+        // ---- the IMPORT table (from the second node on) -----------------------
+        if (bSearchImports)
+        {
+            for (int32_t i = 0; i < pDef->mnImportCount; ++i)
+            {
+                const AptImportEntry& rEntry = pDef->mpImportTable[i];
+                if (_stricmp(pName->GetBuffer(),
+                             static_cast<const char*>(rEntry.mpClassName)) == 0)
+                    return pDef->mpCharacterTable[rEntry.mnId];
+            }
+        }
+    }
+    return nullptr;
 }
 
 // ---------------------------------------------------------------------------
