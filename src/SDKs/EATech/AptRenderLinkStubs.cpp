@@ -219,7 +219,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     { if (pOutHit) *pOutHit = 0; if (ppExisting) *ppExisting = 0; return 0; }   // FLAG link-stub
     void  AptValue_setGCRoot(AptValue* pValue, int bRoot) {}   // FLAG link-stub
     void AptActionInterpreter_UnEscape(EAStringC* pStr) {}   // FLAG link-stub
-    void AptActionInterpreter_getName(AptCIH* pNode, EAStringC* pOut) {}   // FLAG link-stub
+    // AptActionInterpreter_getName RETIRED (2026-07-02): homed in
+    // AptCIHNativeFunctionHelper.cpp (getName @0x82AF75C8 + the recursive
+    // sub_82AF7400 target-path builder).
     // AptActionInterpreter_stackPushIndirect RETIRED (2026-07-01): homed as the real member
     // AptActionInterpreter::stackPushIndirect in AptActionInterpreter.cpp; caller uses the member.
     // AptAnimationTargetSet_Construct is now HOMED faithfully in AptAnimationTarget.cpp
