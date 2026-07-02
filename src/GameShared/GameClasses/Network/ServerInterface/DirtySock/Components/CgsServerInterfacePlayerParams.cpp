@@ -65,9 +65,11 @@ void ServerInterfacePlayerParamsBase::SerialiseFromPlayer(const void* lpPlayer)
 
     const char* lpcPattern = GetPattern();
     const u32   luDataSize = GetDataSize();
-    void*       lpData     = GetData();
+    // NOTE: the binary dispatches through vtable slot +0x14 here, i.e. the
+    // const GetData() overload (not the non-const +0x10 one used elsewhere).
+    const void* lpcData    = static_cast<const ServerInterfacePlayerParamsBase*>(this)->GetData();
     TagFieldGetStructure(reinterpret_cast<const char*>(lpcRec + 0x68),
-                         lpData, static_cast<s32>(luDataSize), lpcPattern);
+                         const_cast<void*>(lpcData), static_cast<s32>(luDataSize), lpcPattern);
 }
 
 void ServerInterfacePlayerParamsBase::SerialiseToString(char* lpcRecord, s32 liRecLen) const

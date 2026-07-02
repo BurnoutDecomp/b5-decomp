@@ -24,12 +24,15 @@
 
 namespace CgsNetwork
 {
-    // {mask, value} fold table for hardware flags (CgsServerInterfacePlayerInfoData.cpp:57).
+    // {value, mask} fold table for hardware flags (CgsServerInterfacePlayerInfoData.cpp:57).
     //   KI_NUM_HW_FLAGS == 14 entries; ConvertHWFlags ORs in value when (mask & in) == mask.
+    //   Field order matches the X360 asm layout verbatim: each 8-byte entry is read as
+    //   value at +0, mask at +4 (both ConvertHWFlags @ 0x82879768 and the inlined fold
+    //   in SerialiseFromUser @ 0x82879CE8 read mask at the +4 slot of every entry).
     struct FlagMapping
     {
-        u32 muMask;
         u32 muValue;
+        u32 muMask;
     };
 
     const s32 KI_NUM_HW_FLAGS = 14;
