@@ -45,6 +45,11 @@ namespace BrnFlapt
         // whether the string is looked up through the localisation manager.
         void SetText(const char* lpcText, bool lbLocalise);
 
+        // ClearText @ 0x8246CBD8 -- blank the field's displayed text. Real X360
+        // symbol (PlayerPositionSingleComponent::RenderValue's empty-value paths);
+        // declaration-only (bodied in its own sibling TU).
+        void ClearText();
+
         // SetAutoSize(bool) @ 0x8246D488 -- enable/disable the field's auto-size flag
         // (the text box grows to fit its content). Used by EATraxInGameComponent::
         // Prepare to make the artist-name field auto-size.
@@ -82,6 +87,23 @@ namespace BrnFlapt
         bool SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
                               s32 liNumParams, const char* const* lppcParams,
                               const s32* lpeParamFormatTypes);
+
+        // SetLocalisedText(id, type, value, valueFormat) @ 0x8246D398 -- look the
+        // string id up and format lfValue into its single positional parameter with
+        // leValueFormatType (raw ParameterFormatType integers per this home's house
+        // style). X360 call sites (PlayerPositionSingle::RenderValue): r5=9 id-lookup,
+        // fp1=the value, r7=11 E_FORMAT_INTEGER. DWARF shape (const char*, PFT,
+        // float32_t, PFT). Declaration-only (bodied in its own sibling TU).
+        bool SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
+                              f32 lfValue, s32 liValueFormatType);
+
+        // SetLocalisedText(id, type, numParams, ...) @ 0x8246CFF0 -- the varargs
+        // positional-parameter form (pairs of value, ParameterFormatType). DWARF shape
+        // (const char*, PFT, int32_t, ...). X360 call sites pass one (const char*,
+        // format) pair (e.g. "STAT_SECONDS" + a preformatted buffer with format 0).
+        // Declaration-only (bodied in its own sibling TU).
+        bool SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
+                              s32 liNumParams, ...);
 
         // SetLocalisedText(const char*, StringIdType) @ 0x8246CD00 -- look a localised
         // string up by id through the language manager and display it. The overload

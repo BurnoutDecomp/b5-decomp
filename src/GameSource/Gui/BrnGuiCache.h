@@ -24,6 +24,7 @@ namespace BrnGui
     // Pointer-only members of the GuiCache layout (forward-declared; the cache never
     // dereferences their full type in this TU -- it stores/returns the pointer).
     struct FreeburnChallengeManager;
+    struct BurnoutSkillsManager;   // GetBurnoutSkillsManager return (pointer only)
     struct HudMessageController;
     struct HudMessageDirector;
     struct MapIconManager;
@@ -245,6 +246,20 @@ namespace BrnGui
         s32 GetActiveRoadRuleScoringMode() const;   // X360 @0x8240FC28 (meRoadRuleScoreMode, != COUNT)
 
         const FreeburnChallengeManager* GetFreeburnChallengeManager() const; // X360 @0x8240F168
+
+        // ADDITIVE GROW (PlayerPositionSingle::RenderValue @0x82421F78, which inlines all
+        // three): the game-mode word, the active road rule, and the skills-manager pointer
+        // (DWARF accessors h:981 GetGameMode / h:1290 GetActiveRoadRule / h:1362
+        // GetBurnoutSkillsManager; no standalone X360 symbols).
+        s32 GetGameMode() const                                  { return meGameModeType; }
+        s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
+        s32 GetActiveRoadRule() const                            { return meActiveRoadRule; }
+        const BurnoutSkillsManager* GetBurnoutSkillsManager() const { return mpSkillsManager; }
+
+        // DWARF h:1203 -- the checkpoint count for the current event (muCheckpointsInEvent).
+        // ADDITIVE GROW: real X360 symbol (called by RenderValue @0x82422030);
+        // declaration-only (bodied with the GuiCache accessor TUs).
+        u8 GetCheckpointsInEvent() const;
         const HudMessageController*     GetHudMessageController() const;      // X360 @0x82472D00
         const HudMessageDirector*       GetHudMessageDirector() const;        // X360 @0x82472D58
 
@@ -261,11 +276,13 @@ namespace BrnGui
         f32 mfTimeNow;                                   // +0x0004 (4)     GetTime, != -FLT_MAX
         u8  mPad_0008[16476];                            // +0x0008..+0x4063
         WorldDataController*      mpWorldDataController;  // +0x4064 (16484)
-        u8  mPad_4068[4];                                // +0x4068
+        const BurnoutSkillsManager* mpSkillsManager;      // +0x4068 (16488) DWARF h:1632 (PlayerPositionSingle::RenderValue @0x824223FC)
         FreeburnChallengeManager* mpChallengeManager;    // +0x406C (16492)
         HudMessageController*     mpHudMessageController; // +0x4070 (16496)
         HudMessageDirector*       mpHudMessageDirector;   // +0x4074 (16500)
-        u8  mPad_4078[4616];                             // +0x4078..+0x527F
+        u8  mPad_4078[2696];                             // +0x4078..+0x4AFF
+        s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
+        u8  mPad_4B04[1916];                             // +0x4B04..+0x527F
         s32 miNumPresetRaces;                            // +0x5280 (21120)
         u8  mPad_5284[19408];                            // +0x5284..+0x9E53
         s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker
@@ -294,7 +311,10 @@ namespace BrnGui
         CgsID mShutdownCarID;                            // +0x9FF0 (40944)
         u8  mPad_9FF8[8];                                // +0x9FF8..+0x9FFF
         s32 meTrophyCarUnlockType;                       // +0xA000 (40960) TrophyUnlockData::UnlockType
-        u8  mPad_A004[3132];                             // +0xA004..+0xAC3F
+        u8  mPad_A004[3124];                             // +0xA004..+0xAC37
+        bool mabRoadRulesActive[2];                      // +0xAC38 (DWARF h; precedes meActiveRoadRule)
+        u8  mPad_AC3A[2];                                // +0xAC3A..+0xAC3B
+        s32 meActiveRoadRule;                            // +0xAC3C (44092) BrnGameState::EActiveRoadRule (PlayerPositionSingle::RenderValue gate @0x824220B4)
         s32 meRoadRuleScoreMode;                         // +0xAC40 (44096) GuiEventSetRoadRuleScoreMode::ERoadPanelModes
         u8  mPad_AC44[1];                                // tail guard (further far members --
         // pre-race messages, profile/replay/online tables, sat-nav zoom -- are reached only

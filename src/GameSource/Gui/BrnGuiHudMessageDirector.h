@@ -37,6 +37,7 @@ namespace BrnGui
 {
     class GuiCache;
     class HudMessageController;
+    struct GuiHudMessage;   // GameSource/Gui/BrnGuiEventTypeDefs.h
 
     struct HudMessageDirector
     {
@@ -51,6 +52,12 @@ namespace BrnGui
 
         // The published HUD message event type the payback/camera-filter functions queue.
         static const s32 KI_STOP_FLAG_EVENT_TYPE = 0x9C;  // 156
+
+        // AddMessage(message, bool) -- push one HUD message into the director (DWARF
+        // BrnGuiHudMessageDirector.h:82). ADDITIVE GROW: real X360 symbol (the
+        // HudMessageAnalyzer's TriggerMessage overloads @0x825179E8/@0x82517AF8 call
+        // it with false); declaration-only (its own ledger function).
+        void AddMessage(const GuiHudMessage* lpMessage, bool lbFlag);
 
         // @ 0x8250C830 -- set the camera-sequence stop flag; when set, queue the stop event.
         void SetCameraSequenceFilter(bool lbShowing);

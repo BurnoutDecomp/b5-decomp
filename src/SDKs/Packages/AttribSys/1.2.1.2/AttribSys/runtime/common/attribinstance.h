@@ -31,6 +31,23 @@ namespace Attrib
     // The 16-byte attribute record Get copies out.
     struct AttributeValue { u32 mauWords[4]; };
 
+    // A reference to another generated-class instance carried inside attribute data
+    // (DWARF attribsys.h:735, members :762-764). X360 record: the 64-bit generated-
+    // class key, the 64-bit collection key, then the resolved collection pointer --
+    // 24 bytes with tail padding (Attrib::DefaultDataArea(0x18) is the null-element
+    // fallback for RefSpec arrays, e.g. a shotgroup's ShotList). The class key is the
+    // leading qword (BrnDirector::ShotSelector::GetCrashShot @0x822396F8 `ld 0(ref)` +
+    // cmpld against the generated ClassKey constants).
+    struct RefSpec
+    {
+        u64 GetClassKey() const { return mClassKey; }
+
+    private:
+        u64               mClassKey;       // +0x00 (attribsys.h:762)
+        u64               mCollectionKey;  // +0x08 (attribsys.h:763)
+        const Collection* mpCollectionPtr; // +0x10 (attribsys.h:764)
+    };
+
     // Collection helpers + generated-class helpers (each its own TU).
     Collection* Collection_AddRef(Collection* lpCollection, int liFlags);
     int         Collection_Release(Collection* lpCollection, int liFlags);
@@ -53,6 +70,13 @@ namespace Attrib
         Collection* ChangeWithDefault(int* lpRefSpec);
         void*       Get(AttributeValue* pOut, int* lpName, int liArg);
         void*       GetAttributePointer();
+
+        // Indexed array-attribute element lookup: the 64-bit attribute key (the
+        // generated Hash:: constant widened with its type tag) + the element index.
+        // REAL X360 symbol (Attrib::Instance::GetAttributePointer overload; called by
+        // ShotSelector::GetCrashShot @0x82239894 with 0x7533C0E2_15246B49 = the
+        // shotgroup ShotList key). Declaration-only (bodied with the AttribSys TUs).
+        void*       GetAttributePointer(u64 luAttributeKey, u32 luIndex) const;
         int         GetClass() const;
         void*       GetCollection() const;
 

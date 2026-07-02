@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_EFFECT_TRIGGER_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N> (the 100-slot hook table)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnDirectorEffectTrigger.h
@@ -37,27 +38,68 @@ namespace BrnDirector
     };
 
     // The set of camera-PFX hooks currently live this frame (the SharedInfo's
-    // mpEffectInterface). The roaming state only passes it BY REFERENCE to the two free
-    // functions below (they query it for the current hook name / blend amount), so its
-    // internal layout is owned by the EffectTrigger TU and opaque here. DWARF home
-    // BrnDirectorEffectTrigger.h:79.
-    //
-    // The rank-up arbitrator state (BrnArbStateRankUp::Update) additionally queries it for
-    // whether an effect is currently requested and, if so, that effect's name (to decide
-    // whether the live take is the checkpoint take). Those two reads are modelled here as
-    // named accessors so the consumer never pokes the interface by offset; they are
-    // DECLARATION-ONLY (the bodies live with the EffectTrigger TU; the per-TU cl /c gate
-    // does not link). FLAG: minimal slice -- the real EffectInterface layout/method set
-    // lands with its own TU; the accessor NAMES are stable.
-    //   X360 (ArbStateRankUp::Update @0x82236380): the gate byte read at EffectInterface
-    //   +0xD37 -> HasCurrentEffectName(); the name fetch (sub @0x821F17C0) ->
-    //   GetCurrentEffectName().
+    // mpEffectInterface). Formerly a minimal accessor slice; upgraded to the real DWARF
+    // class shape (BrnDirectorEffectTrigger.h:79, members h:195-206) when its own TU
+    // landed the hook-registration Update. X360 layout (documented; access BY NAME):
+    // maHookNames data +0x000..+0xCE3 with the Array count word at +0xCE4 (3300 ==
+    // 100*33 -- the trailing-count CgsArray shape), muRequestedPostFxId +0xCE8, the two
+    // blends +0xCEC/+0xCF0, the two current names +0xCF4/+0xD15, then the four flag
+    // bytes mbGotHooks +0xD36 / mbHasCurrentEffectName +0xD37 (the ArbStateRankUp gate
+    // byte) / mbHasCurrentBackgroundEffectName +0xD38 / mbHasCurrentEffectId +0xD39.
     struct EffectInterface
     {
-        // True when an effect hook is currently requested (X360 byte read at +0xD37).
-        bool        HasCurrentEffectName() const;
-        // The name of the currently-requested effect hook (a NUL-terminated string).
-        const char* GetCurrentEffectName() const;
+        // DWARF h:85 (cpp:31) -- its own ledger function (declaration-only here).
+        void Construct();
+
+        // @0x8221E0F0 (the EffectTrigger TU, cpp:46) -- register this frame's hook-name
+        // enumeration: clear the table, wrap+append each name (asserting non-NULL), and
+        // latch mbGotHooks; the out-flag asks the caller to (re)enumerate when the
+        // hooks are still missing.
+        void Update(s32 liNumHooks, const char* const* lapHookNames,
+                    bool* lpbRequestEnumerationOut);
+
+        // DWARF h:95 (cpp:72) -- its own ledger function (declaration-only here).
+        void Update(bool* lpbRequestEnumerationOut);
+
+        // DWARF h:98/h:102/h:106 -- their own ledger functions (declaration-only).
+        s32 GetNumHooks() const;
+        bool HookExists(const char* lpcName) const;
+        const char* GetHookName(s32 liIndex) const;
+
+        // True when an effect hook is currently requested (X360 byte @+0xD37).
+        bool HasCurrentEffectName() const { return mbHasCurrentEffectName; }
+
+        // The name of the currently-requested effect hook. NOTE: the DWARF shape
+        // returns `const HookNameStringWrapper&`; the established consumers
+        // (ArbStateRankUp) strcmp the raw string, so this home keeps the char*
+        // form -- same bytes (the wrapper IS the char[33]).
+        const char* GetCurrentEffectName() const { return mCurrentEffectName.mHookNameString; }
+
+        // DWARF h:115-185 -- their own ledger functions (declaration-only here).
+        f32 GetCurrentEffectBlendAmount() const;
+        bool HasCurrentBackgroundEffectName() const;
+        const HookNameStringWrapper& GetCurrentBackgroundEffectName() const;
+        f32 GetCurrentBackgroundEffectBlendAmount() const;
+        bool HasCurrentEffectId() const;
+        u32 GetCurrentEffectId() const;
+        void RegisterStartingEffectWithName(const HookNameStringWrapper& lrName, f32 lfBlend);
+        void RegisterStoppingEffectWithName(const HookNameStringWrapper& lrName);
+        void RegisterStartingBackgroundEffectWithName(const HookNameStringWrapper& lrName, f32 lfBlend);
+        void RegisterStoppingBackgroundEffectWithName(const HookNameStringWrapper& lrName);
+        void RegisterStartingEffectWithId(u32 luEffectId);
+        u32 GetNullEffectId() const;
+
+    private:
+        Array<HookNameStringWrapper, 100> maHookNames;             // +0x000 (DWARF h:195; count @+0xCE4)
+        u32                   muRequestedPostFxId;                  // +0xCE8 (DWARF h:197)
+        f32                   mfCurrentEffectBlendAmount;           // +0xCEC (DWARF h:198)
+        f32                   mfCurrentBackgroundEffectBlendAmount; // +0xCF0 (DWARF h:199)
+        HookNameStringWrapper mCurrentEffectName;                   // +0xCF4 (DWARF h:200)
+        HookNameStringWrapper mCurrentBackgroundHookName;           // +0xD15 (DWARF h:201)
+        bool                  mbGotHooks;                           // +0xD36 (DWARF h:203)
+        bool                  mbHasCurrentEffectName;               // +0xD37 (DWARF h:204)
+        bool                  mbHasCurrentBackgroundEffectName;     // +0xD38 (DWARF h:205)
+        bool                  mbHasCurrentEffectId;                 // +0xD39 (DWARF h:206)
     };
 
     namespace Camera

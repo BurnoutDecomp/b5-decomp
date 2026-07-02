@@ -12,6 +12,8 @@ extern "C" {
     extern void* off_820CEA3C;
 }
 
+namespace Attrib { namespace Gen { class shotgroup; } }   // GameSource/AttribSys/Generated/classes/shotgroup.h
+
 namespace BrnDirector
 {
 
@@ -75,6 +77,15 @@ public:
     {
         return &mICEResourceMgr;
     }
+
+    // The three crash-energy shotgroup banks (DWARF h:351/h:357/h:354; members
+    // mFastCrashShotGroup/mNormalCrashShotGroup/mSlowCrashShotGroup at X360
+    // manager+1400/+1416/+1432 -- ShotSelector::GetCrashShot @0x82239708.. inlines
+    // these accessors to those direct field addresses). ADDITIVE GROW:
+    // declaration-only (the member bank + bodies land with this manager's own TU).
+    const Attrib::Gen::shotgroup& GetFastCrashShots() const;
+    const Attrib::Gen::shotgroup& GetNormalCrashShots() const;
+    const Attrib::Gen::shotgroup& GetSlowCrashShots() const;
 
     DirectorResourceManager(int a1);
 

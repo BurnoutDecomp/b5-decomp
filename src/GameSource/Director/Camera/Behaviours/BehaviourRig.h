@@ -33,6 +33,8 @@
 #include "GameSource/Director/Camera/Utils/BrnPositionLag.h"  // PositionLag
 #include "GameSource/Director/Utils/BrnVehicleRef.h"          // BrnDirector::VehicleRef (base)
 #include "GameSource/Physics/PhysicsUtilities/Spring1D.h"     // BrnPhysics::Spring1D
+
+namespace BrnDirector { class WorldMap; }   // GameSource/Director/Utils/BrnDirectorWorldMap.h (minimal slice)
 // BrnPlayerInfo.h (VehicleInfo) is included by the .cpp; the header only embeds named members.
 
 namespace BrnDirector
@@ -222,6 +224,10 @@ struct BehaviourSharedInfo
 
     // @pseudo +352*4+timestep*4: per-frame delta seconds indexed by timestep type.
     f32 GetTimestep(BrnDirector::Timestep::EType leType) const;
+
+    // ADDITIVE GROW (PositionFinder::Update @0x8223FD3C, which loads the map pointer
+    // at sharedInfo+0x5DC and hands it to the WorldMap safe-position query).
+    const ::BrnDirector::WorldMap* GetWorldMap() const;
 };
 
 // ============================================================================
