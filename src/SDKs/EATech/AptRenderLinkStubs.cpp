@@ -234,7 +234,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptCIH_queueClipEvents_RunMatched RETIRED (2026-07-01): homed faithfully in
     // AptCIHBehaviour.cpp from the PS3 body @0x815BD0 (the clip-event record scan +
     // AddActionFront/Back enqueues; the byte-code-block + __proto__ tails staged there).
-    int  AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool bClearGCRoots) { return 0; }   // FLAG link-stub
+    // AptCIH_ClearCIH_DrainQueuesAndZombie RETIRED (2026-07-02): homed in
+    // AptCIHBehaviour.cpp (the director-set/new-inst drain + the unload-event tail;
+    // the zombie-vector decision stays a documented staged FLAG there).
     bool AptCIH_sbGeneralisedProcessEarlyReturn = false;   // FLAG link-stub (bEarlyReturn; gate off by default)
     unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*)  = nullptr;   // FLAG link-stub
     unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*) = nullptr;   // FLAG link-stub
