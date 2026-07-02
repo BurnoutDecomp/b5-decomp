@@ -44,6 +44,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (getBytesTotal)
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"           // AptString::str (the goto label)
 #include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"     // mpValue (the boxed label form)
+#include "SDKs/EATech/include/Apt/AptValueWithHash.h"           // mHash (the embedded property hash)
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"      // the operand-stack view (gotoAndX)
 #include "SDKs/EATech/include/Apt/AptMovie.h"                     // mpLabelHash (label -> frame)
 #include "SDKs/EATech/include/Apt/AptCharacter.h"                 // the movie character (KU_AptEmbeddedMovieOff)
@@ -260,6 +261,17 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
         }
     }
     return gpUndefinedValue;   // off_8324D814
+}
+
+// ---------------------------------------------------------------------------
+// AptValue_EmbeddedNativeHash (HOMED 2026-07-02, retiring the null stub). The
+// X360 reads an AptValueWithHash's embedded property hash at value +8 -- the
+// typed mHash member (localToGlobal's point-object x/y lookups etc.).
+// ---------------------------------------------------------------------------
+AptNativeHash* AptValue_EmbeddedNativeHash(AptValue* pValue)
+{
+    // The AptValueWithHash override returns &mHash -- the same +8 sub-object.
+    return static_cast<AptValueWithHash*>(pValue)->GetNativeHashVirtual();
 }
 
 // ---------------------------------------------------------------------------
