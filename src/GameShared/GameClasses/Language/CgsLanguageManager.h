@@ -132,6 +132,14 @@ namespace CgsLanguage
         // @0x824B1BC0/@0x824B1C78, the "TEMP_POPUP_STRING1/2" button labels).
         // ADDITIVE GROW: declaration-only (their bodies are this TU's own ledger
         // functions, not yet reconstructed).
+        // X360 0x82864C48 (DWARF CgsLanguageManager.h:255) -- resolve lpcSourceText
+        // through the given format into the caller's buffer (E_FORMAT_ID_LOOKUP resolves
+        // it as a loc-string id; the value formats render clocks/distances/money).
+        // TextField::SetLocalisedText resolves through it with a 1024 cap. ADDITIVE GROW:
+        // declaration-only (its body is this TU's own ledger function).
+        bool FormatText(char* lpacBuffer, u32 luBufferSize, const char* lpcSourceText,
+                        ParameterFormatType leType);
+
         bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
                               ParameterFormatType leType);
         bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,

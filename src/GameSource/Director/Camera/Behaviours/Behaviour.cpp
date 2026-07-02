@@ -23,8 +23,9 @@
 //       "follow" request bit), matching the asm `ld/and ~3.../std` on +0x140.
 //
 // FLAG: the ValidityAccount home and the +0x140 flag-word block are genuinely un-homed
-// (the BehaviourManager.cpp note records the ValidityAccount as un-homed Behaviour
-// interior; no SetFlag/sub_82204148 body exists in the committed tree). They are modelled
+// (SetFlag @0x82204028 now HAS a committed home -- GameSource/Director/Camera/
+// BrnCameraValidityAccount.h -- migrate these helpers to it; sub_82204148 remains
+// un-homed). They are modelled
 // here as named declaration-only helpers in `detail` -- the call sites read faithfully
 // against the asm, but the per-TU `cl /c` gate does not link them. Replace with the real
 // homes when the Behaviour shared-info / ValidityAccount TU lands; the helper NAMES are

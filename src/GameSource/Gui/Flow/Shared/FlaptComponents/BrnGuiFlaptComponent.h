@@ -2,6 +2,7 @@
 #define BRN_GUI_FLAPT_COMPONENT_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the Construct tripwire)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"   // BrnFlapt::MovieClipRef (embedded by value)
 
 // ============================================================================
@@ -77,6 +78,16 @@ namespace BrnGui
         // mAptRef zero-pairs in BrnGui::BaseOverlayState's reset path
         // @0x824B1F0C/@0x824B2020/@0x824B2E50).
         void SetInvalid() { mAptRef.SetInvalid(); }
+
+        // Construct -- adopt the state channel and invalidate the clip. ADDITIVE GROW
+        // (X360 header-inline; FriendsListEntry::Construct @0x82414B28 opens with it:
+        // the h:113 "lpStateInterface" tripwire, the interface store, the ref clear).
+        void Construct(CgsGui::StateInterface* lpStateInterface)
+        {
+            CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // BrnGuiFlaptComponent.h:113 (non-gating)
+            mpStateInterface = lpStateInterface;
+            mAptRef.SetInvalid();
+        }
 
     protected:
         // +0x00 : the GUI state channel this component talks to (subclass Construct

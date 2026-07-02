@@ -44,3 +44,51 @@ void EffectInterface::Update(s32 liNumHooks, const char* const* lapHookNames,
 }
 
 }
+
+
+// ============================================================================
+// BrnDirector::BackgroundEffectRequest (class TU) -- reconstructed from
+// BURNOUT_X360_ARTIST.XEX.
+//   GetBackgroundStartRequestBlendAmount @0x823A79C8   (h:249 tripwire)
+//   RegisterAndUpdateRequest             @0x82232E88   (h:361 tripwire)
+// ============================================================================
+namespace BrnDirector
+{
+    // h:249 -- non-gating guard, then the staged blend.
+    f32 BackgroundEffectRequest::GetBackgroundStartRequestBlendAmount() const
+    {
+        CGS_ASSERT(HasBackgroundStartRequest(), "HasBackgroundStartRequest()");   // :249
+        return mfBlendAmount;
+    }
+
+    // @ 0x82232E88 -- h:361. Apply the pending request against the live interface:
+    // a stop request stops the named background hook; a start request registers it
+    // (the X360 inlines RegisterStartingBackgroundEffectWithName's three stores).
+    // NOTE (asm-pinned): the pending flag clears ONLY when the hook does NOT exist
+    // yet -- an applied request stays pending and re-applies each frame.
+    void BackgroundEffectRequest::RegisterAndUpdateRequest(EffectInterface* lpEffectInterface)
+    {
+        CGS_ASSERT(lpEffectInterface != 0, "lpEffectInterface != NULL");   // :361
+
+        if (mbStartRequested)
+        {
+            if (mbStopRequest)
+            {
+                if (lpEffectInterface->HookExists(mHookName.mHookNameString))
+                {
+                    lpEffectInterface->RegisterStoppingBackgroundEffectWithName(mHookName);
+                    return;
+                }
+            }
+            else
+            {
+                if (lpEffectInterface->HookExists(mHookName.mHookNameString))
+                {
+                    lpEffectInterface->RegisterStartingBackgroundEffectWithName(mHookName, mfBlendAmount);
+                    return;
+                }
+            }
+            mbStartRequested = false;
+        }
+    }
+}

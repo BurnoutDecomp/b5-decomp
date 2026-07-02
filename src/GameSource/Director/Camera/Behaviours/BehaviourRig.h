@@ -66,6 +66,15 @@ public:
     virtual ~CollisionPolicy() {}
     virtual void GenerateSceneQueries(const void*, Camera&) {}
     virtual void ProcessSceneQueryResults(const void*, Camera&) {}
+
+    // @0x82206450 (class TU; body in ../BrnCameraCollisionPolicy.cpp) -- give up:
+    // record the failure reason in the shared info's validity account (+0x138),
+    // drop the info's follow-request bit (the +0x140 u64, bit 1), raise mbFailed.
+    void Fail(BehaviourSharedInfo* lpInfo, s32 liReason);
+
+private:
+    // ADDITIVE GROW (Fail @0x82206450 `stb 1,4(this)`): the policy's failed latch.
+    bool mbFailed;   // +0x04 (X360; right after the vptr)
 };
 
 // ============================================================================

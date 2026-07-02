@@ -102,6 +102,35 @@ namespace BrnDirector
         bool                  mbHasCurrentEffectId;                 // +0xD39 (DWARF h:206)
     };
 
+    // ------------------------------------------------------------------------
+    // BackgroundEffectRequest (ADDITIVE GROW: its class TU) -- a pending
+    // background camera-PFX request (the hook name + blend a director state
+    // stages, applied against the live EffectInterface each frame). Both DWARF
+    // assert cites (h:249/h:361) put its home in this header. X360 layout:
+    // the leading HookNameStringWrapper (the request IS passable as the name),
+    // mfBlendAmount @+0x24, mbStartRequested @+0x28, mbStopRequest @+0x29
+    // (FLAG: the two flag names are inferred from HasBackgroundStartRequest()).
+    // ------------------------------------------------------------------------
+    struct BackgroundEffectRequest
+    {
+        // h:249's asserted condition -- a start request that is not a stop.
+        bool HasBackgroundStartRequest() const { return mbStartRequested && !mbStopRequest; }
+
+        // @0x823A79C8 (class TU; body in BrnDirectorEffectTrigger.cpp) -- the
+        // staged blend, guarded by the h:249 tripwire.
+        f32 GetBackgroundStartRequestBlendAmount() const;
+
+        // @0x82232E88 (class TU; body in BrnDirectorEffectTrigger.cpp) -- apply
+        // the pending request against the live interface.
+        void RegisterAndUpdateRequest(EffectInterface* lpEffectInterface);
+
+        HookNameStringWrapper mHookName;         // +0x00 (the request's hook name)
+        u8                    maPad21[3];        // +0x21..+0x23
+        f32                   mfBlendAmount;     // +0x24
+        bool                  mbStartRequested;  // +0x28
+        bool                  mbStopRequest;     // +0x29
+    };
+
     namespace Camera
     {
         struct Camera;
