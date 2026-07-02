@@ -148,8 +148,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     AptDragState* AptApt_GetDragState() { return nullptr; }   // FLAG link-stub
     AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStringC* pName) { return nullptr; }   // FLAG link-stub
     // AptScriptFunctionBase_GetActiveFrameStack RETIRED (2026-07-02): homed in AptFrameStack.cpp.
-    AptNativeHash* AptValue_EmbeddedNativeHash(AptValue* pValue) { return nullptr; }   // FLAG link-stub
-    AptNativeHash* AptInterp_GetNodeFrameContextHash(AptValue* pContext) { return nullptr; }   // FLAG link-stub
+    // AptValue_EmbeddedNativeHash RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp (the AptValueWithHash mHash @+8).
+    // AptInterp_GetNodeFrameContextHash RETIRED (2026-07-02): homed in AptActionInterpreterInterpHelpers.cpp
+    // (setVariable @0x82B03374: the display PARENT's char-inst property hash -- the enclosing clip's scope).
     AptTextFormat* AptTextFormat_ConstructDefault(void* pBlock, AptValue* pSource, double dArg) { return nullptr; }   // FLAG link-stub
     // AptActionInterpreter_SetIntervalImpl RETIRED (2026-07-02): homed in
     // AptIntervalTimer.cpp (the X360 cbCallMethod_setInterval @0x82B019D8 body).

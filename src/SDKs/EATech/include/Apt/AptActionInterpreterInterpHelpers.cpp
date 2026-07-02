@@ -39,6 +39,27 @@
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"
 #include "SDKs/EATech/include/Apt/AptConstFile.h"
 
+// ---------------------------------------------------------------------------
+// AptInterp_GetNodeFrameContextHash (HOMED 2026-07-02, retiring the null
+// stub). The X360 setVariable node branch @0x82B03374 resolves a node's
+// "frame context" -- the variable scope a timeline write lands in -- as the
+// node's DISPLAY PARENT's char-inst property hash (`*(ctx+0x1C) -> +0x20 ->
+// +0xC` == GetDisplayListParent()->GetCharacterInst()->mpProperties): an AS
+// timeline variable lives on the ENCLOSING clip. Null when the chain breaks
+// (the caller treats that as handled-store-nothing; the console's null-inst
+// arm falls back to the caller's current dest, which a live parent never
+// exercises -- every placed CIH owns an inst).
+// ---------------------------------------------------------------------------
+AptNativeHash* AptInterp_GetNodeFrameContextHash(AptValue* pContext)
+{
+    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+    AptCIH* const pParent = pNode->GetDisplayListParent();
+    if (pParent == nullptr)
+        return nullptr;
+    AptCharacterInst* const pInst = pParent->GetCharacterInst();
+    return pInst ? pInst->mpProperties : nullptr;
+}
+
 extern AptValue* gpUndefinedValue;   // off_8324D814 (AptValueConvert.cpp)
 
 // ---------------------------------------------------------------------------
@@ -233,7 +254,6 @@ bool AptInterp_SetInScopeChain(AptActionInterpreter* pInterp,
 // a reconstructed named-member path, so resolving the destination hash for a node
 // context is encapsulated here, matching the sibling call/special-op TUs. Returns the
 // node's frame-context property hash, or null when it has none.
-extern AptNativeHash* AptInterp_GetNodeFrameContextHash(AptValue* pContext);
 
 // ---------------------------------------------------------------------------
 // AptInterp_SetVariableFallback -- the tail of setVariable @0x82B03048 reached when
