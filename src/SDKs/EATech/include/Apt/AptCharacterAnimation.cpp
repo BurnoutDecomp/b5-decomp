@@ -1033,317 +1033,194 @@ void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
     return result;
 }
 
-// Unresolve @0x82AF77B0 -- the inverse of Fixup: release the per-character animation
-// refs, un-relocate every record's pointer slot (subtract the load base), and tear
-// down the imports. FAITHFUL to the X360 asm; the serialised records are addressed by
-// their console byte offsets (the FLAGged opaque-record handling). nBase is the load
-// base subtracted off every relocated slot. The atomic ref-count drops + the VM
-// deferred-release queue are FLAGged (console interlocked / single VM thread).
-//
-// FLAG (GUIAPT64 transcode pending): this teardown walk still addresses the def-base +
-// its tables at the CONSOLE record offsets/strides (charCount@0x0C, charTable@0x10 walked
-// with a 4-byte slot stride, importTable stride 0x10, initList stride 8). It is the exact
-// inverse of the CONSOLE Fixup; the matching GUIAPT64 in-place transcode (the inverse of
-// AptCharacterAnimation::Fixup's 64-bit offsets/strides above) lands when the movie-UNLOAD
-// path is enabled -- Unresolve is never reached in the current (load-only, instantiation-
-// deferred) bring-up. mnResolveScratch@0x30 is at the SAME offset in both layouts.
+// Unresolve @0x82AF77B0 (X360) / sub_140845200 (XB1, THE NATIVE-8 ARBITER --
+// located by its unique 0x09876543 freed-character sentinel and transcoded
+// 2026-07-02, retiring the console 4-byte-stride form). The inverse of Fixup:
+// called only from AptFile::~AptFile with the load base; releases the per-
+// character animation refs, converts the type-8/font cross-reference POINTERS
+// back to table indices, per-type un-relocates every record slot (subtract
+// nBase), tears the imports down, stamps every owned character freed, and
+// un-relocates the three table heads. All accesses go through the typed
+// native-8 members (the XB1 offsets: charCount@+0x18, charTable@+0x20 8-byte
+// slots, importCount@+0x34, importTable@+0x38 stride 0x20 {name,class,id,file},
+// initCount@+0x40, initList@+0x48 stride 0x10, parsed-count@+0x50; character
+// records: type@+0, fixup-link@+8, refcount@+0x10, flags-halfword@+0x12,
+// anim-file@+0x18; Shape geometry@+0x30; Text text@+0x50/var@+0x58; Font
+// name@+0x20/glyphCount@+0x28/glyphs@+0x30; sprite/movie body@+0x20 (KU_Apt
+// EmbeddedMovieOff); Image live-unit@+0x20; StaticText recordCount@+0x48/
+// records@+0x50 stride 0x40 w/ the glyph-array slot@+0x38; xref slots
+// @+0x20/+0x28).
 void* AptCharacterAnimation::Unresolve(int32_t nBase)
 {
+    const intptr_t nB = static_cast<intptr_t>(static_cast<uint32_t>(nBase));
     void* result = nullptr;
+    mnParsedValueCount = 0;                                   // *(a1+0x50) = 0
 
-    mnResolveScratch = 0;                                // *(this+0x30) = 0
-
-    // ---- pass 1: release each character's animation file (or rewrite type-8 ids) --
-    const int32_t nChars1 = BlobI32(this, 0x0C);
+    auto IsImportId = [this](int32_t nLogical) -> bool
     {
-        int32_t nLogical = 0;                            // v5
-        for (int32_t iByte = 0; iByte < nChars1 * 4; iByte += 4)   // v7 byte stride
+        for (int32_t i = 0; i < mnImportCount; ++i)
+            if (mpImportTable[i].mnId == nLogical)
+                return true;
+        return false;
+    };
+    auto IndexOfChar = [this](const void* pWant) -> int64_t
+    {
+        for (int32_t i = 0; i < mnCharacterCount; ++i)
+            if (mpCharacterTable[i] == pWant)
+                return i;
+        return -1;
+    };
+    auto Unreloc = [nB](void*& rSlot)
+    {
+        rSlot = rSlot ? reinterpret_cast<void*>(
+                            reinterpret_cast<intptr_t>(rSlot) - nB)
+                      : nullptr;
+    };
+
+    // ---- pass 1: release imported characters / re-index type-8 xrefs ----------
+    for (int32_t i = 0; i < mnCharacterCount; ++i)
+    {
+        AptCharacter* const pChar = mpCharacterTable[i];
+        if (pChar == nullptr)
+            continue;
+        if (!IsImportId(i))
         {
-            void** pTable = reinterpret_cast<void**>(BlobPtr(this, 0x10));
-            void* pChar = *reinterpret_cast<void**>(BlobAt(pTable, iByte));
-            if (pChar)
+            if (pChar->mnType == 8)
             {
-                // Is nLogical an imported character (present in mpImportTable ids)?
-                int32_t iImp = -1;
-                const int32_t nImp = BlobI32(this, 0x20);
-                if (nImp > 0)
-                {
-                    void* pImp = BlobAt(BlobPtr(this, 0x24), 0x08);   // mpImportTable + 8 (id)
-                    for (int32_t i = 0; i < nImp; ++i)
-                    {
-                        if (BlobI32(pImp, 0x00) == nLogical) { iImp = i; break; }
-                        pImp = BlobAt(pImp, 0x10);
-                    }
-                }
-
-                if (iImp == -1)
-                {
-                    // Owned character: type-8 entries get their cross-reference ids
-                    // re-mapped to table indices (the inverse of the import wiring),
-                    // every other type is released below.
-                    void* pCharNow = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                    if (BlobI32(pCharNow, 0x00) == 8)
-                    {
-                        // entry[4] = index of the char whose ptr == entry[4]; -1 if none.
-                        int32_t idx = -1;
-                        const int32_t nC = BlobI32(this, 0x0C);
-                        if (nC > 0)
-                        {
-                            void** pT = reinterpret_cast<void**>(BlobPtr(this, 0x10));
-                            void* pWant = *reinterpret_cast<void**>(BlobAt(pCharNow, 0x10));
-                            for (int32_t i = 0; i < nC; ++i)
-                            {
-                                if (pT[i] == pWant) { idx = i; break; }
-                            }
-                        }
-                        BlobI32Ref(pCharNow, 0x10) = idx;
-
-                        // entry[5] (+0x14) = index of the char whose ptr == entry[5].
-                        int32_t idx2 = -1;
-                        const int32_t nC2 = BlobI32(this, 0x0C);
-                        if (nC2 > 0)
-                        {
-                            void** pT = reinterpret_cast<void**>(BlobPtr(this, 0x10));
-                            void* pCur = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                            void* pWant = *reinterpret_cast<void**>(BlobAt(pCur, 0x14));
-                            for (int32_t i = 0; i < nC2; ++i)
-                            {
-                                if (pT[i] == pWant) { idx2 = i; break; }
-                            }
-                        }
-                        void* pCur2 = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                        BlobI32Ref(pCur2, 0x14) = idx2;
-                    }
-                }
-                else
-                {
-                    // Imported (shared) character: drop one reference; release its
-                    // animation file when the count crosses zero.
-                    // FLAG: console interlocked ref-count (high 16 bits, -0x10000).
-                    AptCharacter* pC = reinterpret_cast<AptCharacter*>(pChar);
-                    pC->ReleaseCharacterReference();
-                    result = pC;
-                }
+                // The two cross-reference pointer slots (+0x20 / +0x28) revert
+                // to character-table indices (-1 when unmatched).
+                void** const ppSlotA = reinterpret_cast<void**>(
+                    reinterpret_cast<char*>(pChar) + 0x20);
+                void** const ppSlotB = reinterpret_cast<void**>(
+                    reinterpret_cast<char*>(pChar) + 0x28);
+                *reinterpret_cast<int64_t*>(ppSlotA) = IndexOfChar(*ppSlotA);
+                *reinterpret_cast<int64_t*>(ppSlotB) = IndexOfChar(*ppSlotB);
             }
-            ++nLogical;
+        }
+        else
+        {
+            // Imported: drop one character reference; the last drop releases the
+            // animation file (the XB1 swaps the slot null then runs the shared-
+            // ptr release twice -- the swap-and-dispose idiom).
+            pChar->ReleaseCharacterReference();
+            result = pChar;
         }
     }
 
-    // ---- pass 2: per-character un-relocation + type-specific teardown -------------
-    const int32_t nChars2 = BlobI32(this, 0x0C);
+    // ---- pass 2: per-character un-relocation + type-specific teardown ---------
+    for (int32_t i = 0; i < mnCharacterCount; ++i)
     {
-        int32_t nLogical = 0;                            // v22
-        for (int32_t iByte = 0; iByte < nChars2 * 4; iByte += 4)   // v23
+        AptCharacter* const pChar = mpCharacterTable[i];
+        if (pChar == nullptr || IsImportId(i))
+            continue;
+        char* const pc = reinterpret_cast<char*>(pChar);
+        switch (pChar->mnType)
         {
-            void* pChar = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-            if (!pChar)
-            {
-                ++nLogical;
-                continue;
-            }
-
-            // Skip the imported characters again (their owner un-resolves them).
-            int32_t iImp = -1;
-            const int32_t nImp = BlobI32(this, 0x20);
-            if (nImp > 0)
-            {
-                void* pImp = BlobAt(BlobPtr(this, 0x24), 0x08);
-                for (int32_t i = 0; i < nImp; ++i)
-                {
-                    if (BlobI32(pImp, 0x00) == nLogical) { iImp = i; break; }
-                    pImp = BlobAt(pImp, 0x10);
-                }
-            }
-            if (iImp != -1)
-            {
-                ++nLogical;
-                continue;
-            }
-
-            const int32_t eType = BlobI32(pChar, 0x00);
-            if (eType == 1)
-            {
-                // Shape: clear the high flag, free the host rendering unit, null it.
-                BlobI32Ref(pChar, 0x0A) &= ~0x8000;       // halfword flag (whole word)
-                void* pSlot = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                AptFreeRenderingUnit(BlobPtr(pSlot, 0x20));   // dword_8324E87C(*(char+0x20)) (FLAG)
-                BlobPtrRef(*reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte)), 0x20) = nullptr;
+            case 1:   // Shape: clear the resolved flag, free the host rendering
+            {         // unit (+0x30), null the slot.
+                *reinterpret_cast<uint16_t*>(pc + 0x12) &= ~0x8000u;
+                void** const ppUnit = reinterpret_cast<void**>(pc + 0x30);
+                AptFreeRenderingUnit(*ppUnit);        // qword_14147AA78 host hook
+                *ppUnit = nullptr;
                 result = nullptr;
+                break;
             }
-            else
+            case 2:   // Text: un-relocate the text (+0x50) + variable (+0x58).
+                Unreloc(*reinterpret_cast<void**>(pc + 0x50));
+                Unreloc(*reinterpret_cast<void**>(pc + 0x58));
+                break;
+            case 3:   // Font: un-relocate the name (+0x20); glyph pointers
+            {         // (+0x30, count +0x28) back to indices; then the array ptr.
+                Unreloc(*reinterpret_cast<void**>(pc + 0x20));
+                const int32_t nGlyphs = *reinterpret_cast<int32_t*>(pc + 0x28);
+                void** const ppGlyphs = *reinterpret_cast<void***>(pc + 0x30);
+                for (int32_t g = 0; g < nGlyphs; ++g)
+                    *reinterpret_cast<int64_t*>(&ppGlyphs[g]) =
+                        IndexOfChar(ppGlyphs[g]);
+                Unreloc(*reinterpret_cast<void**>(pc + 0x30));
+                break;
+            }
+            case 5:
+            case 9:   // Sprite / movie: recurse into the embedded timeline
+                      // (the XB1 sub_14085EE40(body, base, &parsedCount) --
+                      // AptMovie::unresolve; ours keeps its declared shape).
+                result = reinterpret_cast<AptMovie*>(pc + 0x20)   // KU_AptEmbeddedMovieOff (AptCIH.h)
+                             ->unresolve(nBase, static_cast<int>(mnParsedValueCount));
+                break;
+            case 7:   // Image: queued release of the live unit when resolved.
             {
-                switch (eType)
+                uint16_t& rFlags = *reinterpret_cast<uint16_t*>(pc + 0x12);
+                void** const ppUnit = reinterpret_cast<void**>(pc + 0x20);
+                if ((rFlags & 1u) != 0u)
                 {
-                    case 2:   // sprite-button / morph header: un-relocate +0x3C, +0x40.
-                    {
-                        BlobI32Ref(pChar, 0x3C) = BlobI32(pChar, 0x3C) ? (BlobI32(pChar, 0x3C) - nBase) : 0;
-                        void* pC = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                        BlobI32Ref(pC, 0x40) = BlobI32(pC, 0x40) ? (BlobI32(pC, 0x40) - nBase) : 0;
-                        break;
-                    }
-                    case 3:   // text / edit-text: re-index the glyph refs, un-relocate +0x18.
-                    {
-                        BlobI32Ref(pChar, 0x10) = BlobI32(pChar, 0x10) ? (BlobI32(pChar, 0x10) - nBase) : 0;
-                        void* pC = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                        const int32_t nRefs = BlobI32(pC, 0x14);
-                        if (nRefs > 0)
-                        {
-                            int32_t iRef = 0;
-                            for (int32_t off = 0; iRef < BlobI32(pC, 0x14); off += 4)
-                            {
-                                void* pCc = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                                void* pArr = BlobPtr(pCc, 0x18);
-                                void* pWant = *reinterpret_cast<void**>(BlobAt(pArr, off));
-                                // index of the char whose ptr == this glyph ref; -1 if none.
-                                int32_t idx = -1;
-                                const int32_t nC = BlobI32(this, 0x0C);
-                                if (nC > 0)
-                                {
-                                    void** pT = reinterpret_cast<void**>(BlobPtr(this, 0x10));
-                                    for (int32_t i = 0; i < nC; ++i)
-                                        if (pT[i] == pWant) { idx = i; break; }
-                                }
-                                void* pCc2 = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                                *reinterpret_cast<int32_t*>(BlobAt(BlobPtr(pCc2, 0x18), off)) = idx;
-                                ++iRef;
-                            }
-                        }
-                        void* pC2 = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                        BlobI32Ref(pC2, 0x18) = BlobI32(pC2, 0x18) ? (BlobI32(pC2, 0x18) - nBase) : 0;
-                        break;
-                    }
-                    case 5:
-                    case 9:   // sprite / movie: recurse into the embedded timeline.
-                        result = reinterpret_cast<AptMovie*>(BlobAt(pChar, 0x10))
-                                     ->unresolve(nBase, static_cast<int>(reinterpret_cast<intptr_t>(BlobAt(this, 0x30))));
-                        break;
-                    case 7:   // button: queued release of the live instance (off-VM-thread
-                              // deferred), clear the live flags + null the instance slot.
-                    {
-                        if ((BlobI32(pChar, 0x14) & 0x8000) != 0)   // lhz +0xA; clrrwi 15 -> bit 0x8000
-                        {
-                            // FLAG: the live-instance release is queued on the VM thread
-                            // and run inline elsewhere (console interlocked queue).
-                            if (gAptVMThreadId == EA::Thread::GetThreadId())
-                            {
-                                EA::Thread::Mutex_Lock(&gAptUnresolveMutex, &gAptUnresolveMutexName);
-                                void* pInst = *reinterpret_cast<void**>(
-                                    BlobAt(*reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte)), 0x10));
-                                reinterpret_cast<void**>(gAptDeferredReleaseQueue)[gAptDeferredReleaseCount] = pInst;
-                                ++gAptDeferredReleaseCount;
-                                EA::Thread::Mutex_Unlock(&gAptUnresolveMutex);
-                            }
-                            else
-                            {
-                                void* pInst = *reinterpret_cast<void**>(
-                                    BlobAt(*reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte)), 0x10));
-                                AptFreeFontUnit(pInst);   // dword_8324E870 (FLAG)
-                            }
-                        }
-                        void* pC = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                        BlobI32Ref(pC, 0x0A) &= ~0x8000;
-                        void* pC2 = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                        BlobI32Ref(pC2, 0x0A) &= ~0x4000;
-                        void* pC3 = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                        BlobI32Ref(pC3, 0x10) = nLogical;   // stw r26 (the logical index)
-                        break;
-                    }
-                    case 10:  // font: un-relocate the glyph table (+0x3C) + each entry +0x34.
-                    {
-                        const int32_t nGlyphs = BlobI32(pChar, 0x38);
-                        if (nGlyphs > 0)
-                        {
-                            int32_t iG = 0;
-                            for (int32_t off = 0; iG < BlobI32(pChar, 0x38); off += 56)
-                            {
-                                void* pC = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                                void* pGlyphs = BlobPtr(pC, 0x3C);
-                                int32_t& rSlot = *reinterpret_cast<int32_t*>(BlobAt(pGlyphs, off + 0x34));
-                                rSlot = rSlot ? (rSlot - nBase) : 0;
-                                ++iG;
-                            }
-                        }
-                        void* pC2 = *reinterpret_cast<void**>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                        BlobI32Ref(pC2, 0x3C) = BlobI32(pC2, 0x3C) ? (BlobI32(pC2, 0x3C) - nBase) : 0;
-                        break;
-                    }
-                    default:
-                        break;
+                    // The XB1 queues the release on the VM thread (the
+                    // qword_14147A0E0 ring) or calls the host free hook
+                    // directly off-thread; single-threaded bring-up = direct.
+                    AptFreeFontUnit(*ppUnit);         // qword_14147AA60 host hook
                 }
+                rFlags &= ~3u;
+                *ppUnit = nullptr;
+                break;
             }
-            ++nLogical;
-        }
-    }
-
-    // ---- pass 3: drop the imports (AptFilePtr release) + clear their char slots ----
-    const int32_t nImports3 = BlobI32(this, 0x20);
-    {
-        for (int32_t iByte = 0, i = 0; i < nImports3; iByte += 16, ++i)
-        {
-            void* pEntry = BlobAt(BlobPtr(this, 0x24), iByte);
-            // AptFile_::operator_(entry+0xC, &null) then Dispose(prev) -- release the
-            // import's AptFilePtr (the homed AptSharedPtr<AptFile> ops).
-            AptFile* pTmp = nullptr;
-            AptFilePtr* pSlot = reinterpret_cast<AptFilePtr*>(BlobAt(pEntry, 0x0C));
-            AptFile* pOld = pSlot->pData;
-            if (pTmp) AptSharedPtrIncRef(pTmp);
-            pSlot->pData = pTmp;
-            if (pOld && AptSharedPtrDecRef(pOld) == 0)
-                AptSharedPtrDelete(pOld);
-            result = pOld;
-            // clear the imported character's table slot: table[entry.id] = 0.
-            void* pEntryNow = BlobAt(BlobPtr(this, 0x24), iByte);
-            int32_t nSlotId = BlobI32(pEntryNow, 0x08);
-            reinterpret_cast<void**>(BlobPtr(this, 0x10))[nSlotId] = nullptr;
-        }
-    }
-
-    // ---- pass 4: stamp the owned characters dead + un-relocate their slots ---------
-    const int32_t nChars4 = BlobI32(this, 0x0C);
-    {
-        for (int32_t iByte = 0, i = 0; i < nChars4; iByte += 4, ++i)
-        {
-            void** pTable = reinterpret_cast<void**>(BlobPtr(this, 0x10));
-            void* pChar = *reinterpret_cast<void**>(BlobAt(pTable, iByte));
-            if (pChar)
-            {
-                BlobI32Ref(pChar, 0x04) = 0x09876543;     // the freed-character sentinel
-                int32_t& rSlot = *reinterpret_cast<int32_t*>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x10)), iByte));
-                rSlot = rSlot ? (rSlot - nBase) : 0;
+            case 10:  // StaticText: per record (stride 0x40) un-relocate the
+            {         // glyph-array slot (+0x38); then the record-array ptr.
+                const int32_t nRecs = *reinterpret_cast<int32_t*>(pc + 0x48);
+                char* const pRecs = *reinterpret_cast<char**>(pc + 0x50);
+                for (int32_t r = 0; r < nRecs; ++r)
+                    Unreloc(*reinterpret_cast<void**>(pRecs + r * 0x40 + 0x38));
+                Unreloc(*reinterpret_cast<void**>(pc + 0x50));
+                break;
             }
+            default:
+                break;
         }
     }
 
-    // ---- un-relocate the table heads themselves (mpCharacterTable / import / init) -
-    BlobI32Ref(this, 0x10) = BlobI32(this, 0x10) ? (BlobI32(this, 0x10) - nBase) : 0;
+    // ---- pass 3: drop the imports + clear their character slots ---------------
+    for (int32_t i = 0; i < mnImportCount; ++i)
     {
-        const int32_t nImp = BlobI32(this, 0x20);
-        for (int32_t iByte = 0, i = 0; i < nImp; iByte += 16, ++i)
-        {
-            void* pEntry = BlobAt(BlobPtr(this, 0x24), iByte);
-            // name slot (+0) and class slot (+4) -- un-relocate.
-            int32_t& rName = *reinterpret_cast<int32_t*>(BlobAt(pEntry, 0x00));
-            rName = rName ? (rName - nBase) : 0;
-            void* pEntry2 = BlobAt(BlobPtr(this, 0x24), iByte);
-            int32_t& rClass = *reinterpret_cast<int32_t*>(BlobAt(pEntry2, 0x04));
-            rClass = rClass ? (rClass - nBase) : 0;
-        }
+        AptImportEntry& rEntry = mpImportTable[i];
+        AptFilePtr* const pSlot = reinterpret_cast<AptFilePtr*>(&rEntry.mpFile);
+        AptFile* const pOld = pSlot->pData;
+        pSlot->pData = nullptr;
+        if (pOld != nullptr && AptSharedPtrDecRef(pOld) == 0)
+            AptSharedPtrDelete(pOld);
+        result = pOld;
+        mpCharacterTable[rEntry.mnId] = nullptr;
     }
-    {
-        const int32_t nInit = BlobI32(this, 0x28);
-        for (int32_t iByte = 0, i = 0; i < nInit; iByte += 8, ++i)
-        {
-            int32_t& rPtr = *reinterpret_cast<int32_t*>(BlobAt(BlobPtr(this, 0x2C), iByte));
-            rPtr = rPtr ? (rPtr - nBase) : 0;
-            int32_t& rInd = *reinterpret_cast<int32_t*>(BlobAt(reinterpret_cast<char*>(BlobPtr(this, 0x2C)) + iByte, 0x04));
-            if (rInd < 0)
-                rInd = -rInd;
-        }
-    }
-    BlobI32Ref(this, 0x24) = BlobI32(this, 0x24) ? (BlobI32(this, 0x24) - nBase) : 0;
-    BlobI32Ref(this, 0x2C) = BlobI32(this, 0x2C) ? (BlobI32(this, 0x2C) - nBase) : 0;
 
-    mnResolveScratch = 0;                                // *(this+0x30) = 0
+    // ---- pass 4: stamp the owned characters freed + un-relocate their slots ---
+    for (int32_t i = 0; i < mnCharacterCount; ++i)
+    {
+        AptCharacter* const pChar = mpCharacterTable[i];
+        if (pChar != nullptr)
+        {
+            // The freed sentinel lands in the fixup-link slot (+8).
+            *reinterpret_cast<int32_t*>(
+                reinterpret_cast<char*>(pChar) + 0x08) = 0x09876543;
+            Unreloc(*reinterpret_cast<void**>(&mpCharacterTable[i]));
+        }
+    }
+
+    // ---- un-relocate the table heads + entries --------------------------------
+    Unreloc(*reinterpret_cast<void**>(&mpCharacterTable));
+    for (int32_t i = 0; i < mnImportCount; ++i)
+    {
+        Unreloc(*reinterpret_cast<void**>(
+            const_cast<char**>(&mpImportTable[i].mpImportFileName)));
+        Unreloc(*reinterpret_cast<void**>(
+            const_cast<char**>(&mpImportTable[i].mpClassName)));
+    }
+    for (int32_t i = 0; i < mnInitListCount; ++i)
+    {
+        Unreloc(mpInitList[i].mpInitObject);
+        if (mpInitList[i].mnIndicator < 0)
+            mpInitList[i].mnIndicator = -mpInitList[i].mnIndicator;
+    }
+    Unreloc(*reinterpret_cast<void**>(&mpImportTable));
+    Unreloc(*reinterpret_cast<void**>(&mpInitList));
+
+    mnParsedValueCount = 0;
     return result;
 }
 
