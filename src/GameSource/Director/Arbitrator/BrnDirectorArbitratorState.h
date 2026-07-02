@@ -109,6 +109,10 @@ namespace BrnDirector
         // UpdateAll clears this each frame after Update (X360 byte store at +0x171).
         void ClearCycleCameraThisFrame() { mbCycleCameraThisFrame = false; }
 
+        // GROWN for Arbitrator::CycleNormalCamera @0x822087F0 (its two branches raise
+        // this byte directly -- testbed at arb +0x1A1, the active state at +0x171).
+        void RequestCycleCameraThisFrame() { mbCycleCameraThisFrame = true; }
+
         // The director camera this state drives. DWARF (BrnDirectorArbitratorState.h:135/157)
         // pins mCamera as a protected by-value member with a public const GetCamera(); the
         // non-const accessor is what the roaming state's effect-trigger calls need (the X360

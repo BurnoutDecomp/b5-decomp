@@ -31,6 +31,18 @@ namespace BrnDirector
 
         // @0x821F15B8: strcpy(mHookNameString, lpcName) after asserting non-NULL + length.
         void Set(const char* lpcName);
+
+        // User-defined copy-assign routed through Set (GROWN by the
+        // Array<HookNameStringWrapper,100> instantiation TU: its Append @0x82210418
+        // assigns the new slot through the @0x821F15B8 symbol -- the string sits at
+        // offset 0, so the strcpy-shaped operator= and Set(const char*) ICF-fold
+        // into one function on the X360).
+        HookNameStringWrapper& operator=(const HookNameStringWrapper& lrRhs)
+        {
+            Set(lrRhs.mHookNameString);
+            return *this;
+        }
+
         bool operator==(const HookNameStringWrapper& lrRhs) const;
         bool operator==(const char* lpcName) const;
         bool operator!=(const HookNameStringWrapper& lrRhs) const;

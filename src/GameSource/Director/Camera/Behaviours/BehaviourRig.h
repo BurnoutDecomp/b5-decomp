@@ -28,6 +28,8 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"  // CgsSceneManager::EntityId
 #include "GameSource/BurnoutConstants.h"                      // EActiveRaceCarIndex
 #include "GameSource/Director/Camera/Camera.h"                // BrnDirector::Camera::Camera
+#include "GameSource/Director/Camera/BrnCollisionPolicy.h"    // GeometryCollisionPredictor (embedded carve)
+#include "GameSource/Director/Camera/Utils/BrnVehicleCollisionPredictor.h" // Utils::VehicleCollisionPredictor (embedded carve)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"     // AABBox, VersionNumber
 #include "GameSource/Director/Camera/Utils/BrnLooker.h"       // Looker + Random typedef
 #include "GameSource/Director/Camera/Utils/BrnPositionLag.h"  // PositionLag
@@ -79,9 +81,11 @@ private:
 
 // ============================================================================
 // FLAG: minimal slice of the visibility collision policy used by BehaviourRig.
-//   Private members are stored as an opaque blob (the full definition needs
-//   unrecovered types: LineTestNearestPostBox, VehicleCollisionPredictor, etc.).
-//   Nominal X360 size 0x240 bytes; on PC the blob width gives a conservative bound.
+//   The opaque blob is now CARVED around the members the class-TU bodies touch
+//   (X360 offsets in comments; ORDER preserved, PC offsets differ -- all access
+//   is BY NAME). The remaining reserved spans still need the unrecovered types
+//   (LineTestNearestPostBox, VolumeTestDeepestPostBox, GroundConstraint etc.).
+//   Nominal X360 size 0x240 bytes.
 // ============================================================================
 class VisibilityCollisionPolicy : public CollisionPolicy
 {
@@ -95,10 +99,40 @@ public:
     bool IsVisibilityInterrupted() const;
     float GetMinTimeToVisibilityFailure() const;
 
+    // ---- class-TU surface (bodies in ../BrnVisibilityCollisionPolicy.cpp) ----
+
+    // The guards the two time queries assert on (the X360 inlines the embedded
+    // predictors' flag reads into the wrappers).
+    bool WillCollideWithGeometry() const { return mGeometryCollisionPredictor.WillCollide(); }
+    bool WillCollideWithVehicle() const  { return mVehicleCollisionPredictor.HasPredictedCollision(); }
+
+    // @0x821F38E0 (BrnCollisionPolicy.h:489) -- raise the desired-height override
+    // latch, assert the height positive, store it.
+    void SetDesiredHeight(f32 lfDesiredHeight);
+
+    // @0x821F37C8 (BrnCollisionPolicy.h:425 wrapper + the embedded geometry
+    // predictor's own :206 tripwire) -- predicted time until the camera hits
+    // geometry.
+    f32 TimeUntilCollisionWithGeometry() const;
+
+    // @0x821F3858 (BrnCollisionPolicy.h:431 wrapper + the embedded vehicle
+    // predictor's own BrnVehicleCollisionPredictor.h:69 tripwire) -- predicted
+    // time until the camera hits the tracked vehicle.
+    f32 TimeUntilCollisionWithVehicle() const;
+
 private:
-    // FLAG: opaque placeholder; the real member set needs LineTestNearestPostBox,
-    //   VehicleCollisionPredictor, VolumeTestDeepestPostBox, GroundConstraint etc.
-    u8 mRawStorage[0x240 - sizeof(void*)];  // span calibrated from X360 IceAnim sibling
+    // FLAG: reserved spans = rig members not yet recovered (LineTestNearestPostBox,
+    //   VolumeTestDeepestPostBox, GroundConstraint etc.); the named members are the
+    //   asm-attested carves from the three class-TU bodies.
+    u8 maReservedToVehiclePredictor[0x70 - 0x08];              // X360 [+0x08, +0x70)
+    Utils::VehicleCollisionPredictor mVehicleCollisionPredictor;   // X360 +0x70 (flag/time @+0x70/+0x74)
+    u8 maReserved78[0x80 - 0x78];                              // X360 [+0x78, +0x80)
+    GeometryCollisionPredictor mGeometryCollisionPredictor;    // X360 +0x80 (its +0x60/+0x64 pair == policy +0xE0/+0xE4)
+    u8 maReservedE8[0x210 - 0xE8];                             // X360 [+0xE8, +0x210)
+    f32 mfDesiredHeight;                                       // X360 +0x210 (SetDesiredHeight stores)
+    u8 maReserved214[0x23C - 0x214];                           // X360 [+0x214, +0x23C)
+    u8 mbHaveDesiredHeight;                                    // X360 +0x23C (SetDesiredHeight raises)
+    u8 maReservedTail[0x240 - 0x23D];                          // X360 [+0x23D, +0x240)
 };
 
 namespace Utils

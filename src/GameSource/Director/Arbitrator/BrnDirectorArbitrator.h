@@ -126,7 +126,7 @@ namespace BrnDirector
         bool IsDebugCamera();
 
         // Point the debug fly-world camera at lLookAt from lEye. (BrnDirectorArbitrator.h:92)
-        // DECLARATION-ONLY (no asm in this TU's function set).
+        // @0x82234738 (class TU; body in the .cpp).
         void DebugCameraFlyWorldLookAt(rw::math::vpu::Vector3 lEye, rw::math::vpu::Vector3 lLookAt);
 
         // The current debug fly-world camera transform. (BrnDirectorArbitrator.h:95)
@@ -144,11 +144,11 @@ namespace BrnDirector
 
     private:
         // The currently-driving "normal" gameplay camera (the container's selected state's
-        // camera). (BrnDirectorArbitrator.h:150) DECLARATION-ONLY (no asm in this TU's set).
+        // camera). (BrnDirectorArbitrator.h:150) @0x821F5BD8 (class TU; body in the .cpp).
         const Camera::Camera& GetNormalCamera() const;
 
         // Advance the normal-camera cycle one step. (BrnDirectorArbitrator.h:153)
-        // DECLARATION-ONLY (no asm in this TU's function set).
+        // @0x822087F0 (class TU; body in the .cpp).
         void CycleNormalCamera();
 
         // X360 0x821F5D28. Drive the "hold to slow-mo / tap to cycle" camera-cycle control.
@@ -170,6 +170,13 @@ namespace BrnDirector
         Camera::BehaviourHandle<Camera::BehaviourDebugFlyWorld>    mDebugCameraFlyWorld;     // X360 +0x14
 
         ArbStateTestbed          mArbStateTestbed;            // X360 +0x30 (vtable Construct @+0x30)
+
+        // The normal-camera source selector (X360 +0x2EC): CycleNormalCamera /
+        // GetNormalCamera @0x822087F0/@0x821F5BD8 route to the TESTBED state's camera
+        // (mArbStateTestbed.mCamera == arb +0x40) when this reads 2, else to the
+        // container's current state. FLAG: name inferred from that role (the trimmed
+        // DWARF omits the member; only the ==2 compare is attested).
+        s32                      miDebugCameraMode;           // X360 +0x2EC
 
         // FLAG: two Arbitrator scratch flags the trimmed DWARF omits but the asm PROVES exist
         //   (X360 +0x300 / +0x301): Construct seeds +0x300 = 1 and +0x301 = 0, and

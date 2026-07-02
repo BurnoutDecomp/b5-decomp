@@ -98,7 +98,11 @@ namespace Camera
     // BehaviourInterpolate -- the per-behaviour interpolator that blends one camera source
     // into another. The ICE movie-player allocates two of these through the manager and
     // drives their setup. DECLARATION-ONLY (real bodies land with the BehaviourInterpolate
-    // TU). FLAG: minimal slice -- no reconstructed home yet.
+    // TU). FLAG: minimal slice -- the REAL home now exists
+    // (Behaviours/BrnBehaviourInterpolate.h) but is MUTUALLY EXCLUSIVE with this slice
+    // (same class name -- including both is a C2011 redefinition). Pending reconcile:
+    // retire this slice and include the real home; until then consumers of this header
+    // (e.g. BrnArbStateCarSelect.h) reach HasFinished through THIS slice's decl.
     // ------------------------------------------------------------------------
     class BehaviourInterpolate
     {
@@ -211,6 +215,19 @@ namespace Camera
         // SetBehaviourUpdatesDuringPause. Body out-of-line below (needs BehaviourManager
         // complete).
         void SetUpdatesDuringPause(bool lbUpdatesDuringPause);
+
+        // ADDITIVE GROW (the BehaviourHandle<BehaviourRig> instantiation TU): attach /
+        // detach the manager's authoring tweaker to the behaviour this handle owns.
+        // X360-attested handle-level wrappers (BrnBehaviourManager.h:623 / :633 --
+        // BehaviourHandle<BehaviourRig>::AttachTweaker @0x82212608, DetachTweaker
+        // @0x82212668): assert allocated, then forward the +0x04 word to the manager.
+        // The X360 calls the manager's AttachTweaker out-of-line but INLINES
+        // DetachTweaker's internals (the mTweakerHelper current-index compare @+0x158E4
+        // + lock-byte clear @+0x158E0 + helper-pool (+0xFAB0) slot flag-byte clear at
+        // slot +0xA) -- expressed here as the declared manager call. Bodies out-of-line
+        // below (need BehaviourManager complete).
+        void AttachTweaker();
+        void DetachTweaker();
 
     private:
         bool              mbAllocated;     // +0x00  owns a behaviour
@@ -524,6 +541,27 @@ namespace Camera
         CGS_ASSERT(mbAllocated, "IsAllocated()");
         mpManager->SetBehaviourUpdatesDuringPause(BehaviourHelperIndex(static_cast<s32>(muAllocationKey)),
                                                   lbUpdatesDuringPause);
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHandle::AttachTweaker @0x82212608 / DetachTweaker @0x82212668 (the
+    // BehaviourHandle<BehaviourRig> instantiation; BrnBehaviourManager.h:623/:633) --
+    // assert allocated, then forward the handle's allocation key to the manager's
+    // tweaker attach/detach. (The X360 inlines DetachTweaker's manager internals into
+    // the handle body; the declared manager call is the named-helper de-opt.)
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    inline void BehaviourHandle<TBehaviour>::AttachTweaker()
+    {
+        CGS_ASSERT(mbAllocated, "IsAllocated()");   // :623
+        mpManager->AttachTweaker(BehaviourHelperIndex(static_cast<s32>(muAllocationKey)));
+    }
+
+    template <typename TBehaviour>
+    inline void BehaviourHandle<TBehaviour>::DetachTweaker()
+    {
+        CGS_ASSERT(mbAllocated, "IsAllocated()");   // :633
+        mpManager->DetachTweaker(BehaviourHelperIndex(static_cast<s32>(muAllocationKey)));
     }
 
     // ------------------------------------------------------------------------
