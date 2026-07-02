@@ -41,14 +41,22 @@ namespace BrnNetwork
         CgsID                       mCarId;                       // :53
         CgsID                       mWheelId;                     // :54
         CgsNetwork::NetworkPlayerID mMarkedManID;                 // :55  (+0x40)
-        ECameraStatus               meCameraStatus;               // :56
+        ECameraStatus               meCameraStatus;               // :56  (+0x44)
+
+        // X360-ONLY pair (absent from the PS3 DWARF member list; the Clear override
+        // @0x82586598 stores 0.0f @+0x48 and 0.85f @+0x4C between meCameraStatus and
+        // the colour indices, shifting them to +0x50..). FLAG: names unrecovered --
+        // honest positional placeholders, defaults documented by Clear.
+        f32                         mfUnknown48;                  // +0x48 (Clear -> 0.0f)
+        f32                         mfUnknown4C;                  // +0x4C (Clear -> 0.85f)
+
         u16                         mu16FreeburnCarColourIndex;   // :57
         u16                         mu16FreeburnPaintFinishIndex; // :58
         u16                         mu16CarColourIndex;           // :59
         u16                         mu16PaintFinishIndex;         // :60
         bool                        mbFinalCarSelection;          // :61
 
-        // Virtual override (DWARF BrnNetworkPlayerMenuData.cpp:27); bodied in its own TU.
+        // @0x82586598 (the BrnNetworkPlayerMenuData.cpp TU, DWARF cpp:27).
         virtual void Clear();
     };
 } // namespace BrnNetwork

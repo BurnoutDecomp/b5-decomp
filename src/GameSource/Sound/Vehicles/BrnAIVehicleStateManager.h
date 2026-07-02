@@ -50,26 +50,11 @@
 // minimal 12-byte descriptor with the accessed IsLoaded() query is modelled here.
 // FLAG: minimal un-homed home; the three opaque words are pinned by the attested
 // 12-byte stride only, not by named members.
-namespace CgsSound
-{
-namespace Logic
-{
-struct Content
-{
-    Content() : mau32Opaque() {}
-
-    // Queried by GetDecelGinsuContent / GetLoopModelContent tripwires (the loaded
-    // assert on the resolved spec). Deferred body -- returns true (the specs are
-    // asserted loaded on the boot path that reaches these accessors).
-    bool IsLoaded() const;
-
-    // 12-byte element (the X360 *12 stride). Members deferred (un-homed layout).
-    u32 mau32Opaque[3];
-};
-
-inline bool Content::IsLoaded() const { return true; }
-} // namespace Logic
-} // namespace CgsSound
+// CgsSound::Logic::Content moved to its canonical home (GameShared/GameClasses/
+// Sound/Logic/CgsContent.h) when the TrafficStateManager TU attested its real
+// shape ({vptr, mpContent, trailing word} == the same 12-byte X360 stride this
+// manager's spec tables use); the IsLoaded() query and the zeroing default ctor
+// carried over unchanged.
 
 namespace BrnSound
 {

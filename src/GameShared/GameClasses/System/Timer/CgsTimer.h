@@ -24,13 +24,18 @@ namespace CgsSystem
         float  mfRate;         // [+12]
         float  mfScaleCurrent; // [+16]
         float  mfScaleTarget;  // [+20]
-        int    mbRunning;      // [+24]
+        u8     mbRunning;      // [+24] (byte on X360: stb/lbz in Prepare/Update @0x828D72E0/0x828D7320 and ApplyToTimers @0x828D7468)
 
     public:
         bool Prepare(float lfRate);
         Timer* Reset();
         Timer* Update();
         void SetRunning(bool lbRunning) { mbRunning = lbRunning ? 1 : 0; } // mbRunning @+0x18
+
+        // ADDITIVE GROW (TimerRequestInterface::ApplyToTimers @0x828D7468, which
+        // inlines the store to +0x14): retarget the tick-scale the accumulator
+        // chases.
+        void SetScaleTarget(f32 lfScaleTarget) { mfScaleTarget = lfScaleTarget; }
     };
 }
 
