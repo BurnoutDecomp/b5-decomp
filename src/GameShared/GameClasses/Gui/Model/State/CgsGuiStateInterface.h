@@ -46,6 +46,19 @@ namespace CgsGui
         s32                       miUserData;
     };
 
+    // The "suspend / resume network processing" GUI event. X360-attested by the
+    // OutputGuiEvent<CgsGui::GuiEventNetworkSuspension> instantiation @0x82493A88: the
+    // queued record is { muHeader0 = 4 (payload bytes), muEventType = 45, muHeader2 = 12
+    // (payload offset) } + one payload word (the suspend flag), channel 40, 16 bytes.
+    // (BrnGui::PauseScreen posts it with the flag false when leaving the pause menu.)
+    struct GuiEventNetworkSuspension : public GuiEvent<45>
+    {
+        u32 muSuspend;   // +0x0C payload word: nonzero = suspend network processing
+
+        explicit GuiEventNetworkSuspension(bool lbSuspend)
+            : GuiEvent<45>(4, 12), muSuspend(lbSuspend ? 1u : 0u) {}
+    };
+
     struct StateInterface
     {
         CgsGui::EventObserver* mpObserver;

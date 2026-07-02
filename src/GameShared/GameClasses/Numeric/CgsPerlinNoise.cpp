@@ -1,3 +1,5 @@
+#include "GameShared/GameClasses/Numeric/CgsPerlinNoise.h"
+
 #include "types.hpp"
 
 #include <cmath>

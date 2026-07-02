@@ -387,6 +387,22 @@ struct GuiNewBurnoutHudMessageEvent : public CgsGui::GuiEvent<527>
     EActiveRaceCarIndex                            mePreviousOwner;// BrnGuiEventTypeDefs.h:6365
 };
 
+// The "activate / deactivate the CrashNav (front-end map) flow" GUI event. X360-attested
+// by the OutputGuiEvent<BrnGui::GuiEventActivateCrashNav> instantiation @0x82493938: the
+// queued record is { muHeader0 = 8 (payload bytes), muEventType = 191, muHeader2 = 12
+// (payload offset) } + two payload words, channel 40, 20 bytes. BrnGui::PauseScreen posts
+// it as { 1, 0 } when the player picks the pause option that quits to CrashNav. ADDITIVE
+// GROW (BrnPauseScreen TU): the second payload word's role is not recovered (the pause
+// screen leaves it 0).
+struct GuiEventActivateCrashNav : public CgsGui::GuiEvent<191>
+{
+    u32 muActivate;   // +0x0C payload word 0: nonzero = activate CrashNav
+    u32 muParam;      // +0x10 payload word 1 (role not recovered; posted as 0)
+
+    explicit GuiEventActivateCrashNav(bool lbActivate)
+        : CgsGui::GuiEvent<191>(8, 12), muActivate(lbActivate ? 1u : 0u), muParam(0) {}
+};
+
 // Declaration mirror of the DWARF parent (BrnGuiEventTypeDefs.h:1902). Only the nested
 // EIconDisplayType enum is modelled -- it is the type of SatNavRenderer::meIconDisplayType
 // (which "event set" the sat-nav renderer draws). ADDITIVE GROW (BrnSatNavRenderer TU):

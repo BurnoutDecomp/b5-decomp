@@ -59,6 +59,12 @@ public:
     // True iff flag luIndex's current bit differs from its previous-frame bit. @0x8227D380.
     bool HasChanged(u32 luIndex) const;
 
+    // ADDITIVE GROW (BrnDirector::InertiaController::Update @0x8221ECD0): read one
+    // current flag. The X360 inlines it as the 64-bit field load + mask test (the
+    // same bit math as BitArray::IsBitSet); exposed by name so consumers stay off the
+    // raw field.
+    bool IsFlagSet(u32 luIndex) const { return mCurrentFlags.IsBitSet(luIndex); }
+
     // FLAG: only the members the flag methods touch are modelled, at their asm-attested offsets;
     //   the 8-byte CameraState head at +0x00 (not touched by this slice) is a reserved span. The
     //   full member set lands with this type's own ledger TU. Members are public so the file-scope

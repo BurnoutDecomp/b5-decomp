@@ -1,100 +1,87 @@
 #pragma once
 
-// Home for BrnDirector::SharedCameraContainer -- the container the Director arbitrator
-// states query for the gameplay camera header. DWARF home (nominal):
-// GameSource/Director/Camera/BrnSharedCameraContainer.h.
+// Home for BrnDirector::SharedCameraContainer -- the container of the two SHARED gameplay
+// camera behaviours (the external "chase" cam and the in-car "bumper" cam) the Director
+// arbitrator states hand off to between takes. DWARF home:
+// GameSource/Director/Arbitrator/BrnDirectorArbitratorSharedCameraContainer.h:40 (this file
+// predates that attribution; it stays the committed home -- extend, don't fork).
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @0x82219718 (GetGameplayCameraHe),
-// semantic-parity (not byte-matching). Called by ArbStateRoaming::Update,
-// B3ClassicTakedownPlayer::{Update,Prepare}, ShutdownTakedownPlayer::Prepare and
-// ArbStateCrashNav::Prepare to fetch whichever gameplay-camera header is currently live.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX, semantic-parity (not byte-matching):
+//   SharedCameraContainer::GetGameplayCameraHelperIndex @0x82219718
+//     (IDB symbol truncated to "GetGameplayCameraHe"; full name from the DWARF, h:61)
+//   SharedCameraContainer::Prepare                      @0x82263D50
+//     (ledger TU GameSource/Director/Arbitrator/BrnDirectorArbitratorSharedCameraContainer.cpp)
 //
-// Layout the asm proves:
-//   +0x00  bool  mbPrimaryActive    -- lbz 0(this); first selection test
-//   +0x01  bool  mbPrimarySuspended -- lbz 1(this); when set, fall back to the secondary
-//   +0x04  ref   mPrimaryRef        -- handle to the primary gameplay camera header
-//   +0x18  ref   mSecondaryRef      -- handle to the fallback (e.g. crash/takedown) header
-// The selection picks the primary only when it is active AND not suspended; otherwise the
-// secondary. Each ref is the BrnBehaviourManager Reference<> handle whose held pointer
-// lives at handle+0x04 (the two callee accessors, sub_822122F0 / sub_822124A0, both assert
-// IsAllocated() then copy that held pointer into the output) -- modelled here as the
-// deref-by-name accessor so no raw-offset cast is needed.
-//
-// The header pointee and the wider container layout are owned by their own TUs; this home
-// models only the named fields the asm touches, at the proven offsets, with offsetof
-// static_asserts. Members are reached BY NAME.
+// Layout (DWARF h:90-94, X360-asm-attested offsets):
+//   +0x00  bool mbUseGameplayExternal  -- lbz 0(this); pick the external cam when set
+//   +0x01  bool mbLookbackOverride     -- lbz 1(this); when set, fall back to the bumper cam
+//   +0x04  BehaviourHandle<BehaviourGameplayExternal> mGameplayExternal
+//   +0x18  BehaviourHandle<BehaviourGameplayBumper>   mGameplayBumper
+// (+0x18 - +0x04 == 0x14 == the console 5-word BehaviourHandle stride, cross-confirming the
+// handle layout pinned in BrnBehaviourManager.h.) Members are reached BY NAME; the console
+// handle offsets are not pinned on x64 (8-byte pointers shift them).
 
 #include "types.hpp"
 #include <cstddef>   // offsetof
+#include "GameSource/Director/Camera/BrnBehaviourManager.h"  // Camera::BehaviourHandle / BehaviourHelperIndex
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"    // Camera::BehaviourGameplayBumper
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"  // Camera::BehaviourGameplayExternal
 
 namespace BrnDirector
 {
+    struct ArbStateSharedInfo;   // the arbitrator shared context (BrnDirectorArbitratorState.h)
     namespace Camera { struct Camera; }
 
-    // The gameplay-camera header the container hands out. Opaque to this TU -- the caller
-    // receives a pointer to it; its layout belongs to the camera-header TU.
-    struct GameplayCameraHeader;
-
-    // The container's output holder: a single pointer to the selected header. The X360
-    // accessor returns this object (r3) after writing the header pointer into its first
-    // word.
-    struct GameplayCameraHeaderRef
-    {
-        const GameplayCameraHeader* mpHeader;   // +0x00 : written by GetGameplayCameraHe
-    };
-
-    // A BrnBehaviourManager Reference<> handle (subset). The callee accessors assert the
-    // held pointer is allocated, then return it; only the held pointer (X360 handle+0x04,
-    // its 4-byte-pointer slot) is modelled here. mpHeld is a real pointer so the deref is
-    // by-name and type-correct; its absolute x64 offset (8-byte pointer alignment) differs
-    // from the X360 +0x04 -- not pinned (see note below).
-    struct CameraHeaderHandle
-    {
-        unsigned char               maReserved0[0x04];  // +0x00 (X360) : handle book-keeping (own TU)
-        const GameplayCameraHeader*  mpHeld;            // X360 +0x04 : the held header pointer
-    };
-
-    // BrnDirector::SharedCameraContainer (subset). Two live-state flags + the primary and
-    // fallback header handles, at the offsets the X360 asm reads (X360 4-byte-pointer
-    // layout; the byte-flag offsets are size-stable and pinned, the handle offsets are not
-    // -- x64's 8-byte pointers shift them).
+    // BrnDirector::SharedCameraContainer (DWARF BrnDirectorArbitratorSharedCameraContainer.h:40).
+    // Kept a struct with public members: the committed arbitrator consumers
+    // (BrnDirectorArbitrator.cpp / BrnArbStateDriveThru.cpp) reproduce the X360's inlined
+    // flag accesses as direct member reads/writes (the DWARF's Set/Is accessors are what got
+    // inlined there).
     struct SharedCameraContainer
     {
-        bool                mbPrimaryActive;     // +0x00 : lbz 0(this)
-        bool                mbPrimarySuspended;  // +0x01 : lbz 1(this)
-        unsigned char       maReserved0[0x02];   // +0x02 : padding to the handle
-        CameraHeaderHandle  mPrimaryRef;         // X360 +0x04
-        unsigned char       maReserved1[0x10];   // intervening members (own TU)
-        CameraHeaderHandle  mSecondaryRef;       // X360 +0x18
+        bool mbUseGameplayExternal;   // +0x00 (DWARF h:90) : lbz 0(this)
+        bool mbLookbackOverride;      // +0x01 (DWARF h:91) : lbz 1(this)
 
-        // @0x82219718. Select the live gameplay-camera header: the primary handle when the
-        // primary is active and not suspended, otherwise the fallback handle. Writes the
-        // chosen (asserted-allocated) header pointer into lrOut and returns &lrOut.
-        GameplayCameraHeaderRef* GetGameplayCameraHe(GameplayCameraHeaderRef& lrOut) const;
+        // The two shared gameplay camera behaviours (DWARF h:93/h:94).
+        Camera::BehaviourHandle<Camera::BehaviourGameplayExternal> mGameplayExternal;  // X360 +0x04
+        Camera::BehaviourHandle<Camera::BehaviourGameplayBumper>   mGameplayBumper;    // X360 +0x18
 
-        // The Camera of the currently-selected gameplay behaviour: pick the primary handle
-        // when the primary is active and not suspended, otherwise the secondary, then resolve
-        // that behaviour through its manager and return its camera (asserts the handle is
-        // allocated). This is the selection ArbStateRoaming::Prepare copies into mCamera; the
-        // X360 inlines it as the primary/secondary test + the two handle-resolve accessors
-        // (sub_822122x). DECLARATION-ONLY (body lands with the SharedCameraContainer TU).
+        // @0x82263D50 (this build's ledger TU BrnDirectorArbitratorSharedCameraContainer.cpp).
+        // Allocate the two shared gameplay behaviours from the shared-info's manager, bind
+        // each to its parameter block out of the manager's parameter bank, and mark both as
+        // updating during pause. DWARF h:48 declares the param const-ref; the X360 mutates
+        // the handles through it, matching the DWARF .cpp:45 non-const spelling used here.
+        void Prepare(ArbStateSharedInfo& lrSharedInfo);
+
+        // @0x82219718 (IDB-truncated symbol "GetGameplayCameraHe"; DWARF h:61). Select the
+        // live gameplay camera behaviour's helper index: the external cam's when
+        // mbUseGameplayExternal is set and not overridden by lookback, else the bumper cam's.
+        // The X360 returns the 4-byte index object via a hidden sret pointer; by-value here.
+        Camera::BehaviourHelperIndex GetGameplayCameraHelperIndex() const;
+
+        // The Camera of the currently-selected gameplay behaviour (DWARF h:58 names this
+        // GetGameplayCamera; committed consumers already call it under this name): pick the
+        // external handle when mbUseGameplayExternal && !mbLookbackOverride, else the bumper,
+        // then resolve that behaviour through its manager and return its camera (asserts the
+        // handle is allocated). The X360 inlines it as the flag test + the two handle-resolve
+        // accessors (sub_822122x). DECLARATION-ONLY (body lands with the SharedCameraContainer
+        // TU).
         const Camera::Camera& GetSelectedGameplayCamera() const;
 
-        // Force the PRIMARY gameplay-camera behaviour to finish immediately so an intro /
-        // transition camera can take over. The X360 (ArbStateRaceIntro::Update cases 1 and 3)
-        // resolves the primary handle (this+0x04) to its behaviour via the manager, then sets
-        // its remaining-time to FLT_MAX and raises its two "finished" flags (behaviour-
-        // relative byte stores at +0x29E and +0xB5D). Those camera-behaviour offsets belong to
-        // the gameplay-camera-behaviour TU, so this is exposed as a single named operation
-        // here rather than poked by offset. DECLARATION-ONLY (body lands with the
-        // SharedCameraContainer / gameplay-camera-behaviour TU).
+        // Force the EXTERNAL (primary) gameplay-camera behaviour to finish immediately so an
+        // intro / transition camera can take over. The X360 (ArbStateRaceIntro::Update cases 1
+        // and 3) resolves the external handle (this+0x04) to its behaviour via the manager,
+        // then sets its remaining-time to FLT_MAX and raises its two "finished" flags
+        // (behaviour-relative byte stores at +0x29E and +0xB5D). Those camera-behaviour
+        // offsets belong to the gameplay-camera-behaviour TU, so this is exposed as a single
+        // named operation here rather than poked by offset. DECLARATION-ONLY (body lands with
+        // the SharedCameraContainer / gameplay-camera-behaviour TU).
         void ForcePrimaryGameplayBehaviourToFinish();
     };
 
     // Pin only the size-stable offsets the X360 asm proves (the two selection-flag bytes).
-    // The handle offsets (X360 +0x04 / +0x18, both 4-byte-pointer slots) are not pinned on
-    // x64, where 8-byte pointers and pointer alignment shift them; the fields are reached by
-    // name, so the absolute offset is not load-bearing for correctness.
-    static_assert(offsetof(SharedCameraContainer, mbPrimaryActive)    == 0x00, "primary-active flag @+0x00");
-    static_assert(offsetof(SharedCameraContainer, mbPrimarySuspended) == 0x01, "primary-suspended flag @+0x01");
+    // The handle offsets (X360 +0x04 / +0x18) are not pinned on x64, where 8-byte pointers
+    // shift them; the fields are reached by name, so the absolute offset is not load-bearing.
+    static_assert(offsetof(SharedCameraContainer, mbUseGameplayExternal) == 0x00, "use-external flag @+0x00");
+    static_assert(offsetof(SharedCameraContainer, mbLookbackOverride)    == 0x01, "lookback-override flag @+0x01");
 }

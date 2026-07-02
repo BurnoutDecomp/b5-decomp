@@ -84,6 +84,12 @@ namespace BrnGui
         // everything from +0x04 onward and leaves the +0x00 vtable slot untouched.
         TextField& operator=(const TextField& lrSource);
 
+        // ADDITIVE GROW (ImageGalleryCarouselItem::HandleLoadNotifications @0x82419BF8):
+        // the field's current text. The X360 caller reads macText's address directly
+        // (field+0xA4) to re-push the stored text through SetText after a load
+        // notification; exposed by name so that caller stays off the raw offset.
+        const char* GetText() const { return macText; }
+
     private:
         u32  muTextColour;          // +0x8C  (set by SetColour)
         s32  miScroll;              // +0x90

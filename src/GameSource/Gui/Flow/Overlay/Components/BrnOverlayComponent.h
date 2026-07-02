@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h"  // BrnGui::BrnFlaptComponent (base)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                        // BrnFlapt::MovieClipRef (embedded)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT (RunOverlay)
 
 // ============================================================================
 // GameSource/Gui/Flow/Overlay/Components/BrnOverlayComponent.h
@@ -38,6 +39,25 @@ namespace BrnGui
         // overlay's owner polls it to know the wipe has finished.
         bool GetTransitionComplete() const            { return mbTransitionComplete; }
         void SetTransitionComplete(bool lbComplete)   { mbTransitionComplete = lbComplete; }
+
+        // ADDITIVE GROW (BrnGui::InvisibleOverlayState::OnEnter @0x824B1568, which drives
+        // all three): Construct / Prepare are the component's own ledger functions
+        // (declaration-only; shapes per the FlaptComponent-family convention and the
+        // caller's ABI -- Construct(name, iface, parent=0); Prepare(name, file, parent=0)).
+        void Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
+                       const char* lpcParentName);
+        void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile,
+                     const char* lacParentName);
+
+        // RunOverlay (BrnOverlayComponent.h:141, header-inline on the X360 -- the
+        // InvisibleOverlayState::OnEnter asm carries its body: the flash-id assert then
+        // the string-keyed GotoAndPlayLabel @0x8246F3E8 on the component's clip): jump
+        // the overlay movie to the named flash label and play it.
+        void RunOverlay(const char* lpcOverlayFlashId)
+        {
+            CGS_ASSERT(NULL != lpcOverlayFlashId, "NULL != lpcOverlayFlashId");
+            mAptRef.GotoAndPlayLabel(lpcOverlayFlashId);
+        }
 
     private:
         // TransitionCompleteCallback @0x8241C198 -- the apt timeline callback the overlay

@@ -116,7 +116,49 @@ public:
         f32         mfFieldA8;     // +0xA8  default tunable (= 0.5f)
         u8          mbFieldAC;     // +0xAC  default flag (= 1)
     };
+
+    // Adopt an external-cam parameter block: assert it carries the external-cam type tag,
+    // then cache its name word and store the pointer. INLINED on the X360 (no standalone
+    // ledger symbol -- the SharedCameraContainer::Prepare @0x82263D50 asm carries the whole
+    // body: cmplwi bank-block+0x00 vs 0 + the "lpParameters->GetType() ==
+    // eBehaviourGameplayExternal" assert citing BehaviourGameplayExternal.cpp:138, then
+    // stw params, 0xB00(this) / stw params->mpcName, 0x10(this)); extracted back out here
+    // per the inlining-reversal rule, mirroring the bumper's committed SetParameters
+    // @0x821F39C0.
+    void SetParameters(const Parameters* lpParameters);
+
+private:
+
+    // FLAG: only the members SetParameters writes are modelled at their asm-attested offsets;
+    //   the rest of the external-cam rig lands with the full behaviour TU. The vtable/base
+    //   head occupies +0x00; the cached param word is at +0x10 (stw r11, 0x10(this)) and the
+    //   param pointer is at +0xB00 (stw r29, 0xB00(this)). Reserved byte spans place them.
+    void*             mpVTable;                        // +0x00  behaviour vtable (opaque base head)
+    u8                maReserved04[0x10 - 0x04];       // +0x04 .. +0x0F (rig members not modelled here)
+    const char*       mpcCachedName;                   // +0x10  cached lpParameters->mpcName
+    u8                maReserved14[0xB00 - 0x14];      // +0x14 .. +0xAFF (rig members not modelled here)
+    const Parameters* mpParameters;                    // +0xB00  the adopted parameter block
 };
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::BehaviourGameplayExternal::SetParameters (X360-inlined; asm from
+// SharedCameraContainer::Prepare @0x82263D50):
+//   lwz  r11, 0(r29)        ; lpParameters->meType
+//   cmplwi r11, 0           ; == eBehaviourGameplayExternal
+//   ... assert on mismatch ("lpParameters->GetType() == eBehaviourGameplayExternal",
+//                           BehaviourGameplayExternal.cpp:138) ...
+//   lwz  r11, 4(r29)        ; lpParameters->mpcName (its +0x04 word)
+//   stw  r29, 0xB00(r28)    ; mpParameters  = lpParameters
+//   stw  r11, 0x10(r28)     ; mpcCachedName = lpParameters->mpcName
+// ----------------------------------------------------------------------------
+inline void
+BehaviourGameplayExternal::SetParameters(const Parameters* lpParameters)
+{
+    CGS_ASSERT(lpParameters->GetType() == eBehaviourGameplayExternal,
+               "lpParameters->GetType() == eBehaviourGameplayExternal");
+    mpParameters  = lpParameters;              // stw r29, 0xB00(this)
+    mpcCachedName = lpParameters->mpcName;     // lwz r11,4(lp); stw r11, 0x10(this)
+}
 
 } // namespace Camera
 } // namespace BrnDirector

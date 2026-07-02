@@ -75,6 +75,7 @@ namespace Camera
     // (by ptr/ref) of the helper types declared just below.
     class BehaviourManager;
     class BehaviourControllerLockInterface;
+    class BehaviourParameterBank;   // the per-named-behaviour parameter bank (own slice header)
 
     // ------------------------------------------------------------------------
     // BehaviourHelperIndex -- identifies a slot in a BehaviourManager's helper-index
@@ -190,6 +191,27 @@ namespace Camera
             mpBehaviour     = 0;
         }
 
+        // ADDITIVE GROW (SharedCameraContainer::GetGameplayCameraHelperIndex @0x82219718):
+        // the manager-facing BehaviourHelperIndex this handle passes to the manager's
+        // BehaviourHelperIndex-taking APIs. X360-attested: the de-inlined per-type accessors
+        // (sub_822122F0 / sub_822124A0) assert the handle is allocated then return its +0x04
+        // word -- the same word the committed call sites hand to SetBehaviourUpdatesDuringPause
+        // / IsBehaviourWaitingToPrepare (see the key-vs-index naming FLAG on those manager
+        // members: the DWARF types this word as a BehaviourHelperIndex).
+        BehaviourHelperIndex GetBehaviourHelperIndex() const
+        {
+            CGS_ASSERT(mbAllocated, "IsAllocated()");
+            return BehaviourHelperIndex(static_cast<s32>(muAllocationKey));
+        }
+
+        // ADDITIVE GROW (SharedCameraContainer::Prepare @0x82263D50): whether the owned
+        // behaviour keeps updating while the game is paused. X360-attested handle-level
+        // wrapper (BrnBehaviourManager.h:676): assert the handle is allocated ("IsAllocated()",
+        // line 676), then forward the handle's +0x04 word to the manager's
+        // SetBehaviourUpdatesDuringPause. Body out-of-line below (needs BehaviourManager
+        // complete).
+        void SetUpdatesDuringPause(bool lbUpdatesDuringPause);
+
     private:
         bool              mbAllocated;     // +0x00  owns a behaviour
         u32               muAllocationKey; // +0x04  manager-side allocation key
@@ -295,6 +317,14 @@ namespace Camera
         // u32 key signature the consumers use.
         void SetBehaviourUsedByHandle(u32 luAllocationKey);
         void UnSetBehaviourUsedByHandle(u32 luAllocationKey);
+
+        // The per-named-behaviour parameter bank (the DWARF :325 mBehaviourParameterBank
+        // sub-object, X360 manager +0x12530). The bank's own layout is un-homed (the member
+        // below is a FLAGGED opaque slot), so this accessor is DECLARATION-ONLY -- the body
+        // lands when the bank sub-object is homed. X360-attested consumer:
+        // SharedCameraContainer::Prepare @0x82263D50 (addis/addi manager+0x12530 then fixed
+        // offsets into the bank).
+        const BehaviourParameterBank& GetBehaviourParameterBank() const;
 
         void LockBehaviourForInterpolation(BehaviourHelperIndex lFrom, BehaviourHelperIndex lTo);
         void UnlockBehaviourForInterpolation(BehaviourHelperIndex lFrom, BehaviourHelperIndex lTo);
@@ -477,6 +507,20 @@ namespace Camera
             mbAllocated   = false;
         }
         return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHandle::SetUpdatesDuringPause (SharedCameraContainer::Prepare @0x82263D50,
+    // inlined) -- assert the handle is allocated (BrnBehaviourManager.h:676), then forward
+    // the handle's +0x04 word and the flag to the owning manager's
+    // SetBehaviourUpdatesDuringPause (X360: lwz r3,0xC(handle); lwz r4,4(handle); li r5,flag).
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    inline void BehaviourHandle<TBehaviour>::SetUpdatesDuringPause(bool lbUpdatesDuringPause)
+    {
+        CGS_ASSERT(mbAllocated, "IsAllocated()");
+        mpManager->SetBehaviourUpdatesDuringPause(BehaviourHelperIndex(static_cast<s32>(muAllocationKey)),
+                                                  lbUpdatesDuringPause);
     }
 
     // ------------------------------------------------------------------------
