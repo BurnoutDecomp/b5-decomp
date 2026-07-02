@@ -60,8 +60,13 @@ AptActionQueueC::AptActionQueueC(u32 nCapacity)
 {
     mnCapacity = nCapacity;
 
-    s32 liByteSize = static_cast<s32>(KU_X360_SLOT_STRIDE * nCapacity);
-    if (nCapacity > 0x0CCCCCCCu)   // would overflow 20 * nCapacity
+    // FLAG (x64 native stride -- same fix as SetupStaticData's tables): the console
+    // allocates 20-byte slots (KU_X360_SLOT_STRIDE); the x64 AptAnimationPoolData is
+    // pointer-widened (sizeof == 40), and every walker (enqueue/drain/WrapForward)
+    // indexes by element -- allocating the console byte size would let the ring roam
+    // past its block once the cursors pass slot (20*cap)/sizeof.
+    s32 liByteSize = static_cast<s32>(sizeof(AptAnimationPoolData) * nCapacity);
+    if (nCapacity > (0x7FFFFFFFu / sizeof(AptAnimationPoolData)))   // would overflow (console: > 0x0CCCCCCC for 20)
     {
         liByteSize = -1;
     }

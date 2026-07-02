@@ -341,17 +341,16 @@ namespace
     // DefineDictionary (0x88) stream has installed it. On the console the ordering
     // guarantee comes from the clip-event queue chain (AptCIH_queueClipEvents -- still
     // the deferred link-cluster stub) + init-action sequencing. Flip to true once that
-    // cluster is homed. // FLAG (staged activation, not a leaf)
+    // cluster is homed. // (RESOLVED 2026-07-01 -- see below; the switch is retired.)
     //
-    // STATUS 2026-07-01 (2nd round): the clip-event chain IS homed (queueClipEvents
-    // record scan + AddActionFront/Back + the placement's mpClipEventHandlers store +
-    // _addToSetCaches fold + load events) and with the drain ON the VM executes
-    // through FRAME 2 (frames 0-2 tick + place + drain clean, incl. two straddled
-    // clipActions blocks skipped by the converter-data guards). The frame-3 tick then
-    // hard-crashes with no diagnostic -- an executed-bytecode side effect under
-    // investigation (the jumpToFrame replay boundary was ruled out). Staged OFF until
-    // that lands; flip to false to reproduce.
-    bool   s_bDisableRunActions    = true;
+    // STATUS 2026-07-01 (FINAL): the drain is PERMANENTLY ON. The frame-3 crash was a
+    // straddled (never-relocated) tag-1 stream slot from a deep-nested movie (the
+    // converter 4-byte-straddle family) dereferenced into a wild runStream PC -- now
+    // guarded at both the enqueue (queueFrameActions) and the drain (RunActions). With
+    // the CONVERTER-FIXED bundles (branch offsets corrected, 2026-07-01) the full VM
+    // runs steady-state: 1243 tick+drain frames, 0 asserts, the executed stop()s hold
+    // the clips faithfully.
+    bool   s_bDisableRunActions    = false;
     s32    s_iTickFrame            = 0;     // STEP-2 per-frame tick counter (for the placement probes)
 
     // ====================================================================================
@@ -1465,7 +1464,7 @@ namespace BrnGui
             {
                 AptTarget* lpVmTgt = GetTarget();
                 if (lpVmTgt != nullptr && lpVmTgt->mpAnimationTarget != nullptr
-                    && !s_bDisableRunActions)   // TEMP DIAGNOSTIC bisect switch
+                    && !s_bDisableRunActions)   // (retired switch; permanently false)
                     lpVmTgt->mpAnimationTarget->RunActions();
             }
 
