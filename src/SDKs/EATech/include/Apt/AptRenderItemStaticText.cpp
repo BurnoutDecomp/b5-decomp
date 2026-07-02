@@ -4,6 +4,8 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptRenderItemStaticText.h"
+#include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // the def base (the font resolvers)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                    // KU_AptEmbeddedMovieOff
 #include "SDKs/EATech/include/Apt/AptCharacterStaticText.h"  // the baked paragraph/glyph layout
 #include "SDKs/EATech/include/Apt/AptCharacter.h"            // AptCharacter::render (per-glyph shape draw)
 #include "SDKs/EATech/include/Apt/AptRenderingContext.h"     // matrix/colour stack + gAptIdentityMatrix
@@ -24,8 +26,31 @@
 //   AptResolveTextFontCharacter : *(pFontOwner+0x20)[nFontIndex]  -> font character
 //   AptResolveFontGlyph         : *(pFontChar+0x18)[nGlyphIndex]  -> glyph shape character
 // ---------------------------------------------------------------------------
-extern AptCharacter* AptResolveTextFontCharacter(AptCharacter* pFontOwner, int nFontIndex);
-extern AptCharacter* AptResolveFontGlyph(AptCharacter* pFontChar, int nGlyphIndex);
+// HOMED 2026-07-02 (retiring the AptRenderLinkStubs nulls). Native-8 forms of
+// the console reads (the offsets flatten through the def base):
+//   * TextFontCharacter: console `*(fontOwner+0x20)[i]` == root(+0x10 defbase)
+//     (+0x10 charTable) -- native: the def base at mpFixupLink +
+//     KU_AptEmbeddedMovieOff, then its typed mpCharacterTable[nFontIndex].
+//   * FontGlyph: console `*(fontChar+0x18)[i]` -- the FONT record's glyph
+//     char-pointer array (native +0x30, the slot Fixup case-3 relocates;
+//     Unresolve's inverse re-indexes these pointers back to ids, proving the
+//     live entries are pointers). The font subclass fields have no C++ home
+//     yet, so the read stays a doctrine-sanctioned serialized-record access
+//     with the console offset noted.
+AptCharacter* AptResolveTextFontCharacter(AptCharacter* pFontOwner, int nFontIndex)
+{
+    AptCharacterAnimation* const pDef =
+        reinterpret_cast<AptCharacterAnimation*>(
+            reinterpret_cast<char*>(pFontOwner) + KU_AptEmbeddedMovieOff);
+    return pDef->mpCharacterTable[nFontIndex];
+}
+
+AptCharacter* AptResolveFontGlyph(AptCharacter* pFontChar, int nGlyphIndex)
+{
+    AptCharacter** const ppGlyphs = *reinterpret_cast<AptCharacter***>(
+        reinterpret_cast<char*>(pFontChar) + 0x30);   // [c: 0x18] the glyph array
+    return ppGlyphs[nGlyphIndex];
+}
 
 // Pen-advance scale: the baked int16 advance walks the per-glyph x position as
 // advance * 0.05 (X360 flt_820047C8).
