@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameSource/Director/Camera/BrnCameraEffects.h"
 #include "SharedClasses/Graphics/BrnEffectsData.h"
 
 #include <cstring>
@@ -7,6 +8,11 @@
 //   BrnDirector::Camera::MotionBlurData::Construct    @ 0x821F84E8
 //   BrnDirector::Camera::MotionBlurData::Interpolate  @ 0x8220AF20
 //   BrnDirector::Camera::CameraEffects::Interpolate   @ 0x8220B050
+//
+// CameraEffects itself is the canonical, X360-size-proven (0xBC) type declared in
+// BrnCameraEffects.h (this TU's own header) and embedded by value in Camera::mEffects
+// (see Camera.h / Camera.cpp's static_assert(sizeof(CameraEffects) == 0xBC)). Only
+// Interpolate's BODY lands here; the type is not redefined in this TU.
 
 namespace BrnDirector
 {
@@ -19,48 +25,6 @@ namespace Camera
 
     // MotionBlurData is the shared type from SharedClasses/Graphics/BrnEffectsData.h
     // (#included above), not a local fork.
-
-    struct HookNameStringWrapper
-    {
-        u8 maStorage[34];
-    };
-
-    struct BackgroundEffectRequest
-    {
-        u8 maStorage[72];
-    };
-
-    struct CameraEffects
-    {
-        static CameraEffects Interpolate(const CameraEffects& lLhs, const CameraEffects& lRhs, f32 lfT);
-
-        HookNameStringWrapper mStartHookNameStringWrapper;
-        HookNameStringWrapper mStopHookNameStringWrapper;
-        MotionBlurData mMotionBlurData;
-        BackgroundEffectRequest mBackgroundEffectRequest;
-        u32 muRequestedPostFX;
-        f32 mfStartHookBlendAmount;
-        u32 muFadeColor;
-        s32 meOverlay;
-        f32 mfRaceEndEffectAmount;
-        f32 mfBloomThreshold;
-        f32 mfBloomLuminance;
-        f32 mfTimeOfDay;
-        f32 mfSimTimeScale;
-        f32 mfGameCameraBlend;
-        f32 mfCameraLag;
-        f32 mfBlackBarAmount;
-        f32 mfShakeAmplitude;
-        f32 mfShakeFrequency;
-        u8 mu8ShakeType;
-        u8 mu8GameCameraBlendCurve;
-        u8 mu8GameCameraBlendMethod;
-        bool mbHasStartHookNameString;
-        bool mbHasStopHookNameString;
-        bool mbSetTimeOfDay;
-        bool mbRequestingScreenshot;
-        u8 maPad187;
-    };
 
     void MotionBlurData::Construct()
     {

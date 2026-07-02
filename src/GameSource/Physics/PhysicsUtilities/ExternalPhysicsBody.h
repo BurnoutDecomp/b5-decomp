@@ -6,10 +6,11 @@
 // reconstruction: the member SEQUENCE is verbatim from the DecFIGS DWARF
 // (references/DecFIGS/dwarfdump/.../PhysicsUtilities/ExternalPhysicsBody.h:241-249).
 //
-// LAYOUT (X360, confirmed against the asm of the four accumulator funcs below):
-//   mLocalInverseInertia @ +128 (Matrix33)   -- begins right after the 128-byte base
-//   mWorldInverseInertia              (Matrix33)
-//   mfMass                            (VecFloat)
+// LAYOUT (X360, confirmed against the asm of the four accumulator funcs below, and against
+// ReadPropertiesFromRenderware @0x825A2280 which stores all three inertia/mass members):
+//   mLocalInverseInertia @ +112 (0x70) (Matrix33)  -- begins right after the base
+//   mWorldInverseInertia @ +160 (0xA0) (Matrix33)  -- `addi r11,this,0xA0`
+//   mfMass                @ +208 (0xD0) (VecFloat)  -- `li r28,0xD0` / `stvx128 v0,r3,r28`
 //   mTotalLinearForce    @ +224 (0xE0)  -- AddWorldSpaceForce          `addi r11,this,0xE0`
 //   mTotalTorque         @ +240 (0xF0)  -- AddWorldSpaceTorque         `addi r11,this,0xF0`
 //   mTotalLinearImpulse  @ +256 (0x100) -- AddWorldSpaceImpulse        `addi r11,this,0x100`
@@ -17,10 +18,11 @@
 //
 // The four +0xE0..+0x110 stride-16 offsets pin mTotalLinearForce/mTotalTorque/
 // mTotalLinearImpulse/mTotalAngularImpulse to the exact DWARF member sequence. The two inertia
-// matrices + mfMass fill +128..+224; their exact sub-offsets are not load-bearing for this
-// group's funcs (only the inertia tensor's rows are read, via a caller-supplied pointer, in
-// CalculateCollisionImpulseWithInanimateObject). Per project rule members are pinned BY NAME +
-// SEQUENCE (no cross-pointer absolute-offset static_assert).
+// matrices + mfMass fill +0x70..+0xE0 (0x70/0xA0/0xD0, confirmed by ReadPropertiesFromRenderware);
+// their exact sub-offsets are not load-bearing for this group's funcs (only the inertia tensor's
+// rows are read, via a caller-supplied pointer, in CalculateCollisionImpulseWithInanimateObject).
+// Per project rule members are pinned BY NAME + SEQUENCE (no cross-pointer absolute-offset
+// static_assert).
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3, Matrix33, VecFloat

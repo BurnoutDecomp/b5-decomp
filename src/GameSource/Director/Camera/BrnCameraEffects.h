@@ -41,6 +41,11 @@ struct CameraEffects
     // @ (inlined) -- body lands with the CameraEffects TU.
     void Construct();
 
+    // Blend two effects blocks: byte-copies lLhs as the base (188 = 0xBC bytes, the
+    // X360-proven CameraEffects stride) then overwrites the interpolated sub-fields.
+    // @0x8220B050 -- body lands with the CameraEffects TU (BrnCameraEffects.cpp).
+    static CameraEffects Interpolate(const CameraEffects& lLhs, const CameraEffects& lRhs, f32 lfT);
+
     // --- Layout (offsets relative to the CameraEffects sub-object @ camera +0x68) ---
     // Only the offsets the Camera::Construct asm pins by store are named; everything
     // else is a reserved span owned by the CameraEffects TU.
@@ -71,8 +76,12 @@ struct CameraEffects
     //   previous transform by (1 - this value). Construct zeroes it.
     f32 mfCameraLag;
 
-    // +0xA8: race-end amount word (Construct zeroes it). NOMINAL span.
-    u8  maReservedA8[0xAC - 0xA8];
+    // +0xA8: race-end effect amount (DWARF member name mfRaceEndEffectAmount,
+    //   BrnCameraEffects.cpp's DWARF member list). X360-attested: CameraEffects::
+    //   Interpolate @0x8220B050 lerps this float the same way as mfStartHookBlendAmount
+    //   (fsubs/fmadds pair at +0xA8, alongside the +0x9C pair) -- a real interpolated
+    //   field, not filler. Construct zeroes it.
+    f32 mfRaceEndEffectAmount;                  // +0xA8
 
     // +0xAC / +0xB0 / +0xB4: the camera-shake request triple (DWARF names
     //   mfShakeAmplitude / mfShakeFrequency / mu8ShakeType, BrnCameraEffects.cpp's DWARF

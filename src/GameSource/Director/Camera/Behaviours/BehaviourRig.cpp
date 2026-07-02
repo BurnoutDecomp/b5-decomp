@@ -158,9 +158,10 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
 
     const void* const lpWorld = lrSharedInfo.GetWorld();
 
-    if (!mbIsPrepared)
+    if (!mbHasFailed)
     {
-        // Request follow mode on the first frame.
+        // Request follow mode on the first frame (@0x8224282C: mCamera.mState_uFlags |= 2).
+        lrCamera.mState_uFlags |= 2;
     }
 
     // Snapshot the attached vehicle.
