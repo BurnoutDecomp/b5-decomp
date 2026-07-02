@@ -157,7 +157,7 @@ void AptActionInterpreter::_FunctionAptActionSetMember(AptActionInterpreter* pIn
             pInterp->setVariable(pObject, pContext->mpPendingReleaseValue, pName, pValue, 1, 0, 1);
 
             // Assigning __proto__ to _global / a CIH / tag-37 marks it class-bearing.
-            if (*pName == StringPool::saConstant)
+            if (*pName == StringPool::saConstant[0])
             {
                 const AptVirtualFunctionTable_Indices t = pObject->getVtblIndex();
                 if ((t == AptVFT_Object && pObject->getIsDefined())

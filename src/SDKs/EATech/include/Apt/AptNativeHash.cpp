@@ -281,7 +281,7 @@ void AptNativeHash::Set(const EAStringC& key, AptValue* pValue)
 
     const uint16_t h = key.UpdateHashValue();            // compute the cached hash if needed
     if (h == 1689 && key.EqualNoCase(gAptKeyPrototype))      { SetPrototype(pValue);  return; }
-    if (h == 27581 && key.EqualNoCase(StringPool::saConstant)) { Set__Proto__(pValue); return; }
+    if (h == 27581 && key.EqualNoCase(StringPool::saConstant[0])) { Set__Proto__(pValue); return; }
 
     if (!mpTable)
         FirstAllocation();
@@ -314,7 +314,7 @@ void AptNativeHash::Unset(const EAStringC& key)
 
     if (h == 1689 && key.EqualNoCase(gAptKeyPrototype))
         UnsetPrototype();
-    else if (h == 27581 && key.EqualNoCase(StringPool::saConstant))
+    else if (h == 27581 && key.EqualNoCase(StringPool::saConstant[0]))
         Unset__Proto__();
 }
 
@@ -331,7 +331,7 @@ AptValue* AptNativeHash::Lookup(const EAStringC& key) const
     if (h == 1689)
         return key.EqualNoCase(gAptKeyPrototype) ? mpPrototype : nullptr;
     if (h == 27581)
-        return key.EqualNoCase(StringPool::saConstant) ? mp__Proto__ : nullptr;
+        return key.EqualNoCase(StringPool::saConstant[0]) ? mp__Proto__ : nullptr;
     return nullptr;
 }
 

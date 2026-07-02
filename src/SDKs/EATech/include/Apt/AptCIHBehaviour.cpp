@@ -33,6 +33,10 @@
 #include "SDKs/EATech/Apt/AptValueGCAllocator.h"                 // AptValueGC_MemItem::SetIsAllocated
 #include "SDKs/EATech/include/Apt/AptActionQueue.h"              // AptActionQueueC (queueClipEvents enqueue)
 #include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"        // mergeState shim cast target
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"         // gAptActionInterpreter (the clip-event immediate run)
+#include "SDKs/EATech/include/Apt/AptScriptFunctionByteCodeBlock.h" // the onLoad/onUnload block wrapper
+#include "SDKs/EATech/include/Apt/AptValue/AptValue.h"            // findChild / getIsDefined
+
 
 #include <cmath>   // sqrtf
 
@@ -47,6 +51,9 @@ void AptApt_RemoveActionFor(AptCIH* pNode);
 // The "null input" context id queueClipEvents stamps on an enterFrame enqueue
 // (console gNullInput; defined in AptGlobals.cpp).
 extern int gAptNullInputId;
+
+// The process-wide AS action interpreter (off_8324E760; defined in AptGlobals.cpp).
+extern AptActionInterpreter gAptActionInterpreter;
 
 // ---------------------------------------------------------------------------
 // GetFirstChild @0x82ADC938 -- the first placed child of this node. Only the
@@ -1379,16 +1386,10 @@ bool AptCIH::HasEvent(int nEventMask)
 //   masks 512 / 4 / 0x40000      -> the immediate BYTE-CODE-BLOCK run (FLAG below)
 //   anything else (incl. 1 load) -> AddActionBack(..., nFrameId)
 //
-// FLAG (staged sub-paths, console sub-sections of the same body):
-//  * the masks-512/4/0x40000 immediate run builds an AptScriptFunctionByteCodeBlock
-//    over the record's stream and callFunction()s it NOW (not queued), named via the
-//    string-constant table entries [59]/[69] -- StringPool's full saConstant TABLE is
-//    not yet recovered (only the __proto__ key [0] is modelled), so this path is
-//    deferred to the string-pool homing; it is not reached by the tick's mask-1/2
-//    queue calls.
-//  * the bDeferred __proto__ event-member dispatch tail (aClipEvents {mask, strIdx}
-//    pair table + hash Lookup/findChild + AddFunctionBack/Front + the cross-CIH
-//    zombie rebind) needs the same string table; deferred with it.
+// UN-STAGED (2026-07-01, with the recovered StringPool table + the extracted
+// aClipEvents pairs): the masks-512/4/0x40000 immediate byte-code-block run and
+// the bDeferred __proto__ event-member dispatch are BOTH live below. The only
+// remaining FLAG is the cross-CIH handler rebind sub-branch (see inline).
 int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned int nFrameId,
                                       int bDeferred)
 {
@@ -1420,9 +1421,46 @@ int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned in
 
             if (nEventMask == 512 || nEventMask == 4 || nEventMask == 0x40000)
             {
-                // FLAG (staged): the immediate byte-code-block run -- see the header
-                // note. The console returns 1 after running the FIRST matched record.
-                return nResult;
+                // The IMMEDIATE byte-code-block run (PS3 LABEL_24/27): wrap the
+                // matched record's parsed action stream in a fresh
+                // AptScriptFunctionByteCodeBlock named onLoad [59] (mask 512) /
+                // onUnload [69] (masks 4 / 0x40000), then call it NOW through the
+                // interpreter -- not queued. The console runs the FIRST matched
+                // record and returns 1.
+                const int nNameCode = (nEventMask == 512) ? 59 : 69;
+                const EAStringC* pName = &StringPool::saConstant[nNameCode];   // GetString(code)
+
+                // qword_1059C588: the static (zero-init) constant-pool descriptor
+                // the console passes by value -- a clip-event block has no pool of
+                // its own (its streams use the movie dictionary via op 0x88).
+                AptConstantPool lEmptyPool = { nullptr, 0 };
+
+                AptScriptFunctionByteCodeBlock* pBlock = new AptScriptFunctionByteCodeBlock(
+                    const_cast<unsigned char*>(rRec.mpActionStream), -1, lEmptyPool,
+                    pName->GetBuffer(), static_cast<AptValue*>(pNode), nullptr);
+                if (pBlock != nullptr)
+                {
+                    // PrepareForExecution == PushStaticData (the register window).
+                    AptValue** lpSavedHeap = AptScriptFunctionBase::PushStaticData();
+
+                    // Push the node onto the interpreter's CIH/target stack, pin both.
+                    gAptActionInterpreter.mpCIHStack[gAptActionInterpreter.mnCIHStackTop] = pNode;
+                    ++gAptActionInterpreter.mnCIHStackTop;
+                    pNode->AddRef();
+                    pBlock->AddRef();
+
+                    gAptActionInterpreter.callFunction(
+                        static_cast<AptValue*>(pNode), pBlock, 0, nullptr, nullptr);
+
+                    pBlock->Release();
+                    // Pop the CIH stack (Release the pinned node).
+                    gAptActionInterpreter
+                        .mpCIHStack[gAptActionInterpreter.mnCIHStackTop - 1]->Release();
+                    --gAptActionInterpreter.mnCIHStackTop;
+
+                    gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
+                }
+                return 1;
             }
 
             if (pQueue == nullptr)
@@ -1455,12 +1493,80 @@ int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned in
         }
     }
 
-    // FLAG (staged): the bDeferred __proto__ event-member dispatch tail -- see the
-    // header note. Gated exactly as the console gates it, so the staged return is
-    // only reached when an AS-defined event member exists.
+    // The bDeferred __proto__ event-member dispatch tail (PS3 LABEL_17+): when an
+    // AS-defined event member exists anywhere up the __proto__ chain, find the
+    // aClipEvents pair whose mask matches, look the handler up (own hash first,
+    // else findChild), and queue it as a FUNCTION slot.
     if (bDeferred != 0 && pNode->HasEventMember(nEventMask) != 0)
     {
-        return nResult;
+        // aClipEvents @0x82F72DB4 (GROUND TRUTH, extracted from the ARTIST XEX
+        // rodata): 6 {clip-event mask, StringCode} pairs.
+        static const struct { uint32_t mnMask; int32_t mnNameCode; } skAptClipEvents[6] = {
+            { 0x002, 56 },   // onEnterFrame
+            { 0x080, 58 },   // onKeyUp
+            { 0x040, 57 },   // onKeyDown
+            { 0x001, 59 },   // onLoad
+            { 0x004, 69 },   // onUnload
+            { 0x100, 53 },   // onData
+        };
+
+        int nPair = -1;
+        for (int k = 0; k < 6; ++k)
+        {
+            if ((skAptClipEvents[k].mnMask & static_cast<uint32_t>(nEventMask)) != 0u)
+            {
+                nPair = k;
+                break;
+            }
+        }
+        if (nPair == -1)
+            return nResult;
+
+        AptActionQueueC* const pQueue =
+            (gpAptTarget != nullptr && gpAptTarget->mpAnimationTarget != nullptr)
+                ? gpAptTarget->mpAnimationTarget->mpActionQueue : nullptr;
+        if (pQueue == nullptr)
+            return nResult;
+
+        const EAStringC* pName = &StringPool::saConstant[skAptClipEvents[nPair].mnNameCode];   // GetString(code)
+        const uint32_t nPairMask = skAptClipEvents[nPair].mnMask;
+
+        // Own-hash lookup first (the objectMemberLookup vtbl route's fast path).
+        AptNativeHash* pHash = pNode->GetNativeHashVirtual();
+        AptValue* pHandler = (pHash != nullptr) ? pHash->Lookup(*pName) : nullptr;
+        if (pHandler != nullptr)
+        {
+            // Found on this node: masks 0x4000/0x2000 queue at the BACK, the rest
+            // jump the queue at the FRONT (the console's two exits).
+            if (nPairMask == 0x4000u || nPairMask == 0x2000u)
+                pQueue->AddFunctionBack(static_cast<AptValue*>(pNode), pHandler,
+                                        0, static_cast<s32>(nFrameId));
+            else
+                pQueue->AddFunctionFront(static_cast<AptValue*>(pNode), pHandler,
+                                         0, static_cast<s32>(nFrameId));
+            return 1;
+        }
+
+        // Not on the own hash: resolve up the chain (findChild). Only a DEFINED
+        // value dispatches (the console tests the value's defined bit).
+        AptValue* pChild = pNode->findChild(pName, nullptr);
+        if (pChild == nullptr || !pChild->getIsDefined())
+            return nResult;
+
+        // FLAG (deferred sub-branch, console-faithful gate): when the resolved
+        // handler is bound to a DIFFERENT CIH the console re-binds it (Release the
+        // old root-animation ref, DecZombieCount, GetRootAnimation + the packed
+        // zombie-count increment, AddRef, setGCRoot) before queueing. That
+        // cross-CIH rebind (the AptScriptFunctionBase +36 root-animation slot) is
+        // its own follow-on; the SAME-CIH handler (the common case) queues below.
+
+        if (nPairMask == 0x4000u || nPairMask == 0x2000u || nPairMask == 0x001u)
+            pQueue->AddFunctionBack(static_cast<AptValue*>(pNode), pChild,
+                                    0, static_cast<s32>(nFrameId));
+        else
+            pQueue->AddFunctionFront(static_cast<AptValue*>(pNode), pChild,
+                                     0, static_cast<s32>(nFrameId));
+        return 1;
     }
 
     return nResult;

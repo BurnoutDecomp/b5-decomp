@@ -41,6 +41,7 @@
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
 #include "SDKs/EATech/include/Apt/AptPrototype.h"
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"      // AptGetAnimationAtLevel
+#include "SDKs/EATech/include/Apt/AptCIH.h"                   // GetRootAnimation (DeriveFunctionAnimation)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                  // DOGMA_PoolManager
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h" // gpAptOperandStackPool
 
@@ -66,6 +67,18 @@ int32_t        AptScriptFunctionBase::snRegisterBlockSize        = 0;   // dword
 // ctor @0x82AF1030 -- bind to pCIH, capture the enclosing call frame as the closure
 // scope (when defined inside a call), derive the owning timeline animation, and
 // optionally build a fresh prototype object.
+// AptApt_DeriveFunctionAnimation -- the timeline animation a function value is
+// defined on (HOMED 2026-07-01; was the AptRenderLinkStubs null-stub, which AV'd
+// the ctor's unconditional mpParentAnim->AddRef() the first time a ByteCodeBlock
+// was built): the nearest enclosing movie-clip(9)/stage(15) node up the CIH's
+// display-list parent chain -- exactly AptCIH::GetRootAnimation (the homed walk;
+// its CIHNone/empty placeholder resolves to the level-0 root).
+AptValue* AptApt_DeriveFunctionAnimation(AptValue* pCIH)
+{
+    return static_cast<AptValue*>(
+        reinterpret_cast<AptCIH*>(pCIH)->GetRootAnimation());
+}
+
 AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eType,
                                              AptValue* pCallContext,
                                              AptValue* pCIH,
