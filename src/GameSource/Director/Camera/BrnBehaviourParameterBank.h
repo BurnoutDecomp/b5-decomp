@@ -4,6 +4,8 @@
 #include "types.hpp"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"    // BehaviourGameplayBumper::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"  // BehaviourGameplayExternal::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"           // BehaviourGyroCam::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourFixedCam.h"          // BehaviourFixedCam::Parameters
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourParameterBank.h
@@ -85,6 +87,19 @@ namespace BrnDirector
 
             // X360 bank+0x2488: the external ("chase") gameplay parameter block.
             const BehaviourGameplayExternal::Parameters& GetGameplayExternalCameraParamsForCar() const;
+
+            // X360 bank+0xAB4 (manager+0x12FE4): the gyro-cam block the hit-traffic
+            // moment binds (MomentHitTraffic::Update @0x82271EB8 hands it to
+            // BehaviourGyroCam::SetParameters). FLAG: accessor name inferred by the
+            // sibling naming pattern (the X360 inlines the fetch to the fixed offset).
+            const BehaviourGyroCam::Parameters& GetGyroCamMomentParams() const;
+
+            // X360 bank+0x2334 (manager+0x14864): the fixed-cam block the static-cam-
+            // impact moment binds (MomentStaticCamImpact::Update @0x82266C00 hands it
+            // to BehaviourFixedCam::SetParameters). FLAG: accessor name inferred; note
+            // +0x2334 coincides with NamedParameters::maLookAroundCarCamParameters
+            // (see the relationship note above -- left to the bank's own TU).
+            const BehaviourFixedCam::Parameters& GetStaticCamImpactCamParams() const;
         };
     }
 }

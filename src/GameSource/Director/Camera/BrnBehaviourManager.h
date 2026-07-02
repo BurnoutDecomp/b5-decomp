@@ -362,8 +362,11 @@ namespace Camera
         // BrnDirector::Camera::BehaviourManager::NewBehaviour<TBehaviour> family the arbitrator
         // states drive; generic over the handle type so the states' own 5-word BehaviourHandle<>
         // binds as well as this header's interpolator handle. DECLARATION-ONLY.
+        // (3rd param: the arbitrator call sites pass 0 there; MomentHitTraffic::Update
+        // @0x82271EA0 passes the owning MOMENT pointer in that register (r6) -- typed
+        // const void* so both shapes bind to the one X360 symbol family.)
         template <typename TBehaviour, typename THandle>
-        void NewBehaviour(THandle& lrHandle, void* lpOwningState, s32 liArgA, s32 liArgB);
+        void NewBehaviour(THandle& lrHandle, void* lpOwningState, const void* lpOwner, s32 liArgB);
 
         // ADDITIVE GROW (BrnArbStateDriveThru::Prepare @0x8226E938): the ATTRIBUTE-TAKING
         // overload of NewBehaviour<TBehaviour>. X360-attested distinct calling convention from

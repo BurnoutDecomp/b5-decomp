@@ -109,6 +109,10 @@ public:
     // set. @0x822067D0. lVectorFromCar arrives in the first vector register (v1).
     void SetWorldSpaceNormalizedVectorFromCar(rw::math::vpu::Vector3 lVectorFromCar);
 
+    // ADDITIVE GROW (MomentHitTraffic::Update @0x82271D90 reads the returned behaviour's
+    // +0x009 byte -- the Behaviour-base failed flag, carved below): X360 header-inline.
+    bool HasFailed() const { return mbHasFailed; }
+
 private:
 
     // FLAG: only the members these functions touch are modelled at their asm-attested offsets; the
@@ -116,7 +120,9 @@ private:
     //   field. All fields are public-of-layout (offsetof pins live in the .cpp verify the exact
     //   layout). The vtable + parameter pointer use size-stable 32-bit slots (see SIZE-STABLE PIN
     //   note above); the typed parameter pointer is appended at the tail and reached by name.
-    u8    maHead000[0x10];                          // +0x000 .. +0x00F  vtable + rig head (X360 4B ptr slot)
+    u8    maHead000[0x9];                           // +0x000 .. +0x008  vtable + rig head (X360 4B ptr slot)
+    bool  mbHasFailed;                              // +0x009  the Behaviour-base failed flag (MomentHitTraffic::Update reads it)
+    u8    maHead00A[0x10 - 0xA];                    // +0x00A .. +0x00F  rig head remainder
     s32   mParamWord1;                              // +0x010  cached lpParameters->miParamWord1
     u32   muParametersSlot;                         // +0x014  adopted parameter block (X360 4B ptr slot)
     u8    maReserved018[0x20 - 0x18];               // +0x018 .. +0x01F (rig members not modelled here)
