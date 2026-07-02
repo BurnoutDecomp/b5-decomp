@@ -1,13 +1,16 @@
 #pragma once
 
 // CgsSceneManager::EntityId — a packed 32-bit scene-entity handle: an 8-bit owner
-// (entity type), a 12-bit entity index and a 12-bit part index, laid out
-// owner:[31..24] | entityIndex:[23..12] | partIndex:[11..0].
+// (entity type), a 14-bit entity index and a 10-bit part index, laid out
+// owner:[31..24] | entityIndex:[23..10] | partIndex:[9..0].
 //
-// GROUND TRUTH (X360 asm): the masks are 8/12/12 (KU_OWNER_MASK 0xFF000000,
-// KU_ENTITY_INDEX_MASK 0x00FFF000, KU_PART_INDEX_MASK 0x00000FFF). The DecFIGS DWARF
-// for this header lists 14/10 split constants — those DISAGREE with the committed
-// masks, so the asm-authoritative layout (8/12/12) wins here.
+// GROUND TRUTH (X360 asm, EntityId::Set @ 0x82277330): the pack sequence is
+// `slwi r11,r29(owner),14 ; or r11,r11,r30(entityIndex) ; slwi r11,r11,10 ;
+// or r11,r11,r28(partIndex)` i.e. ((owner<<14 | entityIndex) << 10) | partIndex
+// = (owner<<24) | (entityIndex<<10) | partIndex — an 8/14/10 split, matching the
+// DecFIGS DWARF constants (KU_NUM_BITS_FOR_ENTITY_NUM=14, KU_NUM_BITS_FOR_PART_NUM=10,
+// KU_ENTITY_INDEX_BASE=10). The bounds checks in Set also confirm this: entityIndex is
+// compared against 0x4000 (1<<14) and partIndex against 0x400 (1<<10).
 //
 // All bodies are reconstructed from the X360 asm, ported to project conventions:
 // u8/u16/u32 for the width-pinned integer types and CGS_ASSERT for the X360
@@ -42,13 +45,13 @@ namespace CgsSceneManager
 
     private:
         static const u32 KU_NUM_BITS_FOR_OWNER    = 8;
-        static const u32 KU_NUM_BITS_FOR_ENTITY_NUM = 12;
-        static const u32 KU_NUM_BITS_FOR_PART_NUM  = 12;
+        static const u32 KU_NUM_BITS_FOR_ENTITY_NUM = 14;
+        static const u32 KU_NUM_BITS_FOR_PART_NUM  = 10;
         static const u32 KU_OWNER_MASK        = 0xFF000000;
-        static const u32 KU_ENTITY_INDEX_MASK = 0x00FFF000;
-        static const u32 KU_PART_INDEX_MASK   = 0x00000FFF;
+        static const u32 KU_ENTITY_INDEX_MASK = 0x00FFFC00;
+        static const u32 KU_PART_INDEX_MASK   = 0x000003FF;
         static const u32 KU_OWNER_BASE        = 24;
-        static const u32 KU_ENTITY_INDEX_BASE = 12;
+        static const u32 KU_ENTITY_INDEX_BASE = 10;
         static const u32 KU_PART_INDEX_BASE   = 0;
         static const u32 KU_INVALID_ENTITY_ID = 0xFFFFFFFF;
 
