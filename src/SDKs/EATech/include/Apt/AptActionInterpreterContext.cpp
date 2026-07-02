@@ -31,9 +31,18 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 
-// FLAG: the movie root context for absolute ("/") paths (console off_8324E574 ->
-// the current target's root). Wired at AptInit.
-extern AptValue* AptApt_GetRootContext();
+// The movie root context for absolute ("/") paths -- HOMED 2026-07-02,
+// retiring the null stub: the console reads the target singleton
+// (off_8324E574) and resolves its level-0 root animation, which is exactly
+// AptGetAnimationAtLevel(0) (the resolver the zombie preconditions and
+// RunActions already use).
+class AptCIH;
+extern AptCIH* AptGetAnimationAtLevel(int nLevel);
+
+AptValue* AptApt_GetRootContext()
+{
+    return reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
+}
 
 // The console's fixed segment-buffer size (stack char[336] in the original).
 namespace { enum { KI_SEGMENT_MAX = 336 }; }
