@@ -41,7 +41,8 @@
 //   (a RequestQueue<N> carries a 16-byte BaseEventQueue-style header: T* + s32 maxLen + s32 len,
 //   see CgsBaseEventQueue.h:138-140). Same +16 header => RequestInterface<8192> = 8208.
 
-#include "types.hpp"   // u8 (reserved-byte blob)
+#include "types.hpp"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<32768,16> (SceneResultQueue base)   // u8 (reserved-byte blob)
 
 namespace BrnWorld
 {
@@ -76,10 +77,14 @@ namespace RaceCarEntityModuleIO
     };
 
     // ---- Scene-query-results queue (InputBuffer_PrePhysics :442 / GenerateDispatch :648) --
-    // OutSceneQueryResultsQueue<...> (scene-manager query result ring) -> alignas(16).
-    struct alignas(16) SceneResultQueue
+    // GROWN (was a 256-byte NOMINAL opaque): the scene->race-car bridge
+    // BridgeSceneQueryResultsToRaceCarModule_PrePhysics @0x827ABB44 Appends the scene
+    // manager's queue into this member through the REAL instantiated symbol
+    // CgsModule::VariableEventQueue<32768,16>::Append<32768,16>(const VariableEventQueue
+    // <32768,16>&) -- pinning the type. Derives (rather than typedefs) so existing
+    // `struct SceneResultQueue` forward references stay valid.
+    struct alignas(16) SceneResultQueue : public CgsModule::VariableEventQueue<32768, 16>
     {
-        unsigned char maReserved[256];   // NOMINAL -- not byte-verified, grown by own TU
     };
 
     // ---- Resource-request interface (OutputBuffer_Prepare :131 / PostPhysics :595) --------

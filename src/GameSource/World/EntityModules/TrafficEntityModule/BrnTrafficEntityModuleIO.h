@@ -13,10 +13,30 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                                   // CgsModule::IOBuffer
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.h" // TrafficAIInterface
 
+// The world-module timer-status payload the pre-scene input setter latches (pointer-only use;
+// home GameSource/World/BrnWorldModuleIO.h).
+namespace BrnWorldIO { struct TimerStatusInterface; }
+
 namespace BrnTraffic
 {
 namespace BrnTrafficIO
 {
+    struct TrafficNetworkInputInterface;   // SharedIO/BrnTrafficNetworkInterfaces.h (pointer-only use)
+
+    // ============================================================================
+    // InputBuffer_PreScene  (ADDITIVE GROW: WorldBridgeInputToEntityModules TU)
+    // ============================================================================
+    // MINIMAL SLICE -- only the two setters WorldModule::BridgeInputToEntityModules
+    // @0x827ADF88 calls are declared (both real out-of-line X360 symbols,
+    // BrnTraffic::BrnTrafficIO::InputBuffer_PreScene::SetTimerStatusInterface /
+    // ::SetTrafficNetworkInputInterface, their own ledger functions); the buffer
+    // payload is owned by the traffic IO TUs.
+    class InputBuffer_PreScene : public CgsModule::IOBuffer
+    {
+    public:
+        void SetTimerStatusInterface(const BrnWorldIO::TimerStatusInterface* lpTimerStatusInterface);
+        void SetTrafficNetworkInputInterface(const TrafficNetworkInputInterface* lpTrafficNetworkInputInterface);
+    };
     // ============================================================================
     // OutputBuffer_PostScene  (DWARF :291; X360 Construct @ 0x82761830)
     // ============================================================================

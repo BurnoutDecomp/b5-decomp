@@ -58,10 +58,20 @@ namespace CgsGui { class GuiModule; }
 // Forward-declared here (the bridge body includes the real home) to keep the heavy replay IO
 // header out of this keystone header.
 namespace BrnReplays { namespace ReplayIO { struct OutputBuffer_PreSim; } }
+// Sound-bridge family (GameSource/Unity/../Game/GameBridgeSoundToX.cpp) parameter/member types:
+// the sound root pre-update OUTPUT buffer (home GameSource/Sound/Module/SharedIO/
+// BrnSoundRootSharedIO.h) and the training manager (home GameSource/GameState/TrainingManager/
+// BrnTrainingManager.h). Forward-declared; the bridge body includes the real homes.
+namespace BrnSound { namespace Module { namespace Io { struct RootPreUpdateOutputBuffer; } } }
+namespace BrnGameState { class TrainingManager; }
 // (CgsGui::CgsGuiModuleIO::OutputBuffer is the GUI output buffer the ToGui bridge threads through;
 //  it is already declared as a placeholder struct below near the IO-payload stubs.)
 
-namespace BrnGameState { class GameStateModule : public CgsModule::ModuleSingleBuffered {}; }
+// BrnGameState::GameStateModule is now the REAL (minimal-slice) class -- included below per this
+// header's own ODR-trap instruction (the TrainingManager/BurnoutSkillz/ModeManager TUs include the
+// real BrnGameStateModule.h; keeping the empty stub here alongside them was the exact silent-ODR
+// hazard the warning above describes).
+#include "GameSource/GameState/BrnGameStateModule.h"
 namespace BrnDirector  { class DirectorModule  : public CgsModule::ModuleSingleBuffered {}; }
 namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleBuffered {}; }
 // BrnGui::GuiModule is now the REAL module (hosts the MovieManager) -- included above (BrnGuiModule.h),
@@ -219,6 +229,13 @@ namespace BrnGame
         // (placeholder type); lpReplayOutput is the committed replay pre-sim output buffer.
         void BridgeReplayToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
                                const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutput);
+
+        // ---- sound-output bridge family (GameSource/Unity/../Game/GameBridgeSoundToX.cpp) ---------
+        // X360 0x823C63C0 (DWARF BrnGameModule.h:799 / GameBridgeSoundToX.cpp:103) -- walk the sound
+        // root pre-update output's audio-effects message queue and notify the training manager of
+        // each finished voiceover. The family's other bridges (BridgeSoundToResource :41 /
+        // BridgeSoundToGuiPreUpdate :134 / ...) are grown here when reconstructed.
+        void BridgeSoundToTraining(BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer);
     private:
 
         // ---- members (real order; off-path ranges omitted; see LAYOUT NOTE) -------------
@@ -294,6 +311,11 @@ namespace BrnGame
         // need not embed the un-homed CgsGui::GuiModule placeholder by value. The ToGui bridge calls
         // mpCgsGuiModule->AddGuiEvent<T>(...). FLAG: real layout embeds the module by value @ +7252512.
         CgsGui::GuiModule* mpCgsGuiModule; // @ +7252512
+
+        // The training manager the sound bridge notifies (X360 this + 6769456 == 0x674B30, inside
+        // the game-state region). Held by pointer per the mpCgsGuiModule precedent so the keystone
+        // header need not embed the manager by value. FLAG: real layout embeds it @ +6769456.
+        BrnGameState::TrainingManager* mpTrainingManager; // @ +6769456
     };
 
     // operator++(EReleaseStage&, int) @ 0x823A8AD8 (X360 ARTIST), defined in BrnGameModule.cpp.

@@ -70,9 +70,11 @@ void RootPreUpdateOutputBuffer::SetPreUpdateOutput(const PreUpdateOutput& lPreUp
     mPreUpdateOutput.mAudioCarDataLoadedQueue.Append(lPreUpdateOutput.mAudioCarDataLoadedQueue);
 
     // (3) trailing AudioEffects queue region: PreUpdateOutput +0x2A0 .. +0x330.
-    std::memcpy(mPreUpdateOutput.maAudioEffectsMessageQueueStorage,
-                lPreUpdateOutput.maAudioEffectsMessageQueueStorage,
-                sizeof(mPreUpdateOutput.maAudioEffectsMessageQueueStorage));
+    //     (whole-object memcpy stays X360-faithful: the queue is pointer-free --
+    //      inline buffer + s32 cursors -- so the byte copy relocates cleanly)
+    std::memcpy(&mPreUpdateOutput.mAudioEffectsMessageQueue,
+                &lPreUpdateOutput.mAudioEffectsMessageQueue,
+                sizeof(mPreUpdateOutput.mAudioEffectsMessageQueue));
 }
 
 } // namespace Io
