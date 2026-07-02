@@ -164,7 +164,7 @@ struct AptDisplayList
     AptCIH* placeObject(AptCIH* pExistingNode, int nDepth, AptCharacter* pCharacter,
                         const EAStringC* pName, AptCIH* pParentNode, int bForceRemove,
                         int16_t nClipDepth, double fFrameValue, const AptCXForm* pColorXForm,
-                        const float* pPositionMatrix, uint32_t nPlacementField18,
+                        const float* pPositionMatrix, const void* pPlacementClipActions /*console u32 field18*/,
                         AptValue* pClassObject);
 
     // placeObjectNCXForm @0x82B0AD28 -- placeObject with the colour supplied as a packed-ARGB
@@ -172,7 +172,7 @@ struct AptDisplayList
     AptCIH* placeObjectNCXForm(AptCIH* pExistingNode, int nDepth, AptCharacter* pCharacter,
                                const EAStringC* pName, AptCIH* pParentNode, int bForceRemove,
                                int16_t nClipDepth, double fFrameValue, const float* pPositionMatrix,
-                               uint32_t nPlacementField18, const AptUint32CXForm* pPackedColor);
+                               const void* pPlacementClipActions /*console u32 field18*/, const AptUint32CXForm* pPackedColor);
 
     // mergeState @0x82B0B438 -- reconcile this list against a source frame's placement chain
     // (ppMergeInfo[0] = source AptPseudoDisplayList, ppMergeInfo[1] = parent node), walking

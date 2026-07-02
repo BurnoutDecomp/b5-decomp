@@ -36,12 +36,17 @@
 
 #include <cmath>   // sqrtf
 
+
 // FLAG (Apt context singleton -- console off_8324E574; owned by the AptTarget /
 // linker boot TU): cancel this node's in-flight asset load + drop the ActionScript
 // actions queued against it. Declared here as the x64-native accessors; their
 // bodies (the linker CancelLoad + the action-queue removal) land with that TU.
 void AptApt_CancelLoad(AptCIH* pNode);
 void AptApt_RemoveActionFor(AptCIH* pNode);
+
+// The "null input" context id queueClipEvents stamps on an enterFrame enqueue
+// (console gNullInput; defined in AptGlobals.cpp).
+extern int gAptNullInputId;
 
 // ---------------------------------------------------------------------------
 // GetFirstChild @0x82ADC938 -- the first placed child of this node. Only the
@@ -1363,13 +1368,103 @@ bool AptCIH::HasEvent(int nEventMask)
 // AS-execution sub-paths -- FLAG'd to the cluster callee below until that engine is homed.
 // ---------------------------------------------------------------------------
 
-// FLAG (un-homed AS-execution sub-path; console sub-section of AptCIH::queueClipEvents):
-// build + run the matched clip-event's byte-code block (masks 512/4) and the bDeferred
-// __proto__ event-member dispatch, through gAptActionInterpreter + AptScriptFunction-
-// ByteCodeBlock. Declared here so the homed core names it; bodied with the AS interpreter
-// execution TU. Returns 1 when a handler was dispatched.
+// The clip-event record scan + enqueue (HOMED 2026-07-01 from the PS3 body @0x815BD0;
+// was the AptRenderLinkStubs return-0 stub). The sprite's registered handler list
+// (mpClipEventHandlers == the placement's clipActions block) is scanned for records
+// whose mask matches; each match enqueues its action-stream SLOT ADDRESS onto the
+// director's deferred queue:
+//   mask 2 (enterFrame)          -> AddActionFront(..., gAptNullInputId)
+//   mask 0x20000 (keyframe)      -> AddActionFront(..., nFrameId) when the record's
+//                                   keyframe id == nFrameId >> 17
+//   masks 512 / 4 / 0x40000      -> the immediate BYTE-CODE-BLOCK run (FLAG below)
+//   anything else (incl. 1 load) -> AddActionBack(..., nFrameId)
+//
+// FLAG (staged sub-paths, console sub-sections of the same body):
+//  * the masks-512/4/0x40000 immediate run builds an AptScriptFunctionByteCodeBlock
+//    over the record's stream and callFunction()s it NOW (not queued), named via the
+//    string-constant table entries [59]/[69] -- StringPool's full saConstant TABLE is
+//    not yet recovered (only the __proto__ key [0] is modelled), so this path is
+//    deferred to the string-pool homing; it is not reached by the tick's mask-1/2
+//    queue calls.
+//  * the bDeferred __proto__ event-member dispatch tail (aClipEvents {mask, strIdx}
+//    pair table + hash Lookup/findChild + AddFunctionBack/Front + the cross-CIH
+//    zombie rebind) needs the same string table; deferred with it.
 int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned int nFrameId,
-                                      int bDeferred);
+                                      int bDeferred)
+{
+    AptCharacterSpriteInstBase* const pSprite =
+        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
+    AptClipEventHandlerList* pList = pSprite->mpClipEventHandlers;   // charInst word[6]
+
+    int nResult = 0;
+    // The same converter-data plausibility guard as _addToSetCaches (see there): a
+    // 4-byte-straddled record-array slot marks an unusable (never-relocated) block.
+    if (pList != nullptr)
+    {
+        const uintptr_t luRecs = reinterpret_cast<uintptr_t>(pList->mpHandlers);
+        if (luRecs < 0x10000u || (luRecs >> 47) != 0u ||
+            (luRecs & 0xFFFFFFFFull) == 0u)   // the straddle leaves the low dword zero
+            pList = nullptr;
+    }
+    if (pList != nullptr && pList->mnCount > 0)
+    {
+        AptActionQueueC* const pQueue =
+            (gpAptTarget != nullptr && gpAptTarget->mpAnimationTarget != nullptr)
+                ? gpAptTarget->mpAnimationTarget->mpActionQueue : nullptr;
+
+        for (int32_t i = 0; i < pList->mnCount; ++i)
+        {
+            AptClipEventHandler& rRec = pList->mpHandlers[i];
+            if ((rRec.mnEventFlags & static_cast<uint32_t>(nEventMask)) == 0u)
+                continue;
+
+            if (nEventMask == 512 || nEventMask == 4 || nEventMask == 0x40000)
+            {
+                // FLAG (staged): the immediate byte-code-block run -- see the header
+                // note. The console returns 1 after running the FIRST matched record.
+                return nResult;
+            }
+
+            if (pQueue == nullptr)
+                continue;
+
+            if (nEventMask == 2)
+            {
+                // enterFrame: queued at the FRONT with the null-input context id.
+                nResult = 1;
+                pQueue->AddActionFront(&rRec.mpActionStream, pNode, gAptNullInputId);
+            }
+            else if (nEventMask == 0x20000)
+            {
+                // keyframe event: only the record whose keyframe id matches the
+                // packed frame id's high bits (console `rec[1] == a3 >> 17`).
+                if (rRec.mnKeyFrameId == (nFrameId >> 17))
+                {
+                    nResult = 1;
+                    pQueue->AddActionFront(&rRec.mpActionStream, pNode,
+                                           static_cast<s32>(nFrameId));
+                }
+            }
+            else
+            {
+                // Everything else (incl. mask 1 construct/load): queued at the BACK.
+                nResult = 1;
+                pQueue->AddActionBack(&rRec.mpActionStream, pNode,
+                                      static_cast<s32>(nFrameId));
+            }
+        }
+    }
+
+    // FLAG (staged): the bDeferred __proto__ event-member dispatch tail -- see the
+    // header note. Gated exactly as the console gates it, so the staged return is
+    // only reached when an AS-defined event member exists.
+    if (bDeferred != 0 && pNode->HasEventMember(nEventMask) != 0)
+    {
+        return nResult;
+    }
+
+    return nResult;
+}
 
 AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDeferred)
 {
@@ -1647,16 +1742,16 @@ AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharac
     // console @0x82B09CD0: a SINGLE deref reads the source char-inst's subclass placement
     // slot at +0x18 (`lwz r29,0x18(*(a2+0x20))`) -- the same field AptCharInst_SetPlacement-
     // Field18 writes; encapsulated (subclass-specific role), NOT the render-item mFlags.
-    extern uint32_t AptCharInst_GetPlacementField18(AptCharacterInst* pInst);
-    uint32_t nPlacementField18 = 0;
+    extern const void* AptCharInst_GetPlacementField18(AptCharacterInst* pInst);
+    const void* pPlacementClipActions = nullptr;
     if (pSource != nullptr)
-        nPlacementField18 = AptCharInst_GetPlacementField18(pSource->GetCharacterInst());
+        pPlacementClipActions = AptCharInst_GetPlacementField18(pSource->GetCharacterInst());
 
     return pChildList->placeObject(
         /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, pNode,
         /*bForceRemove*/ 1, /*nClipDepth*/ -1, /*fFrameValue*/ 0.0,
         /*pColorXForm*/ nullptr, /*pPositionMatrix*/ nullptr,
-        nPlacementField18, /*pClassObject*/ pInitObject);
+        pPlacementClipActions, /*pClassObject*/ pInitObject);
 }
 
 // AptDisplayList_mergeState -- AptDisplayList::mergeState @0x82B0B438 (homed in

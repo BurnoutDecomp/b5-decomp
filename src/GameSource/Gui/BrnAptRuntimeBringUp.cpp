@@ -342,6 +342,15 @@ namespace
     // guarantee comes from the clip-event queue chain (AptCIH_queueClipEvents -- still
     // the deferred link-cluster stub) + init-action sequencing. Flip to true once that
     // cluster is homed. // FLAG (staged activation, not a leaf)
+    //
+    // STATUS 2026-07-01 (2nd round): the clip-event chain IS homed (queueClipEvents
+    // record scan + AddActionFront/Back + the placement's mpClipEventHandlers store +
+    // _addToSetCaches fold + load events) and with the drain ON the VM executes
+    // through FRAME 2 (frames 0-2 tick + place + drain clean, incl. two straddled
+    // clipActions blocks skipped by the converter-data guards). The frame-3 tick then
+    // hard-crashes with no diagnostic -- an executed-bytecode side effect under
+    // investigation (the jumpToFrame replay boundary was ruled out). Staged OFF until
+    // that lands; flip to false to reproduce.
     bool   s_bDisableRunActions    = true;
     s32    s_iTickFrame            = 0;     // STEP-2 per-frame tick counter (for the placement probes)
 
