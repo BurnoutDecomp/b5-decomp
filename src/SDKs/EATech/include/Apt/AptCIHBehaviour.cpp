@@ -1687,30 +1687,23 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
 // FLAG (un-homed action-queue / new-inst / input-target / GC sub-paths of ClearCIH;
 // console sub_82ADBD50 + __::remove + the off_8324E528 zombie vector + dword_8324E8C8
 // render hook + AptPartialGarbageCollection). Drops this node from every deferred queue
-// the director / input target hold it in, runs the unload-event + zombie/GC tail, and
-// returns nonzero when the node became a zombie (so ClearCIH skips the immediate free).
+// the director / input target hold it in; returns nonzero when the node became a
+// zombie (so ClearCIH skips the immediate free -- the zombie arm is a staged FLAG,
+// so currently always 0). The unload-event tail lives in ClearCIH (shipped order).
 int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool bClearGCRoots);
 
-// AptCIH_ClearCIH_DrainQueuesAndZombie -- the ClearCIH head/tail sub-sections
+// AptCIH_ClearCIH_DrainQueuesAndZombie -- ClearCIH's director-table DRAIN
 // (HOMED 2026-07-02 from the X360 body @0x82AF6020; was the return-0 link-stub,
 // which left cleared nodes dangling in the director's sets/tables -- the bulk
-// removeObject path under mergeState walked them freed):
-//   * DRAIN: remove the node from the director's input set (sub_82ADBD50) +
-//     listener set (__::remove), clear the press/rollover event slots to the
-//     undefined singleton when they point at it, and scrub it out of the shared
-//     new-instances table (Release + null the slot).
-//   * UNLOAD TAIL (skipped in shutdown): a sprite(5)/custom-control(16) node
-//     with an unload handler (record bit 0x400 or a __proto__ member for mask
-//     4) queues its unload clip events and -- when an AS-defined onUnload
-//     handler resolves (findChild &saConstant[69], a defined function value,
-//     vtbl 34..36) -- calls it immediately through the interpreter.
-//   * ZOMBIE decision: FLAG (staged) -- the console then keeps an externally
-//     referenced 0x24-family node alive as an AS-visible zombie (clear its
-//     child display list + hash data, SetReleaseAtEnd, push onto the
-//     off_8324E528 zombie vector, state -> 0x20000000, swap the render item
-//     type to 5, fire the dword_8324E8C8 render-tree hook, return 1). The
-//     zombie vector + hook are un-homed; returning 0 keeps the immediate-free
-//     path, which is memory-safe (queued references hold their own counts).
+// removeObject path under mergeState walked them freed): remove the node from
+// the director's input set (sub_82ADBD50) + listener set (__::remove), clear
+// the press/rollover event slots to the undefined singleton when they point at
+// it, and scrub it out of the shared new-instances table (Release + null the
+// slot). The UNLOAD-EVENT tail + the zombie decision live in ClearCIH itself,
+// in the shipped order (both consoles run the unload tail AFTER the mask
+// master/slave teardown -- X360 bl chain @0x82AF6374, XB1 sub_1408333D0).
+// Returns nonzero when the node became a zombie -- the zombie arm is still a
+// staged FLAG (see the note at the ClearCIH call site), so 0 for now.
 int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
 {
     // ---- the director-set / event-slot / new-inst DRAIN --------------------
@@ -1762,40 +1755,7 @@ int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
         }
     }
 
-    // ---- the unload-event tail (skipped during shutdown) --------------------
-    if (!gbAptInShutdown)
-    {
-        AptCharacterInst* const pInst = pNode->GetCharacterInst();
-        const uint32_t nTag = (pInst != nullptr) ? pInst->GetTypeTag() : 0u;
-        if (nTag == 5u || nTag == 16u)
-        {
-            AptCharacterSpriteInstBase* const pSprite =
-                static_cast<AptCharacterSpriteInstBase*>(pInst);
-            if ((pSprite->mnClipActionFlags & 0x400u) != 0u ||
-                pNode->HasEventMember(4) != 0)
-            {
-                pNode->queueClipEvents(4, 0, 0);
-                // findChild(&saConstant[69] == the interned "onUnload" key).
-                AptValue* const pChild =
-                    pNode->findChild(&StringPool::saConstant[69], nullptr);
-                if (pChild != nullptr && pChild->getIsDefined())
-                {
-                    // A callable function value (vtbl indices 34..36).
-                    const int nVtbl = static_cast<int>(pChild->getVtblIndex());
-                    if (nVtbl >= 34 && nVtbl <= 36)
-                    {
-                        gAptActionInterpreter.callFunction(
-                            static_cast<AptValue*>(pNode), pChild, 0, nullptr, nullptr);
-                        // Pop the call result off the operand stack.
-                        reinterpret_cast<AptValueVector*>(
-                            &gAptActionInterpreter.mnStackTop)->pop();
-                    }
-                }
-            }
-        }
-    }
-
-    // ---- the zombie decision: FLAG (staged) -- see the header note ----------
+    // ---- the zombie decision: FLAG (staged) -- see the ClearCIH call site ---
     return 0;
 }
 
@@ -1861,6 +1821,46 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
             if (AptNativeHash* pMasterHash =
                     pMaster->mpCharacterInst ? pMaster->mpCharacterInst->mpProperties : nullptr)
                 pMasterHash->Unset(strMaskMaster);
+        }
+    }
+
+    // ---- the unload-event tail (skipped during shutdown) --------------------
+    // Shipped order: AFTER the mask master/slave teardown, BEFORE the zombie
+    // decision + instance teardown (X360 @0x82AF6374 bl chain; XB1 the same).
+    // A sprite(5)/custom-control(16) node with an unload handler (record bit
+    // 0x400 or a __proto__ member for mask 4) queues its unload clip events
+    // and -- when an AS-defined onUnload handler resolves (findChild
+    // &saConstant[69], a defined function value, vtbl 34..36) -- calls it
+    // immediately through the interpreter.
+    if (!gbAptInShutdown)
+    {
+        AptCharacterInst* const pInstU = mpCharacterInst;
+        const uint32_t nTagU = (pInstU != nullptr) ? pInstU->GetTypeTag() : 0u;
+        if (nTagU == 5u || nTagU == 16u)
+        {
+            AptCharacterSpriteInstBase* const pSprite =
+                static_cast<AptCharacterSpriteInstBase*>(pInstU);
+            if ((pSprite->mnClipActionFlags & 0x400u) != 0u ||
+                HasEventMember(4) != 0)
+            {
+                queueClipEvents(4, 0, 0);
+                // findChild(&saConstant[69] == the interned "onUnload" key).
+                AptValue* const pChild =
+                    findChild(&StringPool::saConstant[69], nullptr);
+                if (pChild != nullptr && pChild->getIsDefined())
+                {
+                    // A callable function value (vtbl indices 34..36).
+                    const int nVtbl = static_cast<int>(pChild->getVtblIndex());
+                    if (nVtbl >= 34 && nVtbl <= 36)
+                    {
+                        gAptActionInterpreter.callFunction(
+                            static_cast<AptValue*>(this), pChild, 0, nullptr, nullptr);
+                        // Pop the call result off the operand stack.
+                        reinterpret_cast<AptValueVector*>(
+                            &gAptActionInterpreter.mnStackTop)->pop();
+                    }
+                }
+            }
         }
     }
 
