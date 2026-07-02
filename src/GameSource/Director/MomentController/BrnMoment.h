@@ -115,6 +115,15 @@ namespace BrnDirector
         // searching): protected setter for the switch-to gate.
         void SetCanSwitchToMeNow(bool lbCanSwitch) { mbCanSwitchToMeNow = lbCanSwitch; }
 
+        // ADDITIVE GROW (MomentHitTraffic::Update @0x82271D90; both PS3-DWARF-named
+        // Moment methods the X360 inlines): copy a produced camera into the moment's
+        // embedded camera / drop the conditions-met flag.
+        void SetCamera(const Camera::Camera& lrCamera) { mCamera = lrCamera; }
+        void SetConditionsNotMet() { mbConditionsMet = false; }
+
+        // ADDITIVE GROW (MomentStaticCamImpact::Update @0x82266B6C, `stb 0x179`):
+        void SetCanSwitchFromMeNow(bool lbCanSwitch) { mbCanSwitchFromMeNow = lbCanSwitch; }
+
         // DWARF member layout (BrnMoment.h:243..256). Offsets are NOMINAL beyond the
         // by-name access used here -- see the size FLAG at the top of this file.
         Camera::Camera mCamera;        // BrnMoment.h:243

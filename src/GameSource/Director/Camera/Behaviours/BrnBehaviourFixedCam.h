@@ -62,6 +62,12 @@ public:
     // its first word and store the pointer. @0x821F4518.
     void SetParameters(const Parameters* lpParameters);
 
+    // ADDITIVE GROW (MomentStaticCamImpact::Update @0x82266AB0 reads the returned
+    // behaviour's +0x009/+0x00B bytes -- the Behaviour-base flags, carved below):
+    // X360 header-inlines.
+    bool HasFailed() const         { return mbHasFailed; }
+    bool CanSwitchToMeNow() const  { return mbCanSwitchToMeNow; }
+
 private:
 
     // FLAG: only the members SetParameters writes are modelled at their asm-attested offsets;
@@ -69,7 +75,11 @@ private:
     //   occupies +0x00; the cached param word is at +0x10 (stw r11, 0x10(this)) and the param
     //   pointer is at +0x2A0 (stw r31, 0x2A0(this)). Reserved byte spans place them exactly.
     void*             mpVTable;                       // +0x00  behaviour vtable (opaque base head)
-    u8                maReserved04[0x10 - 0x04];      // +0x04 .. +0x0F (rig members not modelled here)
+    u8                maReserved04[0x09 - 0x04];      // +0x04 .. +0x08 (rig members not modelled here)
+    bool              mbHasFailed;                    // +0x09  Behaviour-base failed flag (MomentStaticCamImpact::Update reads it)
+    u8                maReserved0A;                   // +0x0A
+    bool              mbCanSwitchToMeNow;             // +0x0B  Behaviour-base switch-to gate (MomentStaticCamImpact::Update reads it)
+    u8                maReserved0C[0x10 - 0x0C];      // +0x0C .. +0x0F (rig members not modelled here)
     s32               mParamWord1;                    // +0x10  cached lpParameters->miParamWord1
     u8                maReserved14[0x2A0 - 0x14];     // +0x14 .. +0x29F (rig members not modelled here)
     const Parameters* mpParameters;                   // +0x2A0  the adopted parameter block
