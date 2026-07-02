@@ -29,8 +29,9 @@
 //     +0x34 mpOnRollOverObject   ) None/undefined sentinel (off_8324D814) by the ctor;
 //     +0x38 mpInputEventObject38 ) the input layer's Set* accessors store the currently
 //     +0x3C mpDragMC             ) acting movie clip / object here.
-//     +0x40 mDragPos[2]          (GetDragPos returns &mDragPos; inline pos)
-//     +0x48 maTail[4]            FLAG: roles TBD (not written by the ctor)
+//     +0x40 mConstrain[4]        the drag constrain rect L/T/R/B (StartDragMovie
+//                                  @0x82B03B40.. seeds -9999 into all four)
+//     +0x50 mGrabOffset[2]        the drag cursor->clip grab offset X/Y (seeded 0)
 //
 // Member access is BY NAME; the X360 byte offsets are documentation only (on the
 // x64 PC gate the inline AptDisplayList + the Set slot pointers widen, so later
@@ -102,8 +103,8 @@ struct AptAnimationTarget
     void*                 mpOnRollOverObject;   // +0x34  (SetOnRollOverObject; ctor sentinel)
     void*                 mpInputEventObject38; // +0x38  (ctor sentinel) FLAG: role TBD
     void*                 mpDragMC;             // +0x3C  (Get/SetDragMC; ctor sentinel)
-    u32                   mDragPos[2];          // +0x40  (GetDragPos returns &mDragPos)
-    u32                   maTail[4];            // +0x48..+0x54  FLAG: roles TBD
+    f32                   mConstrain[4];        // +0x40  drag constrain L/T/R/B (was mDragPos+maTail,
+    f32                   mGrabOffset[2];       // +0x50  drag grab offset X/Y     roles resolved 2026-07-02)
 
     // ctor @0x82AFF648 -- build the director from the sizing params: copy the timer
     // count + input cap, build the two listener/input sets, pool-allocate the action
@@ -123,7 +124,7 @@ struct AptAnimationTarget
     AptDisplayList* GetDisplayList()              { return &mDisplayList; }            // @0x82AD5F18
     void*           GetListenerSet()              { return &mListenerSet; }            // @0x82AD5F08
     void*           GetInputSet()                 { return &mInputSet; }               // @0x82AD5F10
-    void*           GetDragPos()                  { return &mDragPos; }                // @0x82AD5F38
+    void*           GetDragPos()                  { return &mConstrain[0]; }           // @0x82AD5F38 (the +0x40 slot)
     void*           GetDragMC()                   { return mpDragMC; }                 // @0x82AD5F30
     void            SetDragMC(void* pClip)        { mpDragMC = pClip; }                // @0x82AD5F28
     void            SetOnPressObject(void* p)     { mpOnPressObject = p; }             // @0x82AD5F40

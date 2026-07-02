@@ -26,6 +26,8 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
+#include "SDKs/EATech/include/Apt/AptTarget.h"            // gpAptTarget (the drag-state view)
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"   // the director drag block
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"     // AptString::Create / GetInternalString
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"    // AptInteger::Create
@@ -209,22 +211,30 @@ extern void AptInterp_ResolveTargetContext(AptValue* pScope, AptValue* pTarget,
 // as a small named struct so the float-field stores stay faithful (the console
 // reaches them at +0x3C/+0x40.. off the record) without raw offset arithmetic.
 // ---------------------------------------------------------------------------
+// The drag block lives ON the director (X360 StartDragMovie @0x82B03B00..:
+// target @+0x3C, constrain L/T/R/B @+0x40..+0x4C, grab X/Y @+0x50/+0x54 --
+// all off gpAptTarget->mpAnimationTarget). Declared as the natural x64 view
+// over the director's mpDragMC..mGrabOffset member run (pointer + 6 floats,
+// no console padding -- the old padded form baked the 32-bit offsets and
+// broke over the widened director).
 struct AptDragState
 {
-    uint8_t   mPad00[0x3C];
-    AptValue* mpDragTarget;   // [c:0x3C] the value being dragged (AddRef'd)
-    float     mConstrainL;    // [c:0x40] constrain-rect left   (default -9999)
-    float     mConstrainT;    // [c:0x44] constrain-rect top    (default -9999)
-    float     mConstrainR;    // [c:0x48] constrain-rect right  (default -9999)
-    float     mConstrainB;    // [c:0x4C] constrain-rect bottom (default -9999)
-    float     mGrabOffsetX;   // [c:0x50] cursor->clip grab offset X (default 0)
-    float     mGrabOffsetY;   // [c:0x54] cursor->clip grab offset Y (default 0)
+    AptValue* mpDragTarget;   // dir mpDragMC        [c:0x3C]
+    float     mConstrainL;    // dir mConstrain[0]   [c:0x40] (default -9999)
+    float     mConstrainT;    // dir mConstrain[1]   [c:0x44]
+    float     mConstrainR;    // dir mConstrain[2]   [c:0x48]
+    float     mConstrainB;    // dir mConstrain[3]   [c:0x4C]
+    float     mGrabOffsetX;   // dir mGrabOffset[0]  [c:0x50] (default 0)
+    float     mGrabOffsetY;   // dir mGrabOffset[1]  [c:0x54]
 };
 
-// FLAG (host apt-context global off_8324E574 -> +0x18 = the live drag-state record):
-// the single drag state StartDragMovie mutates. Encapsulated as an accessor so the
-// console's `(*off_8324E574)[+0x18]` deref stays a host boundary.
-extern AptDragState* AptApt_GetDragState();
+// HOMED 2026-07-02 (retiring the null stub): the view over the director's
+// drag member run.
+AptDragState* AptApt_GetDragState()
+{
+    return reinterpret_cast<AptDragState*>(
+        &gpAptTarget->mpAnimationTarget->mpDragMC);
+}
 
 // FLAG (host mouse position -- the engine's current cursor coords, console
 // dword_8324E534 / dword_8324E538, advanced by the input layer each frame; the
