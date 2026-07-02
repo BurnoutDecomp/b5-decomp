@@ -176,7 +176,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3) { return 0; }   // FLAG link-stub
     // AptActionInterpreter_InstanceOfChainWalk RETIRED (2026-07-02): homed in
     // AptActionInterpreter.cpp (the X360 isObjectOfType @0x82AEA5B8 object arm).
-    int AptCIH_ShapeHitTest(AptValue* pNode, float fX, float fY) { return 0; }   // FLAG link-stub
+    // AptCIH_ShapeHitTest RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
+    // (the host pfnPointHitTest dispatch, X360 dword_8324E8A4 == gAptFuncs+0x8C).
     // AptInterp_LabelToFrame RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
     // (the clip movie's label-hash lookup, X360 @0x82B0C618 chain).
     int GetThreadId() { return 0; }   // FLAG link-stub
