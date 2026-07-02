@@ -225,7 +225,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
                                         void** ppExisting, void* pContext, void* pInfo)
     { if (pOutHit) *pOutHit = 0; if (ppExisting) *ppExisting = 0; return 0; }   // FLAG link-stub
     void  AptValue_setGCRoot(AptValue* pValue, int bRoot) {}   // FLAG link-stub
-    void AptActionInterpreter_UnEscape(EAStringC* pStr) {}   // FLAG link-stub
+    // AptActionInterpreter_UnEscape RETIRED (2026-07-02): homed in
+    // AptActionInterpreter.cpp (X360 _unEscape @0x82AEE110 + _escape2Char).
     // AptActionInterpreter_getName RETIRED (2026-07-02): homed in
     // AptCIHNativeFunctionHelper.cpp (getName @0x82AF75C8 + the recursive
     // sub_82AF7400 target-path builder).

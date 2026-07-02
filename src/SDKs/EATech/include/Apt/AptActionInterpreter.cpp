@@ -166,6 +166,8 @@ void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                 // DOGMA_PoolManager::Deallocate
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"  // gpAptOperandStackPool (off_8324D808)
 #include <cstring>                                          // strncmp / strlen
+#include <cctype>    // isxdigit (the un-escape codec)
+#include <cstdlib>   // strtoul (the %XX decode)
 
 // gpUndefinedValue -- the shared `undefined` singleton (console off_8324D814). The
 // dispatch handlers and the builtins reuse it; declared extern here too.
@@ -408,7 +410,51 @@ int AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
 // un-escape pass (console unEscape) are reused via the EAStringC API; unEscape is
 // declared extern (the same value-layer escape codec used by cbCallMethod_unescape).
 // ---------------------------------------------------------------------------
-extern void AptActionInterpreter_UnEscape(EAStringC* pStr);   // FLAG: console unEscape codec
+// The un-escape codec -- HOMED 2026-07-02 (retiring the {} stub). The X360
+// _unEscape @0x82AEE110 + _escape2Char @0x82AD90D8: '+' decodes to a space;
+// a '%' with at least one following char decodes the two-char hex pair via
+// strtoul(16) when the first is a hex digit (else the SECOND char passes
+// through verbatim -- the shipped fallback), consuming both; everything else
+// copies. The console advances two past the '%' unconditionally, tolerating a
+// pair that straddles the terminator (EAStringC reps are NUL-terminated with
+// slack); reproduced with the loop re-checking the cursor each iteration.
+namespace
+{
+    char AptUnEscape2Char(char c1, char c2)
+    {
+        if (!isxdigit(static_cast<unsigned char>(c1)))
+            return c2;
+        char aBuf[3] = { c1, c2, 0 };
+        return static_cast<char>(strtoul(aBuf, nullptr, 16));
+    }
+}
+
+void AptActionInterpreter_UnEscape(EAStringC* pStr)
+{
+    EAStringC lDecoded("");
+    const char* p = pStr->GetBuffer();
+    while (*p != 0)
+    {
+        const char c = *p++;
+        char cOut;
+        if (c == '+')
+        {
+            cOut = ' ';
+        }
+        else if (c == '%' && *p != 0)
+        {
+            cOut = AptUnEscape2Char(p[0], p[1]);
+            p += 2;   // the console consumes both unconditionally
+        }
+        else
+        {
+            cOut = c;
+        }
+        const char aOne[2] = { cOut, 0 };
+        lDecoded += aOne;
+    }
+    *pStr = lDecoded;
+}
 
 const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOutKey, EAStringC* pOutValue)
 {
