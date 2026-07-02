@@ -53,6 +53,7 @@
 #include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"// dyn-text render-item seed (instantiateCharacter)
 #include "SDKs/EATech/include/Apt/AptCharacterTextInst.h"    // SetText (instantiateCharacter)
 #include "SDKs/EATech/include/Apt/AptCharacterMorphInst.h"   // morph blend slot (placeObject)
+
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // gAptActionInterpreter.setVariable (AptCIH_CloneClassMembers / AssociateInstToClass)
 
 #include <new>   // placement new (AptCIH::operator new + ctor for AptDLState_CreateInstAtDepth)
@@ -514,6 +515,20 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
     if (!pHandlers)
         return;
 
+    // FLAG (converter data boundary -- the same 4-byte-straddle class as the malformed
+    // frame tables / char[1]): a few clipActions blocks in the apt_convert-produced
+    // bundle put the record-array pointer at the XB1-aligned +0x08 instead of +0x04,
+    // so the +0x04 read straddles {pad, offset} (observed 0x0000A838_00000000). Such a
+    // block was also skipped by resolve64 (its records/streams never relocated/parsed),
+    // so it is unusable: skip it here (the fold + set-cache add + load events).
+    {
+        const uintptr_t luRecs = reinterpret_cast<uintptr_t>(pHandlers->mpHandlers);
+        if (luRecs < 0x10000u || (luRecs >> 47) != 0u ||
+            (luRecs & 0xFFFFFFFFull) == 0u)   // the straddle leaves the low dword zero
+            return;
+    }
+
+
     // Fold each registered handler's event mask into mnClipActionFlags' high 24 bits,
     // and note whether any handler registers a load/unload event.
     bool bHasLoadUnload = false;
@@ -597,7 +612,7 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
 extern AptCIH* AptDLState_CreateInstAtDepth(AptDisplayListState* pState, int nDepth,
                                             AptCharacter* pCharacter, AptCIH* pParentNode);
 extern AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* pNode);
-extern void    AptCharInst_SetPlacementField18(AptCharacterInst* pInst, uint32_t nValue);
+extern void    AptCharInst_SetPlacementField18(AptCharacterInst* pInst, const void* pValue);
 extern void    AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject);
 extern int     AptCIH_AssociateInstToClass(AptCIH* pNode);
 
@@ -759,7 +774,7 @@ AptRenderItem* AptDisplayList::instantiateCharacter(int nDepth, AptCharacter* pC
 AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharacter* pCharacter,
                                     const EAStringC* pName, AptCIH* pParentNode, int bForceRemove,
                                     int16_t nClipDepth, double fFrameValue, const AptCXForm* pColorXForm,
-                                    const float* pPositionMatrix, uint32_t nPlacementField18,
+                                    const float* pPositionMatrix, const void* pPlacementClipActions /*console u32 field18*/,
                                     AptValue* pClassObject)
 {
     AptCIH* pNode = pExistingNode;
@@ -790,9 +805,10 @@ AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharac
         pInst->GetRenderItemWritable()->GetPositionMatrixWritable()
             ->AptMatrixCopy(reinterpret_cast<const AptMatrix*>(pPositionMatrix));
 
-    // Stamp the placement field at the char inst's +0x18 subclass slot when supplied.
-    if (nPlacementField18 != 0u)
-        AptCharInst_SetPlacementField18(pInst, nPlacementField18);
+    // Stamp the placement field at the char inst's +0x18 subclass slot when supplied
+    // (the placement's clipActions/handler-list pointer; pointer-width on x64).
+    if (pPlacementClipActions != nullptr)
+        AptCharInst_SetPlacementField18(pInst, pPlacementClipActions);
 
     // A morph instance (type tag 8) takes the AS frame value as its blend amount.
     if ((pInst->mTypeFlags & 0xFC000000u) == 0x20000000u)
@@ -825,7 +841,7 @@ AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharac
 AptCIH* AptDisplayList::placeObjectNCXForm(AptCIH* pExistingNode, int nDepth, AptCharacter* pCharacter,
                                            const EAStringC* pName, AptCIH* pParentNode, int bForceRemove,
                                            int16_t nClipDepth, double fFrameValue,
-                                           const float* pPositionMatrix, uint32_t nPlacementField18,
+                                           const float* pPositionMatrix, const void* pPlacementClipActions /*console u32 field18*/,
                                            const AptUint32CXForm* pPackedColor)
 {
     AptCXForm scratchColor;   // default-constructed (helper vtables installed, channels zeroed)
@@ -838,7 +854,7 @@ AptCIH* AptDisplayList::placeObjectNCXForm(AptCIH* pExistingNode, int nDepth, Ap
     }
 
     return placeObject(pExistingNode, nDepth, pCharacter, pName, pParentNode, bForceRemove,
-                       nClipDepth, fFrameValue, pColor, pPositionMatrix, nPlacementField18,
+                       nClipDepth, fFrameValue, pColor, pPositionMatrix, pPlacementClipActions,
                        /*pClassObject*/ nullptr);
 }
 
@@ -1115,7 +1131,7 @@ AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, 
     return pThis->placeObject(
         /*pExistingNode*/ nullptr, nDepth, pProps->mpCharacter, nullptr, pParentNode,
         /*bForceRemove*/ 0, /*nClipDepth*/ -1, /*fFrameValue*/ 0.0,
-        /*pColorXForm*/ nullptr, pPosition, /*nPlacementField18*/ 0u, /*pClassObject*/ nullptr);
+        /*pColorXForm*/ nullptr, pPosition, /*pPlacementClipActions*/ nullptr, /*pClassObject*/ nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -1128,17 +1144,17 @@ AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, 
 //   X360 get (AptCIH::InsertChild @0x82B09CD0): `lwz r29, 0x18(*(a2+0x20))`.
 //   X360 set (AptDisplayList::placeObject):     `stw a33, 0x18(*(a2+0x20))`.
 // ---------------------------------------------------------------------------
-uint32_t AptCharInst_GetPlacementField18(AptCharacterInst* pInst)
+const void* AptCharInst_GetPlacementField18(AptCharacterInst* pInst)
 {
     AptCharacterSpriteInstBase* const pSprite = static_cast<AptCharacterSpriteInstBase*>(pInst);
-    return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pSprite->mpClipEventHandlers));
+    return pSprite->mpClipEventHandlers;
 }
 
-void AptCharInst_SetPlacementField18(AptCharacterInst* pInst, uint32_t nValue)
+void AptCharInst_SetPlacementField18(AptCharacterInst* pInst, const void* pValue)
 {
     AptCharacterSpriteInstBase* const pSprite = static_cast<AptCharacterSpriteInstBase*>(pInst);
     pSprite->mpClipEventHandlers =
-        reinterpret_cast<AptClipEventHandlerList*>(static_cast<uintptr_t>(nValue));
+        static_cast<AptClipEventHandlerList*>(const_cast<void*>(pValue));
 }
 
 // ---------------------------------------------------------------------------

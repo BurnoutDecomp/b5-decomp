@@ -318,6 +318,10 @@ int gAptLookupPoolSize          = 0;   // dword_82F733EC
 int gAptVMThreadId              = 0;   // dword_8324E500
 int gbAptSavedInputActive       = 0;   // dword_8324D7F0 (int-typed flag)
 int gnAptActionFrameId          = 0;   // dword_8324E514
+// The "null input" context id queueClipEvents stamps on an enterFrame enqueue
+// (PS3 `gNullInput`, the 4th AddActionFront arg). FLAG: no writer found in the
+// dumps (a bss dword); zero until one surfaces.
+int gAptNullInputId             = 0;   // console gNullInput
 int gnAptNativeArgCount         = 0;   // dword_8324E760
 int gnCurrUpdateTick            = 0;
 // (gAptParseArgHeapCount retired 2026-07-01: dword_8324E3D4 is

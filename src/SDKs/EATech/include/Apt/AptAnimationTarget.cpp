@@ -18,7 +18,8 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"        // AptValue (GC tag bits + virtuals)
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"  // AptIntervalTimer::mParams item access
 #include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (queued action / event target)
-#include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst (typed drain reads)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"           // AptCharacterInst (typed drain reads)
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // the sprite fields the drains read
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // mDisplayList head GC mark walk
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager::Allocate/Deallocate
 
@@ -581,7 +582,7 @@ void AptAnimationTarget::TickNewInsts()
         }
         const int liTypeTag = static_cast<int>(lpCharInst->GetTypeTag());
         if ((liTypeTag == 5 || liTypeTag == 16)
-            && lpCharInst->mnCreateDepth == -1)
+            && static_cast<AptCharacterSpriteInstBase*>(lpCharInst)->mnGotoFrame == -1)
         {
             AptCIH_tick(lpCIH);                                 // AptCIH::tick
             lpInsts = static_cast<AptValue**>(spNewInsts);     // reload (tick may realloc)
@@ -1364,10 +1365,13 @@ int AptAnimationTarget::RunActions()
                     // The queued instance depth gate: a non-negative depth always runs;
                     // a negative depth runs only when the char inst is absent or its
                     // create-depth (charInst word +16) matches the negated queued depth.
+                    // The queued stamp is the sprite's NEGATED goto-frame (the tick negates
+                    // mnLastActionFrame around queueFrameActions); a negative stamp matches
+                    // only while the inst is STILL at that frame (charInst word[4] +0x10).
                     const int liDepth = lpSlot->action.miDepth;   // v6 = *(v3+8)
                     if (liDepth >= 0
                         || lpCharInst == nullptr
-                        || -liDepth == lpCharInst->mnCreateDepth)   // *(v5+16) == charInst word[4]
+                        || -liDepth == static_cast<AptCharacterSpriteInstBase*>(lpCharInst)->mnGotoFrame)   // *(v5+16)
                     {
                         // Push a fresh register-block window for this run (the console
                         // inlines PushStaticData: save the base, advance, zero the count).

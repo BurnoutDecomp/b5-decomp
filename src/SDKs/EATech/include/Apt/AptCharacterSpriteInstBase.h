@@ -61,22 +61,32 @@
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"   // AptCharacterInst base
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"      // embedded child display list (by value)
 
-// One registered AS clip-event handler (12-byte console record): the packed
-// event-mask word the sprite folds into mnClipActionFlags, plus the handler's
-// bytecode/scope (not read by _addToSetCaches -- only the mask is). Reserved by name.
+// One registered AS clip-event handler. This IS the serialised clipActions record
+// from the place command's clipActions block (the placement stores the block pointer
+// into mpClipEventHandlers): console 12-byte {mask, keyId, streamPtr}; GUIAPT64
+// stride-16 with the 8-byte relocated+parsed action-stream pointer at +0x08 (the
+// exact records AptMovie::resolve64 case-3 relocates + _parseStream parses).
+// queueClipEvents scans the masks and enqueues &mpActionStream (the slot ADDRESS)
+// as the action's event-stream slot; RunActions dereferences it at drain time.
 struct AptClipEventHandler
 {
-    uint32_t mnEventFlags;   // +0x00  packed event mask (tested & 0x201C7 / & 0x200C0)
-    uint32_t mnHandlerA;     // +0x04
-    uint32_t mnHandlerB;     // +0x08
+    uint32_t mnEventFlags;                 // +0x00  packed event mask (tested & 0x201C7 / & 0x200C0)
+    uint32_t mnKeyFrameId;                 // +0x04  keyframe id (mask 0x20000: matches frameId>>17)
+    const unsigned char* mpActionStream;   // +0x08  the parsed action stream (native-8 slot)
 };
 
-// The sprite instance's registered-clip-event-handler list (count + handler array).
+// The sprite instance's registered-clip-event-handler list -- the placement's
+// clipActions BLOCK view: {i32 count @0; recArray ptr}. FLAG (converter-format
+// accommodation, same class as the resolve64 case-3 note): the apt_convert-produced
+// bundle packs the 8-byte record-array pointer at +0x04 (the true XB1 native-8
+// layout has it 8-aligned at +0x08), so the view is 4-packed to match our data.
+#pragma pack(push, 4)
 struct AptClipEventHandlerList
 {
     int32_t             mnCount;       // +0x00
-    AptClipEventHandler* mpHandlers;   // +0x04
+    AptClipEventHandler* mpHandlers;   // +0x04 (our bundle; xb1 +0x08)
 };
+#pragma pack(pop)
 
 struct AptCharacterSpriteInstBase : public AptCharacterInst
 {

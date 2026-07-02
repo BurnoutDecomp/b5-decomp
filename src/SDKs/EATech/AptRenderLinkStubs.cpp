@@ -230,7 +230,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // subsystems land. -------------------------------------------------------------------
     void AptAnimationTarget_AddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem) {}   // FLAG link-stub
     void (*gpAptCIHPreDestroyHook)(AptCIH* pCIH) = nullptr;   // FLAG link-stub (dword_8324E8A0; null until installed)
-    int  AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned int nFrameId, int bDeferred) { return 0; }   // FLAG link-stub
+    // AptCIH_queueClipEvents_RunMatched RETIRED (2026-07-01): homed faithfully in
+    // AptCIHBehaviour.cpp from the PS3 body @0x815BD0 (the clip-event record scan +
+    // AddActionFront/Back enqueues; the byte-code-block + __proto__ tails staged there).
     int  AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool bClearGCRoots) { return 0; }   // FLAG link-stub
     bool AptCIH_sbGeneralisedProcessEarlyReturn = false;   // FLAG link-stub (bEarlyReturn; gate off by default)
     unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*)  = nullptr;   // FLAG link-stub

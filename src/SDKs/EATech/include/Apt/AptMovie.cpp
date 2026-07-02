@@ -510,6 +510,7 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     // The place payload (each gated by its flag bit):
     //   position matrix @body+0x0C (HasMatrix bit2)   colour @body+0x24 (HasColorTransform bit3)
     //   ratio @body+0x2C (HasRatio bit4)              clipDepth @body+0x38 (native-8, 8-byte name ptr)
+    //   clipActions block @body+0x40 (HasClipActions bit7; the slot resolve64 relocated)
     const float* const pPosition = ((nFlags & 0x04u) != 0u)
         ? reinterpret_cast<const float*>(pBody + 0x0C) : nullptr;
     const AptUint32CXForm* const pPackedColor = ((nFlags & 0x08u) != 0u)
@@ -517,9 +518,18 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     const double fFrameValue = static_cast<double>(*reinterpret_cast<const float*>(pBody + 0x2C));
     const int16_t nClipDepth = static_cast<int16_t>(*reinterpret_cast<const int32_t*>(pBody + 0x38));
 
+    // The clipActions/handler-list block pointer: placed into the sprite inst's
+    // mpClipEventHandlers slot (queueClipEvents scans it; _addToSetCaches folds its
+    // masks). The block + each record's stream pointer are already relocated (and the
+    // streams parsed) by resolve64's case-3 walk.
+    const void* pClipActions = nullptr;
+    if ((nFlags & 0x80u) != 0u)
+        pClipActions = *reinterpret_cast<void* const*>(pBody + 0x40);
+
     return pDisplayList->placeObjectNCXForm(
         /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, pParent,
-        /*bForceRemove*/  0, nClipDepth, fFrameValue, pPosition, /*nPlacementField18*/ 0u, pPackedColor);
+        /*bForceRemove*/  0, nClipDepth, fFrameValue, pPosition,
+        /*pPlacementClipActions*/ pClipActions, pPackedColor);
 }
 
 // ===========================================================================

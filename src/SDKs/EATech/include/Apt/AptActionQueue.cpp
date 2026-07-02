@@ -2,6 +2,8 @@
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue::AddRef/Release + sReferenceRegistrationCb
 #include "SDKs/EATech/include/Apt/AptCIH.h"               // AptCIH (the queued action target)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"            // the CIH's bound instance
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // mnLastActionFrame (the queue stamp)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"               // DOGMA_PoolManager (ring allocation)
 
 #include <cstring>   // memmove
@@ -126,6 +128,18 @@ void AptActionQueueC::ClearActions()
     mpFront = mpBegin;
 }
 
+namespace
+{
+    // The action-slot stamp both enqueues snapshot: the CIH's bound sprite
+    // instance's mnLastActionFrame (charInst word[8] +0x20; the console reads it
+    // blind -- every queued-action CIH is sprite-family).
+    inline s32 AptQueueStampOf(AptCIH* pCIH)
+    {
+        AptCharacterInst* pInst = pCIH->mpCharacterInst;
+        return pInst ? static_cast<AptCharacterSpriteInstBase*>(pInst)->mnLastActionFrame : 0;
+    }
+}
+
 // ---- AddActionBack @ 0x82AD94B0 ------------------------------------------
 // Enqueue a clip-event action at the back. No-op if advancing the back cursor
 // would collide with the front (ring full). Snapshots the instance depth, stores
@@ -143,11 +157,11 @@ AptValue* AptActionQueueC::AddActionBack(const void* pEventStreamSlot, AptCIH* p
     }
 
     lpBack->mnType         = AptAnimationPoolData::E_ACTION_TYPE_ACTION;
-    // FLAG: the X360 snapshots an inner instance field (CIH->mpCharacterInst's
-    // depth) into the action slot; modelled here as the instance render depth,
-    // the field's semantic meaning. It is bookkeeping only (never GC-registered
-    // nor re-read in this TU).
-    lpBack->action.miDepth   = pCIH->GetDepth();
+    // The queue stamp: the sprite's mnLastActionFrame (charInst word[8] +0x20 --
+    // PS3 asm `slot[+8] = *(a3[8] + 0x20)`). The tick NEGATES it around
+    // queueFrameActions, so a queued frame action carries -frame; RunActions'
+    // gate then runs it only while the inst is still AT that frame.
+    lpBack->action.miDepth   = AptQueueStampOf(pCIH);
     lpBack->action.mpEventStreamSlot = pEventStreamSlot;
     lpBack->action.mpCIH     = pCIH;
     pCIH->AddRef();
@@ -175,8 +189,8 @@ AptValue* AptActionQueueC::AddActionFront(const void* pEventStreamSlot, AptCIH* 
     }
 
     mpFront = lpNewFront;
-    // FLAG: see AddActionBack -- instance-depth snapshot (bookkeeping only).
-    lpNewFront->action.miDepth   = pCIH->GetDepth();
+    // The same mnLastActionFrame stamp as AddActionBack (see there).
+    lpNewFront->action.miDepth   = AptQueueStampOf(pCIH);
     lpNewFront->mnType           = AptAnimationPoolData::E_ACTION_TYPE_ACTION;
     lpNewFront->action.mpEventStreamSlot = pEventStreamSlot;
     lpNewFront->action.mpCIH     = pCIH;
