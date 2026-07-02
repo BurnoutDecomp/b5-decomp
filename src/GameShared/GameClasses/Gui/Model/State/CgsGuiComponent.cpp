@@ -59,7 +59,11 @@ namespace CgsGui
         }
         else
         {
-            // Inlined StrCpy: debug-asserts the source fits, then a 128-char strncpy.
+            // X360 checks the name length twice here: first against 0x7F with the same
+            // "Component name generated is too long" message as the with-parent branch
+            // (CgsGuiComponent.cpp:99), then the inlined StrCpy re-checks against 0x80
+            // with "String too long: " (CgsStringUtils.h:55) before the 128-char strncpy.
+            CGS_ASSERT(strlen(lpacName) < 0x7F, "Component name generated is too long");
             CGS_ASSERT(strlen(lpacName) < 0x80,
                        "String too long: ");
             strncpy(macName, lpacName, KU_MAX_COMPONENT_NAME_LEN);

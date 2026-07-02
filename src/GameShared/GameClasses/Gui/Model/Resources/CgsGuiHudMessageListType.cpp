@@ -27,7 +27,10 @@ namespace CgsResource
         int liCount = *reinterpret_cast<int*>(lBase + 4);
         if (liCount > 0)
         {
-            uintptr_t* lpTable = *reinterpret_cast<uintptr_t**>(lBase + 8);
+            // The table entries themselves are X360 4-byte values (lwz/stw, stride
+            // of 4 in the asm) -- keep int32_t here rather than widening to native
+            // pointer width, or the per-entry stride would no longer match the asm.
+            int32_t* lpTable = *reinterpret_cast<int32_t**>(lBase + 8);
             for (int li = 0; li < liCount; ++li)
                 lpTable[li] -= liDelta;
         }

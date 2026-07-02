@@ -24,14 +24,16 @@
 
 namespace CgsGui
 {
-    // Member names per burnout.wiki (GUI Popup -> GuiPopupResource). The wiki
-    // documents offset 4 as two int16s (miPopupCount + miSizeOfPopupResource); the
-    // recovered FixUp/FixDown pseudocode reads the count here, so its storage width
-    // is left as the source dictates and only the name is adopted.
+    // Member names per burnout.wiki (GUI Popup -> GuiPopupResource) and DWARF
+    // (CgsGuiPopupResource.h:142-144). Offset 4 is confirmed 16-bit by the ASM
+    // (`lhz r11, 4(r3)` + `extsh`) and by DWARF, which declares it as two
+    // consecutive int16_t fields (miPopupCount then miSizeOfPopupResource); the
+    // second field is not read by FixDown but is kept to preserve layout shape.
     struct GuiPopupResource
     {
-        u32  mppPopupData;  // 0x00 GuiPopup** (rebased down in place)
-        s32  miPopupCount;  // 0x04 number of popup entry pointers at *mppPopupData
+        u32  mppPopupData;             // 0x00 GuiPopup** (rebased down in place)
+        s16  miPopupCount;              // 0x04 number of popup entry pointers at *mppPopupData
+        s16  miSizeOfPopupResource;     // 0x06 (unused by FixDown; kept for layout fidelity)
 
         GuiPopupResource* FixDown(int liDelta, bool lbDeep);
     };
