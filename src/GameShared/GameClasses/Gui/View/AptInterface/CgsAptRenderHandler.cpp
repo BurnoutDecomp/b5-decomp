@@ -97,9 +97,13 @@ namespace CgsGui
         mpLanguageManager     = nullptr;
         mpAlternateTextColours = nullptr;
         miNumAlternateColours  = 0;
-        // Both per-shape texture-state caches start empty (HashTable bins live, pool empty).
-        mWrapTextureCache.Init();
-        mClampTextureCache.Init();
+        // Both per-shape texture-state caches are left RAW here (X360 0x827DFBD8 stores the
+        // BaseLinkedList uninitialised sentinel into every bin and stamps muNodeCount to -1
+        // directly -- it does NOT call HashTable::Init() (mbInitialised stays false); the bins
+        // default-construct to that same sentinel state, so only the -1 node-count stamp needs
+        // reproducing here. The caches are brought properly live by Construct()'s Init() calls.
+        mWrapTextureCache.muNodeCount  = static_cast<u32>(-1);
+        mClampTextureCache.muNodeCount = static_cast<u32>(-1);
 
         // The batch transform starts cleared (the guest's leading zeroed dword runs).
         mVertexTransform.mOriginXYZ.SetZero();

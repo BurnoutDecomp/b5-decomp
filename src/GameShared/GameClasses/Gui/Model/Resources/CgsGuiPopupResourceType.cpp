@@ -45,8 +45,10 @@ namespace CgsResource
 
     ResourceDescriptor GuiPopupResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
-        // Count is read from the resource (byte offset 6 in the X360 build).
-        u32 luCount = *reinterpret_cast<const int*>(reinterpret_cast<uintptr_t>(lpResource) + 6);
+        // Count is a signed 16-bit field at byte offset 6 in the X360 build
+        // (lhz + extsh), sign-extended to 32 bits.
+        s16 liCount16 = *reinterpret_cast<const s16*>(reinterpret_cast<uintptr_t>(lpResource) + 6);
+        u32 luCount   = static_cast<u32>(static_cast<s32>(liCount16));
 
         ResourceDescriptor lDescriptor;
         lDescriptor.m_baseResourceDescriptors[0].m_size      = luCount;

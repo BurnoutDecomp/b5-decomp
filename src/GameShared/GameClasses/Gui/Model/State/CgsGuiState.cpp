@@ -1,6 +1,10 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"   // CgsGui::State (+ ScriptedState base, StateInterface fwd, sResourceTuple fwd)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf
+#include "GameShared/GameClasses/Fsm/CgsScriptedFsm.h"   // CgsFsm::ScriptedFsm::IsLuaResourceValid (mpFsm's concrete type)
+
+#include <cstring>   // strlen
 
 // CgsGui::State base bodies. The X360 keeps these out-of-line in CgsGuiState.cpp; the GUI virtuals are
 // no-op defaults (derived states override OnEnter/OnLeave/Update/GetResourcesToLoad) and the setters just
@@ -25,8 +29,7 @@ namespace CgsGui
 
     void State::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
-        mId = liId;     // CgsFsm::ScriptedState protected members
-        mpFsm = lpFsm;
+        CgsFsm::ScriptedState::Construct(liId, lpFsm);   // ARTIST 0x82848508: bl CgsFsm::ScriptedState::Construct (sets mId/mpFsm)
         mpInGuiEventQueue = 0;       // ARTIST 0x82848508: stw 0,0x18
         mpStateInterface = 0;        // stw 0,0x1C
         mbIsSaveLoadState = false;   // stb 0,0x31  (FLAG: was missing -- ARTIST zeroes both bools here)
@@ -35,7 +38,15 @@ namespace CgsGui
     }
 
     void State::PreWorldUpdate() {}
-    void State::PreUpdate()      {}
+
+    // X360 0x828486A0. Assert the pending-change flag was cleared by the last PostUpdate,
+    // then unconditionally clear it (stb 0, 0x20(r31) runs regardless of the branch taken).
+    void State::PreUpdate()
+    {
+        CGS_ASSERT(!mbStateChangePending, "mbStateChangePending == false");
+        mbStateChangePending = false;
+    }
+
     void State::PostUpdate()     {}
 
     void State::GetResourcesToLoad(const sResourceTuple** lppResourceTuples, u32* lpuNumberOfResources) const
@@ -57,15 +68,22 @@ namespace CgsGui
         mpInGuiEventQueue = lpInGuiEventQueue;
     }
 
+    // X360 0x82848550. Assert the event string is non-null; only when the owning ScriptedFsm's
+    // Lua resource is valid does it copy the event name into macEvent (via SPrintf, asserting if
+    // the source string is too long) and raise mbStateChangePending -- a null/rejected event never
+    // sets the pending flag.
     void State::SendStateEvent(const char* lpacEvent)
     {
-        // [stub] record the event name + flag a pending change. The X360 routes it through the owning
-        // ScriptedFsm to drive the state transition; the minimal boot driver does not transition via this.
-        u32 li = 0;
-        if (lpacEvent != 0)
-            for (; li < sizeof(macEvent) - 1u && lpacEvent[li] != 0; ++li)
-                macEvent[li] = lpacEvent[li];
-        macEvent[li] = 0;
-        mbStateChangePending = true;
+        CGS_ASSERT(lpacEvent != 0, "Invalid event sent to State::SendStateEvent");
+
+        if (mpFsm->IsLuaResourceValid())
+        {
+            CGS_ASSERT(strlen(lpacEvent) < sizeof(macEvent),
+                       "Event too long for message. Increase buffer");
+
+            CgsCore::SPrintf(macEvent, sizeof(macEvent), lpacEvent);
+            macEvent[sizeof(macEvent) - 1] = 0;
+            mbStateChangePending = true;
+        }
     }
 }
