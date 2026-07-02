@@ -190,31 +190,30 @@ bool ICEAuthor::IsEndKeyState(s32 liKey) const
 // ---------------------------------------------------------------------------
 // GetValueFloat
 //
-// Read element liElement's current value as a float. The element-description schema
-// (ICEElementDescriptions) carries the data type; FIXED (3) and FLOAT (4) decode as
-// a float, everything else returns the raw int reinterpreted as float (the runtime
-// loads the same word either way and only the FIXED/FLOAT branch keeps the FP view).
-// The decoded value lives in the edit take's per-element value table.
+// Read element liElement's current value as a float, straight out of the edit
+// take's per-element value table (mEditTake.mValues[liElement]). ICETake::GetValueFloat
+// already carries the FIXED/FLOAT-vs-everything-else type dispatch, so it is called
+// directly with the raw element index -- NOT the element's description channel
+// number, which drives a different (per-channel) table.
 // ---------------------------------------------------------------------------
 f32 ICEAuthor::GetValueFloat(s32 liElement) const
 {
-    const ICEElementDescription& lrDesc = ICEElementDescriptions[liElement];
-    if (lrDesc.mDataType == eICE_FIXED || lrDesc.mDataType == eICE_FLOAT)
-    {
-        return mEditTake.GetValueFloat(lrDesc.miChannelNumber);
-    }
-    return (f32)mEditTake.GetValueInt(lrDesc.miChannelNumber);
+    return mEditTake.GetValueFloat(liElement);
 }
 
 // ---------------------------------------------------------------------------
 // GetCurrentSubtakeGuid
 //
-// If the assembly channel has intervals and the current interval carries a sub-take
-// (element 47, the sub-take flag), return the sub-take guid (element 46); else -1.
+// If the assembly channel (the fixed channel that carries the take's interval
+// breakdown, KI_ICE_ASSEMBLY_CHANNEL) has any intervals and the current interval
+// carries a sub-take (element 47, the sub-take flag), return the sub-take guid
+// (element 46); else -1.
 // ---------------------------------------------------------------------------
 s32 ICEAuthor::GetCurrentSubtakeGuid() const
 {
-    if (mEditTake.GetNumKeys(miCurrentChannel) != 0 && mEditTake.GetValueInt(47) != 0)
+    static const s32 KI_ICE_ASSEMBLY_CHANNEL = 10;
+
+    if (mEditTake.GetNumIntervals(KI_ICE_ASSEMBLY_CHANNEL) != 0 && mEditTake.GetValueInt(47) != 0)
     {
         return mEditTake.GetValueInt(46);
     }

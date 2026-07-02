@@ -98,7 +98,7 @@ namespace CgsLanguage
         LanguageManager();
 
         void SetUseMetricUnits(bool lbUseMetric);
-        bool IsUsingMetricUnits() const;
+        bool IsUsingMetricUnits() const { return mbIsUsingMetricUnits; }
 
         // ADDITIVE GROW (GUI text consumers): look up a localised string by its database key
         // (e.g. "CREDITS_TITLE_0"). Returns the UTF-8 string, or NULL when the key is not in
@@ -114,12 +114,32 @@ namespace CgsLanguage
         // HUD paths that already hold a hash skip the re-hash. Body links from this TU.
         const u8* FindStringByHash(unsigned int luHash) const;
 
+        // X360 0x828647F8 / 0x82864A08. Add a localised string under lpcStringId, evicting any
+        // prior entry for the same key first. AddString heap-copies lpcString (the manager owns
+        // the copy, tracked in mDynamicStringElements); AddStringPointer instead stores the
+        // caller's pointer directly (the caller owns its lifetime, tracked in
+        // mDynamicStringPointerElements). Both always return true. Bodies link from this TU.
+        bool AddString(const char* lpcStringId, const u8* lpcString);
+        bool AddStringPointer(const char* lpcStringId, const u8* lpcString);
+
+        // X360 0x82864950 / 0x828640B0. Remove the string added by AddString, by id or by a
+        // precomputed hash. Returns false when no matching dynamic-string entry is found.
+        // Bodies link from this TU.
+        bool RemoveString(const char* lpcStringId);
+        bool RemoveStringByHash(unsigned int luHash);
+
+        // X360 0x82864B30 / 0x82864158. Remove the string added by AddStringPointer, by id or by
+        // a precomputed hash. Returns false when no matching dynamic-string-pointer entry is
+        // found. Bodies link from this TU.
+        bool RemoveStringPointer(const char* lpcStringId);
+        bool RemoveStringPointerByHash(unsigned int luHash);
+
         // The active language id. The X360 reads it as the manager's leading field
         // (the InGameMessageRenderer compares it against 16 -- a wide-glyph language --
         // to nudge the on-screen message Y-position). Exposed as a named accessor so
         // callers read it by name rather than poking offset 0. Body links from the
         // CgsLanguageManager TU. (CgsLanguage::ELanguage modelled as s32; 0 = English.)
-        s32 GetCurrentLanguage() const;
+        s32 GetCurrentLanguage() const { return static_cast<s32>(meLanguage); }
 
         // Localised value -> string formatters. The overlapping signatures (target buffer, value(s),
         // buffer size) are grounded in the DWARF; the X360 ARTIST build adds the XoverY / Date /
@@ -152,6 +172,15 @@ namespace CgsLanguage
         // programming error, not a recoverable runtime state -- the assert fires and the function
         // still returns the null pointer, matching the X360 body exactly).
         const char* GetDefaultFont() const;
+
+        // X360 0x828608D0. Stashes the language allocator (mpLanguageAllocator, used by every
+        // Add/RemoveString* body's Malloc/Free) and registers the embedded debug component with
+        // the debug menu. Body links from this TU.
+        bool Prepare(CgsMemory::HeapMalloc* lpLanguageAllocator);
+
+        // X360 0x82860940. Stamps every per-locale format separator/template member with its
+        // English-default literal and sets the metric flag to true. Body links from this TU.
+        bool PrepareDefaultFormattingStrings();
 
     private:
         // CgsLanguageManager.h:52 (DWARF).

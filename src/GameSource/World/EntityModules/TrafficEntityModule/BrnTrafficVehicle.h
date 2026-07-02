@@ -187,7 +187,16 @@ public:
     // Accessors used by BrnReplays::TrafficEntitySerialiser::SetVehicleData @0x82714060
     // (reads mxFlags at this+5 and the physical-parts index when E_FLAG_PHYSICAL is set).
     u8  GetFlags() const { return mxFlags; }
-    s32 GetPhysicalPartsIndex() const { return miPhysicalPartsIndex; }
+
+    // X360 @0x8270F928 asserts, then returns the index byte zero-extended
+    // (lbz with no extsb @0x8270F99C): after SetNotPhysical stores -1 the
+    // binary hands back 255, not -1.
+    s32 GetPhysicalPartsIndex() const
+    {
+        CGS_ASSERT(IsPhysical(), "IsPhysical()");
+        CGS_ASSERT(miPhysicalPartsIndex >= 0, "miPhysicalPartsIndex >= 0");
+        return static_cast<u8>(miPhysicalPartsIndex);
+    }
 
 private:
     u8 muVehicleType;

@@ -1,6 +1,8 @@
 #include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/BrnAICar.h"                  // AICar (committed minimal-slice home + accessors)
 #include "GameSource/World/AI/BrnAIUtils.h"                // BrnAI::StepTo (committed step-toward helper)
+#include "GameSource/World/AI/BrnAIAggression.h"           // AIAggression (committed embedded sub-machine @this+0x1C00)
+#include "GameSource/World/AI/Route/BrnRacingLine.h"       // RacingLine (committed embedded sub-object @this+0xF20)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
 
@@ -88,7 +90,9 @@ namespace BrnAI
     // UpdateSteeringAngle -- per-behaviour StepTo rates (rodata by address; UNRECOVERED).
     const f32 KF_STEER_RATE_A = 1.0f;  // flt_820C4228 -- FLAG: rodata unrecovered (player car, beh 1/9/10)
     const f32 KF_STEER_RATE_B = 1.0f;  // flt_820C422C -- FLAG: rodata unrecovered (player car, beh 2)
-    const f32 KF_STEER_RATE_C = 1.0f;  // flt_820C424C -- FLAG: rodata unrecovered (player car, default)
+    const f32 KF_STEER_RATE_C = 0.1f;  // flt_820C424C -- RECOVERED: the same address is decoded as an
+                                        // immediate 0.1 multiplier in ChooseRaceSteeringFan's asm
+                                        // (@0x827663B8, "*(v1+5400) * 0.1"); player car, default rate.
 
     // ====================================================================================
     // TU-LOCAL helpers.
@@ -108,6 +112,17 @@ namespace BrnAI
     {
         const std::size_t luOff = lbDrift ? 0x1B98u : 0x1B34u;
         return reinterpret_cast<PIDControllerLocal*>(reinterpret_cast<u8*>(lpD) + luOff);
+    }
+    // The embedded AIAggression sub-machine @this+0x1C00 -- a committed home (BrnAIAggression.h),
+    // reached by name instead of a raw offset poke.
+    static inline AIAggression* Aggression(AIDriver* lpD)
+    {
+        return reinterpret_cast<AIAggression*>(reinterpret_cast<u8*>(lpD) + 0x1C00);
+    }
+    // The embedded RacingLine sub-object @this+0xF20 -- a committed home (BrnRacingLine.h).
+    static inline RacingLine* DriverRacingLine(AIDriver* lpD)
+    {
+        return reinterpret_cast<RacingLine*>(reinterpret_cast<u8*>(lpD) + 0xF20);
     }
 
     // Read an unexposed AICar byte flag / float by its documented guest offset (de-inlined direct
@@ -144,11 +159,21 @@ namespace BrnAI
     // declared TU-locally here as a free function so this slice does not pull in the Route home.
     void RouteNodeXY(AICar* lpCar, s32 liNodeIndex, f32* lpfOutX, f32* lpfOutY);
 
-    // The mAggression sub-machine reaches (this+0x1C00). Declared TU-locally; bodied in the
-    // AIAggression home. DriverReverseRequested mirrors the X360 `(_cntlzw(*(this+0x1C60)) &
-    // 0x20)==0` reverse-flag test; AggressionUpdate is BrnAI::AIAggression::Update(dt).
-    bool DriverReverseRequested(AIDriver* lpDriver);
-    void AggressionUpdate(AIDriver* lpDriver, f32 lfTimeStep);
+    // DriverReverseRequested mirrors the X360 `(_cntlzw(*(this+0x1C60)) & 0x20)==0` reverse-flag
+    // test (@0x8279A728-0x8279A73C) -- for an 8-bit-zero-extended-to-32 load, cntlzw==32 only when
+    // the byte is 0, so `(cntlzw&0x20)==0` reduces to "the byte is non-zero". Driver-local byte
+    // flag @this+0x1C60 (no committed name for it yet); de-inlined direct load.
+    static inline bool DriverReverseRequested(AIDriver* lpDriver)
+    {
+        return *(reinterpret_cast<const u8*>(lpDriver) + 0x1C60) != 0;
+    }
+    // AggressionUpdate ticks the embedded AIAggression sub-machine @this+0x1C00 (a committed home).
+    // X360 @0x8279A764/0x8279A7B4: r3=this+0x1C00, r5=*(this+0x1CE8) (mpAggressionVictim), f1=dt --
+    // BrnAI::AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar).
+    static inline void AggressionUpdate(AIDriver* lpDriver, f32 lfTimeStep)
+    {
+        Aggression(lpDriver)->Update(lfTimeStep, lpDriver->GetAggressionVictimCar());
+    }
 
     // Read a float / 32-bit word from this driver's own block by guest offset, for the embedded
     // sub-object scalars this slice does not name (RacingLine/avoidance proximity refs @0x1A3C /
@@ -160,6 +185,14 @@ namespace BrnAI
     static inline s32 DriverS32AtImpl(AIDriver* lpD, std::size_t luOff)
     {
         return *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpD) + luOff);
+    }
+    static inline void DriverStoreS32At(AIDriver* lpD, std::size_t luOff, s32 liValue)
+    {
+        *reinterpret_cast<s32*>(reinterpret_cast<u8*>(lpD) + luOff) = liValue;
+    }
+    static inline void DriverStoreFlagAt(AIDriver* lpD, std::size_t luOff, u8 luValue)
+    {
+        *(reinterpret_cast<u8*>(lpD) + luOff) = luValue;
     }
 
     // de-inlined planar (x,y) normalise -- v / |v| over the (x,y) lanes (the rsqrt + 2x
@@ -231,7 +264,7 @@ namespace BrnAI
         mBrakingRoadDir.SetZero();          // 0x1CB0
         m2DCarPos.SetZero();                // 0x1CD0
 
-        // mAggression.Construct() at this+0x1C00 (a1+7168) -- bodied in its own home.
+        Aggression(this)->Construct(this);  // mAggression.Construct(this) @this+0x1C00
     }
 
     // ====================================================================================
@@ -249,7 +282,10 @@ namespace BrnAI
 
         mpCarHost = lpCar;
         lpCar->meCarState = E_AI_CAR_STATE_IN_RANGE;        // *(car+0x14C8) = 0
-        // BrnAI::AICar::SetDriver(car, this) + BrnAI::AIDriver::InitialiseRacingLine(this)
+        // BLOCKED (out of this TU's file scope): X360 @0x82796444 calls
+        // BrnAI::AICar::SetDriver(car, this) here to wire the car back to its driver. AICar's
+        // committed minimal-slice (BrnAICar.h) does not declare SetDriver -- adding the call
+        // needs a declaration added to BrnAICar.h, which this TU may not edit.
         InitialiseRacingLine();
 
         mfStuckTime        = 0.0f;          // 0x1D04
@@ -257,8 +293,13 @@ namespace BrnAI
         mfDistanceToPlayer = 0.0f;          // 0x1D08
         mfInvulnerableTime = -1.0f;         // 0x1D0C
 
-        // The aggression-victim/timer block @this+0x1C00 is seeded here (X360 stores mpCar and
-        // resets its counters/timers); those are mAggression internals, bodied in its home.
+        // BLOCKED (out of this TU's file scope): X360 @0x82796480-0x827964B0 also seeds the
+        // embedded AIAggression block here directly (mpCar, mfStateTime=-1, meAggressionState=0,
+        // mpTargetCar=NULL, mpPlayerCar=NULL, mbTargetPosValid=false, meSpeedMatchType=Disabled,
+        // mfRelativePositionAhead/mfRecentHitTimer/mfContinuousContactTimer/mfHangingAroundTimer=0,
+        // mfNonSpeedMatchedSpeed=flt_8300DC64). Every one of those is a PRIVATE AIAggression data
+        // member (BrnAIAggression.h has no public setter for this "seed for new car" bundle), so
+        // this TU cannot write them without a new method declared on AIAggression -- out of scope.
 
         ResetAttribSysValues();
     }
@@ -267,9 +308,10 @@ namespace BrnAI
     // Prepare @0x82792CA8
     //
     // Per-race-entry init: store the sections-data pointer + active-car index, reset the
-    // attrib-sys values, clear the per-race timers/flags, clear the racing-line section cache,
-    // draw a random tuning value from the supplied Random (an inlined LCG advance + range-lerp),
-    // seed the perpendicular-target tuning, and prepare the embedded SteeringFan.
+    // attrib-sys values, clear the per-race timers/flags/nearby-vehicle count/drift state, clear
+    // the racing-line section cache, draw a random tuning value from the supplied Random (an
+    // inlined LCG advance + range-lerp), seed the perpendicular-target tuning, and prepare the
+    // embedded SteeringFan.
     // ====================================================================================
     void AIDriver::Prepare(void* lpSectionsData, s32 leRelatedActiveCarIndex, void* lpRandom)
     {
@@ -278,11 +320,17 @@ namespace BrnAI
         ResetAttribSysValues();
         meRelatedActiveCarIndexHost = leRelatedActiveCarIndex; // 0x1CF4
         mfPerpendicularTarget   = 0.0f;             // 0x1D48
+        DriverStoreS32At(this, 0x700, 0);           // mNearbyVehicles.miCount = 0
         mfHandBrake             = 0.0f;             // 0x1D30
         mbWantToEnterDrift      = 0;                // 0x1D65
         mActiveRouteTimeStamp   = 0;                // 0x1D5C
+        DriverStoreS32At(this, 0x1CEC, E_DRIFT_STATE_NORMAL_DRIVING);  // meDriftState
 
-        // mRacingLine.ClearSectionCache() at this+0xF20 -- bodied in its home.
+        DriverRacingLine(this)->ClearSectionCache();  // mRacingLine.ClearSectionCache() @this+0xF20
+
+        // byte flags @this+0x1AF0/+0x1AF1 = 0 (no committed names yet; de-inlined direct stores).
+        DriverStoreFlagAt(this, 0x1AF0, 0);
+        DriverStoreFlagAt(this, 0x1AF1, 0);
 
         // X360 draws a per-car random tuning float in a [lo,hi] range (the inlined LCG advance:
         // multiplier 0x5851F42D, increment +1; then a vector lerp of two rodata bounds, minus 1.0)
@@ -298,6 +346,7 @@ namespace BrnAI
         mbBoosting                = 0;               // 0x1D6B
         mfPlayerTimeSinceAIDriven = 0.0f;            // 0x1D38
         mfPlayerSlowSpeedTime     = 0.0f;            // 0x1D58
+        SetAggressionVictimCar(nullptr);             // 0x1CE8 -- mpAggressionVictim = NULL
         meAggressionVictimHost        = -1;             // 0x1CF0 -- EGlobalRaceCarIndex victim = none
     }
 
@@ -398,7 +447,7 @@ namespace BrnAI
             const s32 liPrev = lpCar->meBehaviour;          // car+0x14B4
             CarStoreF32(lpCar, 0x14E0, 0.0f);               // behaviour timer (car+5344) = 0
             CarStoreS32(lpCar, 0x14B8, liPrev);             // previous behaviour (car+5304)
-            lpCar->meBehaviour = 7;                         // CRASHING
+            lpCar->meBehaviour = E_AI_BEHAVIOUR_CRASHING;
         }
 
         switch (lpCar->meBehaviour)
@@ -419,8 +468,8 @@ namespace BrnAI
                 if (DriverReverseRequested(this))
                 {
                     CarStoreF32(lpCar, 0x14E0, 0.0f);
-                    CarStoreS32(lpCar, 0x14B8, 3);
-                    lpCar->meBehaviour = 4;
+                    CarStoreS32(lpCar, 0x14B8, E_AI_BEHAVIOUR_CRUISING);
+                    lpCar->meBehaviour = E_AI_BEHAVIOUR_FIGHTING;
                 }
                 if (meAggressionVictimHost != -1)               // this+0x1CF0 (1852) != -1
                     AggressionUpdate(this, lfTimeStep);
@@ -431,8 +480,8 @@ namespace BrnAI
                 if (!DriverReverseRequested(this))
                 {
                     CarStoreF32(lpCar, 0x14E0, 0.0f);
-                    CarStoreS32(lpCar, 0x14B8, 4);
-                    lpCar->meBehaviour = 3;
+                    CarStoreS32(lpCar, 0x14B8, E_AI_BEHAVIOUR_FIGHTING);
+                    lpCar->meBehaviour = E_AI_BEHAVIOUR_CRUISING;
                 }
                 AggressionUpdate(this, lfTimeStep);
                 UpdateStuck(lfTimeStep);
@@ -459,7 +508,7 @@ namespace BrnAI
                     const s32 liPrev = lpCar->meBehaviour;
                     CarStoreF32(lpCar, 0x14E0, 0.0f);
                     CarStoreS32(lpCar, 0x14B8, liPrev);
-                    lpCar->meBehaviour = 3;
+                    lpCar->meBehaviour = E_AI_BEHAVIOUR_CRUISING;
                 }
                 break;
 
@@ -738,7 +787,8 @@ namespace BrnAI
     // mark not-boosting; else if CheckForBoosting(), latch a 3.0s boost window and set boosting;
     // else clear boosting. Then close the speed loop: if currentSpeed < desiredSpeed, ramp the
     // ACCELERATOR up across the KF_ATDS_UNDER band; if currentSpeed > desiredSpeed, ramp the BRAKE
-    // up across the [KF_ATDS_OVER_LO, KF_ATDS_OVER_HI] band. Each ramp = clamp(1 - gap/width, 0,1).
+    // up across the [KF_ATDS_OVER_LO, KF_ATDS_OVER_HI] band. Each ramp = clamp(gap/width, 0, 1) --
+    // i.e. the ramp GROWS with the speed gap (asm: fsel max(x,0) then fsel min(.,1); no '1-x').
     // ====================================================================================
     void AIDriver::AttemptToDriveAtDesiredSpeed(f32 lfSpeedDelta)
     {
@@ -770,20 +820,18 @@ namespace BrnAI
 
         if (lfSpeed < lfDesired)
         {
-            // under speed -> accelerate. ramp = clamp(1 - (desired-speed)/KF_ATDS_UNDER, 0, 1).
-            f32 lfT = -((lfDesired - lfSpeed) / KF_ATDS_UNDER);
-            f32 lfRamp = (lfT < 0.0f) ? 0.0f : lfT;
-            lfRamp = 1.0f - lfRamp;
+            // under speed -> accelerate. ramp = clamp((desired-speed)/KF_ATDS_UNDER, 0, 1).
+            f32 lfRamp = (lfDesired - lfSpeed) / KF_ATDS_UNDER;
             lfRamp = (lfRamp < 0.0f) ? 0.0f : lfRamp;
+            lfRamp = (lfRamp > 1.0f) ? 1.0f : lfRamp;
             mfAccelerator = lfRamp;                           // 0x1D28
         }
         else if (lfSpeed > lfDesired)
         {
-            // over speed -> brake. ramp = clamp(1 - ((over)-LO)/(HI-LO), 0, 1).
-            f32 lfT = -(((lfSpeed - lfDesired) - KF_ATDS_OVER_LO) / (KF_ATDS_OVER_HI - KF_ATDS_OVER_LO));
-            f32 lfRamp = (lfT < 0.0f) ? 0.0f : lfT;
-            lfRamp = 1.0f - lfRamp;
+            // over speed -> brake. ramp = clamp(((over)-LO)/(HI-LO), 0, 1).
+            f32 lfRamp = ((lfSpeed - lfDesired) - KF_ATDS_OVER_LO) / (KF_ATDS_OVER_HI - KF_ATDS_OVER_LO);
             lfRamp = (lfRamp < 0.0f) ? 0.0f : lfRamp;
+            lfRamp = (lfRamp > 1.0f) ? 1.0f : lfRamp;
             mfBrake = lfRamp;                                 // 0x1D2C
         }
     }
@@ -794,11 +842,12 @@ namespace BrnAI
     // Clamp the target speed by how sharp the upcoming corner is. Computes two unsigned planar
     // angles -- between the car's useful direction and mBrakingRoadDir, and between that SAME
     // useful direction and the (m2DCarPos -> mBrakingAnticipationPos) racing-line direction --
-    // whose difference is the cornering angle, stored to mfAngleToBrakingTarget. A ramp
-    // clamp(1 - (angle - BASE)/RANGE, 0, 1) lerps (inputSpeed * SCALE) with a reference value to
-    // form the cornering speed cap (returned to the caller via fp1).
+    // whose MAX is the cornering angle, stored to mfAngleToBrakingTarget (asm @0x8277D238/0x8277D258:
+    // fsubs is only the fsel condition, fsel picks max(angle1, angle2), not the difference). A ramp
+    // clamp((angle - BASE)/RANGE, 0, 1) lerps from inputSpeed toward (inputSpeed * SCALE) to form
+    // the cornering speed cap, returned to the caller (X360 returns it via fp1).
     // ====================================================================================
-    void AIDriver::CorneringTopSpeed(f32 lfInputSpeed)
+    f32 AIDriver::CorneringTopSpeed(f32 lfInputSpeed)
     {
         const Vector2 lUseful = Normalize2D(To2D(mpCarHost->GetUsefulDirection()));
         const f32 lfAngle1 = FindUnsignedAngleBetween2DVectors(lUseful, mBrakingRoadDir); // 0x1CB0
@@ -814,28 +863,26 @@ namespace BrnAI
         // anticipDir). (NOT angle(anticipDir, anticipDir), which would always be 0.)
         const f32 lfAngle2 = FindUnsignedAngleBetween2DVectors(lUseful, lAnticipDir);
 
-        const f32 lfCorneringAngle = lfAngle1 - lfAngle2;
+        const f32 lfCorneringAngle = (lfAngle1 >= lfAngle2) ? lfAngle1 : lfAngle2;
         mfAngleToBrakingTarget = lfCorneringAngle;               // 0x1CFC
 
-        f32 lfT = -((lfCorneringAngle - KF_CORNER_ANGLE_BASE) / KF_CORNER_ANGLE_RANGE);
-        f32 lfRamp = (lfT < 0.0f) ? 0.0f : lfT;
-        lfRamp = 1.0f - lfRamp;
+        f32 lfRamp = (lfCorneringAngle - KF_CORNER_ANGLE_BASE) / KF_CORNER_ANGLE_RANGE;
         lfRamp = (lfRamp < 0.0f) ? 0.0f : lfRamp;
+        lfRamp = (lfRamp > 1.0f) ? 1.0f : lfRamp;
 
         const f32 lfScaled = lfInputSpeed * KF_CORNER_ANGLE_SCALE;
-        // cap = scaled + (inputSpeed - scaled) * ramp  (the X360 lerps with the stack reference,
-        // initialised to lfInputSpeed). Returned to the caller via fp1 in the X360; computed here
-        // for fidelity (consumed by CalculateDesiredSpeed).
-        const f32 lfCap = lfScaled + (lfInputSpeed - lfScaled) * lfRamp;
-        (void)lfCap;
+        // cap = inputSpeed + (scaled - inputSpeed) * ramp -- lerps from inputSpeed (ramp==0, no
+        // cornering yet) toward the scaled-down speed (ramp==1, sharp corner).
+        return lfInputSpeed + (lfScaled - lfInputSpeed) * lfRamp;
     }
 
     // ====================================================================================
     // ProximitySpeed @0x82770800
     //
-    // Clamp the target speed by how close the car is to its proximity reference. t = clamp(1 -
+    // Clamp the target speed by how close the car is to its proximity reference. t = clamp(
     // (proximityRef - 4.0) * 0.25, 0, 1). v = max( (currentSpeed - speedRef - KF_PROX_SPEED_FLOOR),
-    // lfMinSpeed*0.5 ). Returns the lerp lfMinSpeed + (v - lfMinSpeed) * t.
+    // lfMinSpeed*0.5 ). Returns the lerp v + (lfMinSpeed - v) * t (drops toward lfMinSpeed as the
+    // proximity ref grows; asm @0x827708C4/0x827708C8: vsubfp minSpeed-v, vmaddfp (minSpeed-v)*t+v).
     // ====================================================================================
     f32 AIDriver::ProximitySpeed(f32 lfMinSpeed)
     {
@@ -844,10 +891,9 @@ namespace BrnAI
         const f32 lfProxRef = DriverFloatAtImpl(this, 0x1A3C);
         const f32 lfSpeedRef = DriverFloatAtImpl(this, 0x1A40);
 
-        f32 lfTt = -((lfProxRef - 4.0f) * 0.25f);             // flt_82003F40 == 0.25
-        f32 lfT = (lfTt < 0.0f) ? 0.0f : lfTt;
-        lfT = 1.0f - lfT;
+        f32 lfT = (lfProxRef - 4.0f) * 0.25f;                 // flt_82003F40 == 0.25
         lfT = (lfT < 0.0f) ? 0.0f : lfT;
+        lfT = (lfT > 1.0f) ? 1.0f : lfT;
 
         const f32 lfSpeed = mpCarHost->GetSpeed();
         f32 lfV = (lfSpeed - lfSpeedRef) - KF_PROX_SPEED_FLOOR;
@@ -855,16 +901,17 @@ namespace BrnAI
         if (lfV < lfFloor)
             lfV = lfFloor;
 
-        return lfMinSpeed + (lfV - lfMinSpeed) * lfT;
+        return lfV + (lfMinSpeed - lfV) * lfT;
     }
 
     // ====================================================================================
     // ChooseRaceSteeringFan @0x82766370
     //
     // Pick the SteeringFan bias mode for RACE mode from the car's mode/relative state. Returns 0
-    // (default) unless: the route-finding style is non-default (!=3 and !=0) with >=2 relative
-    // contributors and a positive schedule gate, the car is ahead within (1 - gate*0.1)*50 -> 1
-    // (overtake bias); else if the relative-location is 3 and (opponentIndex % 3) != 0 -> 5; else 0.
+    // (default) unless: the route-finding style is non-default (!=3 and !=0), the relative-location
+    // is neither 0 nor 1, and a positive schedule gate puts the car ahead within
+    // clamp(gate*0.1, 0, 1)*50 -> 1 (overtake bias); else if the relative-location is 3 and
+    // (opponentIndex % 3) != 0 -> 5; else 0.
     // ====================================================================================
     s32 AIDriver::ChooseRaceSteeringFan(AICar* lpCar)
     {
@@ -873,20 +920,21 @@ namespace BrnAI
             return 0;
 
         const s32 luRelLoc = static_cast<s32>(lpCar->meRelativeLocation);    // car+0x14D4 (5332)
-        if (luRelLoc < 2)
+        // asm @0x8276638C/0x82766394: two exact equality tests (==1, ==0), not a relational
+        // compare -- a negative meRelativeLocation would fall through here in the binary.
+        if (luRelLoc == 1 || luRelLoc == 0)
             return 0;
 
         const f32 lfScheduleGate = CarFloatAt(lpCar, 0x1518);                // car+0x1518 (5400)
         if (lfScheduleGate > 0.0f)
         {
             const f32 lfDistAhead = lpCar->mfDistanceAheadOfPlayer;          // car+0x14F8 (5368)
-            f32 lfClamped = -(lfScheduleGate * 0.1f);                        // flt_820C424C == 0.1
+            f32 lfClamped = lfScheduleGate * 0.1f;                           // flt_820C424C == 0.1
             lfClamped = (lfClamped < 0.0f) ? 0.0f : lfClamped;
+            lfClamped = (lfClamped > 1.0f) ? 1.0f : lfClamped;
             if (lfDistAhead > 0.0f)
             {
-                f32 lfBand = 1.0f - lfClamped;
-                lfBand = (lfBand < 0.0f) ? 0.0f : lfBand;
-                if (lfDistAhead < lfBand * 50.0f)                            // flt_820C4244 == 50.0
+                if (lfDistAhead < lfClamped * 50.0f)                        // flt_820C4244 == 50.0
                     return 1;
             }
         }

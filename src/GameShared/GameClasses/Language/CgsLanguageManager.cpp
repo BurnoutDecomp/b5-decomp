@@ -2,10 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsHash.h"          // CgsContainers::CgsHash::CalculateHash
-
-// [stub] CgsLanguage::LanguageManager::IsUsingMetricUnits -- pulled in transitively by
-// CgsGui::StateInterface::IsUsingMetricUnits (not used on the boot-video path). The real impl reads the
-// SKU/locale; returning false (imperial) is a safe placeholder until the language manager is reconstructed.
+#include "GameShared/GameClasses/Fonts/CgsUnicode.h"            // CgsUnicode::IsValidUtf8String
 
 namespace CgsLanguage
 {
@@ -44,9 +41,12 @@ namespace CgsLanguage
         // X360's inlined base-class vtable store with no explicit action needed here.
     }
 
-    bool LanguageManager::IsUsingMetricUnits() const
+    // Setter for mbIsUsingMetricUnits (+0x60F4); no packet listing available for this function
+    // (not among the packet's 35), but the member/shape is attested by the ctor's X360-gated
+    // layout comment above and by IsUsingMetricUnits's paired accessor.
+    void LanguageManager::SetUseMetricUnits(bool lbUseMetric)
     {
-        return false;
+        mbIsUsingMetricUnits = lbUseMetric;
     }
 
     // X360 0x828646A0 CgsLanguage::LanguageManager::FindString.
@@ -71,10 +71,9 @@ namespace CgsLanguage
     //      // FLAG: the two QA diagnostic branches (+0x6165 / +0x6166 placeholder table) are
     //      // deferred; the normal "return the resolved string" branch is reproduced.
     //
-    // Common-boot fallback: when the localised-string table is not yet populated FindStringByHash
-    // returns NULL; we fall back to returning the key itself (passthrough). This matches the X360
-    // show-keys diagnostic result for an unresolved key and keeps the text path rendering the raw
-    // key string rather than a NULL deref while the table subsystem is still being reconstructed.
+    // The X360 normal branch returns the FindStringByHash result UNCONDITIONALLY (including NULL
+    // when the table has no entry for the key) -- the key-passthrough only happens on the
+    // diagnostic show-keys branch flagged above, not as a NULL fallback. Do not substitute the key.
     const u8* LanguageManager::FindString(const char* lpcKey) const
     {
         CGS_ASSERT(lpcKey != 0, "NULL string passed in as hash ID to LanguageManager::FindString");
@@ -89,29 +88,189 @@ namespace CgsLanguage
         // CalculateHash takes a non-const char* (the committed signature); the key is only read.
         unsigned int luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcKey), liLength);
 
-        const u8* lpResolved = FindStringByHash(luHash);
-
-        // Normal branch: hand back the resolved string. On the common boot case (table empty)
-        // fall back to the key passthrough -- see the // FLAG above.
-        if (lpResolved)
-            return lpResolved;
-        return reinterpret_cast<const u8*>(lpcKey);
+        return FindStringByHash(luHash);
     }
 
     // X360 0x82864028 CgsLanguage::LanguageManager::FindStringByHash.
     //
-    // Faithful-minimal body. The X360 fetches the table at (this + 8) through a
-    // CgsContainers::LinearHashTable<...,13>::Get(hash), asserts the stored pointer is a valid
-    // UTF-8 string (CgsUnicode::IsValidUtf8String, line 282), and returns it (or NULL when the
-    // table has no entry). That LinearHashTable bucket-walk + the language-table member at +0x8
-    // are a deep subsystem not yet wired into the modelled manager object, so a faithful walk
-    // here would dereference an unmodelled member and could not link cleanly.
-    // // FLAG: the LinearHashTable<...,13>::Get(hash) bucket-walk over the loaded language table
-    // // (manager member +0x8) + the IsValidUtf8String guard are deferred. Returns NULL (no
-    // // entry) so FindString takes its key-passthrough fallback for the common boot case.
-    const u8* LanguageManager::FindStringByHash(unsigned int /*luHash*/) const
+    // Faithful decompile: look the hash up in mStrings (the manager member at +0x8, modelled by
+    // this TU's header); on a hit assert the stored pointer is a valid UTF-8 string
+    // (CgsUnicode::IsValidUtf8String, line 282 -- non-fatal, matches CGS_ASSERT semantics) and
+    // return it, otherwise return NULL (the table has no entry for that hash).
+    const u8* LanguageManager::FindStringByHash(unsigned int luHash) const
     {
-        return 0;
+        const CgsUnicode::CgsUtf8* const* lppString = mStrings.Get(luHash);
+        if (!lppString)
+            return 0;
+
+        CGS_ASSERT(CgsUnicode::IsValidUtf8String(*lppString), "CgsUnicode::IsValidUtf8String( *luccp )");
+        return *lppString;
+    }
+
+    // X360 0x828647F8 CgsLanguage::LanguageManager::AddString.
+    //
+    // Faithful decompile: validate the key/string, hash the key, evict any prior entry for that
+    // hash (RemoveStringByHash), heap-allocate an owned copy of lpcString (Malloc(ByteLength+1) +
+    // CopyN -- AddString OWNS a private copy, unlike AddStringPointer below), heap-allocate a
+    // HashTableElement<u32, const CgsUtf8*> node, stamp its key/value, insert it into mStrings
+    // (the hash-table lookup index), and finally chain the same node onto mDynamicStringElements'
+    // live list (X360 sub_828622F8(this+0xA8, &node) -- the dynamic-element bookkeeping list's
+    // AddTail; the pool/free-list/live-list shape is a LinkedListHelper<Element*,1024>, so the
+    // pool-bounded append the X360 performs is exactly LinkedListHelper::AddTail). Always
+    // returns true (the X360 body has no failure return).
+    bool LanguageManager::AddString(const char* lpcStringId, const u8* lpcString)
+    {
+        CGS_ASSERT(lpcStringId != 0, "NULL string ID passed to LanguageManager::AddString");
+        CGS_ASSERT(lpcString != 0, "NULL localised string passed to LanguageManager::AddString");
+        CGS_ASSERT(CgsUnicode::IsValidUtf8String(lpcString), "CgsUnicode::IsValidUtf8String( lpcString )");
+
+        const char* lpcScan = lpcStringId;
+        while (*lpcScan)
+            ++lpcScan;
+        int liLength = static_cast<int>(lpcScan - lpcStringId);
+        unsigned int luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcStringId), liLength);
+
+        if (FindStringByHash(luHash))
+            RemoveStringByHash(luHash);
+
+        u32 luStringSize = CgsUnicode::ByteLength(lpcString) + 1;
+        u8* lpcStringCopy = static_cast<u8*>(mpLanguageAllocator->Malloc(static_cast<s32>(luStringSize), 4));
+        CgsUnicode::CopyN(lpcStringCopy, lpcString, static_cast<s32>(luStringSize));
+
+        HashIDStringArray::Element* lpElement =
+            static_cast<HashIDStringArray::Element*>(mpLanguageAllocator->Malloc(sizeof(HashIDStringArray::Element), 4));
+        lpElement->Set(luHash, lpcStringCopy);
+        mStrings.Insert(lpElement);
+        mDynamicStringElements.AddTail(lpElement);
+
+        return true;
+    }
+
+    // X360 0x82864A08 CgsLanguage::LanguageManager::AddStringPointer.
+    //
+    // Faithful decompile: same validate/hash/evict shape as AddString, but stores the CALLER's
+    // string pointer directly (no Malloc+CopyN -- the caller owns lpcString's lifetime) and
+    // probes for a prior entry via FindString (not FindStringByHash) before evicting through
+    // RemoveStringPointerByHash. Chains the new node onto mDynamicStringPointerElements instead
+    // of mDynamicStringElements (X360 sub_828622F8(this+0x30C4, &node)).
+    bool LanguageManager::AddStringPointer(const char* lpcStringId, const u8* lpcString)
+    {
+        CGS_ASSERT(lpcStringId != 0, "NULL string ID passed to LanguageManager::AddString");
+        CGS_ASSERT(lpcString != 0, "NULL localised string passed to LanguageManager::AddString");
+        CGS_ASSERT(CgsUnicode::IsValidUtf8String(lpcString), "CgsUnicode::IsValidUtf8String( lpcString )");
+
+        const char* lpcScan = lpcStringId;
+        while (*lpcScan)
+            ++lpcScan;
+        int liLength = static_cast<int>(lpcScan - lpcStringId);
+        unsigned int luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcStringId), liLength);
+
+        if (FindString(lpcStringId))
+            RemoveStringPointerByHash(luHash);
+
+        HashIDStringArray::Element* lpElement =
+            static_cast<HashIDStringArray::Element*>(mpLanguageAllocator->Malloc(sizeof(HashIDStringArray::Element), 4));
+        lpElement->Set(luHash, lpcString);
+        mStrings.Insert(lpElement);
+        mDynamicStringPointerElements.AddTail(lpElement);
+
+        return true;
+    }
+
+    // X360 0x82864950 CgsLanguage::LanguageManager::RemoveString.
+    //
+    // Faithful decompile: validate, hash the key, and remove the hash's entry via
+    // RemoveStringByHash only if FindStringByHash confirms it is currently present.
+    bool LanguageManager::RemoveString(const char* lpcStringId)
+    {
+        CGS_ASSERT(lpcStringId != 0, "NULL string ID passed to LanguageManager::RemoveString");
+
+        const char* lpcScan = lpcStringId;
+        while (*lpcScan)
+            ++lpcScan;
+        int liLength = static_cast<int>(lpcScan - lpcStringId);
+        unsigned int luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcStringId), liLength);
+
+        if (FindStringByHash(luHash))
+            return RemoveStringByHash(luHash);
+        return false;
+    }
+
+    // X360 0x828640B0 CgsLanguage::LanguageManager::RemoveStringByHash.
+    //
+    // Faithful decompile: remove the hash's entry from mStrings, then walk
+    // mDynamicStringElements' live list for the node whose element key matches the hash. On a
+    // match, recycle the node (X360's InternalRemoveNode(live) + InternalAddHead(free) pair is
+    // exactly LinkedListHelper::RecycleNode), free the owned string copy AddString allocated, and
+    // free the element itself (mpLanguageAllocator owns both allocations). Returns false when no
+    // dynamic-element node matches (table entry absent or entry not owned by this list).
+    bool LanguageManager::RemoveStringByHash(unsigned int luHash)
+    {
+        mStrings.Remove(luHash);
+
+        DynamicHashElementsList::Node* lpNode = mDynamicStringElements.GetHead();
+        while (lpNode)
+        {
+            HashIDStringArray::Element* lpElement = lpNode->mData;
+            if (lpElement && lpElement->GetKey() == luHash)
+                break;
+            lpNode = static_cast<DynamicHashElementsList::Node*>(lpNode->GetNextNode());
+        }
+
+        if (!lpNode)
+            return false;
+
+        HashIDStringArray::Element* lpElement = lpNode->mData;
+        mDynamicStringElements.RecycleNode(lpNode);
+        mpLanguageAllocator->Free(const_cast<CgsUnicode::CgsUtf8*>(lpElement->GetValue()));
+        mpLanguageAllocator->Free(lpElement);
+        return true;
+    }
+
+    // X360 0x82864B30 CgsLanguage::LanguageManager::RemoveStringPointer.
+    //
+    // Faithful decompile: same shape as RemoveString, evicting through
+    // RemoveStringPointerByHash instead.
+    bool LanguageManager::RemoveStringPointer(const char* lpcStringId)
+    {
+        CGS_ASSERT(lpcStringId != 0, "NULL string ID passed to LanguageManager::RemoveString");
+
+        const char* lpcScan = lpcStringId;
+        while (*lpcScan)
+            ++lpcScan;
+        int liLength = static_cast<int>(lpcScan - lpcStringId);
+        unsigned int luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcStringId), liLength);
+
+        if (FindStringByHash(luHash))
+            return RemoveStringPointerByHash(luHash);
+        return false;
+    }
+
+    // X360 0x82864158 CgsLanguage::LanguageManager::RemoveStringPointerByHash.
+    //
+    // Faithful decompile: same shape as RemoveStringByHash but walks
+    // mDynamicStringPointerElements and does NOT free the string value (AddStringPointer never
+    // owned it -- the caller does); only the element node's own allocation is freed.
+    bool LanguageManager::RemoveStringPointerByHash(unsigned int luHash)
+    {
+        mStrings.Remove(luHash);
+
+        DynamicHashElementsList::Node* lpNode = mDynamicStringPointerElements.GetHead();
+        while (lpNode)
+        {
+            HashIDStringArray::Element* lpElement = lpNode->mData;
+            if (lpElement && lpElement->GetKey() == luHash)
+                break;
+            lpNode = static_cast<DynamicHashElementsList::Node*>(lpNode->GetNextNode());
+        }
+
+        if (!lpNode)
+            return false;
+
+        HashIDStringArray::Element* lpElement = lpNode->mData;
+        mDynamicStringPointerElements.RecycleNode(lpNode);
+        mpLanguageAllocator->Free(lpElement);
+        return true;
     }
 
     // X360 0x824434C0 CgsLanguage::LanguageManager::GetDefaultFont.
@@ -124,6 +283,58 @@ namespace CgsLanguage
     {
         CGS_ASSERT(mpcDefaultFontName != 0, "Invalid Default Font Name in Language Manager");
         return mpcDefaultFontName;
+    }
+
+    // X360 0x828608D0 CgsLanguage::LanguageManager::Prepare.
+    //
+    // Faithful decompile: assert the allocator is non-null, stash it (mpLanguageAllocator,
+    // +0x60E4), and register the embedded debug component with the debug menu. Always returns
+    // true (the X360 body has no failure return).
+    bool LanguageManager::Prepare(CgsMemory::HeapMalloc* lpLanguageAllocator)
+    {
+        CGS_ASSERT(lpLanguageAllocator != 0, "Null pointer for language allocator given");
+        mpLanguageAllocator = lpLanguageAllocator;
+        mDebugComponent.Register();
+        return true;
+    }
+
+    // X360 0x82860940 CgsLanguage::LanguageManager::PrepareDefaultFormattingStrings.
+    //
+    // Faithful decompile: stamp every per-locale format separator/template member with its
+    // English-default literal (used before a locale's string table has loaded its own
+    // PrepareFormattingStrings values, and restored by UnloadStringTable), and set the metric
+    // flag to true (the X360 build's fallback default).
+    bool LanguageManager::PrepareDefaultFormattingStrings()
+    {
+        mrLargeDistanceConversion = 0.001f;
+        mrSmallDistanceConversion = 1.0f;
+
+        mpGeneralDecimalSeparator   = reinterpret_cast<const CgsUnicode::CgsUtf8*>(".");
+        mpGeneralThousandsSeparator = reinterpret_cast<const CgsUnicode::CgsUtf8*>(",");
+        mpGeneralPercentage         = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1%");
+        mpGeneralXOverY             = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1/%2");
+        mpGeneralCurrencySeparator  = reinterpret_cast<const CgsUnicode::CgsUtf8*>(".");
+        mpGeneralCurrency           = reinterpret_cast<const CgsUnicode::CgsUtf8*>("$%1");
+
+        mpTimeFormatDate            = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1/%2/%3");
+        mpTimeFormatAll             = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2:%3");
+        mpTimeFormatHrsMinsSecs     = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2:%3");
+        mpTimeFormatMinsSecsHnds    = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2.%3");
+        mpTimeFormatMinsSecs        = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2");
+        mpTimeFormatSecsHnds        = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1.%2");
+        mpTimeFormatSecs            = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1s");
+        mpTimeFormatSecsLong        = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Seconds");
+        mpTimeFormatMinSecsMidText  = reinterpret_cast<const CgsUnicode::CgsUtf8*>("1 Min %1 Secs");
+        mpTimeFormatMinsSecsMidText = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Mins %2 Secs");
+
+        mpDistanceFormatShort       = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1m");
+        mpDistanceFormatShortL      = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Meters");
+        mpDistanceFormatLong        = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1km");
+        mpDistanceFormatLongL       = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Kilometres");
+        mpDistanceFormatIsMetric    = reinterpret_cast<const CgsUnicode::CgsUtf8*>("1");
+
+        mbIsUsingMetricUnits = true;
+        return true;
     }
 
     // ------------------------------------------------------------------------

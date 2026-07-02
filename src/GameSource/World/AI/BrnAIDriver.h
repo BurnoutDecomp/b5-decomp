@@ -64,7 +64,7 @@ namespace BrnAI
         bool ComputeRouteDirection(Vector2& lrOutDirection);   // @0x82766500
         Vector2 GetTargetPosition();                           // @0x8277CBF8 (sret)
         void AttemptToDriveAtDesiredSpeed(f32 lfSpeedDelta);   // @0x827706D8
-        void CorneringTopSpeed(f32 lfInputSpeed);              // @0x8277D0F0
+        f32  CorneringTopSpeed(f32 lfInputSpeed);              // @0x8277D0F0 -- returns the speed cap in fp1
         f32  ProximitySpeed(f32 lfMinSpeed);                   // @0x82770800
         s32  ChooseRaceSteeringFan(AICar* lpCar);              // @0x82766370  (EBiasMode)
         void SetDrivingFanBiases(AICar* lpPlayerCar);          // @0x82770428
@@ -162,12 +162,15 @@ namespace BrnAI
         s32    meAggressionVictimHost;                  // == guest meAggressionVictim @+0x1CF0
         s32    meRelatedActiveCarIndexHost;             // == guest meRelatedActiveCarIndex @+0x1CF4
         void*  mpSectionsDataHost;                      // == guest mpSectionsData @+0x1CE4
+        AICar* mpAggressionVictimCarHost;               // == guest mpAggressionVictim @+0x1CE8
 
         // Typed accessors -- the de-inlined form of the X360 `*(this+0x1CE0)` etc.
         AICar* GetCar() const               { return mpCarHost; }
         void   SetCar(AICar* lpCar)         { mpCarHost = lpCar; }
         s32    GetAggressionVictim() const  { return meAggressionVictimHost; }
         void   SetAggressionVictim(s32 li)  { meAggressionVictimHost = li; }
+        AICar* GetAggressionVictimCar() const     { return mpAggressionVictimCarHost; }
+        void   SetAggressionVictimCar(AICar* lpCar) { mpAggressionVictimCarHost = lpCar; }
 
     private:
         // Never called: documents the offset contract. Every touched member is public, so the
