@@ -335,15 +335,25 @@ namespace CgsGui
 
         // Resolve the header's serialised offset fields to real pointers (x64 substitute for the
         // console's relocated mpAptData/mpConstData -- FLAG). The header sits at the resource base,
-        // so base == the header address. Read the fields at their 8-byte positions (the converted
-        // 8-byte header: mpAptData @ +8, mpConstData @ +16).
-        const uintptr_t luHeaderBase = reinterpret_cast<uintptr_t>(lpAptData);
-        const uintptr_t luConstOff   = static_cast<uintptr_t>(
-            *reinterpret_cast<const uint64_t*>(luHeaderBase + 16u));   // mpConstData (u64 @ +16)
-        void* lpConstFile = reinterpret_cast<void*>(luHeaderBase + luConstOff);   // == aptDataOffset
-        // FLAG (x64 converted bundle): pBase == mpConstData (the aptDataOffset the Fixup relocates
-        // against), NOT mpAptData -- the converted bundle collapses them to that one address.
-        void* lpBase = lpConstFile;
+        // so base == the header address.
+        //
+        // UN-COLLAPSED (2026-07-01): the converted (libapt2 SerializeChunks) header carries SIX
+        // 8-byte fields [name@0, baseName@8, aptData@0x10, const@0x18, geom@0x20, size@0x28] -- the
+        // extra baseName shifts every field one slot past the console's [name, aptData, const, ...]
+        // order (FLAG: converter-format accommodation, see APT_CONVERTER_BUGS.md #2). pBase = the
+        // "Apt Data:1:7:8" chunk (every serialised offset is chunk-relative), pConstFile = the
+        // "Apt constant file" chunk (movieOffset@+0x18 locates the root; itemStart@+0x28 is the
+        // constant-record table _parseStream resolves Push/DefineDictionary entries through) --
+        // exactly the console's AptData[1]/AptData[2] pair and the XB1 CompleteLoad's a3/a4 pair.
+        const uintptr_t luHeaderBase  = reinterpret_cast<uintptr_t>(lpAptData);
+        const uintptr_t luAptDataOff  = static_cast<uintptr_t>(
+            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x10u));  // aptData (u64 @ +0x10)
+        const uintptr_t luConstOff    = static_cast<uintptr_t>(
+            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x18u));  // const   (u64 @ +0x18)
+        void* lpBase      = reinterpret_cast<void*>(luHeaderBase + luAptDataOff);
+        void* lpConstFile = (luConstOff != 0)
+                                ? reinterpret_cast<void*>(luHeaderBase + luConstOff)
+                                : lpBase;   // degenerate header: keep the old collapse
 
         // Pin the caller's handle (the asm's leading lwarx/stwcx. IncRef on *a2).
         AptFilePtr laHandle;

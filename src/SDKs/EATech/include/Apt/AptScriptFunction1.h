@@ -66,9 +66,11 @@ class AptValue;
 struct AptScriptFunction1ByteCode
 {
     const char*  mpName;               // +0x00  the function's name (movie string; "" for anonymous)
-    int64_t      mnNumArguments;       // +0x08  declared parameter count (u32 + pad)
+    uint32_t     mnNumArguments;       // +0x08  declared parameter count (xb1 parse: dword cmp; zero pad follows)
+    uint32_t     mPad0C;               // +0x0C  writer align-8 pad (zero-filled)
     const char** mppArgumentNames;     // +0x10  array[mnNumArguments] of qword name pointers
-    int64_t      mnByteCodeSize;       // +0x18  length in bytes of the action bytecode (u32 + pad)
+    uint32_t     mnByteCodeSize;       // +0x18  length in bytes of the action bytecode (u32; libapt2 Write<u32>)
+    uint32_t     mPad1C;               // +0x1C  writer align-8 pad (zero-filled)
     const char** mppConstantPool;      // +0x20  sig1 slot -> the constant-pool table (patched in)
     int64_t      mnConstantPoolCount;  // +0x28  sig2 slot -> number of entries (patched in)
     uint8_t      maByteCode[1];        // +0x30  the action bytecode (flexible; mnByteCodeSize bytes)

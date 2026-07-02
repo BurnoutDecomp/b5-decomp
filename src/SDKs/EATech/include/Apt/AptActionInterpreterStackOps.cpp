@@ -231,16 +231,17 @@ void AptActionInterpreter::_FunctionAptActionPushFloat(AptActionInterpreter* pIn
 void AptActionInterpreter::_FunctionAptActionPush(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
     // The GUIAPT64 operand block (the form _parseStream produces): 8-aligned
-    // {i64 count @0, AptValue** table @+8}, PC advances 16. The table entries are
-    // LIVE AptValue*s post-parse (console form was 4-aligned {i32, ptr} +8).
+    // {i32 count @0 (the xb1 parse reads it as a signed DWORD -- `cmp [rsi], edi`),
+    // AptValue** table @+8}, PC advances 16. The table entries are LIVE AptValue*s
+    // post-parse (console form was 4-aligned {i32, ptr} +8).
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
             (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
-    const int64_t   nCount = *reinterpret_cast<const int64_t*>(pAligned);
+    const int32_t   nCount = *reinterpret_cast<const int32_t*>(pAligned);
     AptValue* const* pArray = *reinterpret_cast<AptValue* const* const*>(pAligned + 8);
     pCtx->mpProgramCounter = pAligned + 16;
 
-    for (int64_t i = 0; i < nCount; ++i)
+    for (int32_t i = 0; i < nCount; ++i)
         pInterp->stackPushIndirect(pArray[i]);   // real member (resolves Lookup/Register)
 }
 

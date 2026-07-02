@@ -90,7 +90,8 @@ struct AptScriptFunction2ByteCode
     uint16_t              mnRegisters;         // +0x0C  declared register count
     uint16_t              muPreloadFlags;      // +0x0E  preload-register flags (KU_PRELOAD_*)
     AptScriptFunction2Arg* mpArgTable;         // +0x10  array[mnNumArguments] of register/name entries
-    int64_t               mnBodyLength;        // +0x18  record-body length (u32 + pad; advances the PC)
+    uint32_t              mnBodyLength;        // +0x18  record-body length (u32; libapt2 Write<u32>)
+    uint32_t              mPad1C;              // +0x1C  writer align-8 pad (zero-filled)
     const char**          mppConstantPool;     // +0x20  sig1 slot -> the constant-pool table (patched in)
     int64_t               mnConstantPoolCount; // +0x28  sig2 slot -> number of entries (patched in)
     uint8_t               maByteCode[1];       // +0x30  the action bytecode (flexible)

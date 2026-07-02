@@ -397,9 +397,33 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
 // and un-relocate on this path, so it is omitted (as the prior homing already flagged).
 AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile* pConstFile, void* pBlock)
 {
+    // Relocate the const chunk's record-table slot around Fixup (the console's
+    // `*(a3+28) += a3` on the 4-byte layout; the x64 CompleteLoad sub_1408348B0 does the
+    // widened slot @const+0x28 -- itemStart offset -> the ABSOLUTE constant-record table
+    // pointer _parseStream reads at ctx+0x28 while the Fixup walk parses each stream).
+    // The slot is const-chunk-relative (x64: `v12 = v11 + a4`). Idempotence-guarded the
+    // same way every other slot relocate is (only a plausible small offset is promoted).
+    uintptr_t* pnItemStart = nullptr;
+    if (pConstFile != nullptr)
+    {
+        pnItemStart = reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<char*>(pConstFile) + 0x28);
+        if (*pnItemStart != 0 && *pnItemStart < 0x10000000u)   // still a file offset
+            *pnItemStart += reinterpret_cast<uintptr_t>(pConstFile);
+        else
+            pnItemStart = nullptr;                             // absent/already live: no un-relocate
+    }
+
     // Clear the resolve-state scratch at the serialised def-base +0x30 (console `*(a1+48)=0`).
     mnResolveScratch = 0;
-    return Fixup(pBase, pConstFile, pBlock);
+    AptCharacterAnimation* pResult = Fixup(pBase, pConstFile, pBlock);
+
+    // Un-relocate after Fixup (console `*(a3+28) -= a3`): the ctx table is live only
+    // while the parse runs; the unload path re-parses with a null ctx (never reads it).
+    if (pnItemStart != nullptr)
+        *pnItemStart -= reinterpret_cast<uintptr_t>(pConstFile);
+
+    return pResult;
 }
 
 // ===========================================================================
@@ -658,8 +682,11 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
                         ? CgsGui::gAptResourceSpanBase : reinterpret_cast<uintptr_t>(base);
                     const uint32_t luResSize = CgsGui::gAptResourceSpanSize != 0
                         ? CgsGui::gAptResourceSpanSize : 0x02000000u;   // 32 MB fallback cap
+                    // ctx + count (the XB1 Fixup twin sub_1408378E0 case-5/9:
+                    // `sub_1408567D0(char+0x20, base, a3=pConstFile, a1+0x50)`).
                     reinterpret_cast<AptMovie*>(pChar + 0x20)->resolve64(
-                        reinterpret_cast<uintptr_t>(base), luResBase, luResSize);
+                        reinterpret_cast<uintptr_t>(base), luResBase, luResSize,
+                        pConstFile, &this->mnParsedValueCount);
                 }
                 break;
             case 10:  // StaticText: relocate the text-record array pointer (+0x50).
