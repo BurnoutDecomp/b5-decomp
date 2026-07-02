@@ -138,13 +138,13 @@ const u32 KU_MAX_PATCH_MONITORS = 16; // CgsAemsFactory.h:373 (DWARF)
 // placeholder.
 class AemsFactory
 {
-public:
-    // CgsAemsFactory.cpp @ 0x8268A018. Debug-prints lpcText through the engine
-    // log front-end when the log-category filter is enabled; returns lpcText so it
-    // can chain. (X360 returns "<NULLSTRING>" when handed a null pointer.)
-    const char* CsisPrint(const char* lpcText);
-
 protected:
+    // CgsAemsFactory.cpp @ 0x8268A018 (DWARF CgsAemsFactory.cpp:397, protected,
+    // returns void). Debug-prints lpcText through the engine log front-end when
+    // the log-category filter is enabled. (X360 prints "<NULLSTRING>" when handed
+    // a null pointer.)
+    void CsisPrint(const char* lpcText);
+
     // CgsAemsFactory.cpp @ 0x82689E98. Linear-search the patch-monitor table
     // for the monitor whose mpName matches lpcName; returns it, or null if none.
     PatchMonitor* FindPatchMonitor(const char* lpcName);

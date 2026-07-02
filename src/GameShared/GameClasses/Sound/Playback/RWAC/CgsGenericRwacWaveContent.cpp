@@ -14,7 +14,7 @@ namespace CgsResource
 {
     struct BinaryFileResource_
     {
-        int Unload(void* lpOwner, int liParam);
+        bool Unload(void* lpOwner, int liParam);
     };
 }
 
@@ -22,10 +22,10 @@ namespace CgsSound { namespace Playback {
 
     struct GenericRwacWaveContent
     {
-        int DoUnload();
+        virtual bool DoUnload();
     };
 
-    int GenericRwacWaveContent::DoUnload()
+    bool GenericRwacWaveContent::DoUnload()
     {
         char* lpThis = reinterpret_cast<char*>(this);
         CgsResource::BinaryFileResource_* lpBase =
