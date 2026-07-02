@@ -112,17 +112,17 @@ public:
             mVelocity = rw::math::vpu::Vector3();
         }
 
+        // @ 0x826C3C70 (inlined into MicrophoneSystem::UpdateMicrophones). The asm computes
+        // the velocity division unconditionally via a reciprocal-estimate/Newton-Raphson
+        // refine of lfFrameTime -- there is no lfFrameTime != 0.0f branch and no zero-vector
+        // fallback path in the binary.
         void Update(f32 lfFrameTime)
         {
             const rw::math::vpu::Matrix44Affine& lCurrent = mMicrophoneMatrix.GetCurrent();
             const rw::math::vpu::Matrix44Affine& lPrevious = mMicrophoneMatrix.GetPrevious();
 
             mDirection = rw::math::vpu::Normalize(lCurrent.zAxis);
-
-            if (lfFrameTime != 0.0f)
-                mVelocity = (lCurrent.wAxis - lPrevious.wAxis) / lfFrameTime;
-            else
-                mVelocity = rw::math::vpu::Vector3();
+            mVelocity = (lCurrent.wAxis - lPrevious.wAxis) / lfFrameTime;
         }
 
         // @ 0x826AB8A8. Validate the incoming microphone matrix is finite, then seed
