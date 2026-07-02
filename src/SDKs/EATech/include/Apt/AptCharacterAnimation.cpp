@@ -427,93 +427,87 @@ AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile*
 }
 
 // ===========================================================================
-// AptResolveShapeGeometry -- the Step-2 case-1 shape-geometry resolve (the x64 native-8 fork
-// of gAptFuncs.pfnLoadRenderingUnit == CgsGui::AptCallbackRender::LoadRenderingUnit @0x5BAEA8).
+// AptResolveShapeGeometry -- the Step-2 case-1 shape-geometry resolve (the x64 native-8
+// form of gAptFuncs.pfnLoadRenderingUnit == CgsGui::AptCallbackRender::LoadRenderingUnit
+// @0x5BAEA8).
 //
-// The console reads the GuiGeometryObject at userData+12 (a 4-byte pointer) then bsearches its
-// GuiGeometryFile* table for the file whose id == nCharacterId, returning that GuiGeometryFile*.
-// On our native-8 .apt the geometry object is instead at the AptDataHeader field[4] (native-8
-// offset +32) as a FILE-RELATIVE OFFSET, and its file pointer table is 8-byte-strided (each
-// 4-byte offset followed by 4 pad bytes -- the converter widened the pointer slots). So this:
-//   1. resolves the geometry object from the header (offset -> pointer against the resource base);
-//   2. linearly scans its 8-byte-strided file table for the file whose id matches nCharacterId,
-//      rebasing each file offset against the resource base;
-//   3. returns that GuiGeometryFile* (or null if none matches -- a safe, faithful "no unit").
-// This reproduces the console's "the shape's geometry file, keyed by character id" result.
+// CORRECTED 2026-07-02 against the CONVERTER's own reader/writer (libapt2
+// GeometryStore::LoadGeometry/WriteGeometry -- apt_player renders the converted
+// bundle correctly, making it the proven ground truth for this format). The
+// previous walk guessed a 4-byte-field "GuiGeometryObject{numFiles,numTexPages,
+// fileTableOff}" header with 4+4-pad table cells; the REAL converted chunk is:
 //
-// pBlock is the AptDataHeader (== f->mpDataBlock, threaded through Resolve). The resource base is
-// the load base the host stashed (CgsGui::gAptResourceSpanBase); the header + every geometry
-// offset is relative to it. // FLAG (x64 native-8 fork): the file-table 8-byte stride + the
-// offset-not-pointer geometry field are the converter's native-8 form, resolved here explicitly.
+//   header @ base+geometryOffset (the AptDataHeader field[4] @+0x20 -- that part
+//   was right):
+//     +0x00 u32 recordCount
+//     +0x04 u32 dependencyCount
+//     +0x08 u64 recordArrayOffset      (base-relative, FULL 8-byte pointer field)
+//   record array: u64[recordCount]     (each base-relative)
+//   geometry record == CgsResource::GuiGeometryFile verbatim:
+//     {u32 muID, u32 muNumberOfMeshes, u64 mppGeometryMeshes}
+//   mesh table: u64[numMeshes] (base-relative) -> GuiGeometryMesh, ALSO verbatim:
+//     {miMeshType(=drawType), miTextureMode(=hasImage), miTextureId(=imageID),
+//      pad, mpTexture(=the file-provider slot -- holds STALE converter junk on
+//      disk!), muNumberOfVerticies, pad, mppVerticies}
+//   vertex table: u64[count] (base-relative) -> 20-byte {x,y,rgba,u,v} records,
+//   written CONTIGUOUSLY -- exactly CgsGraphics::Basic2dColouredTexturedVertex,
+//   so the committed AptRenderHandler::Render consumes entry[0] as the run
+//   unchanged.
+//
+// The lookup KEY is the shape record's own geometryId (its +0x30 pointer-width
+// field), NOT the character index -- the second bug in the old resolve.
 // ---------------------------------------------------------------------------
-// AptFixupGeometryFileNative8 -- the native-8 fork of GuiGeometryFile::FixUp @0x828500E0.
-//
-// The console FixUp descends {file -> mesh table -> mesh -> vertex table} adding the load delta to
-// every 32-bit offset in place. Our native-8 (GUIAPT64 "1:7:8") geometry has WIDENED pointer fields
-// (8 bytes) and 8-byte-strided pointer TABLES (a 4-byte offset + 4 pad per entry), so the strides
-// differ from the console body -- reproduced here with the native-8 widths (layout verified from the
-// loaded bundle). IDEMPOTENT: every slot that still holds a file-relative OFFSET (value < luSize, the
-// same offset-vs-pointer discriminator CgsAptAux uses) is promoted to (luBase + offset); a slot that
-// already holds a live pointer (value >= luSize) is left alone. So calling it once per shape id -- as
-// AptResolveShapeGeometry does -- rebases a shared file exactly once regardless of how many characters
-// reference it. // FLAG (x64 native-8 fork): the widened struct + 8-byte table stride are the
-// converter's native-8 form; the descend order is faithful to the console FixUp.
+// AptFixupGeometryFileNative8 -- promote a geometry record's base-relative
+// offsets to live pointers, in place and idempotently (a slot already >= the
+// resource size is a pointer; a shared record rebases once). Also clears each
+// textured mesh's mpTexture slot: on disk it holds the converter's stale
+// file-provider junk (high dword 0x7FF7... on XB1 sources), which the render
+// walk would otherwise bind as a texture pointer. FLAG (texture loader
+// deferred): miTextureId (the image character id) is preserved for the future
+// texture-load pass; a cleared slot draws through the white-texture fallback
+// (vertex colours only).
 static void AptFixupGeometryFileNative8(CgsResource::GuiGeometryFile* pFile,
                                         uintptr_t luBase, uint32_t luSize)
 {
     if (pFile == nullptr)
         return;
-    // A rebased pointer is >= luSize (out of the [0,size) offset range); an unrebased offset is < size.
     auto lbIsOffset = [luSize](uintptr_t luVal) -> bool { return luVal != 0 && luVal < luSize; };
 
-    // (1) file -> mesh pointer table (file+0x08, 8-byte field; the table is 8-byte-strided).
     if (lbIsOffset(pFile->mppGeometryMeshes))
         pFile->mppGeometryMeshes += luBase;
     if (pFile->mppGeometryMeshes == 0)
         return;
 
-    const uint32_t luMeshCount = pFile->muNumberOfMeshes;
-    CgsResource::GuiGeometryPtrTableEntry* lpMeshTbl =
-        reinterpret_cast<CgsResource::GuiGeometryPtrTableEntry*>(pFile->mppGeometryMeshes);
-
-    for (uint32_t luMesh = 0; luMesh < luMeshCount && luMesh < 4096u; ++luMesh)
+    uintptr_t* const lpMeshTbl = reinterpret_cast<uintptr_t*>(pFile->mppGeometryMeshes);
+    for (uint32_t luMesh = 0; luMesh < pFile->muNumberOfMeshes && luMesh < 4096u; ++luMesh)
     {
-        // (2) mesh-table entry k (8-byte slot): file-relative mesh offset -> mesh pointer.
-        //     Promote the whole 8-byte slot to a live pointer written across {lo,pad}.
-        uintptr_t luMeshPtr;
-        {
-            const uint32_t luMeshOff = lpMeshTbl[luMesh].muOffsetOrPtrLo;
-            uintptr_t* lpSlot = reinterpret_cast<uintptr_t*>(&lpMeshTbl[luMesh]);
-            if (lbIsOffset(*lpSlot))
-                *lpSlot = luBase + luMeshOff;   // fold the 4-byte offset into the full 8-byte pointer
-            luMeshPtr = *lpSlot;
-        }
-        if (luMeshPtr == 0)
+        if (lbIsOffset(lpMeshTbl[luMesh]))
+            lpMeshTbl[luMesh] += luBase;
+        if (lpMeshTbl[luMesh] == 0)
             continue;
-        CgsResource::GuiGeometryMesh* lpMesh =
-            reinterpret_cast<CgsResource::GuiGeometryMesh*>(luMeshPtr);
+        CgsResource::GuiGeometryMesh* const lpMesh =
+            reinterpret_cast<CgsResource::GuiGeometryMesh*>(lpMeshTbl[luMesh]);
 
-        // (3) mesh -> vertex pointer table (mesh+0x20, 8-byte field).
         if (lbIsOffset(lpMesh->mppVerticies))
+        {
+            // First touch of this mesh: rebase the vertex table + scrub the
+            // stale texture slot (see the header note).
             lpMesh->mppVerticies += luBase;
+            lpMesh->mpTexture = 0;
+        }
         if (lpMesh->mppVerticies == 0 || lpMesh->muNumberOfVerticies == 0)
             continue;
 
-        // (4) vertex-table entries (8-byte-strided): each holds a file-relative offset to a vertex run.
-        //     The render walk reads the FIRST entry as the pointer to the contiguous vertex run, so
-        //     rebase every entry (faithful to the console, which rebases all vertex pointers).
-        CgsResource::GuiGeometryPtrTableEntry* lpVtxTbl =
-            reinterpret_cast<CgsResource::GuiGeometryPtrTableEntry*>(lpMesh->mppVerticies);
+        uintptr_t* const lpVtxTbl = reinterpret_cast<uintptr_t*>(lpMesh->mppVerticies);
         for (uint32_t luV = 0; luV < lpMesh->muNumberOfVerticies && luV < 65536u; ++luV)
         {
-            uintptr_t* lpVSlot = reinterpret_cast<uintptr_t*>(&lpVtxTbl[luV]);
-            if (lbIsOffset(*lpVSlot))
-                *lpVSlot = luBase + lpVtxTbl[luV].muOffsetOrPtrLo;
+            if (lbIsOffset(lpVtxTbl[luV]))
+                lpVtxTbl[luV] += luBase;
         }
     }
 }
 
-static void* AptResolveShapeGeometry(void* pBlock, int32_t nCharacterId)
+static void* AptResolveShapeGeometry(void* pBlock, int32_t nGeometryId)
 {
     if (pBlock == nullptr)
         return nullptr;
@@ -522,44 +516,36 @@ static void* AptResolveShapeGeometry(void* pBlock, int32_t nCharacterId)
     if (luBase == 0)
         return nullptr;
 
-    // The AptDataHeader field[4] (native-8 offset +32) holds the GuiGeometryObject's file offset.
-    const uint32_t luGeomObjOff =
-        static_cast<uint32_t>(*reinterpret_cast<const uint64_t*>(reinterpret_cast<char*>(pBlock) + 32));
-    if (luGeomObjOff == 0 || (luSize != 0 && luGeomObjOff + 12u > luSize))
+    // AptDataHeader field[4] (+0x20): the geometry chunk's base-relative offset.
+    const uint64_t luGeomOff =
+        *reinterpret_cast<const uint64_t*>(reinterpret_cast<char*>(pBlock) + 0x20);
+    if (luGeomOff == 0 || (luSize != 0 && luGeomOff + 16u > luSize))
         return nullptr;
 
-    // GuiGeometryObject {u32 numFiles, u32 numTexPages, u32 fileTableOff} (4-byte object header).
-    const uint32_t* lpObj = reinterpret_cast<const uint32_t*>(luBase + luGeomObjOff);
-    const uint32_t luNumFiles     = lpObj[0];
-    const uint32_t luFileTableOff = lpObj[2];
-    if (luNumFiles == 0 || luNumFiles > 4096u || luFileTableOff == 0 ||
-        (luSize != 0 && luFileTableOff >= luSize))
+    // The chunk header {u32 recordCount, u32 depCount, u64 recordArrayOffset}.
+    const char* const lpChunk = reinterpret_cast<const char*>(luBase + luGeomOff);
+    const uint32_t luRecordCount = *reinterpret_cast<const uint32_t*>(lpChunk);
+    const uint64_t luRecArrOff   = *reinterpret_cast<const uint64_t*>(lpChunk + 8);
+    if (luRecordCount == 0 || luRecordCount > 4096u || luRecArrOff == 0 ||
+        (luSize != 0 && luRecArrOff + luRecordCount * 8u > luSize))
         return nullptr;
 
-    // The file pointer table is 8-byte-strided (native-8 fork): entry k at fileTableOff + k*8.
-    for (uint32_t lu = 0; lu < luNumFiles; ++lu)
+    const uint64_t* const lpRecords =
+        reinterpret_cast<const uint64_t*>(luBase + luRecArrOff);
+    for (uint32_t lu = 0; lu < luRecordCount; ++lu)
     {
-        const uint32_t luEntryOff = luFileTableOff + lu * 8u;
-        if (luSize != 0 && luEntryOff + 4u > luSize)
-            break;
-        const uint32_t luFileOff = *reinterpret_cast<const uint32_t*>(luBase + luEntryOff);
-        if (luFileOff == 0 || (luSize != 0 && luFileOff + 12u > luSize))
+        const uint64_t luFileOff = lpRecords[lu];
+        if (luFileOff == 0 || (luSize != 0 && luFileOff + 16u > luSize))
             continue;
-        // GuiGeometryFile {u32 id, u32 numMeshes, u32 meshTableOff}.
-        const uint32_t luFileId = *reinterpret_cast<const uint32_t*>(luBase + luFileOff);
-        if (static_cast<int32_t>(luFileId) == nCharacterId)
+        CgsResource::GuiGeometryFile* const lpFile =
+            reinterpret_cast<CgsResource::GuiGeometryFile*>(luBase + luFileOff);
+        if (lpFile->muID == static_cast<uint32_t>(nGeometryId))
         {
-            // Rebase the file's internal offset tables (mesh table, mesh vertex tables) offset->pointer
-            // in place BEFORE handing it to the render walk -- the console runs GuiGeometryObject::FixUp
-            // at load; on our .apt path the geometry is embedded (never FixUp'd), so this native-8 fork
-            // does the same descend. Idempotent, so a shared file is rebased once.
-            CgsResource::GuiGeometryFile* const lpFile =
-                reinterpret_cast<CgsResource::GuiGeometryFile*>(luBase + luFileOff);
             AptFixupGeometryFileNative8(lpFile, luBase, luSize);
-            return lpFile;   // the matching GuiGeometryFile* (internal tables now live pointers)
+            return lpFile;
         }
     }
-    return nullptr;   // no geometry file for this character id -> no rendering unit (safe)
+    return nullptr;   // no geometry record for this id -> no rendering unit (safe)
 }
 
 // Fixup @0x82AFF268 (PS3 @0xF44D40) -- relocate the serialised movie root IN PLACE.
@@ -651,7 +637,14 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
                 // 0 vertices -- so this resolves a real, in-range GuiGeometryFile* that draws nothing; a
                 // future bundle with real shape vertices renders unchanged.)
                 {
-                    void* const lpUnit = AptResolveShapeGeometry(pBlock, i);   // pfnLoadRenderingUnit(pBlock, i)
+                    // The shape's own geometry id (the +0x30 pointer-width field the
+                    // converter writes) keys the geometry store -- NOT the character
+                    // index (the old bug; libapt2 Shape::Parse reads geometryId via
+                    // ReadPointer and GetGeometry(id) resolves with it).
+                    const uint32_t luGeomId = static_cast<uint32_t>(
+                        *reinterpret_cast<const uint64_t*>(pChar + 0x30));
+                    void* const lpUnit = AptResolveShapeGeometry(
+                        pBlock, static_cast<int32_t>(luGeomId));
                     *reinterpret_cast<void**>(pChar + 0x20) = lpUnit;
                 }
                 break;
