@@ -124,7 +124,6 @@ AptValueVector* gpAptDeferredReleaseVector  = nullptr;   // off_8324E51C
 //    is zero-initialized, faithful to the console .data object the engine inits.
 // ===========================================================================
 AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
-AptActionInterpreter gApt_Interpreter;        // the AptCharacterTextInst alias of the VM
 
 // FLAG: gAptValueGCPool (off_8324D834) is the live-AptValue pool manager. It has
 // NO default ctor (only the 2-arg DOGMA-forwarding ctor), so it is constructed
