@@ -140,8 +140,8 @@
 
 struct AptDragState;  // FLAG fwd-decl (pointer-only use)
 
-    AptCharacter* AptResolveFontGlyph(AptCharacter* pFontChar, int nGlyphIndex) { return nullptr; }   // FLAG link-stub
-    AptCharacter* AptResolveTextFontCharacter(AptCharacter* pFontOwner, int nFontIndex) { return nullptr; }   // FLAG link-stub
+    // AptResolveFontGlyph RETIRED (2026-07-02): homed in AptRenderItemStaticText.cpp.
+    // AptResolveTextFontCharacter RETIRED (2026-07-02): homed in AptRenderItemStaticText.cpp.
     // findCharacterInLibrary RETIRED (2026-07-02): homed in
     // AptCIHNativeFunctionHelper.cpp (the X360 @0x82AFDF58 parent-chain
     // export/import library resolve).
