@@ -14,6 +14,20 @@ namespace BrnGui
 {
     struct OnlineQuickCustomCreate : public CgsGui::State
     {
+        // DWARF BrnOnlineQuickCustomCreate.h:24 -- the three main-menu options.
+        enum EMainMenuOptions
+        {
+            E_MAIN_MENU_OPTIONS_QUICK_MATCH  = 0,
+            E_MAIN_MENU_OPTIONS_CUSTOM_MATCH = 1,
+            E_MAIN_MENU_OPTIONS_CREATE_MATCH = 2,
+            E_MAIN_MENU_OPTIONS_COUNT        = 3,
+        };
+
+        // ADDITIVE GROW (the freeburn flavour's override @0x82487458 pins the vtable
+        // slot): dispatch the picked main-menu option. The base body is its own
+        // ledger function (declaration-only here).
+        virtual void ProcessSelectedMenuOption(EMainMenuOptions leOption);
+
         // @ 0x825005A0 - hands this screen's static resource list to the loader
         // (X360: *r4 = &maResourcesToLoad; *r5 = muNumResourcesToLoad, count = 2).
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
