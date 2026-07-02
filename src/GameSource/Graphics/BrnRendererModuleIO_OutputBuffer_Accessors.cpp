@@ -136,21 +136,21 @@ BrnEffectsFrame* OutputBuffer::GetBaseEffectsFrame() const
 }
 
 // X360 0x823B3C38: read-lock handle to a world effects frame. X360 range-asserts the slot (<4)
-// ahead of the lock check, then returns mapWorldEffectsFrames[liSlot] (word 10+slot).
-BrnEffectsFrame* OutputBuffer::GetWorldEffectsFrame(s32 liSlot) const
+// ahead of the lock check, then returns mapWorldEffectsFrames[luSlot] (word 10+slot).
+BrnEffectsFrame* OutputBuffer::GetWorldEffectsFrame(u8 luSlot) const
 {
-    CGS_ASSERT(liSlot < 4, "Invalid slot for Fx Layer");
+    CGS_ASSERT(luSlot < 4, "Invalid slot for Fx Layer");
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-    return mapWorldEffectsFrames[liSlot];
+    return mapWorldEffectsFrames[luSlot];
 }
 
 // X360 0x823B3D10: read-lock handle to an FX-events effects frame. X360 range-asserts the slot (<2)
-// ahead of the lock check, then returns mapFXEventsEffectsFrames[liSlot] (word 14+slot).
-BrnEffectsFrame* OutputBuffer::GetFXEventsEffectsFrame(s32 liSlot) const
+// ahead of the lock check, then returns mapFXEventsEffectsFrames[luSlot] (word 14+slot).
+BrnEffectsFrame* OutputBuffer::GetFXEventsEffectsFrame(u8 luSlot) const
 {
-    CGS_ASSERT(liSlot < 2, "Invalid slot for Fx Layer");
+    CGS_ASSERT(luSlot < 2, "Invalid slot for Fx Layer");
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-    return mapFXEventsEffectsFrames[liSlot];
+    return mapFXEventsEffectsFrames[luSlot];
 }
 
 // X360 0x823B3DE8: read-lock handle to the shader-constants frame.
@@ -268,21 +268,21 @@ void OutputBuffer::SetBaseEffectsFrame(BrnEffectsFrame* lpFrame)
 }
 
 // X360 0x823FB448: write-lock store of a world effects frame. X360 range-asserts the slot (<4)
-// ahead of the lock check, then writes mapWorldEffectsFrames[liSlot] (word 10+slot).
-void OutputBuffer::SetWorldEffectsFrame(s32 liSlot, BrnEffectsFrame* lpFrame)
+// ahead of the lock check, then writes mapWorldEffectsFrames[luSlot] (word 10+slot).
+void OutputBuffer::SetWorldEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 {
-    CGS_ASSERT(liSlot < 4, "Invalid slot for Fx Layer");
+    CGS_ASSERT(luSlot < 4, "Invalid slot for Fx Layer");
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    mapWorldEffectsFrames[liSlot] = lpFrame;
+    mapWorldEffectsFrames[luSlot] = lpFrame;
 }
 
 // X360 0x823FB528: write-lock store of an FX-events effects frame. X360 range-asserts the slot (<2)
-// ahead of the lock check, then writes mapFXEventsEffectsFrames[liSlot] (word 14+slot).
-void OutputBuffer::SetFXEventsEffectsFrame(s32 liSlot, BrnEffectsFrame* lpFrame)
+// ahead of the lock check, then writes mapFXEventsEffectsFrames[luSlot] (word 14+slot).
+void OutputBuffer::SetFXEventsEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 {
-    CGS_ASSERT(liSlot < 2, "Invalid slot for Fx Layer");
+    CGS_ASSERT(luSlot < 2, "Invalid slot for Fx Layer");
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    mapFXEventsEffectsFrames[liSlot] = lpFrame;
+    mapFXEventsEffectsFrames[luSlot] = lpFrame;
 }
 
 // X360 0x823FB608: write-lock store of the shader-constants frame.
