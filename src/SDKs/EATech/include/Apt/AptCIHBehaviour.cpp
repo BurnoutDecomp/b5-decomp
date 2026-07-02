@@ -36,6 +36,7 @@
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"         // gAptActionInterpreter (the clip-event immediate run)
 #include "SDKs/EATech/include/Apt/AptScriptFunctionByteCodeBlock.h" // the onLoad/onUnload block wrapper
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"            // findChild / getIsDefined
+#include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"      // the operand-stack pop (the unload-call tail)
 
 
 #include <cmath>   // sqrtf
@@ -51,6 +52,12 @@ void AptApt_RemoveActionFor(AptCIH* pNode);
 // The "null input" context id queueClipEvents stamps on an enterFrame enqueue
 // (console gNullInput; defined in AptGlobals.cpp).
 extern int gAptNullInputId;
+
+// The undefined singleton (off_8324D814) the cleared event slots reset to.
+extern AptValue* gpUndefinedValue;
+
+// The shutdown flag (byte_8324E7C9) gating the unload-event tail.
+extern unsigned char gbAptInShutdown;
 
 // The process-wide AS action interpreter (off_8324E760; defined in AptGlobals.cpp).
 extern AptActionInterpreter gAptActionInterpreter;
@@ -1683,6 +1690,114 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
 // the director / input target hold it in, runs the unload-event + zombie/GC tail, and
 // returns nonzero when the node became a zombie (so ClearCIH skips the immediate free).
 int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool bClearGCRoots);
+
+// AptCIH_ClearCIH_DrainQueuesAndZombie -- the ClearCIH head/tail sub-sections
+// (HOMED 2026-07-02 from the X360 body @0x82AF6020; was the return-0 link-stub,
+// which left cleared nodes dangling in the director's sets/tables -- the bulk
+// removeObject path under mergeState walked them freed):
+//   * DRAIN: remove the node from the director's input set (sub_82ADBD50) +
+//     listener set (__::remove), clear the press/rollover event slots to the
+//     undefined singleton when they point at it, and scrub it out of the shared
+//     new-instances table (Release + null the slot).
+//   * UNLOAD TAIL (skipped in shutdown): a sprite(5)/custom-control(16) node
+//     with an unload handler (record bit 0x400 or a __proto__ member for mask
+//     4) queues its unload clip events and -- when an AS-defined onUnload
+//     handler resolves (findChild &saConstant[69], a defined function value,
+//     vtbl 34..36) -- calls it immediately through the interpreter.
+//   * ZOMBIE decision: FLAG (staged) -- the console then keeps an externally
+//     referenced 0x24-family node alive as an AS-visible zombie (clear its
+//     child display list + hash data, SetReleaseAtEnd, push onto the
+//     off_8324E528 zombie vector, state -> 0x20000000, swap the render item
+//     type to 5, fire the dword_8324E8C8 render-tree hook, return 1). The
+//     zombie vector + hook are un-homed; returning 0 keeps the immediate-free
+//     path, which is memory-safe (queued references hold their own counts).
+int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
+{
+    // ---- the director-set / event-slot / new-inst DRAIN --------------------
+    AptAnimationTarget* const pDir =
+        (gpAptTarget != nullptr) ? gpAptTarget->mpAnimationTarget : nullptr;
+    if (pDir != nullptr)
+    {
+        // sub_82ADBD50(&director->mInputSet, node): find + clear + Release.
+        for (uint32_t i = 0; i < pDir->mInputSet.mnCapacity; ++i)
+        {
+            if (pDir->mInputSet.mppSlots != nullptr &&
+                reinterpret_cast<AptCIH*>(pDir->mInputSet.mppSlots[i]) == pNode)
+            {
+                pDir->mInputSet.mppSlots[i] = nullptr;
+                pNode->Release();
+                break;
+            }
+        }
+        // The press / roll-over event slots reset to the undefined singleton.
+        if (reinterpret_cast<AptCIH*>(pDir->mpOnPressObject) == pNode)
+            pDir->mpOnPressObject = gpUndefinedValue;
+        if (reinterpret_cast<AptCIH*>(pDir->mpOnRollOverObject) == pNode)
+            pDir->mpOnRollOverObject = gpUndefinedValue;
+        // __::remove(&director->mListenerSet, node): same slot scrub (the
+        // listener adds do not AddRef -- the console remove releases nothing).
+        for (uint32_t i = 0; i < pDir->mListenerSet.mnCapacity; ++i)
+        {
+            if (pDir->mListenerSet.mppSlots != nullptr &&
+                reinterpret_cast<AptCIH*>(pDir->mListenerSet.mppSlots[i]) == pNode)
+            {
+                pDir->mListenerSet.mppSlots[i] = nullptr;
+                break;
+            }
+        }
+    }
+
+    // The shared new-instances table: Release + null every slot holding the node.
+    {
+        AptValue** const ppInsts =
+            static_cast<AptValue**>(AptAnimationTarget::GetNewInsts());
+        const int nCount = AptAnimationTarget::GetNewInstSize();
+        for (int i = 0; ppInsts != nullptr && i < nCount; ++i)
+        {
+            if (reinterpret_cast<AptCIH*>(ppInsts[i]) == pNode)
+            {
+                pNode->Release();     // (*(*v11 + 4))()
+                ppInsts[i] = nullptr;
+            }
+        }
+    }
+
+    // ---- the unload-event tail (skipped during shutdown) --------------------
+    if (!gbAptInShutdown)
+    {
+        AptCharacterInst* const pInst = pNode->GetCharacterInst();
+        const uint32_t nTag = (pInst != nullptr) ? pInst->GetTypeTag() : 0u;
+        if (nTag == 5u || nTag == 16u)
+        {
+            AptCharacterSpriteInstBase* const pSprite =
+                static_cast<AptCharacterSpriteInstBase*>(pInst);
+            if ((pSprite->mnClipActionFlags & 0x400u) != 0u ||
+                pNode->HasEventMember(4) != 0)
+            {
+                pNode->queueClipEvents(4, 0, 0);
+                // findChild(&saConstant[69] == the interned "onUnload" key).
+                AptValue* const pChild =
+                    pNode->findChild(&StringPool::saConstant[69], nullptr);
+                if (pChild != nullptr && pChild->getIsDefined())
+                {
+                    // A callable function value (vtbl indices 34..36).
+                    const int nVtbl = static_cast<int>(pChild->getVtblIndex());
+                    if (nVtbl >= 34 && nVtbl <= 36)
+                    {
+                        gAptActionInterpreter.callFunction(
+                            static_cast<AptValue*>(pNode), pChild, 0, nullptr, nullptr);
+                        // Pop the call result off the operand stack.
+                        reinterpret_cast<AptValueVector*>(
+                            &gAptActionInterpreter.mnStackTop)->pop();
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- the zombie decision: FLAG (staged) -- see the header note ----------
+    return 0;
+}
 
 void AptCIH::ClearCIH(bool bClearGCRoots)
 {
