@@ -263,6 +263,58 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
 }
 
 // ---------------------------------------------------------------------------
+// AptInterp_BuildTargetPath -- the recursive display-path builder (X360
+// sub_82AF7400) behind AptActionInterpreter::getName @0x82AF75C8 (HOMED
+// 2026-07-02, retiring the {} stub). Walks up the display-parent chain: the
+// ROOT frame (no parent) renders as "_level%d" of its render-item depth (a
+// dotted build always writes it; the slash form only when the depth is
+// non-zero); every child level appends the separator ("." or "/") plus its
+// instance name -- or "instance%ld" of its depth when the name is the shared
+// empty string.
+// ---------------------------------------------------------------------------
+static void AptInterp_BuildTargetPath(AptCIH* pNode, EAStringC* pOut, int bDots)
+{
+    const char* const pSep = bDots ? "." : "/";
+
+    AptCIH* const pParent = pNode->GetDisplayListParent();
+    if (pParent == nullptr)
+    {
+        const int nDepth = pNode->GetCharacterInst()->GetRenderItem()->GetDepth();
+        if ((bDots == 0 && nDepth != 0) || bDots == 1)
+        {
+            EAStringC lLevel;
+            lLevel.Format("_level%d", nDepth);
+            *pOut = lLevel;
+        }
+        return;
+    }
+
+    AptInterp_BuildTargetPath(pParent, pOut, bDots);
+
+    const EAStringC& rName = pNode->GetInstanceName();
+    if (!rName.IsEmpty())
+    {
+        *pOut += (pSep + rName);   // the free operator+(const char*, EAStringC)
+    }
+    else
+    {
+        const int nDepth = pNode->GetCharacterInst()->GetRenderItem()->GetDepth();
+        *pOut += pSep;
+        EAStringC lInst;
+        lInst.Format("instance%ld", static_cast<long>(nDepth));
+        *pOut += lInst;
+    }
+}
+
+// AptActionInterpreter::getName @0x82AF75C8 -- clear the out-string, then
+// build the dotted target path of pNode ("_level0.child.instance3"-style).
+void AptActionInterpreter_getName(AptCIH* pNode, EAStringC* pOut)
+{
+    *pOut = EAStringC("");
+    AptInterp_BuildTargetPath(pNode, pOut, 1);
+}
+
+// ---------------------------------------------------------------------------
 // AptCIH_ShapeHitTest (HOMED 2026-07-02, retiring the return-0 stub). The
 // X360 sMethod_hitTest's shape-precise arm @0x82AED868 is a HOST-CALLBACK
 // dispatch: `gAptFuncs.pfnPointHitTest(x, y, node)` (dword_8324E8A4 == the
