@@ -1339,6 +1339,7 @@ int AptAnimationTarget::RunActions()
         lpQueue->mpCurItem = lpSlot;                     // v2[3] = v3
 
 
+
         if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_ACTION)   // *v3 == 1
         {
             // Stamp the interpreter's "current event id" scratch with the slot's
@@ -1406,12 +1407,21 @@ int AptAnimationTarget::RunActions()
                                     {
                                         break;
                                     }
-                                    lpLevel = reinterpret_cast<AptValue*>(
-                                        reinterpret_cast<AptCIH*>(lpLevel)->mpDisplayListParent);  // CIH word[7]
-                                    lpWalkInst = reinterpret_cast<AptCIH*>(lpLevel)->mpCharacterInst;
+                                    AptCIH* lpParent =
+                                        reinterpret_cast<AptCIH*>(lpLevel)->mpDisplayListParent;   // CIH word[7]
+                                    if (lpParent == nullptr)
+                                    {
+                                        // Broken/partial parent linkage (the console chain always
+                                        // reaches the type-9 root; our bring-up's torn or partially
+                                        // linked nodes may not): stop at the last valid level.
+                                        break;
+                                    }
+                                    lpLevel = reinterpret_cast<AptValue*>(lpParent);
+                                    lpWalkInst = lpParent->mpCharacterInst;
                                 }
                             }
-                            lpScope = reinterpret_cast<AptCIH*>(lpLevel)->mpCharacterInst;    // v12 = *(AnimationAtLevel+32)
+                            lpScope = (lpLevel != nullptr)
+                                ? reinterpret_cast<AptCIH*>(lpLevel)->mpCharacterInst : nullptr;   // v12 = *(AnimationAtLevel+32)  (null-guarded: the level path may miss)
                         }
 
                         // The queued slot holds the ADDRESS of the command record's
@@ -1422,11 +1432,22 @@ int AptAnimationTarget::RunActions()
                         const unsigned char* lpStream =
                             *static_cast<const unsigned char* const*>(
                                 lpSlot->action.mpEventStreamSlot);   // v4_arg = *(*(v3+12))
+                        // FLAG (converter data boundary): a straddled/unrelocated stream
+                        // slot (see queueFrameActions' enqueue guard) -- skip the run
+                        // rather than hand runStream a wild PC. Belt-and-braces with the
+                        // enqueue-side guard (clip-event slots arrive by another path).
+                        const uintptr_t luRunStream = reinterpret_cast<uintptr_t>(lpStream);
+                        const bool lbRunStreamSane =
+                            luRunStream >= 0x10000u && (luRunStream >> 47) == 0u &&
+                            (luRunStream & 0xFFFFFFFFull) != 0u;
+                        if (lbRunStreamSane)
+                        {
                         gAptActionInterpreter.runStream(
                             lpStream,
                             reinterpret_cast<AptCIH*>(lpSlot->action.mpCIH),          // *(v3+16)
                             -1,
                             lpScope);
+                        }
 
                         // CleanupAfterExecution(savedScratch=v7, localState=v19): the
                         // recovered class method takes only the saved per-call state, so

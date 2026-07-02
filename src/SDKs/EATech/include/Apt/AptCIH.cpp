@@ -397,6 +397,7 @@ int AptCIH::jumpToFrame(int nFrame)
 // yet, so this faithful body is NOT ticked at boot: the host driver holds it off
 // (BrnAptRuntimeBringUp AptRuntimeUpdate: lbTickReady=false) until the converter delivers
 // a uniformly-64-bit bundle. The body below is the single faithful X360 decompile.
+
 int AptCIH::tick()
 {
     // Only a dirtied node ticks (mFlagsA bit25).
@@ -405,6 +406,7 @@ int AptCIH::tick()
 
     AptCharacterSpriteInstBase* pInst =
         static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);   // v6 = *(a1+32)
+
 
     // Only sprite(5)/animation(9) clips have a play-head (v6[2] >> 26 == 5 or 9).
     const uint32_t nType = pInst->GetTypeTag();

@@ -571,7 +571,18 @@ AptMovie* AptMovie::queueFrameActions(void* pCIH, int nFrame)
         // @+0x0C -- both real members now). The queued "event id" is the ADDRESS of the
         // command's action-stream pointer slot: console cmd+0x04; native-8 cmd+0x08 (the slot
         // resolve64 relocated + _parseStream parsed). RunActions dereferences it at drain time.
-        if (gpAptTarget != nullptr && gpAptTarget->mpAnimationTarget != nullptr
+        // FLAG (converter data boundary -- the same 4-byte-straddle family as the
+        // malformed frame tables): a deep-nested movie's tag-1 record can carry a
+        // never-relocated/shifted stream slot (observed *slot == 0x2_00000000).
+        // Skip the enqueue for an implausible stream pointer -- the drain would
+        // dereference it into a wild runStream PC.
+        const uintptr_t luStream = *reinterpret_cast<const uintptr_t*>(
+            static_cast<char*>(pCmd) + 0x08);
+        const bool lbStreamSane =
+            luStream >= 0x10000u && (luStream >> 47) == 0u &&
+            (luStream & 0xFFFFFFFFull) != 0u;
+        if (lbStreamSane
+            && gpAptTarget != nullptr && gpAptTarget->mpAnimationTarget != nullptr
             && gpAptTarget->mpAnimationTarget->mpActionQueue != nullptr)
         {
             gpAptTarget->mpAnimationTarget->mpActionQueue->AddActionBack(
