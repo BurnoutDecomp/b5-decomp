@@ -80,6 +80,13 @@ namespace BrnDirector
         ActualPrint(lrMoment.GetName(), luColour);
     }
 
+    // X360 0x8224EE00 (class:BrnDirector::DebugLog TU). Resolve the moment's display
+    // name through its live vtable (slot 6, `lwz r11,0x18(vtbl); bctrl`) and append it.
+    void DebugLog::AppendName(const Moment& lrMoment, CgsDev::RGBA lRGBA)
+    {
+        ActualAppend(lrMoment.GetName(), lRGBA);
+    }
+
     // X360 0x8221BAC8. Replay every live pool entry, in mStringIndices order, through the printer's
     // private ActualPrint(text, colour) path.
     void DebugLog::Print(DebugPrinter& lrDebugPrinter)

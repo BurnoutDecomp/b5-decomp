@@ -33,9 +33,10 @@
 // word-aligned). All access is by name; the fixed string regions are named char buffers.
 //
 // Only the X360-ATTESTED methods are declared (Construct / SetText / SetColour /
-// SetLocalisedText / OutputAptData / operator=, per the X360 ledger). The PS3-DWARF-only
-// helpers (GetText / RefreshText / ClearText / Scroll* / ResetScroll / SetAutoSize /
-// SetDatabaseText) are intentionally omitted -- they are not in the X360 ledger.
+// SetLocalisedText / SetDatabaseText / OutputAptData / operator=, per the X360 ledger --
+// SetDatabaseText @0x824E5020 IS X360-emitted; an earlier revision of this note wrongly
+// listed it as PS3-only). The remaining PS3-DWARF-only helpers (GetText(non-inline) /
+// RefreshText / Scroll* / ResetScroll / SetAutoSize) stay omitted.
 // ===================================================================================
 
 #include "types.hpp"
@@ -75,6 +76,12 @@ namespace BrnGui
         // database id. Returns whether the lookup succeeded. Body links from the BrnTextField TU.
         bool SetLocalisedText(const char* lpacText,
                               CgsLanguage::LanguageManager::ParameterFormatType leFormat);
+
+        // @0x824E5020 (BrnTextField.cpp:100, DWARF h:191) -- adopt already-resolved text:
+        // strings that fit go straight into macText; over-long strings are registered in
+        // the localisation database under this component's name and displayed as the
+        // "$<name>" database key. Body links from the BrnTextField TU.
+        void SetDatabaseText(const char* lpcActualText);
 
         // @0x824E52B8 (BrnTextField.cpp:511) -- push the field's current contents to its bound
         // apt clip. Body links from the BrnTextField TU.

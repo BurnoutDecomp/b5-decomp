@@ -32,3 +32,8 @@
 
 template int  CgsContainers::ObjectPool<BrnDirector::DebugLog::LogString, 20, int>::AllocateObject();
 template void CgsContainers::ObjectPool<BrnDirector::DebugLog::LogString, 20, int>::FreeObject(int);
+// operator[] @0x82211048 (class:BrnDirector::DebugLog TU; the IDA symbol is the
+// truncated instantiation name "DebugLog::LogSt..."): bounds tripwire
+// (CgsObjectPool.h:218), the streamed BitArray<20> index guard (CgsBitArray.h:203),
+// the allocated-bit check (:219), then &pool[72 * index] -- the committed generic.
+template BrnDirector::DebugLog::LogString& CgsContainers::ObjectPool<BrnDirector::DebugLog::LogString, 20, int>::operator[](int);
