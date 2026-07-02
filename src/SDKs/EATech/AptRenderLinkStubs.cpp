@@ -145,7 +145,7 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSearchImports) { return nullptr; }   // FLAG link-stub
     AptDragState* AptApt_GetDragState() { return nullptr; }   // FLAG link-stub
     AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStringC* pName) { return nullptr; }   // FLAG link-stub
-    AptFrameStack* AptScriptFunctionBase_GetActiveFrameStack() { return nullptr; }   // FLAG link-stub
+    // AptScriptFunctionBase_GetActiveFrameStack RETIRED (2026-07-02): homed in AptFrameStack.cpp.
     AptNativeHash* AptValue_EmbeddedNativeHash(AptValue* pValue) { return nullptr; }   // FLAG link-stub
     AptNativeHash* AptInterp_GetNodeFrameContextHash(AptValue* pContext) { return nullptr; }   // FLAG link-stub
     AptTextFormat* AptTextFormat_ConstructDefault(void* pBlock, AptValue* pSource, double dArg) { return nullptr; }   // FLAG link-stub
@@ -156,8 +156,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptCIH_gotoAndX RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
     // (the real AptCIH::_gotoAndX @0x82B0D2F0 -- label/frame goto core).
     AptValue* AptExtern_GetMember(const char* szName) { return nullptr; }   // FLAG link-stub
-    AptValue* AptInterp_FrameStackFirstLocal(AptValue* pFrameStack) { return nullptr; }   // FLAG link-stub
-    AptValue* AptInterp_LookupScopeChain(AptActionInterpreter* pInterp, const EAStringC* pName) { return nullptr; }   // FLAG link-stub
+    // AptInterp_FrameStackFirstLocal RETIRED (2026-07-02): homed in AptArray.cpp (a tag-14 ARRAY's first element).
+    // AptInterp_LookupScopeChain RETIRED (2026-07-02): homed in AptFrameStack.cpp (spFrameStack->GetInScopeChain).
     // AptUpdateZombieVector RETIRED (2026-07-02): homed in AptGC.cpp (the real
     // reap over gpAptZombieVector -- XB1 sub_140830A40; the vector itself is
     // allocated by AptUpdateInitialize from config word 14). The old "absent

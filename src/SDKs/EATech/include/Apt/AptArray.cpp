@@ -853,3 +853,18 @@ void AptValue_AptArrayToString(AptArray* pArray, EAStringC* pOut, const char* pS
 {
     pArray->toString(pOut, pSeparator);
 }
+
+// ===========================================================================
+// AptInterp_FrameStackFirstLocal (HOMED 2026-07-02, retiring the stub null).
+// Misnomer kept for the call-site contract: the CallFunction opcode's tag-14
+// operand is an AptARRAY (the console reads value[10] = mnLength and
+// *value[8] = mpArray[0]); a non-empty array's first element is the captured
+// function value, null otherwise.
+// ===========================================================================
+AptValue* AptInterp_FrameStackFirstLocal(AptValue* pValue)
+{
+    AptArray* const pArray = static_cast<AptArray*>(pValue);
+    if (pArray->mnLength > 0 && pArray->mpArray != nullptr && pArray->mpArray[0] != nullptr)
+        return pArray->mpArray[0];
+    return nullptr;
+}

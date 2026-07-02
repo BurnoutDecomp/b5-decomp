@@ -127,3 +127,27 @@ bool AptFrameStack::SetWhereExistsInScopeChain(const EAStringC& key, AptValue* p
     }
     return false;
 }
+
+// ===========================================================================
+// The interpreter-facing frame-stack glue (HOMED 2026-07-02, retiring the
+// AptRenderLinkStubs nulls).
+// ===========================================================================
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // spFrameStack
+
+// AptInterp_LookupScopeChain -- getVariable's function-local arm. The X360
+// getVariable @0x82B03550 loads spFrameStack (off_8324E3DC), null-checks it,
+// and calls AptFrameStack::GetInScopeChain (the innermost-outward locals walk).
+class AptActionInterpreter;   // fwd (the interp arg is unused; X360 reads the static)
+AptValue* AptInterp_LookupScopeChain(AptActionInterpreter* /*pInterp*/,
+                                     const EAStringC* pName)
+{
+    AptFrameStack* const pFrame = AptScriptFunctionBase::GetActiveFrameStack();
+    return pFrame ? pFrame->GetInScopeChain(*pName) : nullptr;
+}
+
+// AptScriptFunctionBase_GetActiveFrameStack -- the de-inlined static getter
+// (off_8324E3DC) the render-link cluster called through a shim.
+AptFrameStack* AptScriptFunctionBase_GetActiveFrameStack()
+{
+    return AptScriptFunctionBase::GetActiveFrameStack();
+}
