@@ -169,7 +169,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptValue_GetMCParent RETIRED (2026-07-02): the shim was a reconstruction
     // invention -- the shipped isMCInParentChain @0x82AD8458 walks
     // GetNativeHashVirtual()->mp__Proto__ directly (corrected in AptValue.cpp).
-    bool         isNaN(AptValue* pValue) { return false; }   // FLAG link-stub
+    // isNaN RETIRED (2026-07-02): homed in AptActionInterpreterBuiltins.cpp
+    // (the full @0x82AF9768 ECMA-ish NaN classification incl. the SWF7 arm).
     bool AptLinker_isFileImported(AptLinker* pLinker, AptFilePtr* ppCandidate) { return false; }   // FLAG link-stub
     const char*    AptResolveTextFieldFontName(AptCharacterInst* pTextInst) { return nullptr; }   // FLAG link-stub
     float        Apt_atoff(const char* pStr) { return 0; }   // FLAG link-stub
