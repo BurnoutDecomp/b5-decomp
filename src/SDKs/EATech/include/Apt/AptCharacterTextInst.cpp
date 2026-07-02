@@ -36,10 +36,10 @@
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"          // EAStringC
 #include "SDKs/EATech/include/Apt/AptCIH.h"                       // the scope node (display list)
 
-// FLAG: the single global ActionScript interpreter instance (console module-static
-// at dword_8324E760; this object IS the `this` the X360 passes to getVariable /
-// setVariable). Wired by the Apt runtime startup (AptInit); defined elsewhere.
-extern AptActionInterpreter gApt_Interpreter;
+// The single global ActionScript interpreter instance (console module-static at
+// &dword_8324E760; this object IS the `this` the X360 passes to getVariable /
+// setVariable). Defined in AptGlobals.cpp, initialize()d by AptInit.
+extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 
 // ---------------------------------------------------------------------------
 // own cached layout scalars -- the trivial direct reads/writes are inline in the
@@ -178,7 +178,7 @@ void AptCharacterTextInst::SetText(AptCIH* pScope)
         }
     }
 
-    AptValue* pVariable = gApt_Interpreter.getVariable(pNode, 0, &rVarName, 1, 1, 0);
+    AptValue* pVariable = gAptActionInterpreter.getVariable(pNode, 0, &rVarName, 1, 1, 0);
 
     if (pVariable->getIsDefined())
     {
@@ -201,7 +201,7 @@ void AptCharacterTextInst::SetText(AptCIH* pScope)
 
         *GetTextItemWritable()->GetTextValueWritable() = *pSeed->GetInternalString();
 
-        gApt_Interpreter.setVariable(pNode, 0, &rVarName, pSeed, 1, 1, 0);
+        gAptActionInterpreter.setVariable(pNode, 0, &rVarName, pSeed, 1, 1, 0);
     }
 }
 
@@ -236,7 +236,7 @@ void AptCharacterTextInst::UpdateText(AptCIH* pScope)
         }
     }
 
-    AptValue* pVariable = gApt_Interpreter.getVariable(pNode, 0, &rVarName, 1, 1, 0);
+    AptValue* pVariable = gAptActionInterpreter.getVariable(pNode, 0, &rVarName, 1, 1, 0);
 
     if (pVariable->getIsDefined())
     {
