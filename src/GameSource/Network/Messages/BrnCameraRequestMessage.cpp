@@ -56,6 +56,7 @@ namespace BrnNetwork
 
         *lpbReleaseFeed = mbReleaseFeed;
         mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, "!CgsNetwork::ReliableMessage::IsMessageValid()");
         return true;
     }
 }

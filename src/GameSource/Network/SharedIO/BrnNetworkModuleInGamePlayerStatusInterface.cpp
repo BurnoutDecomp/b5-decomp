@@ -1,5 +1,4 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"
-#include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData::Clear      @ 0x823555A8
@@ -16,26 +15,26 @@ namespace BrnNetwork
     namespace BrnNetworkModuleIO
     {
         // Resets one player's in-game status record to its empty defaults: the player
-        // stats sub-object is cleared, the live-revenge relationship and name are zeroed,
-        // and every id / active-race-car index is set to "none" (-1) with the status
-        // enums returned to their defaults.
+        // stats sub-object is cleared, the live-revenge relationship is zeroed, the name
+        // buffer is emptied (only macName[0] is null-terminated -- the X360 asm stores a
+        // single zero byte at +256, NOT a full 16-byte clear of PlayerName), and every
+        // id / active-race-car index is set to "none" (-1) with the status enums returned
+        // to their defaults. meDistrict/mbIsHost/mbIsLocalPlayer/mbIsInLocalGameWorld are
+        // NOT touched here -- the X360 asm (0x823555A8) never stores to +296/+301/+302/+303
+        // in this function, so those fields retain their prior value.
         void InGamePlayerStatusData::Clear()
         {
+            mPlayerName.macName[0]        = 0;                                   // +256 (single byte, not a full memset)
             mNetworkPlayerID              = -1;                                  // +272
             meActiveRaceCarIndex          = E_ACTIVE_RACE_CAR_NONE;              // +276
             meVOIPStatus                  = 0;                                   // +280
             meCameraStatus                = static_cast<ECameraStatus>(KI_CAMERA_STATUS_DEFAULT); // +284
             mMarkedManPlayerID            = -1;                                  // +288
             meMarkedManActiveRaceCarIndex = E_ACTIVE_RACE_CAR_NONE;              // +292
-            meDistrict                    = 0;                                   // +296
-            mbMarkedMan                   = false;
-            mbIsHost                      = false;
-            mbIsLocalPlayer               = false;
-            mbIsInLocalGameWorld          = false;
+            mbMarkedMan                   = false;                               // +300
 
             mPlayerStats.Clear();
             mLiveRevengeRelationship.Construct();
-            std::memset(&mPlayerName, 0, sizeof(mPlayerName));
         }
 
         // X360 0x823628C8 (ledger stub "InGamePl").

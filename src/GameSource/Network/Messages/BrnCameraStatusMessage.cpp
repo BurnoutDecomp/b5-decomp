@@ -1,7 +1,5 @@
 #include "types.hpp"
 
-#include "GameSource/World/DebugComponents/BrnPVSDebugComponent.h"
-
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::CameraStatusMessage::Construct            @ 0x8257AD20
 //   BrnNetwork::CameraStatusMessage::GetPackedMessageSize @ 0x8257C378
@@ -56,7 +54,15 @@ namespace BrnNetwork
 
     int CameraStatusMessage::PackOrUnpack()
     {
-        u8 lbIsSimple = reinterpret_cast<BrnWorld::PVSDebugComponent*>(this)->IsSimple() ? 1 : 0;
+        // asm calls BrnWorld__PVSDebugComponent__IsSimple with `this` as the argument, but
+        // CameraStatusMessage does not derive from PVSDebugComponent (whose IsSimple() is
+        // `protected` besides). The X360 linker identical-code-folds trivial `return false`
+        // leaf functions together; this call site landed on PVSDebugComponent::IsSimple's
+        // address purely by ICF, not by any real relationship. IsSimple()'s body is a
+        // constant `return false` (BrnPVSDebugComponent.h:102), so the call's observable
+        // result -- 0 -- is reproduced directly rather than performing the (illegal, and
+        // semantically bogus) cross-class cast.
+        u8 lbIsSimple = 0;
 
         int liField = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(this) + 32);
         int liResult = PackField(this, &liField, 0, 4) | lbIsSimple;
