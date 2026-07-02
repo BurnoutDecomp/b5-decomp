@@ -156,7 +156,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptIntervalTimer.cpp (the X360 cbCallMethod_setInterval @0x82B019D8 body).
     // AptApt_DeriveFunctionAnimation RETIRED (2026-07-01): homed in AptScriptFunctionBase.cpp
     // (== AptCIH::GetRootAnimation, the enclosing-timeline walk).
-    AptValue* AptApt_GetRootContext() { return nullptr; }   // FLAG link-stub
+    // AptApt_GetRootContext RETIRED (2026-07-02): homed in
+    // AptActionInterpreterContext.cpp (== AptGetAnimationAtLevel(0), the
+    // level-0 root the absolute "/" paths resolve from).
     // AptCIH_gotoAndX RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
     // (the real AptCIH::_gotoAndX @0x82B0D2F0 -- label/frame goto core).
     AptValue* AptExtern_GetMember(const char* szName) { return nullptr; }   // FLAG link-stub
