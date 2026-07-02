@@ -375,6 +375,9 @@ int AptCIH::jumpToFrame(int nFrame)
             // bulk removeObject -> ClearCIH teardown it exercises for existing
             // children absent from the replay. Staged off until that chain is
             // verified; the boundary seek in the else remains the live path.
+            // (4th-round retest 2026-07-02: STILL crashes with the DrainQueues
+            // AndZombie drain homed -- the residual is deeper inside the merge
+            // reconcile's removeObject/render-tree calls on merge-removed nodes.)
             if (false)
             {
             void* pProperties = pInst->mpProperties;   // dword[3] (the AS property hash)
