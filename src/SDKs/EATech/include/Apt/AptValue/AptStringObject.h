@@ -61,6 +61,10 @@ struct AptStringObject : public AptObject
     virtual AptValue* objectMemberLookup(AptValue* const pThis,
                                          const AptNativeString* const pName) const;  // @0x82ADC878
 
+    // The boxed string value (the X360 callers read +0x20 directly -- e.g.
+    // AptCIH::_gotoAndX @0x82B0D384 `lwz r3, 0x20(r3)` on the label arm).
+    AptValue* GetBoxedString() const { return mpValue; }
+
 private:
     AptValue* mpValue;   // +0x20 -- the boxed (ref-counted) string value
 };

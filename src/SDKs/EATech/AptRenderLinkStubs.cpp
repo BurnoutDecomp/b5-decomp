@@ -153,7 +153,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptApt_DeriveFunctionAnimation RETIRED (2026-07-01): homed in AptScriptFunctionBase.cpp
     // (== AptCIH::GetRootAnimation, the enclosing-timeline walk).
     AptValue* AptApt_GetRootContext() { return nullptr; }   // FLAG link-stub
-    AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay) { return nullptr; }   // FLAG link-stub
+    // AptCIH_gotoAndX RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
+    // (the real AptCIH::_gotoAndX @0x82B0D2F0 -- label/frame goto core).
     AptValue* AptExtern_GetMember(const char* szName) { return nullptr; }   // FLAG link-stub
     AptValue* AptInterp_FrameStackFirstLocal(AptValue* pFrameStack) { return nullptr; }   // FLAG link-stub
     AptValue* AptInterp_LookupScopeChain(AptActionInterpreter* pInterp, const EAStringC* pName) { return nullptr; }   // FLAG link-stub
