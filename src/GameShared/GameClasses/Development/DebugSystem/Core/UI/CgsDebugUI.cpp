@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 
+#include <string.h>  // strncpy - the X360 SafeStringCopy/SafeStringCat bodies call it directly
+
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // DebugManagerConstructParameters
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsWindow.h"     // Window (mWindowList element - Add/Remove/IsAdded)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (Get2DRenderer guard)
@@ -35,16 +37,20 @@ namespace CgsDev
         {
             mMetrics = Metrics::DEFAULT;   // X360 memcpy's the default metrics into the UI here
 
+            // X360 seeds the cascade position from the just-copied metrics defaults
+            // (lfs f0,0x70(r31) / lfs f13,0x74(r31) -> stfs this+8/this+0xC), i.e. the screen
+            // border insets carried in mMetrics after the DEFAULT copy above.
+            mfCascadeX     = mMetrics.mfScreenBorderLeft;
+            mfCascadeY     = mMetrics.mfScreenBorderTop;
+
             mMenuManager.Construct(lpParameters);
             mVariableManager.Construct(lpParameters);
             mFunctionManager.Construct(lpParameters);
 
             mWindowList.Clear();
             mpActiveWindow = nullptr;
-            mfCascadeX     = 0.0f;
-            mfCascadeY     = 0.0f;
             mbVisible      = false;
-            mbRunAutoExec  = false;
+            mbRunAutoExec  = true;   // X360 stores 1 into mbRunAutoExec (stb r10=1,0x11(r31))
             mp2dRender     = nullptr;
         }
 
@@ -52,11 +58,17 @@ namespace CgsDev
         void DebugUI::Destruct() {}
 
         // Window-stack membership (the Console toggle/slide path drives these). AddWindow appends the
-        // window to the stack; RemoveWindow unlinks it; IsWindowAdded queries membership. The full X360
-        // AddWindow also resets the cascade position + focus bookkeeping (UpdateCascadePosition /
-        // SetActiveWindow) - those ride on the DebugUI window-stack follow-on; the membership change is
-        // the part the Console depends on.
-        void DebugUI::AddWindow(Window* lpWindow)    { mWindowList.Add(lpWindow); }
+        // window to the stack then auto-shows the UI (X360 stb r11=1,0x10(r31) -> mbVisible = true);
+        // RemoveWindow unlinks it; IsWindowAdded queries membership. The full X360 AddWindow also, when
+        // there is no active window and the window can take focus (flags & 0x40 clear), promotes it via
+        // SetActiveWindow, then calls UpdateCascadePosition(true) - both are DebugUI window-stack
+        // follow-on methods that are declared but not yet reconstructed (no bodies exist to call), so
+        // only the modelled mbVisible auto-show store is applied here.
+        void DebugUI::AddWindow(Window* lpWindow)
+        {
+            mWindowList.Add(lpWindow);
+            mbVisible = true;
+        }
         void DebugUI::RemoveWindow(Window* lpWindow) { mWindowList.Remove(lpWindow); }
         bool DebugUI::IsWindowAdded(Window* lpWindow){ return mWindowList.IsAdded(lpWindow); }
 
@@ -72,28 +84,40 @@ namespace CgsDev
         void DebugUI::Set2DRenderer(Debug2DImmediateRender* lpRender)  { mp2dRender = lpRender; }
 
         // Bounded string helpers (MakeFullPath/menu-path building use these). Always null-terminate
-        // within the buffer.
+        // within the buffer. Mirrors the X360: on a NULL source or a buffer length <= 1 it still writes
+        // the terminator byte (it never dereferences a NULL source), otherwise strncpy's up to len-1
+        // bytes and terminates.
         void DebugUI::SafeStringCopy(char* lpcBuffer, const char* lpcSource, s32 liBufferLen)
         {
-            if (liBufferLen <= 0)
+            // X360: cmplwi r4,0/beq (NULL-source guard) then signed cmpwi r5,1/ble; either way the
+            // fallback path writes *dest = 0 and returns.
+            if (lpcSource == nullptr || liBufferLen <= 1)
+            {
+                *lpcBuffer = '\0';
                 return;
-            s32 liIndex = 0;
-            for (; liIndex < liBufferLen - 1 && lpcSource[liIndex]; ++liIndex)
-                lpcBuffer[liIndex] = lpcSource[liIndex];
-            lpcBuffer[liIndex] = '\0';
+            }
+            strncpy(lpcBuffer, lpcSource, liBufferLen - 1);
+            lpcBuffer[liBufferLen - 1] = '\0';
         }
 
         void DebugUI::SafeStringCat(char* lpcBuffer, const char* lpcSource, s32 liBufferLen)
         {
-            if (liBufferLen <= 0)
-                return;
+            // X360 scans the existing dest string UNBOUNDED (lbz/bne loop) - it does not clamp to
+            // liBufferLen, so an already-oversized dest is left intact.
             s32 liEnd = 0;
-            while (liEnd < liBufferLen - 1 && lpcBuffer[liEnd])
+            while (lpcBuffer[liEnd])
                 ++liEnd;
-            s32 liSource = 0;
-            for (; liEnd < liBufferLen - 1 && lpcSource[liSource]; ++liEnd, ++liSource)
-                lpcBuffer[liEnd] = lpcSource[liSource];
-            lpcBuffer[liEnd] = '\0';
+
+            // remaining = liBufferLen - strlen(dest). On a NULL source or remaining <= 1 the X360 writes
+            // a single terminator at dest+strlen(dest) (re-terminating without truncating existing text).
+            const s32 liRemaining = liBufferLen - liEnd;
+            if (lpcSource == nullptr || liRemaining <= 1)
+            {
+                lpcBuffer[liEnd] = '\0';
+                return;
+            }
+            strncpy(&lpcBuffer[liEnd], lpcSource, liRemaining - 1);
+            lpcBuffer[liEnd + liRemaining - 1] = '\0';
         }
 
     }
