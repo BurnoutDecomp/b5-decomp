@@ -1868,8 +1868,14 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     AptCharacterInst* pOld = mpCharacterInst;
     if (pOld == nullptr)
     {
+        // X360/XB1 tail: clear the AS-changed flag inline (mFlagsA bit 31, the
+        // X360 `rlwinm 1,31`), then tail-call vtable slot 5 == SetHasClass(0)
+        // (X360 0x82AD7418 `insrwi ..,1,3` = our bit 28; XB1 sub_140841530, the
+        // same slot on its LE flag layout). The previous transcription mislabeled
+        // the slot-5 call as Release(), which fabricated an extra reference drop
+        // on every cleared node.
         mFlagsA &= ~0x80000000u;
-        Release();   // X360 vtable slot +5 (the deleting-destructor path through Release)
+        SetHasClass(0);
         return;
     }
 
@@ -1908,8 +1914,10 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         pOld->~AptCharacterInst();
         gpNonGCPoolManager->Deallocate(pOld, sizeof(AptCharacterInst));
 
+        // AS-changed clear + vtable slot 5 == SetHasClass(0) (see the null-inst
+        // arm note above).
         mFlagsA &= ~0x80000000u;
-        Release();
+        SetHasClass(0);
     }
 }
 
@@ -1997,10 +2005,18 @@ void AptCIH_PreDestroyHook(AptCIH* pCIH)
 // ===========================================================================
 // AptDisplayListState::AddToDelayReleaseList @0x82AFD028 -- detach pItem from the live
 // list and (when still externally referenced) queue it on the director's removal list,
-// then release it. The X360: call the item's vtable[0] (PreDestroy/instantiated hook),
-// removeItem it from this list, AptCIH::Remove(item, bDelay), and -- when its refcount
-// field (mValueBitfield count, the 0x03FFC000 packed field > 0x4000 i.e. > 1) shows an
-// outside reference -- AddToRemList it; finally tail-call its Release (vtable[1]).
+// then release it. The X360: call the item's vtable[0] -- which is AptValue::AddRef
+// (X360 CIH vtbl[+0] = 0x82ADCF20 = AddRef; XB1 slot 0 = 0x14082D030, the saturating
+// count+1 -- both read from the shipped vtables, NOT PreDestroy as previously
+// mislabeled) -- then removeItem it from this list, AptCIH::Remove(item, bDelay), and
+// -- when its refcount field (mValueBitfield count, the 0x03FFC000 packed field >
+// 0x4000 i.e. > 1) shows an outside reference -- AddToRemList it; finally tail-call
+// its Release (vtable[1]). The leading AddRef is the PIN that keeps the node alive
+// across Remove's internal releases (the ClearCIH new-inst scrub + Remove's own
+// display-list-reference drop): without it a node that enters at refcount 1..2 hits
+// zero INSIDE Remove and the tail reads/vcalls tear into freed pool memory (the
+// DOGMA free-list link overwrites the vptr at word 0). The node can only ever be
+// freed by the LAST line of this function, after which nothing touches it.
 // ===========================================================================
 // ===========================================================================
 // EnsureStringAllocated @0x82B06F08 -- FLAG STUB (the deep dynamic-text build/layout
@@ -2020,8 +2036,9 @@ void AptCIH::EnsureStringAllocated(AptCIH* /*pParent*/)
 
 AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 {
-    // X360: (**pItem)(pItem) -- the value's vtable[0] (PreDestroy / instantiated hook).
-    pItem->PreDestroy();
+    // X360: (**pItem)(pItem) -- the value's vtable[0] == AddRef (the lifetime pin;
+    // see the header note).
+    pItem->AddRef();
 
     removeItem(pItem);
     pItem->Remove(bDelay);
