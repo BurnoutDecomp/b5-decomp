@@ -22,6 +22,8 @@
 
 #include <cstdint>
 
+struct AptConstFile;   // the serialised const chunk (the resolve64 parse ctx)
+
 struct AptNativeHash;
 class AptValue;
 class  EAStringC;
@@ -89,12 +91,15 @@ struct AptMovie
     //
     // nBase = the 8-byte load base; nResBase/nResSize bound the resource so every slot is
     // validated (a slot holds a file-relative offset iff 0 < off < nResSize) -- a garbage/
-    // already-relocated slot is left untouched (no wild-pointer write/deref). FLAG: the AS
-    // action-stream re-parse (_parseStream) is the deferred VM transcode; resolve64
-    // relocates only the STRUCTURAL pointers (frame table, command arrays, command pointers)
-    // + the place record's instance-NAME pointer (needed by named placeObject). Frame-0
-    // place/remove placement does not depend on the AS parse.
-    void resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize);
+    // already-relocated slot is left untouched (no wild-pointer write/deref).
+    //
+    // pConstFile / pnParsedValues (ACTIVATED 2026-07-01, the XB1 resolve twin
+    // sub_1408567D0's a3/a4): the "Apt constant file" chunk (the _parseStream const ctx --
+    // its record table lives at ctx+0x28, relocated by Resolve; string payloads rebase
+    // ctx-relative) and the resolved-value counter (the root def's +0x50, zeroed by
+    // CompleteLoad) every action/clipActions/morph stream parse accumulates into.
+    void resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
+                   AptConstFile* pConstFile, int64_t* pnParsedValues);
 
     // @0x82AF4830 -- the inverse of resolve (un-relocate + tear down the label hash).
     void* unresolve(int nBase, int a3);

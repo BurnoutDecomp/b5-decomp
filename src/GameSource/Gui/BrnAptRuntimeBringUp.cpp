@@ -868,19 +868,21 @@ namespace BrnGui
             return;
         }
 
-        // Peek the const-file pointer size (the "Apt Data:1:7:N" signature). Our converted bundle
-        // is native 8-byte; read mpConstData at its 8-byte header position (u64 @ +16).
-        const u32 luConstOff = static_cast<u32>(*reinterpret_cast<const u64*>(luBase + 16u));
-        if (luConstOff == 0 || luConstOff >= luSize)
+        // Peek the pointer size from the "Apt Data:1:7:N" signature. That signature lives in the
+        // APT DATA chunk -- hdr field 2 (@+0x10) of the libapt2 6-field header [name, baseName,
+        // aptData, const, geom, size]. (Renamed 2026-07-01: this slot was mislabelled "constData";
+        // the real const chunk is hdr field 3 @+0x18 -- see LoadAnimation's un-collapse.)
+        const u32 luAptDataOff = static_cast<u32>(*reinterpret_cast<const u64*>(luBase + 0x10u));
+        if (luAptDataOff == 0 || luAptDataOff >= luSize)
         {
-            CgsDev::Log::WriteToLog("[AptRT] faithful: constData offset out of range -- bail (FLAG).\n");
+            CgsDev::Log::WriteToLog("[AptRT] faithful: aptData offset out of range -- bail (FLAG).\n");
             return;
         }
-        AptConstFile* lpConstFile = reinterpret_cast<AptConstFile*>(luBase + luConstOff);
+        AptConstFile* lpConstFile = reinterpret_cast<AptConstFile*>(luBase + luAptDataOff);
         const int liPtrSize = lpConstFile->GetPointerSizeBytes();   // 8 (native) or 4 (console)
         std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: header@0x%llX constFile@0x%X ptrSize=%d (%u bytes).\n",
-            (unsigned long long)luBase, luConstOff, liPtrSize, luSize);
+            "[AptRT] faithful: header@0x%llX aptData@0x%X ptrSize=%d (%u bytes).\n",
+            (unsigned long long)luBase, luAptDataOff, liPtrSize, luSize);
         CgsDev::Log::WriteToLog(lac);
 
         // --- 1. LOCATE the movie-root character header (FLAG: x64 converted bundle) ------------
@@ -1229,16 +1231,21 @@ namespace BrnGui
             CgsDev::Log::WriteToLog(lac);
         }
 
-        // Drive the faithful completion for this handle against the resident span. Locate the movie
-        // root (signature scan) + read the const-file (for the pointer-size + the resolve context).
-        const u32 luConstOff = static_cast<u32>(*reinterpret_cast<const u64*>(lpSlot->luBase + 16u));
-        if (luConstOff == 0 || luConstOff >= lpSlot->luSize)
+        // Drive the faithful completion for this handle against the resident span. UN-COLLAPSED
+        // (2026-07-01, matches LoadAnimation): the libapt2 6-field header puts aptData@+0x10 and
+        // const@+0x18; pBase = the "Apt Data:1:7:8" chunk (the reloc base), pConstFile = the
+        // "Apt constant file" chunk (the _parseStream ctx + the movieOffset root locator).
+        const u32 luAptDataOff = static_cast<u32>(*reinterpret_cast<const u64*>(lpSlot->luBase + 0x10u));
+        const u32 luConstOff   = static_cast<u32>(*reinterpret_cast<const u64*>(lpSlot->luBase + 0x18u));
+        if (luAptDataOff == 0 || luAptDataOff >= lpSlot->luSize)
         {
-            CgsDev::Log::WriteToLog("[AptRT] import-load: constData offset out of range -- bail (FLAG).\n");
+            CgsDev::Log::WriteToLog("[AptRT] import-load: aptData offset out of range -- bail (FLAG).\n");
             return false;
         }
-        AptConstFile* lpConstFile = reinterpret_cast<AptConstFile*>(lpSlot->luBase + luConstOff);
-        void* lpBase = lpConstFile;   // pBase == aptDataOffset (the converted-bundle collapse; see LoadAnimation)
+        void* lpBase = reinterpret_cast<void*>(lpSlot->luBase + luAptDataOff);
+        AptConstFile* lpConstFile = (luConstOff != 0 && luConstOff < lpSlot->luSize)
+            ? reinterpret_cast<AptConstFile*>(lpSlot->luBase + luConstOff)
+            : reinterpret_cast<AptConstFile*>(lpBase);   // degenerate: the old collapse
 
         const u32 luRootHdrOff = LocateMovieRoot8(lpSlot->luBase, lpSlot->luSize);
         if (luRootHdrOff == 0)

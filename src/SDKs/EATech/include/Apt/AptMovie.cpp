@@ -798,7 +798,8 @@ void* AptMovie::resolve(int nBase, void* a3, int a4)
 // values at movie-resolve time, and the runtime handlers read the parsed 8-aligned
 // GUIAPT64 operand form. The VM chain is complete end-to-end.
 // ===========================================================================
-void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
+void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
+                         AptConstFile* pConstFile, int64_t* pnParsedValues)
 {
     // Relocate a native-8 offset slot IN PLACE, but only when it holds a plausible
     // file-relative offset (0 < off < nResSize). A slot already carrying an absolute
@@ -822,14 +823,15 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
         return luPtr >= nResBase && luPtr < nResBase + nResSize;
     };
 
-    // The threaded resolved-value counter _parseStream accumulates (the XB1 a4).
-    // CTX identification (FLAG): _parseStream's const context is the aptdata ROOT --
-    // its string payloads rebase base-relative (like every other GUIAPT64 offset) and
-    // its constant-record table pointer sits in the root header (+0x28); passed as
-    // (void*)nBase. Validated structurally vs libapt2 (all offsets are
-    // GetAptDataOffset-relative); the boot-test gates it at runtime.
-    int64_t lnParsedValues = 0;
-    (void)lnParsedValues;
+    // The parse ctx + resolved-value counter (the XB1 resolve twin sub_1408567D0's
+    // a3/a4, threaded from Fixup case-5/9): pConstFile = the "Apt constant file" chunk
+    // (record table @ctx+0x28, relocated around Fixup by Resolve; string payloads rebase
+    // ctx-relative), pnParsedValues = the root def's +0x50 accumulator (CompleteLoad
+    // zeroes it). Layout verified vs the shipped bundle (libapt2 Const::Write: magic+
+    // align8, movieOffset@+0x18, itemCount@+0x20, itemStart@+0x28, 16-byte records).
+    void* const pParseCtx = pConstFile;
+    int64_t lnFallbackCount = 0;
+    int64_t* const pnCount = pnParsedValues ? pnParsedValues : &lnFallbackCount;
 
     // ---- allocate + init the label hash (5 dwords, tag 2) ------------------
     void* pHash = gpAptPseudoDataPool->Allocate(20);
@@ -904,8 +906,7 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
                     if (luStream != 0 && inRes(luStream))
                         AptActionInterpreter::_parseStream(
                             reinterpret_cast<unsigned char*>(luStream), nBase,
-                            reinterpret_cast<void*>(nBase) /* the aptdata root = the const ctx (FLAG below) */,
-                            &lnParsedValues);
+                            pParseCtx, pnCount);
                     break;
                 }
 
@@ -955,7 +956,7 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
                                 if (luClipStream != 0 && inRes(luClipStream))
                                     AptActionInterpreter::_parseStream(
                                         reinterpret_cast<unsigned char*>(luClipStream), nBase,
-                                        reinterpret_cast<void*>(nBase), &lnParsedValues);
+                                        pParseCtx, pnCount);
                             }
                         }
                     }
@@ -968,7 +969,7 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
                     if (luStream != 0 && inRes(luStream))
                         AptActionInterpreter::_parseStream(
                             reinterpret_cast<unsigned char*>(luStream), nBase,
-                            reinterpret_cast<void*>(nBase), &lnParsedValues);
+                            pParseCtx, pnCount);
                     break;
                 }
 

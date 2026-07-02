@@ -300,12 +300,37 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     // root character header (signature scan) and passes it in pPreResolvedRoot; the def base is
     // root + the native-8 header (0x20). The console 4-byte formula (pBase + dataRootOffset,
     // def base at root+16) is used when no pre-resolved root is supplied.
+    // The pointer-size discriminator reads the "<n>:<v>:<p>" signature, which lives in the
+    // APT DATA chunk ("Apt Data:1:7:8\x1a") == pBase on both formats (the console file leads
+    // with it; our converted bundle's pBase is that chunk). pConstFile is now the REAL
+    // "Apt constant file" chunk (un-collapsed 2026-07-01), which carries no signature.
+    const int liPtrSize = reinterpret_cast<AptConstFile*>(pBase)->GetPointerSizeBytes();
+
     void* pRoot;
     unsigned int luHdrSize;
-    if (pPreResolvedRoot != nullptr)
+    if (liPtrSize == 8)
     {
-        pRoot     = pPreResolvedRoot;                         // FLAG (x64): host-located root header
-        luHdrSize = (pConstFile->GetPointerSizeBytes() == 8) ? 0x20u : 0x10u;
+        // x64-FAITHFUL root location (XB1 CompleteLoad sub_1408348B0): the const chunk's
+        // movieOffset @const+0x18 (pBase-relative) locates the type-9 movie root directly --
+        // `v9 = *(a4+24); if (v9) v9 += a3` (verified vs TITLE_SCREEN02: 0x48E0 -> the root).
+        // The XB1 writes the absolute back into the slot (in-place relocate); kept, load-once.
+        int64_t* pnMovieOffset =
+            reinterpret_cast<int64_t*>(reinterpret_cast<char*>(pConstFile) + 0x18);
+        const int64_t nMovieOffset = *pnMovieOffset;
+        if (nMovieOffset != 0 && nMovieOffset < 0x10000000)   // still a file offset
+        {
+            pRoot          = static_cast<char*>(pBase) + nMovieOffset;
+            *pnMovieOffset = reinterpret_cast<int64_t>(pRoot);   // xb1 `*(a4+24) = v9`
+        }
+        else if (nMovieOffset != 0)
+        {
+            pRoot = reinterpret_cast<void*>(static_cast<intptr_t>(nMovieOffset));   // already live
+        }
+        else
+        {
+            pRoot = pPreResolvedRoot;   // FLAG: host signature-scan fallback (belt-and-braces)
+        }
+        luHdrSize = 0x20u;
     }
     else
     {
@@ -316,6 +341,11 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     }
     AptCharacterAnimation* pCharAnim =
         reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pRoot) + luHdrSize);
+
+    // x64 `*(v10+80) = 0`: zero the def's parsed-value accumulator before the resolve walk
+    // (every _parseStream inside Fixup threads ++s into it).
+    if (liPtrSize == 8)
+        pCharAnim->mnParsedValueCount = 0;
 
     // Resolve the (serialised) movie root against the load base. a5 (pBlock == the
     // AptDataHeader) is threaded through Resolve -> Fixup faithfully.

@@ -79,8 +79,11 @@ namespace BrnGame
         // Until that Prepare + the allocator layer land, two fixed scratch blocks stand in.
         static CgsModule::IOBufferStack sUpdateInputStack;
         static CgsModule::IOBufferStack sUpdateOutputStack;
-        static u8 saUpdateInputMem[64 * 1024];
-        static u8 saUpdateOutputMem[64 * 1024];
+        // Sized to the DOCUMENTED X360 values (main() @0x827E60D8 carves 0x780000 each;
+        // see the comment above) -- the 64KB scratch stand-ins overflowed once the sound
+        // module's ~66KB Root IO buffers started allocating here (the stage-4 assert).
+        static u8 saUpdateInputMem[0x780000];
+        static u8 saUpdateOutputMem[0x780000];
         sUpdateInputStack.Construct("UpdateInput");
         sUpdateInputStack.Prepare(saUpdateInputMem, sizeof(saUpdateInputMem), 16);
         sUpdateOutputStack.Construct("UpdateOutput");

@@ -19,11 +19,14 @@
 // The GUIAPT64 stream operand records are 8-ALIGNED with 8-byte pointer slots
 // (the XB1 asm: `(pc+7) & ~7`, qword loads) -- unlike the 4-aligned console form.
 //
-// The parse CONTEXT (pConstCtx) is the movie's serialized constant block: its
-// record table lives at ctx+0x28 [xb1:+40] as 16-byte records {i64 type,
-// i64 payload}. FLAG: the GUIAPT64 const-header is not yet a recovered type, so
-// the ctx is walked with the documented serialised-blob offset idiom (the same
-// exception Fixup/resolve64 use); home it when the header type lands.
+// The parse CONTEXT (pConstCtx) is the movie's "Apt constant file" CHUNK (threaded
+// CompleteLoad -> Fixup -> resolve64, the xb1 a4/a3/a3 chain): its record table
+// pointer lives at ctx+0x28 [xb1:+40] (itemStart, relocated to absolute around
+// Fixup by Resolve), records are 16-byte {u32 type + pad, 8-byte payload}, and
+// string payloads are ctx-relative. Layout == libapt2 Const::Write (verified).
+// FLAG: the const-chunk header is not yet a recovered type, so the ctx is walked
+// with the documented serialised-blob offset idiom (the same exception Fixup/
+// resolve64 use); home it when the header type lands.
 //
 // Constant-record types (the Push/DefineDictionary entry resolution):
 //   1 string   : payload = ctx-relative offset -> rebase, AptString::Create
@@ -90,12 +93,13 @@ namespace
             rSlot = 0;
     }
 
-    // Resolve one serialized constant record (16-byte {i64 type, i64 payload} at
-    // ctx-table[16 * idx]) to its live AptValue*. pCtx = the const block base (the
-    // string payloads are ctx-relative).
+    // Resolve one serialized constant record (16-byte {u32 type + pad, 8-byte
+    // payload slot} at ctx-table[16 * idx]) to its live AptValue*. pCtx = the const
+    // chunk base (the string payloads are ctx-relative).
     AptValue* ResolveConstRecord(unsigned char* pRec, unsigned char* pCtx)
     {
-        const int64_t nType = Slot64(pRec, 0x00);
+        // xb1 0x14084AA67: `mov eax,[rcx]` -- the record type is a DWORD load.
+        const int32_t nType = *reinterpret_cast<const int32_t*>(pRec + 0x00);
 
         if (nType == 1)   // string: rebase payload against the ctx, intern, un-rebase
         {
@@ -110,27 +114,29 @@ namespace
             return pValue;
         }
 
+        // Payload reads are DWORD loads in the xb1 asm (vmovss / movsxd dword / cmp dword).
         switch (nType)
         {
-            case 6:   // float: 0.0f collapses to the pooled integer 0 (xb1 vucomiss quirk)
-            {
+            case 6:   // float: 0.0f collapses to the pooled integer 0 (xb1 vucomiss+jnz --
+            {         // the UNORDERED result also falls through, so a NaN const takes the
+                      // integer-0 path too; replicated with the explicit self-compare)
                 const float fValue = *reinterpret_cast<const float*>(pRec + 0x08);
-                if (fValue == 0.0f)
+                if (fValue == 0.0f || fValue != fValue)
                     return AptInteger::Create(0);
                 return AptFloat::Create(fValue);
             }
-            case 7:   // integer
-                return AptInteger::Create(static_cast<int>(Slot64(pRec, 0x08)));
-            case 8:   // lookup-pool entry
+            case 7:   // integer (xb1: mov ecx,[rcx+8])
+                return AptInteger::Create(*reinterpret_cast<const int32_t*>(pRec + 0x08));
+            case 8:   // lookup-pool entry (xb1: movsxd of the dword index; upper bound only)
             {
-                const int nIndex = static_cast<int>(Slot64(pRec, 0x08));
+                const int nIndex = *reinterpret_cast<const int32_t*>(pRec + 0x08);
                 return AptLookup::PoolHolds(nIndex) ? AptLookup::GetPoolEntry(nIndex) : 0;
             }
-            case 5:   // boolean: the shared singleton pair
-                return AptBoolean::Create(Slot64(pRec, 0x08) != 0);
-            case 4:   // register-file entry
+            case 5:   // boolean: the shared singleton pair (xb1: cmp dword ptr [rcx+8],0)
+                return AptBoolean::Create(*reinterpret_cast<const int32_t*>(pRec + 0x08) != 0);
+            case 4:   // register-file entry (xb1: movsxd of the dword index; upper bound only)
             {
-                const int nIndex = static_cast<int>(Slot64(pRec, 0x08));
+                const int nIndex = *reinterpret_cast<const int32_t*>(pRec + 0x08);
                 return AptRegister::FileHolds(nIndex) ? AptRegister::GetFileEntry(nIndex) : 0;
             }
             case 3:
@@ -255,13 +261,16 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                 if (!bUnresolve)
                     Rebase(Slot(pRec, 0x10), nBase, false);        // arg table (resolve first)
 
-                const int64_t nArgs = Slot64(pRec, 0x08);
+                // xb1 0x14084AE52/0x14084AD78: `cmp [r8+8], r9d` -- nArgs is a signed
+                // DWORD (the u16 register-count/preload-flags pack occupies +0x0C/+0x0E,
+                // so a qword read would drag them into the count).
+                const int32_t nArgs = *reinterpret_cast<const int32_t*>(pRec + 0x08);
                 unsigned char* pArgs = reinterpret_cast<unsigned char*>(Slot(pRec, 0x10));
                 if (nArgs > 0 && pArgs)
                 {
                     const int nStride  = (nOp == 0x8E) ? 16 : 8;
                     const int nNameOff = (nOp == 0x8E) ? 8  : 0;
-                    for (int64_t i = 0; i < nArgs; ++i)
+                    for (int32_t i = 0; i < nArgs; ++i)
                         Rebase(Slot(pArgs + i * nStride, nNameOff), nBase, bUnresolve);
                 }
 
@@ -282,7 +291,8 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                 unsigned char* pRec = Align8(pc);
                 pc = pRec + 16;
 
-                const int64_t nCount = Slot64(pRec, 0x00);
+                // xb1 0x14084AA3C: `cmp [rsi], edi` -- the entry count is a signed DWORD.
+                const int32_t nCount = *reinterpret_cast<const int32_t*>(pRec + 0x00);
 
                 if (bUnresolve)
                 {
@@ -290,7 +300,7 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                     // a boxed one through its internal AptString at +0x40), then write
                     // the sequential re-serialize index; finally un-rebase the table.
                     unsigned char* pTable = reinterpret_cast<unsigned char*>(Slot(pRec, 0x08));
-                    for (int64_t i = 0; i < nCount; ++i)
+                    for (int32_t i = 0; i < nCount; ++i)
                     {
                         AptValue* pValue = *reinterpret_cast<AptValue**>(pTable + i * 8);
                         if (pValue->isString())
@@ -320,7 +330,7 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                 unsigned char* pConstTable =
                     reinterpret_cast<unsigned char*>(Slot(pCtx, 0x28));   // [xb1: ctx+40] FLAG: blob idiom
 
-                for (int64_t i = 0; i < nCount; ++i)
+                for (int32_t i = 0; i < nCount; ++i)
                 {
                     const int64_t nConstIndex = Slot64(pTable + i * 8, 0);
                     ++*pnValueCount;

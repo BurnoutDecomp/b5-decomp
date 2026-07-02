@@ -96,7 +96,10 @@ struct AptCharacterAnimation
     int32_t        mnInitListCount;   // +0x40  console [10] initCount
     uint8_t        mPad44[0x04];      // +0x44  (pad to the +0x48 pointer slot)
     AptInitEntry*  mpInitList;        // +0x48  console [11] initList (stride 0x10)
-    void*          mpUnk50;           // +0x50  console      (undecoded tail)
+    // +0x50 -- the resolved-value count _parseStream accumulates during Fixup (the XB1
+    // CompleteLoad sub_1408348B0 zeroes `*(def+80)` then threads `def+80` as the resolve
+    // twin sub_1408567D0's a4; every parse of an action stream ++s it per resolved entry).
+    int64_t        mnParsedValueCount; // +0x50  xb1 [a4 of the resolve walk]
 
     // @0x7E3738 -- index of the import whose id == nId, or -1.
     int32_t IsImport(int32_t nId);
