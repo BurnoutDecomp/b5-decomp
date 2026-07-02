@@ -59,6 +59,27 @@ namespace CgsResource
         FixUp(lpResource, lrDest);
     }
 
+    // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x828EDFC0.
+    //
+    // Declared (but never defined) in CgsResourceType.h as the protected offset-rebase
+    // helper. Computes the pointer delta between the destination and source base-resource
+    // pointers for one memory type, stores that single delta into slot [liMemType] of an
+    // otherwise-zeroed scratch buffer, and forwards it through the FixUp vtable slot
+    // (index 4, byte offset +16) as a synthetic "resource" -- FixUp only reads the slot for
+    // the memory type it's being asked to fix up, so the other (still-zero) slots are inert.
+    // lrSize (a5) is not referenced by the X360 body.
+    void Type::ReBaseTechniqueFixupWithOffset(
+        void* lpResource, rw::Resource& lrSource, rw::Resource& lrDest,
+        ResourceDescriptor& /*lrSize*/, s32 liMemType) const
+    {
+        rw::Resource lOffset = {};
+        ptrdiff_t liDelta = static_cast<char*>(lrDest.m_baseResources[liMemType])
+                           - static_cast<char*>(lrSource.m_baseResources[liMemType]);
+        lOffset.m_baseResources[liMemType] = reinterpret_cast<void*>(liDelta);
+
+        FixUp(lpResource, lOffset);
+    }
+
     // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82666180.
     //
     // Placement-new carving a Type out of a RenderWare resource allocator. The X360
