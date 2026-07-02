@@ -19,9 +19,10 @@
 //   the base ends at +0x60 (meFirewallSetting at +0x5C); the X360 leaf adds:
 //     +0x60  macNetworkAddress[36]   (char) -- the 36-byte secure network address
 //
-// GetNetworkAddress copies the 36 bytes at +0x60 into the caller's buffer;
-// SerialiseFromPlayer chains to the base then locates the '^' structure marker in
-// the lobby record and decodes the 36-byte binary blob into macNetworkAddress.
+// GetNetworkAddress is static: it copies the 36 bytes at lpSource's +0x60 into
+// the caller-supplied lpDestination buffer; SerialiseFromPlayer chains to the
+// base then locates the '^' structure marker in the lobby record and decodes
+// the 36-byte binary blob into this object's own macNetworkAddress.
 // ===========================================================================
 
 namespace CgsNetwork
@@ -36,9 +37,12 @@ namespace CgsNetwork
         // TagFieldGetBinary result), or NULL if the record has no '^' marker.
         virtual void SerialiseFromPlayer(const void* lpPlayer);
 
-        // @ X360 0x8287A308 -- copy the 36-byte secure network address into
-        // lpDestination. Reached from BrnNetwork::CameraX360::PlayerFinalised.
-        void* GetNetworkAddress(void* lpDestination) const;
+        // @ X360 0x8287A308 -- static: copy the 36-byte secure network address
+        // out of lpSource->macNetworkAddress into the raw lpDestination buffer.
+        // Reached from BrnNetwork::CameraX360::PlayerFinalised. (ASM: memcpy's
+        // dest is the untouched incoming r3, its src is r4+0x60 -- i.e. both
+        // pointers are explicit arguments; there is no implicit `this` here.)
+        static void* GetNetworkAddress(void* lpDestination, const ServerInterfacePlayerParamsX360* lpSource);
 
     protected:
         // CgsServerInterfacePlayerParamsX360 leaf member, +0x60 (after the base).

@@ -82,6 +82,13 @@ namespace CgsNetwork
         // overwrite, 1 == pending -> clear). Inline accessor over the named member.
         s32 GetLastError() const { return miLastError; }
 
+        // Fetch the last recorded error and reset the component to idle in one step
+        // (X360 @ 0x82876708: read miLastError, then the same reset as ClearLastError).
+        // The body lives in the sibling CgsServerInterfaceComponent.cpp; declared public
+        // to match the X360 call site (BrnNetwork::LiveRevengeManager::ProcessBeforeSimulation)
+        // invoking it through the component by name.
+        int GetAndClearLastError();
+
     protected:
         // ---- Action / error helpers shared by every leaf component ------------------
         // (Bodied in dedicated component TUs / CgsServerInterfaceComponent.cpp; declared

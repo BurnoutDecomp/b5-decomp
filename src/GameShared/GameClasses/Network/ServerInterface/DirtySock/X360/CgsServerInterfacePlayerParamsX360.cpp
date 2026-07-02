@@ -6,8 +6,11 @@
 //   CgsNetwork::ServerInterfacePlayerParamsX360::GetNetworkAddress    @ 0x8287A308
 //   CgsNetwork::ServerInterfacePlayerParamsX360::SerialiseFromPlayer  @ 0x8287A340
 //
-// GetNetworkAddress copies this object's 36-byte secure network address
-// (macNetworkAddress, +0x60) into the caller's buffer and returns that buffer.
+// GetNetworkAddress is static: it copies lpSource's 36-byte secure network
+// address (macNetworkAddress, +0x60) into the caller-supplied lpDestination
+// buffer and returns that buffer. (ASM: the memcpy dest is the untouched
+// incoming r3 and its src is r4+0x60 -- both are plain explicit arguments,
+// there is no implicit `this` read here.)
 //
 // SerialiseFromPlayer chains to the shared base (which fills the name / ident /
 // presence / addresses + parses the USERPARAMS structure), then finds the '^'
@@ -18,9 +21,9 @@
 namespace CgsNetwork
 {
 
-void* ServerInterfacePlayerParamsX360::GetNetworkAddress(void* lpDestination) const
+void* ServerInterfacePlayerParamsX360::GetNetworkAddress(void* lpDestination, const ServerInterfacePlayerParamsX360* lpSource)
 {
-    std::memcpy(lpDestination, macNetworkAddress, 36);
+    std::memcpy(lpDestination, lpSource->macNetworkAddress, 36);
     return lpDestination;
 }
 

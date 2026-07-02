@@ -101,8 +101,12 @@ namespace CgsNetwork
             CGS_ASSERT(GetPlayerMessageIndex(lpPlayer->GetPlayerID()) == -1,
                        "GetPlayerMessageIndex( lpPlayer->GetPlayerID() ) == -1");
 
+            // NOTE: the X360 binary's post-AddNewPlayer bounds check
+            // ("Got too many messages?") compares the returned index against 7, but the
+            // index is always either a valid slot (0..6) or the -1 sentinel -- both < 7
+            // -- so that check is provably dead code in the ASM (cmpwi/blt always taken,
+            // skipping the assert). Do not reintroduce it here.
             const s32 liPlayerIndex = AddNewPlayer(lpPlayer->GetPlayerID());
-            CGS_ASSERT(liPlayerIndex != -1, "Got too many messages?");
 
             lpPlayer->RegisterMessageType(KI_E_MESSAGE_TYPE_SYNC_TIME,
                                           sizeof(SyncTimeMessage),
