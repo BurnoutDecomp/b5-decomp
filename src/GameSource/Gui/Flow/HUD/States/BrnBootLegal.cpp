@@ -5,7 +5,6 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::VariableEventQueue (the in-queue)
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsID, CgsIDCompress
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CgsDev::Assert (the X360 "unexpected event" assert)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // CgsDev::Log::WriteToLog (boot-flow diagnostics)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayRequest
 
@@ -114,12 +113,25 @@ namespace
     };
 
     // 20-byte GuiEvent<25> "set option" command: header { 8, 25, 12 } then a 1.0f payload word
-    // (the X360 OnEnter posts { 8, 25, 12, 0, 1.0f } on channel 41, size 20).
+    // (the X360 OnEnter posts { 8, 25, 12, 0, 1.0f } on channel 41, size 20; OnLeave's first
+    // post is the same header/shape but with miReserved=1 -- 0x82477E3C li r28,1 / stw r28,var_50).
     struct GuiOptionEvent20 : public CgsGui::GuiEvent<25>
     {
-        s32 miReserved;     // +0x0C (0)
+        s32 miReserved;     // +0x0C (0 in OnEnter, 1 in OnLeave's first post)
         f32 mfValue;        // +0x10 (1.0f)
-        GuiOptionEvent20() : CgsGui::GuiEvent<25>(8, 12), miReserved(0), mfValue(1.0f) {}
+        explicit GuiOptionEvent20(s32 liReserved = 0) : CgsGui::GuiEvent<25>(8, 12), miReserved(liReserved), mfValue(1.0f) {}
+    };
+
+    // 20-byte GuiEvent<18> "apt name + flag" command: header { 8, 18, 12 } then a (const char*,
+    // s32) payload. The X360 OnLeave posts { 8, 18, 12, &unk_820046A7 ("" sentinel), 1 } on
+    // channel 41, size 20 (0x82477EAC-0x82477EE8) -- NOT the GuiOptionEvent20/{reserved,float}
+    // shape (event type 18, not 25).
+    struct GuiAptNameFlagEvent20 : public CgsGui::GuiEvent<18>
+    {
+        const char* mpacAptName;   // +0x0C (&unk_820046A7, the empty-name sentinel)
+        s32         miFlag;        // +0x10 (1)
+        explicit GuiAptNameFlagEvent20(const char* lpacAptName, s32 liFlag)
+            : CgsGui::GuiEvent<18>(8, 12), mpacAptName(lpacAptName), miFlag(liFlag) {}
     };
 
     // Post a 16-byte GuiEvent<N> { 1, N, 12 } command on the given channel.
@@ -241,6 +253,18 @@ namespace BootLegalCacheBoundary  // FLAG boundary helpers
     void EnsureBootResourceIsLoaded(GuiCache* lpCache);                                   // FLAG (v43={127,4})
     void UnloadResources(GuiCache* lpCache, const CgsGui::sResourceTuple* lpResources, u32 luCount); // FLAG
     f32  GetTime(const GuiCache* lpCache);                                                // FLAG
+
+    // X360 *(cache+19273) (byte): non-zero suppresses the HD-composite "transin" call in
+    // E_STAGE_FADE_IN (0x824778D8). FLAG: no named accessor on the committed GuiCache API.
+    bool IsHDCompAlreadyTransitioned(const GuiCache* lpCache);                            // FLAG
+    // X360 *(cache+42996) (word): non-zero -> "visible", zero -> "invisible" for the ESRB
+    // panel in E_STAGE_FADE_IN (0x8247790C). FLAG: no named accessor on the committed GuiCache API.
+    bool IsEsrbVisible(const GuiCache* lpCache);                                          // FLAG
+    // X360 *(cache+77578) / *(cache+77579) (bytes): either non-zero forces the
+    // "start message" transin + advance-to-menu path in E_STAGE_PRESTART_OR_IDLE, the same
+    // as mbWaitForStartPressed (0x82477A1C / 0x82477A2C). FLAG: no named accessor on the
+    // committed GuiCache API.
+    bool IsStartMessageForced(const GuiCache* lpCache);                                   // FLAG
 }
 }
 
@@ -326,11 +350,12 @@ namespace BrnGui
     // ------------------------------------------------------------------ OnLeave @ 0x82477E28
     void BootLegal::OnLeave()
     {
-        // Post the leave view-state command (GuiEvent<25> { 8, 25, 12, ..., 1.0f }, ch 41, size 20),
+        // Post the leave view-state command (GuiEvent<25> { 8, 25, 12, 1, 1.0f }, ch 41, size 20 --
+        // 0x82477E3C li r28,1 feeds the reserved dword, unlike OnEnter's {..,0,1.0f} post),
         // refresh the menu component (vtbl+0x18 -- the menu's leave/refresh slot), then
         // unregister the observed events.
         {
-            GuiOptionEvent20 lOption;
+            GuiOptionEvent20 lOption(1);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
         }
@@ -338,9 +363,9 @@ namespace BrnGui
         mpStateInterface->UnRegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
 
         // Post the second leave command (GuiEvent<18> { 8, 18, 12, "", 1 }, ch 41, size 20 -- the
-        // X360 packs the empty apt-name pointer + a 1 flag; modelled as the option record).
+        // X360 packs the empty apt-name pointer + a 1 flag; event type 18, not 25).
         {
-            GuiOptionEvent20 lOption;
+            GuiAptNameFlagEvent20 lOption("", 1);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
         }
@@ -455,7 +480,9 @@ namespace BrnGui
 
             case KI_EVENT_OVERLAY_RESULT:
                 // 189: the SignOut overlay closed -- clear the flag and reset the stage timer.
-                if (CgsIDCompress("SignOut") == *reinterpret_cast<const u64*>(lpPayload + 4) &&
+                // X360: ld r11,0(r29); cmpld r3,r11 -- compares the 8-byte hash at payload+0
+                // (same offset as the 190/OVERLAY_OPENED case), not payload+4.
+                if (CgsIDCompress("SignOut") == *reinterpret_cast<const u64*>(lpPayload) &&
                     *reinterpret_cast<const s32*>(lpPayload + 8) == 1)
                 {
                     mbSignOutPending = false;
@@ -503,7 +530,6 @@ namespace BrnGui
 
             PostCommand16<589>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             mpStateInterface->PlayAptMovie(KAC_TITLE_MOVIE, 1);
-            CgsDev::Log::WriteToLog("[BootLegal] STAGE_START_MOVIE -> PlayAptMovie(Title_Screen02) -- the title_screen02 Apt request reached.\n");
 
             {
                 // GuiEventPlayMusicOnMenuStream { hash = MakeHash("GunsAndRoses") } (ch via OutputGuiEvent).
@@ -530,10 +556,11 @@ namespace BrnGui
 
             // FLAG: the two AddOutputAptViewState calls below are the apt-view boundary.
             // *(cache+19273)/*(cache+42996) are far cache flags the X360 reads to choose the
-            // transition; modelled by name via the cache boundary helpers is out of scope, so
-            // the faithful structure (transin the HD composite; visible/invisible the ESRB) is kept.
-            mHDCompAnimator.AddOutputAptViewState("apt_Transition", "transin", false);      // this+0x58
-            mEsrbAnimator.AddOutputAptViewState("apt_Transition", "visible", false);        // this+0xE4
+            // transition (0x824778D8 / 0x8247790C) -- gated via the cache boundary helpers.
+            if (!BootLegalCacheBoundary::IsHDCompAlreadyTransitioned(mpGuiCache))
+                mHDCompAnimator.AddOutputAptViewState("apt_Transition", "transin", false);  // this+0x58
+            mEsrbAnimator.AddOutputAptViewState("apt_Transition",
+                BootLegalCacheBoundary::IsEsrbVisible(mpGuiCache) ? "visible" : "invisible", false); // this+0xE4
 
             mfStageStartTime = BootLegalCacheBoundary::GetTime(mpGuiCache);
             meUpdateStage    = E_STAGE_WAIT_START;
@@ -550,9 +577,10 @@ namespace BrnGui
             break;
 
         case E_STAGE_PRESTART_OR_IDLE:
-            // If start was already pressed, transin the start message and jump to the menu path;
-            // otherwise idle until the attract timeout, then play the attract loop.
-            if (mbWaitForStartPressed)
+            // If start was already pressed -- or the cache forces it via *(cache+77578)/
+            // *(cache+77579) (0x82477A1C / 0x82477A2C) -- transin the start message and jump
+            // to the menu path; otherwise idle until the attract timeout, then play the attract loop.
+            if (mbWaitForStartPressed || BootLegalCacheBoundary::IsStartMessageForced(mpGuiCache))
             {
                 mStartMessageAnimator.AddOutputAptViewState("apt_Transition", "transin", false); // this+0x170  // FLAG apt-view
                 meUpdateStage = E_STAGE_START_PRESSED;

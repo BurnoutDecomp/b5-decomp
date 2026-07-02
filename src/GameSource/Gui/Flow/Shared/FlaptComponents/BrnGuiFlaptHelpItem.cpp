@@ -74,8 +74,13 @@ namespace BrnGui
                                 bool /*lbRemapButtons*/)
     {
         CGS_ASSERT(lpText != 0, "Invalid text string");
+        // NOTE: matches the X360 asm exactly (0x8241D3DC-0x8241D3EC): the first
+        // range check mixes leButtonLeft's sign test with leButtonRight's upper
+        // bound (no upper-bound test on leButtonLeft here); the second check
+        // below re-tests leButtonRight fully. This looks like an original-source
+        // quirk, not a decompiler artifact -- reproduced verbatim.
         CGS_ASSERT(static_cast<s32>(leButtonLeft) >= 0
-                       && static_cast<s32>(leButtonLeft) < FlaptButtonIconComponent::E_PADBUTTON_COUNT,
+                       && static_cast<s32>(leButtonRight) < FlaptButtonIconComponent::E_PADBUTTON_COUNT,
                    "Invalid button state");
         CGS_ASSERT(static_cast<s32>(leButtonRight) >= 0
                        && static_cast<s32>(leButtonRight) < FlaptButtonIconComponent::E_PADBUTTON_COUNT,

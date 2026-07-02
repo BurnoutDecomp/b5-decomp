@@ -57,6 +57,7 @@ namespace BrnGui
     void BootVideos::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
         CgsGui::State::Construct(liId, lpFsm);
+        mbIsVideoState = true;   // ARTIST 0x824744EC: stb r9(=1), 0x32(r31) -- overrides base Construct's zero
         meUpdateStage = E_UPDATE_STAGE_LOADING;
         mfHDVideoStartTime = 0.0f;
         mfLogoVideoStartTime = 0.0f;
