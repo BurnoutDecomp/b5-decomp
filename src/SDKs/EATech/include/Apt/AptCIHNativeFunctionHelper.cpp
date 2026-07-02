@@ -42,6 +42,11 @@
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"          // findInst / ChangeDepth / swapDepths (swapDepths)
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"             // mpPositionMatrix tx/ty (getBounds)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (getBytesTotal)
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"           // AptString::str (the goto label)
+#include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"     // mpValue (the boxed label form)
+#include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"      // the operand-stack view (gotoAndX)
+#include "SDKs/EATech/include/Apt/AptMovie.h"                     // mpLabelHash (label -> frame)
+#include "SDKs/EATech/include/Apt/AptCharacter.h"                 // the movie character (KU_AptEmbeddedMovieOff)
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"           // spDefaultMovieCharacter/CreateMovieCharacterInst (createEmptyMovieClip)
 #include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h"      // spDefaultTextCharacter -> AptCharacter upcast (createTextField)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                    // gpAptTarget->mpAnimationTarget/mpLinker (attachMovie/loadMovie)
@@ -180,19 +185,87 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_setMask(AptValue* pContext, int nA
 // gotoAndPlay/gotoAndStop(frame): tail-call AptCIH::_gotoAndX with the play flag
 // (1 = play, 0 = stop).
 // ===========================================================================
+// ---------------------------------------------------------------------------
+// AptCIH::_gotoAndX @0x82B0D2F0 -- the shared gotoAndPlay/gotoAndStop core.
+// HOMED 2026-07-02 from the X360 asm (retiring the AptRenderLinkStubs null
+// stub). With at least one argument on the operand stack:
+//   * a level placeholder node (charInst mTypeFlags tag 15, 0x3C000000) is a
+//     no-op;
+//   * a STRING argument (the inlined isString(): vtbl 1/33 + defined) is a
+//     frame LABEL: both string forms yield the embedded EAStringC (+8 -- the
+//     AptString's `str`, or the StringObject's boxed value's), looked up in
+//     the clip movie's label hash (movie word[2]); frame = hash hit
+//     (an AptInteger) + 1, or 0 on a miss (-1 + 1);
+//   * otherwise frame = toInteger(arg);
+//   * AS frames are 1-based: frame -= 1; a negative result is a no-op;
+//   * jumpToFrame(frame); the sprite's playing bit (mnClipActionFlags bit 6)
+//     := bPlay; a STOP additionally calls SetDirtyState(1, 1).
+// Returns the shared undefined singleton (off_8324D814) either way.
+// ---------------------------------------------------------------------------
+extern AptActionInterpreter gAptActionInterpreter;   // dword_8324E760 (the AS VM)
+
+AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
+{
+    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+    if (nArgCount >= 1)
+    {
+        // The operand-stack top (the frame number or label).
+        AptValueVector* pStack =
+            reinterpret_cast<AptValueVector*>(&gAptActionInterpreter.mnStackTop);
+        AptValue* const pArg = pStack->mppItems[pStack->mnTop - 1];
+
+        AptCharacterInst* const pInst = pNode->GetCharacterInst();   // +0x20
+        if ((pInst->mTypeFlags & 0xFC000000u) != 0x3C000000u)        // tag 15 -> no-op
+        {
+            int32_t nFrame;
+            if (pArg->isString())
+            {
+                // Both string forms end at the embedded EAStringC (object +8).
+                AptString* const pStr =
+                    (pArg->getVtblIndex() == AptVFT_StringValue)
+                        ? static_cast<AptString*>(pArg)
+                        : static_cast<AptString*>(
+                              static_cast<AptStringObject*>(pArg)->GetBoxedString());
+                // The clip movie's label hash: charInst -> render item ->
+                // character -> embedded movie (X360 char+0x10 -> label hash
+                // word[2] == the +0x18 read; native-8 via the typed members).
+                const AptCharacter* const pChar = pInst->GetRenderItem()->mpCharacter;
+                const AptMovie* const pMovie = reinterpret_cast<const AptMovie*>(
+                    reinterpret_cast<const char*>(pChar) + KU_AptEmbeddedMovieOff);
+                AptNativeHash* const pLabels = pMovie->mpLabelHash;
+                AptValue* const pHit =
+                    pLabels ? pLabels->Lookup(*pStr->GetInternalString()) : nullptr;
+                nFrame = (pHit ? pHit->toInteger() : -1) + 1;
+            }
+            else
+            {
+                nFrame = pArg->toInteger();
+            }
+
+            nFrame -= 1;   // AS frames are 1-based
+            if (nFrame >= 0)
+            {
+                pNode->jumpToFrame(nFrame);
+                // playing := bPlay (the sprite-base inst's bit 6).
+                AptCharacterSpriteInstBase* const pSprite =
+                    static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
+                pSprite->mnClipActionFlags =
+                    (pSprite->mnClipActionFlags & ~0x40u) | (bPlay ? 0x40u : 0u);
+                if (!bPlay)
+                    pNode->SetDirtyState(true, true);   // X360 (r4=1, r5=1) on the stop arm
+            }
+        }
+    }
+    return gpUndefinedValue;   // off_8324D814
+}
+
 AptValue* AptCIHNativeFunctionHelper::sMethod_gotoAndPlay(AptValue* pContext, int nArgCount)
 {
-    // FLAG: AptCIH::_gotoAndX (the shared goto-frame core) is not yet homed;
-    // declared as an extern shim so this dispatcher keeps the exact
-    // (pContext, nArgCount, bPlay=1) tail-call shape.
-    extern AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay);   // AptCIH::_gotoAndX
     return AptCIH_gotoAndX(pContext, nArgCount, 1);
 }
 
 AptValue* AptCIHNativeFunctionHelper::sMethod_gotoAndStop(AptValue* pContext, int nArgCount)
 {
-    // FLAG: see sMethod_gotoAndPlay -- the same un-homed _gotoAndX core, bPlay=0.
-    extern AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay);   // AptCIH::_gotoAndX
     return AptCIH_gotoAndX(pContext, nArgCount, 0);
 }
 
