@@ -16,6 +16,7 @@
 #include "GameSource/Director/BrnDirectorICEWrapper.h"
 
 #include "SDKs/Packages/ICE/ICEData.hpp"                                            // ICE::ICETake (GetCameraTake return)
+#include "SDKs/Packages/ICE/ICEAuthor.hpp"                                          // ICE::ICEAuthor (GetAuthor's base-identity view)
 #include "GameShared/GameClasses/Containers/CgsStack.h"                             // CgsContainers::KI_STACK_UNCONSTRUCTED (action-queue seed)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"    // DebugManager::ThreadSafeAquire/Release
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // DebugInterface::Enable/DisableConsole
@@ -41,18 +42,19 @@ ICEWrapper::ICEWrapper()
 // ---------------------------------------------------------------------------
 // EditorOn
 //
-// Bring the in-game ICE editor up in mode liMode:
+// Bring the in-game ICE editor up for the given source take:
 //   * take a scoped debug-system handle and turn the on-screen console OFF (the
 //     editor draws its own overlay, so the console would clutter it),
 //   * cancel any movie playback in progress (the editor owns the camera now),
-//   * drive the manager's embedded editor into mode liMode.
+//   * drive the manager's embedded editor into take-edit mode on lpTakeData
+//     (ICEAuthor::EditorOn -- see the header's RETYPED note).
 //
 // The body is bracketed with a DebugInterface auto-acquire/critical-section release
 // (DebugInterface()/ThreadSafeRelease over the singleton DebugManager). The console
 // toggle is a DebugInterface member; expressed here as the established
 // thread-safe-acquire -> use -> release pattern (DebugComponent::Register's idiom).
 // ---------------------------------------------------------------------------
-void ICEWrapper::EditorOn(s32 liMode)
+void ICEWrapper::EditorOn(ICE::ICETakeData* lpTakeData)
 {
     CgsDev::DebugManager*  lpDebugManager = CgsDev::DebugManager::ThreadSafeAquire();
     CgsDev::DebugInterface lDebugInterface(lpDebugManager);
@@ -61,10 +63,26 @@ void ICEWrapper::EditorOn(s32 liMode)
     // The editor takes over the camera, so stop any movie playback first.
     mICEManager.ClearPlaybackData();
 
-    // Enter the requested editor mode on the manager's embedded editor.
-    mICEManager.GetEditor().EditorOn(liMode);
+    // Enter take-edit mode for the source take on the manager's embedded editor.
+    mICEManager.GetEditor().EditorOn(lpTakeData);
 
     CgsDev::DebugManager::ThreadSafeRelease(lpDebugManager);
+}
+
+// ---------------------------------------------------------------------------
+// GetAuthor
+//
+// The embedded editor through its ICEAuthor base identity: ICEController IS-A
+// ICEAuthor sharing the same `this` (the ICEAuthor.hpp "ICEController overlap"
+// FLAG). Expressed as a cast HERE ONLY until the pending
+// `ICEController : public ICEAuthor` derive reconciliation retires it -- then this
+// becomes a plain base-reference return. FLAG: while the two types keep independent
+// synthetic layouts, members past the shared head may not coincide on the 64-bit
+// host; the dev-tools author calls ride on that derive fix landing.
+// ---------------------------------------------------------------------------
+ICE::ICEAuthor& ICEWrapper::GetAuthor()
+{
+    return *reinterpret_cast<ICE::ICEAuthor*>(&mICEManager.GetEditor());
 }
 
 // ---------------------------------------------------------------------------

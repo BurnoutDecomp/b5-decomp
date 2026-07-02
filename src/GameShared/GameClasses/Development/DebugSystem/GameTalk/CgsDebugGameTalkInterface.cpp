@@ -50,7 +50,9 @@ bool DebugGameTalkInterface::Prepare()
 // X360 @0x82833D20. Inbound GameTalk message callback.
 void DebugGameTalkInterface::GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage)
 {
-    if (lpMessage->GetState() != 1)
+    // Only single-key messages are acted on (the @0x82836DC8 accessor is the
+    // message's key count -- pinned by BehaviourRenderMetrics' receiver loop).
+    if (lpMessage->GetNumKeys() != 1)
     {
         return;
     }

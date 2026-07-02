@@ -145,9 +145,12 @@ namespace BrnDirector
                 // selects which of the event's two intro shot-lists the resource manager hands
                 // back.
                 const AllVehicleData& lrAllVehicles = *lrSharedInfo.mpAllVehicleData;
-                const s32 liNearestRaceCar =
+                const EActiveRaceCarIndex leNearestRaceCar =
                     lrAllVehicles.GetNearestRaceCarIndexToPlayer(KU_NEAREST_RACE_CARS_ONLY);
-                const void* lpRaceCar = lrAllVehicles.GetRaceCar(liNearestRaceCar);
+                // GetRaceCar now returns the DWARF-typed record (VehicleInfo is
+                // reference-only here); the +0x220 position read below stays a
+                // byte-offset reach into the un-reconstructed record.
+                const void* lpRaceCar = &lrAllVehicles.GetRaceCar(leNearestRaceCar);
 
                 const rw::math::vpu::Matrix44Affine& lrPlayerTransform =
                     *static_cast<const rw::math::vpu::Matrix44Affine*>(lrSharedInfo.mpPlayerCarTransform);

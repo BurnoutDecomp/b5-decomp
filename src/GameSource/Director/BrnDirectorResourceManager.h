@@ -6,12 +6,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"   // CgsResource::ID (GetICETakeData arg / MakeICEMovieId return)
 #include <cstdio>                                                   // snprintf (GetKeyAnim name formatting)
 
-extern "C" {
-    int sub_827DC838(void* a1, int a2, int a3);
-    int sub_827DC8C8(void* a1, int a2, int a3);
-    extern void* off_820CEA3C;
-}
-
 namespace Attrib { namespace Gen { class shotgroup; } }   // GameSource/AttribSys/Generated/classes/shotgroup.h
 
 namespace BrnDirector
@@ -73,6 +67,15 @@ public:
         return mpICEWrapper->GetShakeGroup();
     }
 
+    // @0x821F69A8 (own ledger fn -- declared for the dev-tools GameTalk handler
+    // @0x822095A0). Resolve an ICE take GUID to its take data: the wrapper editor's
+    // edited-take list first (ICE::ICEAuthor::FindEditedTakeFromGuid on the X360
+    // rm+560 wrapper's editor), else the resource take list
+    // (BrnResource::ICEList::GetICETakeDataFromGuid on the rm+544 list pointer --
+    // both interiors live in maPaddingBeforeICEResourceMgr here). DECLARATION-ONLY;
+    // the body lands with this manager's own TU.
+    ICE::ICETakeData* GetKeyAnimFromGuid(s32 liGuid) const;
+
     const ICE::IResourceManager* GetIceResourceManager() const
     {
         return &mICEResourceMgr;
@@ -87,8 +90,6 @@ public:
     const Attrib::Gen::shotgroup& GetNormalCrashShots() const;
     const Attrib::Gen::shotgroup& GetSlowCrashShots() const;
 
-    DirectorResourceManager(int a1);
-
 private:
     // X360 members preceding mICEResourceMgr occupy 552 bytes. Their concrete
     // resource queue/handle types are owned by their respective TUs.
@@ -97,13 +98,6 @@ private:
     ICEWrapper* mpICEWrapper;
     u8 maPaddingAfterICEWrapper[1064];
 };
-
-inline DirectorResourceManager::DirectorResourceManager(int a1)
-{
-    // The pseudocode calls a massive list of subs, likely initializing a bunch of inline objects/arrays.
-    // However, the signature is `DirectorResourceManager(int a1)`, we can reconstruct its body directly.
-    // Wait, the dossier shows it's literally just initialization. Let's write the exact body from pseudo, adapted to class pointer.
-}
 
 }
 
