@@ -263,6 +263,35 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
 }
 
 // ---------------------------------------------------------------------------
+// AptCIH_ShapeHitTest (HOMED 2026-07-02, retiring the return-0 stub). The
+// X360 sMethod_hitTest's shape-precise arm @0x82AED868 is a HOST-CALLBACK
+// dispatch: `gAptFuncs.pfnPointHitTest(x, y, node)` (dword_8324E8A4 == the
+// user-function table +0x8C; PPC f1/f2 + r5 == the (float, float, clip) C
+// signature). The engine itself has no shape rasterisation -- precise hit
+// testing is the host renderer's job. FLAG (PC bring-up boundary): the X360
+// calls the slot unguarded (CgsAptAux always installs the full table); our
+// bring-up has not installed a point-hit-test callback yet, so a null slot
+// answers 0 (miss) -- the honest un-installed-host state, same convention as
+// the other un-wired gAptFuncs families.
+// ---------------------------------------------------------------------------
+extern AptUserFunctions gAptFuncs;   // dword_8324E818 (CgsAptAux.cpp)
+
+int AptCIH_ShapeHitTest(AptValue* pNode, float fX, float fY)
+{
+    if (gAptFuncs.pfnPointHitTest != nullptr)
+    {
+        // FLAG (x64 handle width): AptAssetMoiveClip is the DWARF 'int' handle --
+        // console-width for the clip pointer. No PC host installs this slot yet;
+        // when one does, the typedef must widen (intptr_t) with the host. The
+        // truncating cast documents the boundary rather than hiding it.
+        return gAptFuncs.pfnPointHitTest(
+            fX, fY,
+            static_cast<AptAssetMoiveClip>(reinterpret_cast<uintptr_t>(pNode)));
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // findCharacterInLibrary @0x82AFDF58 (HOMED 2026-07-02, retiring the null
 // stub). Resolve an exported library symbol name to its AptCharacter: walk
 // pNode's display-parent chain; at each node, take its character's owning def
