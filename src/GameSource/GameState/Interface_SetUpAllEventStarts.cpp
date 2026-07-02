@@ -24,14 +24,18 @@ namespace BrnGameState
 namespace GameStateModuleIO
 {
 
-// X360 0x8235B7D8 - inlined Array<EventStart,175>::Append: assert the array was
-// Construct/Clear'd and has room, copy the record into the next free slot, bump the count,
-// and return the newly added record.
+// X360 0x8235B7D8 - inlined Array<EventStart,175>::Append (void: CgsArray.h Append asserts
+// the array was Construct/Clear'd and has room, copies the record into the next free slot,
+// bumps the count). The inlined ASM never repoints r3 off its function-entry value on the
+// non-firing path (0x8235B8D0 falls straight through from entry with r3 untouched since the
+// `mr r29, r3` at 0x8235B7E4) -- i.e. the X360 "return" here is a void-Append inlining
+// artifact that yields the SetUpAllEventStartsInterface `this` pointer, NOT the new element.
+// Reproduced verbatim (asm-authoritative) rather than "corrected" to the new element.
 SetUpAllEventStartsInterface::EventStart*
 SetUpAllEventStartsInterface::AppendEventStart(const EventStart& lrEventStart)
 {
     maEventStarts.Append(lrEventStart);
-    return &maEventStarts.GetItem(maEventStarts.GetLength() - 1);
+    return reinterpret_cast<EventStart*>(this);
 }
 
 // X360 0x82361398 - linear-scan AddEventStart.
@@ -67,10 +71,9 @@ SetUpAllEventStartsInterface::AddEventStart(const u8* lpLeadingBlock, s32 liEven
     lEventStart.miEventID    = liEventID;
     lEventStart.miWord1C     = liWord1C;
     lEventStart.miWord20     = liWord20;
-    // FLAG: the X360 append path returns the array BASE pointer (an inlined-void-Append
-    // artifact leaving r3 = &maElements[0]); we return the NEW element for consistency with
-    // the found path above (return &lrExisting) -- the intended semantic. Re-confirm against
-    // the caller (GameStateModule::SendSetUpAllEventStartsMessage) when that TU is recovered.
+    // X360-authoritative: the not-found path returns whatever AppendEventStart/EventSta
+    // returns (0x823614E8 -> LABEL_15 falls straight through to the epilogue with r3
+    // untouched), which per AppendEventStart above is `this`, not the new element.
     return AppendEventStart(lEventStart);
 }
 

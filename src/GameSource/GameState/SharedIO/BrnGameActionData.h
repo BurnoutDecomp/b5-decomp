@@ -36,11 +36,12 @@ private:
     s32   miRank;                       // 0x34
 };
 
-// DWARF BrnGameActionData.h:53 -- flat stats block, no base. Construct() zeroes every member.
+// DWARF BrnGameActionData.h:53 -- flat stats block, no base. Construct() zeroes every member
+// except miTotalRoads (the X360 asm never stores to it -- see the NOTE in Construct()).
 struct GameStats
 {
     enum IntValueType   { E_INT_VALUE_TYPE_COUNT   = 32 };
-    enum FloatValueType { E_FLOAT_VALUE_TYPE_COUNT = 3  };
+    enum FloatValueType { E_FLOAT_VALUE_TYPE_COUNT = 4  };  // asm-derived; see Construct()
     enum IdValueType    { E_ID_VALUE_TYPE_COUNT    = 3  };
 
     void Construct();   // X360 0x82354F38
@@ -49,7 +50,7 @@ private:
     // DWARF BrnGameActionData.h:196-206 (CgsID == u64).
     CgsID maIdValues[3];
     s32   maIntValues[32];
-    f32   maFloatValues[3];
+    f32   maFloatValues[4];
     s32   maTakedownTypeCounts[13];
     s32   maRoadsRuledCounts[2];
     s32   maaiMaxStuntElementsPerCounty[3][5];
