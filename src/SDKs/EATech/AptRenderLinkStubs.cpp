@@ -145,7 +145,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // findCharacterInLibrary RETIRED (2026-07-02): homed in
     // AptCIHNativeFunctionHelper.cpp (the X360 @0x82AFDF58 parent-chain
     // export/import library resolve).
-    AptDragState* AptApt_GetDragState() { return nullptr; }   // FLAG link-stub
+    // AptApt_GetDragState RETIRED (2026-07-02): homed in
+    // AptActionInterpreterSpecialOps.cpp (the view over the director's
+    // mpDragMC..mGrabOffset run -- X360 StartDragMovie @0x82B03B00).
     AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStringC* pName) { return nullptr; }   // FLAG link-stub
     // AptScriptFunctionBase_GetActiveFrameStack RETIRED (2026-07-02): homed in AptFrameStack.cpp.
     // AptValue_EmbeddedNativeHash RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp (the AptValueWithHash mHash @+8).
