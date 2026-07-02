@@ -25,18 +25,24 @@
 // holes are explicit padding so the named members land at the binary
 // offsets. The real type is the APT display-list / place-object info
 // record (uncommitted in this batch â€” modelled here as an opaque slice).
+// NATIVE-8 RE-LAY (2026-07-02; was the console 4-byte record view, whose
+// straddled reads were half of the replay-merge crash). The record is the
+// GUIAPT64 place COMMAND (tag@0, 8-aligned body at cmd+8 -- command records are
+// pointer-aligned): the same body map PlaceCommand / resolve64 case-3 /
+// DoTemporaryFrameControls read. Console shadow offsets in brackets.
 struct AptPlaceObjectInfo_t
 {
-    u8  maPad00[4];        // [0x00] (unread by this ctor)
-    u32 muxFlags;          // [0x04] PlaceObject flag bits (0x04/0x08/0x10/0x80)
-    u8  maPad08[8];        // [0x08]
-    u8  maMatrix[24];      // [0x10] transform matrix block (address captured)
-    u8  maColorTransform[8]; // [0x28] colour-transform block (address captured)
-    f32 mfRatio;           // [0x30] morph/tween ratio
-    u8  maPad34[4];        // [0x34]
-    s16 mi16Depth;         // [0x38] display depth
-    u8  maPad3A[2];        // [0x3A]
-    s32 miClipActionValue; // [0x3C] clip-actions / extra value
+    u8  maPad00[8];          // [0x00] tag dword + the align pad to the body
+    u32 muxFlags;            // [0x08] body+0x00  PlaceObject flag bits   [c:+0x04]
+    s32 mi32Depth;           // [0x0C] body+0x04  display depth (i32)     [c: s16 @+0x38]
+    s32 mi32CharacterId;     // [0x10] body+0x08  placed character id
+    u8  maMatrix[24];        // [0x14] body+0x0C  2D affine (6 floats)    [c:+0x10]
+    u8  maColorTransform[8]; // [0x2C] body+0x24  packed colour transform [c:+0x28]
+    f32 mfRatio;             // [0x34] body+0x2C  morph/tween ratio       [c:+0x30]
+    u8  maName[8];           // [0x38] body+0x30  instance-name ptr8
+    s32 miClipDepth;         // [0x40] body+0x38  clip depth
+    u8  maPad44[4];          // [0x44]
+    u8  maClipActions[8];    // [0x48] body+0x40  clipActions block ptr8  [c: value @+0x3C]
 };
 
 struct AptPseudoData_t
@@ -45,7 +51,12 @@ struct AptPseudoData_t
     void* mpData;             // [0x00] caller-supplied data context (ctor arg)
     void* mpMatrix;           // [0x04] &source.maMatrix  if flag 0x04 set, else null
     void* mpColorTransform;   // [0x08] &source.maColorTransform if 0x08 set, else null
-    s32   miClipActionValue;  // [0x0C] source clip value   if 0x80 set, else 0
+    // [0x0C] the console captured its 4-byte clip-actions VALUE here (flag 0x80);
+    // the native-8 record carries a POINTER instead, which this 4-byte slot cannot
+    // hold -- and the slot is UNREAD by the mergeState props-overlay pun (it lands
+    // on AptFramePlacementProps::mnReserved0C), so it stays 0 on the native-8
+    // path. FLAG: revisit if a consumer of the console value surfaces.
+    s32   miClipActionValue;
     f32   mfRatio;            // [0x10] source ratio         if 0x10 set, else 0.0
     u32   muxFlags;           // [0x14] copy of source flag bits
     s16   mi16CharacterId;    // [0x18] character id (ctor arg)

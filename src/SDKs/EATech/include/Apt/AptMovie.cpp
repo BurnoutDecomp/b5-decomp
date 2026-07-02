@@ -244,7 +244,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
             }
 
             // ---- allocate a fresh pseudo node ------------------------------
-            void* pBlock = gpAptPseudoDataPool->Allocate(20);
+            void* pBlock = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));   // [c: 20]
             AptPseudoCIH_t* pNode = nullptr;
             if (pBlock)
             {
@@ -259,7 +259,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
         else if (eTag == 4)
         {
             // ---- remove command: allocate a node carrying the removed id ---
-            void* pBlock = gpAptPseudoDataPool->Allocate(20);
+            void* pBlock = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));   // [c: 20]
             AptPseudoCIH_t* pNode = nullptr;
             if (pBlock)
             {
@@ -679,7 +679,7 @@ void* AptMovie::resolve(int nBase, void* a3, int a4)
     void* result;
 
     // ---- allocate + init the label hash (5 dwords, tag 2) ------------------
-    void* pHash = gpAptPseudoDataPool->Allocate(20);
+    void* pHash = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));   // [c: 20]
     void* pHashOut;
     if (pHash)
     {
@@ -883,7 +883,7 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
     int64_t* const pnCount = pnParsedValues ? pnParsedValues : &lnFallbackCount;
 
     // ---- allocate + init the label hash (5 dwords, tag 2) ------------------
-    void* pHash = gpAptPseudoDataPool->Allocate(20);
+    void* pHash = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));   // [c: 20]
     if (pHash)
     {
         CmdSetI32(pHash, 0x04, 0);
