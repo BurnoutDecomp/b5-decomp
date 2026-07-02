@@ -362,21 +362,63 @@ int AptCIH::jumpToFrame(int nFrame)
         }
         else
         {
-            // Arbitrary jump: the console rebuilds the intervening display-list state
-            // into a scratch pseudo list (DoTemporaryFrameControls per skipped frame)
-            // and merges it (AptDisplayList_mergeState).
+            // Arbitrary jump: rebuild the intervening display-list state into a
+            // scratch pseudo list, replaying every skipped frame, then merge it.
             //
-            // FLAG (un-homed native-8 leaf -- the SAME honest boundary as the tick's
-            // end-wrap, now REACHED because the live VM executes gotoAndPlay): the
-            // temporary-frame resolver still reads command records at CONSOLE (4-byte)
-            // offsets (CmdPtr(pCmd, 0x08)/CmdI32(pCmd, 0x0C) on the 8-aligned native-8
-            // body -> straddled pointers -> AV; verified by the earlier crash dump). So
-            // the replay-merge is SKIPPED: the play-head seeks directly and the target
-            // frame's actions still queue below; the next tick's doFrameControls
-            // composes the target frame's content. The replay-merge (which matters for
-            // the intervening frames' cumulative placements on a mid-timeline SEEK)
-            // lands with the resolver's native-8 port -- its own follow-on.
+            // FLAG (staged -- the pseudo/merge sub-cluster): DoTemporaryFrameControls
+            // itself is native-8 now (2026-07-02), but its CONSUMERS -- the
+            // AptPseudoCIH_t ctor's record reads + AptDisplayList_mergeState's
+            // reconcile -- still carry console-form reads (re-enabling the replay
+            // crashed at the first AS gotoAndPlay). Until that sub-cluster is
+            // ported, the boundary-skip below stays: the play-head seeks directly;
+            // the target frame's actions still queue; the next tick's
+            // doFrameControls composes the target frame's content.
+            if (false)
+            {
+            void* pProperties = pInst->mpProperties;   // dword[3] (the AS property hash)
+
+            void* pScratchMem = gpAptPseudoDataPool->Allocate(8);
+            AptPseudoDisplayList* pScratch = nullptr;
+            if (pScratchMem)
+                pScratch = new (pScratchMem) AptPseudoDisplayList(this);
+
+            const char bForward = (pInst->mnGotoFrame < nFrame) ? 1 : 0;
+
+            // A freshly-placed clip (state bit7) restarts from frame 0.
+            if ((pInst->mnClipActionFlags & 0x80u) == 0x80u)
+                pInst->mnGotoFrame = 0;
+            // Never replay forward FROM a frame already at/after the target.
+            if (pInst->mnGotoFrame >= nFrame)
+                pInst->mnGotoFrame = 0;
+
+            // Replay every frame from the current play-head up to and including
+            // nFrame into the scratch list (stopping early if it would run past the
+            // clip's end). The play-head (mnGotoFrame) is the loop variable.
+            while (pInst->mnGotoFrame <= nFrame)
+            {
+                if (pInst->mnGotoFrame >= AptCIH_GetClipMovie(pInst)->mnFrameCount)
+                    break;
+                // FLAG: the X360 call site (sub_82B0BE60) only fills r3 (the AptMovie)
+                // and r4 (the scratch list); the frame index + trailing args are not
+                // re-loaded into r5/r6 at the call. Passed faithfully as the current
+                // replay frame for the AptMovie::DoTemporaryFrameControls signature.
+                pMovie->DoTemporaryFrameControls(pScratch, pInst->mnGotoFrame, 0, nullptr);
+                ++pInst->mnGotoFrame;
+            }
+
             pInst->mnGotoFrame = nFrame;
+            AptDisplayList_mergeState(&pInst->mDisplayList, pScratch, pProperties, bForward);
+
+            if (pScratch)
+            {
+                pScratch->~AptPseudoDisplayList();
+                gpAptPseudoDataPool->Deallocate(pScratch, 8);
+            }
+            }
+            else
+            {
+                pInst->mnGotoFrame = nFrame;   // the staged boundary seek
+            }
         }
 
         pInst->mnLastActionFrame = pInst->mnGotoFrame;
