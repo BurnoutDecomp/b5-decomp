@@ -92,6 +92,12 @@ namespace stdc
     // DECLARATION-ONLY.
     s32 Snprintf(char* lpcDst, s32 liSize, const char* lpcFormat, ...);
 
+    // atoi wrapper: parse the leading decimal integer of the NUL-terminated
+    // lpcString (@0x82BC7650). BrnDirector::DirectorDevTools::GameTalkMsgHandler
+    // parses the ICE take GUIDs / post-FX hook value from the GameTalk message
+    // content through it. DECLARATION-ONLY.
+    s32 ConvertAToI(const char* lpcString);
+
     // strcmp wrapper: compare the NUL-terminated lpcA against lpcB, returning a
     // value <0 / 0 / >0 (C-library strcmp semantics; 0 means equal). The ICE menu
     // widget uses it to detect empty cells (cell text == the empty sentinel) and

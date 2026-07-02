@@ -56,9 +56,10 @@ namespace CgsDev
 
     private:
         // X360 @0x82833D20. GameTalk message-received callback registered on the
-        // "DebugSystem" channel. When the message's state word is 1 and it carries
-        // an "ExecuteScript" key, run that script text through the debug UI's
-        // script interface (acquiring the DebugManager around the call).
+        // "DebugSystem" channel. When the message carries exactly one key
+        // (GetNumKeys() == 1) and that key is "ExecuteScript", run the script text
+        // through the debug UI's script interface (acquiring the DebugManager
+        // around the call).
         static void GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage);
 
         CgsGameTalk::GameTalk* mpGameTalk;   // +0x00

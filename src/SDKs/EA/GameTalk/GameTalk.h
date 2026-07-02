@@ -91,18 +91,33 @@ namespace GameTalk
         // Modelled as a member that lazily allocates the message's data buffer.
         void* AllocateDataBuffer();
 
-        // GROWN for CgsDev::DebugGameTalkInterface::GameTalkMsgHandler
-        // (X360 @0x82833D20). The handler receives an incoming message and gates on
-        // its state word == 1 before reading the "ExecuteScript" key. The X360 Hex-Rays
-        // mis-resolves these two reads as CgsNetwork::ServerInterfaceComponent::GetLastError
-        // and sub_82837E08, but the call sites pass the GameTalkMessage `this` (r3) and
-        // (for the second) the key string in r4 -- so they are message accessors.
+        // GROWN for CgsDev::DebugGameTalkInterface::GameTalkMsgHandler (X360
+        // @0x82833D20), SEMANTICS PINNED by BrnDirector::Camera::
+        // BehaviourRenderMetrics::GameTalkMessageReceiver (X360 @0x8220FB60). The
+        // X360 Hex-Rays mis-resolves the shared accessor @0x82836DC8 as
+        // CgsNetwork::ServerInterfaceComponent::GetLastError; both call sites pass
+        // the GameTalkMessage `this` in r3.
         //
-        // GetState(): the message's state/result word the handler compares to 1 (only a
-        //             state of 1 is acted on). Asm-shape-derived (return is the r3 int the
-        //             handler branches on); the enumerated state values are not attested by
-        //             this TU, so the raw word is exposed and the caller compares it to 1.
-        s32 GetState() const;
+        // GetNumKeys() @0x82836DC8: the number of key/content entries attached to
+        //   the message (`lwz r3, 0xC(r3)` -- the count word behind the +0x8 entry
+        //   table). The render-metrics receiver uses it as its key-index loop
+        //   bound (indices feed GetKey/GetContent/GetSize below), which is what
+        //   pins the count semantics; the debug handler's `!= 1` gate is thus an
+        //   "exactly one key" check. (Previously modelled as GetState() from the
+        //   debug handler's compare alone -- reconciled 2026-07.)
+        s32 GetNumKeys() const;
+
+        // Indexed entry accessors, GROWN for BehaviourRenderMetrics::
+        // GameTalkMessageReceiver (X360 @0x8220FB60). Each reads the entry-pointer
+        // table at message+0x8 (`lwzx` entry = table[liIndex]) and returns one
+        // entry field:
+        //   GetKey     @0x82836DD0  entry+0x0  the key name string.
+        //   GetContent @0x82836DE8  entry+0x8  the raw content blob (callers cast;
+        //                                      the metrics receiver reads float32s).
+        //   GetSize    @0x82836E00  entry+0xC  the content byte size.
+        const char* GetKey(s32 liIndex) const;
+        const void* GetContent(s32 liIndex) const;
+        s32         GetSize(s32 liIndex) const;
 
         // GetKeyContent(): look up the named key and return its content blob (the script
         //                  source for "ExecuteScript"); NULL when the key is absent. The

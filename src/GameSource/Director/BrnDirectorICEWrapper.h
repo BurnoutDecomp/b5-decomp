@@ -77,7 +77,7 @@
 //   * ICE::ICEGroup -- GetShakeGroup's return type; no reconstructed home yet (see the
 //     ICEData.hpp ICEGroup note), referenced by pointer only.
 namespace CgsSystem { class TimerStatusInterface; }
-namespace ICE       { struct ICEGroup; }
+namespace ICE       { struct ICEGroup; struct ICEAuthor; }
 
 namespace BrnDirector
 {
@@ -112,10 +112,14 @@ public:
     // Tear down the runtime: destruct the ICE manager, then destruct the base heap.
     void Destruct();
 
-    // Turn the in-game ICE editor ON for editor mode liMode. Disables the debug
+    // Turn the in-game ICE editor ON for the given source take. Disables the debug
     // console for the editing session, clears any active movie playback, then drives
-    // the manager's editor into the requested mode.
-    void EditorOn(s32 liMode);
+    // the manager's editor into take-edit mode on lpTakeData. (RETYPED 2026-07: the
+    // parameter was modelled `s32 liMode`, but the real editor entry point is
+    // ICEAuthor::EditorOn(ICETakeData*) -- ICEAuthor.hpp:252, bodied in
+    // ICEAuthor.cpp -- and the dev-tools GameTalk handler @0x822095A0 passes the
+    // resolved take-data pointer through here.)
+    void EditorOn(ICE::ICETakeData* lpTakeData);
 
     // Turn the in-game ICE editor OFF. Re-enables the debug console; if the editor is
     // currently active it transitions the editor back to its idle/play state.
@@ -142,6 +146,17 @@ public:
     void UpdateAction(const Camera::Utils::DebugController& lrController);
 
     bool IsEditorActive() const { return mICEManager.GetEditor().AreMenusActive(); }
+
+    // GROWN for DirectorDevTools::GameTalkMsgHandler (@0x822095A0): the dev-tools
+    // GameTalk commands drive the embedded editor directly (X360 MainDirector+0x27A0
+    // == this wrapper's manager editor). GetEditor exposes the ICEController view
+    // (state/channel gates + SetCurrentIntervalValue); GetAuthor exposes the SAME
+    // object through its ICEAuthor base identity (CreateNewTake / EditAssembly /
+    // SetAssemblySourceTake -- see the ICEAuthor.hpp "ICEController overlap" FLAG;
+    // the cast lives in the .cpp and retires with the pending
+    // `ICEController : public ICEAuthor` derive reconciliation).
+    ICE::ICEController& GetEditor() { return mICEManager.GetEditor(); }
+    ICE::ICEAuthor& GetAuthor();
     void SetAcceptInput(bool lbAcceptInput) { mbAcceptInput = lbAcceptInput; }
     bool WasEditorActive() const { return mbWasEditorActive; }
     void SetWasEditorActive(bool lbWasEditorActive)

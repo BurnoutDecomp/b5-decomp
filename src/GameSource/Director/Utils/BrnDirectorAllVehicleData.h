@@ -1,87 +1,102 @@
-#ifndef GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_ALL_VEHICLE_DATA_H
-#define GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_ALL_VEHICLE_DATA_H
-
-#include <cstddef>                                        // offsetof (layout static_asserts)
+#pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N> (the NearestCarInfo,8 container)
+#include "BrnCommonTypes.h"                                  // Matrix44Affine
+#include "GameSource/BurnoutConstants.h"                     // EActiveRaceCarIndex
+#include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<T,N>
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<8>
+#include "GameShared/GameClasses/Algorithms/CgsBubbleSort.h" // CgsAlgorithms::BubbleSort
 
-// ============================================================================
-// GameSource/Director/Utils/BrnDirectorAllVehicleData.h
+// BrnDirector::AllVehicleData - the director's per-frame view of every live
+// vehicle (player spaces, the race-car table, traffic, and the sorted
+// nearest-cars-to-player list). Class shape / member names / method set verbatim
+// from the DecFIGS DWARF (BrnDirectorAllVehicleData.h:45/:108/:121-:139); gated
+// on the X360 ledger. This TU bodies the two nearest-car distance queries; the
+// rest of the surface is declared-only (their own ledger functions).
 //
-// BrnDirector::AllVehicleData -- the director's per-frame snapshot of every tracked vehicle
-// (the player car, the race cars, the traffic). HOME for the NearestCarInfo element type and
-// the Array<NearestCarInfo, 8> container instantiation whose Append this TU bodies.
-//
-// ----------------------------------------------------------------------------
-// The TU this header anchors is the Array<NearestCarInfo, 8>::Append instantiation
-// @0x821FBA48 (the X360 names it BrnDirector::AllVehicleData::NearestCarInfo,8>::Append). The
-// Append body itself is the generic Array<T,N>::Append in CgsArray.h; this header just gives
-// that instantiation its element type (NearestCarInfo) and a real .cpp home.
-//
-// NearestCarInfo layout is pinned store-for-store from the Append asm (a 12-byte / 3-word
-// element: the element pointer is computed as base + count*3words, then three 32-bit words are
-// copied in) and from the caller AllVehicleData::Update @0x8221D938 (which assembles the three
-// words as: a vehicle index, the squared distance to that car, and the per-team value indexed
-// out of the vehicle-team array). Field roles are named from that caller; the OFFSETS/SIZE are
-// authoritative. The rest of AllVehicleData (the full vehicle snapshot) lands with its own TU.
-// ----------------------------------------------------------------------------
+// RECONCILED (2026-07) with the earlier minimal slice this header replaced: the
+// slice's NearestCarInfo field names (miVehicleIndex/mfDistanceSquared/
+// muTeamValue, roles read off the Update @0x8221D938 caller) are superseded by
+// the DWARF names below (same 12-byte element, pinned by the static_asserts);
+// its NearestCarInfoArray typedef and the Append-instantiation anchor
+// (@0x821FBA48, the BrnDirectorAllVehicleData.cpp FILE TU) are KEPT; its
+// GetNearestRaceCarIndexToPlayer (@0x82233380) / GetRaceCar (@0x82205DE8)
+// decls fold into the DWARF-typed ones below (the RaceIntro consumer reads the
+// race car's +0x220 position lane through the returned record).
+namespace BrnTraffic { namespace BrnTrafficIO { struct TrafficDirectorEntity; } }
 
 namespace BrnDirector
 {
+    struct VehicleInfo;   // pointer/reference-only here (own home)
 
-class AllVehicleData
-{
-public:
-
-    // One "nearest car" record: a vehicle index, the squared distance to it, and the value
-    // pulled from the per-vehicle team array for that vehicle. A 12-byte (3-word) POD; the
-    // Append asm copies exactly three 32-bit words, so the three fields below are 4 bytes each
-    // with no trailing padding (the container packs them at a 12-byte stride).
-    struct NearestCarInfo
+    struct AllVehicleData
     {
-        s32 miVehicleIndex;     // +0x00  the vehicle's index (v135[0] = v99 in Update)
-        f32 mfDistanceSquared;  // +0x04  squared distance to that vehicle (the vmsum3fp128 dot)
-        u32 muTeamValue;        // +0x08  per-vehicle team value (*(4*index + lpaVehicleTeams))
+        // DWARF :108 -- one sorted nearest-car row. X360-DIVERGENCE NOTE: the PS3
+        // DWARF lists only {meRaceCarIndex, mfDistance}, but the X360 element
+        // stride is 12 (the Array<...,8> count word sits at +0x60 == 8*12) and
+        // SqDistanceOfNearestOpposingTeamMember compares a third word @+8 against
+        // the caller-supplied team -- the X360 record carries the row car team id.
+        struct NearestCarInfo
+        {
+            EActiveRaceCarIndex meRaceCarIndex;   // :116  +0x0
+            f32                 mfDistance;       // :117  +0x4 (squared distance)
+            s32                 miTeam;           // X360 +0x8 (FLAG: name inferred; absent from the PS3 DWARF)
+
+            bool operator>(const NearestCarInfo& lrOther) const;   // :111 (own ledger fn; the sort order)
+        };
+
+        // The 8-slot nearest-car container (inline buffer 8*12 = 0x60 bytes, live
+        // count word at +0x60 -- the Append @0x821FBA48 instantiation's element
+        // math). Kept from the earlier slice for the .cpp's instantiation anchor.
+        typedef Array<NearestCarInfo, 8u> NearestCarInfoArray;
+
+        // ---- DWARF :54-:103 -- declared-only (their own ledger functions) ----
+        void Construct();                                                        // :54
+        const VehicleInfo& GetPlayer() const;                                    // :57
+        const VehicleInfo& GetRaceCar(EActiveRaceCarIndex leIndex) const;        // :61 (@0x82205DE8; the race-intro consumer reads the car's +0x220 position lane)
+        void Update(CgsContainers::BitArray<8u> lUsedRaceCars, const VehicleInfo* lpRaceCars,
+                    EActiveRaceCarIndex lePlayerIndex,
+                    const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpTraffic); // :68
+        const VehicleInfo& GetNearestRaceCarToPlayer(u32 luRank) const;          // :75
+        EActiveRaceCarIndex GetNearestRaceCarIndexToPlayer(u32 luRank) const;    // :82 (@0x82233380)
+        Matrix44Affine GetPlayerImpactSpace() const;                             // :85
+        Matrix44Affine GetPlayerHeadingSpace() const;                            // :88
+        Matrix44Affine GetPlayerLooseHeadingSpace() const;                       // :91
+        const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* GetTraffic() const; // :94
+        const VehicleInfo* GetRaceCars() const;                                  // :97
+        const CgsContainers::BitArray<8u>& GetUsedRaceCarsBitArray() const;      // :100
+        EActiveRaceCarIndex GetPlayerRCIndex() const;                            // :103
+
+        // @0x82233488 (this class TU; body in BrnDirectorAllVehicleData.cpp) -- the
+        // squared distance of the nearest OTHER car (sorted row 1; row 0 is the
+        // player itself). CONST + mutable sort state: the committed consumers reach
+        // these through a `const AllVehicleData*` (ArbStateSharedInfo +0x38), so
+        // the lazy first-use sort is modelled with mutable members.
+        f32 GetSqDistanceOfNearestCarToPlayer() const;
+
+        // @0x822334E0 (this class TU) -- the squared distance of the nearest car on
+        // a different team, or FLT_MAX when every listed car shares liMyTeam.
+        f32 SqDistanceOfNearestOpposingTeamMember(s32 liMyTeam) const;
+
+    private:
+        // DWARF :121-:139 order (Matrix44Affine members keep the class 16-aligned).
+        Matrix44Affine mPlayerImpactSpace;         // :121  X360 +0x00
+        Matrix44Affine mPlayerHeadingSpace;        // :122  +0x40
+        Matrix44Affine mPlayerLooseHeadingSpace;   // :123  +0x80
+        const VehicleInfo* mpRaceCars;             // :125  +0xC0
+        EActiveRaceCarIndex mePlayerRaceCarIndex;  // :126  +0xC4
+        CgsContainers::BitArray<8u> mUsedRaceCars; // :127  +0xC8
+        const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>*
+                       mpTrafficVehicleArray;      // :129  +0xD0
+        // mutable: the two const distance queries lazily sort on first use (the
+        // consumers hold a const pointer; see the query comment above).
+        mutable NearestCarInfoArray
+                       maNearestRaceCarsToPlayer;  // :133  +0xD4 (count word @+0x134)
+        mutable bool   mbSorteddNearestRaceCarsToPlayer;   // :134  +0x138 (DWARF spelling)
+        bool           mbShouldUpdateNearestRaceCars;      // :139
     };
 
-    // The director keeps up to 8 nearest-car records (Array<NearestCarInfo, 8>; the inline
-    // buffer is 8 * 12 = 0x60 bytes, then the trailing live-count word at +0x60 -- matching the
-    // Append asm, which reads the count from +0x60 and computes element = base + count*3words).
-    typedef Array<NearestCarInfo, 8> NearestCarInfoArray;
-
-    // ---- nearest-car queries the director's FX path uses (X360-attested) -----------------
-    // The squared distance from the player to the nearest tracked car (bubble-sorts the
-    // nearest-car list on first call, then returns the front record's distance). @0x82233488.
-    // X360 returns the float via the double FP-ABI; modelled as f32.
-    f32 GetSqDistanceOfNearestCarToPlayer() const;
-
-    // The squared distance to the nearest car that is NOT on liTeamId's team (the nearest
-    // *opposing* member). @0x822334E0. X360 returns it via the result-pointer ABI; modelled as
-    // a plain f32 return. FLAG: const-ness inferred (a read-only query that lazily sorts).
-    f32 SqDistanceOfNearestOpposingTeamMember(s32 liTeamId) const;
-
-    // ---- race-car queries the director's race-intro path uses (X360-attested) ------------
-    // The index of the race car nearest the player. luSelector selects the candidate set the
-    // X360 passes (1 == race cars only). @0x82233380. The intro state feeds the result to
-    // GetRaceCar. FLAG: const-ness inferred (a read-only query that lazily sorts the list).
-    s32 GetNearestRaceCarIndexToPlayer(u32 luSelector) const;
-
-    // The race-car record at liIndex (an opaque vehicle-data blob whose layout belongs to the
-    // full AllVehicleData TU). @0x82205DE8. The intro state reads the car's world position out
-    // of it (the X360 lvx128 at the record's +0x220) to decide whether the car is in front of
-    // the player. Returned as a raw pointer because the record type is not reconstructed here.
-    // FLAG: const-ness inferred.
-    const void* GetRaceCar(s32 liIndex) const;
-};
-
-// Pin the element size/field offsets to the Append asm (12-byte / 3-word element copied as
-// three 32-bit words; element pointer = base + count*3words).
-static_assert(sizeof(AllVehicleData::NearestCarInfo) == 12, "NearestCarInfo is a 12-byte element");
-static_assert(offsetof(AllVehicleData::NearestCarInfo, miVehicleIndex)    == 0x00, "NearestCarInfo.+0x00");
-static_assert(offsetof(AllVehicleData::NearestCarInfo, mfDistanceSquared) == 0x04, "NearestCarInfo.+0x04");
-static_assert(offsetof(AllVehicleData::NearestCarInfo, muTeamValue)       == 0x08, "NearestCarInfo.+0x08");
-
-} // namespace BrnDirector
-
-#endif // GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_ALL_VEHICLE_DATA_H
+    // Pin the X360 12-byte element (kept from the earlier slice; the Append
+    // @0x821FBA48 asm copies exactly three 32-bit words at a 12-byte stride).
+    static_assert(sizeof(AllVehicleData::NearestCarInfo) == 12, "NearestCarInfo is a 12-byte element");
+}

@@ -331,8 +331,10 @@ struct ICEController
     // These are ICEAuthor base methods (ICEAuthor::EditorOn, ICEAuthor::SetState),
     // invoked on the editor `this`. Declared here on the slice until the ICEAuthor base
     // lands (their `this` is identical). FLAG: move onto the ICEAuthor base when it
-    // lands -- do NOT keep a fork.
-    void EditorOn(s32 liMode);
+    // lands -- do NOT keep a fork. (EditorOn RETYPED 2026-07 to match the real
+    // ICEAuthor::EditorOn(ICETakeData*) -- ICEAuthor.hpp:252; the old `s32 liMode`
+    // parameter was a mis-model.)
+    void EditorOn(ICETakeData* lpTakeData);
     void SetState(s32 liState);
 
     // ---- Accessors preserved for the existing consumers (ICEManager / ICEWrapper) ----

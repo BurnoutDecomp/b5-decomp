@@ -88,6 +88,35 @@ namespace Utils
     VecFloat GetFOVDegsToFitObjectToScreenSize(VecFloat lvDistance,
                                                Vector2 lSizeOnScreen,
                                                Vector2 lTargetSize);
+// ----------------------------------------------------------------------------
+// TransitionSmoother (ADDITIVE GROW: its class TU) -- a lerp-smoothed scalar
+// with a self-smoothed lerp amount. Class shape / member names / method set
+// verbatim from the DWARF (CameraUtils.h:112/:138-:143). This TU bodies Set;
+// Get/GetRef/SetTarget/Update are their own ledger functions (declared-only).
+// ----------------------------------------------------------------------------
+struct TransitionSmoother
+{
+    // DWARF :116/:119/:130/:134 -- declared-only.
+    f32 Get() const;
+    const f32& GetRef() const;
+    void SetTarget(f32 lfTarget);
+    void Update(f32 lfTimeStep);
+
+    // @0x821F22A0 (class TU; body in CameraUtils.cpp, DWARF :126) -- seed the
+    // smoother: value/target snap to lfValue, the live lerp amount restarts at 0
+    // and chases lfLerpAmount0to1 (itself smoothed by lfLerpAmountLerpAmount0to1).
+    void Set(f32 lfValue, f32 lfLerpAmount0to1, f32 lfLerpAmountLerpAmount0to1,
+             f32 lfSimilarityToleranceScale);
+
+private:
+    f32 mfData;                       // :138  +0x00
+    f32 mfTarget;                     // :139  +0x04
+    f32 mfIdealLerpAmount;            // :140  +0x08
+    f32 mfLerpAmount;                 // :141  +0x0C
+    f32 mfLerpAmountLerpAmount;       // :142  +0x10
+    f32 mfSimilarityToleranceScale;   // :143  +0x14
+};
+
 } // namespace Utils
 } // namespace Camera
 } // namespace BrnDirector

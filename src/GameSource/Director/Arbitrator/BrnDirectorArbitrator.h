@@ -136,6 +136,12 @@ namespace BrnDirector
         // The shared-camera container the gameplay cameras live in. (BrnDirectorArbitrator.h:98)
         SharedCameraContainer& GetSharedCameras() { return mSharedCameraContainer; }
 
+        // GROWN for DirectorDevTools::GameTalkMsgHandler (@0x822095A0): the GameTalk
+        // Start/StopRenderMetrics commands poke the render-metrics request pair
+        // (X360 arbitrator +0x44FE / +0x44FF) directly.
+        void SetDoRenderMetrics(bool lbDoRenderMetrics) { mbDoRenderMetrics = lbDoRenderMetrics; }
+        void SetRenderMetricsArg(u8 luArg)              { muRenderMetricsArg = luArg; }
+
     private:
         // The currently-driving "normal" gameplay camera (the container's selected state's
         // camera). (BrnDirectorArbitrator.h:150) DECLARATION-ONLY (no asm in this TU's set).
@@ -190,6 +196,10 @@ namespace BrnDirector
         bool                     mbStartOfGame;                // X360 +0x44FC
         bool                     mbDoAttractMode;              // X360 +0x44FD
         bool                     mbDoRenderMetrics;            // X360 +0x44FE
+        u8                       muRenderMetricsArg;           // X360 +0x44FF (the StartRenderMetrics content's
+                                                               //   first byte -- an ASCII digit from the tool;
+                                                               //   consumed by the render-metrics state, role
+                                                               //   un-attested by this TU)
         bool                     mbWasDoingTrainingLastFrame;  // X360 +0x4500
         f32                      mfSlomoFactor;                // X360 +0x4504
     };
