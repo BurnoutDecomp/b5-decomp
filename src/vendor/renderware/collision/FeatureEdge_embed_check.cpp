@@ -8,13 +8,14 @@ namespace
 void FeatureEdgeEmbedCheck()
 {
     using rw::collision::FeatureEdge;
+    using rw::collision::Vec4;
 
-    FeatureEdge::Vec4 lA{0.0f, 0.0f, 0.0f, 0.0f};
-    FeatureEdge::Vec4 lB{1.0f, 0.0f, 0.0f, 0.0f};
-    FeatureEdge lEdge(&lA, &lB);
+    Vec4 lA{0.0f, 0.0f, 0.0f, 0.0f};
+    Vec4 lB{1.0f, 0.0f, 0.0f, 0.0f};
+    FeatureEdge lEdge(lA, lB);
 
-    FeatureEdge::Vec4 lPoint{0.5f, 0.0f, 0.0f, 0.0f};
-    int liRegion = lEdge.constrain_point(&lPoint);
-    (void)liRegion;
+    Vec4 lPoint{0.5f, 0.0f, 0.0f, 0.0f};
+    u32 luRegion = lEdge.constrain_point(lPoint);
+    (void)luRegion;
 }
 } // namespace

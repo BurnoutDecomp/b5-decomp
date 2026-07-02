@@ -19,7 +19,7 @@ namespace collision
 VolRef& VolRef::operator=(const VolRef& rOther)
 {
     muVolumePtr = rOther.muVolumePtr;   // +0x00
-    muTag       = rOther.muTag;         // +0x04
+    muTransformPtr = rOther.muTransformPtr;   // +0x04
     mRow0       = rOther.mRow0;         // +0x10
     mRow1       = rOther.mRow1;         // +0x20
     mRow2       = rOther.mRow2;         // +0x30
@@ -28,8 +28,8 @@ VolRef& VolRef::operator=(const VolRef& rOther)
     mu58        = rOther.mu58;          // +0x58
     mu60        = rOther.mu60;          // +0x60
     mu68        = rOther.mu68;          // +0x68
-    mu70        = rOther.mu70;          // +0x70
-    mu74        = rOther.mu74;          // +0x74
+    muTag       = rOther.muTag;         // +0x70
+    muNumTagBits = rOther.muNumTagBits; // +0x74
     return *this;
 }
 
