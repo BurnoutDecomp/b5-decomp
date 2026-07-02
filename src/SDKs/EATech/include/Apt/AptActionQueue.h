@@ -82,8 +82,13 @@ struct AptAnimationPoolData
         {
             s32       miContext;   // +0x04  interpreter context handle (a4)
             s32       miDepth;     // +0x08  instance depth snapshot at queue time
-            s32       miEventId;   // +0x0C  clip-event / frame index (a2)
-            AptValue* mpCIH;       // +0x10  the CIH the action runs on (GC ref)
+            // The queued "event id" is really the ADDRESS of the command record's
+            // action-stream pointer slot (console: queueFrameActions passes cmd+4;
+            // RunActions dereferences it TWICE -- `**(v3+12)`). A 4-byte console
+            // slot; pointer-width on x64 (the same forced widening as the union's
+            // function view, whose AptValue* members are already 8 bytes).
+            const void* mpEventStreamSlot;   // +0x10 x64 (console +0x0C, s32)
+            AptValue* mpCIH;       // +0x18 x64 (console +0x10)  the CIH (GC ref)
         } action;
 
         // ---- function view (mnType == E_ACTION_TYPE_FUNCTION) -------------
@@ -117,11 +122,13 @@ public:
     // @ 0x82AD94B0 -- enqueue an action at the back. No-op if the ring is full
     // (advancing back would collide with front). AddRefs the CIH. Returns the CIH
     // (X360 fastcall return value).
-    AptValue* AddActionBack(s32 iEventId, AptCIH* pCIH, s32 iContext);
+    // pEventStreamSlot = the command record's action-stream pointer slot address
+    // (console s32 event id; pointer-width on x64 -- see AptAnimationPoolData).
+    AptValue* AddActionBack(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext);
 
     // @ 0x82AD9548 -- enqueue an action at the front (push onto the head). Mirrors
     // AddActionBack but decrements front. AddRefs the CIH.
-    AptValue* AddActionFront(s32 iEventId, AptCIH* pCIH, s32 iContext);
+    AptValue* AddActionFront(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext);
 
     // @ 0x82AD95F8 -- enqueue a function call at the back. No-op if the ring is
     // full. AddRefs both the context and the func-def values.

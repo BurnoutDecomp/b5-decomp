@@ -14,6 +14,9 @@
 #include "SDKs/EATech/include/Apt/AptPseudoCIH.h"            // AptPseudoCIH_t, gpAptPseudoDataPool
 #include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"    // AptPseudoDisplayList
 #include "SDKs/EATech/include/Apt/AptActionQueue.h"          // AptActionQueueC
+#include "SDKs/EATech/include/Apt/AptTarget.h"               // gpAptTarget (the director chain)
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"      // AptAnimationTarget::mpActionQueue
+
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // AptActionInterpreter
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // PushStaticData/PopStaticData (the AS register window)
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"     // AptInteger::Create
@@ -76,10 +79,9 @@ int AptMovie::labelToFrame(const EAStringC* pLabel) const
 // off_8324D808 -- the shared Apt DOGMA pool the 20-byte pseudo nodes come from
 // (AptPseudoCIH.h declares it as gpAptPseudoDataPool; reused by name).
 
-// off_8324E574 -- the current AS animation target (its director owns the action
-// queue at +0x18, whose AptActionQueueC* lives at +0x0C). Read raw here (the
-// AptAnimationTarget runtime type is the deferred VM follow-on).
-extern void* gpAptTarget;                       // off_8324E574  (FLAG)
+// off_8324E574 -- the current AS animation target: gpAptTarget (typed AptTarget*,
+// declared by AptTarget.h; its director @+0x18 owns the AptActionQueueC* @+0x0C --
+// both real members now, read through the types).
 
 // dword_8324E514 -- the current frame's queued-action sequence id passed as
 // AddActionBack's 4th arg.
@@ -553,23 +555,19 @@ AptMovie* AptMovie::queueFrameActions(void* pCIH, int nFrame)
         if (CmdI32(pCmd, 0x00) != 1)
             continue;                                  // only tag-1 ACTION commands are queued
 
-        // FLAG (DEFERRED AS-VM EXECUTION -- honest boundary, NOT a pointer-guard hack): the record
-        // is now fully relocated by AptMovie::resolve64 (its action-stream pointer @cmd+0x08 is a live
-        // pointer), so reading it here is SAFE. The console would AddActionBack this action onto the
-        // director's queue (queue == gpAptTarget->[+0x18]->[+0x0C]); that queue is drained by the
-        // ActionScript interpreter's runStream, which is STUBBED in this bring-up. So the enqueue is
-        // the deferred VM's entry point: an enqueued action that never executes is inert, and the
-        // director-queue offset chain (console +0x18/+0x0C) reaches the un-reconstructed AS-runtime
-        // director layout on x64 (verified: *(director+0x0C) reads a straddled non-pointer value ->
-        // dereferencing it AVs). Deferring the enqueue is therefore the faithful "un-run AS action
-        // queue" state -- the statically-placed nested shapes/images (which doFrameControls already
-        // placed) still render; only the AS action does not advance the clip via script. The enqueue
-        // (and its runStream execution) land together when the ActionScript VM is homed.
-        //
-        // The faithful console enqueue is preserved (commented) so it re-activates with the VM:
-        //   void* pDirector = CmdPtr(gpAptTarget, 0x18);                 // *(gpAptTarget + 0x18)
-        //   AptActionQueueC* pQueue = CmdPtr(pDirector, 0x0C);           // *(director   + 0x0C)
-        //   pQueue->AddActionBack(pCmd + 4, (AptCIH*)pCIH, gnAptActionFrameId);
+        // ACTIVATED (2026-07-01, with the live VM): enqueue the action onto the director's
+        // deferred queue -- the console's AddActionBack(cmd+4, pCIH, gnAptActionFrameId) with
+        // the director chain typed (gpAptTarget->mpAnimationTarget @+0x18, ->mpActionQueue
+        // @+0x0C -- both real members now). The queued "event id" is the ADDRESS of the
+        // command's action-stream pointer slot: console cmd+0x04; native-8 cmd+0x08 (the slot
+        // resolve64 relocated + _parseStream parsed). RunActions dereferences it at drain time.
+        if (gpAptTarget != nullptr && gpAptTarget->mpAnimationTarget != nullptr
+            && gpAptTarget->mpAnimationTarget->mpActionQueue != nullptr)
+        {
+            gpAptTarget->mpAnimationTarget->mpActionQueue->AddActionBack(
+                static_cast<char*>(pCmd) + 0x08,
+                static_cast<AptCIH*>(pCIH), gnAptActionFrameId);
+        }
     }
     return this;
 }

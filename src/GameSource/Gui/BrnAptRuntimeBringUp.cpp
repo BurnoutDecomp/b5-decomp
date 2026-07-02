@@ -332,6 +332,17 @@ namespace
     void*                  s_pFaithfulRootCIH  = nullptr;   // the root AptCIH placed on the director
     bool   s_bFaithfulAttempted    = false;
     bool   s_bFaithfulInstantiated = false;
+    // STAGED VM EXECUTION (2026-07-01): the deferred-action DRAIN (AptAnimationTarget::
+    // RunActions after each tick). The full chain is wired + verified live -- with this
+    // false the queue fills faithfully (289 enqueues to frame 100, boot green); with it
+    // true the first real bytecode EXECUTES (45 ops traced: pushes, Stop, a taken
+    // BranchIfTrue) but the run dies at frame ~2 in the byte-push family: a sub-clip
+    // stream indexes the movie string DICTIONARY (interp mpRegisters) before any
+    // DefineDictionary (0x88) stream has installed it. On the console the ordering
+    // guarantee comes from the clip-event queue chain (AptCIH_queueClipEvents -- still
+    // the deferred link-cluster stub) + init-action sequencing. Flip to true once that
+    // cluster is homed. // FLAG (staged activation, not a leaf)
+    bool   s_bDisableRunActions    = true;
     s32    s_iTickFrame            = 0;     // STEP-2 per-frame tick counter (for the placement probes)
 
     // ====================================================================================
@@ -1436,6 +1447,18 @@ namespace BrnGui
             // (content the AS bytecode would attach at runtime) is the remaining VM last-mile.
             if (KB_NESTED_DIRTY_PROPAGATION)
                 PropagateDirtyToChildren(lpRoot, 0);
+
+            // DRAIN THE DEFERRED ACTION QUEUE (ACTIVATED 2026-07-01): the faithful per-frame
+            // sequence -- tick queues each frame's tag-1 actions (AptMovie::queueFrameActions ->
+            // AddActionBack, live now); AptAnimationTarget::RunActions (@0x82B0C9B0) drains them
+            // through runStream. This is the console's per-frame VM step (the host stands in for
+            // the console AptUpdate driver here, as it does for the tick itself).
+            {
+                AptTarget* lpVmTgt = GetTarget();
+                if (lpVmTgt != nullptr && lpVmTgt->mpAnimationTarget != nullptr
+                    && !s_bDisableRunActions)   // TEMP DIAGNOSTIC bisect switch
+                    lpVmTgt->mpAnimationTarget->RunActions();
+            }
 
             // Walk the director's root display list + count the placed nodes (the placement result).
             s32 liNodes = 0;

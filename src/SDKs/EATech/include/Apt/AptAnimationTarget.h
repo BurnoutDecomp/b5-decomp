@@ -72,10 +72,16 @@ struct AptAnimationTargetSet
 // ---------------------------------------------------------------------------
 struct AptAnimationTargetParams
 {
+    // The console block is a contiguous DWORD array -- each param occupies a full
+    // word (the set helpers consume only the low u16 OF their word). The prior
+    // u16+u16 packing of [2]/[3] collapsed them into one word and shifted every
+    // later field down one: mnActionQueueCap read word[4] (== 0) instead of
+    // word[5] (== 512) -> a ZERO-CAPACITY action queue whose enqueue walked off
+    // its 0-slot ring allocation (heap corruption). Fixed 2026-07-01.
     u32 mnNumIntervalTimers;  // [0] -> mnNumIntervalTimers
     u32 mnQueuedInputsCap;    // [1] -> mnQueuedInputsCap
-    u16 mnListenerSetSize;    // [2] -> mListenerSet capacity (helper reads a u16)
-    u16 mnInputSetSize;       // [3] -> mInputSet capacity   (helper reads a u16)
+    u32 mnListenerSetSize;    // [2] -> mListenerSet capacity (helper reads the low u16)
+    u32 mnInputSetSize;       // [3] -> mInputSet capacity   (helper reads the low u16)
     u32 mnReserved4;          // [4]  FLAG: not read by the director ctor
     u32 mnActionQueueCap;     // [5] -> AptActionQueueC capacity
 };
@@ -156,8 +162,8 @@ struct AptAnimationTarget
     // ---- deferred-action queue thunks (each tail-jumps into mpActionQueue) ------
     // The four X360 one-liners at 0x82ADC608..0x82ADC620 load mpActionQueue (+0x0C)
     // and tail-call the matching AptActionQueueC enqueue method on it.
-    AptValue* AddActionBack  (s32 iEventId, AptCIH* pCIH, s32 iContext);        // @0x82ADC608
-    AptValue* AddActionFront (s32 iEventId, AptCIH* pCIH, s32 iContext);        // @0x82ADC610
+    AptValue* AddActionBack  (const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext);   // @0x82ADC608
+    AptValue* AddActionFront (const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext);   // @0x82ADC610
     AptValue* AddFunctionBack (AptValue* pContext, AptValue* pFuncDef,
                                s32 iReturnReg, s32 iArgCount);                  // @0x82ADC618
     AptValue* AddFunctionFront(AptValue* pContext, AptValue* pFuncDef,

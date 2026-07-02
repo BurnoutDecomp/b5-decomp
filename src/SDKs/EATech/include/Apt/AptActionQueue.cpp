@@ -130,7 +130,7 @@ void AptActionQueueC::ClearActions()
 // Enqueue a clip-event action at the back. No-op if advancing the back cursor
 // would collide with the front (ring full). Snapshots the instance depth, stores
 // the CIH + event id + context, and AddRefs the CIH. Returns the CIH.
-AptValue* AptActionQueueC::AddActionBack(s32 iEventId, AptCIH* pCIH, s32 iContext)
+AptValue* AptActionQueueC::AddActionBack(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext)
 {
     AptAnimationPoolData* lpBack = mpBack;
 
@@ -148,7 +148,7 @@ AptValue* AptActionQueueC::AddActionBack(s32 iEventId, AptCIH* pCIH, s32 iContex
     // the field's semantic meaning. It is bookkeeping only (never GC-registered
     // nor re-read in this TU).
     lpBack->action.miDepth   = pCIH->GetDepth();
-    lpBack->action.miEventId = iEventId;
+    lpBack->action.mpEventStreamSlot = pEventStreamSlot;
     lpBack->action.mpCIH     = pCIH;
     pCIH->AddRef();
     lpBack->action.miContext = iContext;
@@ -161,7 +161,7 @@ AptValue* AptActionQueueC::AddActionBack(s32 iEventId, AptCIH* pCIH, s32 iContex
 // Enqueue a clip-event action at the front (push onto the head). Mirrors
 // AddActionBack but steps the front cursor back one slot first; no-op if that
 // would collide with the back.
-AptValue* AptActionQueueC::AddActionFront(s32 iEventId, AptCIH* pCIH, s32 iContext)
+AptValue* AptActionQueueC::AddActionFront(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext)
 {
     AptAnimationPoolData* lpNewFront = mpFront - 1;
     if (lpNewFront < mpBegin)
@@ -178,7 +178,7 @@ AptValue* AptActionQueueC::AddActionFront(s32 iEventId, AptCIH* pCIH, s32 iConte
     // FLAG: see AddActionBack -- instance-depth snapshot (bookkeeping only).
     lpNewFront->action.miDepth   = pCIH->GetDepth();
     lpNewFront->mnType           = AptAnimationPoolData::E_ACTION_TYPE_ACTION;
-    lpNewFront->action.miEventId = iEventId;
+    lpNewFront->action.mpEventStreamSlot = pEventStreamSlot;
     lpNewFront->action.mpCIH     = pCIH;
     pCIH->AddRef();
     lpNewFront->action.miContext = iContext;
