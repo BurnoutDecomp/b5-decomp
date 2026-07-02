@@ -157,7 +157,10 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     AptValue* AptExtern_GetMember(const char* szName) { return nullptr; }   // FLAG link-stub
     AptValue* AptInterp_FrameStackFirstLocal(AptValue* pFrameStack) { return nullptr; }   // FLAG link-stub
     AptValue* AptInterp_LookupScopeChain(AptActionInterpreter* pInterp, const EAStringC* pName) { return nullptr; }   // FLAG link-stub
-    void* AptUpdateZombieVector(char bClear) { return nullptr; }   // FLAG link-stub (BLOCKED: zombie-vector GC subsystem un-homed -- gpZombieVector/AptPartialGarbageCollection absent from all dumps); canonical void* return reconciled
+    // AptUpdateZombieVector RETIRED (2026-07-02): homed in AptGC.cpp (the real
+    // reap over gpAptZombieVector -- XB1 sub_140830A40; the vector itself is
+    // allocated by AptUpdateInitialize from config word 14). The old "absent
+    // from all dumps" claim was false -- the whole subsystem is in the XB1.
     AptValue* AptValue_GetMCParent(AptValue* pValue) { return nullptr; }   // FLAG link-stub
     bool         isNaN(AptValue* pValue) { return false; }   // FLAG link-stub
     bool AptLinker_isFileImported(AptLinker* pLinker, AptFilePtr* ppCandidate) { return false; }   // FLAG link-stub

@@ -37,6 +37,8 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunctionByteCodeBlock.h" // the onLoad/onUnload block wrapper
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"            // findChild / getIsDefined
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"      // the operand-stack pop (the unload-call tail)
+#include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (the zombie file-state swap)
+#include "SDKs/EATech/include/Apt/AptFile.h"                      // mnState / mnField12 / mFileName
 
 
 #include <cmath>   // sqrtf
@@ -1687,10 +1689,22 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
 // FLAG (un-homed action-queue / new-inst / input-target / GC sub-paths of ClearCIH;
 // console sub_82ADBD50 + __::remove + the off_8324E528 zombie vector + dword_8324E8C8
 // render hook + AptPartialGarbageCollection). Drops this node from every deferred queue
-// the director / input target hold it in; returns nonzero when the node became a
-// zombie (so ClearCIH skips the immediate free -- the zombie arm is a staged FLAG,
-// so currently always 0). The unload-event tail lives in ClearCIH (shipped order).
+// the director / input target hold it in. The unload-event tail + the zombie
+// decision live in ClearCIH itself (shipped order); the helper's int return is
+// vestigial (always 0) and ignored.
 int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool bClearGCRoots);
+
+// ---- the zombie-vector surface (AptGC.cpp) --------------------------------
+// The vector (X360 off_8324E528), the zombies-dirty flag (byte_8324E38F), the
+// host notify hook (dword_8324E8C8), and the deferred-release vector the FULL-
+// zombie arm flushes (off_8324E51C).
+extern AptValueVector* gpAptZombieVector;
+extern bool            gbAptZombiesDirty;
+extern void          (*gpAptZombieNotifyHook)(int bImmediate, int nReserved,
+                                              const char* pInstanceName,
+                                              const char* pFileName);
+extern AptValueVector* gpAptDeferredReleaseVector;   // off_8324E51C
+extern AptCIH*         AptGetAnimationAtLevel(int nLevel);
 
 // AptCIH_ClearCIH_DrainQueuesAndZombie -- ClearCIH's director-table DRAIN
 // (HOMED 2026-07-02 from the X360 body @0x82AF6020; was the return-0 link-stub,
@@ -1773,7 +1787,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     // target's drag/focus slots, the new-insts table, and (when it became externally
     // referenced) the zombie vector + partial GC; run the unload-event tail. Returns
     // nonzero when the node was queued as a zombie (the instance is NOT freed below).
-    const int nBecameZombie = AptCIH_ClearCIH_DrainQueuesAndZombie(this, bClearGCRoots);
+    AptCIH_ClearCIH_DrainQueuesAndZombie(this, bClearGCRoots);
 
     // Animation node (type tag 9) -> remove its per-frame timer functions.
     if (mpCharacterInst->GetTypeTag() == 9u && gpAptTarget != nullptr)
@@ -1864,6 +1878,88 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         }
     }
 
+    // ---- the zombie decision (X360 @0x82AF6374..; XB1 sub_1408333D0 tail) ----
+    // An externally referenced type-9 (animation/level) node survives its
+    // removal as an AS-visible ZOMBIE instead of being torn down: the AS side
+    // still holds live references (IncZombieCount) against the loaded movie.
+    // NOT-zombie preconditions (any -> the immediate clear below): in shutdown;
+    // zombie count <= 0 (the X360 tests the SIGNED int16 `(flagsA<<9)&0xFFFF0000
+    // <= 0` -- sign bit == our count field's top bit); not an animation node
+    // (charInst mTypeFlags tag 9, mask 0xFC000000 == 0x24000000); or the root
+    // level-0 animation itself.
+    bool bBecameZombie = false;
+    if (!gbAptInShutdown
+        && GetZombieCount() > 0
+        && (mpCharacterInst->mTypeFlags & 0xFC000000u) == 0x24000000u
+        && this != AptGetAnimationAtLevel(0))
+    {
+        if (gpAptZombieVector == nullptr ||
+            gpAptZombieVector->mnCapacity >= gpAptZombieVector->mnTop)
+        {
+            // No vector (config word 14 == 0) or full: the node cannot be kept.
+            // Mark it CIHState 2 (dead-transition), fire the notify hook with
+            // bImmediate=1, and fall through to the immediate clear.
+            SetCIHState(2);   // X360 `flagsA = 0x40000000 | (flagsA & 0x9FFFFFFF)`
+            if (gpAptZombieNotifyHook != nullptr)
+            {
+                const AptFile* pFile =
+                    static_cast<AptCharacterAnimationInst*>(mpCharacterInst)
+                        ->mAnimationFilePtr.pData;
+                gpAptZombieNotifyHook(1, 0, GetInstanceName().GetBuffer(),
+                                      pFile ? pFile->mFileName.GetBuffer() : "");
+            }
+        }
+        else
+        {
+            // FULL ZOMBIE: scrub the AS-visible surface (the child display list +
+            // the property hash), flush any pending deferred releases, and --
+            // when the scrub itself did not drain the zombie count -- park the
+            // node: AS-changed/HasClass cleared, SetReleaseAtEnd (plain Release
+            // pins it from here), pushed onto the vector, CIHState 1, the source
+            // AptFile's state swapped to 5 (old saved in mnField12), the notify
+            // hook fired with bImmediate=0, and the zombies-dirty flag raised.
+            static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst)
+                ->mDisplayList.clear(true);                     // charInst+28, arg 1
+            if (AptNativeHash* pHash = GetNativeHashVirtual())  // vtbl[2]
+                pHash->ClearData();
+            if (gpAptDeferredReleaseVector != nullptr &&
+                gpAptDeferredReleaseVector->mnCapacity != 0)    // family-(B) live count
+                gpAptDeferredReleaseVector->ReleaseValues();
+
+            if (GetZombieCount() > 0)   // re-check: the scrub may have drained it
+            {
+                mFlagsA &= ~0x80000000u;   // AS-changed clear (the X360 rlwinm 1,31)
+                SetHasClass(0);            // vtable slot 5
+                SetReleaseAtEnd();
+                // Push onto the zombie vector (family-(B): count == mnCapacity,
+                // capacity == mnTop); a lost race to full rolls the pin back.
+                if (gpAptZombieVector->mnCapacity < gpAptZombieVector->mnTop)
+                    gpAptZombieVector->mppItems[gpAptZombieVector->mnCapacity++] =
+                        static_cast<AptValue*>(this);
+                else
+                    ClearReleaseAtEnd();
+                SetCIHState(1);            // X360 `flagsA & 0x9FFFFFFF | 0x20000000`
+
+                AptFile* pFile =
+                    static_cast<AptCharacterAnimationInst*>(mpCharacterInst)
+                        ->mAnimationFilePtr.pData;
+                if (pFile != nullptr)
+                {
+                    const int32_t nOldState = pFile->mnState;
+                    pFile->mnState   = 5;
+                    pFile->mnField12 = nOldState;
+                }
+                if (gpAptZombieNotifyHook != nullptr)
+                    gpAptZombieNotifyHook(0, 0, GetInstanceName().GetBuffer(),
+                                          pFile ? pFile->mFileName.GetBuffer() : "");
+                gbAptZombiesDirty = true;
+                bBecameZombie = true;
+            }
+        }
+    }
+    if (bBecameZombie)
+        return;   // the X360 returns straight after byte_8324E38F = 1
+
     // ---- char-instance teardown -------------------------------------------------------
     AptCharacterInst* pOld = mpCharacterInst;
     if (pOld == nullptr)
@@ -1879,9 +1975,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         return;
     }
 
-    // When the deferred tail queued this node as a zombie, the old instance is preserved
-    // (it lives on for AS visibility); only the immediate-free path runs the swap.
-    if (nBecameZombie == 0)
+    // The immediate-free path (every non-zombie removal reaches here).
     {
         setGCRoot(0);
         if (bClearGCRoots)

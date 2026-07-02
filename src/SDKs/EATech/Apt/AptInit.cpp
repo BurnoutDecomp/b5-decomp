@@ -103,7 +103,6 @@ namespace
 
     // ---- the shared deferred-release AptValueVector pointers ---------------
     AptValueVector* gpAptDeferredVecCommon = nullptr;   // off_8324E51C (common-init side)
-    AptValueVector* gpAptDeferredVecUpdate = nullptr;   // off_8324E528 (update side)
 
     // ---- the AptUpdateInitialize single-list free node (dword_8324D810) ----
     void* gpAptUpdateListNode = nullptr;   // dword_8324D810
@@ -452,6 +451,10 @@ void* AptRenderInitialize(int /*a1*/)
 
 // sub_82AD9030 -- the DOGMA sized-free hook (DOGMA_FreeSized), via the adapter above.
 
+// The zombie vector (off_8324E528) -- defined in AptGC.cpp next to its reap;
+// allocated here from config word [14] (default 8).
+extern AptValueVector* gpAptZombieVector;
+
 int AptUpdateInitialize(unsigned int* a1, char a2)
 {
     AptUpdateRenderMutex().Lock();
@@ -501,16 +504,16 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
         {
             AptValueVector* lpVec = static_cast<AptValueVector*>(lpVecMem);
             *lpVec = AptValueVector::ConstructAptValueVector(static_cast<int>(lpParams[14]));
-            gpAptDeferredVecUpdate = lpVec;
+            gpAptZombieVector = lpVec;
         }
         else
         {
-            gpAptDeferredVecUpdate = nullptr;
+            gpAptZombieVector = nullptr;
         }
     }
     else
     {
-        gpAptDeferredVecUpdate = nullptr;
+        gpAptZombieVector = nullptr;
     }
 
     // AptValueInitialize() -- FLAG-deferred (protected value ctors; see its body).
