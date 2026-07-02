@@ -40,6 +40,8 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResource.h" // PopupStyle/PopupIcons/GuiPopupParameter
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessage.h"     // HudMessageParamTypes/HudMessageParameter
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BurnoutSkillzData (by value)
+#include "SharedClasses/StreetData/BrnStreetData.h"     // BrnStreetData::RoadIndex (road-rules events)
+#include "SharedClasses/StreetData/BrnChallengeData.h"  // BrnStreetData::ScoreType / E_SCORE_TYPE_COUNT (road-rules events)
 
 namespace BrnGui
 {
@@ -584,5 +586,105 @@ struct GuiOverlayFullInfoResponse
     char                      macButton2Id[MKI_MAX_LENGTH_OF_STRING_ID];     // +0x198
     bool                      mbButon2ParamUsed;                             // +0x1B8 (-> pad to 0x1C0)
 };
+
+// ===================================================================================
+// Road-rules event family (ADDITIVE GROW: BrnRoadRuleComponent.h TU). DWARF homes
+// BrnGuiEventTypeDefs.h:113 (RoadRuleLeaderType) / :1071 (GuiEventRoadRuleEnter,
+// GuiEvent<329>) / :1215 (GuiEventRoadRuleUpcomingRoads, GuiEvent<337>). Their
+// Construct/Setup* bodies are their own ledger functions (declaration-only).
+// ===================================================================================
+
+// DWARF BrnGuiEventTypeDefs.h:113 -- who currently holds a road rule.
+enum RoadRuleLeaderType
+{
+    E_ROADRULELEADERTYPE_AI     = 0,
+    E_ROADRULELEADERTYPE_PLAYER = 1,
+    E_ROADRULELEADERTYPE_FRIEND = 2,
+    E_ROADRULELEADERTYPE_COUNT  = 3,
+};
+
+// The leader-name slot the road-rules events carry. FLAG: the X360 interior pins
+// (GuiEventRoadRuleEnter's maeRoadRuleLeaderType at event+0x18 with mRoadId at +0
+// and maFriendLeader between) size this at 8 bytes -- most likely a hashed name
+// (CgsID); the PlayerName type's own home lands with the events TU.
+struct PlayerName
+{
+    CgsID mNameId;   // FLAG: 8-byte slot per the X360 offset arithmetic
+};
+
+// The world/game actions the road-rules event Constructs consume (pointer-only).
+struct RoadRulesEnterRoadAction;
+struct RoadRulesUpdateTargetScoreAction;
+struct UpcomingRoadChangeAction;
+
+// DWARF :1071 -- "entered a road-ruled road" (the road-rules panel refresh
+// payload). X360 sizeof 120 (RoadRuleComponent copies it whole @+0x3E8).
+// X360-DIVERGENCE NOTE: the PS3 DWARF lists mRoadId near the tail (:1083), but the
+// X360 RoadRuleComponent reads the event's LEADING u64 as the road id
+// (EnterRoad @0x82441460 `ld r11,0x3E8(this)`; HandleLeaveRoadEvent @0x82413D98
+// `cmpld` against it) -- the X360 layout pins mRoadId FIRST; the remaining member
+// order is kept from the DWARF (unverified interior).
+struct GuiEventRoadRuleEnter : public CgsGui::GuiEvent<329>
+{
+    // X360-PINNED head: mRoadId @+0x00 (EnterRoad/HandleLeaveRoadEvent read it as
+    // the event's leading u64) and maeRoadRuleLeaderType @+0x18 (EnterRoad passes
+    // event+0x18 as the const RoadRuleLeaderType* to GetRoadSignColour). FLAG: the
+    // members past +0x20 keep the PS3 DWARF order but their X360 offsets are
+    // unverified interior (nothing in-tree reads them yet).
+    CgsID                 mRoadId;                                                         // :1083 (X360 +0x00)
+    PlayerName            maFriendLeader[BrnStreetData::E_SCORE_TYPE_COUNT];               // :1074 (X360 +0x08)
+    RoadRuleLeaderType    maeRoadRuleLeaderType[BrnStreetData::E_SCORE_TYPE_COUNT];        // :1076 (X360 +0x18)
+    RoadRuleLeaderType    maeOfflineRoadRuleLeaderType[BrnStreetData::E_SCORE_TYPE_COUNT]; // :1077
+    RoadRuleLeaderType    maeOnlineRoadRuleLeaderType[BrnStreetData::E_SCORE_TYPE_COUNT];  // :1078
+    CgsID                 maAILeaderId[BrnStreetData::E_SCORE_TYPE_COUNT];                 // :1075 (FLAG: interior)
+    bool                  mabChallenge[BrnStreetData::E_SCORE_TYPE_COUNT];                 // :1079
+    s32                   maiBestValues[BrnStreetData::E_SCORE_TYPE_COUNT];                // :1080
+    s32                   maiBestOfflineValues[BrnStreetData::E_SCORE_TYPE_COUNT];         // :1081
+    s32                   maiBestOnlineValues[BrnStreetData::E_SCORE_TYPE_COUNT];          // :1082
+    BrnStreetData::RoadIndex miRoadIndex;                                                 // :1084
+
+    // DWARF :1089/:1093 -- their own ledger functions (declaration-only).
+    void Construct(const RoadRulesEnterRoadAction* lpAction);
+    void Construct();
+};
+
+// DWARF :1215 -- the two upcoming junction roads (sides, states, rulers). X360
+// sizeof 128 (RoadRuleComponent block-copies it @+0x460 / to a local).
+struct GuiEventRoadRuleUpcomingRoads : public CgsGui::GuiEvent<337>
+{
+    // DWARF :1218 / :1226.
+    enum ERoadSide
+    {
+        E_ROAD_LEFT  = 0,
+        E_ROAD_RIGHT = 1,
+        E_ROAD_COUNT = 2,
+    };
+    enum ERoadState
+    {
+        E_ROADSTATE_NORMAL    = 0,
+        E_ROADSTATE_SUGGESTED = 1,
+        E_ROADSTATE_WRONG     = 2,
+        E_ROADSTATE_COUNT     = 3,
+    };
+
+    RoadRuleLeaderType maaeLeaderTypes[E_ROAD_COUNT][BrnStreetData::E_SCORE_TYPE_COUNT];        // :1235
+    RoadRuleLeaderType maaeOfflineLeaderTypes[E_ROAD_COUNT][BrnStreetData::E_SCORE_TYPE_COUNT]; // :1236
+    RoadRuleLeaderType maaeOnlineLeaderTypes[E_ROAD_COUNT][BrnStreetData::E_SCORE_TYPE_COUNT];  // :1237
+    CgsID              mRoadIds[E_ROAD_COUNT];                                                 // :1238
+    BrnStreetData::RoadIndex maiTurningRoadIndices[E_ROAD_COUNT];                              // :1239
+    BrnStreetData::RoadIndex miCurrentRoadIndex;                                               // :1240
+    ERoadState         meRoadStates[E_ROAD_COUNT];                                             // :1241
+    ERoadState         meCurrentSignState;                                                     // :1242
+    Vector3            maRoadEntrancePosition[E_ROAD_COUNT];                                   // :1243 (X360 +0x60, 16-aligned)
+
+    // DWARF :1247/:1252 -- their own ledger functions (declaration-only).
+    void Construct();
+    void Construct(const UpcomingRoadChangeAction* lpAction);
+};
+
+// Pointer-only in the road-rule component surface (their full DWARF records land
+// with their consumers): :1111 GuiEvent<335> / :1168 GuiEvent<332>.
+struct GuiEventRoadRuleUpdateTargetScores;
+struct GuiEventRoadRuleEnd;
 
 } // namespace BrnGui

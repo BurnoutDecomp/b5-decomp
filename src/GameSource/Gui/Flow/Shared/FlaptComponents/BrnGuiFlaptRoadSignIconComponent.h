@@ -115,6 +115,10 @@ namespace BrnGui
         // from the colour tables.
         void SetColour(ESignColour leSignColour);
 
+        // ADDITIVE GROW (RoadRuleComponent::HandleUpcomingRoadEvent @0x82441338 reads
+        // the sign's colour word @this+0x3C): X360 header-inline.
+        ESignColour GetSignColour() const { return meSignColour; }
+
         // ---- X360-attested siblings, bodied in their own TUs --------------------
         // DisplayRoad(ERoadIcon, bool) @ 0x8242DAE8 -- the icon-id overload that
         // DisplayRoadFromCgsID routes to once it has resolved the icon id; declared
