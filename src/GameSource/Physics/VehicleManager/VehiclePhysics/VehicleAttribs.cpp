@@ -128,7 +128,7 @@ const f32 KF_DEFAULT_TORQUE_CURVE_INPUT_MAX = 740.0f;
 const f32 KF_DEFAULT_TORQUE_CURVE_OUTPUT_AT_MIN = 0.0f;
 const f32 KF_DONUT_AI_MASS = 700.0f;
 const f32 KF_DONUT_AI_DRIFT_MIN_SPEED = 700.0f;
-const f32 KF_DONUT_AI_MAX_TORQUE = 0.0f;
+const f32 KF_DONUT_AI_DIFFERENTIAL = 0.0f;
 }
 
 using namespace EngineDefaults;
@@ -456,8 +456,11 @@ void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWr
 
 void VehicleAttribs::SetupAttribsForDonutAI()
 {
+    // @0x825F62B4/0x825F62F0 (asm): the second store targets a1+0x110, i.e. EngineAttribs
+    // local +0x10 (mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM.x =
+    // SetDifferential), NOT +0x20 (mvMaxTorque...x). Confirmed against the ASM offsets.
     mDriftAttribs.SetMinSpeedForDrift(rw::math::vpu::VecFloat(KF_DONUT_AI_DRIFT_MIN_SPEED));
-    mEngineAttribs.SetMaxTorque(rw::math::vpu::VecFloat(KF_DONUT_AI_MAX_TORQUE));
+    mEngineAttribs.SetDifferential(rw::math::vpu::VecFloat(KF_DONUT_AI_DIFFERENTIAL));
     mFrontTireAttribs.PrepareFrontTireForDonutAI();
     mRearTireAttribs.PrepareRearTireForDonutAI();
     mBaseAttribs.SetMass(rw::math::vpu::VecFloat(KF_DONUT_AI_MASS));

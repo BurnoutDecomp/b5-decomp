@@ -137,11 +137,12 @@ namespace Vehicle
         mRoadContact.mPosition = lPosition;                          // stvx128 -> +0x00
         mRoadContact.mNormal   = lNormal;                            // stvx128 -> +0x10
 
-        // The CollisionTag word is written as its two halfwords (+0x24 / +0x26). The high/low split
-        // matches the asm's `*(this+18)=a5 ; *(this+19)=a4` (halfword indices). Reassembled into the
-        // 32-bit muValue (endian-independent: the field is a single packed word).
+        // The CollisionTag word is written as its two halfwords (+0x24 / +0x26). The asm stores
+        // `*(this+18)=a5 ; *(this+19)=a4` (halfword indices 18/19 = byte offsets 0x24/0x26), and
+        // a4 is bound to lu16TagHi / a5 to lu16TagLo (GP-arg order), so the HIGH halfword (0x24)
+        // is lu16TagLo and the LOW halfword (0x26) is lu16TagHi -- reassembled accordingly.
         mRoadContact.mCollisionTag.muValue =
-            (static_cast<u32>(lu16TagHi) << 16) | static_cast<u32>(lu16TagLo);
+            (static_cast<u32>(lu16TagLo) << 16) | static_cast<u32>(lu16TagHi);
 
         // Traction: only when on the ground AND the contact normal points up enough (Y > 0.5). A
         // steep wall (low normal.Y) breaks traction. 0.5 is the asm's vcfsx(1, scale 1) immediate.

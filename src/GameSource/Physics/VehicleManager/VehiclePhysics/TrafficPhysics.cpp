@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"             // rw::math::vpu::{Add, Mult}
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // CreatePhysicalTrafficEvent (real layout)
 
 // BrnPhysics::Vehicle::TrafficPhysics -- C11_simple_traffic_attribs group.
 //   PreparePhysical: bodied (de-SIMD'd from 0x82639380).
@@ -59,17 +60,16 @@ namespace Vehicle
         (void)lrAABB;
 
         // Build the local transform from the spawn event (the asm copies event+0x10 rows into a
-        // local v35 transform) and forward into the full-physics Prepare. FLAG: the local-transform
-        // assembly reads the event by pointer; passed straight through as lpReferenceTransform.
-        const Matrix44Affine* lpEventTransform =
-            reinterpret_cast<const Matrix44Affine*>(reinterpret_cast<const u8*>(lpEvent) + 0x10);
-        VehiclePhysics::Prepare(lpEventTransform, lpDeformSpec, lpAttribs,
+        // local v35 transform) and forward into the full-physics Prepare.
+        VehiclePhysics::Prepare(&lpEvent->mInitialTransform, lpDeformSpec, lpAttribs,
                                 lpWheelPositions, lpafWheelRadii);
-        VehiclePhysics::SetWheelVelocities(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+        // asm: `lvx128 v1, r0, r29` where r29 = lpEvent+0x50 = &lpEvent->mInitialVelocity -- the
+        // post-Prepare SetWheelVelocities call passes the spawn event's initial velocity vector,
+        // NOT a zero vector (Hex-Rays dropped this VMX128 register argument from the pseudocode).
+        VehiclePhysics::SetWheelVelocities(lpEvent->mInitialVelocity);
 
-        // Seed the freak-out fields. mOwnerID = *(event+8); the others zeroed.
-        mOwnerID            = *reinterpret_cast<const EntityId*>(
-                                  reinterpret_cast<const u8*>(lpEvent) + 8);   // +5104
+        // Seed the freak-out fields. mOwnerID = *(event+8) = event->mCrasherID; the others zeroed.
+        mOwnerID            = lpEvent->mCrasherID;                            // +5104
         mfFreakOutDirection = 0.0f;                                            // +5112
         mfFreakOutTime      = 0.0f;                                            // +5116
         mu8FreakOutState    = E_FREAK_OUT_STATE_OFF;                           // +5108

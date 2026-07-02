@@ -568,14 +568,20 @@ namespace Vehicle
         //   * requires speed above a small threshold (asm: a3 <= 0.2 -> false).
         //   * if the lateral velocity component (mLocalVelocity.y) is clearly positive (> 0.5) and
         //     steering is not strongly opposite (>= -0.1) -> counter-steering: true.
-        //   * else if that component is below the same band and steering is mild (<= 0.1) -> true.
-        //   * otherwise false.
+        //   * else if that component is NOT below -0.5 (i.e. not clearly negative) -> false.
+        //   * else (lateral < -0.5) counter-steering iff steering is mild (<= 0.1).
         // lfSteering = the steering input lane (f1 / a2); lfSpeed = the speed lane (f2 / a3).
         //
-        // FLAG (rodata): the three comparison literals (0.2 / -0.1 / 0.1 / 0.5) are the values the
-        // X360 decompiler resolved for the inlined float constants; the feature-gate constant
-        // (flt_8208F9D4 splat, lazily cached at unk_82FB9FC0) is un-homed rodata and is carried as
-        // an honest enable flag rather than a fabricated numeric value.
+        // FLAG (rodata): the comparison literals 0.2 (flt_82004744) / -0.1 (flt_8200D530) / 0.1
+        // (flt_82004014) / 0.5 (flt_82001DA0) are resolved X360 rodata. The SECOND lateral-velocity
+        // compare loads a DISTINCT rodata symbol -- flt_82004C78 -- not a reuse of the first 0.5
+        // constant; flt_82004C78 is homed elsewhere in this codebase (BrnBehaviourGameplayExternal.cpp,
+        // CgsAptRenderHandler.cpp) as -0.5f. With the (bugged) same +0.5f reused here, the final
+        // `return lfSteering <= 0.1f` was dead code (unreachable, since `!(0.5f > lfLateral)` already
+        // returns false for every value the first branch didn't catch) -- a correctness tell confirming
+        // the two constants differ. The feature-gate constant (flt_8208F9D4 splat, lazily cached at
+        // unk_82FB9FC0) is un-homed rodata and is carried as an honest enable flag rather than a
+        // fabricated numeric value.
         bool IsCounterSteeringAtLowSpeed(f32 lfSteering, f32 lfSpeed) const
         {
             // One-time static feature gate (lazy-cached on X360). Honest placeholder: enabled.
@@ -588,7 +594,7 @@ namespace Vehicle
             if (lfLateral > 0.5f && lfSteering >= -0.1f)
                 return true;
 
-            if (!(0.5f > lfLateral))                  // lfLateral >= 0.5 -> not counter-steering
+            if (!(-0.5f > lfLateral))                 // lfLateral >= -0.5 -> not counter-steering
                 return false;
 
             return lfSteering <= 0.1f;

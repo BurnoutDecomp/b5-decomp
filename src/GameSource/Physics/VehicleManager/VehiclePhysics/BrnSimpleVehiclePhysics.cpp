@@ -117,9 +117,10 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void SimpleVehiclePhysics::Construct()
     {
-        // The X360 calls the base Construct on the base subobject (`this+16`); the only committed
-        // Construct in the base chain is ExternallySimulatedBody::Construct (declared-only sibling).
-        ExternallySimulatedBody::Construct();
+        // The X360 calls the DIRECT base's Construct on the base subobject (`this+16`):
+        // `bl BrnPhysics__ExternalPhysicsBody__Construct`. ExternalPhysicsBody::Construct is
+        // declared (ExternalPhysicsBody.h) with its body in that TU; call it BY NAME.
+        ExternalPhysicsBody::Construct();
         for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             maWheels[liWheel].Clear();
         mSimpleAttribs.Construct();
@@ -201,15 +202,18 @@ namespace Vehicle
 
         mAboveGroundTestResult.mIntersectionPosition = lvPosition;   // +348
         mAboveGroundTestResult.mIntersectionNormal   = lvNormal;     // +364
-        // CollisionTag is one u32 (BrnCommonTypes: `struct CollisionTag { u32 muValue; }`). The asm
-        // stores a3 as the low halfword (+714) and a2 as the high halfword (+715) of that u32.
+        // CollisionTag is one u32 (BrnCommonTypes: `struct CollisionTag { u32 muValue; }`). Big-endian
+        // PPC: the asm stores lu16TagLo (a3=r5) at the LOWER byte address (this+1428) and lu16TagHi
+        // (a2=r4) at the HIGHER byte address (this+1430). On BE the halfword at the lower address is
+        // the high 16 bits of the u32, so the assembled value is (lu16TagLo << 16) | lu16TagHi.
         mAboveGroundTestResult.mCollisionTag.muValue =
-            (static_cast<u32>(lu16TagHi) << 16) | static_cast<u32>(lu16TagLo);
+            (static_cast<u32>(lu16TagLo) << 16) | static_cast<u32>(lu16TagHi);
 
-        // mfVerticalDistance = lvPosition.y - <reference y> (the asm `vspltw v13,a3-arg,1 ;
-        // lvx128 v0,this,+64 ; vspltw v0,v0,1 ; vsubfp`). FLAG: the +64 reference splat lane is a
-        // vehicle-frame height; reproduced as the y delta vs the supplied position's y reference.
-        mAboveGroundTestResult.mfVerticalDistance = lvPosition.y - lvNormal.y;
+        // mfVerticalDistance = mTransform.wAxis.y - lvPosition.y  (the asm
+        // `vspltw v13,v1(lvPosition),1 ; lvx128 v0,this,+64 ; vspltw v0,v0,1 ; vsubfp v0,v0,v13`).
+        // this+64 = mTransform.wAxis (mTransform @ +16; rows xAxis/yAxis/zAxis/wAxis at +16/+32/+48/+64),
+        // i.e. the vehicle world position. The subtraction is (reference y) - (position y).
+        mAboveGroundTestResult.mfVerticalDistance = mTransform.wAxis.y - lvPosition.y;
         mAboveGroundTestResult.mbValid = true;                       // +1432
     }
 

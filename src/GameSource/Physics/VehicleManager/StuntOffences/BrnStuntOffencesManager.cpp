@@ -504,8 +504,10 @@ namespace BrnPhysics
 
         if (mbKeepCheckingForCleanLanding)
         {
-            // on the JUST_LANDED frame compare the flattened takeoff vs landing heading.
-            if ((muCurrentRaceCarState & E_CURRENT_CAR_STATE_JUST_LANDED) != 0)
+            // FIX (asm 0x82614684: extrwi bit2 == IN_THE_AIR_NOW, inverted -- NOT JUST_LANDED/bit1).
+            // Re-evaluate the takeoff-vs-landing heading every grounded frame the check stays armed,
+            // not only on the single JUST_LANDED edge frame.
+            if ((muCurrentRaceCarState & E_CURRENT_CAR_STATE_IN_THE_AIR_NOW) == 0)
             {
                 Vector2 lv2TakeOffAtVector = BrnMath::Flatten(mvTakeOffVector);
                 Vector2 lv2LandingAtVector = BrnMath::Flatten(lpRaceCarPhysics->GetTransform().zAxis);
