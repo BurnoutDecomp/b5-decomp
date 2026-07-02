@@ -120,6 +120,9 @@ namespace Vehicle
             CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
             CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
             const s32 liFrame = lpInterfaceToCopy->maBaseDeformationFrames[leRaceCarIndex];
+
+            CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
             maBaseDeformationFrames[leRaceCarIndex] = liFrame;
         }
     }

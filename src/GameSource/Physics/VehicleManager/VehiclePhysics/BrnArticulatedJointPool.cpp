@@ -46,7 +46,8 @@ int ArticulatedJointPool::Construct()
 {
     // The two masks cleared @800/@808 (BitArray<10>::UnSetAll() emits the same `std 0` as the
     // prior mu64=0), then each joint Construct()ed, then the four limit floats keep their VALUES
-    // by offset (@816=30, @820=10, @824=10, @828=15).
+    // by offset (@816=30, @820=10, @824=15, @828=10 -- the asm reuses the same loaded register/
+    // value for @820 and @828).
     mUsedJoints.UnSetAll();
     mJointsBrokenThisFrame.UnSetAll();
 
@@ -56,8 +57,8 @@ int ArticulatedJointPool::Construct()
 
     mfSwingAngleDegrees       = 30.0f;   // @816
     mfMaxSwingVelocityDegrees = 10.0f;   // @820
-    mfTwistAngleDegrees       = 10.0f;   // @824
-    mfMaxTwistVelocityDegrees = 15.0f;   // @828
+    mfTwistAngleDegrees       = 15.0f;   // @824
+    mfMaxTwistVelocityDegrees = 10.0f;   // @828 (same f0 reg/value reused from @820 in the asm)
     return liResult;
 }
 

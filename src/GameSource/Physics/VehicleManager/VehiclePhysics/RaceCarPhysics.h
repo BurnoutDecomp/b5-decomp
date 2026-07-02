@@ -264,7 +264,7 @@ namespace Vehicle
         bool  mbCarBounce;             // +0x03  byte_82FB8483
         bool  mbGoodImpact;            // +0x04  byte_82FB8484
         u8    mu8Reserved05;           // +0x05  (alignment hole before the u16)
-        u16   muBounceChainCount;      // +0x06  word_82FB8486
+        s16   muBounceChainCount;      // +0x06  word_82FB8486 (signed: asm reads via extsh; DWARF int16_t)
         bool  mbShouldBounceBoost;     // +0x08  byte_82FB8488
         bool  mbBounceBoostPending;    // +0x09  byte_82FB8489 (ShouldBounceBoostNextImpact)
         bool  mbSixaxisTiltApplied;    // +0x0A  byte_82FB848A

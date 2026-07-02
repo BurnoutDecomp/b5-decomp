@@ -888,21 +888,28 @@ namespace Vehicle
             return true;
         }
 
-        // The asm only commits a crash when the shove fired AND at least one car is a network car
-        // (a2+85 || a2+84), AND the player-won byte is set; it then orders victim/aggressor by the
-        // numeric id comparison v19 < v18 (or the fallback v18 < v19).
+        // Commit gate (asm 0x8263D3B4..0x8263D3F8): the crash only commits when the shove fired AND
+        // at least one car is a network car (a2+85 || a2+84). If the gate fails the asm falls to
+        // LABEL_27 and returns 0 (NOT lbFired) -- a shove that fired without a network car involved
+        // still reports "not handled" to the classifier ladder.
         if (!lbFired || !(lpInfo->mbRaceCarBIsNetworkCar || lpInfo->mbRaceCarAIsNetworkCar))
-            return lbFired;   // shove applied but no crash committed (still "handled" -> 1)
-        if (!lbPlayerWon)
-            return true;
+            return false;   // asm: LABEL_27 result=0
 
-        // asm: victim = the larger id, aggressor = the smaller (the v19 < v18 / v18 < v19 split).
-        EntityId lVictim;
-        EntityId lAggressor;
-        if (lId1.muValue < lId0.muValue)      { lVictim = lId0; lAggressor = lId1; } // asm LABEL_20 (v18 victim)
-        else if (lId0.muValue < lId1.muValue) { lVictim = lId1; lAggressor = lId0; }
-        else                                  return true; // equal ids -> no commit
+        // The commit condition is keyed on the player-won byte (a2+258): when the player won, commit
+        // iff v19 < v18 (asm 0x8263D3E4 blt); when the player did NOT win, commit iff v18 < v19 (asm
+        // 0x8263D3F4 bge falls through). Otherwise the asm returns 0 (no commit, LABEL_27).
+        bool lbCommit;
+        if (lbPlayerWon)
+            lbCommit = (lId1.muValue < lId0.muValue);   // asm: cmplw v19,v18 ; blt commit
+        else
+            lbCommit = (lId0.muValue < lId1.muValue);   // asm: cmplw v18,v19 ; bge return0
+        if (!lbCommit)
+            return false;   // asm: LABEL_27 result=0
 
+        // Both commit paths converge on the SAME InstantTakedown operand order (asm 0x8263D414/D41C):
+        // victim = v18 (== lId0), aggressor = v19 (== lId1), regardless of which branch fired.
+        const EntityId lVictim    = lId0;   // asm r4 = r30 = v18
+        const EntityId lAggressor = lId1;   // asm r5 = r29 = v19
         InstantTakedown(lVictim, lAggressor,
                         lpInfo->mpContact->mNormal,
                         lpInfo->mpContact->mPointOnA,
@@ -1069,9 +1076,11 @@ namespace Vehicle
             return true;
         }
 
-        // Too fast for shunt/nudge -- mark both cars handled and report consumed (no crash).
-        if (!lpInfo->mbCrashRaceCarA) lpInfo->mbCrashRaceCarA = true;  // asm *(_R31+256)=1
-        if (!lpInfo->mbCrashRaceCarB) lpInfo->mbCrashRaceCarB = true;  // asm *(_R31+257)=1
+        // Too fast for shunt/nudge -- mark each NON-network car handled and report consumed (no
+        // crash). asm 0x8261A510/A524: the crash-flag store is gated on the car's NETWORK flag
+        // (+0x54/+0x55), NOT on the crash flag itself -- a network car's flag is left untouched.
+        if (!lpInfo->mbRaceCarAIsNetworkCar) lpInfo->mbCrashRaceCarA = true; // asm: if(!*(_R31+84)) *(_R31+256)=1
+        if (!lpInfo->mbRaceCarBIsNetworkCar) lpInfo->mbCrashRaceCarB = true; // asm: if(!*(_R31+85)) *(_R31+257)=1
         return true;
     }
 
@@ -1118,9 +1127,11 @@ namespace Vehicle
             return false;
         if (lfEnergy > (mfTradingPaintMaxSpeed * KF_SPEED_UNIT_SCALE))  // FLAG: scale rodata flt_82F31928
         {
-            // Above the band -> mark both cars handled, report consumed (no crash).
-            if (!lpInfo->mbCrashRaceCarA) lpInfo->mbCrashRaceCarA = true; // asm *(_R31+256)=1
-            if (!lpInfo->mbCrashRaceCarB) lpInfo->mbCrashRaceCarB = true; // asm *(_R31+257)=1
+            // Above the band -> mark each NON-network car handled, report consumed (no crash).
+            // asm 0x8261A2xx (pseudocode 5618/5620): the crash-flag store is gated on the car's
+            // NETWORK flag (+0x54/+0x55), NOT on the crash flag itself.
+            if (!lpInfo->mbRaceCarAIsNetworkCar) lpInfo->mbCrashRaceCarA = true; // asm: if(!*(_R31+84)) *(_R31+256)=1
+            if (!lpInfo->mbRaceCarBIsNetworkCar) lpInfo->mbCrashRaceCarB = true; // asm: if(!*(_R31+85)) *(_R31+257)=1
             return true;
         }
 
@@ -1167,24 +1178,25 @@ namespace Vehicle
         EntityId lVictimId{};
         EntityId lAggressorId{};
 
-        // Candidate 1: B above A. The situation helper + height test decide.
+        // Candidate 1: situation test on record B. The situation helper + height test decide.
+        // asm 0x8263D840/D844: r5 = contact.mEntityIdA (aggressor), r25 = contact.mEntityIdB (victim).
         if (CheckForVerticalTakedownSituation(lpVehB, lpVehA))
         {
             // FLAG: the up-axis height comparison (transform +4192 vs unk_82FB82A0, then ==0) is
             // delegated to the situation helper result -- the in-record height lane is unmodelled.
             lbFired = true;
-            lVictimId    = lpInfo->mRaceCarAEntityID; // asm v10 = **a2 ; v8 = *(*a2+4)
-            lAggressorId = lpInfo->mRaceCarBEntityID;
+            lVictimId    = lpInfo->mRaceCarBEntityID; // asm r25 = *(mpContact+4) = idB -> victim (r4)
+            lAggressorId = lpInfo->mRaceCarAEntityID; // asm r5  = *(mpContact+0) = idA -> aggressor
         }
 
-        // Candidate 2: A above B. (asm runs BOTH situation tests unconditionally; we short-circuit
-        // on the first match since a second match would only overwrite the same victim/aggressor
-        // pair. FLAG: the asm's exact victim-id selection (v8/v26 across both blocks) is inferred.)
-        if (!lbFired && CheckForVerticalTakedownSituation(lpVehA, lpVehB))
+        // Candidate 2: situation test on record A. The asm runs BOTH situation tests unconditionally
+        // and this block OVERWRITES the victim/aggressor pair when it fires (asm 0x8263D8E0/D8E4:
+        // r5 = contact.mEntityIdB (aggressor), r25 = contact.mEntityIdA (victim)).
+        if (CheckForVerticalTakedownSituation(lpVehA, lpVehB))
         {
             lbFired = true;
-            lVictimId    = lpInfo->mRaceCarBEntityID;
-            lAggressorId = lpInfo->mRaceCarAEntityID;
+            lVictimId    = lpInfo->mRaceCarAEntityID; // asm r25 = *(mpContact+0) = idA -> victim (r4)
+            lAggressorId = lpInfo->mRaceCarBEntityID; // asm r5  = *(mpContact+4) = idB -> aggressor
         }
 
         if (!lbFired)
@@ -1308,11 +1320,13 @@ namespace Vehicle
 
         if (lbACrashing)
         {
-            // A is crashing -> B is the live rammer (the victim of the takedown is the crashing A).
-            // asm: ShouldRaceCarCrashOnCarImpact(this, a2[8], vehB, vehA).
+            // A is crashing (asm v26-else branch, 0x8263DBExx). The live car B is the Should subject,
+            // and -- per the asm -- ALSO the victim and the car whose crash flag is set.
+            // asm: ShouldRaceCarCrashOnCarImpact(this, a2[8]=indexB, vehB, vehA).
             if (!ShouldRaceCarCrashOnCarImpact(liB, lpVehB, lpVehA))
                 return false;
-            if (!lpInfo->mbCrashRaceCarB)
+            // Guard is the LIVE car's NETWORK flag (asm 0x8263DE5C: if(!*(_R31+85))), not the crash flag.
+            if (!lpInfo->mbRaceCarBIsNetworkCar)
             {
                 // Both cars' crash-states must read 1 for the pile-on takedown to register.
                 if (maRaceCarCrashState[liA] == 1 && maRaceCarCrashState[liB] == 1)
@@ -1322,8 +1336,8 @@ namespace Vehicle
                     // +4176 height lane vs mePlayerActiveRaceCarIndex; those in-record reads are
                     // unmodelled, so the revenge confirmation is delegated to the crash-state gate.
                     const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
-                    const EntityId lVictim    = MakeRaceCarEntityId(static_cast<u32>(liA));
-                    const EntityId lAggressor = MakeRaceCarEntityId(luPlayer);
+                    const EntityId lVictim    = MakeRaceCarEntityId(static_cast<u32>(liB)); // asm victim=(v6<<10) = indexB
+                    const EntityId lAggressor = MakeRaceCarEntityId(luPlayer);              // asm aggr=(v35<<10) = player
                     InstantTakedown(lVictim, lAggressor,
                                     lpInfo->mpContact->mNormal,
                                     lpInfo->mpContact->mPointOnA,
@@ -1334,22 +1348,25 @@ namespace Vehicle
                                     lpInfo->mpDeformationInterface,
                                     BrnGameState::E_TAKEDOWN_STANDARD);
                 }
-                lpInfo->mbCrashRaceCarA = true; // asm *(_R31+256)=1
+                lpInfo->mbCrashRaceCarB = true; // asm *(_R31+257)=1
             }
             return true;
         }
 
-        // B is crashing -> A is the live rammer. asm: ShouldRaceCarCrashOnCarImpact(this, a2[7], vehA, vehB).
+        // B is crashing (asm v26 branch, 0x8263DB2C). The live car A is the Should subject, the victim,
+        // and the car whose crash flag is set.
+        // asm: ShouldRaceCarCrashOnCarImpact(this, a2[7]=indexA, vehA, vehB).
         if (!ShouldRaceCarCrashOnCarImpact(liA, lpVehA, lpVehB))
             return false;
-        if (!lpInfo->mbCrashRaceCarB)
+        // Guard is the live car's NETWORK flag (asm 0x8263DBFC: if(!*(_R31+84))), not the crash flag.
+        if (!lpInfo->mbRaceCarAIsNetworkCar)
         {
             if (maRaceCarCrashState[liA] == 1 && maRaceCarCrashState[liB] == 1)
             {
                 // FLAG: player-revenge in-record reads (+4432 / +4176) omitted as above.
                 const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
-                const EntityId lVictim    = MakeRaceCarEntityId(static_cast<u32>(liB));
-                const EntityId lAggressor = MakeRaceCarEntityId(luPlayer);
+                const EntityId lVictim    = MakeRaceCarEntityId(static_cast<u32>(liA)); // asm victim=(v4<<10) = indexA
+                const EntityId lAggressor = MakeRaceCarEntityId(luPlayer);              // asm aggr=(v52<<10) = player
                 InstantTakedown(lVictim, lAggressor,
                                 lpInfo->mpContact->mNormal,
                                 lpInfo->mpContact->mPointOnA,
@@ -1360,7 +1377,7 @@ namespace Vehicle
                                 lpInfo->mpDeformationInterface,
                                 BrnGameState::E_TAKEDOWN_STANDARD);
             }
-            lpInfo->mbCrashRaceCarB = true; // asm *(_R31+257)=1
+            lpInfo->mbCrashRaceCarA = true; // asm *(_R31+256)=1
         }
         return true;
     }
