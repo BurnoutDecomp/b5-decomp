@@ -149,8 +149,10 @@ void Looker::Track(VecFloat lvTimeStep,
     const Vector2 lScreenOffset =
         Vector2{ lrParams.mfTargetSubjectXScreenOffset, lrParams.mfTargetSubjectYScreenOffset,
                  0.0f, 0.0f };
+    // asm 0x822226FC/0x8222270C: both the FOV and aspect args come from the camera's own
+    // fields (camera+0x58 / camera+0x5C), not a hardcoded 1.0f aspect.
     const VecFloat lvFOV    = VecFloat{ lrCamera.GetFOV(), 0.0f, 0.0f, 0.0f };
-    const VecFloat lvAspect = VecFloat{ 1.0f, 0.0f, 0.0f, 0.0f };
+    const VecFloat lvAspect = VecFloat{ lrCamera.mfAspectRatio, 0.0f, 0.0f, 0.0f };
     Matrix44Affine lAdjustedLookAt = CreateAdjustedLookAt(lLookAt, lvFOV, lvAspect, lScreenOffset);
 
     if (lrParams.mbInitialiseToLookingAtTarget && mbFirstFrame)
@@ -166,11 +168,21 @@ void Looker::Track(VecFloat lvTimeStep,
     }
     else
     {
-        // Follow path: SLerp the camera's current transform toward the adjusted look-at,
-        // capped by the cosine tolerance angle (half-degree-scaled tracking tolerance * FOV).
+        // Follow path: adapt mfSlerpFactor's first-order approach rate depending on whether the
+        // camera's current forward is still within the tolerance cone of the adjusted look-at's
+        // forward (asm 0x82222990..0x822229E4: dot(camera.At(), lAdjustedLookAt.At()) compared
+        // against cos(mfTrackingTolerance * cameraFOV * halfDegToRad)), THEN SLerp toward the
+        // look-at by the (now updated) mfSlerpFactor.
         const f32 lfCosAngleTolerance =
             rw::math::fpu::Cos(lrParams.mfTrackingTolerance * lrCamera.GetFOV() * KF_HALF_DEG_TO_RADS);
-        (void)lfCosAngleTolerance;
+        const f32 lfForwardDot = rw::math::vpu::Dot(lrCameraTransform.At(), lAdjustedLookAt.At());
+
+        // asm 0x822229E8..0x82222A10: outside the tolerance cone, approach mfTrackingSpeed;
+        // inside it, decay mfSlerpFactor toward 0. Both via mfTrackingAcceleration.
+        if (lfCosAngleTolerance > lfForwardDot)
+            mfSlerpFactor += (lrParams.mfTrackingSpeed - mfSlerpFactor) * lrParams.mfTrackingAcceleration;
+        else
+            mfSlerpFactor += (-mfSlerpFactor) * lrParams.mfTrackingAcceleration;
 
         f32 lfSlerpAmount = mfSlerpFactor;
         Matrix44Affine lBlended =
@@ -210,15 +222,19 @@ void Looker::Zoom(VecFloat lvTimeStep,
     {
     case Parameters::E_ZOOM_SCREEN_AREA:
     {
+        // asm 0x82222C18..C50: GetSizeOnScreen's (lvFOV, lvAspect) args are the camera's own
+        // FOV/aspect (camera+0x58 / camera+0x5C), NOT any Parameters field.
         const Vector2 lSizeOnScreen =
             GetSizeOnScreen(lrCamera.GetTransform(),
                             VecFloat{ lrCamera.GetFOV(), 0.0f, 0.0f, 0.0f },
-                            VecFloat{ lrParams.mfTargetSubjectSize, 0.0f, 0.0f, 0.0f },
+                            VecFloat{ lrCamera.mfAspectRatio, 0.0f, 0.0f, 0.0f },
                             lTarget, lAABB);
+        // asm 0x82222C60..C78: lvDistance is the camera's FOV re-read (camera+0x58), NOT
+        // lfDistanceToTarget (that value is only consumed by the perceived-distance case).
         const Vector2 lTargetArea =
             Vector2{ lrParams.mfTargetSubjectSize, 0.0f, 0.0f, 0.0f };
         const VecFloat lvFOV =
-            GetFOVDegsToFitObjectToScreenArea(VecFloat{ lfDistanceToTarget, 0.0f, 0.0f, 0.0f },
+            GetFOVDegsToFitObjectToScreenArea(VecFloat{ lrCamera.GetFOV(), 0.0f, 0.0f, 0.0f },
                                               lSizeOnScreen,
                                               VecFloat{ lTargetArea.x, 0.0f, 0.0f, 0.0f });
         lfIdealFOV = lvFOV.x;
@@ -226,15 +242,18 @@ void Looker::Zoom(VecFloat lvTimeStep,
     }
     case Parameters::E_ZOOM_SCREEN_REGION:
     {
+        // asm 0x82222B90..BC8: same (lvFOV, lvAspect) pairing as the SCREEN_AREA case above
+        // (camera+0x58 / camera+0x5C); not swapped, not a Parameters field.
         const Vector2 lSizeOnScreen =
             GetSizeOnScreen(lrCamera.GetTransform(),
-                            VecFloat{ lrParams.mfTargetSubjectSize, 0.0f, 0.0f, 0.0f },
                             VecFloat{ lrCamera.GetFOV(), 0.0f, 0.0f, 0.0f },
+                            VecFloat{ lrCamera.mfAspectRatio, 0.0f, 0.0f, 0.0f },
                             lTarget, lAABB);
+        // asm 0x82222BCC..C04: lvDistance is again the camera's FOV re-read (camera+0x58).
         const Vector2 lTargetSize =
             Vector2{ lrParams.mfTargetSubjectXSize, lrParams.mfTargetSubjectYSize, 0.0f, 0.0f };
         const VecFloat lvFOV =
-            GetFOVDegsToFitObjectToScreenSize(VecFloat{ lfDistanceToTarget, 0.0f, 0.0f, 0.0f },
+            GetFOVDegsToFitObjectToScreenSize(VecFloat{ lrCamera.GetFOV(), 0.0f, 0.0f, 0.0f },
                                               lSizeOnScreen, lTargetSize);
         lfIdealFOV = lvFOV.x;
         break;
