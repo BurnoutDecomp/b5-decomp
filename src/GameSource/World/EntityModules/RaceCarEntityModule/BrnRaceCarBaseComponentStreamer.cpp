@@ -1,7 +1,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarBaseComponentStreamer.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"           // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"           // CgsDev::Log::gpDebugPrint
 
 // ============================================================================
 // BrnWorld::RaceCarBaseComponentStreamer
@@ -20,8 +20,11 @@
 // the Feb-2007 reference does not show them). The class-level race-car asserts the
 // Feb-2007 source spells are reproduced via the house CGS_ASSERT.
 //
-// The "STRM:" debug prints are gated on the GLOBAL message-filter bit
-// (CgsDev::Message::KX_FILTER_GLOBAL == 1), matching the X360 filter test.
+// The "STRM:" debug prints are unconditional -- the X360 asm for OnLoadComplete
+// (0x822C0450) and OnUnloadComplete (0x822A5518) calls the StrStreamBase operator<<
+// chain directly with no gxMessageFilterFlags load/test anywhere in either function
+// (the Feb-2007 reference wraps them in a message-filter check, but that does not
+// match the ASM here and is not reproduced).
 // ============================================================================
 
 namespace BrnWorld
@@ -108,23 +111,17 @@ void RaceCarBaseComponentStreamer::OnLoadComplete( const BrnResource::GameDataIO
 
     if( !mAddedEntries.IsBitSet( static_cast<u32>( liActiveRaceCar ) ) )
     {
-        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint << "STRM: " << "(base) Completed load of asset for racecar: "
-                                       << static_cast<s32>( GetUserId( liListIndex ) )
-                                       << ", but racecar is no longer added\n";
-        }
+        *CgsDev::Log::gpDebugPrint << "STRM: " << "(base) Completed load of asset for racecar: "
+                                   << static_cast<s32>( GetUserId( liListIndex ) )
+                                   << ", but racecar is no longer added\n";
         return;
     }
 
     if( maDesiredAssets[liActiveRaceCar] != maLoadedAssets[liActiveRaceCar] )
     {
-        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint << "STRM: " << "(base) Completed load of asset for racecar: "
-                                       << static_cast<s32>( GetUserId( liListIndex ) )
-                                       << ", but desired resource has changed\n";
-        }
+        *CgsDev::Log::gpDebugPrint << "STRM: " << "(base) Completed load of asset for racecar: "
+                                   << static_cast<s32>( GetUserId( liListIndex ) )
+                                   << ", but desired resource has changed\n";
         return;
     }
 
@@ -137,11 +134,8 @@ void RaceCarBaseComponentStreamer::OnUnloadComplete( const BrnResource::GameData
 {
     (void)lpEvent;
 
-    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 )
-    {
-        *CgsDev::Log::gpDebugPrint << "STRM: " << "(base) Completed unload of asset for racecar: "
-                                   << static_cast<s32>( GetUserId( liListIndex ) ) << "\n";
-    }
+    *CgsDev::Log::gpDebugPrint << "STRM: " << "(base) Completed unload of asset for racecar: "
+                               << static_cast<s32>( GetUserId( liListIndex ) ) << "\n";
 }
 
 } // namespace BrnWorld
