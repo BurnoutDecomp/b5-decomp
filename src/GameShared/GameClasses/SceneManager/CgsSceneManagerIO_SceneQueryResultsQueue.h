@@ -20,15 +20,17 @@
 //        OutEventLineTestNearestResult (that type is only 0x40 bytes; this asm reads it at +0x60).
 //        It is a larger narrow-phase intersection record whose concrete type is not yet
 //        identified in the corpus -- modelled here as an opaque source read via raw byte offsets.
-//   a5 = lbHasIntersection (r8, clrlwi 24 -> bool). When true, copy fields from a4 (after
-//        asserting a4 != 0); when false, skip the copy and push the record UNINITIALISED (the
-//        asm does NOT memset/zero the stack image -- only the four copied fields are written on
-//        the true path; on the false path NOTHING is written, so a garbage record is queued).
+//   a5 = lbHasIntersection (r8, clrlwi 24 -> bool). Stored UNCONDITIONALLY into rec+0x38
+//        (mbIntersection) before the branch (stb r8, var_38(r1) @ 0x828D1EB4). When true, ALSO
+//        copy fields from a4 (after asserting a4 != 0); when false, skip the copy and push the
+//        rest of the record UNINITIALISED (the asm does NOT memset/zero the stack image --
+//        mbIntersection plus, on the true path, the four copied fields are the only bytes
+//        written; on the false path only mbIntersection is written, the rest is garbage).
 //
 // SOURCE reads (relative to a4):  +0x40 -> mPosition (rec+0x00), +0x30 -> mNormal (rec+0x10),
 //   +0x50 -> mfLineParam (rec+0x30), +0x60 (packed u32): high16 -> mu16MaterialTag (rec+0x34),
 //   low16 -> mu16GroupTag (rec+0x36). The dest field offsets match the producer-pinned
-//   OutEventLineTestNearestResult layout (mbIntersection@+0x2C, mfLineParam@+0x30,
+//   OutEventLineTestNearestResult layout (mbIntersection@+0x38, mfLineParam@+0x30,
 //   mu16MaterialTag@+0x34, mu16GroupTag@+0x36; see CgsSceneManagerModuleIO.h).
 
 namespace CgsSceneManager
@@ -56,6 +58,10 @@ namespace SceneManagerIO
     {
         // The asm builds the record on an UNINITIALISED stack image -- no memset.
         OutEventLineTestNearestResult lEvent;
+
+        // stb r8, var_38(r1) at 0x828D1EB4 writes lbHasIntersection into rec+0x38
+        // (mbIntersection) UNCONDITIONALLY, before the branch on lbHasIntersection.
+        lEvent.mbIntersection = lbHasIntersection;
 
         if (lbHasIntersection)
         {

@@ -10,10 +10,14 @@
 //   1. CGS_ASSERT(lpAllocator != NULL)                        (baked line 140)
 //   2. mTrianglesForCachedObjects.Prepare(lpAllocator, 13112) (the shared cache;
 //      `this` is passed straight through as the CachedTriangleList sub-object @ +0)
-//   3. Builds a 4-pool rw::ResourceDescriptor on the stack -- pool 0 = {size 0x37E0
-//      (14304 = 298 slots * 48), align 0x10}, pools 1..3 = {size 0, align 1} -- and
-//      allocates "CachedObjectSlots" through the allocator's virtual DoAllocate.
-//      The returned Resource's first pool pointer becomes mpaCachedObjectSlots.
+//   3. Builds a 5-pool rw::BaseResourceDescriptors<5> on the stack -- pool 0 = {size
+//      0x37E0 (14304 = 298 slots * 48), align 0x10}, pools 1..4 = {size 0, align 1}
+//      (the X360/PS3 serialised-descriptor drift documented in rwcore_structs.h and
+//      CgsResourceType.h -- 5 entries, not the PC rwcore <4>) -- and allocates
+//      "CachedObjectSlots" through the allocator's virtual DoAllocate (reinterpret_cast
+//      down to the <4> alias DoAllocate is declared with, same idiom as rwgpfxtint.cpp's
+//      Tint::InitializePixelProgram). The returned Resource's first pool pointer becomes
+//      mpaCachedObjectSlots.
 //   4. CGS_ASSERT(mpaCachedObjectSlots != NULL)               (baked line 164)
 //   5. Initialises all 298 slots (the X360 unrolls 2 per iteration over the 48-byte
 //      stride): clears the cached sphere (16-byte vector store), sets
@@ -41,8 +45,15 @@ namespace CgsSceneManager
         // 13112 bytes for the shared triangle cache backing store.
         mTrianglesForCachedObjects.Prepare(lpAllocator, 13112);
 
-        // Build the 4-pool descriptor: pool 0 holds the slot array, the rest empty.
-        rw::ResourceDescriptor lCachedObjSlotsResDesc;
+        // Build the 5-pool descriptor: pool 0 holds the slot array, the rest empty.
+        // The X360 stack layout builds FIVE (size,align) pairs (var_50..var_30), not
+        // four -- this matches the documented X360/PS3 serialised-descriptor drift
+        // (rw::BaseResourceDescriptors<5>, see rwcore_structs.h and
+        // CgsResourceType.h's CgsResource::ResourceDescriptor typedef). DoAllocate's
+        // declared parameter is the PC's narrower <4> alias, so reinterpret_cast the
+        // <5> descriptor down to it, same idiom as rw::graphics::postfx::Tint::
+        // InitializePixelProgram (rwgpfxtint.cpp).
+        rw::BaseResourceDescriptors<5> lCachedObjSlotsResDesc;
         lCachedObjSlotsResDesc.m_baseResourceDescriptors[0].m_size      = KU_MAX_CACHED_OBJECTS * sizeof(CacheSlot); // 0x37E0
         lCachedObjSlotsResDesc.m_baseResourceDescriptors[0].m_alignment = 0x10;
         lCachedObjSlotsResDesc.m_baseResourceDescriptors[1].m_size      = 0;
@@ -51,11 +62,14 @@ namespace CgsSceneManager
         lCachedObjSlotsResDesc.m_baseResourceDescriptors[2].m_alignment = 1;
         lCachedObjSlotsResDesc.m_baseResourceDescriptors[3].m_size      = 0;
         lCachedObjSlotsResDesc.m_baseResourceDescriptors[3].m_alignment = 1;
+        lCachedObjSlotsResDesc.m_baseResourceDescriptors[4].m_size      = 0;
+        lCachedObjSlotsResDesc.m_baseResourceDescriptors[4].m_alignment = 1;
 
         // Allocate through the allocator's virtual DoAllocate; the first pool's
         // pointer is the slot array base. (X360 indirect call through the
         // allocator vtable, descriptor + "CachedObjectSlots" name.)
-        rw::Resource lCachedObjSlotsRes = lpAllocator->DoAllocate(lCachedObjSlotsResDesc, "CachedObjectSlots");
+        rw::Resource lCachedObjSlotsRes = lpAllocator->DoAllocate(
+            reinterpret_cast<const rw::ResourceDescriptor&>(lCachedObjSlotsResDesc), "CachedObjectSlots");
         mpaCachedObjectSlots = static_cast<CacheSlot*>(lCachedObjSlotsRes.m_baseResources[0]);
 
         CGS_ASSERT(mpaCachedObjectSlots != NULL, "mpaCachedObjectSlots != NULL");
