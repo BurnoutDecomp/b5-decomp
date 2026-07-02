@@ -366,24 +366,18 @@ int AptCIH::jumpToFrame(int nFrame)
             // Arbitrary jump: rebuild the intervening display-list state into a
             // scratch pseudo list, replaying every skipped frame, then merge it.
             //
-            // FLAG (staged -- 3rd round, 2026-07-02): the replay pipeline is now
-            // native-8 through SIX fixed layers (the AptPlaceObjectInfo_t re-lay,
+            // LIVE (2026-07-02, after five staged rounds): the replay pipeline is
+            // native-8 through six fixed layers (the AptPlaceObjectInfo_t re-lay,
             // the snapshot ctor, mergeState's source head, the node/scratch pool
             // sizes, AddToDisplayList/ReplaceDisplyListItem's record id + embedded
-            // -anim chain, the dispatcher's depth word) and the REPLAY completes --
-            // the remaining crash is INSIDE mergeState's reconcile, suspected in the
-            // bulk removeObject -> ClearCIH teardown it exercises for existing
-            // children absent from the replay. Staged off until that chain is
-            // verified; the boundary seek in the else remains the live path.
-            // (4th-round retest 2026-07-02: STILL crashes with the DrainQueues
-            // AndZombie drain homed. 5th-round probes pinpointed the residual to
-            // the INSTRUCTION: the merge's nosrc-remove arm -> removeObject ->
-            // AddToDelayReleaseList -> Remove completes fully -> the final
-            // Release() drops the node 1 -> 0 and the FIRST-EVER true AptCIH
-            // deletion (the vector-deleting-destructor -> ~AptCIH -> GC-pool
-            // free chain) crashes. That deletion chain is the next target.)
-            if (false)
-            {
+            // -anim chain, the dispatcher's depth word), and the removal chain the
+            // merge exercises was made faithful to the arbiter by the 2026-07-02
+            // deletion-chain audit: AddToDelayReleaseList opens with the vtbl[0]
+            // AddRef PIN (was mislabeled PreDestroy), removeItem does NOT release
+            // (the fabricated "balance" drop was removed), ClearCIH's slot-5 tail
+            // is SetHasClass(0) (was a fabricated Release), and the Release zero-
+            // path teardown is ForceDelete (X360 vtbl+0x2C / XB1 +88). Boot-
+            // verified: removals free at ATDRL's final Release only, 0 asserts.
             void* pProperties = pInst->mpProperties;   // dword[3] (the AS property hash)
 
             void* pScratchMem = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoDisplayList));   // [c: 8]
@@ -422,11 +416,6 @@ int AptCIH::jumpToFrame(int nFrame)
             {
                 pScratch->~AptPseudoDisplayList();
                 gpAptPseudoDataPool->Deallocate(pScratch, sizeof(AptPseudoDisplayList));   // [c: 8]
-            }
-            }
-            else
-            {
-                pInst->mnGotoFrame = nFrame;   // the staged boundary seek
             }
         }
 

@@ -108,7 +108,13 @@ AptCIH* AptDisplayListState::removeItem(AptCIH* pItem)
 
     pItem->SetDisplayListNext(0);
     pItem->SetDisplayListPrevious(0);
-    pItem->Release();   // balance the insert AddRef
+    // NB: NO Release here. The arbiter (XB1 sub_140856360; X360 0x82AEE7--)
+    // only unlinks + notifies -- the insert AddRef is balanced by AptCIH::
+    // Remove's tail Release (the "display list's own reference" drop). A
+    // previously fabricated "balance the insert AddRef" Release() at this spot
+    // double-dropped every removed node one reference and made merge removals
+    // free the node INSIDE Remove instead of at AddToDelayReleaseList's final
+    // Release (use-after-free on the ATDRL tail reads).
     return pItem;
 }
 

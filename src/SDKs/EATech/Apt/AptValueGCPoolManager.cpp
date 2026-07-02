@@ -111,11 +111,19 @@ AptValueGC_PoolManager::AptValueGC_PoolManager(size_t mainPoolSizeBytes,
 // byte_8324D806 = 0; byte_8324D804 = 4; then scan byte_82144A18[1..37] for the
 // min/max object size -> dword_8324E2A4 = max; byte_8324D805 = min.
 // (min seed = 1000000 == 0xF4240; loop index < 38.)
+//
+// x64 (Burnout_External_Xbox_One sub_14082D9F0, the arbiter): byte_141479FB3 = 0
+// (the store-next offset stays 0) but byte_141479FB6 = **8** -- the size/alloc-flag
+// offset widens with the pointer so the AptValueGC_MemItem alloc bit + freed-size
+// slot live in the qword AFTER the vptr (bytes 8..15), exactly matching the
+// DOGMA free-list layout (next @ word 0 over the vptr, size @ +8). Keeping the
+// console's 4 here made SetIsAllocated/GetSize match NEITHER union arm (silent
+// no-ops) -- fixed to sizeof(void*) == 8, 2026-07-02.
 // ---------------------------------------------------------------------------
 void AptValueGC_PoolManager::StaticInitialize()
 {
     gAptValueGCStoreSizeFlag = 0;
-    gAptValueGCSizeOffset = 4;
+    gAptValueGCSizeOffset = 8;   // x64: XB1 byte_141479FB6 = 8 (was 4 on the consoles)
 
     uint32_t nMax = 0;
     uint32_t nMin = 1000000;

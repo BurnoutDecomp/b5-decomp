@@ -259,8 +259,13 @@ void AptValue::AddRef()
 //     (vtbl +0x2C); when running OFF the GC thread -> queue into the deferred-
 //     release vector if it has room (SetReleaseAtEnd + push), and only if it is
 //     full roll the queue back (ClearReleaseAtEnd) and tear down now (vtbl +0x2C).
-// X360 vtbl: slot +0x30 = the scalar-deleting destructor (suspend path), slot
-// +0x2C = the normal teardown == AptValue::DeleteThis (`delete this`).
+// X360 vtbl: slot +0x30 = the scalar-deleting destructor (suspend path); slot
+// +0x2C = the normal teardown == ForceDelete, NOT a bare `delete this`: the shipped
+// slot body (X360 0x82AD4DF8; XB1 slot +88 = sub_140837DE0, byte-identical shape)
+// is the composite `vtbl[PreDestroy](this); vtbl[DestroyGCPointers](this);
+// vtbl[deleting-dtor](this, 1)`. Every refcount death therefore runs the full GC
+// teardown (parent release + char-inst/render-item destruction), which a bare
+// DeleteThis skipped -- that was an audit bug, fixed 2026-07-02.
 // ---------------------------------------------------------------------------
 void AptValue::Release()
 {
@@ -289,10 +294,10 @@ void AptValue::Release()
         return;
     }
 
-    // Non-delayed-deletion values tear down immediately (vtbl +0x2C).
+    // Non-delayed-deletion values tear down immediately (vtbl +0x2C == ForceDelete).
     if (!getAllowsDelayedDeletion())   // X360 ((v3 >> 26) & 1) == 0 -> goto teardown
     {
-        DeleteThis();                  // X360 `(*(*this+0x2C))(this)`
+        ForceDelete();                 // X360 `(*(*this+0x2C))(this)` -- the composite
         return;
     }
 
@@ -304,7 +309,7 @@ void AptValue::Release()
     // ON the GC thread: tear down now. OFF the GC thread: try the deferred vector.
     if (gnAptGCThreadId_Release == AptValue_CurrentThreadId())
     {
-        DeleteThis();                  // X360 beq cr6, loc_82AE32C0 -> slot +0x2C
+        ForceDelete();                 // X360 beq cr6, loc_82AE32C0 -> slot +0x2C
         return;
     }
 
@@ -313,7 +318,7 @@ void AptValue::Release()
     // the +0 member mnTop, the live top is the +4 member mnCapacity.)
     if (lpVec == 0 || lpVec->mnCapacity >= lpVec->mnTop)
     {
-        DeleteThis();                  // no room -> teardown now (slot +0x2C)
+        ForceDelete();                 // no room -> teardown now (slot +0x2C)
         return;
     }
 
