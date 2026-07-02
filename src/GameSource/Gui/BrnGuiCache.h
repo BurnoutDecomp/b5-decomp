@@ -120,6 +120,18 @@ namespace BrnGui
         // pre-hashed value to the u32 overload above. Body links from the GuiCache TU.
         void AppendExpectedAptComponent(GuiFlow leFlow, const char* lpacComponentName);
 
+        // ADDITIVE GROW (BrnImageGallery.h TU): replace the flow layer's expected-component
+        // list wholesale with the caller's hash array (ImageGalleryState::
+        // SetExpectedAptComponentList @0x82484720 passes flow 0, its 7-slot hash list and
+        // the live count). Body links from the GuiCache TU.
+        void SetExpectedAptComponentList(GuiFlow leFlow, const u32* lpauComponentNameHashes,
+                                         u32 luCount);
+
+        // ADDITIVE GROW (BrnImageGallery.h TU): has every expected component on the flow
+        // layer finished initialising (the per-frame init-wait poll -- ImageGalleryState::
+        // UpdateWFInit @0x824846B8 gates on it). Body links from the GuiCache TU.
+        bool AreAllAptComponentsInitialised(GuiFlow leFlow) const;
+
         // ADDITIVE GROW (BrnOnlinePreEventMessages TU): the cache holds the active game-mode
         // type the GUI reads to pick mode-specific apt key-frames (the X360 reads it as a far
         // member; e.g. the online pre-event messages select the "anim1_StuntRun" key-frame for

@@ -42,6 +42,10 @@ public:
     // asserts a collision was actually predicted (mbWillCollide), then returns mfTimeUntilCollision.
     f32 GetTimeUntilCollision() const;
 
+    // GROWN for VisibilityCollisionPolicy::TimeUntilCollisionWithGeometry @0x821F37C8
+    // (its h:425 wrapper assert reads this flag through the embedded predictor).
+    bool WillCollide() const { return mbWillCollide != 0; }
+
 private:
     // FLAG: only the two members GetTimeUntilCollision reads are modelled at their asm-attested
     //   offsets; the rest of the predictor rig lands with its full TU.

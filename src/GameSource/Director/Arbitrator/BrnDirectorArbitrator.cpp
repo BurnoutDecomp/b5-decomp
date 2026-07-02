@@ -1,5 +1,8 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitrator.h"
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the fly-world handle tripwire)
+#include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"          // ArbitratorState (cycle request / camera)
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugFlyWorld.h"    // BehaviourDebugFlyWorld (WarpToLookAt)
 
 // ============================================================================
 // BrnDirector::Arbitrator -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
@@ -171,7 +174,60 @@ namespace BrnDirector
     // Destruct / UpdateDebugCameras -- DECLARATION-ONLY (no X360 asm in this TU's function set;
     // the dossier carries DWARF variable hints only). Their bodies land when their asm is
     // attested (or with the debug-camera / behaviour-tweaker TUs).
-    // IsDebugCamera / DebugCameraFlyWorldLookAt / GetDebugFlyWorldTransform / GetNormalCamera /
-    // CycleNormalCamera are likewise declaration-only here (no asm in this TU's function set).
+    // IsDebugCamera / GetDebugFlyWorldTransform remain declaration-only.
+    // CycleNormalCamera / DebugCameraFlyWorldLookAt / GetNormalCamera are bodied below
+    // (class:BrnDirector::Arbitrator, batch 12).
     // ------------------------------------------------------------------------
+
+    // ------------------------------------------------------------------------
+    // CycleNormalCamera @0x822087F0 -- request a camera cycle on whichever state is
+    // driving the "normal" camera: the testbed state directly when the debug-camera
+    // selector reads 2 (the X360 stb at arb +0x1A1 == mArbStateTestbed's +0x171
+    // byte), else the container's current state (the inlined GetCurrentState carries
+    // the StateContainer.h:131 "mpCurrentState != NULL" tripwire -- the committed
+    // out-of-line GetCurrentState fires the same assert).
+    // ------------------------------------------------------------------------
+    void Arbitrator::CycleNormalCamera()
+    {
+        if (miDebugCameraMode == 2)
+        {
+            mArbStateTestbed.RequestCycleCameraThisFrame();
+        }
+        else
+        {
+            mStateContainer.GetCurrentState()->RequestCycleCameraThisFrame();
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // GetNormalCamera @0x821F5BD8 -- the camera currently driving the "normal" view:
+    // the testbed state's camera (arb +0x40 == mArbStateTestbed's +0x10 Camera) when
+    // the debug-camera selector reads 2, else the current state's camera (state +0x10;
+    // the inlined GetCurrentState carries the StateContainer.h:140 tripwire).
+    // ------------------------------------------------------------------------
+    const Camera::Camera& Arbitrator::GetNormalCamera() const
+    {
+        if (miDebugCameraMode == 2)
+        {
+            return mArbStateTestbed.GetCamera();
+        }
+        return mStateContainer.GetCurrentState()->GetCamera();
+    }
+
+    // ------------------------------------------------------------------------
+    // DebugCameraFlyWorldLookAt @0x82234738 -- point the debug fly-world camera at
+    // lLookAt from lEye (the GameTalk "CameraPos" landing spot). The X360 asserts the
+    // fly-world handle is allocated (the BrnBehaviourManager.h:589 "IsAllocated()"
+    // tripwire), re-resolves the behaviour slot through GetBehaviourSlotFromHandle
+    // (== the handle's own cached mpBehaviour -- Prepare defines the cache as exactly
+    // that slot's pointee; the committed GetBehaviour() accessor is the named
+    // equivalent), and forwards both vectors (VMX registers v1/v2 saved across the
+    // resolve) to BehaviourDebugFlyWorld::WarpToLookAt.
+    // ------------------------------------------------------------------------
+    void Arbitrator::DebugCameraFlyWorldLookAt(rw::math::vpu::Vector3 lEye,
+                                               rw::math::vpu::Vector3 lLookAt)
+    {
+        CGS_ASSERT(mDebugCameraFlyWorld.IsAllocated(), "IsAllocated()");   // BrnBehaviourManager.h:589 (non-gating)
+        mDebugCameraFlyWorld.GetBehaviour()->WarpToLookAt(lEye, lLookAt);
+    }
 }
