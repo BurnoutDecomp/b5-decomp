@@ -57,7 +57,14 @@ struct AptArray;   // AptArray.h -- the array join renderer (AptValue_AptArrayTo
 // ---------------------------------------------------------------------------
 extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
-extern float        Apt_atoff(const char* pStr);
+// Apt_atoff -- HOMED 2026-07-02 (retiring the return-0 stub). The PS3 body
+// @0x7E2990 (`_Z9Apt_atoffPKc`) is exactly `(float)_Stod(pStr, 0, 0)` -- the
+// CRT string->double parse (strtod semantics: leading whitespace, sign,
+// decimal/exponent, hex) rounded to single precision.
+float Apt_atoff(const char* pStr)
+{
+    return static_cast<float>(strtod(pStr, nullptr));
+}
 
 // ---------------------------------------------------------------------------
 // c_string @0x7E4E18 -- as the AptString for a primitive string (type 1, the value

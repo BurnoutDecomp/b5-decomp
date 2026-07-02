@@ -177,7 +177,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // (the full @0x82AF9768 ECMA-ish NaN classification incl. the SWF7 arm).
     bool AptLinker_isFileImported(AptLinker* pLinker, AptFilePtr* ppCandidate) { return false; }   // FLAG link-stub
     const char*    AptResolveTextFieldFontName(AptCharacterInst* pTextInst) { return nullptr; }   // FLAG link-stub
-    float        Apt_atoff(const char* pStr) { return 0; }   // FLAG link-stub
+    // Apt_atoff RETIRED (2026-07-02): homed in AptValueConvert.cpp
+    // (PS3 @0x7E2990 == (float)strtod; the stub's 0 broke every string->number).
     int    AptValueGCPool_GetAllocatedCount(void* pPool) { return 0; }   // FLAG link-stub
     int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3) { return 0; }   // FLAG link-stub
     // AptActionInterpreter_InstanceOfChainWalk RETIRED (2026-07-02): homed in
