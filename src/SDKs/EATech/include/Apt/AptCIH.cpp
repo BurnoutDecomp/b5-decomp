@@ -88,6 +88,10 @@ static AptMovie* AptCIH_GetClipMovie(const AptCharacterSpriteInstBase* pInst)
 // dword_1059C6D0); null until installed.
 void AptCIH_PreDestroyHook(AptCIH* pCIH);
 
+// The zombie-vector reap (XB1 sub_140830A40; X360 name AptUpdateZombieVector) --
+// currently the AptRenderLinkStubs no-op until the zombie vector homes.
+extern void* AptUpdateZombieVector(char bClear);
+
 // ctor @0x824C7C
 AptCIH::AptCIH(AptCharacter* pCharacter, AptCIH* pParent)
     : AptValueGC(AptVFT_CharacterInstHandle, CO_CIH)
@@ -200,6 +204,12 @@ void AptCIH::DecZombieCount()
 {
     const int16_t n = static_cast<int16_t>((mFlagsA >> 7) - 1);
     mFlagsA = (mFlagsA & ~0x007FFF80u) | ((static_cast<uint32_t>(n) << 7) & 0x007FFF80u);
+    // XB1 sub_140835B50 (the arbiter's DecZombieCount): when the count reaches
+    // zero, reap the dead zombies immediately -- AptUpdateZombieVector(0).
+    // (The reap body is the staged zombie-vector tier; the current link-stub is
+    // a no-op, faithful while the vector itself is un-homed.)
+    if ((mFlagsA & 0x007FFF80u) == 0u)
+        AptUpdateZombieVector(0);
 }
 
 bool AptCIH::IsInCtor() const { return ((mFlagsA >> 27) & 1u) != 0; }
