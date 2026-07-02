@@ -157,42 +157,39 @@ void AptActionInterpreter::_FunctionAptActionPushByte(AptActionInterpreter* pInt
 }
 
 // ---------------------------------------------------------------------------
-// _FunctionAptActionPushWord @0x8063A0 -- read a big-endian int16 inline, push it
-// (sign-extended). Assembled byte-by-byte so it is correct regardless of host
-// endianness (the .apt bytecode is big-endian).
+// _FunctionAptActionPushWord @0x8063A0 -- read an int16 inline, push it
+// (sign-extended). GUIAPT64 streams are the XB1 little-endian format (the console
+// .apt was big-endian; the XB1 code reads payloads native).
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPushWord(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
     const unsigned char* p = pCtx->mpProgramCounter;
-    int16_t v = static_cast<int16_t>((p[0] << 8) | p[1]);
+    int16_t v = static_cast<int16_t>(p[0] | (p[1] << 8));   // LE (GUIAPT64/XB1 form)
     pCtx->mpProgramCounter += 2;
     pInterp->stackPush(AptInteger::Create(v));
 }
 
 // ---------------------------------------------------------------------------
-// _FunctionAptActionPushDWord @0x8062FC -- read a big-endian int32 inline, push it.
+// _FunctionAptActionPushDWord @0x8062FC -- read an int32 inline, push it.
+// GUIAPT64/XB1 little-endian payload (console was big-endian).
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPushDWord(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
-    const unsigned char* p = pCtx->mpProgramCounter;
-    int32_t v = (static_cast<int32_t>(p[0]) << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
+    int32_t v;
+    std::memcpy(&v, pCtx->mpProgramCounter, sizeof(v));   // LE-native (GUIAPT64/XB1 form)
     pCtx->mpProgramCounter += 4;
     pInterp->stackPush(AptInteger::Create(v));
 }
 
 // ---------------------------------------------------------------------------
-// _FunctionAptActionPushFloat @0x807F50 -- read a big-endian 32-bit float inline,
-// push it. The console assembles the four bytes (big-endian) and reinterprets the
-// word as a float; the byte-by-byte assembly keeps it x64-correct.
+// _FunctionAptActionPushFloat @0x807F50 -- read a 32-bit float inline, push it.
+// GUIAPT64/XB1 little-endian payload (the console assembled big-endian bytes).
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPushFloat(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
-    const unsigned char* p = pCtx->mpProgramCounter;
-    uint32_t u = (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16)
-               | (static_cast<uint32_t>(p[2]) << 8) | p[3];
-    pCtx->mpProgramCounter += 4;
     float f;
-    std::memcpy(&f, &u, sizeof(f));
+    std::memcpy(&f, pCtx->mpProgramCounter, sizeof(f));   // LE-native (GUIAPT64/XB1 form)
+    pCtx->mpProgramCounter += 4;
     pInterp->stackPush(AptFloat::Create(f));
 }
 
@@ -233,19 +230,17 @@ void AptActionInterpreter::_FunctionAptActionPushFloat(AptActionInterpreter* pIn
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPush(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
-    // Align the read pointer up to the next 4-byte boundary, then consume the
-    // {count, array} header. FLAG: the inline operand block stores a 4-byte
-    // serialized pointer (console widths); its on-x64 resolved width is settled by
-    // _parseStream (the transcode, a deferred follow-on), so the count+array header
-    // is read in the console's serialized form here.
+    // The GUIAPT64 operand block (the form _parseStream produces): 8-aligned
+    // {i64 count @0, AptValue** table @+8}, PC advances 16. The table entries are
+    // LIVE AptValue*s post-parse (console form was 4-aligned {i32, ptr} +8).
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
-            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
-    const int32_t   nCount = *reinterpret_cast<const int32_t*>(pAligned);
-    AptValue* const* pArray = *reinterpret_cast<AptValue* const* const*>(pAligned + 4);
-    pCtx->mpProgramCounter = pAligned + 8;
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
+    const int64_t   nCount = *reinterpret_cast<const int64_t*>(pAligned);
+    AptValue* const* pArray = *reinterpret_cast<AptValue* const* const*>(pAligned + 8);
+    pCtx->mpProgramCounter = pAligned + 16;
 
-    for (int32_t i = 0; i < nCount; ++i)
+    for (int64_t i = 0; i < nCount; ++i)
         pInterp->stackPushIndirect(pArray[i]);   // real member (resolves Lookup/Register)
 }
 
@@ -274,7 +269,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictWord(AptActionInterpr
                                                                 LocalContextT* pCtx)
 {
     const unsigned char* p = pCtx->mpProgramCounter;
-    const unsigned int nIndex = (static_cast<unsigned int>(p[0]) << 8) | p[1];   // big-endian u16
+    const unsigned int nIndex = p[0] | (static_cast<unsigned int>(p[1]) << 8);   // LE u16 (GUIAPT64/XB1)
     pCtx->mpProgramCounter += 2;
 
     AptValue* pEntry = pInterp->mpRegisters[nIndex];        // console: *((4*idx & 0x3FFFC) + a1[17])
@@ -292,9 +287,9 @@ void AptActionInterpreter::_FunctionAptActionPushStringGetMember(AptActionInterp
     // Align the PC up to 4 and read the inline string pointer (advances the PC by 4).
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
-            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
-    const char* szName = *reinterpret_cast<const char* const*>(pAligned);
-    pCtx->mpProgramCounter = pAligned + 4;
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
+    const char* szName = *reinterpret_cast<const char* const*>(pAligned);   // 8-aligned qword (GUIAPT64)
+    pCtx->mpProgramCounter = pAligned + 8;
 
     // AptString::Create("") + InitFromBuffer/operator=/Decrease idiom (the X360's
     // empty-seed-then-assign); the temporary EAStringC's ctor/dtor are the asm's
@@ -319,9 +314,9 @@ void AptActionInterpreter::_FunctionAptActionPushStringGetVar(AptActionInterpret
 {
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
-            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
-    const char* szName = *reinterpret_cast<const char* const*>(pAligned);
-    pCtx->mpProgramCounter = pAligned + 4;
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
+    const char* szName = *reinterpret_cast<const char* const*>(pAligned);   // 8-aligned qword (GUIAPT64)
+    pCtx->mpProgramCounter = pAligned + 8;
 
     // FLAG: the console assembles the name into the shared scratch EAStringC
     // off_82F733B0 (InitFromBuffer + operator= + DecreaseInternalRefCount) and
@@ -345,9 +340,9 @@ void AptActionInterpreter::_FunctionAptActionPushStringSetMember(AptActionInterp
 {
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
-            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
-    const char* szName = *reinterpret_cast<const char* const*>(pAligned);
-    pCtx->mpProgramCounter = pAligned + 4;
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
+    const char* szName = *reinterpret_cast<const char* const*>(pAligned);   // 8-aligned qword (GUIAPT64)
+    pCtx->mpProgramCounter = pAligned + 8;
 
     AptString* pStr = AptString::Create("");                // FLAG: seed const @0x820046A7 ("")
     *pStr->GetInternalString() = EAStringC(szName);
@@ -367,9 +362,9 @@ void AptActionInterpreter::_FunctionAptActionPushStringSetVar(AptActionInterpret
 {
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
-            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
-    const char* szName = *reinterpret_cast<const char* const*>(pAligned);
-    pCtx->mpProgramCounter = pAligned + 4;
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
+    const char* szName = *reinterpret_cast<const char* const*>(pAligned);   // 8-aligned qword (GUIAPT64)
+    pCtx->mpProgramCounter = pAligned + 8;
 
     AptString* pStr = AptString::Create("");                // FLAG: seed const @0x820046A7 ("")
     *pStr->GetInternalString() = EAStringC(szName);
@@ -1116,11 +1111,11 @@ void AptActionInterpreter::_FunctionAptActionCallFrame(AptActionInterpreter* pIn
 void AptActionInterpreter::_FunctionAptActionGotoLabel(AptActionInterpreter* /*pInterp*/,
                                                        LocalContextT* pContext)
 {
-    // Align the PC up to 4, read the inline string pointer, advance the PC by 4.
+    // 8-aligned qword string pointer (GUIAPT64); advance the PC by 8.
     const unsigned char* const pAligned = reinterpret_cast<const unsigned char*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
     const char* const szLabel = *reinterpret_cast<const char* const*>(pAligned);
-    pContext->mpProgramCounter = pAligned + 4;
+    pContext->mpProgramCounter = pAligned + 8;
 
     EAStringC label(szLabel);   // console EAStringC::InitFromBuffer scratch (RAII Decrease)
 
@@ -1157,9 +1152,9 @@ void AptActionInterpreter::_FunctionAptActionGotoLabel(AptActionInterpreter* /*p
 void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pInterp,
                                                         LocalContextT* pContext)
 {
-    // Align the PC up to 4; the inline 4-byte word is the "start playing" flag.
+    // 8-aligned (GUIAPT64); the inline 4-byte word is the "start playing" flag.
     const uint32_t* const pPlayFlag = reinterpret_cast<const uint32_t*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPlayFlag + 1);
 
     AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];   // console v8

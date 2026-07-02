@@ -210,7 +210,7 @@ void AptActionInterpreter::_FunctionAptActionGetUrl(AptActionInterpreter* pInter
     // host pointer width here -- the same x64-native PC model as the branch ops.
     // FLAG: 8-byte (vs console 4-byte) inline operand width -- _parseStream transcode.
     const char* const* pOperands = reinterpret_cast<const char* const*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));   // 8-aligned (GUIAPT64)
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pOperands + 2);
 
     const char* pUrl    = pOperands[0];

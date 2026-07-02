@@ -56,10 +56,11 @@ class AptValue;
 // or passed by name (mnRegister == 0 -> bound into the frame's locals under
 // mpName). Serialised in the movie data; 8 bytes per entry.
 // ---------------------------------------------------------------------------
-struct AptScriptFunction2Arg
+struct AptScriptFunction2Arg      // the GUIAPT64 16-byte arg record (8-aligned)
 {
     int32_t     mnRegister;   // +0x00  target register (0 -> bind by name instead)
-    const char* mpName;       // +0x04  the parameter name (movie string)
+    int32_t     mPad04;       // +0x04  (alignment)
+    const char* mpName;       // +0x08  the parameter name (qword movie-string pointer)
 };
 
 // ---------------------------------------------------------------------------
@@ -77,17 +78,22 @@ struct AptScriptFunction2Arg
 // patched in place by the interpreter when the DefineFunction2 action runs (from
 // the interpreter's two constant-pool registers).
 // ---------------------------------------------------------------------------
+// The GUIAPT64 48-byte serialized record (8-aligned; verified against the libapt2
+// converter's DefineFunction2 writer + the XB1 _parseStream walk): name qword,
+// {u32 params, u16 registers, u16 preload-flags}, arg-table qword, u32 body length
+// (+pad), then the two signature qwords (0x98765432/0x12345678) the runtime handler
+// overwrites with the live constant-pool registers.
 struct AptScriptFunction2ByteCode
 {
     const char*           mpName;              // +0x00  the function's name ("" for anonymous)
-    int32_t               mnNumArguments;      // +0x04  declared parameter count
-    uint16_t              mField08;            // +0x08  (serialised; unused by the X360 accessors)
-    uint16_t              muPreloadFlags;      // +0x0A  preload-register flags (KU_PRELOAD_*)
-    AptScriptFunction2Arg* mpArgTable;         // +0x0C  array[mnNumArguments] of register/name entries
-    int32_t               mnBodyLength;        // +0x10  record-body length (used to advance the PC)
-    const char**          mppConstantPool;     // +0x14  the constant-pool string table (patched in)
-    int32_t               mnConstantPoolCount; // +0x18  number of constant-pool entries (patched in)
-    uint8_t               maByteCode[1];       // +0x1C  the action bytecode (flexible)
+    uint32_t              mnNumArguments;      // +0x08  declared parameter count
+    uint16_t              mnRegisters;         // +0x0C  declared register count
+    uint16_t              muPreloadFlags;      // +0x0E  preload-register flags (KU_PRELOAD_*)
+    AptScriptFunction2Arg* mpArgTable;         // +0x10  array[mnNumArguments] of register/name entries
+    int64_t               mnBodyLength;        // +0x18  record-body length (u32 + pad; advances the PC)
+    const char**          mppConstantPool;     // +0x20  sig1 slot -> the constant-pool table (patched in)
+    int64_t               mnConstantPoolCount; // +0x28  sig2 slot -> number of entries (patched in)
+    uint8_t               maByteCode[1];       // +0x30  the action bytecode (flexible)
 };
 
 // DefineFunction2 register-preload flag bits (SetupBeforeExecution masks against

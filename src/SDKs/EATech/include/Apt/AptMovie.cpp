@@ -792,16 +792,11 @@ void* AptMovie::resolve(int nBase, void* a3, int a4)
 // so that after resolve64 NO command record (root OR imported) holds an un-relocated
 // file offset, and doFrameControls / queueFrameActions / placeObject read them safely.
 //
-// FLAG (deferred _parseStream -- the LAST gate before real AS execution): the console
-// additionally calls AptActionInterpreter::_parseStream to re-parse each action stream's
-// BYTECODE (resolving inline operands -- dictionary strings, function bodies, branch
-// targets -- into live pointers). STATUS 2026-07-01: the VM itself is LIVE (runStream +
-// the complete 119-opcode dispatch table + the init passes all wired), but _parseStream
-// (XB1 sub_14084A920, ~466 lines, native x64) is not yet homed -- so stream POINTERS are
-// relocated (record reads never AV) while the bytecode CONTENTS stay as raw serialized
-// operands. Until _parseStream lands, streams must not be dispatched (the handlers'
-// pointer-wide inline-operand reads assume parsed streams). An un-run AS action queue is
-// a valid state; statically-placed nested shapes/images compose without the VM.
+// STATUS (ACTIVATED 2026-07-01): _parseStream (the homed XB1 sub_14084A920) is now
+// CALLED on every action/clipActions/morph stream below -- serialized inline operands
+// (dictionary strings, function records, branch targets) resolve into live pointers/
+// values at movie-resolve time, and the runtime handlers read the parsed 8-aligned
+// GUIAPT64 operand form. The VM chain is complete end-to-end.
 // ===========================================================================
 void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
 {
@@ -826,6 +821,15 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
     {
         return luPtr >= nResBase && luPtr < nResBase + nResSize;
     };
+
+    // The threaded resolved-value counter _parseStream accumulates (the XB1 a4).
+    // CTX identification (FLAG): _parseStream's const context is the aptdata ROOT --
+    // its string payloads rebase base-relative (like every other GUIAPT64 offset) and
+    // its constant-record table pointer sits in the root header (+0x28); passed as
+    // (void*)nBase. Validated structurally vs libapt2 (all offsets are
+    // GetAptDataOffset-relative); the boot-test gates it at runtime.
+    int64_t lnParsedValues = 0;
+    (void)lnParsedValues;
 
     // ---- allocate + init the label hash (5 dwords, tag 2) ------------------
     void* pHash = gpAptPseudoDataPool->Allocate(20);
@@ -893,9 +897,17 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
             // remaining gate; see the resolve64 header FLAG above.
             switch (eTag)
             {
-                case 1:   // ACTION: relocate the action-stream pointer (@cmd+0x08). NOT parsed.
-                    reloc64(pCmd, 0x08);
+                case 1:   // ACTION: relocate the action-stream pointer (@cmd+0x08), then
+                {         // PARSE it (the XB1 sub_14084A920 call -- resolve the stream's
+                          // serialized inline operands into live pointers/values).
+                    const uintptr_t luStream = reloc64(pCmd, 0x08);
+                    if (luStream != 0 && inRes(luStream))
+                        AptActionInterpreter::_parseStream(
+                            reinterpret_cast<unsigned char*>(luStream), nBase,
+                            reinterpret_cast<void*>(nBase) /* the aptdata root = the const ctx (FLAG below) */,
+                            &lnParsedValues);
                     break;
+                }
 
                 case 2:   // LABEL: relocate the name pointer (@cmd+0x08) + register name -> frame f.
                 {
@@ -938,16 +950,27 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize)
                                 const uintptr_t luRec = luRecs + static_cast<uintptr_t>(16) * k;
                                 if (!inRes(luRec) || (luRec + 16) > (nResBase + nResSize))
                                     continue;
-                                reloc64(reinterpret_cast<void*>(luRec), 0x08);   // stream ptr (bounds-guarded; NOT parsed)
+                                const uintptr_t luClipStream =
+                                    reloc64(reinterpret_cast<void*>(luRec), 0x08);   // stream ptr (bounds-guarded)
+                                if (luClipStream != 0 && inRes(luClipStream))
+                                    AptActionInterpreter::_parseStream(
+                                        reinterpret_cast<unsigned char*>(luClipStream), nBase,
+                                        reinterpret_cast<void*>(nBase), &lnParsedValues);
                             }
                         }
                     }
                     break;
                 }
 
-                case 8:   // MORPH: relocate the action-stream pointer (@cmd+0x10 per XB1). NOT parsed.
-                    reloc64(pCmd, 0x10);
+                case 8:   // MORPH: relocate the action-stream pointer (@cmd+0x10 per XB1) + parse it.
+                {
+                    const uintptr_t luStream = reloc64(pCmd, 0x10);
+                    if (luStream != 0 && inRes(luStream))
+                        AptActionInterpreter::_parseStream(
+                            reinterpret_cast<unsigned char*>(luStream), nBase,
+                            reinterpret_cast<void*>(nBase), &lnParsedValues);
                     break;
+                }
 
                 default:  // tag 4 REMOVE / tag 5 BACK-TO-SCRIPT carry no relocatable inner pointer.
                     break;

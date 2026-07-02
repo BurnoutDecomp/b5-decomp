@@ -219,13 +219,14 @@ void AptActionInterpreter::_FunctionAptActionInitObject(AptActionInterpreter* pI
 void AptActionInterpreter::_FunctionAptActionDefineFunction(AptActionInterpreter* pInterp,
                                                             LocalContextT* pContext)
 {
-    // The record begins at the 4-byte-aligned PC; the body follows the 24-byte header.
+    // The GUIAPT64 record begins at the 8-aligned PC; the body follows its 48-byte
+    // header (verified vs the libapt2 writer + _parseStream).
     AptScriptFunction1ByteCode* pByteCode = reinterpret_cast<AptScriptFunction1ByteCode*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
 
-    // Advance the PC past the header (24 bytes) + the inline bytecode body.
+    // Advance the PC past the header (48 bytes) + the inline bytecode body.
     pContext->mpProgramCounter =
-        reinterpret_cast<const unsigned char*>(pByteCode) + 24 + pByteCode->mnByteCodeSize;
+        reinterpret_cast<const unsigned char*>(pByteCode) + 48 + pByteCode->mnByteCodeSize;
 
     // Patch the interpreter's constant-pool registers (the movie string dictionary)
     // into the record. FLAG: the console writes the interpreter's +0x40 slot into the
@@ -270,12 +271,11 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
                                                              LocalContextT* pContext)
 {
     AptScriptFunction2ByteCode* pByteCode = reinterpret_cast<AptScriptFunction2ByteCode*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
 
-    // Advance the PC past the header (28 bytes) + the inline bytecode body
-    // (mnBodyLength == v4[4], the dword at +0x10).
+    // Advance the PC past the GUIAPT64 header (48 bytes) + the inline bytecode body.
     pContext->mpProgramCounter =
-        reinterpret_cast<const unsigned char*>(pByteCode) + 28 + pByteCode->mnBodyLength;
+        reinterpret_cast<const unsigned char*>(pByteCode) + 48 + pByteCode->mnBodyLength;
 
     // Patch the constant-pool registers in (same x64 pointer-width note as v1). FLAG.
     pByteCode->mppConstantPool     = reinterpret_cast<const char**>(
@@ -314,9 +314,11 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
 void AptActionInterpreter::_FunctionAptActionDefineDictionary(AptActionInterpreter* pInterp,
                                                               LocalContextT* pContext)
 {
-    // The (count, base) pair is at the 4-byte-aligned PC; advance past both dwords.
+    // The GUIAPT64 (count, base) pair is at the 8-aligned PC: {i64 count @0,
+    // AptValue** table @+8}; advance the PC by 16 (the form _parseStream produces --
+    // the table entries are live AptValue*s post-parse).
     const uintptr_t* pPair = reinterpret_cast<const uintptr_t*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPair + 2);
 
     // field_40 (console +0x40) <- the entry count; mpRegisters (console +0x44) <- the

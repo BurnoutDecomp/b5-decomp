@@ -59,15 +59,19 @@ class AptValue;
 // extra dword before the constant pool / bytecode), so it has its own record type;
 // this struct is the v1 form only.
 // ---------------------------------------------------------------------------
+// The GUIAPT64 48-byte serialized record (8-aligned; verified against the libapt2
+// converter's DefineFunction writer + the XB1 _parseStream walk). The two trailing
+// qwords carry serialized signatures (0x98765432 / 0x12345678) that the runtime
+// DefineFunction handler overwrites with the live constant-pool registers.
 struct AptScriptFunction1ByteCode
 {
     const char*  mpName;               // +0x00  the function's name (movie string; "" for anonymous)
-    int32_t      mnNumArguments;       // +0x04  declared parameter count
-    const char** mppArgumentNames;     // +0x08  array[mnNumArguments] of parameter-name strings
-    int32_t      mnByteCodeSize;       // +0x0C  length in bytes of the action bytecode
-    const char** mppConstantPool;      // +0x10  the constant-pool string table
-    int32_t      mnConstantPoolCount;  // +0x14  number of constant-pool entries
-    uint8_t      maByteCode[1];        // +0x18  the action bytecode (flexible; mnByteCodeSize bytes)
+    int64_t      mnNumArguments;       // +0x08  declared parameter count (u32 + pad)
+    const char** mppArgumentNames;     // +0x10  array[mnNumArguments] of qword name pointers
+    int64_t      mnByteCodeSize;       // +0x18  length in bytes of the action bytecode (u32 + pad)
+    const char** mppConstantPool;      // +0x20  sig1 slot -> the constant-pool table (patched in)
+    int64_t      mnConstantPoolCount;  // +0x28  sig2 slot -> number of entries (patched in)
+    uint8_t      maByteCode[1];        // +0x30  the action bytecode (flexible; mnByteCodeSize bytes)
 };
 
 class AptScriptFunction1 : public AptScriptFunctionBase
