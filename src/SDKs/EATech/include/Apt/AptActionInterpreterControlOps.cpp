@@ -215,13 +215,13 @@ void AptActionInterpreter::_FunctionAptActionWith(AptActionInterpreter* pInterp,
 {
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
-            (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+            (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));   // 8-aligned (GUIAPT64)
     const unsigned char* pBlockEnd = *reinterpret_cast<const unsigned char* const*>(pAligned);
 
     AptValue* pTarget = pInterp->mpStack[pInterp->mnStackTop - 1];
     if (pTarget->getIsDefined())
     {
-        pContext->mpProgramCounter = pAligned + 4;   // consume the operand (console stride)
+        pContext->mpProgramCounter = pAligned + 8;   // consume the qword operand (GUIAPT64)
 
         AptValue* pObject = nullptr;   // FLAG: the console leaves the out slot uninitialised
                                        // on a no-object value and AddRefs it regardless; the
@@ -350,12 +350,13 @@ void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
 {
     const int nEntryStackTop = pInterp->mnStackTop;   // console v4 = *a1 (unwind target)
 
-    // The try record sits at the 4-byte-aligned PC; the three sub-streams follow its
-    // 20-byte header. The PC is advanced past the whole try/catch/finally body.
+    // The try record sits at the 8-aligned PC (GUIAPT64); the three sub-streams follow
+    // its 24-byte header (the console's 20-byte form had a 4-byte name slot). The PC is
+    // advanced past the whole try/catch/finally body.
     AptTryRecordT* const pRecord = reinterpret_cast<AptTryRecordT*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
 
-    const unsigned char* const pTryStream     = reinterpret_cast<const unsigned char*>(pRecord) + 20;
+    const unsigned char* const pTryStream     = reinterpret_cast<const unsigned char*>(pRecord) + 24;
     const unsigned char* const pCatchStream   = pTryStream + pRecord->mnTryLen;
     const unsigned char* const pFinallyStream = pCatchStream + pRecord->mnCatchLen;
     pContext->mpProgramCounter = pFinallyStream + pRecord->mnFinallyLen;
