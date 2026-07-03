@@ -126,6 +126,28 @@ public:
     // Stop    @ 0x826C5148 -> Playback::Voice::GetSlot + Playback::Slot::Stop
     s32 Stop();
 
+    // @ 0x826C7E18. Empty out-of-line virtual dtor: the mVoiceHandle member dtor
+    // Releases the wrapped Playback::Voice; the vtable-install + operator-delete tail
+    // are the compiler's scalar-deleting-destructor synthesis. DISTINCT from
+    // Destruct() @0x826C4E38 (which asserts + writes the playback state byte).
+    // Materializes the vptr @+0 already documented above. Mirrors the committed
+    // sibling CgsAemsPlayerVoice.h:125 (`virtual ~AemsPlayerVoice();`).
+    virtual ~Voice();
+
+    // SetParameter(sendNameHash, value, ..., sendNameCheck). Broadcast target of
+    // VoicePoolBase::SetParameter (@ 0x826B6628): the pool forwards a raw parameter
+    // value to each live slot's logic Voice. Playback-layer-dependent stub in
+    // CgsVoice.cpp (mirrors SetGain). Added additively -- not in the original 6-fn
+    // batch surface; its own X360 body is a separate slice.
+    void SetParameter(u32 luSendNameHash, f32 lfValue, s32 liReserved, const u32* lpSendName);
+
+    // Raw owned-playback-voice accessor. The embedding VoiceWrapper reads the logic
+    // Voice's owned pointer directly (X360 `*(wrapper+0x38)` == the handle's mpObject)
+    // to null-check "no voice yet" and to reach the ref-counted playback object at
+    // teardown. Exposes mVoiceHandle.GetObject() BY NAME; matches the raw load and
+    // adds no layout or behaviour. No own X360 address (inlined at the call sites).
+    Playback::Voice* GetVoiceObject() const { return mVoiceHandle.GetObject(); }
+
 private:
     // +0x04. Owning handle to the reference-counted playback voice. Read as *(a1+4)
     // by every method; "Voice not yet created!" asserts it is non-null.

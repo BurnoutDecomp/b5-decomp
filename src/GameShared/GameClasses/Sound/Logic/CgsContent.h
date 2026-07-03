@@ -25,12 +25,10 @@ namespace Logic
         // Recovered from the inlined per-member teardown in
         // ~TrafficStateManager @0x826FC320..: drop the held reference (no
         // refcount-zero disposal here -- that is RegisteredContent's richer
-        // teardown, not this handle's).
-        virtual ~Content()
-        {
-            if (mpContent != 0)
-                mpContent->Release();
-        }
+        // teardown, not this handle's). Declaration-only so the out-of-line body
+        // (CgsLogicContentDtor.cpp) emits the single ~Content symbol the X360
+        // `vector deleting destructor' @ 0x826DC378 is synthesised from.
+        virtual ~Content();
 
         // Queried by the AI-engine spec tripwires (GetDecelGinsuContent /
         // GetLoopModelContent). Deferred body -- returns true (the specs are

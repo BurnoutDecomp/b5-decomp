@@ -149,6 +149,13 @@ struct EffectBase : public CgsSound::MemBase
     Module*      GetLogicModule() const { return mpLogicModule; }
     u16          GetAttachCount() const { return mu16AttachCount; }
 
+    // FLAG (additive grow, by-name): the latched dynamic-mix I/O handle (+0x30).
+    // Derived effect controls (Cgs3dEffectControl) read it directly on X360 (`lwz
+    // r?, 0x30(this)`) to null-check the connection and push values into the mixer
+    // input slots. Exposes the private mpDynamicMixIo BY NAME so dependents don't
+    // reach past the access boundary; matches the raw load, no layout/behaviour change.
+    Nicotine::DMixIO* GetDMixIOPtr() const { return mpDynamicMixIo; }
+
     // --- members (DWARF order; offsets are X360 32-bit, not asserted on host) ---
     EffectBase*  mpNextEffectBase;   // CgsEffectBase.h:681
 protected:

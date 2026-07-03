@@ -96,6 +96,51 @@ bool State::IsAttachedToThis(void* apvAttachment)
     return mpvAttachment == apvAttachment;
 }
 
+// ---------------------------------------------------------------------------
+// State::~State  @ 0x826ABCD8  (scalar deleting destructor)
+//
+//   stw  off_820AE1F4, 0(this)               ; install State's own vtable
+//   bl   CgsSound::Logic::State::DestroyEffects  ; (this in r3) tear down effects
+//   stw  off_820AA820, 0(this)               ; re-install the MemBase base vtable
+//   if (flags & 1)                           ; deleting flavour
+//       <sound allocator>.Free(this)         ; via off_82FFB954, vtable slot +0x14
+//   return this
+//
+// The base-class analogue of the committed StreamingState (@0x826C9B28) /
+// GlobalState (@0x826D2250) scalar deleting destructors. The single observable
+// source-level side effect is the DestroyEffects() call on the State base (reused BY
+// NAME). The two vtable installs and the conditional allocator-routed free
+// (off_82FFB954, vtable slot +0x14) are MSVC's compiler-synthesised deleting-
+// destructor thunk, re-emitted from this virtual destructor + the class's operator
+// delete; the sound allocator is not homed in this group, so the host `delete`
+// stands in for the custom dispatch.
+//
+// FLAG: State::DestroyEffects() is declaration-only in CgsState.h (its body is a
+// separate un-homed sound-logic recon slice). It is called BY NAME here to match the
+// X360 `bl` exactly; no body is fabricated for it.
+// ---------------------------------------------------------------------------
+State::~State()
+{
+    DestroyEffects();
+}
+
+// ---------------------------------------------------------------------------
+// State::G  @ 0x8268D410
+//
+//   lis  r11, unk_82F2FA90@ha
+//   addi r3,  r11, unk_82F2FA90@l   ; r3 = &unk_82F2FA90 (rodata sentinel)
+//   blr
+//
+// Returns a pointer to the rodata sentinel unk_82F2FA90. Per the &unk_XXXX
+// convention (HARD RULE 5), a raw IDA rodata sentinel reconstructs as the empty
+// string literal. FLAG (confidence low): the meaning of G() is not recoverable from
+// this one instruction pair; only the observable return (the sentinel) is modelled.
+// ---------------------------------------------------------------------------
+void* State::G()
+{
+    return (void*)"";
+}
+
 } // namespace Logic
 } // namespace CgsSound
 

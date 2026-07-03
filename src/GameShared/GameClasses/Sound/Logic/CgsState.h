@@ -104,7 +104,11 @@ struct State : public CgsSound::MemBase
     // CgsState.h:370. Default ctor: zero/seed the base members (matches the inlined
     // base-init the derived ctors emit @ +4..+80). Defined in CgsState.cpp.
     State();
-    virtual ~State() {}
+
+    // @ 0x826ABCD8 (scalar deleting destructor). Declaration-only so CgsState.cpp
+    // emits the out-of-line State::~State symbol the deleting-destructor thunk is
+    // synthesised from (body = DestroyEffects()). Was an inline no-op.
+    virtual ~State();
 
     // CgsState.h:245 @ 0x826916D8. True when apv is this state's attachment.
     virtual bool IsAttachedToThis(void* apvAttachment);
@@ -116,6 +120,12 @@ struct State : public CgsSound::MemBase
     // slice); declaration-only here so the destructors can call it BY NAME. Do NOT
     // body here.
     void DestroyEffects();
+
+    // @ 0x8268D410. Returns the class rodata sentinel unk_82F2FA90 (reconstructed as
+    // the empty string literal per the &unk_XXXX convention). Semantics (likely a
+    // type-name/empty-name accessor) not recoverable from the one-instruction body --
+    // confidence low.
+    void* G();
 
     // CgsState.h:363 (DWARF) @ 0x8268DF08. Register a per-class RTTI descriptor into
     // State's static ClassTypeInfo<State> array. Scans for the first empty slot
