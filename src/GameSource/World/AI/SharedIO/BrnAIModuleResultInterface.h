@@ -104,8 +104,19 @@ namespace BrnAI
             {
                 return &mResetPosResultEventQueue;
             }
+            // Non-const overloads: RaceCarEntityModuleIO::InputBuffer_PrePhysics::
+            // SetAIModuleResultInterface (X360 0x827ACAF8) empties both member rings
+            // (Clear()) and Appends the source rings, i.e. it mutates the queues in place.
+            ResetOnTrackResultQueue* GetResetOnTrackResultQueue()
+            {
+                return &mResetPosResultEventQueue;
+            }
             void AddPlaceOnTrackRequest(EGlobalRaceCarIndex, f32, Vector3, Vector3);
             const PlaceOnTrackRequestQueue* GetPlaceOnTrackRequestQueue() const
+            {
+                return &mPlaceOnTrackRequestQueue;
+            }
+            PlaceOnTrackRequestQueue* GetPlaceOnTrackRequestQueue()
             {
                 return &mPlaceOnTrackRequestQueue;
             }

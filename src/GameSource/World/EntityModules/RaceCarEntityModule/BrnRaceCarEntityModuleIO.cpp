@@ -14,6 +14,7 @@
 // CORRECTION (2): there is no non-const GetContactSpyInterface in the DWARF, so none is emitted.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include <cstring>                                    // std::memcpy (SetTrafficToRaceCarInterface_PreScene)
 
 namespace BrnWorld
 {
@@ -268,6 +269,259 @@ InputBuffer_GenerateDispatchLists::GetDispatchFlagB() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
     return mbDispatchFlagB;
+}
+
+// ============================================================================
+// Wave 6 accessors (23 funcs) -- the Set*/Get* bodies the X360 build emitted
+// out-of-line for the RaceCarEntityModuleIO input buffers. Verified against
+// BURNOUT_X360_ARTIST.XEX. The two InputBuffer_PostScene setters reproduce the
+// X360 rodata trailing "\n" on their write-lock asserts (verifier correction);
+// the rest follow the sibling-body convention already in this file.
+// ============================================================================
+
+// ---- InputBuffer_PreScene ---------------------------------------------------
+
+// X360 0x822B4A38 (R, :154) -- const timer-status accessor (IDA truncates the
+// mangled name to "Ge"). Returns &mTimerStatusInterface (this+0x5C); member held
+// BY VALUE (DWARF BrnRaceCarEntityModuleIO.h dump :53).
+const TimerStatusInterface*
+InputBuffer_PreScene::GetTimerStatusInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mTimerStatusInterface;
+}
+
+// X360 0x822B4AE0 (R, :157) -- const camera-input accessor (IDA "GetCam").
+// Returns &mCameraInput (this+0x90).
+const BrnDirector::Camera::Camera*
+InputBuffer_PreScene::GetCameraInput() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mCameraInput;
+}
+
+// X360 0x822B4CD8 (R, :166) -- const active-payback-type accessor (IDA
+// "GetActivePaybackTy"). Returns the enum value meActivePaybackType (this+0x363C).
+BrnNetwork::EPaybackType
+InputBuffer_PreScene::GetActivePaybackType() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return meActivePaybackType;
+}
+
+// X360 0x822B4D80 (R, :169) -- const active-payback-aggressor accessor. Returns
+// the enum value meActivePaybackAggressor (this+0x3640).
+EActiveRaceCarIndex
+InputBuffer_PreScene::GetActivePaybackAggressor() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return meActivePaybackAggressor;
+}
+
+// X360 0x8279CFA8 (W, :161) -- copy player vehicle-controls into the buffer
+// (memcpy 60 bytes; this+0x1F0). PlayerVehicleControls is a 60-byte POD.
+void
+InputBuffer_PreScene::SetPlayerVehicleControls(const BrnWorld::PlayerVehicleControls* pControls)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mPlayerVehicleControls = *pControls;
+}
+
+// X360 0x8279D258 (W, :174) -- snapshot the replay status interface into the
+// buffer (StatusInterface::operator= into mReplayStatusInterface at this+0x3644).
+// Member held BY VALUE (DWARF BrnRaceCarEntityModuleIO.h dump :79).
+void
+InputBuffer_PreScene::SetReplayStatusInterface(const InputBuffer_PreScene::ReplayStatusInterface* pStatus)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mReplayStatusInterface = *pStatus;
+}
+
+// ---- InputBuffer_PostScene --------------------------------------------------
+
+// X360 0x827ACA40 (W, :344) -- publishes the crash module's race-car crash-complete
+// events into this buffer's CrashInterface. The X360 body write-asserts, INLINES
+// RaceCarOutputInterface::Clear() (miLength = 0 on the first-member event queue) and
+// calls the de-inlined BaseEventQueue<RaceCarCrashCompleteEvent>::Append (0x827A7D70,
+// the committed instantiation) to block-copy the source's live events. CrashInterface
+// (BrnWorld::CrashIO::RaceCarOutputInterface) is carried as an opaque sized slice here;
+// its queue is the interface's first member, so &mCrashInterface aliases &(its queue),
+// matching the X360 `addi r3, this, 8` used as both the Clear target and Append `this`.
+void
+InputBuffer_PostScene::SetCrashInterface(const CrashInterface* lpCrashInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+
+    typedef CgsModule::EventQueue<BrnWorld::CrashIO::RaceCarCrashCompleteEvent, 10>
+        RaceCarCrashCompleteEventQueue;
+    RaceCarCrashCompleteEventQueue& lrDestQueue =
+        *reinterpret_cast<RaceCarCrashCompleteEventQueue*>(&mCrashInterface);
+    const RaceCarCrashCompleteEventQueue& lrSourceQueue =
+        *reinterpret_cast<const RaceCarCrashCompleteEventQueue*>(lpCrashInterface);
+
+    lrDestQueue.Clear();                 // inlined RaceCarOutputInterface::Clear() -> miLength = 0
+    lrDestQueue.Append(lrSourceQueue);   // 0x827A7D70 BaseEventQueue<...>::Append
+}
+
+// X360 0x827BAF30 (W, :347) -- publishes the pre-scene traffic->racecar interface into
+// this buffer by value (memcpy dst this+0xC0, size 0x220 == 544 == sizeof). Byte-exact
+// via the canonical 544-byte BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene.
+void
+InputBuffer_PostScene::SetTrafficToRaceCarInterface_PreScene(
+        const TrafficToRaceCarInterface_PreScene* lpInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    std::memcpy(&mTrafficToRaceCarInterface_PreScene, lpInterface,
+                sizeof(mTrafficToRaceCarInterface_PreScene));   // X360: 0x220 (544) bytes
+}
+
+// ---- InputBuffer_PrePhysics -------------------------------------------------
+
+// X360 0x822B5AA0 (R, :433) -- const controller-active flag accessor (byte at +212213).
+bool
+InputBuffer_PrePhysics::GetControllerActive() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return mbControllerActive;
+}
+
+// X360 0x822B5B50 (R, :436) -- const hard-stop-camera flag accessor (byte at +212214).
+bool
+InputBuffer_PrePhysics::GetInHardStopCamera() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return mbInHardStopCamera;
+}
+
+// X360 0x827ACAF8 (W, :419) -- empties both of the member interface's event rings
+// (mResetPosResultEventQueue, then mPlaceOnTrackRequestQueue) and Appends the source
+// interface's matching rings onto them.
+void
+InputBuffer_PrePhysics::SetAIModuleResultInterface(const AIModuleResultInterface* lpAIModuleResultInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mAIModuleResultInterface.GetResetOnTrackResultQueue()->Clear();
+    mAIModuleResultInterface.GetResetOnTrackResultQueue()->Append(
+        *lpAIModuleResultInterface->GetResetOnTrackResultQueue());
+    mAIModuleResultInterface.GetPlaceOnTrackRequestQueue()->Clear();
+    mAIModuleResultInterface.GetPlaceOnTrackRequestQueue()->Append(
+        *lpAIModuleResultInterface->GetPlaceOnTrackRequestQueue());
+}
+
+// X360 0x827A9840 (W, :413) -- drops the standing potential-contact queue (miLength = 0)
+// then Appends the caller's queue onto the freshly-emptied member ring.
+void
+InputBuffer_PrePhysics::SetPotentialContactQueue(const PotentialContactQueue* lpPotentialContactQueue)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mPotentialContactQueue.Clear();
+    mPotentialContactQueue.Append(*lpPotentialContactQueue);
+}
+
+// X360 0x8279DDB0 (W, :431) -- single-byte copy of the source
+// TrafficToRaceCarInterface_PostScene (a 1-byte muDUMMY payload) into the member
+// (this+0x33CF4 == &mTrafficToRaceCarInterface_PostScene).
+void
+InputBuffer_PrePhysics::SetTrafficToRaceCarInterface_PostScene(const TrafficToRaceCarInterface_PostScene* lpTrafficToRaceCarInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mTrafficToRaceCarInterface_PostScene = *lpTrafficToRaceCarInterface;
+}
+
+// ---- InputBuffer_PostPhysics ------------------------------------------------
+
+// X360 0x8279E3B8 (W, :529) -- single-word store of the source into mContactSpyInterface
+// (this+0xD6B20). ContactSpyInterface is a 4-byte type; the store is the whole copy.
+void
+InputBuffer_PostPhysics::SetContactSpyInterface(const ContactSpyInterface* lpContactSpyInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mContactSpyInterface = *lpContactSpyInterface;
+}
+
+// X360 0x827A9A68 (W, :526) -- DeformationOutputInterface::operator= on this+0xD4030
+// (mDeformationOutputInterface).
+void
+InputBuffer_PostPhysics::SetDeformationOutputInterface(const DeformationOutputInterface* lpDeformationOutputInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mDeformationOutputInterface = *lpDeformationOutputInterface;
+}
+
+// X360 0x827ACC78 (W, :517) -- VehicleManagerOutputInterface::operator= on this+0x6C20
+// (mVehicleManagerOutputInterface).
+void
+InputBuffer_PostPhysics::SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface* lpVehicleManagerOutputInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mVehicleManagerOutputInterface = *lpVehicleManagerOutputInterface;
+}
+
+// X360 0x827ACBC8 (W, :514) -- VehicleOutputInterface::operator= on this+0x10
+// (mVehicleOutputInterface).
+void
+InputBuffer_PostPhysics::SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mVehicleOutputInterface = *lpVehicleOutputInterface;
+}
+
+// ---- InputBuffer_GenerateDispatchLists --------------------------------------
+
+// X360 0x822B6A70 (R, :633) -- const dispatch-frame accessor (returns the pointer VALUE
+// stored at this+0x8180 == mpDispatchFrame).
+CgsGraphics::DispatchFrame*
+InputBuffer_GenerateDispatchLists::GetDispatchFrame() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return mpDispatchFrame;
+}
+
+// X360 0x822B6C80 (R, :642) -- const shadow-map accessor (returns the pointer VALUE stored
+// at this+0x818C == mpShadowMap). IDA 'GetShad' truncation == GetShadowMap.
+BrnWorld::ShadowMap*
+InputBuffer_GenerateDispatchLists::GetShadowMap() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return mpShadowMap;
+}
+
+// X360 0x8279EB18 (W, :637) -- write-lock store of the blobby-shadow buffer pointer
+// (this+0x8184 == mpBlobbyShadowBuffer).
+void
+InputBuffer_GenerateDispatchLists::SetBlobbyShadowBuffer(
+        BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBlobbyShadowBuffer)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mpBlobbyShadowBuffer = lpBlobbyShadowBuffer;
+}
+
+// X360 0x827A9BF8 (W, :628) -- write-lock copy-assign of the camera input (this+0x10 ==
+// mCameraInput) via BrnDirector::Camera::Camera::operator=.
+void
+InputBuffer_GenerateDispatchLists::SetCameraInput(const BrnDirector::Camera::Camera* lpCameraInput)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mCameraInput = *lpCameraInput;
+}
+
+// X360 0x8279EBC8 (W, :640) -- write-lock store of the corona submission interface pointer
+// (this+0x8188 == mpCoronaSubmissionInterface).
+void
+InputBuffer_GenerateDispatchLists::SetCoronaSubmissionInterface(
+        BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mpCoronaSubmissionInterface = lpCoronaSubmissionInterface;
+}
+
+// X360 0x8279EA68 (W, :634) -- write-lock store of the dispatch frame pointer (this+0x8180
+// == mpDispatchFrame; same offset GetDispatchFrame @0x822B6A70 reads).
+void
+InputBuffer_GenerateDispatchLists::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mpDispatchFrame = lpDispatchFrame;
 }
 
 }
