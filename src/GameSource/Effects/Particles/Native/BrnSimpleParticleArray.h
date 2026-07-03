@@ -49,6 +49,24 @@ namespace Native
     class BrnSimpleParticleArray
     {
     public:
+        // BrnParticle::Native::BrnSimpleParticleArray::CB4ParticleBank -- one CB4 particle
+        // bank of this array (the regular bank @ +0x04, the crash bank @ +0x14). Render walks
+        // the bank's live CB4 particles and builds one shaded/rotated screen-space quad per
+        // surviving particle into the locked vertex buffer via the iterator.
+        //
+        // HONEST STUB -- VMX KEYSTONE (NOT reconstructed in this pass). Render @0x8291E600 is
+        // a ~1000-instruction hand-vectorised VMX/AltiVec pipeline (Hex-Rays: "local variable
+        // allocation has failed") with no faithful scalar lowering (mirrors the committed
+        // ShadedRotatingRenderMethod::BuildQuad stub). See BrnSimpleParticleRenderer.cpp home.
+        struct CB4ParticleBank
+        {
+            // 3-arg register contract proven by the caller @0x8291F948-58/0x8291F978-88:
+            //   this = the CB4 bank (r3); lpIterator = r4; lpArray = r5 (owning
+            //   BrnSimpleParticleArray); lpCamera = r6 (the local CgsGraphics::Camera copy).
+            // HONEST STUB: not implemented -- VMX keystone.
+            void Render(void* lpIterator, void* lpArray, void* lpCamera);
+        };
+
         // BrnParticle::Native::BrnSimpleParticleArray::AcquireTexture @0x8227E468.
         // Resolve and publish the texture descriptor for native-particle-array type
         // leArrayID. luRequestedHash is matched against the hash of this array's
