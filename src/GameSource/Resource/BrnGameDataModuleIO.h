@@ -5,6 +5,10 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                 // CgsModule::IOBuffer base + IsBufferLockedFor{Reading,Writing}()
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"      // BrnResource::GameDataIO::RequestInterface<N>
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // BrnResource::GameDataIO::AllocatorList (OutputBuffer member)
+// CgsGraphics::Im2dRenderBuffer is a typedef (== CgsGraphics::Im2d), not a struct, so its canonical
+// home header is included rather than forward-declared (a `struct Im2dRenderBuffer;` fwd-decl would
+// clash with the typedef). InputBuffer::mpDebug2dRenderBuffer is pointer-only.
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }   // OutputBuffer::GetAllocator return type
 namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAllocator(); }  // allocator-gate leaf
@@ -17,29 +21,58 @@ namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAl
 // DWARF home: GameSource/Resource/BrnGameDataModuleIO.h
 // (references/DecFIGS/dwarfdump/GameSource/Resource/BrnGameDataModuleIO.h). The DWARF declares:
 //   struct InputBuffer : public IOBuffer {
-//     RequestInterface<32768>          mRequestInterface;          // h:123
-//     AttribSysRequestInterface<32768> mAttribSysRequestInterface; // h:127
-//     CgsGraphics::Im2dRenderBuffer*   mpDebug2dRenderBuffer;      // h:130
+//     RequestInterface<32768>                                     mRequestInterface;          // h:123
+//     CgsAttribSys::AttribSysIO::AttribSysRequestInterface<32768> mAttribSysRequestInterface; // h:127
+//     CgsGraphics::Im2dRenderBuffer*                              mpDebug2dRenderBuffer;      // h:130
 //     ... Construct/Prepare/Release/Destruct/Clear,
 //         GetRequestInterface() const (h:99) / GetRequestInterface() (h:103),
-//         GetAttribSysRequestInterface()/SetIm2dDebugRenderBuffer()/GetIm2dDebugRenderBuffer() ...
+//         GetAttribSysRequestInterface() (h:108) / GetAttribSysRequestInterface() const (h:112),
+//         SetIm2dDebugRenderBuffer() (h:116) / GetIm2dDebugRenderBuffer() (h:119) ...
+//   };
+//   struct OutputBuffer : public IOBuffer {
+//     const AllocatorList*  mpAllocatorList;     // h:184  (POINTER, verified against the X360 asm)
+//     u8                    mbLiveUpdateStatus;  // h:189 storage  (X360 = 1 status byte)
+//     ... Construct/Prepare/Release/Destruct/Clear, GetAllocatorList() const (h:167) /
+//         SetAllocatorList() (h:171), GetLiveUpdateStatus() / SetLiveUpdateStatus() ...
 //   };
 //
-// SOURCES (X360 ARTIST): the two GetRequestInterface overloads bodied in BrnGameDataModuleIO.cpp:
-//   GetRequestInterface() const  @ 0x82663F90  (asserts read-lock,  fires at h:211)
-//   GetRequestInterface()        @ 0x823B1788  (asserts write-lock, fires at h:218)
-// Both return &mRequestInterface, which (with the 4-byte IOBuffer base) lands at this+4 -- matching
-// the asm's `return a1 + 4`.
+// SOURCES (X360 ARTIST) bodied in BrnGameDataModuleIO.cpp:
+//   InputBuffer::GetRequestInterface() const           @ 0x82663F90  (read,  h:211)  -> this+4
+//   InputBuffer::GetRequestInterface()                 @ 0x823B1788  (write, h:218)  -> this+4
+//   InputBuffer::GetAttribSysRequestInterface()        @ 0x823B1830  (write, h:226)  -> this+32788
+//   InputBuffer::GetAttribSysRequestInterface() const  @ 0x82664038  (read,  h:233)  -> this+32788
+//   OutputBuffer::GetAllocatorList() const             @ 0x823B18D8  (read,  h:167)  -> *(this+4)
+//   OutputBuffer::SetAllocatorList()                   @ 0x826640E0  (write, h:171)  ->  this+4
+//   OutputBuffer::GetLiveUpdateStatus()                @ 0x823B1638  (read)          -> &(this+8)
+//   OutputBuffer::SetLiveUpdateStatus()                @ 0x82663E30  (write)         ->  this+8
+// The +32788 (0x8014) == base(1, padded to 4) + sizeof(RequestInterface<32768>) (32784 = 32768 payload +
+// 16-byte VEQ header), so mAttribSysRequestInterface lands at this+4+32784 = this+32788, matching both
+// AttribSys accessors' `return a1 + 32788`.
 //
-// FLAG (MINIMAL SLICE): only the members up to and including mRequestInterface are declared here --
-// that is all the two GetRequestInterface overloads (this pass) need. The DWARF's trailing members
-// (mAttribSysRequestInterface: AttribSysRequestInterface<32768>, NOT yet committed anywhere; and
-// mpDebug2dRenderBuffer: CgsGraphics::Im2dRenderBuffer*) plus all the other accessors / lifecycle
-// methods (Construct/Prepare/Release/Destruct/Clear, the AttribSys/Im2d getters and setters) and the
-// entire OutputBuffer (AllocatorList + FileSystemStatusInterface) are DEFERRED to their own TUs and
-// intentionally omitted. This is semantic parity (real names/types/order for the declared prefix),
-// NOT a byte-exact full object. GROW this header additively when the deferred members/methods land --
-// do NOT fork it.
+// AttribSysRequestInterface<32768> is CgsAttribSys::AttribSysIO's templated request interface. The DWARF
+// .cpp (BrnGameDataModuleIO.cpp:53/55) confirms its Construct/Clear delegate to
+// CgsModule::VariableEventQueue<32768,16>::Construct/Clear -- i.e. it embeds one VariableEventQueue<32768,16>
+// (== 32768 payload + 16-byte VEQ header == 32784 bytes), exactly like the committed NON-templated
+// CgsAttribSys::AttribSysIO::AttribSysRequestInterface (a single AttribSysEventQueue). Because only the
+// non-templated form is currently committed (CgsAttribSysModuleIO.h), and no committed templated <N>
+// AttribSys type exists yet, mAttribSysRequestInterface is declared here as explicitly-sized opaque storage
+// (32784 bytes, DWARF-attested) to keep this header self-consistent and correctly sized WITHOUT inventing a
+// template body or forking the committed AttribSys home. FLAG: swap for the real
+// CgsAttribSys::AttribSysIO::AttribSysRequestInterface<32768> (and tighten the AttribSys accessor return
+// types from void*) once that shared template lands.
+//
+// OUTPUTBUFFER LAYOUT FIX (verified this batch): the +4 member is a POINTER, not an embedded list.
+// GetAllocatorList() const @ 0x823B18D8 emits `lwz r3,4(r28)` (LOAD a pointer VALUE); SetAllocatorList
+// @ 0x826640E0 emits `stw r27,4(r28)` (STORE a pointer). An embedded member would compile to
+// `addi r3,r28,4` (compute an address). So mpAllocatorList is `const AllocatorList*` @+4, matching the
+// DecFIGS DWARF (h:184). The +8 slot: the X360 symbols are Get/SetLiveUpdateStatus and the asm reads/
+// writes a SINGLE BYTE there; the PS3 DWARF drifted it into FileSystemStatusInterface (h:189) with
+// Get/SetFileSystemStatusInterface -- we follow the X360 asm+symbols (authoritative for the X360 ledger).
+//
+// FLAG (MINIMAL SLICE / additive header): lifecycle methods (Construct/Prepare/Release/Destruct/Clear) and
+// the Im2d setter-getters beyond what the reconstructed accessors need are DEFERRED. Semantic parity (real
+// DWARF names/types/order for the declared members), NOT a byte-exact object on the 64-bit host. GROW
+// additively; do NOT fork.
 namespace BrnResource
 {
 namespace GameDataIO
@@ -53,6 +86,10 @@ namespace GameDataIO
         static const s32 knRequestInterfaceQueueSize         = 32768;   // DWARF h:63
         static const s32 kiAttribSysRequestInterfaceQueueSize = 32768;  // DWARF h:69
 
+        // Byte size of AttribSysRequestInterface<32768> == VariableEventQueue<32768,16>: payload +
+        // 16-byte VEQ header (DWARF .cpp:53/55). Opaque placeholder size (see header note).
+        static const s32 kiAttribSysRequestInterfaceStorageBytes = kiAttribSysRequestInterfaceQueueSize + 16;
+
         // GetRequestInterface() const @ 0x82663F90 / fires assert at DWARF h:211 -- assert the buffer
         // is read-locked, then hand back the embedded request interface (read side). Returns this+4
         // (= &mRequestInterface).
@@ -63,52 +100,74 @@ namespace GameDataIO
         // request interface (write side). Returns this+4 (= &mRequestInterface).
         RequestInterface<knRequestInterfaceQueueSize>* GetRequestInterface();               // DWARF h:103
 
+        // GetAttribSysRequestInterface() @ 0x823B1830 (fires at DWARF h:226) -- WRITE-lock; returns
+        // this+32788 (= &mAttribSysRequestInterface). DWARF h:108. FLAG: DWARF return type is
+        // AttribSysRequestInterface<32768>*; opaque storage -> void* (see header note).
+        void* GetAttribSysRequestInterface();                                                // DWARF h:108
+
+        // GetAttribSysRequestInterface() const @ 0x82664038 (fires at DWARF h:233) -- READ-lock; returns
+        // this+32788 (= &mAttribSysRequestInterface). DWARF h:112. FLAG: DWARF return type is
+        // const AttribSysRequestInterface<32768>*; opaque storage -> const void* (see header note).
+        const void* GetAttribSysRequestInterface() const;                                    // DWARF h:112
+
     private:
-        // DWARF h:123 -- the only member declared in this slice. With the committed CgsModule::IOBuffer
-        // base (a single 1-byte FlagSet8 status field, padded to 4), mRequestInterface lands at this+4
-        // -- matching the asm's `return a1 + 4` in both overloads. FLAG: the trailing
-        // mAttribSysRequestInterface (h:127) + mpDebug2dRenderBuffer (h:130) are DEFERRED (see header
-        // note); the +4 offset is implied by the base size, not asserted byte-exactly here.
+        // DWARF h:123 -- lands at this+4 (after the 1-byte IOBuffer base padded to 4-byte queue
+        // alignment) -- matching the asm's `return a1 + 4` in both GetRequestInterface overloads.
         RequestInterface<knRequestInterfaceQueueSize> mRequestInterface;
+        // DWARF h:127 -- lands at this+32788 (= 4 + sizeof(mRequestInterface)). Opaque, size-exact
+        // (VariableEventQueue<32768,16> == 32784 bytes; see header note).
+        u8 mAttribSysRequestInterface[kiAttribSysRequestInterfaceStorageBytes];
+        // DWARF h:130 -- the optional debug Im2d render buffer (SetIm2dDebugRenderBuffer stashes it).
+        // Pointer-only; forward-declared type.
+        CgsGraphics::Im2dRenderBuffer* mpDebug2dRenderBuffer;
     };
 
     // BrnResource::GameDataIO::OutputBuffer : public IOBuffer -- the GameData module's per-frame output
-    // payload. It owns the AllocatorList (the bank->allocator registry that GameDataModule::Create-
-    // Allocators populates) and the FileSystemStatusInterface. The loading-screen module loads read the
-    // module's RW general allocator through OutputBuffer::GetAllocator (e.g. LoadSoundModule @0x823E75A8:
-    // `GameDataIO::OutputBuffer::GetAllocator(outputBuffer)` -> passes it to SoundModule::Construct).
-    //
-    // STRUCTURAL SLICE: the type + the AllocatorList member + GetAllocator are defined here so the module
-    // loads can name them; mFileSystemStatusInterface (DWARF, deferred) is omitted (minimal slice). The
-    // AllocatorList stays EMPTY (every bank unregistered) until GameDataModule::CreateAllocators (still a
-    // stub) populates it + the module gives Prepare a real output-buffer instance (currently Prepare(0,0)
-    // -- null buffers) -- that boot-critical population is the next slice. GROW additively; do NOT fork.
+    // payload. DWARF home BrnGameDataModuleIO.h:142. It carries a POINTER to the AllocatorList (the
+    // bank->allocator registry that GameDataModule::CreateAllocators populates) plus a 1-byte live-update
+    // status. The loading-screen module loads read the module's RW general allocator through
+    // OutputBuffer::GetAllocator (e.g. LoadSoundModule @0x823E75A8: passes GetAllocatorList() to
+    // RootSoundModule::Prepare). Faithful X360 layout (LAYOUT FIX, see header note):
+    //   IOBuffer base         (this+0, 4-byte FlagSet8 status)
+    //   const AllocatorList*  mpAllocatorList     (this+4, DWARF h:184 -- POINTER, not embedded)
+    //   u8                    mbLiveUpdateStatus  (this+8, DWARF h:189 storage; X360 = 1 status byte)
     struct OutputBuffer : public CgsModule::IOBuffer
     {
-        void Construct() { mAllocatorList.Construct(); }
+        // DWARF h:147 -- clears the pointer/status members (the old embedded-list Construct was the
+        // superseded structural approximation).
+        void Construct() { mpAllocatorList = 0; mbLiveUpdateStatus = 0; }
 
         // Return the module's RW general resource allocator. X360: OutputBuffer::GetAllocator(this)
-        // returns the GameData general allocator the module loads construct from. The bank is the
-        // GameData root general-heap bank; pinned to bank 0 here pending the CreateAllocators memory-map
-        // population (which assigns the real bank ids). Asserts (via the AllocatorList accessor) until
-        // CreateAllocators registers that bank -- so this must not be called before the population slice.
+        // returns the GameData general allocator the module loads construct from; pinned to the single
+        // standalone GameData general allocator pending the CreateAllocators memory-map population
+        // (which assigns the real bank ids). The faithful path once mpAllocatorList is populated is
+        // `mpAllocatorList->GetRWGeneralResourceAllocator(<bank>)`.
         rw::core::GeneralResourceAllocator* GetAllocator() const
         {
-            // [allocator gate] Until GameDataModule::CreateAllocators populates mAllocatorList per
-            // bank (memory-map-driven), vend the single standalone GameData general allocator. The
-            // faithful path returns mAllocatorList.GetRWGeneralResourceAllocator(<bank>).
             return BrnResource::GetGameDataGeneralAllocator();
         }
 
-        AllocatorList& GetAllocatorList() { return mAllocatorList; }
-        // Const overload: the scripted module loads receive the OutputBuffer read-side (const)
-        // and pass its list to each module Prepare (const AllocatorList* -- e.g. RootSoundModule::
-        // Prepare 0x826FABF8 via LoadSoundModule 0x823E75A8).
-        const AllocatorList& GetAllocatorList() const { return mAllocatorList; }
+        // @ 0x823B18D8 -- read-locked accessor. DWARF h:167. Returns *(this+4) (asm `lwz r3,4(r28)`).
+        const AllocatorList* GetAllocatorList() const;
+
+        // @ 0x826640E0 -- write-locked mutator. DWARF h:171. Stores the pointer at this+4
+        // (asm `stw r27,4(r28)`).
+        void SetAllocatorList(const AllocatorList* lpAllocatorList);
+
+        // @ 0x823B1638 -- read-locked accessor; returns the address of the 1-byte live-update status
+        // (asm `addi r3,r28,8`; IDA return type unsigned __int8*). X360 symbol GetLive[UpdateStatus];
+        // PS3 DWARF drift = GetFileSystemStatusInterface (h:178).
+        u8* GetLiveUpdateStatus();
+
+        // @ 0x82663E30 -- write-locked mutator; copies one status byte in
+        // (asm `lbz r11,0(r27); stb r11,8(r28)`). X360 symbol SetLiveUpdateStatus; PS3 DWARF drift =
+        // SetFileSystemStatusInterface (h:179).
+        void SetLiveUpdateStatus(const u8* lpStatus);
 
     private:
-        AllocatorList mAllocatorList;
-        // FileSystemStatusInterface mFileSystemStatusInterface;  // DWARF -- deferred (minimal slice)
+        const AllocatorList* mpAllocatorList;    // DWARF h:184 -- this+4 (POINTER, not embedded)
+        u8                   mbLiveUpdateStatus; // DWARF h:189 storage -- this+8 (X360: 1 status byte)
+        // FileSystemStatusInterface follows in the PS3 DWARF; on X360 the +8 slot is a status byte.
     };
 }
 }

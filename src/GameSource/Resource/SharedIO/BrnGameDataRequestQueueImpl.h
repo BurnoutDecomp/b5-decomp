@@ -145,6 +145,29 @@ namespace GameDataIO
         return mRequestQueue.AddEvent(&lEvent, 49);
     }
 
+    // -------- LoadAILanes @ 0x82396980 (<3072>) --------
+    // ASM store order: v5[0]@var_30 = liEventId (r5/a3), v5[1]@var_2C = lpReceiverQueue
+    // (r4/a2), v5[2]@var_28 = liPoolId (r6/a4); v6 = id, v7 = meType(3, DATA), v8 = 0;
+    // type 0x1A == 26; event LoadGameDataEvent. Load* twin of GetAILanes: SAME baked id
+    // but LoadGameDataEvent + AddEvent type 26 (same shape as LoadTrafficLanes/LoadPVS).
+    // DWARF sig: bool LoadAILanes(BaseEventReceiverQueue*, int, int). Caller:
+    // BrnProgression::ProgressionManager::LoadAIData.
+    template <s32 N>
+    bool RequestInterface<N>::LoadAILanes(
+            CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+            s32 liEventId, s32 liPoolId)
+    {
+        LoadGameDataEvent lEvent;
+        lEvent.miEventId       = liEventId;                 // +0x00
+        lEvent.mpReceiverQueue = lpReceiverQueue;           // +0x04
+        lEvent.miPoolId        = liPoolId;                  // +0x08
+        lEvent.mId             = 0x71117D7F4337FFFFULL;     // +0x10
+        lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
+        lEvent.mbFailFlag      = false;                     // +0x1C
+
+        return mRequestQueue.AddEvent(&lEvent, 26);
+    }
+
     // -------- GetICEList @ 0x82256358 (<512>) --------
     // ASM: v5[0] = liEventId (a3), v5[1] = lpReceiverQueue (a2), v5[2]@var_28 = 5 (literal
     // poolId); id, meType(3), 0; type 49; event GetICEListRequest.
@@ -288,7 +311,9 @@ namespace GameDataIO
         lEvent.miPoolId        = liPoolId;
         // The hash rides zero-extended in the id's low word with the pool id packed in
         // the top nibble (the X360 std of the HashString result OR'd with poolId << 48).
-        lEvent.mResourceId     = CgsResource::ID(
+        // CgsResource::ID exposes only the default ctor + SetHash (no u64 ctor), so build the
+        // packed 64-bit value and stamp it via SetHash -- same stored bits as the X360.
+        lEvent.mResourceId.SetHash(
             static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
                 reinterpret_cast<const u8*>(lpcResourceName))))
             | (static_cast<u64>(liPoolId) << 48));

@@ -85,8 +85,10 @@ bool LoadingScriptedState::LoadSoundModule(BrnResource::GameDataIO::InputBuffer*
     // GameData input/output buffers each frame and threads them through every LoadXxxModule) is
     // not reconstructed yet, so the buffers arrive null here; the allocator list is then null and
     // Prepare's carve stages stay allocator-gated (see BrnRootSoundModule.cpp).
+    // GetAllocatorList() const now returns const AllocatorList* (the +4 member is a pointer, not an
+    // embedded list -- see the OutputBuffer layout fix in BrnGameDataModuleIO.h), so no address-of here.
     const BrnResource::GameDataIO::AllocatorList* lpAllocatorList =
-        lpGameDataOutputBuffer ? &lpGameDataOutputBuffer->GetAllocatorList() : 0;
+        lpGameDataOutputBuffer ? lpGameDataOutputBuffer->GetAllocatorList() : 0;
 
     bool lbPrepared = BrnGame::GetMainSoundModule()->Prepare(
         lpAllocatorList, lpUpdateInputStack, lpUpdateOutputStack,
