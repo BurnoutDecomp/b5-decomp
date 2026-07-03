@@ -14,6 +14,11 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::GuiEventPlayAptMovie (channel-41 payload)
 #include "GameSource/Gui/BrnAptRuntimeBringUp.h"                          // BrnGui::AptRuntime* (the Apt runtime bring-up + driver)
 
+// PC KEYBOARD BRING-UP (FLAG): poll GetAsyncKeyState without dragging <Windows.h> into this
+// game-source TU (its NOUSER/NOGDI lean-defines conflict). Signature per WinUser.h.
+extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vKey);
+static short BrnGuiPcGetAsyncKeyState(int liVKey) { return GetAsyncKeyState(liVKey); }
+
 // The loading-screen visual signal (BrnRendererModule::Render shows the loading screen while it's set).
 // The GUI BF_LOADING state now OWNS this when its FSM is live: BootLoading::Update PlayLoadingScreen
 // (channel 40, GuiEventPlayAptLoadingMovie/19) raises it; BootLoading::OnLeave StopLoadingScreen
@@ -383,6 +388,63 @@ namespace BrnGui
                 CgsModule::Event lReadyEvent;
                 mBootLegalInQueue.AddEvent(&lReadyEvent, 64, static_cast<s32>(sizeof(lReadyEvent)));  // cache-ready
                 mbBootStarted = true;
+            }
+
+            // ---- boot-resources-ready feedback (event 567; bring-up FLAG) ----------------------
+            // The console GUI cache posts 567 when the title's expected apt components have
+            // initialised, which arms BootLegal's press-start path (mbWaitForStartPressed).
+            // The cache watcher isn't reconstructed; post it once when the apt movie is live.
+            {
+                static bool sbResourceReadyFed = false;
+                if (!sbResourceReadyFed && BrnGui::AptRuntimeIsMovieLive())
+                {
+                    CgsModule::Event lReady;
+                    mBootLegalInQueue.AddEvent(&lReady, 567, static_cast<s32>(sizeof(lReady)));
+                    sbResourceReadyFed = true;
+                    CgsDev::Log::WriteToLog("[GuiModule] apt movie live -> fed resources-ready (567) to BF_LEGAL.\n");
+                }
+            }
+
+            // ---- PC KEYBOARD -> boot-flow input events (bring-up FLAG) -------------------------
+            // The console feeds BootLegal pad input through the event-interpreter pipeline
+            // (event 143 = "press start" feedback; events 6/21 = controller actions with the
+            // sub-id at payload+4: 41 menu-next, 42 menu-prev, 45 back). That pipeline is not
+            // up on PC yet, so poll the keyboard here and post the SAME event records BootLegal
+            // consumes: Enter/Space -> 143 (start), Down/Right -> 6/41, Up/Left -> 6/42,
+            // Escape -> 6/45. Edge-triggered so a held key posts once.
+            {
+                struct PcActionEvent : public CgsModule::Event
+                {
+                    s32 miPad0;    // +0x00
+                    s32 miSubId;   // +0x04 (BootLegal reads the action sub-id here)
+                    s32 miPad2;
+                    s32 miPad3;
+                    explicit PcActionEvent(s32 liSubId)
+                        : miPad0(0), miSubId(liSubId), miPad2(0), miPad3(0) {}
+                };
+                struct PcKeyMap { int iVKey; s32 iEventId; s32 iSubId; };
+                static const PcKeyMap KA_KEYS[] =
+                {
+                    { 0x0D /*VK_RETURN*/, 143, 0  },
+                    { 0x20 /*VK_SPACE*/,  143, 0  },
+                    { 0x28 /*VK_DOWN*/,   6,   41 },
+                    { 0x27 /*VK_RIGHT*/,  6,   41 },
+                    { 0x26 /*VK_UP*/,     6,   42 },
+                    { 0x25 /*VK_LEFT*/,   6,   42 },
+                    { 0x1B /*VK_ESCAPE*/, 6,   45 },
+                };
+                static bool sabKeyWasDown[sizeof(KA_KEYS) / sizeof(KA_KEYS[0])] = {};
+                for (u32 luKey = 0; luKey < sizeof(KA_KEYS) / sizeof(KA_KEYS[0]); ++luKey)
+                {
+                    const bool lbDown = (BrnGuiPcGetAsyncKeyState(KA_KEYS[luKey].iVKey) & 0x8000) != 0;
+                    if (lbDown && !sabKeyWasDown[luKey])
+                    {
+                        PcActionEvent lAction(KA_KEYS[luKey].iSubId);
+                        mBootLegalInQueue.AddEvent(&lAction, KA_KEYS[luKey].iEventId,
+                                                   static_cast<s32>(sizeof(lAction)));
+                    }
+                    sabKeyWasDown[luKey] = lbDown;
+                }
             }
             if (mbBootLegalFsmReady)
                 mBootLegalStateMachine.CgsFsm::Fsm::Update();   // runs BootLegal through the Lua FSM

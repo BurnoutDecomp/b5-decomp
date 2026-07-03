@@ -19,6 +19,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"  // CgsGui::sResourceTuple
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"      // BrnGui::MenuComponent
+#include "GameSource/Gui/BrnAptRuntimeBringUp.h"                         // BrnGui::AptRuntimeSetComponentViewState (PC shim)
 
 #include <chrono>   // FLAG: PC wall-clock time source standing in for the GUI cache's frame time
 
@@ -101,8 +102,34 @@ namespace BootLegalCacheBoundary
 // ===========================================================================
 namespace CgsGui
 {
-    void GuiComponent::Construct(const char* /*lpacName*/, StateInterface* /*lpStateInterface*/, const char* /*lpacParentName*/) {}
-    void GuiComponent::AddOutputAptViewState(const char* /*lpacAptName*/, const char* /*lpacViewState*/, bool /*lbImmediate*/) {}
+    // PC bring-up (FLAG): keep the component's NAME (the movie's PLACE instance name)
+    // so AddOutputAptViewState can reach the clip; the state interface may be null on
+    // the boot path (SetStateInterface asserts, so store it only when supplied).
+    void GuiComponent::Construct(const char* lpacName, StateInterface* lpStateInterface, const char* lpacParentName)
+    {
+        // Inline the name store (the real SetName TU -- CgsGuiComponent.cpp -- is not in
+        // this build; it also drags the unwired AptAux::UpdateFlashComponent).
+        macName[0] = '\0';
+        if (lpacName != nullptr)
+        {
+            u32 lu = 0;
+            for (; lpacName[lu] != '\0' && lu < KU_MAX_COMPONENT_NAME_LEN - 1; ++lu)
+                macName[lu] = lpacName[lu];
+            macName[lu] = '\0';
+        }
+        (void)lpacParentName;   // boot components pass no parent
+        muHashedName = 0;
+        mpStateInterface = lpStateInterface;
+    }
+
+    // PC bring-up shim (FLAG): the faithful path is FillAptViewMessage -> AptAux::
+    // UpdateFlashComponent -> AptCommunicator -> the movie AS. That glue is not wired
+    // yet; drive the observable effect (gotoAndPlay the view-state label on this
+    // component's clip) through the Apt runtime bridge directly.
+    void GuiComponent::AddOutputAptViewState(const char* /*lpacAptName*/, const char* lpacViewState, bool /*lbImmediate*/)
+    {
+        BrnGui::AptRuntimeSetComponentViewState(GetName(), lpacViewState);
+    }
 }
 
 namespace BrnGui

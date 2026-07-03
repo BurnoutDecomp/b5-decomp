@@ -1624,6 +1624,125 @@ namespace BrnGui
                 "[AptRT] render: render-tree walk (AptRender) -> D3D9 via ImRenderBuffer::Dispatch (OK; per-frame).\n");
         }
     }
+
+    bool AptRuntimeIsMovieLive()
+    {
+        return s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr;
+    }
+
+    // -------------------------------------------------------------------------
+    // AptRuntimeSetComponentViewState -- PC bring-up shim for the GuiComponent apt-view
+    // protocol (FLAG; see the header note). Finds the root movie's placed child clip by
+    // its PLACE instance name and jumps it to the view-state frame label, playing.
+    // The label lives in the clip's own embedded AptMovie label hash (registered by
+    // resolve64's tag-2 pass); a clip or label miss is logged + false (clean no-op).
+    // -------------------------------------------------------------------------
+    // Try to jump ONE clip node to the labelled frame; when its own timeline lacks the
+    // label, recurse into its child display list (the components are CONTAINER sprites --
+    // the transition timeline lives in a nested clip, e.g. char[19] transin/transout).
+    static bool AptViewStateGotoLabel(AptCIH* lpNode, const char* lpacLabel, int liDepth)
+    {
+        if (lpNode == nullptr || liDepth > 6)
+            return false;
+        AptCharacterInst* lpCI = lpNode->GetCharacterInst();
+        if (lpCI == nullptr || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
+            return false;
+        AptCharacterSpriteInstBase* lpSprite = static_cast<AptCharacterSpriteInstBase*>(lpCI);
+        AptCharacter* lpChar = lpSprite->mpRenderItem ? lpSprite->mpRenderItem->mpCharacter : nullptr;
+        if (lpChar != nullptr)
+        {
+            AptMovie* lpMovie = reinterpret_cast<AptMovie*>(
+                reinterpret_cast<char*>(lpChar) + KU_AptEmbeddedMovieOff);
+            EAStringC lLabel(lpacLabel);
+            const int liFrame = lpMovie->labelToFrame(&lLabel);
+            if (liFrame >= 0)
+            {
+                lpNode->jumpToFrame(liFrame);
+                lpSprite->mnClipActionFlags |= 0x80u;   // play (the AptLinker seed flag)
+                char lac[192];
+                std::snprintf(lac, sizeof(lac),
+                    "[AptRT] viewstate:   clip %p depth %d -> frame %d ('%s')\n",
+                    (void*)lpNode, liDepth, liFrame, lpacLabel);
+                CgsDev::Log::WriteToLog(lac);
+                return true;
+            }
+        }
+        AptDisplayListState* lpKids = lpSprite->mDisplayList.AsState();
+        if (lpKids == nullptr)
+            return false;
+        for (AptCIH* lpK = lpKids->mpFirst; lpK != nullptr; lpK = lpK->GetDisplayListNext())
+        {
+            if (AptViewStateGotoLabel(lpK, lpacLabel, liDepth + 1))
+                return true;
+        }
+        return false;
+    }
+
+    bool AptRuntimeSetComponentViewState(const char* lpacInstName, const char* lpacViewState)
+    {
+        char lac[224];
+        if (lpacInstName == nullptr || lpacViewState == nullptr || !AptRuntimeIsMovieLive())
+            return false;
+
+        // The AnimatorComponent instances are CONTAINERS (the imported TransitionComponent);
+        // the transition TIMELINE (transin/transout/... labels) lives in a PAIRED sibling
+        // clip that the component's ActionScript drives. The AS pairing isn't running yet
+        // (the communicator glue is the faithful follow-on), so pair them here explicitly
+        // for the title screen (FLAG: title-screen-scoped table).
+        struct PairMap { const char* pcComponent; const char* pcTargetClip; };
+        static const PairMap KA_PAIRS[] =
+        {
+            { "HDCompAnimator_mc",             "HDComp_mc"       },
+            { "esrb_anim",                     "esrb_mc"         },
+            { "StartMessageAnimatorComponent", "ButtStart_mc"    },
+            { "BackgroundAnimatorComponent",   "background_mc"   },
+            { "SelectionMenuAnimatorComponent","SelectionMenu_mc"},
+        };
+        const char* lpcTarget = lpacInstName;
+        for (u32 lu = 0; lu < sizeof(KA_PAIRS) / sizeof(KA_PAIRS[0]); ++lu)
+        {
+            if (_stricmp(KA_PAIRS[lu].pcComponent, lpacInstName) == 0)
+            {
+                lpcTarget = KA_PAIRS[lu].pcTargetClip;
+                break;
+            }
+        }
+
+        AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_pFaithfulRootCIH);
+        AptCharacterInst* lpRootCI = lpRoot->GetCharacterInst();
+        if (lpRootCI == nullptr)
+            return false;
+        AptCharacterSpriteInstBase* lpRootSprite =
+            static_cast<AptCharacterSpriteInstBase*>(lpRootCI);
+        AptDisplayListState* lpState = lpRootSprite->mDisplayList.AsState();
+        if (lpState == nullptr)
+            return false;
+
+        for (AptCIH* lpN = lpState->mpFirst; lpN != nullptr; lpN = lpN->GetDisplayListNext())
+        {
+            AptCharacterInst* lpCI = lpN->GetCharacterInst();
+            if (lpCI == nullptr || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
+                continue;
+            const EAStringC& lrName = lpN->GetInstanceName();
+            const char* lpcName = lrName.GetBuffer();
+            if (lpcName == nullptr || _stricmp(lpcName, lpcTarget) != 0)
+                continue;
+
+            const bool lbApplied = AptViewStateGotoLabel(lpN, lpacViewState, 0);
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] viewstate: '%s' -> '%s' on clip '%s' (%s)\n",
+                lpacInstName, lpacViewState, lpcTarget,
+                lbApplied ? "APPLIED" : "no label in subtree (FLAG)");
+            CgsDev::Log::WriteToLog(lac);
+            return lbApplied;
+        }
+
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] viewstate: '%s': target clip '%s' not found on the root display list (FLAG).\n",
+            lpacInstName, lpcTarget);
+        CgsDev::Log::WriteToLog(lac);
+        return false;
+    }
 }
 
 // =============================================================================

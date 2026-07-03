@@ -62,6 +62,19 @@ namespace BrnGui
 
     // True once AptRuntimeBringUp() has fully succeeded (the engine host is live).
     bool AptRuntimeIsReady();
+
+    // True once the title movie is loaded + instantiated (root CIH live, ticking).
+    bool AptRuntimeIsMovieLive();
+
+    // ---- component view-state bridge (PC bring-up shim; FLAG) ------------------
+    // The faithful path is GuiComponent::FillAptViewMessage -> AptAux::
+    // UpdateFlashComponent -> AptCommunicator key-values -> the movie's AS
+    // ("UpdateAll") applying the transition. That communicator glue is not wired
+    // yet, so this shim reproduces the OBSERVABLE effect directly: find the placed
+    // child clip whose PLACE instance name is lpacInstName (on the root movie's
+    // display list) and gotoAndPlay its "<viewState>" frame label ("transin"/
+    // "transout"/"visible"/"invisible"...). Returns true when a clip+label matched.
+    bool AptRuntimeSetComponentViewState(const char* lpacInstName, const char* lpacViewState);
 }
 
 #endif
