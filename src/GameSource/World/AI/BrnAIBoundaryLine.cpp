@@ -6,26 +6,21 @@
 //
 // BrnAI::BoundaryLine::GetInterp @ 0x82676C78.
 //
-// KEYSTONE -- NOT reconstructed. The X360 body is a hand-vectorised AltiVec/VMX128 pipeline
-// built on vrlimi128 permute-immediates:
-//   - lvx128 v13, r0, r4              loads the whole 16-byte line (4 packed lanes) at once;
-//   - the interp parameter lfT (f1) is stored, reloaded with lvlx and broadcast (vspltw v12);
-//   - a cascade of vrlimi128 (rotate-left-immediate, mask-insert: amounts 8/4, masks 2/0)
-//     re-packs the four line lanes into two working endpoint vectors (v10, v11/v0);
-//   - vsubfp v13, v10, v0             forms the inter-endpoint delta;
-//   - vmaddfp v0, v13, v0, v12        fuses a multiply-add across the re-packed lanes;
-//   - stvx128 v0, r0, r3             writes the resulting 16-byte Vector2 to the out pointer.
-//
-// The vrlimi128 lane re-packing does not reliably lower to scalar C++: which lanes carry the
-// start/end/parameter after the rotate-mask cascade is exactly the kind of per-lane detail the
-// project rule forbids guessing, and a wrong scalar lerp (the naive (end-start)*t+start) does
-// NOT match the fused vmaddfp operand assignment the asm actually emits. Inventing a per-lane
-// formula here would be fabrication, so the body is left as an honest stub pending a VMX-aware
-// lowering pass (or the RW vpu *_operation intrinsics) that decodes the vrlimi128 permutation.
-//
-// The stub does not fabricate arithmetic: it zero-initialises the out Vector2 (a defined,
-// non-corrupting result) rather than emitting a guessed interpolation. The operands are
-// referenced so the signature is honest about what it consumes/produces.
+// Interpolate a point along the boundary line by parameter lfT, writing the full 16-byte
+// result Vector2 to *lpv2Out (X360 ABI: out in r3, this in r4, lfT in f1). The console body
+// is a hand-vectorised VMX128 pipeline, decoded lane-by-lane in the wave-2 VMX pass:
+//   - lvx128 loads the whole 16-byte line (start in lanes 0,1; end in lanes 2,3);
+//   - lfT is spilled/reloaded and broadcast to all lanes (stfs + lvlx + vspltw);
+//   - two vrlimi128 pairs re-pack the four line lanes into zero-padded endpoint registers:
+//     start = [startX, startY, 0, 0] (masks 8/4, rotate 0) and end = [endX, endY, 0, 0]
+//     (masks 8/4, rotate 2 words);
+//   - vsubfp forms delta = end - start;
+//   - vmaddfp v0, v13, v0, v12 fuses v0 = v13*v12 + v0 == delta*t + start (the multiplier
+//     is the LAST listed operand, the addend the THIRD -- the documented IDA field order);
+//   - stvx128 writes all 16 bytes to the out pointer, unconditionally (no null guard).
+// Lanes 2,3 are structurally (0-0)*t+0 == +0.0f for all finite t, written as literal zeros
+// (the same simplification the sibling GetLength body already applies to its structurally-
+// zero lanes). No rodata constant is consumed (only vspltisw-zero immediates).
 //
 // BrnAI::BoundaryLine::GetLength @ 0x82676BE8.
 //
@@ -34,22 +29,24 @@
 // vrlimi128 cascade re-packs start=(x,y) and end=(x,y), vsubfp forms the (end-start) delta,
 // the two squared lanes are summed (vspltw lane0 + lane1, vaddfp), and the same vrsqrtefp +
 // 2-step Newton-Raphson + vcmpeqfp/vsel zero-guard magnitude pipeline yields the result
-// (lfs f1 returns it). UNLIKE GetInterp, the lane usage here is a plain endpoint-pair
-// magnitude that lowers cleanly, so it is bodied (not stubbed): sqrtf((dx*dx)+(dy*dy)),
-// the established subsystem convention (BrnAStar.h:167). sqrtf(0)==0 satisfies the asm's
-// exact-zero vsel guard. No rodata constant is consumed.
+// (lfs f1 returns it). The lane usage is a plain endpoint-pair magnitude that lowers
+// cleanly: sqrtf((dx*dx)+(dy*dy)), the established subsystem convention (BrnAStar.h:167).
+// sqrtf(0)==0 satisfies the asm's exact-zero vsel guard. No rodata constant is consumed.
 
 namespace BrnAI
 {
     void BoundaryLine::GetInterp(Vector2* lpv2Out, f32 lfT) const
     {
-        // KEYSTONE STUB: VMX vrlimi128 lerp pipeline not reconstructed (see file header).
-        (void)lfT;
-        (void)mfStartX; (void)mfStartY; (void)mfEndX; (void)mfEndY;
-        if (lpv2Out != nullptr)
-        {
-            lpv2Out->SetZero();
-        }
+        // vsubfp lanes 0,1: delta = end - start.
+        const f32 lfDeltaX = mfEndX - mfStartX;
+        const f32 lfDeltaY = mfEndY - mfStartY;
+
+        // vmaddfp: result = delta*t + start; stvx128 writes all four lanes (the console
+        // stores through r3 with no null check -- kept unconditional to match).
+        lpv2Out->x = (lfDeltaX * lfT) + mfStartX;
+        lpv2Out->y = (lfDeltaY * lfT) + mfStartY;
+        lpv2Out->z = 0.0f;   // lane 2: (0-0)*t + 0 on console
+        lpv2Out->w = 0.0f;   // lane 3: (0-0)*t + 0 on console
     }
 
     f32 BoundaryLine::GetLength() const

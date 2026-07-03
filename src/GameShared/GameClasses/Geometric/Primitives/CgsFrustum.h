@@ -12,6 +12,11 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"  // Vector4 (16-byte SIMD lane)
 
+namespace CgsGraphics
+{
+    struct CameraRwFrustum;   // GameShared/GameClasses/Graphics/CgsCamera.h
+}
+
 namespace CgsGeometric
 {
     struct Frustum
@@ -26,6 +31,16 @@ namespace CgsGeometric
             PlaneFar    = 4,
             PlaneNear   = 5,
         };
+
+        // --- PENDING DECLARATIONS (cross-TU; bodies live in their own not-
+        //     yet-landed TUs; call shapes attested at the BrnWorld::ShadowMap::
+        //     ComputeTSMMatrix @ 0x827BFF58 call sites) ----------------------
+
+        // @call 0x827C0058: build the 6-plane frustum from the RW-side
+        // snapshot Camera::GetFrustum(CameraRwFrustum&) wrote.
+        void SetFromRwFrustum(const CgsGraphics::CameraRwFrustum& lrRw);
+        // @call 0x827C0064: write the 8 corner vertices.
+        void CalcVertices(Vector4* lapVerts) const;
 
         // CgsFrustum.h:159 (DWARF). 8 swizzled plane lanes = 128 bytes.
         Vector4 maSwizzledPlanes[8];

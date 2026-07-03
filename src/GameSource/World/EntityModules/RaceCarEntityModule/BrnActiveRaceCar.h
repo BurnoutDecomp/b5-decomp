@@ -146,11 +146,12 @@ public:
         // X360 0x822E6818: reset to the just-spawned visual state.
         void            Reset();
 
-        // X360 0x822A21B0: DEFERRED -- 1280-line compiler-unrolled VMX broadcast
-        // (a 16-byte-strided scratch fill). Declared only; its body is left to a
-        // dedicated VMX pass. The per-TU `cl /c` gate does not link, so an
-        // undefined-but-declared method compiles cleanly.
-        int             DEBUG_OverrideScratchAmount(int liResult);
+        // X360 0x822A21B0 (wave-2 VMX pass): DEBUG override -- broadcast
+        // lfScratchAmount into the W lane of all 128 scratch vectors
+        // (whole-register round-trip per element, see the .cpp). The earlier
+        // `int (int)` placeholder was an IDA artifact (Hex-Rays dropped the
+        // f1 argument and modelled the untouched r3 pass-through as a return).
+        void            DEBUG_OverrideScratchAmount(f32 lfScratchAmount);
 
     private:
         // Packed 8-byte storage for one cracked-glass scale pair. The console array
@@ -163,7 +164,12 @@ public:
         // [0,0,0,0]) -- the car-body render transform the physics/IO side overwrites
         // each frame with the live pose.
         Matrix44  mBodyTransform;                        // +0x000 (0)
-        u8        mPad0040[2048];                        // +0x040 (64) .. +0x840 (2112)
+        // +0x040 (64) .. +0x840 (2112): 128 16-byte scratch vectors. The only
+        // asm-proven fact about the element layout is that byte 12 (lane w)
+        // carries a per-element "scratch amount" (DEBUG_OverrideScratchAmount
+        // @ 0x822A21B0 broadcasts its float arg into lane w of every element,
+        // leaving lanes x/y/z untouched).
+        Vector4   mav4ScratchVertices[128];              // +0x040 (64)
         Matrix44  maWheelTransforms[6];                  // +0x840 (2112) wheel render xforms
         Matrix44  maWheelScaleMatrices[6];               // +0x9C0 (2496) wheel scale xforms
         u8        mPad0B40[64];                          // +0xB40 (2880) .. +0xB80 (2944)

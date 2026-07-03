@@ -174,10 +174,77 @@ static_assert(offsetof(GPInstance, mVolumeType)        == 0x90, "GPInstance::mVo
 static_assert(offsetof(GPInstance, mFlags)             == 0x94, "GPInstance::mFlags");
 static_assert(offsetof(GPInstance, mEdgeData)          == 0x98, "GPInstance::mEdgeData");
 
+// ---------------------------------------------------------------------------
+// GP primitive images (canonical rwccore.h:1182-1266: no extra data members
+// on any of them). The per-type callbacks below are the bodies behind each
+// type's VolumeMethods slots. X360 SHAPE DELTA (per the header note above):
+// the canonical PS3 build declares them as non-static const member functions
+// reached through pointers-to-member; the X360 build caches PLAIN function
+// pointers, so they are reconstructed as static members matching the
+// committed GetMaximumFeatureFn / GetIntervalFn / GetIntervalsFn typedefs
+// exactly (the un-recovered FixupSepDirMethods-style registration TU owns the
+// table fill). GetBBox siblings exist in the binary at other addresses
+// outside these TUs and are NOT declared here.
+// ---------------------------------------------------------------------------
+
+// The GP sphere image (canonical rwccore.h:1182: the core primitive is a
+// point -- the radius rides in mFatness and is applied by the callers).
+struct GPSphere : public GPInstance
+{
+    // @ 0x82BA80A8 -- VolumeMethods +0xA8 (GetIntervalFn).
+    static void GetInterval(const GPInstance* lpThis,
+                            const Vec4& arDir, Interval& arInterval);
+    // @ 0x82BA80C0 -- VolumeMethods +0xAC (GetIntervalsFn).
+    static void GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
+                             u32 auNumDirs, Interval* lapIntervals);
+};
+
+// The GP capsule image (canonical rwccore.h:1193: the core is the axis
+// segment -- mEdgeDirections[0] is the axis, mDimensions.x the half-height,
+// the radius rides in mFatness).
+struct GPCapsule : public GPInstance
+{
+    // @ 0x82BAFA80 -- VolumeMethods +0xA4 (GetMaximumFeatureFn).
+    static void GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
+                                  const Vec4& arDir, Feature& arFeature);
+    // @ 0x82BAFB68 -- VolumeMethods +0xA8 (GetIntervalFn).
+    static void GetInterval(const GPInstance* lpThis,
+                            const Vec4& arDir, Interval& arInterval);
+    // @ 0x82BAFC10 -- VolumeMethods +0xAC (GetIntervalsFn).
+    static void GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
+                             u32 auNumDirs, Interval* lapIntervals);
+};
+
+// The GP box image (canonical rwccore.h:1207: mFaceNormals are the unit face
+// axes, mDimensions the half-extents).
+struct GPBox : public GPInstance
+{
+    // @ 0x82BA8918 -- VolumeMethods +0xA4 (GetMaximumFeatureFn).
+    static void GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
+                                  const Vec4& arDir, Feature& arFeature);
+    // @ 0x82BA8650 -- VolumeMethods +0xA8 (GetIntervalFn).
+    static void GetInterval(const GPInstance* lpThis,
+                            const Vec4& arDir, Interval& arInterval);
+    // @ 0x82BA9238 -- VolumeMethods +0xAC (GetIntervalsFn).
+    static void GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
+                             u32 auNumDirs, Interval* lapIntervals);
+};
+
 // The GP cylinder image (canonical rwccore.h:1253: no extra data members --
-// mEdgeDirections[0] is the axis, mDimensions.x/.y the half-length/radius).
+// mEdgeDirections[0] is the axis, mDimensions.x/.y the half-length/radius;
+// per the canonical GPCylinder::Initialize rwccore.h:1390 mFaceNormals[0] is
+// the axis with [1]/[2] the two perpendicular frame axes).
 struct GPCylinder : public GPInstance
 {
+    // @ 0x82BAE430 -- VolumeMethods +0xA4 (GetMaximumFeatureFn).
+    static void GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
+                                  const Vec4& arDir, Feature& arFeature);
+    // @ 0x82BAD7F8 -- VolumeMethods +0xA8 (GetIntervalFn).
+    static void GetInterval(const GPInstance* lpThis,
+                            const Vec4& arDir, Interval& arInterval);
+    // @ 0x82BAD938 -- VolumeMethods +0xAC (GetIntervalsFn).
+    static void GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
+                             u32 auNumDirs, Interval* lapIntervals);
 };
 
 // ---------------------------------------------------------------------------
@@ -193,7 +260,12 @@ struct GPCylinder : public GPInstance
 // ASM vs DWARF DELTA (attested twice, 0x82BAB4A8 + 0x82BAACD8): the pass-1
 // dispatch separation is stored to `distance` (+0x4F0) and re-read from there
 // by pass 3 (`addi r30, r26, 0x4F0` / `lfs f0, 0x50(r23)` with r23 at +0x4A0);
-// `sepDist` (+0x4B0) is NOT touched by the batch kernels.
+// `sepDist` (+0x4B0) is NOT touched by the batch kernels. The single-pair
+// entry point PrimitivePairIntersect @ 0x82BAC130 is the OTHER half of the
+// pairing: it DOES write `sepDist` (stfs f31, 0x4B0) with the coarse
+// separation, and also writes `distance` (+0x4F0) with the final reference
+// separation along the contact normal -- both stores are correct per their
+// own asm; consumers must read the field their producer fills.
 // ---------------------------------------------------------------------------
 struct PrimitivePairIntersectResult
 {
@@ -350,18 +422,20 @@ f32 FindBestSeparatingDirCylVol(Vec4& arBestSepDir,
 // canonical declarations -- names are the ledger's).
 // ---------------------------------------------------------------------------
 
-// PENDING @ 0x82BB53F8 (not delivered this wave) -- candidate separating
-// direction between a cylinder rim circle (centre, unit axis, lane-broadcast
-// radius) and the edge segment [arEdgeP1, arEdgeP2]. The X360 passes all five
-// vectors by value in VMX v1..v5 and returns the direction in v1.
+// @ 0x82BB53F8 -- candidate separating direction between a cylinder rim
+// circle (centre, unit axis, lane-broadcast radius) and the edge segment
+// [aEdgeP1, aEdgeP2]: a 10-step damped regula-falsi on the rim-to-edge gap.
+// The X360 passes all five vectors by value in VMX v1..v5 and returns the
+// direction in v1.
 Vec4 RimToEdge(Vec4 aRimCentre, Vec4 aRimAxis, Vec4 aRimRadius,
                Vec4 aEdgeP1, Vec4 aEdgeP2);
 
-// PENDING @ 0x82BB56C8 (not delivered this wave) -- test one rim-circle pair
-// for a separating-direction candidate; on success writes one 16-byte
-// candidate to lpCandidate and returns nonzero. (All vector parameters by
-// value: at the 0x82BB61C0 call site every argument register carries the
-// address of a fresh caller-stack copy.)
+// @ 0x82BB56C8 -- test one rim-circle pair for a separating-direction
+// candidate (interlock rejection, coplanar closed form, or a Heron-seeded
+// bracketed regula-falsi on the angular score); on success writes one
+// 16-byte candidate to lpCandidate and returns nonzero. (All vector
+// parameters by value: at the 0x82BB61C0 call site every argument register
+// carries the address of a fresh caller-stack copy.)
 RwBool RimToRim(Vec4 aRimCentre1, Vec4 aRimAxis1, Vec4 aRimRadius1,
                 Vec4 aRimCentre2, Vec4 aRimAxis2, Vec4 aRimRadius2,
                 Vec4 aSepDir, Vec4* lpCandidate);
@@ -475,11 +549,22 @@ s32 PrimitiveBatchIntersect(PrimitivePairIntersectResult* lapResults,
                             VolRef1xN* lapPairs, s32 aiNumPairs,
                             f32 afPadding);
 
-// NOT DECLARED HERE (nothing delivered this wave calls it):
-// rw::collision::PrimitivePairIntersect @ 0x82BAC130 is PENDING; its canonical
-// signature is rwccore.h:3001 (RwBool PrimitivePairIntersect(
-// PrimitivePairIntersectResult&, const Volume*, const Matrix44Affine*,
-// const Volume*, const Matrix44Affine*, float padding, const Vector4* sepDir)).
+// vendor/renderware/collision/CollisionVolume.hpp (128-byte image).
+struct Volume;
+
+// @ 0x82BAC130 -- single-pair narrow-phase entry point (canonical
+// rwccore.h:3001: RwBool PrimitivePairIntersect(PrimitivePairIntersectResult&,
+// const Volume*, const Matrix44Affine*, const Volume*, const Matrix44Affine*,
+// float padding, const Vector4* sepDir)). The transforms ride as const void*
+// per the committed CreateGPInstanceFn slot type (the Matrix44Affine layout
+// has not landed in this home). apSepDir, when non-NULL, carries the caller's
+// separating direction in xyz and the separation distance in w (lfs f31,
+// 0xC(r30)). Called by BrnPhysics::Vehicle::VehicleManager::
+// PredictCarCarIntersection and the CgsSceneManager OverlapCullingModule.
+RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,
+                              const Volume* apVolume1, const void* apMtx1,
+                              const Volume* apVolume2, const void* apMtx2,
+                              f32 afPadding, const Vec4* apSepDir);
 
 } // namespace collision
 } // namespace rw
