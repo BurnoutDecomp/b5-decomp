@@ -10,11 +10,16 @@
 // rw::collision line-segment intersection vocabulary -- the reconstruction
 // mirror of the vendor rwccore.h primitive line-test declarations.
 //
-// OWNING HOME (LineSegIntersect.cpp) for the two functions the X360 binary
+// OWNING HOME (LineSegIntersect.cpp) for the functions the X360 binary
 // defines that are homed here:
-//     rw::collision::FatTriangleLineSegIntersect  @ 0x82BBAD98
-//     rw::collision::SolveQuarticRoots            @ 0x82BACA30
-// The remaining family members are PENDING declarations (see below).
+//     rw::collision::FatTriangleLineSegIntersect   @ 0x82BBAD98
+//     rw::collision::SolveQuarticRoots             @ 0x82BACA30
+//     rw::collision::rwcSphereLineSegIntersect     @ 0x82BA81D8   (wave 2)
+//     rw::collision::rwcCylinderLineSegIntersect   @ 0x82BAF8A0   (wave 2)
+//     rw::collision::rwcTorusLineSegIntersect      @ 0x82BADAB0   (wave 2)
+//     rw::collision::ThinTriangleLineSegIntersect  @ 0x82BB9EB8   (wave 2)
+//     rw::collision::TriangleLineSegIntersect      @ 0x82BBB7B8   (wave 2)
+// One helper remains a PENDING declaration (see below).
 // ===========================================================================
 
 namespace rw
@@ -92,34 +97,75 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,   // r3
 // else 0. (Canonical rwccore.h:3812; sole caller rwcTorusLineSegIntersect.)
 RwBool SolveQuarticRoots(f32 lafCoefficients[5], f32& arRoot);
 
-// ---------------------------------------------------------------------------
-// PENDING family members (declaration-only; bodies not delivered this wave).
-// ---------------------------------------------------------------------------
-
-// PENDING @ 0x82BA81D8 -- sphere vs line segment (canonical rwccore.h:2464).
-// Call shape attested at the 0x82BBAD98 call site (r3=lpDist out Fraction,
-// r4/r5/r6 = the three vector pointers, f1 = radius). Returns <0 on
-// error/abort, 0 = no direct hit, >0 = hit codes.
+// @ 0x82BA81D8 -- sphere vs line segment (canonical rwccore.h:2464): the
+// deferred-division near-root sphere test. Returns 1 = hit (lpDist valid),
+// 0 = miss, -1 = the segment does not approach the sphere (receding start
+// outside) -- the walk-abort code consumed by FatTriangleLineSegIntersect's
+// Voronoi loop. X360: r3=lpDist, r4/r5/r6 = the three vector pointers,
+// f1 = radius.
 s32 rwcSphereLineSegIntersect(Fraction* lpDist,
                               const Vec4* lpLineStart,
                               const Vec4* lpLineDelta,
                               const Vec4* lpCentre,
                               f32 afRadius);
 
-// PENDING @ 0x82BAF8A0 -- infinite cylinder vs line segment (canonical
-// rwccore.h:2537). Call shape attested at the 0x82BBAD98 call site
-// (r3=lpDist, f1=axisLengthSq, f2=radius, r6/r7 = two integer flags -- both
-// zero there -- and the four vectors in v1..v4). Returns <0 on error, 0 = no
-// direct hit, >0 = hit.
+// @ 0x82BAF8A0 -- INFINITE cylinder vs line segment (canonical
+// rwccore.h:2536, parameter names `invert`/`ignoreInside`). abIgnoreInside
+// suppresses the radially-inside immediate accept; abInvert selects the FAR
+// root (exit surface) and drops the receding-line -1 abort. Returns 1 = hit,
+// 0 = miss, -1 = segment does not approach the surface (only when !abInvert).
+// X360: r3=lpDist, f1=axisLengthSq, f2=radius, r6/r7 = the two flags (the
+// 0x82BBAD98 call site passes 0, 0), v1..v4 = the four vectors by value.
 s32 rwcCylinderLineSegIntersect(Fraction* lpDist,
                                 f32 afAxisLengthSq,
                                 f32 afRadius,
-                                s32 aiFlagA,
-                                s32 aiFlagB,
+                                s32 abInvert,
+                                s32 abIgnoreInside,
                                 Vec4 aLineStart,
                                 Vec4 aLineDelta,
                                 Vec4 aBase,
                                 Vec4 aAxis);
+
+// @ 0x82BADAB0 -- torus vs line segment (canonical rwccore.h:3813): builds
+// the line-parameter quartic of a z-axis torus (major radius R, minor r) and
+// reports whether the damped-Newton quartic solver converged. Returns 1 on an
+// accepted root (arDist = the line parameter), else 0 (arDist still receives
+// the solver's final iterate). Sole caller of SolveQuarticRoots.
+s32 rwcTorusLineSegIntersect(f32& arDist,
+                             Vec4 aLineStart,
+                             Vec4 aLineDir,
+                             f32 afMajorRadius,
+                             f32 afMinorRadius);
+
+// @ 0x82BB9EB8 -- zero-fatness (thin) triangle vs line segment: one-sided
+// Moller-Trumbore with a relative interval tolerance. Returns 1 on hit
+// (position/volParam/lineParam filled -- the normal is the CALLER's job:
+// TriangleLineSegIntersect @ 0x82BBB7B8 writes it after a hit), 0 on miss.
+// X360 register map: r3 = lpResult, v1..v5 = the five vectors by value.
+s32 ThinTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
+                                 Vec4 aLineStart,
+                                 Vec4 aLineDelta,
+                                 Vec4 aV0,
+                                 Vec4 aV1,
+                                 Vec4 aV2);
+
+// @ 0x82BBB7B8 -- triangle vs line segment dispatcher: zero fatness runs the
+// thin one-sided tester and derives the unit face normal on a hit; non-zero
+// fatness seeds that normal into the result (the fat tester's +0x20 input
+// contract) and pulls the reported position back onto the core triangle
+// surface. X360 register map: r3 = lpResult, v1..v5 = the five vectors by
+// value, f1 = the fatness.
+s32 TriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
+                             Vec4 aLineStart,
+                             Vec4 aLineDelta,
+                             Vec4 aV0,
+                             Vec4 aV1,
+                             Vec4 aV2,
+                             f32  afFatness);
+
+// ---------------------------------------------------------------------------
+// PENDING family member (declaration-only; body not delivered).
+// ---------------------------------------------------------------------------
 
 // PENDING X360 loc_82BBA748 -- the triangle nearest-point / feature-region
 // classifier FatTriangleLineSegIntersect calls. The ledger attributes the
@@ -139,13 +185,6 @@ s32 TriangleNearestPointRegion(Vec4* lpNearest,
                                Vec4 aV0,
                                Vec4 aV1,
                                Vec4 aV2);
-
-// ALSO PENDING in this family (no declarations needed -- nothing delivered
-// this wave calls them):
-//   rw::collision::TriangleLineSegIntersect      @ 0x82BBB7B8 (rwccore.h:3483)
-//   rw::collision::ThinTriangleLineSegIntersect  @ 0x82BB9EB8 (rwccore.h:3583)
-//   rw::collision::rwcTorusLineSegIntersect      @ 0x82BADAB0 (rwccore.h:3814;
-//       the sole caller of SolveQuarticRoots)
 
 } // namespace collision
 } // namespace rw

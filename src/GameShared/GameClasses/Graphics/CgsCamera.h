@@ -35,6 +35,17 @@
 
 namespace CgsGraphics
 {
+    // FLAG (opaque placeholder): the RW-side frustum snapshot
+    // Camera::GetFrustum(CameraRwFrustum&) writes and CgsGeometric::Frustum::
+    // SetFromRwFrustum consumes (both pending externals; the only attested
+    // producer/consumer pair is BrnWorld::ShadowMap::ComputeTSMMatrix
+    // @ 0x827BFF58). 128 bytes of 16-aligned storage is provenance-honest
+    // (the X360 stack slot region), not a decoded layout.
+    struct CameraRwFrustum
+    {
+        Vector4 maData[8];
+    };
+
     class Camera
     {
     public:
@@ -64,6 +75,29 @@ namespace CgsGraphics
         // TU). Reconstructing it would require fabricating the tan/atan VMX sequence and the
         // projection-matrix build -- left unbodied per the no-fabrication rule.
         void SetFovHorizontal(f32 fovHorizontal);
+
+        // CgsGraphics::Camera::UpdateViewProjectionMatrix @0x827E7030 (wave 2) --
+        // rebuild mViewProjection = mView (affine) * mProjection. Body in
+        // CgsCamera.cpp. Attested callers: BrnWorld::ShadowMap::
+        // CalculateShadowMapCameras, Camera::UpdateOrthogonalProjectionMatrix,
+        // Camera::SetPerspectiveProjectionMatrixRightHanded,
+        // Camera::UpdatePerspectiveProjectionMatrix, Camera::LookAt.
+        void UpdateViewProjectionMatrix();
+
+        // --- PENDING DECLARATIONS (cross-TU; bodies live in their own not-yet-
+        //     landed TUs; call shapes attested at the BrnWorld::ShadowMap::
+        //     ComputeTSMMatrix @ 0x827BFF58 call sites) ------------------------
+
+        // @call 0x827BFFD4: r3 = source camera (this), r4 = destination.
+        void Clone(Camera* lpDest);
+        // @calls 0x827BFFF0 / 0x827C000C: rebuild mProjection/mViewProjection
+        // from the cached projection scalars.
+        void UpdatePerspectiveProjectionMatrix();
+        // @call 0x827C004C: overload writing an RW-side frustum snapshot to
+        // lrOut (see CameraRwFrustum above).
+        void GetFrustum(CameraRwFrustum& lrOut);
+        // @call 0x827C1060: fill lpOut from this camera's parallel projection.
+        void GetCgsFrustumParallel(CgsGeometric::Frustum* lpOut);
 
     private:
         // Out-of-scope sibling helpers (their own TUs): GetFrustum dispatches to these. Declared so

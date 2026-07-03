@@ -1083,5 +1083,340 @@ u32 ComputeContactPoints(const GPInstance& arGP1, const GPInstance& arGP2,
     return arResult.numPoints;
 }
 
+// ===========================================================================
+// rw::collision::PrimitivePairIntersect @ 0x82BAC130   (wave 2)
+// Called by: BrnPhysics::Vehicle::VehicleManager::PredictCarCarIntersection,
+//            CgsSceneManager::OverlapCullingModule::DoPairQuery,
+//            CgsSceneManager::OverlapCullingModule::IsInsideEscapeVolume.
+//
+// The single-pair narrow-phase entry point (canonical rwccore.h:3001):
+//   1. gate: both volumes must have flags bit 0 set (+0x5C, clrlwi. 31);
+//   2. instance both volumes through vtable slot 5 (CreateGPInstance, with
+//      the caller's transform pointers riding through r5/r7);
+//   3. direction: caller-supplied (xyz + distance in w) or the 6x6 SAT
+//      dispatch off the two instance types;
+//   4. range cull: distance > (fatness2 + fatness1) + padding -> 0
+//      (VOLUME fatness words @ +0x50, not the GPInstance copies);
+//   5. publish sepDist (+0x4B0!) + sepDir (+0x4A0), build both maximal
+//      features (+dir ccw=1 / -dir ccw=0), run FindFeatureIntersectionPrism;
+//      the two 0x240 Feature blocks are memcpy'd into the result on BOTH the
+//      hit and the miss path;
+//   6. contact normal: single point pair -> normalised (p2-p1) delta with
+//      the interval orientation test above (all-separated -> fall back to
+//      the coarse direction, any-flip -> negate); multi point -> the prism
+//      override normal through the same test, or the coarse direction;
+//   7. emit header words (v1/v2 = the console Volume pointer words, tags =
+//      0), numPoints, the copied point lists, the (single or averaged)
+//      reference points, fatness push-out on every point, per-point +
+//      reference separations along the normal;
+//   8. one-sided triangle gates (GPTriangleAcceptContactNormal with +normal
+//      on side 1 / -normal on side 2) -- a reject here returns 0 AFTER the
+//      result block has been fully written (preserved).
+//
+// DELTA vs the batch kernels (both attested here): sepDist (+0x4B0) IS
+// written by this function (stfs f31, 0x4B0(r31) -- the kernels leave it
+// untouched), and v1/v2 (+0x00/+0x08) receive the raw Volume pointer words
+// with zeroed tag words (the kernels store mVolumeTag/mUserTag instead). See
+// the pairing note in GPInstance.hpp.
+//
+// rodata: flt_8218025C == KF_DEGENERATE_GAP_EPSILON; flt_82001CC0 = 0.0f;
+// flt_82001C98 = 1.0f; off_82F91800 == gapFindBestSeparatingDirection.
+// unk_82CDA350 is a 16-byte vperm control whose bytes are NOT dumped --
+// FLAG (triangulated, not fabricated): every attested consumer uses it as a
+// SAME-LANE blend/gather control (the 0x82B57DE0 CreateFromBox row assembly,
+// the 0x8291AE64 SatNav-family merge), and here BOTH vperm operands are the
+// same register (vperm v1, v0, v0, v7) with lane 2 re-inserted from v0 by
+// vrlimi128 v1,v0,2,0 -- under the attested same-lane semantics the sequence
+// is a verbatim copy of *apSepDir (the compiler's generic three-source
+// Vector3 lane-gather with all three sources equal). Only the w byte-source
+// ordering is unattested, and w of a direction row is inert downstream.
+// ===========================================================================
+
+namespace
+{
+    // --- TU-local Volume field views (same raw-offset convention as
+    //     GetVolumeVTable above; promote to members when the full Volume
+    //     layout lands) ------------------------------------------------------
+
+    // Volume +0x5C: the flags word (DWARF volume.h Volume::m_flags). Bit 0 is
+    // the enabled gate this function tests (lwz 0x5C / clrlwi. r11, r11, 31).
+    inline u32 VolumeFlags(const Volume* lpVolume)
+    {
+        return *reinterpret_cast<const u32*>(
+            reinterpret_cast<const u8*>(lpVolume) + 0x5C);
+    }
+
+    // Volume +0x50: the volume's fatness/radius word (lfs 0x50(r28)/0x50(r27);
+    // the same word the batch path mirrors into GPInstance::mFatness).
+    inline f32 VolumeFatness(const Volume* lpVolume)
+    {
+        return *reinterpret_cast<const f32*>(
+            reinterpret_cast<const u8*>(lpVolume) + 0x50);
+    }
+
+    // Console pointer image of a Volume* for the result header words
+    // (stw r28/r27 into +0x00/+0x08; the committed PPIR keeps v1/v2 as the
+    // X360 32-bit words -- same width FLAG as VolRef::muVolumePtr).
+    inline u32 VolumePointerImage(const Volume* lpVolume)
+    {
+        return static_cast<u32>(reinterpret_cast<uintptr_t>(lpVolume));
+    }
+}
+
+RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r31)
+                              const Volume* apVolume1,                  // r4 (r28)
+                              const void*   apMtx1,                     // r5 (rides through)
+                              const Volume* apVolume2,                  // r6 (r27)
+                              const void*   apMtx2,                     // r7 (r29)
+                              f32           afPadding,                  // f1 (f30)
+                              const Vec4*   apSepDir)                   // r9 (r30)
+{
+    // ---- 1. enabled gates (lwz 0x5C / clrlwi. / beq -> return 0) -----------
+    if ((VolumeFlags(apVolume1) & 1u) == 0)
+    {
+        return 0;
+    }
+    if ((VolumeFlags(apVolume2) & 1u) == 0)
+    {
+        return 0;
+    }
+
+    // ---- 2. instance both volumes (vtable slot 5, +0x14) --------------------
+    // First call: r5 = the UNTOUCHED incoming mtx1; second call: r5 = r29.
+    GPInstance lInst1;                                  // var_880
+    GPInstance lInst2;                                  // var_7C0
+    GetVolumeVTable(apVolume1)->mpCreateGPInstance(apVolume1, &lInst1, apMtx1);
+    GetVolumeVTable(apVolume2)->mpCreateGPInstance(apVolume2, &lInst2, apMtx2);
+
+    // ---- 3. separating direction + distance ---------------------------------
+    Vec4 lvDirection;                                   // var_950
+    f32  lfDistance;                                    // f31
+    if (apSepDir != nullptr)                            // cmplwi cr6, r30, 0
+    {
+        // lvx128 v0 = *apSepDir; lfs f31, 0xC(r30) = the w-lane distance.
+        // vperm v1, v0, v0, [unk_82CDA350] + vrlimi128 v1, v0, 2, 0: the
+        // generic three-source Vector3 lane-gather with all sources the same
+        // register == verbatim copy (see the rodata FLAG above).
+        lvDirection = *apSepDir;
+        lfDistance  = apSepDir->w;
+    }
+    else
+    {
+        // (*(&off_82F91800[6 * type1] + type2))(&dir, &inst1, &inst2); the
+        // returned broadcast's lane 0 (stvx128 v1 -> var_970, lfs f31) is the
+        // separating distance.
+        const FindBestSeparatingDirectionFn lpfnFindSepDir =
+            gapFindBestSeparatingDirection[lInst1.mVolumeType][lInst2.mVolumeType];
+        lfDistance = lpfnFindSepDir(lvDirection, lInst1, lInst2);
+    }
+
+    // ---- 4. range cull (VOLUME fatness words, +0x50) -------------------------
+    // Scalar add ORDER preserved: (fatness2 + fatness1) + padding
+    // (lfs f0, 0x50(r27) / lfs f13, 0x50(r28) / fadds / fadds / fcmpu / bgt).
+    const f32 lfFatness1 = VolumeFatness(apVolume1);    // r26 = r28 + 0x50
+    const f32 lfFatness2 = VolumeFatness(apVolume2);    // r25 = r27 + 0x50
+    if (lfDistance > ((lfFatness2 + lfFatness1) + afPadding))
+    {
+        return 0;
+    }
+
+    // ---- 5. publish the coarse pair state, features, prism ------------------
+    arResult.sepDist = lfDistance;                      // stfs f31, 0x4B0(r31)
+    arResult.sepDir  = lvDirection;                     // stvx128 v1, r31, 0x4A0
+
+    // Side 1: maximal feature along +dir, ccw = 1 (vtable copy word +0xA4);
+    // side 2: along -dir (vspltisw128/vslw128/vxor sign flip), ccw = 0.
+    Feature lFeature1;                                  // var_4E0
+    Feature lFeature2;                                  // var_2A0
+    lInst1.mMethods.mGetMaximumFeature(&lInst1, 1, lvDirection, lFeature1);
+    lInst2.mMethods.mGetMaximumFeature(&lInst2, 0, Negate(lvDirection), lFeature2);
+
+    rwc_FeatureIntersectionPrism lPrism;                // var_700
+    lPrism.normalOverride = 0;                          // stw r29, var_4EC
+    const RwBool lbPrismFound =
+        FindFeatureIntersectionPrism(lPrism, lFeature1, lFeature2, lvDirection);
+
+    // Both 0x240 Feature blocks are copied into the result on BOTH outcomes
+    // (the miss path at 0x82BAC2C8 runs the same two memcpys before return 0).
+    std::memcpy(&arResult.f1, &lFeature1, sizeof(Feature));  // r31+0x20
+    std::memcpy(&arResult.f2, &lFeature2, sizeof(Feature));  // r31+0x260
+    if (!lbPrismFound)                                  // cmplwi r3, 0 / bne
+    {
+        return 0;
+    }
+
+    // ---- 6. contact normal (r30 = &arResult.normal, +0x4C0) -----------------
+    bool lbUseCoarseDir = false;                        // -> LABEL_19/20
+
+    if (lPrism.m_numpts == 1)                           // cmpwi cr6 (signed)
+    {
+        // ==== single point pair (0x82BAC31C) ================================
+        // delta = pt2[0] - pt1[0]; stored to the normal slot immediately
+        // (stvx128 v13, r0, r30), then length-tested against FLT_EPSILON.
+        const Vec4 lvDelta = Sub(lPrism.m_ptsOn2[0], lPrism.m_ptsOn1[0]);
+        arResult.normal = lvDelta;
+        const f32 lfLenSq = Dot3(lvDelta, lvDelta);     // vmsum3fp128 -> var_970
+
+        if (lfLenSq <= KF_DEGENERATE_GAP_EPSILON)       // fcmpu vs flt_8218025C / ble
+        {
+            lbUseCoarseDir = true;
+        }
+        else
+        {
+            // Normalise: vrsqrtefp + two Newton-Raphson steps (vspltisw/vcfsx
+            // 1.0/0.5 splats; @ 0x82BAC354..0x82BAC39C), rendered exact.
+            arResult.normal = Scale(lvDelta, 1.0f / std::sqrt(lfLenSq));
+
+            // Support intervals of both instances along the candidate normal
+            // (v1 = the normal on both +0xA8 calls; interval rows on the stack
+            // at var_910/var_900 and var_8E0/var_8D0).
+            Interval lInterval1;
+            Interval lInterval2;
+            lInst1.mMethods.mGetInterval(&lInst1, arResult.normal, lInterval1);
+            lInst2.mMethods.mGetInterval(&lInst2, arResult.normal, lInterval2);
+
+            // The shared orientation test (vsubfp/vcmpgtfp/vsel row math +
+            // vcmpgtfp. / vcmpeqfp. CR6 all-lanes bits, distance splatted
+            // from (f31, 0, 0, 0) lane 0).
+            bool lbAllSeparated;
+            bool lbAnyFlip;
+            ClassifyIntervalSeparation(lInterval1, lInterval2, lfDistance,
+                                       lbAllSeparated, lbAnyFlip);
+            if (lbAllSeparated)                         // vcmpgtfp. all -> LABEL_19
+            {
+                lbUseCoarseDir = true;
+            }
+            else if (lbAnyFlip)                         // vcmpeqfp. all failed
+            {
+                arResult.normal = Negate(arResult.normal);   // vxor sign flip
+            }
+            // else: keep the normalised delta (bne skips the store).
+        }
+    }
+    else if (lPrism.normalOverride != 0)                // lwz var_4EC / cmplwi
+    {
+        // ==== multi point pair with a prism override normal (0x82BAC464) ====
+        arResult.normal = lPrism.normal;                // lvx128 var_500 -> +0x4C0
+
+        Interval lInterval1;                            // var_940/var_930
+        Interval lInterval2;                            // var_8B0/var_8A0
+        lInst1.mMethods.mGetInterval(&lInst1, arResult.normal, lInterval1);
+        lInst2.mMethods.mGetInterval(&lInst2, arResult.normal, lInterval2);
+
+        bool lbAllSeparated;
+        bool lbAnyFlip;
+        ClassifyIntervalSeparation(lInterval1, lInterval2, lfDistance,
+                                   lbAllSeparated, lbAnyFlip);
+        if (lbAllSeparated)
+        {
+            lbUseCoarseDir = true;
+        }
+        else if (lbAnyFlip)
+        {
+            arResult.normal = Negate(arResult.normal);
+        }
+    }
+    else
+    {
+        lbUseCoarseDir = true;                          // beq -> LABEL_19
+    }
+
+    if (lbUseCoarseDir)
+    {
+        // LABEL_19/20: lvx128 var_950 -> stvx128 +0x4C0.
+        arResult.normal = lvDirection;
+    }
+
+    // ---- 7. emit the result block (LABEL_21, 0x82BAC504) ---------------------
+    arResult.v1        = VolumePointerImage(apVolume1); // stw r28, 0x00(r31)
+    arResult.tag1      = 0;                             // stw r29, 0x04(r31)
+    arResult.v2        = VolumePointerImage(apVolume2); // stw r27, 0x08(r31)
+    arResult.tag2      = 0;                             // stw r29, 0x0C(r31)
+    arResult.numPoints = static_cast<u32>(lPrism.m_numpts);   // stw -> +0x740
+
+    // Point copy (skipped when the count is 0; the bound is re-read from
+    // +0x740 each pass, unchanged inside the loop). Store order per pass:
+    // pointsOn2[i] (+0x600) first, then pointsOn1[i] (+0x500, via r5 = -0x100).
+    for (u32 luPoint = 0; luPoint < arResult.numPoints; ++luPoint)
+    {
+        arResult.pointsOn2[luPoint] = lPrism.m_ptsOn2[luPoint];
+        arResult.pointsOn1[luPoint] = lPrism.m_ptsOn1[luPoint];
+    }
+
+    if (arResult.numPoints == 1)                        // lwz r6, 0x740 / cmplwi 1
+    {
+        // Reference points straight from the copied slot-0 pair (loads from
+        // the RESULT arrays, r31+0x500 / r31+0x600).
+        arResult.pointOn1 = arResult.pointsOn1[0];      // -> +0x4D0
+        arResult.pointOn2 = arResult.pointsOn2[0];      // -> +0x4E0
+    }
+    else
+    {
+        // Zero-seeded averages (flt_82001CC0 x3 + stw 0 stack rows stored to
+        // both reference slots, then accumulated in place).
+        Vec4 lvZero;
+        lvZero.x = 0.0f;
+        lvZero.y = 0.0f;
+        lvZero.z = 0.0f;
+        lvZero.w = 0.0f;
+        arResult.pointOn1 = lvZero;
+        arResult.pointOn2 = lvZero;
+        for (u32 luPoint = 0; luPoint < arResult.numPoints; ++luPoint)
+        {
+            arResult.pointOn1 = Add(arResult.pointOn1, arResult.pointsOn1[luPoint]);
+            arResult.pointOn2 = Add(arResult.pointOn2, arResult.pointsOn2[luPoint]);
+        }
+        // 1/count: std/lfd/fcfid (exact s64->f64) + frsp + fdivs of the 1.0f
+        // constant (flt_82001C98), lvlx+vspltw splatted. The asm computes the
+        // identical quotient TWICE (0x82BAC62C and 0x82BAC664, same +0x740
+        // count both times); folded to one computation of the same value.
+        const f32 lfInvCount = 1.0f / static_cast<f32>(arResult.numPoints);
+        arResult.pointOn1 = Scale(arResult.pointOn1, lfInvCount);
+        arResult.pointOn2 = Scale(arResult.pointOn2, lfInvCount);
+    }
+
+    // Fatness push-out along the final normal (lvlx+vspltw splats of the
+    // VOLUME fatness words r26/r25; the normal is reloaded from +0x4C0 --
+    // value unchanged). vmaddfp v0, v0, v12, v13 == normal*fat1 + point
+    // (multiplier = LAST operand); side 2 is vmulfp128 + vsubfp.
+    const Vec4 lvNormal = arResult.normal;
+    arResult.pointOn1 = MaddScalar(lvNormal, lfFatness1, arResult.pointOn1);
+    arResult.pointOn2 = Sub(arResult.pointOn2, Scale(lvNormal, lfFatness2));
+
+    // Per-point push-out + separation (guarded by numPoints; the count is
+    // re-read from +0x740 each pass). Per pass: pointsOn1[i] fattened first
+    // (r8 = r11 - 0x100), then pointsOn2[i], then
+    // distances[i] (+0x700) = dot3(pointsOn2[i]' - pointsOn1[i]', normal).
+    for (u32 luPoint = 0; luPoint < arResult.numPoints; ++luPoint)
+    {
+        arResult.pointsOn1[luPoint] =
+            MaddScalar(lvNormal, lfFatness1, arResult.pointsOn1[luPoint]);
+        arResult.pointsOn2[luPoint] =
+            Sub(arResult.pointsOn2[luPoint], Scale(lvNormal, lfFatness2));
+        arResult.distances[luPoint] =
+            Dot3(Sub(arResult.pointsOn2[luPoint], arResult.pointsOn1[luPoint]),
+                 lvNormal);
+    }
+
+    // Reference separation (vsubfp/vmsum3fp128 -> stfs +0x4F0).
+    arResult.distance = Dot3(Sub(arResult.pointOn2, arResult.pointOn1), lvNormal);
+
+    // ---- 8. one-sided triangle gates (AFTER the block is fully written) -----
+    // Side 1: +normal (v1 = lvx128 +0x4C0); side 2: -normal (vxor sign flip).
+    // A reject returns 0 but leaves every store above in place (preserved).
+    if (lInst1.mVolumeType == GPInstance::TRIANGLE &&
+        !GPTriangleAcceptContactNormal(&lInst1, lvNormal))   // bl sub_82BAA600
+    {
+        return 0;
+    }
+    if (lInst2.mVolumeType == GPInstance::TRIANGLE &&
+        !GPTriangleAcceptContactNormal(&lInst2, Negate(lvNormal)))
+    {
+        return 0;
+    }
+
+    return 1;                                           // li r3, 1
+}
+
 } // namespace collision
 } // namespace rw

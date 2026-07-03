@@ -13,7 +13,7 @@
 // (RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics); the render side
 // consumes it (RaceCarEntityModule::RenderRaceCar / SubmitCoronasForRaceCar).
 //
-// 12 of the 13 X360 functions are bodied here:
+// All 13 X360 functions are bodied here:
 //   GetWheelTransform                    @ 0x822A3220  ((luWheel+33)<<6)+this  -> &maWheelTransforms[luWheel]
 //   GetWheelScaleMatrix                  @ 0x822A31B8  ((luWheel+39)<<6)+this  -> &maWheelScaleMatrices[luWheel]
 //   SetWheelScale                        @ 0x822CD170  maWheelScaleMatrices[luWheel] = lrScale
@@ -26,9 +26,8 @@
 //   SetCrackedGlassScaleFactorsN         @ 0x822B83A0  store 2*n+1302 (two floats)
 //   RequestBluesAndTwosStateSwitch       @ 0x822A1C90  strobe-timer accumulate/wrap/toggle on +5132/+5136/+5140/+5141
 //   Reset                                @ 0x822E6818  init to just-spawned visual state
-//
-// DEFERRED (declared only, NOT bodied here):
-//   DEBUG_OverrideScratchAmount          @ 0x822A21B0  1280-line compiler-unrolled VMX broadcast.
+//   DEBUG_OverrideScratchAmount          @ 0x822A21B0  W-lane broadcast over the 128 scratch vectors
+//                                                      (compiler-unrolled VMX; re-rolled -- wave-2 pass)
 //
 // The X360-baked d:\p4 ...BrnActiveRaceCar.h file/line cites are discarded per project
 // policy; CGS_ASSERT carries the stringized condition + __FILE__/__LINE__. The console
@@ -47,6 +46,7 @@ namespace BrnWorld
 #define PIN_RP_OFFSETS()                                                                                      \
     do {                                                                                                      \
         static_assert(offsetof(RenderParams, mBodyTransform)                    == 0,    "mBodyTransform @0");            \
+        static_assert(offsetof(RenderParams, mav4ScratchVertices)               == 64,   "scratch vectors @64");          \
         static_assert(offsetof(RenderParams, maWheelTransforms)                 == 2112, "maWheelTransforms @2112");      \
         static_assert(offsetof(RenderParams, maWheelScaleMatrices)             == 2496, "maWheelScaleMatrices @2496");   \
         static_assert(offsetof(RenderParams, mv4Field2944)                      == 2944, "mv4Field2944 @2944");           \
@@ -261,6 +261,35 @@ void ActiveRaceCar::RenderParams::Reset()
     for (u32 luPane = 0; luPane < 8; ++luPane)
     {
         mafCrackedGlassFractureAmount[luPane] = 0.0f;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// DEBUG scratch-amount override
+// ----------------------------------------------------------------------------
+
+// X360 0x822A21B0 (wave-2 VMX pass): broadcast lfScratchAmount into the W lane of all
+// 128 scratch vectors at +0x40..+0x83F. The console body is a fully compiler-unrolled
+// 128-iteration loop (0x1000 bytes, straight-line, no branches, no CR use); each element
+// is the classic VectorIntrinsicUnion round-trip (cf. Vector4::SetComponent /
+// vector4_type_inline.h):
+//     addi    r11, r3, OFF          OFF = 0x40, 0x50, ..., 0x830
+//     lvx128  v0, r0, r11           load the whole member vector
+//     stvx128 v0, r0, r10           spill it to the 16-byte stack union (sp+0..15)
+//     stfs    f1, 0xC(r1)           overwrite byte 12 == big-endian float lane 3 == W
+//     lvx128  v0, r0, r10           reload the patched register
+//     stvx128 v0, r0, r11           store ALL 16 bytes back to the member
+// (The Hex-Rays pseudocode silently dropped every stfs, making the function look like a
+// no-op self-copy; the asm is authoritative.) r3 (this) is never modified and blr returns
+// it untouched -- no semantic return value. Faithfully re-rolled; iteration order
+// (ascending offsets) and the whole-vector store per element are preserved.
+void ActiveRaceCar::RenderParams::DEBUG_OverrideScratchAmount(f32 lfScratchAmount)
+{
+    for (u32 luVector = 0; luVector < 128; ++luVector)
+    {
+        Vector4 lv4Value = mav4ScratchVertices[luVector];    // lvx128: whole register
+        lv4Value.w = lfScratchAmount;                        // stfs f1 -> byte 12 (lane W)
+        mav4ScratchVertices[luVector] = lv4Value;            // stvx128: all 16 bytes back
     }
 }
 

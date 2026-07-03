@@ -7,10 +7,15 @@
 // rw::collision line-segment testers -- reconstructed from
 // BURNOUT_X360_ARTIST.XEX (dedicated VMX pass).
 //
-//   rw::collision::FatTriangleLineSegIntersect  @ 0x82BBAD98
-//   rw::collision::SolveQuarticRoots            @ 0x82BACA30
+//   rw::collision::FatTriangleLineSegIntersect   @ 0x82BBAD98
+//   rw::collision::SolveQuarticRoots             @ 0x82BACA30
+//   rw::collision::rwcSphereLineSegIntersect     @ 0x82BA81D8   (wave 2)
+//   rw::collision::rwcCylinderLineSegIntersect   @ 0x82BAF8A0   (wave 2)
+//   rw::collision::rwcTorusLineSegIntersect      @ 0x82BADAB0   (wave 2)
+//   rw::collision::ThinTriangleLineSegIntersect  @ 0x82BB9EB8   (wave 2)
+//   rw::collision::TriangleLineSegIntersect      @ 0x82BBB7B8   (wave 2)
 //
-// Both hand-vectorised bodies are lowered to portable scalar maths per the
+// Every hand-vectorised body is lowered to portable scalar maths per the
 // committed Feature / FeatureEdge / AALineClipper precedent; branch polarity,
 // early-outs, loop structure and every caller-visible store are preserved.
 // ===========================================================================
@@ -419,7 +424,7 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
             const f32 lfAxisLenSq = Dot3(lvAxis, lvAxis);      // vmsum3fp128 -> var_120
 
             liHitCode = rwcCylinderLineSegIntersect(&lDist, lfAxisLenSq, afFatness,
-                                                    0, 0,      // li r6/r7, 0
+                                                    0, 0,      // li r6/r7, 0: abInvert=0, abIgnoreInside=0
                                                     lvPoint, lvCurDelta, lvBase, lvAxis);
             if (liHitCode < 0)
             {
@@ -658,6 +663,516 @@ RwBool SolveQuarticRoots(f32 lafCoefficients[5], f32& arRoot)
         liConverged = 1;                            // li r11, 1
     }
     return liConverged;                             // mr r3, r11
+}
+
+// ===========================================================================
+// rw::collision::rwcSphereLineSegIntersect @ 0x82BA81D8
+//
+// X360 register map (__fastcall):
+//   r3 = lpDist   r4 = lpLineStart   r5 = lpLineDelta   r6 = lpCentre
+//   f1 = afRadius
+//
+// rodata: flt_82001CC0 = 0.0f    flt_82001C98 = 1.0f
+//
+// Deferred-division near-root sphere test. toCentre = centre - start; a
+// start strictly inside the sphere -> immediate hit t = 0/1. Otherwise
+// require the segment to approach (dot(toCentre, delta) > 0, else -1), form
+// the |delta|^2-scaled discriminant
+//     disc = |delta|^2 * radius^2 - |cross(toCentre, delta)|^2
+// (negative -> the infinite line misses), reject a near root past the
+// segment end (proj - |delta|^2 > 0 with its square beyond disc), and return
+// the near root as the Fraction (proj - sqrt(disc)) / |delta|^2.
+//
+// VMX lowering notes: vmsum3fp128 -> Dot3; the vpermwi128 0x63 / vmulfp128 /
+// vnmsubfp / vpermwi128 two-permute idiom @ 0x82BA8250..0x82BA8270 is exactly
+// Cross(toCentre, aLineDelta). fmsubs f11,f12,f0,f11 (scalar operand order
+// fD = fA*fC - fB, multiplier SECOND) = deltaLenSq*radiusSq - crossSq. Branch
+// polarity is preserved exactly, including the unordered (NaN) direction of
+// every fcmpu, via the !(...) forms below (the SolveQuarticRoots loop-back
+// precedent).
+// ===========================================================================
+s32 rwcSphereLineSegIntersect(Fraction* lpDist,           // r3
+                              const Vec4* lpLineStart,    // r4
+                              const Vec4* lpLineDelta,    // r5
+                              const Vec4* lpCentre,       // r6
+                              f32 afRadius)               // f1
+{
+    const f32 lfRadiusSq = afRadius * afRadius;           // fmuls f0, f1, f1
+
+    // toCentre = centre - start (lvx128 v0 / v13 ; vsubfp v13).
+    const Vec4 lvToCentre = Sub(*lpCentre, *lpLineStart);
+    // |toCentre|^2 (vmsum3fp128 v0, v13, v13 -> stack round-trip -> lfs f13).
+    const f32 lfDistSq = Dot3(lvToCentre, lvToCentre);
+
+    // fcmpu f13, f0 / bge loc_82BA821C: only a STRICTLY inside start takes
+    // the immediate-hit path (unordered goes to the main path with the asm).
+    if (lfDistSq < lfRadiusSq)
+    {
+        // Start inside the sphere: hit at once, t = 0/1.
+        lpDist->den = 1.0f;   // flt_82001C98 (stfs f13, 4(r11))
+        lpDist->num = 0.0f;   // flt_82001CC0 (the shared tail store @ 0x82BA82B8)
+        return 1;             // li r3, 1
+    }
+
+    // proj = dot3(toCentre, delta) (vmsum3fp128 v12, v13, v0).
+    const f32 lfProj = Dot3(lvToCentre, *lpLineDelta);
+    if (!(lfProj > 0.0f))     // fcmpu f10, f13(0.0) / bgt skips -> li r3, -1
+    {
+        return -1;            // segment points away from (or grazes) the sphere
+    }
+
+    const f32 lfDeltaLenSq = Dot3(*lpLineDelta, *lpLineDelta);   // vmsum3fp128 v11
+    // |cross(toCentre, delta)|^2 -- the two-permute cross idiom + vmsum3fp128.
+    const Vec4 lvCross   = Cross(lvToCentre, *lpLineDelta);
+    const f32  lfCrossSq = Dot3(lvCross, lvCross);
+
+    // disc = |delta|^2 * r^2 - crossSq (fmsubs f11, f12, f0, f11).
+    const f32 lfDisc = lfDeltaLenSq * lfRadiusSq - lfCrossSq;
+    if (!(lfDisc >= 0.0f))    // fcmpu f11, f13(0.0) / bge skips -> li r3, 0
+    {
+        return 0;             // the infinite line misses the sphere
+    }
+
+    // Segment-end rejection (fsubs f0, f10, f12): the near root lies past
+    // t = 1 iff proj - |delta|^2 > 0 and its square exceeds the discriminant.
+    const f32 lfPastEnd = lfProj - lfDeltaLenSq;
+    if (lfPastEnd > 0.0f                              // fcmpu / ble skips the square test
+        && lfPastEnd * lfPastEnd > lfDisc)            // fmuls / fcmpu / bgt -> li r3, 0
+    {
+        return 0;
+    }
+
+    // Near root as a deferred fraction: t = (proj - sqrt(disc)) / |delta|^2.
+    lpDist->den = lfDeltaLenSq;                       // stfs f12, 4(r11)
+    lpDist->num = lfProj - std::sqrt(lfDisc);         // fsqrts / fsubs / stfs 0(r11)
+    return 1;                                         // li r3, 1
+}
+
+// ===========================================================================
+// rw::collision::rwcCylinderLineSegIntersect @ 0x82BAF8A0
+//
+// X360 register map (__fastcall; the vector InParams ride in VMX v1..v4, the
+// two scalar floats in f1/f2 shadowing the r4/r5 GPR slots, so the RwBools
+// land in r6/r7 -- exactly the two integers the asm tests):
+//   r3 = lpDist         f1 = afAxisLengthSq   f2 = afRadius
+//   r6 = abInvert       r7 = abIgnoreInside
+//   v1 = aLineStart(orig)  v2 = aLineDelta(seg)  v3 = aBase(center)  v4 = aAxis
+//
+// rodata: flt_82001CC0 = 0.0f  flt_82001C98 = 1.0f  flt_820037C8 = -1.0f
+//
+// INFINITE cylinder of radius `radius` around (base, axis), everything
+// |axis|^2-scaled so no normalisation is needed. With toBase = base - start:
+//   radialSq(t) = |cross(toBase - t*delta, axis)|^2
+//               = crossBaseSq - 2t*proj + t^2*crossDeltaSq,
+//   proj         = dot3(cross(toBase, axis), cross(delta, axis)),
+//   hit when radialSq(t) = |axis|^2 * r^2, i.e.
+//   t = (proj -/+ sqrt(disc)) / crossDeltaSq,
+//   disc = crossDeltaSq*|axis|^2*r^2 + proj^2 - crossDeltaSq*crossBaseSq.
+// abIgnoreInside suppresses the radially-inside immediate accept (t = 0/1);
+// abInvert selects the FAR root (exit surface, sign -1, only when the exit
+// lies strictly inside the segment) and drops the receding-line -1 abort.
+//
+// VMX lowering notes: both crosses are the two-permute idiom -> Cross;
+// vmsum3fp128 -> Dot3. Scalar tail: fmuls f13,f10,f13 / fmsubs f13,f11,f11,
+// f13 / fmadds f13,f10,f0,f13 build the discriminant in exactly the order
+// below; fnmsubs f0,f13,f0,f11 (fD = -(fA*fC - fB)) = proj - sign*sqrt(disc).
+// Branch polarity (incl. the unordered direction of every fcmpu) is
+// preserved via the !(...) forms.
+// ===========================================================================
+s32 rwcCylinderLineSegIntersect(Fraction* lpDist,        // r3
+                                f32 afAxisLengthSq,      // f1
+                                f32 afRadius,            // f2
+                                s32 abInvert,            // r6 (canonical `invert`)
+                                s32 abIgnoreInside,      // r7 (canonical `ignoreInside`)
+                                Vec4 aLineStart,         // v1 (canonical `orig`)
+                                Vec4 aLineDelta,         // v2 (canonical `seg`)
+                                Vec4 aBase,              // v3 (canonical `center`)
+                                Vec4 aAxis)              // v4
+{
+    // |axis|^2 * r^2 -- the scaled squared-radius limit (fmuls f0,f1,f2 ;
+    // fmuls f0,f0,f2).
+    const f32 lfRadialLimit = (afAxisLengthSq * afRadius) * afRadius;
+
+    // toBase = base - start (vsubfp v0, v3, v1) and its axis cross
+    // (two-permute idiom @ 0x82BAF8A4..0x82BAF8C4).
+    const Vec4 lvToBase      = Sub(aBase, aLineStart);
+    const Vec4 lvCrossBase   = Cross(lvToBase, aAxis);
+    const f32  lfCrossBaseSq = Dot3(lvCrossBase, lvCrossBase);   // vmsum3fp128 v12
+
+    // fcmpu f13, f0 / bge loc_82BAF8FC ; cmplwi r7 / bne loc_82BAF8FC: only a
+    // STRICTLY radially-inside start with abIgnoreInside == 0 early-accepts
+    // (unordered takes the main path with the asm).
+    if (lfCrossBaseSq < lfRadialLimit && abIgnoreInside == 0)
+    {
+        lpDist->den = 1.0f;   // flt_82001C98 (stfs f13, 4(r10))
+        lpDist->num = 0.0f;   // flt_82001CC0 (the shared tail store @ loc_82BAF99C)
+        return 1;             // li r3, 1
+    }
+
+    // cross(delta, axis) (two-permute idiom @ 0x82BAF8FC..0x82BAF910) and the
+    // projected approach term proj = dot3(crossBase, crossDelta)
+    // (vmsum3fp128 v0, v0, v13).
+    const Vec4 lvCrossDelta = Cross(aLineDelta, aAxis);
+    const f32  lfProj       = Dot3(lvCrossBase, lvCrossDelta);
+
+    // cmplwi r6 / bne skips ; fcmpu f11, f12(0.0) / bgt skips -> li r3, -1.
+    if (abInvert == 0 && !(lfProj > 0.0f))
+    {
+        return -1;            // segment points away from the surface
+    }
+
+    const f32 lfCrossDeltaSq = Dot3(lvCrossDelta, lvCrossDelta);   // vmsum3fp128 v0
+
+    // Discriminant, in asm order (fmuls f13, f10, f13 ; fmsubs f13, f11, f11,
+    // f13 ; fmadds f13, f10, f0, f13):
+    //   disc = crossDeltaSq*|axis|^2*r^2 + (proj^2 - crossDeltaSq*crossBaseSq)
+    f32 lfDisc = lfCrossDeltaSq * lfCrossBaseSq;
+    lfDisc = lfProj * lfProj - lfDisc;
+    lfDisc = lfCrossDeltaSq * lfRadialLimit + lfDisc;
+    if (!(lfDisc >= 0.0f))    // fcmpu f13, f12(0.0) / bge skips -> li r3, 0
+    {
+        return 0;             // the infinite line misses the cylinder
+    }
+
+    // pastEnd = proj - crossDeltaSq (fsubs f0, f11, f10): the near root sits
+    // past t = 1 exactly when pastEnd >= 0 and pastEnd^2 >= disc.
+    const f32 lfPastEnd = lfProj - lfCrossDeltaSq;
+    f32 lfSign;               // the fsel-free +/-1 root selector (f0)
+    if (abInvert == 0)
+    {
+        // fcmpu f0, f12 / blt loc_82BAF988 skips the square test.
+        if (!(lfPastEnd < 0.0f))
+        {
+            // fmuls f0, f0, f0 ; fcmpu f0, f13 / bge loc_82BAF960 -> miss.
+            if (!(lfPastEnd * lfPastEnd < lfDisc))
+            {
+                return 0;     // near root beyond the segment end
+            }
+        }
+        lfSign = 1.0f;        // flt_82001C98 (loc_82BAF988): near root
+    }
+    else
+    {
+        // loc_82BAF9A8 -- exit-surface (far root) selection: require the far
+        // root strictly inside the segment (crossDeltaSq - proj > sqrt(disc)).
+        if (!(lfPastEnd < 0.0f))                      // fcmpu / bge -> miss
+        {
+            return 0;
+        }
+        if (!(lfPastEnd * lfPastEnd > lfDisc))        // fmuls ; fcmpu / ble -> miss
+        {
+            return 0;
+        }
+        lfSign = -1.0f;       // flt_820037C8: far root
+    }
+
+    // t = (proj - sign*sqrt(disc)) / crossDeltaSq as a deferred fraction
+    // (fsqrts f13 ; stfs f10, 4(r10) ; fnmsubs f0, f13, f0, f11 ; stfs 0(r10)).
+    lpDist->den = lfCrossDeltaSq;
+    lpDist->num = -(std::sqrt(lfDisc) * lfSign - lfProj);
+    return 1;                 // li r3, 1
+}
+
+// ===========================================================================
+// rw::collision::rwcTorusLineSegIntersect @ 0x82BADAB0
+// Sole caller of SolveQuarticRoots (above).
+//
+// X360 register map (__fastcall):
+//   r3 = &arDist   v1 = aLineStart(orig)   v2 = aLineDir(dir)
+//   f1 = afMajorRadius   f2 = afMinorRadius
+//
+// rodata (all valued): flt_82001CC0 = 0.0f, flt_82004EF4 = 4.0f,
+//   flt_82001D9C = 2.0f, flt_82004C88 = 8.0f.
+//
+// Torus centred at the local origin with its axis along local z (the vspltw
+// v1/v2 lane-2 broadcasts), major radius R = f1, minor radius r = f2. For
+// q(t) = orig + t*dir the implicit surface
+//   (|q|^2 - (R^2 + r^2))^2 - 4R^2(r^2 - qz^2) = 0
+// expands to the quartic sum(c[k] t^k) with (od = orig.dir, dd = dir.dir,
+// oo = orig.orig, C0 = oo - (R^2 + r^2), G0 = r^2 - origZ^2):
+//   c4 = dd^2
+//   c3 = 4*od*dd
+//   c2 = 4*od^2 + 2*C0*dd + 4R^2*dirZ^2
+//   c1 = 4*C0*od + 8R^2*origZ*dirZ          <- the KF_EIGHT confirmation
+//   c0 = C0^2 - 4R^2*G0
+// The coefficients feed the damped-Newton SolveQuarticRoots with &arDist as
+// the root slot (mr r4, r3); the return is the solver's converged flag
+// normalised to 0/1 (cntlzw/extrwi/xori == `!= 0`).
+//
+// VMX lowering notes: the body is pure coefficient assembly -- vmsum3fp128
+// dot folds (-> Dot3) plus splat/stack round-trips that carry SCALARS through
+// vector registers; all are lowered to scalars. Every fmuls/fadds/fsubs/
+// fmadds/fmsubs association below transcribes the asm order exactly. The only
+// caller-visible stores are *r3 (the up-front 0.0f seed and SolveQuarticRoots'
+// unconditional root write) -- both preserved.
+// ===========================================================================
+
+namespace
+{
+    // flt_82004C88 -- the 8R^2 factor of the quartic's linear term (label
+    // valued twice in the committed tree: BrnBehaviourGameplayExternal.cpp
+    // "flt_82004C88 = 8.0f" and SDKs/EATech/eajobs/detail.cpp
+    // "flt_82004C88 == 8.0"; independently forced by the torus expansion).
+    const f32 KF_EIGHT = 8.0f;
+}
+
+s32 rwcTorusLineSegIntersect(f32& arDist,          // r3
+                             Vec4 aLineStart,      // v1 (canonical `orig`)
+                             Vec4 aLineDir,        // v2 (canonical `dir`)
+                             f32 afMajorRadius,    // f1
+                             f32 afMinorRadius)    // f2
+{
+    // stfs f11(flt_82001CC0), 0(r4): the root slot is seeded 0.0f up front
+    // (caller-visible; SolveQuarticRoots overwrites it unconditionally).
+    arDist = 0.0f;
+
+    const f32 lfMajorSq = afMajorRadius * afMajorRadius;   // fmuls f13, f1, f1
+    const f32 lfMinorSq = afMinorRadius * afMinorRadius;   // fmuls f12, f2, f2
+
+    const f32 lfOD = Dot3(aLineStart, aLineDir);    // vmsum3fp128 v11 -> var_50
+    const f32 lfDD = Dot3(aLineDir, aLineDir);      // vmsum3fp128 v10 -> var_20
+    const f32 lfOO = Dot3(aLineStart, aLineStart);  // vmsum3fp128 v12
+
+    const f32 lfOrigZ = aLineStart.z;               // vspltw v0, v1, 2
+    const f32 lfDirZ  = aLineDir.z;                 // vspltw v13, v2, 2
+
+    // C0 = oo - (r^2 + R^2)  (fadds f10, f12, f13 -> var_80 splat ; vsubfp v12).
+    const f32 lfC0 = lfOO - (lfMinorSq + lfMajorSq);
+    // G0 = r^2 - origZ^2  (vmulfp128 v10, v0, v0 -> var_80 ; fsubs f13, f12, f13).
+    const f32 lfG0 = lfMinorSq - lfOrigZ * lfOrigZ;
+
+    const f32 lfFourMajorSq  = lfMajorSq * KF_FOUR;    // fmuls f11, f13, f0  (4R^2)
+    const f32 lfEightMajorSq = lfMajorSq * KF_EIGHT;   // fmuls f13, f13, f10 (8R^2)
+
+    // Quartic coefficients c[k] of t^k, ordered exactly as SolveQuarticRoots'
+    // lafCoefficients[5] expects (asm store order: [0] var_40, [4] var_30,
+    // [3] var_34, [1] var_3C, [2] var_38).
+    f32 lafCoefficients[5];
+
+    // c0 = C0*C0 - G0*4R^2
+    // (vmulfp128 v0, v12, v0 -> var_50 ; fmsubs f10, f13, f13, f10).
+    lafCoefficients[0] = lfC0 * lfC0 - lfG0 * lfFourMajorSq;
+
+    // c1 = (C0*od)*4 + (dirZ*8R^2)*origZ
+    // (vmulfp128 v11, v13, v11 ; vmulfp128 v0, v11, v0 -> var_40 = f9 ;
+    //  fmuls f10, f13, f12 ; fmadds f10, f10, f0, f9 -> var_8C).
+    lafCoefficients[1] = (lfC0 * lfOD) * KF_FOUR
+                       + (lfDirZ * lfEightMajorSq) * lfOrigZ;
+
+    // c2 = (od*od)*4 + (C0*dd)*2 + (dirZ*4R^2)*dirZ
+    // (fmuls f9, f12, f12 ; fmuls f10, f13, f11 ; fmuls f13, f10, f13(2.0) ;
+    //  fmadds f0, f9, f0(4.0), f13 ; vmulfp128 v0, v13, v0 ;
+    //  vmulfp128 v0, v0, v13 ; fadds f0, f0, f13).
+    lafCoefficients[2] = ((lfOD * lfOD) * KF_FOUR + (lfC0 * lfDD) * KF_TWO)
+                       + (lfDirZ * lfFourMajorSq) * lfDirZ;
+
+    // c3 = (od*dd)*4  (fmuls f12, f12, f11 ; fmuls f12, f12, f0 -> var_34).
+    lafCoefficients[3] = (lfOD * lfDD) * KF_FOUR;
+
+    // c4 = dd*dd  (fmuls f13, f11, f11 -> var_30).
+    lafCoefficients[4] = lfDD * lfDD;
+
+    // bl SolveQuarticRoots (r3 = &coefficients, r4 = the original r3 = &dist);
+    // cntlzw/extrwi/xori normalise the converged flag to exactly 0/1.
+    return SolveQuarticRoots(lafCoefficients, arDist) != 0;
+}
+
+// ===========================================================================
+// rw::collision::ThinTriangleLineSegIntersect @ 0x82BB9EB8
+//
+// rodata (all values attested by the extract's literals):
+//   flt_8200D5F0 = 0.0000000099999999  == 1.0e-8f   (backface/degeneracy gate)
+//   flt_82180AA4 = -0.0000099999997    == -1.0e-5f  (relative tolerance factor)
+//   flt_82001CC0 = 0.0f                             (volParam z lane)
+//
+// VMX lowering notes: both cross products are the committed two-permute
+// idiom; vmsum3fp128 == Dot3; 1/det is vrefp + TWO vnmsubfp/vmaddfp Newton-
+// Raphson steps (@ 0x82BB9FCC..0x82BB9FE8), rendered exact per the wave-1
+// precedent. The final position is vmaddfp v0, v2, v1, v0 == delta * splat(t)
+// + start, where the t splat is lvlx'd back from the just-stored lineParam
+// field (identical value).
+//
+// Caller-visible store contract (preserved exactly): lineParam (+0x40)
+// receives the RAW t*det dot BEFORE the t interval test -- a miss on that
+// final test still leaves t*det in the caller's lineParam field. On a hit it
+// is overwritten with t, then volParam (+0x30) = (u, v, 0, 0) and position
+// (+0x10) are stored. normal (+0x20) is never touched here.
+// ===========================================================================
+
+// flt_8200D5F0: the one-sided determinant gate. det <= 1e-8 rejects backfacing
+// AND near-parallel segments in one compare (no fabs -- the test is one-sided).
+static const f32 KF_THIN_DET_EPSILON = 1.0e-8f;
+
+// flt_82180AA4: the relative interval tolerance factor. Multiplied by the
+// (positive) determinant it widens every barycentric interval test by
+// det*1e-5 on both sides: low bound = det * -1e-5, high bound = det - low.
+static const f32 KF_THIN_TOLERANCE = -1.0e-5f;
+
+s32 ThinTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,   // r3
+                                 Vec4 aLineStart,                          // v1
+                                 Vec4 aLineDelta,                          // v2
+                                 Vec4 aV0,                                 // v3
+                                 Vec4 aV1,                                 // v4
+                                 Vec4 aV2)                                 // v5
+{
+    // ---- determinant (one-sided Moller-Trumbore) ---------------------------
+    const Vec4 lvEdge2 = Sub(aV2, aV0);                 // vsubfp v12, v5, v3
+    const Vec4 lvEdge1 = Sub(aV1, aV0);                 // vsubfp v0, v4, v3
+
+    // pvec = delta x edge2 (vpermwi128 0x63 / vmulfp128 / vnmsubfp / vpermwi128).
+    const Vec4 lvPVec = Cross(aLineDelta, lvEdge2);     // v13
+    // det = dot3(edge1, pvec) (vmsum3fp128 v11, v0, v13; lane 0 via the stack).
+    const f32 lfDet = Dot3(lvEdge1, lvPVec);
+
+    // fcmpu cr6 / ble: backfacing or (near-)parallel -> miss. ONE-SIDED: a
+    // negative determinant is rejected outright, there is no sign fold here
+    // (unlike the fat tester).
+    if (lfDet <= KF_THIN_DET_EPSILON)                   // flt_8200D5F0
+    {
+        return 0;
+    }
+
+    // Relative tolerance band for every interval test below (fmuls / fsubs):
+    //   low  = det * -1e-5      (a small NEGATIVE margin)
+    //   high = det - low        (det * (1 + 1e-5))
+    const f32 lfLowBound  = lfDet * KF_THIN_TOLERANCE;  // f0  (flt_82180AA4)
+    const f32 lfHighBound = lfDet - lfLowBound;         // f11
+
+    // ---- u interval ---------------------------------------------------------
+    const Vec4 lvTVec = Sub(aLineStart, aV0);           // vsubfp v11, v1, v3
+    const f32  lfUDet = Dot3(lvTVec, lvPVec);           // vmsum3fp128 v13, v11, v13
+    if (lfUDet < lfLowBound)                            // fcmpu / blt
+    {
+        return 0;
+    }
+    if (lfUDet > lfHighBound)                           // fcmpu / bgt
+    {
+        return 0;
+    }
+
+    // ---- v interval ---------------------------------------------------------
+    // qvec = tvec x edge1 (vmr/vpermwi128/vmulfp128/vnmsubfp/vpermwi128 block;
+    // vnmsubfp v0, v10, v0, v13 decodes as v0 = v0 - perm(tvec)*edge1).
+    const Vec4 lvQVec = Cross(lvTVec, lvEdge1);         // v0
+    const f32  lfVDet = Dot3(aLineDelta, lvQVec);       // vmsum3fp128 v13, v2, v0
+    if (lfVDet < lfLowBound)                            // fcmpu / blt
+    {
+        return 0;
+    }
+    // fadds f13, f10, f12: the u+v fold compares v + u against the high bound.
+    if (lfVDet + lfUDet > lfHighBound)                  // fcmpu / bgt
+    {
+        return 0;
+    }
+
+    // ---- t interval ---------------------------------------------------------
+    const f32 lfTDet = Dot3(lvEdge2, lvQVec);           // vmsum3fp128 v0, v12, v0
+
+    // stfs f13, 0x40(r11): the RAW t*det is stored to the caller's lineParam
+    // slot BEFORE the interval test -- a reject below leaves it there.
+    lpResult->lineParam = lfTDet;
+
+    if (lfTDet < lfLowBound || lfTDet > lfHighBound)    // fcmpu blt / bgt
+    {
+        return 0;
+    }
+
+    // ---- hit: divide through by the determinant and fill the result --------
+    // vrefp + two Newton-Raphson refine steps on the splatted determinant
+    // (@ 0x82BB9FCC..0x82BB9FE8), rendered exact.
+    const f32 lfRecipDet = 1.0f / lfDet;                // v22 lane 0
+
+    // fmuls f13, f0, f13 / stfs f13, 0(r10): overwrite the raw store with t.
+    const f32 lfT = lfRecipDet * lfTDet;
+    lpResult->lineParam = lfT;                          // +0x40
+
+    // volParam row assembled on the stack in lane order (u, v, 0.0f, 0).
+    lpResult->volParam = MakeVec4(lfRecipDet * lfUDet,
+                                  lfRecipDet * lfVDet,
+                                  0.0f, 0.0f);          // r11+0x30
+
+    // vmaddfp v0, v2, v1, v0 (== delta * splat(t) + start; the splat is the
+    // lvlx/vspltw reload of the lineParam field just stored) -> +0x10.
+    lpResult->position = MaddScalar(aLineDelta, lfT, aLineStart);   // r11+0x10
+
+    return 1;                                           // li r3, 1
+}
+
+// ===========================================================================
+// rw::collision::TriangleLineSegIntersect @ 0x82BBB7B8
+// Called by: rw::collision::TriangleKDTreeProcedural::LineIntersectionQueryThis,
+//            rw::collision::TriangleVolume::LineSegIntersect (both pending).
+//
+// rodata: flt_82001CC0 = 0.0f (the fatness == 0 dispatch compare).
+//
+// VMX lowering notes: the prologue's v125/v126/v127 saves are the callee-
+// saved VMX128 bank spill (keeping V0/V1/V2 across the calls); they lower to
+// ordinary by-value parameters. The unit-normal block is emitted TWICE by the
+// compiler (thin-hit path @ 0x82BBB818, fat prologue @ 0x82BBB884) with
+// identical instructions; it is factored into the TU-local helper below. Its
+// vrsqrtefp + TWO Newton-Raphson steps are rendered exact; no zero guard is
+// emitted (degenerate triangles propagate INF exactly as the console does in
+// this scalar form). The fat-hit position pull-back is a splat(fatness)
+// vmulfp128 + vsubfp over all four lanes.
+// ===========================================================================
+
+namespace
+{
+    // The unit geometric normal of (V0, V1, V2): normalize(Cross(V0-V1, V0-V2)).
+    // Emitted twice inline on the X360 (see the lowering notes above); the
+    // subtraction ORDER (V0 - V1, V0 - V2) is the asm's.
+    inline Vec4 TriangleUnitNormal(const Vec4& arV0, const Vec4& arV1, const Vec4& arV2)
+    {
+        const Vec4 lvCross = Cross(Sub(arV0, arV1), Sub(arV0, arV2));
+        const f32  lfLenSq = Dot3(lvCross, lvCross);    // vmsum3fp128 v0, v13, v13
+        // vrsqrtefp + two Newton-Raphson steps, rendered exact.
+        return Scale(lvCross, 1.0f / std::sqrt(lfLenSq));
+    }
+}
+
+s32 TriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,   // r3 (r31)
+                             Vec4 aLineStart,                          // v1
+                             Vec4 aLineDelta,                          // v2
+                             Vec4 aV0,                                 // v3 -> v127
+                             Vec4 aV1,                                 // v4 -> v126
+                             Vec4 aV2,                                 // v5 -> v125
+                             f32  afFatness)                           // f1 -> f31
+{
+    s32 liHit;                                                         // r3
+
+    if (afFatness == 0.0f)                              // fcmpu vs flt_82001CC0 / bne
+    {
+        // ---- thin path: test first, derive the normal only on a hit --------
+        liHit = ThinTriangleLineSegIntersect(lpResult, aLineStart, aLineDelta,
+                                             aV0, aV1, aV2);   // bl 0x82BB9EB8
+        if (liHit)                                      // cmplwi / beq
+        {
+            // stvx128 v0, r31, 0x20: the unit face normal.
+            lpResult->normal = TriangleUnitNormal(aV0, aV1, aV2);
+        }
+    }
+    else
+    {
+        // ---- fat path: the normal is an INPUT to the fat tester ------------
+        // stvx128 v0, r0, r30 (r30 = result + 0x20) BEFORE the call: the
+        // FatTriangleLineSegIntersect above reads +0x20 as the caller-seeded
+        // unit plane normal (its documented input contract).
+        lpResult->normal = TriangleUnitNormal(aV0, aV1, aV2);
+
+        liHit = FatTriangleLineSegIntersect(lpResult, aLineStart, aLineDelta,
+                                            aV0, aV1, aV2, afFatness);   // bl 0x82BBAD98
+        if (liHit)                                      // cmplwi / beq
+        {
+            // Pull the fat-surface hit back onto the core triangle:
+            //   position -= normal * fatness
+            // (the normal is reloaded from the result block, i.e. the fat
+            // tester's OUTPUT normal; all four lanes.)
+            lpResult->position =
+                Sub(lpResult->position, Scale(lpResult->normal, afFatness));
+        }
+    }
+
+    return liHit;                                       // r3 pass-through
 }
 
 } // namespace collision
