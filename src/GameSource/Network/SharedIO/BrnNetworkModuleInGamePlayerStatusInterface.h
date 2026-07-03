@@ -41,7 +41,8 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"          // BrnNetwork::PlayerName(16B), NetworkPlayerID, EActiveRaceCarIndex
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"          // BrnNetwork::PlayerName(16B), NetworkPlayerID, EActiveRaceCarIndex(NONE=-1)
+#include "GameSource/BurnoutConstants.h"                             // ::EActiveRaceCarIndex (0..8 : INVALID/_0../_COUNT) for MarkedManInterface
 #include "GameSource/Network/Managers/BrnNetworkPlayerStats.h"       // BrnNetwork::NetworkPlayerStats (136B, committed; operator= @0x82355C50)
 #include "GameSource/Network/Managers/BrnNetworkLiveRevengeRelationship.h" // BrnNetwork::LiveRevengeRelationship (120B, committed)
 
@@ -133,5 +134,45 @@ namespace BrnNetwork
             bool                   mbLocalPlayerIsHost;    // +2536
             // +2540 trailing pad word follows mbLocalPlayerIsHost.
         };
+
+        // ===================================================================
+        // MarkedManInterface  (no DWARF; shape wholly from the X360 asm of its two members)
+        //   CheckForMarkedManTakedown    @ 0x82355758  (this[aggressorSlot] == victimSlot)
+        //   SetFromPlayerStatusInterface @ 0x82355670  (this[player.meActiveRaceCarIndex] =
+        //                                                player.meMarkedManActiveRaceCarIndex)
+        //
+        // This SharedIO header is the correct home: the X360 assert rodata for BOTH members carries
+        // the path GameSource\Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h. Both
+        // members index the table by an active-race-car slot with a 4-byte stride (slwi ...,2), so the
+        // table is an 8-entry array of s32 race-car slots -- one marked-man victim slot per aggressor
+        // slot. Consumers reached from BrnGameState::TakedownManager::ProcessTakedownEvent.
+        //
+        // ENUM NOTE: the TABLE element and the method PARAMETERS use the GLOBAL ::EActiveRaceCarIndex
+        // (full 0..8; from BurnoutConstants.h), whose enumerators the range-assert strings name. The
+        // InGamePlayerStatusData meActiveRaceCarIndex/meMarkedManActiveRaceCarIndex fields resolve to
+        // the DIFFERENT BrnNetwork::EActiveRaceCarIndex {NONE=-1}; SetFromPlayerStatusInterface's store
+        // therefore static_casts the field into the global element type. Comparing the two distinct
+        // scoped enums directly would be ill-formed, so both params/element are the global enum.
+        // ===================================================================
+        struct MarkedManInterface
+        {
+            // X360 0x82355758: does maMarkedManActiveRaceCarIndex[leAggressor] == leVictim?
+            // (both slots range-asserted (> INVALID && < COUNT)). Body in this TU's .cpp.
+            bool CheckForMarkedManTakedown(::EActiveRaceCarIndex leAggressorActiveRaceCarIndex,
+                                           ::EActiveRaceCarIndex leVictimActiveRaceCarIndex) const;
+
+            // X360 0x82355670: rebuild this table from every in-game player's status record
+            // (this[player.meActiveRaceCarIndex] = player.meMarkedManActiveRaceCarIndex). Returns *this.
+            // Body in this TU's .cpp.
+            MarkedManInterface& SetFromPlayerStatusInterface(
+                    const InGamePlayerStatusInterface& lPlayerStatusInterface);
+
+        private:
+            // Indexed by an aggressor's active-race-car slot (0..7); value is that aggressor's currently
+            // marked victim slot. X360 stride is 4 bytes (slwi idx,2); 8 entries.
+            ::EActiveRaceCarIndex maMarkedManActiveRaceCarIndex[::E_ACTIVE_RACE_CAR_INDEX_COUNT]; // +0 (8 * 4 == 32)
+        };
+        static_assert(sizeof(MarkedManInterface) == ::E_ACTIVE_RACE_CAR_INDEX_COUNT * 4,
+                      "MarkedManInterface = 8 x s32 race-car slots (0x20)");
     } // namespace BrnNetworkModuleIO
 } // namespace BrnNetwork

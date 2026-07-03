@@ -61,6 +61,7 @@
 
 #pragma once
 
+#include <cstddef>                                                              // offsetof (PreSimulationInputBuffer::_AssertLayout guards)
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                          // CgsModule::IOBuffer (base; 1B status FlagSet8 @ +0)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                        // CgsSystem::Time (PlayerResultsData::mFinishTime)
@@ -68,8 +69,12 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                     // PlayerName(16B), NetworkPlayerID, EActiveRaceCarIndex, DirtyTrickEvent
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // FULL InGamePlayerStatusData / InGamePlayerStatusInterface
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                     // CgsModule::BaseEventQueue<T> (typed impact/takedown queue accessors)
-#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"        // BrnPhysics::Vehicle::ImpactEvent
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                 // CgsModule::VariableEventQueue<1536,16> (PostSim AppendVehicleOutputInterface body)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"        // BrnPhysics::Vehicle::ImpactEvent / PhysicalTrafficState
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"       // BrnGameState::TakedownEvent
+#include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"  // GameStateToNetworkInterface (PostSim AppendGameStateToNetworkInterface)
+#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h" // EventQueue<CrashingTrafficUpdateEvent,24> (PostSim SetCrashOutputInterface)
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h" // TrafficNetworkInputInterface (PostSim SetTrafficOutputInterface)
 
 namespace BrnNetwork
 {
@@ -99,6 +104,9 @@ namespace BrnNetworkModuleIO
     class NetworkToGuiInterface;         // OutputBuffer @ +180588
     class NetworkToGameStateInterface;   // OutputBuffer @ +172376
     class NetworkEventQueue;             // OutputBuffer @ +184080 ; PostSim @ +72952..+73284
+    class VehicleDriverInputInterface;   // OutputBuffer @ +5312   (DWARF mVehicleDriverInputInterface, h:440)
+    class NetworkInputInterface;         // OutputBuffer @ +147488 (DWARF mCrashNetworkInputInterface, h:442)
+    class GameEventQueue;                // OutputBuffer @ +174576 (DWARF mGameEventQueue, h:451)
     struct PostSimulationInputBuffer;    // defined below; PostSim() takes a pointer to it
 
     // ---- ADDITIVE GROW (BrnNetworkEventScoresManager TU) -------------------------------------
@@ -112,19 +120,55 @@ namespace BrnNetworkModuleIO
 
     // ========================================================================
     // PreSimulationInputBuffer  (DWARF BrnNetworkModuleIO.h:102 : IOBuffer)
-    //   members: mbSysMenuOnScreen, mbPadIdle, miControllerPort, mTimerInterface
+    //   members (DWARF order): mbSysMenuOnScreen(+1), mbPadIdle(+2), miControllerPort(+4),
+    //   mTimerInterface(+8). All names/offsets/decl-order DWARF-authoritative
+    //   (references/DecFIGS/dwarfdump/GameSource/Network/BrnNetworkModuleIO.h:143-148).
+    //   Base IOBuffer = 1B status FlagSet8 @ +0. sizeof(CgsModule::IOBuffer)==1.
+    //   mTimerInterface is CgsSystem::TimerStatusInterface = 48 bytes (2x 24-byte TimerStatus;
+    //   proven by SetTimerStatusInterface's 48-byte store-for-store copy @ 0x823BB670 AND by the
+    //   CgsTimerStatusInterface.h DWARF; matches the committed Director sibling mTimerInterface[0x30]).
+    //   Modelled as raw offset-pinned storage (forward-declared interface design of this file);
+    //   widen to the real typed member on TimerStatusInterface homing (offset +8 must not move).
     // ========================================================================
     struct PreSimulationInputBuffer : public CgsModule::IOBuffer
     {
         // X360 0x82587AA8 (read-lock; "Not locked for reading", h:507) -> &mTimerInterface @ +8
         const TimerStatusInterface* GetTimerStatusInterface() const;
+        // X360 0x823BB670 (write-lock; h:515) -> memberwise 48-byte copy into mTimerInterface @ +8
+        void SetTimerStatusInterface(const TimerStatusInterface* lpTimerStatusInterface);
+        // X360 0x823BB520 (write-lock; h:478) -> mbPadIdle @ +2
+        void SetPadIdle(bool lbPadIdle);
+        // X360 0x82587958 (read-lock;  h:485) -> mbPadIdle @ +2
+        bool IsPadIdle() const;
+        // X360 0x82587A00 (read-lock;  h:500) -> miControllerPort @ +4
+        s32  GetControllerPort() const;
+        // X360 0x823BB5C8 (write-lock; h:493) -> miControllerPort @ +4
+        void SetControllerPort(s32 liControllerPort);
+        // X360 0x823BB780 (write-lock; h:523) -> mbSysMenuOnScreen @ +1
+        void SetSysMenuOnScreen(bool lbSysMenuOnScreen);
+        // X360 0x82587B50 (read-lock;  h:530) -> mbSysMenuOnScreen @ +1
+        bool IsSysMenuOnScreen() const;
 
-        // declared-only API (other TUs): Construct/Destruct/SetTimerStatusInterface/SetPadIdle/
-        // IsPadIdle/GetControllerPort/SetControllerPort/SetSysMenuOnScreen/IsSysMenuOnScreen.
+        // declared-only API (other TUs): Construct (h:107) / Destruct (h:111).
     private:
-        // base end (1B) -> +8 : mbSysMenuOnScreen/mbPadIdle/miControllerPort packed in the gap.
-        u8 maPadToTimerInterface[8 - sizeof(CgsModule::IOBuffer)];   // -> +8
-        u8 mTimerInterfaceStorage[8];                                // TimerStatusInterface @ +8 (widen on its TU)
+        bool mbSysMenuOnScreen;              // +1  (DWARF BrnNetworkModuleIO.h:143)
+        bool mbPadIdle;                      // +2  (DWARF BrnNetworkModuleIO.h:144)
+        // +3 : implicit alignment pad before the s32 below
+        s32  miControllerPort;               // +4  (DWARF BrnNetworkModuleIO.h:145)
+        // CgsSystem::TimerStatusInterface mTimerInterface @ +8 (DWARF BrnNetworkModuleIO.h:148);
+        // 48 bytes. Raw storage until the type is homed here; the committed GetTimerStatusInterface
+        // body returns &mTimerInterfaceStorage and SetTimerStatusInterface memcpys 48B into it.
+        u8   mTimerInterfaceStorage[48];     // TimerStatusInterface @ +8 (widen->typed on its TU)
+
+        // Compile-time offset guards (private members -> assert from a member-fn context, mirroring
+        // the committed BrnGameStateModuleIO.h PreWorldInputBuffer::_AssertLayout pattern).
+        static void _AssertLayout()
+        {
+            static_assert(offsetof(PreSimulationInputBuffer, mbSysMenuOnScreen)      == 1, "PreSim mbSysMenuOnScreen @ +1");
+            static_assert(offsetof(PreSimulationInputBuffer, mbPadIdle)             == 2, "PreSim mbPadIdle @ +2");
+            static_assert(offsetof(PreSimulationInputBuffer, miControllerPort)      == 4, "PreSim miControllerPort @ +4");
+            static_assert(offsetof(PreSimulationInputBuffer, mTimerInterfaceStorage) == 8, "PreSim mTimerInterface @ +8");
+        }
     };
 
     // ========================================================================
@@ -161,6 +205,24 @@ namespace BrnNetworkModuleIO
         const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::ImpactEvent>* GetImpactEventQueue() const;
         const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>*      GetTakedownEventQueue() const;
 
+        // ---- wave4 producer interfaces (bodies in this TU's .cpp) ----
+        // X360 0x823BB828 (write, h:558) -> &member @ +54504 (write twin of GetVehicleOutputInterfaceRaw_54504).
+        u8*  GetVehicleOutputInterfaceRaw_54504ForWriting();
+        // X360 0x823BB978 (write, h:624) -> &member @ +40240 (write twin of GetMember_40240; ledger 'GetP' truncated).
+        u8*  GetMember_40240ForWriting();
+        // X360 0x823C9DF0 (write, h:680) -> GameStateToNetworkInterface::Append @ +53628 (a2 source; callee void -> return 0).
+        int  AppendGameStateToNetworkInterface(const GameStateToNetworkInterface* lpSource);
+        // X360 0x823C9D38 (write, h:672) -> BaseEventQueue<BrnGameState::TakedownEvent>::Append @ +54168.
+        int  AppendTakedownQueue(const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>* lpSource);
+        // X360 0x823C9AE8 (write, h:639) -> splice source vehicle-output interface (a2): 3 queue Appends + +16 field + memcpy body.
+        int* AppendVehicleOutputInterface(const void* lpSource);
+        // X360 0x823BBA20 (write, h:648) -> assert !=null + write-lock, XMemCpy 10480B active-race-car interface (a2) into &member @ +27680.
+        int* SetActiveRaceCarInterface(const void* lpInterface);
+        // X360 0x823C9C80 (write, h:664) -> reset miLength (+38312) then EventQueue<CrashingTrafficUpdateEvent,24>::Append @ +38304.
+        int  SetCrashOutputInterface(const void* lpSource);
+        // X360 0x823C9BD0 (write, h:657) -> copy source traffic-network interface (a2) into &member @ +38160 BEFORE the lock assert.
+        void* SetTrafficOutputInterface(const void* lpSource);
+
         // X360 0x82593158: PostSimulationInputBuffer::operator= -- zeroes the live count of and
         //   Appends lOther's events onto the five embedded fixed-capacity event queues
         //   (RoadRulesRecvData @ +0, RoadRulesDownloadEvent @ +3712, RoadRulesMessageData @ +5968,
@@ -185,8 +247,30 @@ namespace BrnNetworkModuleIO
     // ========================================================================
     // OutputBuffer  (DWARF BrnNetworkModuleIO.h:284 : IOBuffer)
     // ========================================================================
+    // RE-SLICED for wave4: three of the old opaque spans are subdivided so this batch's new
+    // accessors reach their proven X360 byte offsets (mVehicleDriverInputInterface @ +5312,
+    // mCrashNetworkInputInterface @ +147488, mGameEventQueue @ +174576, mePlayerActiveRaceCarIndex
+    // @ +178688, and the three state bytes @ +180584/+180585/+180586). Every committed accessor's
+    // returned start-offset is preserved (mGuiEventQueue@+16, mInGamePlayerStatusInterface@+162992,
+    // mNetworkToGameStateInterface@+172376, mStatsOutputInterface@+178692, mNetworkToGuiInterface@
+    // +180588, mNetworkEventQueue@+184080). DWARF DECLARATION order != X360 storage order; members
+    // are placed at their proven X360 byte offsets.
     struct OutputBuffer : public CgsModule::IOBuffer
     {
+        // X360 0x823BC060 (read,  h:827) / 0x8254EF68 (write, h:841) -> VehicleDriverInputInterface* @ +5312
+        const VehicleDriverInputInterface*  GetVehicleDriverInputInterface() const;
+        VehicleDriverInputInterface*        GetVehicleDriverInputInterface();
+        // X360 0x823BC1B0 (read,  h:855) / 0x825881F8 (write, h:862) -> NetworkInputInterface* @ +147488
+        const NetworkInputInterface*        GetCrashNetworkInputInterface() const;
+        NetworkInputInterface*              GetCrashNetworkInputInterface();
+        // X360 0x823BBDA8 (read,  h:775) / 0x8254EEC0 (write, h:767) -> GameEventQueue* @ +174576
+        // (IDA truncates to GetGuiEv*; DWARF h:304/308 names this pair GetGameEventQueue / member
+        //  mGameEventQueue. The committed +16 accessor owns the separate GetGuiEventQueue name.)
+        const GameEventQueue*               GetGameEventQueue() const;
+        GameEventQueue*                     GetGameEventQueue();
+        // X360 0x823BBBA8 (read,  h:719) -> EActiveRaceCarIndex mePlayerActiveRaceCarIndex @ +178688 (lwzx)
+        EActiveRaceCarIndex                 GetPlayerActiveRaceCarIndex() const;
+
         // X360 0x823BC108 (read, h:834) -> const GuiEventQueueSmall* @ +16
         const GuiEventQueueSmall*           GetGuiEventQueue() const;
         // X360 0x823BC258 (read, h:869) -> const InGamePlayerStatusInterface* @ +162992
@@ -194,13 +278,23 @@ namespace BrnNetworkModuleIO
         // X360 0x823BC5A0 (read, h:964) -> const NetworkToGameStateInterface* @ +172376
         const NetworkToGameStateInterface*  GetNetworkToGameStateInterface() const;
         // X360 0x823BBC58 (read, h:745) -> const StatsOutputInterface* @ +178692
+        // X360 0x82587E98 (write, h:737) -> StatsOutputInterface* @ +178692 (non-const twin; DWARF h:390)
         const StatsOutputInterface*         GetStatsOutputInterface() const;
+        StatsOutputInterface*               GetStatsOutputInterface();
         // X360 0x823BC3A8 (read, h:911) -> const NetworkToGuiInterface* @ +180588
         const NetworkToGuiInterface*        GetNetworkToGuiInterface() const;
         // X360 0x823BC6F0 (read, h:1001) -> const NetworkEventQueue* @ +184080
         const NetworkEventQueue*            GetNetworkEventQueue() const;
         // X360 0x8254F160 (write, h:994)  -> NetworkEventQueue* @ +184080 (non-const twin)
         NetworkEventQueue*                  GetNetworkEventQueue();
+
+        // ---- state flags (X360 stbx/lbzx byte accessors) --------------------
+        // X360 0x823BBE50 (read, h:790) / 0x82587F40 (write, h:783) -> mbIsPlaying   @ +180584
+        bool IsPlaying() const;    void SetIsPlaying(bool lbPlaying);
+        // X360 0x823BBF00 (read, h:805) / 0x82587FF0 (write, h:798) -> mbIsConnected @ +180585
+        bool IsConnected() const;  void SetConnected(bool lbConnected);
+        // X360 0x823BBFB0 (read, h:820) / 0x825880A0 (write, h:813) -> mbIsInInvite  @ +180586
+        bool IsInInvite() const;   void SetIsInInvite(bool lbInInvite);
 
         // ---- typed event-queue accessors used by the AggressiveDriving relay (declared-only) ----
         // X360 OutputBuffer::GetVehicleManagerOutputInterface (Hex-Rays "GetVeh"): the
@@ -221,12 +315,20 @@ namespace BrnNetworkModuleIO
         // declared-only: Construct/Destruct + the full DWARF Get*/Set* set.
     private:
         u8  maPadToGuiEventQueue[16 - sizeof(CgsModule::IOBuffer)];        // -> +16
-        u8  mGuiEventQueueStorage[162992 - 16];                           // GuiEventQueueSmall @ +16 (also spans the +460..+537 operator= fields)
+        u8  mGuiEventQueueStorage[5312 - 16];                             // GuiEventQueueSmall @ +16 (h:448; also spans the +460..+537 operator= fields)
+        u8  mVehicleDriverInputInterfaceStorage[147488 - 5312];          // VehicleDriverInputInterface @ +5312 (h:440; also spans mVehicleInputInterface @ h:441)
+        u8  mCrashNetworkInputInterfaceStorage[162992 - 147488];         // NetworkInputInterface @ +147488 (mCrashNetworkInputInterface, h:442)
         u8  mInGamePlayerStatusInterfaceStorage[172376 - 162992];        // InGamePlayerStatusInterface @ +162992
-        u8  mNetworkToGameStateInterfaceStorage[178692 - 172376];        // NetworkToGameStateInterface @ +172376
-        u8  mStatsOutputInterfaceStorage[180588 - 178692];               // StatsOutputInterface @ +178692
-        u8  mNetworkToGuiInterfaceStorage[184080 - 180588];              // NetworkToGuiInterface @ +180588
-        u8  mNetworkEventQueueStorage[16];                               // mNetworkEventQueue @ +184080 (width placeholder; widen on VariableEventQueue homing)
+        u8  mNetworkToGameStateInterfaceStorage[174576 - 172376];        // NetworkToGameStateInterface @ +172376
+        u8  mGameEventQueueStorage[178688 - 174576];                     // GameEventQueue @ +174576 (mGameEventQueue, h:451)
+        EActiveRaceCarIndex mePlayerActiveRaceCarIndex;                  // @ +178688 (h:450) -- 4-byte enum : s32
+        u8  mStatsOutputInterfaceStorage[180584 - 178692];               // StatsOutputInterface @ +178692 (h:447)
+        bool mbIsPlaying;                                                // @ +180584 (h:454)
+        bool mbIsConnected;                                              // @ +180585 (h:455)
+        bool mbIsInInvite;                                               // @ +180586 (h:456)
+        u8  maPadToNetworkToGuiInterface[180588 - 180587];               // @ +180587 (mbInvitesOpen, h:457)
+        u8  mNetworkToGuiInterfaceStorage[184080 - 180588];              // NetworkToGuiInterface @ +180588 (h:445)
+        u8  mNetworkEventQueueStorage[16];                               // mNetworkEventQueue @ +184080 (h:465; width placeholder; widen on VariableEventQueue homing)
     };
 
     // ========================================================================
