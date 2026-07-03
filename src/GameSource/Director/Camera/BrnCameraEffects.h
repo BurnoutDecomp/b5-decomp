@@ -181,6 +181,18 @@ struct CameraEffects
         return mStopHookNameString;
     }
     f32 GetCameraLag() const      { return mfCameraLag; }
+
+    // ADDITIVE GROW (MomentPlayerJumping::Update @0x82275AA4..: the moment registers
+    // its "Jump_Effect" start hook on the stack camera it is about to adopt with the
+    // inlined triple store -- HookNameStringWrapper::Set on mStartHookNameString, the
+    // +0xB7 gate byte, the +0x80 blend). De-inlined to a named CameraEffects operation
+    // so callers never poke the fields by offset; the store ORDER matches the asm.
+    void SetStartHookName(const char* lpcName, f32 lfBlendAmount)
+    {
+        mStartHookNameString.Set(lpcName);
+        mbHasStartHookNameString   = true;
+        mfStartHookNameBlendAmount = lfBlendAmount;
+    }
 };
 
 } // namespace Camera

@@ -107,9 +107,34 @@ namespace Camera
     class BehaviourInterpolate
     {
     public:
-        // Per-take interpolation curve/easing parameters. Opaque here; the player only ever
-        // holds a pointer to one.
-        class Parameters {};
+        // Per-take interpolation curve/easing parameters (DWARF BrnBehaviourInterpolate.h:
+        // 186-193; MomentPlayerJumping holds one BY VALUE @X360 +0x36C). GROWN from the
+        // earlier opaque model for MomentPlayerJumping::Construct @0x8225F2C0..: the real
+        // record is the Behaviour::Parameters head ({type tag, debug name}) + the
+        // method/mapping enum pair. The base head is folded FLAT into this slice (this
+        // header carries no Behaviour base; the real home Behaviours/BrnBehaviourInterpolate.h
+        // is mutually exclusive with this slice -- see the class FLAG above), and the two
+        // enums are s32-typed here for the same reason (values per the real home's
+        // EInterpolationMethod/EInterpolationMapping).
+        class Parameters
+        {
+        public:
+            // The inlined default construct (X360 stores {8, 0, mapping=1, method=0}):
+            // the interpolate behaviour-type tag, no debug name, slerp method,
+            // sinusoidal mapping.
+            void Construct()
+            {
+                mType                  = 8;   // the interpolate behaviour-type tag
+                mpcDebugName           = 0;
+                meInterpolationMapping = 1;   // E_MAPPING_SINUSOIDAL
+                meInterpolationMethod  = 0;   // E_METHOD_SLERP
+            }
+
+            u32         mType;                  // +0x00 (Behaviour::Parameters head)
+            const char* mpcDebugName;           // +0x04 (console)
+            s32         meInterpolationMethod;  // +0x08 (:189)
+            s32         meInterpolationMapping; // +0x0C (:190)
+        };
 
         // 0 == cut / no pause updates, 2 == updates-during-pause.
         void SetInterpolationMode(s32 liMode);

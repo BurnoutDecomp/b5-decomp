@@ -97,6 +97,14 @@ public:
     const Attrib::Gen::shotgroup& GetTumblingCrashShots() const;     // +1448
     const Attrib::Gen::shotgroup& GetStationaryCrashShots() const;   // +1464
 
+    // The player-jumping ICE shot-group instance (X360 manager+1320 / +0x528 --
+    // MomentPlayerJumping::Prepare @0x82251048 reads *(behaviour-manager
+    // mpDirectorResourceManager)+0x528 and resolves its ShotList attribute, key
+    // 0x7533C0E2_15246B49, for up to five ice shots). ADDITIVE GROW:
+    // declaration-only (the member + body land with this manager's own TU).
+    // FLAG: accessor name inferred from the consumer's role.
+    const Attrib::Gen::shotgroup& GetPlayerJumpingShots() const;      // +1320
+
 private:
     // X360 members preceding mICEResourceMgr occupy 552 bytes. Their concrete
     // resource queue/handle types are owned by their respective TUs.

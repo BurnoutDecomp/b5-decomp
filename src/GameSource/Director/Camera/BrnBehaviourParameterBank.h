@@ -7,6 +7,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"           // BehaviourGyroCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFixedCam.h"          // BehaviourFixedCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h"       // BehaviourBystanderCam::Parameters
+#include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"            // BehaviourPassengerCam::Parameters
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourParameterBank.h
@@ -109,6 +110,25 @@ namespace BrnDirector
             // that role. DECLARATION-ONLY (the bank's own TU bodies them).
             const BehaviourBystanderCam::Parameters& GetBystanderCamCloseMomentParams() const;   // +0xEEC
             const BehaviourBystanderCam::Parameters& GetBystanderCamMomentParams() const;        // +0x1024
+
+            // The passenger-sees-action camera block (MomentPassengerSeesAction::
+            // Update @0x8225EEB8 hands manager+83732 == bank+0x21E4 to
+            // BehaviourPassengerCam::SetParameters). FLAG: getter name inferred.
+            // DECLARATION-ONLY (the bank's own TU bodies it).
+            const BehaviourPassengerCam::Parameters& GetPassengerCamMomentParams() const;        // +0x21E4
+
+            // The player-jumping moment's shot parameter blocks (MomentPlayerJumping::
+            // Prepare @0x82251048 AddShots). The X360 inlines fixed bank offsets on a
+            // sizeof grid -- rig blocks at bank + 0x1280 + 0x120*liIndex (Prepare feeds
+            // indices {0,1,6,9,8,4} to the attached-rig collection and {10,11,12} to the
+            // dropped-rig collection), bystander blocks at bank + 0xD18 + 0x138*liIndex
+            // (indices {0,1}). FLAG: accessor names + the index grids inferred (the
+            // 0x120/0x138 strides match the blocks' spacings == the Parameters sizes;
+            // the individual offsets are asm-attested). DECLARATION-ONLY (the bank's
+            // own TU bodies them). BehaviourRig::Parameters comes in through the
+            // BehaviourPassengerCam.h include's BehaviourRig.h base slice.
+            const BehaviourRig::Parameters&          GetPlayerJumpingRigShotParams(s32 liIndex) const;
+            const BehaviourBystanderCam::Parameters& GetPlayerJumpingBystanderShotParams(s32 liIndex) const;
         };
     }
 }
