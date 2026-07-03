@@ -64,5 +64,61 @@ namespace BrnNetwork
             mbIsInLocalGameWorld          = lOther.mbIsInLocalGameWorld;         // +303
             return *this;
         }
+
+        // ================================================================
+        // MarkedManInterface::CheckForMarkedManTakedown  (X360 0x82355758)
+        // ================================================================
+        // Returns whether the aggressor's currently-marked-man victim (as recorded in this
+        // per-aggressor table) equals the supplied victim slot -- i.e. this takedown was of the
+        // aggressor's marked man. Both car slots are range-asserted (> INVALID && < COUNT) as on the
+        // X360; the baked assert-message strings are reproduced verbatim (file path + line dropped per
+        // convention). The equality return is the X360 cntlzw/extrwi BOOL idiom.
+        bool MarkedManInterface::CheckForMarkedManTakedown(
+                ::EActiveRaceCarIndex leAggressorActiveRaceCarIndex,
+                ::EActiveRaceCarIndex leVictimActiveRaceCarIndex) const
+        {
+            CGS_ASSERT((leAggressorActiveRaceCarIndex > ::E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                       (leAggressorActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                       "( leAggressorActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+            CGS_ASSERT((leVictimActiveRaceCarIndex > ::E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                       (leVictimActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                       "( leVictimActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+
+            return maMarkedManActiveRaceCarIndex[leAggressorActiveRaceCarIndex] == leVictimActiveRaceCarIndex;
+        }
+
+        // ================================================================
+        // MarkedManInterface::SetFromPlayerStatusInterface  (X360 0x82355670)
+        // ================================================================
+        // Rebuilds this per-aggressor marked-man table from an in-game player-status interface: for
+        // each of the interface's miNumPlayers records, indexes this table by that player's own
+        // active-race-car slot and stores that player's marked-man target slot. The X360 body walks
+        // the record array by raw offset (record.meActiveRaceCarIndex @ +276,
+        // record.meMarkedManActiveRaceCarIndex @ +292, stride 312) and reads miNumPlayers @ +0x9E4;
+        // reversed here into the named accessors -- identical bytes. The loop index and each record's
+        // active-race-car slot are range-asserted exactly as on the X360; assert strings reproduced
+        // verbatim (file path + line dropped). The store static_casts the BrnNetwork:: field into the
+        // global ::EActiveRaceCarIndex table element. Returns *this.
+        MarkedManInterface& MarkedManInterface::SetFromPlayerStatusInterface(
+                const InGamePlayerStatusInterface& lPlayerStatusInterface)
+        {
+            const s32 liNumPlayers = lPlayerStatusInterface.GetNumPlayers();
+            for (s32 liIndex = 0; liIndex < liNumPlayers; ++liIndex)
+            {
+                CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+                CGS_ASSERT(liIndex < liNumPlayers, "liIndex < miNumPlayers");
+
+                const InGamePlayerStatusData* lpPlayerStatusData =
+                        lPlayerStatusInterface.GetPlayerStatusData(liIndex);
+
+                CGS_ASSERT((lpPlayerStatusData->meActiveRaceCarIndex > E_ACTIVE_RACE_CAR_NONE) &&
+                           (lpPlayerStatusData->meActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                           "( lpPlayerStatusData->meActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( lpPlayerStatusData->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+
+                maMarkedManActiveRaceCarIndex[lpPlayerStatusData->meActiveRaceCarIndex] =
+                        static_cast<::EActiveRaceCarIndex>(lpPlayerStatusData->meMarkedManActiveRaceCarIndex);
+            }
+            return *this;
+        }
     } // namespace BrnNetworkModuleIO
 } // namespace BrnNetwork
