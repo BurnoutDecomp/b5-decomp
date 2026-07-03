@@ -104,6 +104,12 @@ namespace GameDataIO
         bool GetAILanes(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
                         s32 liEventId, s32 liPoolId);
 
+        // Push a LoadGameDataEvent (type 26) requesting the AI lane data -- the Load* twin of
+        // GetAILanes (SAME baked id 0x71117D7F4337FFFF, meType DATA) but the LOAD family event/type.
+        // X360 0x82396980 (<3072>). Caller: BrnProgression::ProgressionManager::LoadAIData.
+        bool LoadAILanes(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                         s32 liEventId, s32 liPoolId);
+
         // Push a GetICEListRequest (type 49) requesting the in-game-camera-editor list.
         // X360 0x82256358 (<512>). miPoolId == 5, meType == E_ASSETSET_DATA, mId baked.
         bool GetICEList(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
