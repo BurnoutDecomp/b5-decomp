@@ -20,5 +20,17 @@ namespace CgsDev
 
         Variant&    Variable::GetValue()       { return mVariant; }
         const char* Variable::GetName() const  { return mpcName; }
+
+        // --- variable-edit follow-on: menu-tick surface, dead on the loading-screen boot
+        // (no debug menu is ticked/drawn during loading). Stubbed so MenuItemVariable links. ---
+        void Variable::Increment() {}
+        void Variable::Decrement() {}
+        void Variable::Select()    {}
+        bool Variable::IsVisible() { return true; }
+        void Variable::GetValueAsString(char* lpcBuffer, int liBufferLen)
+        {
+            if (liBufferLen > 0)
+                lpcBuffer[0] = '\0';
+        }
     }
 }

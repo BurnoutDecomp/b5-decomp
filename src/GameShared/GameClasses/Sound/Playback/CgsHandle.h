@@ -75,7 +75,12 @@ public:
     // Acquire/Release ref-counting. Declared-only (other-TU surface).
     explicit Handle(T* lpObject);
     Handle(const Handle& lkrOther);
-    ~Handle();
+    // dtor: the real body drops the owned ref (ReleaseObject -> Release). That ref-count is
+    // a FLAG'd, not-yet-reconstructed surface, and no out-of-line body exists for any
+    // instantiation, so define it inline as the empty no-op the current design already
+    // implies -- otherwise every Handle<T>::~Handle use (e.g. Logic::Voice's mVoiceHandle)
+    // is an unresolved external. Replace with the out-of-line Release body when it lands.
+    ~Handle() {}
     Handle& operator=(const Handle& lkrOther);
 
     // CgsHandle.h:251 / 259 / 268 / 277. Validity / equality. Declared-only.

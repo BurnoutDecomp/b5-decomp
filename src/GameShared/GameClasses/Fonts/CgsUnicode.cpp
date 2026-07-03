@@ -171,4 +171,14 @@ namespace CgsUnicode
         *lpDest = 0;
         return lpUtf8TargetString;
     }
+
+    // Byte length of a NUL-terminated UTF-8 string (X360 CgsUnicode.cpp:108). Counts the
+    // bytes preceding the terminator -- the LanguageResourceType string-table descriptor size.
+    u32 ByteLength(const u8* lpUtf8String)
+    {
+        const u8* lpByte = lpUtf8String;
+        while (*lpByte != 0u)
+            ++lpByte;
+        return static_cast<u32>(lpByte - lpUtf8String);
+    }
 }

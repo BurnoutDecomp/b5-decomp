@@ -54,6 +54,16 @@ namespace BrnDirector
         }
     }
 
+    // The E_RACE_CAR case of Set: bind the reference to a specific race car index
+    // (mirrors the E_PLAYER_CAR fill -- populate the four fields, ref slot cleared).
+    void VehicleRef::SetToRaceCar(EActiveRaceCarIndex leRaceCar)
+    {
+        meType         = E_RACE_CAR;
+        mbSet          = true;
+        miRaceCarIndex = static_cast<s32>(leRaceCar);
+        muRef          = 0;
+    }
+
     // @ 0x821F2A38 (class:BrnDirector::VehicleRef TU) -- memberwise inequality over
     // the four fields (type, race car, set-flag, ref slot -- the asm's compare order).
     bool VehicleRef::operator!=(const VehicleRef& lrOther) const

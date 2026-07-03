@@ -29,6 +29,7 @@
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsEmergencyFragPoolModuleState.h"
 #include "GameSource/Replays/BrnReplayModule.h"
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
 namespace CgsResource
 {
@@ -47,6 +48,54 @@ namespace BrnReplays
     // member sub-objects default-construct; the real ctor body is in BrnReplayModule.cpp
     // (out of the exe build -- see the header audit note).
     ReplayModule::ReplayModule() {}
+}
+
+namespace BrnGameState
+{
+    // Link stub: ModeManager embeds a ScoringSystem by value (X360 ModeManager+0xDB0), so its
+    // ctor is referenced by ModeManager::ModeManager(). The real ctor (BrnScoringSystem_
+    // Lifecycle.cpp) + the online-mode-scoring subsystem it constructs are OFF the loading-screen
+    // boot path and would pull the whole online/network/world closure into the link. Stub the ctor
+    // here; constructing the embedded online-mode-scoring members needs their vtables, so the vtable
+    // virtuals are stubbed below too. All inert (scoring is not exercised during loading).
+    // Signatures MIRROR the class headers exactly so each lands in the right vtable slot.
+    // Replace this whole block with the real scoring TUs when that subsystem is wired in.
+    ScoringSystem::ScoringSystem() {}
+
+    // --- BaseOnlineModeScoring: slots 0..8 + the two non-slot virtuals ---
+    void BaseOnlineModeScoring::Construct() {}
+    bool BaseOnlineModeScoring::Prepare()  { return false; }
+    bool BaseOnlineModeScoring::Release()  { return false; }
+    void BaseOnlineModeScoring::Destruct() {}
+    void BaseOnlineModeScoring::ClearData() {}
+    void BaseOnlineModeScoring::Update(const ScoringSystem*, s32) {}
+    void BaseOnlineModeScoring::UpdatePlayerPoints(ScoringSystem*, s32) {}
+    void BaseOnlineModeScoring::AwardNetworkRatings(const ScoringSystem*, u32) {}
+    void BaseOnlineModeScoring::WriteDataToOutput(OnlineScoringOutputInterface*) {}
+    GameStateModuleIO::EPlayerTeam BaseOnlineModeScoring::GetCurrentPlayerTeam(s32) { return static_cast<GameStateModuleIO::EPlayerTeam>(0); }
+
+    // --- the four concrete online modes: identical override set (see each header) ---
+#define BRN_STUB_ONLINE_MODE(CLS)                                                          \
+    void CLS::Construct() {}                                                                \
+    bool CLS::Prepare()  { return false; }                                                  \
+    bool CLS::Release()  { return false; }                                                  \
+    void CLS::Destruct() {}                                                                  \
+    void CLS::ClearData() {}                                                                 \
+    void CLS::Update(const ScoringSystem*, s32) {}                                           \
+    void CLS::UpdatePlayerPoints(ScoringSystem*, s32) {}                                     \
+    void CLS::WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface*) {}
+    BRN_STUB_ONLINE_MODE(OnlineRaceModeScoring)
+    BRN_STUB_ONLINE_MODE(OnlineRoadRageModeScoring)
+    BRN_STUB_ONLINE_MODE(OnlineStuntRunModeScoring)
+    BRN_STUB_ONLINE_MODE(OnlineBurningHomeRunModeScoring)
+#undef BRN_STUB_ONLINE_MODE
+
+    // --- StuntModeScoring extra virtuals the vtable references ---
+    bool StuntModeScoring::HasStuntModeEnded(bool) { return true; }
+    s32  StuntModeScoring::CalculateMultiplier(const StuntInfo*, StuntModeScoring::MultiplierOutInfo*) { return 0; }
+
+    // --- CarScoreData ctor (embedded array element in the scoring records) ---
+    GameStateModuleIO::CarScoreData::CarScoreData() {}
 }
 
 namespace CgsSound

@@ -32,5 +32,10 @@ namespace CgsDev
         void    MenuItem::GetDisplayName(char* lpcBuffer, s32 liBufferLen) const { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
         void    MenuItem::GetItemString(char* lpcBuffer, s32 liBufferLen) const  { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
         Window* MenuItem::OpenAsWindow() { return nullptr; }
+
+        // --- text helpers used by MenuItemVariable/MenuItemFunction render: menu-render
+        // follow-on, dead on the loading-screen boot. Stubbed for link. ---
+        void MenuItem::RenderMenuItemText(Debug2DImmediateRender*, const char*, f32, f32, f32, f32, bool, f32) {}
+        void MenuItem::ComputeSizeFromText(const char*) {}
     }
 }
