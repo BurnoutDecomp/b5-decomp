@@ -90,13 +90,22 @@ public:
     // @0x821F3F80. meRaceCarIndex is an EActiveRaceCarIndex (modelled as s32 here).
     void SetTarget(s32 meRaceCarIndex);
 
+    // GROWN for MomentBystanderSeesAction::Update @0x82266730 (the moment polls its
+    // candidate through the Behaviour-base head bytes +0x09 / +0x0B).
+    bool HasFailed() const        { return mbFailed; }
+    bool CanSwitchToMeNow() const { return mbCanSwitchToMeNow; }
+
 private:
 
     // FLAG: only the members these three functions touch are modelled at their asm-attested
     //   offsets; the rest of the bystander-cam rig lands with the full behaviour TU. Reserved
     //   byte spans place them exactly.
     void*             mpVTable;                       // +0x000  behaviour vtable (opaque base head)
-    u8                maReserved004[0x10 - 0x04];     // +0x004 .. +0x00F (rig members not modelled here)
+    u8                maReserved004[0x09 - 0x04];     // +0x004 .. +0x008 (rig members not modelled here)
+    bool              mbFailed;                       // +0x009  the Behaviour-base failed flag (MomentBystanderSeesAction polls it)
+    u8                mReserved00A;                   // +0x00A
+    bool              mbCanSwitchToMeNow;             // +0x00B  the Behaviour-base switch-to gate (DWARF base name)
+    u8                maReserved00C[0x10 - 0x0C];     // +0x00C .. +0x00F
     s32               mParamWord1;                    // +0x010  cached lpParameters->miParamWord1
     u8                maReserved014[0xD0 - 0x14];     // +0x014 .. +0x0CF (rig members not modelled here)
     u8                maCollisionPolicy[0x340 - 0xD0]; // +0x0D0  mCollisionPolicy (opaque, &-of by GetCol)

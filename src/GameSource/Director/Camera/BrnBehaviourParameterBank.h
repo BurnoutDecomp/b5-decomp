@@ -6,6 +6,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"  // BehaviourGameplayExternal::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"           // BehaviourGyroCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFixedCam.h"          // BehaviourFixedCam::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h"       // BehaviourBystanderCam::Parameters
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourParameterBank.h
@@ -100,6 +101,14 @@ namespace BrnDirector
             // +0x2334 coincides with NamedParameters::maLookAroundCarCamParameters
             // (see the relationship note above -- left to the bank's own TU).
             const BehaviourFixedCam::Parameters& GetStaticCamImpactCamParams() const;
+
+            // The two bystander-sees-action camera blocks (MomentBystanderSeesAction::
+            // Update @0x82266730 picks by its Parameters::mbCloseCamera and feeds the
+            // block to BehaviourBystanderCam::SetParameters). X360 bank +0xEEC (close)
+            // / +0x1024 (manager +78876 / +79188). FLAG: getter names inferred from
+            // that role. DECLARATION-ONLY (the bank's own TU bodies them).
+            const BehaviourBystanderCam::Parameters& GetBystanderCamCloseMomentParams() const;   // +0xEEC
+            const BehaviourBystanderCam::Parameters& GetBystanderCamMomentParams() const;        // +0x1024
         };
     }
 }

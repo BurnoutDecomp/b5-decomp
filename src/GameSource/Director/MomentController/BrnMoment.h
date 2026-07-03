@@ -23,10 +23,13 @@
 // and no absolute-offset static_assert is pinned across the nominal Camera span.
 
 #include "types.hpp"
-#include "GameSource/Director/Camera/Camera.h"   // BrnDirector::Camera::Camera (by value)
+#include "GameSource/Director/Camera/Camera.h"               // BrnDirector::Camera::Camera (by value)
+#include "GameSource/Director/Camera/BrnBehaviourManager.h"   // Camera::BehaviourHandle<T> (MomentBystanderSeesAction's mBystander)
 
 namespace BrnDirector
 {
+    namespace Camera { class BehaviourBystanderCam; }   // MomentBystanderSeesAction's handle T (real home BrnBehaviourBystanderCam.h)
+
     // DWARF: BrnMoment.h:97.
     class Moment
     {
@@ -178,11 +181,20 @@ namespace BrnDirector
 
         bool Prepare(void* lrBehaviourController) override;   // @0x821F7560
 
-        // Minimal stubs so the class is concrete for the embed check. DECLARATION-ONLY
-        // bodies for the rest -- they land with this moment's own TU.
-        void  Update(f32, void*, const void*) override {}
-        bool  Release() override { return true; }
-        const char* GetName() const override;
+        // The rest of the override set (GROWN by this moment's own TU, batch 14 --
+        // Moments/BrnMomentBystanderSeesAction.cpp replaces the earlier concrete
+        // stubs with the real bodies):
+        void  Construct() override;                                            // @0x8225F118
+        void  Update(f32 lfTimeStep, void* lrBehaviourController,
+                     const void* lSharedInfo) override;                        // @0x82266730
+        void  SetParameters(const Moment::Parameters* lpParameters) override;  // @0x821F7670
+        bool  Release() override;                                              // @0x8223AAF8
+        const char* GetName() const override;                                  // @0x821F7608
         EType GetInstanceType() override { return E_MOMENT_BYSTANDER_SEES_ACTION; }
+
+    private:
+        // DWARF h:87/h:89 (X360 +0x180 / +0x184).
+        const Parameters* mpParameters;
+        Camera::BehaviourHandle<Camera::BehaviourBystanderCam> mBystander;
     };
 }

@@ -88,6 +88,13 @@ namespace BrnFlapt
                               s32 liNumParams, const char* const* lppcParams,
                               const s32* lpeParamFormatTypes);
 
+        // SetLocalisedText(id, type, value, valueFormat) @ 0x8246D2B0 -- the
+        // INTEGER-parameter variant (BoostMessageItem::SetText's boost-amount path:
+        // r5 == 9 id-lookup, r6 == the integer value, r7 == 11 E_FORMAT_INTEGER).
+        // ADDITIVE GROW; bodied in its own sibling TU.
+        bool SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
+                              s32 liValue, s32 liValueFormatType);
+
         // SetLocalisedText(id, type, value, valueFormat) @ 0x8246D398 -- look the
         // string id up and format lfValue into its single positional parameter with
         // leValueFormatType (raw ParameterFormatType integers per this home's house

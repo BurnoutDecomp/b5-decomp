@@ -2,7 +2,9 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BRN_CAMERA_EFFECTS_H
 
 #include "types.hpp"
-#include "SharedClasses/Graphics/BrnEffectsData.h"   // BrnDirector::Camera::MotionBlurData
+#include "SharedClasses/Graphics/BrnEffectsData.h"          // BrnDirector::Camera::MotionBlurData
+#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT (the hook-name tripwires)
+#include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"   // BrnDirector::HookNameStringWrapper
 
 // ============================================================================
 // GameSource/Director/Camera/BrnCameraEffects.h
@@ -50,19 +52,31 @@ struct CameraEffects
     // Only the offsets the Camera::Construct asm pins by store are named; everything
     // else is a reserved span owned by the CameraEffects TU.
 
-    // +0x00 .. +0x43: start/stop hook-name string wrappers (mStartHookNameStringWrapper
-    //   head byte at +0x00, mStopHookNameStringWrapper head byte at +0x21 -- both NUL'd
-    //   by Construct). NOMINAL span.
-    u8  maReserved00[0x44];
+    // +0x00 / +0x21: the start/stop camera-PFX hook-name wrappers (both NUL'd by
+    //   Construct). CARVED by the CameraEffects class TU (the five hook-name
+    //   accessors @0x821F1910/0x821F1968/0x821F19C0/0x821F1A18/0x821F1A70 return
+    //   this+0 / this+0x21 and read the has-flags at +0xB7/+0xB8).
+    HookNameStringWrapper mStartHookNameString;   // +0x00 (33 bytes)
+    HookNameStringWrapper mStopHookNameString;    // +0x21 (33 bytes -> ends +0x42)
+    u8  maReserved42[0x44 - 0x42];                // +0x42 .. +0x43
 
     // +0x44: the embedded motion-blur parameter block (the Construct asm zeroes its two
     //   blur amounts at +0x44/+0x48 and its two bool flags at +0x4C/+0x4D). Shared type
     //   from BrnEffectsData.h.
     MotionBlurData mMotionBlurData;             // +0x44 (12 bytes -> ends +0x50)
 
-    // +0x50 .. +0x9B: background-effect request + leading post-FX/fade scalars. Construct
-    //   zeroes bytes/words at +0x50/+0x78/+0x7C and floats at +0x90/+0x94. NOMINAL span.
-    u8  maReserved50[0x9C - 0x50];
+    // +0x50 .. +0x7F: background-effect request + leading post-FX/fade scalars. Construct
+    //   zeroes bytes/words at +0x50/+0x78/+0x7C. NOMINAL span.
+    u8  maReserved50[0x80 - 0x50];
+
+    // +0x80: the start-hook blend amount (GetStartHookNameBlendAmount @0x821F1910
+    //   `lfs f1, 0x80`, guarded by mbHasStartHookNameString -- the REAL blend member;
+    //   the earlier +0x9C mis-name is what the mfSimTimeScale reconcile retired).
+    f32 mfStartHookNameBlendAmount;               // +0x80
+
+    // +0x84 .. +0x9B: the stop-hook counterpart scalars + fade floats (Construct zeroes
+    //   +0x90/+0x94). NOMINAL span.
+    u8  maReserved84[0x9C - 0x84];
 
     // +0x9C: the requested sim-time (timestep) scale. Construct sets it to 1.0f
     //   (normal speed). RECONCILED 2026-07 (was "mfStartHookBlendAmount", an
@@ -106,14 +120,59 @@ struct CameraEffects
     f32 mfShakeFrequency;                       // +0xB0 (Construct sets 1.0f)
     u8  mu8ShakeType;                           // +0xB4
 
-    // +0xB5 .. +0xBB: trailing flag/enum bytes (+0xB7/+0xB8/+0xB9/+0xBA zeroed; +0xBB the
-    //   final pad). NOMINAL span; pads the block to the X360-proven 0xBC stride.
-    u8  maReservedB5[0xBC - 0xB5];
+    // +0xB5 / +0xB6: trailing flag bytes (zeroed by Construct). NOMINAL.
+    u8  maReservedB5[2];
+
+    // +0xB7 / +0xB8: the hook-name presence flags (member NAMES from the accessor
+    //   asserts, BrnCameraEffects.h:175/:194).
+    bool mbHasStartHookNameString;                // +0xB7
+    bool mbHasStopHookNameString;                 // +0xB8
+
+    // +0xB9 .. +0xBB: trailing bytes (+0xB9/+0xBA zeroed; +0xBB the final pad). NOMINAL
+    //   span; pads the block to the X360-proven 0xBC stride.
+    u8  maReservedB9[0xBC - 0xB9];
 
     // The shake-request read accessors (DWARF: CameraEffects::GetShakeAmplitude is named
     // by the PerlinShakeController::Update hint; GetShakeFrequency by symmetry).
     f32 GetShakeAmplitude() const { return mfShakeAmplitude; }
     f32 GetShakeFrequency() const { return mfShakeFrequency; }
+
+    // ---- the hook-name accessor set (class:CameraEffects TU; all header-inline in
+    // the original -- the h:175/:178/:194 class-body copies and the h:497/:524
+    // out-of-class copies compile as SEPARATE X360 functions distinguished only by
+    // their assert line, modelled here as the const/non-const pairs). All tripwires
+    // non-gating (the X360 returns the member regardless). ----
+
+    // @0x821F1910 (h:175) -- the start-hook blend amount.
+    f32 GetStartHookNameBlendAmount() const
+    {
+        CGS_ASSERT(mbHasStartHookNameString, "mbHasStartHookNameString");   // :175 (non-gating)
+        return mfStartHookNameBlendAmount;
+    }
+
+    // @0x821F1968 (h:178, const) / @0x821F1A18 (h:497, non-const).
+    const HookNameStringWrapper& GetStartHookNameString() const
+    {
+        CGS_ASSERT(mbHasStartHookNameString, "mbHasStartHookNameString");   // :178 (non-gating)
+        return mStartHookNameString;
+    }
+    HookNameStringWrapper& GetStartHookNameString()
+    {
+        CGS_ASSERT(mbHasStartHookNameString, "mbHasStartHookNameString");   // :497 (non-gating)
+        return mStartHookNameString;
+    }
+
+    // @0x821F19C0 (h:194, const) / @0x821F1A70 (h:524, non-const).
+    const HookNameStringWrapper& GetStopHookNameString() const
+    {
+        CGS_ASSERT(mbHasStopHookNameString, "mbHasStopHookNameString");     // :194 (non-gating)
+        return mStopHookNameString;
+    }
+    HookNameStringWrapper& GetStopHookNameString()
+    {
+        CGS_ASSERT(mbHasStopHookNameString, "mbHasStopHookNameString");     // :524 (non-gating)
+        return mStopHookNameString;
+    }
     f32 GetCameraLag() const      { return mfCameraLag; }
 };
 
