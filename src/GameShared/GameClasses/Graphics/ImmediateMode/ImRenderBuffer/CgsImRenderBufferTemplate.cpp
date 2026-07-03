@@ -679,12 +679,15 @@ namespace CgsGraphics
             }
         }
 
-        // Fold one colour channel through the batch transform's colour shift/scale (floats in [0,1],
-        // the X360 vertex-program colour transform) and re-pack to 8-bit. shift/scale default to
-        // {0,1} (identity) for buffers that never emitted a SET_TRANSFORM.
+        // Fold one colour channel through the batch transform's colour shift/scale and re-pack
+        // to 8-bit. The apt CXForm channel space is FIXED-POINT 0..255 (identity scale = 255,
+        // shift in 0..255 add units -- the same space AptRenderingContext composes in and
+        // AptCallbackRender::SetColourTransform copies to the Im2dTransform), so both fold
+        // terms normalise by 255 here. scale/shift default to {255,0} (identity) for buffers
+        // that never emitted a SET_TRANSFORM.
         u8 DispatchColourChannel(u8 lu8In, f32 lfScale, f32 lfShift)
         {
-            f32 lfOut = (static_cast<f32>(lu8In) / 255.0f) * lfScale + lfShift;
+            f32 lfOut = (static_cast<f32>(lu8In) / 255.0f) * (lfScale / 255.0f) + (lfShift / 255.0f);
             if (lfOut < 0.0f) lfOut = 0.0f;
             if (lfOut > 1.0f) lfOut = 1.0f;
             return static_cast<u8>(lfOut * 255.0f + 0.5f);
@@ -721,7 +724,8 @@ namespace CgsGraphics
         f32 lfOriginX = 0.0f, lfOriginY = 0.0f;
         f32 lfRightX  = 1.0f, lfRightY  = 0.0f;
         f32 lfUpX     = 0.0f, lfUpY     = 1.0f;
-        f32 lfColScaleR = 1.0f, lfColScaleG = 1.0f, lfColScaleB = 1.0f, lfColScaleA = 1.0f;
+        // Colour identity in the 0..255 CXForm space (see DispatchColourChannel).
+        f32 lfColScaleR = 255.0f, lfColScaleG = 255.0f, lfColScaleB = 255.0f, lfColScaleA = 255.0f;
         f32 lfColShiftR = 0.0f, lfColShiftG = 0.0f, lfColShiftB = 0.0f, lfColShiftA = 0.0f;
 
         // BeginRendering's D3D state prologue (matches CgsIm2d.cpp's ImRenderer::BeginRendering):
@@ -772,10 +776,12 @@ namespace CgsGraphics
                 // matching AptCallbackRender::SetVertexMatrix's packing + DrawRenderingUnit's fold.
                 lfRightX  = lTransform.mRightUp.x;   lfRightY  = lTransform.mRightUp.y;
                 lfUpX     = lTransform.mRightUp.z;   lfUpY     = lTransform.mRightUp.w;
-                lfColScaleR = lTransform.mColourScale.x; lfColScaleG = lTransform.mColourScale.y;
-                lfColScaleB = lTransform.mColourScale.z; lfColScaleA = lTransform.mColourScale.w;
-                lfColShiftR = lTransform.mColourShift.x; lfColShiftG = lTransform.mColourShift.y;
-                lfColShiftB = lTransform.mColourShift.z; lfColShiftA = lTransform.mColourShift.w;
+                // Channel order per AptCallbackRender::SetColourTransform: the CXForm's
+                // (Alpha, Red, Green, Blue) land in (x, y, z, w).
+                lfColScaleA = lTransform.mColourScale.x; lfColScaleR = lTransform.mColourScale.y;
+                lfColScaleG = lTransform.mColourScale.z; lfColScaleB = lTransform.mColourScale.w;
+                lfColShiftA = lTransform.mColourShift.x; lfColShiftR = lTransform.mColourShift.y;
+                lfColShiftG = lTransform.mColourShift.z; lfColShiftB = lTransform.mColourShift.w;
                 break;
             }
 

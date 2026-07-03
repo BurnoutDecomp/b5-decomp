@@ -169,12 +169,18 @@ AptRenderManagerQueue gAptRenderManagerQueue = { nullptr, nullptr };// dword_832
 AptMatrix              gIdentityMatrix    = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
 extern const AptMatrix gAptIdentityMatrix = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f };   // flt_8324E2B0
 
-// CXForm identity builder: scale channels = 1.0, translate channels = 0.0.
+// CXForm identity builder: scale channels = 255.0, translate channels = 0.0.
+// The CXForm channel space is FIXED-POINT 0..255 (the SWF cxform): the compose is
+// current = append * current / 255 (AptRenderingContext::appendColourTransform), and
+// the context's own identity init is scale = 255 ("opaque white", flt_82010C20). An
+// identity of 1.0 here made every appendColourTransform level DIVIDE the colour scale
+// by 255 (1.0*current/255), collapsing nested sprites to ~zero -> the whole apt scene
+// rendered invisible. 255 is the multiplicative identity of this space.
 static AptCXForm AptMakeIdentityCXForm()
 {
     AptCXForm cx;   // ctor sets vptrs + zeroes all eight channels
     for (int i = 0; i < 4; ++i)
-        cx.scale.SetValuef(static_cast<AptColorHelper::AptColorValue>(i), 1.0f);
+        cx.scale.SetValuef(static_cast<AptColorHelper::AptColorValue>(i), 255.0f);
     // translate stays 0.0 from the ctor (the additive identity)
     return cx;
 }

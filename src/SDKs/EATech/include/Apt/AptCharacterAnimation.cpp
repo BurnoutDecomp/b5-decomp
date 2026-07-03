@@ -490,10 +490,16 @@ static void AptFixupGeometryFileNative8(CgsResource::GuiGeometryFile* pFile,
 
         if (lbIsOffset(lpMesh->mppVerticies))
         {
-            // First touch of this mesh: rebase the vertex table + scrub the
-            // stale texture slot (see the header note).
+            // First touch of this mesh: rebase the vertex table. The texture slot is
+            // scrubbed ONLY when it still holds a non-pointer value (a small serialized
+            // id / in-span offset): the container-import pass (Pool::ResolveImportForEntry)
+            // has already written the imported renderengine::Texture* into this slot at
+            // bundle load, and that live pointer must SURVIVE for the textured-mesh bind
+            // (AptRenderHandler::Render mode 1/2). Values below the resource span size are
+            // unpatched serialized junk -> cleared to draw through the white fallback.
             lpMesh->mppVerticies += luBase;
-            lpMesh->mpTexture = 0;
+            if (lpMesh->mpTexture < static_cast<uintptr_t>(luSize))
+                lpMesh->mpTexture = 0;
         }
         if (lpMesh->mppVerticies == 0 || lpMesh->muNumberOfVerticies == 0)
             continue;

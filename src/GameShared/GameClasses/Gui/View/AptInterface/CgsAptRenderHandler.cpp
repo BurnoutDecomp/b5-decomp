@@ -368,9 +368,10 @@ namespace CgsGui
         CGS_ASSERT(mpImRenderers != 0, "mpImRenderers");
         CGS_ASSERT(mpImRenderers->mp3dRenderer != 0, "Invalid 3D renderer in AptRenderHandler::Render");
 
-        // Skip a fully-transparent batch: the colour-scale alpha (mColourScale.w == mColourScale
-        // + 0xC) below the epsilon means nothing this batch draws is visible.
-        if (std::fabs(mVertexTransform.mColourScale.w) < 0.00000011920929f)
+        // Skip a fully-transparent batch: the colour-scale ALPHA below the epsilon means nothing
+        // this batch draws is visible. Channel order per AptCallbackRender::SetColourTransform:
+        // (Alpha, Red, Green, Blue) in (x, y, z, w) -- alpha is .x.
+        if (std::fabs(mVertexTransform.mColourScale.x) < 0.00000011920929f)
             return;
 
         // Fetch the active 2D renderer base (GetIm2dRendererType == **(this+108588)) and reach its
@@ -450,18 +451,18 @@ namespace CgsGui
 
             if (liTextureMode == 1 || liTextureMode == 2)
             {
-                // FLAG (x64 native-8 fork -- deferred texture-cache widening, honest boundary): on
-                // native-8 the mesh's mpTexture is an 8-BYTE resolved GuiTexture pointer (mesh+0x10),
-                // but the console texture-state cache (ResolveTextureState / BuildTextureStateParameters
-                // / TextureStateCache) is keyed by a 4-BYTE id and binds the id-as-raster. Passing the
-                // 8-byte pointer through the u32 key would TRUNCATE it (wrong key + an invalid bound
-                // raster -> garbage/AV). Widening the whole TextureStateCache (HashTable<u32,...,25>) +
-                // BuildTextureStateParameters to uintptr_t keys is the native-8 texture-binding leaf,
-                // deferred. Until then the textured shapes draw with the WHITE fallback (the same bind
-                // the texMode-0 path uses) so the geometry composes (untextured) without the truncation.
-                // (void)luTextureId -- not routed through the u32 cache on this fork.
-                (void)luTextureId;
-                lpBuffer->SetTexture(static_cast<renderengine::Texture*>(mpWhiteTexture));
+                // Native-8 texture bind: mpTexture holds the live renderengine::Texture* the
+                // container-import pass wrote at bundle load (the type-0 RwRaster handler's FixUp
+                // has already realised its D3D texture). Bind it directly -- the same object type
+                // the white-fallback SetTexture path takes. The console instead routes through the
+                // u32-keyed TextureState cache (clamp/wrap sampler state); that cache widening is
+                // still the faithful follow-on -- the direct bind renders the art with the device's
+                // current sampler addressing. A mesh whose slot was NOT import-patched (scrubbed to
+                // 0 by AptFixupGeometryFileNative8) keeps the white fallback.
+                if (luTextureId != 0)
+                    lpBuffer->SetTexture(reinterpret_cast<renderengine::Texture*>(luTextureId));
+                else
+                    lpBuffer->SetTexture(static_cast<renderengine::Texture*>(mpWhiteTexture));
             }
             else if (liTextureMode == 0)
             {
