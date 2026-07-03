@@ -18,6 +18,7 @@ namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList retur
 namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
 namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (pointer only)
 namespace BrnProgression { struct Profile; }      // DetermineCarUnlockPending arg (pointer only)
+namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusData; } } // GetOnlinePlayerInfo return (pointer only; home BrnNetworkModuleInGamePlayerStatusInterface.h)
 
 namespace BrnGui
 {
@@ -281,6 +282,26 @@ namespace BrnGui
         u8 GetCheckpointsInEvent() const;
         const HudMessageController*     GetHudMessageController() const;      // X360 @0x82472D00
         const HudMessageDirector*       GetHudMessageDirector() const;        // X360 @0x82472D58
+
+        // ---- the road-rule-shot block + the online player records (past the
+        // modelled tail; RoadRuleShotComponent::Snap @0x82415620 inlines all
+        // three reads). DECLARATION-ONLY per the far-member convention (bodies
+        // link from the GuiCache TU). ----
+
+        // DWARF h:1277 (member meRoadRuleShotOpponentARCI, h:1817; X360
+        // +0xAC48/44104). s32-typed per this header's ARCI house style.
+        s32 GetRoadRuleShotOpponentARCI() const;
+
+        // The shot "captured-for line" gate byte (X360 +0xAC5A/44122). FLAG: no
+        // PS3-DWARF member lands on this X360 offset (the DWARF's shot bools sit
+        // at +0xAC44..46 / +0xAC58) -- an X360-side addition, named from its one
+        // consumer (Snap fills the "CAPTURED_FOR <ruler>" line only when set).
+        bool GetRoadRuleShotCapturedLineGate() const;
+
+        // One online player record (DWARF h:1836 maPlayerInfo[8]; X360
+        // +0xAC80/44160, the committed 312-byte InGamePlayerStatusData stride).
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
+             GetOnlinePlayerInfo(s32 liIndex) const;
 
     private:
         // ===================================================================

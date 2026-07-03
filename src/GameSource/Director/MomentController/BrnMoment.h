@@ -24,6 +24,7 @@
 
 #include "types.hpp"
 #include "GameSource/Director/Camera/Camera.h"               // BrnDirector::Camera::Camera (by value)
+#include "GameSource/Director/Utils/BrnVehicleRef.h"          // BrnDirector::VehicleRef (Moment::VehicleRef base)
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"   // Camera::BehaviourHandle<T> (MomentBystanderSeesAction's mBystander)
 
 namespace BrnDirector
@@ -39,7 +40,11 @@ namespace BrnDirector
         // subclass Parameters records (held by value in MomentParameterBank) can derive
         // from it. SetParameters takes a const Parameters*.
         class Parameters {};
-        class VehicleRef;
+
+        // DWARF: the moment-side vehicle-reference wrapper (MomentPassengerSeesAction
+        // holds two by value). Extends the committed BrnDirector::VehicleRef with no
+        // data; the resolve/set calls land on the base's committed surface.
+        class VehicleRef : public BrnDirector::VehicleRef {};
 
         // DWARF: BrnMoment.h:104.
         enum EState
