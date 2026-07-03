@@ -19,6 +19,7 @@
 // asm's construct-queue-before-spy ordering is preserved (this is a hand-written method, so the
 // body order is the call order, independent of declaration order).
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstddef>   // offsetof
 
@@ -42,6 +43,33 @@ namespace PropEntityIO
 
         mUpdatedPropQueue.Construct();
         mContactSpyInterface.Construct();
+    }
+
+    // X360 0x822B93F0 (R, :569) -- read-lock; return the embedded contact-spy interface (this+4).
+    // Called by BrnWorld::PropEntityModule::ProcessContacts. (class:BrnWorld::PropEntityIO TU; no \n.)
+    const InputBuffer_PostPhysics::ContactSpyInterface* InputBuffer_PostPhysics::GetContactSpyInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mContactSpyInterface;
+    }
+
+    // X360 0x827A1628 (:572) -- write-lock; return the mutable contact-spy interface handle
+    // (this+0x04). This is the NON-const overload: it tests the WRITE-lock bit
+    // (`extrwi r11,r11,1,28` == bit 3 == IsBufferLockedForWriting()) -- reproduced as attested.
+    // The rodata assert string carries a trailing newline (VERBATIM).
+    InputBuffer_PostPhysics::ContactSpyInterface* InputBuffer_PostPhysics::GetContactSpyInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mContactSpyInterface;
+    }
+
+    // X360 0x827AA2D8 (:573) -- write-lock; append the source update-prop queue onto the embedded
+    // mUpdatedPropQueue (this+0x10). Append is the BaseEventQueue<UpdatePropEvent> generic.
+    // The rodata assert string carries a trailing newline (VERBATIM).
+    void InputBuffer_PostPhysics::AppendUpdatedPropQueue(const UpdatePropEventQueue* lpQueue)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mUpdatedPropQueue.Append(*lpQueue);
     }
 }
 }

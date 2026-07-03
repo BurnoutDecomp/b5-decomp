@@ -25,7 +25,32 @@ namespace PropEntityIO
     void OutputBuffer_Prepare::_AssertLayout()
     {
         static_assert(offsetof(OutputBuffer_Prepare, mResourceRequestInterface) == 4,      "mResourceRequestInterface @4");
+        static_assert(offsetof(OutputBuffer_Prepare, mSceneInputInterface)      == 1056,   "mSceneInputInterface @1056");
         static_assert(offsetof(OutputBuffer_Prepare, mPropInputInterface)       == 819824, "mPropInputInterface @819824");
+    }
+
+    // X360 0x827A1820 (R, :605) -- read-lock; return the resource-request interface (this+4).
+    // Called by WorldModule::BridgePropResourceRequestsToOutput_Prepare.
+    const OutputBuffer_Prepare::ResourceRequestInterfaceStorage* OutputBuffer_Prepare::GetResourceRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mResourceRequestInterface;
+    }
+
+    // X360 0x827A16D0 (R, :599) -- read-lock; return the scene-input interface (this+1056).
+    // Called by WorldModule::BridgePropModuleToSceneModule_Prepare.
+    const OutputBuffer_Prepare::SceneInputInterfaceStorage* OutputBuffer_Prepare::GetSceneInputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mSceneInputInterface;
+    }
+
+    // X360 0x822B9540 (W, :602) -- write-lock; return the scene-input interface (this+1056).
+    // Called by BrnWorld::PropEntityModule::InitializePropPhysicsData.
+    OutputBuffer_Prepare::SceneInputInterfaceStorage* OutputBuffer_Prepare::GetSceneInputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mSceneInputInterface;
     }
 
     // X360 0x822B9690: write-lock; return this + 4.

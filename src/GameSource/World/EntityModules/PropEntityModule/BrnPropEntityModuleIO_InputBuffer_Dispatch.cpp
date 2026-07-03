@@ -24,6 +24,8 @@ namespace PropEntityIO
                       "muDispatchFrame @4");
         static_assert(offsetof(InputBuffer_Dispatch, muShadowMap) == 8,
                       "muShadowMap @8");
+        static_assert(offsetof(InputBuffer_Dispatch, mSceneResultQueue) == 0xC,
+                      "mSceneResultQueue @0xC");
         static_assert(offsetof(InputBuffer_Dispatch, muCoronaSubmissionInterface) == 0x801C,
                       "muCoronaSubmissionInterface @0x801C");
     }
@@ -54,6 +56,15 @@ namespace PropEntityIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         muShadowMap = luShadowMap;
+    }
+
+    // X360 0x827BB1E0 (W, :296) -- write-lock; return the scene-query-results queue (this+0xC).
+    // Called by BrnWorld::PropEntityModule::GenerateDispatchLists /
+    // GenerateShadowMapDispatchLists (WorldModule::GenerateDispatchLists path).
+    InputBuffer_Dispatch::SceneResultQueueStorage* InputBuffer_Dispatch::GetSceneResultQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mSceneResultQueue;
     }
 
     // X360 0x822B8FF8 (R, :304) -- read-lock; return the corona-submission interface handle

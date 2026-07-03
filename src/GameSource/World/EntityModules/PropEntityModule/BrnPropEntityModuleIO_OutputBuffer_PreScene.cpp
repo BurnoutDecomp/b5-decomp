@@ -23,7 +23,33 @@ namespace PropEntityIO
     void OutputBuffer_PreScene::_AssertLayout()
     {
         static_assert(offsetof(OutputBuffer_PreScene, mResourceRequestInterface) == 4,      "mResourceRequestInterface @4");
+        static_assert(offsetof(OutputBuffer_PreScene, mSceneInputInterface)      == 1056,   "mSceneInputInterface @1056");
         static_assert(offsetof(OutputBuffer_PreScene, mPropInputInterface)       == 819824, "mPropInputInterface @819824");
+        static_assert(offsetof(OutputBuffer_PreScene, mVisibleOverheadSignArray) == 831104, "mVisibleOverheadSignArray @831104");
+    }
+
+    // X360 0x827A1A18 (R, :640) -- read-lock; return the resource-request interface (this+4).
+    // Called by WorldModule::BridgePropToOutput_PreScene.
+    const OutputBuffer_PreScene::ResourceRequestInterfaceStorage* OutputBuffer_PreScene::GetResourceRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mResourceRequestInterface;
+    }
+
+    // X360 0x827A1AC0 (R, :643) -- read-lock; return the visible-overhead-sign array (this+831104).
+    // Called by WorldModule::BridgePropToOutput_PreScene.
+    const OutputBuffer_PreScene::VisibleOverheadSignArrayStorage* OutputBuffer_PreScene::GetVisibleOverheadSignArray() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mVisibleOverheadSignArray;
+    }
+
+    // X360 0x822B9930 (W, :644) -- write-lock; return the visible-overhead-sign array (this+831104).
+    // Called by BrnWorld::PropEntityModule::PreSceneUpdate.
+    OutputBuffer_PreScene::VisibleOverheadSignArrayStorage* OutputBuffer_PreScene::GetVisibleOverheadSignArray()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mVisibleOverheadSignArray;
     }
 
     // X360 0x822B9888: write-lock; return this + 4.
