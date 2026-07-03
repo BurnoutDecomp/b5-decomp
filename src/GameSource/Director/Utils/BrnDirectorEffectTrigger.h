@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N> (the 100-slot hook table)
+#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (the current-effect tripwires)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnDirectorEffectTrigger.h
@@ -85,7 +86,13 @@ namespace BrnDirector
         // returns `const HookNameStringWrapper&`; the established consumers
         // (ArbStateRankUp) strcmp the raw string, so this home keeps the char*
         // form -- same bytes (the wrapper IS the char[33]).
-        const char* GetCurrentEffectName() const { return mCurrentEffectName.mHookNameString; }
+        // @0x821F17C0 (class TU) -- the h:112 tripwire, then the name (the X360
+        // returns the wrapper's address == its string; non-gating).
+        const char* GetCurrentEffectName() const
+        {
+            CGS_ASSERT(mbHasCurrentEffectName, "HasCurrentEffectName()");   // :112 (non-gating)
+            return mCurrentEffectName.mHookNameString;
+        }
 
         // DWARF h:115-185 -- their own ledger functions (declaration-only here).
         f32 GetCurrentEffectBlendAmount() const;

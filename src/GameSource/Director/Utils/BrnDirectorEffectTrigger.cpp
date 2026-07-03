@@ -91,4 +91,46 @@ namespace BrnDirector
             mbStartRequested = false;
         }
     }
+
+// ============================================================================
+// The EffectInterface current-effect surface (class:BrnDirector::EffectInterface,
+// batch 15): the blend accessor and the three register entry points.
+// ============================================================================
+
+// @ 0x821F1818 -- h:115 tripwire (non-gating), then the blend.
+f32 EffectInterface::GetCurrentEffectBlendAmount() const
+{
+    CGS_ASSERT(mbHasCurrentEffectName, "HasCurrentEffectName()");   // :115 (non-gating)
+    return mfCurrentEffectBlendAmount;
+}
+
+// @ 0x82203FD8 -- adopt a starting camera-PFX effect: drop the id form, raise the
+// name form, copy the name, store the blend (the asm's store order).
+void EffectInterface::RegisterStartingEffectWithName(const HookNameStringWrapper& lrName,
+                                                     f32 lfBlend)
+{
+    mbHasCurrentEffectId   = false;
+    mbHasCurrentEffectName = true;
+    mCurrentEffectName.Set(lrName.mHookNameString);
+    mfCurrentEffectBlendAmount = lfBlend;
+}
+
+// @ 0x821F1870 -- drop the current effect when the stopping name matches it (or
+// when nothing is current -- the X360 falls into the same clear).
+void EffectInterface::RegisterStoppingEffectWithName(const HookNameStringWrapper& lrName)
+{
+    if (!mbHasCurrentEffectName || mCurrentEffectName == lrName.mHookNameString)
+        mbHasCurrentEffectName = false;
+}
+
+// @ 0x821F18C0 -- the background counterpart. FAITHFUL QUIRK: the X360 gates on
+// the FOREGROUND has-flag (+0xD37) and compares against the FOREGROUND name
+// (+0xCF4) -- not the background pair -- while clearing the BACKGROUND has-flag
+// (+0xD38); reproduced as-is.
+void EffectInterface::RegisterStoppingBackgroundEffectWithName(const HookNameStringWrapper& lrName)
+{
+    if (!mbHasCurrentEffectName || mCurrentEffectName == lrName.mHookNameString)
+        mbHasCurrentBackgroundEffectName = false;
+}
+
 }

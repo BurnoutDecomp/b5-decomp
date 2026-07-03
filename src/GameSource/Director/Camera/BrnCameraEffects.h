@@ -65,9 +65,16 @@ struct CameraEffects
     //   from BrnEffectsData.h.
     MotionBlurData mMotionBlurData;             // +0x44 (12 bytes -> ends +0x50)
 
-    // +0x50 .. +0x7F: background-effect request + leading post-FX/fade scalars. Construct
-    //   zeroes bytes/words at +0x50/+0x78/+0x7C. NOMINAL span.
-    u8  maReserved50[0x80 - 0x50];
+    // +0x50 .. +0x77: background-effect request + leading post-FX scalars. Construct
+    //   zeroes bytes/words at +0x50/+0x78. NOMINAL span.
+    u8  maReserved50[0x78 - 0x50];
+
+    u8  maReserved78[4];                          // +0x78 (Construct zeroes it)
+
+    // +0x7C: the requested camera post-FX id (Construct zeroes it; MomentPlayerStunt
+    //   @0x82272750 compares it against the 2dFlash id 575791 to publish state flag
+    //   20 -- the "SetRequestedPostFX" word the arbitrator FLAG names).
+    u32 muRequestedPostFxId;                      // +0x7C
 
     // +0x80: the start-hook blend amount (GetStartHookNameBlendAmount @0x821F1910
     //   `lfs f1, 0x80`, guarded by mbHasStartHookNameString -- the REAL blend member;

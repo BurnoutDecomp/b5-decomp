@@ -76,6 +76,14 @@ namespace BrnFlapt
         void GotoAndStopLabel(u32 luLabelHash, const char* lpcLabel);
 
         // ---- trigger callbacks --------------------------------------------
+        // The clip's current timeline frame, ONE-BASED (the accessor NAME is given
+        // by BoostMessageSlot's :266 assert text). CONTRACT PIN: the X360 field at
+        // instance +0x28 is ZERO-based -- the inlined accessor returns field+1, and
+        // the BoostMessageSlot consumers compare the ONE-based values (10/19/27/34,
+        // 13/45/66, <=34). The body MUST add one. GROWN for BoostMessageSlot::Update
+        // @0x82420E60; DECLARATION-ONLY (the timeline TU owns the layout).
+        s32 GetCurrentFrameOneBased() const;
+
         // SetFrameTriggerCallback @ 0x8246CAB8 call site.
         void SetFrameTriggerCallback(FrameTriggerCallback lpCallback,
                                      void* lpUserData);

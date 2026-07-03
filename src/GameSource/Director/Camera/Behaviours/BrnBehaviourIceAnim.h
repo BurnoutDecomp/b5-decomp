@@ -149,6 +149,7 @@ public:
     const Attrib::Gen::shotgroup& GetTumblingCrashShots() const;     // +1448
     const Attrib::Gen::shotgroup& GetStationaryCrashShots() const;   // +1464
     ICE::ICETakeData* GetKeyAnimFromGuid(s32 liGuid) const;          // @0x821F69A8
+    ICE::ICETakeData* GetKeyAnim(s32 liHashedNameId) const;          // @0x821F6948 (the hashed-name lookup; MomentPlayerStunt's "World_Signature_%i" takes)
 
     // The online-race-start shot-group (the manager's embedded shotgroup @+616 / +0x268). The
     // online-race-intro arbitrator state (BrnArbStateOnlineRaceIntro::Update / ::SetupRivalMovie)
@@ -489,8 +490,9 @@ public:
     // the base's mbCanSwitchToMeNow (Behaviour.h DWARF); the behaviour raising it
     // from Update is it signalling readiness -- the member keeps the slice name
     // pending its own-TU reconcile.
-    bool HasFailed() const        { return mbFailed; }
-    bool CanSwitchToMeNow() const { return mbMotionBlurGate; }
+    bool HasFailed() const          { return mbFailed; }
+    bool CanSwitchToMeNow() const   { return mbMotionBlurGate; }
+    bool CanSwitchFromMeNow() const { return mbBaseFlagC; }   // +0x0C == the base mbCanSwitchFromMeNow (DWARF base name; MomentPlayerStunt's release gate)
 
     // The camera this behaviour produced this frame (mLastCamera). The arbitrator states
     // copy it into their own mCamera while the behaviour is driving (the X360 reaches it
