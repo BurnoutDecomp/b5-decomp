@@ -4,39 +4,257 @@
 // DecFIGS DWARF (GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h)
 // with member OFFSETS pinned by the X360 retail XEX.
 //
-// This header currently homes OutputBuffer_PostScene (the post-scene producer buffer the
-// traffic module fills with AI-visible traffic + the traffic->race-car interface). The other
-// BrnTrafficIO buffers in the DWARF (OutputBuffer_Prepare/PrePhysics/..., InputBuffer_*) are
-// reconstructed by their own TUs; only the pieces this TU needs are declared here.
+// This header homes the traffic module's per-stage IO buffers: the InputBuffer_* buffers the
+// world/physics/race-car bridges fill for the traffic module to drain, and the OutputBuffer_*
+// buffers the traffic module produces. Members whose owning homes live in other TUs are embedded
+// by-value using their real committed types where available, or as correctly-sized opaque stand-
+// ins (flagged) sized to the X360 spans so the X360-pinned member offsets are exact.
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                                   // CgsModule::IOBuffer
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.h" // TrafficAIInterface
 
-// The world-module timer-status payload the pre-scene input setter latches (pointer-only use;
-// home GameSource/World/BrnWorldModuleIO.h).
-namespace BrnWorldIO { struct TimerStatusInterface; }
+// ---- InputBuffer_PreScene member/parameter type homes ----
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"                 // CgsSystem::TimerStatusInterface
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntity{Active,Global}RaceCarOutputInterface, RCEntityPlayerResetInterface
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h"           // TrafficNetworkInputInterface
+
+// ---- InputBuffer_PrePhysics member type homes ----
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"                                 // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"            // SceneManagerIO::PotentialContact (80B)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventOutOverlapPair.h"   // SceneManagerIO::OutOverlapPair (24B)
+
+// ---- InputBuffer_PostScene / InputBuffer_PostPhysics member type homes ----
+#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h"     // BrnWorld::CrashIO::TrafficOutputInterface
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"        // VehicleOutputInterface, VehicleManagerOutputInterface
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h" // DeformationOutputInterfaceForEntityModules
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"                       // ContactSpyInterface
 
 namespace BrnTraffic
 {
 namespace BrnTrafficIO
 {
-    struct TrafficNetworkInputInterface;   // SharedIO/BrnTrafficNetworkInterfaces.h (pointer-only use)
+    // ============================================================================
+    // InputBuffer_Dispatch  (ADDITIVE GROW: WorldBridgeWorldModuleToEntityModules_Render TU)
+    // ============================================================================
+    // The traffic-entity module's generate-dispatch-lists INPUT buffer
+    // (WorldModule::BridgeWorldModuleToEntityModules_Render fills it via the four setters;
+    // BrnTraffic::TrafficEntityModule::GenerateDispatchLists drains it via the four getters).
+    // Mirrors the near-identical sibling BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists.
+    //
+    // LAYOUT (X360 accessor offsets, authoritative -- four contiguous 32-bit words at the tail):
+    //   base    CgsModule::IOBuffer                     (1-byte status FlagSet8; +1.. pad)
+    //   +0x8014 u32 muDispatchFrame                     dispatch-frame index
+    //   +0x8018 u32 muBlobbyShadowBuffer                blobby-shadow buffer handle
+    //   +0x801C u32 muCoronaSubmissionInterface         corona-submission interface handle
+    //   +0x8020 u32 muShadowMap                         shadow-map handle
+    //
+    // FLAG (opaque interior): the corona/shadow/blobby fields are 32-bit handles of foreign
+    // interfaces whose homes land elsewhere; the asm treats each as a single 32-bit word. The
+    // dispatch-list payload from base up to +0x8014 is the buffer's other (unrecovered) contents
+    // and is modelled as correctly-sized opaque storage so the four X360-pinned offsets are exact.
+    class InputBuffer_Dispatch : public CgsModule::IOBuffer
+    {
+    public:
+        // X360 0x827120D8: read-lock; return the dispatch-frame index (this+0x8014).
+        u32  GetDispatchFrame() const;
+        // X360 0x827A0EC0: write-lock; set the dispatch-frame index (this+0x8014).
+        void SetDispatchFrame(u32 luDispatchFrame);
+        // X360 0x82712188 (Hex-Rays "G"): read-lock; return the blobby-shadow buffer handle (this+0x8018).
+        u32  GetBlobbyShadowBuffer() const;
+        // X360 0x827A0F70: write-lock; set the blobby-shadow buffer handle (this+0x8018).
+        void SetBlobbyShadowBuffer(u32 luBlobbyShadowBuffer);
+        // X360 0x82712238 (Hex-Rays "GetCor"): read-lock; return the corona-submission interface handle (this+0x801C).
+        u32  GetCoronaSubmissionInterface() const;
+        // X360 0x827A1020: write-lock; set the corona-submission interface handle (this+0x801C).
+        void SetCoronaSubmissionInterface(u32 luCoronaSubmissionInterface);
+        // X360 0x827122E8: read-lock; return the shadow-map handle (this+0x8020).
+        u32  GetShadowMap() const;
+        // X360 0x827A10D0: write-lock; set the shadow-map handle (this+0x8020).
+        void SetShadowMap(u32 luShadowMap);
+
+        static void _AssertLayout();
+
+    private:
+        // The IOBuffer base is a single status byte; the four handle words sit contiguously at the
+        // tail (+0x8014..+0x8020). The preceding dispatch-list payload is folded into correctly-sized
+        // opaque storage: 0x8014 - 1 accounts for the base's 1-byte status (see FLAG).
+        u8            maPayloadAndPad[0x8014 - 1];        // +0x0001..+0x8013 (status pad + payload)
+        u32           muDispatchFrame;                    // +0x8014
+        u32           muBlobbyShadowBuffer;               // +0x8018
+        u32           muCoronaSubmissionInterface;        // +0x801C
+        u32           muShadowMap;                        // +0x8020
+    };
 
     // ============================================================================
-    // InputBuffer_PreScene  (ADDITIVE GROW: WorldBridgeInputToEntityModules TU)
+    // InputBuffer_PreScene  (ADDITIVE GROW: full DWARF layout, BrnTrafficEntityModuleIO.h:143)
     // ============================================================================
-    // MINIMAL SLICE -- only the two setters WorldModule::BridgeInputToEntityModules
-    // @0x827ADF88 calls are declared (both real out-of-line X360 symbols,
-    // BrnTraffic::BrnTrafficIO::InputBuffer_PreScene::SetTimerStatusInterface /
-    // ::SetTrafficNetworkInputInterface, their own ledger functions); the buffer
-    // payload is owned by the traffic IO TUs.
+    // The traffic module's pre-scene input buffer. Grown from the earlier minimal 2-setter slice
+    // to the full DWARF layout with REAL committed member types, so the batch setter bodies get
+    // exact X360 offsets. WorldModule::BridgeInputToEntityModules fills the timer + network members;
+    // WorldModule::BridgeRaceCarModuleToTrafficModule_PreScene fills the two race-car interfaces.
     class InputBuffer_PreScene : public CgsModule::IOBuffer
     {
     public:
-        void SetTimerStatusInterface(const BrnWorldIO::TimerStatusInterface* lpTimerStatusInterface);
-        void SetTrafficNetworkInputInterface(const TrafficNetworkInputInterface* lpTrafficNetworkInputInterface);
+        typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface ActiveRaceCarOutputInterface;   // DWARF :85
+        typedef BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface GlobalRaceCarOutputInterface;   // DWARF :86
+
+        // X360 0x82710B30 -- read-lock; returns &mTimerStatusInterface (this + 4).
+        const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const;                                       // DWARF :150
+        // X360 0x8279FAD8 -- write-lock; field-copies the source timer status into +4 (operator=).
+        void SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpTimerStatusInterface);                  // DWARF :151
+        // X360 0x8279FBE8 -- write-lock; flat 10480B member copy into +64.
+        void SetActiveRaceCarOutputInterface(const ActiveRaceCarOutputInterface* lpInterface);                        // DWARF :154
+        // X360 0x8279FCA0 -- write-lock; flat 2416B member copy into +10544.
+        void SetGlobalRaceCarOutputInterface(const GlobalRaceCarOutputInterface* lpInterface);                        // DWARF :157
+        // X360 0x827ACD28 -- write-lock; clear+append the hull queue, copy mbDiverged into +12960.
+        void SetTrafficNetworkInputInterface(const TrafficNetworkInputInterface* lpTrafficNetworkInputInterface);     // DWARF :160
+
+        static void _AssertLayout();
+
+    private:
+        CgsSystem::TimerStatusInterface mTimerStatusInterface;          // DWARF :167  @ +4     (48B)
+        ActiveRaceCarOutputInterface    mActiveRaceCarOutputInterface;  // DWARF :168  @ +64    (10480B)
+        GlobalRaceCarOutputInterface    mGlobalRaceCarOutputInterface;  // DWARF :169  @ +10544 (2416B)
+        TrafficNetworkInputInterface    mTrafficNetworkInputInterface;  // DWARF :170  @ +12960
+        f32                             mfTimeOfDay_Seconds;            // DWARF :171
     };
+
+    // ============================================================================
+    // InputBuffer_PostScene  (ADDITIVE GROW: DWARF BrnTrafficEntityModuleIO.h:221)
+    // ============================================================================
+    // The traffic module's post-scene input buffer. WorldModule::BridgeCrashModuleToTrafficModule_
+    // PostScene fills the crash-traffic output interface; BridgeRaceCarModuleToTrafficModule_PreScene
+    // fills the active-race-car interface.
+    //
+    // X360-pinned offsets:
+    //   mCrashTrafficOutputInterface  (TrafficOutputInterface)               @ 8     (8-aligned after status)
+    //   mActiveRaceCarOutputInterface (RCEntityActiveRaceCarOutputInterface) @ 1648  (0x670; 16-aligned)
+    //   mRaceCarToTrafficInterface    (RaceCarToTrafficInterface)            follows
+    //
+    // FLAG (opaque interior): RaceCarToTrafficInterface's concrete home is not yet in-tree, so it is
+    // modelled as a 1-byte opaque placeholder (this batch never touches its interior; the two pinned
+    // offsets that matter -- @8 and @1648 -- are both asserted in the .cpp bodies). Adopt the named
+    // type additively when its home lands.
+    class InputBuffer_PostScene : public CgsModule::IOBuffer
+    {
+    public:
+        typedef BrnWorld::CrashIO::TrafficOutputInterface                             CrashTrafficOutputInterface; // DWARF :250
+        typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface ActiveRaceCarOutputInterface; // :240
+        // RaceCarToTrafficInterface home not yet reconstructed -- opaque placeholder (see FLAG).
+        struct RaceCarToTrafficInterface { u8 muDUMMY; };                                                          // :241
+
+        const CrashTrafficOutputInterface* GetCrashTrafficOutputInterface() const;     // :228
+        void SetCrashTrafficOutputInterface(const CrashTrafficOutputInterface*);        // :229 (0x827ACDE8)
+        const ActiveRaceCarOutputInterface* GetActiveRaceCarOutputInterface() const;   // :231
+        void SetActiveRaceCarOutputInterface(const ActiveRaceCarOutputInterface*);      // :232 (0x8279FEA8)
+
+    private:
+        CrashTrafficOutputInterface   mCrashTrafficOutputInterface;    // :239 @8
+        ActiveRaceCarOutputInterface  mActiveRaceCarOutputInterface;   // :240 @1648 (0x670)
+        RaceCarToTrafficInterface     mRaceCarToTrafficInterface;      // :241
+    };
+
+    // ============================================================================
+    // InputBuffer_PrePhysics  (ADDITIVE GROW: DWARF BrnTrafficEntityModuleIO.h:330)
+    // ============================================================================
+    // The traffic module's pre-physics input buffer. Member SEQUENCE + NAMES from the DecFIGS DWARF
+    // (:330-364); byte OFFSETS pinned by the three X360 setter bodies (0x827A9DE0 / 0x827A9E98 /
+    // 0x827A0158):
+    //   +0        IOBuffer status flag (1-byte FlagSet base)
+    //   +16       mPotentialContactQueue  EventQueue<PotentialContact,2048>  (addi this,0x10)
+    //   +163872   mOverlapPairsQueue      EventQueue<OutOverlapPair,128>     (this+0x28020)
+    //   +166960   mSceneResultQueue       OutSceneQueryResultsQueue<32768> (not set here; opaque pad)
+    //   +199744   mPlayerResetInterface   RCEntityPlayerResetInterface (32B) (this+0x30C40)
+    //   +199776   mPropToTrafficInterface PropToTrafficInterface (not set here; opaque placeholder)
+    class InputBuffer_PrePhysics : public CgsModule::IOBuffer
+    {
+    public:
+        typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048> PotentialContactQueue; // :91
+        typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>    OverlapPairsQueue;     // :92
+        typedef BrnWorld::RaceCarEntityModuleIO::RCEntityPlayerResetInterface                  RCEntityPlayerResetInterface; // :104
+
+        const PotentialContactQueue* GetPotentialContactQueue() const;                           // :277
+        void  SetPotentialContactQueue(const PotentialContactQueue* lpPotentialContactQueue);    // :278 W (0x827A9DE0)
+
+        const OverlapPairsQueue* GetOverlapPairsQueue() const;                                   // :280
+        void  SetOverlapPairsQueue(const OverlapPairsQueue* lpOverlapPairsQueue);                // :281 W (0x827A9E98)
+
+        const RCEntityPlayerResetInterface* GetPlayerResetInterface() const;                     // :283
+        void  SetPlayerResetInterface(const RCEntityPlayerResetInterface* lpPlayerResetInterface); // :284 W (0x827A0158)
+
+        static void _AssertLayout();
+
+    private:
+        // The mSceneResultQueue / mPropToTrafficInterface members this batch does not touch are
+        // modelled as correctly-sized opaque stand-ins so the pinned member offsets are exact.
+        PotentialContactQueue        mPotentialContactQueue;                                     // :294 (offset 16)
+        OverlapPairsQueue            mOverlapPairsQueue;                                          // :295 (offset 163872)
+        unsigned char                maSceneResultQueue[199744 - 166960];                        // :296 (offset 166960, 32784B; OutSceneQueryResultsQueue<32768>, opaque)
+        RCEntityPlayerResetInterface mPlayerResetInterface;                                       // :298 (offset 199744, 32B)
+        unsigned char                maPropToTrafficInterface[1];                                 // :299 (offset 199776; PropToTrafficInterface, opaque placeholder)
+    };
+
+    // ============================================================================
+    // InputBuffer_PostPhysics  (ADDITIVE GROW: DWARF BrnTrafficEntityModuleIO.h:459)
+    // ============================================================================
+    // The traffic module's post-physics input buffer. The physics/race-car bridges publish per-
+    // frame snapshots via WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics (and
+    // BridgeRaceCarModuleToTrafficModule_PreScene for the active-race-car member), calling the five
+    // write-lock setters below (all real out-of-line X360 symbols). Each tests the IOBuffer write-
+    // lock bit, fires the non-gating "Not locked for writing" assert, then copies the source into
+    // the matching embedded member.
+    //
+    // MEMBER LAYOUT authoritative from the DecFIGS DWARF (:459-499, NAMES all members); the X360
+    // accessor/store offsets pin their console positions:
+    //   +0x10    (16)     mVehicleOutputInterface                     (:370)
+    //   +0xEC30  (60464)  mVehicleManagerOutputInterface              (:372)
+    //   +0x128C0 (75968)  mActiveRaceCarOutputInterface               (:374; X360 XMemCpy 0x28F0 == 10480)
+    //   +0x151B0 (86448)  mDeformationOutputInterfaceForEntityModules (:375)
+    //   +0x19EF0 (106224) mContactSpyInterface                        (:376; single-word copy)
+    //
+    // Offsets are NOT static_asserted: the SIMD/queue aggregates widen on the 64-bit host so their
+    // host sizes do not reproduce the 32-bit X360 offsets (same reason the sibling RaceCar
+    // InputBuffer_PostPhysics pins no member offsets). The two members this batch does not access
+    // (mSceneResultQueue, mGameActionQueue) are modelled as correctly-sized opaque-by-value stand-
+    // ins sized to the X360 spans. Adopt the named queue types additively when their homes land.
+    class InputBuffer_PostPhysics : public CgsModule::IOBuffer
+    {
+    public:
+        typedef BrnPhysics::Vehicle::VehicleOutputInterface        VehicleOutputInterface;        // :82
+        typedef BrnPhysics::Vehicle::VehicleManagerOutputInterface VehicleManagerOutputInterface; // :83
+        typedef BrnPhysics::Deformation::DeformationOutputInterfaceForEntityModules DeformationOutputInterfaceForEntityModules; // :106
+        typedef BrnPhysics::ContactSpy::ContactSpyInterface        ContactSpyInterface;           // :108
+        // :374 spells the member type as InputBuffer_PreScene::ActiveRaceCarOutputInterface, itself a
+        // typedef for RCEntityActiveRaceCarOutputInterface (DWARF :144). Use the real type directly.
+        typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface ActiveRaceCarOutputInterface;
+
+        // X360 0x827A9F50 (:347): write-lock; mVehicleOutputInterface = *src.
+        void SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface);
+        // X360 0x827AA000 (:353): write-lock; mVehicleManagerOutputInterface = *src.
+        void SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface* lpVehicleManagerOutputInterface);
+        // X360 0x827A06C0 (:359): write-lock; mActiveRaceCarOutputInterface = *src (X360 XMemCpy 0x28F0 == 10480).
+        void SetActiveRaceCarOutputInterface(const ActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface);
+        // X360 0x827AA0B8 (:362): write-lock; mDeformationOutputInterfaceForEntityModules = *src.
+        void SetDeformationOutputInterfaceForEntityModules(const DeformationOutputInterfaceForEntityModules* lpDeformationOutputInterface);
+        // X360 0x827A0778 (:366): write-lock; mContactSpyInterface = *src (single-word copy).
+        void SetContactSpyInterface(const ContactSpyInterface* lpContactSpyInterface);
+
+    private:
+        // Opaque-by-value stand-ins for the two members this batch does not touch, sized to the
+        // X360 spans between the pinned real members (host offsets are not asserted).
+        struct SceneResultQueueStorage { unsigned char maReserved[32784]; }; // :371 span +0x10+sizeof(VOI) .. +0xEC30
+        struct GameActionQueueStorage  { unsigned char maReserved[13328]; }; // :373 span +0xEC30+sizeof(VMOI) .. +0x128C0
+
+        VehicleOutputInterface                     mVehicleOutputInterface;                       // :370  X360 +0x10
+        SceneResultQueueStorage                    mSceneResultQueue;                             // :371
+        VehicleManagerOutputInterface              mVehicleManagerOutputInterface;                // :372  X360 +0xEC30
+        GameActionQueueStorage                     mGameActionQueue;                              // :373
+        ActiveRaceCarOutputInterface               mActiveRaceCarOutputInterface;                 // :374  X360 +0x128C0 (10480 B)
+        DeformationOutputInterfaceForEntityModules mDeformationOutputInterfaceForEntityModules;   // :375  X360 +0x151B0
+        ContactSpyInterface                        mContactSpyInterface;                          // :376  X360 +0x19EF0
+    };
+
     // ============================================================================
     // OutputBuffer_PostScene  (DWARF :291; X360 Construct @ 0x82761830)
     // ============================================================================
@@ -44,9 +262,8 @@ namespace BrnTrafficIO
     //   +0      IOBuffer status flag (*a1 = 1)
     //   +4      mSceneCoarseQueryQueue  (VariableEventQueue<16384,16>::Construct(a1+4))
     //   +16416  mTrafficAIInterface     (GetTrafficAIInterface returns a1+16416; count zeroed)
-    //   +61488  mTrafficToRaceCarInterface_PostScene (RivalInTrafficUpdateEvent,34 not here --
-    //           it lives inside mTrafficAIInterface @ +45072; this trailing interface is the
-    //           post-scene traffic->race-car interface)
+    //   +61488  mTrafficToRaceCarInterface_PostScene (this trailing interface is the post-scene
+    //           traffic->race-car interface)
     //
     // mSceneCoarseQueryQueue is the SceneManager coarse-query input queue
     // (InputBuffer_Query::InSmCoarseQueryQueue == InCoarseQueryQueue<16384>, a
@@ -113,18 +330,6 @@ namespace BrnTrafficIO
     // homes elsewhere and are NOT reconstructed here; the storage up to each pinned offset is
     // modelled as correctly-sized opaque storage so the three pinned return offsets (+8, +834784,
     // +834828) are exact. Adopt the named interface types additively when their homes land.
-    //
-    // PS3-RECONCILE SKIP (branch divergence): the PS3 DecFIGS (B5_FIGS) OutputBuffer_PostPhysics
-    // has 9 named members (mCrashTrafficInputInterface, mNetworkInterface, mTrafficSoundOutput-
-    // Interface, mTrafficDirectorOutputInterface, mGameEventQueue, mSceneInputInterface,
-    // mTrafficTypeResponseQueue, mResourceRequestInterface, mGuiEventQueue) while the Feb-2007
-    // b5_main leak (same branch as our X360 target, path d:/P4/B5_main/) has only 6 (and NO
-    // Gui queue). Our X360 (a later b5_main) emits accessors for only 3 members and the recovered
-    // return offsets (+8, +834784, +834828 -- the last two only 44 bytes apart) do NOT reconcile
-    // with the PS3 member sizes/order. The branch layouts diverge, so PS3 names cannot be safely
-    // mapped onto these three offsets -- the only X360-clear fact is GetGuiE @ +834828 returns a
-    // GuiEventQueue. Names left as offset-role placeholders per the "X360 target wins / do not
-    // blind-apply PS3" rule.
     class OutputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
     public:
