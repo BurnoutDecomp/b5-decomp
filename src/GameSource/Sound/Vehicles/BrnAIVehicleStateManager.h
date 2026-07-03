@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"   // BrnSound::Logic::BrnStateManager (committed base)
+#include "GameShared/GameClasses/Sound/Logic/CgsContent.h"          // CgsSound::Logic::Content (by-value spec tables below)
 
 // =============================================================================
 // BrnSound::Vehicles::AIVehicleStateManager
