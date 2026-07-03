@@ -21,6 +21,9 @@
 #include "SDKs/EATech/include/Apt/AptLoader.h"      // AptLoader::Load (the real import loader, homed)
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"  // PushStaticData (the register-block window push)
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"   // gAptActionInterpreter (runStream/CleanupAfterExecution)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                 // AptCIH (ExecuteInitActions' typed CIH chase)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"       // AptCharacterInst::mpRenderItem
+#include "SDKs/EATech/include/Apt/AptRenderItem.h"          // AptRenderItem::mpCharacter
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"  // native-8 shape-geometry rebase
 
 #include <cstdint>
@@ -855,12 +858,13 @@ void* AptCharacterAnimation::ExportClassDefinitionAssets(void* pA2)
         if (result)
         {
             // Find the type-8 timeline command whose id [+4] == this label's indicator.
+            // NATIVE-8 (frame record {i32 count@0, pad, u64 cmds@8}; console was {count@0, cmds@4}).
             const int32_t nIndicator = rEntry.mnIndicator;
-            void* pCmdHdr = mpFrames;                        // [c:0x04] framesOffset (the command table)
-            const int32_t nCmds = BlobI32(pCmdHdr, 0x00);    // *( *(this+4) )
+            void* pCmdHdr = mpFrames;                        // frame[0] == the init command table
+            const int32_t nCmds = BlobI32(pCmdHdr, 0x00);
             if (nCmds > 0)
             {
-                void** pCmdTable = reinterpret_cast<void**>(BlobPtr(pCmdHdr, 0x04));   // *(*(this+4)+4)
+                void** pCmdTable = reinterpret_cast<void**>(BlobPtr(pCmdHdr, 0x08));   // native-8 cmds@+8
                 int32_t iCmd = 0;
                 while (BlobI32(pCmdTable[iCmd], 0x00) != 8 ||
                        BlobI32(pCmdTable[iCmd], 0x04) != nIndicator)
@@ -875,7 +879,7 @@ void* AptCharacterAnimation::ExportClassDefinitionAssets(void* pA2)
                     void* pSavedScratch = AptScriptFunctionBase::PushStaticData();
 
                     void* pScope  = ResolveAnimationScope(pA2);
-                    void* pStream = BlobPtr(pCmdTable[iCmd], 0x08);   // cmd+8 = the stream
+                    void* pStream = BlobPtr(pCmdTable[iCmd], 0x10);   // native-8 tag-8 stream @cmd+0x10
                     // X360 runStream(&dword_8324E760, stream, a2, -1, scope) -> the member
                     // (pStream, pCIH = a2, nLength = -1, pCharInst = the resolved scope).
                     gAptActionInterpreter.runStream(
@@ -906,12 +910,12 @@ void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
 {
     void* result = nullptr;
 
-    void* pCmdHdr = mpFrames;                            // [c:0x04] framesOffset (command table)
-    const int32_t nCmds = BlobI32(pCmdHdr, 0x00);        // *( *(this+4) )
+    void* pCmdHdr = mpFrames;                            // frame[0] == the init command table
+    const int32_t nCmds = BlobI32(pCmdHdr, 0x00);        // NATIVE-8 frame record (count@0, cmds@8)
     if (nCmds <= 0)
         return result;
 
-    void** pCmdTable = reinterpret_cast<void**>(BlobPtr(pCmdHdr, 0x04));   // *(*(this+4)+4)
+    void** pCmdTable = reinterpret_cast<void**>(BlobPtr(pCmdHdr, 0x08));   // native-8 cmds@+8
     int32_t iCmd = 0;
     void* pEntry;
     for (;;)
@@ -931,10 +935,10 @@ void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
 
     void* pScope = ResolveAnimationScope(pA2);
 
-    // stream = *(*(4*iCmd + *(*(this+4)+4)) + 8) -- re-read the table (the asm reloads
-    // *(this+4) after the call) and index the matched command's +8 stream.
-    void** pCmdTable2 = reinterpret_cast<void**>(BlobPtr(mpFrames, 0x04));   // [c:0x04] framesOffset
-    void* pStream = BlobPtr(pCmdTable2[iCmd], 0x08);
+    // stream = the matched command's action stream -- re-read the table (the asm reloads
+    // it after the call). NATIVE-8: cmds@frame+8, tag-8 stream @cmd+0x10.
+    void** pCmdTable2 = reinterpret_cast<void**>(BlobPtr(mpFrames, 0x08));
+    void* pStream = BlobPtr(pCmdTable2[iCmd], 0x10);
     // X360 runStream(&dword_8324E760, stream, a2, -1, scope) -> the member.
     gAptActionInterpreter.runStream(
         static_cast<const unsigned char*>(pStream),
@@ -967,14 +971,24 @@ void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
 
     // Locate nId in mpImportTable (the serialized 64-bit import entry: id at +0x10).
     int32_t iSlot = -1;
-    const int32_t nImports = mnImportCount;               // [c:0x20] importCount
-    // v9 default = *(*(*(pA2+0x20)+4)+4) + 0x10 (the supplied CIH's init bucket).
-    void* pBucket = BlobAt(BlobPtr(BlobPtr(BlobPtr(pA2, 0x20), 0x04), 0x04), 0x10);
+    const int32_t nImports = mnImportCount;
+    // Default bucket = the supplied CIH's clip movie (console chase *(*(*(pA2+0x20)+4)+4)+0x10
+    // == CIH -> charInst -> renderItem -> character -> embedded movie). NATIVE-8: the typed
+    // chain with the widened body offset (KU_AptEmbeddedMovieOff).
+    void* pBucket = nullptr;
+    {
+        AptCIH* pCIH = reinterpret_cast<AptCIH*>(pA2);
+        AptCharacterInst* pCI = pCIH ? pCIH->GetCharacterInst() : nullptr;
+        AptRenderItem* pRI = pCI ? pCI->mpRenderItem : nullptr;
+        AptCharacter* pChar = pRI ? pRI->mpCharacter : nullptr;
+        if (pChar != nullptr)
+            pBucket = reinterpret_cast<char*>(pChar) + 0x20;   // the embedded AptMovie
+    }
     if (nImports > 0)
     {
         for (int32_t i = 0; i < nImports; ++i)
         {
-            if (mpImportTable[i].mnId == nId)             // [c:0x24] importTable, id@+8 console
+            if (mpImportTable[i].mnId == nId)
             {
                 iSlot = i;
                 break;
@@ -988,37 +1002,47 @@ void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
         nResolvedId = GetIDFromImportFile(iSlot);
         if (nResolvedId != -1)
         {
-            // pBucketOwner = imported movie root; pBucket = its init list for the id.
-            AptImportEntry& rImportEntry = mpImportTable[iSlot];   // [c:0x24] importTable (stride 0x20)
-            // FLAG (deferred sub-record): entry.mpFile (the AptFile @+0x18 GUIAPT64) is chased
-            // into its embedded movie (+0x14) and then root+0x10/+0x20 -- these AptFile/embedded-
-            // movie offsets stay the console record layout pending their sub-record recovery.
-            void* pImportedRoot = BlobPtr(rImportEntry.mpFile, 0x14);          // *( entry.mpFile+0x14 )
-            pBucketOwner = BlobAt(pImportedRoot, 0x10);                        // root+0x10 (addi r28,r11,0x10)
-            void* pInitTable = BlobPtr(pBucketOwner, 0x10);                    // *(pBucketOwner+0x10) == *(root+0x20)
-            pBucket = BlobAt(BlobPtr(pInitTable, nResolvedId * 4), 0x10);
+            // pBucketOwner = imported movie DEF BASE; pBucket = the exported character's
+            // embedded movie. NATIVE-8 typed walk (console: file+0x14 -> root+0x10 ->
+            // *(def+0x10)[id*4] -> char+0x10).
+            AptImportEntry& rImportEntry = mpImportTable[iSlot];
+            AptFile* pFile = reinterpret_cast<AptFile*>(rImportEntry.mpFile);
+            void* pImportedRoot = pFile ? pFile->mpData : nullptr;             // the root char header
+            if (pImportedRoot != nullptr)
+            {
+                pBucketOwner = reinterpret_cast<char*>(pImportedRoot) + 0x20;  // def base (native-8)
+                AptCharacterAnimation* pOwner =
+                    reinterpret_cast<AptCharacterAnimation*>(pBucketOwner);
+                if (nResolvedId >= 0 && nResolvedId < pOwner->mnCharacterCount &&
+                    pOwner->mpCharacterTable != nullptr &&
+                    pOwner->mpCharacterTable[nResolvedId] != nullptr)
+                {
+                    pBucket = reinterpret_cast<char*>(pOwner->mpCharacterTable[nResolvedId]) + 0x20;
+                }
+            }
         }
     }
+    if (pBucket == nullptr)
+        return result;
 
-    // Run every pending type-3 init command in the bucket.
-    // The command list is one indirection deeper: outer guard *(pBucket) > 0; then
-    // header = *(pBucket+4), command COUNT = *(header), command ARRAY = *(header+4),
-    // command = array[iCmd] (matching the ExecuteInitAction header read above).
+    // Run every pending type-3 (PLACE) init command in the bucket's frame 0.
+    // NATIVE-8: movie {fc@0, frames@8}; frame record {i32 count@0, pad, u64 cmds@8};
+    // PLACE body at align8(cmd+4)=cmd+8 with charId @body+8 (== cmd+0x10).
     if (BlobI32(pBucket, 0x00) > 0)
     {
-        void* pHdr    = BlobPtr(pBucket, 0x04);                          // *(pBucket+4)
-        void** pCmds  = reinterpret_cast<void**>(BlobPtr(pHdr, 0x04));   // *(header+4) = command array
-        int32_t nCmds = BlobI32(pHdr, 0x00);                            // *(header)   = command count
-        if (nCmds > 0)
+        void* pHdr    = BlobPtr(pBucket, 0x08);                          // frames -> frame[0]
+        void** pCmds  = reinterpret_cast<void**>(BlobPtr(pHdr, 0x08));   // frame[0].cmds
+        int32_t nCmds = BlobI32(pHdr, 0x00);                            // frame[0].count
+        if (pHdr != nullptr && pCmds != nullptr && nCmds > 0)
         {
             int32_t iCmd = 0;
             do
             {
                 void* pCmd = pCmds[iCmd];
-                if (BlobI32(pCmd, 0x00) == 3 && BlobI32(pCmd, 0x0C) != -1)
-                    result = reinterpret_cast<AptCharacterAnimation*>(pBucketOwner)->ExecuteInitAction(pA2, BlobI32(pCmd, 0x0C));
-                pHdr  = BlobPtr(pBucket, 0x04);                          // reload (asm re-reads *(pBucket+4))
-                pCmds = reinterpret_cast<void**>(BlobPtr(pHdr, 0x04));
+                if (BlobI32(pCmd, 0x00) == 3 && BlobI32(pCmd, 0x10) != -1)
+                    result = reinterpret_cast<AptCharacterAnimation*>(pBucketOwner)->ExecuteInitAction(pA2, BlobI32(pCmd, 0x10));
+                pHdr  = BlobPtr(pBucket, 0x08);                          // reload (asm re-reads)
+                pCmds = reinterpret_cast<void**>(BlobPtr(pHdr, 0x08));
                 ++iCmd;
             }
             while (iCmd < BlobI32(pHdr, 0x00));
