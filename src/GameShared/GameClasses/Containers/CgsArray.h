@@ -133,6 +133,27 @@ public:
         return FindFirstInstanceOf(lrElement) != KI_UNCONSTRUCTED;
     }
 
+    // Count how many live elements equal lrElement (X360 Array<T,N>::CountInstancesOf,
+    // generic template body shared by every instantiation; e.g.
+    // Array<BehaviourHelperIndex,28>::CountInstancesOf @ 0x821FCC40, CgsArray.h:453).
+    // Asserts the array was Construct/Clear'd, then linearly scans the live [0,count)
+    // range tallying element==lrElement matches. Faithful to the X360 count-loop
+    // (result=0; iterate maElements[0..count); ++result on each match).
+    u32 CountInstancesOf(const T& lrElement) const
+    {
+        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+        u32 luMatches = 0;
+        const u32 luCount = static_cast<u32>(miCount);
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+        {
+            if (maElements[luIndex] == lrElement)
+            {
+                ++luMatches;
+            }
+        }
+        return luMatches;
+    }
+
     // Checked element accessor (the X360 build's Array<>::Ge); same checked body as
     // operator[] (constructed-assert + bounds-check), routed through it so the bounds
     // logic lives in one place.

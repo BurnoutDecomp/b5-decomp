@@ -88,6 +88,44 @@ namespace Utils
     VecFloat GetFOVDegsToFitObjectToScreenSize(VecFloat lvDistance,
                                                Vector2 lSizeOnScreen,
                                                Vector2 lTargetSize);
+
+    // @0x821F23E8 (CameraUtils.h:559). Inverse of GetFOVDegsFromZoom: zoom = 1/tan(fov*pi/360).
+    f32 GetZoomFromFOVDegs(f32 lfFOVDegs);
+
+    // @0x821F2530. FOV (degrees) + film/sensor size -> 35mm-equivalent lens length (mm).
+    // Used by BrnDirector::DebugComponent::RenderHUD.
+    f32 ConvertFOVDegsToLensLength(f32 lfFOVDegs, f32 lfFilmSize);
+
+    // @0x821F2378 (CameraUtils.h:340). Wrap a value into [lo, hi) after adding a step (unsigned).
+    // Used by BrnDirector::ArbStateCarSelect::StartCarUnlockCam.
+    u32 Cycle(u32 luValue, u32 luInclusiveLowerBound, u32 luExclusiveUpperBound, u32 luStep);
+
+    // @0x82205A60 (CameraUtils.h:1205). Pitch angle (radians) of the centre->point direction:
+    // asin(Normalize(point-centre).y). Used by the vehicle collision policy.
+    f32 GetPitchAboutPointRads(Vector3 lCentre, Vector3 lPoint);
+
+    // @0x822183E0. Rotate a look-at frame about a world pivot by a pitch angle (radians).
+    // Used by CollisionPolicyAttachedToVehicle::GenerateSceneQueries.
+    // FLAG (declaration-only): the console body is an inline VMX Sin/Cos minimax whose
+    // coefficient tables (rodata 82000BD0..82000C60) are not attested as named constants;
+    // bodying it would require fabricating the polynomial. Left unbodied.
+    Matrix44Affine ApplyPitchAboutPointRads(Vector3 lPoint, VecFloat lvPitchRads);
+
+    // @0x821F25B8. The FOUR near-clip-plane corner positions for a camera transform (a2..a5
+    // are the four out-corners, written in asm store order r30/r29/r28/r27). Used by
+    // BehaviourRoadRunner::Update.
+    // FLAG (declaration-only): heavy XMVectorTan + VMX add/sub corner lattice; the corner
+    // packing / lane order is not safely reconstructable store-for-store. Left unbodied.
+    void CalcNearClipCorners(Matrix44Affine lrCameraTransform,
+                             Vector3& lrCorner0,
+                             Vector3& lrCorner1,
+                             Vector3& lrCorner2,
+                             Vector3& lrCorner3);
+
+    // @0x822171B0. A fixed basis vector guaranteed non-parallel to lVector. Used by SafeSLerp.
+    // FLAG (declaration-only): one of the two returned constants is the raw rodata sentinel
+    // unk_82181510 (an unrecovered basis vector) -- not fabricated. Left unbodied.
+    Vector3 FindNonParallelNormalisedVectorTo(Vector3 lVector);
 // ----------------------------------------------------------------------------
 // TransitionSmoother (ADDITIVE GROW: its class TU) -- a lerp-smoothed scalar
 // with a self-smoothed lerp amount. Class shape / member names / method set
