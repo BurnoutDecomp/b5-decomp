@@ -29,6 +29,7 @@ namespace PhysicsModuleIO
         static_assert(offsetof(OutputBuffer, mVehicleOutputInterface)        == 44128,  "mVehicleOutputInterface @44128");
         static_assert(offsetof(OutputBuffer, mPropManagerOutputInterface)    == 71792,  "mPropManagerOutputInterface @71792");
         static_assert(offsetof(OutputBuffer, mDeformationOutputInterface)    == 148656, "mDeformationOutputInterface @148656");
+        static_assert(offsetof(OutputBuffer, mSceneInputInterface)           == 179424, "mSceneInputInterface @179424");
         static_assert(offsetof(OutputBuffer, mContactSpyInterface)           == 998192, "mContactSpyInterface @998192");
     }
 
@@ -79,6 +80,38 @@ namespace PhysicsModuleIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mContactSpyInterface;
+    }
+
+    // ---- wave5 ADDITIVE accessors (const twins + non-const scene-input) --------------
+    // Assert strings match this file's existing convention (no trailing \n); the X360 rodata
+    // carries \n but the committed bodies above omit it -- kept consistent within this file.
+
+    // X360 0x8279F448 (DWARF :298): read-lock; return this + 16.
+    const OutputBuffer::VehicleOutputRequestInterfaceStorage* OutputBuffer::GetVehicleOutputRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mVehicleOutputRequestInterface;
+    }
+
+    // X360 0x8279F6E8 (DWARF :322): read-lock; return this + 148656.
+    const OutputBuffer::DeformationOutputInterfaceStorage* OutputBuffer::GetDeformationOutputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mDeformationOutputInterface;
+    }
+
+    // X360 0x8279F838 (DWARF :366): read-lock; return this + 179424.
+    const OutputBuffer::SceneInputInterfaceStorage* OutputBuffer::GetSceneInputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mSceneInputInterface;
+    }
+
+    // X360 0x825A0278 (DWARF :337): write-lock; return this + 179424.
+    OutputBuffer::SceneInputInterfaceStorage* OutputBuffer::GetSceneInputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mSceneInputInterface;
     }
 }
 }

@@ -28,7 +28,7 @@ void BridgeCrashModuleToPhysicsModule(
     // interface) -- adopt the typed members when the buffers' own TUs land.
     typedef BrnPhysics::Vehicle::VehicleInputInterface VehicleInputInterface;
     VehicleInputInterface* lpVehicle = reinterpret_cast<VehicleInputInterface*>(
-        lpPhysicsModuleInputBuffer->GetVehicle());
+        lpPhysicsModuleInputBuffer->GetVehicleInputInterface());
     lpVehicle->Append(*reinterpret_cast<const VehicleInputInterface*>(
         lpCrashOutput_PreScene->GetVehicleInputInterface()));
 }
