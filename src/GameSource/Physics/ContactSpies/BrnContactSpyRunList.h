@@ -32,6 +32,17 @@ namespace BrnPhysics
             EntityId GetEntityId() const   { return mEntityId; }
             s32      GetStartIndex() const { return miStartIndex; }
             s32      GetRunLength() const  { return miRunLength; }
+
+            // BrnContactSpyRunList.h:235 static factory (X360 0x8259BA80). Vector args map in
+            // vtx order v1->mTotalFrictionStress, v2->mAverageStress, v3->mAverageContactPoint.
+            // Called by ContactSpyQueue<T,N>::SortAndCreateRunList.
+            static ContactSpyRunData* Construct(ContactSpyRunData* lpResult,
+                                                EntityId lEntityId,
+                                                const Vector3& lrTotalFrictionStress,
+                                                const Vector3& lrAverageStress,
+                                                const Vector3& lrAverageContactPoint,
+                                                s32 liStartIndex,
+                                                s32 liRunLength);
         };
 
         // Fixed-capacity, per-entity-type list of contact runs (DWARF BrnContactSpyRunList.h:143).

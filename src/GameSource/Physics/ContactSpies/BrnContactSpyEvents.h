@@ -2,6 +2,12 @@
 
 #include "BrnCommonTypes.h"
 
+// The scene-manager potential-contact record consumed by BaseContact::Construct
+// (its canonical home is GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h).
+// Forward-declared here so the header does not pull in the SceneManager IO tree; the
+// factory .cpp includes the full definition.
+namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
+
 namespace BrnPhysics
 {
     namespace ContactSpy
@@ -31,6 +37,15 @@ namespace BrnPhysics
             Vector3      mNormal;
             Vector3      mPointOnA;
             Vector3      mPointOnB;
+
+            // BrnContactSpyEvents.h:238 static factory (X360 0x8259F6F8). Stamps *lpResult
+            // from the spy's five leading stress/geometry vectors (lpInSpy[0..4]) plus the
+            // scene-manager potential contact's entity words (each VolumeInstanceId's HIGH
+            // dword) and swapped/sentinel poly tag.
+            static BaseContact* Construct(
+                BaseContact* lpResult,
+                const Vector3* lpInSpy,
+                const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact);
         };
 
         // A resolved contact involving a race car. Adds no members of its own over
