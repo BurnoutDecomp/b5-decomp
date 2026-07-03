@@ -250,6 +250,55 @@ void Voice::SetGain(u32 luSendNameHash, f32 lfGain, s32 liReserved, const u32* l
 }
 
 // ----------------------------------------------------------------------------
+// Voice::SetParameter(luSendNameHash, lfValue, liReserved, lpSendName)
+//   The broadcast target of VoicePoolBase::SetParameter (@ 0x826B6628): the pool
+//   forwards a raw parameter value to every live pooled voice's logic Voice. The
+//   underlying set is a Playback-layer call (parallel to SetGain).
+// FLAG: STUB -- depends on the Playback layer.
+//   BLOCKS ON: the CgsSound::Playback parameter-set path (parallel to
+//   Playback::Voice::GetSend). Not reconstructed. Added additively so the pool
+//   broadcast compiles + names the call BY NAME.
+// ----------------------------------------------------------------------------
+void Voice::SetParameter(u32 luSendNameHash, f32 lfValue, s32 liReserved, const u32* lpSendName)
+{
+    CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
+    (void)luSendNameHash;
+    (void)lfValue;
+    (void)liReserved;
+    (void)lpSendName;
+    // No-op until the Playback parameter-set path exists.
+}
+
+// ----------------------------------------------------------------------------
+// Voice::~Voice  (compiler-synthesized `scalar deleting destructor')  @ 0x826C7E18
+//   X360 sequence:
+//     *this = &off_820B0E20;              // install the Voice vtable @+0
+//     v4 = *(this+4);                     // mVoiceHandle.mpObject
+//     if (v4) Playback::Object::Release(v4);
+//     if (a2 & 1) operator delete(this);  // scalar-deleting tail
+//     return this;
+//
+//   The only real work is dropping the reference the handle owns on its
+//   Playback::Voice -- i.e. Handle<Voice>::~Handle() -> ReleaseObject() -> Release.
+//   Defining the class destructor out-of-line emits exactly that: the mVoiceHandle
+//   member destructor runs the Release, the vtable store and the operator-delete tail
+//   are the compiler's scalar-deleting-destructor synthesis (host delete stands in
+//   for the custom-allocator tail). Mirrors committed CgsAemsPlayerVoiceDtor.cpp /
+//   CgsSubmixVoiceDtor.cpp.
+//
+//   NOTE: this is DISTINCT from Voice::Destruct() (@0x826C4E38) -- Destruct asserts
+//   the voice exists + is not playing and writes the Playback state byte (+0x11=2);
+//   the destructor here does NOT assert and only Releases the handle's object.
+// ----------------------------------------------------------------------------
+Voice::~Voice()
+{
+    // mVoiceHandle's destructor (Handle<Voice>::~Handle -> ReleaseObject) drops the
+    // reference on the wrapped Playback::Voice when mpObject is non-null -- exactly
+    // the X360 `if (mVoiceHandle.mpObject) Playback::Object::Release(...)`. The
+    // vtable install and operator-delete tail are the compiler's synthesis.
+}
+
+// ----------------------------------------------------------------------------
 // Voice::Attach(liSlotName, lppOther)  @ 0x826DC4C8
 //   Assert the voice exists (CgsVoice.cpp:162), ref both this voice and *lppOther,
 //   call Playback::Module::Module::AttachVoice(&this, &other, slotName), then drop
