@@ -28,6 +28,8 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"  // CgsModule::EventQueue (InputBuffer_PostPhysics::mUpdatedPropQueue)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"  // BrnPhysics::ContactSpy::ContactSpyInterface (mContactSpyInterface, by value)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"   // BrnPhysics::Props::UpdatePropEvent (queue element)
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"  // CgsSceneManager::SceneManagerIO::PotentialContact (InputBuffer_PrePhysics::mPotentialContactQueue element)
+#include "GameSource/World/AI/SharedIO/BrnAIModuleResultInterface.h"           // BrnAI::AIModuleIO::AIModuleResultInterface::ResetOnTrackResultQueue (InputBuffer_PrePhysics::mResetOnTrackResultQueue)
 
 // The replay-status payload InputBuffer_PreScene::SetReplayStatusInterface latches (pointer-only
 // use; home GameSource/Replays/BrnReplayStatusInterface.h).
@@ -157,26 +159,35 @@ namespace PropEntityIO
     class OutputBuffer_PreScene : public CgsModule::IOBuffer
     {
     public:
-        // Opaque foreign-type storages (see FLAG above).
-        struct ResourceRequestInterfaceStorage { unsigned char maBytes[1]; };
-        struct PropInputInterfaceStorage       { unsigned char maBytes[1]; };
+        // Opaque foreign-type storages (see FLAG above). Sized so each X360-pinned return offset
+        // is exact: mResourceRequestInterface@+4, mSceneInputInterface@+1056,
+        // mPropInputInterface@+819824, mVisibleOverheadSignArray@+831104 (LAST member).
+        struct ResourceRequestInterfaceStorage { unsigned char maBytes[1056 - 4]; };        // +4..+1055
+        struct SceneInputInterfaceStorage      { unsigned char maBytes[819824 - 1056]; };    // +1056..+819823
+        struct PropInputInterfaceStorage       { unsigned char maBytes[831104 - 819824]; };  // +819824..+831103
+        struct VisibleOverheadSignArrayStorage { unsigned char maBytes[1]; };                // trailing +831104
 
+        // X360 0x827A1A18 (:640, THIS batch): read-lock handle, returns this + 4 (mResourceRequestInterface).
+        const ResourceRequestInterfaceStorage* GetResourceRequestInterface() const;
         // X360 0x822B9888: write-lock handle, returns this + 4 (mResourceRequestInterface).
         ResourceRequestInterfaceStorage* GetResourceRequestInterface();
         // X360 0x827A1970: read-lock handle, returns this + 819824 (mPropInputInterface).
         const PropInputInterfaceStorage* GetPropInputInterface() const;
         // X360 0x822B97E0: write-lock handle, returns this + 819824 (mPropInputInterface).
         PropInputInterfaceStorage* GetPropInputInterface();
+        // X360 0x827A1AC0 (:643, THIS batch): read-lock handle, returns this + 831104 (mVisibleOverheadSignArray).
+        const VisibleOverheadSignArrayStorage* GetVisibleOverheadSignArray() const;
+        // X360 0x822B9930 (:644, THIS batch): write-lock handle, returns this + 831104 (mVisibleOverheadSignArray).
+        VisibleOverheadSignArrayStorage* GetVisibleOverheadSignArray();
 
         static void _AssertLayout();
 
     private:
         u8                              maStatusPad[3];             // +1..+3 (force +4 placement)
         ResourceRequestInterfaceStorage mResourceRequestInterface;  // +4      :647
-        // mSceneInputInterface (:648) is folded into this padding (see FLAG): it spans from
-        // the end of mResourceRequestInterface (+5) to the +819824 start of mPropInputInterface.
-        unsigned char                   maSceneInputAndPad[819824 - 5]; // ...    :648
+        SceneInputInterfaceStorage      mSceneInputInterface;       // +1056   :648
         PropInputInterfaceStorage       mPropInputInterface;        // +819824 :649
+        VisibleOverheadSignArrayStorage mVisibleOverheadSignArray;  // +831104 :650 (LAST)
     };
 
     // ========================================================================
@@ -202,12 +213,20 @@ namespace PropEntityIO
     class OutputBuffer_Prepare : public CgsModule::IOBuffer
     {
     public:
-        // Opaque foreign-type storages (see FLAG above).
-        struct ResourceRequestInterfaceStorage { unsigned char maBytes[1]; };
-        struct PropInputInterfaceStorage       { unsigned char maBytes[1]; };
+        // Opaque foreign-type storages (see FLAG above). Sized so each X360-pinned return offset
+        // is exact: mResourceRequestInterface@+4, mSceneInputInterface@+1056, mPropInputInterface@+819824.
+        struct ResourceRequestInterfaceStorage { unsigned char maBytes[1056 - 4]; };     // +4..+1055
+        struct SceneInputInterfaceStorage      { unsigned char maBytes[819824 - 1056]; }; // +1056..+819823
+        struct PropInputInterfaceStorage       { unsigned char maBytes[1]; };             // trailing +819824
 
+        // X360 0x827A1820 (:605, THIS batch): read-lock handle, returns this + 4 (mResourceRequestInterface).
+        const ResourceRequestInterfaceStorage* GetResourceRequestInterface() const;
         // X360 0x822B9690: write-lock handle, returns this + 4 (mResourceRequestInterface).
         ResourceRequestInterfaceStorage* GetResourceRequestInterface();
+        // X360 0x827A16D0 (:599, THIS batch): read-lock handle, returns this + 1056 (mSceneInputInterface).
+        const SceneInputInterfaceStorage* GetSceneInputInterface() const;
+        // X360 0x822B9540 (:602, THIS batch): write-lock handle, returns this + 1056 (mSceneInputInterface).
+        SceneInputInterfaceStorage* GetSceneInputInterface();
         // X360 0x827A1778: read-lock handle, returns this + 819824 (mPropInputInterface).
         const PropInputInterfaceStorage* GetPropInputInterface() const;
         // X360 0x822B95E8: write-lock handle, returns this + 819824 (mPropInputInterface).
@@ -218,8 +237,7 @@ namespace PropEntityIO
     private:
         u8                              maStatusPad[3];             // +1..+3 (force +4 placement)
         ResourceRequestInterfaceStorage mResourceRequestInterface;  // +4      :609
-        // mSceneInputInterface (:610) is folded into this padding (see FLAG).
-        unsigned char                   maSceneInputAndPad[819824 - 5]; // ...    :610
+        SceneInputInterfaceStorage      mSceneInputInterface;       // +1056   :610
         PropInputInterfaceStorage       mPropInputInterface;        // +819824 :611
     };
 
@@ -253,11 +271,14 @@ namespace PropEntityIO
     {
     public:
         // Opaque foreign-type storages (see FLAG above).
-        struct SceneInputInterfaceStorage { unsigned char maBytes[1]; };
-        struct PropInputInterfaceStorage  { unsigned char maBytes[1]; };
+        struct HitOverheadSignQueueStorage { unsigned char maBytes[820912 - 2144]; }; // +2144..+820911
+        struct SceneInputInterfaceStorage  { unsigned char maBytes[1]; };
+        struct PropInputInterfaceStorage   { unsigned char maBytes[1]; };
 
         // X360 0x827A2000: read-lock handle, returns this + 833008 (mPropInputInterface).
         const PropInputInterfaceStorage* GetPropInputInterface() const;
+        // X360 0x822B9B28 (:735, THIS batch): write-lock handle, returns this + 2144 (mHitOverheadSignQueue).
+        HitOverheadSignQueueStorage* GetHitOverheadSignQueue();
         // X360 0x822B9BD0: write-lock handle, returns this + 820912 (mSceneInputInterface).
         SceneInputInterfaceStorage* GetSceneInputInterface();
         // X360 0x822B9FC0: write-lock handle, returns this + 833008 (mPropInputInterface).
@@ -266,13 +287,55 @@ namespace PropEntityIO
         static void _AssertLayout();
 
     private:
-        // Leading event-queue members (:748-:751) folded into opaque storage up to the
-        // +820912 SceneInputInterface start (status byte at +0 is the IOBuffer base subobject).
-        unsigned char               maLeadingQueuesAndPad[820912 - 1]; // ...     :748-:751
+        // Leading event-queue members (:748-:749: mPropBecamePhysicalEventQueue / mRecordHitPropQueue)
+        // folded into opaque storage up to the +2144 mHitOverheadSignQueue start (status byte at +0
+        // is the IOBuffer base subobject).
+        unsigned char               maLeadingQueuesA[2144 - 1];        // +1..+2143 :748-:749
+        // mHitOverheadSignQueue (:750, EventQueue<HitOverheadSignEvent,100>) at +2144 (opaque; MEDIUM
+        // confidence -- see FLAG). Spans up to the +820912 SceneInputInterface start; folds the
+        // trailing mBrokenPropQueue (:751) into its span.
+        HitOverheadSignQueueStorage mHitOverheadSignQueue;             // +2144   :750
         SceneInputInterfaceStorage  mSceneInputInterface;              // +820912 :752
         // mSceneInputInterface span (:752) folded into this padding up to the +833008 start.
         unsigned char               maSceneInputAndPad[833008 - 820912 - 1]; // ... :752
         PropInputInterfaceStorage   mPropInputInterface;               // +833008 :753
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::OutputBuffer_PrePhysics (DWARF BrnPropEntityModuleIO.h:683).
+    // ADDITIVE GROW: the pre-physics OUTPUT buffer the prop module fills for the traffic bridge.
+    // DWARF: mPropInputInterface(:702)@+4, mPropToTrafficInterface(:703)@+11296
+    // (PropToTrafficInterface, foreign/opaque). X360 accessors emitted for this slice:
+    //   GetPropInputInterface() const   @ 0x827A1B68  read-lock  (bit 4) -> +4      (own TU)
+    //   GetPropInputInterface()         @ 0x822B99D8  write-lock (bit 3) -> +4      (own TU)
+    //   GetPropToTrafficInterface() const @ 0x827A1C10 read-lock (bit 4) -> +11296  (THIS batch)
+    //   GetPropToTrafficInterface()     @ 0x822B9A80  write-lock (bit 3) -> +11296  (THIS batch)
+    //
+    // FLAG (foreign types / opaque interior): both members have their own owning homes elsewhere;
+    // modelled as correctly-sized opaque storage so the two X360-pinned return offsets (+4, +11296)
+    // are exact. Adopt PropInputInterface / PropToTrafficInterface named types additively when they land.
+    class OutputBuffer_PrePhysics : public CgsModule::IOBuffer
+    {
+    public:
+        // Opaque foreign-type storages (see FLAG above).
+        struct PropInputInterfaceStorage     { unsigned char maBytes[11296 - 4]; }; // +4..+11295
+        struct PropToTrafficInterfaceStorage { unsigned char maBytes[1]; };         // trailing +11296
+
+        // X360 0x827A1B68 (own TU): read-lock handle, returns this + 4 (mPropInputInterface).
+        const PropInputInterfaceStorage* GetPropInputInterface() const;
+        // X360 0x822B99D8 (own TU): write-lock handle, returns this + 4 (mPropInputInterface).
+        PropInputInterfaceStorage* GetPropInputInterface();
+        // X360 0x827A1C10 (:698, THIS batch): read-lock handle, returns this + 11296 (mPropToTrafficInterface).
+        const PropToTrafficInterfaceStorage* GetPropToTrafficInterface() const;
+        // X360 0x822B9A80 (:699, THIS batch): write-lock handle, returns this + 11296 (mPropToTrafficInterface).
+        PropToTrafficInterfaceStorage* GetPropToTrafficInterface();
+
+        static void _AssertLayout();
+
+    private:
+        u8                            maStatusPad[3];            // +1..+3 (force +4 placement)
+        PropInputInterfaceStorage     mPropInputInterface;       // +4      :702
+        PropToTrafficInterfaceStorage mPropToTrafficInterface;   // +11296  :703
     };
 
     // ========================================================================
@@ -358,6 +421,11 @@ namespace PropEntityIO
     class InputBuffer_Dispatch : public CgsModule::IOBuffer
     {
     public:
+        // Opaque foreign-type storage (see FLAG above): the DWARF :307 scene-query-results queue
+        // (OutSmSceneQueryResultsQueue) occupies +0xC..+0x801B; its own home lands elsewhere. Sized
+        // exactly so muCoronaSubmissionInterface stays @+0x801C.
+        struct SceneResultQueueStorage { unsigned char maBytes[0x801C - 0xC]; };
+
         // X360 0x822B8EA8: read-lock; return the dispatch-frame index (this+4).
         u32  GetDispatchFrame() const;
         // X360 0x827A1180: write-lock; set the dispatch-frame index (this+4).
@@ -366,6 +434,10 @@ namespace PropEntityIO
         u32  GetShadowMap() const;
         // X360 0x827A1228: write-lock; set the shadow-map handle (this+8).
         void SetShadowMap(u32 luShadowMap);
+        // :295 (own TU): read-lock; return the scene-query-results queue (this+0xC).
+        const SceneResultQueueStorage* GetSceneResultQueue() const;
+        // X360 0x827BB1E0 (:296, THIS batch): write-lock; return the scene-query-results queue (this+0xC).
+        SceneResultQueueStorage* GetSceneResultQueue();
         // X360 0x822B8FF8: read-lock; return the corona-submission interface handle (this+0x801C).
         u32  GetCoronaSubmissionInterface() const;
         // X360 0x827A12D0: write-lock; set the corona-submission interface handle (this+0x801C).
@@ -376,13 +448,50 @@ namespace PropEntityIO
     private:
         // The IOBuffer base is a single status byte; the X360 places muDispatchFrame at this+4,
         // so pad bytes +1..+3 explicitly.
-        u8            maStatusPad[3];                    // +1..+3 (force +4)
-        u32           muDispatchFrame;                   // +4
-        u32           muShadowMap;                       // +8
-        // Intervening dispatch-list payload (opaque; see FLAG). Spans from +0xC up to the
-        // +0x801C start of muCoronaSubmissionInterface.
-        unsigned char maPayloadAndPad[0x801C - 0xC];     // +0xC..+0x801B
-        u32           muCoronaSubmissionInterface;       // +0x801C
+        u8                     maStatusPad[3];                    // +1..+3 (force +4)
+        u32                    muDispatchFrame;                   // +4
+        u32                    muShadowMap;                       // +8
+        // Scene-query-results queue (:307) at +0xC (opaque; see FLAG). Spans up to the +0x801C
+        // start of muCoronaSubmissionInterface.
+        SceneResultQueueStorage mSceneResultQueue;                // +0xC   :307
+        u32                    muCoronaSubmissionInterface;       // +0x801C
+    };
+
+    // ========================================================================
+    // BrnWorld::PropEntityIO::InputBuffer_PrePhysics (DWARF BrnPropEntityModuleIO.h:529 /
+    // members :547-:548).
+    // The prop-entity module's pre-physics INPUT buffer: the scene/AI bridges fill it with the
+    // per-frame potential-contact queue and the reset-on-track result queue.
+    // LAYOUT (DWARF :547/:548 member order + X360 Append offset, authoritative):
+    //   base  CgsModule::IOBuffer                                   (1-byte status; +1..+0xF pad)
+    //   +0x10 OutPotentialContactQueue mPotentialContactQueue       (EventQueue<PotentialContact,2048>) :547
+    //   +...  ResetOnTrackResultQueue  mResetOnTrackResultQueue                                         :548
+    // mPotentialContactQueue lands at +0x10 because PotentialContact is alignas(16); X360
+    // AppendPotentialContactQueue @ 0x827AA170 pins it with `addi r3, this, 0x10`.
+    class InputBuffer_PrePhysics : public CgsModule::IOBuffer
+    {
+    public:
+        // DWARF :547 typedef -- OutputBuffer::OutPotentialContactQueue (capacity 2048; committed
+        // element CgsSceneManager::SceneManagerIO::PotentialContact).
+        typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>
+                OutPotentialContactQueue;
+        // DWARF :548 typedef -- AIModuleResultInterface::ResetOnTrackResultQueue (committed home).
+        typedef BrnAI::AIModuleIO::AIModuleResultInterface::ResetOnTrackResultQueue
+                ResetOnTrackResultQueue;
+
+        void Construct();                                                          // :534
+        void Destruct();                                                           // :538
+        const OutPotentialContactQueue* GetPotentialContactQueue() const;          // :540
+        // X360 0x827AA170 (THIS batch): write-lock; Append onto mPotentialContactQueue (this+0x10).
+        void AppendPotentialContactQueue(const OutPotentialContactQueue* lpQueue);  // :541
+        const ResetOnTrackResultQueue* GetResetOnTrackResultQueue() const;         // :543
+        void AppendResetOnTrackResultQueue(const ResetOnTrackResultQueue* lpQueue); // :544
+
+        static void _AssertLayout();
+
+    private:
+        OutPotentialContactQueue mPotentialContactQueue;   // +0x10 :547
+        ResetOnTrackResultQueue  mResetOnTrackResultQueue;  //       :548
     };
 
     // ========================================================================

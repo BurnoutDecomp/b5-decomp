@@ -30,8 +30,17 @@ namespace PropEntityIO
 {
     void OutputBuffer_PostPhysics::_AssertLayout()
     {
+        static_assert(offsetof(OutputBuffer_PostPhysics, mHitOverheadSignQueue) == 2144,   "mHitOverheadSignQueue @2144");
         static_assert(offsetof(OutputBuffer_PostPhysics, mSceneInputInterface) == 820912, "mSceneInputInterface @820912");
         static_assert(offsetof(OutputBuffer_PostPhysics, mPropInputInterface)  == 833008, "mPropInputInterface @833008");
+    }
+
+    // X360 0x822B9B28 (W, :735) -- write-lock; return the hit-overhead-sign event queue (this+2144).
+    // Called by BrnWorld::PropZoneManager::UpdateInstance.
+    OutputBuffer_PostPhysics::HitOverheadSignQueueStorage* OutputBuffer_PostPhysics::GetHitOverheadSignQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mHitOverheadSignQueue;
     }
 
     // X360 0x827A2000: read-lock; return this + 833008.
