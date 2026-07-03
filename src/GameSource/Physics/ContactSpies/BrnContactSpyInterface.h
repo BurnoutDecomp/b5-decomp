@@ -30,8 +30,16 @@ namespace ContactSpy
     struct ContactSpyInterface
     {
         u32 muField0;       // [0x00] cleared on construct (X360 0x82A61A18)
+                            // DWARF names this leading slot `ContactSpyData* mpData`; retype
+                            // muField0 -> ContactSpyData* + retype the accessor return once
+                            // ContactSpyData lands in-tree (see BrnContactSpyData.h TODO).
 
         ContactSpyInterface* Construct();
+
+        // X360 0x82355BF0 (DWARF BrnContactSpyInterface.h:110): asserts mpData != NULL then
+        // returns &mpData->mRaceCarContactRunList (byte offset 0x198D0 into ContactSpyData).
+        // Deferred return type: const ContactSpyData::RaceCarContactRunList*.
+        const void* GetRaceCarContactRunList() const;
     };
 }
 }

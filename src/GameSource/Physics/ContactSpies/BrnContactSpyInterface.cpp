@@ -1,5 +1,6 @@
 #include "types.hpp"
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"  // BrnPhysics::ContactSpy::ContactSpyInterface (canonical home)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   (BrnPhysics::ContactSpy::ContactSpyInterface)
@@ -21,6 +22,20 @@ namespace ContactSpy
     {
         muField0 = 0;
         return this;
+    }
+
+    // BrnPhysics::ContactSpy::ContactSpyInterface::GetRaceCarContactRunList @ 0x82355BF0
+    //   Asserts mpData != NULL, then returns &mpData->mRaceCarContactRunList at byte offset
+    //   0x198D0 (104656) into ContactSpyData
+    //   (asm: addis r3,r11,2 ; addi r3,r3,-0x6730  ==>  mpData + 0x20000 - 0x6730 = mpData + 0x198D0).
+    //   Identity PROVEN by computing ContactSpyData's DWARF member layout (queues then run lists,
+    //   batch-attested strides) -- mRaceCarContactRunList lands at exactly 0x198D0. ContactSpyData
+    //   is not reconstructed in-tree yet, so this returns an opaque byte pointer over muField0;
+    //   retype once ContactSpyData lands (see the header note).
+    const void* ContactSpyInterface::GetRaceCarContactRunList() const
+    {
+        CGS_ASSERT(muField0 != 0, "mpData != NULL");
+        return reinterpret_cast<const u8*>(static_cast<uintptr_t>(muField0)) + 0x198D0;
     }
 }
 }
