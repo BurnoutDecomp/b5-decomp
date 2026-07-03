@@ -22,3 +22,11 @@ template bool CgsModule::BaseEventQueue<BrnAI::AIModuleIO::ResetOnTrackResult>::
     const BrnAI::AIModuleIO::ResetOnTrackResult&);
 template bool CgsModule::BaseEventQueue<BrnAI::AIModuleIO::ResetOnTrackResult>::Append(
     const CgsModule::BaseEventQueue<BrnAI::AIModuleIO::ResetOnTrackResult>&);
+
+// GetEvent(s32) const @0x822AC500 (callers RaceCarEntityModule::ProcessResetOnTrackResultQueue,
+// PropEntityModule::PrePhysicsUpdate, AIModule::UpdateResetOnTrackManager): the checked const
+// element accessor. Generic body inline in CgsBaseEventQueue.h; asserts mpEvents != NULL,
+// liIndex < GetLength() and liIndex >= 0, then returns &mpEvents[liIndex] as mpEvents + liIndex*48
+// (stride 48 == sizeof(ResetOnTrackResult)). This TU only forces the out-of-line emission.
+template const BrnAI::AIModuleIO::ResetOnTrackResult&
+CgsModule::BaseEventQueue<BrnAI::AIModuleIO::ResetOnTrackResult>::GetEvent(s32) const;
