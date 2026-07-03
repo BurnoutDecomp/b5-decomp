@@ -58,6 +58,12 @@ public:
     // name equals GenericRwacFactory::SK_NAME (the X360 compares the two hash words).
     bool operator==(const Name& lkrOther) const { return mHash == lkrOther.mHash; }
 
+    // CgsCommon.h. Value-inequality on the interned hash. FLAG: ADDITIVE home-grow
+    // for the Playback::Voice name-lookup loops (FindNamedSlot/Send/... and the
+    // GetIndexOf* family compare the searched name against each descriptor's Name via
+    // the X360 `cmpw` on the hash words, i.e. the negated operator==).
+    bool operator!=(const Name& lkrOther) const { return mHash != lkrOther.mHash; }
+
     // CgsCommon.h. The raw interned hash value. FLAG: ADDITIVE home-grow for the
     // CgsSound::Playback::Registry TU (Registry::AddEntity reads an Entity's
     // mName/mTypeName hash words directly -- `*a2` / `a2[1]` in the X360 asm).
