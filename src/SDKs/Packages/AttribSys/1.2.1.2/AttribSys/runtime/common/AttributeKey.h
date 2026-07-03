@@ -21,4 +21,8 @@ namespace Attrib
     // X360 symbol @0x82802940 takes it as the third argument -- declared per the
     // X360 ABI. Declaration-only (its own ledger function).
     Attribute::Key StringToKey(const char* lpcText, u32 luLength, u64 luSeed);
+
+    // The NUL-terminated convenience form (@0x82805828; MomentPlayerStunt hashes
+    // its take-guid strings through it). DECLARATION-ONLY.
+    Attribute::Key StringToKey(const char* lpcText);
 }

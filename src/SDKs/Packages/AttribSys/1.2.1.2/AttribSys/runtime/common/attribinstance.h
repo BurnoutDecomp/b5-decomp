@@ -42,6 +42,21 @@ namespace Attrib
     {
         u64 GetClassKey() const { return mClassKey; }
 
+        // GROWN for MomentPlayerStunt::Update @0x82272750 (the stunt moment builds
+        // stack references to its "World_Signature_%i" ICE takes): raw-key
+        // construction (the X360 composes {class key, StringToKey(guid)} in
+        // registers with a null collection pointer), the refcounted assignment
+        // (@0x8280DFB0 -- resolves/AddRefs the source's collection into the
+        // destination), the resolved-ref drop (@0x8280DB60), and the
+        // did-the-resolve-pin-a-collection check its callers Clean() on. The two
+        // real bodies are DECLARATION-ONLY (the AttribSys runtime TUs).
+        RefSpec() : mClassKey(0), mCollectionKey(0), mpCollectionPtr(0) {}
+        RefSpec(u64 luClassKey, u64 luCollectionKey)
+            : mClassKey(luClassKey), mCollectionKey(luCollectionKey), mpCollectionPtr(0) {}
+        RefSpec& operator=(const RefSpec& lrOther);   // @0x8280DFB0
+        void Clean();                                  // @0x8280DB60
+        bool HasResolvedCollection() const { return mpCollectionPtr != 0; }
+
     private:
         u64               mClassKey;       // +0x00 (attribsys.h:762)
         u64               mCollectionKey;  // +0x08 (attribsys.h:763)

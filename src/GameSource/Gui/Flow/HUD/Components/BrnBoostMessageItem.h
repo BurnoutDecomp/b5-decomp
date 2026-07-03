@@ -56,6 +56,14 @@ namespace BrnGui
         // asserts carry the original BrnWorld::E_BOOST_TYPE_* spelling.
         void UpdateBoostType(s32 leBoostType);
 
+        // GROWN for BrnBoostMessageSlot (the slot drives its embedded item's clip
+        // and transition latch directly on the X360 -- item +0x20 reads/clears and
+        // the "MessageRefresh" play on item +0x04):
+        bool IsInTransition() const       { return mbInTransition; }
+        void ClearInTransition()          { mbInTransition = false; }
+        void PlayLabel(const char* lpcLabel) { mAptRef.GotoAndPlayLabel(lpcLabel); }
+        const BrnFlapt::MovieClipRef& GetAptRef() const { return mAptRef; }
+
     private:
         // The transition frames (@0x82F24988) and the backing's boost-type frames
         // (@0x82F24994); definitions in the .cpp.
