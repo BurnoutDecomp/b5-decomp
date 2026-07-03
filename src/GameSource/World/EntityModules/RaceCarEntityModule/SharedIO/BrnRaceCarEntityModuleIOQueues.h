@@ -42,7 +42,9 @@
 //   see CgsBaseEventQueue.h:138-140). Same +16 header => RequestInterface<8192> = 8208.
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"           // CgsModule::EventQueue<T,N> (PotentialContactQueue base)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<32768,16> (SceneResultQueue base)   // u8 (reserved-byte blob)
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact (PotentialContactQueue element)
 
 namespace BrnWorld
 {
@@ -70,10 +72,21 @@ namespace RaceCarEntityModuleIO
     };
 
     // ---- Potential-contact queue (InputBuffer_PrePhysics :441) ----------------------------
-    // EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048> -> alignas(16).
+    // GROWN (was a 256-byte NOMINAL opaque): InputBuffer_PrePhysics::SetPotentialContactQueue
+    // (X360 0x827A9840) Clear()s the member queue then Append()s the caller's queue -- both
+    // inline-generic BaseEventQueue<T> methods -- so the member must BE the real fixed-cap
+    // instantiation, not an opaque blob. Per the DecFIGS DWARF it is
+    // CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>
+    // (== OutputBuffer::OutPotentialContactQueue; element home CgsPotentialContact.h, the
+    // committed EventQueue<PotentialContact,2048> instantiation lives in
+    // GameShared/GameClasses/SceneManager/SharedIO/EventQueue_PotentialContact_2048.cpp).
+    // Derives (rather than typedefs) so existing `struct PotentialContactQueue` forward
+    // references stay valid, mirroring the SceneResultQueue pattern below. Real sizeof is
+    // 16 + 2048*80 = 163856; the member is returned only by-name (&member), so growing it is
+    // offset-safe for all consumers.
     struct alignas(16) PotentialContactQueue
+        : public CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>
     {
-        unsigned char maReserved[256];   // NOMINAL -- not byte-verified, grown by own TU
     };
 
     // ---- Scene-query-results queue (InputBuffer_PrePhysics :442 / GenerateDispatch :648) --

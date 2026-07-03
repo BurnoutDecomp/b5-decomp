@@ -51,6 +51,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"         // BrnPhysics::Vehicle::VehicleOutputInterface + VehicleManagerOutputInterface
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEffectsInputInterface.h"   // BrnPhysics::Vehicle::VehicleEffectsInputInterface
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleRaceCarIOInterfaces.h"      // BrnWorld::CrashIO::RaceCarOutputInterface (CrashInterface)
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h" // BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene (canonical 544B)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h" // BrnWorld::PlayerVehicleControls
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"                          // BrnAI::AIModuleIO::RaceCarAIInterface + AIRaceCarInterface
 #include "GameSource/World/AI/SharedIO/BrnAIModuleRequestInterface.h"                     // BrnAI::AIModuleIO::AIModuleRequestInterface
@@ -82,25 +83,35 @@ struct ShadowMap;                                                          // :6
 namespace RaceCarEntityModuleIO
 {
     // ---- Remaining locally-homed payloads -----------------------------------------
-    // TimerStatusInterface (:254 member type): NOT in the canonical type-map; the .ref
-    // models it as a by-pointer payload (mpTimerStatusInterface, Get/SetTimerStatusInterface
-    // pass pointers), so a local incomplete forward-decl is sufficient and intentional.
-    struct TimerStatusInterface;                          // :254 (pointer-held payload)
+    // TimerStatusInterface (:254 member type): the DecFIGS DWARF for InputBuffer_PreScene
+    // (BrnRaceCarEntityModuleIO.h:53) declares `TimerStatusInterface mTimerStatusInterface;`
+    // -- a BY-VALUE member, NOT a pointer. The X360 getter (0x822B4A38) does
+    // `addi r3, this, 0x5C` (returns &member), and the by-value member pins mCameraInput at
+    // +0x90 (0x5C + 48, Camera 16-byte aligned); a pointer member would instead put
+    // mCameraInput at +0x60, contradicting the 0x822B4AE0 getter's `addi r3, this, 0x90`.
+    // It is not in the canonical type-map (its DWARF home was not dumped), so a
+    // minimal-complete 48-byte slice is defined here in this namespace, mirroring the X360
+    // CgsSystem::TimerStatusInterface payload (two 24-byte TimerStatus blocks, game then sim).
+    // Accessed only by-name across homes, so the exact field spelling is not load-bearing;
+    // the 48-byte size IS (it fixes mCameraInput's offset).
+    struct alignas(4) TimerStatusInterface                // :254 (by-value payload, 48B)
+    {
+        unsigned char maReserved[48];   // 2 x 24B TimerStatus (game/sim); size X360-attested
+    };
 
     // AudioCarLoadedDataQueue (homed in BrnRaceCarEntityModuleOutputInterface.h via the
     // AudioCarDataLoadedEvent element, which is in this namespace): EventQueue<...,16>.
     typedef CgsModule::EventQueue<AudioCarDataLoadedEvent, 16> AudioCarLoadedDataQueue; // OutputInterface.h
 
-    // ---- BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_* (minimal-complete slice) ----
-    // Canonical home is GameSource/World/EntityModules/TrafficEntityModule/SharedIO/
-    // BrnTrafficToRaceCarInterface.h (namespace BrnTraffic::BrnTrafficIO). That stub home was
-    // never produced by the stub phase (the traffic group was omitted from the workflow), yet
-    // both payloads are embedded BY VALUE (mTrafficToRaceCarInterface_PreScene :352,
-    // mTrafficToRaceCarInterface_PostScene :447) so they MUST be complete types for `cl /c`.
-    // Per the project minimal-slice pattern they are defined here as sized slices in their
-    // canonical namespace; accessed only by-name (Get/Set return/pass the pointer), so the
-    // byte-exact layout is irrelevant. RISK: if BrnTrafficToRaceCarInterface.h later lands its
-    // own definition, delete these two and #include that home instead (ODR).
+    // ---- BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_* --------------------------
+    // TrafficToRaceCarInterface_PreScene now has a canonical byte-exact (544B) definition in
+    // GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h
+    // (#included above), so the earlier inline 256-byte slice is deleted here to avoid an ODR
+    // duplicate of that FQN and to make SetTrafficToRaceCarInterface_PreScene's memcpy copy the
+    // full 0x220 (544) bytes at member offset +0xC0. TrafficToRaceCarInterface_PostScene has NO
+    // canonical home yet (the traffic ledger only landed the PreScene type), so its DWARF-faithful
+    // 1-byte muDUMMY slice remains defined inline below; it is embedded BY VALUE
+    // (mTrafficToRaceCarInterface_PostScene :447) and accessed only by-name.
 }
 }
 
@@ -108,16 +119,6 @@ namespace BrnTraffic
 {
 namespace BrnTrafficIO
 {
-    // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout reconstructed
-    // by its own TU (DWARF home BrnTrafficToRaceCarInterface.h:77). Size 256 (NOMINAL -- not
-    // byte-verified, grown by own TU). Real DWARF layout: BitArray<400> + VehicleStompingData[8]
-    // + Array<NearMissData,16> + Array<NearMissData,8> + 6 scalar words (~640B). Carries Vector3
-    // (VehicleStompingData::mStompeePosition) -> alignas(16).
-    struct alignas(16) TrafficToRaceCarInterface_PreScene
-    {
-        unsigned char maReserved[256];   // NOMINAL -- full layout grown by own TU
-    };
-
     // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout reconstructed
     // by its own TU (DWARF home BrnTrafficToRaceCarInterface.h:175). Size 1 (DWARF-faithful:
     // the real type is a single uint8_t muDUMMY placeholder, BrnTrafficToRaceCarInterface.h:187).
@@ -196,13 +197,13 @@ namespace RaceCarEntityModuleIO
         bool                    mabRegainedContactThisFrame[8];                            // :250
         bool                    mabCarSelectStatus[8];                                     // :251
         bool                    mabCarSelectStatusValid[8];                                // :252
-        TimerStatusInterface*   mpTimerStatusInterface;                                    // :254 (pointer-held payload)
-        BrnDirector::Camera::Camera mCameraInput;                                          // :255
+        TimerStatusInterface    mTimerStatusInterface;                                     // :254 (BY VALUE; DWARF :53, &member @+0x5C)
+        BrnDirector::Camera::Camera mCameraInput;                                          // :255 (@+0x90)
         BrnWorld::PlayerVehicleControls mPlayerVehicleControls;                            // :256
         GameActionQueue         mGameActionQueue;                                          // :257  (0x8279D060 -> this)
         BrnNetwork::EPaybackType meActivePaybackType;                                      // :258
         EActiveRaceCarIndex     meActivePaybackAggressor;                                  // :259
-        ReplayStatusInterface*  mpReplayStatusInterface;                                   // :260 (pointer-held payload)
+        ReplayStatusInterface   mReplayStatusInterface;                                    // :260 (BY VALUE; DWARF :79, operator=-assigned @+0x3644)
         AudioCarLoadedDataQueue mAudioCarLoadedDataQueue;                                  // :261
     };
 
