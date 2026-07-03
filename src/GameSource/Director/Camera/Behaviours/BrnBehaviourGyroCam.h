@@ -100,6 +100,10 @@ public:
     // EActiveRaceCarIndex (modelled as s32 here).
     void AttachToRaceCar(s32 meRaceCarIndex);
 
+    // GROWN for MomentTumbling::SignalIsGoodTimeToPlant @0x8220A078: raise the
+    // plant request pair (+0x630/+0x631).
+    void SignalGoodTimeToPlant() { mbPlantRequested = true; mbPlantSignal = true; }
+
     // Return this behaviour's active collision policy: the vehicle-attachment policy (+0x260) when
     // mbUseVehicleAttachmentCollision is set, otherwise the visibility policy (+0x20). @0x821FA1C0.
     CollisionPolicy* GetCollisionPolicy();
@@ -113,6 +117,11 @@ public:
     // +0x009 byte -- the Behaviour-base failed flag, carved below): X360 header-inline.
     bool HasFailed() const { return mbHasFailed; }
 
+    // GROWN for MomentTumbling::Update @0x82271F28 (the moment polls its rig
+    // through the Behaviour-base head bytes +0x0B / +0x0C).
+    bool CanSwitchToMeNow() const   { return mbCanSwitchToMeNow; }
+    bool CanSwitchFromMeNow() const { return mbCanSwitchFromMeNow; }
+
 private:
 
     // FLAG: only the members these functions touch are modelled at their asm-attested offsets; the
@@ -122,7 +131,10 @@ private:
     //   note above); the typed parameter pointer is appended at the tail and reached by name.
     u8    maHead000[0x9];                           // +0x000 .. +0x008  vtable + rig head (X360 4B ptr slot)
     bool  mbHasFailed;                              // +0x009  the Behaviour-base failed flag (MomentHitTraffic::Update reads it)
-    u8    maHead00A[0x10 - 0xA];                    // +0x00A .. +0x00F  rig head remainder
+    u8    mHead00A;                                 // +0x00A  rig head byte
+    bool  mbCanSwitchToMeNow;                       // +0x00B  the Behaviour-base switch-to gate (DWARF base name)
+    bool  mbCanSwitchFromMeNow;                     // +0x00C  the Behaviour-base switch-from gate (DWARF base name)
+    u8    maHead00D[0x10 - 0xD];                    // +0x00D .. +0x00F  rig head remainder
     s32   mParamWord1;                              // +0x010  cached lpParameters->miParamWord1
     u32   muParametersSlot;                         // +0x014  adopted parameter block (X360 4B ptr slot)
     u8    maReserved018[0x20 - 0x18];               // +0x018 .. +0x01F (rig members not modelled here)
@@ -139,7 +151,14 @@ private:
 
     rw::math::vpu::Vector3 mWorldSpaceNormalizedVectorFromCar;        // +0x530
     rw::math::vpu::Vector3 mDesiredWorldSpaceNormalizedVectorFromCar; // +0x540
-    u8    maReserved550[0x632 - 0x550];             // +0x550 .. +0x631 (rig members not modelled here)
+    u8    maReserved550[0x630 - 0x550];             // +0x550 .. +0x62F (rig members not modelled here)
+
+    // +0x630 / +0x631: the "good time to plant" request pair MomentTumbling::
+    // SignalIsGoodTimeToPlant @0x8220A078 raises on a LEAD-subtype tumble (both
+    // bytes stb'd 1). FLAG: names inferred from that caller's role; the rig's own
+    // consumer lands with the full behaviour TU.
+    bool  mbPlantRequested;                         // +0x630
+    bool  mbPlantSignal;                            // +0x631
 
     bool  mbIsWorldSpaceVectorSet;                  // +0x632  set once SetWorldSpaceNormalizedVectorFromCar runs
     bool  mbUseVehicleAttachmentCollision;          // +0x633  selects which collision policy is active
