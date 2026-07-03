@@ -106,5 +106,32 @@ namespace CrashIO
         TrafficVehicleBits             mFarFromCameraBits;               // :191 @0xCF8
         TrafficVehicleBits             mPhysicalBits;                    // :192 @0xD48
     };
+
+    // Crash-module traffic OUTPUT interface (DWARF home BrnCrashModuleTrafficIOInterfaces.h:385;
+    // members :391/:398). The crash module fills this each frame with the traffic vehicles the
+    // traffic module must clean up (crashed traffic volumes) plus the network-replicated traffic
+    // to start crashing; the traffic module's InputBuffer_PostScene::SetCrashTrafficOutputInterface
+    // (X360 0x827ACDE8) refreshes an embedded copy from it. X360 layout:
+    //   mCleanupTrafficEventQueue         @ 0x000  EventQueue<CleanupTrafficEvent,160>
+    //   mStartCrashingNetworkTrafficQueue @ 0x510  EventQueue<NetworkTrafficCrashingEvent,160>
+    // The non-const reference-returning queue accessors let the copier chain .Clear()/.Append().
+    struct TrafficOutputInterface
+    {
+        typedef CgsModule::EventQueue<CleanupTrafficEvent, 160>         CleanupTrafficEventQueue;   // DWARF :387
+        typedef CgsModule::EventQueue<NetworkTrafficCrashingEvent, 160> CrashNetworkTrafficQueue;   // DWARF :395
+
+        void Construct();
+        void AddTrafficToCleanup(CgsSceneManager::VolumeInstanceId lVolumeInstanceId);
+        void StartNetworkTrafficVehicleCrashing(u32 luVehicleId);
+
+        const CleanupTrafficEventQueue& GetCleanupTrafficEventQueue() const { return mCleanupTrafficEventQueue; }
+        CleanupTrafficEventQueue&       GetCleanupTrafficEventQueue()       { return mCleanupTrafficEventQueue; }
+        const CrashNetworkTrafficQueue& GetStartCrashingNetworkTrafficQueue() const { return mStartCrashingNetworkTrafficQueue; }
+        CrashNetworkTrafficQueue&       GetStartCrashingNetworkTrafficQueue()       { return mStartCrashingNetworkTrafficQueue; }
+
+    private:
+        CleanupTrafficEventQueue mCleanupTrafficEventQueue;         // DWARF :391 @0x000
+        CrashNetworkTrafficQueue mStartCrashingNetworkTrafficQueue; // DWARF :398 @0x510
+    };
 }
 }
