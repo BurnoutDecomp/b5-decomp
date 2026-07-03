@@ -4,6 +4,7 @@
 #include <cstddef>   // offsetof (buffer layout asserts)
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer (base; lock state machine)
+#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h" // RootOutputBuffer::AttribSysRequestInterface / ::SoundResourceRequestInterface (member types)
 
 // =============================================================================
 // BrnSound::Module::Io::LogicOutputBuffer
@@ -17,37 +18,43 @@
 // bit 4 for const readers, write-lock bit 3 for the mutable writer) then return
 // &member-at-X360-offset. Same shape as the committed BrnRootSoundModuleIo.h buffers.
 //
-// This group bodies the THREE TU functions (all assert against
-// BrnSoundLogicModuleIo.h baked file string):
-//   * GetReplay() const  (X360 0x82695320) -- read-lock ("Not locked for reading\n",
-//     baked :79), returns the replay-output sub-buffer at this+0x1824 (6180).
-//   * GetResults() const (X360 0x82695470, IDA-truncated to "LogicOutputBuffer::")
-//     -- read-lock ("Not locked for reading\n", baked :113), returns the results
-//     sub-buffer at this+0x814 (2068).
-//   * GetResults()       (X360 0x826955C0, IDA-truncated to "GetRes") -- write-lock
-//     ("Not locked for writing\n", baked :128), returns the SAME results sub-buffer
-//     at this+0x814 (2068). The const/non-const pair guards the same member with the
-//     read vs write lock respectively (the established IOBuffer accessor idiom).
+// This group bodies the TWO wave-7 TU functions (the GetAttribSysRequestInterface
+// overloads); the DWARF-listed sibling methods (Construct, GetResourceRequestInterface
+// const/non-const) are DECLARED for shape completeness but bodied in their own TU.
+//   * GetAttribSysRequestInterface() const (X360 0x82695518) -- read-lock ("Not locked
+//     for reading\n"), returns &mAttribSysRequestInterface at this+0x04 (DWARF :69).
+//   * GetAttribSysRequestInterface()       (X360 0x82695668) -- write-lock ("Not locked
+//     for writing\n"), returns the SAME &mAttribSysRequestInterface (DWARF :77).
 //
-// LOCK-BIT MAP (authoritative, from the asm `extrwi` field extracts on the lbz'd
-// status byte at offset 0):
-//   GetReplay   0x82695324..: extrwi r11,r11,1,27  -> bit 4 (mask 0x10) read-lock
-//   GetResults  0x82695474..: extrwi r11,r11,1,27  -> bit 4 (mask 0x10) read-lock
-//   GetResults  0x826955D4..: extrwi r11,r11,1,28  -> bit 3 (mask 0x08) write-lock
-// These match CgsModule::IOBuffer::eStatusLockedForRead/Write exactly, so the bodies
-// reuse IsBufferLockedForReading()/IsBufferLockedForWriting() by NAME.
+// LOCK-BIT MAP (from the asm `extrwi` field extracts on the lbz'd status byte @0):
+//   GetAttribSysRequestInterface const 0x82695518: extrwi ...,1,27 -> bit 4 read-lock
+//   GetAttribSysRequestInterface       0x82695668: extrwi ...,1,28 -> bit 3 write-lock
+// These match CgsModule::IOBuffer::eStatusLockedForRead/Write, so the bodies reuse
+// IsBufferLockedForReading()/IsBufferLockedForWriting() by NAME.
 //
-// MINIMAL SLICE: the buffer models only its two touched members, each pinned to its
-// exact X360 byte offset with explicit u8 storage for the gaps (the BrnRootSoundModuleIo.h
-// precedent). Only the IOBuffer base (1 byte) + u8 storage precede each touched member
-// (no host-width pointers), so offsetof IS byte-faithful on the 64-bit gate and the
-// member offsets are static_asserted.
-// FLAG (un-DWARF'd member names/types): the two returned sub-objects ("results" @ +0x814
-// and "replay" @ +0x1824) are named opaque byte storage of unknown element type; only
-// their +0x814 / +0x1824 offsets and the lock-state guards are X360 facts. The IDA-
-// truncated method names (GetResults / GetReplay) are inferred from the call-site usage
-// (RootSoundModule::Update / BridgeLogicToRoot / RegistryLoad) + the lock direction; the
-// X360 bodies (lock assert + return &member-at-offset) are exact.
+// RECONCILIATION (wave 7): the DWARF (dwarfdump BrnSoundLogicModuleIo.h:50-82) gives
+// LogicOutputBuffer a request-interface shape, NOT the results/replay shape the prior
+// minimal slice guessed. The prior GetResults/GetReplay + maResultsStorage/maReplayStorage
+// model was contradicted by the DWARF and is REPLACED here:
+//   struct LogicOutputBuffer : public OutputBuffer {
+//     RootOutputBuffer::AttribSysRequestInterface     mAttribSysRequestInterface; // @ +0x04 FIRST (:81)
+//     RootOutputBuffer::SoundResourceRequestInterface mResourceRequestInterface;  //         (:82)
+//     void Construct();                                        // :60
+//     const/non-const GetResourceRequestInterface();           // :65 / :73
+//     const/non-const GetAttribSysRequestInterface();          // :69 / :77
+//   }
+// The DWARF base is "OutputBuffer" (a thin CgsModule::IOBuffer subclass, the OutputBuffer
+// side of the InputBuffer/OutputBuffer pair). That intermediary is un-homed in-tree, so
+// this keeps the direct CgsModule::IOBuffer base -- byte-identical (status byte @0, first
+// member @ +0x04, which funcs 04/05's `addi r3,this,4` attest). FLAG(low): the
+// OutputBuffer intermediary is elided; if it ever carries members it must be interposed.
+//
+// The two members are DWARF-named, correctly-sized opaque storage borrowed from
+// RootOutputBuffer (AttribSysRequestInterface<2048> = 0x810; SoundResourceRequestInterface
+// = RequestInterface<4096> = 0x1010). Only mAttribSysRequestInterface's +0x04 start is
+// X360-attested by this batch; mResourceRequestInterface's start (+0x814) follows from the
+// AttribSys span and is NOT independently attested (FLAG). offsetof(mAttribSysRequest-
+// Interface) == 0x04 is byte-faithful (only the 1-byte IOBuffer base precedes it).
 // =============================================================================
 
 namespace BrnSound
@@ -56,46 +63,40 @@ namespace Module
 {
 namespace Io
 {
-    // The "results" sub-buffer returned (by reference) from GetResults @ +0x814. Its
-    // real element type is UNVERIFIED (the X360 only does `addi r3, this, 0x814` --
-    // take-address); modelled as named opaque storage so the buffer's later full
-    // reconstruction can replace it without moving anything.
-    struct LogicOutputResults;
-
-    // The "replay" sub-buffer returned (by const reference) from GetReplay @ +0x1824.
-    // Same opaque-storage treatment.
-    struct LogicOutputReplay;
-
     // BrnSound::Module::Io::LogicOutputBuffer -- the per-frame logic OUTPUT payload the
-    // sound logic module fills for the root module. Derives from CgsModule::IOBuffer.
+    // sound logic module fills for the root module. DWARF shape (request interfaces).
     struct LogicOutputBuffer : public CgsModule::IOBuffer
     {
-        // X360 0x82695470 (read-lock; "Not locked for reading\n", baked :113) -- the
-        // results sub-buffer at this+0x814. Const reader.
-        const LogicOutputResults& GetResults() const;
+        // BrnSoundLogicModuleIo.h:60 (DWARF; own TU, declared-only here).
+        void Construct();
 
-        // X360 0x826955C0 (write-lock; "Not locked for writing\n", baked :128) -- the
-        // SAME results sub-buffer at this+0x814. Mutable writer.
-        LogicOutputResults& GetResults();
+        // BrnSoundLogicModuleIo.h:65 / :73 (DWARF; own TU, declared-only here) --
+        // &mResourceRequestInterface. Not bodied by this wave.
+        const RootOutputBuffer::SoundResourceRequestInterface* GetResourceRequestInterface() const;
+        RootOutputBuffer::SoundResourceRequestInterface*       GetResourceRequestInterface();
 
-        // X360 0x82695320 (read-lock; "Not locked for reading\n", baked :79) -- the
-        // replay-output sub-buffer at this+0x1824. Const reader.
-        const LogicOutputReplay& GetReplay() const;
+        // X360 0x82695518 (read-lock, DWARF :69) / 0x82695668 (write-lock, DWARF :77) --
+        // &mAttribSysRequestInterface at this+0x04 (this wave).
+        const RootOutputBuffer::AttribSysRequestInterface* GetAttribSysRequestInterface() const;
+        RootOutputBuffer::AttribSysRequestInterface*       GetAttribSysRequestInterface();
 
     private:
-        // base end (1 byte) -> +0x0814 results sub-buffer.
-        u8 maPadToResults[0x814 - sizeof(CgsModule::IOBuffer)];
-        // results sub-buffer @ +0x0814; named opaque storage (full layout deferred).
-        u8 maResultsStorage[0x1824 - 0x814];                     // @ +0x0814
-        // replay sub-buffer @ +0x1824; named opaque storage (full layout deferred).
-        u8 maReplayStorage[0x40];                                // @ +0x1824
+        // Byte widths mirror RootOutputBuffer's attested request-interface spans
+        // (AttribSysRequestInterface<2048> = 0x810, SoundResourceRequestInterface =
+        // RequestInterface<4096> = 0x1010). Opaque storage because the request-interface
+        // template return-type tags are incomplete forward decls (same discipline as
+        // RootOutputBuffer); the getters reinterpret_cast &storage to the typedef pointer.
+        static const int KI_AttribSysInterfaceBytes = 0x0810; // @ +0x04 .. +0x814
+        static const int KI_ResourceInterfaceBytes  = 0x1010; // @ +0x814 ..
+
+        u8 maStatusPad[0x04 - sizeof(CgsModule::IOBuffer)];             // base end -> +0x04
+        u8 mAttribSysRequestInterfaceStorage[KI_AttribSysInterfaceBytes]; // @ +0x04 FIRST (DWARF :81)
+        u8 mResourceRequestInterfaceStorage[KI_ResourceInterfaceBytes];  // @ +0x814     (DWARF :82; start not independently attested)
 
         static void _AssertLayout()
         {
-            static_assert(offsetof(LogicOutputBuffer, maResultsStorage) == 0x814,
-                          "LogicOutputBuffer results sub-buffer @ +0x814");
-            static_assert(offsetof(LogicOutputBuffer, maReplayStorage) == 0x1824,
-                          "LogicOutputBuffer replay sub-buffer @ +0x1824");
+            static_assert(offsetof(LogicOutputBuffer, mAttribSysRequestInterfaceStorage) == 0x04,
+                          "LogicOutputBuffer.mAttribSysRequestInterface @ +0x04");
         }
     };
 
