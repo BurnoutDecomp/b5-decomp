@@ -1,9 +1,11 @@
 // ============================================================================
 // b5-decomp/src/GameSource/Physics/BrnPhysicsModuleIO.h
 //
-// Canonical (DWARF) home for BrnPhysics::PhysicsModuleIO::OutputBuffer
-// (BrnPhysicsModuleIO.h:260). MINIMAL-COMPLETE slice covering ONLY the OutputBuffer's
-// X360-emitted accessors owned by the IO-OutputBuffers group:
+// Canonical (DWARF) home for BrnPhysics::PhysicsModuleIO::{OutputBuffer, InputBuffer}
+// (BrnPhysicsModuleIO.h). Grown across waves to cover the X360-emitted accessors of both
+// IO buffers.
+//
+// OutputBuffer -- MINIMAL-COMPLETE slice covering the OutputBuffer's X360-emitted accessors:
 //   GetVehicleOutputRequestInterface() @ 0x8259FF30 write (bit 3) -> +16     (DWARF :349)
 //   GetVehicleOutputInterface() const  @ 0x8279F598 read  (bit 4) -> +44128  (DWARF :354)
 //   GetVehicleOutputInterface()        @ 0x825A0080 write (bit 3) -> +44128  (DWARF :355)
@@ -11,6 +13,10 @@
 //   GetPropManagerOutputInterface()    @ 0x825C0DC8 write (bit 3) -> +71792  (DWARF :358)
 //   GetDeformationOutputInterface()    @ 0x825A0128 write (bit 3) -> +148656 (DWARF :361)
 //   GetContactSpyInterface()           @ 0x825A0320 write (bit 3) -> +998192 (DWARF :370)
+//   GetSceneInputInterface() const     @ 0x8279F838 read  (bit 4) -> +179424 (DWARF :366)
+//   [wave5 ADDITIVE] const GetVehicleOutputRequestInterface() @ 0x8279F448 read -> +16     (:298)
+//   [wave5 ADDITIVE] const GetDeformationOutputInterface()    @ 0x8279F6E8 read -> +148656 (:322)
+//   [wave5 ADDITIVE] non-const GetSceneInputInterface()       @ 0x825A0278 write -> +179424 (:337)
 //
 // LAYOUT (DWARF :260 member order + X360 getter return-offsets, authoritative):
 //   base   CgsModule::IOBuffer                                  (1-byte status; +1..+15 pad)
@@ -20,16 +26,14 @@
 //   +71792  PropOutputInterface           mPropManagerOutputInterface            :381
 //   +148656 DeformationOutputInterface    mDeformationOutputInterface            :383
 //   +...    DeformationOutputInterfaceForEntityModules mDeformationOutputInterfaceForEntityModules :384
-//   +...    SceneInputInterface           mSceneInputInterface                   :385
+//   +179424 SceneInputInterface           mSceneInputInterface                   :385
 //   +998192 ContactSpyInterface           mContactSpyInterface                   :386
 //
 // FLAG (foreign types): every interface member here has its own owning home elsewhere
-// and is NOT reconstructed in this slice. The five X360-pinned return offsets (+16,
-// +44128, +71792, +148656, +998192) are made exact via correctly-sized opaque storage;
-// the intervening members whose offsets are not separately X360-attested
-// (mVehicleManagerOutputInterface, mDeformationOutputInterfaceForEntityModules,
-// mSceneInputInterface) are folded into the padding (named in comments). Adopt the named
-// interface types additively when their homes land.
+// and is NOT reconstructed in this slice. The X360-pinned return offsets are made exact via
+// correctly-sized opaque storage; the intervening members whose offsets are not separately
+// X360-attested are folded into the padding (named in comments). Adopt the named interface
+// types additively when their homes land.
 #pragma once
 
 #include "types.hpp"
@@ -65,6 +69,11 @@ namespace PhysicsModuleIO
         // the previously-unpinned mSceneInputInterface offset.
         const SceneInputInterfaceStorage*           GetSceneInputInterface() const;           // +179424, read
 
+        // ---- ADDITIVE this wave (wave5 IO family) --------------------------------------
+        const VehicleOutputRequestInterfaceStorage* GetVehicleOutputRequestInterface() const; // +16,     read  (0x8279F448, DWARF :298)
+        const DeformationOutputInterfaceStorage*    GetDeformationOutputInterface() const;     // +148656, read  (0x8279F6E8, DWARF :322)
+        SceneInputInterfaceStorage*                 GetSceneInputInterface();                  // +179424, write (0x825A0278, DWARF :337)
+
         static void _AssertLayout();
 
     private:
@@ -89,25 +98,108 @@ namespace PhysicsModuleIO
     };
 
     // ================================================================================
-    // BrnPhysics::PhysicsModuleIO::InputBuffer (DWARF BrnPhysicsModuleIO.h) -- MINIMAL
-    // slice for the one accessor the world bridges drive:
-    //   GetVehicle() @ 0x8279ED28  write-lock (bit 3, "Not locked for writing\n",
-    //   assert line 276) -> this + 368  (the embedded vehicle-input interface the
-    //   crash bridge Appends into; real type BrnPhysics::Vehicle::VehicleInputInterface,
-    //   kept as opaque storage here per this header's convention -- adopt the real
-    //   member type when the InputBuffer's own TU lands).
+    // BrnPhysics::PhysicsModuleIO::InputBuffer (DWARF BrnPhysicsModuleIO.h:259) -- the
+    // physics module's per-frame input buffer. This unified block MERGES two waves:
+    //   * the InputBuffer IO-family slice (camera / vehicle-input / RC-entity-output /
+    //     timer / solver-max-iterations / prop-manager accessors), AND
+    //   * the bare PhysicsModuleIO group's InputBuffer members
+    //     (mVehicleDriverInterface :312, mVehicleEffectsInputInterface :313,
+    //     mGameActionQueue :323) with their four accessors.
+    //
+    // STYLE: mirrors the OutputBuffer sibling above -- NAMED members (DWARF names + offsets,
+    // authoritative from references/DecFIGS/dwarfdump/GameSource/Physics/BrnPhysicsModuleIO.h)
+    // + explicit padding pinning the X360-attested offsets + _AssertLayout() static_asserts.
+    //
+    // DWARF member order (:259, all private):
+    //   Camera mCameraInput                          :309  +0x00010 (16)      copied extent 0x160
+    //   VehicleInputInterface mVehicleInputInterface :311  +0x00170 (368)
+    //   VehicleDriverInputInterface mVehicleDriverInterface :312 +0x22CD0 (142544)
+    //   VehicleEffectsInputInterface mVehicleEffectsInputInterface :313 +0x24180 (147840)
+    //   RCEntityOutputInterface mRCEntityOutputInterface :314 +0x24880 (149632)  copy 0x28F0
+    //   CreateWorldEventQueue mCreateWorldEventQueue :316  (folded)
+    //   InPotentialContactQueue mPotentialContactQueue :317 (folded)
+    //   InOverlapPairsQueue mOverlapPairsQueue       :318  (folded)
+    //   TimerStatusInterface mTimerInterface         :319  +0x4FDF0 (327152)   copy 0x30
+    //   uint32_t mSolverMaxIterations                :320  +0x4FE20 (327200)
+    //   PropInputInterface mPropManagerInputInterface:322  +0x4FE30 (327216)
+    //   GameActionQueue mGameActionQueue             :323  +0x52A40 (338496)
+    //
+    // Lock bit per asm + CgsIOBuffer.h (eStatusLockedForWrite=0x08 bit3, eStatusLockedForRead=0x10
+    // bit4): read-lock (status>>4 &1) => IsBufferLockedForReading() "Not locked for reading\n";
+    // write-lock (status>>3 &1) => IsBufferLockedForWriting() "Not locked for writing\n". BOTH
+    // strings carry the trailing \n per X360 rodata. Some Get* (mutable overloads) test the WRITE
+    // bit -- reproduced as-is.
+    //
+    // FLAG (foreign types): every interface sub-object has its own owning home; kept as
+    // correctly-SIZED opaque *Storage. mCameraInput is sized 0x160 (the copied Camera extent),
+    // NOT the 0x170 CgsGraphics::Camera -- 0x10 + 0x160 == 0x170 == next member start. Adopt the
+    // real member types additively when their homes land.
+    //
+    // NOTE: GetVehicleInputInterface() is the DWARF-authoritative name for the +368 accessor
+    // (X360 0x8279ED28) previously provisionally called GetVehicle(); the one committed consumer
+    // (WorldBridgeCrashToEntityModules.cpp) was updated to the DWARF name.
     // ================================================================================
     class InputBuffer : public CgsModule::IOBuffer
     {
     public:
-        struct VehicleInputInterfaceStorage { unsigned char maBytes[1]; };
+        // Opaque foreign-type storages, sized to their X360-attested copied/embedded extent.
+        struct CameraStorage                        { unsigned char maBytes[0x160]; };  // 352
+        struct VehicleInputInterfaceStorage         { unsigned char maBytes[1]; };
+        struct VehicleDriverInputInterfaceStorage   { unsigned char maBytes[1]; };
+        struct VehicleEffectsInputInterfaceStorage  { unsigned char maBytes[1]; };
+        struct RCEntityOutputInterfaceStorage       { unsigned char maBytes[0x28F0]; }; // 10480
+        struct TimerStatusInterfaceStorage          { unsigned char maBytes[0x30]; };   // 48
+        struct PropInputInterfaceStorage            { unsigned char maBytes[1]; };
+        struct GameActionQueueStorage               { unsigned char maBytes[1]; };
 
-        // @ 0x8279ED28 -- write-lock tripwire, then the vehicle-input sub-interface.
-        VehicleInputInterfaceStorage* GetVehicle();   // +368, write
+        // ---- getters (read-lock: status bit 4) ----
+        const CameraStorage*                        GetCameraInput() const;                 // 0x8259F7F8 :272
+        const VehicleInputInterfaceStorage*         GetVehicleInputInterface() const;       // 0x8259F8A0 :275
+        const VehicleDriverInputInterfaceStorage*   GetVehicleDriverInterface() const;      // 0x8259F948 :278
+        const VehicleEffectsInputInterfaceStorage*  GetVehicleEffectsInputInterface() const;// 0x8259F9F0 :281
+        const TimerStatusInterfaceStorage*          GetTimerInterface() const;              // 0x8259FC90 :295
+        const u32*                                  GetSolverMaxIterations() const;         // 0x8259FD38 :298
+        const PropInputInterfaceStorage*            GetPropManagerInputInterface() const;   // 0x8259FDE0 :301
+        const GameActionQueueStorage*               GetGameActionQueue() const;             // 0x8259FE88 :304
+
+        // ---- getters (write-lock: status bit 3 -- mutable overloads test the WRITE bit) ----
+        VehicleInputInterfaceStorage*               GetVehicleInputInterface();             // 0x8279ED28 :276
+        VehicleEffectsInputInterfaceStorage*        GetVehicleEffectsInputInterface();      // 0x8279EE78 :282
+        PropInputInterfaceStorage*                  GetPropManagerInputInterface();         // 0x8279F2F8 :302
+        GameActionQueueStorage*                     GetGameActionQueue();                   // 0x8279F3A0 :305
+
+        // ---- setters (write-lock: status bit 3) ----
+        void SetCameraInput(const CameraStorage* lpCamera);                                 // 0x827A9D30 :273
+        void SetRCEntityOutputInterface(const RCEntityOutputInterfaceStorage* lpInterface); // 0x8279EF20 :285
+        void SetTimerInterface(const TimerStatusInterfaceStorage* lpTimer);                 // 0x8279F128 :296
+        void SetSolverMaxIterations(const u32* lpValue);                                    // 0x8279F240 :299
+
+        static void _AssertLayout();
 
     private:
-        u8                           maStatusPad[367];        // +1..+367 (force +368)
-        VehicleInputInterfaceStorage mVehicleInputInterface;  // +368
+        u8                                  maStatusPad[15];                 // +1..+15 (force +16)
+        CameraStorage                       mCameraInput;                    // +16      :309
+        VehicleInputInterfaceStorage        mVehicleInputInterface;          // +368     :311
+        // gap to mVehicleDriverInterface: +369 .. +142543.
+        unsigned char                       maDriverPad[142544 - 369];       //
+        VehicleDriverInputInterfaceStorage  mVehicleDriverInterface;         // +142544  :312
+        // gap to mVehicleEffectsInputInterface: +142545 .. +147839.
+        unsigned char                       maEffectsPad[147840 - 142545];   //
+        VehicleEffectsInputInterfaceStorage mVehicleEffectsInputInterface;   // +147840  :313
+        // gap to mRCEntityOutputInterface: +147841 .. +149631.
+        unsigned char                       maRCEntityPad[149632 - 147841];  //
+        RCEntityOutputInterfaceStorage      mRCEntityOutputInterface;        // +149632  :314 (0x28F0)
+        // mCreateWorldEventQueue/mPotentialContactQueue/mOverlapPairsQueue (:316-:318) folded:
+        // +160112 (0x24880+0x28F0) .. +327151.
+        unsigned char                       maQueuesPad[327152 - 160112];    //          :316-:318
+        TimerStatusInterfaceStorage         mTimerInterface;                 // +327152  :319 (0x30)
+        u32                                 mSolverMaxIterations;            // +327200  :320
+        // gap to mPropManagerInputInterface: +327204 .. +327215.
+        unsigned char                       maSolverPad[327216 - 327204];    //
+        PropInputInterfaceStorage           mPropManagerInputInterface;      // +327216  :322
+        // gap to mGameActionQueue: +327217 .. +338495.
+        unsigned char                       maGameActionPad[338496 - 327217];//
+        GameActionQueueStorage              mGameActionQueue;                // +338496  :323
     };
 }
 }
