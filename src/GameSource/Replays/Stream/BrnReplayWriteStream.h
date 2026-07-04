@@ -21,12 +21,24 @@
 
 #include "types.hpp"
 #include "GameSource/Replays/Stream/BrnReplayStreamHeader.h"
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // CgsMemory::LinearMalloc mHeaderMalloc
 
 namespace BrnReplays
 {
+    // The record-side disk sink. Reached BY POINTER only (mpStream is neither read nor
+    // reset by the bodied functions in this slice), so an incomplete type suffices; the
+    // full WriteStream TU owns its concrete home.
+    class DiskWriteStream;
+
     class WriteStream
     {
     public:
+        // ResetStream @ 0x8264D100. Free every header allocation, carve a fresh
+        // StreamHeader, stamp the "REPLAY " magic, and clear the per-recording
+        // bookkeeping (the DiskWriteStream link mpStream is left untouched --
+        // StartNewStream owns it). Returns the freshly allocated StreamHeader.
+        StreamHeader* ResetStream();
+
         // InvalidateFrunksAhead @ 0x8264D190. After a new frunk is added at liStartFrunk,
         // mark every later frunk whose start frame falls within the new frunk's covered
         // frame range as VOID (KU_FLAG_VOID), then advance miFirstFrunk past any leading
@@ -40,12 +52,20 @@ namespace BrnReplays
         void SetStreamHeaderForTest(StreamHeader* lpHeader) { mpStreamHeader = lpHeader; }
 
     private:
-        // @0x00 LinearMalloc mHeaderMalloc -- header allocator state (opaque; 0x1C bytes
-        // on X360 so mpStreamHeader lands at +0x1C). Not reached by name by this TU.
-        u8            maHeaderMalloc[0x1C]; // @0x00 (LinearMalloc, layout unrecovered)
-        StreamHeader* mpStreamHeader;       // @0x1C the frunk index / stream header
-        // ... remaining WriteStream members (mCurrentFrunk, write/stall counters,
-        //     mpStream, the 128 KiB intermediate buffer, ...) are NOT modelled in this
-        //     minimal slice; the full WriteStream TU grows them.
+        // Members recovered by ResetStream @0x8264D100 / InvalidateFrunksAhead
+        // @0x8264D190; reached BY NAME (native layout, X360 byte offsets documentary).
+        CgsMemory::LinearMalloc mHeaderMalloc;         // @0x00  header bump allocator (X360: 0x1C bytes)
+        StreamHeader*           mpStreamHeader;        // @0x1C  the frunk index / stream header
+        s32                     miCurrentWriteIndex;   // @0x40  write cursor
+        s32                     miStallCount;          // @0x44
+        bool                    mbEnded;               // @0x48
+        bool                    mbPaused;              // @0x49
+        s32                     miNumFrunksAllocated;  // @0x4C
+        DiskWriteStream*        mpStream;              // @0x50  disk sink (NOT reset by ResetStream)
+        s32                     miFilePosition;        // @0x54
+        s32                     miBufferPosition;      // @0x58
+        // ... remaining WriteStream tail (the 128 KiB intermediate buffer, ...) is NOT
+        //     modelled in this slice; the full WriteStream TU grows it. No offset is
+        //     asserted across these members.
     };
 }

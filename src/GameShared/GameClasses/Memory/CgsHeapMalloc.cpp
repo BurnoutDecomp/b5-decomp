@@ -107,6 +107,17 @@ namespace CgsMemory
         mAllocator.Destruct();
     }
 
+    // @ 0x827EF3F0 -- out-of-line virtual destructor; the host compiler synthesises the
+    // scalar/vector deleting-destructor thunk from it. The X360 vector-deleting-destructor
+    // runs the implicit member-destruction chain -- ~HeapMalloc(mAllocator) -> its embedded
+    // ~GeneralAllocator (the asm's `~GeneralAllocator(a1+0xC)` call) -- restores the
+    // ICoreAllocator/HeapMallocCoreAllocator vtable (off_8200F5B4) at +0x0, then conditionally
+    // `operator delete(this)` when the low bit of the flag arg is set. Member destruction is
+    // implicit and the host `delete` stands in for the deleting tail, so the body is empty.
+    HeapMallocCoreAllocator::~HeapMallocCoreAllocator()
+    {
+    }
+
     // CgsHeapMalloc.cpp:247 - ICoreAllocator::Alloc -> HeapMalloc::Malloc, default alignment.
     // The debug name / flags are ignored by the underlying engine.
     void* HeapMallocCoreAllocator::Alloc(size_t lnSize, const char* /*lpcName*/, unsigned int /*luFlags*/)

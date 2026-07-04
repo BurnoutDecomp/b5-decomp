@@ -32,9 +32,24 @@ namespace BrnMassive
     // bytes here; its concrete field layout is reconstructed separately.
     struct System360HWMassive
     {
+        // Multi-step Massive prepare state machine. operator++ advances the stage by
+        // one; the asm asserts the value never runs past E_PREPARESTAGE_DONE (the
+        // `result > 4` overflow test in operator++ @ 0x823A8958). Concrete intermediate
+        // stage names are not attested; only the START/DONE bounds (0 and 4) are
+        // recovered from the asm.
+        enum EPrepareStage
+        {
+            E_PREPARESTAGE_START = 0,
+            E_PREPARESTAGE_DONE  = 4
+        };
+
         u8 mPad00[4];
         int Release();
     };
+
+    // Postfix increment for the Massive prepare-stage state machine
+    // (BrnSystemHWX360Massive.cpp @ 0x823A8958).
+    System360HWMassive::EPrepareStage operator++(System360HWMassive::EPrepareStage& reStage, int);
 }
 
 namespace BrnHW

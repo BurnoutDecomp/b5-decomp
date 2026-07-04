@@ -26,25 +26,31 @@ namespace BrnTrigger
 {
     struct SpawnLocation
     {
-        // DWARF / X360: the spawn-location kind discriminator. E_TYPE_COUNT (4) is the sentinel the
-        // callers assert against; the concrete enumerator names are not in this TU's exports, so only
-        // the count sentinel + numeric meaning are pinned.
+        // DWARF: the spawn-location kind discriminator (references/DecFIGS/dwarfdump/.../
+        // BrnSpawnLocation.h). E_TYPE_COUNT (4) is the sentinel GetType and the car-select
+        // callers assert against.
         enum Type
         {
-            E_TYPE_0     = 0,   // FLAG: enumerator names not in exports (only E_TYPE_COUNT is attested)
-            E_TYPE_1     = 1,
-            E_TYPE_2     = 2,
-            E_TYPE_3     = 3,
-            E_TYPE_COUNT = 4,   // BrnSpawnLocation.h:152 assert bound
+            E_TYPE_PLAYER_SPAWN     = 0,
+            E_TYPE_CAR_SELECT_LEFT  = 1,
+            E_TYPE_CAR_SELECT_RIGHT = 2,
+            E_TYPE_CAR_UNLOCK       = 3,
+            E_TYPE_COUNT            = 4,   // BrnSpawnLocation.h:152 assert bound
         };
 
-        // X360: read the u8 at this+0x28 and return it as Type. Declare-only here (body in the
-        // SpawnLocation TU); the asserting callers reproduce the `muType < E_TYPE_COUNT` guard.
+        // X360: read the u8 muType at this+0x28 and return it as Type. Body in
+        // BrnSpawnLocation.cpp.
         Type GetType() const;
 
-        // X360: read the 8-byte junkyard id at SpawnLocation +0x24. SetupSpawnLocations matches it
-        // against mJunkyardId to claim each junkyard's spawn points. Declare-only here (body in the
-        // SpawnLocation/TriggerData TU).
+        // X360: read the 8-byte junkyard id mJunkyardId at SpawnLocation +0x20.
+        // SetupSpawnLocations matches it to claim each junkyard's spawn points.
+        // Declare-only here (body in the SpawnLocation/TriggerData TU).
         CgsID GetJunkyardId() const;
+
+        // --- layout (DWARF-named; muType pinned by the X360 lbz at +0x28) --------------
+        Vector3 mPosition;    // +0x00 (16B slot)
+        Vector3 mDirection;   // +0x10 (16B slot)
+        CgsID   mJunkyardId;  // +0x20 (8B)
+        u8      muType;       // +0x28 the Type discriminator GetType reads
     };
 }

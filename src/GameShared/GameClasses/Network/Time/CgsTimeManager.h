@@ -38,13 +38,13 @@
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeBase.h"      // SyncTimeMessageManager
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessageWithPlayerIDs.h"  // NetworkPlayerID
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"             // CgsSystem::Time
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"  // CgsSystem::TimerStatus (NextFrame)
 
 namespace CgsNetwork
 {
     // Pointer-only collaborator; an incomplete type suffices and avoids pulling the whole
     // player registry into every includer.
     struct PlayerManager;
-    struct TimerStatus;
 
     struct TimeManager
     {
@@ -104,7 +104,7 @@ namespace CgsNetwork
         // --- start-frame bookmark / frame queries ---
         void SetStartFrame(EStartFrame leStartFrame, const CgsSystem::Time* lpStartTime, f32 lfTimeStep);
         bool HasStartFrameBeenSetValid();
-        void NextFrame(const TimerStatus* lpTimerStatus);
+        void NextFrame(const CgsSystem::TimerStatus* lpTimerStatus);
         u32  GetFrameCount() const;
         u16  GetU16FrameCount() const;
         u16  GetU16FrameCountSinceStart() const;

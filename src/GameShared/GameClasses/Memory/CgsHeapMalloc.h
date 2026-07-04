@@ -92,6 +92,12 @@ namespace CgsMemory
         // CgsHeapMalloc.cpp:234 - tear the embedded HeapMalloc down.
         void Destruct();
 
+        // @ 0x827EF3F0 -- out-of-line virtual dtor; overrides ICoreAllocator's slot-0 virtual
+        // dtor and anchors the vtable (off_8200F5B4). The compiler-synthesised vector deleting
+        // destructor runs the implicit ~HeapMalloc -> ~GeneralAllocator (the asm's a1+0xC call)
+        // member chain, restores the vtable, then conditionally operator-delete's `this`.
+        virtual ~HeapMallocCoreAllocator();
+
         // EA::Allocator::ICoreAllocator overrides (CgsHeapMalloc.cpp:247/263/280).
         // Alloc tags are debug-only and ignored by the underlying engine.
         virtual void* Alloc(size_t lnSize, const char* lpcName, unsigned int luFlags);
