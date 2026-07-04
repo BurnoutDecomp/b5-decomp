@@ -1866,16 +1866,18 @@ namespace BrnGui
                 {
                     s_bHelpDefaultsPending = false;
                 }
-                else if (++s_iHelpAttempts > 300)   // ~10s at 30 ticks/s
+                else if ((++s_iHelpAttempts % 300) == 0)   // heartbeat ~every 10s at 30 ticks/s
                 {
-                    // FLAG (follow-on): the prompt TEXT applies, but the button GLYPH's
-                    // 'select' state never lands -- the Icon's imported ControllerButtons
-                    // export resolves to a subtree without the button-clip labels (the
-                    // import-link export mapping for nested wrapper clips). Give up
-                    // retrying; the localised prompt text is in place.
-                    s_bHelpDefaultsPending = false;
+                    // KEEP RETRYING (2026-07-05): the StaticHelpItem + its Controller-
+                    // Buttons icon subtree only compose once the SELECTION MENU opens
+                    // (they place over its transin ticks) -- which can be minutes after
+                    // boot, so the old boot-anchored give-up cap was wrong (the glyph
+                    // only appeared when the menu was opened within ~10s of composing).
+                    // The cap dated from when the icon subtree could NEVER compose (the
+                    // GUIAPT64 record-misalignment data defect, since repaired -- see
+                    // references/GUIAPT64_FRAMETABLE_BUG.md). Heartbeat, don't give up.
                     CgsDev::Log::WriteToLog(
-                        "[AptRT] helpitem: icon 'select' never composed -- glyph deferred (FLAG).\n");
+                        "[AptRT] helpitem: defaults still pending (icon subtree not composed yet) -- retrying.\n");
                 }
             }
 
@@ -2298,6 +2300,20 @@ namespace BrnGui
             if (lpcName != nullptr && _stricmp(lpcName, "Icon") == 0)
             {
                 lbIcon = AptViewStateGotoLabel(lpK, "select", 0);
+                if (!lbIcon)
+                {
+                    // The Icon is the imported ControllerButtons PLATFORM wrapper
+                    // ('xbox' f0 / 'ps3' f10 / 'invisible' f20). In this Nov-06 dev
+                    // asset only the 'ps3' band PLACES the button board (the 'xbox'
+                    // band is empty -- the console's component ActionScript attaches
+                    // the platform board; that script is the AS-VM follow-on, FLAG).
+                    // Arm the board's composition by jumping the wrapper to its only
+                    // art-bearing band; the per-update retry then lands the 'select'
+                    // jump once the board has placed. (Before the GUIAPT64 record
+                    // repair this happened BY ACCIDENT: the wrapper's broken f0 Stop
+                    // let it free-run into the 'ps3' band.)
+                    AptViewStateGotoLabel(lpK, "ps3", 0);
+                }
                 break;
             }
         }
