@@ -37,6 +37,7 @@ IXAudio2*               g_pXAudio2    = nullptr;
 IXAudio2MasteringVoice* g_pMaster     = nullptr;
 IXAudio2SourceVoice*    g_pSource     = nullptr;
 int                     g_channels    = 2;
+int                     g_openRate    = 0;      // sample rate the voice was opened at (0 = closed)
 AudioOutputPC::FillFn   g_fill        = nullptr;
 void*                   g_user        = nullptr;
 s16                     g_buf[kBuffers][kFrames * kMaxChannels];
@@ -152,6 +153,7 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
     }
 
     g_channels = liChannels;
+    g_openRate = liSampleRate;
     g_fill = lpFill;
     g_user = lpUser;
     g_pSource->Start(0);
@@ -169,9 +171,12 @@ void AudioOutputPC::Close()
     if (g_pXAudio2) { g_pXAudio2->Release(); g_pXAudio2 = nullptr; }
     if (g_hXAudioDll) { ::FreeLibrary(g_hXAudioDll); g_hXAudioDll = nullptr; }
     g_fill = nullptr; g_user = nullptr;
+    g_openRate = 0;
 }
 
 bool AudioOutputPC::IsOpen() { return g_pSource != nullptr; }
+
+int AudioOutputPC::GetOpenSampleRate() { return g_openRate; }
 
 void AudioOutputPC::SetFill(FillFn lpFill, void* lpUser) { g_fill = lpFill; g_user = lpUser; }
 

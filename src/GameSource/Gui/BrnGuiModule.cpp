@@ -13,6 +13,8 @@
 #include "GameShared/GameClasses/Fsm/CgsEvent.h"                          // CgsFsm::Event (drive BF_PROCEED through the FSM)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::GuiEventPlayAptMovie (channel-41 payload)
 #include "GameSource/Gui/BrnAptRuntimeBringUp.h"                          // BrnGui::AptRuntime* (the Apt runtime bring-up + driver)
+#include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"             // CgsSystem::MenuMusicPC (the menu-stream music player)
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
 
 // PC KEYBOARD BRING-UP (FLAG): poll GetAsyncKeyState without dragging <Windows.h> into this
 // game-source TU (its NOUSER/NOGDI lean-defines conflict). Signature per WinUser.h.
@@ -174,6 +176,58 @@ namespace BrnGui
             lpEvent = lpNext;
         }
         // Do NOT Clear() here: BootLegal's output queue carries other events consumed elsewhere.
+    }
+
+    // ---- BF_LEGAL audio consumers (events 155 / 201; bring-up host bridges) ---------------
+    // The console consumers are BrnSound::Logic::MusicStream (the menu stream, fed through
+    // SndStream) and the AEMS GUI sound logic (the trigger patches) -- both deferred
+    // behavioural clusters (the MusicEffect ctor installs un-homed singleton vtables).
+    // These host consumers reproduce the OBSERVABLES on the same event protocol:
+    //   155 (GuiEventPlayMusicOnMenuStream): miHash @+0x0C. A known sound-name hash
+    //        (CgsSound::Playback::Name::MakeHash -- homed) -> play/loop that stream;
+    //        hash 0 -> stop (the X360 posts 0 before the attract video).
+    //   201 (GuiAudioTriggerEvent): the trigger name (bring-up carrier @+0x10) is consumed
+    //        + logged; the AEMS patch PLAYBACK (the actual blip sample, inside the Splicer
+    //        PresentationAsset bank) is the FLAG follow-on.
+    static void HandleMenuMusicEvent(s32 liHash)
+    {
+        struct MenuStreamKey { const char* lpacName; const char* lpacSnsPath; };
+        static const MenuStreamKey KA_MENU_STREAMS[] =
+        {
+            // The title screen's menu stream (BootLegal E_STAGE_START_MOVIE posts it).
+            { "GunsAndRoses", "SOUND\\STREAMS\\GUNS_AND_ROSES.SNS" },
+        };
+
+        if (liHash == 0)
+        {
+            if (CgsSystem::MenuMusicPC::IsActive())
+            {
+                CgsDev::Log::WriteToLog("[GuiModule] menu-music 155 hash 0 -> stop.\n");
+                CgsSystem::MenuMusicPC::Stop();
+            }
+            return;
+        }
+        for (u32 lu = 0; lu < sizeof(KA_MENU_STREAMS) / sizeof(KA_MENU_STREAMS[0]); ++lu)
+        {
+            const s32 liKey = static_cast<s32>(
+                CgsSound::Playback::Name::MakeHash(KA_MENU_STREAMS[lu].lpacName));
+            if (liHash == liKey)
+            {
+                char lac[160];
+                std::snprintf(lac, sizeof(lac), "[GuiModule] menu-music 155 '%s' -> %s\n",
+                              KA_MENU_STREAMS[lu].lpacName, KA_MENU_STREAMS[lu].lpacSnsPath);
+                CgsDev::Log::WriteToLog(lac);
+                CgsSystem::MenuMusicPC::Play(KA_MENU_STREAMS[lu].lpacSnsPath);
+                return;
+            }
+        }
+        {
+            char lac[120];
+            std::snprintf(lac, sizeof(lac),
+                          "[GuiModule] menu-music 155 hash 0x%08X unknown -- no stream mapped (FLAG).\n",
+                          static_cast<u32>(liHash));
+            CgsDev::Log::WriteToLog(lac);
+        }
     }
 
     // Bring one boot FSM phase up: construct + wire the state into its StateMachine, then compile + enter
@@ -509,6 +563,24 @@ namespace BrnGui
                             if (lpCmd->muEventType == 70)
                                 lbLegalAccepted = true;
                         }
+                        // Event 155: the menu-stream music request (hash @+0x0C; 0 = stop).
+                        if (lbPastCursor && liId == 155)
+                        {
+                            HandleMenuMusicEvent(*reinterpret_cast<const s32*>(
+                                reinterpret_cast<const char*>(lpEvent) + 0x0C));
+                        }
+                        // Event 201: a GUI audio trigger ("Accept"...). Consume + log; the AEMS
+                        // patch playback (the blip sample in the Splicer bank) is the follow-on.
+                        if (lbPastCursor && liId == 201)
+                        {
+                            const char* lpacTrigger =
+                                reinterpret_cast<const char*>(lpEvent) + 0x0C + 4;
+                            char lacT[140];
+                            std::snprintf(lacT, sizeof(lacT),
+                                "[GuiModule] audio trigger '%.63s' consumed -- AEMS patch playback deferred (FLAG).\n",
+                                lpacTrigger);
+                            CgsDev::Log::WriteToLog(lacT);
+                        }
                         if (lpEvent == s_pVideoPumpCursor)
                             lbPastCursor = true;
                         lpLast = lpEvent;
@@ -529,6 +601,9 @@ namespace BrnGui
                     if (!mbBootLegalFsmReady)
                         mBootLegal.OnLeave();
                     BrnGui::AptRuntimeStopMovie();
+                    // Leaving the state stops the menu stream on console (the sound logic
+                    // reacts to the flow change); mirror that here.
+                    CgsSystem::MenuMusicPC::Stop();
                     miBootPhase = 3;
                     return;
                 }
@@ -557,6 +632,10 @@ namespace BrnGui
                     CgsDev::Log::WriteToLog("[GuiModule] BF_LEGAL video finished -> fed 510.\n");
                 }
             }
+
+            // Per-frame: let the menu-music stream (re)claim the audio output once the
+            // movie stream is idle (the attract video borrows the single device voice).
+            CgsSystem::MenuMusicPC::Update();
 
             BrnGui::AptRuntimeUpdate();
             return;

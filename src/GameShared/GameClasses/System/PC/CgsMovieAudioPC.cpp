@@ -109,7 +109,10 @@ namespace
         SnrHeader h;
         const std::size_t kBase = 0x10;        // skip 16-byte resource wrapper
         const std::size_t kDataOffset = 0x28;  // wrapper + EAAC(8) + extended(16)
-        if (d.size() < kDataOffset) return h;
+        // A header-only SNR (no prefetch -- e.g. the 32-byte music-stream headers in
+        // STREAMHEADERS) still carries the authoritative codec/channels/rate/samples;
+        // only the prefetch fields/data may be absent.
+        if (d.size() < kBase + 8) return h;
         const std::uint32_t h1 = ReadBe32(&d[kBase]);
         const std::uint32_t h2 = ReadBe32(&d[kBase + 4]);
         const int codec = int((h1 >> 24) & 0xF);
@@ -117,10 +120,12 @@ namespace
         h.channels   = int((h1 >> 18) & 0x3F) + 1;
         h.sampleRate = int(h1 & 0x3FFFF);
         h.numSamples = h2 & 0x1FFFFFFF;
-        const std::uint32_t prefetchSize = ReadBe32(&d[kBase + 12]);  // 0x1c
-        const std::size_t avail = d.size() - kDataOffset;
-        const std::size_t bytes = std::min<std::size_t>(prefetchSize, avail);
-        h.prefetch.assign(d.begin() + kDataOffset, d.begin() + kDataOffset + bytes);
+        if (d.size() > kDataOffset) {
+            const std::uint32_t prefetchSize = ReadBe32(&d[kBase + 12]);  // 0x1c
+            const std::size_t avail = d.size() - kDataOffset;
+            const std::size_t bytes = std::min<std::size_t>(prefetchSize, avail);
+            h.prefetch.assign(d.begin() + kDataOffset, d.begin() + kDataOffset + bytes);
+        }
         h.valid = true;
         return h;
     }
@@ -288,17 +293,18 @@ void MovieAudioPC::Release()
     g_frames = 0; g_cursor = 0; g_finished = true; g_loaded = false;
 }
 
-bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
+// ---------------------------------------------------------------------------
+// Shared SNS(+staged SNR) -> interleaved stereo s16 PCM decode. Used by the
+// movie stream (Load) and the menu-music stream (MenuMusicPC::Play); lpacTag
+// prefixes the log lines so each consumer keeps its probe identity.
+// ---------------------------------------------------------------------------
+static bool DecodeSnsFileToPcm(const char* lpSnsPath, int liChannels, const char* lpacTag,
+                               std::vector<std::int16_t>& lrPcm, int& lrSampleRate)
 {
-    // drop any previous stream
-    Stop();
-    if (g_pcm) { std::free(g_pcm); g_pcm = nullptr; }
-    g_frames = 0; g_cursor = 0; g_finished = true; g_loaded = false;
-
     if (lpSnsPath == nullptr || lpSnsPath[0] == 0) return false;
     std::FILE* lpFile = std::fopen(lpSnsPath, "rb");
     if (lpFile == nullptr) {
-        AUDIO_LOG << "[MovieAudio] open failed: " << lpSnsPath << "\n";
+        AUDIO_LOG << lpacTag << " open failed: " << lpSnsPath << "\n";
         return false;
     }
     std::fseek(lpFile, 0, SEEK_END);
@@ -308,13 +314,13 @@ bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
     std::vector<std::uint8_t> sns(static_cast<std::size_t>(lSize));
     const std::size_t lRead = std::fread(sns.data(), 1, sns.size(), lpFile);
     std::fclose(lpFile);
-    if (lRead != sns.size()) { AUDIO_LOG << "[MovieAudio] short read: " << lpSnsPath << "\n"; return false; }
+    if (lRead != sns.size()) { AUDIO_LOG << lpacTag << " short read: " << lpSnsPath << "\n"; return false; }
 
     // Load the matching SNR (GenericRwacWaveContent) staged next to the .SNS
     // (same base name, ".SNR"). It supplies the prefetched attack plus the
     // authoritative channels / sample rate / total length. Without it the first
     // ~0.3 s (the attack) is missing, since that audio lives only in the SNR.
-    g_sampleRate     = 48000;            // default for the SNR-less fallback
+    lrSampleRate     = 48000;            // default for the SNR-less fallback
     int       liDecodeChannels = liChannels;
     SnrHeader snr;
     {
@@ -333,18 +339,17 @@ bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
             std::fclose(lpSnr);
         }
         if (snr.valid) {
-            g_sampleRate     = snr.sampleRate;
+            lrSampleRate     = snr.sampleRate;
             liDecodeChannels = snr.channels;
-            AUDIO_LOG << "[MovieAudio] SNR " << lSnrPath.c_str() << " ch=" << snr.channels
+            AUDIO_LOG << lpacTag << " SNR " << lSnrPath.c_str() << " ch=" << snr.channels
                       << " rate=" << snr.sampleRate << " samples=" << (int)snr.numSamples
                       << " prefetch=" << (int)snr.prefetch.size() << "B\n";
         } else {
-            AUDIO_LOG << "[MovieAudio] no SNR for " << lpSnsPath
+            AUDIO_LOG << lpacTag << " no SNR for " << lpSnsPath
                       << " -- decoding .SNS only (attack may be clipped)\n";
         }
     }
 
-    std::vector<std::int16_t> pcm;
     try {
         RestoredXma restored = RestorePackets(sns);
         std::size_t lTargetSamples = restored.samples;
@@ -360,12 +365,24 @@ bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
         }
         if (snr.valid) lTargetSamples = snr.numSamples;
         const std::vector<FrameBits> frames = ExtractFrames(restored.packets);
-        pcm = DecodeAll(frames, liDecodeChannels, lTargetSamples);
+        lrPcm = DecodeAll(frames, liDecodeChannels, lTargetSamples);
     } catch (const std::exception& lEx) {
-        AUDIO_LOG << "[MovieAudio] decode error (" << lpSnsPath << "): " << lEx.what() << "\n";
+        AUDIO_LOG << lpacTag << " decode error (" << lpSnsPath << "): " << lEx.what() << "\n";
         return false;
     }
-    if (pcm.empty()) return false;
+    return !lrPcm.empty();
+}
+
+bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
+{
+    // drop any previous stream
+    Stop();
+    if (g_pcm) { std::free(g_pcm); g_pcm = nullptr; }
+    g_frames = 0; g_cursor = 0; g_finished = true; g_loaded = false;
+
+    std::vector<std::int16_t> pcm;
+    if (!DecodeSnsFileToPcm(lpSnsPath, liChannels, "[MovieAudio]", pcm, g_sampleRate))
+        return false;
 
     g_frames = long(pcm.size() / 2);
     g_pcm = static_cast<s16*>(std::malloc(std::size_t(g_frames) * 2 * sizeof(s16)));
@@ -377,6 +394,10 @@ bool MovieAudioPC::Load(const char* lpSnsPath, int liChannels)
     // stamps the wall-clock. Opening the audio endpoint (CreateMasteringVoice) costs a few
     // hundred ms the first time; doing it here (with a silent fill) keeps the later Start()
     // instant, so audio and video begin together instead of the audio lagging by the open cost.
+    // If the MENU-MUSIC stream has the device open at a different rate, close it first (the
+    // single source voice is fixed-rate; MenuMusicPC::Update reclaims it after this stream stops).
+    if (AudioOutputPC::IsOpen() && AudioOutputPC::GetOpenSampleRate() != g_sampleRate)
+        AudioOutputPC::Close();
     if (!AudioOutputPC::IsOpen())
         AudioOutputPC::Open(g_sampleRate, 2, nullptr, nullptr);   // null fill -> silence until Start()
 
@@ -428,5 +449,99 @@ void MovieAudioPC::Stop()
 
 bool MovieAudioPC::IsLoaded() const   { return g_loaded; }
 bool MovieAudioPC::IsFinished() const { return g_finished; }
+
+// ===========================================================================
+//  MenuMusicPC -- the looping menu-music stream (see the header note). Shares
+//  this TU's decode; the MOVIE stream keeps fill priority (console parity: the
+//  menu stream is hash-0-stopped before any attract/boot video plays).
+// ===========================================================================
+namespace
+{
+    s16* m_musicPcm    = nullptr;   // interleaved stereo PCM (cached across Stop)
+    long m_musicFrames = 0;
+    long m_musicCursor = 0;
+    int  m_musicRate   = 44100;
+    bool m_musicActive = false;
+    char m_macMusicPath[300] = { 0 };
+
+    inline bool MovieStreamBusy() { return g_loaded && !g_finished; }
+}
+
+void MenuMusicPC::FillStatic(s16* lpOut, int liFrames, void* /*lpUser*/)
+{
+    // Realtime XAudio2 callback: copy from the decoded buffer, LOOPING at the end.
+    long li = 0;
+    if (m_musicPcm != nullptr && m_musicActive && m_musicFrames > 0) {
+        for (; li < liFrames; ++li) {
+            if (m_musicCursor >= m_musicFrames) m_musicCursor = 0;   // loop
+            *lpOut++ = m_musicPcm[m_musicCursor * 2 + 0];
+            *lpOut++ = m_musicPcm[m_musicCursor * 2 + 1];
+            ++m_musicCursor;
+        }
+    }
+    for (; li < liFrames; ++li) { *lpOut++ = 0; *lpOut++ = 0; }
+}
+
+bool MenuMusicPC::Play(const char* lpSnsPath)
+{
+    if (lpSnsPath == nullptr || lpSnsPath[0] == 0) return false;
+
+    if (!(m_musicPcm != nullptr && std::strcmp(m_macMusicPath, lpSnsPath) == 0))
+    {
+        // A different track: decode it (replacing the cached one). Close the device
+        // first when the fill could be ours -- DestroyVoice synchronises with the
+        // callback, making the free safe (same discipline as the movie stream).
+        if (AudioOutputPC::IsOpen() && !MovieStreamBusy())
+            AudioOutputPC::Close();
+        m_musicActive = false;
+        if (m_musicPcm) { std::free(m_musicPcm); m_musicPcm = nullptr; }
+        m_musicFrames = 0; m_macMusicPath[0] = 0;
+
+        std::vector<std::int16_t> pcm;
+        int liRate = 48000;
+        if (!DecodeSnsFileToPcm(lpSnsPath, 2, "[MenuMusic]", pcm, liRate))
+            return false;
+        m_musicFrames = long(pcm.size() / 2);
+        m_musicPcm = static_cast<s16*>(std::malloc(std::size_t(m_musicFrames) * 2 * sizeof(s16)));
+        if (m_musicPcm == nullptr) { m_musicFrames = 0; return false; }
+        std::memcpy(m_musicPcm, pcm.data(), std::size_t(m_musicFrames) * 2 * sizeof(s16));
+        m_musicRate = liRate;
+        std::strncpy(m_macMusicPath, lpSnsPath, sizeof(m_macMusicPath) - 1);
+        m_macMusicPath[sizeof(m_macMusicPath) - 1] = 0;
+        AUDIO_LOG << "[MenuMusic] decoded " << lpSnsPath << " (" << (int)m_musicFrames
+                  << " frames, " << (int)(m_musicRate > 0 ? m_musicFrames / m_musicRate : 0)
+                  << " s, rate " << m_musicRate << ", looping)\n";
+    }
+
+    m_musicCursor = 0;
+    m_musicActive = true;
+    Update();   // claim the output now if it is free
+    return true;
+}
+
+void MenuMusicPC::Stop()
+{
+    if (!m_musicActive) return;
+    m_musicActive = false;
+    // Release the device only when the fill is (at most) ours -- never yank a
+    // playing movie stream. The decoded PCM stays cached for the next Play.
+    if (AudioOutputPC::IsOpen() && !MovieStreamBusy())
+        AudioOutputPC::Close();
+    AUDIO_LOG << "[MenuMusic] stopped\n";
+}
+
+void MenuMusicPC::Update()
+{
+    if (!m_musicActive || m_musicPcm == nullptr) return;
+    if (MovieStreamBusy()) return;               // the movie stream owns the output
+    if (AudioOutputPC::IsOpen() && AudioOutputPC::GetOpenSampleRate() != m_musicRate)
+        AudioOutputPC::Close();                  // a finished movie left it at another rate
+    if (!AudioOutputPC::IsOpen())
+        AudioOutputPC::Open(m_musicRate, 2, &MenuMusicPC::FillStatic, nullptr);
+    else
+        AudioOutputPC::SetFill(&MenuMusicPC::FillStatic, nullptr);   // reclaim (idempotent)
+}
+
+bool MenuMusicPC::IsActive() { return m_musicActive; }
 
 } // namespace CgsSystem
