@@ -30,6 +30,7 @@
 #include "GameSource/Replays/BrnReplayModule.h"
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 
 namespace CgsResource
 {
@@ -96,6 +97,22 @@ namespace BrnGameState
 
     // --- CarScoreData ctor (embedded array element in the scoring records) ---
     GameStateModuleIO::CarScoreData::CarScoreData() {}
+}
+
+namespace CgsSound
+{
+namespace Utils
+{
+    // Link stub for the curve-shape mapper (DWARF CgsSoundUtils.h:276) that the wave-26
+    // PathLine<2>::Update stage interpolation calls. The real body (the per-ECurveType
+    // fraction shaping) is its own recon slice; NOT exercised on the boot path (no
+    // PathLine stage machine runs until the roadnoise/transition-envelope layers go
+    // real). Inert linear-identity fallback: return the fraction unshaped.
+    f32 Curve::GetOutput(f32 lfFraction, ECurveType /*leCurve*/)
+    {
+        return lfFraction;
+    }
+}
 }
 
 namespace CgsSound

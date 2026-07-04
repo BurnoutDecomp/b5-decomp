@@ -66,6 +66,12 @@ namespace BrnGui
     // True once the title movie is loaded + instantiated (root CIH live, ticking).
     bool AptRuntimeIsMovieLive();
 
+    // True once the movie has COMPOSED (the first paced tick ran frame-0's place
+    // commands; the PLACE-named clips exist on the root display list) -- the host
+    // equivalent of the GuiCache apt-component init handshake
+    // (AreAllAptComponentsInitialised gates E_STAGE_FADE_IN on it).
+    bool AptRuntimeIsMovieComposed();
+
     // ---- component view-state bridge (PC bring-up shim; FLAG) ------------------
     // The faithful path is GuiComponent::FillAptViewMessage -> AptAux::
     // UpdateFlashComponent -> AptCommunicator key-values -> the movie's AS

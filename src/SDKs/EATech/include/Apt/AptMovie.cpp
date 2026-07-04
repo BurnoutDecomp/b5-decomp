@@ -25,7 +25,8 @@
 
 // ---- the native-8 place path (doFrameControls tag-3 + the place-command dispatcher) ----
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::placeObjectNCXForm (the homed place spine)
-#include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (the parent node + char-inst chain)
+#include "SDKs/EATech/include/Apt/AptCIH.h"
+#include "SDKs/EATech/include/Apt/AptDisplayListState.h"   // findInst (the MOVE tween-keyframe path)                   // AptCIH (the parent node + char-inst chain)
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::GetRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"            // AptRenderItem::mpCharacter
 #include "SDKs/EATech/include/Apt/AptCharacter.h"             // AptCharacter (the movie character + mpAnimationFile)
@@ -517,11 +518,11 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     // GUIAPT bundle) whose id is in this movie's import table -- e.g. TITLE_SCREEN02 charId 30 ==
     // import 'B5HelperComponents::TransitionComponent'. Fixup pass-3 (the import .apt load) is the
     // DEFERRED bring-up boundary, so imported characters are not resolved and their table slot stays
-    // null. The console would place the resolved import here; on our bring-up we skip the place for
-    // that one character (placing a null character would AV in instantiateCharacter). The movie's
-    // OWN (non-import) characters still place, so the title composes minus the imported sub-clips.
-    if (pCharacter == nullptr)
-        return nullptr;
+    // null. The console would place the resolved import here; on our bring-up we skip the FRESH
+    // place for that one character (the null guard below the Move branch -- placing a null
+    // character would AV in instantiateCharacter). A MOVE record (charId == -1) must NOT bail
+    // here: it targets the EXISTING node at its depth (the tween-keyframe path below). The
+    // movie's OWN (non-import) characters still place, so the title composes fully.
 
     // The instance name (when HasName, bit5): the record's name pointer @body+0x30 was relocated
     // to a live C string by resolve64. Build a bracketed EAStringC over it.
@@ -555,6 +556,39 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     const void* pClipActions = nullptr;
     if ((nFlags & 0x80u) != 0u)
         pClipActions = *reinterpret_cast<void* const*>(pBody + 0x40);
+
+    // ---- MOVE (bit0 without bit1 HasCharacter): the TWEEN-KEYFRAME path ----------------
+    // The X360 `(flags & 2) == 0` branch: findInst the EXISTING node at this depth and
+    // re-place it (pExistingNode set, no character, no name, depth 0, clipDepth -1) so the
+    // record's matrix/colour land on the live item -- these charId==-1 records are every
+    // animation's tween keyframes (dropping them froze all the title transitions after
+    // their discrete PLACE frames). Only a node whose mFlagsA bit31 is clear moves (the
+    // console `*(v18+12) >= 0` pending-remove gate); a missing node falls through to the
+    // fresh-place path (which the null-character guard below then skips, as the console's
+    // charTable[-1] junk-place never composes on our bring-up either).
+    if (bMove && !bHasCharacter)
+    {
+        AptCIH* pPrev = nullptr;
+        AptCIH* pMatch = nullptr;
+        AptDisplayListState* pState = pDisplayList->AsState();
+        if (pState != nullptr)
+            pState->findInst(nDepth, nullptr, &pPrev, &pMatch);
+        if (pMatch != nullptr)
+        {
+            if (static_cast<int32_t>(pMatch->mFlagsA) >= 0)
+            {
+                return pDisplayList->placeObjectNCXForm(
+                    /*pExistingNode*/ pMatch, /*nDepth*/ 0, /*pCharacter*/ nullptr,
+                    /*pName*/ nullptr, pParent, /*bForceRemove*/ 0, /*nClipDepth*/ -1,
+                    fFrameValue, pPosition, pClipActions, pPackedColor);
+            }
+            return nullptr;
+        }
+        // no existing node at that depth: fall through (fresh place when a character exists)
+    }
+
+    if (pCharacter == nullptr)
+        return nullptr;   // (see the import-not-loaded FLAG above; also the charId==-1 Move miss)
 
     return pDisplayList->placeObjectNCXForm(
         /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, pParent,
