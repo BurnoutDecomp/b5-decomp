@@ -121,8 +121,11 @@ void EAStringC::InitFromBuffer(const char* const pStrText)
     }
     else
     {
+        // FIX (verifier fail @0x82AE35A0): the X360 empty branch only stores
+        // &s_EmptyInternalData into m_pData and returns -- no atomic/no bl. The
+        // refcount bump the copy/default ctors do is NOT emitted here (the empty
+        // sentinel is guarded anyway), so this is store-for-store faithful.
         m_pData = reinterpret_cast<DebugDataC*>(&s_EmptyInternalData);
-        IncreaseInternalRefCount();
     }
 }
 
@@ -296,6 +299,39 @@ void EAStringC::Clear()
     IncreaseInternalRefCount();
 }
 
+// ---------------------------------------------------------------------------
+// ClearConstantValue / Invalidate / IsValid / Validate.  X360 0x82ADBE48 /
+// 0x82AE6618 / 0x82AD5710 / 0x82ADBE08.
+//   ClearConstantValue : repoint at the shared empty block WITHOUT releasing the
+//     current one (constant/static strings are not pool-owned, must not be freed).
+//   Invalidate         : drop our ref and NULL the pointer (raw null, distinct from
+//     Clear which repoints at s_EmptyInternalData). Pairs with IsValid.
+//   Validate(const EAStringC&) : adopt another string's block into a just-
+//     Invalidate()d slot -- the inc-source half of operator= with NO release of the
+//     (stale) current block.
+// ---------------------------------------------------------------------------
+void EAStringC::ClearConstantValue()
+{
+    m_pData = reinterpret_cast<DebugDataC*>(&s_EmptyInternalData);
+}
+
+void EAStringC::Invalidate()
+{
+    DecreaseInternalRefCount(m_pData);
+    m_pData = 0;
+}
+
+bool EAStringC::IsValid() const
+{
+    return m_pData != 0;
+}
+
+void EAStringC::Validate(const EAStringC& strText)
+{
+    m_pData = strText.m_pData;
+    IncreaseInternalRefCount();   // FLAG: console = lwarx/stwcx. +0x10000; PC = plain ++
+}
+
 EAStringC& EAStringC::Duplicate(const EAStringC& strText)
 {
     const uint16_t uSize = strText.m_pData->m_uSize;
@@ -350,6 +386,42 @@ bool EAStringC::operator!=(const EAStringC& strText) const { return !(*this == s
 bool EAStringC::operator!=(const char* const pStrText) const
 {
     return strcmp(GetInternalBuffer(), pStrText) != 0;
+}
+
+// Ordering against a C string.  X360 0x82AD5498 (operator<) / 0x82AD54D8 (<=) /
+// 0x82AD5520 (>) / 0x82AD5570 (>=).  operator< is the console's hand-rolled byte
+// walk (unsigned lbz loads, delta = *this[i] - rhs[i], stop at first difference or
+// a NUL in *this, return delta<0); the other three fold to the same strcmp sign the
+// asm computes, matching the sibling Compare @0x82AD5628.
+bool EAStringC::operator<(const char* const pStrText) const
+{
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(GetInternalBuffer());
+    const unsigned char* q = reinterpret_cast<const unsigned char*>(pStrText);
+    int32_t delta;
+    for (;;)
+    {
+        delta = static_cast<int32_t>(*p) - static_cast<int32_t>(*q);
+        if (*p == 0 || delta != 0)
+            break;
+        ++p;
+        ++q;
+    }
+    return delta < 0;
+}
+
+bool EAStringC::operator<=(const char* const pStrText) const
+{
+    return strcmp(GetInternalBuffer(), pStrText) <= 0;
+}
+
+bool EAStringC::operator>(const char* const pStrText) const
+{
+    return strcmp(GetInternalBuffer(), pStrText) > 0;
+}
+
+bool EAStringC::operator>=(const char* const pStrText) const
+{
+    return strcmp(GetInternalBuffer(), pStrText) >= 0;
 }
 
 uint32_t EAStringC::operator[](const int32_t index) const
@@ -760,6 +832,19 @@ bool EAStringC::EndWithRemoveIgnoreCase(const char* const pStrText)
         return false;
     *this = Left(static_cast<int32_t>(uSize - uNeedle));
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// MakeLower.  X360 0x82AE8C00.  Force a private, fully-sized copy (copy-on-write
+// via ChangeBuffer), then ASCII-lowercase the whole buffer in place with the CRT
+// _strlwr (MSVC form; matches the file's existing _stricmp usage).
+// ---------------------------------------------------------------------------
+EAStringC& EAStringC::MakeLower()
+{
+    const uint32_t uSize = m_pData->m_uSize;
+    ChangeBuffer(uSize, 0, uSize, CB_PUSH_ZERO, uSize);
+    _strlwr(GetInternalBuffer());
+    return *this;
 }
 
 // ---------------------------------------------------------------------------
