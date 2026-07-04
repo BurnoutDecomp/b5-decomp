@@ -188,6 +188,14 @@ public:
     // (reads mxFlags at this+5 and the physical-parts index when E_FLAG_PHYSICAL is set).
     u8  GetFlags() const { return mxFlags; }
 
+    // Raw byte reads BrnReplays::TrafficVehicleData::SetFromVehicle @0x82713E38 performs on a
+    // live traffic vehicle: the vehicle TYPE byte @+0 (`lbz 0`) written verbatim into the
+    // replay record's byte 0, and the effect-state byte @+7 (the a2[7] & 2/4/0x10 reads).
+    // Both are plain zero-extended byte reads matching the asm (no IsAlive guard inside the
+    // getter -- SetFromVehicle asserts IsAlive() explicitly at each use site).
+    u8  GetVehicleType() const { return muVehicleType; }  // @+0
+    u8  GetEffectState() const { return mxEffectState; }  // @+7 (raw mxEffectState byte)
+
     // X360 @0x8270F928 asserts, then returns the index byte zero-extended
     // (lbz with no extsb @0x8270F99C): after SetNotPhysical stores -1 the
     // binary hands back 255, not -1.

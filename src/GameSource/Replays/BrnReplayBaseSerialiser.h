@@ -81,6 +81,32 @@ namespace BrnReplays
         // frame reader uses this for the bonus-asset count and the trailing slot table.
         s32 ReadByte(void* lpDest);
 
+        // --- additive primitives the BrnReplayArray / SoundSerialiser delta paths drive
+        //     (declaration-only here; bodies live in the BaseSerialiser TU). Each mirrors a
+        //     distinct X360 sub_* entry point. ---
+
+        // WriteByte(const void*) @ 0x8264FBC8 (sub_8264FBC8). The 1-byte write primitive,
+        // the record mirror of ReadByte.
+        s32 WriteByte(const void* lpSrc);
+
+        // ReadFloat(void*) @ 0x82650130 (sub_82650130). Read one 32-bit float into *lpDest.
+        s32 ReadFloat(void* lpDest);
+
+        // WriteFloat(const void*) @ 0x8264FEE8 (sub_8264FEE8). Write one 32-bit float from
+        // *lpSrc (the record mirror of ReadFloat).
+        s32 WriteFloat(const void* lpSrc);
+
+        // Read/WriteVariableQueue -- pop / push a packed VariableEventQueue<512,16> off / onto
+        // the stream (the sound frame's embedded event queue). Templated only on the buffer /
+        // alignment; declared as void* here to keep this base home free of the queue header.
+        s32 ReadVariableQueue(void* lpQueue);
+        s32 WriteVariableQueue(void* lpQueue);
+
+        // IsKeyFrame() -- expose the protected mbIsKeyFrame flag (asm reads lbz 0x50) so the
+        // delta serialisers (BrnReplayArray<T,N>, SoundSerialiser) can select the key-frame
+        // vs delta path without forking the flag.
+        bool IsKeyFrame() const { return mbIsKeyFrame; }
+
         // Serialise(void*, int32_t) @ 0x8264C470. Mode-directed dispatch: forwards
         // the (buffer, size) pair to Write while recording, to Read while playing,
         // and is a no-op (returns 0) in every other mode.

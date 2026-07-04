@@ -123,6 +123,11 @@ namespace CgsGraphics
     struct ImRenderer : public ImRendererBase
     {
         void BeginRendering();
+        // X360-attested signed-char overload (DWARF CgsImRenderer.h attests BOTH `void BeginRendering();`
+        // and `void BeginRendering(signed char);` on the ImRenderer<V> template). Bodied per vertex type
+        // (the LionBlend path @ X360 0x8227C3A8 supplies the LionBlendVertex instantiation). Distinct from
+        // the no-arg PC-fold BeginRendering().
+        void BeginRendering(s8 li8Program);
         void EndRendering();
         void Render(renderengine::PrimitiveType lePrimitiveType, const V* lpVertices, u32 luCount);
 

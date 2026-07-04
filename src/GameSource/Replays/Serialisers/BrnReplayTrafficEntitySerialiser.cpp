@@ -522,4 +522,80 @@ namespace BrnReplays
 
         return Unlock() ? 1 : 0;
     }
+
+    // KF_HEADLIGHT_ON_THRESHOLD -- flt_820BA62C (0.5) the headlight warmth is compared
+    // against (`fcmpu; blt` skips the OR when warmth < 0.5).
+    static const f32 KF_HEADLIGHT_ON_THRESHOLD = 0.5f;
+
+    // @0x82713E38
+    // Populate the 3-byte replay record from a live traffic vehicle. Every store, branch
+    // and constant below is taken store-for-store from the X360 ASM:
+    //   record[0] = muVehicleType  (`lbz r11,0(r31); stb r11,0(r29)` -- vehicle BYTE 0)
+    //   record[2] = liPhysicalPartsIndex (`stb r28,2(r29)`)
+    //   record[1] = packed light/effect flags, built bit-by-bit (starts 0).
+    // The three IsAlive() asserts before the mxEffectState reads (asm 0x6C1/0x6C8/0x6BA)
+    // are the inlined IsAlive() guards of the raw +7 byte reads; reproduced verbatim.
+    void TrafficVehicleData::SetFromVehicle(TrafficVehicleDataRecord* lpRecord,
+                                            const BrnTraffic::Vehicle* lpVehicle,
+                                            s32 liPhysicalPartsIndex)
+    {
+        // Leading asserts (asm 0x82713E5C / 0x82713E88 / 0x82713EC4).
+        CGS_ASSERT(lpVehicle != nullptr, "lpVehicle");
+        CGS_ASSERT(lpVehicle->IsAlive(), "lpVehicle->IsAlive()");
+        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");
+
+        // record[0] = vehicle type byte (`lbz 0(r31); stb 0(r29)`), NOT the flags byte.
+        lpRecord->maData[0] = lpVehicle->GetVehicleType();
+
+        // a3 != -1 && !lpVehicle->IsPhysical()  ->  assert (asm 0x82713EEC-0x82713EFC).
+        if (liPhysicalPartsIndex != -1)
+        {
+            CGS_ASSERT(lpVehicle->IsPhysical(),
+                       "liPhysicsIndex == -1 || lpVehicle->IsPhysical()");
+        }
+
+        // record[2] = physical-parts index; record[1] starts cleared.
+        lpRecord->maData[2] = static_cast<u8>(liPhysicalPartsIndex);
+        lpRecord->maData[1] = 0;
+
+        // Bit 0x01: headlights on when warmth >= 0.5 (flt_820BA62C; `fcmpu; blt`).
+        if (lpVehicle->GetHeadlightWarmth() >= KF_HEADLIGHT_ON_THRESHOLD)
+        {
+            lpRecord->maData[1] |= 0x01u;
+        }
+
+        // Bit 0x02: brakelights (`clrlwi r11,r3,24; cmplwi; beq`).
+        if (lpVehicle->AreBrakelightsOn())
+        {
+            lpRecord->maData[1] |= 0x02u;
+        }
+
+        // The next three mxEffectState (+7) reads each re-assert IsAlive() first (the
+        // inlined predicate guards at asm 0x6C1/0x6C8/0x6BA), in this exact order.
+        const u8 luEffectState = lpVehicle->GetEffectState();
+
+        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()"); // asm 0x6C1
+        if ((luEffectState & 0x02u) != 0)              // a2[7] & 0x02 (left-indicator bit)
+        {
+            lpRecord->maData[1] |= 0x04u;
+        }
+
+        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()"); // asm 0x6C8
+        if ((luEffectState & 0x04u) != 0)              // a2[7] & 0x04 (right-indicator bit)
+        {
+            lpRecord->maData[1] |= 0x08u;
+        }
+
+        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()"); // asm 0x6BA
+        if ((luEffectState & 0x10u) != 0)              // a2[7] & 0x10 (alarm bit)
+        {
+            lpRecord->maData[1] |= 0x10u;
+        }
+
+        // Bit 0x20: set when the vehicle is NOT physical (`(a2[5] & 8) == 0`).
+        if ((lpVehicle->GetFlags() & BrnTraffic::Vehicle::E_FLAG_PHYSICAL) == 0)
+        {
+            lpRecord->maData[1] |= 0x20u;
+        }
+    }
 }
