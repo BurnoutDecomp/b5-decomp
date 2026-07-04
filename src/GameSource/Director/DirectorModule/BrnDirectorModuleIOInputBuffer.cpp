@@ -230,5 +230,26 @@ namespace DirectorIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         mbGotColourCalibrationHiddenEvent = true;
     }
+
+    // ---- control-input accessors (read/write) -----------------------------------------------
+    // The ControlInput sub-object occupies the head of the committed mMidInterfaceBlock span
+    // @0x3340; both overloads `return &mControlInput` (== this+0x3340), differing only in which
+    // lock bit they assert.
+
+    // X360 0x82206C50 (BrnDirectorModuleIO.h:583): read-lock; return &mControlInput (this+0x3340).
+    const ControlInput* InputBuffer::GetControll() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return reinterpret_cast<const ControlInput*>(mMidInterfaceBlock);
+    }
+
+    // X360 0x823B2740 (BrnDirectorModuleIO.h:574): write-lock; return &mControlInput (this+0x3340).
+    // Non-const (write-side) overload of GetControll(): tests bit 3 (write-lock), unlike the const
+    // read-lock overload above.
+    ControlInput* InputBuffer::GetControll()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return reinterpret_cast<ControlInput*>(mMidInterfaceBlock);
+    }
 }
 }
