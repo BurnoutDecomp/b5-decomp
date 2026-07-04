@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"
 #include "GameShared/GameClasses/System/PC/CgsAudioOutputPC.h"
+#include "GameShared/GameClasses/System/PC/CgsStreamHeadersPC.h"   // the resident SNR table (console chain)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include <algorithm>
@@ -316,37 +317,36 @@ static bool DecodeSnsFileToPcm(const char* lpSnsPath, int liChannels, const char
     std::fclose(lpFile);
     if (lRead != sns.size()) { AUDIO_LOG << lpacTag << " short read: " << lpSnsPath << "\n"; return false; }
 
-    // Load the matching SNR (GenericRwacWaveContent) staged next to the .SNS
-    // (same base name, ".SNR"). It supplies the prefetched attack plus the
-    // authoritative channels / sample rate / total length. Without it the first
-    // ~0.3 s (the attack) is missing, since that audio lives only in the SNR.
-    lrSampleRate     = 48000;            // default for the SNR-less fallback
+    // Resolve the stream's SNR (GenericRwacWaveContent) from the RESIDENT
+    // StreamHeaders bundle by the .SNS file name (path zone 1) -- the console
+    // chain (StreamsRegistry ContentSpec -> HashString(gamedb url) ->
+    // StreamHeaders resource; see CgsStreamHeadersPC.h). It supplies the
+    // authoritative channels / sample rate / total length plus the PREFETCHED
+    // attack: without it the first ~0.3 s of audio is missing and everything
+    // after plays EARLY (the reported intro desync), and an unknown rate
+    // falls back to 48 kHz (the reported pitch shift on 44.1 kHz streams).
+    lrSampleRate     = 48000;            // default for the header-less fallback
     int       liDecodeChannels = liChannels;
     SnrHeader snr;
     {
-        std::string lSnrPath(lpSnsPath);
-        const std::size_t lDot = lSnrPath.find_last_of('.');
-        if (lDot != std::string::npos) lSnrPath.resize(lDot);
-        lSnrPath += ".SNR";
-        std::FILE* lpSnr = std::fopen(lSnrPath.c_str(), "rb");
-        if (lpSnr) {
-            std::fseek(lpSnr, 0, SEEK_END); long lSnrSize = std::ftell(lpSnr); std::fseek(lpSnr, 0, SEEK_SET);
-            if (lSnrSize > 0) {
-                std::vector<std::uint8_t> lSnrData(static_cast<std::size_t>(lSnrSize));
-                if (std::fread(lSnrData.data(), 1, lSnrData.size(), lpSnr) == lSnrData.size())
-                    snr = ParseSnr(lSnrData);
-            }
-            std::fclose(lpSnr);
+        const char* lpacBase = std::strrchr(lpSnsPath, '\\');
+        lpacBase = lpacBase ? (lpacBase + 1) : lpSnsPath;
+        const u8* lpSnrData = nullptr;
+        u32       luSnrLen  = 0;
+        if (StreamHeadersPC::ResolveBySnsName(lpacBase, &lpSnrData, &luSnrLen))
+        {
+            std::vector<std::uint8_t> lSnrData(lpSnrData, lpSnrData + luSnrLen);
+            snr = ParseSnr(lSnrData);
         }
         if (snr.valid) {
-            lrSampleRate     = snr.sampleRate;
-            liDecodeChannels = snr.channels;
-            AUDIO_LOG << lpacTag << " SNR " << lSnrPath.c_str() << " ch=" << snr.channels
+            AUDIO_LOG << lpacTag << " SNR (StreamHeaders) " << lpacBase << " ch=" << snr.channels
                       << " rate=" << snr.sampleRate << " samples=" << (int)snr.numSamples
                       << " prefetch=" << (int)snr.prefetch.size() << "B\n";
+            lrSampleRate     = snr.sampleRate;
+            liDecodeChannels = snr.channels;
         } else {
-            AUDIO_LOG << lpacTag << " no SNR for " << lpSnsPath
-                      << " -- decoding .SNS only (attack may be clipped)\n";
+            AUDIO_LOG << lpacTag << " no StreamHeaders entry for " << lpSnsPath
+                      << " -- decoding .SNS only (rate 48k fallback; attack may be clipped)\n";
         }
     }
 
@@ -480,6 +480,22 @@ void MenuMusicPC::FillStatic(s16* lpOut, int liFrames, void* /*lpUser*/)
         }
     }
     for (; li < liFrames; ++li) { *lpOut++ = 0; *lpOut++ = 0; }
+}
+
+bool MenuMusicPC::PlaySpec(const char* lpacSpecName)
+{
+    // ContentSpec name -> the registry's zone-1 .SNS file (the same resident
+    // chain the SNR lookup uses); then stream it from SOUND\STREAMS\.
+    char lacSns[96] = { 0 };
+    if (!StreamHeadersPC::ResolveBySpecName(lpacSpecName, nullptr, nullptr,
+                                            lacSns, sizeof(lacSns)))
+    {
+        AUDIO_LOG << "[MenuMusic] spec '" << lpacSpecName << "' not in StreamsRegistry\n";
+        return false;
+    }
+    char lacPath[160];
+    std::snprintf(lacPath, sizeof(lacPath), "SOUND\\STREAMS\\%s", lacSns);
+    return Play(lacPath);
 }
 
 bool MenuMusicPC::Play(const char* lpSnsPath)

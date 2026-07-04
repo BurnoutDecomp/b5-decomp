@@ -73,6 +73,7 @@ namespace CgsSystem
     class MenuMusicPC
     {
     public:
+        static bool PlaySpec(const char* lpacSpecName);   // ContentSpec name -> registry zone-1 .SNS -> Play
         static bool Play(const char* lpSnsPath);   // decode (cached by path) + loop from the start
         static void Stop();                        // stop (keeps the decoded PCM cached)
         static void Update();                      // per-frame: (re)claim the output fill when free

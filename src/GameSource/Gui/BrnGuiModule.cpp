@@ -207,11 +207,18 @@ namespace BrnGui
     //        PresentationAsset bank) is the FLAG follow-on.
     static void HandleMenuMusicEvent(s32 liHash)
     {
-        struct MenuStreamKey { const char* lpacName; const char* lpacSnsPath; };
+        // Event name -> ContentSpec name. FLAG (the MusicEffect data layer): the
+        // console maps the posted event name to a StreamsRegistry ContentSpec via
+        // the music database (MusicEffect::GetEventStartContentSpec @0x8269CFC0
+        // reads it from game data); that table is not reconstructed, so the one
+        // title-screen pairing is carried here. The SPEC then resolves through
+        // the real registry chain (CgsSystem::StreamHeadersPC) -- the .SNS file
+        // and its SNR header both come from the ORIGINAL X360 bundles.
+        struct MenuStreamKey { const char* lpacName; const char* lpacSpecName; };
         static const MenuStreamKey KA_MENU_STREAMS[] =
         {
             // The title screen's menu stream (BootLegal E_STAGE_START_MOVIE posts it).
-            { "GunsAndRoses", "SOUND\\STREAMS\\GUNS_AND_ROSES.SNS" },
+            { "GunsAndRoses", "Guns_And_Roses" },
         };
 
         if (liHash == 0)
@@ -230,10 +237,10 @@ namespace BrnGui
             if (liHash == liKey)
             {
                 char lac[160];
-                std::snprintf(lac, sizeof(lac), "[GuiModule] menu-music 155 '%s' -> %s\n",
-                              KA_MENU_STREAMS[lu].lpacName, KA_MENU_STREAMS[lu].lpacSnsPath);
+                std::snprintf(lac, sizeof(lac), "[GuiModule] menu-music 155 '%s' -> spec '%s'\n",
+                              KA_MENU_STREAMS[lu].lpacName, KA_MENU_STREAMS[lu].lpacSpecName);
                 CgsDev::Log::WriteToLog(lac);
-                CgsSystem::MenuMusicPC::Play(KA_MENU_STREAMS[lu].lpacSnsPath);
+                CgsSystem::MenuMusicPC::PlaySpec(KA_MENU_STREAMS[lu].lpacSpecName);
                 return;
             }
         }
