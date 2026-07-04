@@ -189,6 +189,12 @@ namespace BrnNetworkModuleIO
         const u8* GetMember_40240() const;                          // RENAME on member-type homing
         // X360 0x8254EE18 (write, h:752) -> &member @ +180248
         u8*       GetMember_180248();                               // RENAME / re-home on member-type homing
+        // X360 0x823BBD00 (read,  h:759) -> const u8* @ +180248 (const read twin of the h:752 write accessor)
+        const u8* GetMember_180248() const;                        // RENAME / re-home on member-type homing
+        // X360 0x823BC300 (read,  h:890) -> const u8* @ +163104
+        const u8* GetMember_163104() const;                        // RENAME on member-type homing
+        // X360 0x8254EC20 (read,  h:596) -> const u8* @ +27680 (active-race-car interface; RENAME to the real interface-typed accessor on homing)
+        const u8* GetActiveRaceCarInterfaceRaw_27680() const;      // RENAME / re-home on member-type homing
         // X360 0x8254ECC8 (read,  h:687) -> const NetworkEventQueue* @ +72952 (queue start)
         const NetworkEventQueue* GetNetworkEventQueue() const;
         // X360 0x823BBB00 (write, h:701) -> NetworkEventQueue* @ +73284 (queue body)
@@ -234,14 +240,16 @@ namespace BrnNetworkModuleIO
     private:
         // Offsets are absolute from `this`. Only the pinned anchors below are load-bearing for this TU;
         // intervening storage is opaque padding to be subdivided by sibling member-type TUs.
-        u8  maPadToMember_38160[38160 - sizeof(CgsModule::IOBuffer)]; // -> +38160
+        u8  maPadToMember_27680[27680 - sizeof(CgsModule::IOBuffer)]; // -> +27680
+        u8  mActiveRaceCarInterfaceStorage[38160 - 27680];            // @ +27680 (active-race-car interface; SetActiveRaceCarInterface @0x823BBA20 XMemCpy's 10480B here; h:596 read accessor)
         u8  mMember_38160Storage[38304 - 38160];                      // @ +38160 (h:610 accessor)
         u8  mMember_38304Storage[40240 - 38304];                      // @ +38304 (h:603 accessor)
         u8  mMember_40240Storage[40300 - 40240];                      // @ +40240 (h:631 accessor)
         u8  mMember_40300Storage[54504 - 40300];                      // @ +40300 (h:574 write accessor)
         u8  mMember_54504Storage[72952 - 54504];                      // @ +54504 (h:566 accessor)
-        u8  mNetworkEventQueueStorage[180248 - 72952];                // mNetworkEventQueue family @ +72952 (covers +73284); widen/split on VariableEventQueue homing
-        u8  mMember_180248Storage[8];                                 // @ +180248 (h:752 write accessor); width is a placeholder
+        u8  mNetworkEventQueueStorage[163104 - 72952];                // mNetworkEventQueue family @ +72952 (covers +73284); widen/split on VariableEventQueue homing
+        u8  mMember_163104Storage[180248 - 163104];                   // @ +163104 (h:890 read accessor)
+        u8  mMember_180248Storage[8];                                 // @ +180248 (h:752 write / h:759 read accessors); width is a placeholder
     };
 
     // ========================================================================
@@ -283,6 +291,8 @@ namespace BrnNetworkModuleIO
         StatsOutputInterface*               GetStatsOutputInterface();
         // X360 0x823BC3A8 (read, h:911) -> const NetworkToGuiInterface* @ +180588
         const NetworkToGuiInterface*        GetNetworkToGuiInterface() const;
+        // X360 0x823BC648 (read, h:987) -> const u8* @ +183408 (GUI-bound sub-interface within NetworkToGuiInterface; RENAME on homing)
+        const u8*                           GetMember_183408() const;
         // X360 0x823BC6F0 (read, h:1001) -> const NetworkEventQueue* @ +184080
         const NetworkEventQueue*            GetNetworkEventQueue() const;
         // X360 0x8254F160 (write, h:994)  -> NetworkEventQueue* @ +184080 (non-const twin)
@@ -327,7 +337,8 @@ namespace BrnNetworkModuleIO
         bool mbIsConnected;                                              // @ +180585 (h:455)
         bool mbIsInInvite;                                               // @ +180586 (h:456)
         u8  maPadToNetworkToGuiInterface[180588 - 180587];               // @ +180587 (mbInvitesOpen, h:457)
-        u8  mNetworkToGuiInterfaceStorage[184080 - 180588];              // NetworkToGuiInterface @ +180588 (h:445)
+        u8  mNetworkToGuiInterfaceStorage[183408 - 180588];              // NetworkToGuiInterface @ +180588 (h:445)
+        u8  mMember_183408Storage[184080 - 183408];                      // @ +183408 (h:987 read accessor; GUI-bound sub-interface within NetworkToGuiInterface)
         u8  mNetworkEventQueueStorage[16];                               // mNetworkEventQueue @ +184080 (h:465; width placeholder; widen on VariableEventQueue homing)
     };
 

@@ -20,3 +20,12 @@
 // BrnNetwork::NetworkToGuiLiveRevengeUpdate (four int32 == 16 bytes); Construct does not read
 // element fields, only takes the buffer base address.
 template void CgsModule::EventQueue<BrnNetwork::NetworkToGuiLiveRevengeUpdate, 4>::Construct();
+
+// CgsModule::BaseEventQueue<BrnNetwork::NetworkToGuiLiveRevengeUpdate>::GetEvent(s32) const  @ 0x823AC498
+//   (called by BrnGame::BrnGameModule::TranslateNetworkInterfaceToGuiEvents, which drains the
+//   NetworkToGui queue). The generic const GetEvent body is inline in CgsBaseEventQueue.h:
+//   asserts mpEvents != NULL (:272), liIndex < GetLength() (:274), liIndex >= 0 (:275), then
+//   returns mpEvents[liIndex]. The X360 return `slwi r11,r29,4` == index*sizeof(T) with
+//   sizeof(NetworkToGuiLiveRevengeUpdate) == 16. Thin out-of-line instantiation.
+template const BrnNetwork::NetworkToGuiLiveRevengeUpdate&
+CgsModule::BaseEventQueue<BrnNetwork::NetworkToGuiLiveRevengeUpdate>::GetEvent(s32) const;

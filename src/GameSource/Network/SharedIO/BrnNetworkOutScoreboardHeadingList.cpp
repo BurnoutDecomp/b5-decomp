@@ -45,5 +45,14 @@ namespace BrnNetworkModuleIO
                    "String too long");
         std::strncpy(lpcSlot, lpcHeading, KI_MAX_CAT_VAR_INDEX_NAME_LENGTH);
     }
+
+    // X360 0x823A62F8 -- read the heading-list discriminator. Asserts the type is not the
+    // E_HEADING_COUNT sentinel, then returns meHeadingType (@ +4). The consumer
+    // (HandleScoreboardHeadingEvent) switches on category / index / variation.
+    EHeadingType NetworkOutScoreboardHeadingList::GetHeadingType() const
+    {
+        CGS_ASSERT(meHeadingType != E_HEADING_COUNT, "meHeadingType != E_HEADING_COUNT");
+        return static_cast<EHeadingType>(meHeadingType);
+    }
 }
 }

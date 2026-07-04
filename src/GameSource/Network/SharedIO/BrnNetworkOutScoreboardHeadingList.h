@@ -63,6 +63,11 @@ namespace BrnNetworkModuleIO
         // @ 0x82541EB0 -- append one heading string. Asserts strlen(name) < 31, 0 <= miLength,
         // miLength < 66; then strncpy's the name into maHeadings[miLength] and increments miLength.
         void AddHeading(const char* lpcHeading);
+
+        // @ 0x823A62F8 -- read the heading-list discriminator (meHeadingType @ +4). Asserts the
+        // type is not the E_HEADING_COUNT sentinel; the consumer (HandleScoreboardHeadingEvent)
+        // switches on category / index / variation.
+        EHeadingType GetHeadingType() const;
     };
     static_assert(sizeof(NetworkOutScoreboardHeadingList) == 0x808, "NetworkOutScoreboardHeadingList size (event-type 0x34, 2056 bytes)");
 }

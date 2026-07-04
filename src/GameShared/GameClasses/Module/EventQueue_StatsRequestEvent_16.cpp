@@ -28,3 +28,12 @@
 #include "GameSource/Network/Managers/BrnStatsRequestEvent.h"  // BrnNetwork::StatsRequestEvent (20B element)
 
 template void CgsModule::EventQueue<BrnNetwork::StatsRequestEvent, 16>::Construct();
+
+// CgsModule::BaseEventQueue<BrnNetwork::StatsRequestEvent>::GetEvent(s32) const  @ 0x8254D808
+//   Checked const indexed accessor (called by NetworkPlayerStatsManager::CopyEvents). The generic
+//   const GetEvent body is inline in CgsBaseEventQueue.h: asserts mpEvents != NULL (:272),
+//   liIndex < GetLength() (:274), liIndex >= 0 (:275), then returns &mpEvents[liIndex]
+//   (result = 20*a2 + *a1; sizeof(StatsRequestEvent) == 20). CgsEventQueue.h already includes
+//   CgsBaseEventQueue.h, so the generic body is in scope. Thin out-of-line instantiation.
+template const BrnNetwork::StatsRequestEvent&
+CgsModule::BaseEventQueue<BrnNetwork::StatsRequestEvent>::GetEvent(s32) const;

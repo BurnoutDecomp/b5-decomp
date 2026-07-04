@@ -74,9 +74,30 @@ namespace GameTalk
     class GameTalkMessage
     {
     public:
+        // One key/content entry (16-byte record, X360 ctor 0x828387A8 / dtor 0x82837860):
+        //   +0x00  const char* mpcKey     the key name string.
+        //   +0x04  s32         miType     the content type/flags word.
+        //   +0x08  const void* mpContent  the raw content blob.
+        //   +0x0C  s32         miSize     the content byte size.
+        struct KeyContent
+        {
+            const char* mpcKey;
+            s32         miType;
+            const void* mpContent;
+            s32         miSize;
+        };
+
         // Construct a message bound to the named tool channel ("Camera").
         explicit GameTalkMessage(const char* lpcChannel);
         ~GameTalkMessage();
+
+        // @0x82838D98 -- static factory: decode a big-endian wire buffer into a message.
+        static GameTalkMessage* Create(const char* lpBuffer);
+
+        // @0x82837B50 -- serialize the message into a freshly package-allocated big-endian
+        // wire buffer (lpcKey prefixed at the front); *lppOutBuffer receives it. Returns the
+        // total buffer size.
+        u32 CreateBuffer(const char* lpcKey, void** lppOutBuffer);
 
         // Attach a named content blob to the message. liType is the content
         // type/flags word (0 from FileClose); lpContent/liLength are the raw
@@ -123,6 +144,25 @@ namespace GameTalk
         //                  source for "ExecuteScript"); NULL when the key is absent. The
         //                  handler treats a non-NULL result as the script text to execute.
         const char* GetKeyContent(const char* lpcKey) const;
+
+        // Shared entry-buffer capacity (X360 global dword_82F32FC4, doubled on grow by
+        // AddKeyContent; seeded by AllocateDataBuffer in its own TU).
+        static s32 KsDataBufferCapacity;
+
+    private:
+        // Wire-cursor parse helpers (X360 statics). Each reads a big-endian u32 length
+        // prefix off the cursor, advances past it, package-allocates the payload and copies
+        // it in, advancing the cursor past the payload.
+        //   ReadString @0x82837E88  NUL-terminated string copy (len+1 bytes).
+        //   ReadBinary @0x82837F40  length-prefixed binary blob (*lpuLength bytes).
+        static char* ReadString(const char*& rlpCursor);
+        static void* ReadBinary(const char*& rlpCursor, u32* lpuLength);
+
+        void* mpVTable;         // +0x00  vtable
+        s32   mbParsed;         // +0x04  mbCreatedFromBuffer (parsed-from-wire flag)
+        KeyContent** mppEntries;// +0x08  entry-pointer table
+        s32   miNumKeys;        // +0x0C  live key/content entry count
+        const char* mpcChannel; // +0x10  tool channel string
     };
 
     // Signature of a GameTalk message-received handler: the manager hands the
