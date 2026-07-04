@@ -65,6 +65,19 @@ public:
     void SetTextureMapHandle(U32 auHandle);
     void SetNormalMapHandle(U32 auHandle);
 
+    // ---- the material load/serialise path (out-of-line in ARTIST; bodies in ParticleMaterial.cpp) ----
+    // Build              @ 0x8290E500 -- finalise after load (mesh count, normal-map promote,
+    //                                    texture register, frame count, flag cleanup).
+    void Build();
+    // Delocate           @ 0x82909A70 -- ptr->offset the owned strings + optional endian twiddle.
+    void Delocate(U32 aEndianTwiddleFlag);
+    // GetSerialiseSize   @ 0x82909C78 -- add this material's serialised size to the serialiser.
+    void GetSerialiseSize(class cLionSerialiser& aSer) const;
+    // Relocate           @ 0x8290E660 -- offset->ptr the owned strings (inverse of Delocate).
+    void Relocate();
+    // Serialise          @ 0x8290E720 -- copy the record + intern each owned string, return the copy.
+    cParticleMaterial* Serialise(class cLionSerialiser& aSer) const;
+
     // ParticleMaterial.h:228+ -- the serialised material record.
     U32   mID;                  // +0x00
     U32   mMaterialHandle;      // +0x04

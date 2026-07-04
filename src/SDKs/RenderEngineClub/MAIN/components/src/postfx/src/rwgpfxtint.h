@@ -38,6 +38,22 @@ namespace graphics
 {
 namespace postfx
 {
+    // TintBlendParameters -- the parameter block the EA::Jobs colour-cube blend runs against
+    // (DWARF rwgpfxtintblender.h). Tint::BeginBlendJob seeds only the destination-surface
+    // geometry (size / dst strides / dst pointer) from the locked tint-map texture; the caller
+    // (BrnPostFx::BeginTintBlend) fills numSources / src[] / factor[] before scheduling the job.
+    // The X360 block is 0x80 bytes (m_blendLock follows at +0x80); the named destination fields
+    // are laid out first and the caller-filled remainder is carried as opaque source storage
+    // (PC-semantic parity, not byte-matched).
+    struct TintBlendParameters
+    {
+        u32   size;            // colour-lookup edge (== texture width)
+        u32   dstStride;       // destination row pitch (bytes)
+        u32   dstSliceStride;  // destination slice pitch (bytes)
+        u8*   dst;             // destination pixel data
+        u8    mauSourceOpaque[0x80 - (3 * sizeof(u32) + sizeof(void*))]; // numSources/src[]/factor[]
+    };
+
     class Tint
     {
     public:
@@ -58,16 +74,17 @@ namespace postfx
         // slot the effects sample) and return it.
         static renderengine::ProgramBufferData* InitializePixelProgram(rw::IResourceAllocator* lpAllocator);
 
-    private:
-        // Opaque, not touched by this TU (recovered only as much as the layout needs).
-        struct TintBlendParameters { u8 mauOpaque[0x80]; };   // X360 +0x00 (size inferred: m_blendLock @ +0x80)
-        struct TextureLocked       { u8 mauOpaque[0x1C]; };   // X360 +0xA4 (renderengine::Texture::Locked)
+        // X360 0x823F8310 -- lock the colour-lookup (tint-map) texture surface, seed the blend-job
+        // parameter block's destination geometry + pixel pointer, and return it by reference for the
+        // caller (BrnPostFx::BeginTintBlend) to fill the source list and schedule the blend.
+        TintBlendParameters& BeginBlendJob();
 
-        TintBlendParameters                 m_blendParameters;              // +0x00
+    private:
+        rw::graphics::postfx::TintBlendParameters m_blendParameters;        // +0x00
         bool                                m_blendLock;                    // +0x80
         f32                                 m_colourLookupOffset[4];        // +0x90 Vector4
         renderengine::ProgramVariableHandle m_colourLookupOffsetHandle;     // +0xA0
-        TextureLocked                       m_textureLock;                  // +0xA4
+        renderengine::Texture::Locked       m_textureLock;                  // +0xA4
         renderengine::Texture*              m_textureTintMap;               // +0xC0
         renderengine::TextureState*         m_textureStateTintMap;          // +0xC4
         rw::Resource                        m_textureTintMapResource;       // +0xC8

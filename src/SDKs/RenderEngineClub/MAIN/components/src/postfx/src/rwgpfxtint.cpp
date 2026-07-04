@@ -126,6 +126,21 @@ namespace postfx
 
         return lpTint;
     }
+
+    // X360 0x823F8310. Lock the colour-lookup (tint-map) texture's surface, then publish its geometry
+    // + destination pixel pointer into the blend-job parameter block and hand a reference back to the
+    // caller (BrnPostFx::BeginTintBlend) that schedules the EA::Jobs colour-cube blend into it.
+    // numSources / src[] / factor[] are filled by the caller; this only seeds the destination surface.
+    TintBlendParameters& Tint::BeginBlendJob()
+    {
+        renderengine::Texture::Lock(m_textureTintMap, 2, 0, 0, &m_textureLock);
+
+        m_blendParameters.size           = renderengine::Texture::GetWidth(m_textureTintMap);
+        m_blendParameters.dstStride      = m_textureLock.muStride;
+        m_blendParameters.dstSliceStride = m_textureLock.muSliceStride;
+        m_blendParameters.dst            = static_cast<u8*>(m_textureLock.mpPixelData);
+        return m_blendParameters;
+    }
 }
 }
 }

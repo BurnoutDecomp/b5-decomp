@@ -529,6 +529,55 @@ namespace BrnWorld
         }
     }
 
+    // @ 0x822C54C0. Draw ONE inertia box for a collision volume: from the volume's box extent
+    // (lCentre) and a broadcast scale (lfExtent = the volume radius/mass), compute the three
+    // principal half-extents of the equivalent solid-box inertia tensor and draw that box (white)
+    // under the prop/part world transform. Called per-volume by RenderInertiaBoxes.
+    //
+    // The X360 body is a pure VMX cascade: it forms a Newton-refined reciprocal of the extent,
+    // scales it by lfExtent, then for each axis takes sqrt(K * (sum of the other two lane terms -
+    // this lane term)) -- the standard box inertia-diagonal shape (Ixx ~ y^2+z^2, etc.) inverted
+    // back into an equivalent-box half-extent -- zero-guarding each sqrt, assembles the three into
+    // the box max corner, negates it (sign-bit XOR) for the min corner, and calls
+    // DrawBox(min, max, lTransform, white).
+    //
+    // FLAG (rodata): the per-axis scale/normalisation vector unk_82FAD600 (asm 0x822C54F4:
+    // `lvx128 v6, r0, r11` from unk_82FAD600) is an un-homed .rdata constant absent from the
+    // exports. The reciprocal/normalize/sqrt STRUCTURE, the zero guards, the min = -max, and the
+    // white DrawBox call are reconstructed EXACTLY; the numeric scale (KF_INERTIA_SCALE) stays 0
+    // until the constant is recovered, so the drawn extents are honest-inert. NEVER fabricated.
+    void PropEntityDebugComponent::RenderInertiaBox(CgsDev::Debug3DImmediateRender* lpDisplay,
+                                                    Matrix44Affine lTransform, Vector3 lCentre,
+                                                    VecFloat lfExtent)
+    {
+        // FLAG: un-homed .rdata scale vector unk_82FAD600 @ 0x822C54F4 -> honest flagged-0 placeholder.
+        static const f32 KF_INERTIA_SCALE = 0.0f;
+
+        // Newton-refined reciprocal of the box extent (vrefp v11 + two vnmsubfp/vmaddfp steps),
+        // scaled by the broadcast lfExtent (vmulfp128 v11, v11, v1).
+        const f32 lfScale = lfExtent.x;
+        const f32 lfRx = (lCentre.x != 0.0f) ? (lfScale / lCentre.x) : 0.0f;
+        const f32 lfRy = (lCentre.y != 0.0f) ? (lfScale / lCentre.y) : 0.0f;
+        const f32 lfRz = (lCentre.z != 0.0f) ? (lfScale / lCentre.z) : 0.0f;
+
+        // Per-axis inertia-diagonal combination (sum of the OTHER two lanes minus this lane),
+        // each scaled by the un-homed constant, then sqrt (vrsqrtefp + Newton), zero-guarded.
+        const f32 lfTermX = (lfRy + lfRz - lfRx) * KF_INERTIA_SCALE;   // v11 = y+z-x
+        const f32 lfTermY = (lfRz + lfRx - lfRy) * KF_INERTIA_SCALE;   // v10 = z+x-y
+        const f32 lfTermZ = (lfRx + lfRy - lfRz) * KF_INERTIA_SCALE;   // v9  = x+y-z
+
+        const f32 lfHx = (lfTermX > 0.0f) ? std::sqrt(lfTermX) : 0.0f;  // vcmpeqfp/vsel zero-guard
+        const f32 lfHy = (lfTermY > 0.0f) ? std::sqrt(lfTermY) : 0.0f;
+        const f32 lfHz = (lfTermZ > 0.0f) ? std::sqrt(lfTermZ) : 0.0f;
+
+        // Box max = the three half-extents (vrlimi128 assembly), min = -max (vslw sign-mask XOR).
+        const Vector3 lMax = MakeVector3( lfHx,  lfHy,  lfHz);
+        const Vector3 lMin = MakeVector3(-lfHx, -lfHy, -lfHz);
+
+        // DrawBox(lpDisplay, min, max, lTransform, white). Colour arg == -1 == ARGB 0xFFFFFFFF.
+        lpDisplay->DrawBox(lMin, lMax, lTransform, rw::RGBA(255, 255, 255, 255));
+    }
+
     // @ 0x822DD868. For every prop whose type is flagged as a traffic light, within the
     // render distance, draw an "ID: %u" marker at the prop.
     void PropEntityDebugComponent::RenderTrafficLights(CgsDev::Debug3DImmediateRender* lpDisplay)

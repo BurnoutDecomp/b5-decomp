@@ -98,6 +98,11 @@ public:
     // the data area, record the old->new remap, and return the destination pointer.
     u8*   DataStore(const void* apData, u32 aSize);
 
+    // char* StringStore(const char* apcString): intern apcString into the string area
+    // (null passes through as null) and return the relocated string pointer. Called by
+    // cParticleMaterial::Serialise for each owned string; its own out-of-line TU.
+    char* StringStore(const char* apcString);
+
     // void DataSizeUpdate(U32 aSize): grow the reserved data size by aSize rounded
     // up to 16 bytes (sizing pass, before Alloc).
     void  DataSizeUpdate(u32 aSize);
