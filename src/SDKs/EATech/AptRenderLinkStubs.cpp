@@ -260,7 +260,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // gValuesToRelease.ReleaseValues() drain (the {} stub silently dropped every GC drain).
     AptValue* AptApt_LoadVariablesFetch(const char* pUrl) { return 0; }   // FLAG link-stub (host URL fetch; null until installed)
     void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY) {}   // FLAG link-stub
-    void AptApt_PopValues(AptActionInterpreter* pInterp, int nCount) {}   // FLAG link-stub
+    // AptApt_PopValues RETIRED: it IS AptActionInterpreter::stackPop(int) (AptActionInterpreter.cpp:65,
+    // @0x7FDB68 -- "pop nCount values, releasing each"; ICF-folded as Burnout_X360_Artist_01e3_0). The
+    // ControlOps/StackOps call sites call the member directly; the {} shim silently skipped every collapse.
     // AptCIH_GetWorldBounds RETIRED: its body IS the shared GetBoundingRectClamped
     // (AptCIHBehaviour.cpp, X360 sub_82AE2C58, asm-verified 2-arg (AptCIH* r3, float* r4)); the
     // getBounds/hitTest native methods now call it directly (AptValue clip -> AptCIH via static_cast).
