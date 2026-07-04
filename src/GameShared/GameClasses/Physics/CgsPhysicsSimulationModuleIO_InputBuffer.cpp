@@ -31,8 +31,9 @@ namespace PhysicsSimulationIO
 {
     void InputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer, mfTimeStep)      == 0x0004, "mfTimeStep @ +0x0004");
-        static_assert(offsetof(InputBuffer, muMaxIterations) == 0x0008, "muMaxIterations @ +0x0008");
+        static_assert(offsetof(InputBuffer, mfTimeStep)         == 0x0004, "mfTimeStep @ +0x0004");
+        static_assert(offsetof(InputBuffer, muMaxIterations)    == 0x0008, "muMaxIterations @ +0x0008");
+        static_assert(offsetof(InputBuffer, mAddRigidBodyQueue) == 0x0010, "mAddRigidBodyQueue @ +0x0010");
     }
 
     // X360 0x8289E338. Read-lock guard, then asserts muMaxIterations > 0 before returning it.
@@ -66,6 +67,15 @@ namespace PhysicsSimulationIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         CGS_ASSERT(lfTimeStep > 0.0f, "lfTimeStep > 0.0f");
         mfTimeStep = lfTimeStep;
+    }
+
+    // X360 0x825BCE08. Write-lock guarded (bit 3; faithful to the asm) accessor returning the
+    // embedded add-rigid-body request queue (this + 0x10, the first embedded queue member). No
+    // bounds check. Consumed by Deformation/Props AddToSim / AddPropToSim / CreatePart.
+    InputBuffer::InAddRigidBodyQueue* InputBuffer::GetAddRigidBodyQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mAddRigidBodyQueue;
     }
 }
 }

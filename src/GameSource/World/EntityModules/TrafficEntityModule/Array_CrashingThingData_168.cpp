@@ -24,3 +24,15 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // CrashingThingData (32-byte element)
 
 template BrnTraffic::CrashingThingData& Array<BrnTraffic::CrashingThingData, 168>::operator[](u32);
+
+// Array<BrnTraffic::CrashingThingData, 168>::Append @ 0x8270BCD8
+//   (BrnTraffic::TrafficEntityModule::UpdateParams_BuildListOfCrashingThings)
+//
+// The generic Array<T,N>::Append body is inline in CgsArray.h; this is the thin explicit
+// instantiation. The X360 body (@0x8270BCD8) matches store-for-store: assert constructed
+// (count word @ +0x1500 != -1 sentinel, "Array used before Construct/Clear was called",
+// CgsArray.h:225), assert count < 168 (X360 streamed the dynamic out-of-space message,
+// CgsArray.h:226; cmplwi 0xA8 == N==168), then copies the 32-byte element to &maElements[count]
+// (`slwi count,5` == count*0x20 stride) and post-increments count. The +0x1500 count offset ==
+// 168*0x20 reconfirms sizeof(CrashingThingData) == 32.
+template void Array<BrnTraffic::CrashingThingData, 168>::Append(const BrnTraffic::CrashingThingData&);

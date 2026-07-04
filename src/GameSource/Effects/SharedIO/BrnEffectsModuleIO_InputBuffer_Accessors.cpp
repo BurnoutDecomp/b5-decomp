@@ -83,6 +83,31 @@ const void* InputBuffer::GetAud() const
     return MemberImage() + KU_AUDIO_EFFECTS_MESSAGE_QUEUE_OFFSET;
 }
 
+// X360 0x8227D7F0 (R, :111) -- read-lock; return &mActiveRaceCarInterface (this+0x1140).
+// Const read-lock counterpart of SetActiveRaceCarInterface (0x823BA490 :109).
+const void* InputBuffer::GetActiveRaceCarInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return MemberImage() + KU_ACTIVE_RACE_CAR_INTERFACE_OFFSET;
+}
+
+// X360 0x8227D898 (R, :115) -- read-lock; return &mVehiclePhysicalStateQueue (this+0x3A30).
+// Const read-lock counterpart of SetVehiclePhysicalStateQueue (0x823C96B8 :113).
+const void* InputBuffer::GetVehiclePhysicalStateQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return MemberImage() + KU_VEHICLE_PHYSICAL_STATE_QUEUE_OFFSET;
+}
+
+// X360 0x8227DC88 (R, :149) -- read-lock; return &mPropVFXLocatorQueue (this+0xE0D0).
+// The asm forms the offset as addis+1/-0x1F30 (== +0xE0D0). Const read-lock counterpart of
+// SetPropVFXLocatorQueue (0x823C98D0 :147).
+const void* InputBuffer::GetPropVFXLocatorQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return MemberImage() + KU_PROP_VFX_LOCATOR_QUEUE_OFFSET;
+}
+
 // ============================== getters (write-lock, status bit 3) =============================
 // The non-const overload faithfully tests the WRITE bit as the asm names it.
 

@@ -26,3 +26,15 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // CollidableVehicleInfo4 (128-byte element)
 
 template const BrnTraffic::CollidableVehicleInfo4& Array<BrnTraffic::CollidableVehicleInfo4, 16>::operator[](u32) const;
+
+// Array<BrnTraffic::CollidableVehicleInfo4, 16>::Append @ 0x8270B420
+//   (BrnTraffic::TrafficEntityModule::UpdateCollidableVehicles -- pushes one cached packet)
+//
+// The generic Array<T,N>::Append body is inline in CgsArray.h; this is the thin explicit
+// instantiation. The X360 body (@0x8270B420) matches store-for-store: assert constructed
+// (count word @ +0x800 != -1 sentinel, "Array used before Construct/Clear was called",
+// CgsArray.h:225), assert room (count >= 16 streams the dynamic out-of-space message,
+// CgsArray.h:226; capacity literal li r4,0x10 == N==16), then copies the whole 128-byte packet
+// to &maElements[count] via a single 128-byte memcpy (`slwi r11,r11,7` == 128*index), and
+// increments the count word. The +0x800 count offset == 16*128 reconfirms sizeof == 128.
+template void Array<BrnTraffic::CollidableVehicleInfo4, 16>::Append(const BrnTraffic::CollidableVehicleInfo4&);

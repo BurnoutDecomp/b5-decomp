@@ -1,29 +1,39 @@
 #pragma once
 
 // =============================================================================
-// BrnTrafficSection.h  (NEW OWNING HEADER -- partial)
+// BrnTrafficSection.h  (OWNING HEADER for the BrnTraffic traffic-graph value types)
 //
 // DWARF home (references/DecFIGS/dwarfdump/SharedClasses/Traffic/BrnTrafficSection.h)
-// of the BrnTraffic traffic-graph value types. This slice owns only:
+// of the BrnTraffic traffic-graph value types. This slice owns:
 //
-//   BrnTraffic::LaneRung            (struct @ BrnTrafficSection.h:50)
-//   BrnTraffic::LaneRung::GetRightVector  @ 0x821F4A88   (this TU)
+//   BrnTraffic::LaneRung   (struct @ BrnTrafficSection.h:50)  -- GetRightVector @ 0x821F4A88
+//   BrnTraffic::Section    (struct @ BrnTrafficSection.h:106) -- the section accessor family:
+//       GetNumSegments                  @ 0x821F4B78
+//       CalcPositionAtParameter         @ 0x821F4BD8
+//       GetGlobalRungForSegment         @ 0x821F5068
+//       CalcSignedDistanceAlongSection  @ 0x82705BC0
 //
-// The X360 bakes this file's path into GetRightVector's assert
-// ("...\\SharedClasses\\traffic\\BrnTrafficSection.h", line 328 of the original),
-// confirming the home. The sibling value types in this DWARF file
-// (Section / Neighbour / Side / the Section accessor family) are NOT reconstructed
-// here -- they belong to other slices; only LaneRung is defined so this slice stays
-// minimal and additive. When the full BrnTrafficSection.h lands it should GROW this
-// header with those siblings, never redefine LaneRung.
+// The X360 bakes this file's path into every assert in the accessor family
+// ("...\\SharedClasses\\traffic\\BrnTrafficSection.h", the original line numbers
+// shown per-method), confirming the home. Sibling value types (Neighbour / Side /
+// SectionSpan / SectionFlow) and the not-yet-bodied Section methods are still owned
+// elsewhere; only the members LaneRung and Section need for this batch are defined.
+// GROW this header with those siblings/methods when they land -- never redefine
+// LaneRung or Section.
 //
-// LAYOUT (DWARF-authoritative): LaneRung is a single member -- Vector3 maPoints[2]
-// (BrnTrafficSection.h:52). Two 16-byte Vector3 lanes => 32 bytes. The X360 asm reads
-// maPoints[0] at +0 (`lvx128 v13,r0,r4`) and maPoints[1] at +0x10 (`lvx128 v12,r4,r10`
-// with r10=0x10), exactly the &maPoints[0]/&maPoints[1] stride this layout produces.
+// Section LAYOUT (DWARF-authoritative, BrnTrafficSection.h:106..130): the exact
+// member list below (names/order verified against the DWARF dump). The X360 sizes
+// the record to 48 bytes (proven by BrnTrafficHull::GetSection's index*48 stride),
+// so a 4-byte tail pad follows mfLength (natural member sum reaches +44). The
+// accessor asm reads *(this+0)=muRungOffset (lwz 0) and *(this+4)=muNumRungs (lbz 4),
+// exactly the +0 / +4 offsets this layout produces.
+//
+// GUARD: this real definition sets BRNTRAFFIC_SECTION_DEFINED, so the 48-byte
+// placeholder `struct Section` in BrnTrafficHull.h yields to it whenever this header
+// is included first.
 // =============================================================================
 
-#include "BrnCommonTypes.h"   // Vector3 (= rw::math::vpu::Vector3)
+#include "BrnCommonTypes.h"   // Vector3, VecFloat (= rw::math::vpu::Vector3 / Vector4)
 
 namespace BrnTraffic
 {
@@ -41,7 +51,61 @@ namespace BrnTraffic
         // slice. GetRightVector @ 0x821F4A88 is owned and bodied in
         // BrnTrafficSection.cpp.
         Vector3 GetCentrePos() const;    // :57
-        Vector3 GetRightVector() const;  // :61  (this TU, @ 0x821F4A88)
+        Vector3 GetRightVector() const;  // :61  (@ 0x821F4A88)
         void    EndianSwap();            // :65
     };
+
+    // BrnTrafficSection.h:106 -- one directed lane section of the traffic graph.
+    // 48-byte record (DWARF members below; X360 GetSection stride == 48).
+#ifndef BRNTRAFFIC_SECTION_DEFINED
+#define BRNTRAFFIC_SECTION_DEFINED
+    struct Section
+    {
+        u32 muRungOffset;            // +0x00  (:108)  first global rung of this section
+        u8  muNumRungs;              // +0x04  (:109)  rung count (GetNumSegments = this-1)
+        u8  muStopLineOffset;        // +0x05  (:111)
+        u8  muNumStopLines;          // +0x06  (:112)
+        u8  muSpanIndex;             // +0x07  (:113)
+        u16 mauForwardHulls[3];      // +0x08  (:115)
+        u16 mauBackwardHulls[3];     // +0x0E  (:116)
+        u8  mauForwardSections[3];   // +0x14  (:117)
+        u8  mauBackwardSections[3];  // +0x17  (:118)
+        u8  muTurnLeftProb;          // +0x1A  (:120)
+        u8  muTurnRightProb;         // +0x1B  (:121)
+        u16 muNeighbourOffset;       // +0x1C  (:123)
+        u8  muLeftNeighbourCount;    // +0x1E  (:124)
+        u8  muRightNeighbourCount;   // +0x1F  (:125)
+        u8  muChangeLeftProb;        // +0x20  (:126)
+        u8  muChangeRightProb;       // +0x21  (:127)
+        u8  maPad22[2];              // +0x22  (alignment hole before mfSpeed)
+        f32 mfSpeed;                 // +0x24  (:129)
+        f32 mfLength;                // +0x28  (:130)
+        u8  maPad44[4];              // +0x2C  (tail pad to the X360's 48-byte footprint)
+
+        // -- BrnTrafficSection.h:138 accessor family (this batch) --------------------
+        // A "segment" is the span between two adjacent rungs; a section with muNumRungs
+        // rungs therefore has muNumRungs-1 segments.
+        u32   GetNumSegments() const;                                                     // :138  @ 0x821F4B78
+
+        // Position along the lane at fractional parameter lfParam within luSegment,
+        // interpolated from the global rung table lpaGlobalRungs.
+        void  CalcPositionAtParameter(const LaneRung* lpaGlobalRungs, VecFloat lfParam,   // :146  @ 0x821F4BD8
+                                      u32 luSegment, Vector3& lrResult) const;
+
+        // Global (whole-graph) rung id of the given local segment index.
+        s32   GetGlobalRungForSegment(VecFloat lfParam, u32 luSegment) const;             // :160  @ 0x821F5068
+
+        // Signed arc-length from (lfParamA, luSegmentA) to (lfParamB, luSegmentB) along
+        // this section, using the shared cumulative rung-length table.
+        f32   CalcSignedDistanceAlongSection(f32 lfParamA, u32 luSegmentA,                // :204  @ 0x82705BC0
+                                             f32 lfParamB, u32 luSegmentB,
+                                             const f32* lpafRungLengths) const;
+
+        // -- BrnTrafficSection.h siblings this batch depends on (bodied elsewhere) ----
+        // Arc-length from the section start to (lfParam, luSegment). Declared here so
+        // CalcSignedDistanceAlongSection can call it; bodied in its own slice.
+        f32   CalcDistanceAlongSection(f32 lfParam, u32 luSegment,                        // :188
+                                       const f32* lpafRungLengths) const;
+    };
+#endif
 }

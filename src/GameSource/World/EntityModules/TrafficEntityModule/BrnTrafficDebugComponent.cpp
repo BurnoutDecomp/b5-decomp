@@ -15,6 +15,7 @@
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
+#include "SharedClasses/Traffic/BrnTrafficHull.h"      // BrnTraffic::Hull (mpaRungs) + Section 48-byte placeholder
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstring>                                    // strcpy
@@ -98,5 +99,50 @@ namespace BrnTraffic
     void DebugComponent::Update()
     {
         UpdateStats();
+    }
+
+    // @ 0x82750000. A traffic-graph section is culled iff BOTH endpoints of its
+    // rung span are individually culled: the START point (maPoints[0]) of the FIRST
+    // rung and the END point (maPoints[1]) of the LAST rung. The rungs live in
+    // lpHull->mpaRungs (element = LaneRung, Vector3[2], stride 32); the section
+    // occupies rungs [muRungOffset .. muRungOffset+muNumRungs-1].
+    //
+    // The committed BrnTraffic::Section is still the guarded 48-byte placeholder
+    // (BrnTrafficHull.h), so its two fields are read by raw byte offset exactly as
+    // the X360 asm does (lwz 0(section) / lbz 4(section)), matching the committed
+    // Hull::GetSection opaque-Section idiom. DWARF (BrnTrafficSection.h:108/109):
+    //   muRungOffset u32 @+0     muNumRungs u8 @+4
+    // LaneRung is Vector3[2] (stride 32); maPoints[0] @+0, maPoints[1] @+16.
+    bool DebugComponent::ShouldSectionBeCulled(const Section* lpSection, const Hull* lpHull,
+                                               CgsDev::Debug3DImmediateRender* lpDisplay) const
+    {
+        CGS_ASSERT(lpSection != nullptr, "lpSection");
+        CGS_ASSERT(lpHull    != nullptr, "lpHull");
+        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay");
+
+        static const u32 KU_LANE_RUNG_STRIDE    = 32;  // sizeof(LaneRung) (Vector3[2])
+        static const u32 KU_LANE_RUNG_END_POINT = 16;  // byte offset of maPoints[1]
+
+        const u8* lpcSection = reinterpret_cast<const u8*>(lpSection);
+        const u32 luRungOffset = *reinterpret_cast<const u32*>(lpcSection + 0);   // muRungOffset
+        const u8  lu8NumRungs  = *reinterpret_cast<const u8*>(lpcSection + 4);    // muNumRungs
+
+        const u8* lpcRungs = reinterpret_cast<const u8*>(lpHull->mpaRungs);
+
+        // First rung's start point (maPoints[0]).
+        const Vector3& lStartPoint =
+            *reinterpret_cast<const Vector3*>(lpcRungs + KU_LANE_RUNG_STRIDE * luRungOffset);
+
+        if (ShouldObjectBeCulled(lStartPoint, lpDisplay))
+        {
+            // Last rung's end point (maPoints[1] of rung muRungOffset+muNumRungs-1).
+            const Vector3& lEndPoint =
+                *reinterpret_cast<const Vector3*>(
+                    lpcRungs
+                    + KU_LANE_RUNG_STRIDE * (luRungOffset + lu8NumRungs - 1)
+                    + KU_LANE_RUNG_END_POINT);
+            return ShouldObjectBeCulled(lEndPoint, lpDisplay);
+        }
+        return false;
     }
 }

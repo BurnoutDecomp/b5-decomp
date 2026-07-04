@@ -81,4 +81,56 @@ namespace CgsPhysics
         CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:685 tripwire (bne skips)
         return &maScaledDynamics[liIndex];
     }
+
+    // ===================== RigidBodyData ===================================
+
+    // CgsRigidBody.h:87: the module-global invalid-rigid-body sentinel (X360 static
+    // qword_82F33E18 == 0xFFFFFFFFFFFFFFFF). RigidBodyId::IsInvalid() compares against it.
+    const RigidBodyId K_INVALID_RIGID_BODY_ID = { 0xFFFFFFFFFFFFFFFFull };
+
+    // Host-stable element strides (X360-attested).
+    static_assert(sizeof(Inertia)     == 48, "Inertia stride 48 (GetInertia 48*(idx+50))");
+    static_assert(sizeof(RigidBodyId) == 8,  "RigidBodyId is a single u64 (CgsRigidBody.h:48)");
+
+    // X360 @0x8289CF78. Checked slot read returning maGameIDs[liIndex] (by value; the X360 ABI
+    // returns the 8-byte RigidBodyId via a hidden sret ptr).
+    RigidBodyId RigidBodyData::GetGameID(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");                              // h:585 tripwire (blt skips)
+        CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(), "!maGameIDs[liIndex].IsInvalid()"); // h:586 tripwire
+        return maGameIDs[liIndex];
+    }
+
+    // X360 @0x8289D020. Checked slot read returning maRWBodies[liIndex].
+    rw_physics::RigidBody* RigidBodyData::GetRigidBody(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");                              // h:594 tripwire (blt skips)
+        CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(), "!maGameIDs[liIndex].IsInvalid()"); // h:595 tripwire
+        return maRWBodies[liIndex];
+    }
+
+    // X360 @0x8289D0C0. Checked slot read returning &maInertias[liIndex].
+    Inertia* RigidBodyData::GetInertia(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");                              // h:603 tripwire (blt skips)
+        CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(), "!maGameIDs[liIndex].IsInvalid()"); // h:604 tripwire
+        return &maInertias[liIndex];
+    }
+
+    // ===================== PhysicsSimulationModule =========================
+
+    // X360 0x8289CF18 (DWARF CgsPhysicsSimulationModule.h:566). Post-increment on
+    // PhysicsSimulationModule::EReleaseStage: read old, advance the referenced cursor by one,
+    // tripwire that it did not overrun RELEASESTAGE_DONE, return the pre-increment value.
+    // Store-for-store: r31=old; *a1=old+1 (unconditional); assert new<=2; return old.
+    PhysicsSimulationModule::EReleaseStage
+    operator++(PhysicsSimulationModule::EReleaseStage& leEnumIndex, int)
+    {
+        PhysicsSimulationModule::EReleaseStage leOld = leEnumIndex;
+        leEnumIndex = static_cast<PhysicsSimulationModule::EReleaseStage>(
+            static_cast<int>(leEnumIndex) + 1);
+        CGS_ASSERT(leEnumIndex <= PhysicsSimulationModule::RELEASESTAGE_DONE,
+                   "leEnumIndex <= PhysicsSimulationModule::RELEASESTAGE_DONE");
+        return leOld;
+    }
 }

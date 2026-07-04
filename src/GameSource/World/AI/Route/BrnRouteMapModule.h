@@ -8,6 +8,18 @@ namespace BrnAI
 {
 struct AISectionsData;
 
+// Reconstructed from DWARF (BrnRouteMapModule.h:48-52). An 8-byte (section,portal) index pair;
+// the element type of the RacingLineGenerator's ExtrapolatedIndexArray
+// (CgsContainers::Array<BrnAI::SectionAndPortalIndices,16u>, typedef ExtrapolatedIndexArray).
+// Two u32 words -> stride 8, matching the X360 Array<...,16>::operator[] `index*8 + base`
+// accessor @0x8276AA08 (slwi r11,r28,3; add r3,r11,r29) and the live-count word at byte +0x80
+// (== 16*8).
+struct SectionAndPortalIndices
+{
+    u32 muSection; // DWARF BrnRouteMapModule.h:50
+    u32 muPortal;  // DWARF BrnRouteMapModule.h:51
+};
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x827E23F0.
 // The X360 layout places a large embedded working set between the two
 // read/write mutexes and the trailing intrusive-list anchor; the unknown

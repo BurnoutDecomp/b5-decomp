@@ -1,7 +1,9 @@
 #include "SharedClasses/Traffic/BrnTrafficSection.h"
 
+#include <cmath>                                          // std::floor (CalcPositionAtParameter)
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
-#include "rw/math/vpu/vector3_operation.h"               // operator-, IsZero, Normalize
+#include "rw/math/vpu/vector3_operation.h"               // operator-, IsZero, Normalize, MultAdd
 
 namespace BrnTraffic
 {
@@ -44,5 +46,97 @@ namespace BrnTraffic
         CGS_ASSERT(!rw::math::vpu::IsZero(lDiff), "!RwMath::IsZero( lDiff )");
 
         return rw::math::vpu::Normalize(lDiff);
+    }
+
+    // -------------------------------------------------------------------------
+    // BrnTraffic::Section accessor family (@0x821F4B78 / 0x821F4BD8 / 0x821F5068 /
+    // 0x82705BC0). Section is homed in BrnTrafficSection.h.
+    // -------------------------------------------------------------------------
+
+    // BrnTraffic::Section::GetNumSegments  @ 0x821F4B78  -> uint32_t
+    // A section with muNumRungs rungs has muNumRungs-1 inter-rung segments.
+    u32 Section::GetNumSegments() const
+    {
+        CGS_ASSERT(muNumRungs > 0, "muNumRungs > 0");
+        return static_cast<u32>(muNumRungs) - 1;
+    }
+
+    // BrnTraffic::Section::CalcPositionAtParameter  @ 0x821F4BD8  -> void
+    // Interpolate the lane position at the fractional parameter lfParam that lies inside
+    // local segment luSegment, from the whole-graph rung table lpaGlobalRungs. The rung pair
+    // straddling the segment is lpaGlobalRungs[muRungOffset + luSegment] (A) and the next (B);
+    // the section-local fraction is the parameter minus its floor.
+    //
+    // FLAG (store-for-store VMX): the X360 hand-vectorised inner block is reproduced op for op
+    // with the SDK Vector3 helpers (Mult/MultAdd = vmaddfp), NOT re-derived into a named lerp --
+    // the 0.5 broadcast and the exact multiply/add/subtract graph are preserved verbatim.
+    void Section::CalcPositionAtParameter(const LaneRung* lpaGlobalRungs, VecFloat lfParam,
+                                          u32 luSegment, Vector3& lrResult) const
+    {
+        CGS_ASSERT(lpaGlobalRungs != NULL, "lpaGlobalRungs != NULL");
+        CGS_ASSERT(muNumRungs > 0, "muNumRungs > 0");
+        CGS_ASSERT(luSegment < GetNumSegments(), "luSegment < GetNumSegments()");
+
+        // fctidz -> truncate the parameter's first lane toward zero; the segment index must
+        // equal that whole part.
+        const f32 lfParamScalar = lfParam.x;
+        CGS_ASSERT(luSegment == static_cast<u32>(static_cast<s32>(lfParamScalar)),
+                   "Mismatched segment & param values: seg=");
+
+        // Section-local fraction = param - floor(param)  (vrfim128 = round toward -inf).
+        const f32     lfFrac = lfParamScalar - std::floor(lfParamScalar);
+        const Vector3 lvFrac{ lfFrac, lfFrac, lfFrac, lfFrac };
+        const Vector3 lvHalf{ 0.5f, 0.5f, 0.5f, 0.5f };
+
+        // The rung pair straddling this segment (32-byte LaneRung stride).
+        const LaneRung& lrRungA = lpaGlobalRungs[muRungOffset + luSegment];
+        const LaneRung& lrRungB = lpaGlobalRungs[muRungOffset + luSegment + 1];
+
+        const Vector3 lvSpanA = lrRungA.maPoints[1] - lrRungA.maPoints[0];  // vsubfp v10
+        const Vector3 lvSpanB = lrRungB.maPoints[1] - lrRungB.maPoints[0];  // vsubfp v9
+
+        // vmaddfp v13 = spanA * A.p0 + 0.5 ; vmaddfp v0 = spanB * B.p0 + 0.5
+        const Vector3 lvA = rw::math::vpu::MultAdd(lvSpanA, lrRungA.maPoints[0], lvHalf);
+        const Vector3 lvB = rw::math::vpu::MultAdd(lvSpanB, lrRungB.maPoints[0], lvHalf);
+
+        // vsubfp v0 = B - A ; vmaddfp v0 = (B - A) * A + frac ; stvx128 -> lResult
+        const Vector3 lvDelta = lvB - lvA;
+        lrResult = rw::math::vpu::MultAdd(lvDelta, lvA, lvFrac);
+    }
+
+    // BrnTraffic::Section::GetGlobalRungForSegment  @ 0x821F5068  -> int32_t
+    // Map a section-local segment index to its whole-graph rung id: muRungOffset + luSegment.
+    // The truncated parameter must agree with the segment, the segment must be in range, and
+    // the resulting rung id must not run past this section's last rung.
+    s32 Section::GetGlobalRungForSegment(VecFloat lfParam, u32 luSegment) const
+    {
+        const s32 liParam = static_cast<s32>(lfParam.x);   // fctidz: truncate toward zero
+        CGS_ASSERT(luSegment == static_cast<u32>(liParam),
+                   "Mismatched segment & param values: seg=");
+
+        CGS_ASSERT(muNumRungs > 0, "muNumRungs > 0");
+        CGS_ASSERT(luSegment < GetNumSegments(),
+                   "Out-of-range segment index: luSegment=");
+
+        const s32 liRungId = static_cast<s32>(muRungOffset + luSegment);
+
+        CGS_ASSERT(muNumRungs > 0, "muNumRungs > 0");
+        CGS_ASSERT(liRungId <= (static_cast<s32>(GetNumSegments() + muRungOffset) - 1),
+                   "liRungId <= ( (int32_t)( GetNumSegments() + muRungOffset ) - 1 )");
+
+        return liRungId;
+    }
+
+    // BrnTraffic::Section::CalcSignedDistanceAlongSection  @ 0x82705BC0  -> float32_t
+    // Signed arc-length from (A) to (B) along this section: the distance of B from the section
+    // start minus the distance of A from the section start, so B ahead of A is positive. Both
+    // legs share the cumulative rung-length table lpafRungLengths.
+    f32 Section::CalcSignedDistanceAlongSection(f32 lfParamA, u32 luSegmentA,
+                                                f32 lfParamB, u32 luSegmentB,
+                                                const f32* lpafRungLengths) const
+    {
+        const f32 lfDistB = CalcDistanceAlongSection(lfParamB, luSegmentB, lpafRungLengths);
+        const f32 lfDistA = CalcDistanceAlongSection(lfParamA, luSegmentA, lpafRungLengths);
+        return lfDistB - lfDistA;
     }
 }
