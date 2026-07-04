@@ -443,8 +443,8 @@ namespace BrnWorldIO
         typedef BrnResource::GameDataIO::RequestInterface<KI_WORLD_EVENT_QUEUE_MAX_SIZE>
                                                                    WorldResourceRequestInterface;
         // :118 spells AttribSysRequestInterface<2048>; the committed home is the
-        // <2048>-shaped (VariableEventQueue<2048,16>-backed) interface.
-        typedef CgsAttribSys::AttribSysIO::AttribSysRequestInterface AttribSysVaultRequestInterface;
+        // <2048>-shaped (VariableEventQueue<2048,16>-backed) templated interface.
+        typedef CgsAttribSys::AttribSysIO::AttribSysRequestInterface<2048> AttribSysVaultRequestInterface;
         typedef BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface TrafficNetworkOutputInterface; // :122
         typedef BrnTraffic::BrnTrafficIO::TrafficSoundOutputInterface   TrafficSoundOutputInterface;   // :123
         typedef BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface TrafficDirectorOutputInterface; // :632 member type
