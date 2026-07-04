@@ -98,7 +98,7 @@ void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInt
 // Each is a thin composition of the already-reconstructed leaf handlers
 // (_FunctionAptActionCallFunction / _FunctionAptActionCallMethod /
 // _FunctionAptActionSetVariable) plus, for the Dict* forms, an inline operand-
-// stack push of a value taken from the per-call register window (mpRegisters,
+// stack push of a value taken from the string-constant dictionary (mpConstantPool,
 // console +0x44) indexed by a single dictionary byte read from the program
 // counter. After the side-effect each flushes the AptGC deferred-release value
 // vector once the operand stack has drained (the console guards the flush by
@@ -120,18 +120,18 @@ extern void AptApt_FlushDeferredReleases();
 
 namespace
 {
-    // Push the per-call register-window value addressed by the next program-counter
+    // Push the string-constant-dictionary value addressed by the next program-counter
     // dictionary byte onto the operand stack (the shared prologue of the three
     // Dict* fused ops). Console: r10 = byte<<2 (a 4-byte-pointer index into
-    // mpRegisters @ +0x44); the value is stored at the top, the top advanced, and
-    // vtbl[0] (AddRef) invoked -- i.e. stackPush of mpRegisters[dictByte]. On x64
-    // the window is an AptValue* array, so it indexes by element.
+    // mpConstantPool @ +0x44); the value is stored at the top, the top advanced, and
+    // vtbl[0] (AddRef) invoked -- i.e. stackPush of mpConstantPool[dictByte]. On x64
+    // the dictionary is an AptValue* array, so it indexes by element.
     inline void PushDictRegister(AptActionInterpreter* pInterp,
                                  AptActionInterpreter::LocalContextT* pContext)
     {
         const uint8_t nDictByte = *pContext->mpProgramCounter;
         ++pContext->mpProgramCounter;                       // advance past the byte
-        AptValue* pValue = pInterp->mpRegisters[nDictByte];
+        AptValue* pValue = pInterp->mpConstantPool[nDictByte];
         pInterp->mpStack[pInterp->mnStackTop++] = pValue;   // inlined stackPush
         pValue->AddRef();
     }
@@ -186,7 +186,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncPop(AptActionInterprete
     const unsigned int nIndex = *pContext->mpProgramCounter;   // inline byte dict index
     pContext->mpProgramCounter += 1;
 
-    AptValue* pEntry = pInterp->mpRegisters[nIndex];           // console: *(4*idx + a1[17])
+    AptValue* pEntry = pInterp->mpConstantPool[nIndex];           // console: *(4*idx + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;          // inlined stackPush
     pEntry->AddRef();
 
