@@ -113,7 +113,7 @@ extern void* AptPseudoDisplayList_FindInst(void* pList, void* pSource,   // AptP
                                            unsigned char* pOutHit, void** ppExisting,
                                            void* pContext, void* pInfo);
 // AptPseudoDisplayList_Insert retired: the real member AptPseudoDisplayList::Insert is called directly.
-extern void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId);   // AptCharacterAnimation::ExecuteInitActions
+extern void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId);   // AptCharacterAnimation::ExecuteInitActions (FLAG deferred; see AptRenderLinkStubs.cpp)
 extern void* AptFile_operator(void* pDst, void* pSrc);                   // AptFile::operator=
 
 // sub_82B0AE08 @0x82B097D8's caller-side dispatcher (the place-command handler doFrameControls
@@ -418,7 +418,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 const int32_t nId = *reinterpret_cast<const int32_t*>(luBody + 0x08);
 
                 // ---- place: run the placed character's init actions -----------
-                AptCharacterAnimation_ExecuteInitActions(pAnim, pParent, nId);
+                AptCharacterAnimation_ExecuteInitActions(pAnim, pParent, nId);   // FLAG deferred: the real member runs away at boot frame 3 (init-action VM path incomplete) -- see AptRenderLinkStubs.cpp
 
                 // Bind the placed character's animation file (native-8 named members): a
                 // placed char with no file yet takes the import-table entry matching its id,

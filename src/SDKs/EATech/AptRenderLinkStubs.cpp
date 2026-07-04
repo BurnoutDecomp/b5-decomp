@@ -219,7 +219,12 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // StringPool exposes only ClearTemporaryPool so far. Home with the unload bring-up.
     class AptString;
     void AptStringPool_ReleaseString(AptString* pString) { (void)pString; }
-    void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId) {}   // FLAG link-stub
+    // FLAG deferred (NOT a clean swap -- boot-verified 2026-07-04): the real member
+    // AptCharacterAnimation::ExecuteInitActions (AptCharacterAnimation.cpp, X360 0x82AF4340) is homed
+    // but its init-action VM path RUNS AWAY at boot frame 3 (a flood of mkitem instantiation -> crash)
+    // because the deeper import->AptFile->embedded-movie chase is still deferred. Keep this no-op until
+    // that sub-record path is homed, THEN swap the AptMovie::doFrameControls tag-8 caller to the member.
+    void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId) {}
     void  AptFreeFontUnit(void* pUnit) {}   // FLAG link-stub
     void  AptFreeRenderingUnit(void* pUnit) {}   // FLAG link-stub
     // AptPseudoDisplayList_Insert RETIRED (2026-07-01): homed member AptPseudoDisplayList::Insert
@@ -235,7 +240,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void* AptPseudoDisplayList_FindInst(void* pList, void* pSource, unsigned char* pOutHit,
                                         void** ppExisting, void* pContext, void* pInfo)
     { if (pOutHit) *pOutHit = 0; if (ppExisting) *ppExisting = 0; return 0; }   // FLAG link-stub
-    void  AptValue_setGCRoot(AptValue* pValue, int bRoot) {}   // FLAG link-stub
+    // AptValue_setGCRoot RETIRED: the real member AptValue::setGCRoot(int) is called directly
+    // (AptAnimationTarget.cpp, AptLinker.cpp, AptString.cpp).
     // AptActionInterpreter_UnEscape RETIRED (2026-07-02): homed in
     // AptActionInterpreter.cpp (X360 _unEscape @0x82AEE110 + _escape2Char).
     // AptActionInterpreter_getName RETIRED (2026-07-02): homed in
@@ -247,7 +253,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // (sub_82AE1708: allocate the slot array + set capacity; native-8 pointer stride).
     void AptAnimationTargetSet_Destruct (AptAnimationTargetSet* pSet) {}   // FLAG link-stub
     void AptAnimationTargetSet_Destruct2(AptAnimationTargetSet* pSet) {}   // FLAG link-stub
-    void AptAnimationTarget_TickNewInsts(AptAnimationTarget* pAnim) {}   // FLAG link-stub
+    // AptAnimationTarget_TickNewInsts RETIRED: the real static AptAnimationTarget::TickNewInsts()
+    // (AptAnimationTarget.cpp:562, X360 0x82B0C8E0 -- drains the module new-instance table) is now
+    // called directly at its one call site (AptCIHNativeFunctionHelper.cpp duplicateMovieClip).
     // AptApt_FlushDeferredReleases RETIRED (2026-07-01): homed in AptGC.cpp as the real
     // gValuesToRelease.ReleaseValues() drain (the {} stub silently dropped every GC drain).
     AptValue* AptApt_LoadVariablesFetch(const char* pUrl) { return 0; }   // FLAG link-stub (host URL fetch; null until installed)

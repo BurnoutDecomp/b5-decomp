@@ -43,6 +43,7 @@
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"             // mpPositionMatrix tx/ty (getBounds)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (getBytesTotal)
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"           // AptString::str (the goto label)
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"           // AptAnimationTarget::TickNewInsts (static)
 #include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"     // mpValue (the boxed label form)
 #include "SDKs/EATech/include/Apt/AptValueWithHash.h"           // mHash (the embedded property hash)
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"      // the operand-stack view (gotoAndX)
@@ -76,7 +77,6 @@
 extern AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharacter,
                                   int nDepth, EAStringC* pName, AptValue* pInitObject);   // AptCIH::InsertChild
 extern AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSearchImports);
-extern void AptAnimationTarget_TickNewInsts(AptAnimationTarget* pAnim);                   // AptAnimationTarget::TickNewInsts
 extern int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3);             // dword_8324E8AC
 
 // ---------------------------------------------------------------------------
@@ -1078,7 +1078,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, in
 
     AptCIH* const pInserted =
         AptCIH_InsertChild(pNode, pNode, pCharacter, nDepth, &lNewName, pInitObj);
-    AptAnimationTarget_TickNewInsts(gpAptTarget->mpAnimationTarget);
+    AptAnimationTarget::TickNewInsts();   // static drain of the module new-instance table (retired the AptAnimationTarget_TickNewInsts shim)
 
     return pInserted ? pInserted : gpUndefinedValue;
 }

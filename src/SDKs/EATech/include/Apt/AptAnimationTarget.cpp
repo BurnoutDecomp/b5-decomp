@@ -225,7 +225,7 @@ extern void AptAnimationTargetSet_Destruct2(AptAnimationTargetSet* pSet);       
 extern int   AptReplaceReferences(AptValue* pOld, AptValue* pNew,
                                   AptValue** ppTable, int nCount);                  // ReplaceReferences
 extern void* AptUpdateZombieVector(char bClear);                                   // AptUpdateZombieVector -- CANONICAL void* (PS3 __int64 status; AptTarget.cpp matches; was AptValue* here)
-extern void  AptValue_setGCRoot(AptValue* pValue, int bRoot);                      // AptValue::setGCRoot (free-fn form)
+// AptValue::setGCRoot is now called directly on the member (the AptValue_setGCRoot shim is retired).
 
 // The GC value pool: GetAllAllocatedAptValues snapshots the live-value table the
 // remove-list flush remaps references against; the table's element count lives at
@@ -1048,7 +1048,7 @@ AptValue* AptAnimationTarget::AddListenerToQueue(AptValue* pListener, int nEvent
             *lpNewFlags = (*lpNewFlags & 0xFF80007Fu) | liNewZombie;
             (*reinterpret_cast<VFn0*>(*reinterpret_cast<char**>(lpBoundThis)))(lpBoundThis);  // vtbl[0] AddRef
 
-            AptValue_setGCRoot(lpTarget, 1);
+            lpTarget->setGCRoot(1);   // member (lpTarget is AptValue*); retired the AptValue_setGCRoot shim
         }
 
         // Get the callable (vtbl index 17) and enqueue the deferred function call.
