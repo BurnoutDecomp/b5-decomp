@@ -83,4 +83,54 @@ namespace CgsSceneManager
                 reinterpret_cast<usize>(mpUnsafeNeighbours) - luBase);
         }
     }
+
+    // X360 0x822BACE8. Centroid of the zone polygon: the average of all corner points.
+    // The X360 build hand-vectorises this over VMX -- it sums the full 16-byte point vectors
+    // (all four lanes) into an accumulator, then multiplies by a Newton-refined reciprocal of
+    // the point count (1/miNumPoints). For the exactly-4-point case it tail-calls the branch-free
+    // CalculateCentre4. This is the semantic-parity scalar reconstruction: the same per-lane
+    // sum-then-scale on the named Vector2 lanes, not the VMX reciprocal-refinement permute.
+    rw::math::vpu::Vector2 Zone::CalculateCentre() const
+    {
+        if (miNumPoints == 4)
+        {
+            return CalculateCentre4();
+        }
+
+        rw::math::vpu::Vector2 lCentre;
+        lCentre.SetZero();
+
+        for (s16 liIndex = 0; liIndex < miNumPoints; ++liIndex)
+        {
+            lCentre.x += mpPoints[liIndex].x;
+            lCentre.y += mpPoints[liIndex].y;
+            lCentre.z += mpPoints[liIndex].z;
+            lCentre.w += mpPoints[liIndex].w;
+        }
+
+        const f32 lfInvCount = 1.0f / static_cast<f32>(miNumPoints);
+        lCentre.x *= lfInvCount;
+        lCentre.y *= lfInvCount;
+        lCentre.z *= lfInvCount;
+        lCentre.w *= lfInvCount;
+
+        return lCentre;
+    }
+
+    // X360 0x822A3CA0. Branch-free centroid for the 4-point case: (p0+p1+p2+p3) * 0.25.
+    // Asserts the zone has exactly 4 points. The X360 forms 1/4 as (-0.5)^2 rather than a literal
+    // and sums the four full 16-byte point vectors (all lanes). Semantic-parity scalar form.
+    rw::math::vpu::Vector2 Zone::CalculateCentre4() const
+    {
+        CGS_ASSERT(miNumPoints == 4,
+                   "This optimised calc centre function only works for 4 point units\n");
+
+        rw::math::vpu::Vector2 lCentre;
+        lCentre.x = (mpPoints[0].x + mpPoints[1].x + mpPoints[2].x + mpPoints[3].x) * 0.25f;
+        lCentre.y = (mpPoints[0].y + mpPoints[1].y + mpPoints[2].y + mpPoints[3].y) * 0.25f;
+        lCentre.z = (mpPoints[0].z + mpPoints[1].z + mpPoints[2].z + mpPoints[3].z) * 0.25f;
+        lCentre.w = (mpPoints[0].w + mpPoints[1].w + mpPoints[2].w + mpPoints[3].w) * 0.25f;
+
+        return lCentre;
+    }
 }

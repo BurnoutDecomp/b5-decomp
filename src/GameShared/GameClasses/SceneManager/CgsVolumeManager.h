@@ -22,6 +22,20 @@
 
 namespace CgsSceneManager
 {
+    // CgsVolumeManager.h:60 (DecFIGS DWARF) -- one pooled collision-volume record.
+    // Sibling of VolumeManager at namespace scope (NOT nested). X360-attested stride
+    // 32 bytes: maObjectPool[5048] spans [0,161536) in the pool's AllocateObject/Clear
+    // asm (maiObjectFreeQueue base @ +161536; 161536/5048 = 32). DWARF field NAMES
+    // (offsets not individually attested -- the pool bodies never read element fields,
+    // only sizeof(T)==32 matters; grow into named fields with real offsets when
+    // VolumeManager's own add/replace TUs land, do NOT fork the pool):
+    //   VolumeId                              mVolumeId;          // :62
+    //   VolumeManagerVolume::VolumeTypeFlags  mxFlags;            // :63  (typedef uint8_t)
+    //   ResourceHandle                        mVolumeHandle;      // :64
+    //   int32_t                               miVolumeStoreIndex; // :65
+    //   bool                                  mbStaticVolume;     // :66
+    struct VolumeManagerVolume { u8 maBlob[32]; };
+
     class VolumeManager
     {
     public:

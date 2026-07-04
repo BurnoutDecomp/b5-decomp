@@ -119,6 +119,12 @@ namespace CgsSceneManager
             // update-body queue (sub_828B0230, == &mUpdateBodyQueue) and appends through it.
             InUpdateBodyQueue* GetUpdateBodyQueue() { return &mUpdateBodyQueue; }
 
+            // Non-const add-body-queue accessor for the producing path -- the X360
+            // SceneManagerModule::AddBody (0x828BA498) resolves the add-body queue (the
+            // truncated CgsSceneMana(a2) callee, == &mAddBodyQueue since the queue is the
+            // struct's first member) and appends the assembled event through it.
+            InAddBodyQueue& GetAddBodyQueue() { return mAddBodyQueue; }
+
             // Push a per-frame body-position update request onto the update-body queue. @ 0x828BA430.
             // lpAabb is the world box (the X360 rw::collision::AABBox*); modelled as an opaque
             // 32-byte source span (see maAABBox above) block-copied whole into the queued event.

@@ -38,7 +38,7 @@
 
 // Embedded sub-managers (each by value, in DWARF declaration order).
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManager.h"
-#include "GameShared/GameClasses/SceneManager/CgsOverlapGenerationModule.h"
+#include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModule.h"  // full home of OverlapGenerationModule + OverlapGenerationIO (AddBody producer types)
 #include "GameShared/GameClasses/SceneManager/CgsOverlapCullingModule.h"
 #include "GameShared/GameClasses/SceneManager/FineIntersectionTestModule/CgsFineIntersectionTestModule.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityManager.h"
@@ -90,6 +90,12 @@ namespace CgsSceneManager
         struct InputBuffer_Update;
         struct InputBuffer_Query;
     }
+
+    // The overlap-generation input buffer the AddBody producer pushes onto. Its full
+    // definition lives in ContactGen/CgsOverlapGenerationModule.h (pulled by the .cpp);
+    // this TU's header includes only the STUB SceneManager/CgsOverlapGenerationModule.h,
+    // so a forward declaration suffices for the pointer parameter.
+    namespace OverlapGenerationIO { struct InputBuffer; }
 
     class SceneManagerModule : public CgsModule::ModuleSingleBuffered
     {
@@ -167,6 +173,13 @@ namespace CgsSceneManager
         // @ 0x828BAC90 -- build the culling-group adjacency table from the scene
         // resource allocator (forwards to mCullingGroupManager).
         void CreateCullingTable(rw::IResourceAllocator* lpSceneAllocator);
+
+        // @ 0x828BA498 -- push an add-body request onto the overlap-generation input
+        // buffer's add-body queue and record the object's culling group. lpAabb is the
+        // 32-byte world box (opaque; block-copied whole into the queued 64-byte event).
+        void AddBody(OverlapGenerationIO::InputBuffer* lpOverlapGenerationInputBuffer,
+                     u32 luObjectIndex, const void* lpAabb, u32 luCullingGroup,
+                     u32 luVolumeHandle, u64 lu64Body);
 
         // Bridges driven by UpdateContactGeneration (bodies in this TU's bridge
         // sibling TU; declared here for the call sites).

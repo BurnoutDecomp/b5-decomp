@@ -46,6 +46,18 @@ namespace CgsSceneManager
             unsigned char maBytes[8];
         };
 
+        // The recursive line-test traversal's per-call parameter block. Consumers
+        // (LooseOctree::TestLineAgainstNodeBoundingBox @0x828B0FC8) read it by raw vector
+        // offset -- line origin at +0x00, inverse line direction at +0x30 -- so it is modelled
+        // here as a documented opaque block sized to those attested offsets (two 16-byte vectors
+        // plus the intervening 0x20 span). Its full field layout has its real home with the
+        // line-test recursion TU; this minimal opaque shell only sizes the pointer target so the
+        // slab-test's raw-offset reads land correctly.
+        struct alignas(16) LineTestRecursiveFuncParams
+        {
+            unsigned char maBytes[0x40];   // +0x00 origin (vec), +0x30 inverse direction (vec)
+        };
+
         // @ 0x828BA3B0 -- allocate a new entity node, then splice it into the graph.
         void AddEntity(u16 lu16Id, u32 lxTypeFlags, Vector3 lPosition, float32_t lfRadius);
 
