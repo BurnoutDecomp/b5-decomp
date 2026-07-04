@@ -67,6 +67,12 @@ namespace Io
     // attested; the following member's offset is absorbed by an explicit pad).
     struct PropUpdateNotificationQueue { u8 mData[0x40]; };
 
+    // The prop-became-physical event queue handed out (by pointer) from
+    // RootInputBuffer::GetPropBecamePhysicalEventQueue @ +0x103D0. Opaque, correctly
+    // sized to its X360-attested span (+0x103D0 .. +0x10520 == 0x150 bytes) so the
+    // following PropUpdateNotificationQueue keeps its +0x10520 offset.
+    struct PropBecamePhysicalEventQueue { u8 mData[0x10520 - 0x103D0]; }; // 0x150 attested span
+
     // =========================================================================
     // BrnSound::Module::Io::PreUpdateOutput -- MINIMAL SLICE (canonical home is
     // GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h:149; reproduced here
@@ -230,6 +236,10 @@ namespace Io
         GameActionQueue&       GetGameActionQueue();
         // X360 0x823B8518 (write-lock) -- the prop-update notification queue @ +0x10520.
         PropUpdateNotificationQueue* GetPropUpdateNotificationQueue();
+        // X360 0x826949E8 (read-lock) -- CONST overload of the prop-update notification queue @ +0x10520.
+        const PropUpdateNotificationQueue* GetPropUpdateNotificationQueue() const;
+        // X360 0x823B8470 (write-lock) -- the prop-became-physical event queue @ +0x103D0.
+        PropBecamePhysicalEventQueue* GetPropBecamePhysicalEventQueue();
 
         // ---- write-lock setters (this wave) -----------------------------------------
         void SetReplayStatusInterface(const ReplayStatusInterface* lpInterface);            // X360 0x823B7EC0 @ +0x0004
@@ -276,7 +286,8 @@ namespace Io
         UpdateInfo                    mUpdateInfo;                 // @ +0x0EBBC
         u8 maPad12[0xEEE0 - (0xEBBC + sizeof(UpdateInfo))];
         AICarOutputInterface          mAICarOutputInterface;       // @ +0x0EEE0
-        u8 maPad13[0x10520 - (0xEEE0 + sizeof(AICarOutputInterface))];
+        u8 maPad13[0x103D0 - (0xEEE0 + sizeof(AICarOutputInterface))];
+        PropBecamePhysicalEventQueue  mPropBecamePhysicalEventQueue; // @ +0x103D0 (0x150)
         PropUpdateNotificationQueue   mPropUpdateNotificationQueue;// @ +0x10520
         u8 maPad14[0x13730 - (0x10520 + sizeof(PropUpdateNotificationQueue))];
         GuiAudioEventResults          mGuiAudioEventResults;       // @ +0x13730
