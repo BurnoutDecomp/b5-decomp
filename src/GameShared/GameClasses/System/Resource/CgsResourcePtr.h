@@ -120,7 +120,26 @@ namespace CgsResource
         ResourcePtr() {}
         ResourcePtr(const ResourcePtr<Type>& lrOther);
         ResourcePtr(const BaseResourcePtr& lrOther);
-        ResourcePtr(const ResourceHandle& lrHandle);
+
+        // CgsResourcePtr.h:123. X360 0x8277AE28 (attested via the AISectionsData
+        // instantiation): zero the base identity (mpResourceMemory + the two mHandle
+        // pointers @+0x00/+0x04/+0x08), self-link the intrusive alias list
+        // (mpNext/mpPrev/mpThis = this @+0x0C/+0x10/+0x14), clear muThreadId (+0x18),
+        // then bind the resource memory via the protected BaseResourcePtr::CreateFromHandle
+        // (already bodied at CgsResourcePtr.cpp:77). Store order matches the X360 exactly.
+        // Defined inline here so every per-type instantiation TU forces its out-of-line
+        // emission with a `template ...::ResourcePtr(const ResourceHandle&);` line.
+        ResourcePtr(const ResourceHandle& lrHandle)
+        {
+            mpResourceMemory         = 0;       // +0x00
+            mHandle.mpResourceMemory = 0;       // +0x04
+            mHandle.mpSourceEntry    = 0;       // +0x08
+            mpNext = this;                      // +0x0C  self-linked intrusive alias list
+            mpPrev = this;                      // +0x10
+            mpThis = this;                      // +0x14
+            muThreadId = 0;                     // +0x18
+            CreateFromHandle(&lrHandle);        // bind resource memory from the handle
+        }
 
         ResourcePtr<Type>& operator=(const ResourcePtr<Type>& lrOther);
         ResourcePtr<Type>& operator=(const BaseResourcePtr& lrOther);

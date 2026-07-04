@@ -78,8 +78,12 @@ namespace TriggerEntityModuleIO
         // Opaque foreign-type storage (see FLAG above): first byte at this + 4.
         struct InputInterfaceStorage { unsigned char maBytes[1]; };
 
-        // X360 0x827A3270: write-lock handle, returns &mInputInterface (this + 4).
+        // X360 0x827A3270: write-lock handle, returns &mInputInterface (this + 4). Body committed
+        // in BrnTriggerEntityModuleIO_Accessors.cpp.
         InputInterfaceStorage* GetInputInterface();
+        // X360 0x822BCFE0: read-lock const overload, returns &mInputInterface (this + 4). Body in
+        // BrnTriggerEntityModuleIO_QueueAccessors.cpp.
+        const InputInterfaceStorage* GetInputInterface() const;
 
         static void _AssertLayout();
 
@@ -109,8 +113,10 @@ namespace TriggerEntityModuleIO
     class InputBuffer_PostScene : public CgsModule::IOBuffer
     {
     public:
-        const TriggerQueryQueue* GetQueryInputInterface() const { return &mQueryInputInterface; }
-        TriggerQueryQueue*       GetQueryInputInterface()       { return &mQueryInputInterface; }
+        // Both overloads emitted out-of-line by the X360 build (const 0x822BCE90 read-lock,
+        // non-const 0x827A3120 write-lock); bodies in BrnTriggerEntityModuleIO_QueueAccessors.cpp.
+        const TriggerQueryQueue* GetQueryInputInterface() const;
+        TriggerQueryQueue*       GetQueryInputInterface();
     private:
         TriggerQueryQueue mQueryInputInterface;
     };
@@ -129,7 +135,9 @@ namespace TriggerEntityModuleIO
     class InputBuffer_PrePhysics : public CgsModule::IOBuffer
     {
     public:
-        const SceneResultQueue* GetSceneResultQueue() const { return &mSceneResultQueue; }
+        // The const overload is emitted out-of-line by the X360 build (0x822BD130, read-lock);
+        // body in BrnTriggerEntityModuleIO_QueueAccessors.cpp. The non-const stays inline.
+        const SceneResultQueue* GetSceneResultQueue() const;
         SceneResultQueue*       GetSceneResultQueue()       { return &mSceneResultQueue; }
     private:
         SceneResultQueue mSceneResultQueue;
@@ -139,8 +147,10 @@ namespace TriggerEntityModuleIO
     class OutputBuffer_PrePhysics : public CgsModule::IOBuffer
     {
     public:
-        const TriggerEntityModuleOutputInterface* GetOutputInterface() const { return &mOutputInterface; }
-        TriggerEntityModuleOutputInterface*       GetOutputInterface()       { return &mOutputInterface; }
+        // Both overloads emitted out-of-line by the X360 build (const 0x827A3468 read-lock,
+        // non-const 0x822BD1D8 write-lock); bodies in BrnTriggerEntityModuleIO_QueueAccessors.cpp.
+        const TriggerEntityModuleOutputInterface* GetOutputInterface() const;
+        TriggerEntityModuleOutputInterface*       GetOutputInterface();
     private:
         TriggerEntityModuleOutputInterface mOutputInterface;
     };

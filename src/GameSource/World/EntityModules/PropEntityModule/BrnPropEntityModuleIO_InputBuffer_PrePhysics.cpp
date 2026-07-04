@@ -39,5 +39,15 @@ namespace PropEntityIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         mPotentialContactQueue.Append(*lpQueue);
     }
+
+    // X360 0x822B9348 (R, :550) -- read-lock; return the reset-on-track result queue (this+163872).
+    // mResetOnTrackResultQueue sits after mPotentialContactQueue (EventQueue<PotentialContact,2048>:
+    // +0x10 base + 16 header + 2048*80 = +163872). Called by BrnWorld::PropEntityModule::PrePhysicsUpdate.
+    // Rodata carries a trailing newline (VERBATIM, per Feb-2007 reference source).
+    const InputBuffer_PrePhysics::ResetOnTrackResultQueue* InputBuffer_PrePhysics::GetResetOnTrackResultQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mResetOnTrackResultQueue;
+    }
 }
 }

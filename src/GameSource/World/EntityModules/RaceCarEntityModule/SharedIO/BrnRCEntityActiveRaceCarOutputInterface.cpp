@@ -298,6 +298,24 @@ void RCEntityActiveRaceCarOutputInterface::SetRaceCarState(
     mbCanDriveAwayFromCrash                        = lbCanDriveAwayFromCrash;              // this+10465
 }
 
+// X360 0x82287998 -- GetDeformationModelResourcePtr: const per-index deformation-model
+// resource-ptr accessor. Bounds-checks the EActiveRaceCarIndex in [0,8), then returns a
+// ResourcePtr bound from maDeformationModelResourceHandles[idx] (X360 default-constructs a
+// BaseResourcePtr in the return slot, then CreateFromHandle(&handle)). The equivalent public
+// path -- matching the X360 default-construct-then-bind-from-handle sequence -- is the
+// ResourcePtr(const ResourceHandle&) constructor (CgsResourcePtr.h; CreateFromHandle is protected,
+// callable only from the ResourcePtr ctor, not this non-derived class). handle ptr ==
+// 8*idx + this + 10340 == &maDeformationModelResourceHandles[idx]. Pairs with the committed
+// SetDeformationModelResourcePtr (X360 0x822A1200).
+CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>
+RCEntityActiveRaceCarOutputInterface::GetDeformationModelResourcePtr(EActiveRaceCarIndex leActiveRaceCarIndex) const
+{
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    return CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>(
+        maDeformationModelResourceHandles[leActiveRaceCarIndex]);
+}
+
 // X360 0x8259BB58 -- GetPlayerSpeedMPH: the player car's current speed (mfSpeedMPH @968 in
 // the player's RaceCarState). Asserts the player index has been set. (Additive accessor;
 // the export demangled name was fully truncated -- mapped from the asm: it reads

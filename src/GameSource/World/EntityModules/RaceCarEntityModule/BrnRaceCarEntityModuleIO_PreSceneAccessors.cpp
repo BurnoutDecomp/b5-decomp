@@ -49,5 +49,28 @@ OutputBuffer_PreScene::IsRequestingRivalUpdate() const
     return mbRequestingRivalUpdate;
 }
 
+// X360 0x8279D500 (R, :288) -- const active-race-car output-interface accessor of
+// OutputBuffer_PreScene. Read-lock ((status>>4)&1, eStatusLockedForRead) =>
+// IsBufferLockedForReading(). X360 epilogue == this + 0xEA9C0 (960960); reproduced
+// by-name as &mActiveRaceCarOutputInterface. Pairs with the non-const overload (:289,
+// X360 0x822B5020) at the identical member offset (in the catch-all IO.cpp).
+const RCEntityActiveRaceCarOutputInterface*
+OutputBuffer_PreScene::GetActiveRaceCarOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mActiveRaceCarOutputInterface;
+}
+
+// X360 0x822B5758 (R, :424) -- const scoring-output interface accessor of
+// InputBuffer_PrePhysics. Read-lock ((status>>4)&1, eStatusLockedForRead) =>
+// IsBufferLockedForReading(). X360 epilogue == this + 0x28020 (163872); reproduced
+// by-name as &mScoringInterface. Caller: BrnWorld::PlaceOnTrackManager::PrePhysicsUpdate.
+const InputBuffer_PrePhysics::ScoringInterface*
+InputBuffer_PrePhysics::GetScoringInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mScoringInterface;
+}
+
 }
 }

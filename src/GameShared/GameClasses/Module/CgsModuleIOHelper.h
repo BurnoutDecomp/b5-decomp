@@ -39,10 +39,13 @@ namespace CgsModule
                 "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");
         }
 
-        // CgsModuleIOHelper.h:55. Pops the buffer back off the stack.
+        // CgsModuleIOHelper.h:55. Pops the buffer back off the stack. The X360 dtor
+        // (attested via IOHelper<RouteMapModuleIO::OutputBuffer>::~IOHelper @0x82791820)
+        // asserts the DestroyIOBuffer result (CgsModuleIOHelper.h:57).
         ~IOHelper()
         {
-            mpStack->DestroyIOBuffer(&mpBuffer);
+            CGS_ASSERT(mpStack->DestroyIOBuffer(&mpBuffer),
+                "mpStack->DestroyIOBuffer( &mpBuffer )");
         }
 
         // CgsModuleIOHelper.h:60 / :65 — access the borrowed buffer.

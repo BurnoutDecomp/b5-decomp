@@ -71,5 +71,15 @@ namespace PropEntityIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         mUpdatedPropQueue.Append(*lpQueue);
     }
+
+    // X360 0x822B9498 (R, :577) -- read-lock; return the update-prop event queue (this+0x10).
+    // Const overload of the mUpdatedPropQueue accessor (mContactSpyInterface@+4,
+    // mUpdatedPropQueue@+0x10). Called by BrnWorld::PropEntityModule::PostPhysicsUpdate.
+    // Rodata carries a trailing newline (VERBATIM, per Feb-2007 reference source).
+    const InputBuffer_PostPhysics::UpdatePropEventQueue* InputBuffer_PostPhysics::GetUpdatedPropQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mUpdatedPropQueue;
+    }
 }
 }

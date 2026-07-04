@@ -21,3 +21,15 @@
 
 template void Array<BrnDirector::MomentController::MomentHandle, 10>::Append(
     const BrnDirector::MomentController::MomentHandle&);
+
+// Array<BrnDirector::MomentController::MomentHandle,10>::operator[](u32)  @0x822010D8
+// Non-const checked accessor (generic body inline in CgsArray.h:538/539; asserts 0x21A/0x21B).
+// count @+0xF0, stride 0x18 == sizeof(MomentHandle). Caller MomentSelector::ActualDebugRender.
+template BrnDirector::MomentController::MomentHandle&
+Array<BrnDirector::MomentController::MomentHandle, 10>::operator[](u32);
+
+// Array<BrnDirector::MomentController::MomentHandle,10>::operator[](u32) const  @0x82200FC8
+// Const checked accessor (generic body inline in CgsArray.h:556/557; asserts 0x22C/0x22D).
+// count @+0xF0, stride 0x18. 9 read-side callers (GetSelectedMoment/Release/...).
+template const BrnDirector::MomentController::MomentHandle&
+Array<BrnDirector::MomentController::MomentHandle, 10>::operator[](u32) const;

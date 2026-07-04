@@ -28,4 +28,15 @@ namespace BrnAI
                                         Vector2 lQ2,
                                         f32*    lpfParamA,
                                         f32*    lpfParamB);
+
+    // 0x827651F0 - signed perpendicular distance of the line through lPosition with direction
+    // lVelocity to the origin = cross(lVelocity, lPosition)/|lPosition.xy|; falls back to
+    // |lVelocity.xy| when |lPosition.xy| is zero. Asserts the result is finite ('Bad maths!').
+    f32 DistancePosVelToOrigin(Vector2 lPosition, Vector2 lVelocity);
+
+    // 0x82768680 - SIMD 'fast' point-in-section test against a precomputed 4-edge convex
+    // section (SoA edge coefficients). Returns true iff (lfX,lfY) is on the inside half-plane
+    // of all four edges. lpSectionEdges points at four attested 4-lane vectors (edgeX0 @+0x00,
+    // edgeY0 @+0x10, coefA @+0x20, coefB @+0x30).
+    bool IsInsideSectionFast(const void* lpSectionEdges, f32 lfX, f32 lfY);
 }

@@ -18,3 +18,12 @@
 template void CgsContainers::RingBuffer<
     BrnAI::ResetOnTrackManager::RecentResetEntry>::Push(
         const BrnAI::ResetOnTrackManager::RecentResetEntry* lpEntry);
+
+// operator[](u32) @0x8276A1B0 (called by ResetOnTrackManager::Update). The generic operator[]
+// body is inline in CgsRingBuffer.h: range-checks the index against miLength (CGS_ASSERT
+// "Attempt to access element outside range"), then returns mpData[(miReadPos + index) % miMaxLength].
+// Member offsets mpData@0, miMaxLength@4, miReadPos@8, miLength@0x10; 32-byte element stride
+// (`slwi r11,r11,5`) == sizeof(RecentResetEntry)==32. Sibling to the committed ::Push instantiation
+// @0x8276A090 above; this TU only forces the out-of-line emission.
+template BrnAI::ResetOnTrackManager::RecentResetEntry&
+CgsContainers::RingBuffer<BrnAI::ResetOnTrackManager::RecentResetEntry>::operator[](u32);

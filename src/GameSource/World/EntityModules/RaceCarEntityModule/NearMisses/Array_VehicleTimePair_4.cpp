@@ -24,3 +24,18 @@
 // NearMissData<4,7>::UpdateTimers / RememberNearMiss / AddContacted.
 template void Array<BrnWorld::VehicleTimePair, 4>::Append(const BrnWorld::VehicleTimePair&);
 template void Array<BrnWorld::VehicleTimePair, 4>::Erase(u32);
+
+// Array<BrnWorld::VehicleTimePair, 4>::operator[] (non-const) @ 0x822B0500
+// Thin explicit instantiation (generic body inline in CgsArray.h:38-43). Asserts Construct/Clear'd
+// (count @ +0x20 != -1, baked CgsArray.h:538, 'Array used before Construct/Clear was called'),
+// bounds-checks (baked CgsArray.h:539, 'Array index out of bounds'), returns (index<<3)+base ==
+// &maElements[index]. Called by NearMissData<4,8>::IsRecentNearMiss / ::IsRecentContacted.
+template BrnWorld::VehicleTimePair&
+Array<BrnWorld::VehicleTimePair, 4>::operator[](u32);
+
+// Array<BrnWorld::VehicleTimePair, 4>::operator[] const @ 0x822B03F8
+// Thin explicit instantiation (generic body inline in CgsArray.h:44-49). Const overload; baked
+// CgsArray.h:556/557. count @ +0x20 == 4*8 => N=4, stride 8. Called by NearMissData<4,8>::
+// UpdateTimers / ::RememberNearMiss / ::AddContacted.
+template const BrnWorld::VehicleTimePair&
+Array<BrnWorld::VehicleTimePair, 4>::operator[](u32) const;

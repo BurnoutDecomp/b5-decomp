@@ -65,3 +65,17 @@ f32 AllVehicleData::SqDistanceOfNearestOpposingTeamMember(s32 liMyTeam) const
 }
 
 }
+
+// ---- Array<NearestCarInfo,8>::operator[] const (X360 0x821FF4E0) --------------------
+// The two const distance queries above index the nearest-car table through
+// maNearestRaceCarsToPlayer.GetItem(i) (== const operator[]); the X360 de-inlines the const
+// checked accessor out of line. Count word @+0x60 (8*12), the unconstructed tripwire
+// (CgsArray.h:556) + dynamic out-of-bounds check (CgsArray.h:557), then &maElements[index] at
+// the 12-byte NearestCarInfo stride (slwi/add/slwi == 12*i). Lines 556/557 == the CONST
+// operator[] overload (CgsArray.h line map). Force just the const overload the GetItem const
+// bodies reach; the non-const copy is not this TU's symbol.
+// (Explicit instantiation of the global-namespace Array<T,N> template must sit at global
+// scope, not inside namespace BrnDirector.)
+template
+const BrnDirector::AllVehicleData::NearestCarInfo&
+Array<BrnDirector::AllVehicleData::NearestCarInfo, 8>::operator[](u32) const;

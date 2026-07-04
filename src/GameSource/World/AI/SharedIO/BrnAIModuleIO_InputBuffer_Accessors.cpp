@@ -67,6 +67,16 @@ namespace AIModuleIO
         return MemberImage() + KU_PLAYER_VEHICLE_CONTROLS_OFFSET;
     }
 
+    // X360 0x8276D488 (R) -- the race-route request queue (this+0x137D0). Read-lock
+    // getter twin of AppendRaceRouteRequestQueue (write-locked, same offset). Callers
+    // BrnAI::AIModule::PausedUpdate / Update.
+    const RouteMapModuleIO::RaceRouteRequestQueue* InputBuffer::GetRaceRouteRequestQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return reinterpret_cast<const RouteMapModuleIO::RaceRouteRequestQueue*>(
+            MemberImage() + KU_RACE_ROUTE_REQUEST_QUEUE_OFFSET);
+    }
+
     // ---- write-locked game-action queue accessor (bit 3, faithfully the WRITE bit) ----
 
     // X360 0x8279C4F8 (W) -- the game-action queue (this+0x103BC). Asserts the WRITE lock.

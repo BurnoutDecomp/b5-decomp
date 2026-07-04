@@ -38,3 +38,13 @@ CgsModule::BaseEventQueue<BrnAI::RouteMapModuleIO::RouteResponse>::AddEvent(
 template bool
 CgsModule::BaseEventQueue<BrnAI::RouteMapModuleIO::RouteResponse>::Append(
     const CgsModule::BaseEventQueue<BrnAI::RouteMapModuleIO::RouteResponse>&);
+
+// CgsModule::BaseEventQueue<BrnAI::RouteMapModuleIO::RouteResponse>::GetEvent(s32) const
+//   X360 @0x823AC158 (callers BrnGameModule::BridgeWorldRouteInformationToGui /
+//   BridgeWorldToGameState / AIModule::UpdateCarRoutes).
+// The generic const GetEvent body is inline in CgsBaseEventQueue.h: asserts mpEvents != NULL,
+// liIndex < GetLength(), liIndex >= 0, then returns mpEvents[liIndex]. The X360 body matches
+// store-for-store; the return `mulli index,0x1410` == index*sizeof(T) with
+// sizeof(RouteResponse)==5136. Thin out-of-line instantiation of the const GetEvent overload.
+template const BrnAI::RouteMapModuleIO::RouteResponse&
+CgsModule::BaseEventQueue<BrnAI::RouteMapModuleIO::RouteResponse>::GetEvent(s32) const;

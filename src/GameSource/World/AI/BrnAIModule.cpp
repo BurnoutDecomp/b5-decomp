@@ -1,7 +1,24 @@
 #include "BrnAIModule.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+
 namespace BrnAI
 {
+
+// X360 0x82765A10 -- BrnAI::operator++(AIModule::EPrepareStage&, int)
+// DWARF BrnAIModule.h:417. Post-increment over the AI prepare-stage enum: caches
+// the current stage, advances it by one, asserts the result has not walked past
+// E_PREPARESTAGE_DONE (5), and returns the pre-increment value. Called by
+// AIModule::Prepare to step through the multi-frame prepare state machine.
+AIModule::EPrepareStage operator++(AIModule::EPrepareStage& leEnumIndex, int)
+{
+    AIModule::EPrepareStage leOldValue = leEnumIndex;
+    leEnumIndex = static_cast<AIModule::EPrepareStage>(static_cast<int>(leEnumIndex) + 1);
+    CGS_ASSERT(leEnumIndex <= AIModule::E_PREPARESTAGE_DONE,
+               "leEnumIndex <= AIModule::E_PREPARESTAGE_DONE");
+    return leOldValue;
+}
+
 AIModule::AIModule()
     : mInputMutex(nullptr, true),
       mOutputMutex(nullptr, true),

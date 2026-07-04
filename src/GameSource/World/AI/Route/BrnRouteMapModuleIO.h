@@ -241,9 +241,15 @@ namespace BrnAI
             void Construct();
             void Destruct();
 
-            RaceRouteRequestQueue*                GetRaceRouteRequestQueue()                { return &mRaceRouteRequestQueue; }
+            // The two NON-const producer getters are emitted out-of-line by the X360 build
+            // (write-lock-guarded, X360 0x8276AE00 / 0x8276AF50); bodies live in
+            // BrnRouteMapModuleIO_InputBuffer_Accessors.cpp. Declaration-only here to avoid an
+            // ODR clash with those out-of-line definitions (mirrors CgsModelModuleIO.h
+            // GetLoadRequests()). The const overloads stay inline (no const getter was emitted
+            // out-of-line in this batch).
+            RaceRouteRequestQueue*                GetRaceRouteRequestQueue();                                                       // X360 0x8276AE00 (W)
             const RaceRouteRequestQueue*          GetRaceRouteRequestQueue() const          { return &mRaceRouteRequestQueue; }
-            ExtrapolatedRouteRequestQueue*        GetExtrapolatedRouteRequestQueue()        { return &mExtrapolatedRouteRequestQueue; }
+            ExtrapolatedRouteRequestQueue*        GetExtrapolatedRouteRequestQueue();                                               // X360 0x8276AF50 (W)
             const ExtrapolatedRouteRequestQueue*  GetExtrapolatedRouteRequestQueue() const  { return &mExtrapolatedRouteRequestQueue; }
 
         private:
@@ -261,8 +267,16 @@ namespace BrnAI
             void Construct();
             void Destruct();
 
+            // X360-attested member start offset into the buffer payload (the IOBuffer FlagSet<s8>
+            // base pads to 4, so mRouteResponseQueue -- the first OutputBuffer member -- lands @+4).
+            enum EMemberOffset { KU_ROUTE_RESPONSE_QUEUE_OFFSET = 0x4 };  // == &mRouteResponseQueue
+
             RouteResponseQueue*       GetRouteResponseQueue()       { return &mRouteResponseQueue; }
             const RouteResponseQueue* GetRouteResponseQueue() const { return &mRouteResponseQueue; }
+
+            // X360 0x8276B0A0 (W, :617) -- write-lock (status bit 3); returns this+4
+            // (&mRouteResponseQueue) as a raw u8*. Body in BrnRouteMapModuleIO.cpp.
+            u8* GetRouteResponseQueueForWrite();
 
         private:
             RouteResponseQueue mRouteResponseQueue;   // :313
