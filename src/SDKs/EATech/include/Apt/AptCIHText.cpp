@@ -28,9 +28,11 @@
 //     file data (the movie's widened native-8 character table). Its layout is fixed by
 //     the data, not a C++ class, so it is read by documented native-8 offsets (the
 //     AGENTS.md "external serialised data" exception). The console reads a 4-byte-slot
-//     table + a console font-char name @+0x10; the widened bundle strides the table
-//     8 bytes and the type-3 font char's name pointer lands @+0x20 (char header 0x20 +
-//     name slot 0 -- see tools/assets/bundles/apt_widen_4to8.py CHAR_FIELDS[3]).
+//     table + a console font-char name @+0x10; the widened native-8 bundle strides the
+//     table 8 bytes and the type-3 font char's name pointer lands @+0x20 (widened char
+//     header 0x20 + name slot 0 -- the same native-8 character layout the XB1
+//     AptCharacterAnimation::Fixup / AptMovie::resolve64 walk; verify vs the XB1 char
+//     record, never a converter script).
 //   * The TextFormat object (mpTextFormat) is still an opaque AptValue* in this slice
 //     (its value-type layout is a follow-on). The console overrides colour/style/
 //     indent/margins from it by fixed offsets; modelled here by documented offset

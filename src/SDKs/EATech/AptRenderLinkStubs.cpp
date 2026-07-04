@@ -167,7 +167,10 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // level-0 root the absolute "/" paths resolve from).
     // AptCIH_gotoAndX RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
     // (the real AptCIH::_gotoAndX @0x82B0D2F0 -- label/frame goto core).
-    AptValue* AptExtern_GetMember(const char* szName) { return nullptr; }   // FLAG link-stub
+    // host extern-object member-GET callback slot (X360 dword_8324E858); the host installs it for
+    // AptVFT_Extern (type-11) script objects -- none are registered on the PC title path, so the
+    // un-installed slot faithfully answers null (matches the X360 null fn-ptr slot, not an engine stub).
+    AptValue* AptExtern_GetMember(const char* szName) { return nullptr; }   // FLAG PC-platform leaf
     // AptInterp_FrameStackFirstLocal RETIRED (2026-07-02): homed in AptArray.cpp (a tag-14 ARRAY's first element).
     // AptInterp_LookupScopeChain RETIRED (2026-07-02): homed in AptFrameStack.cpp (spFrameStack->GetInScopeChain).
     // AptUpdateZombieVector RETIRED (2026-07-02): homed in AptGC.cpp (the real
@@ -205,7 +208,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void      AptApt_AnimationAddCharacterRef(AptValue* pAnimation) {}   // FLAG link-stub
     void      AptApt_AnimationReleaseCharacterRef(AptValue* pAnimation) {}   // FLAG link-stub
     void      AptApt_PrepareCallContextScope(AptValue* pCallContext) {}   // FLAG link-stub
-    void      AptExtern_SetMember(const char* szName, const char* szValue) {}   // FLAG link-stub
+    // host extern-object member-SET callback slot (X360 dword_8324E854); un-installed on the PC
+    // title path (no type-11 extern objects) -> faithful no-op, matching the X360 null fn-ptr slot.
+    void      AptExtern_SetMember(const char* szName, const char* szValue) {}   // FLAG PC-platform leaf
     // AptActionInterpreter_runStream RETIRED (IGNITION 2026-07-01): the init passes call the real
     // member gAptActionInterpreter.runStream (AptActionRun.cpp dispatch loop) -- ActionScript executes.
 
