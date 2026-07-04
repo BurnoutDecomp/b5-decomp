@@ -1653,12 +1653,16 @@ namespace BrnGui
     // the top-level sprite CONTAINERS. Those placed children come out with mnClipActionFlags 0xC0
     // (needs-action + fresh) but mFlagsA bit25 (dirty) CLEAR, so AptCIH::tick early-returns on them
     // (its first line gates on the dirty bit) and they never run THEIR doFrameControls -> their nested
-    // shapes/images are never placed. On the console the render-tree-manager propagates the dirty bit
-    // down as nodes are placed; that propagation is the deferred piece. This walks a clip's child
-    // display list and SetDirtyState(true) every sprite/animation node (recursively), so the next tick
+    // shapes/images are never placed. VERIFIED (2026-07-04): placeObject sets only the PARENT's
+    // generalized-process dirty (mFlagsA bits 24/23, SetGeneralizedProcessDirtyState); neither it nor
+    // the create path sets a placed child's bit25 -- so nothing dirties fresh children. (The earlier
+    // "the render-tree-manager propagates the dirty bit down" claim is FALSE: the AptRenderTreeManager
+    // Update_* methods manage render-item LINKS, not dirty bits.) This walks a clip's child display
+    // list and SetDirtyState(true) (bit25) every sprite/animation node (recursively), so the next tick
     // recurses into each + places its content -- cascading one display-list level per frame until the
-    // whole tree is composed. // FLAG stand-in for the un-homed render-tree-manager placement dirty
-// propagation (Phase 4b retires this; NOT a permanent PC leaf).
+    // whole tree is composed.
+    // FLAG stand-in: the faithful fix is to home the X360 spot that sets a freshly-placed child's
+    // bit25 (Phase 4b -- find + confirm it in the asm, do NOT guess); NOT a permanent PC leaf.
     // =========================================================================
     static void PropagateDirtyToChildren(AptCIH* lpNode, int nDepth)
     {
