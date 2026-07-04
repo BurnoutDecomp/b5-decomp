@@ -93,9 +93,18 @@ namespace CgsLanguage
         // sublists own every node, their live sublists start empty) and every mStrings hash bin's
         // miCount sentinel, then stamps mDebugComponent's vtable pointer. meLanguage,
         // mpcDefaultFontName, mpResource, the allocator/format-string pointers and the metric flag
-        // are left untouched here (populated by Construct(), not yet reconstructed). See ViewModule.h
-        // for the by-value-member call site (CgsGui::ViewModule::ViewModule).
+        // are left untouched here (Construct() nulls mpResource + the allocator/element ptrs and sets
+        // the metric flag; Prepare() stashes the allocator; PrepareDefaultFormattingStrings() fills the
+        // format strings). See ViewModule.h for the by-value-member call site (CgsGui::ViewModule).
         LanguageManager();
+
+        // X360 0x82862490. Runtime (re-)init to a clean PRE-LOAD state (NOT the string-table loader --
+        // the asm NULLS mpResource + Init's mStrings EMPTY, disproving a prior comment): resets the
+        // lifecycle stages (prepare=START, release=DONE), nulls the resource/allocator/string-element
+        // pointers, re-seeds both dynamic-string pools, Init's the empty mStrings hash, nulls the
+        // default font, sets metric units on, and constructs the embedded debug component. Called by
+        // CgsGui::ViewModule::Construct (0x828605A0).
+        void Construct();
 
         void SetUseMetricUnits(bool lbUseMetric);
         bool IsUsingMetricUnits() const { return mbIsUsingMetricUnits; }
