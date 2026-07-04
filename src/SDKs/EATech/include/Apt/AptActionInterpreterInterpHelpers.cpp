@@ -737,25 +737,32 @@ AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInter
 // AptInterp_ExecuteScriptFunction -- the AptScriptFunctionBase frame-execution branch
 // of callFunction (tags 34/35/36).
 //
-// FLAG (faithful follow-on stub): the full console branch installs the function as
-// mpCurrentFunction, calls SetupBeforeExecution / SetArgument / runStream the function
-// body / CleanupAfterExecution, and leaves the result on the call-context stack. That
-// sequence is driven through the AptScriptFunctionBase vtable by RAW console slot
-// offsets (a 2-arg setup at +0x50 returning the saved {field_40, mpRegisters} pair, a
-// 5-arg SetupBeforeExecution at +0x54, GetNumArguments +0x44, SetArgument +0x58,
-// GetByteCodeBase/Size +0x48/+0x4C, CleanupAfterExecution +0x5C) AND the interpreter's
-// still-half-mapped per-call window (field_40 / mpRegisters / the +0x90 call-context
-// stack). The console vtable order does NOT match this build's reconstructed
-// AptScriptFunctionBase virtual order, so dispatching by the named virtuals would call
-// the WRONG slot -- and the raw 4-byte console slot numbers are invalid against this
-// build's 8-byte x64 vtable. Reconstructing the exact slot map is the documented
-// runStream/AptScriptFunctionBase follow-on (the same deferral the callFunction FLAG in
-// AptActionInterpreter.cpp records); it is NOT fabricated here.
-//
-// The faithful, VM-consistent contract this stub keeps (so the dispatch above stays
-// correct and the engine links + boots): consume the nArgs operands and yield the
-// `undefined` result -- exactly the console's own LABEL_37 "uncallable bound CIH" path
-// (pop the args, push undefined), which a not-yet-executable script function reduces to.
+// FLAG (faithful follow-on stub -- NO LONGER blocked on missing structure; corrected
+// 2026-07-04): the full console branch (0x82AE3CB8..0x82AE4050 inside callFunction
+// @0x82AE3C08) installs the function as mpCurrentFunction (saving the prior into a local),
+// snapshots + reinstalls the register window into a stack SavedExecutionState, pushes the
+// function onto the CIH/target stack, calls SetupBeforeExecution -> GetNumArguments ->
+// SetArgument (bind the min(nArgs,GetNumArguments) operands, then pad the remainder with
+// undefined) -> resolves the level-0 root animation (_AptGetAnimationAtLevel) -> runStream
+// over GetByteCodeBase/GetByteCodeSize -> CleanupAfterExecution -> pops the CIH stack and
+// restores mpCurrentFunction/field_40. The earlier claim that this was blocked is STALE:
+//   - the sequence's methods ARE named virtuals on AptScriptFunctionBase (SetupBefore-
+//     Execution @0x82AD6618, CleanupAfterExecution @0x82AD6630, GetNumArguments,
+//     GetByteCodeBase/Size, SetArgument) -- CALLED BY NAME, so C++ dispatches through the
+//     reconstructed vtable correctly (the console's raw 4-byte slot numbers are irrelevant
+//     when calling by name);
+//   - the interpreter per-call window is now NAMED (mpCurrentFunction [c:0x3C], field_40
+//     [c:0x40], mpRegisters [c:0x44], mpCIHStack/[c:0x24..0x2C]) after the 2026-07-01
+//     register-block reconciliation; and the AptScriptFunctionBase register block
+//     (spRegBlock*) is unified.
+// So homing this is now a BOUNDED decompilation of that branch, not a structure-recovery.
+// It stays a stub for ONE more reason only -- it is BOOT-ACTIVE: activating real script-
+// function execution runs AS bytecode paths deliberately deferred for boot-stability (see
+// the AptRuntimeUpdate FLAG), so it must be decompiled + boot-tested with revert-on-break
+// in a focused pass, not enabled untested. Until then it keeps the faithful, VM-consistent
+// contract (so the dispatch above stays correct + the engine links + boots): consume the
+// nArgs operands and yield `undefined` -- exactly the console's own LABEL_37 "uncallable
+// bound CIH" reduction (pop the args, push undefined).
 // ---------------------------------------------------------------------------
 AptValue* AptInterp_ExecuteScriptFunction(AptActionInterpreter* pInterp,
                                           AptValue* /*pScope*/, AptValue* /*pFunction*/,
