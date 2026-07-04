@@ -50,10 +50,10 @@
 // FLAG: on x64 the render-data handle is a 32-bit host id (the console stored a
 // 32-bit pointer in this slot); kept as the header's int32_t mZID.
 // ---------------------------------------------------------------------------
-extern void (*gpfnAptDrawTextRenderData)(int nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
-extern void (*gpfnAptReleaseTextRenderData)(int nZId, int nOp);                             // dword_8324E864
+extern void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
+extern void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp);                        // dword_8324E864
 extern bool gAptDefaultTextMouseWheelEnabled;                                               // byte_8324E392
-extern int  gAptEmptyTextRenderDataZID;                                                     // &unk_82F72DB0
+extern intptr_t gAptEmptyTextRenderDataZID;                                                 // &unk_82F72DB0
 
 // ---------------------------------------------------------------------------
 // Factory ctor @0x82AEC0D0 -- base render item + the dynamic-text render-type flag,
@@ -184,7 +184,7 @@ void AptRenderItemDynamicText::Render(AptRenderingContext* pCtx, AptMaskRenderOp
 // SetZID @0x82ADB578 -- swap the field's host render-data handle: release the old
 // one through the host hook (unless empty), then store the new one.
 // ---------------------------------------------------------------------------
-void AptRenderItemDynamicText::SetZID(int nZID)
+void AptRenderItemDynamicText::SetZID(intptr_t nZID)
 {
     if (mZID && mZID != gAptEmptyTextRenderDataZID && gpfnAptReleaseTextRenderData)
         gpfnAptReleaseTextRenderData(mZID, 2);

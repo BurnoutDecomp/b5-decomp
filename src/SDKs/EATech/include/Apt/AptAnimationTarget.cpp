@@ -372,7 +372,7 @@ AptAnimationTarget::AptAnimationTarget(const AptAnimationTargetParams* pParams)
     mpDragMC             = gpAptNoneValue;   // +0x3C (a1[15])
     mpOnPressObject      = gpAptNoneValue;   // +0x30 (a1[12])
     mpOnRollOverObject   = gpAptNoneValue;   // +0x34 (a1[13])
-    mpInputEventObject38 = gpAptNoneValue;   // +0x38 (a1[14])
+    mpTopMostSprite = gpAptNoneValue;        // +0x38 (a1[14]; XB1: TopMostSprite)
 }
 
 // ---------------------------------------------------------------------------

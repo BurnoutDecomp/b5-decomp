@@ -64,7 +64,7 @@ bool     AptCharacterTextInst::GetWordWrap() const         { return GetTextItemC
 
 // GetZID @0x82AD5830 : the X360 reads the dword at render-item +0x3C (the dynamic
 // text item's mZID field), straight through the const item.
-int AptCharacterTextInst::GetZID() const { return GetTextItemConst()->GetZID(); }
+intptr_t AptCharacterTextInst::GetZID() const { return GetTextItemConst()->GetZID(); }
 
 // GetCreatedDynamic @0x82AD5950 : bit 27 of the render item's mFlags (created-at-
 // runtime marker) read straight through the const item.
@@ -130,7 +130,7 @@ void AptCharacterTextInst::SetTextFormat(AptValue* pTextFormat)
 }
 
 // SetZID @0x82AE1E20 : forward to the render item's z-id setter.
-void AptCharacterTextInst::SetZID(int nZID)
+void AptCharacterTextInst::SetZID(intptr_t nZID)
 {
     GetTextItemWritable()->SetZID(nZID);
 }

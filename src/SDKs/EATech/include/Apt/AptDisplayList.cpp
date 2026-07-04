@@ -395,6 +395,16 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
             (luTablePtr >= 0x10000u) && ((luTablePtr >> 47) == 0u);
     }
 
+    // FLAG (import not loaded -- the deferred boundary, mirrored from the live place
+    // path): a fresh ADD whose placement names NO character (an unresolved-import slot,
+    // or a MOVE node whose target depth never composed because ITS import place was
+    // skipped) cannot be instantiated -- the dispatch would create a CIH over a null
+    // character (AV; reproduced on the drive bundles' menu state jumps). Skip the add.
+    // Authored console data never hits this (imports are always resolved by Fixup
+    // pass-3, the follow-on).
+    if (pPlacedChar == nullptr)
+        return nullptr;
+
     if (bAnimSane)
         pAnim->ExecuteInitActions(pParentNode, nCharId);
 

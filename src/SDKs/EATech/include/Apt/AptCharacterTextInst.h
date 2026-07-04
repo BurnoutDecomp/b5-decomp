@@ -67,7 +67,7 @@ struct AptCharacterTextInst : public AptCharacterInst
     uint32_t GetBorderColor() const;            // @0x82AD5888
     int  GetAlignment() const;                  // @0x82AD58B8
     int  GetScroll() const;                     // @0x82AD5860
-    int  GetZID() const;                        // @0x82AD5830
+    intptr_t GetZID() const;                    // @0x82AD5830 (pointer-width handle on x64; XB1-verified)
     int  GetFontID() const;                     // @0x82AD5920
     float GetFontSize() const;                  // @0x82AD5910
     bool GetCreatedDynamic() const;             // @0x82AD5950
@@ -109,7 +109,7 @@ struct AptCharacterTextInst : public AptCharacterInst
     void ClearStateFlags(uint32_t uFlags);      // @0x82AE2078
 
     void SetTextFormat(AptValue* pTextFormat);  // @0x82AECE08
-    void SetZID(int nZID);                      // @0x82AE1E20
+    void SetZID(intptr_t nZID);                 // @0x82AE1E20
 
     // ---- bound-variable text resolution ---------------------------------------
     // SetText: bind/store the field text from the AS variable named by mVarValue,

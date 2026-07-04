@@ -21,8 +21,12 @@
 //   [14] +0x38  mTypeStr               EAStringC  (Get/SetTypeStr)
 //   [15] +0x3C  mTargetStr             EAStringC  (GetTargetStr)
 //   [16] +0x40  mCustomPropertiesStr   EAStringC  (SetCustomPropertiesStr)
-//   [17] +0x44  mZId                   int32_t    (Get/SetZId; the host render-data
-//                                                  handle -- 0 = none)
+//   [17] +0x44  mZId                   i32 console / POINTER-WIDTH x64 (Get/SetZId;
+//                                                  the host render-data handle -- 0 =
+//                                                  none). XB1-VERIFIED: the retail
+//                                                  64-bit GetZId does an 8-byte load
+//                                                  (void* @+0x78), so the handle is
+//                                                  pointer-width on the 64-bit ABI.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -37,7 +41,7 @@ struct AptRenderItemCustomControl : public AptRenderItemSprite
     EAStringC mTypeStr;              // [14] +0x38 -- the control type name
     EAStringC mTargetStr;           // [15] +0x3C -- the control target name
     EAStringC mCustomPropertiesStr; // [16] +0x40 -- free-form properties blob
-    int32_t   mZId;                 // [17] +0x44 -- host render-data handle (0 = none)
+    intptr_t  mZId;                 // [17] +0x44 -- host render-data handle (0 = none; XB1: void*)
 
     // Clone copy-ctor @0x82AEF460 -- delegate the base/sprite copy up the chain
     // (character/matrices/instance-name + extended state), copy the three
@@ -78,6 +82,6 @@ struct AptRenderItemCustomControl : public AptRenderItemSprite
     EAStringC& SetCustomPropertiesStr(const EAStringC& strProp) { return (mCustomPropertiesStr = strProp); }  // @0x82AE5A88
 
     // ---- render-data handle (Z-id) ---------------------------------------
-    int  GetZId() const { return mZId; }   // @0x82AD5048
-    AptRenderItemCustomControl* SetZId(int nZId) { mZId = nZId; return this; }   // @0x82AD5050
+    intptr_t GetZId() const { return mZId; }   // @0x82AD5048 (XB1: 8-byte load)
+    AptRenderItemCustomControl* SetZId(intptr_t nZId) { mZId = nZId; return this; }   // @0x82AD5050
 };

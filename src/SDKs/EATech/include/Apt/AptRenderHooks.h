@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>   // intptr_t (the pointer-width ZId handles; XB1-verified)
+
 // ===========================================================================
 // EATech Apt -- the Apt -> RenderWare render-callback boundary.
 //
@@ -47,11 +49,11 @@ int  AptHook_ResolveImport(void* pImportFileData, int nImportId);
 // here so the custom-control render item compiles/links against the boundary.
 // ---------------------------------------------------------------------------
 extern bool gbAptCustomControlRenderEnabled;                                   // byte_82F733F6
-extern void (*gpfnAptDestroyCustomControl)(int nZId);                          // dword_8324E898
+extern void (*gpfnAptDestroyCustomControl)(intptr_t nZId);                     // dword_8324E898
 extern void (*gpfnAptDrawCustomControl)(const char* pType, const char* pTarget,
                                         void* pPayload, const char* pProperties,
                                         AptMaskRenderOperation eOp, int nTick); // dword_8324E88C
-extern void (*gpfnAptDrawCustomControlById)(int nZId, void* pPayload,
+extern void (*gpfnAptDrawCustomControlById)(intptr_t nZId, void* pPayload,
                                             AptMaskRenderOperation eOp, int nTick);   // dword_8324E89C
 extern void (*gpfnAptCustomControlPushRenderData)(const char* pInstanceName);  // dword_8324E8CC
 extern void (*gpfnAptCustomControlPopRenderData)(const char* pInstanceName);   // dword_8324E8D0

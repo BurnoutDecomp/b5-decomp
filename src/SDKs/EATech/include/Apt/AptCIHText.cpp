@@ -58,7 +58,7 @@
 // homed in AptGlobals.cpp. mZID equal to it (or 0) means the field has no resolved
 // render data. Declared here (redundant extern is legal) so the SetZID sentinel
 // stores + the "has text" test read the same value the render-item TU does.
-extern int gAptEmptyTextRenderDataZID;   // &unk_82F72DB0
+extern intptr_t gAptEmptyTextRenderDataZID;   // &unk_82F72DB0
 
 // ---------------------------------------------------------------------------
 // AptCIH::EnsureStringAllocated @0x82B06F08.
@@ -92,7 +92,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
     // If the field already holds a live host handle (not null / not the empty sentinel),
     // release it before we (re)allocate (X360: SetZID(item, 0) drops the old handle via
     // the release hook).
-    const int nOldZID = pItem->mZID;
+    const intptr_t nOldZID = pItem->mZID;
     if (nOldZID != 0 && nOldZID != gAptEmptyTextRenderDataZID)
     {
         static_cast<AptRenderItemDynamicText*>(GetCharacterInst()->GetRenderItemWritable())
@@ -300,7 +300,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // BrnAptRuntimeBringUp.cpp), so it fits the int32 mZID without truncation.
         AptRenderItemDynamicText* pWritable =
             static_cast<AptRenderItemDynamicText*>(GetCharacterInst()->GetRenderItemWritable());
-        pWritable->SetZID(static_cast<int>(reinterpret_cast<intptr_t>(hHandle)));
+        pWritable->SetZID(reinterpret_cast<intptr_t>(hHandle));
 
         // FLAG (bring-up boundary): when the host could NOT lay the string out (hHandle == 0 --
         // no FontCollection wired yet), Prepare never ran, so there is no measured geometry to

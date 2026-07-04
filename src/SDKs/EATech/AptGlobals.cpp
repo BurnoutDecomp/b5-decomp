@@ -296,11 +296,11 @@ void (*gpAptBackToScriptHook)(void* pPayload)                            = nullp
 void (*gpAptGCTableFree)(void* p, unsigned nBytes)                       = nullptr;   // dword_8324E820
 AptVarNotFoundCb gpAptVarNotFoundCb                                      = nullptr;
 int  (*gpAptInputRecorderSink)(void*, int)                               = nullptr;   // dword_8324E830
-void (*gpfnAptDestroyCustomControl)(int nZId)                            = nullptr;   // dword_8324E898
+void (*gpfnAptDestroyCustomControl)(intptr_t nZId)                       = nullptr;   // dword_8324E898
 void (*gpfnAptCustomControlPushRenderData)(const char* pInstanceName)    = nullptr;   // dword_8324E8CC
 void (*gpfnAptCustomControlPopRenderData)(const char* pInstanceName)     = nullptr;   // dword_8324E8D0
-void (*gpfnAptDrawTextRenderData)(int nZId, AptMaskRenderOperation eOp, int nTick) = nullptr;  // dword_8324E868
-void (*gpfnAptReleaseTextRenderData)(int nZId, int nOp)                  = nullptr;   // dword_8324E864
+void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick) = nullptr;  // dword_8324E868
+void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp)             = nullptr;   // dword_8324E864
 
 // ===========================================================================
 // 13. bool / byte flags.  false / 0 (the features default OFF).
@@ -317,7 +317,7 @@ unsigned char gbAptRecorderGate      = 0;   // byte_82F733F7
 // ===========================================================================
 int gAptBoundingRectMode       = 0;
 int gAptDeferredReleaseCount    = 0;   // dword_8324E508
-int gAptEmptyTextRenderDataZID  = 0;
+intptr_t gAptEmptyTextRenderDataZID  = 0;   // pointer-width (matches the widened mZID)
 int gAptInputRecorderEnabled    = 0;   // dword_8324E518
 int gAptLookupPoolSize          = 0;   // dword_82F733EC
 int gAptVMThreadId              = 0;   // dword_8324E500
