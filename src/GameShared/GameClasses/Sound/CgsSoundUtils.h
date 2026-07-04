@@ -108,6 +108,11 @@ struct Curve
         E_ONE_MINUS_EQPWR    = 3,
         E_ONE_MINUS_EQPWR_SQ = 4,
     };
+
+    // Map a [0..1] interpolation fraction through the selected curve shape (DWARF
+    // CgsSoundUtils.h:276). Used by PathLine / InterpolateLine stage interpolation. Body
+    // lives in its own recon slice; declared here so the stage machines can call it by name.
+    static f32 GetOutput(f32 lfFraction, ECurveType leCurve);
 };
 
 // CgsSound::Utils::PathLine<tuNumStages> (DWARF CgsSoundUtils.h:120-181,1605). A
@@ -142,7 +147,11 @@ struct PathLine
     void    ClearStages();
     s32     AddStage(f32 lfStart, f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve);
     s32     AddLinkedStage(f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve);
-    f32     Update(f32 lfDeltaTime);
+    // DWARF dwarfdump CgsSoundUtils.h:1645 -- void return. Reset then seed a single stage.
+    void    Initialize(f32 lfStart, f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve);
+    // DWARF -- void return (the X360 body advances the cursor / stage and updates
+    // mfCurrentValue in place; no caller uses a return value).
+    void    Update(f32 lfDeltaTime);
 
     // ORDER mirrors the DWARF (PathLine<2u>). Public for the embedding envelope's seed.
     f32               maLength[tuNumStages];      // CgsSoundUtils.h:170

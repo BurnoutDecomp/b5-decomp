@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (PathLine stage machines)
+
 #include <cmath>
 
 // CgsSound::Utils::Slope::Slope(const SlopeParams&) @ 0x826A1F70.
@@ -38,6 +40,216 @@ Slope::Slope(const SlopeParams& params)
         mParams.mfMaxInput += KF_MIN_INPUT_SPAN;
     }
 }
+
+// ============================================================================================
+// CgsSound::Utils::PathLine stage-machine bodies, reconstructed store-for-store from
+// BURNOUT_X360.XEX. Two instantiations are attested by the X360 build:
+//
+//   PathLine<2>  -- AddLinkedStage @0x826A84D8, AddStage @0x82690B40, ClearStages @0x8268F278,
+//                   Initialize @0x826A8460, Update @0x8268F2D0
+//   PathLine<3>  -- ClearStages @0x8268EEA0, AddStage @0x8268EEF8
+//
+// PathLine<2>'s members are written as EXPLICIT SPECIALIZATIONS (`template <>`), matching the
+// X360's dedicated <2> code. PathLine<3>'s two members are written as the GENERIC out-of-line
+// template body plus a PER-MEMBER explicit instantiation for <3u> (there is no explicit
+// specialization of PathLine<3>). A whole-struct `template struct PathLine<3u>;` is deliberately
+// NOT used: the header also declares AddLinkedStage / Update / Initialize which have no <3> body
+// in scope, so a full instantiation would fail to link. Only the two X360-attested <3> members
+// are instantiated.
+// ============================================================================================
+
+// flt_82013F90 -- length input scale (ms fixed-point -> the path's internal units).
+static const f32 KF_STAGE_LENGTH_SCALE = 0.001f;
+// flt_82002138 -- minimum stage length floor applied when the scaled length is <= 0.
+static const f32 KF_MIN_STAGE_LENGTH   = 0.0099999998f;
+
+// -------------------------------------------------------------------------------------------
+// PathLine<2> -- explicit specializations.
+// -------------------------------------------------------------------------------------------
+
+// AddStage @ 0x82690B40 -- append one interpolation stage.
+template <>
+s32 PathLine<2>::AddStage(f32 lfStart, f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve)
+{
+    CGS_ASSERT(mnNumStages != 2, "mnNumStages != TNumPoints");
+
+    // Length is supplied in milliseconds; store it in seconds and clamp to a floor
+    // so Update never divides by (near) zero.
+    maLength[mnNumStages] = lfLength * 0.001f;
+    if (maLength[mnNumStages] <= 0.0f)
+    {
+        maLength[mnNumStages] = 0.01f;
+    }
+
+    maFinish[mnNumStages]     = lfFinish;
+    maStart[mnNumStages]      = lfStart;
+    maCurveTypes[mnNumStages] = leCurve;
+    maIsLinked[mnNumStages]   = false;
+
+    mbComplete = false;
+
+    // The first stage seeds the running output value with its start level.
+    if (mnNumStages == 0)
+    {
+        mfCurrentValue = maStart[0];
+    }
+
+    ++mnNumStages;
+    return mnNumStages;
+}
+
+// AddLinkedStage @ 0x826A84D8 -- append a stage that ramps from the previous stage's finish.
+template <>
+s32 PathLine<2>::AddLinkedStage(f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve)
+{
+    CGS_ASSERT(mnNumStages, "mnNumStages");
+
+    // A linked stage always ramps from the previous stage's finish level, so the
+    // start is seeded to 0.0f here and carried over at stage-advance time (Update).
+    AddStage(0.0f, lfFinish, lfLength, leCurve);
+
+    // Mark the stage that AddStage just appended (mnNumStages was ++'d) as linked.
+    maIsLinked[mnNumStages - 1] = true;
+
+    return mnNumStages;
+}
+
+// ClearStages @ 0x8268F278 -- reset the path to empty and mark it complete.
+template <>
+void PathLine<2>::ClearStages()
+{
+    mfElapsedTime  = 0.0f;
+    mnNumStages    = 0;
+    mfCurrentValue = 0.0f;
+    mnCurrentStage = 0;
+
+    for (s32 lk = 0; lk < 2; ++lk)
+    {
+        maLength[lk]     = 0.0f;
+        maStart[lk]      = 0.0f;
+        maFinish[lk]     = 0.0f;
+        maIsLinked[lk]   = false;
+        maCurveTypes[lk] = Curve::E_LINEAR;
+    }
+
+    mbComplete = true;
+}
+
+// Initialize @ 0x826A8460 -- reset then seed a single stage; latch the running value.
+template <>
+void PathLine<2>::Initialize(f32 lfStart, f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve)
+{
+    ClearStages();
+    AddStage(lfStart, lfFinish, lfLength, leCurve);
+    mfCurrentValue = lfStart;
+}
+
+// Update @ 0x8268F2D0 -- advance the cursor by lfDeltaTime, updating mfCurrentValue.
+template <>
+void PathLine<2>::Update(f32 lfDeltaTime)
+{
+    if (mbComplete || mnNumStages == 0)
+    {
+        return;
+    }
+
+    const s32 lnStage = mnCurrentStage;
+    CGS_ASSERT(maLength[lnStage], "maLength[mnCurrentStage]");
+
+    mfElapsedTime += lfDeltaTime;
+
+    if (mfElapsedTime > maLength[lnStage])
+    {
+        // Current stage finished: snap to its finish level.
+        mfCurrentValue = maFinish[lnStage];
+
+        if (lnStage >= mnNumStages - 1)
+        {
+            mbComplete = true;
+        }
+        else
+        {
+            const s32 lnNext = lnStage + 1;
+            mfElapsedTime -= maLength[lnStage];
+            mnCurrentStage = lnNext;
+
+            // A linked stage starts from the previous stage's finish level.
+            if (maIsLinked[lnNext])
+            {
+                maStart[lnNext] = maFinish[lnNext - 1];
+            }
+        }
+    }
+    else
+    {
+        // Interpolate within the current stage.
+        const f32 lfRange = maFinish[lnStage] - maStart[lnStage];
+
+        f32 lfFraction = mfElapsedTime / maLength[lnStage];
+        if (lfFraction < 0.0f) { lfFraction = 0.0f; }
+        if (lfFraction > 1.0f) { lfFraction = 1.0f; }
+
+        mfCurrentValue = Curve::GetOutput(lfFraction, maCurveTypes[lnStage]) * lfRange
+                       + maStart[mnCurrentStage];
+    }
+}
+
+// -------------------------------------------------------------------------------------------
+// PathLine<3> -- generic out-of-line template bodies + per-member explicit instantiation.
+// -------------------------------------------------------------------------------------------
+
+// ClearStages @ 0x8268EEA0 -- reset the path to empty and mark it complete.
+template <u32 tuNumStages>
+void PathLine<tuNumStages>::ClearStages()
+{
+    mfElapsedTime  = 0.0f;
+    mnNumStages    = 0;
+    mfCurrentValue = 0.0f;
+    mnCurrentStage = 0;
+
+    for (u32 lu = 0; lu < tuNumStages; ++lu)
+    {
+        maLength[lu]     = 0.0f;
+        maStart[lu]      = 0.0f;
+        maFinish[lu]     = 0.0f;
+        maIsLinked[lu]   = false;
+        maCurveTypes[lu] = Curve::E_LINEAR;
+    }
+
+    mbComplete = true;
+}
+
+// AddStage @ 0x8268EEF8 -- append one interpolation stage.
+template <u32 tuNumStages>
+s32 PathLine<tuNumStages>::AddStage(f32 lfStart, f32 lfFinish, f32 lfLength,
+                                    Curve::ECurveType leCurve)
+{
+    CGS_ASSERT(mnNumStages != static_cast<s32>(tuNumStages), "mnNumStages != TNumPoints");
+
+    maLength[mnNumStages] = lfLength * KF_STAGE_LENGTH_SCALE;
+    if (maLength[mnNumStages] <= 0.0f)
+    {
+        maLength[mnNumStages] = KF_MIN_STAGE_LENGTH;
+    }
+
+    maFinish[mnNumStages]     = lfFinish;
+    maStart[mnNumStages]      = lfStart;
+    maCurveTypes[mnNumStages] = leCurve;
+    maIsLinked[mnNumStages]   = false;
+    mbComplete                = false;
+
+    if (mnNumStages == 0)
+    {
+        mfCurrentValue = maStart[0];
+    }
+
+    ++mnNumStages;
+    return mnNumStages;
+}
+
+// Per-member explicit instantiation for the X360-attested PathLine<3> instance.
+template void PathLine<3u>::ClearStages();
+template s32  PathLine<3u>::AddStage(f32, f32, f32, Curve::ECurveType);
 
 }
 }

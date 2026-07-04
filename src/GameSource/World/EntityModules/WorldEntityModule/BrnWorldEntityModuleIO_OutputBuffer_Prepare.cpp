@@ -33,5 +33,16 @@ namespace WorldEntityIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mResourceRequestInterface;
     }
+
+    // X360 0x827A2728: read-lock; return this + 4. DWARF BrnWorldEntityModuleIO.h:72 -- the
+    // const overload; the asm tests the read-lock bit (`extrwi r11,r11,1,27` == bit 4 ==
+    // IsBufferLockedForReading()) and fires "Not locked for reading". Called by
+    // WorldModule::BridgeWorldResourceRequestsToOutput_Prepare.
+    const OutputBuffer_Prepare::ResourceRequestInterfaceStorage*
+    OutputBuffer_Prepare::GetResourceRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mResourceRequestInterface;
+    }
 }
 }

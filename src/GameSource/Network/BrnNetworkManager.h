@@ -204,6 +204,28 @@ namespace BrnNetwork
         // Declared-only; body lands with the full BrnNetworkManager TU.
         void OnAutoLogin();
 
+        // X360 @ 0x82581DB0 (called by BrnNetwork::StateManager::UpdateLogin /
+        // ::HandleConnectEvent) -- begin an interactive sign-in: pure tail-call forwarder that
+        // hands the login-connect arguments to the embedded login sub-object at this+0x41E90
+        // (269968) Connect(...). X360 register shape is (a2..a6 : s32, a7 : s64); the exact
+        // param types belong to that login sub-object's own un-homed TU, so the raw arg shape
+        // is reproduced here (FLAG: re-type once the login sub-object is reconstructed).
+        // DECLARATION-ONLY (FLAGGED: un-homed full layout).
+        void OnLogIn( s32 liUserContext, s32 liArg2, s32 liArg3, s32 liArg4, s32 liArg5, s64 lliAccountId );
+
+        // X360 @ 0x82581E28 (called by BrnNetwork::StateManager::ProcessNetworkEvents) --
+        // latch the one-shot 'finished boot' flag (word at this+0x41E98 / 269976, the +8 field
+        // of the embedded login sub-object at this+0x41E90): set it to 1 iff still 0.
+        // DECLARATION-ONLY (FLAGGED: un-homed full layout / un-homed flag offset).
+        void OnFinishedBoot();
+
+        // X360 @ 0x82542668 (DWARF BrnNetworkManager.h:368, returns bool) -- true when the
+        // local player is in a not-yet-started online game (the free-burn lobby wait). Reads
+        // the embedded server-interface games component (this+0x38F4 / 14580): returns false
+        // unless ServerInterfaceGames::IsLocalPlayerInGame() && !ServerInterfaceGames::IsGameStarted().
+        // DECLARATION-ONLY (FLAGGED: un-homed full layout / un-homed games-component offset).
+        bool IsDoingFreeBurnLobby();
+
         // ---- ADDITIVE GROW (BrnNetworkEventScoresManager TU) ------------------------------
         // EventScoresManager signals the manager that a stage of the auto-login process is done
         // (X360: every call site passes the literal 2 in r4 -- e.g. UpdateLoggedIn @ 0x82556BB8,
