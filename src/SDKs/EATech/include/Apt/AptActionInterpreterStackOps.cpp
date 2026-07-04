@@ -482,7 +482,7 @@ extern int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel);
 
 // FLAG (console Burnout_X360_Artist_01e3_0 -- the inlined stack-collapse primitive):
 // pop nCount operands off the operand stack, Releasing each.
-extern void AptApt_PopValues(AptActionInterpreter* pInterp, int nCount);
+// AptApt_PopValues -> AptActionInterpreter::stackPop(int) member (@0x7FDB68).
 
 // FLAG (the per-stack single-element pop-with-release primitives the console inlines:
 // AptValue_::pop(a1 + 3) on the CIH/target stack, AptValue_::pop(a1 + 9) on call-depth
@@ -602,7 +602,7 @@ void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* 
     }
 
     pFunction->AddRef();                                    // console (**Variable)(Variable)
-    AptApt_PopValues(pInterp, 2);                           // pop the name + count operands
+    pInterp->stackPop(2);                                  // pop the name + count operands (member)
 
     AptValue* const pCallScope = pResolvedScope ? pResolvedScope : pContext->mpCIH;
     pInterp->callFunction(pCallScope, pFunction, nArgs, nullptr, nullptr);
@@ -720,7 +720,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     // console: ((*(v7+1) >> 27) & 1) == 0  -> the method name has no boxed bit set.
     if (!pMethodName->getIsDefined())
     {
-        AptApt_PopValues(pInterp, nArgs + 3);                  // console Burnout_X360_Artist_01e3_0(a1, v8+3)
+        pInterp->stackPop(nArgs + 3);                          // console Burnout_X360_Artist_01e3_0 == stackPop(int) (member)
         pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // push off_8324D814
         // (no AddRef: the console stores the singleton without taking a ref here)
         return;   // -> the shared LABEL_140 string-scratch teardown (RAII below)

@@ -309,7 +309,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
 // pop nCount operands off the operand stack, Releasing each. Shared with the StackOps
 // call opcodes (declared there too); used here to unwind any operands the sub-streams
 // left above the entry top.
-extern void AptApt_PopValues(AptActionInterpreter* pInterp, int nCount);
+// AptApt_PopValues -> AptActionInterpreter::stackPop(int) member (@0x7FDB68; the {} shim was a no-op).
 
 // FLAG (the active AS local-variable frame stack -- console off_8324E3DC /
 // AptScriptFunctionBase::spFrameStack, a protected static). The catch-variable bind
@@ -426,5 +426,5 @@ void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
 
     // unwind any operands the sub-streams left above the try's entry top.
     if (pInterp->mnStackTop > nEntryStackTop)
-        AptApt_PopValues(pInterp, pInterp->mnStackTop - nEntryStackTop);   // FLAG: stack collapse
+        pInterp->stackPop(pInterp->mnStackTop - nEntryStackTop);   // stack collapse to entry level (member; retired the AptApt_PopValues no-op shim)
 }
