@@ -113,6 +113,63 @@ namespace Deformation
         return &maWheelSpecs[liWheel];
     }
 
+    // X360 @ 0x825B3258 -- StreamedDeformationSpec::GetDrivenPartSpec (DWARF
+    // BrnStreamedDeformationSpec.h:222, returns const IKBodyPartSpec*). Identified by the caller
+    // DeformableObject::PrepareIKPart (DWARF BrnDeformableObject.cpp:822 -> :833 calls
+    // StreamedDeformationSpec::GetDrivenPartSpec) and by stride 0x1E0==480==sizeof(IKBodyPartSpec),
+    // bound miNumberOfIKParts (@+0x18), base maIKPartData (@+0x14), asserts at source lines 378/379.
+    //   asm: cmpw liIndex, miNumberOfIKParts; blt skip assert "liIndex < miNumberOfIKParts" (:17A=378)
+    //        cmpwi liIndex, 0; bge skip assert "liIndex >= 0" (:17B=379)
+    //        result = 480 * liIndex + maIKPartData
+    // IKBodyPartSpec is forward-declared in this TU (full layout not needed to home it), so the
+    // element address is computed via KU_IK_PART_STRIDE -- the raw-offset idiom the rest of this TU
+    // uses for the un-homed sibling spec types.
+    const IKBodyPartSpec* StreamedDeformationSpec::GetDrivenPartSpec(s32 liIndex) const
+    {
+        CGS_ASSERT(liIndex < miNumberOfIKParts, "liIndex < miNumberOfIKParts");   // BrnStreamedDeformationSpec.h:378
+        CGS_ASSERT(liIndex >= 0, "liIndex >= 0");                                  // BrnStreamedDeformationSpec.h:379
+        const char* lpBase = reinterpret_cast<const char*>(maIKPartData);
+        return reinterpret_cast<const IKBodyPartSpec*>(lpBase + KU_IK_PART_STRIDE * liIndex);
+    }
+
+    // ---- LocatorPointSpecList batch accessors ---------------------------------------------------
+
+    // X360 @ 0x825E32F0. Return-by-value copy of the locator at luTag (X360 hidden struct-return:
+    // dest ptr in r3, this in r4, luTag in r5). Bounds-asserts luTag < muNumLocators
+    // (BrnStreamedDeformationSpec.cpp:481, non-gating tripwire), then copies the 64-byte matrix
+    // followed by the three trailing scalar members store-for-store (the 9 padding bytes 71..79 of
+    // the 80-byte stride are not copied, matching the asm which only touches +0..+70).
+    LocatorPointSpec LocatorPointSpecList::CreateLo(u32 luTag) const
+    {
+        CGS_ASSERT(luTag < muNumLocators, "luTag < muNumLocators");   // BrnStreamedDeformationSpec.cpp:481
+
+        const LocatorPointSpec& lSrc = mpaLocatorPoints[luTag];
+
+        LocatorPointSpec lResult;
+        lResult.mLocatorMatrix = lSrc.mLocatorMatrix;   // 4x lvx128/stvx128 (64 bytes)
+        lResult.meTagPointType = lSrc.meTagPointType;   // lwz/stw @+0x40 (u32)
+        lResult.miIkPartIndex  = lSrc.miIkPartIndex;    // lhz/sth @+0x44 (s16)
+        lResult.mu8SkinPoint   = lSrc.mu8SkinPoint;     // lbz/stb @+0x46 (u8)
+        return lResult;
+    }
+
+    // X360 @ 0x82704930. Return the locator's tag-point type. Bounds-asserts luTag < muNumLocators
+    // (BrnStreamedDeformationSpec.h:94, non-gating tripwire), then loads meTagPointType (element +64).
+    ETagPointType LocatorPointSpecList::GetLocatorTy(u32 luTag) const
+    {
+        CGS_ASSERT(luTag < muNumLocators, "luTag < muNumLocators");   // BrnStreamedDeformationSpec.h:94
+        return mpaLocatorPoints[luTag].meTagPointType;
+    }
+
+    // X360 @ 0x825B31E0. Return a pointer to the locator's 4x4 affine transform. The matrix is the
+    // first member, so the element address IS the matrix address (asm returns the element base, no
+    // added offset). Bounds-asserts luTag < muNumLocators (BrnStreamedDeformationSpec.h:98).
+    const Matrix44Affine* LocatorPointSpecList::GetLocatorXf(u32 luTag) const
+    {
+        CGS_ASSERT(luTag < muNumLocators, "luTag < muNumLocators");   // BrnStreamedDeformationSpec.h:98
+        return &mpaLocatorPoints[luTag].mLocatorMatrix;
+    }
+
     // X360 @ 0x825BA9E8. Fill an axis-aligned bounding box that encloses every deformation-sensor
     // sphere. The asm seeds two SIMD accumulators (max = +0, min = +0) then, for each of the
     // mu8NumDeformationSensors sensors, expands them by the sensor's offset +/- its radius:
