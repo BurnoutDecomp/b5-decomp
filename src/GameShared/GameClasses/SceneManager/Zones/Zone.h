@@ -186,6 +186,15 @@ namespace CgsSceneManager
         inline s16 GetType() const { return miZoneType; }
         inline u32 GetFlags() const { return muFlags; }
 
+        // @0x822BACE8. Centroid of the zone polygon: the average of all corner points
+        // (tail-calls CalculateCentre4 for the exactly-4-point case). All four Vector2 lanes
+        // participate (the X360 sums full 16-byte point vectors). Out-of-line body in Zone.cpp.
+        rw::math::vpu::Vector2 CalculateCentre() const;
+
+        // @0x822A3CA0. Branch-free centroid for the 4-point case: (p0+p1+p2+p3)*0.25.
+        // Asserts miNumPoints == 4. Out-of-line body in Zone.cpp.
+        rw::math::vpu::Vector2 CalculateCentre4() const;
+
     private:
         rw::math::vpu::Vector2* mpPoints;            // Zone.h:164
         Neighbour*              mpSafeNeighbours;    // Zone.h:167

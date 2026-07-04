@@ -16,12 +16,40 @@ class ObjectPool
 public:
     static const s32 KI_CAPACITY = N;
 
-    // Reset the pool to its all-free state. ADDITIVE GROW: the per-instantiation
-    // bodies are real X360 symbols (e.g. SceneManagerEntity<10000,s32>::Clear /
-    // VolumeInstance<5048,s32>::Clear called by EntityManager::Prepare
-    // @0x828C5FDC/@0x828C5FE8); declaration-only here (each instantiation's body
-    // is its own ledger function).
-    void Clear();
+    // Reset the pool to its all-free state. X360 (SceneManagerEntity<10000,s32>::Clear
+    // @0x828B8E30 / VolumeInstance<5048,s32>::Clear, both called by EntityManager::Prepare
+    // @0x828C5FC8): memset the occupancy BitArray to 0, refill the free queue DESCENDING
+    // (maiObjectFreeQueue[i] = N-1-i, i.e. N-1 down to 0 stored front-to-back so AllocateObject
+    // hands out slot 0 first), then miNumObjectsFree = N. INLINE because Clear() is called from
+    // multiple separate instantiation TUs (EntityManager::Prepare instantiates both
+    // <SceneManagerEntity,10000> and <VolumeInstance,5048>); an out-of-line body in one .cpp
+    // would not be visible to the other TU.
+    void Clear()
+    {
+        mObjectsAllocated.UnSetAll();
+        for (s32 liSlot = N - 1; liSlot >= 0; --liSlot)
+        {
+            maiObjectFreeQueue[N - 1 - liSlot] = static_cast<TIndex>(liSlot);
+        }
+        miNumObjectsFree = N;
+    }
+
+    // Lowest ALLOCATED slot index, or -1 when the pool is empty. The X360 body
+    // (0x828C3538) inlines the occupancy-BitArray lowest-set-bit scan; forwarding to
+    // BitArray<N>::GetFirstNonZeroBit is value-identical. DWARF CgsObjectPool.h:298.
+    s32 GetFirstObjectIndex() const
+    {
+        return mObjectsAllocated.GetFirstNonZeroBit();
+    }
+
+    // Lowest ALLOCATED slot index strictly greater than liCurrentIndex, or -1 when none
+    // remains. The X360 body (0x828C35A0) inlines the same scan starting after
+    // liCurrentIndex; forwarding to BitArray<N>::GetNextNonZeroBit is value-identical.
+    // DWARF CgsObjectPool.h:306.
+    s32 GetNextObjectIndex(s32 liCurrentIndex) const
+    {
+        return mObjectsAllocated.GetNextNonZeroBit(liCurrentIndex);
+    }
 
     // Pop the next free slot index, mark it allocated, and return it (-1 when the pool is empty).
     TIndex AllocateObject()

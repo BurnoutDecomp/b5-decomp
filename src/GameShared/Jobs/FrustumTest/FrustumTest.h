@@ -17,6 +17,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"  // Matrix44 (64-byte / 16-aligned)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"  // CgsGeometric::Frustum (128 bytes)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"   // CgsGeometric::Sphere (bounding-sphere narrow test)
 
 namespace CgsSceneManager
 {
@@ -63,5 +64,64 @@ namespace CgsSceneManager
         // operator= @ 0x82BDFC48 — copies the 6 header words, delegates the embedded
         // FrustumJobQueryInfo copy, then copies the 3 trailer words. Returns *this.
         FrustumTestJobData& operator=(const FrustumTestJobData& lrSource);
+    };
+
+    // ========================================================================
+    // CgsSceneManager::FrustumTestJob -- the FrustumTest worker-job object. Owns the
+    // per-frame job payload (mJobData) plus per-query working scratch fields the recursive
+    // octree cull fills in. All member OFFSETS are X360-attested from the four job methods
+    // (Execute/FrustumTestRecursive/TestEntitiesBulk/TrivialAcceptRecursive
+    // @ 0x82BDFCD8..0x82BE0158); the object is not DWARF-attested, so intermediate gaps are
+    // opaque padding at the exact attested boundaries. Member NAMES are reconstructed.
+    //
+    // The octree node record is walked as a raw byte block (no committed LooseOctreeNode type):
+    //   +0x42 u16 firstChildIndex   +0x44 s32 entityCount   +0x4C u16 entityListHead
+    //   +0x54 u32 subtreeEntityFlags
+    // mJobData pointer fields are read out of the committed mau32Header[]/mau32Trailer[] words
+    // (this TU attests their meaning): header[0]=root-node array, header[1]=node-entity-info
+    // array, header[2]=entity array, header[3]=bounding-sphere array (stride 16),
+    // header[4]=muNumNodes; trailer[0]=result buffer, trailer[2]=debug-mode flags.
+    //
+    // FLAG: the VMX narrow-phase helpers (NodeInsideFrustumVp / SphereInsideCurrentFrustum) and
+    // the entity-node accessor are declared here but their bodies are NOT in this batch; they
+    // are their own sibling ledger functions (declared-not-defined -> the compile gate is a
+    // compile-only check, so no body is required to gate; the byte-exact VMX lane math is left
+    // for its own reconstruction rather than fabricated here).
+    //
+    // KU_MAX_OCTREE_NODES == 0x2800 (10240): the muNumNodes tripwire in Execute.
+    // ========================================================================
+    const u32 KU_MAX_OCTREE_NODES = 0x2800;  // 10240
+
+    class FrustumTestJob
+    {
+    public:
+        // @ 0x82BE0158 -- run every live query in mJobData.mQueryInfo. Returns the result buffer.
+        void* Execute();
+        // @ 0x82BDFFC8 -- classify+descend a node against the current query frustum. Returns last test result.
+        int   FrustumTestRecursive(u16 lu16NodeIndex);
+        // @ 0x82BDFE70 -- SIMD sphere-vs-frustum narrow test over the candidate list. Returns this.
+        void* TestEntitiesBulk();
+        // @ 0x82BDFCD8 -- accept a fully-inside subtree with no per-sphere test. Node passed as raw byte ptr.
+        void* TrivialAcceptRecursive(const u8* lpNode);
+
+    private:
+        // Sibling FrustumTestJob methods reconstructed elsewhere (not in this batch;
+        // declared-not-defined -- the compile gate does not need their bodies).
+        int  NodeInsideFrustumVp(const u8* lpNode, const Matrix44* lpViewProjection);
+        void PushEntityForTesting(u16 lu16Entity);
+        // Portable stand-in for the VMX narrow-phase lane math in TestEntitiesBulk (declared-not-defined).
+        bool SphereInsideCurrentFrustum(const CgsGeometric::Sphere* lpSphere) const;
+
+        // ---- attested layout (byte offsets pinned by the four job methods) ------------------
+        u16                mau16EntitiesToTest[(0x4E20) / 2];   // +0x0000  candidate index scratch list
+        u32                muNumEntitiesToTest;                 // +0x4E20  scratch-list count / loop bound
+        u8                 macPad4E24[0x4E80 - 0x4E24];         // +0x4E24  (unattested gap)
+        FrustumTestJobData mJobData;                            // +0x4E80  (sizeof 0x7E0)
+        void*              mpNodeEntityInfoArray;               // +0x5680  cache of mJobData header[1]
+        void*              mpEntityArray;                       // +0x5684  cache of mJobData header[2]
+        u8                 macPad5688[0x5690 - 0x5688];         // +0x5688  (align to matrix)
+        Matrix44           mCurrentViewProjection;              // +0x5690  (0x40) working VP for active query
+        u8                 macCurrentFrustum[0x80];             // +0x56D0  working swizzled frustum
+        u32                mxCurrentEntityTypeFlags;            // +0x5750  active query entity-type mask
     };
 }

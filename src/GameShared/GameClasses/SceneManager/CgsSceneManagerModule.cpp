@@ -24,6 +24,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsContactGenerationIO.h"
+#include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModule.h"  // OverlapGenerationIO::InputBuffer / InAddBodyEvent (AddBody)
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"
 #include "rw/rwcore_structs.h"   // rw::IResourceAllocator / rw::Resource / rw::ResourceDescriptor
@@ -560,6 +561,61 @@ void SceneManagerModule::ProcessFrustumTestJobResults(SceneManagerIO::IOBufferSt
     reinterpret_cast<CgsModule::IOBuffer*>(lpSceneOutputBuffer)->UnlockForWrite();
 
     lpOutStack->DestroyIOBuffer(&lpResultBuffer);
+}
+
+// ===========================================================================
+// SceneManagerModule::AddBody @ 0x828BA498
+//
+// Producer side of the overlap-generation add-body path: assemble a 64-byte
+// InAddBodyEvent image (the whole 32-byte world AABB block-copied into +0x00..+0x1F,
+// then the culling-group lane @+0x20, sweeper object index @+0x24, volume-instance
+// handle @+0x28, and the packed 64-bit body word @+0x30) and push it onto the
+// overlap-generation input buffer's add-body queue, then record the object's culling
+// group in the culling-group manager's per-object array.
+//
+// The X360 lays the event out store-for-store (four ld/std qword pairs off the
+// caller's box, then stw r30/r31/r8 + std r9). The truncated `CgsSceneMana(a2)` callee
+// is the non-const OverlapGenerationIO::InputBuffer::GetAddBodyQueue accessor
+// (== &a2->mAddBodyQueue, the queue is the first member) whose queued 64-byte events
+// the sibling BaseEventQueue<InAddBodyEvent>::AddEvent (@0x828B85D8) copies wholesale.
+// The +0x20 culling-group lane sits inside the event's leading AABB span (the box is
+// 32 bytes on the wire) so it is written by raw offset rather than a named field. The
+// trailing index assert is a non-gating tripwire; the culling-group byte store runs
+// unconditionally after it (X360 stbx past the blt).
+// ===========================================================================
+void SceneManagerModule::AddBody(OverlapGenerationIO::InputBuffer* lpOverlapGenerationInputBuffer,
+                                 u32         luObjectIndex,
+                                 const void* lpAabb,
+                                 u32         luCullingGroup,
+                                 u32         luVolumeHandle,
+                                 u64         lu64Body)
+{
+    // Build the 64-byte add-body event image (the X360 assembles it on the stack).
+    OverlapGenerationIO::InAddBodyEvent lEvent;
+    u8* lpEventBytes = reinterpret_cast<u8*>(&lEvent);
+
+    // 32-byte world AABB block copy (four ld/std qword pairs off the caller's box).
+    const u64* lpAabbWords  = static_cast<const u64*>(lpAabb);
+    u64*       lpEventWords = reinterpret_cast<u64*>(lpEventBytes);
+    lpEventWords[0] = lpAabbWords[0];
+    lpEventWords[1] = lpAabbWords[1];
+    lpEventWords[2] = lpAabbWords[2];
+    lpEventWords[3] = lpAabbWords[3];
+
+    // Culling group @+0x20 (inside the event's leading AABB span -- the box is 32B on
+    // the wire, so this lane has no named field); the remaining tail fields do.
+    *reinterpret_cast<u32*>(lpEventBytes + 0x20) = luCullingGroup;  // +0x20 (r30)
+    lEvent.muObjectIndex  = luObjectIndex;   // +0x24 (r31)
+    lEvent.muVolumeHandle = luVolumeHandle;  // +0x28 (r8)
+    lEvent.mu64Body       = lu64Body;        // +0x30 (r9)
+
+    // Push it onto the overlap-generation module's add-body queue.
+    lpOverlapGenerationInputBuffer->GetAddBodyQueue().AddEvent(lEvent);
+
+    // Record the object's culling group (non-gating index tripwire, then the store
+    // runs unconditionally -- X360 stbx sits past the assert's branch).
+    CGS_ASSERT(luObjectIndex < 0x13BBu, "luObjectIndex < (uint32_t)SceneSweeper::KU_MAX_NUM_OBJECTS");
+    mCullingGroupManager.GetVolumeInstanceCullingGroup()[luObjectIndex] = static_cast<u8>(luCullingGroup);
 }
 
 }  // namespace CgsSceneManager

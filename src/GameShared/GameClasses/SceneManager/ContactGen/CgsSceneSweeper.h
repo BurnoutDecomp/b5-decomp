@@ -49,6 +49,10 @@ namespace CgsSceneManager
         // queue is constructed inline by Construct via the 131072-element instantiation).
         static const s32 KI_MAX_OVERLAPPING_INTERVAL_PAIRS = 131072;
 
+        // Volume-instance ceiling the force-no-padding / add-object paths guard against
+        // (X360 assert string "KI_MAX_NUM_VOLUME_INSTANCES", value 0x13B8 == 5048).
+        static const s32 KI_MAX_NUM_VOLUME_INSTANCES = 5048;
+
         typedef CgsModule::EventQueue<OverlappingIntervalPair, KI_MAX_OVERLAPPING_INTERVAL_PAIRS>
             OverlappingIntervalPairQueue;
 
@@ -89,6 +93,12 @@ namespace CgsSceneManager
         //   luObjectIndex = queue element +0x30, lpAABBox = the queue element +0x38 box,
         //   lu64Body = the packed body word, lrPosition = the new world position lane (+0x20).
         void UpdateObject(u32 luObjectIndex, const void* lpAABBox, u64 lu64Body, const Vector3& lrPosition);
+
+        // Mark a volume instance as "no padding" in the sweeper's force-no-padding bit
+        // set (X360 SceneSweeper::ForceNoPadding @ 0x828B0578; body in CgsSceneSweeper.cpp).
+        // Called from OverlapGenerationModule::ProcessForceNoPaddingQueue per queued request.
+        //   luObjectIndex = the volume-instance index (< KI_MAX_NUM_VOLUME_INSTANCES).
+        void ForceNoPadding(u32 luObjectIndex);
 
     private:
         // SceneSweeperDebugComponent leading slice (+0x00..+0x18). Opaque to avoid the
