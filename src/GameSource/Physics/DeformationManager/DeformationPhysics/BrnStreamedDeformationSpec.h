@@ -149,6 +149,11 @@ namespace Deformation
         u32 GetNumLocatorPoints() const { return muNumLocators; }
         const LocatorPointSpec* GetLocatorSpec(u32 luIndex) const { return &mpaLocatorPoints[luIndex]; }
 
+        // Batch (all bounds-assert luTag < muNumLocators, non-gating tripwires):
+        LocatorPointSpec       CreateLo(u32 luTag) const;      // X360 0x825E32F0 return-by-value copy (BrnStreamedDeformationSpec.cpp:481)
+        ETagPointType          GetLocatorTy(u32 luTag) const;  // X360 0x82704930 meTagPointType at element +64 (.h:94)
+        const Matrix44Affine*  GetLocatorXf(u32 luTag) const;  // X360 0x825B31E0 &element.mLocatorMatrix (.h:98)
+
     private:
         u32               muNumLocators;
         LocatorPointSpec* mpaLocatorPoints;
@@ -172,6 +177,13 @@ namespace Deformation
         // X360 @ 0x822A0328: asserts liWheel < eNumWheels (4) (non-gating tripwire), then returns
         // &maWheelSpecs[liWheel] (asm: 48 * liWheel + this + 80).
         const WheelSpec* GetWheelSpec(s32 liWheel) const;
+
+        // BrnStreamedDeformationSpec.h:222 -- checked IK/driven-part accessor.
+        // X360 @ 0x825B3258: asserts liIndex < miNumberOfIKParts and liIndex >= 0 (non-gating
+        // tripwires), then returns &maIKPartData[liIndex] (asm: 480 * liIndex + maIKPartData).
+        // (Identified as GetDrivenPartSpec via the caller DeformableObject::PrepareIKPart:833; the
+        // misnomer GetIKPart belongs to DeformableObject and returns a different type.)
+        const IKBodyPartSpec* GetDrivenPartSpec(s32 liIndex) const;
 
         // Live deformation-sensor count (mu8NumDeformationSensors; asm spec+1618). The debug component's
         // selected-sensor slider range-checks against this.
