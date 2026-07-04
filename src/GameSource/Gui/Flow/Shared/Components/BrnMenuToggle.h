@@ -21,10 +21,15 @@
 // ===================================================================================
 
 #include "types.hpp"
-#include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"  // BrnGui::SelectableGroup
+#include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"  // BrnGui::SelectableGroup (base; also fwd-declares CgsGui::StateInterface)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                        // BrnGui::GuiFlow (AppendExpectedAptComponent selector; complete enum needed to pass by value)
 
 namespace BrnGui
 {
+    // The apt-component cache (BrnGuiCache.h). Pointer-only in the decl below, so a forward
+    // declaration suffices; the bodies that dereference it (in other TUs) include the full header.
+    class GuiCache;
+
     // Minimal view of a BrnGui::Selectable as MenuToggle::GetHighlightedId reads it: the X360
     // SelectableGroup::GetHighlighted() returns the highlighted item (a guest Selectable*),
     // and GetHighlightedId loads the item's id (u64 mId @ +0x10). The full Selectable class is
@@ -47,6 +52,27 @@ namespace BrnGui
         bool HighlightNext();
         // @ 0x824828D8 -- retreat the highlight; on success mark dirty. Returns success.
         bool HighlightPrevious();
+
+        // ----- members bodied by other MenuToggle TUs (declared-only here so the group can
+        //       forward to them BY NAME; the MenuToggleGroupVarSize<N> template drives the calls) -----
+
+        // Build the toggle row (name it, wire its state interface + parent, take its apt id).
+        // Called per-row by MenuToggleGroupVarSize<N>::Construct.
+        void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
+                       const char* lpacParentName, u64 luAptId);
+
+        // Register the row's expected apt component on the GUI cache for the given flow.
+        // Called per-live-row by MenuToggleGroupVarSize<N>::AppendExpectedAptComponent.
+        void AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache, bool lbArg);
+
+        // (Re)configure the row: text + option strings + option ids (+ a trailing selector). Called
+        // by MenuToggleGroupVarSize<N>::SetupToggle when a row is (de)activated.
+        void SetupMenuToggle(s32 lbActive, const char* lpacText, const char** lppacOptions,
+                             u64* lpu64Ids, s32 liUnused);
+
+        // Tear the row down (release its loaded resources). Called per-row by
+        // MenuToggleGroupVarSize<N>::Unloaded.
+        void Unloaded();
 
         // ----- recovered layout (member-by-name; reserved head carries the unrecovered base) -----
         u8               maHeadReserved[0x0C];   // +0x00..+0x0B (GuiComponent base head)

@@ -86,5 +86,30 @@ namespace BrnTrafficIO
         CGS_ASSERT(mbActiveHullsValid, "mbActiveHullsValid");   // BrnTrafficNetworkInterfaces.h:434
         return mau16ActiveHulls;
     }
+
+    // X360 0x823C8FD8. TrafficNetworkOutputInterface copy-assignment. The X360 clears the
+    // embedded ActivateHull queue (stw 0,miLength) then Appends the source queue's live
+    // events, then field-copies the active-hull table (mau16ActiveHulls[8] @0x6C), the two
+    // 'valid' tripwire flags + the divergence flag (@0x7C/0x7D/0x7E), the cross-peer hash
+    // (muHash @0x80, halfword) and the frame it was taken on (muHashUpdateFrame @0x84, word).
+    // It returns *this. Callers: BrnNetwork::BrnNetworkModuleIO::PostSimulationInputBuffer::
+    // SetTrafficOutputInterface, BrnNetwork::BrnNetworkModule::ProcessAfterSimulation,
+    // BrnWorldIO::UpdateOutputBuffer::SetTrafficNetworkOutputInterface.
+    TrafficNetworkOutputInterface& TrafficNetworkOutputInterface::operator=(
+        const TrafficNetworkOutputInterface& lrSource)
+    {
+        mActivateHullQueue.Clear();                          // stw 0,8(this) -> miLength = 0
+        mActivateHullQueue.Append(lrSource.mActivateHullQueue);
+
+        for (u32 luIndex = 0; luIndex < KU_MAX_HULLS_IN_PVS; ++luIndex)  // table @0x6C, 8x u16
+            mau16ActiveHulls[luIndex] = lrSource.mau16ActiveHulls[luIndex];
+
+        mbHashValid          = lrSource.mbHashValid;          // 0x7C
+        mbActiveHullsValid   = lrSource.mbActiveHullsValid;   // 0x7D
+        mbHullSyncDivergence = lrSource.mbHullSyncDivergence; // 0x7E
+        muHash               = lrSource.muHash;               // 0x80 (u16)
+        muHashUpdateFrame    = lrSource.muHashUpdateFrame;    // 0x84 (u32)
+        return *this;
+    }
 }
 }

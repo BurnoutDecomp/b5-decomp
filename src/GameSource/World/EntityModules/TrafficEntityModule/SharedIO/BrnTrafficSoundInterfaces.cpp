@@ -37,5 +37,39 @@ u16 TrafficSoundOutputInterface::GetTrafficEntityCount() const
     return mu16EntityCount;
 }
 
+// X360 @ 0x82681EC8. Linear scan of the live maActiveEntityList[0..mu16EntityCount) for the
+// entry whose mu16EntityIndex (@0x48 in TrafficSoundEntity) equals lu16Index, returning a
+// pointer to it (&maActiveEntityList[index]), or nullptr if the count is zero or no entry
+// matches. The loop bound is the raw count (the key compare uses a zero-extended u16).
+// Callers: BrnSound::Logic::Collision::CollisionStateManager::FindEntity, ::MapEntityIdToMaterial.
+const TrafficSoundEntity* TrafficSoundOutputInterface::GetTrafficEntityIndex(u16 lu16Index) const
+{
+    if (mu16EntityCount == 0)
+        return nullptr;
+
+    u32 luIndex = 0;
+    while (maActiveEntityList[luIndex].mu16EntityIndex != lu16Index)
+    {
+        ++luIndex;
+        if (luIndex >= mu16EntityCount)
+            return nullptr;
+    }
+    return &maActiveEntityList[luIndex];
+}
+
+// X360 @ 0x823A7F18. TrafficSoundOutputInterface copy-assignment. Copies the live count
+// (mu16EntityCount @0) then whole-copies all KU_MAX_ENTITIES (32) TrafficSoundEntity records
+// of maActiveEntityList (X360 unrolls 8 entities/loop x 4, element stride 0x50 == 80).
+// Returns *this. Callers: BrnSound::Module::Io::RootInputBuffer::SetTrafficOutputInterface,
+// BrnWorldIO::UpdateOutputBuffer::SetTrafficSoundOutputInterface.
+TrafficSoundOutputInterface& TrafficSoundOutputInterface::operator=(
+    const TrafficSoundOutputInterface& lrSource)
+{
+    mu16EntityCount = lrSource.mu16EntityCount;                     // @0x00
+    for (u32 luIndex = 0; luIndex < KU_MAX_ENTITIES; ++luIndex)     // 32 entities x 80B
+        maActiveEntityList[luIndex] = lrSource.maActiveEntityList[luIndex];
+    return *this;
+}
+
 }
 }

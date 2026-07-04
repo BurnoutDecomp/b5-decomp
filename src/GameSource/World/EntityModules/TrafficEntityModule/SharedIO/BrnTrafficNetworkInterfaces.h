@@ -69,6 +69,11 @@ namespace BrnTrafficIO
         const u16* GetActiveHulls() const;                                           // :167  (X360 0x825424E8)
         bool GetDetectedHullSyncDivergence() const;                                  // :171
 
+        // X360 0x823C8FD8 -- copy-assignment. Clears then Appends the source ActivateHull queue,
+        // then field-copies the active-hull table + valid/divergence flags + hash + hash-frame.
+        // Callers: BrnNetworkModuleIO / BrnWorldIO output-buffer setters.
+        TrafficNetworkOutputInterface& operator=(const TrafficNetworkOutputInterface& lrSource);
+
     private:
         ActivateHullQueue mActivateHullQueue;                       // :175 (offset 0)
         u16               mau16ActiveHulls[KU_MAX_HULLS_IN_PVS];    // :176 (offset 0x6C)
