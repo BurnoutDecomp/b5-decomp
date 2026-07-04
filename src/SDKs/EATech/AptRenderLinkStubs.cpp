@@ -266,7 +266,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // getBounds/hitTest native methods now call it directly (AptValue clip -> AptCIH via static_cast).
     // AptCIH_SetDirtyState RETIRED (2026-07-01): the real member AptCIH::SetDirtyState
     // (AptCIH.cpp, faithful) is called directly; the {} stub silently dropped the dirty latch.
-    void AptCIH_SetProceduralProperty(AptCIH* pNode, int nProperty, double fValue) {}   // FLAG link-stub
+    // AptCIH_SetProceduralProperty RETIRED: the real member AptCIH::SetProceduralProperty
+    // (AptCIHBehaviour.cpp:963, X360 0x82AE73C0 -- 4th arg bASChanged is r6, asm-verified) is called
+    // directly by createTextField; the invented shim dropped the value AND the bASChanged flag.
     // AptCIH_jumpToFrame RETIRED (2026-07-01): homed member AptCIH::jumpToFrame (AptCIH.cpp,
     // faithful play-head seek) called directly at all 5 VM sites; the {} stub dropped every seek.
     // AptCIH_tick is now homed faithfully in AptCIHBehaviour.cpp (forwards to AptCIH::tick).
