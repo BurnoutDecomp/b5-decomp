@@ -1786,9 +1786,13 @@ namespace BrnGui
             // IN THE SAME FRAME and runs its doFrameControls -> its nested shapes/images place. (This
             // retired the PropagateDirtyToChildren stand-in, which batch-dirtied children a level per
             // frame; the ctor mechanism composes the whole subtree per frame, as the console does.)
-            // FLAG (deferred AS-VM EXECUTION, unchanged): resolve64 relocates the action-stream
-            // POINTERS but the interpreter's runStream is stubbed, so queued AS bytecode never runs --
-            // a valid state for statically placed content; script-attached content is the VM last-mile.
+            // (AS-VM EXECUTION note, corrected 2026-07-04: the interpreter's runStream is NOT stubbed
+            // -- it is the fully-homed dispatch loop in AptActionRun.cpp, and RunActions below drains
+            // the per-frame action queue through it every frame, so queued frame actions DO execute.
+            // What remains deferred is narrower: individual AS opcodes / host-callbacks (e.g. the
+            // getVariable scope resolve, callFunction) are FLAGged at their own sites, and the
+            // GuiComponent->AptCommunicator view-message injection that DRIVES the component
+            // transitions is the un-homed C++ side that the title view-state shims stand in for -- 4d.)
 
             // DRAIN THE DEFERRED ACTION QUEUE (ACTIVATED 2026-07-01): the faithful per-frame
             // sequence -- tick queues each frame's tag-1 actions (AptMovie::queueFrameActions ->
