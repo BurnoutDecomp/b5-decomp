@@ -33,6 +33,26 @@ void CarData::Construct(CgsID lId)
 }
 
 // ------------------------------------------------------------------------------------
+// CarData::SetColourIndex -- X360 0x82354890. Range-assert the index fits in a byte,
+// then store the low byte to mu8ColourIndex (+0x08).
+// ------------------------------------------------------------------------------------
+void CarData::SetColourIndex(s32 liColour)
+{
+    CGS_ASSERT((u32)liColour < 256, "luColourIndex < 256");
+    mu8ColourIndex = (u8)liColour;
+}
+
+// ------------------------------------------------------------------------------------
+// CarData::SetPaletteIndex -- X360 0x823548F0. Range-assert the index fits in a byte,
+// then store the low byte to mu8PaletteIndex (+0x09).
+// ------------------------------------------------------------------------------------
+void CarData::SetPaletteIndex(s32 liPalette)
+{
+    CGS_ASSERT((u32)liPalette < 256, "luPaletteIndex < 256");
+    mu8PaletteIndex = (u8)liPalette;
+}
+
+// ------------------------------------------------------------------------------------
 // RivalData::Construct -- initialise one rival record (X360 inlines this in AddRival:
 // keep the two ids, zero everything else).
 // ------------------------------------------------------------------------------------

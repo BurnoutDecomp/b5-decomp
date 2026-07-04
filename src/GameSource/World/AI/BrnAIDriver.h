@@ -68,6 +68,8 @@ namespace BrnAI
         f32  ProximitySpeed(f32 lfMinSpeed);                   // @0x82770800
         s32  ChooseRaceSteeringFan(AICar* lpCar);              // @0x82766370  (EBiasMode)
         void SetDrivingFanBiases(AICar* lpPlayerCar);          // @0x82770428
+        bool IsInvulnerable() const;                           // @0x82765740
+        bool IsOnStartLine();                                  // @0x82765800 (DWARF BrnAIDriver.h:263 -- NON-const)
 
         // ---- AIDriver members the bodied functions CALL but that are bodied in their own recon
         // passes (declare-only; the per-TU cl /c gate needs only the declaration). Keeping these

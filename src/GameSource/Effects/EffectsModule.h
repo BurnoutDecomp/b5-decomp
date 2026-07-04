@@ -38,6 +38,9 @@ namespace BrnEffects
 }
 namespace BrnReplays { class EffectsSerialiser; }
 namespace BrnPhysics { namespace Vehicle { struct RaceCarState; } }
+// GetNextAcquireResourceResponse return/param (pointer-only here; full type in
+// GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h, pulled by the .cpp).
+namespace CgsResource { namespace Events { struct AcquireResourceResponse; } }
 
 namespace BrnEffects
 {
@@ -121,11 +124,23 @@ namespace BrnEffects
         bool IsJunkyardVfxActive() const;
 
     private:
+        // X360 0x8227F098. Iterate the module's resource-acquire reply queue (mReceiverQueue,
+        // an EventReceiverQueue<2048,16> embedded at X360 byte +0x244). Body in EffectsModule.cpp.
+        const CgsResource::Events::AcquireResourceResponse*
+        GetNextAcquireResourceResponse(const CgsResource::Events::AcquireResourceResponse* lpPrevious);
+
+        // X360 0x822926C8. Drive the convoy slip-stream LION effect (muSlipStreamEffectHandle at
+        // X360 byte +0x2F54C). Body in EffectsModule.cpp.
+        void HandleConvoySlipStream(f32 lfBlend, u32 luUnused,
+                                    const rw::math::vpu::Matrix44Affine& lrTransform);
+
         // FLAG: fully opaque body. The X360 EffectsModule is ~185 KB; sub-objects are
         // constructed by the ctor at X360 absolute byte offsets via placement new.
         // When individual sub-type layouts land, fold them into named typed members.
-        // Conservative bound: 185400 bytes covers surfacelist at X360 +185288.
-        u8 mOpaqueBody[185400];
+        // Bound grown to 0x2F550 (193872) to cover muSlipStreamEffectHandle at X360 +0x2F54C
+        // (193868) + 4 (HandleConvoySlipStream stores through this+0x2F54C, beyond the prior
+        // 185400 surfacelist bound).
+        u8 mOpaqueBody[0x2F550];
     };
 }
 

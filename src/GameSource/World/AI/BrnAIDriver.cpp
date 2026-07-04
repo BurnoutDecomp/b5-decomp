@@ -1001,4 +1001,49 @@ namespace BrnAI
                                         : ChooseRaceSteeringFan(lpCar);
         Fan(this)->SetBiasMode(leBias);
     }
+
+    // ====================================================================================
+    // IsInvulnerable @0x82765740
+    //
+    // Whether the AI car is currently protected from takedowns. Asserts mpCar is bound. When the
+    // car is BEHIND the player (meRelativeLocation < 2 -- E_RELATIVE_BEHIND_* == 0/1): invulnerable
+    // if it is more than 30m away OR the invuln timer is still positive. When AHEAD of the player
+    // (meRelativeLocation >= 2): invulnerable only while the invuln timer is positive. The X360
+    // tests meRelativeLocation for exact ==1 / ==0 (both branch to the distance arm), which is the
+    // Hex-Rays `< 2u` form.
+    // ====================================================================================
+    bool AIDriver::IsInvulnerable() const
+    {
+        CGS_ASSERT(mpCarHost != nullptr, "mpCar != NULL");
+
+        if (mpCarHost->meRelativeLocation < 2)          // car+0x14D4 (behind player: 0 or 1)
+        {
+            if (mfDistanceToPlayer > 30.0f)             // 0x1D08 (flt_820C3FA8 == 30.0)
+                return true;
+            if (mfInvulnerableTime > 0.0f)              // 0x1D0C (flt_82001CC0 == 0.0)
+                return true;
+            return false;
+        }
+
+        return mfInvulnerableTime > 0.0f;               // ahead of player: timer only
+    }
+
+    // ====================================================================================
+    // IsOnStartLine @0x82765800
+    //
+    // Whether the AI car is sitting on the start line. Returns false when no car is bound. Asserts
+    // the car is not INACTIVE (a start-line query on a dead car is a logic error), then returns the
+    // car's own on-start-line flag (car+0x1547).
+    // ====================================================================================
+    bool AIDriver::IsOnStartLine()
+    {
+        AICar* lpCar = mpCarHost;                       // 0x1CE0
+        if (!lpCar)
+            return false;
+
+        CGS_ASSERT(lpCar->meCarState != E_AI_CAR_STATE_INACTIVE,  // car+0x14C8 != 2
+                   "GetState() != E_AI_CAR_STATE_INACTIVE");
+
+        return lpCar->mbIsOnStartLine != 0;             // car+0x1547
+    }
 }
