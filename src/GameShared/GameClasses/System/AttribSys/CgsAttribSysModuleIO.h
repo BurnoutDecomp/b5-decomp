@@ -79,27 +79,69 @@ namespace AttribSysIO
     {
     };
 
-    // The vault request interface: a request queue plus the typed push helpers callers
-    // use to enqueue requests. Only the queue is load-bearing for the module's drain path.
+    // ---- the templated vault/schema request interface (DWARF CgsAttribSysSharedIO.h:65/82) ----
+    // Replaces the former non-templated placeholder `struct AttribSysRequestInterface`. Defined
+    // HERE (rather than in CgsAttribSysSharedIO.h) because InputBuffer embeds a complete
+    // AttribSysRequestInterface<N> member, and CgsAttribSysSharedIO.h includes THIS header --
+    // defining the template here keeps the InputBuffer member complete without a circular
+    // include. CgsAttribSysSharedIO.h re-exports this (plus the method decls) for the .cpp.
+    //
+    // AttribSysRequestQueue<N> : VariableEventQueue<N,16> -- an empty derived tag naming the
+    // request interface's backing event queue. Mirror of BrnResource::GameDataIO::RequestQueue<N>.
+    template <s32 N>
+    struct AttribSysRequestQueue : public CgsModule::VariableEventQueue<N, 16>
+    {
+    };
+
+    // AttribSysRequestInterface<N> -- holds exactly one AttribSysRequestQueue<N> at offset 0;
+    // the typed push helpers enqueue vault/schema requests. Generic method bodies live in
+    // CgsAttribSysSharedIOImpl.h; symbols emitted from CgsAttribSysModuleIO.cpp
+    // (<512> RegisterVault explicit member specialization; <2048> RegisterSchema/RegisterVault/
+    // UnregisterVault generic body + explicit member instantiation).
+    template <s32 N>
     struct AttribSysRequestInterface
     {
-        AttribSysEventQueue mRequestQueue;
+        AttribSysRequestQueue<N> mRequestQueue;   // @0x00 (only member; Inp/InputBuff hand back its address)
+
+        // Push a RegisterSchemaRequest (type 1). X360 0x826730B0 for <2048>.
+        bool RegisterSchema(BaseEventReceiverQueue* lpUserReceiverQueue,
+                            void* lpSchemaVltData, s32 liSchemaVltDataSize,
+                            void* lpSchemaBinData, s32 liSchemaBinDataSize);
+
+        // Push a RegisterVaultRequest (type 0), 3-param overload. X360 0x8229D6C8 for
+        // <2048>, X360 0x82256428 for <512>.
+        bool RegisterVault(BaseEventReceiverQueue* lpUserReceiverQueue,
+                           ResourceHandle lVaultResourceHandle,
+                           EAttribSysVaultType leVaultType);
+
+        // Push an UnregisterVaultRequest (type 2), 2-param overload. X360 0x826731E8 for <2048>.
+        bool UnregisterVault(BaseEventReceiverQueue* lpUserReceiverQueue,
+                             ResourceHandle lVaultResourceHandle);
     };
+
+    // Forward-declare the namespace-scope free accessors so InputBuffer can friend them.
+    struct InputBuffer;
+    const AttribSysEventQueue* Inp(const InputBuffer* lpInputBuffer);
+    AttribSysEventQueue*       InputBuff(InputBuffer* lpInputBuffer);
 
     // CgsAttribSysModuleIO.h:65 -- the AttribSys module's input payload. A read/write
     // guarded IOBuffer carrying a generic event queue plus the vault request interface.
+    // The vault request interface is the X360-attested <2048>-shaped instantiation
+    // (KI_ATTRIBSYS_EVENT_QUEUE_MAX_SIZE == 2048).
     struct InputBuffer : public CgsModule::IOBuffer
     {
-        AttribSysEventQueue       mEventQueue;             // leading generic queue
-        AttribSysRequestInterface mVaultRequestInterface;  // the drained request queue (X360 +2068)
+        AttribSysEventQueue                              mEventQueue;             // leading generic queue
+        AttribSysRequestInterface<KI_ATTRIBSYS_EVENT_QUEUE_MAX_SIZE> mVaultRequestInterface;  // the drained request queue (X360 +2068)
 
-        AttribSysRequestInterface*       GetVaultRequestInterface()       { return &mVaultRequestInterface; }
-        const AttribSysRequestInterface* GetVaultRequestInterface() const { return &mVaultRequestInterface; }
+        AttribSysRequestInterface<KI_ATTRIBSYS_EVENT_QUEUE_MAX_SIZE>*       GetVaultRequestInterface()       { return &mVaultRequestInterface; }
+        const AttribSysRequestInterface<KI_ATTRIBSYS_EVENT_QUEUE_MAX_SIZE>* GetVaultRequestInterface() const { return &mVaultRequestInterface; }
+
+        // Inp/InputBuff are namespace-scope free functions (DWARF CgsAttribSys::AttribSysIO::Inp /
+        // ::InputBuff) that read this buffer's protected lock state + request queue; grant them
+        // access as friends (a friend of InputBuffer may reach the inherited protected IOBuffer
+        // predicates through an InputBuffer object).
+        friend const AttribSysEventQueue* Inp(const InputBuffer* lpInputBuffer);
+        friend AttribSysEventQueue*       InputBuff(InputBuffer* lpInputBuffer);
     };
-
-    // @ 0x828042D8 -- assert the buffer is locked for reading, then return its request queue.
-    // (Hex-Rays renders the buffer as `unsigned __int8*` and the return as `this+2068`; that
-    // address is the request interface's embedded queue.)
-    const AttribSysEventQueue* Inp(const InputBuffer* lpInputBuffer);
 }
 }
