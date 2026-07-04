@@ -181,4 +181,51 @@ BlurBlend* BlurBlend::Add(const BrnEffects::BlurData* lpSrc, f32 lfWeight)
     return this;
 }
 
+// ---- VignetteBlend::Construct @ 0x824F6968 -------------------------------
+// Seeds a fresh accumulator. The X360 body stores mData.mfAngle@0x00 (0.0f) +
+// mData.mfSharpness@0x04 (0.33f) then the four 16-byte vector members
+// (mv2Amount@0x10, mv2Centre@0x20, mv4InnerColour@0x30, mv4OuterColour@0x40) --
+// exactly BrnEffects::VignetteData::Construct's store set -- and finally 0.0f to
+// mfWeight@0x50 and mfCount@0x54. Delegate to keep the payload defaults homed in
+// one place, then zero the two trailing bookkeeping fields. Returns this.
+VignetteBlend* VignetteBlend::Construct()
+{
+    mData.Construct();   // 2 scalar defaults @0x00/0x04 + 4 vector defaults @0x10..0x40
+    mfWeight = 0.0f;     // +0x50
+    mfCount  = 0.0f;     // +0x54
+    return this;
+}
+
+// ---- VignetteBlend::Add @ 0x824F69E8 -------------------------------------
+// Copy path (mfCount becomes 1.0f) is an 80-byte payload copy; the blend path
+// delegates to BrnEffects::VignetteData::SetToBlend(&mData, &mData, 1-w, w, src)
+// [X360 call: r3=lpResult=&mData, r4=lpA=&mData, f1=lfWa=1-w, f2=lfWb=w,
+// r6=lpB=src, matching SetToBlend's (lpResult, lpA, lfWa, lfWb, lpB)].
+VignetteBlend* VignetteBlend::Add(const BrnEffects::VignetteData* lpSrc, f32 lfWeight)
+{
+    if (lpSrc == nullptr)
+    {
+        return this;
+    }
+
+    mfCount = mfCount + 1.0f;
+    if (mfWeight < lfWeight)
+    {
+        CGS_ASSERT(lfWeight <= 1.0f, "lfWeight <= 1.0f");
+        mfWeight = lfWeight;
+    }
+
+    if (mfCount == 1.0f)
+    {
+        memcpy(&mData, lpSrc, sizeof(BrnEffects::VignetteData));
+    }
+    else
+    {
+        // SetToBlend(result=&mData, lpA=&mData, lfWa=1-w, lfWb=w, lpB=src)
+        BrnEffects::VignetteData::SetToBlend(&mData, &mData, 1.0f - lfWeight, lfWeight, lpSrc);
+    }
+
+    return this;
+}
+
 } // namespace BrnGui

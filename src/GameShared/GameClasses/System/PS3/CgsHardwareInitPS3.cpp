@@ -177,3 +177,17 @@ bool CgsSystem::HardwareInit::IsHardDiskAvailable()
 {
     return gbHardDiskAvailable;
 }
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX
+//   CgsSystem::HardwareInit::EnableJobThread  @ 0x828D6138
+//
+// X360: the job-manager worker threads are brought up during
+// InitializeHardware() (fixed processors 1/3/5). There is no runtime
+// enable-a-job-thread path on xbox, so this entry point is a hard stop.
+// (De-inlined BeginAssert/FireAssert/EndAssert chain @ 0x828D6138, no branch
+// guard -> unconditional assert. File/line args dropped; rodata message kept
+// verbatim including its trailing \n.) Called by BrnReplays::ReplayModule::StopPlaying.
+void CgsSystem::HardwareInit::EnableJobThread()
+{
+    CGS_ASSERT(false, "Not supported on xbox\n");
+}

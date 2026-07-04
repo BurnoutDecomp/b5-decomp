@@ -89,4 +89,30 @@ namespace CgsSceneManager
 
         return true;
     }
+
+    // Reconstructed from BURNOUT_X360_ARTIST.XEX
+    //   CgsSceneManager::TriangleCacheManager::GetTrianglesForCachedObject  @ 0x82277790
+    //   (IDA symbol truncated to ...CachedObjec by name-length limits)
+    //
+    // Returns the first cached SoA triangle-batch for cached-object slot
+    // liObjectIndex. The X360 body is a single leaf that inlines
+    // CachedTriangleList::GetCachedTriangle:
+    //   1. v3 = mpaCachedObjectSlots[liObjectIndex].miIndexIntoTriangleCache
+    //      (lwz r30, 0x24(base) with base = mpaCachedObjectSlots + index*48 -- slot
+    //      stride 48 = slwi/add producing index*3<<4, +0x24 = miIndexIntoTriangleCache).
+    //   2. CGS_ASSERT(mpaTriangleCache != NULL)  (baked CgsCachedTriangleList.h:153;
+    //      the inlined GetCachedTriangle guard; tests mTrianglesForCachedObjects's
+    //      first member at this+0).
+    //   3. return mpaTriangleCache + v3   (mulli r11, r30, 0xE0 -> v3 * sizeof(Triangle4)
+    //      == 224, added to the cache base).
+    //
+    // NOTE: the assert reads the cache pointer AFTER the slot index is loaded, matching
+    // the asm (`lwz r30, 0x24(r11)` precedes the NULL test on `0(this)`); expressed here
+    // as the two-step inlined form via GetCachedTriangle so the guard + base+index math
+    // live in their DWARF home (CachedTriangleList).
+    const CgsGeometric::Triangle4* TriangleCacheManager::GetTrianglesForCachedObject(s32 liObjectIndex) const
+    {
+        s32 liIndexIntoTriangleCache = mpaCachedObjectSlots[liObjectIndex].miIndexIntoTriangleCache;
+        return mTrianglesForCachedObjects.GetCachedTriangle(liIndexIntoTriangleCache);
+    }
 }

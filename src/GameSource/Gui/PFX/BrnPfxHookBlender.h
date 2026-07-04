@@ -94,6 +94,26 @@ namespace BrnGui
 
         BlurBlend* Add(const BrnEffects::BlurData* lpSrc, f32 lfWeight);
     };
+
+    // ---- VignetteData accumulator (Add @ 0x824F69E8) -------------------------
+    // payload == BrnEffects::VignetteData (80B) then weight @0x50, count @0x54. The
+    // blend path delegates to BrnEffects::VignetteData::SetToBlend; the copy path is
+    // a straight 80-byte memcpy of the payload.
+    struct VignetteBlend
+    {
+        BrnEffects::VignetteData mData;    // +0x00 .. +0x4F (80B)
+        f32                      mfWeight; // +0x50
+        f32                      mfCount;  // +0x54
+
+        // Construct @ 0x824F6968 -- seed the payload with the VignetteData defaults
+        // (mfAngle@0x00, mfSharpness@0x04, and the four 16-byte vector members
+        // mv2Amount@0x10 / mv2Centre@0x20 / mv4InnerColour@0x30 / mv4OuterColour@0x40
+        // that BrnEffects::VignetteData::Construct writes) then zero the two
+        // bookkeeping fields mfWeight@0x50 / mfCount@0x54 (both 0.0f). Returns this.
+        VignetteBlend* Construct();
+
+        VignetteBlend* Add(const BrnEffects::VignetteData* lpSrc, f32 lfWeight);
+    };
 }
 
 #endif

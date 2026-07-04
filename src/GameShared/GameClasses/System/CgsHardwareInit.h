@@ -32,6 +32,10 @@ namespace CgsSystem
         static void InitializeHardware(s32 lnArgc, char* lapcArgv[]);
 #endif
 
+#if defined(CGS_PLATFORM_X360)
+        static void EnableJobThread();   // @0x828D6138 -- X360 stub, always asserts "Not supported on xbox\n"
+#endif
+
         static char* GetWorkingDirectory() { return macRootPath; }
         static char* GetFOPENDirectory() { return macFOPENPath; }
 

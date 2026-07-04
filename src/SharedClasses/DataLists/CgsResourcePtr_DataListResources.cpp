@@ -16,6 +16,7 @@
 //   VehicleListR          @ 0x82210B08  ResourcePtr<VehicleListResource>::operator->() const    (baked assert line 563)
 //   VehicleListResourc    @ 0x82665E88  ResourcePtr<VehicleListResource>::operator*()  const    (baked assert line 637, "dereference")
 //   WheelListResou        @ 0x822C9AE8  ResourcePtr<WheelListResource>::operator->()   const    (baked assert line 563)
+//   WheelListResou        @ 0x826790C0  ResourcePtr<WheelListResource>::operator->()             (baked assert line 544, non-const)
 
 namespace BrnResource
 {
@@ -40,3 +41,5 @@ template const BrnResource::VehicleListResource&
 
 template const BrnResource::WheelListResource*
     CgsResource::ResourcePtr<BrnResource::WheelListResource>::operator->() const;
+template BrnResource::WheelListResource*
+    CgsResource::ResourcePtr<BrnResource::WheelListResource>::operator->();
