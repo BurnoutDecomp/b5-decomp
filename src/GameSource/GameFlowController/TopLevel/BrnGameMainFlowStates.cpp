@@ -387,7 +387,5 @@ void MainGameFlowStateCompleteLoading::Update() {}
 void MainGameFlowStateCompleteLoading::Render() {}
 
 MainGameFlowStateInGame::MainGameFlowStateInGame() {}
-void MainGameFlowStateInGame::OnEnter() {}
-void MainGameFlowStateInGame::OnLeave() {}
-void MainGameFlowStateInGame::Update() {}
-void MainGameFlowStateInGame::Render() {}
+// OnEnter/OnLeave/Update/Render are homed in BrnGameMainFlowInGameState.cpp (the DWARF
+// home for the in-game state's per-frame surface); only the ctor stays with this group.

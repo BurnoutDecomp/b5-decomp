@@ -91,6 +91,14 @@ struct State
     // here -- exists so the destructor can call it BY NAME without fabricating its body.
     // FLAG: declaration-only un-homed base member (do not body here).
     void DestroyEffects();
+
+    // CgsSound::Logic::State::Attach(void*) -- records the attachment on the state and
+    // wires it into the sound-logic state machine. Called BY NAME from the derived
+    // TrafficState::Attach (X360 `bl ...State::Attach` @0x826CB270), the same
+    // declaration-only idiom as DestroyEffects above; the body is a separate un-homed
+    // sound-logic recon slice.
+    // FLAG: declaration-only un-homed base member (do not body here).
+    void Attach(void* lpvAttachment);
 };
 
 } // namespace Logic

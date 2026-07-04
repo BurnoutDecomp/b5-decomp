@@ -16,6 +16,35 @@ namespace BrnEffects
 namespace EffectsIO
 {
 
+// ============================== construction ==============================
+
+// X360 0x82288120: default-construct the dispatch input buffer. Asm store order:
+//   1. stb 1,0(this)                     -> IOBuffer::Construct() (status = eStatusConstructed)
+//   2. stvx128 zero @+0x20/+0x30/+0x40   -> the three light Vector3s cleared (SetZero x3)
+//   3. stw 0,0x10(this)                  -> mpDispatchFrame = nullptr
+//   4. bl Camera::Clear(this+0x50)       -> mCameraInput.Clear()
+//   5. stw 0,4(this)                     -> mpBaseEffectsFrame = nullptr
+//   6. loop slot=0,1: stw 0,(slot+2)*4   -> mapFXEventsEffectsFrames[slot] = nullptr
+//   7. stw 0,0x1B0(this)                 -> mpEnvironmentMap = nullptr
+// mfWhiteLevel (+0x1B4) is deliberately left uninitialised (no store in the asm).
+void DispatchInputBuffer::Construct()
+{
+    IOBuffer::Construct();                 // stb 1, 0(this) -- eStatusConstructed
+
+    mKeyLightDirection.SetZero();          // stvx128 v0, this+0x20
+    mKeyLightColour.SetZero();             // stvx128 v0, this+0x30
+    mAverageIrradianceColour.SetZero();    // stvx128 v0, this+0x40
+
+    mpDispatchFrame = nullptr;             // stw 0, 0x10(this)
+    mCameraInput.Clear();                  // bl Camera::Clear(this+0x50)
+    mpBaseEffectsFrame = nullptr;          // stw 0, 4(this)
+
+    for (u8 luSlot = 0; luSlot < 2; ++luSlot)   // loop 0x82288174..0x82288190
+        mapFXEventsEffectsFrames[luSlot] = nullptr;   // stwx 0, (slot+2)*4(this)
+
+    mpEnvironmentMap = nullptr;            // stw 0, 0x1B0(this)
+}
+
 // ============================== getters (read-lock, status bit 4) ==============================
 
 // X360 0x8227E328: read-lock handle to the base effects frame.

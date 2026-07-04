@@ -53,6 +53,11 @@ namespace BrnGameMainFlowController
         EMainGameFlowState GetCurrentState() const { return meCurrentState; }
         MainGameFlowState* GetState(EMainGameFlowState leState) { return maStates.GetItem((u32)leState); }
 
+        // Bare meCurrentState (+0x50) stamp -- the inline the in-game Update writes for the
+        // IN_GAME -> START_SCREEN transition (NOT SetState, which additionally guards
+        // != E_MGS_INVALID and runs the leave/enter hooks itself).
+        void SetCurrentStateRaw(EMainGameFlowState leState) { meCurrentState = leState; }
+
     private:
         MainGameFlowStateInitialLoadingScreen mInitialLoadingScreen;
         MainGameFlowStateMarketingScreens     mMarketingScreens;

@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Traffic/BrnTrafficState.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // =============================================================================
 // BrnSound::Logic::Traffic::TrafficState -- out-of-line bodies.
@@ -40,6 +41,42 @@ namespace Traffic
 TrafficState::~TrafficState()
 {
     DestroyEffects();
+}
+
+// ---------------------------------------------------------------------------
+// Attach  @ 0x826CB270
+//
+//   cmplwi cr6, r31, 0                 ; if (lpvAttachment == 0)
+//   bne    cr6, <store>
+//   bl     BeginAssert / FireAssert("lpvAttachment",...) / EndAssert
+//   stw    r31, 0x54(r30)              ; mpTrafficEntity = lpvAttachment
+//   mr     r3, r30 ; mr r4, r31
+//   bl     CgsSound::Logic::State::Attach   ; base Attach(this, lpvAttachment)
+//
+// Null-asserts the attachment, records it in the +0x54 derived member
+// (mpTrafficEntity), then chains to the base State::Attach (reused BY NAME, the
+// same idiom as the committed sibling destructors' DestroyEffects() call).
+// CGS_ASSERT folds the Begin/Fire/End sequence; the baked d:\p4 file/line is dropped.
+// ---------------------------------------------------------------------------
+void TrafficState::Attach(void* lpvAttachment)
+{
+    CGS_ASSERT(lpvAttachment != 0, "lpvAttachment");
+    mpTrafficEntity = lpvAttachment;
+    State::Attach(lpvAttachment);
+}
+
+// ---------------------------------------------------------------------------
+// GetTypeName  @ 0x826841B8
+//
+//   lwz r3, (off_82F2E8F4)   ; r3 = "TrafficState"
+//   blr
+//
+// Returns the per-class RTTI type name. Mirrors the committed sibling
+// GlobalState::GetTypeName (@ 0x82686808).
+// ---------------------------------------------------------------------------
+const char* TrafficState::GetTypeName() const
+{
+    return "TrafficState";
 }
 
 } // namespace Traffic

@@ -100,6 +100,13 @@ namespace BrnGame
         BrnResource::GameDataModule& GetGameDataModule() { return mGameDataModule; }
         BrnSound::Module::RootSoundModule& GetSoundModule() { return mSoundModule; }
 
+        // Per-frame spines the in-game flow state drives directly (non-virtual; each returns
+        // an int status the void flow-state Update/Render slots discard):
+        //   DoUpdate   -- the game module's per-frame update spine  (MainGameFlowStateInGame::Update)
+        //   DoDispatch -- the game module's per-frame render-dispatch spine (MainGameFlowStateInGame::Render)
+        int DoUpdate();
+        int DoDispatch();
+
         // The per-frame update IO stacks. The scripted module loads (LoadingScriptedState::
         // LoadXxxModule) create their per-frame module IO buffers on these, exactly as the
         // X360 reads them off the game-module global (e.g. LoadSoundModule 0x823E75A8).

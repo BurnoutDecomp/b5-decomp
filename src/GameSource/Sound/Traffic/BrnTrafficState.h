@@ -43,6 +43,14 @@ struct TrafficState : public BrnSound::Logic::BrnState
     // DWARF-confirmed return type/virtualness/const.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
+
+    // @ 0x826CB270 -- null-asserts the attachment, records it in mpTrafficEntity (+0x54),
+    // then chains to the base State::Attach (reused BY NAME, the DestroyEffects idiom).
+    virtual void Attach(void* lpvAttachment);
+
+private:
+    // +0x54  DWARF: const TrafficStateManager::Slot::TrafficSoundEntity* (un-homed -> const void*).
+    const void* mpTrafficEntity;
 };
 
 } // namespace Traffic

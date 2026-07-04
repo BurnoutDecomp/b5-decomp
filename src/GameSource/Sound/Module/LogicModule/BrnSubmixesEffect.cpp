@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSubmixesEffect.h"
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"   // CgsSound::Io::MessageHeader
 
 // =============================================================================
 // BrnSound::Logic::SubmixesEffect -- out-of-line deleting-destructor body.
@@ -39,6 +40,27 @@ namespace Logic
 
 SubmixesEffect::~SubmixesEffect()
 {
+}
+
+// ---------------------------------------------------------------------------
+// SubmixesEffect::Notify  @ 0x82687EE8   (overrides EffectBase::Notify)
+//
+//   if (message type field @ +0x08 == 15)         ; lhz 8; cmplwi 0xF; bnelr
+//       mbHoldVolumes = <payload byte @ +0x10>;    ; lbz 0x10; stb 0x39
+//
+// Type-15 messages carry a single-byte hold-volumes flag in their body at +0x10, past the
+// committed 12-byte MessageHeader; read BY OFFSET off the base header (the concrete type-15
+// message struct is un-homed and NOT fabricated).
+// ---------------------------------------------------------------------------
+void SubmixesEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
+{
+    // lhz r11,8(r4); cmplwi 0xF; bnelr -- only type-15 messages are handled.
+    if (reinterpret_cast<const u16*>(apMessageHeader)[4] == 15)
+    {
+        // lbz r11,0x10(r4); stb r11,0x39(r3) -- latch the hold-volumes flag byte from the
+        // (un-homed) message body into mbHoldVolumes.
+        mbHoldVolumes = (reinterpret_cast<const u8*>(apMessageHeader)[0x10] != 0);
+    }
 }
 
 } // namespace Logic
