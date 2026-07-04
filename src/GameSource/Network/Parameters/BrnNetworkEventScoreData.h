@@ -1,64 +1,88 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceStructureInterface.h"
 
 // ===================================================================================
 // BrnNetwork::EventScoreData -- owning header
 //   b5-decomp/src/GameSource/Network/Parameters/BrnNetworkEventScoreData.{h,cpp}
 //
 // The fixed-capacity batch of per-event scores the game uploads to the server in one
-// "event scores" custom command. EventScoresManagerDebugComponent::SetCalvalryBurningRouteBest
-// builds one of these on the stack (developer shortcut), and
-// ServerInterfaceCustomCommands::UploadEventScoreData serialises it.
+// "event scores" custom command. EventScoresManager::UpdateUploadEventScores builds one,
+// fills it row-by-row (AddEventScore), and hands it to ServerInterfaceCustomCommands::
+// UploadEventScoreData. The developer shortcut EventScoresManagerDebugComponent::
+// SetCalvalryBurningRouteBest stack-constructs one and adds a single row.
 //
-// LAYOUT (X360-AUTHORITATIVE, read off SetCalvalryBurningRouteBest @ 0x82591D00 -- the debug
-// component constructs the object at sp+var_E0 and the three element stores plus the count are
-// at the offsets below; XMemSet zeros the 184 data bytes after the vptr; UploadEventScoreData
-// receives the object by pointer):
-//   +0x00 (4)   vptr                          (off_8207F2F8 is its vtable; >=1 virtual)
-//   +0x04 (60)  maEventScoreType   [15]       (s32; SetCalvalryBurningRouteBest stores 6)
-//   +0x40 (60)  maScore            [15]       (s32; SetCalvalryBurningRouteBest stores 50000)
-//   +0x7C (60)  maEventScoreSubType[15]       (s32; SetCalvalryBurningRouteBest stores 5)
-//   +0xB8 (4)   miNumScores                   (s32; asserted >=0 and < KI_MAX_EVENT_SCORES_TO_UPLOAD)
-// Total 188 bytes.
+// The X360 build's mangled name for this type is EventScoreUploadData; this codebase's
+// committed manager / custom-commands / debug code refers to it as EventScoreData, so the
+// class name is kept as EventScoreData (member fns EventScoreUploadData::{Construct,
+// GetDataSize,SerialiseToString,SetScoreData,~} @ 0x82584AE0 / 0x82584D38 / 0x82584CA0 /
+// 0x82584AF0 / 0x8254B468).
 //
-// NOTE on the three parallel arrays: only their stride/offset and the literals stored into them
-// (6 / 50000 / 5) are X360-authoritative. No DWARF survives for this type, so the field NAMES
-// below are descriptive placeholders chosen to match the values (the 50000 slot is plainly the
-// score). FLAG: rename maEventScoreType / maEventScoreSubType if a DWARF or richer call site
-// later pins their true meaning; the s32[15] size/offset must not change.
+// It IS a serialisable structure: the vector deleting destructor @ 0x8254B468 installs the
+// ServerInterfaceStructureInterface vtable (off_8207C88C) at this+0, and SerialiseToString
+// dispatches through that interface's virtuals (GetPattern @ slot+0x04, GetDataSize @
+// slot+0x0C, GetData @ slot+0x10). So EventScoreData derives from
+// CgsNetwork::ServerInterfaceStructureInterface and overrides its pure virtuals.
+//
+// LAYOUT (X360-AUTHORITATIVE):
+//   +0x00 (4)   vptr (base ServerInterfaceStructureInterface subobject)
+//   +0x04 (60)  maScoreboardIndex  [15]   (s32)  -- SetScoreData stores a2 at 4*(count+1)
+//   +0x40 (60)  maScore            [15]   (s32)  -- SetScoreData stores a3 at 4*(count+16)
+//   +0x7C (60)  maGameMode         [15]   (s32)  -- SetScoreData stores a4 at 4*(count+31)
+//   +0xB8 (4)   miNumScores               (s32)  -- asserted >=0 and < KI_MAX_EVENT_SCORES_TO_UPLOAD
+// Total 188 bytes; Construct XMemSet-zeros the 184 payload bytes at this+4. GetDataSize
+// returns 184 (0xB8) -- the payload size TagFieldSetStructure serialises.
+//
+// NOTE: the three parallel arrays' stride/offset is X360-authoritative; the field names
+// are chosen to match the values the manager stores into them (scoreboard index / score /
+// game mode). No DWARF survives for this type -- FLAG: rename if a richer source pins the
+// true member spellings; the s32[15] size/offset must not change.
 // ===================================================================================
 
 namespace BrnNetwork
 {
-    class EventScoreData
+    class EventScoreData : public CgsNetwork::ServerInterfaceStructureInterface
     {
     public:
         // Maximum number of per-event scores carried in one upload batch. X360-authoritative:
-        // SetCalvalryBurningRouteBest asserts miNumScores < 15 (cmpwi r11, 0xF).
+        // SetScoreData asserts miNumScores < 15 (cmpwi r11, 0xF).
         static const s32 KI_MAX_EVENT_SCORES_TO_UPLOAD = 15;
 
         EventScoreData();
         virtual ~EventScoreData();
 
-        // Append one scored event. The bounds asserts the debug component triggers
-        // (miNumScores >= 0 and < KI_MAX_EVENT_SCORES_TO_UPLOAD) live in this type's TU
-        // (BrnNetworkEventScoreData.cpp), so the per-slot store + count bump is owned here.
-        // Bodied in another TU; declared here for the debug component's `cl /c` gate.
-        //
-        // Returns true once the batch is FULL (the X360 EventScoresManager::UpdateUploadEventScores
-        // @ 0x8256C010 stops draining its pending list when this returns a non-zero byte:
-        // clrlwi r11, r3, 24; cmplwi 0; bne break). The debug component's single call ignores the
-        // return. The X360 build's mangled name for this method on the upload object is
-        // SetScoreData; this is the same store-one-score-and-report-full operation. (ADDITIVE GROW:
-        // widened from void to bool -- additive for the existing debug-component call site, which
-        // discards the value.)
-        bool AddEventScore( s32 liEventScoreType, s32 liScore, s32 liEventScoreSubType );
+        // Construct @ 0x82584AE0 -- zero the whole 184-byte payload after the vptr. The default
+        // ctor calls this so the manager's stack-constructed instance starts empty.
+        void Construct();
+
+        // Append one row {scoreboard-index, score, game-mode} at miNumScores and bump the count.
+        // X360 SetScoreData @ 0x82584AF0. Preconditions: liScoreboardIndex >= 0; miNumScores in
+        // [0, KI_MAX_EVENT_SCORES_TO_UPLOAD); per-game-mode index bound (burn-route 5: <35;
+        // stunt-run 7: <14; any other mode unsupported -> dynamic assert). Returns true once the
+        // batch is FULL. The committed manager / debug call sites name it AddEventScore.
+        bool AddEventScore( s32 liScoreboardIndex, s32 liScore, s32 liGameMode );
+
+        // Serialise the payload into the DirtySock record as one "EVSCORE" structure field.
+        // X360 SerialiseToString @ 0x82584CA0.
+        void SerialiseToString( char* lpcRecord, s32 liRecLen );
+
+        // ServerInterfaceStructureInterface overrides. GetDataSize is X360 GetDataSize @
+        // 0x82584D38 (returns 184); GetPattern / GetPatternLength / GetData bodies live in
+        // other (out-of-batch) TUs -- declared here so SerialiseToString / the interface
+        // contract resolve. FLAG: those override bodies are not yet reconstructed in-tree; the
+        // vtable is anchored to this TU (destructor), so they must be provided before this
+        // class is instantiated at link time.
+        virtual const char* GetPattern() const override;
+        virtual s32         GetPatternLength() const override;
+        virtual u32         GetDataSize() const override;
+        virtual void*       GetData() override;
+        virtual const void* GetData() const override;
 
     private:
-        s32 maEventScoreType[KI_MAX_EVENT_SCORES_TO_UPLOAD];     // +0x04
-        s32 maScore[KI_MAX_EVENT_SCORES_TO_UPLOAD];              // +0x40
-        s32 maEventScoreSubType[KI_MAX_EVENT_SCORES_TO_UPLOAD];  // +0x7C
-        s32 miNumScores;                                         // +0xB8
+        s32 maScoreboardIndex[KI_MAX_EVENT_SCORES_TO_UPLOAD];  // +0x04
+        s32 maScore[KI_MAX_EVENT_SCORES_TO_UPLOAD];            // +0x40
+        s32 maGameMode[KI_MAX_EVENT_SCORES_TO_UPLOAD];         // +0x7C
+        s32 miNumScores;                                       // +0xB8
     };
 } // namespace BrnNetwork

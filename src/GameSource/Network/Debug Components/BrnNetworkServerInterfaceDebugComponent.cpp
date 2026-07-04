@@ -130,4 +130,45 @@ namespace BrnNetwork
             mpNetworkManager->GetNetworkServers()->SetServerType(static_cast<CgsNetwork::EServerType>(miServerType));
         }
     }
+
+    // ================================================================================================
+    // RenderConnectionStatus  @0x82594AC0  -- BLOCKED (declared-only; body not homed this wave)
+    // ------------------------------------------------------------------------------------------------
+    // The connection-status HUD table. The store-for-store body is reconstructed and verified, but it
+    // stack-constructs a CgsNetwork::ServerInterfacePlayerInfoDataBase (to read the local player's name
+    // for the "us" row tag), and that committed type is still ABSTRACT -- it inherits the five
+    // ServerInterfaceStructureInterface pure virtuals (GetPattern/GetPatternLength/GetDataSize/GetData
+    // x2) without overriding them. Instantiating it here is a compile error, and providing those
+    // overrides would fabricate a foreign type's interface (they belong to the
+    // CgsServerInterfacePlayerInfoData TU, where the concrete leaf's serialise virtuals are homed).
+    // Per the project rule (never fabricate a foreign type's interior/interface), the body is left
+    // declared-only until that type is made concrete; RenderHUD's tail-call resolves against the
+    // declaration under the cl /c gate. See the wave41 packet for the full verified body.
+    // ================================================================================================
+
+    // ================================================================================================
+    // RenderHUD  @0x82597690  (CgsDev::DebugComponent::RenderHUD override)
+    // ------------------------------------------------------------------------------------------------
+    // Gate the connection-status table on the "Display Connection Status" menu toggle (+0x1E). The X360
+    // tail-calls RenderConnectionStatus, passing the display through unchanged.
+    void ServerInterfaceDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
+    {
+        if (mbDisplayConnectionStatus)
+        {
+            RenderConnectionStatus(lpDisplay);
+        }
+    }
+
+    // ================================================================================================
+    // ServerTypeSelectCallback  @0x82585800
+    // ------------------------------------------------------------------------------------------------
+    // Debug-menu select callback for the "Server Type" enum: flag the change to be applied on the next
+    // Update tick (deferred so it runs on the network thread). The menu passes the changed value in the
+    // first argument (unused here) and the registered component in the second. The X360 asserts the
+    // component is non-null, then unconditionally sets the deferred-apply flag.
+    void ServerInterfaceDebugComponent::ServerTypeSelectCallback(void* /*lpData*/, void* lpUserData)
+    {
+        CGS_ASSERT(lpUserData != nullptr, "lpServerInterfaceDebugComponent");
+        static_cast<ServerInterfaceDebugComponent*>(lpUserData)->mbApplyServerTypeNextUpdate = true;
+    }
 }

@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
+#include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"   // BaseEventQueue<T>::AddEvent (inline generic)
 #include "GameSource/Network/SharedIO/BrnNetworkToGuiEvents.h"   // BrnNetwork::NetworkToGuiLiveRevengeUpdate (16-byte element)
 
 // CgsModule::EventQueue<BrnNetwork::NetworkToGuiLiveRevengeUpdate, 4>::Construct  @ 0x82592518
@@ -29,3 +30,22 @@ template void CgsModule::EventQueue<BrnNetwork::NetworkToGuiLiveRevengeUpdate, 4
 //   sizeof(NetworkToGuiLiveRevengeUpdate) == 16. Thin out-of-line instantiation.
 template const BrnNetwork::NetworkToGuiLiveRevengeUpdate&
 CgsModule::BaseEventQueue<BrnNetwork::NetworkToGuiLiveRevengeUpdate>::GetEvent(s32) const;
+
+// CgsModule::BaseEventQueue<BrnNetwork::NetworkToGuiLiveRevengeUpdate>::AddEvent  @ 0x82557F28
+//   (called by BrnNetwork::LiveRevengeManager::DisplayPlayerTakedownMessage and
+//   ::DisplayRivalTakedownMessage, which push live-revenge status updates into the
+//   NetworkToGui OutputBuffer's per-event queue).
+//
+// Thin explicit instantiation of the generic AddEvent(const T&) already inline in
+// CgsBaseEventQueue.h. Store-for-store match against the X360 body:
+//   * lwz r11,0(r29); bne -> non-gating 'mpEvents != NULL' tripwire (CgsBaseEventQueue.h:312);
+//   * lwz r11,8(r29) (miLength@+8) vs lwz r10,4(r29) (miMaxLength@+4); blt skips the de-inlined
+//     'CgsModule::BaseEventQueue<...>::AddEvent\nReached Max length ' builder -- non-gating (:313);
+//   * 16-byte stride: lwz r11,8(r29) (miLength), slwi r11,r11,4 (miLength*16), lwz r10,0(r29)
+//     (+mpEvents), add, then FOUR 32-bit word copies from r26 (a2) at +0/+4/+8/+0xC ==
+//     sizeof(NetworkToGuiLiveRevengeUpdate) == 16 (four int32);
+//   * bump miLength: lwz r11,8(r29)/addi r11,r11,1/stw r11,8(r29); return 1 (li r3,1).
+// Member offsets: mpEvents@+0, miMaxLength@+4, miLength@+8. Element already committed (16 bytes).
+template bool
+CgsModule::BaseEventQueue<BrnNetwork::NetworkToGuiLiveRevengeUpdate>::AddEvent(
+    const BrnNetwork::NetworkToGuiLiveRevengeUpdate& lEvent);

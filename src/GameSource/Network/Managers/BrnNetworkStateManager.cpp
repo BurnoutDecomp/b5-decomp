@@ -51,4 +51,24 @@ namespace BrnNetwork
         *lpXUID = maSlots[liSlot].mu64XUID;          // ld 8(slot); std 0(lpXUID)
         return this;
     }
+
+    // BrnNetwork::StateManager::TeamSelectionFinishedCallback @ 0x82549870
+    //
+    // Menu-flow completion callback fired when team selection has finished. The X360 body
+    // guards its two arguments then advances the state manager's state machine to 12:
+    //   - result handle non-null, else the streamed assert "Team selection has failed somehow\n"
+    //     (the BeginAssert + BasePriorityQueue::Clear + off_82000D00 StrStream-into-buffer
+    //     inlining collapses to one CGS_ASSERT per project convention);
+    //   - lpStateManager non-null, else CGS_ASSERT(..., "lpStateManager") (cpp:5663);
+    //   - then `stw 12, 0x90(lpStateManager)` sets miState = 12.
+    // The asserts are non-fatal, so the state store runs on every path. Returns the result
+    // handle it was passed (r3 preserved as the callback's return value).
+    void* StateManager::TeamSelectionFinishedCallback(void* lpResult, StateManager* lpStateManager)
+    {
+        CGS_ASSERT(lpResult != nullptr, "Team selection has failed somehow\n");
+        CGS_ASSERT(lpStateManager != nullptr, "lpStateManager");
+
+        lpStateManager->miState = 12;   // stw r11(=0xC), 0x90(r27)
+        return lpResult;
+    }
 } // namespace BrnNetwork

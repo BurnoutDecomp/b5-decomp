@@ -84,6 +84,16 @@ namespace BrnNetwork
         // into the state manager's private layout. Declared-only; body is the state manager's TU.
         void SetRetryGetServerBuddies(bool lbRetry);
 
+        // Menu-flow completion callback fired when team selection has finished. Guards its two
+        // arguments then advances the state machine to 12 (stw 12, 0x90(lpStateManager)).
+        // X360 @ 0x82549870. Returns the result handle it was passed (r3 preserved).
+        static void* TeamSelectionFinishedCallback(void* lpResult, StateManager* lpStateManager);
+
+        // The state-machine value written by the flow callbacks (X360 store @ +0x90). Modelled
+        // by name; ADDITIVE GROW (this TU) -- the full StateManager layout is not reconstructed,
+        // so the preceding members are not modelled here (miState is reached by name only).
+        s32 miState;   // +0x90
+
         // Nested fixed-size player-id -> XUID lookup table (8 slots).
         struct CurrentPlayerXUIDs
         {

@@ -79,6 +79,8 @@ namespace CgsNetwork
 
 namespace BrnNetwork
 {
+    class NetworkGamerCardManagerX360;   // pointer-only (GetGamerCardManager return)
+
     class BrnNetworkManager
     {
         friend class NetworkServers;
@@ -137,6 +139,13 @@ namespace BrnNetwork
         // ADDITIVE GROW (BrnNetworkBuddyManagerX360 TU).
         s32 GetLocalUserControllerPort() const;
 
+        // Clear the cached "local user is signed in" flag (X360: stb 0 at this+0x3D0CC). Called
+        // by BrnNetwork::NetworkNotificationManagerX360::ProcessNotifications when a system
+        // sign-in change affects the local user's controller port. Declared-only here; storage
+        // materialises with the full BrnNetworkManager TU. ADDITIVE GROW
+        // (BrnNetworkNotificationManagerX360 TU).
+        void ClearLocalUserSignedInFlag();
+
         // The running network send-frame counter (X360: *(this+0x3658), read whole then taken
         // modulo 0xFFFF to derive a reliable-message frame id; see
         // BrnNetwork::MarkedManManager::SendMarkedManDataToAll @ 0x82548DCC). Declared-only here;
@@ -147,6 +156,12 @@ namespace BrnNetwork
         // &GetNetworkManager()->mpLiveRevengeManager). Declared-only; storage lands with the full
         // BrnNetworkManager TU. ADDITIVE GROW (BrnNetworkAggressiveDrivingManager TU).
         LiveRevengeManager* GetLiveRevengeManager();
+
+        // The embedded X360 gamer-card manager (X360: reached as an embedded sub-object at
+        // manager +0x41AB0; resolves a player's XUID by name). Read by
+        // BrnNetwork::ScoreboardManager::HandleEvScoreTargetEvent. Declared-only here; storage
+        // lands with the full BrnNetworkManager TU. ADDITIVE GROW (BrnNetworkScoreboardManager TU).
+        NetworkGamerCardManagerX360* GetGamerCardManager();
 
         // The current online round number (X360: read whole as a u8 at *(this+613796) ==
         // *(this+0x95DA4); BrnNetwork::StandingsManager stamps the sent PlayerFinishedRoundMessage

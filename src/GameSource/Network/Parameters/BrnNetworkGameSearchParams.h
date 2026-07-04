@@ -46,12 +46,20 @@ namespace BrnNetwork
         u8 maGameSearchTail[0x83];
     };
 
+    class BrnNetworkManager;   // pointer-only (AreRivalsInSameGame param)
+
     // X360 leaf. Its `scalar deleting destructor' (X360 @ 0x82569280) stores the
     // class vptr then conditionally frees -- the codegen of a virtual destructor.
     class GameSearchParams : public GameSearchParamsBase
     {
     public:
         virtual ~GameSearchParams();
+
+        // X360 GameSearchParamsX360::AreRivalsInSameGame @ 0x82590FC0.
+        // Fills lpbRivalInSameGame[i] for each stored revenge rival with whether that
+        // rival is currently present in a Burnout title (via Xbox LIVE presence). Returns
+        // the revenge-relationship count. lpNetworkManager reaches the LiveRevengeManager.
+        s32 AreRivalsInSameGame(bool* lpbRivalInSameGame, BrnNetworkManager* lpNetworkManager);
     };
 }
 

@@ -9,6 +9,19 @@
 #include "lobbystatbook.h"   // LobbyStatbook* family
 #include "lobbysetting.h"    // LobbySetting* family
 
+// Vendor DirtySDK lobby/tagfield C-API entry points used by GetPlayerXUIDByName /
+// _GetPlayerXUIDCallback. Declared extern "C" at file scope, mirroring the sibling
+// CgsServerInterfaceGames.cpp (TagFieldSetString @:68 / TagFieldFind @:65). The
+// real prototypes live in the DirtySDK headers.
+extern "C"
+{
+    s32   TagFieldSetString(char* pRecord, s32 iRecLen, const char* pKey, const char* pValue);
+    void* TagFieldFind(const char* pRecord, const char* pKey);
+    // DirtyAddrToHostAddr(pHostAddr, iLen, pField) -- decode a "MADDR" tag field into a host
+    // address (here the 8-byte XUID slot the caller passed in).
+    s32   DirtyAddrToHostAddr(void* pHostAddr, s32 iLen, const void* pField);
+}
+
 // ===========================================================================
 // CgsNetwork::ServerInterfacePlayerInfo
 //
@@ -262,6 +275,73 @@ namespace CgsNetwork
                           KAI_ACTION_CODE_MAPPING[meCurrentAction],
                           mpServerInterface->GetMessageBuffer(),
                           lpfCallback, this);
+    }
+
+    // -----------------------------------------------------------------------------------
+    // GetPlayerXUIDByName @ 0x82888918
+    //   ADDITIVE GROW (BrnNetwork::NetworkGamerCardManagerX360 TU): resolve a player's
+    //   64-bit XUID from a gamer name. Stash the destination XUID slot at +0x28 (which
+    //   otherwise holds the four account-settings flag bytes -- the two paths never
+    //   coexist), seed the shared message buffer under the "PERS" tag, and issue the lobby
+    //   request via the E_ACTION_LOAD_SETTINGS slot with the XUID completion callback.
+    // -----------------------------------------------------------------------------------
+    void ServerInterfacePlayerInfo::GetPlayerXUIDByName(const PlayerName* lpcPlayerName,
+                                                        u64* lpXuidOut)
+    {
+        CGS_ASSERT(lpXuidOut, "lpXUID");
+        CGS_ASSERT(lpcPlayerName, "lpPlayerName");
+
+        mpXUID = lpXuidOut;   // +0x28 (aliases the account-settings flag bytes; stw @0x82888984)
+
+        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
+        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
+        lpcBuffer[0] = 0;
+
+        // KI_MESSAGE_BUFFER_LEN (2048). The persona name reaches TagFieldSetString as a
+        // const char* (the name buffer).
+        TagFieldSetString(mpServerInterface->GetMessageBuffer(), 2048, "PERS",
+                          reinterpret_cast<const char*>(lpcPlayerName));
+
+        StartAction(E_ACTION_LOAD_SETTINGS, &ServerInterfacePlayerInfo::_GetPlayerXUIDCallback);
+    }
+
+    // -----------------------------------------------------------------------------------
+    // _GetPlayerXUIDCallback @ 0x828796A0 (static; LobbyApiCallbackT-shaped)
+    //   Lobby reports the resolved record for the XUID lookup. The component arrives via
+    //   the void* user-data param (r5). On success (result == 0) decode the "MADDR" tag
+    //   field into the caller's XUID slot via DirtyAddrToHostAddr; otherwise zero it. Then
+    //   clear the pending XUID pointer, map the lobby result for the action, and finish.
+    // -----------------------------------------------------------------------------------
+    void ServerInterfacePlayerInfo::_GetPlayerXUIDCallback(LobbyApiRefT* /*lpRef*/,
+                                                           LobbyApiMsgT* lpMsg, void* lpData)
+    {
+        ServerInterfacePlayerInfo* lpComponent =
+            static_cast<ServerInterfacePlayerInfo*>(lpData);
+        CGS_ASSERT(lpComponent->mpXUID, "lpServerInterface->mpXUID");
+
+        // msg+0x0C is the lobby result code; msg+0x10 is the record data pointer.
+        const s32 liResult = reinterpret_cast<const s32*>(lpMsg)[3];   // +0x0C
+        if (liResult == 0)
+        {
+            void* lpField = TagFieldFind(
+                reinterpret_cast<const char*>(reinterpret_cast<void**>(lpMsg)[4]),  // +0x10
+                "MADDR");
+            DirtyAddrToHostAddr(lpComponent->mpXUID, 8, lpField);
+        }
+        else
+        {
+            *lpComponent->mpXUID = 0;
+        }
+
+        const EAction leAction = lpComponent->meCurrentAction;   // read +0x14 before clearing
+        lpComponent->mpXUID = 0;                                 // stw 0,0x28
+
+        const DSErrorToServerInterfaceErrorTable& lEntry = KA_DS_ERROR_TABLE_LOOKUP[leAction];
+        EServerInterfaceError leError =
+            lpComponent->ServerInterfaceComponent::ConvertError(
+                liResult, lEntry.mpMappingTable, lEntry.miNumMappings);
+        lpComponent->EndActionCore(static_cast<int>(leError));
+        lpComponent->meCurrentAction = E_ACTION_COUNT;
     }
 
     // -----------------------------------------------------------------------------------

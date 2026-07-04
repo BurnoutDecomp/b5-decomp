@@ -157,7 +157,10 @@ namespace CgsNetwork
                                            s32 liResult, void* lpData);
         static void LoadSettingsCallback(DirtySock::LobbySettingRefT* lpRef,
                                          s32 liResult, void* lpData);
-        void _GetPlayerXUIDCallback(LobbyApiRefT* lpRef, LobbyApiMsgT* lpMsg, void* lpData);
+        // STATIC (X360 reaches the component through the void* user-data param r5, not r3, and
+        // GetPlayerXUIDByName hands its address to StartAction as a LobbyApiCallbackT* -- so it
+        // must be a plain (LobbyApiRefT*, LobbyApiMsgT*, void*) static, the LobbyApiCallbackT shape).
+        static void _GetPlayerXUIDCallback(LobbyApiRefT* lpRef, LobbyApiMsgT* lpMsg, void* lpData);
 
         // ---- Data members (DWARF order; base occupies +0x00..+0x0C) -----------------
         ServerInterfaceDirtySock*          mpServerInterface;        // +0x10
@@ -166,10 +169,23 @@ namespace CgsNetwork
         LobbyFindUserT*                    mpFindUser;               // +0x1C
         LobbyStatbookT*                    mpStatbook;               // +0x20
         s32                                miEventCallback;          // +0x24
-        bool                               mbUseCachedAccountSettings; // +0x28
-        bool                               mbAgreeToShareInfoEA;
-        bool                               mbAgreeToShareInfoPartners;
-        bool                               mbTelemetryEnable;
+        // The single 4-byte X360 slot at +0x28 holds BOTH the four account-settings flag bytes
+        // (Construct/Destruct/Prepare/Release zero them with one word) AND, on the XUID-lookup
+        // path, the u64* destination pointer (GetPlayerXUIDByName stores it here @0x82888984; the
+        // callback reads/writes *mpXUID). The two paths never coexist, so a union is
+        // behaviour-preserving. No members follow, so pointer-widening on the 64-bit host cannot
+        // corrupt a later offset.
+        union                                                          // +0x28 (4 bytes on X360)
+        {
+            struct
+            {
+                bool mbUseCachedAccountSettings;   // +0x28
+                bool mbAgreeToShareInfoEA;         // +0x29
+                bool mbAgreeToShareInfoPartners;   // +0x2A
+                bool mbTelemetryEnable;            // +0x2B
+            };
+            u64* mpXUID;                            // +0x28 (XUID lookup out-ptr)
+        };
     };
 }
 

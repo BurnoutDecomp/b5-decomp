@@ -62,6 +62,16 @@ namespace BrnNetwork
         LiveRevengeSyncMessage  mRecvMessage;        // DWARF :77
     };
 
+    // 2-word payback network-event payload (X360: word0 @+0, word1 @+4). Consumed by
+    // HandlePayback{Initialised,Succeeded}Event -> UpdatePaybacksData. X360 attests only
+    // two 4-byte words (lwz 0(r31), lwz 4(r31)); field names inferred from UpdatePaybacksData
+    // arg1/arg2.
+    struct PaybackEvent
+    {
+        s32 miNetworkPlayerID;  // +0  (UpdatePaybacksData arg1)
+        s32 miAggressorIndex;   // +4  (UpdatePaybacksData arg2)
+    };
+
     // Suppress the minimal-slice forward definition in BrnNetworkManager.h when the full
     // class definition is already visible (see BrnNetworkManager.h comment).
 #define BRNETWORK_LIVEREVENGEMANAGER_DEFINED
@@ -106,6 +116,14 @@ namespace BrnNetwork
 
         LiveRevengeRelationship* GetNonConstRevengeRelationship(NetworkPlayerID lPlayerID);
 
+        // @ 0x8258C540 -- const table-index accessor (DWARF-truncated "GetRevengeRelationshi").
+        // Caller: BrnNetwork::GameSearchParamsBase::FillInRivals.
+        LiveRevengeRelationship* GetRevengeRelationship(s32 liTableIndex) const;
+
+        // Payback network-event handlers (callers: BrnNetwork::StateManager::ProcessNetworkEvents).
+        void HandlePaybackInitialisedEvent(const PaybackEvent* lpPaybackEvent);   // @ 0x82561930
+        void HandlePaybackSucceededEvent(const PaybackEvent* lpPaybackEvent);     // @ 0x825619A0
+
         void DisplayPlayerTakedownMessage(void* lpOutputBuffer, s32 liAggressorIndex, s32 liVictimIndex, s32 liUnk);
         void DisplayRivalTakedownMessage(void* lpOutputBuffer, s32 liAggressorIndex, s32 liVictimIndex, s32 liUnk);
 
@@ -134,7 +152,10 @@ namespace BrnNetwork
         void  AutoSaveLiveRevengeProfile();
         void  UpdateMarkedManInfo();
         void  UpdateLiveRevengeRelationShip(s32 liAggressor, s32 liVictim, u8 luFlags, void* lpOutputBuffer);
-        void  UpdatePaybacksData(s32 liNetworkPlayerID, s32 liAggressorIndex, s32 liVictimIndex);
+        // The X360 payback handlers pass (networkPlayerID, aggressorIndex, flag) as three
+        // value args (r4/r5/r6), where the 3rd is a raw payback-outcome flag (2 == Initialised,
+        // 4 == Succeeded; NOT EPaybackType, whose values are 0..3).
+        void  UpdatePaybacksData(s32 liNetworkPlayerID, s32 liAggressorIndex, s32 liPaybackFlag);
         void  GetUniqueIDByName(const char* lpcPlayerName, void* lpUniqueID) const;
         void  GetUniqueIDByPlayerID(NetworkPlayerID lNetworkPlayerID, void* lpUniqueID) const;
         LiveRevengeRelationship* GetNonConstRevengeRelation(NetworkPlayerID lPlayerID);

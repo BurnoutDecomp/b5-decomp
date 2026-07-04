@@ -1,4 +1,6 @@
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsSmartBitStream.h"
+#include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
+#include "GameShared/GameClasses/Network/Packeting/BitStream/CgsIntQuantiser.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cstdint>   // uintptr_t
@@ -110,5 +112,38 @@ namespace CgsNetwork
             ++lpcDst;
             --liNumBytes;
         }
+    }
+
+    // ---- GetQuantisedFloat @ 0x8264AFA0 (liNumBits overload) -------------------
+    // Read liNumBits from the stream, then hand the packed bits plus the range to
+    // FloatQuantiser::UnPack, which reconstructs the float into *lpfValue.
+    void SmartBitStream::GetQuantisedFloat(float* lpfValue, float lfMin, float lfMax,
+                                           s32 liNumBits)
+    {
+        u32 luPackedValue = static_cast<u32>(GetBits(liNumBits));
+        FloatQuantiser::UnPack(lpfValue, lfMin, lfMax, liNumBits, luPackedValue);
+    }
+
+    // ---- GetQuantisedInt @ 0x82880098 -----------------------------------------
+    // The X360 build inlines IntQuantiser::GetNumBits here: count the right-shifts
+    // it takes to drive the unsigned span (max-min) to zero. Read that many bits,
+    // then reconstruct the value through IntQuantiser::UnPack.
+    void SmartBitStream::GetQuantisedInt(s32* lpiValue, s32 liMin, s32 liMax)
+    {
+        // Inlined GetNumBits(liMin, liMax): bit_width(liMax - liMin), 0 when equal.
+        u32 luSpan    = static_cast<u32>(liMax) - static_cast<u32>(liMin);
+        s32 liNumBits = 0;
+        if (liMax != liMin)
+        {
+            do
+            {
+                luSpan >>= 1;
+                ++liNumBits;
+            }
+            while (luSpan);
+        }
+
+        u32 luPackedValue = static_cast<u32>(GetBits(liNumBits));
+        IntQuantiser::UnPack(lpiValue, liMin, liMax, luPackedValue);
     }
 }

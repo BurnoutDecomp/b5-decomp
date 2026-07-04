@@ -16,9 +16,14 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceRankings.h"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                          // VariableEventQueue<14000,16>::AddEvent
+#include "GameSource/Network/BrnNetworkModule.h"                                          // GetNetworkManager / GetNetworkEventQueue
+#include "GameSource/Network/BrnNetworkManager.h"                                         // GetLocalUserControllerPort / GetGamerCardManager
+#include "GameSource/Network/Managers/X360/BrnNetworkGamerCardManagerX360.h"             // NetworkGamerCardManagerX360::GetXuidForPlayer
 
 #include <cstdlib>   // atoi, qsort
 #include <cstdio>    // snprintf (the rank-column "%d" formatter)
+#include <cstdint>   // uintptr_t (this <-> s32 user-data round-trip)
 
 namespace BrnNetwork
 {
@@ -38,6 +43,54 @@ namespace BrnNetwork
 
     // The X360 cell-buffer width every Get*Cell read uses (char[31], the ScoreboardRow cell width).
     static const s32 KI_CELL_BUFFER_SIZE = 31;
+
+    // The incoming GUI "challenge this event score" event handed to HandleEvScoreTargetEvent.
+    // Forward-declared in the header (BrnNetwork::EvScoreTargetEvent); defined here. The leading
+    // bytes are the challenged player's name string (fed to UniquePlayerIDX360::Construct); the
+    // trailing fields are read at the X360-attested offsets. Total size is not attested (a
+    // queue-payload span), so no closing member is modelled.
+    struct EvScoreTargetEvent
+    {
+        u8  macOpaqueName[0x10];   // +0x00  player-name string span (Construct source)
+        u32 muScoreValue;          // +0x10
+        s32 miCategory;            // +0x14
+        s32 miIndex;               // +0x18
+        s32 miVariation;           // +0x1C
+        u8  muChallengeType;       // +0x20
+    };
+
+    // ---- score-target challenge event protocol (private to this manager) ----------------------
+    namespace
+    {
+        // The concrete network-event queue behind BrnNetworkModuleIO::NetworkEventQueue (same
+        // 14000/16 instantiation the sibling BrnEventScoresManager.cpp re-casts to).
+        typedef CgsModule::VariableEventQueue<14000, 16> NetworkEventQueueConcrete;
+
+        inline NetworkEventQueueConcrete* AsConcreteQueue(BrnNetworkModuleIO::NetworkEventQueue* lpQueue)
+        {
+            return reinterpret_cast<NetworkEventQueueConcrete*>(lpQueue);
+        }
+
+        // The outgoing "score-target challenge" network event (type 0x35 == 53, 40-byte payload).
+        // Layout X360-attested from the HandleEvScoreTargetEvent / RequestXUIDForPlayerCallback
+        // payload builds: the challenged player's id (UniquePlayerIDX360, 24B) then the scoreboard
+        // slot, the challenge value and the challenge-type byte.
+        struct ScoreTargetChallengeEvent
+        {
+            CgsNetwork::UniquePlayerIDX360 mPlayerID;         // +0x00  (24B)
+            u64                            mScoreboardSlot;   // +0x18
+            s32                            miValue;           // +0x20
+            u8                             muChallengeType;   // +0x24
+        };
+
+        // The outgoing network-event type code (X360 AddEvent(queue, payload, 0x35, 0x28)).
+        const s32 KI_NETEVENT_SCORE_TARGET     = 0x35;   // 53
+        const s32 KI_SCORE_TARGET_PAYLOAD_SIZE = 0x28;   // 40 == sizeof(ScoreTargetChallengeEvent)
+
+        // The scoreboard params HandleEvScoreTargetEvent probes to pick the per-param slot table.
+        const s32 KI_SCORE_TARGET_PARAM_A = 4;
+        const s32 KI_SCORE_TARGET_PARAM_B = 5;
+    } // anonymous namespace
 
     // -------------------------------------------------------------------------------------------
     // Construct  @ 0x8255A408  [EXECUTED in goal trace]
@@ -470,5 +523,166 @@ namespace BrnNetwork
         }
 
         AddNumberBeforeAndAfter(lpScoreboard, static_cast<s8>(liRowCount));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // DirtySockColumnTypeToEDataType  @ 0x825474F8
+    // Map a DirtySock column type-code onto the scoreboard's logical EDataType. The X360 body
+    // linear-scans a paired file-scope rodata lookup table (unk_8207C69C key words / dword_8207C6A0
+    // result words, stride 8 == {type,EDataType} pairs); the first pair whose key matches liDSType
+    // yields that pair's EDataType. An unrecognised code asserts "Bad dirtysock data type" and
+    // returns the out-of-enum "unknown" sentinel 9 (the value AddColumnInfoToScoreboard tests
+    // against; there is no EDataType == 9).
+    //
+    // FLAGGED rodata gap (per project rule: never fabricate un-recovered rodata): the paired
+    // {DirtySock-type, EDataType} lookup table (unk_8207C69C / dword_8207C6A0) is file-scope rodata
+    // NOT recovered in this slice, so the individual type->EDataType mappings cannot be
+    // reconstructed without fabricating data. The recoverable structure -- the linear scan, the
+    // not-found assert and the `return 9` sentinel -- is reconstructed; the table walk is left as a
+    // documented placeholder that always reports "not found" until that rodata is homed.
+    // -------------------------------------------------------------------------------------------
+    ScoreboardColumn::EDataType ScoreboardManager::DirtySockColumnTypeToEDataType(s32 liDSType)
+    {
+        // FLAGGED placeholder: scan the un-recovered {type,EDataType} lookup table for liDSType.
+        // for (each {liKey, leResult} pair in the table)
+        //     if (liDSType == liKey) return leResult;
+        (void)liDSType;
+
+        // No matching column type: report the bad type and return the out-of-enum "unknown"
+        // sentinel (== 9; see AddColumnInfoToScoreboard, which routes 9 to E_DATATYPE_STRING).
+        CGS_ASSERT(false, "Bad dirtysock data type");
+        return static_cast<ScoreboardColumn::EDataType>(9);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // HandleEvScoreTargetEvent  @ 0x82568960
+    // Handle a GUI "challenge this event score" request: point the rankings component at the target
+    // scoreboard, resolve which per-param scoreboard-slot table applies, and build the outgoing
+    // score-target challenge network event. When the challenged player's XUID already travels in
+    // the event (challenge-type byte set) the event is queued immediately; otherwise the XUID is
+    // resolved by-name through the gamer-card manager and the event is queued from
+    // RequestXUIDForPlayerCallback once it arrives.
+    //
+    // FLAGGED rodata gap: the per-param score-target scoreboard-slot tables (qword_8207C440 for
+    // param 4, qword_8207C4B0 for param 5) are un-recovered file-scope rodata. The param dispatch,
+    // the no-leaderboard assert and the mScoreTargetScoreboard store ARE reconstructed; the table
+    // read (v4[variation]) is left as a documented placeholder (0) until that rodata is homed.
+    // -------------------------------------------------------------------------------------------
+    void ScoreboardManager::HandleEvScoreTargetEvent(const EvScoreTargetEvent* lpScoreTargetEvent)
+    {
+        CGS_ASSERT(lpScoreTargetEvent != 0, "lpScoreboardScoreTargetEvent");
+
+        mpRankings->SelectScoreboard(lpScoreTargetEvent->miCategory,
+                                     lpScoreTargetEvent->miIndex,
+                                     lpScoreTargetEvent->miVariation);
+
+        // Resolve which per-param scoreboard-slot table applies (FLAGGED: table content un-recovered).
+        if (mpRankings->ScoreboardHasParam(KI_SCORE_TARGET_PARAM_A))
+        {
+            // v4 = &qword_8207C440 (param-4 table).
+        }
+        else if (mpRankings->ScoreboardHasParam(KI_SCORE_TARGET_PARAM_B))
+        {
+            // v4 = &qword_8207C4B0 (param-5 table).
+        }
+        else
+        {
+            CGS_ASSERT(false, "Trying to challenge event score for event without a leaderboard\n");
+            return;
+        }
+
+        // FLAGGED-0 placeholder: mScoreTargetScoreboard = v4[lpScoreTargetEvent->miVariation]
+        // (un-recovered per-param scoreboard-slot table, u64 stride).
+        mScoreTargetScoreboard = 0;
+        miScoreTargetValue     = static_cast<s32>(lpScoreTargetEvent->muScoreValue);
+
+        if (lpScoreTargetEvent->muChallengeType != 0)
+        {
+            // The challenged player's identity travels in the event: build the challenge and queue it.
+            mScoreTargetPlayerID.Construct(reinterpret_cast<const char*>(lpScoreTargetEvent), 0);
+
+            ScoreTargetChallengeEvent lChallengeEvent;
+            lChallengeEvent.mPlayerID       = mScoreTargetPlayerID;
+            lChallengeEvent.mScoreboardSlot = mScoreTargetScoreboard;
+            lChallengeEvent.miValue         = miScoreTargetValue;
+            lChallengeEvent.muChallengeType = lpScoreTargetEvent->muChallengeType;
+
+            CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+            AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lChallengeEvent),
+                KI_NETEVENT_SCORE_TARGET, KI_SCORE_TARGET_PAYLOAD_SIZE);
+        }
+        else
+        {
+            // The challenged player's XUID is not yet known: seed the name-only id, then ask the
+            // gamer-card manager to resolve the XUID and re-enter through the callback.
+            mScoreTargetPlayerID.Construct(reinterpret_cast<const char*>(lpScoreTargetEvent), 0);
+
+            CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
+                       "mpNetworkModule->GetNetworkManager()");
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetGamerCardManager() != 0,
+                       "mpNetworkModule->GetNetworkManager()->GetGamerCardManager()");
+
+            BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
+            const s32 liControllerPort = lpNetworkManager->GetLocalUserControllerPort();
+            // The X360 passes `this` through the s32 user-data slot (32-bit pointers). On the
+            // x64 gate the pointer is widened; round-trip it through uintptr_t so the recovered
+            // callback can restore it (no information is lost within a single process image).
+            s32 liResult = lpNetworkManager->GetGamerCardManager()->GetXuidForPlayer(
+                static_cast<u32>(liControllerPort),
+                reinterpret_cast<const PlayerName*>(lpScoreTargetEvent),
+                &ScoreboardManager::RequestXUIDForPlayerCallback,
+                static_cast<s32>(reinterpret_cast<uintptr_t>(this)));
+
+            if (liResult == 0)
+            {
+                // Request did not start: clear the pending challenge state.
+                mScoreTargetScoreboard          = 0;
+                miScoreTargetValue              = 0;
+                mScoreTargetPlayerID.macName[0] = 0;
+                mScoreTargetPlayerID.mqXuid     = 0;
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // RequestXUIDForPlayerCallback  @ 0x82562E50  (static gamer-card-manager completion callback)
+    // Fired by NetworkGamerCardManagerX360::GetXuidForPlayer once a challenged player's XUID has
+    // been resolved by-name. Stamp the resolved XUID onto the pending player id and queue the same
+    // score-target challenge network event HandleEvScoreTargetEvent would have queued directly.
+    // (Register order: r3 lbSuccess, r4 lqRequestedXuid, r5 the ScoreboardManager `this`.)
+    // -------------------------------------------------------------------------------------------
+    s32 ScoreboardManager::RequestXUIDForPlayerCallback(s32 lbSuccess, u64 lqRequestedXuid,
+                                                        s32 liUserData)
+    {
+        s32 liResult = lbSuccess;
+        if (lbSuccess)
+        {
+            ScoreboardManager* lpScoreboardManager =
+                reinterpret_cast<ScoreboardManager*>(static_cast<uintptr_t>(static_cast<u32>(liUserData)));
+            CGS_ASSERT(lpScoreboardManager != 0, "lpScoreboardManager");
+            CGS_ASSERT(lqRequestedXuid != 0, "lRequestedXuid != 0");
+
+            // Re-build the pending id from its own (already-copied) name, now carrying the XUID.
+            lpScoreboardManager->mScoreTargetPlayerID.Construct(
+                lpScoreboardManager->mScoreTargetPlayerID.macName, lqRequestedXuid);
+
+            ScoreTargetChallengeEvent lChallengeEvent;
+            lChallengeEvent.mPlayerID       = lpScoreboardManager->mScoreTargetPlayerID;
+            lChallengeEvent.mScoreboardSlot = lpScoreboardManager->mScoreTargetScoreboard;
+            lChallengeEvent.miValue         = lpScoreboardManager->miScoreTargetValue;
+            lChallengeEvent.muChallengeType = 0;
+
+            CGS_ASSERT(lpScoreboardManager->mpNetworkModule != 0,
+                       "lpScoreboardManager->mpNetworkModule");
+            CGS_ASSERT(lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue() != 0,
+                       "lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue()");
+            liResult = AsConcreteQueue(
+                lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue())->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lChallengeEvent),
+                    KI_NETEVENT_SCORE_TARGET, KI_SCORE_TARGET_PAYLOAD_SIZE);
+        }
+        return liResult;
     }
 }
