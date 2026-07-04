@@ -4,19 +4,20 @@
 
 #include <cstddef>   // offsetof
 
-// BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics member, reconstructed from
-// BURNOUT_X360_ARTIST.XEX. This TU bodies the single X360-emitted accessor:
+// BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics accessors, reconstructed from
+// BURNOUT_X360_ARTIST.XEX (DWARF BrnWorldEntityModuleIO.h:234 struct). RECONCILED: the
+// previously-committed Get()/mOutputPayload accessor is really the write-lock
+// GetStatusInterface() (DWARF :249) returning mStatusInterface (:259, this + 822896).
+// This TU now bodies all three X360-emitted accessors:
 //
-//   Get() @ 0x822BA8B8  -> &mOutputPayload (this + 822896 == 0xC8E70), asserts write-lock (bit 3)
+//   GetResourceRequestInterface() @ 0x822BA810  write-lock (bit 3) -> &mResourceRequestInterface (this + 4)      [DWARF :246]
+//   GetStatusInterface() const    @ 0x827A2E78  read-lock  (bit 4) -> &mStatusInterface (this + 822896)          [DWARF :248]
+//   GetStatusInterface()          @ 0x822BA8B8  write-lock (bit 3) -> &mStatusInterface (this + 822896)          [DWARF :249]
 //
-// The asm tests the write-lock bit (`lbz r11,0(this); extrwi r11,r11,1,28` == bit 3 of the
-// status byte == IsBufferLockedForWriting()), and on failure fires the assert via the
-// streamed message "Not locked for writing\n" against
-// ..\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h:249. It
-// then returns the member address (this + 822896, computed by the asm as
-// `addis r3,this,0xD; addi r3,r3,-0x7190` == this + 0xD0000 - 0x7190 == this + 0xC8E70).
-// Modelled as the house CGS_ASSERT + member-address return (the streamed "\n" is dropped from
-// the stringized condition, as in the sibling PropEntityIO::OutputBuffer_PreScene accessors).
+// The read getter tests bit 4 (`extrwi r11,r11,1,27`), the writers test bit 3
+// (`extrwi r11,r11,1,28`). The +822896 (0xC8E70) member address is computed by the asm as
+// `addis r3,this,0xD; addi r3,r3,-0x7190`. The streamed "\n" is dropped from the stringized
+// condition, as in the sibling OutputBuffer_Prepare accessor.
 
 namespace BrnWorld
 {
@@ -24,15 +25,34 @@ namespace WorldEntityIO
 {
     void OutputBuffer_PostPhysics::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_PostPhysics, mOutputPayload) == 822896,
-                      "mOutputPayload @822896");
+        static_assert(offsetof(OutputBuffer_PostPhysics, mResourceRequestInterface) == 4,
+                      "mResourceRequestInterface @4");
+        static_assert(offsetof(OutputBuffer_PostPhysics, mStatusInterface) == 822896,
+                      "mStatusInterface @822896");
+    }
+
+    // X360 0x822BA810: write-lock; return this + 4.
+    OutputBuffer_PostPhysics::ResourceRequestInterfaceStorage*
+    OutputBuffer_PostPhysics::GetResourceRequestInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mResourceRequestInterface;
+    }
+
+    // X360 0x827A2E78: read-lock; return this + 822896.
+    const OutputBuffer_PostPhysics::StatusInterfaceStorage*
+    OutputBuffer_PostPhysics::GetStatusInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mStatusInterface;
     }
 
     // X360 0x822BA8B8: write-lock; return this + 822896.
-    OutputBuffer_PostPhysics::OutputPayloadStorage* OutputBuffer_PostPhysics::Get()
+    OutputBuffer_PostPhysics::StatusInterfaceStorage*
+    OutputBuffer_PostPhysics::GetStatusInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return &mOutputPayload;
+        return &mStatusInterface;
     }
 }
 }
