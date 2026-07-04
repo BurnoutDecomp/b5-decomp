@@ -109,6 +109,9 @@ namespace EffectsIO
         const void* GetContactSpyInterface() const;  // 0x8227DA90 :127
         const void* G() const;                       // 0x8227DB38 :131 (returns &mDeformationInterface)
         const void* GetAud() const;                  // 0x8227DDD8 :156 (returns &mAudioEffectsMessageQueue)
+        const void* GetActiveRaceCarInterface() const;    // 0x8227D7F0 :111 (returns &mActiveRaceCarInterface @ +0x1140)
+        const void* GetVehiclePhysicalStateQueue() const; // 0x8227D898 :115 (returns &mVehiclePhysicalStateQueue @ +0x3A30)
+        const void* GetPropVFXLocatorQueue() const;       // 0x8227DC88 :149 (returns &mPropVFXLocatorQueue @ +0xE0D0)
 
         // ---- setters (write-lock: status bit 3) ----
         void SetActiveRaceCarInterface(const void* lpInterface);      // 0x823BA490 :109

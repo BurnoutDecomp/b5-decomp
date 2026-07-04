@@ -79,11 +79,44 @@ namespace PhysicsSimulationIO
     };
 
     // Change a rigid body's inertia tensor. Queued with capacity 200 across the input/output
-    // buffers (X360 Construct @ 0x825A7B28). Same recovery caveat as InAddRigidBody: stride
-    // NOT X360-attested in scope, payload sized only to the attested 16-byte alignment class.
+    // buffers (X360 Construct @ 0x825A7B28). The event STRIDE *is* now X360-attested: the
+    // matching BaseEventQueue<InChangeRigidBodyInertia>::Append @ 0x825A40E8 block-copies at an
+    // 80-byte stride (dest offset `slwi r8,r11,2; add` == miLength*5, `slwi r11,r11,4` == *16 ==
+    // miLength*80; count `slwi r9,r29,2; add` == count*5, `slwi r5,r9,4` == *16 == count*80;
+    // Hex-Rays XMemCpy(80*a1[2]+*a1, *a2, 80*v4)). So this payload is sized to that attested
+    // 80-byte stride. 80 is 16-byte aligned so alignas(16) is preserved (and the committed
+    // EventQueue<...,200>::Construct stays store-for-store faithful -- it depends only on the
+    // base size for the +0x10 buffer padding and stores N / clears the count, element-size-
+    // agnostic). Internal field layout is still NOT recovered (no DWARF/source), so it is
+    // modelled as an opaque, 16-byte-aligned byte span.
     struct alignas(16) InChangeRigidBodyInertia : public Event
     {
+        u8 macOpaquePayload[80];  // stride 80B X360-attested (Append @0x825A40E8); fields not recovered
+    };
+
+    // Remove a previously-added vehicle drive from the simulation (symmetric partner of
+    // InAddDrive). Queued with capacity 1 in PhysicsSimulationIO::InputBuffer (X360
+    // EventQueue<InRemoveDrive,1>::Construct @ 0x828A64C8). Only Construct is in scope (no
+    // Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map @ 0x828A71B8
+    // that would pin it is not in scope), so the payload is sized only to the 16-byte alignment
+    // class the asm proves (addi r30, r31, 0x10). Stride/field layout intentionally NOT invented.
+    struct alignas(16) InRemoveDrive : public Event
+    {
         u8 macOpaquePayload[16];  // stride NOT recovered; sized to attested 16B alignment only
+    };
+
+    // Remove ALL rigid bodies belonging to one owner from the simulation, addressed by an
+    // 8-bit owner id. Queued with capacity 8 in PhysicsSimulationIO::InputBuffer as
+    // mRemoveAllRigidBodiesQueue (X360 EventQueue<InRemoveAllRigidBodies,8>::Construct
+    // @ 0x828A6148). Unlike the 16-byte-aligned siblings, this element is a single uint8_t: the
+    // Construct asm points the base at this+0x0C (`addi r30, r31, 0xC`) -- the 12-byte
+    // BaseEventQueue base is NOT padded before maEvents -- proving align < 16. DWARF
+    // (CgsPhysicsSimulationModuleIO.h:154/156) names the one member outright:
+    // { uint8_t mu8OwnerId; } over an empty Event base == sizeof 1, align 1. So this is a
+    // fully-attested struct, not an opaque span, and no alignas.
+    struct InRemoveAllRigidBodies : public Event
+    {
+        u8 mu8OwnerId;  // DWARF CgsPhysicsSimulationModuleIO.h:156; sizeof 1, align 1 (base at this+0x0C X360-attested)
     };
 
     // Push an external (non-simulation) body's updated state into the simulation. Queued with

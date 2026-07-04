@@ -168,6 +168,55 @@ public:
     bool HasDied() const { return (mxEffectAndHistoryState & E_HISTORY_DIED) != 0; }
     bool IsInPurgatory() const { return (mxFlags & E_FLAG_IN_PURGATORY) != 0; }
 };
+
+// ---------------------------------------------------------------------------
+// BrnTraffic::ParamTransform -- the per-vehicle orientation/position transform block.
+// DWARF-AUTHORITATIVE (references/DecFIGS/dwarfdump/.../BrnTrafficParam.h:314): a struct
+// with four private 16-byte, 16-aligned SIMD vectors (sizeof == 0x40) and the public method
+// set below. Offsets pinned by the store/load displacements in the X360 asm (GetRight +0x20,
+// GetLerpedPos/GetSpeed +0x30, Initialise stores mPos@0x00 / mDirAndAccel@0x10 / mRight@0x20 /
+// mLerpedPosAndSpeed@0x30) AND corroborated field-for-field by the DWARF member listing:
+//   0x00 mPos               (Vector3)      -- deterministic world position
+//   0x10 mDirAndAccel       (Vector3Plus)  -- forward dir in xyz, accel scalar in w/plus
+//   0x20 mRight             (Vector3)      -- right axis
+//   0x30 mLerpedPosAndSpeed (Vector3Plus)  -- render-lerped pos in xyz, speed in w/plus
+//
+// This batch reconstructs CalcUp/GetLerpedPos/GetRight/GetSpeed/Initialise. The remaining
+// DWARF-listed methods are DECLARED here (DWARF shape) for later waves. GetDirection is
+// DWARF-real (BrnTrafficParam.h:130) and is CALLED by CalcUp; because its own body is not in
+// this batch it is provided here as a minimal inline accessor mirror of the mDirAndAccel slot
+// so the TU links -- FLAGGED, to be replaced (not duplicated) by its own wave.
+class ParamTransform
+{
+public:
+    // 0x82712500 / 0x827126A0 / 0x82712770 / 0x827128E0 / 0x82712BA8 (this batch)
+    Vector3  GetDeterministicPos() const;                      // later wave
+    Vector3  GetLerpedPos() const;                             // 0x82712500
+    Vector3  GetDirection() const;                             // FLAGGED inline stub (see below)
+    Vector3  GetRight() const;                                 // 0x827126A0
+    Vector3  CalcUp() const;                                   // 0x82712770
+    VecFloat GetSpeed() const;                                 // 0x827128E0
+    Vector3  GetLerpedPositionAcross(VecFloat lfAcross) const; // later wave
+    void     UpdateLerpedPosition(VecFloat lfBlend);           // later wave
+    void     Construct();                                      // later wave
+    void     Initialise(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecFloat lfSpeed); // 0x82712BA8
+    void     Update(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecFloat lfSpeed, VecFloat lfBlend); // later wave
+
+private:
+    Vector3     mPos;                // 0x00
+    Vector3Plus mDirAndAccel;        // 0x10 (dir.xyz + accel in .w)
+    Vector3     mRight;              // 0x20
+    Vector3Plus mLerpedPosAndSpeed;  // 0x30 (lerped pos.xyz + speed in .w)
+};
+// sizeof(ParamTransform) == 0x40
+
+// FLAGGED stub: GetDirection is a DWARF-real accessor (its own X360 body is a later wave).
+// Provided inline so CalcUp compiles/links now; the trivial mDirAndAccel.GetVector3() mirror
+// matches GetRight's slot-accessor shape. Its own wave replaces this definition.
+inline Vector3 ParamTransform::GetDirection() const
+{
+    return mDirAndAccel.GetVector3();
+}
 }
 
 #endif

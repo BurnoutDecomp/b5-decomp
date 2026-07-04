@@ -1,5 +1,6 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/math/vpu/vector3_operation.h"   // IsZero / IsValid / Normalize / Cross (ParamTransform)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   BrnTraffic::Param::ClearDying              @ 0x82713130
@@ -226,5 +227,97 @@ bool Param::ShouldBeIndicatingRight() const
     // X360 only tests plan[1].muType == E_TYPE_CHANGE_SECTION here.
     return maPlans[1].muType == ParamPlan::E_TYPE_CHANGE_SECTION &&
            maPlans[1].muDirection == 2; // E_DIR_RIGHT
+}
+
+// ===========================================================================
+// BrnTraffic::ParamTransform -- per-vehicle orientation/position transform block.
+// ===========================================================================
+
+// 0x82712500 -- the render-lerped position (xyz of mLerpedPosAndSpeed; the w lane holds
+// speed). The X360 IsValid guard checks only the X/Y/Z lanes, then returns the vector.
+Vector3 ParamTransform::GetLerpedPos() const
+{
+    CGS_ASSERT(rw::math::vpu::IsValid(mLerpedPosAndSpeed.GetVector3()),
+               "RwMath::IsValid( mLerpedPosAndSpeed.GetVector3() )");
+
+    return mLerpedPosAndSpeed.GetVector3();
+}
+
+// 0x827126A0 -- the vehicle's right axis (mRight @0x20), guarded by an IsValid NaN check.
+Vector3 ParamTransform::GetRight() const
+{
+    CGS_ASSERT(rw::math::vpu::IsValid(mRight), "RwMath::IsValid( mRight )");
+
+    return mRight;
+}
+
+// 0x82712770 -- up = Normalize( Cross( GetRight(), GetDirection() ) ). The X360 first asserts
+// the direction and right axes are not (near-)equal (a degenerate cross would follow), then
+// builds the up axis. The source-level guard is !IsSimilar(dir, right); there is no linkable
+// rw::math::vpu::IsSimilar(Vector3,Vector3) in the vendor home, so it is expressed as the
+// equivalent !IsZero(dir - right) (asm: vsubfp Direction-Right, vandc fabs, vcmpgtfp |diff| >
+// eps). The exact rodata epsilon (unk_820BA240) is un-valued; IsZero's default tolerance stands
+// in for this debug-only guard.
+Vector3 ParamTransform::CalcUp() const
+{
+    const Vector3 lDirection = GetDirection();
+    const Vector3 lRight     = GetRight();
+
+    CGS_ASSERT(!rw::math::vpu::IsZero(lDirection - lRight),
+               "!IsSimilar( GetDirection(), GetRight() )");
+
+    return rw::math::vpu::Normalize(rw::math::vpu::Cross(GetRight(), GetDirection()));
+}
+
+// 0x827128E0 -- the lerped speed scalar (the w/plus lane of mLerpedPosAndSpeed), returned
+// broadcast across all four lanes as a VecFloat (asm: vspltw lane 3 -> full-register store).
+// The IsValid guard validates ONLY that plus lane (asm vspltw v0,v0,3 then vcmpeqfp self-
+// compare); modelled as the scalar `lf == lf` NaN self-test (same convention as
+// Param::SetParamAlong in this file), since there is no rw::math::vpu::IsValid(float).
+VecFloat ParamTransform::GetSpeed() const
+{
+    const f32 lfSpeed = mLerpedPosAndSpeed.GetPlus();
+
+    CGS_ASSERT(lfSpeed == lfSpeed, "RwMath::IsValid( mLerpedPosAndSpeed.GetPlus() )");
+
+    return VecFloat{ lfSpeed, lfSpeed, lfSpeed, lfSpeed };
+}
+
+// 0x82712BA8 -- seed the transform from the spawn basis + speed. Stores (targets/order exact
+// from the asm):
+//   mPos               = lPos                                      (@0x00)
+//   mDirAndAccel       = { lDir.xyz, plus = 0 }                    (@0x10, accel lane cleared)
+//   mRight             = lRight                                    (@0x20)
+//   mLerpedPosAndSpeed = { (lPos - lDir*lfSpeed*KF_INIT_LERP_STEP).xyz, plus = lfSpeed } (@0x30)
+// FLAG(medium): the rodata float flt_82004014 scaling lDir*lfSpeed is a shared cross-binary
+// constant; its usages elsewhere (equality/threshold compares) indicate it is the shared ZERO
+// constant, so KF_INIT_LERP_STEP is modelled as 0.0f -- the lerp-history seed is then simply
+// lPos. The store structure is faithful regardless of the constant's exact value.
+void ParamTransform::Initialise(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecFloat lfSpeed)
+{
+    CGS_ASSERT(rw::math::vpu::IsValid(lPos),   "RwMath::IsValid( lPos )");
+    CGS_ASSERT(rw::math::vpu::IsValid(lDir),   "RwMath::IsValid( lDir )");
+    CGS_ASSERT(rw::math::vpu::IsValid(lRight), "RwMath::IsValid( lRight )");
+    CGS_ASSERT(lfSpeed.x == lfSpeed.x,         "RwMath::IsValid( lfSpeed )");
+
+    // FLAG: rodata flt_82004014 (shared ZERO constant per cross-binary usage). The back-step
+    // scaling lDir*lfSpeed before the subtract; value INFERRED 0.0f (seeds the lerp history at
+    // lPos). A future wave that hard-pins the rodata should confirm/adjust.
+    const f32 KF_INIT_LERP_STEP = 0.0f;
+
+    mPos   = lPos;
+    mRight = lRight;
+
+    mDirAndAccel.SetVector3(lDir);
+    mDirAndAccel.SetPlus(0.0f);
+
+    const f32 lfSpeedScalar = lfSpeed.x;
+    const f32 lfStep        = lfSpeedScalar * KF_INIT_LERP_STEP;
+    mLerpedPosAndSpeed.SetVector3(Vector3{
+        lPos.x - lDir.x * lfStep,
+        lPos.y - lDir.y * lfStep,
+        lPos.z - lDir.z * lfStep,
+        0.0f });
+    mLerpedPosAndSpeed.SetPlus(lfSpeedScalar);
 }
 }

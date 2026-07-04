@@ -39,15 +39,40 @@ namespace CgsPhysics
     // bytes (DWARF drivedynamics.h).
     struct alignas(16) DriveDynamics { u8 macOpaque[32]; };
 
+    // rw::physics::Inertia. 48-byte X360-attested array stride (GetInertia
+    // @0x8289D0C0 indexes maInertias at 48*(idx+50)). DWARF (rw/physics/
+    // inertia.h) names the interior (Vector3 mInvTens + 6 f32: mInvMass,
+    // mSpherical, mMaxVelocity, mMaxOmega, mLinearDrag, mAngularDrag = 40B,
+    // padded to 48 by the leading Vector3's 16-align), but none of the three
+    // RigidBodyData accessors homed here consume it -> modelled as an opaque
+    // 16-aligned span, mirroring the committed JointFrames/DriveFrames.
+    struct alignas(16) Inertia { u8 macOpaque[48]; };
+
     // Opaque handle tables -- single u64 ids / single pointers; sized to the
     // DWARF (JointId/DriveId == uint64_t).
     struct JointId { u64 muId; };
     struct DriveId { u64 muId; };
 
+    // CgsPhysics::RigidBodyId (CgsRigidBody.h:48): a single uint64_t id (DWARF
+    // + Feb-2007 source both name the member `mId`). IsInvalid() compares mId
+    // against the module-global sentinel K_INVALID_RIGID_BODY_ID (X360 static
+    // qword_82F33E18; value 0xFFFFFFFFFFFFFFFF per CgsRigidBody.h:87). Only the
+    // RigidBodyData slot tripwires consume it, so just the id + IsInvalid() are
+    // modelled.
+    struct RigidBodyId
+    {
+        u64 mId;                                    // CgsRigidBody.h:84/120
+        bool IsInvalid() const;
+    };
+    // CgsRigidBody.h:87: static const RigidBodyId K_INVALID_RIGID_BODY_ID = ~0ull.
+    extern const RigidBodyId K_INVALID_RIGID_BODY_ID;
+    inline bool RigidBodyId::IsInvalid() const { return mId == K_INVALID_RIGID_BODY_ID.mId; }
+
     namespace rw_physics
     {
-        struct Joint;   // opaque rw::physics::Joint (maRWJoints holds Joint*)
-        struct Drive;   // opaque rw::physics::Drive (maRWDrives holds Drive*)
+        struct Joint;      // opaque rw::physics::Joint (maRWJoints holds Joint*)
+        struct Drive;      // opaque rw::physics::Drive (maRWDrives holds Drive*)
+        struct RigidBody;  // opaque rw::physics::RigidBody (maRWBodies holds RigidBody*)
     }
 
     // JointLimits IS modelled field-by-field: JointData's constructor writes its
@@ -122,4 +147,52 @@ namespace CgsPhysics
         DriveId            maGameIDs[1];         // X360 @+0x88 (8-aligned)
         bool               mabUsedSlot[1];       // X360 @+0x90            -> 144
     };
+
+    // ---- RigidBodyData (DWARF CgsPhysicsSimulationModule.h:64) --------------
+    // knSize == 200. Struct-of-arrays slot table indexed by slot. Unlike
+    // JointData/DriveData there is NO mabUsedSlot[] array: the "slot in use"
+    // tripwire is `!maGameIDs[liIndex].IsInvalid()` (the X360 asm compares the
+    // slot's GameID to K_INVALID_RIGID_BODY_ID). Member order + array element
+    // types are DWARF-attested (CgsPhysicsSimulationModule.h:126-128).
+    class RigidBodyData
+    {
+    public:
+        static const s32 KI_SIZE = 200;                 // DWARF knSize (X360 cmpwi 0xC8)
+
+        // Checked slot read of maGameIDs[liIndex] (X360 @0x8289CF78). Returned by
+        // value; the X360 ABI passes a hidden return pointer for the 8-byte id.
+        RigidBodyId GetGameID(s32 liIndex);
+
+        // Checked slot read of maRWBodies[liIndex] (X360 @0x8289D020).
+        rw_physics::RigidBody* GetRigidBody(s32 liIndex);
+
+        // Checked slot read of &maInertias[liIndex] (X360 @0x8289D0C0).
+        Inertia* GetInertia(s32 liIndex);
+
+        // Offsets below are X360-ABI (4-byte pointer) byte offsets; on the x64
+        // host the pointer-array slot widens, but member access is by name.
+    private:
+        rw_physics::RigidBody* maRWBodies[200];   // X360 @+0x0000 (4B ptr)  -> 800
+        RigidBodyId            maGameIDs[200];     // X360 @+0x0320 (stride 8) -> 2400
+        Inertia                maInertias[200];    // X360 @+0x0960 (stride 48)
+    };
+
+    // DWARF CgsPhysicsSimulationModule.h:286 (struct) with nested EReleaseStage
+    // at h:301. Only the enum is homed here; the full PhysicsSimulationModule is
+    // reconstructed elsewhere and must GROW this shell in place (no redefinition).
+    class PhysicsSimulationModule
+    {
+    public:
+        enum EReleaseStage
+        {
+            RELEASESTAGE_START   = 0,
+            RELEASESTAGE_MANAGER = 1,
+            RELEASESTAGE_DONE    = 2,
+        };
+    };
+
+    // X360 0x8289CF18 (DWARF CgsPhysicsSimulationModule.h:566). Post-increment on
+    // the release-stage cursor.
+    PhysicsSimulationModule::EReleaseStage
+    operator++(PhysicsSimulationModule::EReleaseStage& leEnumIndex, int);
 }
