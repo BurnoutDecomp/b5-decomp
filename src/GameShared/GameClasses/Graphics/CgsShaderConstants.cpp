@@ -207,3 +207,155 @@ void ShaderConstantTableElement::SetNumEntries(u8 lu8NumEntries)
     CGS_ASSERT(liNumQwInArray <= 0xFFFF, "luNumQwInArray <= 0xFFFF");
     mu16SizeOfArrayInQw = static_cast<u16>(liNumQwInArray);
 }
+
+// ---- ShaderConstantsCPU -----------------------------------------------------------------
+// The CPU-side ("material animation") shader-constant block. DWARF-homed at
+// CgsShaderConstants.h (:1006/1028/1038/1043); the X360 bodies below come from
+// CgsMaterialAnimation.cpp (@ 0x827E9800 / 0x827E98D8 / 0x827E9970 / 0x827E99F8).
+
+// CgsShaderConstants.cpp / X360 @ 0x827E9800 (DWARF: CgsShaderConstants.h:1006)
+// Relocate the streamed-in CPU shader-constant block by the load base. mpCPUShader (+0)
+// is nulled, the instance-data array (+8) and name array (+0xC) each get the base added,
+// then per constant instance: the name pointer is relocated only when non-null, while the
+// instance-data pointer (u32**) is relocated unconditionally. Asserts the instance count
+// fits a byte (< 256). Returns int 0 on X360 (u32 per the DWARF signature).
+u32 ShaderConstantsCPU::FixUp(u8* lpBaseData)
+{
+    CGS_ASSERT(muNumConstantsInstances < 256, "muNumConstantsInstances<256");
+
+    const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
+
+    mpCPUShader = nullptr;
+    mppaConstantsInstanceData = reinterpret_cast<u32**>(reinterpret_cast<uintptr_t>(mppaConstantsInstanceData) + luBase);
+    mppacNames = reinterpret_cast<const char**>(reinterpret_cast<uintptr_t>(mppacNames) + luBase);
+
+    if (muNumConstantsInstances != 0)
+    {
+        u32 luIndex = 0;
+        do
+        {
+            const uintptr_t luName = reinterpret_cast<uintptr_t>(mppacNames[luIndex]);
+            if (luName != 0)
+            {
+                mppacNames[luIndex] = reinterpret_cast<const char*>(luName + luBase);
+            }
+
+            mppaConstantsInstanceData[luIndex] =
+                reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(mppaConstantsInstanceData[luIndex]) + luBase);
+
+            ++luIndex;
+        }
+        while (luIndex < muNumConstantsInstances);
+    }
+
+    return 0;
+}
+
+// CgsShaderConstants.cpp / X360 @ 0x827E98D8 (DWARF: CgsShaderConstants.h:1028)
+// Linear name lookup. Walk mppacNames comparing each candidate against lpName with an inline
+// strcmp (byte compare, stopping at lpName's terminating NUL). On the first exact match, copy
+// that constant's Vector4 (16-byte aligned load/store on X360) out of the per-instance data
+// array into lrOutValue and return true; otherwise return false. Mirrors the committed
+// ShaderConstantsExternal::HasShaderConstant strcmp loop.
+bool ShaderConstantsCPU::GetValue(const char* lpName, Vector4& lrOutValue) const
+{
+    const u32 luNum = muNumConstantsInstances;
+    if (luNum == 0)
+    {
+        return false;
+    }
+
+    u32 luIndex = 0;
+    for (const char* const* lppName = mppacNames; ; ++lppName)
+    {
+        const char* lpCandidate = *lppName;
+        const char* lpQuery = lpName;
+
+        int liDiff;
+        do
+        {
+            liDiff = static_cast<u8>(*lpQuery) - static_cast<u8>(*lpCandidate);
+            if (*lpQuery == 0)
+            {
+                break;
+            }
+            ++lpQuery;
+            ++lpCandidate;
+        }
+        while (liDiff == 0);
+
+        if (liDiff == 0)
+        {
+            lrOutValue = *reinterpret_cast<const Vector4*>(mppaConstantsInstanceData[luIndex]);
+            return true;
+        }
+
+        if (++luIndex >= luNum)
+        {
+            return false;
+        }
+    }
+}
+
+// CgsShaderConstants.cpp / X360 @ 0x827E9970 (DWARF: CgsShaderConstants.h:1038)
+// Compute the serialised size contribution of this CPU constant block, given the running
+// serialised size luCurrentSize (used to 16-align the header relative to the stream pos):
+//   * header of (muNumConstantsInstances + 4) words, then 16-byte aligned;
+//   * one Vector4 (16 bytes) of instance data per constant;
+//   * one word (name pointer) per constant;
+//   * each constant's NUL-terminated name, 4-byte aligned.
+u32 ShaderConstantsCPU::GetSizeOf(u32 luCurrentSize) const
+{
+    const u32 luNum = muNumConstantsInstances;
+
+    u32 luAlignedHeader = (((luNum + 4) * 4 + luCurrentSize + 15) & 0xFFFFFFF0u) - luCurrentSize;
+    if (luNum != 0)
+    {
+        luAlignedHeader += 16 * luNum;
+    }
+
+    u32 luTotalSize = 4 * luNum + luAlignedHeader;
+
+    if (luNum != 0)
+    {
+        const char* const* lppName = reinterpret_cast<const char* const*>(mppacNames);
+        u32 luRemaining = luNum;
+        do
+        {
+            const char* lpName = *lppName;
+            const char* lpWalk = lpName;
+            while (*lpWalk++ != 0)
+            {
+            }
+
+            const u32 luNameLen = static_cast<u32>(lpWalk - lpName - 1);
+            luTotalSize += (luNameLen + 4) & 0xFFFFFFFCu;
+
+            --luRemaining;
+            ++lppName;
+        }
+        while (luRemaining != 0);
+    }
+
+    return luTotalSize;
+}
+
+// CgsShaderConstants.cpp / X360 @ 0x827E99F8 (DWARF: CgsShaderConstants.h:1043)
+// A CPU constant block is worth serialising iff it carries a non-zero "AnimDuration" constant:
+// fetch that named Vector4 via GetValue; if it is absent, or its first component (the animation
+// duration) is exactly 0.0, there is nothing to serialise.
+bool ShaderConstantsCPU::ShouldSerialise() const
+{
+    Vector4 lValue;
+    if (!GetValue("AnimDuration", lValue))
+    {
+        return false;
+    }
+
+    if (lValue.x == 0.0f)
+    {
+        return false;
+    }
+
+    return true;
+}
