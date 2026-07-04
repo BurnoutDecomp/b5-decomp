@@ -501,7 +501,6 @@ namespace
     // need the VM to execute, only their records relocated. // FLAG: an un-run AS action queue is a
     // valid state (the movie just doesn't advance via script); dynamically script-attached content
     // is the deferred VM last-mile.
-    const bool KB_NESTED_DIRTY_PROPAGATION = true;
 
     ImportBundleSlot s_aImportBundles[KU_MAX_IMPORT_BUNDLES];
     // Per-import pool backing (one E_MEMTYPE_NUMTYPES x KU_IMPORT_POOL_BYTES block per slot).
@@ -534,12 +533,9 @@ namespace BrnGui
     // call for the same name is a no-op that still completes the handle). Called by the homed
     // AptLoader_StartAsyncLoad (the platform stream hook).
     static bool LoadImportBundle(const char* lpacMovieName, AptFilePtr* lpFile);
-    // STEP 4 (nested-content dirty propagation): recursively mark every sprite/animation node in a
-    // clip's child display list dirty so the NEXT tick recurses into it + runs its doFrameControls
-    // (placing its own nested shapes/images). The console propagates the dirty bit through the
-    // render-tree manager on placement; this stands in for that propagation. // FLAG: propagation
-    // stand-in (the render-tree-manager dirty propagation on placement is the deferred piece).
-    static void PropagateDirtyToChildren(AptCIH* lpNode, int nDepth);
+    // (STEP 4 nested-content dirty propagation retired 2026-07-04 -- the AptCIH ctor births
+    // fresh sprite/animation children dirty, so no host propagation pass is needed. See the
+    // per-frame tick in AptRuntimeUpdate.)
 
     bool AptRuntimeIsReady() { return s_bRuntimeReady; }
 
@@ -1646,54 +1642,10 @@ namespace BrnGui
         return true;
     }
 
-    // =========================================================================
-    // PropagateDirtyToChildren -- STEP 4 dirty propagation (the missing piece for nested content).
-    //
-    // The root CIH is dirtied each frame (host), so its tick runs frame-0's place commands + places
-    // the top-level sprite CONTAINERS. Those placed children come out with mnClipActionFlags 0xC0
-    // (needs-action + fresh) but mFlagsA bit25 (dirty) CLEAR, so AptCIH::tick early-returns on them
-    // (its first line gates on the dirty bit) and they never run THEIR doFrameControls -> their nested
-    // shapes/images are never placed. VERIFIED (2026-07-04): placeObject sets only the PARENT's
-    // generalized-process dirty (mFlagsA bits 24/23, SetGeneralizedProcessDirtyState); neither it nor
-    // the create path sets a placed child's bit25 -- so nothing dirties fresh children. (The earlier
-    // "the render-tree-manager propagates the dirty bit down" claim is FALSE: the AptRenderTreeManager
-    // Update_* methods manage render-item LINKS, not dirty bits.) This walks a clip's child display
-    // list and SetDirtyState(true) (bit25) every sprite/animation node (recursively), so the next tick
-    // recurses into each + places its content -- cascading one display-list level per frame until the
-    // whole tree is composed.
-    // FLAG stand-in: the faithful fix is to home the X360 spot that sets a freshly-placed child's
-    // bit25 (Phase 4b -- find + confirm it in the asm, do NOT guess); NOT a permanent PC leaf.
-    // =========================================================================
-    static void PropagateDirtyToChildren(AptCIH* lpNode, int nDepth)
-    {
-        if (lpNode == nullptr || nDepth > 12)   // depth cap (guards against a pathological cycle)
-            return;
-        AptCharacterInst* lpCI = lpNode->GetCharacterInst();
-        if (lpCI == nullptr)
-            return;
-        const uint32_t luTag = lpCI->GetTypeTag();
-        if (luTag != 5 && luTag != 9)           // only sprite/animation clips carry a child list
-            return;
-        AptCharacterSpriteInstBase* lpSprite = static_cast<AptCharacterSpriteInstBase*>(lpCI);
-        AptDisplayListState* lpState = lpSprite->mDisplayList.AsState();
-        if (lpState == nullptr)
-            return;
-        for (AptCIH* lpChild = lpState->mpFirst; lpChild != nullptr;
-             lpChild = lpChild->GetDisplayListNext())
-        {
-            AptCharacterInst* lpChildCI = lpChild->GetCharacterInst();
-            if (lpChildCI == nullptr)
-                continue;
-            const uint32_t luChildTag = lpChildCI->GetTypeTag();
-            if (luChildTag == 5 || luChildTag == 9)
-            {
-                if (!lpChild->GetDirtyState())
-                    lpChild->SetDirtyState(true, false);   // dirty so its next tick places its content
-                PropagateDirtyToChildren(lpChild, nDepth + 1);   // recurse deeper as levels appear
-            }
-        }
-    }
-
+    // PropagateDirtyToChildren (STEP 4 dirty-propagation stand-in) was RETIRED 2026-07-04: the real
+    // mechanism is the AptCIH ctor (@0x82B00638) dirtying a freshly-created sprite/animation node
+    // (SetDirtyState(true,true), AptCIH.cpp), so the root tick's own child-list recursion composes the
+    // whole subtree per frame. The batch-dirty walk that used to live here is no longer needed.
 
     // -------------------------------------------------------------------------
     // RETIRED (2026-07-01): the invented direct-geometry render (RenderLoadedGeometryDirect +
@@ -1757,7 +1709,7 @@ namespace BrnGui
         // deferred until the import-load + shape-geometry (+ the render-tree flush for pixels) land.
         // The render-leaf BODIES stay faithful + committed; the per-frame drive is now ENABLED
         // (2026-07-01): the faithful per-frame tick composes the movie AND recurses into the nested
-        // imported sprite CONTAINERS (KB_NESTED_DIRTY_PROPAGATION), so the title's actual visible
+        // imported sprite CONTAINERS (born dirty in the AptCIH ctor), so the title's actual visible
         // content (the "Paradise City" logo art, which lives one display-list level deeper inside the
         // imported clips) places + draws (PROVEN via screenshot). The prior AV blockers are closed:
         //   - resolve64 now relocates EVERY per-frame command record's pointer slots (XB1-verified),
@@ -1810,8 +1762,10 @@ namespace BrnGui
             ++liTicksThisUpdate;
 
             // Mark the root clip "dirty" so AptCIH::tick processes it (mFlagsA bit25 == GetDirtyState,
-            // the tick gate; the ctor leaves it clear). SetDirtyState(true,...) sets bit25. (FLAG: the
-            // X360 dirties via the render-tree manager's propagation; we set it directly each tick.)
+            // the tick gate). The AptCIH ctor births the root dirty, but tick clears/recomputes bit25
+            // at its tail each frame (AptCIH.cpp), so the root must be re-dirtied for the NEXT frame.
+            // FLAG (host driver, Phase 4c/4d): the console re-drives this per frame from AptUpdate
+            // (sub_82B0D608) / the AptTarget update; the host stands in by re-dirtying the root here.
             if (!lpRoot->GetDirtyState())
                 lpRoot->SetDirtyState(true, false);
 
@@ -1823,23 +1777,18 @@ namespace BrnGui
                 CgsDev::Log::WriteToLog(lacp);
             }
 
-            liTickResult = lpRoot->tick();   // advance frame 0 -> place characters
+            liTickResult = lpRoot->tick();   // advance frame 0 -> place + recurse the whole subtree
 
-            // STEP 4 (ENABLED 2026-07-01): propagate dirty into the freshly-placed sprite CONTAINERS
-            // so their next tick recurses + places their nested content. This places the nested shapes
-            // (doFrameControls succeeds). The prior AV boundary is CLOSED: AptMovie::resolve64 now
-            // relocates every per-frame command record's pointer slots at the native-8 offsets (tag-1
-            // Action stream ptr @cmd+0x08, tag-2 Label name ptr @cmd+0x08, tag-3 PlaceObject name
-            // @body+0x30 + clipActions block @body+0x40 + its record-array/stream ptrs, tag-8 Morph
-            // stream ptr @cmd+0x08), so a nested container's doFrameControls / queueFrameActions read
-            // their records without dereferencing an un-relocated file offset. // FLAG (deferred AS-VM
-            // EXECUTION): the action-stream *contents* (the AS bytecode) stay un-parsed and un-run --
-            // resolve64 relocates only the record POINTERS, and the interpreter's runStream is stubbed,
-            // so queued actions never execute. An un-run AS action queue is a valid state; statically
-            // placed nested shapes/images compose without the VM. Dynamically script-attached content
-            // (content the AS bytecode would attach at runtime) is the remaining VM last-mile.
-            if (KB_NESTED_DIRTY_PROPAGATION)
-                PropagateDirtyToChildren(lpRoot, 0);
+            // STEP 4 nested composition is now FAITHFUL and needs no host propagation pass: a
+            // freshly-placed sprite/animation child is born dirty in the AptCIH ctor (@0x82B00638
+            // tail: SetDirtyState(true,true) keyed on char type -- AptCIH.cpp), so the root tick's own
+            // child-list recursion (AptCIH::tick -> mDisplayList.tick, AptCIH.cpp) ticks each new child
+            // IN THE SAME FRAME and runs its doFrameControls -> its nested shapes/images place. (This
+            // retired the PropagateDirtyToChildren stand-in, which batch-dirtied children a level per
+            // frame; the ctor mechanism composes the whole subtree per frame, as the console does.)
+            // FLAG (deferred AS-VM EXECUTION, unchanged): resolve64 relocates the action-stream
+            // POINTERS but the interpreter's runStream is stubbed, so queued AS bytecode never runs --
+            // a valid state for statically placed content; script-attached content is the VM last-mile.
 
             // DRAIN THE DEFERRED ACTION QUEUE (ACTIVATED 2026-07-01): the faithful per-frame
             // sequence -- tick queues each frame's tag-1 actions (AptMovie::queueFrameActions ->
