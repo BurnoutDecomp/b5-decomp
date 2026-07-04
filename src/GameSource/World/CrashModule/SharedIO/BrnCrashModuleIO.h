@@ -23,7 +23,10 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                          // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
-#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h" // NetworkOutputInterface
+#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h" // NetworkOutputInterface + NetworkInputInterface
+#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h" // TrafficInputInterface
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"    // BrnPhysics::Vehicle::VehicleOutputInterface + VehicleManagerOutputInterface
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"             // CgsSystem::TimerStatusInterface
 
 namespace BrnWorld
 {
@@ -85,28 +88,50 @@ namespace CrashIO
     // single X360-pinned return offset is exact; the preceding region (the buffer's other
     // payload, not recovered by this slice) is opaque padding.
 
-    // BrnCrashModuleIO.h:81 -- crash-module pre-scene input buffer (read-side accessor
-    // @ 0x827BB3D8 -> this + 0x3CD0; caller CrashModule::ResetCrashedNetworkRaceCars).
+    // BrnCrashModuleIO.h:63 (DWARF) -- crash-module pre-scene input buffer. DWARF-authoritative
+    // full-member layout (the prior slice modelled this as an opaque read view with a single
+    // mReadInterface @+0x3CD0, exposed as GetReadInterface; that getter is the const
+    // GetVehicleDriverInterface below). Member ORDER + names from DecFIGS DWARF; the three
+    // blind-copied interface members (vehicle-driver / active-race-car / game-action) have their
+    // own homes and are modelled as correctly-sized opaque storage (X360 setter copy counts).
+    // X360 member offsets (documentation): mTimerStatusInterface @+0x4, mNetworkInputInterface
+    // @+0x40, mVehicleDriverInterface @+0x3CD0, mActiveRaceCarInterface @+0x5180, mGameActionQueue
+    // @+0x7A70, mbPlayerPressingBoost @+0xAE80. On this PC build the embedded NetworkInputInterface
+    // widens (its EventQueue holds a host pointer), so only the pointer-free prefix offset
+    // (mTimerStatusInterface @+0x4) is pinned by _AssertLayout; the widening members' accessors
+    // return &member (host-correct regardless of absolute offset).
     struct InputBuffer_PreScene : public CgsModule::IOBuffer
     {
-        struct ReadInterfaceStorage { unsigned char maBytes[1]; };
+        // Blind-copied foreign types (own homes elsewhere); correctly-sized opaque storage.
+        struct VehicleDriverInterfaceStorage { unsigned char maBytes[0x14B0]; };   // 5296
+        struct ActiveRaceCarInterfaceStorage { unsigned char maBytes[0x28F0]; };   // 10480
+        struct GameActionQueueStorage        { unsigned char maBytes[0x3410]; };   // 13328
 
-        // Latch the race-car module's pre-scene active-car view. ADDITIVE GROW: real
-        // X360 symbol (BrnWorld::CrashIO::InputBuffer_PreScene::SetActiveRaceCarInterface,
-        // called by WorldModule::BridgeEntityModulesToCrashModule_PreScene @0x827A50D4);
-        // declaration-only (its own ledger function). Pointer-only use of the
-        // interface type (home: BrnRaceCarEntityModuleOutputInterface.h).
+        // ---- read-side getters (read-lock tripwire "Not locked for reading") ----
+        const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const;    // 0x827BB288 -> +0x4
+        const NetworkInputInterface*           GetNetworkInputInterface() const;   // 0x827BB330 -> +0x40
+        const VehicleDriverInterfaceStorage*   GetVehicleDriverInterface() const;  // 0x827BB3D8 -> +0x3CD0 (ex-GetReadInterface)
+
+        // ---- write-side setters (write-lock tripwire "Not locked for writing") ----
+        void SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpInterface);   // 0x827A20A8
+        void SetNetworkInputInterface(const NetworkInputInterface* lpInterface);            // 0x827ACF88
+        void SetVehicleDriverInterface(const VehicleDriverInterfaceStorage* lpInterface);   // 0x827A21B8
+        // Latch the race-car module's pre-scene active-car view (caller
+        // WorldModule::BridgeEntityModulesToCrashModule_PreScene @0x827A50D4). Pointer-only use of
+        // the interface type (home: BrnRaceCarEntityModuleOutputInterface.h).
         void SetActiveRaceCarInterface(
-            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpInterface);
-
-        // 0x827BB3D8 -- read-lock tripwire; returns this + 0x3CD0.
-        const ReadInterfaceStorage* GetReadInterface() const;
+            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpInterface); // 0x827A2270
+        void SetGameActionQueue(const GameActionQueueStorage* lpQueue);                     // 0x827A2328
 
         static void _AssertLayout();
 
     private:
-        unsigned char        maPrecedingPayload[0x3CD0 - 1];   // +1..+0x3CCF
-        ReadInterfaceStorage mReadInterface;                   // +0x3CD0
+        CgsSystem::TimerStatusInterface mTimerStatusInterface;    // X360 +0x4    (48B POD)
+        NetworkInputInterface           mNetworkInputInterface;   // X360 +0x40   (align-16; widens on host)
+        VehicleDriverInterfaceStorage   mVehicleDriverInterface;  // X360 +0x3CD0
+        ActiveRaceCarInterfaceStorage   mActiveRaceCarInterface;  // X360 +0x5180
+        GameActionQueueStorage          mGameActionQueue;         // X360 +0x7A70
+        bool                            mbPlayerPressingBoost;    // X360 +0xAE80
     };
 
     // BrnCrashModuleIO.h:87 -- crash-module input buffer (read-side accessor @ 0x827BB528 ->
@@ -125,21 +150,36 @@ namespace CrashIO
         ReadInterfaceStorage mReadInterface;                   // +0x7A70
     };
 
-    // BrnCrashModuleIO.h:174 -- crash-module post-physics input buffer (read-side accessor
-    // @ 0x827BB918 -> this + 0x79B0; callers CrashModule::ProcessCrashedRaceCarEvents /
-    // ProcessSlammedTrafficEvents / PostPhysicsUpdate).
+    // BrnCrashModuleIO.h:156 (DWARF) -- crash-module post-physics input buffer. DWARF-authoritative
+    // full-member layout (the prior slice modelled this as an opaque read view with a single
+    // mReadInterface @+0x79B0, exposed as GetReadInterface; that getter is the const
+    // GetVehicleManagerOutputInterface below). Three embedded-by-value interface members, each
+    // exposed via a const read-lock getter + a write-lock setter. X360 member offsets
+    // (documentation): mTrafficInputInterface @+0x8, mVehicleOutputInterface @+0xDA0,
+    // mVehicleManagerOutputInterface @+0x79B0. The embedded interfaces hold host-widening
+    // EventQueue members, so only the pointer-free prefix offset (mTrafficInputInterface @+0x8)
+    // is pinned; the later accessors return &member (host-correct regardless of absolute offset).
     struct InputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
-        struct ReadInterfaceStorage { unsigned char maBytes[1]; };
+        typedef BrnPhysics::Vehicle::VehicleOutputInterface        VehicleOutputInterface;         // DWARF :45
+        typedef BrnPhysics::Vehicle::VehicleManagerOutputInterface VehicleManagerOutputInterface;  // DWARF :44
 
-        // 0x827BB918 -- read-lock tripwire; returns this + 0x79B0.
-        const ReadInterfaceStorage* GetReadInterface() const;
+        // ---- read-side getters (read-lock tripwire "Not locked for reading") ----
+        const TrafficInputInterface*         GetTrafficInputInterface() const;          // 0x827BB7C8 -> +0x8
+        const VehicleOutputInterface*        GetVehicleOutputInterface() const;         // 0x827BB870 -> +0xDA0
+        const VehicleManagerOutputInterface* GetVehicleManagerOutputInterface() const;  // 0x827BB918 -> +0x79B0 (ex-GetReadInterface)
+
+        // ---- write-side setters (write-lock tripwire "Not locked for writing") ----
+        void SetTrafficInputInterface(const TrafficInputInterface* lpTrafficInputInterface);                       // 0x827AD038
+        void SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface);                    // 0x827AA388
+        void SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface* lpVehicleManagerOutputInterface); // 0x827AA438
 
         static void _AssertLayout();
 
     private:
-        unsigned char        maPrecedingPayload[0x79B0 - 1];   // +1..+0x79AF
-        ReadInterfaceStorage mReadInterface;                   // +0x79B0
+        TrafficInputInterface         mTrafficInputInterface;          // X360 +0x8    (DWARF :179)
+        VehicleOutputInterface        mVehicleOutputInterface;         // X360 +0xDA0  (DWARF :180; align-16, widens on host)
+        VehicleManagerOutputInterface mVehicleManagerOutputInterface;  // X360 +0x79B0 (DWARF :181; align-16, widens on host)
     };
 
     // ========================================================================
