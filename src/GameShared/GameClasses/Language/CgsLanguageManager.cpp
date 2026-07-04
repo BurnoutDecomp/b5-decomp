@@ -41,6 +41,36 @@ namespace CgsLanguage
         // X360's inlined base-class vtable store with no explicit action needed here.
     }
 
+    // X360 0x82862490 CgsLanguage::LanguageManager::Construct.
+    //
+    // The RUNTIME (re-)initialiser -- NOT the string-table loader (a prior comment claimed Construct
+    // installs the loaded table; the asm disproves it: it NULLS mpResource and Init's mStrings EMPTY).
+    // Store-for-store faithful to the asm: reset the lifecycle to a clean pre-load state, re-seed the
+    // two dynamic-string pools (same as the ctor), Init the empty mStrings hash, set metric units on,
+    // and construct the embedded debug component. The actual localised-string LOAD (reading the
+    // LanguageResource into mStrings) is a SEPARATE function, so AptLoadLanguageStrings's per-entry
+    // install path is retired by THAT, not this. Called from CgsGui::ViewModule::Construct (0x828605A0).
+    void LanguageManager::Construct()
+    {
+        mePrepareStage      = E_PREPARESTAGE_START;   // 0 -- stw r29 @0x60EC
+        meReleaseStage      = E_RELEASESTAGE_DONE;    // 2 -- stw r11=2 @0x60F0
+        mpResource          = nullptr;                //      stw r29 @0x60E8
+        mpStringElements    = nullptr;                //      stw r29 @0x60E0
+        mpLanguageAllocator = nullptr;                //      stw r29 @0x60E4
+
+        // Re-seed both dynamic-string pools (free sublist owns all 1024 nodes, live empty) -- the
+        // X360's two back-to-back InternalInit pairs, identical to the ctor's seeding.
+        mDynamicStringElements.Construct();
+        mDynamicStringPointerElements.Construct();
+
+        mStrings.Init();                              // __13_::Init(this+8) -- (re-)init the empty hash
+
+        mpcDefaultFontName   = nullptr;               // stw r29 @0x04
+        mbIsUsingMetricUnits = true;                  // stb r11=1 @0x60F4
+
+        mDebugComponent.Construct(this);              // LanguageManagerDebugComponent::Construct(&mDebugComponent, this)
+    }
+
     // Setter for mbIsUsingMetricUnits (+0x60F4); no packet listing available for this function
     // (not among the packet's 35), but the member/shape is attested by the ctor's X360-gated
     // layout comment above and by IsUsingMetricUnits's paired accessor.
