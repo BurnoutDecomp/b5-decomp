@@ -38,6 +38,23 @@ PropUpdateNotificationQueue* RootInputBuffer::GetPropUpdateNotificationQueue()
     return &mPropUpdateNotificationQueue;
 }
 
+// X360 0x826949E8 (IDA-truncated "BrnSound::Modu"). Read-lock CONST overload of the
+// prop-update notification queue accessor at this+0x10520 (DWARF BrnRootSoundModuleIo.h:225).
+// Pairs with the non-const write-lock overload at X360 0x823B8518.
+const PropUpdateNotificationQueue* RootInputBuffer::GetPropUpdateNotificationQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mPropUpdateNotificationQueue;
+}
+
+// X360 0x823B8470 (IDA-truncated "BrnSound::Modul"). Write-lock NON-CONST accessor for the
+// prop-became-physical event queue at this+0x103D0 (DWARF BrnRootSoundModuleIo.h:222).
+PropBecamePhysicalEventQueue* RootInputBuffer::GetPropBecamePhysicalEventQueue()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mPropBecamePhysicalEventQueue;
+}
+
 // X360 0x823B8BB8 ("BrnSound::Module::Io::RootPreUpdateOutputBuffer::Ge[tPreUpdateOutput]",
 // IDA-truncated). Read-lock accessor: assert read-locked ("Not locked for reading\n",
 // BrnRootSoundModuleIo.h:590 in the X360 baked string -> the DWARF method is :338), then

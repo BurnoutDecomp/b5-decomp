@@ -30,6 +30,30 @@ namespace CgsResource
 {
 namespace BundleLoaderIO
 {
+    // The per-frame input buffer. Read-locked by the consumer; the event-queue payload
+    // begins at +4. (CgsBundleLoaderModuleIO.h; created/destroyed via
+    // CgsModule::IOBufferStack::Create/DestroyIOBuffer<InputBuffer>.) The only accessor
+    // this slice bodies is the read-locked GetEventQueue() @0x828E1D48; consumed by
+    // CgsResource::BundleLoaderModule::ProcessBundleLoadRequests.
+    struct InputBuffer : public CgsModule::IOBuffer
+    {
+        // FLAG: foreign payload type (the bundle-loader event queue). Opaque, correctly
+        // placed at +4.
+        struct EventQueueStorage
+        {
+            unsigned char maBytes[4];
+        };
+
+        // @ 0x828E1D48: assert read-locked, then return &mEventQueue (this + 4).
+        const EventQueueStorage* GetEventQueue() const;
+
+        static void _AssertLayout();
+
+    private:
+        u8               maStatusPad[3];   // +1..+3 (force +4 placement)
+        EventQueueStorage mEventQueue;     // +4
+    };
+
     // The per-frame input record buffer. Write-locked by the producer; the consumer reads the
     // record body that begins at +4. (CgsBundleLoaderModuleIO.h, created/destroyed via
     // CgsModule::IOBufferStack::Create/DestroyIOBuffer<InputBuffer_Record>.)
@@ -42,7 +66,9 @@ namespace BundleLoaderIO
             unsigned char maBytes[4];
         };
 
-        // @ 0x828E2090: assert write-locked, then return &mRecord (this + 4).
+        // @ 0x828E1FE8: assert read-locked, then return &mRecord (this + 4). (DWARF :112)
+        const RecordStorage* GetRecord() const;
+        // @ 0x828E2090: assert write-locked, then return &mRecord (this + 4). (DWARF :113)
         RecordStorage* GetRecord();
 
         static void _AssertLayout();
@@ -53,23 +79,35 @@ namespace BundleLoaderIO
     };
 
     // The bundle loader's output buffer. Write-locked by the loader while it fills the output;
-    // GetPool() hands back the pool span that begins at +4.
+    // GetPool() hands back the pool span that begins at +4, and the read-locked GetStream()
+    // @0x828E2528 hands back a second payload span at +0x1342C.
     struct OutputBuffer : public CgsModule::IOBuffer
     {
-        // FLAG: foreign payload type (the output pool span). Opaque, correctly placed at +4.
+        // FLAG: foreign payload type (the output pool span). Opaque, sized so the second
+        // payload lands at its X360 offset (+4 .. +0x1342C == 0x13428 bytes).
         struct PoolStorage
+        {
+            unsigned char maBytes[0x13428];
+        };
+
+        // FLAG: foreign payload type (the output stream span). Opaque, correctly placed at
+        // +0x1342C.
+        struct StreamStorage
         {
             unsigned char maBytes[4];
         };
 
-        // @ 0x828E21E0: assert write-locked, then return &mPool (this + 4).
+        // @ 0x828E21E0: assert write-locked, then return &mPool (this + 4). (DWARF :143)
         PoolStorage* GetPool();
+        // @ 0x828E2528: assert read-locked, then return &mStream (this + 0x1342C). (DWARF :151)
+        const StreamStorage* GetStream() const;
 
         static void _AssertLayout();
 
     private:
-        u8          maStatusPad[3];   // +1..+3 (force +4 placement)
-        PoolStorage mPool;            // +4
+        u8            maStatusPad[3];   // +1..+3 (force +4 placement)
+        PoolStorage   mPool;            // +4
+        StreamStorage mStream;          // +0x1342C
     };
 }
 }
