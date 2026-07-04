@@ -440,8 +440,14 @@ namespace BrnGui
                     if (lbDown && !sabKeyWasDown[luKey])
                     {
                         PcActionEvent lAction(KA_KEYS[luKey].iSubId);
-                        mBootLegalInQueue.AddEvent(&lAction, KA_KEYS[luKey].iEventId,
+                        const bool lbAdded = mBootLegalInQueue.AddEvent(&lAction, KA_KEYS[luKey].iEventId,
                                                    static_cast<s32>(sizeof(lAction)));
+                        char lacKey[96];
+                        std::snprintf(lacKey, sizeof(lacKey),
+                            "[GuiModule] key vk=0x%02X -> event %d/%d (AddEvent=%d)\n",
+                            KA_KEYS[luKey].iVKey, KA_KEYS[luKey].iEventId,
+                            KA_KEYS[luKey].iSubId, lbAdded ? 1 : 0);
+                        CgsDev::Log::WriteToLog(lacKey);
                     }
                     sabKeyWasDown[luKey] = lbDown;
                 }
@@ -454,6 +460,71 @@ namespace BrnGui
             // Consume BootLegal's channel-41 PlayAptMovie("Title_Screen02") output -> the Apt runtime
             // (load the title movie), then tick the Apt runtime for this frame (advance + render).
             RouteAptMovieEvents(mBootLegalStateInterface);
+
+            // ---- BF_LEGAL attract-video pump (the BF_VIDEOS steps 3/3b/4/5 for this phase) ----
+            // BootLegal's attract loop posts play(508)/stop(509) onto its state interface; deliver
+            // them to the MovieManager, tick it, and feed video-finished (510) back into the
+            // BF_LEGAL in-queue -- exactly what the X360 module dispatch does for every phase.
+            // The legal out-queue is append-only (RouteAptMovieEvents deliberately does not
+            // Clear() it -- the channel-41 re-fire is load-bearing), so a high-water cursor keeps
+            // the pump from re-delivering the same records each frame.
+            {
+                static const CgsModule::Event* s_pVideoPumpCursor = 0;
+                CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpLegalOut =
+                    mBootLegalStateInterface.GetOutputEventQueue();
+                if (lpLegalOut != 0)
+                {
+                    CgsModule::VariableEventQueue<65536, 16>* lpOutBase = lpLegalOut;
+                    const CgsModule::Event* lpEvent = 0;
+                    s32 liSize = 0;
+                    s32 liId = lpOutBase->GetFirstEvent(&lpEvent, &liSize);
+                    bool lbPastCursor = (s_pVideoPumpCursor == 0);
+                    const CgsModule::Event* lpLast = s_pVideoPumpCursor;
+                    while (liId >= 0 && lpEvent != 0)
+                    {
+                        if (lbPastCursor && (liId == 508 || liId == 509))
+                        {
+                            mMovieManager.GetReceiverQueue()->AddEvent(lpEvent, liId, liSize);
+                            char lacV[80];
+                            std::snprintf(lacV, sizeof(lacV),
+                                          "[GuiModule] BF_LEGAL video event %d -> MovieManager.\n", liId);
+                            CgsDev::Log::WriteToLog(lacV);
+                        }
+                        if (lpEvent == s_pVideoPumpCursor)
+                            lbPastCursor = true;
+                        lpLast = lpEvent;
+                        const CgsModule::Event* lpNext = 0;
+                        liId = lpOutBase->GetNextEvent(lpEvent, &lpNext, &liSize);
+                        lpEvent = lpNext;
+                    }
+                    s_pVideoPumpCursor = lpLast;
+                }
+                // Drain the receiver queue into RecvEvent + tick the manager (BF_VIDEOS 3b/4).
+                {
+                    CgsModule::VariableEventQueue<1024, 16>* lpRecv = mMovieManager.GetReceiverQueue();
+                    const CgsModule::Event* lpEvent = 0;
+                    s32 liSize = 0;
+                    s32 liId = lpRecv->GetFirstEvent(&lpEvent, &liSize);
+                    while (liId >= 0 && lpEvent != 0)
+                    {
+                        mMovieManager.RecvEvent(lpEvent, liId);
+                        const CgsModule::Event* lpNext = 0;
+                        liId = lpRecv->GetNextEvent(lpEvent, &lpNext, &liSize);
+                        lpEvent = lpNext;
+                    }
+                    lpRecv->Clear();
+                }
+                mMovieManager.Update();
+                // Video finished (incl. the missing-attract-file skip) -> 510 to BF_LEGAL (step 5).
+                if (mMovieManager.HasFinishedReporting())
+                {
+                    CgsModule::Event lFinishedEvent;
+                    mBootLegalInQueue.AddEvent(&lFinishedEvent, 510, static_cast<s32>(sizeof(lFinishedEvent)));
+                    mMovieManager.AcknowledgeFinishedAndReturnToIdle();
+                    CgsDev::Log::WriteToLog("[GuiModule] BF_LEGAL video finished -> fed 510.\n");
+                }
+            }
+
             BrnGui::AptRuntimeUpdate();
             return;
         }

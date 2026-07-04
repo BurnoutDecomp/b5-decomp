@@ -68,7 +68,14 @@ namespace BootLegalCacheBoundary
     // are constructed synchronously in OnEnter, so the cache-wait stage may advance).
     void ClearExpectedAptComponentList(GuiCache* /*lpCache*/, s32 /*liFlow*/) {}
     void AppendExpectedAptComponent(GuiCache* /*lpCache*/, s32 /*liFlow*/, CgsGui::GuiComponent* /*lpComponent*/) {}
-    bool AreAllAptComponentsInitialised(const GuiCache* /*lpCache*/, s32 /*liFlow*/) { return true; }
+    // A component reports initialised only once its clip is PLACED; gate on the movie
+    // having composed (frame-0 place commands ran) so E_STAGE_FADE_IN's view states
+    // land on live clips. (With the paced 30fps tick, "return true" raced the first
+    // tick and the HDComp/esrb transins were lost -- clip-not-found.)
+    bool AreAllAptComponentsInitialised(const GuiCache* /*lpCache*/, s32 /*liFlow*/)
+    {
+        return BrnGui::AptRuntimeIsMovieComposed();
+    }
 
     // The legal screen's static resources are resident (PC loads synchronously).
     bool EnsureResourcesAreLoaded(GuiCache* /*lpCache*/)      { return true; }

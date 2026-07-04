@@ -7,6 +7,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CgsDev::Assert (the X360 "unexpected event" assert)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayRequest
+#include "GameSource/Gui/BrnGuiVideoEvents.h"                             // BrnGui::GuiEventPlayVideo/StopVideo (508/509, the attract loop)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log (diag probe)
+#include <cstdio>                                                         // std::snprintf (diag probe)
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"         // CgsResource::ID::HashString (the attract video resource id)
 
 // BrnGui::BootLegal -- the boot legal / title-screen state (BF_LEGAL), reconstructed from
 // BURNOUT_X360_ARTIST.XEX (OnEnter 0x82477028 / Update 0x82477270 / OnLeave 0x82477E28 /
@@ -416,6 +420,20 @@ namespace BrnGui
         if (lpInQueue == 0)
             return;
 
+        // Bring-up diagnostic: one line per stage-machine transition (cheap, load-bearing
+        // for boot-flow triage -- the attract/press-start regressions were found with it).
+        {
+            static s32 s_iLastLoggedStage = -1;
+            if (s_iLastLoggedStage != static_cast<s32>(meUpdateStage))
+            {
+                char lacStage[80];
+                std::snprintf(lacStage, sizeof(lacStage), "[BootLegal] stage %d -> %d\n",
+                              s_iLastLoggedStage, static_cast<s32>(meUpdateStage));
+                CgsDev::Log::WriteToLog(lacStage);
+                s_iLastLoggedStage = static_cast<s32>(meUpdateStage);
+            }
+        }
+
         bool lbVideoFinished = false;   // v2:  a 510 (video-finished) event arrived this frame
         bool lbBackRequested = false;   // v39: a 45/49 (back/stop) action arrived this frame
         bool lbCacheLoaded   = false;   // v3:  the cache reported its resources loaded this frame
@@ -601,13 +619,19 @@ namespace BrnGui
                 MusicOnMenuStreamEvent lMusic(0);   // X360 uses dword_830082A8 (the boot music id)
                 mpStateInterface->OutputGuiEvent<MusicOnMenuStreamEvent>(lMusic);
 
-                u8 lacVideoDef[112];
-                MovieVideoDefinition_Prepare(lacVideoDef);
-                // The X360 fills the def's resource id (HashString) + sound name (MakeHash) from
-                // the attract-movie name, then posts GuiEventPlayVideo with the def.
-                PlayVideoEvent lPlay(lacVideoDef);
-                mpStateInterface->OutputGuiEvent<PlayVideoEvent>(lPlay);
-                (void)KAAC_ATTRACT_MOVIE;  // off_82F25D08[idx] -- the attract name table
+                // The X360 Prepare()s a MovieManager VideoDefinition and fills its video
+                // resource id (CgsResource::ID::HashString(attractName)) + sound name
+                // (MakeHash) from the attract table entry off_82F25D08[idx], then posts the
+                // def as GuiEventPlayVideo. Post the typed BrnGui::GuiEventPlayVideo with
+                // that id -- the reconstructed MovieManager's 508 record (BootVideos' proven
+                // path); the def rect/crossfade defaults match, the sound-stream name is the
+                // same follow-on as BootVideos. (The prior raw 112-byte def was never filled
+                // -- a garbage id that hung the manager, killing press-start after the 25s
+                // attract timeout.)
+                BrnGui::GuiEventPlayVideo lPlay;
+                lPlay.muVideoResourceId = static_cast<u32>(CgsResource::ID::HashString(
+                    reinterpret_cast<const u8*>(KAAC_ATTRACT_MOVIE[muCurrentAttractMovieIdx])));
+                mpStateInterface->OutputGuiEvent<BrnGui::GuiEventPlayVideo>(lPlay);
             }
             meUpdateStage = E_STAGE_ATTRACT_PLAYING;
             break;
@@ -622,10 +646,11 @@ namespace BrnGui
             }
             if (lbBackRequested)
             {
-                u8 lacVideoDef[112];
-                MovieVideoDefinition_Prepare(lacVideoDef);
-                StopVideoEvent lStop(lacVideoDef);
-                mpStateInterface->OutputGuiEvent<StopVideoEvent>(lStop);
+                // X360: Prepare a def + post the stop record. The reconstructed MovieManager's
+                // 509 record is the typed BrnGui::GuiEventStopVideo (immediate-stop flag clear,
+                // the def-stop default).
+                BrnGui::GuiEventStopVideo lStop;
+                mpStateInterface->OutputGuiEvent<BrnGui::GuiEventStopVideo>(lStop);
                 lpInQueue->Clear();
                 return;
             }

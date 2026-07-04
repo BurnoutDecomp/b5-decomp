@@ -50,6 +50,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h"   // mnDefaultGlyphIndex (font index)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"     // the movie def (font-char table walk)
 #include "SDKs/EATech/include/Apt/AptStd/AptRect.h"
+#include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"       // mpPositionMatrix->tx (the box-align anchor)
 #include "SDKs/EATech/include/Apt/Apt.h"                    // AptAllocateStringParameters + gAptFuncs
 
 // ---------------------------------------------------------------------------
@@ -125,11 +126,10 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         const int nBoxAlign = (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 26)) >> 28;
         if ((nBoxAlign & 0xF) != 0xC)   // console rlwinm r11,0,26,29 ; cmpwi 0xC -> the "none" box
         {
-            // The console adds a fixed edge inset (flt_82004EF4) to the right / bottom
-            // margins (and, unless word-wrap, left/top). FLAG: the exact inset constant
-            // (flt_82004EF4) is un-recovered rodata; modelled as 0 so the reset is inert
-            // (the empty field's box just collapses to its authored margins). No UB.
-            const float fEdgeInset = 0.0f;   // FLAG [un-recovered rodata flt_82004EF4]
+            // The console collapses the empty field's box to a fixed 4-pixel edge inset:
+            // right = left + 4.0, bottom = top + 4.0 (flt_82004EF4 == 4.0 -- the literal
+            // is inline in the X360 pseudocode: `*(v36 + 80) + 4.0`).
+            const float fEdgeInset = 4.0f;   // flt_82004EF4
             if (((pItem2->mFlagsAndBorderColor >> 1) & 1u) == 0u)   // not word-wrapped
             {
                 pWritable->mBounds.fRight = pItem2->mBounds.fLeft + fEdgeInset;
@@ -246,7 +246,10 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             AptCharacterInst* pParentCI = pParent->GetCharacterInst();
             AptRenderItem*    pParentRI = pParentCI ? pParentCI->GetRenderItem() : nullptr;
             AptCharacter*     pParentChar = pParentRI ? pParentRI->mpCharacter : nullptr;
-            const int32_t     nFontIdx = pCharacter->mnDefaultGlyphIndex;
+            // X360: the character's mnDefaultGlyphIndex (*(v5+32)) is only the "has a
+            // font" GATE; the table INDEX is the render item's own font id (*(v10+100)
+            // == mFontID -- seeded from the character but overridable per item).
+            const int32_t     nFontIdx = pItem->mFontID;
             if (pParentChar != nullptr && pParentChar->mpFixupLink != nullptr)
             {
                 AptCharacterAnimation* pDef = reinterpret_cast<AptCharacterAnimation*>(
@@ -312,20 +315,26 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 26)) >> 28;
         if (hHandle != nullptr && nBoxAlign2 != 3)
         {
-            const float fFieldWidth = params.x1 - params.x0;    // v26 = right - left
-            const float fTextWidth  = params.fTextWidth;        // Prepare wrote this back
-            // FLAG: the console adds a per-parent field inset (v27[4] off the parent
-            // char anim, or flt_8324E2B0 when absent); un-recovered rodata, modelled 0.
-            const float fInset = 0.0f;   // FLAG [un-recovered rodata flt_8324E2B0[4]]
-            if (nBoxAlign2 == 2)         // centre
+            // X360 fold operands:
+            //   v26        = the item's CURRENT field width (item +0x58 - +0x50 re-read
+            //                AFTER the host call -- the pre-layout box);
+            //   (v41 - v39) = the PARAMS' field width (x1 - x0 -- the box the host layout
+            //                wrote back);
+            //   v27[4]     = the item's position matrix tx (mpPositionMatrix, defaulting
+            //                to the identity matrix flt_8324E2B0 whose tx is 0) -- the
+            //                clip's authored x anchor the nudge is relative to.
+            const float fItemWidth   = pItem2->mBounds.fRight - pItem2->mBounds.fLeft;
+            const float fParamsWidth = params.x1 - params.x0;
+            const float fTx = (pItem2->mpPositionMatrix != nullptr)
+                                  ? pItem2->mpPositionMatrix->tx
+                                  : 0.0f;   // gAptIdentityMatrix.tx (flt_8324E2B0[4])
+            if (nBoxAlign2 == 2)         // centre: -(((newW - curW) * 0.5) - tx)
             {
-                const float fOffset = -((((fFieldWidth - fTextWidth) * 0.5f)) - fInset);
-                SetProceduralProperty(0, fOffset, true);
+                SetProceduralProperty(0, -(((fParamsWidth - fItemWidth) * 0.5f) - fTx), true);
             }
-            else if (nBoxAlign2 == 1)    // right
+            else if (nBoxAlign2 == 1)    // right: (tx + curW) - newW
             {
-                const float fOffset = ((fInset + fFieldWidth) - fTextWidth);
-                SetProceduralProperty(0, fOffset, true);
+                SetProceduralProperty(0, (fTx + fItemWidth) - fParamsWidth, true);
             }
         }
 

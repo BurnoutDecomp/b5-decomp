@@ -2,6 +2,7 @@
 
 #include <cstdio>    // std::snprintf (probe logging)
 #include <cstring>   // std::strncpy
+#include <chrono>    // steady_clock (the faithful timeline pacing's elapsed-ms source)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog
 
@@ -435,6 +436,17 @@ namespace
     // the clips faithfully.
     bool   s_bDisableRunActions    = false;
     s32    s_iTickFrame            = 0;     // STEP-2 per-frame tick counter (for the placement probes)
+
+    // ---- the faithful timeline PACING (console AptUpdate/sub_82B0D608) ------------------
+    // The console accumulates the ELAPSED MILLISECONDS into the root anim inst (charInst+36)
+    // and ticks the display list once per movie msPerFrame (character+44 -- TITLE_SCREEN02
+    // authors 33ms == 30fps), catch-up looping while the accumulator holds a full frame;
+    // RunActions runs per TICK and the generalised text/mask process per UPDATE. Without
+    // this the movie ticked once per RENDER frame (~170fps) and every transition played
+    // ~5.7x too fast (a blink instead of an animation).
+    u32    s_uMovieMsPerFrame      = 33u;    // captured from the movie header at load (ms=)
+    double s_dTickAccumMs          = 0.0;    // the charInst+36 accumulator (host-held)
+    s64    s_iLastUpdateQpcMs      = -1;     // wall-clock of the previous AptRuntimeUpdate
 
     // ====================================================================================
     // STEP 3 -- IMPORT CONTENT-LOAD (the cross-bundle imports the title's visible content lives in).
@@ -1139,6 +1151,17 @@ namespace BrnGui
                     "frameCount=%u charCount=%u w=%u h=%u ms=%u\n",
                     luScan, luHdr, luDB, luFC, luCC, luW, luH, luMs);
                 CgsDev::Log::WriteToLog(lac);
+                // Capture the LEVEL movie's authored ms-per-frame for the tick pacing (the
+                // FIRST parsed root is the title movie; imports re-enter here but must not
+                // override the level clock -- console pacing reads the ROOT anim's movie).
+                {
+                    static bool sbMsCaptured = false;
+                    if (!sbMsCaptured)
+                    {
+                        sbMsCaptured = true;
+                        s_uMovieMsPerFrame = luMs;
+                    }
+                }
                 return luHdr;   // the ROOT CHARACTER HEADER offset
             }
         }
@@ -1733,9 +1756,38 @@ namespace BrnGui
         if (lbTickReady && s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr)
         {
             AptCIH* lpRoot = static_cast<AptCIH*>(s_pFaithfulRootCIH);
+
+            // ---- FAITHFUL TIMELINE PACING (console AptUpdate / sub_82B0D608) ------------
+            // Accumulate the elapsed wall-clock milliseconds (the console's a1, fed from the
+            // frame clock) and tick the movie once per authored msPerFrame (character+44;
+            // TITLE_SCREEN02 = 33ms == 30fps), catch-up looping while a full frame is
+            // banked -- with RunActions per TICK, exactly the console's per-tick sequence.
+            // The catch-up is capped (the console smooths via its frame-time governor; a
+            // fixed cap is the host stand-in) so a debugger stall doesn't spiral.
+            {
+                const s64 liNowMs = static_cast<s64>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch()).count());
+                if (s_iLastUpdateQpcMs >= 0)
+                    s_dTickAccumMs += static_cast<double>(liNowMs - s_iLastUpdateQpcMs);
+                s_iLastUpdateQpcMs = liNowMs;
+            }
+            const double ldMsPerFrame = static_cast<double>(
+                s_uMovieMsPerFrame >= 10u && s_uMovieMsPerFrame <= 100u ? s_uMovieMsPerFrame : 33u);
+            // Clamp a runaway backlog to 4 frames of catch-up.
+            if (s_dTickAccumMs > 4.0 * ldMsPerFrame)
+                s_dTickAccumMs = 4.0 * ldMsPerFrame;
+
+            int liTickResult = 0;
+            int liTicksThisUpdate = 0;
+            while (s_dTickAccumMs >= ldMsPerFrame)
+            {
+            s_dTickAccumMs -= ldMsPerFrame;
+            ++liTicksThisUpdate;
+
             // Mark the root clip "dirty" so AptCIH::tick processes it (mFlagsA bit25 == GetDirtyState,
             // the tick gate; the ctor leaves it clear). SetDirtyState(true,...) sets bit25. (FLAG: the
-            // X360 dirties via the render-tree manager's propagation; we set it directly each frame.)
+            // X360 dirties via the render-tree manager's propagation; we set it directly each tick.)
             if (!lpRoot->GetDirtyState())
                 lpRoot->SetDirtyState(true, false);
 
@@ -1747,7 +1799,7 @@ namespace BrnGui
                 CgsDev::Log::WriteToLog(lacp);
             }
 
-            const int liTickResult = lpRoot->tick();   // advance frame 0 -> place characters
+            liTickResult = lpRoot->tick();   // advance frame 0 -> place characters
 
             // STEP 4 (ENABLED 2026-07-01): propagate dirty into the freshly-placed sprite CONTAINERS
             // so their next tick recurses + places their nested content. This places the nested shapes
@@ -1777,10 +1829,14 @@ namespace BrnGui
                     lpVmTgt->mpAnimationTarget->RunActions();
             }
 
+            }   // ---- end of the per-msPerFrame catch-up tick loop (console pacing) ----
+
             // DYNAMIC-TEXT REFRESH: run the generalised-process pass with ProcessTextInst
             // installed, so every dynamic-text node (type tag 2) re-resolves its bound text +
             // (re)lays it out through EnsureStringAllocated -> pfnAllocateString. The console
-            // runs this inside AptUpdate (sub_82B0D608); we drive it here on the root each frame.
+            // runs this inside AptUpdate (sub_82B0D608) ONCE PER UPDATE and only when at
+            // least one timeline tick ran this update (the v5 gate) -- matched here.
+            if (liTicksThisUpdate > 0)
             {
                 static bool s_bTextProbe = false;
                 AptCIH_RunGeneralisedTextProcess(lpRoot);
@@ -1960,6 +2016,24 @@ namespace BrnGui
         return s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr;
     }
 
+    // True once the movie has COMPOSED: the root clip's first paced tick has run its
+    // frame-0 place commands, so the child display list is populated (the PLACE-named
+    // clips the view-state bridge targets exist). The console's equivalent gate is the
+    // GuiCache apt-component handshake (AreAllAptComponentsInitialised): a component
+    // reports initialised only once its clip is placed.
+    bool AptRuntimeIsMovieComposed()
+    {
+        if (!AptRuntimeIsMovieLive())
+            return false;
+        AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_pFaithfulRootCIH);
+        AptCharacterInst* lpCI = lpRoot->GetCharacterInst();
+        if (lpCI == nullptr || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
+            return false;
+        AptDisplayListState* lpState =
+            static_cast<AptCharacterSpriteInstBase*>(lpCI)->mDisplayList.AsState();
+        return lpState != nullptr && lpState->mpFirst != nullptr;
+    }
+
     // -------------------------------------------------------------------------
     // AptRuntimeSetComponentViewState -- PC bring-up shim for the GuiComponent apt-view
     // protocol (FLAG; see the header note). Finds the root movie's placed child clip by
@@ -1987,8 +2061,20 @@ namespace BrnGui
             const int liFrame = lpMovie->labelToFrame(&lLabel);
             if (liFrame >= 0)
             {
+                // The faithful gotoAndPlay tail (AptCIH::_gotoAndX @0x82B0D2F0, bPlay=1):
+                // jumpToFrame + SET the auto-play state bit (mnClipActionFlags bit6 0x40) +
+                // re-dirty the node so it keeps ticking. The clip then PLAYS the labelled
+                // transition segment until its authored stop() frame action clears the play
+                // bit (the interpreter Stop op) -- every Title_Screen02 state frame carries
+                // one (verified in the 1:7:4 action streams). This is exactly what the
+                // MAIN.bundle TransitionComponent AS does on the console (_parent.gotoAndPlay
+                // (viewState) from gAptCommunicator.UpdateAll). The prior 0x80 "freshly
+                // placed" seed was the WRONG bit: tick clears it after ONE step, freezing
+                // every transition on its jump frame (the broken title-screen animations).
                 lpNode->jumpToFrame(liFrame);
-                lpSprite->mnClipActionFlags |= 0x80u;   // play (the AptLinker seed flag)
+                lpSprite->mnClipActionFlags =
+                    (lpSprite->mnClipActionFlags & 0xFFFFFFBFu) | 0x40u;
+                lpNode->SetDirtyState(true, true);
                 char lac[192];
                 std::snprintf(lac, sizeof(lac),
                     "[AptRT] viewstate:   clip %p depth %d -> frame %d ('%s')\n",
