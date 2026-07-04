@@ -83,6 +83,7 @@ namespace DirectorIO
         EActiveRaceCarIndex                                GetPlayerCarIndex() const;
         bool                                               GetShortcutMenuState() const;
         const ControlInput*                                GetControll() const;
+        ControlInput*                                      GetControll();
 
         bool HasGotHookEnumeration() const;
         bool HasGotShortcutMenuEvent() const;
