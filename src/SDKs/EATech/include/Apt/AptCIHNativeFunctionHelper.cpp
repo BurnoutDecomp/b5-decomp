@@ -1086,7 +1086,9 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, in
 // FLAG (un-homed AptCIH behavioural callee): set a procedural display property
 // (_x/_y/_rotation/_alpha/...) by id on the node. @0x82AE... -- declared so the AS
 // creation/positioning methods compile against the same entry point.
-extern void AptCIH_SetProceduralProperty(AptCIH* pNode, int nProperty, double fValue);
+// AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASChanged) is called
+// directly on the member (shim retired); the X360 4th arg bASChanged is r6 (the float fValue skips
+// the r5 GPR slot), NOT visible in the pseudocode -- createTextField passes 0.
 
 // ===========================================================================
 // sMethod_createTextField @0x82B0BA40 -- AS createTextField(name, depth, x, y,
@@ -1141,8 +1143,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_createTextField(AptValue* pContext
         pTextRI->mStateFlags |= 6u;                 // editable + needs-layout state bits
 
         // Position at (x, y) with the authored +2px inset, then size the bounds rect.
-        AptCIH_SetProceduralProperty(pInserted, 0, fX + 2.0);   // _x
-        AptCIH_SetProceduralProperty(pInserted, 1, fY + 2.0);   // _y
+        pInserted->SetProceduralProperty(0, fX + 2.0f, false);   // _x (X360 asm: r4=0, f1=x+2.0f, r6=bASChanged=0 via `li r6,0`)
+        pInserted->SetProceduralProperty(1, fY + 2.0f, false);   // _y (X360 asm: r4=1, f1=y+2.0f, r6=bASChanged=0)
         pTextRI->mBounds.fRight  = static_cast<float>(pTextRI->mBounds.fLeft + fWidth);
         pTextRI->mBounds.fBottom = static_cast<float>(pTextRI->mBounds.fTop + fHeight);
     }
