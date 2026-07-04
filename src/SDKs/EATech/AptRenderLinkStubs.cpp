@@ -261,7 +261,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     AptValue* AptApt_LoadVariablesFetch(const char* pUrl) { return 0; }   // FLAG link-stub (host URL fetch; null until installed)
     void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY) {}   // FLAG link-stub
     void AptApt_PopValues(AptActionInterpreter* pInterp, int nCount) {}   // FLAG link-stub
-    void AptCIH_GetWorldBounds(AptValue* pNode, float* pOutRect) {}   // FLAG link-stub
+    // AptCIH_GetWorldBounds RETIRED: its body IS the shared GetBoundingRectClamped
+    // (AptCIHBehaviour.cpp, X360 sub_82AE2C58, asm-verified 2-arg (AptCIH* r3, float* r4)); the
+    // getBounds/hitTest native methods now call it directly (AptValue clip -> AptCIH via static_cast).
     // AptCIH_SetDirtyState RETIRED (2026-07-01): the real member AptCIH::SetDirtyState
     // (AptCIH.cpp, faithful) is called directly; the {} stub silently dropped the dirty latch.
     void AptCIH_SetProceduralProperty(AptCIH* pNode, int nProperty, double fValue) {}   // FLAG link-stub

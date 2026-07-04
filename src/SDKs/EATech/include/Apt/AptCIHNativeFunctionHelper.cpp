@@ -599,7 +599,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadVariables(AptValue* pContext, 
 // node's world-space AABB into pOutRect (left,top,right,bottom). Declared as an
 // extern shim so the AS hitTest / getBounds keep the exact (node, &rect) call shape.
 // ---------------------------------------------------------------------------
-extern void AptCIH_GetWorldBounds(AptValue* pNode, float* pOutRect);   // sub_82AE2C58
+extern void GetBoundingRectClamped(const AptCIH* pThis, float* pOutRect);   // sub_82AE2C58 (AptCIHBehaviour.cpp) -- the shared world-bounds helper; the AS clip AptValue* IS an AptCIH*
 
 // FLAG: the shape-precise point hit-test (X360 indirect through dword_8324E8A4, an
 // AptCharacter render-method slot) -- "is local point (x,y) inside the node's drawn
@@ -635,8 +635,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_hitTest(AptValue* pContext, int nA
         {
             float fThis[4];     // this node's world AABB (left,top,right,bottom)
             float fTarget[4];   // the target's world AABB
-            AptCIH_GetWorldBounds(pContext, fThis);
-            AptCIH_GetWorldBounds(pTarget, fTarget);
+            GetBoundingRectClamped(static_cast<AptCIH*>(pContext), fThis);
+            GetBoundingRectClamped(static_cast<AptCIH*>(pTarget), fTarget);
             // box overlap: target.left <= this.right && target.right >= this.left
             //           && target.bottom >= this.top && target.top <= this.bottom
             if (fTarget[0] <= fThis[2] && fTarget[2] >= fThis[0]
@@ -662,7 +662,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_hitTest(AptValue* pContext, int nA
         else
         {
             float fThis[4];   // this node's world AABB
-            AptCIH_GetWorldBounds(pContext, fThis);
+            GetBoundingRectClamped(static_cast<AptCIH*>(pContext), fThis);
             nResult = 1;
             if (fX < fThis[0] || fX > fThis[2] || fY < fThis[1] || fY > fThis[3])
                 nResult = 0;
@@ -781,7 +781,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_getBounds(AptValue* pContext, int 
     // The receiver's world AABB (left, top, right, bottom), shifted into the
     // coordinate-space node's local frame.
     float fRect[4];   // [0]=left [1]=top [2]=right [3]=bottom
-    AptCIH_GetWorldBounds(pContext, fRect);
+    GetBoundingRectClamped(static_cast<AptCIH*>(pContext), fRect);
     fRect[2] -= pPos->tx;   // right  - tx
     fRect[0] -= pPos->tx;   // left   - tx
     fRect[1] -= pPos->ty;   // top    - ty
