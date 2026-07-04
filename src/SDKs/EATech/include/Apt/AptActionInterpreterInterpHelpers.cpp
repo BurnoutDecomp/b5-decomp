@@ -750,16 +750,22 @@ AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInter
 //
 // STILL a stub for TWO reasons (corrected 2026-07-04 -- the prior "no longer blocked,
 // bounded decompilation" note OVERSTATED it):
-//   (1) MEMBER-SEMANTICS DISCREPANCY: the console stores GetConstantPool's {entries,count}
-//       into interpreter [c:0x40] and [c:0x44] -- VERIFIED (slot 0x50 == GetConstantPool
-//       in the AptScriptFunction2 vtable; the branch does `stw entries,0x40; stw count,
-//       0x44`). But this build NAMES those members `field_40` ("saved register-window
-//       slot") and `mpRegisters` ("per-call register window") -- which the callFunction
-//       asm CONTRADICTS (they hold the current function's CONSTANT POOL during a call,
-//       saved/restored around it; the AS Push-constant opcodes read them). Homing the
-//       branch against the current names would be WRONG. The interpreter member layout
-//       [c:0x40]/[c:0x44] must be re-validated (against the PS3 DWARF, which names
-//       callFunction) and likely renamed FIRST.
+//   (1) MEMBER-SEMANTICS DISCREPANCY: interpreter [c:0x40]/[c:0x44] are NOT a register
+//       window -- they are the AS CONSTANT-POOL / STRING-DICTIONARY {count, base} pair.
+//       VERIFIED three ways: DefineDictionary @0x82AD9278 (AptActionInterpreterProtoOps.cpp)
+//       sets [c:0x40]=count, [c:0x44]=table base; stackPushIndirect + the dict-push ops
+//       INDEX [c:0x44][i] as the entries table (so [c:0x44] is the base POINTER, not an
+//       int count); and the callFunction script branch calls GetConstantPool (vtable slot
+//       0x50 -- confirmed in the AptScriptFunction2 vtable @0x82145D10) and stores its two
+//       dwords into [c:0x40]/[c:0x44], saved/restored as an ld/std pair around the call.
+//       So the running DefineDictionary+stackPushIndirect path is self-consistent, but the
+//       members are MIS-NAMED `field_40`/`mpRegisters` ("register window"). CAUTION: the
+//       AptConstantPool struct decl ({mppEntries@0, mnCount@4}) implies the REVERSE field
+//       order to DefineDictionary's {count@0x40, base@0x44}; GetConstantPool returns
+//       {record+0x14, record+0x18} and the exact half->offset mapping must be reconciled
+//       against DefineDictionary (the authoritative running use) BEFORE homing -- do NOT
+//       trust the struct field order. Rename [c:0x40]/[c:0x44] to the constant-pool pair
+//       first.
 //   (2) BOOT-ACTIVE: activating real script-function execution runs AS bytecode paths
 //       deferred for boot-stability (see the AptRuntimeUpdate FLAG) -- decompile + build +
 //       boot-test with revert-on-break, not enabled untested. And boot-green does NOT
