@@ -338,40 +338,54 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
             {
                 if (eType == 8)
                 {
-                    // Type-8 import character: its two cross-reference INDEX fields
-                    // (+0x10, +0x14) name characters by table index; rewrite them to
-                    // live pointers via mpCharacterTable.
+                    // Type-8 character: its two cross-reference INDEX fields name
+                    // characters by table index; rewrite them to live pointers.
+                    // XB1-VERIFIED (Link sub_14083B6E0): the native-8 fields are the
+                    // 8-BYTE slots @char+0x20 and @char+0x28 (console: 4-byte +0x10/
+                    // +0x14) -- the prior console offsets read header padding on the
+                    // GUIAPT64 bundles, so type-8 cross-refs never resolved.
                     AptCharacter** const pT = pCharAnim->mpCharacterTable;
-                    // FLAG (x64 fork): +0x10 and +0x14 are adjacent 4-byte index fields
-                    // on the console; an 8-byte host pointer written at +0x10 would clobber
-                    // +0x14, so both indices are read BEFORE either pointer is stored (the
-                    // console writes 4-byte slots, so ordering was immaterial there).
-                    // FLAG (deferred sub-record): the type-8 char-entry cross-reference field
-                    // offsets (+0x10/+0x14) are the CONSOLE record layout; their GUIAPT64
-                    // widening lands with the char-entry sub-record recovery (this Link pass is
-                    // the deferred cross-reference resolution, not the runtime instantiation path).
-                    const int32_t nIdx0 = BlobI32(pChar, 0x10);
-                    const int32_t nIdx1 = BlobI32(pChar, 0x14);
-                    BlobPtrRef(pChar, 0x10) = pT[nIdx0];
-                    BlobPtrRef(pChar, 0x14) = pT[nIdx1];
+                    const int32_t nIdx0 = BlobI32(pChar, 0x20);
+                    const int32_t nIdx1 = BlobI32(pChar, 0x28);
+                    // Data guard (host-only; the XB1 asm is unguarded on trusted data):
+                    // only rewrite PLAUSIBLE indices -- a slot that already holds a
+                    // pointer (or a stale/padding word) must not index the table.
+                    const int32_t nCount = pCharAnim->mnCharacterCount;
+                    if (nIdx0 >= 0 && nIdx0 < nCount && nIdx1 >= 0 && nIdx1 < nCount)
+                    {
+                        BlobPtrRef(pChar, 0x20) = pT[nIdx0];
+                        BlobPtrRef(pChar, 0x28) = pT[nIdx1];
+                    }
                 }
                 // (any other type: nothing to resolve)
             }
             else
             {
-                // Type-3 character: an ARRAY of cross-reference indices (count @+0x14,
-                // array @+0x18); rewrite each entry to a live character pointer.
-                // FLAG (deferred sub-record): +0x14/+0x18 are the console char-entry offsets
-                // (see the type-8 note); GUIAPT64 widening lands with the sub-record recovery.
-                const int32_t nRefs = BlobI32(pChar, 0x14);
-                if (nRefs > 0)
+                // Type-3 (Font): an ARRAY of glyph cross-reference indices. XB1-VERIFIED
+                // (Link sub_14083B6E0): native-8 count @char+0x28, array ptr @char+0x30,
+                // 8-BYTE elements (console: count +0x14, array +0x18, 4-byte elements --
+                // and the old loop wrote 8-byte pointers at a 4-byte stride, clobbering
+                // its neighbours). The widener emits 8-byte glyph slots, matching XB1.
+                const int32_t nRefs = BlobI32(pChar, 0x28);
+                // Data guard (host-only): a Font glyph array is at most a few thousand
+                // entries and its pointer must be a live heap/resource address; a record
+                // whose +0x28/+0x30 read as padding or floats must not drive the rewrite
+                // loop (an unbounded count here scribbled the heap -- 0xc0000374 at load).
+                void* const pArrProbe = BlobPtr(pChar, 0x30);
+                const uintptr_t luArr = reinterpret_cast<uintptr_t>(pArrProbe);
+                const bool bArrSane =
+                    (nRefs > 0 && nRefs <= 0x4000) &&
+                    (luArr >= 0x10000u) && ((luArr >> 47) == 0u);
+                if (bArrSane)
                 {
+                    const int32_t nCount = pCharAnim->mnCharacterCount;
                     for (int32_t r = 0; r < nRefs; ++r)
                     {
                         AptCharacter** const pT = pCharAnim->mpCharacterTable;
-                        void* pArr = BlobPtr(pChar, 0x18);                 // char[6] (the index array)
-                        const int32_t nIdx = BlobI32(pArr, r * 4);
-                        *reinterpret_cast<void**>(BlobAt(pArr, r * 4)) = pT[nIdx];
+                        void* pArr = BlobPtr(pChar, 0x30);                 // the glyph index array
+                        const int64_t nIdx = *reinterpret_cast<const int64_t*>(BlobAt(pArr, r * 8));
+                        if (nIdx >= 0 && nIdx < nCount)
+                            *reinterpret_cast<void**>(BlobAt(pArr, r * 8)) = pT[nIdx];
                         // (the asm reloads char[4]/char[6] each iteration)
                         pChar = pTable[i];
                     }
