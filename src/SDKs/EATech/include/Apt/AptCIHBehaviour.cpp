@@ -615,7 +615,9 @@ extern int gAptBoundingRectMode;
 // sentinel, accumulate this node's world bounds (identity transform = local space),
 // then zero the rect if nothing expanded it. (afRect[0..3] == AptRect left/top/right/
 // bottom -- the X360 GetBoundingRect path fills exactly that 16-byte rect.)
-static void GetBoundingRectClamped(const AptCIH* pThis, float afRect[4])
+// non-static: the X360 sub_82AE2C58 is one shared helper called by GetProceduralProperty
+// (_width/_height) AND the getBounds/hitTest native methods (AptCIHNativeFunctionHelper.cpp).
+void GetBoundingRectClamped(const AptCIH* pThis, float* afRect)   // float* (not float[4]): MSVC mangles the array param as float*const, breaking the cross-TU extern
 {
     AptRect* pRect = reinterpret_cast<AptRect*>(afRect);
     pRect->fLeft = 3.4028235e38f;  pRect->fTop    = 3.4028235e38f;
