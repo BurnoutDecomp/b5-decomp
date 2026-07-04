@@ -193,6 +193,8 @@ namespace WorldEntityIO
         // 16-byte boundary the X360 `addi this,0x10` member start implies.
         struct alignas(16) ActiveRaceCarInterfaceStorage { unsigned char maBytes[10480]; };
 
+        // X360 0x822BA228: read-lock handle, returns &mActiveRaceCarInterface (this + 16).
+        const ActiveRaceCarInterfaceStorage* GetActiveRaceCarInterface() const;
         // X360 0x822BA2D0: read-lock handle, returns &mRequestInterface (this + 10496).
         const RequestInterface* GetRequestInterface() const;
         // X360 0x827A2888: write-lock handle, merges lrOther into mRequestInterface.
@@ -274,8 +276,11 @@ namespace WorldEntityIO
     struct OutputBuffer_PreScene : public CgsModule::IOBuffer
     {
         // Opaque foreign-type storage (see FLAG above).
-        struct SceneInputInterfaceStorage { unsigned char maBytes[1]; };
-        struct GameEventQueueStorage      { unsigned char maBytes[1]; };
+        struct SceneInputInterfaceStorage     { unsigned char maBytes[1]; };
+        struct GameEventQueueStorage          { unsigned char maBytes[1]; };
+        struct PropGraphicsLoadedQueueStorage   { unsigned char maBytes[1]; };  // +76   :147
+        struct PropGraphicsUnloadedQueueStorage { unsigned char maBytes[1]; };  // +140  :148
+        struct SoundWorldLoadInterfaceStorage   { unsigned char maBytes[1]; };  // +820528 :151
 
         // X360 0x827A2938: read-lock tripwire ("Not locked for reading"); return this + 208.
         const SceneInputInterfaceStorage* GetSceneInputInterface() const;
@@ -283,18 +288,31 @@ namespace WorldEntityIO
         SceneInputInterfaceStorage* GetSceneInputInterface();
         // X360 0x822BA420: write-lock tripwire ("Not locked for writing"); return this + 818976.
         GameEventQueueStorage* GetGameEventQueue();
+        // X360 0x822BA4C8: write-lock; return &mPropGraphicsLoadedQueue (this + 76).   :127
+        PropGraphicsLoadedQueueStorage* GetPropGraphicsLoadedQueue();
+        // X360 0x822BA618: write-lock; return &mPropGraphicsUnloadedQueue (this + 140). :133
+        PropGraphicsUnloadedQueueStorage* GetPropGraphicsUnloadedQueue();
+        // X360 0x822BA6C0: write-lock; return &mSoundWorldLoadInterface (this + 820528). :136
+        SoundWorldLoadInterfaceStorage* GetSoundWorldLoadInterface();
 
         static void _AssertLayout();
 
     private:
-        // The IOBuffer base is a single status byte; the three prop-queue members occupy
-        // +1..+207 (opaque), placing mSceneInputInterface at this + 208.
-        unsigned char              maPrecedingQueues[208 - 1];       // +1..+207 (opaque)
-        SceneInputInterfaceStorage mSceneInputInterface;             // +208     :149
-        // Intervening interior (mSoundWorldLoadInterface :151 etc.; opaque). Spans +209 up to
-        // the +818976 start of mGameEventQueue.
-        unsigned char              maInterior[818976 - 208 - 1];     // +209..+818975
-        GameEventQueueStorage      mGameEventQueue;                  // +818976  :150
+        // The IOBuffer base is a single status byte. The prop-queue members land at their
+        // X360-attested offsets (+76 loaded, +140 unloaded), mSceneInputInterface at +208,
+        // mGameEventQueue at +818976, mSoundWorldLoadInterface at +820528. Explicit gaps carve
+        // each to its exact offset (all opaque foreign-type storage, no host pointers -> the
+        // byte offsets are safe to pin).
+        unsigned char                    maPreLoaded[76 - 1];                 // +1..+75
+        PropGraphicsLoadedQueueStorage   mPropGraphicsLoadedQueue;            // +76      :147
+        unsigned char                    maLoadedToUnloaded[140 - 76 - 1];    // +77..+139
+        PropGraphicsUnloadedQueueStorage mPropGraphicsUnloadedQueue;          // +140     :148
+        unsigned char                    maUnloadedToScene[208 - 140 - 1];    // +141..+207
+        SceneInputInterfaceStorage       mSceneInputInterface;               // +208     :149
+        unsigned char                    maSceneToGameEvent[818976 - 208 - 1]; // +209..+818975
+        GameEventQueueStorage            mGameEventQueue;                     // +818976  :150
+        unsigned char                    maGameEventToSound[820528 - 818976 - 1]; // +818977..+820527
+        SoundWorldLoadInterfaceStorage   mSoundWorldLoadInterface;            // +820528  :151
     };
 }
 }

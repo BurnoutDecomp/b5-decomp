@@ -49,6 +49,15 @@ InputBuffer_PreScene::GetGameActionQueue()
     return &mGameActionQueue;
 }
 
+// X360 0x822B4C30 (R, :163) -- const game-action queue accessor (pairs with the mutable overload
+// :164 at the identical member offset). Returns &mGameActionQueue (this+0x22C == 556).
+const InputBuffer_PreScene::GameActionQueue*
+InputBuffer_PreScene::GetGameActionQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mGameActionQueue;
+}
+
 // ---- OutputBuffer_PreScene --------------------------------------------------
 
 // X360 0x822B4ED0 (W, :283) -- mutable vehicle-input accessor.
@@ -73,6 +82,16 @@ OutputBuffer_PreScene::GetRaceCarAIInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
     return &mRaceCarAIInterface;
+}
+
+// X360 0x822B5020 (W, :289) -- mutable active-race-car output accessor. Pairs with the
+// const overload :288 (homed in BrnRaceCarEntityModuleIO_PreSceneAccessors.cpp, X360 0x8279D500).
+// Returns &mActiveRaceCarOutputInterface (this+0xEAA40 == 960960).
+RCEntityActiveRaceCarOutputInterface*
+OutputBuffer_PreScene::GetActiveRaceCarOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mActiveRaceCarOutputInterface;
 }
 
 // ---- InputBuffer_PostScene --------------------------------------------------

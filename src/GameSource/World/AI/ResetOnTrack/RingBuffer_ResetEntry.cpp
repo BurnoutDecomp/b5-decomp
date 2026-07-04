@@ -20,3 +20,12 @@
 template void CgsContainers::RingBuffer<
     BrnAI::ResetOnTrackDebugComponent::ResetEntry>::Push(
         const BrnAI::ResetOnTrackDebugComponent::ResetEntry* lpEntry);
+
+// operator[](u32) const @0x82769CD0 (caller BrnAI::ResetOnTrackDebugComponent::RenderHUD):
+// the checked live-window read of the reset-history ring buffer. Generic body inline in
+// CgsRingBuffer.h; range-asserts the index against miLength ('Attempt to access element
+// outside range', CgsRingBuffer.h:258) then returns mpData[(miReadPos + luIndex) % miMaxLength]
+// as mpData + index*80 (stride 80 == sizeof(ResetEntry): asm index*(4+1)*16). This TU only
+// forces the out-of-line emission for the ResetEntry instantiation.
+template const BrnAI::ResetOnTrackDebugComponent::ResetEntry&
+CgsContainers::RingBuffer<BrnAI::ResetOnTrackDebugComponent::ResetEntry>::operator[](u32) const;

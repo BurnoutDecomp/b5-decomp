@@ -28,6 +28,15 @@ namespace WorldEntityIO
                       "ActiveRaceCarInterface payload is 10480 bytes");
     }
 
+    // X360 0x822BA228 (R, :96) -- read-lock; return &mActiveRaceCarInterface (this + 16). DWARF
+    // BrnWorldEntityModuleIO.h:96 (const). Called by BrnWorld::WorldEntityModule::PreSceneUpdate.
+    const InputBuffer_PreScene::ActiveRaceCarInterfaceStorage*
+    InputBuffer_PreScene::GetActiveRaceCarInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mActiveRaceCarInterface;
+    }
+
     // X360 0x822BA2D0 (R, :100) -- read-lock; return &mRequestInterface (this + 10496).
     const RequestInterface* InputBuffer_PreScene::GetRequestInterface() const
     {

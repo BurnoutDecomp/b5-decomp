@@ -30,8 +30,12 @@ namespace PropEntityIO
 {
     void OutputBuffer_PostPhysics::_AssertLayout()
     {
+        static_assert(offsetof(OutputBuffer_PostPhysics, mPropBecamePhysicalEventQueue) == 16,     "mPropBecamePhysicalEventQueue @16");
+        static_assert(offsetof(OutputBuffer_PostPhysics, mRecordHitPropQueue)  == 0x160,  "mRecordHitPropQueue @0x160");
+        static_assert(offsetof(OutputBuffer_PostPhysics, mBrokenPropQueue)     == 2080,   "mBrokenPropQueue @2080");
         static_assert(offsetof(OutputBuffer_PostPhysics, mHitOverheadSignQueue) == 2144,   "mHitOverheadSignQueue @2144");
         static_assert(offsetof(OutputBuffer_PostPhysics, mSceneInputInterface) == 820912, "mSceneInputInterface @820912");
+        static_assert(offsetof(OutputBuffer_PostPhysics, mPropVFXLocatorQueue) == 832192, "mPropVFXLocatorQueue @832192");
         static_assert(offsetof(OutputBuffer_PostPhysics, mPropInputInterface)  == 833008, "mPropInputInterface @833008");
     }
 
@@ -62,6 +66,44 @@ namespace PropEntityIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mPropInputInterface;
+    }
+
+    // X360 0x822B9F18 (W, :747) -- write-lock; return the prop-became-physical event queue (this+16).
+    // First output-buffer queue member (EventQueue<PropBecamePhysicalEvent,20>, 336B). Called by
+    // BrnWorld::PropZoneManager::UpdateInstance. Rodata carries a trailing newline (VERBATIM).
+    OutputBuffer_PostPhysics::PropBecamePhysicalEventQueueStorage* OutputBuffer_PostPhysics::GetPropBecamePhysicalEventQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mPropBecamePhysicalEventQueue;
+    }
+
+    // X360 0x822B9E70 (W, :746) -- write-lock; return the record-hit-prop event queue (this+0x160).
+    // Called by BrnWorld::PropEntityModule::ProcessContacts. Rodata carries a trailing newline
+    // (VERBATIM). LOW CONFIDENCE: the exact DWARF member name/type at +0x160 is not separately
+    // attested; modelled as opaque queue storage carved at +0x160 (placeholder name).
+    OutputBuffer_PostPhysics::RecordHitPropQueueStorage* OutputBuffer_PostPhysics::GetRecordHitPropQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mRecordHitPropQueue;
+    }
+
+    // X360 0x822B9D20 (W, :744) -- write-lock; return the broken-prop event queue (this+2080).
+    // EventQueue<BrokenPropEvent,50> (span 64 to the next member @+2144). Called by
+    // BrnWorld::PropEntityModule::ProcessContacts. Rodata carries a trailing newline (VERBATIM).
+    OutputBuffer_PostPhysics::BrokenPropQueueStorage* OutputBuffer_PostPhysics::GetBrokenPropQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mBrokenPropQueue;
+    }
+
+    // X360 0x822B9DC8 (W, :745) -- write-lock; return the prop-VFX-locator event queue (this+832192).
+    // EventQueue<PropVFXLocatorEvent,10> = 816B; +832192 + 816 = +833008 = mPropInputInterface. Called
+    // by PropZoneManager::UpdateInstance / PropEntityModule::ProcessContacts. Rodata carries a trailing
+    // newline (VERBATIM).
+    OutputBuffer_PostPhysics::PropVFXLocatorQueueStorage* OutputBuffer_PostPhysics::GetPropVFXLocatorQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mPropVFXLocatorQueue;
     }
 }
 }

@@ -27,10 +27,16 @@ namespace WorldEntityIO
 {
     void OutputBuffer_PreScene::_AssertLayout()
     {
+        static_assert(offsetof(OutputBuffer_PreScene, mPropGraphicsLoadedQueue) == 76,
+                      "mPropGraphicsLoadedQueue @76");
+        static_assert(offsetof(OutputBuffer_PreScene, mPropGraphicsUnloadedQueue) == 140,
+                      "mPropGraphicsUnloadedQueue @140");
         static_assert(offsetof(OutputBuffer_PreScene, mSceneInputInterface) == 208,
                       "mSceneInputInterface @208");
         static_assert(offsetof(OutputBuffer_PreScene, mGameEventQueue) == 818976,
                       "mGameEventQueue @818976");
+        static_assert(offsetof(OutputBuffer_PreScene, mSoundWorldLoadInterface) == 820528,
+                      "mSoundWorldLoadInterface @820528");
     }
 
     // X360 0x827A2938: read-lock; return this + 208.
@@ -55,6 +61,37 @@ namespace WorldEntityIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mGameEventQueue;
+    }
+
+    // X360 0x822BA4C8: write-lock; return &mPropGraphicsLoadedQueue (this + 76). DWARF
+    // BrnWorldEntityModuleIO.h:127 (non-const). Called by
+    // BrnWorld::WorldEntityModule::OnWorldGraphicsLoadComplete.
+    OutputBuffer_PreScene::PropGraphicsLoadedQueueStorage*
+    OutputBuffer_PreScene::GetPropGraphicsLoadedQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mPropGraphicsLoadedQueue;
+    }
+
+    // X360 0x822BA618: write-lock; return &mPropGraphicsUnloadedQueue (this + 140). DWARF
+    // BrnWorldEntityModuleIO.h:133 (non-const). Called by
+    // BrnWorld::WorldEntityModule::OnWorldGraphicsUnloadBegin.
+    OutputBuffer_PreScene::PropGraphicsUnloadedQueueStorage*
+    OutputBuffer_PreScene::GetPropGraphicsUnloadedQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mPropGraphicsUnloadedQueue;
+    }
+
+    // X360 0x822BA6C0: write-lock; return &mSoundWorldLoadInterface (this + 820528). DWARF
+    // BrnWorldEntityModuleIO.h:136 (non-const). The +820528 (0xC8570) member address is
+    // computed by the asm as `addis r3,this,0xD; addi r3,r3,-0x7AD0`. Called by
+    // BrnWorld::WorldEntityModule::OnWorldGraphicsLoadComplete and OnWorldGraphicsUnloadBegin.
+    OutputBuffer_PreScene::SoundWorldLoadInterfaceStorage*
+    OutputBuffer_PreScene::GetSoundWorldLoadInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mSoundWorldLoadInterface;
     }
 }
 }

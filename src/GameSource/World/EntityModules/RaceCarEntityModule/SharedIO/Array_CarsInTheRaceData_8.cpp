@@ -31,3 +31,18 @@
 template void
 Array<BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData, 8u>::Append(
     const BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData&);
+
+// Array<CarsInTheRaceData,8>::operator[](u32) @ 0x8231A960 (NON-const) -- generic body inline in
+// CgsArray.h. count word @+0x200 (==8*64), used-before-Construct assert (CgsArray.h:538,
+// "Array used before Construct/Clear was called"), bounds-check (CgsArray.h:539), epilogue
+// `slwi r11,r28,6` (index*64) + base == &maElements[index]. Callers ScoringSystem::
+// {UpdateRacePositions,UpdateDistanceToPlayer,StoreCarIds,UpdateGeneralStats} +
+// TriggerQueryManager::SubmitTriggerQueries.
+template BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData&
+Array<BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData, 8u>::operator[](u32);
+
+// Array<CarsInTheRaceData,8>::operator[](u32) const @ 0x8235F8E8 -- const overload (baked
+// CgsArray.h:556/557). Same instantiation, count @+0x200, stride 64. Sole caller
+// GameStateModule::CopyScoringDataToOutput.
+template const BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData&
+Array<BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData, 8u>::operator[](u32) const;

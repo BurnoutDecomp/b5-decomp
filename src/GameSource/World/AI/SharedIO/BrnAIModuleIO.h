@@ -39,6 +39,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"  // BrnPhysics::ContactSpy::ContactSpyInterface (embedded by value in InputBuffer_PostPhysics)
+#include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"  // BrnAI::RouteMapModuleIO::RaceRouteRequestQueue (GetRaceRouteRequestQueue return type)
 
 // Pointer-only return types for the read-locked getters; full homes are included by
 // the accessor .cpp (CgsTimerStatusInterface.h / BrnAIModuleRequestInterface.h).
@@ -86,6 +87,8 @@ namespace AIModuleIO
         const void* GetGameActionQueue() const;
         // X360 0x8276D5D8 (R) -- the player vehicle controls block (this+0x1B9E8).
         const void* GetPlayerVehicleControls() const;
+        // X360 0x8276D488 (R) -- the race-route request queue (this+0x137D0).
+        const RouteMapModuleIO::RaceRouteRequestQueue* GetRaceRouteRequestQueue() const;
 
         // X360 0x8279C4F8 (W) -- the game-action queue (this+0x103BC). Asserts the WRITE lock.
         void* Get();

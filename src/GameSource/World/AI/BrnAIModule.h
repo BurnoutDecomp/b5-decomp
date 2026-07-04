@@ -16,6 +16,18 @@ class AIModule
 public:
     AIModule();
 
+    // DWARF-authoritative nested enum (BrnAIModule.h:83): the multi-frame prepare state
+    // machine AIModule::Prepare steps through (advanced by the free post-increment operator++).
+    enum EPrepareStage
+    {
+        E_PREPARESTAGE_START     = 0,
+        E_PREPARESTAGE_MANAGER   = 1,
+        E_PREPARESTAGE_RESOURCES = 2,
+        E_PREPARESTAGE_ROUTEMAP  = 3,
+        E_PREPARESTAGE_AICARS    = 4,
+        E_PREPARESTAGE_DONE      = 5,
+    };
+
     // Declared-only accessors needed by RouteMapDebugComponent::RenderHUD (its own TU). Bodies live
     // in the AIModule TU. X360 offsets (read in RouteMapDebugComponent::RenderHUD @0x827940A0):
     //   - the master route is a Route embedded at this+0x46B60 (289632); GetMasterRoute returns it.
@@ -76,4 +88,7 @@ private:
     RouteMapModule      mRouteMapModule;
     s32                 miWorldRouteRequest;
 };
+
+// Free post-increment over the AI prepare-stage enum (DWARF BrnAIModule.h:417). X360 0x82765A10.
+AIModule::EPrepareStage operator++(AIModule::EPrepareStage& leEnumIndex, int);
 }

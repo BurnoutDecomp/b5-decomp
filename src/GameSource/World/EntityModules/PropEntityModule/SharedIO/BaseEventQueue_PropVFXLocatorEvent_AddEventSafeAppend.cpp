@@ -23,3 +23,14 @@ CgsModule::BaseEventQueue<BrnWorld::PropEntityIO::PropVFXLocatorEvent>::AddEvent
 template bool
 CgsModule::BaseEventQueue<BrnWorld::PropEntityIO::PropVFXLocatorEvent>::Append(
     const CgsModule::BaseEventQueue<BrnWorld::PropEntityIO::PropVFXLocatorEvent>&);
+
+// CgsModule::BaseEventQueue<BrnWorld::PropEntityIO::PropVFXLocatorEvent>::GetEvent(s32) const
+//   @ 0x8227BDA8
+// Checked indexed accessor, const overload: asserts mpEvents!=NULL (CgsBaseEventQueue.h:272),
+// liIndex < GetLength() (:274) and liIndex >= 0 (:275), then returns mpEvents[liIndex]
+// (X360 `slwi r11,liIndex,2; add r11,liIndex,r11; slwi r11,r11,4; add r3,r11,mpEvents`
+// == mpEvents + liIndex*80, stride 80 == sizeof(PropVFXLocatorEvent)). The generic const
+// GetEvent(s32) inline body is already committed in CgsBaseEventQueue.h; this is the thin
+// explicit instantiation. Called by BrnEffects::PropCollisions::UpdateLocatorVfx.
+template const BrnWorld::PropEntityIO::PropVFXLocatorEvent&
+CgsModule::BaseEventQueue<BrnWorld::PropEntityIO::PropVFXLocatorEvent>::GetEvent(s32) const;

@@ -21,3 +21,15 @@
 
 template void Array<BrnDirector::MomentDescription, 10>::Append(
     const BrnDirector::MomentDescription&);
+
+// Array<BrnDirector::MomentDescription,10>::operator[](u32)  @0x82200EC0
+// Non-const checked accessor (generic body inline in CgsArray.h:538/539; asserts 0x21A/0x21B).
+// count @+0xA0, stride 0x10 == sizeof(MomentDescription). Caller MomentSelector::ActualDebugRender.
+template BrnDirector::MomentDescription&
+Array<BrnDirector::MomentDescription, 10>::operator[](u32);
+
+// Array<BrnDirector::MomentDescription,10>::operator[](u32) const  @0x82200DB8
+// Const checked accessor (generic body inline in CgsArray.h:556/557; asserts 0x22C/0x22D).
+// count @+0xA0, stride 0x10. 6 read-side callers (SelectBestLRUMomentWithExclusion/...).
+template const BrnDirector::MomentDescription&
+Array<BrnDirector::MomentDescription, 10>::operator[](u32) const;

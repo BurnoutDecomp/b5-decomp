@@ -271,9 +271,14 @@ namespace PropEntityIO
     {
     public:
         // Opaque foreign-type storages (see FLAG above).
-        struct HitOverheadSignQueueStorage { unsigned char maBytes[820912 - 2144]; }; // +2144..+820911
+        struct HitOverheadSignQueueStorage { unsigned char maBytes[1]; }; // +2144 (span carved by maToScene)
         struct SceneInputInterfaceStorage  { unsigned char maBytes[1]; };
         struct PropInputInterfaceStorage   { unsigned char maBytes[1]; };
+        // Leading event-queue members now carved to their X360-attested offsets (:748-:751).
+        struct PropBecamePhysicalEventQueueStorage { unsigned char maBytes[1]; };  // +16      :747
+        struct RecordHitPropQueueStorage           { unsigned char maBytes[1]; };  // +0x160   :748 (placeholder name)
+        struct BrokenPropQueueStorage              { unsigned char maBytes[1]; };  // +2080    :744
+        struct PropVFXLocatorQueueStorage          { unsigned char maBytes[1]; };  // +832192  :745
 
         // X360 0x827A2000: read-lock handle, returns this + 833008 (mPropInputInterface).
         const PropInputInterfaceStorage* GetPropInputInterface() const;
@@ -283,22 +288,35 @@ namespace PropEntityIO
         SceneInputInterfaceStorage* GetSceneInputInterface();
         // X360 0x822B9FC0: write-lock handle, returns this + 833008 (mPropInputInterface).
         PropInputInterfaceStorage* GetPropInputInterface();
+        // X360 0x822B9F18 (:747): write-lock; return &mPropBecamePhysicalEventQueue (this + 16).
+        PropBecamePhysicalEventQueueStorage* GetPropBecamePhysicalEventQueue();
+        // X360 0x822B9E70 (:746): write-lock; return &mRecordHitPropQueue (this + 0x160). (placeholder name)
+        RecordHitPropQueueStorage* GetRecordHitPropQueue();
+        // X360 0x822B9D20 (:744): write-lock; return &mBrokenPropQueue (this + 2080).
+        BrokenPropQueueStorage* GetBrokenPropQueue();
+        // X360 0x822B9DC8 (:745): write-lock; return &mPropVFXLocatorQueue (this + 832192).
+        PropVFXLocatorQueueStorage* GetPropVFXLocatorQueue();
 
         static void _AssertLayout();
 
     private:
-        // Leading event-queue members (:748-:749: mPropBecamePhysicalEventQueue / mRecordHitPropQueue)
-        // folded into opaque storage up to the +2144 mHitOverheadSignQueue start (status byte at +0
-        // is the IOBuffer base subobject).
-        unsigned char               maLeadingQueuesA[2144 - 1];        // +1..+2143 :748-:749
-        // mHitOverheadSignQueue (:750, EventQueue<HitOverheadSignEvent,100>) at +2144 (opaque; MEDIUM
-        // confidence -- see FLAG). Spans up to the +820912 SceneInputInterface start; folds the
-        // trailing mBrokenPropQueue (:751) into its span.
-        HitOverheadSignQueueStorage mHitOverheadSignQueue;             // +2144   :750
-        SceneInputInterfaceStorage  mSceneInputInterface;              // +820912 :752
-        // mSceneInputInterface span (:752) folded into this padding up to the +833008 start.
-        unsigned char               maSceneInputAndPad[833008 - 820912 - 1]; // ... :752
-        PropInputInterfaceStorage   mPropInputInterface;               // +833008 :753
+        // Leading event-queue members carved to their X360-attested offsets (all opaque
+        // foreign-type storage -> the byte offsets are safe to pin). IOBuffer status byte at +0.
+        unsigned char                       maStatusPad[16 - 1];               // +1..+15
+        PropBecamePhysicalEventQueueStorage mPropBecamePhysicalEventQueue;     // +16      :747
+        unsigned char                       maToRecordHit[0x160 - 16 - 1];     // +17..+0x15F
+        RecordHitPropQueueStorage           mRecordHitPropQueue;               // +0x160   :748 (placeholder)
+        unsigned char                       maToBrokenProp[2080 - 0x160 - 1];  // +0x161..+2079
+        BrokenPropQueueStorage              mBrokenPropQueue;                  // +2080    :744
+        unsigned char                       maToHitOverhead[2144 - 2080 - 1];  // +2081..+2143
+        // mHitOverheadSignQueue (:750, EventQueue<HitOverheadSignEvent,100>) at +2144 (opaque).
+        HitOverheadSignQueueStorage         mHitOverheadSignQueue;             // +2144   :750
+        unsigned char                       maToScene[820912 - 2144 - 1];      // +2145..+820911
+        SceneInputInterfaceStorage          mSceneInputInterface;              // +820912 :752
+        unsigned char                       maSceneToVFX[832192 - 820912 - 1]; // +820913..+832191
+        PropVFXLocatorQueueStorage          mPropVFXLocatorQueue;              // +832192 :745
+        unsigned char                       maVFXToProp[833008 - 832192 - 1];  // +832193..+833007
+        PropInputInterfaceStorage           mPropInputInterface;               // +833008 :753
     };
 
     // ========================================================================

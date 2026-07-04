@@ -47,3 +47,11 @@ template bool CgsModule::BaseEventQueue<BrnDirector::NewVehicleEvent>::AddEvent(
     const BrnDirector::NewVehicleEvent&);
 template bool CgsModule::BaseEventQueue<BrnDirector::NewVehicleEvent>::Append(
     const CgsModule::BaseEventQueue<BrnDirector::NewVehicleEvent>&);
+
+// CgsModule::BaseEventQueue<BrnDirector::NewVehicleEvent>::GetEvent(s32)  @0x821FBFF8
+// Non-const checked element accessor (generic body inline in CgsBaseEventQueue.h; asserts
+// mpEvents!=NULL :272, liIndex<GetLength() :274, liIndex>=0 :275). Return &mpEvents[liIndex]
+// (`16*index + *mpEvents`, stride 0x10 == sizeof(NewVehicleEvent)). Thin explicit instantiation,
+// mirroring committed BaseEventQueue_ImpactEvent_GetEvent.cpp. Caller MainDirector::ProcessNewVehicleEvents.
+template BrnDirector::NewVehicleEvent&
+CgsModule::BaseEventQueue<BrnDirector::NewVehicleEvent>::GetEvent(s32);
