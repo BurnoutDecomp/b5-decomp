@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"  // CgsResource::GuiGeometryFile / GuiGeometryMesh / GuiGeometryObject
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the mask/command writers)
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"              // CgsGraphics::TextRenderer::RenderString / TextObject
+#include "GameShared/GameClasses/Gui/View/CgsGuiFontCollection.h"              // CgsGui::FontCollection (the empty-collection guard)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"   // CgsGraphics::Im2dRenderBuffer (RenderString arg)
 
 #include <cstdlib>   // bsearch
@@ -171,20 +172,41 @@ namespace CgsGui
 
         AptRenderHandler& lrHandler = AptAuxPointer::mpAptAuxInst->mRenderHandler;
 
-        // Fully-transparent batch -> nothing to draw (alpha == colour-scale.w).
-        if (lrHandler.GetVertexTransform().mColourScale.w == 0.0f)
+        // x64 render-data handle: the engine passes the ZID (slotIndex + 1, or the raw slot
+        // pointer on the console). Map it back to the pooled CgsAptString (the TextObject is its
+        // leading member). A 0 / out-of-range id (or a null TextRenderer on the shape-only bring-up)
+        // -> nothing to draw. See AptRenderHandler::ZIDToAptString.
+        const int liZID = static_cast<int>(reinterpret_cast<intptr_t>(lpAssetString));
+        CgsAptString* lpSlot = lrHandler.ZIDToAptString(liZID);
+        if (lpSlot == nullptr || lrHandler.GetTextRenderer() == nullptr)
             return;
 
-        // The guest pre-warms the command line (dcbz) before the glyph batch. The observable
-        // effect is just that the text renderer batches into the active 2D command buffer.
-        // Hand the renderer base (the Im2dRenderBuffer the glyphs go into) + the laid-out text
-        // object to TextRenderer::RenderString. REUSE: the committed TextRenderer.
-        CgsGraphics::Im2dRenderBuffer* lpRenderBuffer =
-            reinterpret_cast<CgsGraphics::Im2dRenderBuffer*>(lrHandler.GetIm2dRendererBase());
-        const CgsGraphics::TextObject* lpTextObject =
-            reinterpret_cast<const CgsGraphics::TextObject*>(lpAssetString);
+        // Fully-transparent batch -> nothing to draw. The guest's early-out is `vcmpeqfp` on the
+        // colour-scale ALPHA lane; in the committed Im2dTransform packing that lane is .x
+        // (SetColourTransform maps the CXForm's (Alpha, Red, Green, Blue) into (x, y, z, w) --
+        // the same order Dispatch's colour fold unpacks).
+        if (lrHandler.GetVertexTransform().mColourScale.x == 0.0f)
+            return;
 
-        lrHandler.GetTextRenderer()->RenderString(lpRenderBuffer, *lpTextObject);
+        // The glyphs ride the SAME dispatched command buffer as the Apt shapes, under this text
+        // item's CURRENT batch transform (PushMatrices -> pfnSetVertexMatrix stamped it into the
+        // handler's mVertexTransform just before this callback; the shape path pushes the same
+        // command at the head of AptRenderHandler::Render). Dispatch folds the transform into
+        // every glyph vertex, so the field's local-space layout box lands exactly where the apt
+        // matrix places it -- and the glyph draw keeps its walk-order depth among the shapes.
+        // FLAG (PC fold): on the console the Im2dRenderBuffer this path drives IS this buffered
+        // command buffer (RenderStart @0x57E0A0 / RenderEnd @0x57E5DC); the PC debug fold made the
+        // Im2dRenderBuffer typedef the IMMEDIATE Im2d wrapper, so the text renderer is driven
+        // through its buffered entry (TextRenderer::RenderStringBuffered) here.
+        CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpBuffer =
+            lrHandler.GetCommandBuffer();
+        lpBuffer->SetTransform(lrHandler.GetVertexTransform());
+
+        // The pooled CgsAptString's leading member IS the CgsGraphics::TextObject (same address).
+        const CgsGraphics::TextObject* lpTextObject =
+            reinterpret_cast<const CgsGraphics::TextObject*>(lpSlot);
+
+        lrHandler.GetTextRenderer()->RenderStringBuffered(lpBuffer, *lpTextObject);
     }
 
     // -------------------------------------------------------------------------
@@ -391,8 +413,13 @@ namespace CgsGui
     // -------------------------------------------------------------------------
     void AptCallbackRender::DeallocateString(AptAssetString lpAssetString, u32 /*leFlags*/)
     {
-        AptAuxPointer::mpAptAuxInst->mRenderHandler.DestroyAptString(
-            reinterpret_cast<CgsAptString*>(lpAssetString));
+        // x64 render-data handle: map the ZID (slotIndex + 1) back to the pool slot, then free it.
+        // A 0 / out-of-range id is a no-op (an unresolved / already-freed handle).
+        AptRenderHandler& lrHandler = AptAuxPointer::mpAptAuxInst->mRenderHandler;
+        const int liZID = static_cast<int>(reinterpret_cast<intptr_t>(lpAssetString));
+        CgsAptString* lpSlot = lrHandler.ZIDToAptString(liZID);
+        if (lpSlot != nullptr)
+            lrHandler.DestroyAptString(lpSlot);
     }
 
     // -------------------------------------------------------------------------
@@ -421,7 +448,8 @@ namespace CgsGui
                                               CgsUnicode::CgsUtf8** lpcStringBufferOut,
                                               const void** lppFontsOut,
                                               s32* lpiEffectOut,
-                                              f32* lpfSizeScaleOut)
+                                              f32* lpfSizeScaleOut,
+                                              s32* lpiZIDOut)
     {
         AptRenderHandler& lrHandler = AptAuxPointer::mpAptAuxInst->mRenderHandler;
 
@@ -433,9 +461,20 @@ namespace CgsGui
         void* lpSlot = lrHandler.GetUnusedAptString(lpcStringBufferOut, lpParameters->szString);
 
         // Surface the text-layout inputs the guest reads from the render handler.
-        *lppFontsOut     = lrHandler.GetFontCollection();
+        // An EMPTY font collection (no typeface registered yet -- the bring-up's text system
+        // not loaded) is surfaced as NULL so AllocateString returns the unresolved handle
+        // instead of letting FindFont's degenerate empty-slot result AV inside Prepare.
+        const FontCollection* lpFonts =
+            reinterpret_cast<const FontCollection*>(lrHandler.GetFontCollection());
+        if (lpFonts != nullptr && lpFonts->maFonts[0].IsNull())
+            lpFonts = nullptr;
+        *lppFontsOut     = lpFonts;
         *lpiEffectOut    = lrHandler.GetTextEffect();
         *lpfSizeScaleOut = lrHandler.GetFontSizeScale();
+
+        // The x64 render-data handle for this slot (slotIndex + 1); the AllocateString TU returns
+        // it as the AptAssetString the engine stores in mZID (see the header note).
+        *lpiZIDOut = lrHandler.AptStringToZID(reinterpret_cast<const CgsAptString*>(lpSlot));
         return lpSlot;
     }
 

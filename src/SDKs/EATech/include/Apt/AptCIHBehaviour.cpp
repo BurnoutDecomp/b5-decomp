@@ -1298,10 +1298,41 @@ bool AptCIH::ProcessTextInst()
         if (nZID == 0 || nZID == gAptEmptyTextRenderDataZID ||
             (pTextItem->mStateFlags & 1u) == 0)
         {
-            EnsureStringAllocated(mpDisplayListParent);   // FLAG: deep text engine (declared-only)
+            EnsureStringAllocated(mpDisplayListParent);   // (homed in AptCIHText.cpp)
         }
     }
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// The generalised-process callback slots (AptRenderLinkStubs.cpp) + the per-node
+// generalised process. The console AptUpdate driver (sub_82B0D608) installs
+// AptCIH::ProcessTextInst / ProcessCustomControls / ProcessMaskMatricies into
+// dword_8324E41C/420/424 around AptDisplayList::GeneralisedProcess each frame; the
+// registered callbacks are invoked per node by AptCIH::GeneralisedProcess (above).
+//
+// AptCIH_ProcessTextInstCb is the free-function adapter matching the callback slot
+// signature (AptCIH*, AptCIH*, void*) -> unsigned int; it forwards to the node's
+// ProcessTextInst (which reads only its `this`, like the console's r3-in call).
+// AptCIH_RunGeneralisedTextProcess installs it, walks pRoot's subtree via
+// GeneralisedProcess, and restores the slot -- the faithful text-refresh pass a host
+// per-frame driver runs (the console does it inside AptUpdate).
+// ---------------------------------------------------------------------------
+extern unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*);   // dword_8324E41C
+
+unsigned int AptCIH_ProcessTextInstCb(AptCIH* pNode, AptCIH* /*pRoot*/, void* /*pCtx*/)
+{
+    return pNode->ProcessTextInst() ? 1u : 0u;
+}
+
+void AptCIH_RunGeneralisedTextProcess(AptCIH* pRoot)
+{
+    if (pRoot == nullptr)
+        return;
+    unsigned int (*pPrev)(AptCIH*, AptCIH*, void*) = AptCIH_sCIHProcessCb;
+    AptCIH_sCIHProcessCb = &AptCIH_ProcessTextInstCb;
+    pRoot->GeneralisedProcess(pRoot, nullptr);
+    AptCIH_sCIHProcessCb = pPrev;
 }
 
 // ===========================================================================
@@ -2112,21 +2143,10 @@ void AptCIH_PreDestroyHook(AptCIH* pCIH)
 // DOGMA free-list link overwrites the vptr at word 0). The node can only ever be
 // freed by the LAST line of this function, after which nothing touches it.
 // ===========================================================================
-// ===========================================================================
-// EnsureStringAllocated @0x82B06F08 -- FLAG STUB (the deep dynamic-text build/layout
-// engine). The PS3 DWARF body is ~200 lines that drive AptCharacterTextInst::UpdateText
-// + the glyph/TextFormat layout engine that bakes a dynamic-text field's render data
-// (resolves the inherited TextFormat off pParent, walks the glyph table, lays out lines,
-// and writes the baked render-data handle back into the render item). That whole subsystem
-// (the Apt text/font layout engine) is un-homed; reconstructing it faithfully here would
-// require homing it wholesale. Left a faithful no-op stub so ProcessTextInst / the AS
-// createTextField path LINK; the field simply keeps its prior (unresolved) render data
-// until the text engine TU lands. NOT fabricated -- a deliberate deferred-subsystem stub.
-// ===========================================================================
-void AptCIH::EnsureStringAllocated(AptCIH* /*pParent*/)
-{
-    // FLAG: deferred -- the dynamic-text/glyph layout engine (its own TU).
-}
+// EnsureStringAllocated @0x82B06F08 is now HOMED in AptCIHText.cpp (the deep dynamic-text
+// build/layout path -- AptCharacterTextInst::UpdateText + the AptAllocateStringParameters
+// build + the host pfnAllocateString call + the SetZID/box-align/measure fold). The prior
+// FLAG no-op stub here is retired.
 
 AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 {

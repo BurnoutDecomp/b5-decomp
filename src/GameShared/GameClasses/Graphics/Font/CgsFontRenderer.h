@@ -8,6 +8,8 @@
 
 namespace renderengine { class TextureState; }   // RenderBufferSetTextureState binds it
 
+namespace CgsGraphics { template <typename V> struct ImRenderBuffer; }   // the buffered command buffer (Apt path)
+
 // CgsGraphics::TextObject + TextRenderer -- the resource-font (bitmap) text path. A TextObject
 // describes one piece of text (which Font, colour, screen rect, alignment, the multiline / italic /
 // background / border / gradient / drop-shadow / emboss options); TextRenderer turns it into Im2d
@@ -113,6 +115,17 @@ namespace CgsGraphics
         // buffer, runs RenderStringInternal (Buffered), clears the buffer pointer.
         void RenderString(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject);
 
+        // FLAG (PC fold; the faithful CONSOLE shape of this path): on the X360/PS3 the
+        // `Im2dRenderBuffer` the Apt string-draw drives IS the buffered command buffer
+        // (Im2dRenderBuffer::RenderStart @0x57E0A0 / RenderEnd @0x57E5DC are the command-stream
+        // reserve/submit, applied + transformed at Dispatch). The PC debug-text fold typedef'd
+        // Im2dRenderBuffer to the IMMEDIATE Im2d wrapper (DrawPrimitiveUP, no transform), so the
+        // Apt path -- whose glyphs must ride the same dispatched command stream as the Apt shapes
+        // (per-batch SET_TRANSFORM + draw order) -- re-binds the RenderBuffer* helpers to the real
+        // buffered ImRenderBuffer<V> through this entry. Same layout/glyph path as RenderString.
+        void RenderStringBuffered(ImRenderBuffer<Im2dVertex>* lpBufferedBuffer,
+                                  const TextObject& lrTextObject);
+
         // Render the text object's string with a per-glyph vertical fade: glyphs fade out
         // above lfFadeTopY (over the band up to lfFadeTopY) and below lfFadeBottomStart..
         // lfFadeBottomEnd. X360 0x82800798 -- the same per-line / per-glyph layout as
@@ -141,6 +154,11 @@ namespace CgsGraphics
         Im2dVertex*       mapaVertices[1];                       // X360 +0x0C
         bool              mabTempVerticesInUse[1];               // X360 +0x10 (+pad)
         Im2dVertex        maaTempVertices[1][KU_MAX_VERTICES];   // X360 +0x14
+
+        // FLAG (PC fold; see RenderStringBuffered): the buffered command buffer the Apt
+        // string path drives (null on the debug/immediate paths -- RenderString /
+        // RenderStringFadingY explicitly clear it, so an embedding object needs no init).
+        ImRenderBuffer<Im2dVertex>* mpBufferedRenderBuffer;
     };
 }
 

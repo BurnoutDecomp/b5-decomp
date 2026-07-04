@@ -93,8 +93,12 @@ namespace CgsUnicode
         // luTrailing <= 3 and the lead is not a 10xxxxxx continuation byte: walk the trailing
         // bytes and require each to be a 10xxxxxx continuation. (X360: luTrailing > extra count
         // -> too many trailing bytes -> invalid; fewer -> the loop ends early and is valid.)
+        // luSeen counts the CONTINUATION bytes seen (starts at 0): a char is invalid only when
+        // MORE than luTrailing continuations follow. (The prior luSeen=1 seed counted the lead
+        // itself and rejected EVERY valid multi-byte character -- e.g. the 2-byte (C2 A9)
+        // copyright sign failed on its first continuation byte. Off-by-one, fixed 2026-07-04.)
         const u8* lpByte = lpUtf8Char + 1;
-        u32 luSeen = 1u;
+        u32 luSeen = 0u;
         while ((*lpByte & 0xC0) == 0x80)
         {
             ++lpByte;

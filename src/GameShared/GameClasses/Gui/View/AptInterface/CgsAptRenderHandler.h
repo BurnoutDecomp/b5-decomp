@@ -53,11 +53,15 @@ namespace CgsGui
 {
     // One pooled text unit. The guest array strides 0x80 (128 bytes) per element (the
     // DestroyAptString slot search uses `i << 7`); only the pool bookkeeping is in scope, so the
-    // unit body is modelled as opaque storage of that stride. FLAG: CgsAptString interior is
-    // out-of-scope opaque state (homed when the text-draw path is recovered).
+    // unit body is modelled as opaque storage. FLAG: CgsAptString interior is out-of-scope
+    // opaque state (the REAL type lives in CgsAptString.h; the AllocateString TU casts the slot
+    // to it and Prepare fills it in place). x64 STRIDE: the real object widens past the console
+    // 0x80 (the embedded TextObject's pointers + the two-pointer font handle push it to ~0xB8),
+    // so the opaque slot reserves 0x100 -- byte offsets are not load-bearing on the x64 gate,
+    // only "each slot is big enough for the real object" is.
     struct CgsAptString
     {
-        u8 mau8Opaque[128];   // 0x80-byte stride (DestroyAptString `i << 7`)
+        u8 mau8Opaque[256];   // console stride 0x80; x64 slot reserves 0x100 (see FLAG above)
     };
 
     // The active 2D renderer the Apt rasteriser drives. On the X360 this is an Im2dRenderBuffer:
@@ -139,6 +143,16 @@ namespace CgsGui
 
         // PS3 0x5BACF8. Return an AptString to the pool: find its slot and mark it free.
         void DestroyAptString(CgsAptString* lpAptString);
+
+        // ---- ZID <-> pool-slot bridge (x64 render-data handle scheme) -----------------------
+        // On the console the Apt dynamic-text render-data handle (AptRenderItemDynamicText::mZID)
+        // is the 32-bit CgsAptString* the string-allocate callback returns. On x64 the pool slot
+        // is a 64-bit pointer that does NOT fit the engine's int32 mZID, so the string-allocate
+        // callback hands back a SLOT INDEX + 1 (so 0 stays the "unresolved" value the engine
+        // tests) and the text draw/release hooks map that id back to the pool slot. These two
+        // helpers are the round-trip; the pool array is contiguous so the id is just the index.
+        int           AptStringToZID(const CgsAptString* lpAptString) const;   // slot -> index+1 (0 on miss)
+        CgsAptString* ZIDToAptString(int liZID);                              // index+1 -> slot (null on OOB)
 
         // ---- accessors the AptCallbackRender host callbacks reach state through -----------
         // The Apt player drives the engine -> render-handler bridge (CgsGui::AptCallbackRender,
@@ -252,8 +266,14 @@ namespace CgsGui
 
         // ---- the AptString pool (guest base +99520) ------------------------------------------
         static const u32 KU_NUM_APT_STRINGS = 256;
+        // Per-slot resolved-text storage CgsAptString::Prepare copies the laid-out string into
+        // (its CopyN caps at 256 bytes). The guest holds per-slot 32-bit POINTERS to storage the
+        // pool build preallocated; on x64 a pointer doesn't fit the u32 slot, so the storage is
+        // INLINE per slot (same observable: GetUnusedAptString hands each claimed slot its own
+        // stable 256-byte text buffer).
+        static const u32 KU_APT_STRING_CHARS = 256;
         CgsAptString    maAptStrings[KU_NUM_APT_STRINGS];       // [guest +99520+192] 0x80-byte units
-        u32             maacAptStringChars[KU_NUM_APT_STRINGS]; // [guest +99520+...] preallocated char ptrs (32-bit)
+        u8              maacAptStringChars[KU_NUM_APT_STRINGS][KU_APT_STRING_CHARS]; // per-slot text storage
         u8              mabUnusedAptStrings[KU_NUM_APT_STRINGS];// [guest +99520] free flags (1 == free)
 
         // ---- Im2d renderer set (guest +108588; read by GetIm2dRendererType / Render) ----------

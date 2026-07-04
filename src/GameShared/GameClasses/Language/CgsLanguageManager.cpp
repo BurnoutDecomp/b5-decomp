@@ -177,6 +177,41 @@ namespace CgsLanguage
         return true;
     }
 
+    // FLAG (PC bring-up shim; see the header note): installs one serialised {hash, string}
+    // table entry into mStrings -- the per-entry observable effect of the unreconstructed
+    // LanguageManager::Construct (the STATIC string-table install). Unlike AddStringPointer,
+    // the element is NOT chained onto mDynamicStringPointerElements: the static table has
+    // thousands of entries (the dynamic bookkeeping list holds 1024 nodes and exists so
+    // individually-added strings can be REMOVED); the console's static entries live in the
+    // bulk mpStringElements array outside the dynamic lists, exactly like these.
+    bool LanguageManager::AddStringPointerByHash(unsigned int luHash, const u8* lpcString)
+    {
+        CGS_ASSERT(lpcString != 0, "NULL localised string passed to LanguageManager::AddStringPointerByHash");
+
+        // FLAG (part of the Construct stand-in): the X360 ctor deliberately leaves mStrings'
+        // bins at the "uninitialised" sentinel -- LanguageManager::Construct (unreconstructed)
+        // Init()s the table before installing the loaded entries. Mirror that here on the
+        // first installed entry, else every Insert/Get fires the container asserts.
+        static bool sbTableInit = false;
+        if (!sbTableInit)
+        {
+            sbTableInit = true;
+            mStrings.Init();
+        }
+
+        if (FindStringByHash(luHash))
+            return true;   // already installed (a static-table re-load; keep the first entry)
+
+        HashIDStringArray::Element* lpElement =
+            static_cast<HashIDStringArray::Element*>(mpLanguageAllocator->Malloc(sizeof(HashIDStringArray::Element), 4));
+        if (lpElement == 0)
+            return false;
+        lpElement->Set(luHash, lpcString);
+        mStrings.Insert(lpElement);
+
+        return true;
+    }
+
     // X360 0x82864950 CgsLanguage::LanguageManager::RemoveString.
     //
     // Faithful decompile: validate, hash the key, and remove the hash's entry via

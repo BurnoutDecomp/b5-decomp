@@ -127,9 +127,14 @@ namespace CgsGui
     // render-handler header. This bridge frees the previous string, hands out a free pool slot +
     // its char buffer, and surfaces the font collection / text effect / size scale Prepare needs.
     // Returns the pool slot as a raw void* (the caller casts it to the REAL CgsAptString*).
+    // lpiZIDOut receives the x64 render-data handle for the returned slot: (slotIndex + 1),
+    // the small int id the engine stores in AptRenderItemDynamicText::mZID (0 == unresolved).
+    // The bridge owns the ZID<->slot mapping (it has the render handler); the AllocateString TU
+    // returns this id, and DrawString / DeallocateString map it back through the same handler.
     void* AptCallbackRender_AcquireStringSlot(AptAllocateStringParameters* lpParameters,
                                               CgsUnicode::CgsUtf8** lpcStringBufferOut,
                                               const void** lppFontsOut,
                                               s32* lpiEffectOut,
-                                              f32* lpfSizeScaleOut);
+                                              f32* lpfSizeScaleOut,
+                                              s32* lpiZIDOut);
 }

@@ -29,8 +29,15 @@ namespace CgsGui
         const void*          lpFonts        = nullptr;
         s32                  liEffect       = 0;
         f32                  lfSizeScale    = 1.0f;
+        s32                  liZID          = 0;
         void* lpSlot = AptCallbackRender_AcquireStringSlot(
-            lpParameters, &lpStringBuffer, &lpFonts, &liEffect, &lfSizeScale);
+            lpParameters, &lpStringBuffer, &lpFonts, &liEffect, &lfSizeScale, &liZID);
+
+        // Guard the shape-only bring-up: when no FontCollection is wired (title-screen shapes
+        // don't need text layout), the slot has nothing to lay out -- return the unresolved
+        // handle rather than asserting in CgsAptString::Prepare (which requires lpFonts).
+        if (lpSlot == nullptr || lpFonts == nullptr)
+            return reinterpret_cast<AptAssetString>(static_cast<intptr_t>(0));
 
         // Lay the parametrised string out into the slot's char buffer with the font collection,
         // the requested effect, and the size scale (the guest's CgsAptString::Prepare call).
@@ -42,6 +49,7 @@ namespace CgsGui
             static_cast<CgsAptString::ETextEffects>(liEffect),
             lfSizeScale);
 
-        return reinterpret_cast<AptAssetString>(lpSlot);
+        // Return the x64 render-data handle (slotIndex + 1) the engine stores in mZID.
+        return reinterpret_cast<AptAssetString>(static_cast<intptr_t>(liZID));
     }
 }

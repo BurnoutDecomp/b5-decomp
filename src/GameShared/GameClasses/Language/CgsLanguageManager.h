@@ -122,6 +122,14 @@ namespace CgsLanguage
         bool AddString(const char* lpcStringId, const u8* lpcString);
         bool AddStringPointer(const char* lpcStringId, const u8* lpcString);
 
+        // FLAG (PC bring-up shim; NOT an X360 method): install one loaded string-table entry by
+        // its PRECOMPUTED key hash. The serialised LanguageResource carries only {hash, string}
+        // pairs (no key strings), and the X360 member that installs the whole loaded table into
+        // mStrings (LanguageManager::Construct) is not reconstructed yet -- this is its
+        // per-entry observable effect (an AddStringPointer minus the re-hash; the caller owns
+        // the string's lifetime, exactly like AddStringPointer). Remove when Construct lands.
+        bool AddStringPointerByHash(unsigned int luHash, const u8* lpcString);
+
         // X360 0x828651A0 / 0x82866450 (DWARF CgsLanguageManager.h:200/:231). Resolve
         // lpcSourceText through the given format (E_FORMAT_ID_LOOKUP resolves it as a
         // loc-string id) into a local 1KB buffer, then AddString the result under
