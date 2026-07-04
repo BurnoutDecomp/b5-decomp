@@ -652,6 +652,8 @@ namespace BrnGui
     // AddStringPointerByHash shim; the file block stays resident (the manager stores the
     // string POINTERS). Remove when LanguageManager::Construct + a faithful widened
     // resource handler land.
+    // FLAG stand-in for un-homed CgsGui::LanguageManager::Construct (Phase 4a retires this; NOT a
+    // permanent PC leaf -- it exists only until the real string-table load is reconstructed).
     // -------------------------------------------------------------------------
     static bool AptLoadLanguageStrings(const char* lpcBundlePath)
     {
@@ -728,6 +730,8 @@ namespace BrnGui
     // and arm the text system the AptAux render handler hands to the Apt string path.
     // Gated on the D3D device (the font atlas FixUp creates D3D textures); retried by the
     // (idempotent) bring-up until the device exists.
+    // FLAG stand-in for the un-homed CgsGui::ViewModule::Prepare text/font bring-up (Phase 4c retires
+    // this; NOT a permanent PC leaf).
     // -------------------------------------------------------------------------
     static void AptBringUpTextSystem()
     {
@@ -1653,7 +1657,8 @@ namespace BrnGui
     // down as nodes are placed; that propagation is the deferred piece. This walks a clip's child
     // display list and SetDirtyState(true) every sprite/animation node (recursively), so the next tick
     // recurses into each + places its content -- cascading one display-list level per frame until the
-    // whole tree is composed. // FLAG: stand-in for the render-tree-manager placement dirty propagation.
+    // whole tree is composed. // FLAG stand-in for the un-homed render-tree-manager placement dirty
+// propagation (Phase 4b retires this; NOT a permanent PC leaf).
     // =========================================================================
     static void PropagateDirtyToChildren(AptCIH* lpNode, int nDepth)
     {
@@ -2303,6 +2308,12 @@ namespace BrnGui
         return lbIcon;
     }
 
+    // FLAG title-bring-up scaffolding (Phase 4d retires this whole cluster): AptRuntimeSetComponentViewState
+    // / AptRuntimeSetComponentKeyValue / AptApplyTitleHelpItemDefaults reproduce the OBSERVABLE of the
+    // un-run GuiComponent ActionScript (view-state transitions) via a hardcoded, title-screen-scoped
+    // component->clip pair map -- this is behavioral scaffolding, NOT faithful decompiled code. Kept
+    // (user decision 2026-07-04) so the title keeps animating; delete the whole cluster when the faithful
+    // GuiComponent::FillAptViewMessage -> AptCommunicator AS routing is homed (Phase 4d).
     bool AptRuntimeSetComponentViewState(const char* lpacInstName, const char* lpacViewState)
     {
         char lac[224];
@@ -2523,6 +2534,10 @@ namespace BrnGui
 //
 // This STRONG definition overrides the FLAG link-stub previously in AptRenderLinkStubs.cpp (removed).
 // pFile->mFileName is the movie name AptLoader::Update passes as pFileName (== the import to load).
+// FLAG PC-platform leaf: PC has no async .apt stream, so this loads the import SYNCHRONOUSLY. This is
+// a permanent platform leaf (not a stand-in to retire) -- the completion (CompleteLoad -> Resolve ->
+// Fixup), the AptCharacterAnimation_Link -> FindExport link, and the AptLoader::Update state machine
+// it drives are all the faithful console flow.
 // =============================================================================
 void AptLoader_StartAsyncLoad(const char* pFileName, AptFilePtr* pFile)
 {
