@@ -101,7 +101,9 @@ struct AptAnimationTarget
     u32*                  mpQueuedInputs;       // +0x2C  (4*mnQueuedInputsCap alloc)
     void*                 mpOnPressObject;      // +0x30  (SetOnPressObject; ctor sentinel)
     void*                 mpOnRollOverObject;   // +0x34  (SetOnRollOverObject; ctor sentinel)
-    void*                 mpInputEventObject38; // +0x38  (ctor sentinel) FLAG: role TBD
+    void*                 mpTopMostSprite;      // +0x38  (ctor sentinel) XB1-NAMED: GetTopMostSprite
+                                                //        (?GetTopMostSprite@AptAnimationTarget reads x64 +0x68,
+                                                //        the widened twin of this slot; was "role TBD")
     void*                 mpDragMC;             // +0x3C  (Get/SetDragMC; ctor sentinel)
     f32                   mConstrain[4];        // +0x40  drag constrain L/T/R/B (was mDragPos+maTail,
     f32                   mGrabOffset[2];       // +0x50  drag grab offset X/Y     roles resolved 2026-07-02)

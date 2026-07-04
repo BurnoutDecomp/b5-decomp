@@ -17,9 +17,25 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
 
 // PC KEYBOARD BRING-UP (FLAG): poll GetAsyncKeyState without dragging <Windows.h> into this
-// game-source TU (its NOUSER/NOGDI lean-defines conflict). Signature per WinUser.h.
+// game-source TU (its NOUSER/NOGDI lean-defines conflict). Signatures per WinUser.h.
+// FOCUS GATE: GetAsyncKeyState reads the GLOBAL key state, so without a foreground check
+// the boot flow reacts to keys typed into ANY app (verified: terminal Enters accepted the
+// title menu). Only read the keyboard while a window of THIS process is foreground.
 extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vKey);
-static short BrnGuiPcGetAsyncKeyState(int liVKey) { return GetAsyncKeyState(liVKey); }
+extern "C" __declspec(dllimport) void* __stdcall GetForegroundWindow(void);
+extern "C" __declspec(dllimport) unsigned long __stdcall GetWindowThreadProcessId(void* hWnd, unsigned long* lpdwProcessId);
+extern "C" __declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
+static short BrnGuiPcGetAsyncKeyState(int liVKey)
+{
+    void* lpForeground = GetForegroundWindow();
+    if (lpForeground == nullptr)
+        return 0;
+    unsigned long luPid = 0;
+    GetWindowThreadProcessId(lpForeground, &luPid);
+    if (luPid != GetCurrentProcessId())
+        return 0;
+    return GetAsyncKeyState(liVKey);
+}
 
 // The loading-screen visual signal (BrnRendererModule::Render shows the loading screen while it's set).
 // The GUI BF_LOADING state now OWNS this when its FSM is live: BootLoading::Update PlayLoadingScreen

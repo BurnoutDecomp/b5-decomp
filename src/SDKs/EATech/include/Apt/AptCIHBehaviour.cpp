@@ -1272,7 +1272,7 @@ void AptCIH::CleanNativeFunctions()
 // FLAG (homed with the dynamic-text render-item TU; console &unk_82F72DB0): the
 // "unresolved/empty text render-data handle" sentinel. mZID equal to it (or 0) means
 // the field has no resolved render data yet. Mirrors AptRenderItemDynamicText.cpp.
-extern int gAptEmptyTextRenderDataZID;
+extern intptr_t gAptEmptyTextRenderDataZID;
 
 // ---------------------------------------------------------------------------
 // ProcessTextInst @0x82B076F0 -- refresh a dynamic-text node's baked render data.
@@ -1294,7 +1294,7 @@ bool AptCIH::ProcessTextInst()
     {
         AptRenderItemDynamicText* pTextItem =
             static_cast<AptRenderItemDynamicText*>(mpCharacterInst->GetRenderItem());
-        const int nZID = pTextItem->mZID;
+        const intptr_t nZID = pTextItem->mZID;
         if (nZID == 0 || nZID == gAptEmptyTextRenderDataZID ||
             (pTextItem->mStateFlags & 1u) == 0)
         {

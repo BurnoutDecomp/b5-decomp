@@ -499,20 +499,17 @@ int AptCIH::tick()
         {
             // Wrapped past the end: loop back to the start, then skip to the enterFrame
             // stage (LABEL_27) -- NOT through queueFrameActions.
-            // FLAG (un-homed native-8 leaf -- honest boundary): the console loops via
-            // jumpToFrame(0), whose arbitrary-jump path replays the intervening frames through
-            // AptMovie::DoTemporaryFrameControls + the AptPseudoDisplayList temporary-frame skip
-            // resolver. That subsystem still reads command records at CONSOLE (4-byte) offsets and
-            // is NOT ported to the native-8 GUIAPT layout (verified via crash dump: DoTemporary
-            // FrameControls -> CmdPtr reads a straddled/misaligned pointer 0x180400d000007ff6 -> AV).
-            // Until it is homed (its own follow-on), a multi-frame nested clip that reaches its end
-            // would AV on the wrap. So the wrap RESETS the play-head to frame 0 directly (a plain
-            // loop) instead of the arbitrary-jump replay: the next tick's frame-0 doFrameControls
-            // re-composes the clip's frame-0 content, which is the same on-screen result for a
-            // looping clip (the replay-merge only matters for a mid-timeline SEEK, not a loop-to-0).
-            // (The console additionally re-queues the label-0 actions via jumpToFrame's queueFrame
-            // Actions tail; that is AS-VM work which is deferred here, so the plain reset is faithful
-            // to the "un-run action queue" state.) Then fall to the enterFrame stage (label_27).
+            // FLAG (deliberate divergence, 2nd attempt 2026-07-04): the faithful console/
+            // XB1 wrap is jumpToFrame(0) (XB1 tick sub_14085D620 `call sub_1408501F0(0)`,
+            // replay + mergeState + frame-0 action re-queue). RESTORING it against the
+            // REAL native-8 drive bundles kills the process reproducibly a few ticks into
+            // composition (silent death mid-mkitem, no WER record -- 2x reproduced), so
+            // the wrap-replay chain still has an un-diagnosed defect on real-bundle data
+            // (suspects: the pseudo-list replay over clips whose imports are unresolved
+            // stubs, or the delay-release chain re-entered from mergeState during tick).
+            // Until that is pinned, the plain play-head reset stays: the next tick's
+            // frame-0 doFrameControls re-composes the loop content (same on-screen
+            // result for a LOOP; the replay-merge only matters for a mid-timeline SEEK).
             pInst->mnGotoFrame = 0;
             goto label_27;
         }

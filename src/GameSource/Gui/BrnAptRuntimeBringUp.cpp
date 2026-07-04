@@ -201,22 +201,22 @@ extern AptActionInterpreter gAptActionInterpreter;
 // callbacks directly; here the bring-up installs bridges that forward to CgsGui::AptCallbackRender.
 // The engine passes the ZID (AptRenderItemDynamicText::mZID) -- our x64 slot-index handle.
 enum AptMaskRenderOperation : int;
-extern void (*gpfnAptDrawTextRenderData)(int nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
-extern void (*gpfnAptReleaseTextRenderData)(int nZId, int nOp);                             // dword_8324E864
+extern void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
+extern void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp);                        // dword_8324E864
 
 // The bring-up bridges the two hooks forward to. DrawString batches the ZID's glyphs;
 // DeallocateString frees the ZID's pooled string. (leFlags/nOp carried for parity.)
-static void AptRT_DrawTextRenderData(int nZId, AptMaskRenderOperation eOp, int nTick)
+static void AptRT_DrawTextRenderData(intptr_t nZId, AptMaskRenderOperation eOp, int nTick)
 {
     (void)nTick;   // the render callback keys off the ZID + mask op (level unused on this path)
     CgsGui::AptCallbackRender::DrawString(
-        reinterpret_cast<AptAssetString>(static_cast<intptr_t>(nZId)), eOp, 0);
+        reinterpret_cast<AptAssetString>(nZId), eOp, 0);
 }
 
-static void AptRT_ReleaseTextRenderData(int nZId, int nOp)
+static void AptRT_ReleaseTextRenderData(intptr_t nZId, int nOp)
 {
     CgsGui::AptCallbackRender::DeallocateString(
-        reinterpret_cast<AptAssetString>(static_cast<intptr_t>(nZId)),
+        reinterpret_cast<AptAssetString>(nZId),
         static_cast<u32>(nOp));
 }
 

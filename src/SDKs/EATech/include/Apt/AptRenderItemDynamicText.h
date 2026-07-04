@@ -14,7 +14,12 @@
 //   AptRenderItem base (console 52 bytes / 13 dwords), then --
 //   [c:0x34] mTextValue        EAStringC -- the currently displayed text
 //   [c:0x38] mVarValue         EAStringC -- the bound AS variable name ("$var")
-//   [c:0x3C] mZID              i32   (the z id; Get/SetZID)
+//   [c:0x3C] mZID              i32 console / POINTER-WIDTH x64 (the host render-data
+//            handle; Get/SetZID). XB1-VERIFIED (?GetZID@AptCharacterTextInst@@QEBAQEAXXZ
+//            does an 8-byte load at item+0x68): on the 64-bit ABI this slot is a void*-
+//            width handle, which shifts the following block to the XB1 offsets
+//            mTextColor@0x70 mScroll@0x74 flags@0x78/0x7C mBounds@0x80 mFontSize@0x90
+//            mFontID@0x94 (mpTextFormat@0x98/mStateFlags@0xA0 re-sync).
 //   [c:0x40] mTextColor        u32   (text-colour read straight)
 //   [c:0x44] mScroll           i32   (scroll offset)
 //   [c:0x48] mFlagsAndBackColor PACKED: bits 3-6 alignment(signed) / bit 7
@@ -54,7 +59,7 @@ struct AptRenderItemDynamicText : public AptRenderItem
 {
     EAStringC mTextValue;             // [c:0x34] the displayed text
     EAStringC mVarValue;              // [c:0x38] the bound AS variable name
-    int32_t   mZID;                   // [c:0x3C] the z id
+    intptr_t  mZID;                   // [c:0x3C] pointer-width on x64 (XB1: void* @0x68)
     uint32_t  mTextColor;             // [c:0x40]
     int32_t   mScroll;                // [c:0x44]
     uint32_t  mFlagsAndBackColor;     // [c:0x48] alignment/drawsBackground/backColor
@@ -160,11 +165,11 @@ struct AptRenderItemDynamicText : public AptRenderItem
     void SetScroll(int nScroll) { mScroll = nScroll; }         // @0x82AE1E88
 
     // ---- z id -------------------------------------------------------------
-    int  GetZID() const { return mZID; }                       // @0x82AD5830 (facade reads mpRenderItem+0x3C)
+    intptr_t GetZID() const { return mZID; }                   // @0x82AD5830 (facade reads mpRenderItem+0x3C; XB1 8-byte load)
     // FLAG: the facade SetZID (@0x82AE1E20) calls this OUT-OF-LINE render-item method
     // (not inlined), so its body lives with the render-item TU; declared here so the
     // facade can name it. (Its effect is the mZID write; body deferred, not guessed.)
-    void SetZID(int nZID);                                      // (callee of AptCharacterTextInst::SetZID)
+    void SetZID(intptr_t nZID);                                 // (callee of AptCharacterTextInst::SetZID)
 
     // ---- font -------------------------------------------------------------
     float GetFontSize() const { return mFontSize; }            // @0x82AD5910

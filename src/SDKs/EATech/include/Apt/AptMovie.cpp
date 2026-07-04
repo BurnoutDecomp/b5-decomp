@@ -240,22 +240,36 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
             if (pExisting && nResolvedId == -1)
             {
                 // ---- merge the place fields onto the existing node ---------
-                // (native-8 field positions; console shadows: matrix word info+12,
-                // colour word info+36, clipDepth info+56, ratio info+44.)
-                void* pData = CmdPtr(pExisting, 0x04);
-
-                int32_t v21 = (nFlags & 4)  ? *reinterpret_cast<int32_t*>(pBody + 0x0C) : CmdI32(pData, 0x04);
-                CmdSetI32(pData, 0x04, v21);
-                int32_t v22 = (nFlags & 8)  ? *reinterpret_cast<int32_t*>(pBody + 0x24) : CmdI32(pData, 0x08);
-                CmdSetI32(pData, 0x08, v22);
-                int32_t v23 = (nFlags & 0x80) ? *reinterpret_cast<int32_t*>(pBody + 0x38) : CmdI32(pData, 0x0C);
-                CmdSetI32(pData, 0x0C, v23);
-                float   v24 = (nFlags & 0x10) ? *reinterpret_cast<float*>(pBody + 0x2C) : CmdF32(pData, 0x10);
-                *reinterpret_cast<float*>(reinterpret_cast<char*>(pData) + 0x10) = v24;
-
-                CmdSetI32(pData, 0x14, CmdI32(pData, 0x14) | nFlags);
+                // XB1-VERIFIED (sub_1408363A0): the merge stores the ADDRESSES of this
+                // record's matrix/colour fields (`lea rcx,[rbx+14h]`-family) into the
+                // node's typed AptPseudoData_t snapshot -- NOT 4-byte field VALUES at
+                // console offsets (the prior transliteration corrupted the x64 node on
+                // any MOVE-record merge). clipActions (bit 0x80): the native-8 record
+                // carries a POINTER @body+0x40 that the console's 4-byte slot cannot
+                // hold and no pun consumer reads -- unchanged (see AptPseudoData.h FLAG).
+                AptPseudoData_t* pData =
+                    static_cast<AptPseudoCIH_t*>(pExisting)->mpPseudoData;
+                if (pData != nullptr)
+                {
+                    if (nFlags & 0x04)
+                        pData->mpMatrix = const_cast<char*>(pBody) + 0x0C;
+                    if (nFlags & 0x08)
+                        pData->mpColorTransform = const_cast<char*>(pBody) + 0x24;
+                    if (nFlags & 0x10)
+                        pData->mfRatio = *reinterpret_cast<const float*>(pBody + 0x2C);
+                    pData->muxFlags |= static_cast<u32>(nFlags);
+                }
                 continue;
             }
+
+            // FLAG (import not loaded -- the same deferred boundary as the live place path):
+            // a non-MOVE place whose charTable slot is null is an UNRESOLVED IMPORT (real
+            // native-8 bundles keep imports as genuine import-table entries). Feeding a
+            // null-character node into the replay would hand mergeState's AddToDisplayList
+            // a null character to instantiate (AV -- reproduced on the drive bundles' menu
+            // state jumps). Skip it, exactly as AptMovie_PlaceCommand skips the fresh place.
+            if (nResolvedId != -1 && pCharacter == nullptr)
+                continue;
 
             // ---- allocate a fresh pseudo node ------------------------------
             void* pBlock = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));   // [c: 20]
@@ -280,7 +294,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                 pNode = new (pBlock) AptPseudoCIH_t(
                             reinterpret_cast<AptCharacterInfo_t*>(pCmd),
                             static_cast<short>(nFrame),                // a3 (r5) = nFrame -> li16CharacterId
-                            reinterpret_cast<void*>(static_cast<intptr_t>(CmdI32(pCmd, 0x04))),  // a4 (r6) = v13[1] -> lpContext (+0x08)
+                            reinterpret_cast<void*>(static_cast<intptr_t>(CmdI32(pCmd, 0x08))),  // a4 (r6) = the removed DEPTH (native-8 payload @cmd+8)
                             nullptr);                                   // r7 = 0
             }
             pPseudoList->Insert(pNode);   // real member
@@ -435,8 +449,10 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
             }
             else if (eTag == 4)
             {
-                // remove: drop the node at the command's depth (sub_82AFD150).
-                AptMovie_RemoveCommand(pDisplayList, CmdI32(pCmd, 0x04));
+                // remove: drop the node at the command's depth (sub_82AFD150; XB1 inlines
+                // the same walk). Native-8 payload @cmd+8 (XB1 asm `mov r8d,[rbx+8]`;
+                // cmd+4 is the tag pad -- the converter-era +4 read is retired).
+                AptMovie_RemoveCommand(pDisplayList, CmdI32(pCmd, 0x08));
             }
             else if (eTag == 5 && !gbAptBackToScriptFired)
             {
@@ -448,7 +464,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 // title timeline (the tag-5 command hands control back to the host Lua FSM,
                 // which our bring-up drives separately).
                 if (gpAptBackToScriptHook != nullptr)
-                    gpAptBackToScriptHook(CmdPtr(pCmd, 0x04));
+                    gpAptBackToScriptHook(CmdPtr(pCmd, 0x08));   // native-8 payload @cmd+8
                 gbAptBackToScriptFired = 1;
             }
         }
@@ -932,10 +948,15 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
     void* pHash = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));   // [c: 20]
     if (pHash)
     {
-        CmdSetI32(pHash, 0x04, 0);
-        CmdSetI32(pHash, 0x08, 0);
-        CmdSetI32(pHash, 0x0C, 0);
-        CmdSetI32(pHash, 0x10, 0);
+        // XB1 (sub_1408567D0) zeroes the four 8-BYTE member slots of the 0x28-byte
+        // AptNativeHash (mpTable/mp__Proto__/mpPrototype/mnEventHandlerMask @+0x08..
+        // +0x20) then stamps the type word. The prior 4-byte zeroing left the upper
+        // halves (and +0x18..) as pool garbage on x64.
+        char* const pcHash = reinterpret_cast<char*>(pHash);
+        *reinterpret_cast<uint64_t*>(pcHash + 0x08) = 0;
+        *reinterpret_cast<uint64_t*>(pcHash + 0x10) = 0;
+        *reinterpret_cast<uint64_t*>(pcHash + 0x18) = 0;
+        *reinterpret_cast<uint64_t*>(pcHash + 0x20) = 0;
         CmdSetI32(pHash, 0x00, 2);
     }
     this->mpLabelHash = reinterpret_cast<AptNativeHash*>(pHash);
@@ -980,13 +1001,11 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
             //                   _parseStream(each); then name ptr [xb1:cmd+0x38]
             //   case 8 MORPH  : stream ptr [xb1:cmd+0x10] + _parseStream(stream); un-negate id@+0x08
             //
-            // OUR-BUNDLE OFFSET DELTA (verified vs TITLE_SCREEN02.bundle): the tag-1/tag-2 stream/name
-            // pointers sit at the same cmd+0x08 as XB1, but the apt_convert-produced tag-3 PLACE record
-            // is 4 bytes "earlier" than the true native-8 layout (the converter's body alignment differs):
-            // our name is at body+0x30 (== cmd+0x34, not xb1 cmd+0x38), our clipActions block at
-            // body+0x40 (== cmd+0x44, not xb1 cmd+0x48), and the block's record-array pointer at
-            // block+0x04 (not xb1 block+0x08). The record STRIDE (16) + stream slot (rec+0x08) match XB1
-            // exactly. So the offsets below are XB1-derived STRUCTURE at our-bundle byte positions.
+            // BUNDLE PROVENANCE (2026-07-04): the staged GUIAPT bundles are now the REAL
+            // native-8 set (JeBobs' GUIAPT64 drive drop), which matches the XB1 layout
+            // EXACTLY: place body = cmd+8 (align8(cmd+4) lands there), name @body+0x30
+            // (cmd+0x38), clipActions block @body+0x40 (cmd+0x48), block recArrayPtr
+            // @block+0x08. The apt_convert-era "-4" deltas are retired with the converter.
             //
             // FLAG (deferred _parseStream): XB1 calls sub_14084A920 (its _parseStream) on each action
             // stream; here the stream POINTERS are relocated (reads never AV) but the BYTECODE stays
@@ -1028,7 +1047,7 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
                     const uintptr_t luClip = reloc64(pBody, 0x40); // place record clipActions/init-action block
 
                     // Walk the clipActions block's records (XB1 case-3 inner loop): the block is
-                    // {count@+0x00 (i32); recArrayPtr@block+0x04 (native-8 ptr; xb1 block+0x08)}; each
+                    // {count@+0x00 (i32); recArrayPtr@block+0x08 (XB1/native-8)}; each
                     // record is STRIDE 16 (XB1 v17+=16) with its action-stream pointer at rec+0x08 (an
                     // 8-byte native-8 slot). Relocate the record-array pointer + each record's stream
                     // pointer so a clipActions read never AVs; the stream CONTENTS stay un-parsed
@@ -1037,7 +1056,7 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
                     {
                         void* const pClip = reinterpret_cast<void*>(luClip);
                         const int32_t nRecs = CmdI32(pClip, 0x00);
-                        const uintptr_t luRecs = reloc64(pClip, 0x04);   // record-array ptr @block+0x04 (our bundle)
+                        const uintptr_t luRecs = reloc64(pClip, 0x08);   // record-array ptr @block+0x08 (XB1/native-8)
                         if (luRecs != 0 && inRes(luRecs) && nRecs > 0 && nRecs <= 0x1000)
                         {
                             for (int32_t k = 0; k < nRecs; ++k)
