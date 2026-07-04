@@ -66,6 +66,10 @@ namespace BrnGui
     // True once the title movie is loaded + instantiated (root CIH live, ticking).
     bool AptRuntimeIsMovieLive();
 
+    // The flow left BF_LEGAL (accept command 70): stop ticking + rendering the movie
+    // (the console unloads it on state leave; the unload chain is a FLAG follow-on).
+    void AptRuntimeStopMovie();
+
     // True once the movie has COMPOSED (the first paced tick ran frame-0's place
     // commands; the PLACE-named clips exist on the root display list) -- the host
     // equivalent of the GuiCache apt-component init handshake

@@ -323,6 +323,7 @@ namespace
     char        s_acLoadedMovieName[64] = { 0 };
     bool        s_bMovieRequested        = false;   // a PlayAptMovie request is in flight (load attempted)
     bool        s_bMovieLoaded           = false;   // the movie bundle loaded + the AptDataHeader resolved
+    bool        s_bMovieStopped          = false;   // the flow left BF_LEGAL (accept path) -- stop tick+render
     s32         s_iFrameCounter          = 0;       // per-frame probe throttle
     s32         s_iRenderFrame           = 0;       // render-walk per-frame trace counter
 
@@ -1705,7 +1706,7 @@ namespace BrnGui
     // -------------------------------------------------------------------------
     void AptRuntimeUpdate()
     {
-        if (!s_bRuntimeReady)
+        if (!s_bRuntimeReady || s_bMovieStopped)
             return;
 
         ++s_iFrameCounter;
@@ -2018,7 +2019,8 @@ namespace BrnGui
     void AptRuntimeRender(CgsGraphics::Im2d* lpIm2d)
     {
         (void)lpIm2d;   // the walk draws through the Apt render handler's own command buffer
-        if (!s_bRuntimeReady || !s_bMovieLoaded || !s_bAuxReady || !s_bRenderBufferReady)
+        if (!s_bRuntimeReady || !s_bMovieLoaded || !s_bAuxReady || !s_bRenderBufferReady ||
+            s_bMovieStopped)
             return;
 
         const bool lbFirst = !s_bFlushProbed;
@@ -2052,6 +2054,23 @@ namespace BrnGui
     bool AptRuntimeIsMovieLive()
     {
         return s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr;
+    }
+
+    // -------------------------------------------------------------------------
+    // AptRuntimeStopMovie -- the flow left BF_LEGAL (the accept path posted command
+    // 70). On the console, leaving the state unloads the title movie (OnLeave's
+    // channel-41 {"",1} post -> CgsAptAux unload). The async unload path is not
+    // homed, so the observable equivalent: stop ticking + rendering the movie
+    // (the title disappears, exactly as on console). Idempotent.
+    // FLAG (follow-on): the faithful unload (resource release + target-instance
+    // teardown) lands with the CgsAptAux unload chain.
+    // -------------------------------------------------------------------------
+    void AptRuntimeStopMovie()
+    {
+        if (s_bMovieStopped)
+            return;
+        s_bMovieStopped = true;
+        CgsDev::Log::WriteToLog("[AptRT] StopMovie: BF_LEGAL left -- tick+render parked (unload deferred).\n");
     }
 
     // True once the movie has COMPOSED: the root clip's first paced tick has run its

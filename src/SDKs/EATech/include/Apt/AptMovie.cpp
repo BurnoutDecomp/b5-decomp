@@ -25,8 +25,8 @@
 
 // ---- the native-8 place path (doFrameControls tag-3 + the place-command dispatcher) ----
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::placeObjectNCXForm (the homed place spine)
-#include "SDKs/EATech/include/Apt/AptCIH.h"
-#include "SDKs/EATech/include/Apt/AptDisplayListState.h"   // findInst (the MOVE tween-keyframe path)                   // AptCIH (the parent node + char-inst chain)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (the parent node + char-inst chain)
+#include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // findInst (MOVE tween keyframes + tag-4 removes)
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::GetRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"            // AptRenderItem::mpCharacter
 #include "SDKs/EATech/include/Apt/AptCharacter.h"             // AptCharacter (the movie character + mpAnimationFile)
@@ -115,12 +115,25 @@ extern void* AptPseudoDisplayList_FindInst(void* pList, void* pSource,   // AptP
 // AptPseudoDisplayList_Insert retired: the real member AptPseudoDisplayList::Insert is called directly.
 extern void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId);   // AptCharacterAnimation::ExecuteInitActions
 extern void* AptFile_operator(void* pDst, void* pSrc);                   // AptFile::operator=
-extern void* sub_82AFD150(void* a1, int a2);                             // remove-object handler (unhomed)
 
 // sub_82B0AE08 @0x82B097D8's caller-side dispatcher (the place-command handler doFrameControls
 // invokes for each tag-3 record). HOMED below (2026-07-01) as AptMovie_PlaceCommand -- it reads
 // the serialised place-info record + calls the faithfully-homed AptDisplayList::placeObjectNCXForm.
 static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent);
+
+// sub_82AFD150 @0x82AFD150 -- the remove-command dispatcher (doFrameControls' tag-4 twin of
+// AptMovie_PlaceCommand). HOMED (2026-07-04; was an AptRenderLinkStubs no-op, which left every
+// timeline-removed element on screen -- the title menu items stacked their whole state band).
+// X360 body (two calls, both already homed):
+//   AptDisplayListState::findInst(*a1, a2, 0, &prev, &match);   // r3=*list (the state), r4=depth
+//   AptDisplayList::removeObject(a1, match);
+static void AptMovie_RemoveCommand(AptDisplayList* pDisplayList, int nDepth)
+{
+    AptCIH* pPrev  = nullptr;   // the console's 12-byte prev triple; only the out-pointers matter
+    AptCIH* pMatch = nullptr;
+    pDisplayList->AsState()->findInst(nDepth, nullptr, &pPrev, &pMatch);
+    pDisplayList->removeObject(pMatch);
+}
 
 // ---------------------------------------------------------------------------
 // Command-record byte accessors. The serialised .apt command record has no
@@ -422,9 +435,8 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
             }
             else if (eTag == 4)
             {
-                // remove: the console remove-object handler (sub_82AFD150). FLAG: still an
-                // un-homed link-stub; frame 0 of the boot title carries no remove commands.
-                sub_82AFD150(pDisplayList, CmdI32(pCmd, 0x04));
+                // remove: drop the node at the command's depth (sub_82AFD150).
+                AptMovie_RemoveCommand(pDisplayList, CmdI32(pCmd, 0x04));
             }
             else if (eTag == 5 && !gbAptBackToScriptFired)
             {

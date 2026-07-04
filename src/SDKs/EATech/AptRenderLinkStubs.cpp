@@ -302,7 +302,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptActionInterpreter_CleanupAfterExecution RETIRED (IGNITION 2026-07-01): the real member
     // (thrown-value drop + PopStaticData window pop) is called directly with the saved base.
     void* AptFile_operator(void* pDst, void* pSrc) { return nullptr; }   // FLAG link-stub
-    void* sub_82AFD150(void* a1, int a2) { return nullptr; }   // FLAG link-stub
+    // sub_82AFD150 (the remove-command dispatcher @0x82AFD150) is now HOMED faithfully as
+    // AptMovie_RemoveCommand in AptMovie.cpp (findInst by depth + removeObject). The null
+    // link-stub -- which silently dropped every timeline remove -- is retired.
     // sub_82B0AE08 (the place-command dispatcher @0x82B0AE08) is now HOMED faithfully as
     // AptMovie_PlaceCommand in AptMovie.cpp (reads the PlaceObject record + calls the homed
     // AptDisplayList::placeObjectNCXForm). The null link-stub is retired.

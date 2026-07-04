@@ -373,6 +373,12 @@ namespace BrnGui
             return;   // the MovieManager bridge below belongs to BF_VIDEOS (phase 1)
         }
 
+        // ---- PHASE 3: post-legal park -------------------------------------------------------------
+        // The boot flow accepted out of BF_LEGAL (command 70). The next flow (the frontend / MAIN
+        // menu GuiFsmController phase) is not reconstructed; hold here. FLAG follow-on.
+        if (miBootPhase == 3)
+            return;
+
         // ---- PHASE 2: BF_LEGAL ------------------------------------------------------------------------
         // BootLegal (the legal / title screen) runs through the BRNLEGALFSM Lua FSM, driving its
         // 0..10-stage machine (wait-cache -> play the title_screen02 title movie -> fade-in -> wait-start
@@ -410,8 +416,10 @@ namespace BrnGui
             // (event 143 = "press start" feedback; events 6/21 = controller actions with the
             // sub-id at payload+4: 41 menu-next, 42 menu-prev, 45 back). That pipeline is not
             // up on PC yet, so poll the keyboard here and post the SAME event records BootLegal
-            // consumes: Enter/Space -> 143 (start), Down/Right -> 6/41, Up/Left -> 6/42,
-            // Escape -> 6/45. Edge-triggered so a held key posts once.
+            // consumes: Enter -> 6/45 (the console A/accept action: 45 falls through to the
+            // start path in PRESTART and fires the accept handler in MENU_ACTIVE), Space ->
+            // 143 (start feedback), Down/Right -> 6/41, Up/Left -> 6/42, Escape -> 6/49
+            // (stop). Edge-triggered so a held key posts once.
             {
                 struct PcActionEvent : public CgsModule::Event
                 {
@@ -425,13 +433,13 @@ namespace BrnGui
                 struct PcKeyMap { int iVKey; s32 iEventId; s32 iSubId; };
                 static const PcKeyMap KA_KEYS[] =
                 {
-                    { 0x0D /*VK_RETURN*/, 143, 0  },
+                    { 0x0D /*VK_RETURN*/, 6,   45 },
                     { 0x20 /*VK_SPACE*/,  143, 0  },
                     { 0x28 /*VK_DOWN*/,   6,   41 },
                     { 0x27 /*VK_RIGHT*/,  6,   41 },
                     { 0x26 /*VK_UP*/,     6,   42 },
                     { 0x25 /*VK_LEFT*/,   6,   42 },
-                    { 0x1B /*VK_ESCAPE*/, 6,   45 },
+                    { 0x1B /*VK_ESCAPE*/, 6,   49 },
                 };
                 static bool sabKeyWasDown[sizeof(KA_KEYS) / sizeof(KA_KEYS[0])] = {};
                 for (u32 luKey = 0; luKey < sizeof(KA_KEYS) / sizeof(KA_KEYS[0]); ++luKey)
@@ -470,6 +478,7 @@ namespace BrnGui
             // the pump from re-delivering the same records each frame.
             {
                 static const CgsModule::Event* s_pVideoPumpCursor = 0;
+                bool lbLegalAccepted = false;
                 CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpLegalOut =
                     mBootLegalStateInterface.GetOutputEventQueue();
                 if (lpLegalOut != 0)
@@ -490,6 +499,16 @@ namespace BrnGui
                                           "[GuiModule] BF_LEGAL video event %d -> MovieManager.\n", liId);
                             CgsDev::Log::WriteToLog(lacV);
                         }
+                        // Channel-40 command 70: BootLegal's E_STAGE_ACCEPT_DWELL posted the final
+                        // "legal accepted -- load the next flow" command (the X360 GuiFsmController
+                        // leaves BF_LEGAL on it). The GuiEvent<N> header carries N at muEventType.
+                        if (lbPastCursor && liId == 40)
+                        {
+                            const CgsGui::GuiEvent<0>* lpCmd =
+                                reinterpret_cast<const CgsGui::GuiEvent<0>*>(lpEvent);
+                            if (lpCmd->muEventType == 70)
+                                lbLegalAccepted = true;
+                        }
                         if (lpEvent == s_pVideoPumpCursor)
                             lbPastCursor = true;
                         lpLast = lpEvent;
@@ -498,6 +517,20 @@ namespace BrnGui
                         lpEvent = lpNext;
                     }
                     s_pVideoPumpCursor = lpLast;
+                }
+                // Leave BF_LEGAL on the accept command: run the state's OnLeave (the fallback
+                // drive owns the transition the Lua FSM would run), stop the title movie, and
+                // park -- the next flow (the frontend / MAIN menu) is not reconstructed yet.
+                if (lbLegalAccepted)
+                {
+                    CgsDev::Log::WriteToLog(
+                        "[GuiModule] BF_LEGAL command 70 (accepted) -> OnLeave + park "
+                        "(frontend flow un-reconstructed; FLAG follow-on).\n");
+                    if (!mbBootLegalFsmReady)
+                        mBootLegal.OnLeave();
+                    BrnGui::AptRuntimeStopMovie();
+                    miBootPhase = 3;
+                    return;
                 }
                 // Drain the receiver queue into RecvEvent + tick the manager (BF_VIDEOS 3b/4).
                 {
