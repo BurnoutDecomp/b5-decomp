@@ -115,12 +115,28 @@ AptCIH::AptCIH(AptCharacter* pCharacter, AptCIH* pParent)
 
     mpCharacterInst = AptCharacterInst::CreateCharacterInst(pCharacter);
 
-    // FLAG: the console finishes by calling SetDirtyState /
-    // SetGeneralizedProcessDirtyState keyed on the character type (which read the
-    // char-inst flags + propagate up the parent chain). Simplified here to the
-    // local generalized-process-dirty bit; the propagation is deferred with the
-    // render-tree update path.
-    mFlagsA |= 0x01000000u;
+    // Finish exactly as the console ctor (@0x82B00638, tail 0x82B006F0..0x82B00778):
+    // dirty the node keyed on the character type.
+    //   SetDirtyState(bDirty, bDirty)  -- bDirty when the character is a sprite(5) /
+    //     button(4) / morph(8) / animation(9) / custom-control(16), or is null. Both
+    //     the dirty and propagate args carry the SAME value (asm sets r4==r5). This
+    //     sets the tick-dirty bit25 and pushes it up the display-list parent chain, so
+    //     a freshly-placed sprite/animation child is BORN dirty and ticks on its own
+    //     placement frame (SetDirtyState's internal shape/text/None gate still applies).
+    //   SetGeneralizedProcessDirtyState(bGenDirty) -- bGenDirty when the character is a
+    //     text(2) / button(4) / sprite(5); sets bit24 (self) + propagates bit23 up.
+    // This is the real mechanism that composes nested content -- NOT a later render-tree
+    // propagation pass. (Replaces the deferred `mFlagsA |= 0x01000000` stand-in, which
+    // both hard-set bit24 unconditionally and omitted the bit25 that fresh children need.)
+    const int32_t nCharType = pCharacter ? pCharacter->mnType : -1;
+    const bool bDirty = (pCharacter == nullptr) ||
+        nCharType == 5 || nCharType == 4 || nCharType == 8 ||
+        nCharType == 9 || nCharType == 16;
+    SetDirtyState(bDirty, bDirty);
+
+    const bool bGenDirty = (pCharacter != nullptr) &&
+        (nCharType == 2 || nCharType == 4 || nCharType == 5);
+    SetGeneralizedProcessDirtyState(bGenDirty);
 }
 
 // dtor @0x804E68 -- free the lazily-allocated asset string; mInstanceName is

@@ -150,16 +150,7 @@ namespace TestBed
 }
 }
 
-namespace CgsNetwork
-{
-    // Link stub for the float de-quantiser the wave-40 CgsSmartBitStream TU names
-    // (GetQuantisedFloat -> UnPack @0x8264AFA0's callee family). The real body is its
-    // own recon slice; NOT exercised on the boot path (no packet streams run at the
-    // title). Inert fallback: reconstruct as the range minimum. FLAG.
-    void FloatQuantiser::UnPack(float* lpfValue, float lfMin, float /*lfMax*/,
-                                s32 /*liNumBits*/, u32 /*luPackedValue*/)
-    {
-        if (lpfValue != 0)
-            *lpfValue = lfMin;
-    }
-}
+// CgsNetwork::FloatQuantiser::UnPack is NOT stubbed here -- the real asm-decoded body
+// lives in GameShared/.../BitStream/CgsFloatQuantiser.cpp (wired into build_game_exe.bat).
+// (A prior inert "reconstruct as the range minimum" stub was removed: it collided
+// (LNK2005) with the real body and was itself an invented fallback.)
