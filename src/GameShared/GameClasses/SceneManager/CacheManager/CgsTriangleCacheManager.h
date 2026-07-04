@@ -4,6 +4,8 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                              // Vector3Plus
 #include "GameShared/GameClasses/Containers/CgsBitArray.h" // CgsContainers::BitArray<N>
+#include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h" // CgsGeometric::Triangle4
+#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (inlined GetCachedTriangle guard)
 
 // ============================================================================
 // GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h
@@ -83,16 +85,31 @@ namespace CgsSceneManager
     // ------------------------------------------------------------------------
     struct CachedTriangleList
     {
+        // +0x00  mpaTriangleCache -- the shared SoA triangle-batch backing store
+        // (DecFIGS DWARF CgsCachedTriangleList.h:132: `Triangle4 * mpaTriangleCache`).
+        // Allocated by Prepare; the only instance member the recovered slice reads
+        // (the DWARF's other member, saKdTreeResults[5000], is a file-scope static,
+        // not part of the object). It is the FIRST member, so it sits at the head of
+        // the owning TriangleCacheManager (X360 `lwz r11, 0(this)` in
+        // GetTrianglesForCachedObject reads exactly this pointer).
+        CgsGeometric::Triangle4* mpaTriangleCache; // +0x00
+
         // Prepare(allocator, capacityBytes) -- external symbol
         // CgsSceneManager::CachedTriangleList::Prepare. Declared only; this TU
         // does not own its body.
         bool Prepare(rw::IResourceAllocator* lpAllocator, s32 liCapacityBytes);
 
-        // Storage placeholder so CachedTriangleList occupies the head of
-        // TriangleCacheManager. The on-disk/runtime layout of the list is owned
-        // by its own TU; the single byte keeps it non-empty without asserting a
-        // false size (no Prepare offset past +0x00 of the list is read here).
-        u8 mOpaque[1];
+        // @ CgsCachedTriangleList.h:121 (non-const overload; :117 const). Returns
+        // &mpaTriangleCache[liIndex]. The X360 build INLINES this into
+        // TriangleCacheManager::GetTrianglesForCachedObject: it asserts the cache is
+        // allocated (baked CgsCachedTriangleList.h:153) then returns base + index *
+        // sizeof(Triangle4) (0xE0). Defined inline so the manager body below mirrors
+        // the single inlined X360 function store-for-store.
+        const CgsGeometric::Triangle4* GetCachedTriangle(s32 liIndex) const
+        {
+            CGS_ASSERT(mpaTriangleCache != NULL, "mpaTriangleCache != NULL");
+            return &mpaTriangleCache[liIndex];
+        }
     };
 
     // ------------------------------------------------------------------------
@@ -116,12 +133,14 @@ namespace CgsSceneManager
         // This TU's single recovered function.
         bool Prepare(rw::IResourceAllocator* lpAllocator);
 
-        // @ X360 (separate TU's body) -- returns the cached-triangle window/count for the
-        // given cached-object index; tail-called by SceneManagerIO::TriangleCacheInterface::
-        // GetCache @ 0x82277810. ADDITIVE GROW (declaration only; body owned by the cache-
-        // manager TU). The IDA symbol is truncated to 'GetTrianglesForCachedObjec' by
-        // symbol-length limits; un-truncated to ...Object for the C++ home.
-        s32 GetTrianglesForCachedObject(s32 liObjectIndex);
+        // @ X360 0x82277790 -- returns a pointer to the first cached SoA triangle-batch
+        // for the given cached-object slot; tail-called by SceneManagerIO::
+        // TriangleCacheInterface::GetCache @ 0x82277810. The IDA symbol is truncated to
+        // 'GetTrianglesForCachedObjec' by symbol-length limits; un-truncated to ...Object
+        // for the C++ home. DWARF (CgsTriangleCacheManager.h:228) is authoritative for the
+        // shape: `const Triangle4 * GetTrianglesForCachedObject(int32_t) const`. Body in
+        // the .cpp (mirrors the single inlined X360 function).
+        const CgsGeometric::Triangle4* GetTrianglesForCachedObject(s32 liObjectIndex) const;
 
         // @ X360 0x828C7508 (tail-called from SceneManagerModule::EndUpdateTriangleCache)
         // -- finish this frame's triangle-cache update against the supplied collision
