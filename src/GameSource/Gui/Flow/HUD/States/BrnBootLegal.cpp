@@ -40,6 +40,10 @@
 
 namespace BrnGui
 {
+    // The menu-facade highlighted-row accessor (BrnBootLegalBoundary.cpp; FLAG -- the
+    // real SelectableGroup writes the byte back into this state directly).
+    s32 BootLegalMenuFacade_GetHighlightedIndex();
+
 namespace
 {
     // ---- The state IN-queue is an 18KB variable event queue (X360 VariableEventQueue<18432,16>). ----
@@ -404,6 +408,11 @@ namespace BrnGui
             mSelectionMenu.SelectNext();
         else if (liAction == KI_ACTION_MENU_PREV)
             mSelectionMenu.SelectPrevious();
+
+        // FLAG (facade sync): the real SelectableGroup writes the highlighted row back
+        // into this state (the +0x3BD byte the X360 reads below); the facade exposes it
+        // through an accessor instead -- sync before the view-state read.
+        mu8SelectedMenuIndex = static_cast<u8>(BootLegalMenuFacade_GetHighlightedIndex());
 
         mSelectionMenu.Refresh();                       // (*(*menu + 0x14))(menu)
 

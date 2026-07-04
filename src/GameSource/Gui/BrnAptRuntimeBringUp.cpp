@@ -47,6 +47,7 @@
 #include "SDKs/EATech/include/Apt/AptCIH.h"                   // AptCIH (the root display-object node)
 #include "SDKs/EATech/include/Apt/AptMovie.h"                 // AptMovie::doFrameControls / resolve (timeline driver)
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h" // mDisplayList (the root CIH's child display list)
+#include "SDKs/EATech/include/Apt/AptCharacterTextInst.h"     // SetTextValue/ClearStateFlags (the apt_labeltxt bridge)
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"       // AptAnimationTarget::GetRootDisplayList (the director's root list)
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::AsState
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // AptDisplayListState::mpFirst (the placed-node chain)
@@ -292,6 +293,10 @@ namespace
     CgsLanguage::LanguageManager s_AptLanguageManager;   // ctor seeds the hash bins/lists
     CgsMemory::HeapMalloc        s_AptLanguageAllocator; // backs the manager's element allocs
     bool s_bTextSystemReady = false;                     // fonts + strings loaded (one-shot)
+    CgsResource::Font* s_pAptBodyFont = nullptr;         // the FIRST loaded typeface (B5EAConDisS --
+                                                         // the menu-label font; the AS-autofit measure)
+    bool s_bHelpDefaultsPending = false;                 // retry the help-item defaults until the
+                                                         // icon subtree is composed (see the FLAG)
 
     // The language allocator's backing heap: ~4.7K hash elements (24B each) + heap overhead.
     const u32 KU_LANGUAGE_HEAP_BYTES = 512u * 1024u;
@@ -610,6 +615,11 @@ namespace BrnGui
 
         // Build the runtime texture state (binds atlas page 0) so the glyph batch can draw.
         lpFont->CreateTextureState();
+
+        // The first registered typeface is the body font (B5EAConDisS) -- the menu-label
+        // measure font for the AS-autofit observable (see the apt_labeltxt bridge).
+        if (s_pAptBodyFont == nullptr)
+            s_pAptBodyFont = lpFont;
 
         // Register the typeface with the collection (the canonical double-deref handle,
         // exactly as the debug-font bring-up builds it).
@@ -1684,6 +1694,10 @@ namespace BrnGui
     // render tree; removed per the render-tree-flush milestone.
     // -------------------------------------------------------------------------
 
+    // Forward declarations (bodies below, with the component view-state bridge).
+    static AptCIH* AptFindClipByName(AptCIH* lpNode, const char* lpacName, int liDepth);
+    static bool AptApplyTitleHelpItemDefaults(AptCIH* lpMenuClip);
+
     // -------------------------------------------------------------------------
     // AptRuntimeUpdate -- per-frame TICK only. Advances the frame counter and (when a movie is
     // loaded) would tick its timeline + ActionScript. The RENDER moved to AptRuntimeRender (the
@@ -1830,6 +1844,30 @@ namespace BrnGui
             }
 
             }   // ---- end of the per-msPerFrame catch-up tick loop (console pacing) ----
+
+            // The pending title help-item defaults (armed by the SelectionMenu transin):
+            // retried per update until the StaticHelpItem + its ControllerButtons icon
+            // subtree have composed (they place over the transin's first ticks).
+            if (s_bHelpDefaultsPending && liTicksThisUpdate > 0)
+            {
+                static int s_iHelpAttempts = 0;
+                AptCIH* lpMenuClip2 = AptFindClipByName(lpRoot, "SelectionMenu_mc", 0);
+                if (lpMenuClip2 != nullptr && AptApplyTitleHelpItemDefaults(lpMenuClip2))
+                {
+                    s_bHelpDefaultsPending = false;
+                }
+                else if (++s_iHelpAttempts > 300)   // ~10s at 30 ticks/s
+                {
+                    // FLAG (follow-on): the prompt TEXT applies, but the button GLYPH's
+                    // 'select' state never lands -- the Icon's imported ControllerButtons
+                    // export resolves to a subtree without the button-clip labels (the
+                    // import-link export mapping for nested wrapper clips). Give up
+                    // retrying; the localised prompt text is in place.
+                    s_bHelpDefaultsPending = false;
+                    CgsDev::Log::WriteToLog(
+                        "[AptRT] helpitem: icon 'select' never composed -- glyph deferred (FLAG).\n");
+                }
+            }
 
             // DYNAMIC-TEXT REFRESH: run the generalised-process pass with ProcessTextInst
             // installed, so every dynamic-text node (type tag 2) re-resolves its bound text +
@@ -2094,6 +2132,158 @@ namespace BrnGui
         return false;
     }
 
+    // Find a placed clip by its PLACE instance name anywhere in the movie (the root's
+    // display list, recursing into container sprites -- MenuItem_0/1 live INSIDE
+    // SelectionMenu_mc, not on the root list). Sprite/animation nodes only.
+    static AptCIH* AptFindClipByName(AptCIH* lpNode, const char* lpacName, int liDepth)
+    {
+        if (lpNode == nullptr || liDepth > 6)
+            return nullptr;
+        AptCharacterInst* lpCI = lpNode->GetCharacterInst();
+        if (lpCI == nullptr || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
+            return nullptr;
+        AptDisplayListState* lpKids =
+            static_cast<AptCharacterSpriteInstBase*>(lpCI)->mDisplayList.AsState();
+        if (lpKids == nullptr)
+            return nullptr;
+        for (AptCIH* lpK = lpKids->mpFirst; lpK != nullptr; lpK = lpK->GetDisplayListNext())
+        {
+            AptCharacterInst* lpKCI = lpK->GetCharacterInst();
+            if (lpKCI != nullptr && (lpKCI->GetTypeTag() == 5 || lpKCI->GetTypeTag() == 9))
+            {
+                const EAStringC& lrName = lpK->GetInstanceName();
+                const char* lpcName = lrName.GetBuffer();
+                if (lpcName != nullptr && _stricmp(lpcName, lpacName) == 0)
+                    return lpK;
+            }
+            AptCIH* lpFound = AptFindClipByName(lpK, lpacName, liDepth + 1);
+            if (lpFound != nullptr)
+                return lpFound;
+        }
+        return nullptr;
+    }
+
+    // Find the clip subtree's dynamic-text field (char-inst type tag 2), preferring the
+    // one PLACE-named 'label' (the B5MenuItem labelHolder->label field); else the first.
+    static AptCIH* AptFindTextFieldIn(AptCIH* lpNode, int liDepth)
+    {
+        if (lpNode == nullptr || liDepth > 6)
+            return nullptr;
+        AptCharacterInst* lpCI = lpNode->GetCharacterInst();
+        if (lpCI == nullptr || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
+            return nullptr;
+        AptDisplayListState* lpKids =
+            static_cast<AptCharacterSpriteInstBase*>(lpCI)->mDisplayList.AsState();
+        if (lpKids == nullptr)
+            return nullptr;
+        AptCIH* lpFirstText = nullptr;
+        for (AptCIH* lpK = lpKids->mpFirst; lpK != nullptr; lpK = lpK->GetDisplayListNext())
+        {
+            AptCharacterInst* lpKCI = lpK->GetCharacterInst();
+            if (lpKCI == nullptr)
+                continue;
+            if (lpKCI->GetTypeTag() == 2)
+            {
+                const EAStringC& lrName = lpK->GetInstanceName();
+                const char* lpcName = lrName.GetBuffer();
+                if (lpcName != nullptr && _stricmp(lpcName, "label") == 0)
+                    return lpK;
+                if (lpFirstText == nullptr)
+                    lpFirstText = lpK;
+                continue;
+            }
+            AptCIH* lpFound = AptFindTextFieldIn(lpK, liDepth + 1);
+            if (lpFound != nullptr)
+            {
+                const EAStringC& lrName = lpFound->GetInstanceName();
+                const char* lpcName = lrName.GetBuffer();
+                if (lpcName != nullptr && _stricmp(lpcName, "label") == 0)
+                    return lpFound;
+                if (lpFirstText == nullptr)
+                    lpFirstText = lpFound;
+            }
+        }
+        return lpFirstText;
+    }
+
+    // The title help-prompt defaults (see the FLAG at the SelectionMenu transin apply):
+    // find the StaticHelpItem instance inside the menu -- the clip whose DIRECT children
+    // include a dynamic-text 'TextField' -- set the authored prompt text, and jump its
+    // 'Icon' (the ControllerButtons import) to the authored 'select' glyph state.
+    static bool AptApplyTitleHelpItemDefaults(AptCIH* lpMenuClip)
+    {
+        // depth-first: the StaticHelpItem lives one level under SelectionMenu_mc.
+        struct Local
+        {
+            static AptCIH* FindHelpItem(AptCIH* lpNode, int liDepth)
+            {
+                if (lpNode == nullptr || liDepth > 5)
+                    return nullptr;
+                AptCharacterInst* lpCI = lpNode->GetCharacterInst();
+                if (lpCI == nullptr || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
+                    return nullptr;
+                AptDisplayListState* lpKids =
+                    static_cast<AptCharacterSpriteInstBase*>(lpCI)->mDisplayList.AsState();
+                if (lpKids == nullptr)
+                    return nullptr;
+                for (AptCIH* lpK = lpKids->mpFirst; lpK != nullptr; lpK = lpK->GetDisplayListNext())
+                {
+                    AptCharacterInst* lpKCI = lpK->GetCharacterInst();
+                    const EAStringC& lrName = lpK->GetInstanceName();
+                    const char* lpcName = lrName.GetBuffer();
+                    if (lpKCI != nullptr && lpKCI->GetTypeTag() == 2 &&
+                        lpcName != nullptr && _stricmp(lpcName, "TextField") == 0)
+                        return lpNode;   // the PARENT is the help-item state clip
+                    AptCIH* lpFound = FindHelpItem(lpK, liDepth + 1);
+                    if (lpFound != nullptr)
+                        return lpFound;
+                }
+                return nullptr;
+            }
+        };
+
+        AptCIH* lpHelp = Local::FindHelpItem(lpMenuClip, 0);
+        if (lpHelp == nullptr)
+            return false;   // not composed yet -- the per-update driver retries
+
+        // The prompt text: '$CAPS_BUTTON_SELECT' (localised by the text pipeline).
+        AptCIH* lpText = AptFindTextFieldIn(lpHelp, 0);
+        if (lpText != nullptr)
+        {
+            AptCharacterTextInst* lpTextInst =
+                static_cast<AptCharacterTextInst*>(lpText->GetCharacterInst());
+            EAStringC lValue("$CAPS_BUTTON_SELECT");
+            lpTextInst->SetTextValue(lValue);
+            lpTextInst->ClearStateFlags(1u);
+        }
+
+        // The button glyph: the 'Icon' child -> the ControllerButtons 'select' state.
+        AptCharacterInst* lpHCI = lpHelp->GetCharacterInst();
+        AptDisplayListState* lpHKids = (lpHCI != nullptr)
+            ? static_cast<AptCharacterSpriteInstBase*>(lpHCI)->mDisplayList.AsState() : nullptr;
+        bool lbIcon = false;
+        for (AptCIH* lpK = lpHKids ? lpHKids->mpFirst : nullptr; lpK != nullptr;
+             lpK = lpK->GetDisplayListNext())
+        {
+            const EAStringC& lrName = lpK->GetInstanceName();
+            const char* lpcName = lrName.GetBuffer();
+            if (lpcName != nullptr && _stricmp(lpcName, "Icon") == 0)
+            {
+                lbIcon = AptViewStateGotoLabel(lpK, "select", 0);
+                break;
+            }
+        }
+        if (lbIcon)
+        {
+            char lac[160];
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] helpitem: prompt text set (%s), icon 'select' APPLIED.\n",
+                lpText ? "ok" : "NO FIELD");
+            CgsDev::Log::WriteToLog(lac);
+        }
+        return lbIcon;
+    }
+
     bool AptRuntimeSetComponentViewState(const char* lpacInstName, const char* lpacViewState)
     {
         char lac[224];
@@ -2134,28 +2324,169 @@ namespace BrnGui
         if (lpState == nullptr)
             return false;
 
-        for (AptCIH* lpN = lpState->mpFirst; lpN != nullptr; lpN = lpN->GetDisplayListNext())
+        AptCIH* lpClip = AptFindClipByName(lpRoot, lpcTarget, 0);
+        if (lpClip != nullptr)
         {
-            AptCharacterInst* lpCI = lpN->GetCharacterInst();
-            if (lpCI == nullptr || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
-                continue;
-            const EAStringC& lrName = lpN->GetInstanceName();
-            const char* lpcName = lrName.GetBuffer();
-            if (lpcName == nullptr || _stricmp(lpcName, lpcTarget) != 0)
-                continue;
-
-            const bool lbApplied = AptViewStateGotoLabel(lpN, lpacViewState, 0);
+            const bool lbApplied = AptViewStateGotoLabel(lpClip, lpacViewState, 0);
             std::snprintf(lac, sizeof(lac),
                 "[AptRT] viewstate: '%s' -> '%s' on clip '%s' (%s)\n",
                 lpacInstName, lpacViewState, lpcTarget,
                 lbApplied ? "APPLIED" : "no label in subtree (FLAG)");
             CgsDev::Log::WriteToLog(lac);
+
+            // FLAG (title-scoped stand-in for the StaticHelpItem AS initialize): the
+            // selection menu's help prompt is authored via the placed instance's clip-
+            // action params (Title_Screen02 stream @0x6ff4: mText='$CAPS_BUTTON_SELECT',
+            // mPromptType='select', mAlignment='IconOnLeft'). The StaticHelpItem class
+            // AS (MAIN.bundle, not running) would apply them; reproduce the observable
+            // once when the menu transitions in: set the prompt TextField's text (the
+            // localised 'SELECT') and jump the Icon (the ControllerButtons import) to
+            // its 'select' glyph state.
+            if (lbApplied && _stricmp(lpcTarget, "SelectionMenu_mc") == 0)
+                s_bHelpDefaultsPending = true;   // applied by the per-update driver once the
+                                                 // icon subtree has composed (retried)
             return lbApplied;
         }
 
         std::snprintf(lac, sizeof(lac),
-            "[AptRT] viewstate: '%s': target clip '%s' not found on the root display list (FLAG).\n",
+            "[AptRT] viewstate: '%s': target clip '%s' not found in the movie (FLAG).\n",
             lpacInstName, lpcTarget);
+        CgsDev::Log::WriteToLog(lac);
+        return false;
+    }
+
+    // -------------------------------------------------------------------------
+    // AptRuntimeSetComponentKeyValue -- the faithful KEY dispatch of the GuiComponent
+    // apt-view protocol (GuiComponent::AddOutputAptViewState(key, value) -> FillAptView
+    // Message -> AptAux::UpdateComponents -> AptCommunicator key-values -> the movie AS).
+    // The AS framework movie (MAIN.bundle's gAptCommunicator/BurnoutComponent classes) is
+    // not running yet, so this bridge reproduces each key's OBSERVABLE effect on the
+    // component's clip, exactly as the AS would:
+    //   apt_Transition  (TransitionComponent)   -> gotoAndPlay(value) on the PAIRED clip;
+    //   apt_state       (B5MenuItem/ButtonIcon) -> gotoAndPlay(value) on the clip itself
+    //                    (the item timelines carry the Selected/Unselected/Disabled/
+    //                     Invisible state labels);
+    //   apt_labeltxt    (B5MenuItem)            -> set the clip's nested dynamic-text
+    //                    field ('labelHolder'->'label') through the faithful setters
+    //                    (AptCharacterTextInst::SetTextValue + ClearStateFlags bit0);
+    //                    the invalidate makes ProcessTextInst re-lay it out and
+    //                    CgsAptString::Prepare localises the '$KEY' string;
+    //   apt_updatestate (B5MenuItem)            -> no-op (the AS Update trigger; the
+    //                    invalidate above already re-lays out).
+    // -------------------------------------------------------------------------
+    bool AptRuntimeSetComponentKeyValue(const char* lpacInstName, const char* lpacKey,
+                                        const char* lpacValue)
+    {
+        if (lpacInstName == nullptr || lpacKey == nullptr || lpacValue == nullptr)
+            return false;
+
+        if (_stricmp(lpacKey, "apt_Transition") == 0)
+            return AptRuntimeSetComponentViewState(lpacInstName, lpacValue);
+
+        if (!AptRuntimeIsMovieLive())
+            return false;
+
+        char lac[224];
+        AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_pFaithfulRootCIH);
+
+        if (_stricmp(lpacKey, "apt_updatestate") == 0)
+            return true;   // the AS Update trigger; the labeltxt/state posts already applied
+
+        AptCIH* lpClip = AptFindClipByName(lpRoot, lpacInstName, 0);
+        if (lpClip == nullptr)
+        {
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] kv: '%s' %s='%s': clip not found (FLAG).\n",
+                lpacInstName, lpacKey, lpacValue);
+            CgsDev::Log::WriteToLog(lac);
+            return false;
+        }
+
+        if (_stricmp(lpacKey, "apt_state") == 0)
+        {
+            const bool lbApplied = AptViewStateGotoLabel(lpClip, lpacValue, 0);
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] kv: '%s' apt_state='%s' (%s)\n",
+                lpacInstName, lpacValue, lbApplied ? "APPLIED" : "no label (FLAG)");
+            CgsDev::Log::WriteToLog(lac);
+            return lbApplied;
+        }
+
+        if (_stricmp(lpacKey, "apt_labeltxt") == 0)
+        {
+            AptCIH* lpText = AptFindTextFieldIn(lpClip, 0);
+            if (lpText == nullptr)
+            {
+                std::snprintf(lac, sizeof(lac),
+                    "[AptRT] kv: '%s' apt_labeltxt: no dynamic-text field in the clip subtree (FLAG).\n",
+                    lpacInstName);
+                CgsDev::Log::WriteToLog(lac);
+                return false;
+            }
+            AptCharacterTextInst* lpTextInst =
+                static_cast<AptCharacterTextInst*>(lpText->GetCharacterInst());
+            EAStringC lValue(lpacValue);
+            lpTextInst->SetTextValue(lValue);      // @0x82AE66C0 (the AS `label.text =` store)
+
+            // ---- the AS-autofit observable (B5MenuItem::Update: shrink the label font
+            // until the text fits -- `fmt.size = mnFontSize; while (_width > mnMaxWidth &&
+            // size > mnMinFontSize) --size`). Reproduced with the engine's own faithful
+            // shrink math (TextObject::CalculateAutosizing @0x827EEF58: keep when the box
+            // holds the span, else scale by boxW/(span+5), floored) against the field's
+            // AUTHORED box + font size, measuring the LOCALISED string with the body
+            // typeface (B5EAConDisS -- the menu-label font; title-scoped FLAG).
+            {
+                AptRenderItemDynamicText* lpItem = static_cast<AptRenderItemDynamicText*>(
+                    lpText->GetCharacterInst()->GetRenderItem());
+
+                // The AUTHORED font size: cached on first touch (later posts re-fit from
+                // the original, not from an already-shrunk size).
+                struct AuthoredSize { void* pField; float fSize; };
+                static AuthoredSize s_aAuthored[8] = {};
+                float lfAuthored = lpItem->mFontSize;
+                for (u32 luA = 0; luA < 8; ++luA)
+                {
+                    if (s_aAuthored[luA].pField == (void*)lpText)
+                    { lfAuthored = s_aAuthored[luA].fSize; break; }
+                    if (s_aAuthored[luA].pField == nullptr)
+                    { s_aAuthored[luA].pField = (void*)lpText; s_aAuthored[luA].fSize = lfAuthored; break; }
+                }
+
+                const char* lpcResolved = lpacValue;
+                if (lpacValue[0] == '$' || lpacValue[0] == '~')
+                {
+                    const u8* lpLoc = s_AptLanguageManager.FindString(lpacValue + 1);
+                    if (lpLoc != nullptr)
+                        lpcResolved = reinterpret_cast<const char*>(lpLoc);
+                }
+                if (s_pAptBodyFont != nullptr)
+                {
+                    const f32 lfBoxW = lpItem->mBounds.fRight - lpItem->mBounds.fLeft;
+                    const f32 lfWidthEm = s_pAptBodyFont->GetStringWidth(
+                        reinterpret_cast<const CgsResource::CgsUtf8*>(lpcResolved));
+                    const f32 lfSpan = lfWidthEm * lfAuthored;
+                    f32 lfFit = lfAuthored;
+                    if (lfBoxW > 0.0f && lfSpan > lfBoxW)
+                    {
+                        lfFit = lfAuthored / ((lfSpan + 5.0f) / lfBoxW);
+                        if (lfFit < 15.0f)
+                            lfFit = 15.0f;
+                    }
+                    lpTextInst->SetFontSize(lfFit);   // @0x82AE2020 (the AS fmt.size store)
+                }
+            }
+
+            lpTextInst->ClearStateFlags(1u);       // invalidate -> ProcessTextInst re-lays out
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] kv: '%s' apt_labeltxt='%s' (text field %p invalidated)\n",
+                lpacInstName, lpacValue, (void*)lpText);
+            CgsDev::Log::WriteToLog(lac);
+            return true;
+        }
+
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] kv: '%s' %s='%s' (unhandled key -- FLAG).\n",
+            lpacInstName, lpacKey, lpacValue);
         CgsDev::Log::WriteToLog(lac);
         return false;
     }
