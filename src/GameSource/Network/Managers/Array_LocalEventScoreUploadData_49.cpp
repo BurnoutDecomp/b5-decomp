@@ -39,3 +39,23 @@
 template void Array<BrnNetwork::LocalEventScoreUploadData, 49>::Append(const BrnNetwork::LocalEventScoreUploadData&);
 template void Array<BrnNetwork::LocalEventScoreUploadData, 49>::Erase(u32);
 template void Array<BrnNetwork::LocalEventScoreUploadData, 49>::EraseFast(u32);
+
+// non-const operator[]  @ 0x8254E3E8  (checked indexed accessor; reached through
+// CgsContainers::AppendArray<..>(Array<LocalEventScoreUploadData,49>&) which indexes the source
+// array element-by-element). The X360 body is the generic non-const operator[] (CgsArray.h:538/539):
+// asserts miCount != the -1 sentinel ("Array used before Construct/Clear was called"), unsigned
+// bounds-checks the index against miCount @ +0x310 (== 49 * 16 == N * sizeof(T)), then returns
+// &maElements[i] (element stride 0x10 == 16). The dynamic "Array index out of bounds. Index: <i>,
+// length: <n>" StrStream message is the documented generic-body parity gap (kept as the static
+// CGS_ASSERT string).
+template BrnNetwork::LocalEventScoreUploadData&
+    Array<BrnNetwork::LocalEventScoreUploadData, 49>::operator[](u32);
+
+// AddNew  @ 0x8235C268  (reserve-a-slot accessor; called by
+// BrnNetwork::EventScoresManager::StoreEventScoreForUpload @0x8255DFB0 via maPendingUploads.AddNew()
+// and by BrnProgression::Profile::SetEventScoreToUpload). The X360 body is the generic
+// Array<T,N>::AddNew (CgsArray.h:179): asserts miCount != the -1 sentinel + unsigned capacity-49
+// guard, then `slwi r10,r11,4` (16*miCount) + add this -> returns &maElements[miCount] and
+// post-increments miCount (stw r11+1,0x310). Stride 0x10 == 16 == sizeof(LocalEventScoreUploadData).
+template BrnNetwork::LocalEventScoreUploadData*
+    Array<BrnNetwork::LocalEventScoreUploadData, 49>::AddNew();

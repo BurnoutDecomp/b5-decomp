@@ -61,6 +61,10 @@ struct ExplosionState : public BrnSound::Logic::BrnState
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;
     virtual const char*                                            GetTypeName() const;
 
+    // @ 0x82689198 — per-class static RTTI descriptor accessor. Bodied in the .cpp.
+    // typeName "ExplosionState" is inferred from class identity (FLAG: not GetTypeName-proven).
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
+
     // @ 0x826891B8 — null-asserts the attachment pointer ("lpvAttachment"). Bodied
     // in this TU's .cpp. DWARF: virtual void Attach(void*) (BrnExplosionState.cpp:66).
     virtual void Attach(void* lpvAttachment);

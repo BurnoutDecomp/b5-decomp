@@ -153,6 +153,30 @@ namespace BrnNetworkModuleIO
         return &mMember_180248Storage[0];
     }
 
+    // X360 0x823BBD00 (read, h:759) -> &member @ +180248 (const read twin of the h:752 write accessor).
+    const u8* PostSimulationInputBuffer::GetMember_180248() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mMember_180248Storage[0];
+    }
+
+    // X360 0x823BC300 (read, h:890) -> &member @ +163104.
+    const u8* PostSimulationInputBuffer::GetMember_163104() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mMember_163104Storage[0];
+    }
+
+    // X360 0x8254EC20 (read-lock; "Not locked for reading", h:596) -> &member @ +27680.
+    // Read accessor for the embedded active-race-car interface (SetActiveRaceCarInterface
+    // @0x823BBA20 XMemCpy's 10480 bytes into this same +27680 offset). RENAME to the real
+    // interface-typed accessor when that interface's layout is homed (offset must not move).
+    const u8* PostSimulationInputBuffer::GetActiveRaceCarInterfaceRaw_27680() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mActiveRaceCarInterfaceStorage[0];
+    }
+
     // X360 0x8254ECC8 (read, h:687) -> const NetworkEventQueue* @ +72952 (queue start == storage start).
     const NetworkEventQueue* PostSimulationInputBuffer::GetNetworkEventQueue() const
     {
@@ -400,6 +424,16 @@ namespace BrnNetworkModuleIO
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return reinterpret_cast<const NetworkToGuiInterface*>(&mNetworkToGuiInterfaceStorage);
+    }
+
+    // X360 0x823BC648 (read-lock; "Not locked for reading", h:987) -> &member @ +183408.
+    // OutputBuffer read accessor for a GUI-bound sub-interface (BridgeNetworkToGui consumes it;
+    // lies within the NetworkToGuiInterface span). RENAME to the real interface-typed accessor
+    // when that interface's layout is homed (offset must not move).
+    const u8* OutputBuffer::GetMember_183408() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mMember_183408Storage[0];
     }
 
     // X360 0x823BC6F0 (read, h:1001) -> const NetworkEventQueue* @ +184080.

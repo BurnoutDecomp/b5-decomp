@@ -391,6 +391,31 @@ ResourceRegistrar& PassbyStateManager::GetResourceRegistrar()
     return sUnhomedRegistrar;
 }
 
+// ---------------------------------------------------------------------------
+// DynamicPropByCache::Find  @ 0x82683438
+//   Linear scan for the first ACTIVE cache slot whose stored EntityId matches lId;
+//   returns a pointer to it, or 0 when no active slot matches within the 32-entry
+//   cache. Faithful to the X360 loop (BrnPassbyStateManager.h:180 declares
+//   `Item* Find( const EntityId& )`):
+//     lbz mbActive@+0 ; if !active -> advance ; lwz mId.muValue@+8 vs lId.muValue@+0
+//     -> hit returns &maItems[count] ; advance ++count, stride 0xC, cap 0x20.
+//   Cap 0x20 == KU_DYNAMIC_PROP_CACHE_SIZE (32). Reached BY NAME (indexed maItems
+//   walk) -- no absolute offsets asserted.
+// ---------------------------------------------------------------------------
+PassbyStateManager::DynamicPropByCache::Item*
+PassbyStateManager::DynamicPropByCache::Find( const EntityId& lId )
+{
+    for( u32 luIndex = 0; luIndex < PassbyStateManager::KU_DYNAMIC_PROP_CACHE_SIZE; ++luIndex )
+    {
+        Item& lrItem = maItems[ luIndex ];
+        if( lrItem.mbActive && lrItem.mId.muValue == lId.muValue )
+        {
+            return &lrItem;
+        }
+    }
+    return 0;
+}
+
 } // namespace Passby
 } // namespace Logic
 } // namespace BrnSound

@@ -49,6 +49,11 @@ struct GlobalState : public BrnSound::Logic::BrnState
 
     // @ 0x82686808 — per-class RTTI type name. Bodied here.
     virtual const char* GetTypeName() const;
+
+    // @ 0x826867F8 — per-class static RTTI descriptor accessor. Bodied in the .cpp;
+    // typeName "GlobalState" is PROVEN (descriptor unk_82F2F86C+4 = off_82F2F870, the
+    // committed GetTypeName literal).
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
 };
 
 } // namespace Logic

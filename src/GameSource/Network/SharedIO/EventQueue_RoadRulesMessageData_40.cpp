@@ -13,3 +13,10 @@ template void CgsModule::EventQueue<BrnNetwork::RoadRulesMessageData, 40>::Const
 // instantiations (24-byte element stride; the symbols live on BaseEventQueue<T>).
 template bool CgsModule::BaseEventQueue<BrnNetwork::RoadRulesMessageData>::AddEvent(const BrnNetwork::RoadRulesMessageData&);
 template bool CgsModule::BaseEventQueue<BrnNetwork::RoadRulesMessageData>::Append(const CgsModule::BaseEventQueue<BrnNetwork::RoadRulesMessageData>&);
+
+// BaseEventQueue<RoadRulesMessageData>::GetEvent(s32) const  @ 0x823188E8
+//   (called by BrnGameState::StreetManager::UpdateUserScoresFromServerRecords). Generic const
+//   GetEvent inline in CgsBaseEventQueue.h; the X360 return `slwi ,1; add; slwi ,3` == index*24 ==
+//   index*sizeof(RoadRulesMessageData). Thin out-of-line instantiation.
+template const BrnNetwork::RoadRulesMessageData&
+CgsModule::BaseEventQueue<BrnNetwork::RoadRulesMessageData>::GetEvent(s32) const;

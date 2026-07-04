@@ -59,6 +59,34 @@ ExplosionState::~ExplosionState()
     DestroyEffects();
 }
 
+// ---------------------------------------------------------------------------
+// GetStaticTypeInfo  @ 0x82689198
+//
+//   lis   r11, unk_82F2F9AC@ha
+//   addi  r3,  r11, unk_82F2F9AC@l   ; r3 = &sTypeInfo (the rodata descriptor)
+//   blr
+//
+// Returns ExplosionState's per-class static RTTI descriptor. The 2-instruction &unk_X; blr
+// shape is the committed per-class GetStaticTypeInfo() accessor form (PassbyState @0x82688FC8).
+// Mirrors that reconstruction: a function-local static, aggregate-initialised
+// ClassTypeInfo<State>.
+//
+// FLAG (confidence medium): typeName "ExplosionState" is inferred from the class identity,
+// NOT proven from a committed GetTypeName dereferencing 0x82F2F9B0. ObjectID is unrecovered
+// -> seeded 0 and FLAGGED; base/createObject deferred (BrnState descriptor chain un-homed).
+// ---------------------------------------------------------------------------
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* ExplosionState::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo =
+    {
+        0,                // ObjectID        (FLAG: State-side id unrecovered)
+        "ExplosionState", // mpcTypeName     (FLAG: inferred from class, not GetTypeName-proven)
+        nullptr,          // mpBaseTypeInfo  (DEFERRED — BrnState descriptor chain)
+        nullptr,          // mpfnCreateObject(DEFERRED)
+    };
+    return &sTypeInfo;
+}
+
 } // namespace Explosion
 } // namespace Logic
 } // namespace BrnSound

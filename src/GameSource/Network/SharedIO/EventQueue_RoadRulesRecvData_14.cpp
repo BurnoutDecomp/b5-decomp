@@ -13,3 +13,10 @@ template void CgsModule::EventQueue<BrnNetwork::RoadRulesRecvData, 14>::Construc
 // (264-byte element stride; the symbols live on BaseEventQueue<T>).
 template bool CgsModule::BaseEventQueue<BrnNetwork::RoadRulesRecvData>::AddEvent(const BrnNetwork::RoadRulesRecvData&);
 template bool CgsModule::BaseEventQueue<BrnNetwork::RoadRulesRecvData>::Append(const CgsModule::BaseEventQueue<BrnNetwork::RoadRulesRecvData>&);
+
+// BaseEventQueue<RoadRulesRecvData>::GetEvent(s32) const  @ 0x82318798
+//   (called by BrnGameState::BurnoutSkillzManager::UpdateLobbyRoadRulesScores). Generic const
+//   GetEvent inline in CgsBaseEventQueue.h; the X360 return `mulli r11,r29,0x108` == index*264 ==
+//   index*sizeof(RoadRulesRecvData). Thin out-of-line instantiation.
+template const BrnNetwork::RoadRulesRecvData&
+CgsModule::BaseEventQueue<BrnNetwork::RoadRulesRecvData>::GetEvent(s32) const;

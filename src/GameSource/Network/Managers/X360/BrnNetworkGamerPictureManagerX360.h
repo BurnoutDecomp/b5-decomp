@@ -146,6 +146,13 @@ namespace BrnNetwork
         // (the local slot when liPlayerID != -1 and it owns that id), or null if no slot matches.
         GamerPictureData* Get(s32 liPlayerID);
 
+        // X360 0x8254C310 -- a second slot-lookup variant that checks the LOCAL slot's miPlayerID
+        // FIRST and UNCONDITIONALLY (no `liPlayerID != -1` guard, unlike Get @ 0x8254C2A8), then
+        // scans the remote table; returns null if no slot matches. Called by GetGamerPictureTexture
+        // and NetworkImageManager::HandleShowingMugshot. Distinct X360 function from Get -- NAME
+        // inferred (no DWARF for this X360 TU); re-home if the DWARF name surfaces.
+        GamerPictureData* GetGamerPictureData(s32 liPlayerID);
+
         // X360 0x8254C528 -- reset every slot (id = -1, xuid = 0, not-ready) and release its
         // texture; also the local + compressed textures. Returns the last Release() result.
         s32 ResetGamerPictureData();

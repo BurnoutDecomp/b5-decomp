@@ -202,6 +202,31 @@ namespace BrnNetwork
     }
 
     // =======================================================================
+    // GetGamerPictureData @ 0x8254C310
+    //
+    // Slot lookup that prefers the LOCAL slot: it tests the local slot's miPlayerID FIRST and
+    // UNCONDITIONALLY (no `liPlayerID != -1` guard, unlike Get @ 0x8254C2A8), returning it on a
+    // match; otherwise it scans the remote table and returns the matching slot, or null when none
+    // matches. NAME inferred (no DWARF for this X360 TU).
+    // =======================================================================
+    GamerPictureManagerX360::GamerPictureData* GamerPictureManagerX360::GetGamerPictureData(s32 liPlayerID)
+    {
+        if (mLocalPlayerGamerPictureData.miPlayerID == liPlayerID)
+        {
+            return &mLocalPlayerGamerPictureData;
+        }
+
+        for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_GAMER_PICTURES; ++liPlayerIndex)
+        {
+            if (maGamerPictureData[liPlayerIndex].miPlayerID == liPlayerID)
+            {
+                return &maGamerPictureData[liPlayerIndex];
+            }
+        }
+        return NULL;
+    }
+
+    // =======================================================================
     // GetGamerPictureTexture @ 0x8254C370
     //
     // Return the decoded gamer-picture texture for a player (the local player when
