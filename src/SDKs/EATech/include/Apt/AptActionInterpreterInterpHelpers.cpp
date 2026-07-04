@@ -737,32 +737,37 @@ AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInter
 // AptInterp_ExecuteScriptFunction -- the AptScriptFunctionBase frame-execution branch
 // of callFunction (tags 34/35/36).
 //
-// FLAG (faithful follow-on stub -- NO LONGER blocked on missing structure; corrected
-// 2026-07-04): the full console branch (0x82AE3CB8..0x82AE4050 inside callFunction
-// @0x82AE3C08) installs the function as mpCurrentFunction (saving the prior into a local),
-// snapshots + reinstalls the register window into a stack SavedExecutionState, pushes the
-// function onto the CIH/target stack, calls SetupBeforeExecution -> GetNumArguments ->
-// SetArgument (bind the min(nArgs,GetNumArguments) operands, then pad the remainder with
-// undefined) -> resolves the level-0 root animation (_AptGetAnimationAtLevel) -> runStream
-// over GetByteCodeBase/GetByteCodeSize -> CleanupAfterExecution -> pops the CIH stack and
-// restores mpCurrentFunction/field_40. The earlier claim that this was blocked is STALE:
-//   - the sequence's methods ARE named virtuals on AptScriptFunctionBase (SetupBefore-
-//     Execution @0x82AD6618, CleanupAfterExecution @0x82AD6630, GetNumArguments,
-//     GetByteCodeBase/Size, SetArgument) -- CALLED BY NAME, so C++ dispatches through the
-//     reconstructed vtable correctly (the console's raw 4-byte slot numbers are irrelevant
-//     when calling by name);
-//   - the interpreter per-call window is now NAMED (mpCurrentFunction [c:0x3C], field_40
-//     [c:0x40], mpRegisters [c:0x44], mpCIHStack/[c:0x24..0x2C]) after the 2026-07-01
-//     register-block reconciliation; and the AptScriptFunctionBase register block
-//     (spRegBlock*) is unified.
-// So homing this is now a BOUNDED decompilation of that branch, not a structure-recovery.
-// It stays a stub for ONE more reason only -- it is BOOT-ACTIVE: activating real script-
-// function execution runs AS bytecode paths deliberately deferred for boot-stability (see
-// the AptRuntimeUpdate FLAG), so it must be decompiled + boot-tested with revert-on-break
-// in a focused pass, not enabled untested. Until then it keeps the faithful, VM-consistent
-// contract (so the dispatch above stays correct + the engine links + boots): consume the
-// nArgs operands and yield `undefined` -- exactly the console's own LABEL_37 "uncallable
-// bound CIH" reduction (pop the args, push undefined).
+// FLAG (faithful follow-on stub). The console branch is 0x82AE3CB8..0x82AE4050 (inside
+// callFunction @0x82AE3C08); I read the full asm + decoded the AptScriptFunction2 vtable
+// (@0x82145D10) this session. Sequence: save mpCurrentFunction into a local + set it to
+// pFunction; call GetConstantPool (vtable slot 0x50) and install its {entries,count} into
+// the interpreter's [c:0x40]/[c:0x44] pair (saving the prior pair via ld/std); push the
+// scope onto the CIH/target stack; SetupBeforeExecution (slot 0x54) -> GetNumArguments
+// (0x44) -> SetArgument (0x58) binding min(nArgs,GetNumArguments) operands then padding
+// the rest with undefined -> resolve the level-0 root animation (_AptGetAnimationAtLevel)
+// -> runStream(GetByteCodeBase 0x48, GetByteCodeSize 0x4C) -> CleanupAfterExecution (0x5C)
+// -> pop the CIH stack + restore mpCurrentFunction + the saved [c:0x40]/[c:0x44] pair.
+//
+// STILL a stub for TWO reasons (corrected 2026-07-04 -- the prior "no longer blocked,
+// bounded decompilation" note OVERSTATED it):
+//   (1) MEMBER-SEMANTICS DISCREPANCY: the console stores GetConstantPool's {entries,count}
+//       into interpreter [c:0x40] and [c:0x44] -- VERIFIED (slot 0x50 == GetConstantPool
+//       in the AptScriptFunction2 vtable; the branch does `stw entries,0x40; stw count,
+//       0x44`). But this build NAMES those members `field_40` ("saved register-window
+//       slot") and `mpRegisters` ("per-call register window") -- which the callFunction
+//       asm CONTRADICTS (they hold the current function's CONSTANT POOL during a call,
+//       saved/restored around it; the AS Push-constant opcodes read them). Homing the
+//       branch against the current names would be WRONG. The interpreter member layout
+//       [c:0x40]/[c:0x44] must be re-validated (against the PS3 DWARF, which names
+//       callFunction) and likely renamed FIRST.
+//   (2) BOOT-ACTIVE: activating real script-function execution runs AS bytecode paths
+//       deferred for boot-stability (see the AptRuntimeUpdate FLAG) -- decompile + build +
+//       boot-test with revert-on-break, not enabled untested. And boot-green does NOT
+//       validate AS-VM correctness (the title barely calls script functions), so the PS3
+//       cross-check in (1) is the real correctness gate.
+// Until both are resolved it keeps the faithful, VM-consistent contract (so the dispatch
+// above stays correct + the engine links + boots): consume the nArgs operands and yield
+// `undefined` -- exactly the console's own LABEL_37 "uncallable bound CIH" reduction.
 // ---------------------------------------------------------------------------
 AptValue* AptInterp_ExecuteScriptFunction(AptActionInterpreter* pInterp,
                                           AptValue* /*pScope*/, AptValue* /*pFunction*/,
