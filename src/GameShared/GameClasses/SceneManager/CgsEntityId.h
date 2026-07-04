@@ -31,8 +31,11 @@ namespace CgsSceneManager
         inline u16 GetPartIndex() const;
         inline bool IsValid() const;
 
-        inline void SetOwner( u8 luOwner );
-        inline void SetEntityIndex( u32 luEntityIndex );
+        // SetOwner / SetEntityIndex are defined OUT-OF-LINE in CgsEntityId.cpp (the X360
+        // ARTIST build emitted them out-of-line); plain declarations here so exactly one
+        // definition emits across the ~16 includers (ODR). SetPartIndex stays inline below.
+        void SetOwner( u8 luOwner );
+        void SetEntityIndex( u32 luEntityIndex );
         inline void SetPartIndex( u32 luPartIndex );
         inline void SetInvalid();
 
@@ -100,20 +103,9 @@ namespace CgsSceneManager
         return mId != KU_INVALID_ENTITY_ID;
     }
 
-    inline void
-    EntityId::SetOwner( u8 luOwner )
-    {
-        CGS_ASSERT( luOwner < 8, "Burnout Specfic: Bad entity type set" );
-        mId = ( (u32)luOwner << KU_OWNER_BASE ) | ( mId & ~KU_OWNER_MASK );
-    }
-
-    inline void
-    EntityId::SetEntityIndex( u32 luEntityIndex )
-    {
-        CGS_ASSERT( luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM),
-                    "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)" );
-        mId = ( (u32)luEntityIndex << KU_ENTITY_INDEX_BASE ) | ( mId & ~KU_ENTITY_INDEX_MASK );
-    }
+    // EntityId::SetOwner and EntityId::SetEntityIndex are defined out-of-line in
+    // CgsEntityId.cpp (see that TU). They were moved out of this header to avoid a
+    // duplicate-definition/ODR conflict across the header's many includers.
 
     inline void
     EntityId::SetPartIndex( u32 luPartIndex )

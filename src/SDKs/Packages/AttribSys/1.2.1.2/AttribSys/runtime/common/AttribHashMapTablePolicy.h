@@ -53,6 +53,16 @@ namespace Attrib
         // additive (no data members, layout/sizeof unchanged). Returns lpBlock.
         static void* FreeWithCensus(void* lpBlock, size_t liSize, const char* lpcTag);
 
+        // The null-guarded variant of FreeWithCensus. Same shared census update
+        // (decrement smCurrentMemory by liSize, refresh smPeakMemory against the
+        // post-decrement total) done UNCONDITIONALLY, but the inner package-allocator
+        // Free is emitted only when both lpBlock and liSize are non-zero -- the shape
+        // MSVC synthesises for `delete p` on a vtbl'd AttribSys impl object whose
+        // deleting-destructor thunk null-checks the block before operator delete
+        // (e.g. Attrib::DatabasePrivate @ 0x8280CA40, free size 172, NULL tag).
+        // Returns lpBlock. Additive (no data members; layout/sizeof unchanged).
+        static void* FreeWithCensusIf(void* lpBlock, size_t liSize, const char* lpcTag);
+
         // The malloc-side counterpart (bumps smCurrentMemory / smPeakMemory the other
         // way and forwards onto AttribSysPackageAllocator::Malloc). Body in its own TU.
         static void* Allocate(size_t liSize, size_t liAlignment, size_t liOffset, int liFlags);

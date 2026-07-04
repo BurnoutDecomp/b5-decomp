@@ -120,4 +120,9 @@ namespace BrnStreetData
         void Construct();
         void Copy( const ChallengePlayerScoreEntry* lpSource );
     };
+
+    // BrnChallengeData.h:56 (DWARF). Post-increment ScoreType iterator: advances the referenced
+    // enum, asserts it has not exceeded E_SCORE_TYPE_COUNT, returns the prior value by value.
+    // X360 0x8230EBB8. Body in BrnChallengeData.cpp.
+    ScoreType operator++( ScoreType& leEnumIndex, int );
 }

@@ -5,7 +5,8 @@
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (BrnReplays::WriteStream).
 //
-//   InvalidateFrunksAhead @ 0x8264D190
+//   ResetStream            @ 0x8264D100
+//   InvalidateFrunksAhead  @ 0x8264D190
 //
 // When a frunk is (re)recorded at index liStartFrunk, any frunks that were already
 // in the stream for the frames it now covers are stale. This walks forward marking
@@ -14,6 +15,48 @@
 
 namespace BrnReplays
 {
+    // @ 0x8264D100
+    // Reset the write stream to an empty, freshly-allocated header. Frees every
+    // allocation the header allocator has made, carves a new StreamHeader out of it,
+    // stamps the "REPLAY " magic (through the terminating NUL) and zeroes the header's
+    // frunk index, then clears the per-recording bookkeeping (write cursor, stall/alloc
+    // counters, ended/paused flags, file + intermediate-buffer positions). The
+    // DiskWriteStream link (mpStream @0x50) is intentionally left untouched --
+    // StartNewStream owns it. Returns the freshly allocated StreamHeader (X360 r3).
+    StreamHeader* WriteStream::ResetStream()
+    {
+        mHeaderMalloc.FreeAll();
+
+        StreamHeader* lpHeader =
+            static_cast<StreamHeader*>(mHeaderMalloc.Malloc(sizeof(StreamHeader)));
+        mpStreamHeader = lpHeader;
+
+        // Stamp the 8-byte magic ("REPLAY " + NUL). The X360 body is a byte copy that
+        // runs through and including the terminating NUL of the rodata literal.
+        static const char KacReplayMagic[8] = { 'R', 'E', 'P', 'L', 'A', 'Y', ' ', '\0' };
+        for (s32 liByte = 0; ; ++liByte)
+        {
+            lpHeader->macMagicNumber[liByte] = KacReplayMagic[liByte];
+            if (KacReplayMagic[liByte] == '\0')
+                break;
+        }
+
+        lpHeader->miVersion      = 0;
+        lpHeader->miNumFrunks    = 0;
+        lpHeader->miFirstFrunk   = 0;
+        lpHeader->mpFrameOffsets = nullptr;
+
+        miCurrentWriteIndex  = 0; // @0x40
+        miStallCount         = 0; // @0x44
+        mbEnded              = false; // @0x48
+        mbPaused             = false; // @0x49
+        miNumFrunksAllocated = 0; // @0x4C
+        miFilePosition       = 0; // @0x54  (mpStream @0x50 deliberately untouched)
+        miBufferPosition     = 0; // @0x58
+
+        return lpHeader;
+    }
+
     // @ 0x8264D190
     void WriteStream::InvalidateFrunksAhead(s32 liStartFrunk)
     {

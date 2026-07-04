@@ -14,8 +14,9 @@
 //   GetU16FrameCountSinceStart    @0x8288B2D0
 //   GetFrameWrapCountSinceStart   @0x82893310
 //   GetFramesSinceStart           @0x82893388
+//   NextFrame                     @0x825813F0
 //
-// The remaining DWARF-declared methods (NextFrame / SetStartFrame / the simple
+// The remaining DWARF-declared methods (SetStartFrame / the simple
 // getters / ResetNetworkTime / Start/StopSyncingTime / Disconnected / Destruct /
 // OnHostMigration / ReleaseSyncTimeManagers / the start-frame helpers) were not in
 // this TU's binary export; they are declared in the header and bodied in their own
@@ -260,5 +261,20 @@ namespace CgsNetwork
     TimeManager::GetU16FrameCount() const
     {
         return static_cast<u16>(muFrameCount % KU_FRAME_WRAP_MODULUS);
+    }
+
+    // ---- NextFrame @0x825813F0 ------------------------------------------------------
+    // Advance both clocks by this frame's timer step and bump the running frame counter.
+    // The step is the timer status' current time step (mfBaseTimeStep * mfTimeStepMultiplier,
+    // asm: lfs 8(r4) * lfs 4(r4) into fp31, computed once and reused for both += Time temps).
+    void
+    TimeManager::NextFrame(const CgsSystem::TimerStatus* lpTimerStatus)
+    {
+        const f32 lfTimeStep = lpTimerStatus->GetCurrentTimeStep();
+
+        mNetworkTime += CgsSystem::Time(lfTimeStep);   // this+0x370 += Time(step)
+        mGlobalTime  += CgsSystem::Time(lfTimeStep);   // this+0x378 += Time(step)
+
+        ++muFrameCount;                                // this+0x388
     }
 } // namespace CgsNetwork

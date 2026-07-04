@@ -59,4 +59,26 @@ void* HashMapTablePolicy::FreeWithCensus(void* lpBlock, size_t liSize, const cha
 
     return lpBlock;
 }
+
+// Null-guarded census-and-free. Store-for-store from the DatabasePrivate deleting
+// destructor free site (0x8280CA40): the census decrement + peak refresh run
+// unconditionally (the caller is already inside the should-free branch), but the
+// package-allocator Free is skipped when the block or size is zero -- the null-check
+// the X360 emits (cmplwi r30,0 / beq) before the operator delete call. Returns lpBlock.
+void* HashMapTablePolicy::FreeWithCensusIf(void* lpBlock, size_t liSize, const char* lpcTag)
+{
+    const u32 luNewCurrent = smCurrentMemory - static_cast<u32>(liSize);
+    smCurrentMemory = luNewCurrent;
+    if (smCurrentMemory > smPeakMemory)
+        smPeakMemory = luNewCurrent;
+
+    if (lpBlock != NULL && liSize != 0)
+    {
+        CgsAttribSys::AttribSysPackageAllocator* lpAllocator =
+            CgsAttribSys::AttribSysMemoryManager::GetAttribSysAllocator();
+        lpAllocator->Free(lpBlock, static_cast<s32>(liSize), lpcTag);
+    }
+
+    return lpBlock;
+}
 }
