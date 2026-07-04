@@ -38,6 +38,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"  // BrnPhysics::ContactSpy::ContactSpyInterface (embedded by value in InputBuffer_PostPhysics)
 
 // Pointer-only return types for the read-locked getters; full homes are included by
 // the accessor .cpp (CgsTimerStatusInterface.h / BrnAIModuleRequestInterface.h).
@@ -119,6 +120,28 @@ namespace AIModuleIO
         // IOBuffer base; spans through the trailing player-vehicle-controls block. The
         // accessors index from `this` (MemberImage), so this blob only sizes the object.
         u8 maImage[0x1BA30 - sizeof(CgsModule::IOBuffer)];
+    };
+
+    // ------------------------------------------------------------------------
+    // InputBuffer_PostPhysics -- the AI module's post-physics INPUT buffer (a
+    // SEPARATE, small CgsModule::IOBuffer from the large InputBuffer above). The
+    // physics side fills it with contact-spy results; the AI post-physics step
+    // drains it. Exactly one member per the DWARF (BrnAIModuleIO.h:286/:368):
+    // the embedded contact-spy interface at +0x04 (right after the 1-byte IOBuffer
+    // status flag). Construct/Destruct bodied in
+    // BrnAIModuleIO_InputBuffer_PostPhysics.cpp.
+    // ------------------------------------------------------------------------
+    struct InputBuffer_PostPhysics : public CgsModule::IOBuffer
+    {
+        typedef BrnPhysics::ContactSpy::ContactSpyInterface ContactSpyInterface;
+
+        void Construct();   // X360 0x8277BCD0
+        void Destruct();    // X360 0x8277BCE8
+
+    private:
+        static void _AssertLayout();
+
+        ContactSpyInterface mContactInterface;   // +0x04  DWARF BrnAIModuleIO.h:286
     };
 }
 }

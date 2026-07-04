@@ -4,6 +4,9 @@
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
 
+// Forward decl -- Notify takes a message header by pointer only (read by offset).
+namespace CgsSound { namespace Io { class MessageHeader; } }
+
 // =============================================================================
 // BrnSound::Logic::SubmixesEffect
 //   GameSource/Sound/Module/LogicModule/BrnSubmixesEffect.h (DWARF home) +
@@ -69,6 +72,26 @@ struct SubmixesEffect : public BrnSound::Logic::BrnEffectObject
 {
     SubmixesEffect() {}
     virtual ~SubmixesEffect();
+
+    // @ 0x82687EE8 -- overrides EffectBase::Notify. Type-15 messages carry a single-byte
+    // hold-volumes flag in their body at +0x10 (past the 12-byte MessageHeader); Notify
+    // latches it into mbHoldVolumes. NOT marked `override`: the committed minimal EffectBase
+    // reconstruction (BrnEffectObject.h) elides the engine Notify virtual, so this is declared
+    // as a plain virtual on the leaf (grow-additive, no base re-home) until that base surface
+    // is materialised.
+    virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader);
+
+private:
+    // +0x39 (X360) -- "hold submix volumes" latch. Written by Notify (type-15 message) and,
+    // once SubmixesEffect::Attach is homed, by Attach. NOTE: SubmixesEffect::Attach @ 0x826D2DA8
+    // is BLOCKED this wave -- its ASM proves the CANONICAL CgsEffectBase EffectBase layout
+    // (mpState@+0x08, mu16AttachCount@+0x0E, meDetachState@+0x24, mpLogicModule@+0x28), which is
+    // IRRECONCILABLE with the committed BrnEffectObject base model this leaf's ~SubmixesEffect
+    // destructor is written against (meDetachState@+0x28, mpLogicModule@+0x2C, no mpState). Homing
+    // Attach requires re-basing SubmixesEffect + rewriting the committed destructor + several
+    // un-homed types (GlobalStateManager/Environment accessors, UpdateStaticPluginParameters) --
+    // out of scope for this slice. Only mbHoldVolumes (which Notify needs) is added here.
+    bool mbHoldVolumes;
 };
 
 } // namespace Logic

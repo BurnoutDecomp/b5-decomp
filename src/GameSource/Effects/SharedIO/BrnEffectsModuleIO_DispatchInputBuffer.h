@@ -56,6 +56,9 @@ namespace EffectsIO
     // EffectsModuleIO.h:196 -- struct DispatchInputBuffer : public IOBuffer.
     struct DispatchInputBuffer : public CgsModule::IOBuffer
     {
+        // --- construction bodied in BrnEffectsModuleIO_DispatchInputBuffer.cpp ----------
+        void              Construct();                                                          // @ 0x82288120 (DWARF EffectsModuleIO.h:201)
+
         // --- accessors bodied in BrnEffectsModuleIO_DispatchInputBuffer.cpp -------------
         // Getters read-lock (status bit 4, "Not locked for reading\n"); setters write-lock
         // (status bit 3, "Not locked for writing\n") -- reproduced exactly as the X360 asm
