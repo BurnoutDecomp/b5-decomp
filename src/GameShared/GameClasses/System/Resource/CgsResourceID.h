@@ -12,6 +12,8 @@
 // X360 is a follow-on; it is the load-by-name path, not needed to READ ids already stored in a bundle
 // (that only needs the value + GetHash/SetHash).
 
+namespace CgsDev { struct StrStreamBase; }
+
 namespace CgsResource
 {
     class ID
@@ -36,4 +38,8 @@ namespace CgsResource
     private:
         CHash mHash;
     };
+
+    // @ 0x826801F0 -- stream-insert a resource ID into a CgsDev::StrStreamBase as 16 lowercase
+    // hex digits (the 64-bit hash, most-significant byte first). Bodied in CgsResourceID.cpp.
+    CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lStream, ID lId);
 }

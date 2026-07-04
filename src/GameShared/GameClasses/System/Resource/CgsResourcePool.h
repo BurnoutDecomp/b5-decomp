@@ -191,6 +191,9 @@ namespace CgsResource
         void DeleteMemoryForEntry(ID lID);
         bool ReAllocateMemoryForEntry(ID lID, Entry::ResourceDescriptor* lpDescriptor, s32 liMemType, SmallResource* lpResource);
         bool IsDefragmenting() const;
+        // Returns miDefragMemType (X360 Pool+0x1BC; -1 == this pool's defrag stage is idle/done).
+        // Read by IntelliFragPoolModuleState::Update @0x828FF7F8 to detect the -1 completion sentinel.
+        s32  GetDefragMemType() const;
         void BuildAllocRequestForEntry(AllocListSet* lpAllocListSet, u16 luIndex, Entry* lpEntry);
 
         // ---- per-entry status / refcount / imports ------------------------------------

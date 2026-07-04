@@ -127,4 +127,65 @@ namespace CgsResource
     {
         GetPool()->BeginDefragmentation(mpScratchPool, lpRequests, lpSources, luNum, liMemType);
     }
+
+    // -------- Update @ 0x828FF7F8 --------
+    // Poll the intellifrag step machine once (driven by PoolModule::UpdateIntelliFrag). Dispatch on
+    // meState:
+    //   IDLE(0):                nothing to do -> SUCCESS.
+    //   >=3 (invalid):          assert tripwire, return ERROR.
+    //   START_DEFRAGMENTING(1): once the pool's defrag latch has cleared (GetDefragMemType()==-1), arm
+    //                           the final addressed allocations and stay PEND.
+    //   DEFRAGMENTING_HEAP(2):  while the pool is still relocating, stay PEND; once idle, scan the
+    //                           three per-memtype batch-alloc results -- the first that still reports
+    //                           NEED_DEFRAG kicks off BeginDefragment for that memtype (PEND on
+    //                           success; on failure fall back to IDLE and escalate to EMERGENCY). If
+    //                           none need defrag, return to IDLE and report SUCCESS.
+    IntelliFragPoolModuleState::EIntelliFragResult IntelliFragPoolModuleState::Update()
+    {
+        switch (meState)
+        {
+        case E_STATE_IDLE:
+            return E_RESULT_SUCCESS;                     // li r3,0
+
+        case E_STATE_START_DEFRAGMENTING:               // meState == 1
+            if (GetPool()->GetDefragMemType() == -1)    // *(mpPool+0x1BC) == -1
+            {
+                meState = E_STATE_START_DEFRAGMENTING;  // stw 1, 0x4C (re-latch)
+                DoFinalAllocations();                   // bl ...BaseDefragPoolModuleState::DoFinalAllocations
+            }
+            return E_RESULT_PEND;                        // li r3,2
+
+        case E_STATE_DEFRAGMENTING_HEAP:                // meState == 2
+            if (GetPool()->IsDefragmenting())           // *(mpPool+0x1C8) != 0 -> still relocating
+            {
+                return E_RESULT_PEND;                    // li r3,2
+            }
+            // Pool has finished its current relocation batch: find the first memtype whose batch-alloc
+            // still needs defragmenting.
+            for (s32 liMemType = 0; liMemType < 3; ++liMemType)
+            {
+                if (GetAllocationResult(liMemType) == E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG)  // ==1
+                {
+                    meState = E_STATE_DEFRAGMENTING_HEAP;   // stw 2, 0x4C
+                    if (BeginDefragment(liMemType))         // bl ...BeginDefragment(memtype)
+                    {
+                        return E_RESULT_PEND;               // li r3,2
+                    }
+                    meState = E_STATE_IDLE;                 // stw 0, 0x4C
+                    if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    {
+                        *CgsDev::Log::gpDebugPrint << "Intellifrag moving too much data - returning emergency\n";
+                    }
+                    return E_RESULT_EMERGENCY;              // li r3,3
+                }
+            }
+            meState = E_STATE_IDLE;                       // stw 0, 0x4C
+            return E_RESULT_SUCCESS;                      // li r3,0
+
+        default:
+            // meState >= E_STATE_DEFRAGMENTING_HEAP+1 -- an impossible step value.
+            CGS_ASSERT(false, "Defrag state is invalid\n");   // :152
+            return E_RESULT_ERROR;                       // li r3,1
+        }
+    }
 }
