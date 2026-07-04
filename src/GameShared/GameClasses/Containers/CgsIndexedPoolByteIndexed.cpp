@@ -39,10 +39,16 @@ namespace CgsResource
 // by (no fork; the include pins the same sizeof).
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalX360.h"
 
-// Pool A (12-byte element, byte index): Clear + Get.
+// Pool A (12-byte element, byte index): Clear + Get + Pop.
+// Pop @ 0x828F2890 (ResourceModule::AddOpen/CloseFileRequest / AddOpen/CloseReadStreamRequest):
+// claim a free slot and return &maElements[Allocate()] (or null when full). The asm multiplies
+// the claimed index by 0x0C == sizeof(ResourcePoolRecord), reusing the same 12-byte placeholder
+// so the pool is NOT forked.
 template void CgsContainers::IndexedPool<CgsResource::ResourcePoolRecord, 256, s8>::Clear();
 template s32  CgsContainers::IndexedPool<CgsResource::ResourcePoolRecord, 256, s8>::Get(
                   CgsResource::ResourcePoolRecord**, s32) const;
+template CgsResource::ResourcePoolRecord*
+             CgsContainers::IndexedPool<CgsResource::ResourcePoolRecord, 256, s8>::Pop();
 
 // Pool B (272-byte element, byte index): GetObjectIndex + Push + PushIndex.
 template s8   CgsContainers::IndexedPool<CgsFileSystem::FileHandleRecord, 256, s8>::GetObjectIndex(

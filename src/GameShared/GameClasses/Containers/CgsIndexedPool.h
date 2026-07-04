@@ -162,6 +162,21 @@ public:
         return lsResult;
     }
 
+    // Pop @ 0x828F2890 (CgsResource::ResourceModule::AddOpen/CloseFileRequest /
+    // AddOpen/CloseReadStreamRequest): claim a free slot and return the OBJECT pointer rather
+    // than the handle. X360: index = Allocate(); when the pool is full (index == -1) return 0,
+    // else return &maElements[index] (the asm's `12*index + maElements` for the 12-byte
+    // ResourcePoolRecord instantiation -- the stride is sizeof(T)). DWARF CgsIndexedPool.h:330.
+    T* Pop()
+    {
+        const IndexType lsIndex = Allocate();
+        if (lsIndex == static_cast<IndexType>(-1))
+        {
+            return 0;
+        }
+        return &maElements[lsIndex];
+    }
+
     // GetObjectIndex @ 0x82662F50: recover a live object's handle from its address.
     // X360: index = (s16)((lpObject - maElements) / sizeof(T)); then range-guard
     // [0, msCapacity) ("Object not in pool", CgsIndexedPool.h:222, non-fatal) and

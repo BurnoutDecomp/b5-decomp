@@ -207,6 +207,7 @@ namespace CgsResource
     s32  Pool::GetNumEntriesInPurgatory() const    { return miNumResourcesInPurgatory; }
     bool Pool::GetAllowDefragmentation() const     { return mbAllowDefragmentation; }
     void Pool::SetAllowDefragmentation(bool lbAllow) { mbAllowDefragmentation = lbAllow; }
+    s32  Pool::GetDefragMemType() const            { return miDefragMemType; }
 
     s16  Pool::GetEntryRefCount(s32 liIndex) const       { return mpiResourceRefCounts[liIndex]; }
     void Pool::SetEntryRefCount(s32 liIndex, s16 liRefCount) { mpiResourceRefCounts[liIndex] = liRefCount; }
