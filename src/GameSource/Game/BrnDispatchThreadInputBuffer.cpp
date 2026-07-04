@@ -2,25 +2,186 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-// BrnGame::DispatchThreadInputBuffer::GetParticleData() const @ 0x8227F4F0 (DWARF h:97).
-//
-// The X360 body tests IOBuffer status bit 4 ((*a1 >> 4) & 1 -> the read-lock bit) and, on failure,
-// inlines a StrStream to build the message "Not locked for reading\n" before firing the assert at
-// BrnDispatchThreadInputBuffer.h:97, then returns a1 + 16 (= &mParticleData).
-//
-// Mirrors b5-decomp/src/GameShared/GameClasses/Memory/CgsMemoryModuleIO.cpp EXACTLY: the simple
-// CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n") (IsBufferLockedForReading() is
-// the inherited CgsModule::IOBuffer read-lock query) then return &mParticleData.
+// BrnGame::DispatchThreadInputBuffer -- out-of-line accessors/mutators the X360 build emitted for
+// the particle/effects dispatch-thread input buffer. Each body tests the inherited IOBuffer status
+// flag then acts on the named member:
+//   - const getters assert the read-lock  ("Not locked for reading\n")  and return &member / value;
+//   - mutable getters / Append / Set mutators assert the write-lock ("Not locked for writing\n").
+// (The X360 rodata carries the trailing \n on both lock strings -- matched verbatim.)
 //
 // FLAG (benign parity gap): the X360 inlined a StrStream (BeginAssert/BasePriorityQueue::Clear/the
-// stream operator/FireAssert/EndAssert) to compose the assert message; we deliberately use the
+// stream operator/FireAssert/EndAssert) to compose each assert message; we deliberately use the
 // committed CGS_ASSERT macro instead and do NOT reproduce that StrStream machinery. Parity YELLOW
 // for the missing assert-stream calls is the expected/committed convention.
 namespace BrnGame
 {
+    // ---- particle data ---------------------------------------------------------------
+
+    // GetParticleData() const @ 0x8227F4F0 (DWARF h:97). Read-lock, return &mParticleData (+16).
     const BrnParticle::ParticleModule::DispatchThreadUpdateData* DispatchThreadInputBuffer::GetParticleData() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return &mParticleData;
+    }
+
+    // GetParticleData() @ 0x8227F598 (DWARF h:98, NON-const; IDA "GetP"). Write-lock, return
+    // &mParticleData (+16).
+    BrnParticle::ParticleModule::DispatchThreadUpdateData* DispatchThreadInputBuffer::GetParticleData()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mParticleData;
+    }
+
+    // GetParticleRenderData() @ 0x8227F6E8 (DWARF h:101, NON-const; IDA "GetParticl"). Write-lock,
+    // return &mParticleRenderData (+0x38A0).
+    BrnParticle::ParticleModule::ParticleRenderData* DispatchThreadInputBuffer::GetParticleRenderData()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mParticleRenderData;
+    }
+
+    // ---- crash-triangle cache --------------------------------------------------------
+
+    // GetBufferCrashTriangleCache() const @ 0x8227F790 (DWARF h:103). Read-lock, &member (+0x3B00).
+    const BrnEffects::BrnCrashTriangleCache* DispatchThreadInputBuffer::GetBufferCrashTriangleCache() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mBufferCrashTriangleCache;
+    }
+
+    // GetBufferCrashTriangleCache() @ 0x8227F838 (DWARF h:104, NON-const). Write-lock, &member.
+    BrnEffects::BrnCrashTriangleCache* DispatchThreadInputBuffer::GetBufferCrashTriangleCache()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mBufferCrashTriangleCache;
+    }
+
+    // ---- particle inter-thread event queue -------------------------------------------
+
+    // GetParticleInterThreadEventQueue() const @ 0x8227F8E0 (DWARF h:106; IDA "GetParticle").
+    // Read-lock, return &mParticleInterThreadEventQueue (+0x5980).
+    const DispatchThreadInputBuffer::CappedInterThreadEventQueue* DispatchThreadInputBuffer::GetParticleInterThreadEventQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mParticleInterThreadEventQueue;
+    }
+
+    // GetParticleInterThreadEventQueue() @ 0x8227F988 (DWARF h:107, NON-const; IDA
+    // "GetParticleInterT"). Write-lock, return &mParticleInterThreadEventQueue (+0x5980).
+    DispatchThreadInputBuffer::CappedInterThreadEventQueue* DispatchThreadInputBuffer::GetParticleInterThreadEventQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mParticleInterThreadEventQueue;
+    }
+
+    // AppendParticleInterThreadEventQueue @ 0x8228FDE8 (DWARF h:108). Write-lock, then bulk-append
+    // the source inter-thread event queue's packed bytes into the embedded particle queue (+0x5980).
+    // X360 forwards to CgsModule::VariableEventQueue<16384,16>::Append<16384,16>(source); the
+    // committed template's Append<SRCBUF,SRCALIGN> deduces <16384,16> from the source type.
+    void DispatchThreadInputBuffer::AppendParticleInterThreadEventQueue(const CappedInterThreadEventQueue* lpSource)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mParticleInterThreadEventQueue.Append(*lpSource);
+    }
+
+    // ---- renderer flags / brightness / contrast --------------------------------------
+
+    // SetRendererFlags @ 0x827BBDA0 (DWARF h:95). Write-lock, stw a2 at this+4 (mxRendererFlags).
+    void DispatchThreadInputBuffer::SetRendererFlags(uint32_t xRendererFlags)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mxRendererFlags = xRendererFlags;
+    }
+
+    // SetBrightness @ 0x823B4280 (DWARF h:111). Write-lock, stw at +8 (miBrightness).
+    void DispatchThreadInputBuffer::SetBrightness(int32_t liBrightness)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        miBrightness = liBrightness;
+    }
+
+    // GetBrightness() const @ 0x823FB970 (DWARF h:110). Read-lock, return miBrightness (+8).
+    int32_t DispatchThreadInputBuffer::GetBrightness() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return miBrightness;
+    }
+
+    // SetContrast @ 0x823B4328 (DWARF h:114). Write-lock, stw at +12 (miContrast).
+    void DispatchThreadInputBuffer::SetContrast(int32_t liContrast)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        miContrast = liContrast;
+    }
+
+    // GetContrast() const @ 0x823FBA18 (DWARF h:113). Read-lock, return miContrast (+12).
+    int32_t DispatchThreadInputBuffer::GetContrast() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return miContrast;
+    }
+
+    // ---- calibration texture / post-fx / stall / disk-error --------------------------
+
+    // SetCalibrationTextureHandle @ 0x823B4480 (DWARF h:120). Write-lock, 8-byte store at +0x9994
+    // (mhCalibrationTextureHandle == ResourceHandle 8-byte opaque handle).
+    void DispatchThreadInputBuffer::SetCalibrationTextureHandle(CgsResource::ResourceHandle lhCalibrationTextureHandle)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mhCalibrationTextureHandle = lhCalibrationTextureHandle;
+    }
+
+    // GetCalibrationTextureHandle() const @ 0x823FBB70 (DWARF h:119). Read-lock, return the 8-byte
+    // handle (+0x9994) by value (both handle dwords copied into the sret slot).
+    CgsResource::ResourceHandle DispatchThreadInputBuffer::GetCalibrationTextureHandle() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return mhCalibrationTextureHandle;
+    }
+
+    // SetCalibrationUnfriendlyEnablePostFx @ 0x823B43D0 (DWARF h:117). Write-lock, stb at +0x99BB.
+    void DispatchThreadInputBuffer::SetCalibrationUnfriendlyEnablePostFx(bool lbEnablePostFx)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mbCalibrationUnfriendlyEnablePostFx = lbEnablePostFx;
+    }
+
+    // GetCalibrationUnfriendlyEnablePostFx() const @ 0x823FBAC0 (DWARF h:116). Read-lock, return
+    // the byte at +0x99BB.
+    bool DispatchThreadInputBuffer::GetCalibrationUnfriendlyEnablePostFx() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return mbCalibrationUnfriendlyEnablePostFx;
+    }
+
+    // SetIsStalled @ 0x823B4530 (DWARF h:123). Write-lock, stb a2 at +0x99BC (mbIsStalled).
+    void DispatchThreadInputBuffer::SetIsStalled(bool bIsStalled)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mbIsStalled = bIsStalled;
+    }
+
+    // GetIsStalled() const @ 0x823FBC30 (DWARF h:122). Read-lock, return the byte at +0x99BC.
+    bool DispatchThreadInputBuffer::GetIsStalled() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return mbIsStalled;
+    }
+
+    // SetIsDiskError @ 0x823B45E0 (DWARF h:131). Write-lock, stb at +0x99BD (mbIsDiskError).
+    void DispatchThreadInputBuffer::SetIsDiskError(bool lbIsDiskError)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mbIsDiskError = lbIsDiskError;
+    }
+
+    // ---- snapshot request ------------------------------------------------------------
+
+    // GetSnapShotRequest() @ 0x823B4690 (DWARF h:134, NON-const). Write-lock, return
+    // &mSnapShotRequest (+0x999C).
+    DispatchThreadInputBuffer::SnapShotRequest* DispatchThreadInputBuffer::GetSnapShotRequest()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mSnapShotRequest;
     }
 }
