@@ -777,6 +777,11 @@ AptValue* AptInterp_ExecuteScriptFunction(AptActionInterpreter* pInterp,
 {
     // console LABEL_37 (the reduced path): Burnout_X360_Artist_01e3_0(a1, v7) then push
     // the undefined singleton.
+    // NOTE (2026-07-04 probe): this reduced path IS reached ~4x at boot (all nArgs=0), so
+    // the title's component AS does call script functions -- homing the real branch (above
+    // FLAG) would execute those 4 bodies instead of yielding undefined. nArgs=0 keeps the
+    // SetArgument binding trivial. (Their effects may be internal, so boot-green alone won't
+    // fully validate a homing -- the asm-level correctness check remains the real gate.)
     pInterp->stackSafePop(nArgs);
     pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
     return gpUndefinedValue;
