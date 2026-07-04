@@ -3,24 +3,33 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer base + IsBufferLockedForReading()
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // CgsModule::VariableEventQueue<N,16> (inter-thread queue Append)
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle (calibration texture handle, by value)
 
 // BrnGame::DispatchThreadInputBuffer -- the per-frame input payload the particle/effects dispatch
 // thread reads. It derives the shared CgsModule::IOBuffer (status-flag-guarded read/write locking)
 // and carries the particle-update data the simulation produced, plus brightness/contrast/renderer
-// flags and (deferred) the render data, crash-triangle cache, inter-thread event queue, etc.
+// flags and the render data, crash-triangle cache, inter-thread event queue, calibration/loading
+// state, and the snapshot request.
 //
 // Layout + member order recovered from the DecFIGS DWARF
 // (references/DecFIGS/dwarfdump/GameSource/Game/BrnDispatchThreadInputBuffer.h): struct
-// BrnGame::DispatchThreadInputBuffer : public IOBuffer, with the first four members being
-// mxRendererFlags (h:191), miBrightness (h:192), miContrast (h:193), mParticleData (h:194).
+// BrnGame::DispatchThreadInputBuffer : public IOBuffer, with the members being (in DWARF order)
+// mxRendererFlags (h:191), miBrightness (h:192), miContrast (h:193), mParticleData (h:194),
+// mParticleRenderData (h:195), mBufferCrashTriangleCache (h:196), the inter-thread event queue
+// (h:197), the calibration-texture handle / flags / loading command, and mSnapShotRequest.
 //
-// FLAG (MINIMAL SLICE): only the members up to and including mParticleData are declared -- that is
-// all GetParticleData() (this TU) needs. The many trailing members (mParticleRenderData,
-// mBufferCrashTriangleCache, the InterThreadEventQueue<16384> mParticleInterThreadEventQueue,
-// meLoadingScreenCommand, mhCalibrationTextureHandle, mSnapShotRequest, the bool flags, and the
-// occlusion Matrix44) and ALL the other accessors/lifecycle methods are DEFERRED to their own TUs
-// and are intentionally omitted here. This is semantic parity (real names/types/order for the
-// declared prefix), not a byte-exact full object.
+// FLAG (semantic parity, NOT byte-exact full object): the render-payload member TYPES that have no
+// committed home yet (DispatchThreadUpdateData, ParticleRenderData, BrnCrashTriangleCache,
+// CappedInterThreadEventQueue, SnapShotRequest) are modelled here as opaque/minimal complete types
+// -- their true internal size/layout is UNKNOWN. They are embedded BY VALUE so that &member yields
+// the correct pointer type for the accessor return (the accessor bodies return &member / forward to
+// a member method). The X360 32-bit byte offsets (this+16 mParticleData, this+0x38A0
+// mParticleRenderData, this+0x3B00 mBufferCrashTriangleCache, this+0x5980 mParticleInterThreadEvent
+// Queue, this+0x9994 mhCalibrationTextureHandle, this+0x999C mSnapShotRequest, ...) are documented
+// for reference only; the host x64 layout differs (pointers/queues widen) so parity is BY NAMED
+// MEMBER, per the x64-gate rule. When each payload's canonical home lands this file includes it and
+// drops the local opaque model (do NOT fork the type).
 namespace BrnParticle
 {
 namespace ParticleModule
@@ -35,7 +44,28 @@ namespace ParticleModule
     {
         u8 maStorage[1];   // FLAG: opaque, true size unknown
     };
+
+    // FLAG (ad-hoc opaque): ParticleRenderData has no committed home yet (DWARF h:195). Same
+    // by-value opaque model as DispatchThreadUpdateData so &mParticleRenderData yields the correct
+    // pointer type. True size/layout UNKNOWN; replaced when its canonical home lands.
+    struct ParticleRenderData
+    {
+        u8 maStorage[1];   // FLAG: opaque, true size unknown
+    };
 }
+}
+
+namespace BrnEffects
+{
+    // FLAG (ad-hoc opaque): BrnEffects::BrnCrashTriangleCache is bodied only in
+    // GameSource/Effects/BrnCrashTriangleCache.cpp (no includable committed struct home yet, DWARF
+    // h:196). Modelled here as a by-value opaque so &mBufferCrashTriangleCache yields the correct
+    // pointer type for GetBufferCrashTriangleCache's const/non-const overloads. True size UNKNOWN;
+    // replaced when BrnCrashTriangleCache gets a committed header home.
+    struct BrnCrashTriangleCache
+    {
+        u8 maStorage[1];   // FLAG: opaque, true size unknown
+    };
 }
 
 namespace BrnGame
@@ -44,20 +74,75 @@ namespace BrnGame
     // CgsModule::IOBuffer, the committed shared base).
     struct DispatchThreadInputBuffer : public CgsModule::IOBuffer
     {
-        // GetParticleData @ 0x8227F4F0 / DWARF h:97 -- assert the buffer is read-locked, then hand
-        // back the embedded particle-update data. Const overload only in this slice; the non-const
-        // overload (DWARF h:98) is deferred.
-        const BrnParticle::ParticleModule::DispatchThreadUpdateData* GetParticleData() const;
+        // The particle dispatch thread's inter-thread event queue (DWARF h:197). The X360
+        // AppendParticleInterThreadEventQueue forwards to
+        // CgsModule::VariableEventQueue<16384,16>::Append<16384,16>(source). Reused by name; the
+        // template's Append<SRCBUF,SRCALIGN> deduces <16384,16> from the source type.
+        typedef CgsModule::VariableEventQueue<16384, 16> CappedInterThreadEventQueue;
+
+        // FLAG (ad-hoc opaque): SnapShotRequest has no committed home yet. Modelled as a by-value
+        // opaque so &mSnapShotRequest yields the correct pointer type for GetSnapShotRequest. True
+        // size/layout UNKNOWN; replaced when its canonical home lands.
+        struct SnapShotRequest
+        {
+            u8 maStorage[1];   // FLAG: opaque, true size unknown
+        };
+
+        // ---- particle data ---------------------------------------------------------------
+        // GetParticleData @ 0x8227F4F0 / DWARF h:97 (const) -- assert read-lock, hand back the
+        // embedded particle-update data; @ 0x8227F598 / DWARF h:98 (non-const) asserts write-lock.
+        const BrnParticle::ParticleModule::DispatchThreadUpdateData* GetParticleData() const;   // 0x8227F4F0
+        BrnParticle::ParticleModule::DispatchThreadUpdateData*       GetParticleData();          // 0x8227F598
+
+        // GetParticleRenderData @ 0x8227F6E8 / DWARF h:101 (non-const) -- write-lock, &member.
+        BrnParticle::ParticleModule::ParticleRenderData* GetParticleRenderData();               // 0x8227F6E8
+
+        // ---- crash-triangle cache --------------------------------------------------------
+        const BrnEffects::BrnCrashTriangleCache* GetBufferCrashTriangleCache() const;           // 0x8227F790 (h:103, R)
+        BrnEffects::BrnCrashTriangleCache*       GetBufferCrashTriangleCache();                 // 0x8227F838 (h:104, W)
+
+        // ---- particle inter-thread event queue -------------------------------------------
+        const CappedInterThreadEventQueue* GetParticleInterThreadEventQueue() const;            // 0x8227F8E0 (h:106, R)
+        CappedInterThreadEventQueue*       GetParticleInterThreadEventQueue();                  // 0x8227F988 (h:107, W)
+        void AppendParticleInterThreadEventQueue(const CappedInterThreadEventQueue* lpSource);  // 0x8228FDE8 (h:108, W)
+
+        // ---- renderer flags / brightness / contrast --------------------------------------
+        void    SetRendererFlags(uint32_t xRendererFlags);                                      // 0x827BBDA0 (h:95, W)
+        void    SetBrightness(int32_t liBrightness);                                            // 0x823B4280 (h:111, W)
+        int32_t GetBrightness() const;                                                          // 0x823FB970 (h:110, R)
+        void    SetContrast(int32_t liContrast);                                                // 0x823B4328 (h:114, W)
+        int32_t GetContrast() const;                                                            // 0x823FBA18 (h:113, R)
+
+        // ---- calibration texture / post-fx / stall / disk-error --------------------------
+        void                          SetCalibrationTextureHandle(CgsResource::ResourceHandle lhCalibrationTextureHandle); // 0x823B4480 (h:120, W)
+        CgsResource::ResourceHandle   GetCalibrationTextureHandle() const;                      // 0x823FBB70 (h:119, R)
+        void SetCalibrationUnfriendlyEnablePostFx(bool lbEnablePostFx);                         // 0x823B43D0 (h:117, W)
+        bool GetCalibrationUnfriendlyEnablePostFx() const;                                      // 0x823FBAC0 (h:116, R)
+        void SetIsStalled(bool bIsStalled);                                                     // 0x823B4530 (h:123, W)
+        bool GetIsStalled() const;                                                              // 0x823FBC30 (h:122, R)
+        void SetIsDiskError(bool lbIsDiskError);                                                // 0x823B45E0 (h:131, W)
+
+        // ---- snapshot request ------------------------------------------------------------
+        SnapShotRequest* GetSnapShotRequest();                                                  // 0x823B4690 (h:134, W)
 
     private:
         // Members in DWARF declaration order. With the committed CgsModule::IOBuffer base (a single
         // 1-byte FlagSet8 status field, padded to 4), mxRendererFlags lands at +4, miBrightness at
         // +8, miContrast at +12, and mParticleData at +16 -- matching the asm's `return a1 + 16`
-        // (= &mParticleData). FLAG: semantic parity; the +16 offset is implied by the base size,
-        // not asserted byte-exactly here.
-        uint32_t mxRendererFlags;                                       // DWARF h:191
-        int32_t  miBrightness;                                          // DWARF h:192
-        int32_t  miContrast;                                            // DWARF h:193
-        BrnParticle::ParticleModule::DispatchThreadUpdateData mParticleData;  // DWARF h:194
+        // (= &mParticleData). FLAG: semantic parity; the trailing X360 offsets (h:195 +0x38A0,
+        // h:196 +0x3B00, h:197 +0x5980, +0x9994.., +0x999C) are implied by the (unknown) member
+        // sizes, not asserted byte-exactly here (the opaque models are NOT the true sizes).
+        uint32_t mxRendererFlags;                                       // DWARF h:191  (X360 +4)
+        int32_t  miBrightness;                                          // DWARF h:192  (X360 +8)
+        int32_t  miContrast;                                            // DWARF h:193  (X360 +12)
+        BrnParticle::ParticleModule::DispatchThreadUpdateData mParticleData;             // DWARF h:194  (X360 +16)
+        BrnParticle::ParticleModule::ParticleRenderData       mParticleRenderData;       // DWARF h:195  (X360 +0x38A0)
+        BrnEffects::BrnCrashTriangleCache                     mBufferCrashTriangleCache; // DWARF h:196  (X360 +0x3B00)
+        CappedInterThreadEventQueue                           mParticleInterThreadEventQueue; // DWARF h:197  (X360 +0x5980)
+        CgsResource::ResourceHandle mhCalibrationTextureHandle;         // X360 +0x9994 (8 bytes)
+        SnapShotRequest             mSnapShotRequest;                   // X360 +0x999C
+        bool mbCalibrationUnfriendlyEnablePostFx;                       // X360 +0x99BB
+        bool mbIsStalled;                                               // X360 +0x99BC (h:212)
+        bool mbIsDiskError;                                             // X360 +0x99BD
     };
 }

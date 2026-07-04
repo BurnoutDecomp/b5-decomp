@@ -26,8 +26,11 @@ namespace SceneManagerIO
 
         // @ X360 0x82277810. lwz r11,0(r31) ; cmplwi 0 ; bne -> assert iff *a1==0,
         // then GetTrianglesForCachedObject(*a1, a2) tail-returned (return passed
-        // straight back through r3). Pointer-null guard, no lock-bit test.
-        s32 GetCache(s32 liObjectIndex) const
+        // straight back through r3). Pointer-null guard, no lock-bit test. The X360
+        // ABI returns the forwarded pointer in r3; the return type is the manager's
+        // GetTrianglesForCachedObject return (const Triangle4*), not s32 (an early
+        // Hex-Rays int artifact -- corrected once that manager accessor was homed).
+        const CgsGeometric::Triangle4* GetCache(s32 liObjectIndex) const
         {
             CGS_ASSERT(mpTriangleCacheManager != nullptr, "mpTriangleCacheManager != NULL");
             return mpTriangleCacheManager->GetTrianglesForCachedObject(liObjectIndex);

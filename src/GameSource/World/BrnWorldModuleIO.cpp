@@ -334,4 +334,44 @@ void UpdateInputBuffer::SetActivePaybackAggressor(EActiveRaceCarIndex leAggresso
     meActivePaybackAggressor = leAggressor;
 }
 
+// ---- ADDITIVE GROW (wave33: WorldBridgeInput* consumer-side const getters) ----
+
+// X360 0x827A3708 (:265 R, IDA "UpdateInputBuffer") -- const game-action queue accessor (+147572).
+const GameActionQueue* UpdateInputBuffer::GetGameActionQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mGameActionQueue;
+}
+
+// X360 0x827A3858 (:272 R, IDA "UpdateInputBuffer_") -- const takedown-event queue accessor (+160952).
+const TakedownEventQueue* UpdateInputBuffer::GetTakedownEventQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mTakedownEventQueue;
+}
+
+// X360 0x827A3900 (:276 R, IDA "UpdateInputB") -- const trigger-management-input accessor (+161288).
+const TriggerManagementInputInterface* UpdateInputBuffer::GetTriggerManagementInputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mTriggerManagementInputInterface;
+}
+
+// X360 0x827A3C48 (:294 R, IDA "UpdateInputBuff") -- const race-car race-distance accessor (+317496).
+const RaceCarRaceDistanceInterface* UpdateInputBuffer::GetRaceCarRaceDistanceInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mRaceCarRaceDistanceInterface;
+}
+
+// X360 0x827A3510 (:255 R, IDA "Upda") -- const AI race-route-request-queue accessor (+322240).
+// Returns &mRaceRouteRequestQueue (DWARF member :353 == BrnAI::RouteMapModuleIO::RaceRouteRequestQueue
+// == CgsModule::EventQueue<RaceRouteRequest,1>). Consumed by WorldModule::BridgeInputToAIModule.
+// (Host LLP64 offset differs from X360 +322240; parity is by named member.)
+const UpdateInputBuffer::RaceRouteRequestQueue* UpdateInputBuffer::GetRaceRouteRequestQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mRaceRouteRequestQueue;
+}
+
 }   // namespace BrnWorldIO

@@ -226,6 +226,20 @@ namespace BrnWorldIO
     // ========================================================================
     struct UpdateInputBuffer : public CgsModule::IOBuffer
     {
+        // ---- DWARF typedef spellings (class-local) --------------------------------
+        // :342 mInWorldEventQueue == VariableEventQueue<4096,16> (DWARF :91).
+        typedef CgsModule::VariableEventQueue<KI_WORLD_EVENT_QUEUE_MAX_SIZE, 16> InWorldEventQueue;
+        // :352 mAudioCarDataLoadedQueue == EventQueue<AudioCarDataLoadedEvent,16> (DWARF :173).
+        typedef CgsModule::EventQueue<BrnWorld::RaceCarEntityModuleIO::AudioCarDataLoadedEvent, 16>
+                                                                   AudioCarLoadedDataQueue;
+        // :353 mRaceRouteRequestQueue -- DWARF InputBuffer::RaceRouteRequestQueue aliases the
+        // committed BrnAI::RouteMapModuleIO::RaceRouteRequestQueue (== EventQueue<RaceRouteRequest,1>,
+        // BrnRouteMapModuleIO.h:231).
+        typedef BrnAI::RouteMapModuleIO::RaceRouteRequestQueue     RaceRouteRequestQueue;
+
+        // ---- AI race-route-request queue (consumed by WorldModule::BridgeInputToAIModule) ----
+        const RaceRouteRequestQueue* GetRaceRouteRequestQueue() const;                           // :255 R (0x827A3510, "Upda")
+
         // ---- per-active-race-car colour / paint / contact / select state -----------
         void SetRaceCarColourIndex(EActiveRaceCarIndex leActiveRaceCarIndex, u16 lu16ColourIndex);       // :203 (W store-only)
         void SetRaceCarPaintFinishIndex(EActiveRaceCarIndex leActiveRaceCarIndex, u16 lu16PaintIndex);   // :216 (W store-only)
@@ -263,6 +277,7 @@ namespace BrnWorldIO
         DebugController*       GetDebugController();                                                     // :291 W (0x823B49B0)
 
         // ---- race-car race-distance interface -------------------------------------
+        const RaceCarRaceDistanceInterface* GetRaceCarRaceDistanceInterface() const;                     // :294 R (0x827A3C48, "UpdateInputBuff")
         void                   SetRaceCarRaceDistanceInterface(const RaceCarRaceDistanceInterface*);     // :295 W (0x823B4A58)
 
         // ---- scoring interfaces ---------------------------------------------------
@@ -377,6 +392,7 @@ namespace BrnWorldIO
         TriggerQueryInputInterface   mTriggerQueryInputInterface;   // :339
         BrnNetwork::EPaybackType     meActivePaybackType;           // :340
         EActiveRaceCarIndex          meActivePaybackAggressor;      // :341
+        InWorldEventQueue            mInWorldEventQueue;            // :342  (added: was dropped from frozen layout)
         TrafficNetworkInputInterface mTrafficNetworkInterface;      // :343
         CrashNetworkInputInterface   mCrashNetworkInterface;        // :344
         PlayerVehicleControls        mPlayerVehicleControls;        // :345
@@ -386,6 +402,8 @@ namespace BrnWorldIO
         bool                         mbControllerActive;            // :349
         WorldEntityRequestInterface  mWorldEntityRequestInterface;  // :350
         ReplayStatusInterface        mReplayStatusInterface;        // :351
+        AudioCarLoadedDataQueue      mAudioCarDataLoadedQueue;      // :352  (added: was dropped from frozen layout)
+        RaceRouteRequestQueue        mRaceRouteRequestQueue;        // :353  X360 +322240 (added)
         OnlineScoringInterface       mOnlineScoringInterface;       // :354
 
         // Pin the X360-proven leading-array byte offsets (store-for-store load-bearing).
@@ -507,6 +525,7 @@ namespace BrnWorldIO
         void AppendResourceRequestInterface(const WorldResourceRequestInterface* lpInterface); // :522 W (0x827AD0E8)
 
         // ---- attrib-sys vault request interface ----
+        const AttribSysVaultRequestInterface* GetAttribSysVaultRequestInterface() const;   // :524 R (0x823B5828, "UpdateOutputBuffer")
         AttribSysVaultRequestInterface* GetAttribSysVaultRequestInterface();               // :525 W (0x827BCAD0, "GetA")
 
         // ---- vehicle output interfaces ----
@@ -519,7 +538,9 @@ namespace BrnWorldIO
         void SetDirectorVehicleInputInterface(const DirectorVehicleInputInterface* lpInterface); // :536 W (0x827AD1A0)
 
         // ---- race-car entity / trigger output interfaces ----
+        const RCEntityGlobalOutputInterface* GetRaceCarGlobalOutputInterface() const;      // :538 R (0x823B5AC8, "UpdateO")
         void SetRaceCarGlobalOutputInterface(const RCEntityGlobalOutputInterface* lpInterface);   // :539 W (0x827A4638)
+        const TriggerEntityModuleOutputInterface* GetTriggerEntityOutputInterface() const; // :541 R (0x823B5B70, "UpdateOut")
         void SetTriggerEntityOutputInterface(const TriggerEntityModuleOutputInterface* lpInterface); // :542 W (0x827A46F0)
         void SetActiveRaceCarOutputInterface(const RCEntityActiveRaceCarOutputInterface* lpInterface); // :545 W (0x827A47A8)
         void SetReplayActiveRaceCarOutputInterface(const RCEntityActiveRaceCarOutputInterface* lpInterface); // :548 W (0x827A4860)
@@ -537,6 +558,7 @@ namespace BrnWorldIO
         void SetPlayerVehicleControls(const PlayerVehicleControls* lpControls);            // :558 W (0x827BCB78)
 
         // ---- AI route responses ----
+        const RouteResponseQueue* GetRouteResponseQueue() const;                           // :560 R (0x823B5F60, "Update")
         void AppendRouteResponseQueue(const RouteResponseQueue* lpQueue);                  // :561 W (0x827AA5A0)
 
         // ---- traffic network / sound / director ----
@@ -572,6 +594,7 @@ namespace BrnWorldIO
         void SetWorldEntityStatusInterface(const StatusInterface* lpInterface);            // :592 W (0x827A4BD8)
 
         // ---- sound world load ----
+        const SoundWorldLoadInterface* GetSoundWorldLoadInterface() const;                 // :694 R (0x823B65F0, "Upd")
         void AppendSoundWorldLoadInterface(const SoundWorldLoadInterface* lpInterface);    // :595 W (0x827AA7C8)
 
         // ---- replay requests ----
@@ -579,6 +602,7 @@ namespace BrnWorldIO
         void AppendReplayRequestInterface(const ReplayRequestInterface* lpInterface);      // :598 W (0x827A4CA8)
 
         // ---- prop VFX locators ----
+        const PropVFXLocatorQueue* GetPropVFXLocatorQueue() const;                         // :712 R (0x823B6740, "U")
         void SetPropVFXLocatorQueue(const PropVFXLocatorQueue* lpQueue);                   // :600 W (0x827AA880)
 
         // ---- gui events (own TU: one of the pair is X360 @ 0x823B6890) ----
@@ -587,6 +611,7 @@ namespace BrnWorldIO
 
         // ---- prop physical/update notifications ----
         void AppendPropBecamePhysicalEventQueue(const PropBecamePhysicalEventQueue* lpQueue); // :614 W (0x827AA938)
+        const PropUpdateNotificationQueue* GetPropUpdateNotificationQueue() const;            // :739 R (0x823B6A88, "Up")
         void AppendPropUpdateNotificationQueue(const PropUpdateNotificationQueue* lpQueue);   // :618 W (0x827AA9F0)
 
     private:

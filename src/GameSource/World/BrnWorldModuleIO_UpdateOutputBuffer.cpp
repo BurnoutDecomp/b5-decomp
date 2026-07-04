@@ -447,4 +447,61 @@ void UpdateOutputBuffer::AppendPropUpdateNotificationQueue(const PropUpdateNotif
     mPropUpdateNotificationQueue.Append(*lpQueue);
 }
 
+// ---- ADDITIVE GROW (wave33: consumer-side const read accessors) --------------------------------
+
+// X360 0x823B5828 (:524 R, IDA "UpdateOutputBuffer") -- const attrib-sys vault request accessor
+// (+150832). The read-lock const overload paired with the committed mutable :525 getter (0x827BCAD0).
+// (Slot-mapping corrected by the verifier: this body returns &mAttribSysVaultRequestInterface, not
+// the trigger-entity member.)
+const UpdateOutputBuffer::AttribSysVaultRequestInterface* UpdateOutputBuffer::GetAttribSysVaultRequestInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mAttribSysVaultRequestInterface;
+}
+
+// X360 0x823B5AC8 (:538 R, IDA "UpdateO") -- const global race-car output accessor (+52672).
+const UpdateOutputBuffer::RCEntityGlobalOutputInterface* UpdateOutputBuffer::GetRaceCarGlobalOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mRaceCarGlobalOutputInterface;
+}
+
+// X360 0x823B5B70 (:541 R, IDA "UpdateOut") -- const trigger-entity output accessor (+50816). The
+// mutable-side operation for this member is the committed Set (:542 W, 0x827A46F0); this is the
+// const read accessor. (Slot-mapping corrected by the verifier: this body returns
+// &mTriggerEntityOutputInterface, not the attrib-sys member.)
+const UpdateOutputBuffer::TriggerEntityModuleOutputInterface* UpdateOutputBuffer::GetTriggerEntityOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mTriggerEntityOutputInterface;
+}
+
+// X360 0x823B5F60 (:560 R, IDA "Update") -- const AI route-response queue accessor (+60440).
+const UpdateOutputBuffer::RouteResponseQueue* UpdateOutputBuffer::GetRouteResponseQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mRouteResponseQueue;
+}
+
+// X360 0x823B65F0 (:694 R, IDA "Upd") -- const sound-world-load-interface accessor (+169096).
+const UpdateOutputBuffer::SoundWorldLoadInterface* UpdateOutputBuffer::GetSoundWorldLoadInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mSoundWorldLoadInterface;
+}
+
+// X360 0x823B6740 (:712 R, IDA "U") -- const prop-VFX-locator-queue accessor (+169360).
+const UpdateOutputBuffer::PropVFXLocatorQueue* UpdateOutputBuffer::GetPropVFXLocatorQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mPropVFXLocatorQueue;
+}
+
+// X360 0x823B6A88 (:739 R, IDA "Up") -- const prop-update-notification-queue accessor (+203296).
+const UpdateOutputBuffer::PropUpdateNotificationQueue* UpdateOutputBuffer::GetPropUpdateNotificationQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mPropUpdateNotificationQueue;
+}
+
 }   // namespace BrnWorldIO
