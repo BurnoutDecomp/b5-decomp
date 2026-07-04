@@ -8,48 +8,64 @@
 // fog parameters the world + sky shaders read. BrnRendererModule double-buffers a pair of
 // these (maShaderConstantsFrames[2]). Reconstructed from the DecFIGS DWARF
 // (BrnShaderConstantsFrame.{h,cpp}); layout is console-faithful.
+//
+// Lock discipline: the frame is filled while write-locked (mbLockedForWriting, this+0x31C)
+// and read only once finalized. The X360 guards each accessor it emitted OUT-OF-LINE with a
+// lock assert -- getters assert the frame is NOT write-locked ("false == mbLockedForWriting");
+// setters assert it IS ("true == mbLockedForWriting"). Those accessors are declared here and
+// bodied in BrnShaderConstantsFrame.cpp. The remaining accessors were fully inlined at their
+// call sites (no standalone symbol) and are kept as trivial inline members below.
 struct BrnShaderConstantsFrame
 {
+    BrnShaderConstantsFrame() = default;
+    // X360 0x823FC338: compiler-emitted copy constructor (address-taken by
+    // BrnRendererModule::Render's frame swap). The console body is a memberwise byte copy of
+    // the whole object 0x000..0x31C -- exactly the defaulted copy constructor.
+    BrnShaderConstantsFrame(const BrnShaderConstantsFrame&) = default;
+
     void Construct();
 
-    void           SetViewProjectionMatrix(Matrix44 lMatrix)            { mViewProjection = lMatrix; }
-    Matrix44       GetViewProjectionMatrix() const                      { return mViewProjection; }
-    void           SetEnvMapViewProjectionMatrix(BrnGraphics::EEnvironmentMapFace leFace, Matrix44 lMatrix) { maEnvMapViewProjectionMatrices[leFace] = lMatrix; }
-    Matrix44       GetEnvMapViewProjectionMatrix(BrnGraphics::EEnvironmentMapFace leFace) const             { return maEnvMapViewProjectionMatrices[leFace]; }
+    // ---- accessors the console emitted out-of-line (lock-asserted; bodies in .cpp) --------
+    void           SetViewProjectionMatrix(Matrix44 lMatrix);                                              // X360 0x827B0018
+    Matrix44       GetViewProjectionMatrix() const;                                                        // X360 0x823F4980
+    void           SetEnvMapViewProjectionMatrix(BrnGraphics::EEnvironmentMapFace leFace, Matrix44 lMatrix); // X360 0x827B00A8
+    Matrix44       GetEnvMapViewProjectionMatrix(BrnGraphics::EEnvironmentMapFace leFace) const;            // X360 0x823F4A10
+    void           SetCameraTransform(Matrix44Affine lM);                                                  // X360 0x827B0158
+    void           SetEnvMapViewPosition(Vector3 lV);                                                      // X360 0x827B01E8
+    Vector3        GetEnvMapViewPosition() const;                                                          // X360 0x823F4B30
+    Vector3        GetViewPosition() const;                                                                // X360 0x823F4AC0
+    Vector3        GetKeyLightDirection() const;                                                           // X360 0x823F4BA0
+    Vector3        GetKeyLightColour() const;                                                              // X360 0x823F4C10
+    Vector4        GetTopColourDrk() const;                                                                // X360 0x823F4FE8
+    Vector4        GetHorColourPow() const;                                                                // X360 0x823F5058
+    Vector4        GetSunColourPow() const;                                                                // X360 0x823F50C8
+    Vector3        GetHorBleedSclPow() const;                                                              // X360 0x823F5138
+    Vector4        GetFogScattering() const;                                                               // X360 0x823F4F20
+    Vector4        GetCloudDarkColour0() const;                                                            // X360 0x823F4C80
+    Vector4        GetCloudLiteColour0() const;                                                            // X360 0x823F4CF0
+    Vector4        GetCloudTextureScaleAndOffsets0() const;                                                // X360 0x823F4D60
+    Vector4        GetCloudLayerDensity() const;                                                           // X360 0x823F4DD0
+    Vector4        GetCloudLayerInvFeather() const;                                                        // X360 0x823F4E40
+    Vector4        GetCloudLayerOpacity() const;                                                           // X360 0x823F4EB0
+    f32            GetCloudDistanceCurve() const;                                                          // X360 0x823F4F90
+
+    // ---- accessors fully inlined on the console (trivial; no lock symbol survives) ---------
     void           SetViewPosition(Vector3 lV)                          { mViewPosition = lV; }
-    Vector3        GetViewPosition() const                             { return mViewPosition; }
-    void           SetCameraTransform(Matrix44Affine lM)               { mCameraTransform = lM; }
     Matrix44Affine GetCameraTransform() const                         { return mCameraTransform; }
-    void           SetEnvMapViewPosition(Vector3 lV)                   { mEnvMapViewPosition = lV; }
-    Vector3        GetEnvMapViewPosition() const                       { return mEnvMapViewPosition; }
     void           SetKeyLightDirection(Vector3 lV)                    { mKeyLightDirection = lV; }
-    Vector3        GetKeyLightDirection() const                        { return mKeyLightDirection; }
     void           SetKeyLightColour(Vector3 lV)                       { mKeyLightColour = lV; }
-    Vector3        GetKeyLightColour() const                           { return mKeyLightColour; }
-    Vector4        GetTopColourDrk() const                             { return mTopColourDrk; }
-    Vector4        GetHorColourPow() const                             { return mHorColourPow; }
-    Vector4        GetSunColourPow() const                             { return mSunColourPow; }
-    Vector3        GetHorBleedSclPow() const                           { return mHorBleedSclPow; }
     void           SetTopColourDrk(Vector4 lV)                         { mTopColourDrk = lV; }
     void           SetHorColourPow(Vector4 lV)                         { mHorColourPow = lV; }
     void           SetSunColourPow(Vector4 lV)                         { mSunColourPow = lV; }
     void           SetHorBleedSclPow(Vector3 lV)                       { mHorBleedSclPow = lV; }
     void           SetFogScattering(Vector4 lV)                        { mFogScattering = lV; }
-    Vector4        GetFogScattering() const                           { return mFogScattering; }
     void           SetCloudDarkColour0(Vector4 lV)                    { mCloudDarkColour0 = lV; }
-    Vector4        GetCloudDarkColour0() const                        { return mCloudDarkColour0; }
     void           SetCloudLiteColour0(Vector4 lV)                    { mCloudLiteColour0 = lV; }
-    Vector4        GetCloudLiteColour0() const                        { return mCloudLiteColour0; }
     void           SetCloudTextureScaleAndOffsets0(Vector4 lV)        { mCloudTextureScaleAndOffsets0 = lV; }
-    Vector4        GetCloudTextureScaleAndOffsets0() const            { return mCloudTextureScaleAndOffsets0; }
     void           SetCloudLayerDensity(Vector4 lV)                   { mCloudLayerDensity = lV; }
-    Vector4        GetCloudLayerDensity() const                       { return mCloudLayerDensity; }
     void           SetCloudLayerInvFeather(Vector4 lV)               { mCloudLayerInvFeather = lV; }
-    Vector4        GetCloudLayerInvFeather() const                    { return mCloudLayerInvFeather; }
     void           SetCloudLayerOpacity(Vector4 lV)                   { mCloudLayerOpacity = lV; }
-    Vector4        GetCloudLayerOpacity() const                       { return mCloudLayerOpacity; }
     void           SetCloudDistanceCurve(f32 lf)                      { mfCloudDistanceCurve = lf; }
-    f32            GetCloudDistanceCurve() const                      { return mfCloudDistanceCurve; }
     void           SetGameTime(f32 lf)                                { mGameTime = lf; }
     f32            GetGameTime() const                                { return mGameTime; }
     void           SetWhiteLevel(f32 lf)                              { mfWhiteLevel = lf; }
@@ -58,28 +74,28 @@ struct BrnShaderConstantsFrame
     void           SetUnbiasedKeyLightDirection(Vector3 lV)           { mUnbiasedKeyLightDirection = lV; }
 
 private:
-    Matrix44       mViewProjection;
-    Vector3        mViewPosition;
-    Matrix44Affine mCameraTransform;
-    Matrix44       maEnvMapViewProjectionMatrices[6];
-    Vector3        mEnvMapViewPosition;
-    Vector3        mKeyLightDirection;
-    Vector3        mKeyLightColour;
-    Vector4        mCloudLayerRadii;
-    Vector4        mCloudDarkColour0;
-    Vector4        mCloudLiteColour0;
-    Vector4        mCloudTextureScaleAndOffsets0;
-    Vector4        mCloudLayerDensity;
-    Vector4        mCloudLayerInvFeather;
-    Vector4        mCloudLayerOpacity;
-    Vector4        mTopColourDrk;
-    Vector4        mHorColourPow;
-    Vector4        mSunColourPow;
-    Vector3        mHorBleedSclPow;
-    Vector4        mFogScattering;
-    Vector3        mUnbiasedKeyLightDirection;
-    f32            mfCloudDistanceCurve;
-    f32            mGameTime;
-    f32            mfWhiteLevel;
-    bool volatile  mbLockedForWriting;
+    Matrix44       mViewProjection;                        // @0x000
+    Vector3        mViewPosition;                          // @0x040
+    Matrix44Affine mCameraTransform;                       // @0x050 (4x16 = 64 bytes)
+    Matrix44       maEnvMapViewProjectionMatrices[6];      // @0x090 (stride 64)
+    Vector3        mEnvMapViewPosition;                    // @0x210
+    Vector3        mKeyLightDirection;                     // @0x220
+    Vector3        mKeyLightColour;                        // @0x230
+    Vector4        mCloudLayerRadii;                       // @0x240
+    Vector4        mCloudDarkColour0;                      // @0x250
+    Vector4        mCloudLiteColour0;                      // @0x260
+    Vector4        mCloudTextureScaleAndOffsets0;          // @0x270
+    Vector4        mCloudLayerDensity;                     // @0x280
+    Vector4        mCloudLayerInvFeather;                  // @0x290
+    Vector4        mCloudLayerOpacity;                     // @0x2A0
+    Vector4        mTopColourDrk;                          // @0x2B0
+    Vector4        mHorColourPow;                          // @0x2C0
+    Vector4        mSunColourPow;                          // @0x2D0
+    Vector3        mHorBleedSclPow;                        // @0x2E0
+    Vector4        mFogScattering;                         // @0x2F0
+    Vector3        mUnbiasedKeyLightDirection;             // @0x300
+    f32            mfCloudDistanceCurve;                   // @0x310
+    f32            mGameTime;                              // @0x314
+    f32            mfWhiteLevel;                           // @0x318
+    bool volatile  mbLockedForWriting;                     // @0x31C
 };
