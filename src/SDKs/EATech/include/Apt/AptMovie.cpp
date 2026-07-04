@@ -147,6 +147,18 @@ namespace
     inline void     CmdSetI32(void* pRec, int nOff, int32_t v) { *reinterpret_cast<int32_t*>(reinterpret_cast<char*>(pRec) + nOff) = v; }
     inline void*    CmdPtr(void* pRec, int nOff)  { return *reinterpret_cast<void**>(reinterpret_cast<char*>(pRec) + nOff); }
     inline float    CmdF32(void* pRec, int nOff)  { return *reinterpret_cast<float*>(reinterpret_cast<char*>(pRec) + nOff); }
+
+    // TRANSITION-ERA dual-format payload read (FLAG): real native-8 (XB1-verified)
+    // carries the tag-4 depth / tag-5 payload at cmd+8 with cmd+4 the tag PAD
+    // (always 0); the retired apt_convert bundles carried it at cmd+4 (nonzero --
+    // authored depths are >= 1). Both GUIAPT sets are still in circulation while
+    // the import-EXPORT resolution lands, so discriminate on the +4 word. Remove
+    // this (fixed +8) when the converter set is finally retired.
+    inline int32_t  CmdPayloadI32(void* pRec)
+    {
+        const int32_t nAt4 = CmdI32(pRec, 0x04);
+        return (nAt4 != 0) ? nAt4 : CmdI32(pRec, 0x08);
+    }
 }
 
 
@@ -294,7 +306,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                 pNode = new (pBlock) AptPseudoCIH_t(
                             reinterpret_cast<AptCharacterInfo_t*>(pCmd),
                             static_cast<short>(nFrame),                // a3 (r5) = nFrame -> li16CharacterId
-                            reinterpret_cast<void*>(static_cast<intptr_t>(CmdI32(pCmd, 0x08))),  // a4 (r6) = the removed DEPTH (native-8 payload @cmd+8)
+                            reinterpret_cast<void*>(static_cast<intptr_t>(CmdPayloadI32(pCmd))),  // a4 (r6) = the removed DEPTH (dual-format; native-8 @cmd+8)
                             nullptr);                                   // r7 = 0
             }
             pPseudoList->Insert(pNode);   // real member
@@ -450,9 +462,9 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
             else if (eTag == 4)
             {
                 // remove: drop the node at the command's depth (sub_82AFD150; XB1 inlines
-                // the same walk). Native-8 payload @cmd+8 (XB1 asm `mov r8d,[rbx+8]`;
-                // cmd+4 is the tag pad -- the converter-era +4 read is retired).
-                AptMovie_RemoveCommand(pDisplayList, CmdI32(pCmd, 0x08));
+                // the same walk). Native-8 payload @cmd+8 (XB1 asm `mov r8d,[rbx+8]`);
+                // dual-format read while converter-era bundles are still staged.
+                AptMovie_RemoveCommand(pDisplayList, CmdPayloadI32(pCmd));
             }
             else if (eTag == 5 && !gbAptBackToScriptFired)
             {
@@ -1056,7 +1068,10 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
                     {
                         void* const pClip = reinterpret_cast<void*>(luClip);
                         const int32_t nRecs = CmdI32(pClip, 0x00);
-                        const uintptr_t luRecs = reloc64(pClip, 0x08);   // record-array ptr @block+0x08 (XB1/native-8)
+                        // record-array ptr @block+0x08 on XB1/native-8 (+4 = pad 0);
+                        // @block+0x04 (nonzero) on the converter-era bundles.
+                        const uintptr_t luRecs = (CmdI32(pClip, 0x04) != 0)
+                            ? reloc64(pClip, 0x04) : reloc64(pClip, 0x08);
                         if (luRecs != 0 && inRes(luRecs) && nRecs > 0 && nRecs <= 0x1000)
                         {
                             for (int32_t k = 0; k < nRecs; ++k)

@@ -31,6 +31,7 @@
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
+#include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
 
 namespace CgsResource
 {
@@ -147,4 +148,18 @@ namespace TestBed
     void Allocator::Header::SanityCheck(History& /*lrHistory*/, const char* /*lpcAllocatorName*/) {}
     void Allocator::Header::Dump(History& /*lrHistory*/) {}
 }
+}
+
+namespace CgsNetwork
+{
+    // Link stub for the float de-quantiser the wave-40 CgsSmartBitStream TU names
+    // (GetQuantisedFloat -> UnPack @0x8264AFA0's callee family). The real body is its
+    // own recon slice; NOT exercised on the boot path (no packet streams run at the
+    // title). Inert fallback: reconstruct as the range minimum. FLAG.
+    void FloatQuantiser::UnPack(float* lpfValue, float lfMin, float /*lfMax*/,
+                                s32 /*liNumBits*/, u32 /*luPackedValue*/)
+    {
+        if (lpfValue != 0)
+            *lpfValue = lfMin;
+    }
 }
