@@ -97,6 +97,10 @@ namespace BrnTrafficIO
         // asm: assert(mu16EntityCount < KU_MAX_ENTITIES); return mu16EntityCount;
         u16 GetTrafficEntityCount() const;
 
+        // X360 0x823A7F18 -- copy-assignment. Copies mu16EntityCount then whole-copies all
+        // KU_MAX_ENTITIES TrafficSoundEntity records. Callers: BrnSound / BrnWorldIO output-buffer setters.
+        TrafficSoundOutputInterface& operator=(const TrafficSoundOutputInterface& lrSource);
+
         u16                mu16EntityCount;                       // :138  +0x00
         TrafficSoundEntity maActiveEntityList[KU_MAX_ENTITIES];   // :139  +0x10
     };

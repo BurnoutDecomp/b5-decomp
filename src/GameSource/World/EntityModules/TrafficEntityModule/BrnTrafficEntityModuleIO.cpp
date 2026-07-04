@@ -30,42 +30,88 @@ namespace BrnTrafficIO
 
     // ========================================================================
     // OutputBuffer_PostPhysics handle accessors (reconstructed from BURNOUT_X360_ARTIST.XEX).
-    // Each tests the lock state then returns the member's pinned address. The return offsets
-    // (+8 / +834784 / +834828) are the load-bearing facts -- pinned here so offsetof can see the
-    // private members.
+    // Each tests the lock state (read = bit 4, write = bit 3) then returns the member's pinned
+    // address. Member offsets are pinned by the header's opaque pad spans (not static_asserts:
+    // the SharedIO TrafficSoundOutputInterface @+3632 widens on the 64-bit host). The rodata lock
+    // messages carry the verbatim trailing "\n".
+    // ========================================================================
     void OutputBuffer_PostPhysics::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_PostPhysics, mInterfaceAt8)      == 8,      "mInterfaceAt8 @8");
-        static_assert(offsetof(OutputBuffer_PostPhysics, mInterfaceAt834784) == 834784, "mInterfaceAt834784 @834784");
-        static_assert(offsetof(OutputBuffer_PostPhysics, mInterfaceAt834828) == 834828, "mInterfaceAt834828 @834828");
+        // Offsets pinned by the header pad spans (host-widening members forbid offsetof asserts).
     }
 
-    // X360 0x82711A48 (asm-line 392): write-lock; return this + 8.
-    OutputBuffer_PostPhysics::InterfaceAt8Storage* OutputBuffer_PostPhysics::GetWriteInterfaceAt8()
+    // X360 0x827A0830 (:387): read-lock; return &mCrashTrafficInputInterface (this + 8).
+    const OutputBuffer_PostPhysics::CrashTrafficInputInterface* OutputBuffer_PostPhysics::GetCrashTrafficInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return &mInterfaceAt8;
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mCrashTrafficInputInterface;
     }
 
-    // X360 0x82711D90 (asm-line 407): write-lock; return this + 834784.
-    OutputBuffer_PostPhysics::InterfaceAt834784Storage* OutputBuffer_PostPhysics::GetWriteInterfaceAt834784()
+    // X360 0x82711A48 (:392): write-lock; return &mCrashTrafficInputInterface (this + 8).
+    OutputBuffer_PostPhysics::CrashTrafficInputInterface* OutputBuffer_PostPhysics::GetCrashTrafficInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return &mInterfaceAt834784;
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mCrashTrafficInputInterface;
     }
 
-    // X360 0x827A0E18 (asm-line 418): read-lock; return this + 834828.
-    const OutputBuffer_PostPhysics::InterfaceAt834828Storage* OutputBuffer_PostPhysics::GetReadInterfaceAt834828() const
+    // X360 0x827A0980 (:391, wave35 reconciliation -- const read overload of the +3632 member):
+    // read-lock; return &mTrafficSoundOutputInterface (this + 3632).
+    const TrafficSoundOutputInterface* OutputBuffer_PostPhysics::GetTrafficSoundOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return &mInterfaceAt834828;
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mTrafficSoundOutputInterface;
     }
 
-    // X360 0x82712030 (asm-line 419): write-lock; return this + 834828.
-    OutputBuffer_PostPhysics::InterfaceAt834828Storage* OutputBuffer_PostPhysics::GetWriteInterfaceAt834828()
+    // X360 0x82711B98 (:394): write-lock; return &mTrafficSoundOutputInterface (this + 3632).
+    // Producer: BrnTraffic::TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults.
+    TrafficSoundOutputInterface* OutputBuffer_PostPhysics::GetTrafficSoundOutputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return &mInterfaceAt834828;
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mTrafficSoundOutputInterface;
+    }
+
+    // X360 0x827A0A28 (:399): read-lock; return &mGameEventQueue (this + 9824).
+    const OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mGameEventQueue;
+    }
+
+    // X360 0x82711CE8 (:400): write-lock; return &mGameEventQueue (this + 9824).
+    // Producers: BrnTraffic::TrafficEntityModule::HandleExternalRequests / ::PostPhysicsUpdate.
+    OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mGameEventQueue;
+    }
+
+    // X360 0x827A0B78 (:402): read-lock; return &mSceneInputInterface (this + 834784). The stored
+    // member is a 44B opaque span; the getter reinterpret_casts it to the DWARF pointer type.
+    const OutputBuffer_PostPhysics::SceneInputInterface* OutputBuffer_PostPhysics::GetSceneInputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return reinterpret_cast<const SceneInputInterface*>(&mSceneInputInterface);
+    }
+
+    // X360 0x82711D90 (:407): write-lock; return &mSceneInputInterface (this + 834784).
+    OutputBuffer_PostPhysics::SceneInputInterfaceStorage* OutputBuffer_PostPhysics::GetWriteSceneInputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mSceneInputInterface;
+    }
+
+    // X360 0x827A0E18 (:418): read-lock; return &mTrafficTypeResponseFactory (this + 834828).
+    const OutputBuffer_PostPhysics::TrafficTypeResponseFactory* OutputBuffer_PostPhysics::GetReadTrafficTypeResponseFactory() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mTrafficTypeResponseFactory;
+    }
+
+    // X360 0x82712030 (:419): write-lock; return &mTrafficTypeResponseFactory (this + 834828).
+    OutputBuffer_PostPhysics::TrafficTypeResponseFactory* OutputBuffer_PostPhysics::GetWriteTrafficTypeResponseFactory()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mTrafficTypeResponseFactory;
     }
 
     // ========================================================================
@@ -244,6 +290,162 @@ namespace BrnTrafficIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         mPlayerResetInterface = *lpPlayerResetInterface;
+    }
+
+    // X360 0x827113B8 (:289): read-lock; return &mPropToTrafficInterface (this+199776).
+    const InputBuffer_PrePhysics::PropToTrafficInterface* InputBuffer_PrePhysics::GetPropToTrafficInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mPropToTrafficInterface;
+    }
+
+    // X360 0x827A02D0 (:290): write-lock; return &mPropToTrafficInterface (this+199776).
+    InputBuffer_PrePhysics::PropToTrafficInterface* InputBuffer_PrePhysics::GetPropToTrafficInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mPropToTrafficInterface;
+    }
+
+    // ========================================================================
+    // OutputBuffer_PostScene extra accessors (wave35): the non-const scene coarse-query queue
+    // (0x82711118) and the const traffic-AI interface (0x827A0008). The committed non-const
+    // GetTrafficAIInterface / Construct live above; these grow the same buffer.
+    // ========================================================================
+
+    // X360 0x82711118: write-lock; return &mSceneCoarseQueryQueue (this + 4, first member).
+    OutputBuffer_PostScene::SceneCoarseQueryQueue* OutputBuffer_PostScene::GetSceneCoarseQueryQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mSceneCoarseQueryQueue;
+    }
+
+    // X360 0x827A0008 (:255): read-lock; return &mTrafficAIInterface (this + 16416).
+    const TrafficAIInterface* OutputBuffer_PostScene::GetTrafficAIInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mTrafficAIInterface;
+    }
+
+    // ========================================================================
+    // OutputBuffer_PreScene accessors (wave35 new home).
+    // ========================================================================
+    void OutputBuffer_PreScene::_AssertLayout()
+    {
+        static_assert(offsetof(OutputBuffer_PreScene, mTrafficToRaceCarInterface_PreScene) == 63424,
+                      "mTrafficToRaceCarInterface_PreScene @63424");
+        static_assert(offsetof(OutputBuffer_PreScene, mTriggerManagementInputInterface) == 818784,
+                      "mTriggerManagementInputInterface @818784");
+    }
+
+    // X360 0x827A00B0 (:185): read-lock; return &mTrafficToRaceCarInterface_PreScene (this+63424).
+    const OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene*
+    OutputBuffer_PreScene::GetTrafficToRaceCarInterface_PreScene() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mTrafficToRaceCarInterface_PreScene;
+    }
+
+    // X360 0x827BB090 (DWARF const read overload of the +818784 member; the [pass] verifier also
+    // homed this accessor on the OutputBuffer buffer below): read-lock; return the member (this+818784).
+    const OutputBuffer_PreScene::TriggerManagementInputInterface*
+    OutputBuffer_PreScene::GetTriggerManagementInputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mTriggerManagementInputInterface;
+    }
+
+    // X360 0x82710DD0 (:208): write-lock; return &mTriggerManagementInputInterface (this+818784).
+    OutputBuffer_PreScene::TriggerManagementInputInterface*
+    OutputBuffer_PreScene::GetTriggerManagementInputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mTriggerManagementInputInterface;
+    }
+
+    // ========================================================================
+    // OutputBuffer accessors (wave35 new home; DWARF-scope-attested buffer, offset-role members).
+    // ========================================================================
+    void OutputBuffer::_AssertLayout()
+    {
+        static_assert(offsetof(OutputBuffer, mInterfaceAt818784) == 818784, "mInterfaceAt818784 @818784");
+        static_assert(offsetof(OutputBuffer, mInterfaceAt819328) == 819328, "mInterfaceAt819328 @819328");
+    }
+
+    // X360 0x827BB090: read-lock; return the member at this+818784. Caller WorldModule::Update.
+    const OutputBuffer::InterfaceAt818784Storage* OutputBuffer::GetReadInterfaceAt818784() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mInterfaceAt818784;
+    }
+
+    // X360 0x82710E78: write-lock; return the DISTINCT member at this+819328 (818784 + 544).
+    // Caller BrnTraffic::TrafficEntityModule::ManageTriggers.
+    OutputBuffer::InterfaceAt819328Storage* OutputBuffer::GetWriteInterfaceAt819328()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mInterfaceAt819328;
+    }
+
+    // ========================================================================
+    // OutputBuffer_Prepare accessors (wave35 new home).
+    // ========================================================================
+    void OutputBuffer_Prepare::_AssertLayout()
+    {
+        static_assert(offsetof(OutputBuffer_Prepare, mSceneInputInterface) == 16,
+                      "mSceneInputInterface @16");
+        static_assert(offsetof(OutputBuffer_Prepare, mResourceRequestInterface) == 818784,
+                      "mResourceRequestInterface @818784");
+    }
+
+    // X360 0x8279F988: read-lock; return &mSceneInputInterface (this + 16).
+    const OutputBuffer_Prepare::SceneInputInterface* OutputBuffer_Prepare::GetSceneInputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mSceneInputInterface;
+    }
+
+    // X360 0x827109E0: write-lock; return &mSceneInputInterface (this + 16).
+    OutputBuffer_Prepare::SceneInputInterface* OutputBuffer_Prepare::GetSceneInputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mSceneInputInterface;
+    }
+
+    // X360 0x8279FA30 (:125): read-lock; return &mResourceRequestInterface (this + 818784).
+    const OutputBuffer_Prepare::ResourceRequestInterface* OutputBuffer_Prepare::GetResourceRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mResourceRequestInterface;
+    }
+
+    // X360 0x82710A88 (:130): write-lock; return &mResourceRequestInterface (this + 818784).
+    OutputBuffer_Prepare::ResourceRequestInterface* OutputBuffer_Prepare::GetResourceRequestInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mResourceRequestInterface;
+    }
+
+    // ========================================================================
+    // OutputBuffer_PrePhysics accessors (wave35 new home).
+    // ========================================================================
+    void OutputBuffer_PrePhysics::_AssertLayout()
+    {
+        static_assert(offsetof(OutputBuffer_PrePhysics, mVehicleDriverInterface) == 143984,
+                      "mVehicleDriverInterface @143984");
+    }
+
+    // X360 0x827A04C8 (:326): read-lock; return &mVehicleDriverInterface (this + 143984).
+    const OutputBuffer_PrePhysics::VehicleDriverInputInterface* OutputBuffer_PrePhysics::GetVehicleDriverInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mVehicleDriverInterface;
+    }
+
+    // X360 0x82711508 (:448): write-lock; return &mVehicleDriverInterface (this + 143984).
+    OutputBuffer_PrePhysics::VehicleDriverInputInterface* OutputBuffer_PrePhysics::GetVehicleDriverInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mVehicleDriverInterface;
     }
 }
 }
