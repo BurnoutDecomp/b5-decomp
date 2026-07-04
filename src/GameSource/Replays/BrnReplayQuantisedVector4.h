@@ -40,8 +40,22 @@ namespace BrnReplays
     struct QuantisedVector4Compression;
     namespace QuantisedVector4
     {
+        // @0x8265AB58: quantise lrValue through lpCompression into lpDest.
         void Pack(void* lpDest, const QuantisedVector4Compression* lpCompression,
                   const Vector4& lrValue);
+
+        // @0x8265ACC8: reconstruct the Vector4 from lpSource into lpDest; returns lpDest.
+        //   ABI (store-for-store): r3=lpDest (returned; final stvx128 target),
+        //   r4=lpSource (packed input buffer, fed to BitStream::Prepare),
+        //   r5=lpCompression (bit counts read at 0..3, mMin @+0x10, mMax @+0x20). NOTE the
+        //   argument order is (dest, SOURCE, COMPRESSION) -- source and compression are the
+        //   reverse of Pack's (dest, COMPRESSION, value).
+        void* UnPack(void* lpDest, const void* lpSource,
+                     const QuantisedVector4Compression* lpCompression);
+
+        // @0x82653340: log "Vec: <x> <y> <z> <w>\n" to gpDebugPrint (filtered). The vector is
+        // passed in VMX v1; the Hex-Rays integer args are dead register leftovers.
+        void PrintVector4(const Vector4& lrValue);
     }
 
     struct alignas(16) QuantisedVector4Compression
