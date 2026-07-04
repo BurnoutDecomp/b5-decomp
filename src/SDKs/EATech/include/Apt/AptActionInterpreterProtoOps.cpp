@@ -231,12 +231,12 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction(AptActionInterpreter
     // Patch the interpreter's constant-pool registers (the movie string dictionary)
     // into the record. FLAG: the console writes the interpreter's +0x40 slot into the
     // record's +0x10 field and +0x44 into +0x14; on x64 the dictionary base is an
-    // 8-byte pointer, so it is kept in the pointer-typed mppConstantPool (mpRegisters)
-    // and the count in mnConstantPoolCount (field_40) rather than the literal console
+    // 8-byte pointer, so it is kept in the pointer-typed mppConstantPool (mpConstantPool)
+    // and the count in mnConstantPoolCount (mnConstantPoolCount) rather than the literal console
     // slot order, which would truncate the pointer.
     pByteCode->mppConstantPool     = reinterpret_cast<const char**>(
-                                         reinterpret_cast<uintptr_t>(pInterp->mpRegisters));
-    pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->field_40);
+                                         reinterpret_cast<uintptr_t>(pInterp->mpConstantPool));
+    pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mnConstantPoolCount);
 
     EAStringC name(pByteCode->mpName);   // console InitFromBuffer(&v10, mpName)
 
@@ -279,8 +279,8 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
 
     // Patch the constant-pool registers in (same x64 pointer-width note as v1). FLAG.
     pByteCode->mppConstantPool     = reinterpret_cast<const char**>(
-                                         reinterpret_cast<uintptr_t>(pInterp->mpRegisters));
-    pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->field_40);
+                                         reinterpret_cast<uintptr_t>(pInterp->mpConstantPool));
+    pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mnConstantPoolCount);
 
     void* pMem = AptScriptFunction2::operator new(52);
     AptScriptFunction2* pFunction = pMem
@@ -308,7 +308,7 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
 // DefineDictionary @0x82AD9278 (0x88) -- install the movie's ActionScript string
 // dictionary (constant pool) for the current run: read the (count, base) pair inline
 // from the bytecode (PC, 4-byte aligned), advance the PC past it, and stash the pair
-// in the interpreter's two constant-pool registers (field_40 = count, mpRegisters =
+// in the interpreter's two constant-pool registers (mnConstantPoolCount = count, mpConstantPool =
 // the string-table base) that the Push*StringDict* ops index off.
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionDefineDictionary(AptActionInterpreter* pInterp,
@@ -321,10 +321,10 @@ void AptActionInterpreter::_FunctionAptActionDefineDictionary(AptActionInterpret
         (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPair + 2);
 
-    // field_40 (console +0x40) <- the entry count; mpRegisters (console +0x44) <- the
+    // mnConstantPoolCount (console +0x40) <- the entry count; mpConstantPool (console +0x44) <- the
     // string-table base pointer the dictionary-push ops index. FLAG: on x64 the base
-    // is an 8-byte pointer, so it is held in the pointer-typed mpRegisters slot (the
+    // is an 8-byte pointer, so it is held in the pointer-typed mpConstantPool slot (the
     // console's 32-bit slot widths differ -- access is by member name).
-    pInterp->field_40    = static_cast<uint32_t>(pPair[0]);
-    pInterp->mpRegisters = reinterpret_cast<AptValue**>(pPair[1]);
+    pInterp->mnConstantPoolCount    = static_cast<uint32_t>(pPair[0]);
+    pInterp->mpConstantPool = reinterpret_cast<AptValue**>(pPair[1]);
 }

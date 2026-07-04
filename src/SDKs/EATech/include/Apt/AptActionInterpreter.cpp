@@ -124,15 +124,15 @@ void AptActionInterpreter::stackPopAndPush(int nCount, AptValue* pValue)
 
 // ---------------------------------------------------------------------------
 // stackPushIndirect @0x7ECE34 -- push pValue, first resolving an indirection.
-// A Lookup value (tag 8, defined) reads the interpreter's per-run register window
-// mpRegisters[index]; a Register value (tag 4, defined) reads the AS function
+// A Lookup value (tag 8, defined) reads the interpreter's string-constant dictionary
+// mpConstantPool[index]; a Register value (tag 4, defined) reads the AS function
 // register file via AptScriptFunctionBase::GetRegisterValue(index). The push is
 // the console's inlined stackPush (store/advance/AddRef), reproduced via stackPush.
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 {
     if (pValue->isLookup())            // AptVFT_Lookup (tag 8) && defined
-        pValue = mpRegisters[static_cast<AptLookup*>(pValue)->GetIndex()];
+        pValue = mpConstantPool[static_cast<AptLookup*>(pValue)->GetIndex()];
     else if (pValue->isRegister())     // AptVFT_Register (tag 4) && defined
         pValue = AptScriptFunctionBase::GetRegisterValue(static_cast<AptRegister*>(pValue)->GetIndex());
 
@@ -509,10 +509,11 @@ void AptActionInterpreter::_doEnumerate(AptValue* pScope, AptValue* pTarget)
 // callFunction @0x82AE3C08 -- invoke an AS callable value (function body run /
 // native callback / `new` dispatch) with nArgs operands already on the stack.
 // FLAG: the faithful body drives AptScriptFunctionBase::SetupBeforeExecution /
-// CleanupAfterExecution + runStream over the captured scope, reading the script
-// function's frame-stack + register-window internals (mpCurrentFunction / field_40 /
-// mpRegisters) and the AptScriptFunctionBase vtable execution slots that are not yet
-// reconstructed as named members. Deferred to the call-dispatch helper so this entry
+// CleanupAfterExecution + runStream over the captured scope, saving/restoring the
+// interpreter's current function (mpCurrentFunction) + string-constant-dictionary pair
+// (mnConstantPoolCount / mpConstantPool, which GetConstantPool installs per-function) and
+// driving the AptScriptFunctionBase register/frame machinery. Deferred to the call-dispatch
+// helper (see AptInterp_ExecuteScriptFunction's FLAG for the exact branch + open items) so this entry
 // layer is faithful and links; the operand-stack collapse the console performs around
 // it (Burnout_X360_Artist_01e3_0 == the pop-N primitive) is part of that helper.
 // ---------------------------------------------------------------------------

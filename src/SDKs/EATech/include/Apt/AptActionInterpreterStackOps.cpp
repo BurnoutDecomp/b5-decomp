@@ -56,7 +56,7 @@
 extern AptValue* gpUndefinedValue;
 
 // stackPushIndirect @0x7ECE34 is now a real member (homed in AptActionInterpreter.cpp):
-// it resolves AptVFT_Lookup (via the register window mpRegisters) / AptVFT_Register
+// it resolves AptVFT_Lookup (via the string-constant dictionary mpConstantPool) / AptVFT_Register
 // (via AptScriptFunctionBase::GetRegisterValue) values before pushing. _Push calls the
 // member directly; the old free-function shim (AptRenderLinkStubs.cpp) is retired.
 
@@ -208,12 +208,12 @@ void AptActionInterpreter::_FunctionAptActionPushFloat(AptActionInterpreter* pIn
 //
 // The "StringDictByte"/"Push*String*" families take a single inline byte that
 // indexes the string-constant dictionary the console keeps at interpreter offset
-// +0x44 (the same slot the header names mpRegisters; the dict opcodes reuse it as
+// +0x44 (the same slot the header names mpConstantPool; the dict opcodes reuse it as
 // the AptValue* string-pool array). Each pushes the dictionary entry onto the
 // operand stack -- the inlined store/advance/AddRef sequence the asm emits is
 // exactly stackPush(), reproduced here -- and the fused forms then delegate to the
 // matching variable/member opcode handler. The console indexes the array with byte
-// math (4 * byteIndex); on x64 it is typed element indexing (mpRegisters[byte]),
+// math (4 * byteIndex); on x64 it is typed element indexing (mpConstantPool[byte]),
 // the same entry where the pointers are 8 bytes.
 //
 // The "Push*String*Get/SetVar" forms also pass the entry's embedded EAStringC name
@@ -256,7 +256,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictByte(AptActionInterpr
     const unsigned int nIndex = *pCtx->mpProgramCounter;   // byte dictionary index
     pCtx->mpProgramCounter += 1;
 
-    AptValue* pEntry = pInterp->mpRegisters[nIndex];        // console: *(4*idx + a1[17])
+    AptValue* pEntry = pInterp->mpConstantPool[nIndex];        // console: *(4*idx + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
     pEntry->AddRef();
 }
@@ -273,7 +273,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictWord(AptActionInterpr
     const unsigned int nIndex = p[0] | (static_cast<unsigned int>(p[1]) << 8);   // LE u16 (GUIAPT64/XB1)
     pCtx->mpProgramCounter += 2;
 
-    AptValue* pEntry = pInterp->mpRegisters[nIndex];        // console: *((4*idx & 0x3FFFC) + a1[17])
+    AptValue* pEntry = pInterp->mpConstantPool[nIndex];        // console: *((4*idx & 0x3FFFC) + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
     pEntry->AddRef();
 }
@@ -386,7 +386,7 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetMember(AptActionIn
     const unsigned int nIndex = *pCtx->mpProgramCounter;    // byte dictionary index
     pCtx->mpProgramCounter += 1;
 
-    AptValue* pEntry = pInterp->mpRegisters[nIndex];        // console: *(4*idx + a1[17])
+    AptValue* pEntry = pInterp->mpConstantPool[nIndex];        // console: *(4*idx + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
     pEntry->AddRef();
 
@@ -406,7 +406,7 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInter
     const unsigned int nIndex = *pCtx->mpProgramCounter;    // byte dictionary index
     pCtx->mpProgramCounter += 1;
 
-    AptValue* pEntry = pInterp->mpRegisters[nIndex];        // console: *(4*idx + a1[17])
+    AptValue* pEntry = pInterp->mpConstantPool[nIndex];        // console: *(4*idx + a1[17])
 
     // The asm inlines Get_ToString: type-1 StringValue -> its own EAStringC (+8);
     // else (boxed tag 33) -> the AptString at +0x20, then its EAStringC. Reuse the

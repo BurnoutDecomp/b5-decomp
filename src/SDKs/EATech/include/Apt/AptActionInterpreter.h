@@ -165,9 +165,9 @@ public:
     void       clearThrownValue() { mpAbortValue->Release(); mpAbortValue = 0; }
 
     // stackPushIndirect @0x7ECE34 -- push a value, first resolving an indirection:
-    // an AptVFT_Lookup value (tag 8) indexes the interpreter's per-run register
-    // window (mpRegisters); an AptVFT_Register value (tag 4) indexes the AS function
-    // register file (AptScriptFunctionBase::GetRegisterValue). Anything else pushes
+    // an AptVFT_Lookup value (tag 8) indexes the interpreter's string-constant
+    // dictionary (mpConstantPool); an AptVFT_Register value (tag 4) indexes the AS
+    // function register file (AptScriptFunctionBase::GetRegisterValue). Anything else pushes
     // as-is. The push itself is the inlined stackPush (store/advance/AddRef).
     void       stackPushIndirect(AptValue* pValue);
 
@@ -547,8 +547,15 @@ public:
 
     AptScriptFunctionBase* mpCurrentFunction;  // [c:0x3C] the script function currently executing
                                   // (callFunction sets it; DefineLocal + the scope chain read it)
-    uint32_t   field_40;          // [c:0x40] unmapped (callFunction's saved register-window slot)
-    AptValue** mpRegisters;       // [c:0x44] the per-call register window (stackPushIndirect)
+    // The AS string-constant DICTIONARY (constant pool) for the current run -- NOT a
+    // register window (verified 2026-07-04: DefineDictionary @0x82AD9278 sets these;
+    // the Push*Dict* ops + stackPushIndirect's Lookup path index mpConstantPool[i];
+    // DefineByteCode copies them into AptScriptFunctionByteCodeBlock's mppConstantPool/
+    // mnConstantPoolCount; callFunction's GetConstantPool sets them per-function). The
+    // genuine AS function register file is separate (AptScriptFunctionBase::GetRegister-
+    // Value / spRegBlock*). (Renamed from field_40/mpRegisters "register window".)
+    uint32_t   mnConstantPoolCount; // [c:0x40] dictionary/constant-pool entry count
+    AptValue** mpConstantPool;      // [c:0x44] dictionary/constant-pool base (AptValue* table)
     uint32_t   field_48[6];       // [c:0x48..0x5C] unmapped
     AptValue*  mpAbortValue;      // [c:0x60] the thrown value (null = no abort) -- Throw sets it,
                                   // runStream checks it after each op and unwinds. x64: a pointer

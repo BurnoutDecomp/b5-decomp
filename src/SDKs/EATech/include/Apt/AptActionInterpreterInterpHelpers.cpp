@@ -662,12 +662,12 @@ AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* /*pInterp*/,
 // GetNumArguments stack operands as the call arguments (SetArgument), collapse the
 // args, run the function body (runStream over GetByteCodeBase/Size against the
 // resolved animation context), CleanupAfterExecution, and leave the result on the
-// call-context stack -- restoring the saved mpCurrentFunction / field_40 / mpRegisters.
+// call-context stack -- restoring the saved mpCurrentFunction / mnConstantPoolCount / mpConstantPool.
 //
 // It reads the AptScriptFunctionBase vtable slots the console reaches by raw offset
 // (+0x50/+0x54 setup, +0x44 GetNumArguments, +0x58 SetArgument, +0x48/+0x4C bytecode,
 // +0x5C cleanup) and the interpreter's still-half-mapped per-call window members
-// (field_40 / mpRegisters / the call-context stack #5 at +0x90) which are NOT yet
+// (mnConstantPoolCount / mpConstantPool / the call-context stack #5 at +0x90) which are NOT yet
 // reconstructed as named members -- so this innermost branch is encapsulated here,
 // matching the deferral the AptActionInterpreter.cpp callFunction FLAG documents.
 // Returns the call result value (already on the appropriate stack), or `undefined`.
@@ -697,15 +697,15 @@ AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInter
     AptValue* pResult;
     if (pFunction && pFunction->isNativeFunction())   // tag 9, defined
     {
-        // console: v15 = *(a1+64) (field_40, saved across the native call).
-        const uint32_t nSavedField40 = pInterp->field_40;
+        // console: v15 = *(a1+64) (mnConstantPoolCount, saved across the native call).
+        const uint32_t nSavedField40 = pInterp->mnConstantPoolCount;
         // console: v16 = (*(a3+32))(a2, a4) -- call the wrapped AptExtFunctionPtr.
         typedef AptValue* (*AptExtCall)(AptValue* pThis, int nArgCount);
         AptValue* const pRet = reinterpret_cast<AptExtCall>(
             static_cast<AptNativeFunction*>(pFunction)->GetFunction())(pScope, nArgs);
         // console: AptValue_::PopAndPush(a1, a4, v16) -- collapse the args, push result.
         pInterp->stackPopAndPush(nArgs, pRet);
-        pInterp->field_40 = nSavedField40;   // console *(a1+64) = v15
+        pInterp->mnConstantPoolCount = nSavedField40;   // console *(a1+64) = v15
         pResult = pRet;
     }
     else if (pFunction && pFunction->isScriptFunction())   // tags 34/35/36, defined
@@ -740,37 +740,32 @@ AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInter
 // FLAG (faithful follow-on stub). The console branch is 0x82AE3CB8..0x82AE4050 (inside
 // callFunction @0x82AE3C08); I read the full asm + decoded the AptScriptFunction2 vtable
 // (@0x82145D10) this session. Sequence: save mpCurrentFunction into a local + set it to
-// pFunction; call GetConstantPool (vtable slot 0x50) and install its {entries,count} into
-// the interpreter's [c:0x40]/[c:0x44] pair (saving the prior pair via ld/std); push the
-// scope onto the CIH/target stack; SetupBeforeExecution (slot 0x54) -> GetNumArguments
-// (0x44) -> SetArgument (0x58) binding min(nArgs,GetNumArguments) operands then padding
-// the rest with undefined -> resolve the level-0 root animation (_AptGetAnimationAtLevel)
-// -> runStream(GetByteCodeBase 0x48, GetByteCodeSize 0x4C) -> CleanupAfterExecution (0x5C)
-// -> pop the CIH stack + restore mpCurrentFunction + the saved [c:0x40]/[c:0x44] pair.
+// pFunction; call GetConstantPool (vtable slot 0x50) and install its {count,base} pair
+// into the interpreter's mnConstantPoolCount/mpConstantPool [c:0x40]/[c:0x44] (saving the
+// prior pair via ld/std); push the scope onto the CIH/target stack; SetupBeforeExecution
+// (slot 0x54) -> GetNumArguments (0x44) -> SetArgument (0x58) binding min(nArgs,
+// GetNumArguments) operands then padding the rest with undefined -> resolve the level-0
+// root animation (_AptGetAnimationAtLevel) -> runStream(GetByteCodeBase 0x48, GetByteCode-
+// Size 0x4C) -> CleanupAfterExecution (0x5C) -> pop the CIH stack + restore mpCurrent-
+// Function + the saved constant-pool pair.
 //
-// STILL a stub for TWO reasons (corrected 2026-07-04 -- the prior "no longer blocked,
-// bounded decompilation" note OVERSTATED it):
-//   (1) MEMBER-SEMANTICS DISCREPANCY: interpreter [c:0x40]/[c:0x44] are NOT a register
-//       window -- they are the AS CONSTANT-POOL / STRING-DICTIONARY {count, base} pair.
-//       VERIFIED three ways: DefineDictionary @0x82AD9278 (AptActionInterpreterProtoOps.cpp)
-//       sets [c:0x40]=count, [c:0x44]=table base; stackPushIndirect + the dict-push ops
-//       INDEX [c:0x44][i] as the entries table (so [c:0x44] is the base POINTER, not an
-//       int count); and the callFunction script branch calls GetConstantPool (vtable slot
-//       0x50 -- confirmed in the AptScriptFunction2 vtable @0x82145D10) and stores its two
-//       dwords into [c:0x40]/[c:0x44], saved/restored as an ld/std pair around the call.
-//       So the running DefineDictionary+stackPushIndirect path is self-consistent, but the
-//       members are MIS-NAMED `field_40`/`mpRegisters` ("register window"). CAUTION: the
-//       AptConstantPool struct decl ({mppEntries@0, mnCount@4}) implies the REVERSE field
-//       order to DefineDictionary's {count@0x40, base@0x44}; GetConstantPool returns
-//       {record+0x14, record+0x18} and the exact half->offset mapping must be reconciled
-//       against DefineDictionary (the authoritative running use) BEFORE homing -- do NOT
-//       trust the struct field order. Rename [c:0x40]/[c:0x44] to the constant-pool pair
-//       first.
+// The [c:0x40]/[c:0x44] misnaming that blocked this is now FIXED: they were `field_40`/
+// `mpRegisters` ("register window") but are the AS CONSTANT-POOL / STRING-DICTIONARY
+// {count, base} pair -- renamed to mnConstantPoolCount/mpConstantPool this session
+// (VERIFIED three ways: DefineDictionary @0x82AD9278 sets [c:0x40]=count, [c:0x44]=table
+// base; stackPushIndirect + the dict-push ops index mpConstantPool[i] as the entries
+// table; callFunction's GetConstantPool -- vtable slot 0x50 -- writes both). STILL a stub
+// for TWO reasons:
+//   (1) FIELD ORDER of GetConstantPool's return must be reconciled before homing: the
+//       AptConstantPool struct decl ({mppEntries@0, mnCount@4}) implies the REVERSE order
+//       to DefineDictionary's authoritative {count@0x40, base@0x44}. GetConstantPool
+//       returns {record+0x14, record+0x18}; confirm which half is count vs base against
+//       DefineDictionary and fix AptConstantPool's field order -- do NOT trust the struct.
 //   (2) BOOT-ACTIVE: activating real script-function execution runs AS bytecode paths
 //       deferred for boot-stability (see the AptRuntimeUpdate FLAG) -- decompile + build +
 //       boot-test with revert-on-break, not enabled untested. And boot-green does NOT
-//       validate AS-VM correctness (the title barely calls script functions), so the PS3
-//       cross-check in (1) is the real correctness gate.
+//       validate AS-VM correctness (the title barely calls script functions), so the
+//       asm-level cross-check is the real correctness gate.
 // Until both are resolved it keeps the faithful, VM-consistent contract (so the dispatch
 // above stays correct + the engine links + boots): consume the nArgs operands and yield
 // `undefined` -- exactly the console's own LABEL_37 "uncallable bound CIH" reduction.
