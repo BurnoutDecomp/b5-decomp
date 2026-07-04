@@ -41,6 +41,22 @@ EmitterState::~EmitterState()
     DestroyEffects();
 }
 
+// ---------------------------------------------------------------------------
+// EmitterState::GetTypeName() const  @ 0x82686798
+//
+//   lis/addi r11, sTypeInfo(82F2F83C) ; lwz r3, 4(r11) ; blr
+//
+// Loads sTypeInfo.mpcTypeName (the +0x4 field of this class's static
+// ClassTypeInfo descriptor at 82F2F83C), the interned "EmitterState" type-name
+// literal. Per the committed leaf-GetTypeName convention (GlobalState::GetTypeName
+// @0x82686808 -> `return "GlobalState";`, CollisionStateManager::GetTypeName ->
+// `return "CollisionStateManager";`) the leaf returns that interned literal directly.
+// ---------------------------------------------------------------------------
+const char* EmitterState::GetTypeName() const
+{
+    return "EmitterState";
+}
+
 } // namespace World
 } // namespace Logic
 } // namespace BrnSound

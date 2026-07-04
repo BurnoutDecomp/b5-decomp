@@ -309,3 +309,31 @@ struct ShaderConstantsInternal
     // CgsShaderConstants.h:912
     renderengine::ProgramVariableHandle* mpaProgramStateHandles;  // word 4 (offset 0x10) - per-instance program handles
 };
+
+// CgsShaderConstants.h:1044 (DWARF)
+// The CPU-side ("material animation") constant block. Unlike External/Internal this is
+// name-keyed and carries a back-pointer to the ICPUShader that produced it (nulled by
+// FixUp; only ever stored/relocated, never dereferenced by these functions, so a forward
+// declaration suffices). FixUp relocates the instance-data and name arrays by the load
+// base; GetSizeOf computes the serialised size; GetValue does the linear name lookup;
+// ShouldSerialise gates on a non-zero "AnimDuration" constant.
+class ICPUShader;   // pointer-only member (nulled by FixUp); homed in the shader SDK.
+
+struct ShaderConstantsCPU
+{
+    // CgsShaderConstants.h:1006 / 1028 / 1038 / 1043
+    u32  FixUp(u8* lpBaseData);
+    bool GetValue(const char* lpName, Vector4& lrOutValue) const;
+    u32  GetSizeOf(u32 luCurrentSize) const;
+    bool ShouldSerialise() const;
+
+    // ---- console-faithful member layout (DWARF CgsShaderConstants.h:1047-1050) ----
+    // CgsShaderConstants.h:1047
+    ICPUShader*  mpCPUShader;                 // word 0 (offset 0x00) - producing CPU shader (nulled by FixUp)
+    // CgsShaderConstants.h:1048
+    u32          muNumConstantsInstances;     // word 1 (offset 0x04) - element count
+    // CgsShaderConstants.h:1049
+    u32**        mppaConstantsInstanceData;   // word 2 (offset 0x08) - per-instance data (relocated; each element relocated too)
+    // CgsShaderConstants.h:1050
+    const char** mppacNames;                  // word 3 (offset 0x0C) - name array (relocated; each name relocated too)
+};
