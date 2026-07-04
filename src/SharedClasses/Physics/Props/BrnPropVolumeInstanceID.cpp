@@ -110,4 +110,22 @@ namespace BrnWorld
             (mVolumeInstanceId.muId & 0xFFFFFFFFull)
             | (static_cast<u64>(lEntity.mEntityId.muValue) << KU_ENTITY_ID_BASE);
     }
+
+    // 0x822B7958: operator class CgsSceneManager::VolumeInstanceId(). The asm reads the
+    // owner byte of the embedded entity word (`ld r11,0(r30); srdi r11,r11,32; srwi
+    // r11,r11,24; cmplwi cr6,r11,3; beq`) and fires the volume-level owner tripwire
+    // ("mVolumeInstanceId.GetEntityIDOwner() == E_ENTITYTYPE_PROP", BrnPropEntityID.h:455)
+    // when it is not 3 BEFORE copying, then copies the full packed 64-bit word into the
+    // result (`ld r11,0(r30); std r11,0(r31)`). The tripwire == PropVolumeInstanceID::
+    // AssertIsProp() (same string+line 455 as the committed AssertIsProp, endian-independent
+    // owner read == the asm's high-byte compare); the copy is the whole-word muId assignment.
+    // Direct sibling of PropEntityID::operator EntityId() @0x822B78E8. Called by
+    // BrnWorld::PropZoneManager::UpdateInstance.
+    PropVolumeInstanceID::operator CgsSceneManager::VolumeInstanceId() const
+    {
+        AssertIsProp();
+        CgsSceneManager::VolumeInstanceId lResult;
+        lResult.muId = mVolumeInstanceId.muId;
+        return lResult;
+    }
 }

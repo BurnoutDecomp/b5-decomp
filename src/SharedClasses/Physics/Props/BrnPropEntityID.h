@@ -147,6 +147,13 @@ namespace BrnWorld
         // 0x822B7E50 — splice PropEntityID::SetPartIndex back into the entity word.
         void SetPartIndex(u32 luPartIndex);
 
+        // 0x822B7958 — operator class CgsSceneManager::VolumeInstanceId().
+        // Volume-level owner tripwire (line 455) then whole-word copy of the packed
+        // 64-bit muId into the returned VolumeInstanceId. Called by
+        // BrnWorld::PropZoneManager::UpdateInstance. Direct analog of
+        // PropEntityID::operator EntityId() @0x822B78E8.
+        operator CgsSceneManager::VolumeInstanceId() const;
+
         // Volume-level owner tripwire (baked line 455).
         void AssertIsProp() const;
 
