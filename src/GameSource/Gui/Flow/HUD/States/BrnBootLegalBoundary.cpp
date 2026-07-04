@@ -31,7 +31,10 @@ namespace BootLegalFlag
     void* gpBrnGameModule = nullptr;
 
     // byte_82FFA7F0 -- the DLC "beat the team" enable flag (off by default).
-    u8 gu8BeatTheTeamDlcEnabled = 0u;
+    // PC bring-up (FLAG): default ON so the title's 2-entry selection menu
+    // (DisplaySelectionMenu: $TITLESCREEN_MENU_NORMAL / _BEATTHETEAM) is exercised on
+    // press-start. The console reads this from the DLC/licence state (byte_82FFA7F0).
+    u8 gu8BeatTheTeamDlcEnabled = 1u;
 
     // 0x823C0278 / 0x823C0288 -- a cold boot is neither a soft reboot nor an invite reboot.
     bool HasGameBeenSoftRebooted(void* /*lpModule*/)          { return false; }

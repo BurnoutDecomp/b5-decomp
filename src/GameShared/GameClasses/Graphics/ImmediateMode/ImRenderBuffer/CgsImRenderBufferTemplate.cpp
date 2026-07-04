@@ -892,6 +892,7 @@ namespace CgsGraphics
                 {
                     break;
                 }
+
                 lpDevice->DrawPrimitiveUP(leTopology, luPrimCount, saBatch, sizeof(DispatchScreenVertex));
                 break;
             }
@@ -907,6 +908,7 @@ namespace CgsGraphics
                 break;
             }
         }
+
     }
 
     // -------------------------------------------------------------------------

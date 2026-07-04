@@ -111,12 +111,12 @@ namespace CgsGui
         mVertexTransform.mColourShift.SetZero();
         mVertexTransform.mColourScale.SetZero();
 
-        // Every AptString slot starts FREE (flag != 0 means available). The slot char-pointer
-        // table starts cleared.
+        // Every AptString slot starts FREE (flag != 0 means available). The per-slot text
+        // storage starts empty (x64: inline buffers -- see the header note).
         for (u32 luIndex = 0; luIndex < KU_NUM_APT_STRINGS; ++luIndex)
         {
-            mabUnusedAptStrings[luIndex] = 1;
-            maacAptStringChars[luIndex]  = 0;
+            mabUnusedAptStrings[luIndex]    = 1;
+            maacAptStringChars[luIndex][0]  = 0;
         }
     }
 
@@ -200,8 +200,8 @@ namespace CgsGui
         miNumAlternateColours  = liNumAlternateColours;
         for (u32 luIndex = 0; luIndex < KU_NUM_APT_STRINGS; ++luIndex)
         {
-            mabUnusedAptStrings[luIndex] = 1;
-            maacAptStringChars[luIndex]  = 0;
+            mabUnusedAptStrings[luIndex]    = 1;
+            maacAptStringChars[luIndex][0]  = 0;   // x64: inline per-slot text storage (header note)
         }
 
         // ---- the white fallback texture (guest _R27[32] = mgStateLibrary.mpTexture_White) ----
@@ -505,8 +505,8 @@ namespace CgsGui
             if (mabUnusedAptStrings[luSlot])
             {
                 // Hand back this slot's preallocated char storage + the slot itself, and claim it.
-                *lpcStringPointer = reinterpret_cast<CgsUnicode::CgsUtf8*>(
-                    static_cast<uintptr_t>(maacAptStringChars[luSlot]));
+                // (x64: the storage is the slot's inline 256-byte buffer -- see the header note.)
+                *lpcStringPointer = reinterpret_cast<CgsUnicode::CgsUtf8*>(maacAptStringChars[luSlot]);
                 mabUnusedAptStrings[luSlot] = 0;
                 return &maAptStrings[luSlot];
             }
@@ -527,5 +527,27 @@ namespace CgsGui
                 return;
             }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // ZID <-> pool-slot bridge (x64 render-data handle scheme; see the header note).
+    // The pool array maAptStrings is contiguous, so the ZID is (slotIndex + 1) -- 0 stays
+    // the engine's "unresolved handle" value (AptRenderItemDynamicText::mZID == 0).
+    // -------------------------------------------------------------------------
+    int AptRenderHandler::AptStringToZID(const CgsAptString* lpAptString) const
+    {
+        if (lpAptString == nullptr)
+            return 0;
+        const CgsAptString* lpBase = &maAptStrings[0];
+        if (lpAptString < lpBase || lpAptString >= lpBase + KU_NUM_APT_STRINGS)
+            return 0;
+        return static_cast<int>(lpAptString - lpBase) + 1;
+    }
+
+    CgsAptString* AptRenderHandler::ZIDToAptString(int liZID)
+    {
+        if (liZID <= 0 || static_cast<u32>(liZID) > KU_NUM_APT_STRINGS)
+            return nullptr;
+        return &maAptStrings[static_cast<u32>(liZID) - 1u];
     }
 }

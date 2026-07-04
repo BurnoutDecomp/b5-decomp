@@ -5,6 +5,9 @@
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog
 
+// ---- the Apt text render-data hooks (dynamic-text draw/release) --------------
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"   // AptCallbackRender::DrawString / DeallocateString + AptMaskRenderOperation
+
 // ---- the Apt host adaptor + render handler (the render bridge) --------------
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"          // CgsGui::AptAux / AptAuxPointer
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"// CgsGui::AptImRendererSet / AptIm2dRenderBuffer
@@ -48,6 +51,20 @@
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // AptDisplayListState::mpFirst (the placed-node chain)
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::GetRenderItem/GetDepth (probe)
 #include "SDKs/EATech/include/Apt/AptRenderWalk.h"            // AptRender (the faithful render-tree flush)
+
+// ---- the Apt TEXT system (fonts + glyph batcher + localisation) --------------
+// The PC stand-in for CgsGui::ViewModule's owned text sub-objects (GetFontCollection() /
+// GetTextRenderer() / GetLanguageManager()): the bring-up constructs + loads them itself and
+// hands them to AptAux::Construct so the Apt dynamic-text path lays out + draws visible glyphs.
+#include "GameShared/GameClasses/Gui/View/CgsGuiFontCollection.h"   // CgsGui::FontCollection (typeface set)
+#include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"   // CgsGraphics::TextRenderer (glyph batcher)
+#include "GameShared/GameClasses/Fonts/CgsFont.h"                   // CgsResource::Font (loaded typeface)
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h" // E_RESOURCETYPE_FONT
+#include "GameShared/GameClasses/Language/CgsLanguageManager.h"     // CgsLanguage::LanguageManager
+#include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"            // CgsMemory::HeapMalloc (language allocator)
+#include "pc/gcm/renderengine/device.h"                             // renderengine::gDevice (font atlas gate)
+
+#include <cstdlib>   // malloc (font pool backing, language file block)
 
 
 // The pass-3 import-registration probe sink (declared weak in AptCharacterAnimation.cpp). Logs each
@@ -175,6 +192,39 @@ extern void*              gpAptValueGCPool;        // off_8324D834 (type-erased 
 // The interpreter VM singleton (X360 &dword_8324E760) -- defined in AptGlobals.cpp.
 extern AptActionInterpreter gAptActionInterpreter;
 
+// ---- the Apt text render-data hooks (AptGlobals.cpp; null until the host installs them) ----
+// The dynamic-text render item (AptRenderItemDynamicText) reaches the host through these two
+// function-pointer slots: the draw hook (dword_8324E868) batches a resolved text handle's glyphs,
+// the release hook (dword_8324E864) frees a text handle. On the console they call the render
+// callbacks directly; here the bring-up installs bridges that forward to CgsGui::AptCallbackRender.
+// The engine passes the ZID (AptRenderItemDynamicText::mZID) -- our x64 slot-index handle.
+enum AptMaskRenderOperation : int;
+extern void (*gpfnAptDrawTextRenderData)(int nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
+extern void (*gpfnAptReleaseTextRenderData)(int nZId, int nOp);                             // dword_8324E864
+
+// The bring-up bridges the two hooks forward to. DrawString batches the ZID's glyphs;
+// DeallocateString frees the ZID's pooled string. (leFlags/nOp carried for parity.)
+static void AptRT_DrawTextRenderData(int nZId, AptMaskRenderOperation eOp, int nTick)
+{
+    (void)nTick;   // the render callback keys off the ZID + mask op (level unused on this path)
+    CgsGui::AptCallbackRender::DrawString(
+        reinterpret_cast<AptAssetString>(static_cast<intptr_t>(nZId)), eOp, 0);
+}
+
+static void AptRT_ReleaseTextRenderData(int nZId, int nOp)
+{
+    CgsGui::AptCallbackRender::DeallocateString(
+        reinterpret_cast<AptAssetString>(static_cast<intptr_t>(nZId)),
+        static_cast<u32>(nOp));
+}
+
+// The faithful per-frame dynamic-text refresh pass (AptCIHBehaviour.cpp): install
+// AptCIH::ProcessTextInst as the generalised-process callback + walk the root subtree,
+// so every dynamic-text node re-resolves its bound text + (re)lays it out through
+// EnsureStringAllocated. The console runs this inside AptUpdate (sub_82B0D608).
+struct AptCIH;
+void AptCIH_RunGeneralisedTextProcess(AptCIH* pRoot);
+
 // The Apt input-recorder/replay gate (X360 byte_82F733F7; defined in AptGlobals.cpp, default 0).
 // When SHUT (0) a freshly-placed clip's play-head does NOT auto-advance (deterministic replay);
 // when OPEN (1) fresh clips step + run doFrameControls, placing their nested content. Normal play
@@ -229,6 +279,39 @@ namespace
     // FLAG: sentinel only -- a real Im3dRenderBuffer is out of this slice's scope (the
     // title movie draws 2D). If a 3D Apt path is ever exercised this must become real.
     int s_i3dRendererSentinel = 0;
+
+    // ---- the Apt TEXT system (PC stand-in for the ViewModule's owned text sub-objects) ----
+    // FLAG: on the X360 these live inside CgsGui::ViewModule (GetFontCollection() /
+    // GetTextRenderer() / GetLanguageManager()) and are handed to AptAux::Construct by the
+    // view bring-up. That module's full bring-up is not reconstructed, so the Apt bring-up
+    // owns its own instances here and loads them from the SAME staged data the console used
+    // (LANGUAGE\FONTS\*.font typeface bundles + the LANGUAGE\000N.bundle string table).
+    CgsGraphics::TextRenderer    s_AptTextRenderer;      // zero-init BSS (RenderString* self-arms)
+    CgsGui::FontCollection       s_AptFontCollection;    // zero-init BSS (empty handles == free slots)
+    CgsLanguage::LanguageManager s_AptLanguageManager;   // ctor seeds the hash bins/lists
+    CgsMemory::HeapMalloc        s_AptLanguageAllocator; // backs the manager's element allocs
+    bool s_bTextSystemReady = false;                     // fonts + strings loaded (one-shot)
+
+    // The language allocator's backing heap: ~4.7K hash elements (24B each) + heap overhead.
+    const u32 KU_LANGUAGE_HEAP_BYTES = 512u * 1024u;
+    u8 s_aLanguageHeap[KU_LANGUAGE_HEAP_BYTES];
+
+    // The 3 typeface bundles the collection holds (KI_MAX_FONTS == 3 slots). The title
+    // movie's type-3 font chars name the "B5EAConDisS(Drop)" family == WESTERNB5BODY_35;
+    // HEADER_70 ("MachineStd-Bold") and DOTMAT_35 ("B5DotMat") are the other two western
+    // typefaces the GUI movies reference (and the FindFont fallback-table entries).
+    const char* const KA_APT_FONT_BUNDLES[3] =
+    {
+        "Language/Fonts/WesternB5Body_35.font",
+        "Language/Fonts/WesternB5Header_70.font",
+        "Language/Fonts/WesternB5DotMat_35.font",
+    };
+    CgsResource::Pool s_aAptFontPools[3];   // one resident pool per typeface bundle
+
+    // The language string-table bundle. FLAG: langid selection is host-static (0002 ==
+    // langid 8, the clean English table -- verified offline: TITLES_PRESS_START ->
+    // "Press START"); the console picks the bundle from the SKU/dash language.
+    const char* const KC_APT_LANGUAGE_BUNDLE = "LANGUAGE/0002.bundle";
 
     // ---- the loaded movie handle (channel-41 result) ---------------------------
     char        s_acLoadedMovieName[64] = { 0 };
@@ -443,6 +526,219 @@ namespace BrnGui
     bool AptRuntimeIsReady() { return s_bRuntimeReady; }
 
     // -------------------------------------------------------------------------
+    // AptLoadOneGuiFont -- load one typeface bundle into its resident pool and register
+    // the Font with the Apt font collection. Mirrors the PROVEN CgsDev::LoadAndSetDebugFont
+    // load shape (pool over malloc backing -> BundleLoader -> type-0x21 entry ->
+    // CreateTextureState -> SafeResourceHandle), but the handle goes to the FontCollection
+    // instead of the debug manager. Returns true when the typeface registered.
+    // -------------------------------------------------------------------------
+    static bool AptLoadOneGuiFont(const char* lpcBundlePath, CgsResource::Pool* lpPool)
+    {
+        // Pool backing (the same generous fixed sizes the debug-font bring-up uses).
+        const u32 KU_FONT_POOL_BYTES = 4u * 1024u * 1024u;
+        void* lpMainMem   = malloc(KU_FONT_POOL_BYTES);
+        void* lpGfxSysMem = malloc(KU_FONT_POOL_BYTES);
+        void* lpGfxLclMem = malloc(KU_FONT_POOL_BYTES);
+        if (lpMainMem == 0 || lpGfxSysMem == 0 || lpGfxLclMem == 0)
+        {
+            free(lpMainMem); free(lpGfxSysMem); free(lpGfxLclMem);
+            return false;
+        }
+
+        CgsResource::Pool::InitOptions lOptions;
+        lOptions.miId    = 5;
+        lOptions.mpcName = "AptFont";
+        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_MAINMEMORY].muMaxNodes       = 256u;
+        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_MAINMEMORY].muHeapMemorySize = 3u * 1024u * 1024u;
+        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_MAINMEMORY].muHeapAlignment  = 16u;
+        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_SYSTEM].muMaxNodes       = 256u;
+        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_SYSTEM].muHeapMemorySize = KU_FONT_POOL_BYTES - 64u * 1024u;
+        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_SYSTEM].muHeapAlignment  = 16u;
+        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_LOCAL].muMaxNodes       = 256u;
+        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_LOCAL].muHeapMemorySize = KU_FONT_POOL_BYTES - 64u * 1024u;
+        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_LOCAL].muHeapAlignment  = 16u;
+        lOptions.mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY]      = lpMainMem;
+        lOptions.mResource.m_baseResources[CgsResource::E_MEMTYPE_GRAPHICS_SYSTEM] = lpGfxSysMem;
+        lOptions.mResource.m_baseResources[CgsResource::E_MEMTYPE_GRAPHICS_LOCAL]  = lpGfxLclMem;
+        for (u32 luMemType = 0; luMemType < CgsResource::E_MEMTYPE_NUMTYPES; ++luMemType)
+        {
+            lOptions.mDescriptor.m_baseResourceDescriptors[luMemType].m_size      = KU_FONT_POOL_BYTES;
+            lOptions.mDescriptor.m_baseResourceDescriptors[luMemType].m_alignment = 16u;
+        }
+        lOptions.muMaxResources         = 64u;
+        lOptions.muMaxImports           = 64u;
+        lOptions.miRefCountThreshold    = 0;
+        lOptions.miNumDependencies      = 0;
+        lOptions.miBankId               = 0;
+        lOptions.mbAllowDefragmentation = false;
+        lpPool->InitPool(&lOptions);
+
+        CgsResource::BundleLoader lLoader;
+        const s32 liLoaded = lLoader.LoadBundle(lpcBundlePath, lpPool, CgsResource::ResolveResourceType);
+        char lac[224];
+        if (liLoaded <= 0)
+        {
+            std::snprintf(lac, sizeof(lac), "[AptRT] text: font bundle '%s' FAILED to load.\n", lpcBundlePath);
+            CgsDev::Log::WriteToLog(lac);
+            return false;
+        }
+
+        s32 liIndex = -1;
+        CgsResource::Entry* lpEntry =
+            lpPool->FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_FONT, &liIndex);
+        CgsResource::Font* lpFont = (lpEntry != 0)
+            ? reinterpret_cast<CgsResource::Font*>(lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY])
+            : 0;
+        if (lpFont == 0)
+        {
+            std::snprintf(lac, sizeof(lac), "[AptRT] text: '%s' has no Font (0x21) resource.\n", lpcBundlePath);
+            CgsDev::Log::WriteToLog(lac);
+            return false;
+        }
+
+        // Build the runtime texture state (binds atlas page 0) so the glyph batch can draw.
+        lpFont->CreateTextureState();
+
+        // Register the typeface with the collection (the canonical double-deref handle,
+        // exactly as the debug-font bring-up builds it).
+        CgsResource::SafeResourceHandle<CgsResource::Font> lHandle;
+        lHandle.mpResourceMemory = &lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
+        lHandle.mpSourceEntry    = lpEntry;
+        s_AptFontCollection.AddFont(lHandle);
+
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] text: font '%s' registered (family='%s' chars=%u heightPx=%u atlas=%s).\n",
+            lpcBundlePath, lpFont->macTypefaceFamilyName, lpFont->muNumChars,
+            lpFont->muFontHeightInPixels,
+            (lpFont->mpapTextures != 0 && lpFont->muNumTexturePages > 0 && lpFont->mpapTextures[0] != 0
+             && lpFont->mpapTextures[0]->mpD3DTexture != 0) ? "d3d-ok" : "NO-D3D");
+        CgsDev::Log::WriteToLog(lac);
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // AptLoadLanguageStrings -- load the staged language string table and install every
+    // {hash, string} entry into the Apt language manager.
+    //
+    // FLAG (PC host shim): the staged LANGUAGE\000N.bundle carries the x64-WIDENED
+    // LanguageResource (16-byte {u64 hash, u64 stringOff} entries; header {u32 langid,
+    // u32 count, u64 entriesOff}) -- the committed console-stride LanguageResourceType::FixUp
+    // (8-byte entries) would mis-relocate it, and the X360 member that installs the loaded
+    // table (LanguageManager::Construct) is not reconstructed. So the bundle file is read
+    // directly (bnd2 v2 platform-4, uncompressed) and each entry installed through the
+    // AddStringPointerByHash shim; the file block stays resident (the manager stores the
+    // string POINTERS). Remove when LanguageManager::Construct + a faithful widened
+    // resource handler land.
+    // -------------------------------------------------------------------------
+    static bool AptLoadLanguageStrings(const char* lpcBundlePath)
+    {
+        std::FILE* lpFile = std::fopen(lpcBundlePath, "rb");
+        char lac[224];
+        if (lpFile == 0)
+        {
+            std::snprintf(lac, sizeof(lac), "[AptRT] text: language bundle '%s' not found.\n", lpcBundlePath);
+            CgsDev::Log::WriteToLog(lac);
+            return false;
+        }
+        std::fseek(lpFile, 0, SEEK_END);
+        const long liSize = std::ftell(lpFile);
+        std::fseek(lpFile, 0, SEEK_SET);
+        u8* lpData = static_cast<u8*>(malloc(static_cast<size_t>(liSize)));   // resident (strings live here)
+        const size_t luRead = (lpData != 0) ? std::fread(lpData, 1, static_cast<size_t>(liSize), lpFile) : 0;
+        std::fclose(lpFile);
+        if (lpData == 0 || luRead != static_cast<size_t>(liSize) || liSize < 0x28)
+        {
+            free(lpData);
+            CgsDev::Log::WriteToLog("[AptRT] text: language bundle read failed.\n");
+            return false;
+        }
+
+        // bnd2 container: entry table @0x14 (0x40-byte entries), mem0 data @0x18.
+        const u32 luNumEntries = *reinterpret_cast<const u32*>(lpData + 0x10);
+        const u32 luEntryOff   = *reinterpret_cast<const u32*>(lpData + 0x14);
+        const u32 luData0      = *reinterpret_cast<const u32*>(lpData + 0x18);
+        const u8* lpResource   = 0;
+        u32       luResSize    = 0;
+        for (u32 lu = 0; lu < luNumEntries; ++lu)
+        {
+            const u8* lpEnt = lpData + luEntryOff + 0x40u * lu;
+            if (*reinterpret_cast<const u32*>(lpEnt + 0x38) == 0x27u)   // Language (39)
+            {
+                lpResource = lpData + luData0 + *reinterpret_cast<const u32*>(lpEnt + 0x28);
+                luResSize  = *reinterpret_cast<const u32*>(lpEnt + 0x10) & 0x0FFFFFFFu;
+                break;
+            }
+        }
+        if (lpResource == 0)
+        {
+            free(lpData);
+            CgsDev::Log::WriteToLog("[AptRT] text: no Language (0x27) resource in the bundle.\n");
+            return false;
+        }
+
+        // The widened LanguageResource: {u32 langid, u32 count, u64 entriesOff}; 16-byte
+        // entries {u64 hash, u64 stringOff}; every offset is resource-relative.
+        const u32 luLangId  = *reinterpret_cast<const u32*>(lpResource + 0);
+        const s32 liCount   = *reinterpret_cast<const s32*>(lpResource + 4);
+        const u32 luEntries = static_cast<u32>(*reinterpret_cast<const u64*>(lpResource + 8));
+        s32 liInstalled = 0;
+        for (s32 li = 0; li < liCount; ++li)
+        {
+            const u8* lpSlot = lpResource + luEntries + 16u * static_cast<u32>(li);
+            const u32 luHash = static_cast<u32>(*reinterpret_cast<const u64*>(lpSlot + 0));
+            const u64 luStr  = *reinterpret_cast<const u64*>(lpSlot + 8);
+            if (luStr == 0 || luStr >= luResSize)
+                continue;   // out-of-range slot: skip (defensive; the staged tables are clean)
+            if (s_AptLanguageManager.AddStringPointerByHash(luHash, lpResource + luStr))
+                ++liInstalled;
+        }
+
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] text: language '%s' langid=%u strings=%d/%d installed.\n",
+            lpcBundlePath, luLangId, liInstalled, liCount);
+        CgsDev::Log::WriteToLog(lac);
+        return liInstalled > 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // AptBringUpTextSystem -- one-shot: load the 3 typefaces + the language string table
+    // and arm the text system the AptAux render handler hands to the Apt string path.
+    // Gated on the D3D device (the font atlas FixUp creates D3D textures); retried by the
+    // (idempotent) bring-up until the device exists.
+    // -------------------------------------------------------------------------
+    static void AptBringUpTextSystem()
+    {
+        if (s_bTextSystemReady)
+            return;
+        if (renderengine::gDevice == 0)
+        {
+            CgsDev::Log::WriteToLog("[AptRT] text: device not up yet -- font/language load deferred.\n");
+            return;
+        }
+
+        CgsResource::RegisterAllResourceTypes();   // idempotent (Font 0x21 + raster handlers)
+
+        s32 liFonts = 0;
+        for (u32 lu = 0; lu < 3u; ++lu)
+        {
+            if (AptLoadOneGuiFont(KA_APT_FONT_BUNDLES[lu], &s_aAptFontPools[lu]))
+                ++liFonts;
+        }
+
+        // The language manager: allocator + faithful default formatting, then the string table.
+        s_AptLanguageAllocator.Construct(s_aLanguageHeap, static_cast<s32>(KU_LANGUAGE_HEAP_BYTES));
+        s_AptLanguageManager.Prepare(&s_AptLanguageAllocator);
+        s_AptLanguageManager.PrepareDefaultFormattingStrings();
+        const bool lbStrings = AptLoadLanguageStrings(KC_APT_LANGUAGE_BUNDLE);
+
+        s_bTextSystemReady = (liFonts > 0);
+        char lac[160];
+        std::snprintf(lac, sizeof(lac), "[AptRT] text: system %s (fonts=%d strings=%s).\n",
+                      s_bTextSystemReady ? "READY" : "INCOMPLETE", liFonts, lbStrings ? "ok" : "MISSING");
+        CgsDev::Log::WriteToLog(lac);
+    }
+
+    // -------------------------------------------------------------------------
     // AptRuntimeBringUp -- the once-only host bring-up (idempotent). Mirrors the
     // X360 CgsGui::AptAux::InitializeApt @0x82848E50 + AptAllocatorInitialize
     // @0x82ADD118, but only the pieces whose engine bodies exist; every step that
@@ -498,28 +794,41 @@ namespace BrnGui
             s_AptImRendererSet.mpReserved0C   = nullptr;
             s_AptImRendererSet.mp3dRenderer   = &s_i3dRendererSentinel; // Render asserts != 0
 
+            // Bring the TEXT system up first (fonts + language + glyph batcher) so the
+            // handler's text-layout inputs are live from the start. One-shot; device-gated.
+            AptBringUpTextSystem();
+
             // AptAux::Construct args:
             //   ImRendererSet*       -> our AptImRendererSet (re-typed; bit-aliased, see header)
-            //   TextRenderer*        -> null   FLAG: the glyph batcher is out of scope (no Apt
-            //                                  static-text on the title screen is required to render
-            //                                  the movie's shapes; DrawString would need it)
-            //   LanguageManager*     -> null   FLAG: localised-string lookup unused for shape draw
-            //   FontCollection*      -> null   FLAG: text layout unused for shape draw
+            //   TextRenderer*        -> the bring-up's glyph batcher (FLAG: PC stand-in for
+            //                           ViewModule::GetTextRenderer(); drives the buffered path)
+            //   LanguageManager*     -> the bring-up's manager (FLAG: stand-in for
+            //                           ViewModule::GetLanguageManager(); $LANGID keys resolve)
+            //   FontCollection*      -> the bring-up's collection (FLAG: stand-in for
+            //                           ViewModule::GetFontCollection(); 3 western typefaces)
             //   aspectRatio          -> 16:9 (1280/720) so the stage resolution lands at 1280x720
-            //   alt-colour table     -> null / 0 entries (no alt text colours needed for shapes)
+            //   alt-colour table     -> null / 0 entries (the '^N' colour codes are unused here)
             const f32 lfAspect = 1280.0f / 720.0f;
             CgsDev::Log::WriteToLog("[AptRT] step4 aux: calling AptAux::Construct ...\n");
             s_AptAux.Construct(reinterpret_cast<CgsGuiModuleIO::ImRendererSet*>(&s_AptImRendererSet),
-                               /*TextRenderer*/   nullptr,
-                               /*LanguageManager*/nullptr,
-                               /*FontCollection*/ nullptr,
+                               &s_AptTextRenderer,
+                               &s_AptLanguageManager,
+                               &s_AptFontCollection,
                                lfAspect,
                                /*AlternateTextColours*/ nullptr,
                                /*NumAlternateColours*/  0);
             s_bAuxReady = (CgsGui::AptAuxPointer::mpAptAuxInst == &s_AptAux);
-            char lac[160];
+
+            // Install the dynamic-text render-data hooks (draw + release). ConstructApt wires the
+            // gAptFuncs render family (incl. pfnAllocateString/DrawString/DeallocateString); these two
+            // engine .data slots are separate (AptRenderItemDynamicText reaches them directly), so the
+            // bring-up installs them here so a dynamic-text field's Render()/SetZID reach the host.
+            gpfnAptDrawTextRenderData    = &AptRT_DrawTextRenderData;
+            gpfnAptReleaseTextRenderData = &AptRT_ReleaseTextRenderData;
+
+            char lac[200];
             std::snprintf(lac, sizeof(lac),
-                "[AptRT] step4 aux: Construct done. singleton=%p im2d=%p (== &renderbuf %p)\n",
+                "[AptRT] step4 aux: Construct done. singleton=%p im2d=%p (== &renderbuf %p) textHooks=installed\n",
                 (void*)CgsGui::AptAuxPointer::mpAptAuxInst,
                 (void*)s_AptImRendererSet.mpIm2dRenderer, (void*)&s_AptRenderBuffer);
             CgsDev::Log::WriteToLog(lac);
@@ -1468,6 +1777,21 @@ namespace BrnGui
                     lpVmTgt->mpAnimationTarget->RunActions();
             }
 
+            // DYNAMIC-TEXT REFRESH: run the generalised-process pass with ProcessTextInst
+            // installed, so every dynamic-text node (type tag 2) re-resolves its bound text +
+            // (re)lays it out through EnsureStringAllocated -> pfnAllocateString. The console
+            // runs this inside AptUpdate (sub_82B0D608); we drive it here on the root each frame.
+            {
+                static bool s_bTextProbe = false;
+                AptCIH_RunGeneralisedTextProcess(lpRoot);
+                if (!s_bTextProbe)
+                {
+                    s_bTextProbe = true;
+                    CgsDev::Log::WriteToLog("[AptRT] text: ran generalised-process text pass "
+                                            "(ProcessTextInst installed).\n");
+                }
+            }
+
             // Walk the director's root display list + count the placed nodes (the placement result).
             s32 liNodes = 0;
             AptTarget* lpTgt = GetTarget();
@@ -1614,6 +1938,12 @@ namespace BrnGui
         AptRender(/*nLayerMask*/ 0);   // 0 == all display layers
         lrBuffer.EndRendering();
         lrBuffer.Swap();               // freeze the write buffer for dispatch
+        // Reset the NEW write buffer's stream positions for the next frame (the faithful
+        // ImRenderBuffer::Clear @0x1EA7D4 -- Swap alone does NOT reset them). Without this the
+        // vertex stream (the text/mask AllocVertices consumer) fills permanently after ~60
+        // text-drawing frames (RenderStart returns null forever -> the dynamic-text glyphs
+        // silently stop landing) and the command stream degrades into rewind churn.
+        lrBuffer.Clear();
         lrBuffer.Dispatch();           // re-issue every command to the D3D9 device (faithful PC path)
         ++s_iRenderFrame;
 

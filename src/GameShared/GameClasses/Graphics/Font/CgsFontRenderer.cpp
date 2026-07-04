@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // IncrementUtf8Pointer
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the buffered Apt string path)
 
 #include <cmath>   // fabsf
 
@@ -151,10 +152,25 @@ namespace CgsGraphics
     // Faithful port of X360 0x82801998: render through the Im2d buffer, then clear it.
     void TextRenderer::RenderString(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject)
     {
-        mpIm2dRenderBuffer = lpRenderBuffer;
-        mpIm3dRenderBuffer = 0;
+        mpIm2dRenderBuffer     = lpRenderBuffer;
+        mpIm3dRenderBuffer     = 0;
+        mpBufferedRenderBuffer = 0;   // (PC fold: guarantee the immediate path regardless of init)
         RenderStringInternal(lrTextObject, EImRenderingType_Buffered);
         mpIm2dRenderBuffer = 0;
+    }
+
+    // FLAG (PC fold; see the header note): the Apt string path -- the glyphs ride the SAME
+    // dispatched command stream as the Apt shapes (per-batch SET_TRANSFORM + walk order), which
+    // is exactly what the console's buffered Im2dRenderBuffer::RenderStart/RenderEnd did. Same
+    // layout/glyph path as RenderString; only the RenderBuffer* helpers' target differs.
+    void TextRenderer::RenderStringBuffered(ImRenderBuffer<Im2dVertex>* lpBufferedBuffer,
+                                            const TextObject& lrTextObject)
+    {
+        mpIm2dRenderBuffer     = 0;
+        mpIm3dRenderBuffer     = 0;
+        mpBufferedRenderBuffer = lpBufferedBuffer;
+        RenderStringInternal(lrTextObject, EImRenderingType_Buffered);
+        mpBufferedRenderBuffer = 0;
     }
 
     namespace
@@ -326,6 +342,11 @@ namespace CgsGraphics
     // X360 0x827F7D80: reserve luVertexCount vertices and return the write pointer.
     TextRenderer::Im2dVertex* TextRenderer::RenderBufferRenderStart(u32 luVertexCount, EImRenderingType leType)
     {
+        // FLAG (PC fold): the buffered Apt path reserves from the command buffer's vertex
+        // stream (the console Im2dRenderBuffer::RenderStart @0x57E0A0 == AllocVertices).
+        if (mpBufferedRenderBuffer != 0)
+            return mpBufferedRenderBuffer->RenderStart(luVertexCount);
+
         if (mpIm2dRenderBuffer != 0)
             return mpIm2dRenderBuffer->RenderStart(luVertexCount);
 
@@ -351,8 +372,9 @@ namespace CgsGraphics
         using CgsResource::CgsUtf8;
         using CgsResource::FontChar;
 
-        mpIm2dRenderBuffer = lpRenderBuffer;
-        mpIm3dRenderBuffer = 0;
+        mpIm2dRenderBuffer     = lpRenderBuffer;
+        mpIm3dRenderBuffer     = 0;
+        mpBufferedRenderBuffer = 0;   // (PC fold: guarantee the immediate path regardless of init)
 
         const CgsResource::Font* lpFont = lrTextObject.mpFont.operator->();
 
@@ -492,6 +514,14 @@ namespace CgsGraphics
     void TextRenderer::RenderBufferSetTextureState(const renderengine::TextureState* lpTextureState,
                                                    EImRenderingType /*leType*/)
     {
+        // FLAG (PC fold): the buffered Apt path appends a SET_STATE_TEXTURE command
+        // (Dispatch binds the state's raster -- the font atlas -- with modulate stages).
+        if (mpBufferedRenderBuffer != 0)
+        {
+            mpBufferedRenderBuffer->SetTextureState(lpTextureState);
+            return;
+        }
+
         if (mpIm2dRenderBuffer != 0)
             mpIm2dRenderBuffer->SetState(lpTextureState);
         // else if (mpIm3dRenderBuffer) -> 3D buffer SetState (follow-on, 3D text path)
@@ -501,6 +531,15 @@ namespace CgsGraphics
     void TextRenderer::RenderBufferRenderEnd(u32 luPrimitiveType, const Im2dVertex* lpVertices,
                                              u32 luVertexCount, EImRenderingType leType)
     {
+        // FLAG (PC fold): the buffered Apt path appends the RENDER_PRIMITIVES command over the
+        // RenderStart-reserved run (the console Im2dRenderBuffer::RenderEnd @0x57E5DC).
+        if (mpBufferedRenderBuffer != 0)
+        {
+            mpBufferedRenderBuffer->RenderEnd(static_cast<renderengine::PrimitiveType>(luPrimitiveType),
+                                              lpVertices, luVertexCount);
+            return;
+        }
+
         if (mpIm2dRenderBuffer != 0)
         {
             mpIm2dRenderBuffer->RenderEnd(static_cast<renderengine::PrimitiveType>(luPrimitiveType),

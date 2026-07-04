@@ -20,6 +20,7 @@
 #include "SDKs/EATech/include/Apt/AptDefine.h"        // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"   // the sprite/movie-clip subtype (type 5)
+#include "SDKs/EATech/include/Apt/AptCharacterTextInst.h"          // the dynamic-text subtype (type 2)
 #include "SDKs/EATech/include/Apt/AptPseudoCIH.h"                 // gpAptPseudoDataPool (off_8324D808, the ctor's pool)
 
 #include <new>   // placement new (factory)
@@ -121,13 +122,31 @@ AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter
     if (nType == 4)
         return nullptr;   // button: built elsewhere (the console returns 0 here)
 
-    // Dynamic text (type 2) is 32 bytes on the console; every other type (1 / 10 / null / etc.)
-    // is the 16-byte base. The reconstruction's base AptCharacterInst covers both (the extra
-    // text-inst state is the follow-on); allocate the larger of the needed size and sizeof(base).
-    const size_t luSize = (nType == 2)
-        ? (32u > sizeof(AptCharacterInst) ? 32u : sizeof(AptCharacterInst))
-        : sizeof(AptCharacterInst);
-    void* const pMem = gpAptPseudoDataPool->Allocate(luSize);
+    if (nType == 2)
+    {
+        // Dynamic text: the AptCharacterTextInst -- the base + its 4 cached layout scalars
+        // (mMaxScroll / mTextWidth / mTextHeight / mLength). Console 32 bytes (16 base + 16);
+        // x64 48 (32 base + 16). The block MUST be the full text-inst size: the prior
+        // max(32, sizeof(base)) under-sized it on x64 (32), and the text path's scalar writes
+        // (EnsureStringAllocated's measure fold at inst +32..+47) landed past the block --
+        // corrupting the adjacent DOGMA pool block (a live render item / CIH node) and
+        // crashing the render walk.
+        void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterTextInst));
+        if (pMem == nullptr)
+            return nullptr;
+        AptCharacterTextInst* const pTextInst =
+            static_cast<AptCharacterTextInst*>(::new (pMem) AptCharacterInst(pCharacter));
+        // Seed the cached layout scalars (the console text-inst ctor's seeds; the render
+        // item's own ctor seeds its scroll to 1 the same way).
+        pTextInst->mMaxScroll  = 1;
+        pTextInst->mTextWidth  = 0.0f;
+        pTextInst->mTextHeight = 0.0f;
+        pTextInst->mLength     = 0.0f;
+        return pTextInst;
+    }
+
+    // Every other type (1 / 10 / null / etc.) is the plain base.
+    void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterInst));
     if (pMem == nullptr)
         return nullptr;
     return ::new (pMem) AptCharacterInst(pCharacter);
