@@ -36,6 +36,13 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"   // CgsNetwork::PlayerManager
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"   // CgsNetwork::NetworkPlayer + RegisterMessageType
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"               // CgsMemory::HeapMalloc
+#include "GameSource/Network/BrnNetworkModule.h"                        // BrnNetworkModule::GetNetworkManager
+#include "GameSource/Network/BrnNetworkManager.h"                       // BrnNetworkManager::GetLocalUserControllerPort
+#include "GameShared/GameClasses/System/Input/CgsInputTypes.h"         // CgsInput::KU_NUMBER_OF_PADS
+
+// Vendor XDK privilege query used by CheckMugshotPrivilege. Declared extern "C" at file
+// scope (the real prototype lives in the Xbox 360 XDK), mirroring the corpus convention.
+extern "C" { int XUserCheckPrivilege(u32 luUserIndex, u32 luPrivilegeType, u32* lpbResult); }
 
 namespace BrnNetwork
 {
@@ -43,6 +50,13 @@ namespace BrnNetwork
     static const s32 KI_IMAGE_MESSAGE_TYPE = 19;
     // The X360 packed ImageMessage byte length passed to RegisterMessageType (liLength = 568).
     static const s32 KI_IMAGE_MESSAGE_PACKED_LENGTH = 568;
+
+    // Xbox communications privilege ids (asm 0xF7 / 0xF6) and the un-homed camera sub-object
+    // offsets CheckMugshotPrivilege reaches off the network manager (attested displacements).
+    static const u32 KU_XPRIVILEGE_COMMUNICATIONS              = 247; // 0xF7
+    static const u32 KU_XPRIVILEGE_COMMUNICATIONS_FRIENDS_ONLY = 246; // 0xF6
+    static const s32 KI_NETWORK_MANAGER_CAMERA_OFFSET          = 0x425E0; // asm addis+addi -> &mpCamera
+    static const s32 KI_CAMERA_MUGSHOT_PRIVILEGE_FIELD_OFFSET  = 0x43B9C; // lwzx field, ==2 -> FRIENDS
 
     // ----------------------------------------------------------------------------------
     // Construct  @ 0x8255D7D0  (EXECUTED in goal trace)
@@ -468,5 +482,107 @@ namespace BrnNetwork
     // FLAG: declaration-only -- compressed-gamer-picture job completion twin.  @ 0x8256FD40
     void NetworkImageManager::_GetCompressedGamerPicCallback(void* /*lpData*/)
     {
+    }
+
+    // ----------------------------------------------------------------------------------
+    // GetImageMessageDataEntry  @ 0x8254A8B8  (DWARF spells the X360 callee GetImageMes)
+    //   Linear-scan the in-flight ImageMessage send/recv table for the slot keyed by lPlayerID
+    //   (mPlayerID, the entry's first field). Passing -1 finds the first free slot. Asserts +
+    //   returns the (possibly null) entry on miss.
+    // ----------------------------------------------------------------------------------
+    NetworkImageManager::ImageMessageData* NetworkImageManager::GetImageMessageDataEntry(NetworkPlayerID lPlayerID)
+    {
+        ImageMessageData* lpEntry = nullptr;
+
+        for ( s32 liIndex = 0; liIndex < KI_MAX_IMAGE_PLAYERS; ++liIndex )
+        {
+            if ( maImageData[liIndex].mPlayerID == lPlayerID )
+            {
+                lpEntry = &maImageData[liIndex];
+                if ( lpEntry )
+                    return lpEntry;
+                break;
+            }
+        }
+
+        CGS_ASSERT(lpEntry, "lpEntry");
+        return lpEntry;
+    }
+
+    // ----------------------------------------------------------------------------------
+    // GetMugshotDataEntry  @ 0x8254A940  (DWARF spells the X360 callee GetMugshotDataEn)
+    //   Linear-scan the per-player mugshot table for the slot keyed by aggressor id
+    //   (mTakedownAggressorPlayerID). Passing -1 finds the first free slot. Asserts + returns the
+    //   (possibly null) entry on miss.
+    // ----------------------------------------------------------------------------------
+    NetworkImageManager::MugshotData* NetworkImageManager::GetMugshotDataEntry(NetworkPlayerID lPlayerID)
+    {
+        MugshotData* lpEntry = nullptr;
+
+        for ( s32 liIndex = 0; liIndex < KI_MAX_MUGSHOT_PLAYERS; ++liIndex )
+        {
+            if ( maMugshotData[liIndex].mTakedownAggressorPlayerID == lPlayerID )
+            {
+                lpEntry = &maMugshotData[liIndex];
+                if ( lpEntry )
+                    return lpEntry;
+                break;
+            }
+        }
+
+        CGS_ASSERT(lpEntry, "lpEntry");
+        return lpEntry;
+    }
+
+    // ----------------------------------------------------------------------------------
+    // CheckMugshotPrivilege  @ 0x8254A9C8
+    //   Resolve the local player's communications privilege for mugshot exchange. Reads the
+    //   signed-in local controller index off the network manager, then queries the Xbox-LIVE
+    //   communications privilege (XPRIVILEGE_COMMUNICATIONS == 247, then the friends-only variant
+    //   246). If communications are allowed at all, the answer is taken from the camera manager's
+    //   published privilege field (E_MUGSHOT_PRIVILEGE_FRIENDS when that field reads 2, else
+    //   E_MUGSHOT_PRIVILEGE_ANYONE). Otherwise it is FRIENDS when the restricted query resolved a
+    //   friends-only grant (pfResult == 1) and NOONE when it is fully blocked.
+    // ----------------------------------------------------------------------------------
+    NetworkImageManager::EMugshotPrivilege NetworkImageManager::CheckMugshotPrivilege()
+    {
+        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
+
+        const s32 liActiveUserIndex = mpNetworkModule->GetNetworkManager()->GetLocalUserControllerPort();
+        CGS_ASSERT(liActiveUserIndex >= 0, "liActiveUserIndex >= 0");
+        CGS_ASSERT(liActiveUserIndex < static_cast<s32>(CgsInput::KU_NUMBER_OF_PADS),
+                   "liActiveUserIndex < CgsInput::KU_NUMBER_OF_PADS");
+
+        u32 lu32PrivilegeResult[16];   // X360 [sp+50h] pfResult BYREF (only [0] is read)
+
+        EMugshotPrivilege lePrivilege = E_MUGSHOT_PRIVILEGE_ANYONE;
+        if ( XUserCheckPrivilege(liActiveUserIndex, KU_XPRIVILEGE_COMMUNICATIONS, lu32PrivilegeResult)
+             || lu32PrivilegeResult[0] == 1
+             || XUserCheckPrivilege(liActiveUserIndex, KU_XPRIVILEGE_COMMUNICATIONS_FRIENDS_ONLY, lu32PrivilegeResult) )
+        {
+            CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
+
+            // X360 (0x8254AB10 addis r30,r3,4 / addi r30,r30,0x25E0): lpCamera = NetworkManager +
+            // 0x425E0 (== &NetworkManager->mpCamera); the read is *(int*)(lpCamera + 0x43B9C) == 2.
+            // The camera sub-object is not yet homed, so it is reached by its attested byte offset
+            // off the manager (mirrors the sibling GamerPictureManagerX360 named-offset accessor).
+            BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
+            u8* lpCamera = reinterpret_cast<u8*>(lpNetworkManager) + KI_NETWORK_MANAGER_CAMERA_OFFSET;
+            CGS_ASSERT(lpCamera, "lpCamera");
+
+            const s32 liCameraPrivilege =
+                *reinterpret_cast<const s32*>(lpCamera + KI_CAMERA_MUGSHOT_PRIVILEGE_FIELD_OFFSET);
+            lePrivilege = (liCameraPrivilege == 2) ? E_MUGSHOT_PRIVILEGE_FRIENDS : E_MUGSHOT_PRIVILEGE_ANYONE;
+        }
+        else
+        {
+            // X360 0x8254AB78: ((cntlzw(pfResult[0] - 1) & 0x20) == 0) + 1
+            //   pfResult[0] == 1 -> FRIENDS (1); anything else -> NOONE (2).
+            lePrivilege = static_cast<EMugshotPrivilege>((lu32PrivilegeResult[0] != 1) + 1);
+        }
+
+        return lePrivilege;
     }
 } // namespace BrnNetwork

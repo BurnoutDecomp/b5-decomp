@@ -158,8 +158,10 @@ namespace BrnNetwork
     private:
         // ---- internals ------------------------------------------------------------------
         void         SendNextSegment();                                                 // @ 0x82555658  // FLAG: declaration-only
-        MugshotData* GetMugshotDataEntry(NetworkPlayerID lPlayerID);                     // @ (sibling GetMugshotDataEn; bodied helper)
-        ImageMessageData* GetImageMessageDataEntry(NetworkPlayerID lPlayerID);           // @ (sibling GetImageMes; bodied helper)
+        MugshotData* GetMugshotDataEntry(NetworkPlayerID lPlayerID);                     // @ 0x8254A940 (DWARF GetMugshotDataEn)
+        ImageMessageData* GetImageMessageDataEntry(NetworkPlayerID lPlayerID);           // @ 0x8254A8B8 (DWARF GetImageMes)
+        // @ 0x8254A9C8 -- local communications-privilege gate for mugshot exchange.
+        EMugshotPrivilege CheckMugshotPrivilege();
         void         ProcessNetworkEvents(const NetworkEventQueue* lpQueue);             // @ 0x8255DAB0  // FLAG: declaration-only (reaches VariableEventQueue<14000,16>)
         void         OutputMugshotData(BrnNetworkModuleIO::OutputBuffer* lpOutput);      // @ 0x82564E38  // FLAG: declaration-only
         void         HandleMugshotEvent(const NetworkInPaybackMugshotEvent* lpEvent);    // @ 0x82555188  // FLAG: declaration-only

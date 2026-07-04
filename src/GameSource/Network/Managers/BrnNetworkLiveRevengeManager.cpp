@@ -281,11 +281,36 @@ void LiveRevengeManager::UpdateMarkedManInfo()
 }
 
 // ============================================================================
-// LiveRevengeManager::GetNonConstRevengeRelation  (private)
+// LiveRevengeManager::GetNonConstRevengeRelation  @0x8255AFB8  (private)
 // ============================================================================
-LiveRevengeRelationship* LiveRevengeManager::GetNonConstRevengeRelation(NetworkPlayerID /*lPlayerID*/)
+LiveRevengeRelationship* LiveRevengeManager::GetNonConstRevengeRelation(NetworkPlayerID lPlayerID)
 {
-    return nullptr;
+    CGS_ASSERT(lPlayerID != -1, "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+
+    s32 liIndex = 0;
+    while (maPlayerToTableIndexData[liIndex].mPlayerID != lPlayerID)
+    {
+        ++liIndex;
+        if (liIndex >= KI_MAX_PLAYERS)
+        {
+            // Streamed StrStream assert ("Could not find PlayerID <id> in
+            // BrnNetwork::LiveRevengeManager::GetNonConstRevengeRelationship") collapses to
+            // the leading static literal (project convention; keep its trailing space).
+            CGS_ASSERT(false, "Could not find PlayerID ");
+            return nullptr;
+        }
+    }
+
+    LiveRevengeMappingEntry* lpEntry = &maPlayerToTableIndexData[liIndex];
+
+    CGS_ASSERT(lpEntry->miRevengeTableIndex >= 0,
+               "lpEntry->miRevengeTableIndex >= 0");
+    CGS_ASSERT(lpEntry->miRevengeTableIndex < LiveRevengeProfile::KI_MAX_REVENGE_HISTORY,
+               "lpEntry->miRevengeTableIndex < LiveRevengeProfile::KI_MAX_REVENGE_HISTORY");
+
+    CGS_ASSERT(mpLiveRevengeProfile != nullptr, "lpProfile");
+
+    return BrnNetwork::LiveRevengeRelations(mpLiveRevengeProfile, lpEntry->miRevengeTableIndex);
 }
 
 // ============================================================================
@@ -294,6 +319,45 @@ LiveRevengeRelationship* LiveRevengeManager::GetNonConstRevengeRelation(NetworkP
 LiveRevengeRelationship* LiveRevengeManager::GetNonConstRevengeRelationship(NetworkPlayerID lPlayerID)
 {
     return GetNonConstRevengeRelation(lPlayerID);
+}
+
+// ============================================================================
+// LiveRevengeManager::GetRevengeRelationship  @0x8258C540  (const, public)
+// (DWARF-truncated as "GetRevengeRelationshi")
+// ============================================================================
+LiveRevengeRelationship* LiveRevengeManager::GetRevengeRelationship(s32 liTableIndex) const
+{
+    CGS_ASSERT(mpLiveRevengeProfile != nullptr, "mpLiveRevengeProfile");
+
+    return BrnNetwork::LiveRevengeRelations(mpLiveRevengeProfile, liTableIndex);
+}
+
+// ============================================================================
+// LiveRevengeManager::HandlePaybackInitialisedEvent  @0x82561930
+// ============================================================================
+void LiveRevengeManager::HandlePaybackInitialisedEvent(const PaybackEvent* lpPaybackEvent)
+{
+    CGS_ASSERT(lpPaybackEvent != nullptr, "lpPaybackEvent");
+
+    // asm: UpdatePaybacksData(*a2, a2[1], 2) -- three value args (r4/r5/r6); r6 == the
+    // payback-outcome flag (2 == Initialised).
+    UpdatePaybacksData(lpPaybackEvent->miNetworkPlayerID,
+                       lpPaybackEvent->miAggressorIndex,
+                       2);
+}
+
+// ============================================================================
+// LiveRevengeManager::HandlePaybackSucceededEvent  @0x825619A0
+// ============================================================================
+void LiveRevengeManager::HandlePaybackSucceededEvent(const PaybackEvent* lpPaybackEvent)
+{
+    CGS_ASSERT(lpPaybackEvent != nullptr, "lpPaybackEvent");
+
+    // asm: UpdatePaybacksData(*a2, a2[1], 4) -- three value args (r4/r5/r6); r6 == the
+    // payback-outcome flag (4 == Succeeded).
+    UpdatePaybacksData(lpPaybackEvent->miNetworkPlayerID,
+                       lpPaybackEvent->miAggressorIndex,
+                       4);
 }
 
 // ============================================================================

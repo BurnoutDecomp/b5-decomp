@@ -156,6 +156,9 @@ namespace CgsNetwork
     PackOrUnpackResult PackOrUnpackU8(Message* lpMessage, u8* lpu8Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackS16(Message* lpMessage, s16* lps16Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackU16(Message* lpMessage, u16* lpu16Field, s32 liMin, s32 liMax);
+    //   PackOrUnpackUInt -- sub_82881490: a quantised 32-bit UNSIGNED int in [liMin, liMax]
+    //   (distinct from PackOrUnpackU16). First needed by StuntMultiplierMessage::PackOrUnpack.
+    PackOrUnpackResult PackOrUnpackUInt(Message* lpMessage, u32* lpu32Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackBool(Message* lpMessage, bool* lpbField);
     PackOrUnpackResult PackOrUnpackCgsID(Message* lpMessage, u64* lpu64Field);
     //   PackOrUnpackFloat  -- sub_8288DF50: a quantised 32-bit float in [fMin, fMax] at a

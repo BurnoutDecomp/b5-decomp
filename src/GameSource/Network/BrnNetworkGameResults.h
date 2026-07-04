@@ -46,11 +46,27 @@ namespace BrnNetwork
     class GameResults : public CgsNetwork::ServerInterfaceEndGameDataX360
     {
     public:
+        // X360 @ 0x827DFB60 (`scalar deleting destructor'). Installs the shared
+        // ServerInterfaceStructureInterface base vptr (off_8207C88C) as the object
+        // dies. Implicitly virtual via the base's virtual destructor.
+        virtual ~GameResults();
+
+        // X360 @ 0x82584600. Serialise the GEN header, each per-entry RACE/STUNT
+        // custom-results record, and the STAT block into the lobby message record.
+        void SerialiseToString(char* lpcRecord, s32 liRecLen) const;
+
         // Fill the end-game result payload from the round-by-round results and the
         // number of online rivals (X360: called from PostRoundManager::ProcessRaceResults
         // after the inherited Prepare()). Declared-only; bodied in the GameResults TU.
         void SetGameStats(const GameStateModuleIO::OnlineGameResults* lpRaceResults,
                           s32 liNumberOfRivals);
+
+    protected:
+        // +0x44  leaf custom-results tail. Begins right after the inherited
+        // {vptr + maResultWords[16]} (base size 0x44); SerialiseToString @ 0x82584600
+        // reaches records by absolute byte offset from `this`, so no per-field names
+        // are asserted. Sized as a safe UPPER BOUND -- max entry count unattested.
+        u8 maCustomResults[0x200];   // +0x44
     };
 }
 

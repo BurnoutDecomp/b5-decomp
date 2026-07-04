@@ -28,6 +28,7 @@
 #include "GameSource/Network/BrnNetworkInEventTypeDefs.h"                                // NetworkInSelectScoreboardEvent (queue element)
 #include "GameSource/Network/Managers/BrnNetworkScoreboard.h"                            // Scoreboard / ScoreboardColumn::EDataType
 #include "GameSource/Network/Debug Components/BrnNetworkScoreboardDebugComponent.h"      // ScoreboardDebugComponent (by-value member)
+#include "GameShared/GameClasses/Network/Players/X360/CgsUniquePlayerIDX360.h"           // CgsNetwork::UniquePlayerIDX360 (by-value member)
 
 namespace CgsNetwork
 {
@@ -43,6 +44,9 @@ namespace BrnNetwork
     {
         struct OutputBuffer;           // pointer-only (ProcessBeforeSimulation param)
     }
+
+    // Forward decl for the score-target-challenge handler (payload defined in the .cpp).
+    struct EvScoreTargetEvent;
 
     struct ScoreboardManager
     {
@@ -69,6 +73,9 @@ namespace BrnNetwork
                 lpSelectScoreboardEvent);                                                // DWARF :91 (declared-only)
         void SetViewAndDownloadHeaders();                                                // @ 0x82547280
         void Disconnected();                                                             // @ 0x82553270
+
+        // @ 0x82568960 -- handle a GUI "challenge this event score" request.
+        void HandleEvScoreTargetEvent(const EvScoreTargetEvent* lpScoreTargetEvent);
 
     private:
         void BuildDownloadedScoreboard(Scoreboard* lpScoreboard);                        // @ 0x8255F948
@@ -100,6 +107,11 @@ namespace BrnNetwork
         // miScore, negated when mbAscending. Returns the C-style {-1,0,1} ordering int.
         static int _ScoreboardSortData(const void* lpData1, const void* lpData2);        // @ 0x82547640
 
+        // @ 0x82562E50 -- static gamer-card-manager completion callback (matches the
+        // NetworkGamerCardManagerX360::CompleteCallback typedef: s32(*)(s32,u64,s32)). Stamps the
+        // resolved XUID onto mScoreTargetPlayerID and queues the score-target challenge event.
+        static s32 RequestXUIDForPlayerCallback(s32 lbSuccess, u64 lqRequestedXuid, s32 liUserData);
+
         // KI_INVALID_HEADING (DWARF :111) -- the -1 "no heading selected" sentinel.
         static const s32 KI_INVALID_HEADING = -1;
         // KI_EVENT_QUEUE_SIZE (DWARF :122) -- the select-event FIFO capacity.
@@ -117,6 +129,11 @@ namespace BrnNetwork
         CgsNetwork::ServerInterface*  mpServerInterface;      // +0x34  (a1[13])
         EState                        meCurrentState;         // +0x38  (a1[14])
         s32                           miCurrentViewOffset;    // +0x3C  (a1[15])
+        // ---- score-target-challenge working state (+0x40..+0x64 gap; filled by
+        //      HandleEvScoreTargetEvent @ 0x82568960 / RequestXUIDForPlayerCallback @ 0x82562E50) ----
+        u64                           mScoreTargetScoreboard; // +0x40  (a1+64)
+        CgsNetwork::UniquePlayerIDX360 mScoreTargetPlayerID;  // +0x48  (24B: macName[16]+mqXuid; a1+72, xuid a1+88)
+        s32                           miScoreTargetValue;     // +0x60  (a1+96)
         ScoreboardDebugComponent      mDebugComponent;        // +0x64  (Construct/Prepare arg)
     };
 }

@@ -67,6 +67,10 @@ namespace CgsNetwork
         s32         GetColumnWidth(s32 liColumn) const;
         const char* GetColumnTitle(s32 liColumn) const;
         bool        ScoreboardHasParam(s32 liParam) const;
+        // Point the rankings component at the target scoreboard (category / index / variation).
+        // Called by BrnNetwork::ScoreboardManager::HandleEvScoreTargetEvent. Declared-only here;
+        // body lands with this component's own TU. ADDITIVE GROW (BrnNetworkScoreboardManager TU).
+        void        SelectScoreboard(s32 liCategory, s32 liIndex, s32 liVariation);
         s32         GetRowThatContainsLocalUser() const;
         void        GetCell(s32 liColumn, s32 liRow, char* lpcBuffer, s32 liBufferSize) const;
         s32         GetUserType(s32 liVariation, const char** lapcUserListNames,

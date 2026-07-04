@@ -106,6 +106,10 @@ namespace BrnNetwork
         // === Reconstructed in this TU ===
         s32 GetTotalTakedowns() const;                      // @ 0x82355540
 
+        // The rival's 64-bit XUID (asm reads ld 0x68(rel) == +104 == muUniqueID_104).
+        // Consumed by GameSearchParams::AreRivalsInSameGame (X360 @ 0x82590FC0).
+        u64 GetRivalXUID() const { return muUniqueID_104; }
+
         // GetRivalName returns the committed CgsNetwork::PlayerName (do NOT re-fork PlayerName).
         const CgsNetwork::PlayerName* GetRivalName() const; // own TU
         s32  GetCurrentScoreForLocalPlayer() const;         // own TU

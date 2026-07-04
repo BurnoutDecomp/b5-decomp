@@ -46,9 +46,16 @@ namespace BrnNetwork
         void Construct(BrnServerInterfaceBase* lpServerInterfaceBase);   // @ 0x82585700
         void Update() override;                                          // @ 0x8258AC70
 
+        // @0x82597690 -- gate the connection-status table on mbDisplayConnectionStatus, then
+        // tail-call RenderConnectionStatus. Overrides CgsDev::DebugComponent::RenderHUD.
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
+
     protected:
         const char* GetName() const override;   // @ 0x82585798
         void        OnActivate() override;       // @ 0x8258AD10
+
+        // @0x82594AC0 -- the connApi connection-status HUD table (called by RenderHUD).
+        void RenderConnectionStatus(CgsDev::Debug2DImmediateRender* lpDisplay);
 
     private:
         // Static menu callbacks (registered with the debug menu; the void* user-data IS this
