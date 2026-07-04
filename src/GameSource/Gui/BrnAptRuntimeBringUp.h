@@ -81,6 +81,15 @@ namespace BrnGui
     // display list) and gotoAndPlay its "<viewState>" frame label ("transin"/
     // "transout"/"visible"/"invisible"...). Returns true when a clip+label matched.
     bool AptRuntimeSetComponentViewState(const char* lpacInstName, const char* lpacViewState);
+
+    // The faithful KEY dispatch of the component protocol (AddOutputAptViewState's
+    // (key, value) pair): apt_Transition -> the paired-clip transition above;
+    // apt_state -> gotoAndPlay(value) on the component's own clip (the B5MenuItem
+    // Selected/Unselected/Disabled/Invisible state labels); apt_labeltxt -> set the
+    // clip's nested 'label' dynamic-text field (SetTextValue + invalidate; the text
+    // pipeline localises '$KEY' strings); apt_updatestate -> no-op trigger.
+    bool AptRuntimeSetComponentKeyValue(const char* lpacInstName, const char* lpacKey,
+                                        const char* lpacValue);
 }
 
 #endif

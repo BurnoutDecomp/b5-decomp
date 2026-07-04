@@ -21,6 +21,7 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"      // BrnGui::MenuComponent
 #include "GameSource/Gui/BrnAptRuntimeBringUp.h"                         // BrnGui::AptRuntimeSetComponentViewState (PC shim)
 
+#include <cstdio>   // std::snprintf (the menu facade component names)
 #include <chrono>   // FLAG: PC wall-clock time source standing in for the GUI cache's frame time
 
 namespace BootLegalFlag
@@ -134,20 +135,129 @@ namespace CgsGui
 
     // PC bring-up shim (FLAG): the faithful path is FillAptViewMessage -> AptAux::
     // UpdateFlashComponent -> AptCommunicator -> the movie AS. That glue is not wired
-    // yet; drive the observable effect (gotoAndPlay the view-state label on this
-    // component's clip) through the Apt runtime bridge directly.
-    void GuiComponent::AddOutputAptViewState(const char* /*lpacAptName*/, const char* lpacViewState, bool /*lbImmediate*/)
+    // yet; drive each KEY's observable effect through the Apt runtime bridge directly
+    // (apt_Transition/apt_state -> gotoAndPlay; apt_labeltxt -> the label text field;
+    // apt_updatestate -> trigger no-op). The (key, value) pair is passed through
+    // faithfully -- the same pair UpdateComponent would store on the communicator.
+    void GuiComponent::AddOutputAptViewState(const char* lpacAptName, const char* lpacViewState, bool /*lbImmediate*/)
     {
-        BrnGui::AptRuntimeSetComponentViewState(GetName(), lpacViewState);
+        BrnGui::AptRuntimeSetComponentKeyValue(GetName(), lpacAptName, lpacViewState);
     }
 }
 
 namespace BrnGui
 {
-    void MenuComponent::Construct(const char* /*lpacName*/, CgsGui::StateInterface* /*lpStateInterface*/, int /*liA*/, int /*liB*/, s64 /*liC*/) {}
-    void MenuComponent::SetupMenu(int /*liNumRows*/, bool /*lbWrap*/) {}
-    void MenuComponent::SetText(int /*liRow*/, const char* /*lpacText*/) {}
-    void MenuComponent::Refresh() {}
-    void MenuComponent::SelectPrevious() {}
-    void MenuComponent::SelectNext() {}
+    // =======================================================================
+    // MenuComponent facade (PC bring-up; FLAG). The REAL X360 MenuComponent is the
+    // blocked multiply-inheriting SelectableGroup hierarchy (see BrnMenuComponent.cpp's
+    // ctor note); this facade reproduces the OBSERVABLE protocol the title screen
+    // needs, matching the asm of the real chain:
+    //   MenuComponent::SetText @0x8241EA88 -> MenuItem::SetText @0x824E3030
+    //     (SPrintf into the item's 64-byte text @+164 + set the dirty flag @+228);
+    //   MenuComponent::Refresh -> per-item MenuItem::Update @0x824E6490:
+    //     apt_labeltxt=<text>, apt_state=KAC_STATE_NAMES[state], apt_updatestate="1"
+    //     posted on the item's component -- named "<base>_<index>", the movie's
+    //     PLACE names (MenuItem_0/MenuItem_1 inside SelectionMenu_mc).
+    //   Selection maps to MenuItem's E_MENUITEMSTATES (BrnMenuItem.cpp
+    //   KAC_STATE_NAMES): highlighted -> "Selected", else "Unselected".
+    // Single static instance (the title screen owns ONE menu; the real component is
+    // per-object -- re-home this state into the class when the hierarchy unblocks).
+    // =======================================================================
+    namespace
+    {
+        const s32 KI_MENU_FACADE_MAX = 16;   // the real component's selectable cap
+        struct MenuFacadeItem
+        {
+            char macText[64];   // MenuItem +164: the SPrintf'd item text
+            bool mbDirty;       // MenuItem +228: the text/state-dirty flag
+        };
+        MenuFacadeItem s_aMenuItems[KI_MENU_FACADE_MAX];
+        char s_acMenuBaseName[32] = { 0 };
+        s32  s_iMenuNumEntries    = 0;
+        s32  s_iMenuHighlighted   = 0;
+    }
+
+    void MenuComponent::Construct(const char* lpacName, CgsGui::StateInterface* /*lpStateInterface*/, int /*liA*/, int /*liB*/, s64 /*liC*/)
+    {
+        s_acMenuBaseName[0] = '\0';
+        if (lpacName != nullptr)
+        {
+            u32 lu = 0;
+            for (; lpacName[lu] != '\0' && lu < sizeof(s_acMenuBaseName) - 1; ++lu)
+                s_acMenuBaseName[lu] = lpacName[lu];
+            s_acMenuBaseName[lu] = '\0';
+        }
+        s_iMenuNumEntries  = 0;
+        s_iMenuHighlighted = 0;
+        for (s32 li = 0; li < KI_MENU_FACADE_MAX; ++li)
+        {
+            s_aMenuItems[li].macText[0] = '\0';
+            s_aMenuItems[li].mbDirty    = false;
+        }
+    }
+
+    void MenuComponent::SetupMenu(int liNumRows, bool /*lbWrap*/)
+    {
+        s_iMenuNumEntries = (liNumRows < 0) ? 0
+                          : (liNumRows > KI_MENU_FACADE_MAX) ? KI_MENU_FACADE_MAX : liNumRows;
+        s_iMenuHighlighted = 0;
+        for (s32 li = 0; li < s_iMenuNumEntries; ++li)
+            s_aMenuItems[li].mbDirty = true;
+    }
+
+    void MenuComponent::SetText(int liRow, const char* lpacText)
+    {
+        if (liRow < 0 || liRow >= s_iMenuNumEntries || lpacText == nullptr)
+            return;
+        // MenuItem::SetText @0x824E3030: SPrintf("%s") into the 64-byte text + dirty.
+        u32 lu = 0;
+        for (; lpacText[lu] != '\0' && lu < sizeof(s_aMenuItems[liRow].macText) - 1; ++lu)
+            s_aMenuItems[liRow].macText[lu] = lpacText[lu];
+        s_aMenuItems[liRow].macText[lu] = '\0';
+        s_aMenuItems[liRow].mbDirty = true;
+    }
+
+    void MenuComponent::Refresh()
+    {
+        // Per-item MenuItem::Update @0x824E6490: a dirty item posts its label text,
+        // its state name, and the update trigger on its "<base>_<index>" component.
+        for (s32 li = 0; li < s_iMenuNumEntries; ++li)
+        {
+            if (!s_aMenuItems[li].mbDirty)
+                continue;
+            char lacComponent[48];
+            std::snprintf(lacComponent, sizeof(lacComponent), "%s_%d", s_acMenuBaseName, li);
+            const char* lpcState = (li == s_iMenuHighlighted) ? "Selected" : "Unselected";
+            AptRuntimeSetComponentKeyValue(lacComponent, "apt_labeltxt", s_aMenuItems[li].macText);
+            AptRuntimeSetComponentKeyValue(lacComponent, "apt_state", lpcState);
+            AptRuntimeSetComponentKeyValue(lacComponent, "apt_updatestate", "1");
+            s_aMenuItems[li].mbDirty = false;
+        }
+    }
+
+    void MenuComponent::SelectPrevious()
+    {
+        if (s_iMenuNumEntries <= 0)
+            return;
+        s_iMenuHighlighted = (s_iMenuHighlighted + s_iMenuNumEntries - 1) % s_iMenuNumEntries;
+        for (s32 li = 0; li < s_iMenuNumEntries; ++li)
+            s_aMenuItems[li].mbDirty = true;
+    }
+
+    void MenuComponent::SelectNext()
+    {
+        if (s_iMenuNumEntries <= 0)
+            return;
+        s_iMenuHighlighted = (s_iMenuHighlighted + 1) % s_iMenuNumEntries;
+        for (s32 li = 0; li < s_iMenuNumEntries; ++li)
+            s_aMenuItems[li].mbDirty = true;
+    }
+
+    // FLAG (facade accessor, not an X360 method): the real component reports the
+    // highlighted row through its SelectableGroup; BootLegal's UpdateSelectionMenu
+    // syncs mu8SelectedMenuIndex from this after Select*.
+    s32 BootLegalMenuFacade_GetHighlightedIndex()
+    {
+        return s_iMenuHighlighted;
+    }
 }
