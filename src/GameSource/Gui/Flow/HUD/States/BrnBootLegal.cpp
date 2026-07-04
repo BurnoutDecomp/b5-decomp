@@ -207,10 +207,22 @@ namespace
     {
         u8 maBody[112];
         GuiAudioTriggerEvent() : CgsGui::GuiEvent<201>(0, 12) { for (s32 i = 0; i < 112; ++i) maBody[i] = 0; }
-        // FLAG: the X360 fills the 112-byte audio record (channel + apt/trigger-name hashes). The exact
-        // layout + the sound trigger are the deferred audio-engine boundary; modelled as a no-op so the
-        // record is emitted (the menu "Accept" sound fires once the sound engine consumes channel-201 events).
-        void Construct(s32 /*liChannel*/, const char* /*lpacAptName*/, const char* /*lpacTrigger*/) {}
+        // FLAG (bring-up carrier layout): the X360 fills the 112-byte audio record with the channel +
+        // apt/trigger NAME HASHES for the AEMS sound logic; that exact record layout is the deferred
+        // audio-engine boundary. Until it is recovered, carry { s32 channel @+0, trigger name @+4,
+        // apt name @+68 } so the PC channel-201 consumer can key the trigger (it currently logs the
+        // trigger; the AEMS patch playback is the follow-on).
+        void Construct(s32 liChannel, const char* lpacAptName, const char* lpacTrigger)
+        {
+            *reinterpret_cast<s32*>(&maBody[0]) = liChannel;
+            const char* lpacT = (lpacTrigger != 0) ? lpacTrigger : "";
+            const char* lpacA = (lpacAptName != 0) ? lpacAptName : "";
+            s32 li = 0;
+            for (; li < 63 && lpacT[li] != 0; ++li) maBody[4 + li] = static_cast<u8>(lpacT[li]);
+            maBody[4 + li] = 0;
+            for (li = 0; li < 43 && lpacA[li] != 0; ++li) maBody[68 + li] = static_cast<u8>(lpacA[li]);
+            maBody[68 + li] = 0;
+        }
     };
 }   // anonymous namespace
 }   // namespace BrnGui

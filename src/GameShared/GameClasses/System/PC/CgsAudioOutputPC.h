@@ -38,6 +38,10 @@ public:
     static void Close();
     static bool IsOpen();
 
+    // The sample rate the voice was opened at (0 when closed). The single source
+    // voice is fixed-rate, so a stream at another rate must Close + re-Open.
+    static int  GetOpenSampleRate();
+
     // Swap the active fill source at runtime (e.g. test tone -> the real Dac pull).
     static void SetFill(FillFn lpFill, void* lpUser);
 

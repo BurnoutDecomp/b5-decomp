@@ -20,6 +20,7 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"  // CgsGui::sResourceTuple
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"      // BrnGui::MenuComponent
 #include "GameSource/Gui/BrnAptRuntimeBringUp.h"                         // BrnGui::AptRuntimeSetComponentViewState (PC shim)
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"             // CgsSound::Playback::Name::MakeHash (homed)
 
 #include <cstdio>   // std::snprintf (the menu facade component names)
 #include <chrono>   // FLAG: PC wall-clock time source standing in for the GUI cache's frame time
@@ -47,8 +48,14 @@ namespace BootLegalFlag
     // a no-op lets the legal-screen stage machine advance without the title movie.
     void MovieVideoDefinition_Prepare(void* /*lpDefinition*/) {}
 
-    // FLAG: CgsSound::Playback::Name::MakeHash -- the music/sound name hasher (deferred).
-    s32 SoundPlaybackNameMakeHash(const char* /*lpacName*/)   { return 0; }
+    // CgsSound::Playback::Name::MakeHash -- the music/sound name hasher, homed in
+    // CgsCommon.cpp (@0x82689A50, boot-trace verified). Call the real one so the
+    // menu-music event (155) carries the faithful hash its consumer keys on (this
+    // was a return-0 stub, which made every music post read as a "stop").
+    s32 SoundPlaybackNameMakeHash(const char* lpacName)
+    {
+        return static_cast<s32>(CgsSound::Playback::Name::MakeHash(lpacName));
+    }
 
     // BrnResource::DLCBeatTheTeamGame::SetEnabledState -- faithfully write the enable byte.
     void DLCBeatTheTeamGame_SetEnabledState(u8* lpFlag, s32 liState)

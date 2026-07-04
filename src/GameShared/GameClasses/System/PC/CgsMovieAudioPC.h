@@ -54,6 +54,32 @@ namespace CgsSystem
         static void FillStatic(s16* lpOut, int liFrames, void* lpUser);
         void Fill(s16* lpOut, int liFrames);
     };
+
+    // ------------------------------------------------------------------------
+    // CgsSystem::MenuMusicPC -- PC playback of the menu-stream MUSIC (the title
+    // screen's "GunsAndRoses" 44.1 kHz EA-XMA stream). Same faithful-data/PC-leaf
+    // model as MovieAudioPC (shares this TU's SNS+SNR decode); LOOPS the track,
+    // and resamples to the already-open device rate when they differ.
+    //
+    // On the console the menu stream is fed by BrnSound::Logic::MusicStream through
+    // SndStream (the deferred faithful layer -- the MusicEffect behavioural cluster
+    // is un-homed); this host player reproduces the OBSERVABLE: event-155 hash ->
+    // the named stream playing/looping, hash 0 -> stopped. FLAG.
+    //
+    // The movie stream (attract/boot videos) has fill priority: Update() only
+    // (re)claims the output while no movie stream is mid-play -- matching the
+    // console, which stops the menu stream (hash-0 post) before the attract video.
+    // ------------------------------------------------------------------------
+    class MenuMusicPC
+    {
+    public:
+        static bool Play(const char* lpSnsPath);   // decode (cached by path) + loop from the start
+        static void Stop();                        // stop (keeps the decoded PCM cached)
+        static void Update();                      // per-frame: (re)claim the output fill when free
+        static bool IsActive();
+    private:
+        static void FillStatic(s16* lpOut, int liFrames, void* lpUser);
+    };
 }
 
 #endif // CGS_SYSTEM_PC_MOVIEAUDIOPC_H
