@@ -169,6 +169,33 @@ extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
     CgsDev::Log::WriteToLog(lac);
 }
 
+// The AS new-object probe (declared in AptActionInterpreterStackOps.cpp): names every
+// `new <Class>` and whether the class resolved. First 48.
+extern "C" void AptCreateObjectProbe(const char* pcClass, bool bResolved)
+{
+    static int s_iCoHits = 0;
+    if (s_iCoHits >= 48)
+        return;
+    ++s_iCoHits;
+    char lac[160];
+    std::snprintf(lac, sizeof(lac), "[AptRT] new %s -> %s\n",
+                  pcClass ? pcClass : "<null>", bResolved ? "RESOLVED" : "UNRESOLVED");
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The Object.registerClass probe (declared in AptObject.cpp): logs each AS class
+// registration so the boot log shows the framework's class wiring run. First 24.
+extern "C" void AptRegisterClassProbe(const char* pcName)
+{
+    static int s_iRcHits = 0;
+    if (s_iRcHits >= 24)
+        return;
+    ++s_iRcHits;
+    char lac[160];
+    std::snprintf(lac, sizeof(lac), "[AptRT] registerClass: '%s'\n", pcName ? pcName : "<null>");
+    CgsDev::Log::WriteToLog(lac);
+}
+
 // The _parseStream double-resolve probe (declared in AptActionInterpreterParseStream.cpp):
 // logs a Push/dictionary constant slot revisited after a prior resolve pass. First 16 hits.
 extern "C" void AptParseStreamDoubleResolveProbe(const void* pSlot, long long nValue)
