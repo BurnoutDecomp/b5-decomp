@@ -149,6 +149,18 @@ namespace CgsGraphics
         return luNumLines;
     }
 
+    // Construct @0x827E9D98 -- zero-init the render-buffer pointers + the single per-type vertex
+    // slot state (console: `stw 0` at +0/+4/+8/+0xC, `stb 0` at +0x10). The temp-vertex scratch
+    // (maaTempVertices) is deliberately left uninitialised, exactly as the console leaves it.
+    void TextRenderer::Construct()
+    {
+        mpIm2dRenderBuffer      = 0;   // +0x00
+        mpIm3dRenderBuffer      = 0;   // +0x04
+        mauVertexCount[0]       = 0;   // +0x08
+        mapaVertices[0]         = 0;   // +0x0C
+        mabTempVerticesInUse[0] = false;   // +0x10
+    }
+
     // Faithful port of X360 0x82801998: render through the Im2d buffer, then clear it.
     void TextRenderer::RenderString(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject)
     {

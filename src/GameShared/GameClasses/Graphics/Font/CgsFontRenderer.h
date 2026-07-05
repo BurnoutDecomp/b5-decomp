@@ -111,6 +111,11 @@ namespace CgsGraphics
 
         typedef CgsGraphics::Basic2dColouredTexturedVertex Im2dVertex;
 
+        // Construct @0x827E9D98 -- zero the render-buffer pointers + the per-type vertex slot state
+        // (the object is otherwise POD; the temp-vertex scratch needs no init). Called by
+        // CgsGui::ViewModule::Construct as part of the GUI-IO render context bring-up.
+        void Construct();
+
         // Render one text object's string into the given Im2d buffer. X360 0x82801998: stashes the
         // buffer, runs RenderStringInternal (Buffered), clears the buffer pointer.
         void RenderString(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject);
