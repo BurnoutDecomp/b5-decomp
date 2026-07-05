@@ -134,11 +134,14 @@ namespace TestBed
     // Link stubs for the testbed-allocator tail. BrnRootSoundModule.cpp now instantiates the
     // four carve globals (gRwac/gCsis/gPlayback/gLogicTestBedAlloc), which pulls the Allocator
     // vtable + the SanityCheck/SafeDump paths into the link, but the DoAllocate/DoFree bodies
-    // (the actual carve/track/free algorithms) and the per-block Header::SanityCheck/Dump
-    // bodies are not reconstructed yet. NOT exercised on the boot path: nothing allocates
-    // through these wrappers until the RWAC/PLAYBACK/LOGIC carve stages of
-    // RootSoundModule::Prepare go real (they are gated on the same missing layers). Replace
-    // with the real bodies when the testbed-allocator TU tail is reconstructed.
+    // (the actual carve/track/free algorithms) and the per-block Header::SanityCheck body are
+    // not reconstructed yet. NOT exercised on the boot path: nothing allocates through these
+    // wrappers until the RWAC/PLAYBACK/LOGIC carve stages of RootSoundModule::Prepare go real
+    // (they are gated on the same missing layers). Replace with the real bodies when the
+    // testbed-allocator TU tail is reconstructed.
+    //   NOTE: Header::Dump is NOT stubbed here -- its real body now lives in
+    //   CgsTestBedAllocator.cpp (wired into the exe source list). A prior stub collided
+    //   (LNK2005) with that body and was removed.
     rw::Resource Allocator::DoAllocate(const rw::ResourceDescriptor& /*lrDescriptor*/,
                                        const char* /*lpcName*/)
     {
@@ -146,8 +149,87 @@ namespace TestBed
     }
     void Allocator::DoFree(const rw::Resource& /*lrResource*/) {}
     void Allocator::Header::SanityCheck(History& /*lrHistory*/, const char* /*lpcAllocatorName*/) {}
-    void Allocator::Header::Dump(History& /*lrHistory*/) {}
 }
+}
+
+// ===========================================================================
+// wave46 link-resolution stubs.
+//
+// Several TUs already in the exe source list had their bodies EXPANDED (wave46) to call
+// helpers that are declared-only / reconstructed as isolated compile-gate TUs whose symbols
+// do not link (they drag X360 XDK externals). None of these helper paths run on the
+// title-screen boot slice, so inert stubs satisfy the link and stay behaviourally neutral.
+// Replace each with the real body when its subsystem is wired into the build.
+// ===========================================================================
+
+// --- CgsUnicode string helpers (declared in CgsUnicode.h; bodies not yet reconstructed). ---
+// Referenced by CgsUnicode::UnicodeBuffer::Convert (Copy) and BrnGui::GuiHudMessage::GetParam
+// (SafelyTerminate). Inert: copy nothing / just return the buffer NUL-terminated at [0].
+#include "GameShared/GameClasses/Fonts/CgsUnicode.h"
+namespace CgsUnicode
+{
+    CgsUtf8* Copy(CgsUtf8* lpUtf8TargetString, const CgsUtf8* /*lpUtf8SourceString*/)
+    {
+        if (lpUtf8TargetString) lpUtf8TargetString[0] = 0;
+        return lpUtf8TargetString;
+    }
+    CgsUtf8* SafelyTerminate(CgsUtf8* lpUtf8String, s32 /*lnMaxTargetLength*/)
+    {
+        if (lpUtf8String) lpUtf8String[0] = 0;
+        return lpUtf8String;
+    }
+}
+
+// --- EA::GameTalk::GameTalkMessage accessors (BrnGameModule::RenderMetricsMessageHandler,
+// a debug-metrics GameTalk handler -- not on the boot path). No keys / no key strings. ---
+#include "SDKs/EA/GameTalk/GameTalk.h"
+namespace EA { namespace GameTalk {
+    s32         GameTalkMessage::GetNumKeys() const           { return 0; }
+    const char* GameTalkMessage::GetKey(s32 /*liIndex*/) const { return 0; }
+}}
+
+// --- BrnHW::System360HW::HasGameBeenRebootedDueToInvite (real body is in BrnSystemHWX360.cpp,
+// which is out of the PC exe build). Mirrors the BrnBootLegalBoundary.cpp fallback: false. ---
+#include "GameSource/Game/X360/BrnSystemHWX360.h"
+namespace BrnHW
+{
+    bool System360HW::HasGameBeenRebootedDueToInvite() { return false; }
+}
+
+// --- XShowDirtyDiscErrorUI: Xbox 360 XDK import (declared extern "C" in BrnGameModule.cpp's
+// DiskErrorThreadProc). No PC equivalent; the disk-error thread never runs on the boot slice. ---
+extern "C" unsigned long XShowDirtyDiscErrorUI(unsigned long /*dwUserIndex*/) { return 0; }
+
+// --- RenderWare resource-descriptor helpers driving RwRenderableResourceType::
+// GetSerialisedResourceDescriptor (a resource-SIZE query, not exercised while rendering the
+// title Apt). RenderableMesh::GetResourceDescriptor has no linkable body; the renderengine
+// IndexBuffer/VertexBuffer bodies live in TUs that drag undefined X360 XDK shims, so they are
+// stubbed here rather than linked. All inert: empty/zero descriptors, pass-through pointers. ---
+#include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"
+#include "pc/gcm/renderengine/IndexBuffer.h"
+#include "pc/gcm/renderengine/VertexBuffer.h"
+CgsResource::ResourceDescriptor RenderableMesh::GetResourceDescriptor(uint32_t /*luNumVertexBuffers*/,
+                                                                      uint32_t /*luNumVertexDescriptors*/)
+{
+    return CgsResource::ResourceDescriptor();
+}
+namespace renderengine
+{
+    IndexBufferHeader* IndexBuffer::GetParameters(IndexBufferHeader* lpBuffer, IndexBufferParamsOut* lpOut)
+    {
+        if (lpOut) { lpOut->muField00 = 0u; lpOut->muBits = 16u; lpOut->muCount = 0u; }
+        return lpBuffer;
+    }
+    VertexBufferHeader* VertexBuffer::GetParameters(VertexBufferHeader* lpBuffer, u32* lpParamsOut)
+    {
+        if (lpParamsOut) { lpParamsOut[0] = 0u; lpParamsOut[1] = 0u; }
+        return lpBuffer;
+    }
+    u64* VertexBuffer::GetResourceDescriptor(u64* lpDescriptorOut, int /*a2*/)
+    {
+        if (lpDescriptorOut) { for (int i = 0; i < 5; ++i) lpDescriptorOut[i] = 0ull; }
+        return lpDescriptorOut;
+    }
 }
 
 // CgsNetwork::FloatQuantiser::UnPack is NOT stubbed here -- the real asm-decoded body
