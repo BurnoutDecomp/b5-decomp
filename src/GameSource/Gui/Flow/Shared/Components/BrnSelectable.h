@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 
-namespace CgsGui { class StateInterface; }
+namespace CgsGui { struct StateInterface; }
 
 // BrnGui::Selectable - the highlight/select item base every menu-ish component
 // mixes in (an id + a state-flag byte + the optional selection text, with the

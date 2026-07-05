@@ -10,7 +10,9 @@ namespace CgsLanguage { class LanguageManager; }
 
 namespace CgsGui
 {
-    class StateInterface;
+    struct StateInterface;   // canonical tag (CgsGuiStateInterface.h) -- keep struct so the
+                             // mangled name of every GuiComponent method taking a StateInterface*
+                             // matches across TUs (a class/struct split silently breaks the link).
 
     struct GuiComponent
     {

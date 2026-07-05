@@ -20,14 +20,11 @@
 #include "types.hpp"
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"  // base
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuItem.h"         // embedded row
-#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                        // BrnGui::GuiFlow
 
-namespace CgsGui { class StateInterface; }
+namespace CgsGui { struct StateInterface; }
 
 namespace BrnGui
 {
-    class GuiCache;
-
     struct MenuComponent : public SelectableGroup
     {
         static const s32 KI_MAX_MENU_ITEMS = 16;   // GetSelectable's fixed index bound
@@ -65,8 +62,9 @@ namespace BrnGui
         // @0x824E4DE8 -- move the highlight to the previous row (not quiet).
         bool HighlightPrevious();
 
-        // @0x824E2DE0 -- register every row's apt component name with the loading-screen cache.
-        void AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpCache);
+        // (@0x824E2DE0 MenuComponent::AppendExpectedAptComponent deferred: it registers each row's
+        // apt name with the loading-screen cache, but GuiCache::AppendExpectedAptComponent is not
+        // yet bodied and it is not on the title-menu path -- reconstruct with that TU.)
 
         MenuItem maItems[KI_MAX_MENU_ITEMS];   // +0x238 (16 rows, 0xE8 stride)
         s32      miNumMenuItems;               // +0x10B8 (rows created by Construct)

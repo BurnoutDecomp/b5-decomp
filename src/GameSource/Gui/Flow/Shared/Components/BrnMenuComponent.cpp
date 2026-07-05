@@ -11,7 +11,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"  // CgsGui::GuiComponent (item base construct/name)
-#include "GameSource/Gui/BrnGuiCache.h"                   // BrnGui::GuiCache (AppendExpectedAptComponent)
 
 #include <cstring>   // std::strlen (name-length assert)
 
@@ -155,12 +154,5 @@ namespace BrnGui
     bool MenuComponent::HighlightPrevious()
     {
         return SelectableGroup::HighlightPrevious(false);
-    }
-
-    // @0x824E2DE0 -- register every row's apt component name with the loading-screen cache.
-    void MenuComponent::AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpCache)
-    {
-        for (s32 li = 0; li < miNumMenuItems; ++li)
-            lpCache->AppendExpectedAptComponent(leFlow, maItems[li].CgsGui::GuiComponent::GetName());
     }
 }
