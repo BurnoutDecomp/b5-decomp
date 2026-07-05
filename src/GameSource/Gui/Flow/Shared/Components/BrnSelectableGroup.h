@@ -32,7 +32,7 @@
 
 // Forward-declared: the group stores Selectable* and calls their virtuals in the .cpp
 // (which includes BrnSelectable.h). Pointer members need only the incomplete type here.
-namespace CgsGui { class StateInterface; }
+namespace CgsGui { struct StateInterface; }
 
 namespace BrnGui
 {

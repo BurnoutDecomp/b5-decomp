@@ -34,7 +34,8 @@ namespace BrnGui
         void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                        const char* lpacParentName, u64 luId);
         const char* GetItemText() const;
-        virtual void Select();
+        // (No MenuItem::Select override: the X360 ledger has no such symbol -- MenuItem inherits
+        // the base Selectable::Select (vtable slot 4). It was a PS3-only DWARF declaration.)
 
         // @0x824E2E90 (this TU, DWARF h:57) -- wipe the row back to an unused slot.
         void Clear();

@@ -79,4 +79,11 @@ namespace BrnGui
     {
         mxFlags = static_cast<u8>(mxFlags ^ E_FLAG_DIRTY);
     }
+
+    // The base "select" action is a no-op (no out-of-line X360 body -- it is inlined/empty on
+    // the base and overridden by the concrete selectables that act on selection, e.g.
+    // ImageGallerySelectable::Select). MenuItem uses this base default (vtable slot 4).
+    void Selectable::Select()
+    {
+    }
 }
