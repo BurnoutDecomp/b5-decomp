@@ -32,6 +32,19 @@
 // FLAG (wired at AptInit; see AptValueConvert.cpp).
 extern AptValue* gpUndefinedValue;
 
+// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
+// bring-up TU): reports a CIH-stack push/pop imbalance detected at a top-level
+// runStream exit (see the exit pop).
+#if defined(_MSC_VER)
+extern "C" void AptRunStreamImbalanceProbe(int nSavedTop, int nExitTop,
+                                           const void* pSlot, const void* pPushed);
+#pragma comment(linker, "/alternatename:AptRunStreamImbalanceProbe=AptRunStreamImbalanceProbeDefault")
+extern "C" void AptRunStreamImbalanceProbeDefault(int, int, const void*, const void*) {}
+#else
+extern "C" void AptRunStreamImbalanceProbe(int nSavedTop, int nExitTop,
+                                           const void* pSlot, const void* pPushed);
+#endif
+
 // FLAG (string-pool key): the scope ("this") variable name runStream binds at entry
 // (console stru_1059C8A0). Homed with the StringPool constants. getVariable's body
 // is deferred too (see AptActionInterpreter.h), so this run-scope bind is a FLAG'd
@@ -44,6 +57,11 @@ const unsigned char* AptActionInterpreter::runStream(
     const bool bTopLevel = (nLength == -1);
 
     // Top-level run: push the running CIH onto the target/CIH stack.
+    // (The entry top is snapshotted so the exit pop releases EXACTLY the pushed CIH
+    // and restores the entry depth -- observably identical to the console's push/pop
+    // when the nested handlers stay balanced, and it self-heals + logs when an
+    // un-homed nested path drifts the top. FLAG diagnostic; see the exit pop.)
+    const int nSavedCIHTop = mnCIHStackTop;
     if (bTopLevel)
     {
         mpCIHStack[mnCIHStackTop] = pCIH;
@@ -127,11 +145,21 @@ const unsigned char* AptActionInterpreter::runStream(
 
     mnStackBase = nSavedBase;
 
-    // Top-level run: pop the CIH off the target stack.
+    // Top-level run: pop the CIH off the target stack. Release the exact CIH this
+    // run pushed (pCIH) and restore the entry depth; a drifted top (an unbalanced
+    // nested handler) is logged instead of dereferencing an unwritten slot (the
+    // 0xbaadf00d AV this replaces -- FLAG diagnostic, see the entry note).
     if (bTopLevel)
     {
-        mpCIHStack[mnCIHStackTop - 1]->Release();
-        --mnCIHStackTop;
+        if (mnCIHStackTop != nSavedCIHTop + 1
+            || mpCIHStack[mnCIHStackTop - 1] != pCIH)
+        {
+            AptRunStreamImbalanceProbe(nSavedCIHTop, mnCIHStackTop,
+                                       mnCIHStackTop > 0 ? mpCIHStack[mnCIHStackTop - 1] : nullptr,
+                                       pCIH);
+        }
+        pCIH->Release();
+        mnCIHStackTop = nSavedCIHTop;
     }
 
     // FLAG: the console then flushes the GC deferred-release vector
