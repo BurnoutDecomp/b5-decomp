@@ -303,7 +303,11 @@ void AptScriptFunctionBase::SetRegisterValue(int32_t nRegister, AptValue* pValue
     AptValue* pOld = spRegBlockCurrentFrameBase[nRegister];
     spRegBlockCurrentFrameBase[nRegister] = pValue;
     pValue->AddRef();
-    pOld->Release();
+    // Null-guarded: the console pre-fills the whole register block with the
+    // undefined singleton at init, so pOld is never raw null there; the x64
+    // block's first-touch slots are zero -- skip the release. FLAG hardening.
+    if (pOld)
+        pOld->Release();
 }
 
 // GetRegisterValue -- the symmetric read: return the live value in register slot

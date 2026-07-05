@@ -169,6 +169,18 @@ extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
     CgsDev::Log::WriteToLog(lac);
 }
 
+// The clip-placement class-bind probe. First 32.
+extern "C" void AptClassBindProbe(const char* pcExport)
+{
+    static int s_iCbHits = 0;
+    if (s_iCbHits >= 220)
+        return;
+    ++s_iCbHits;
+    char lac[144];
+    std::snprintf(lac, sizeof(lac), "[AptRT] class-bind: '%s'\n", pcExport ? pcExport : "<null>");
+    CgsDev::Log::WriteToLog(lac);
+}
+
 // The RunActions stale-ring-slot probe. First 16.
 extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH)
 {

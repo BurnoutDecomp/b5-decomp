@@ -29,6 +29,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"
+#include <cstdio>   // snprintf (the class-bind diagnostic probe)
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"   // delegated list ops
 #include "SDKs/EATech/include/Apt/AptCIH.h"                // the listed nodes + AddRef/Release/ClearCIH
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"      // GetCharacterInst()->GetDepth() (removeClonedObject)
@@ -44,6 +45,10 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // ExecuteInitActions
 #include "SDKs/EATech/include/Apt/AptFile.h"                 // AptMovieData (the .apt root + import table)
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"      // GetNewInsts / GetNewInstSize / DecNewInstSize / mInputSet
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"     // callFunction / the GC-root stacks (class binding)
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // Push/PopStaticData (the register window)
+#include "SDKs/EATech/include/Apt/AptPrototype.h"             // AptPrototype (the node prototype)
+#include "SDKs/EATech/include/Apt/AptObject.h"                // AptValueWithHash (the live _global type)
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"            // AptFilePtr (the placed char's animation-file bind)
 #include "SDKs/EATech/include/Apt/AptTarget.h"               // gpAptTarget->GetAnimationTarget()
 #include "SDKs/EATech/include/Apt/AptListenerSlotList.h"     // the clip-event set-cache add (_addToSetCaches)
@@ -645,6 +650,20 @@ extern AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int n
 extern void    AptCharInst_SetPlacementField18(AptCharacterInst* pInst, const void* pValue);
 extern void    AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject);
 extern int     AptCIH_AssociateInstToClass(AptCIH* pNode);
+
+// The class-binding tail's collaborators (see AptCIH_AssociateInstToClass below).
+extern AptNativeHash* gpAptClassRegistry;             // dword_8324E2D4 (AptObject.cpp)
+extern AptValueWithHash* gpAptGlobalFallback;         // off_8324E380 (the live _global)
+extern const EAStringC gAptSpriteClassKey;            // dword_8324E640 "MovieClip"
+extern AptActionInterpreter gAptActionInterpreter;    // &dword_8324E760
+
+#if defined(_MSC_VER)
+extern "C" void AptClassBindProbe(const char* pcExport);
+#pragma comment(linker, "/alternatename:AptClassBindProbe=AptClassBindProbeDefault")
+extern "C" void AptClassBindProbeDefault(const char*) {}
+#else
+extern "C" void AptClassBindProbe(const char* pcExport);
+#endif
 
 // ---------------------------------------------------------------------------
 // instantiateCharacter @0x82B061D0 -- find-or-create the placed node at a depth and
@@ -1283,11 +1302,139 @@ int AptCIH_AssociateInstToClass(AptCIH* pNode)
     const bool bSpriteLike = (nTag == 5u || nTag == 16u);
     if (!bSpriteLike && (pInst->mTypeFlags & 0xFC000000u) != 0x24000000u)
         return 0;
+    {
+        char lacGate[64];
+        // sprite-like entry: show the bit-27 gate value (diagnostic probe).
+        lacGate[0] = 0;
+        AptCharacter* const pProbeChar = pInst->GetRenderItem()->mpCharacter;
+        std::snprintf(lacGate, sizeof(lacGate), "<sprite f27=%u chr=%d fix=%d exp=%d>",
+                      (pInst->GetRenderItem()->mFlags >> 27) & 1u,
+                      pProbeChar ? 1 : 0,
+                      (pProbeChar && pProbeChar->mpFixupLink) ? 1 : 0,
+                      (pProbeChar && pProbeChar->mpFixupLink)
+                          ? reinterpret_cast<const AptMovieData*>(pProbeChar->mpFixupLink)->mnExportCount
+                          : -1);
+        AptClassBindProbe(lacGate);
+    }
     if (((pInst->GetRenderItem()->mFlags >> 27) & 1u) != 0u)   // already class-bound
         return 0;
 
-    // The prototype build + class-value resolution + AS-constructor execution is the
-    // deferred AS-execution tail (FLAG above): no class is registered until the AS-VM
-    // boot TU is homed, so the X360's own early-outs make this a no-op during bring-up.
-    return 0;
+    // ---- the class-binding tail (UN-DEFERRED 2026-07-05: the AS framework is live,
+    // Object.registerClass populates gpAptClassRegistry) -- faithful to the X360
+    // @0x82B073B8 body:
+    //   1. fresh prototype on the node + __proto__ = the MovieClip builtin's prototype
+    //      (console Lookup(_global+8, &dword_8324E640 "MovieClip") -> *(hash+12));
+    //   2. resolve the placed char's EXPORT NAME (the owning ROOT movie's export table:
+    //      match charTable[entry.id] == the char);
+    //   3. look the name up in the class registry (dword_8324E2D4); on a defined hit:
+    //      node.__proto__ = class.prototype; tick the node once (byte_82F733F7 gate,
+    //      boot default 0) + SetDirtyState; RUN THE CLASS CONSTRUCTOR on the node under
+    //      GC-root protection (interp stacks B(+0x0C)/E(+0x30) pushes + the register-
+    //      window save, callFunction(node, class, 0), pops + restore);
+    //   4. FindAndSetEvents (the clip-event member mask the dispatcher consumes).
+    //      FLAG: the console then adds the node to the director's event-target set
+    //      (off_8324E574 listener list) when events were found -- that container is
+    //      un-homed; the member-mask wiring below is what queueClipEvents reads.
+    AptCharacter* const pChar = pInst->GetRenderItem()->mpCharacter;
+    if (pChar == nullptr || pChar->mpFixupLink == nullptr)
+        return 0;
+    const AptMovieData* const pMovie =
+        reinterpret_cast<const AptMovieData*>(pChar->mpFixupLink);   // the ROOT char header
+
+    // console: the prototype/__proto__ land on the CHAR INST's property hash
+    // (v2[3] == pInst->mpProperties -- the same hash timeline variables use),
+    // NOT the CIH's value hash (which is null for placed clips).
+    AptNativeHash* const pNodeHash = pInst->mpProperties;
+    if (pNodeHash == nullptr)
+    {
+        AptClassBindProbe("<no-props-hash>");
+        return 0;
+    }
+
+    // 1. fresh prototype + the MovieClip builtin's prototype as __proto__.
+    AptPrototype* const pFreshProto = new AptPrototype();
+    pNodeHash->SetPrototype(pFreshProto);
+    if (gpAptGlobalFallback != nullptr)
+    {
+        AptNativeHash* const pGlobals = gpAptGlobalFallback->GetNativeHashVirtual();
+        AptValue* const pMcClass = pGlobals ? pGlobals->Lookup(gAptSpriteClassKey) : nullptr;
+        AptNativeHash* const pMcHash = pMcClass ? pMcClass->GetNativeHashVirtual() : nullptr;
+        if (pMcHash != nullptr && pMcHash->GetPrototype() != nullptr)
+            pNodeHash->Set__Proto__(pMcHash->GetPrototype());
+    }
+
+    // 2. the char's export name.
+    const char* pExportName = nullptr;
+    if (pMovie->mnExportCount > 0 && pMovie->mpExportTable != nullptr
+        && pMovie->mpCharacterTable != nullptr)
+    {
+        for (int32_t li = 0; li < pMovie->mnExportCount; ++li)
+        {
+            const AptExportEntry& lrEntry = pMovie->mpExportTable[li];
+            if (lrEntry.mnCharacterId >= 0 && lrEntry.mnCharacterId < pMovie->mnCharacterCount
+                && pMovie->mpCharacterTable[lrEntry.mnCharacterId] == pChar)
+            {
+                pExportName = lrEntry.mpName;
+                break;
+            }
+        }
+    }
+    if (pExportName == nullptr || gpAptClassRegistry == nullptr)
+    {
+        AptClassBindProbe(pExportName ? "<no-registry>" : "<no-export-name>");
+        return 0;
+    }
+
+    // 3. the registered class.
+    EAStringC lName(pExportName);
+    AptValue* const pClass = gpAptClassRegistry->Lookup(lName);
+    if (pClass == nullptr || !pClass->getIsDefined())
+    {
+        AptClassBindProbe("<no-class-for-export>");
+        return 0;
+    }
+
+    AptClassBindProbe(pExportName);   // FLAG bring-up probe (weak sink pattern)
+
+    AptNativeHash* const pClassHash = pClass->GetNativeHashVirtual();
+    AptValue* const pClassProto = pClassHash ? pClassHash->GetPrototype() : nullptr;
+    if (pClassProto != nullptr && pClassProto->getIsDefined())
+        pNodeHash->Set__Proto__(pClassProto);
+
+    // console: tick once (byte_82F733F7 boot default 0 -> tick) + SetDirtyState(1).
+    pNode->tick();
+    pNode->SetDirtyState(true, false);
+
+    // 4. run the class constructor on the node (GC-root protected).
+    AptValue** const lppSavedRegs = AptScriptFunctionBase::PushStaticData();
+    gAptActionInterpreter.mpCallStackB[gAptActionInterpreter.mnCallStackB_Count++] = pNode;
+    pNode->AddRef();
+    gAptActionInterpreter.mpCallStackE[gAptActionInterpreter.mnCallStackE_Count++] = pNode;
+    pNode->AddRef();
+    pNode->mFlagsA |= 0x8000000u;
+    gAptActionInterpreter.callFunction(static_cast<AptValue*>(pNode), pClass, 0, nullptr, nullptr);
+    pNode->mFlagsA &= ~0x8000000u;
+
+    if (gAptActionInterpreter.mnCallStackE_Count > 0)
+    {
+        AptValue* const pTopE = reinterpret_cast<AptValue*>(
+            gAptActionInterpreter.mpCallStackE[gAptActionInterpreter.mnCallStackE_Count - 1]);
+        if (pTopE) pTopE->Release();
+        --gAptActionInterpreter.mnCallStackE_Count;
+    }
+    if (gAptActionInterpreter.mnCallStackB_Count > 0)
+    {
+        AptValue* const pTopB = reinterpret_cast<AptValue*>(
+            gAptActionInterpreter.mpCallStackB[gAptActionInterpreter.mnCallStackB_Count - 1]);
+        if (pTopB) pTopB->Release();
+        --gAptActionInterpreter.mnCallStackB_Count;
+    }
+    if (gAptActionInterpreter.mnStackTop > 0)
+        gAptActionInterpreter.stackPop();   // the constructor's result
+    AptScriptFunctionBase::PopStaticData(lppSavedRegs);
+
+    // 5. wire the clip-event member mask + mark the render item class-bound.
+    pNode->FindAndSetEvents();
+    pInst->GetRenderItemWritable()->mFlags |= (1u << 27);
+    return 1;
 }

@@ -184,6 +184,8 @@ void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
     {
         if (!pPreloadThis)
             pPreloadThis = mpCIH->findChild(&gAptKeyThis, 0);
+        if (!pPreloadThis)
+            pPreloadThis = gpUndefinedValue;   // miss -> the undefined singleton (as _parent)
         AptScriptFunctionBase::SetRegisterValue(1, pPreloadThis);
         nReg = 2;
     }
@@ -201,6 +203,8 @@ void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
         // against the function's own scope instead.
         if (!pArguments || ((pArguments->mnValueData >> 27) & 1) == 0)
             pArguments = mpCIH->findChild(&gAptKeyArguments, 0);
+        if (!pArguments)
+            pArguments = gpUndefinedValue;     // miss -> the undefined singleton
         AptScriptFunctionBase::SetRegisterValue(nReg++, pArguments);
     }
 
@@ -208,6 +212,8 @@ void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
     {
         EAStringC keyRoot("_root");
         AptValue* pRoot = mpCIH->findChild(&keyRoot, 0);
+        if (!pRoot)
+            pRoot = gpUndefinedValue;          // miss -> the undefined singleton
         AptScriptFunctionBase::SetRegisterValue(nReg++, pRoot);
     }
 
