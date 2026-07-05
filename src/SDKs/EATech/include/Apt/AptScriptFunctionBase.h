@@ -175,6 +175,9 @@ public:
     static AptValue** PushStaticData();
 
     AptValue* GetCIH() const          { return mpCIH; }
+    // Raw mpCIH write (no ref-count change) -- the console callFunction reduced path drops a
+    // dead-bound function's CIH via an explicit Release + this raw store to the pinned EmptyCIH.
+    void      SetCIH(AptValue* pCIH)  { mpCIH = pCIH; }
     AptValue* GetParentScope() const  { return mpParentScope; }
     // +0x24 ParentAnim accessor (the global-object frame the interpreter's variable
     // fallback resolves _level / global members through -- getVariable @0x82B03430
