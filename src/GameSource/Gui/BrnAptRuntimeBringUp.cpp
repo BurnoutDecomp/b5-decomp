@@ -169,6 +169,18 @@ extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
     CgsDev::Log::WriteToLog(lac);
 }
 
+// The RunActions stale-ring-slot probe. First 16.
+extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH)
+{
+    static int s_iSsHits = 0;
+    if (s_iSsHits >= 16)
+        return;
+    ++s_iSsHits;
+    char lac[144];
+    std::snprintf(lac, sizeof(lac), "[AptRT] RunActions STALE SLOT: slot=%p cih=%p\n", pSlot, pCIH);
+    CgsDev::Log::WriteToLog(lac);
+}
+
 // The CallMethod stack-accounting probe: logs ONLY invariant violations
 // (exit top must equal entry top - (args+3) + 1) plus the last entry before one.
 extern "C" void AptCallMethodProbe(const char* pcWhere, int nTop, int nArgs, const char* pcNote)
@@ -200,7 +212,7 @@ extern "C" void AptCallMethodProbe(const char* pcWhere, int nTop, int nArgs, con
 extern "C" void AptSetVariableProbe(const char* pcName, const void* pContext, int nContextType)
 {
     static int s_iSvHits = 0;
-    if (s_iSvHits >= 96)
+    if (s_iSvHits >= 400)
         return;
     ++s_iSvHits;
     char lac[176];
