@@ -675,6 +675,14 @@ extern AptValue* gpAptDestroyedClipValue;   // dword_8324D818
 extern const EAStringC gAptEmptyMethodName;   // unk_8324E6B8
 extern const EAStringC gAptThisKey;           // dword_8324E6C0
 // The apply()/call() method-name keys the console stricmp's inline (rodata literals).
+#if defined(_MSC_VER)
+extern "C" void AptCallMethodProbe(const char* pcWhere, int nTop, int nArgs, const char* pcNote);
+#pragma comment(linker, "/alternatename:AptCallMethodProbe=AptCallMethodProbeDefault")
+extern "C" void AptCallMethodProbeDefault(const char*, int, int, const char*) {}
+#else
+extern "C" void AptCallMethodProbe(const char* pcWhere, int nTop, int nArgs, const char* pcNote);
+#endif
+
 static const EAStringC gAptApplyKey("apply");
 static const EAStringC gAptPopKey  ("pop");
 static const EAStringC gAptShiftKey("shift");
@@ -695,6 +703,9 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     AptValue*       pMethodName = pInterp->mpStack[pInterp->mnStackTop - 2];   // v7 (r27)
 
     int       nArgs       = pCountValue->toInteger();   // v8/v9/v25
+    // FLAG (bring-up probe): entry/exit stack accounting trace.
+    AptCallMethodProbe("entry", pInterp->mnStackTop, nArgs,
+                       pObject && pObject->isString() ? "strname" : "othername");
     EAStringC** pNameSlot  = nullptr;                    // v10 (r23): method-name slot
     bool      bPushedFrame = false;                      // v11 (r15)
     AptValue* pMethod      = nullptr;                    // v12 (r26): resolved method value
@@ -797,7 +808,9 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
 
     // ---- pop the object operand + drop the name/count slots (console Pop; then the
     //      top-- / top-- pair that drops the name + count without releasing) ----
-    pInterp->stackPop();                                       // console AptValue>::Pop (the object slot)
+    AptCallMethodProbe("pre-pop", pInterp->mnStackTop, nArgs,
+                       pMethod ? (pMethod->getIsDefined() ? "resolved" : "undef") : "null");
+    pInterp->stackPop();                                       // console AptValue>::Pop (the NAME slot, top)
     if (pInterp->mnStackTop > 0)
     {
         --pInterp->mnStackTop;
@@ -1043,6 +1056,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     AptApt_PopCallStackC(pInterp);   // console AptValue_::pop(a1 + 9)  // FLAG: call-depth stack #2 pop
     pMethodNameSaved->Release();     // console (*(*v19+4))(v19)
     pCountValue->Release();          // console (*(*v5+4))(v5)
+    AptCallMethodProbe("exit", pInterp->mnStackTop, nArgs, "");
 
     // LABEL_140: the string scratch (v69[0]) is released by EAStringC's RAII dtor.
 }

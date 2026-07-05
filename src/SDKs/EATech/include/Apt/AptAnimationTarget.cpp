@@ -1491,16 +1491,27 @@ int AptAnimationTarget::RunActions()
             gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
 
             // Pop the pushed context off the CIH/target stack, then the operand stack.
-            reinterpret_cast<AptValueVector*>(
-                &gAptActionInterpreter.mnCIHStackTop)->pop();   // AptValue_::pop(&dword_8324E784)
-            reinterpret_cast<AptValueVector*>(
-                &gAptActionInterpreter.mnStackTop)->pop();      // AptValue_::Pop(&dword_8324E760)
+            // x64 FIX (2026-07-05, same class as the CallMethod cleanup pops): the
+            // console pun (member triple reinterpreted as AptValueVector + pop()) reads
+            // its array pointer from a garbage offset on x64, releasing bogus values
+            // and corrupting the interpreter stacks -- which then garbaged the queue
+            // walk (the RunActions+0xa4 wild-node AV). Named-member pops instead.
+            if (gAptActionInterpreter.mnCIHStackTop > 0)
+            {
+                AptCIH* const lpTopCIH =
+                    gAptActionInterpreter.mpCIHStack[gAptActionInterpreter.mnCIHStackTop - 1];
+                if (lpTopCIH)
+                    lpTopCIH->Release();
+                --gAptActionInterpreter.mnCIHStackTop;
+            }
+            if (gAptActionInterpreter.mnStackTop > 0)
+                gAptActionInterpreter.stackPop();               // AptValue_::Pop (Release + drop)
         }
 
-        // After a run leaves stray operands, drop the top one.
+        // After a run leaves stray operands, drop the top one (x64: named-member pop).
         if (gAptActionInterpreter.mnStackTop > 0)
         {
-            reinterpret_cast<AptValueVector*>(&gAptActionInterpreter.mnStackTop)->pop();
+            gAptActionInterpreter.stackPop();
         }
 
         // Re-test whether the cursor is still within [front, back) (the queue may have

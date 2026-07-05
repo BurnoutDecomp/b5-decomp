@@ -169,6 +169,32 @@ extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
     CgsDev::Log::WriteToLog(lac);
 }
 
+// The CallMethod stack-accounting probe: logs ONLY invariant violations
+// (exit top must equal entry top - (args+3) + 1) plus the last entry before one.
+extern "C" void AptCallMethodProbe(const char* pcWhere, int nTop, int nArgs, const char* pcNote)
+{
+    static int s_iEntryTop = -1, s_iEntryArgs = -1;
+    static char s_acNote[24];
+    if (pcWhere[0] == 'e' && pcWhere[1] == 'n')
+    {
+        s_iEntryTop = nTop; s_iEntryArgs = nArgs;
+        std::snprintf(s_acNote, sizeof(s_acNote), "%s", pcNote ? pcNote : "");
+        return;
+    }
+    if (pcWhere[0] == 'e' && pcWhere[1] == 'x')
+    {
+        const int nExpect = s_iEntryTop - (s_iEntryArgs + 3) + 1;
+        if (nTop != nExpect || s_iEntryTop < s_iEntryArgs + 3)
+        {
+            char lac[192];
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] cm VIOLATION: entryTop=%d args=%d exitTop=%d expect=%d note=%s\n",
+                s_iEntryTop, s_iEntryArgs, nTop, nExpect, s_acNote);
+            CgsDev::Log::WriteToLog(lac);
+        }
+    }
+}
+
 // The setVariable store probe (declared in AptActionInterpreterSetVariable.cpp):
 // traces store names + context so class definitions can be followed. First 96.
 extern "C" void AptSetVariableProbe(const char* pcName, const void* pContext, int nContextType)
