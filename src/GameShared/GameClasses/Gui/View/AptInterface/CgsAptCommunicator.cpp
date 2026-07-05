@@ -22,6 +22,7 @@ extern AptActionInterpreter gAptActionInterpreter;   // AptGlobals.cpp (&dword_8
 
 #include <cstring>   // strncpy
 #include <cstdlib>   // atof
+#include <cstdio>    // std::snprintf (the bring-up probes)
 
 // ============================================================================
 // CgsGui::AptCommunicator - reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -324,6 +325,17 @@ namespace CgsGui
 
         mAptComponentList.SetName(liNew, lpacName);
         ++muNumActivecomponents;
+        // FLAG (bring-up probe): every ONLOAD registration is a title clip announcing
+        // itself to the communicator -- surface the first ones in the boot log.
+        if (muNumActivecomponents <= 16)
+        {
+            char lacProbe[192];
+            std::snprintf(lacProbe, sizeof(lacProbe),
+                          "[AptComm] component registered: '%s' (count=%u)\n",
+                          lpacName ? lpacName : "<null>",
+                          static_cast<unsigned>(muNumActivecomponents));
+            CgsDev::Log::WriteToLog(lacProbe);
+        }
         // lRefText's internal refcount drops here (X360 DecreaseInternalRefCount).
     }
 
@@ -395,6 +407,9 @@ namespace CgsGui
         CGS_ASSERT(lbValid, "Invalid Communicator sent to SetCommunicationObject");
 
         mpAptInternalCommunicator = lpCommunicator;
+        // FLAG (bring-up probe): the AS framework movie calling this native IS the
+        // proof its bootstrap classes executed -- surface it in the boot log.
+        CgsDev::Log::WriteToLog("[AptComm] SetCommunicationObject: AS framework bound the communicator.\n");
         return AptInteger::Create(0);
     }
 
