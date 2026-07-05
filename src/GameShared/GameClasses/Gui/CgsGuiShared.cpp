@@ -13,4 +13,18 @@ namespace CgsGui
         CGS_ASSERT(mpGuiCache != nullptr, "mpGuiCache");
         return mpGuiCache;
     }
+
+    // Null every shared-resource pointer; the owners install each one as its
+    // subsystem comes up (mpAptAux from the Apt bring-up, the flapt/cache/queue
+    // pointers from their modules).
+    void GuiAccessPointers::Construct()
+    {
+        mpAptAux           = nullptr;
+        mpLanguageManager  = nullptr;
+        mpFlaptFile        = nullptr;
+        mpFlaptManager     = nullptr;
+        mpGuiCache         = nullptr;
+        mpGDMInput         = nullptr;
+        mpGDMReceiverQueue = nullptr;
+    }
 }

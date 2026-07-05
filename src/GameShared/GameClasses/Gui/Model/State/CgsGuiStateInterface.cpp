@@ -85,6 +85,15 @@ namespace CgsGui
         static_cast<CgsModule::VariableEventQueue<65536, 16>&>(mOutEventQueue).Construct();
     }
 
+    // Install the shared allocator + access-pointer bundle the interface hands its
+    // states (GetAccessPointers / GetAllocator read them back). The X360 GUI stack
+    // machinery prepares each pushed state's interface with the module's shared pair.
+    void StateInterface::Prepare(rw::IResourceAllocator* lpAllocator, GuiAccessPointers* lpAccessPointers)
+    {
+        mpAllocator      = lpAllocator;
+        mpAccessPointers = lpAccessPointers;
+    }
+
     GuiStackEventQueue::GuiEventQueueLarge* StateInterface::GetOutputEventQueue()
     {
         return &mOutEventQueue;

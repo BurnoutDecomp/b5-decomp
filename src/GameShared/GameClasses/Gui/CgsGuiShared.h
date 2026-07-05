@@ -18,20 +18,13 @@ namespace InputBuffer { class GuiEventQueue; }
 
 namespace CgsGui
 {
-    // CgsGui::AptAux drives the Flash/apt view layer. Only the one static entry point
-    // the GUI components call is reconstructed here; the rest of AptAux is owned by the
-    // View/AptInterface group. UpdateFlashComponent posts an apt-view-state transition
-    // (apt movie name / view state / optional param) for a component, immediately or
-    // queued. The X360 call site (CgsGui::GuiComponent::FillAptViewMessage @0x828583A8)
-    // passes the AptAux* explicitly as the first argument, so it is modelled as a static
-    // member taking the AptAux* it operates on. The body lives in the AptInterface group.
-    class AptAux
-    {
-    public:
-        static void UpdateFlashComponent(AptAux* lpAptAux, const char* lpacAptName,
-                                         const char* lpacViewState, const char* lpacParam,
-                                         bool lbImmediate);
-    };
+    // CgsGui::AptAux drives the Flash/apt view layer; its owning home is
+    // View/AptInterface/CgsAptAux.h (which declares UpdateFlashComponent /
+    // UpdateComponents / the communicator member). Forward-declared here:
+    // GuiAccessPointers only holds a pointer to it. (The old stub class that
+    // re-DEFINED AptAux here was retired 2026-07-05 -- it collided with the real
+    // class the moment one TU saw both headers.)
+    class AptAux;
 }
 
 namespace BrnGui

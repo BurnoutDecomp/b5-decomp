@@ -13,6 +13,8 @@
 #include "GameShared/GameClasses/Fsm/CgsEvent.h"                          // CgsFsm::Event (drive BF_PROCEED through the FSM)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::GuiEventPlayAptMovie (channel-41 payload)
 #include "GameSource/Gui/BrnAptRuntimeBringUp.h"                          // BrnGui::AptRuntime* (the Apt runtime bring-up + driver)
+#include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers (BF_LEGAL interface wiring)
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"       // CgsGui::AptAuxPointer (the AptAux singleton)
 #include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"             // CgsSystem::MenuMusicPC (the menu-stream music player)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
 
@@ -56,6 +58,12 @@ namespace
     // One backing set per concurrently-live boot FSM pool (BF_LOADING + BF_VIDEOS).
     u8 s_fsmPoolBacking[2][CgsResource::E_MEMTYPE_NUMTYPES][KU_FSM_POOL_BYTES];
     u8 s_bootLuaHeapBuffer[512u * 1024u];
+
+    // The shared access-pointer bundle BF_LEGAL's state interface hands its GUI
+    // components (Prepare'd in GuiModule::Prepare once the Apt bring-up publishes
+    // the AptAux singleton). The console's view module owns the equivalent
+    // module-shared GuiAccessPointers instance.
+    CgsGui::GuiAccessPointers s_BootLegalAccessPointers;
 }
 
 // BrnGui::GuiModule -- the GUI module (minimal movie-hosting slice; see BrnGuiModule.h). X360
@@ -351,6 +359,17 @@ namespace BrnGui
         // the render buffer) so it is live before BF_LEGAL posts PlayAptMovie("Title_Screen02").
         // Idempotent + defensive (logs [AptRT] probes; bails cleanly at the first un-homed piece).
         BrnGui::AptRuntimeBringUp();
+
+        // Wire BF_LEGAL's state interface to the shared access pointers so the GUI
+        // components' faithful apt output chain (FillAptViewMessage -> AptAux::
+        // UpdateFlashComponent -> the AptCommunicator key/value store) can reach the
+        // AptAux singleton the bring-up just published. The console's view module
+        // prepares each state interface with the module-shared GuiAccessPointers the
+        // same way; only mpAptAux is populated here (the flapt/cache pointers belong
+        // to their still-gated modules).
+        s_BootLegalAccessPointers.Construct();
+        s_BootLegalAccessPointers.mpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
+        mBootLegalStateInterface.Prepare(0, &s_BootLegalAccessPointers);
 
         return true;
     }

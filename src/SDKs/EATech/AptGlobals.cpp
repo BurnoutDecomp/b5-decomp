@@ -69,8 +69,10 @@ AptValue* gpAptStringObject           = nullptr;   // off_8324D82C (String)
 AptValue* gpAptExternObject           = nullptr;   // off_8324E2CC (extern)
 AptValue* gpAptGlobalExtensionObject  = nullptr;   // off_8324E37C (the _global extension object)
 void*     gpAptRenderingContext       = nullptr;   // dword_8324E2AC (the shared AptRenderingContext; opaque view)
-AptValue* gpGlobalGlobalObject        = nullptr;   // the AS _global object
-AptValue* gpGlobalExtensionObject     = nullptr;   // the AS extension object
+// (gpGlobalGlobalObject / gpGlobalExtensionObject RETIRED 2026-07-05: they duplicated
+// off_8324E380 / off_8324E37C under second never-assigned names, so findChild's global
+// arms silently looked up empty objects. Every reader now binds gpAptGlobalFallback /
+// gpAptGlobalExtensionObject above -- the pair AptValueInitialize actually builds.)
 AptValue* gpObjRegistrationFunc       = nullptr;   // the Object-registration native fn
 
 // ===========================================================================

@@ -238,3 +238,33 @@ void AptExtObject::DestroyGCPointers()
 {
     mpNativeHash->DestroyGCPointers();
 }
+
+// ---------------------------------------------------------------------------
+// AptRegisterExtension @0x82AF7330 -- register a native extension object with the
+// AS VM. X360 sequence (verified against the export pseudocode):
+//   1. v2 = ext->vtbl[+0x3C](ext)      == GetName();  EAStringC name(v2)
+//   2. ext->vtbl[+0x40](ext)           == Initialize()   (the extension installs its
+//      native function members here -- e.g. CgsGui::AptCommunicator::Initialize
+//      @0x8285F0D8 SetFunction's its 6 sMethod_* natives)
+//   3. spinlock unk_8324E71C acquire (lwarx/stwcx.)
+//   4. AptNativeHash::Set(off_8324E37C + 8, name, ext) -- store the extension into
+//      the _global extension object's embedded native hash, keyed by its name; every
+//      AS name lookup then reaches it through AptValue::findChild's global-extension
+//      arm (LookupInObject(gpAptGlobalExtensionObject, name)).
+//   5. spinlock release; name refcount drop (the EAStringC dtor here).
+// The host boot path is single-threaded, so the interlocked latch collapses to the
+// direct Set (the same one-time-guard equivalence AptValueInitialize documents).
+// ---------------------------------------------------------------------------
+extern AptValue* gpAptGlobalExtensionObject;   // off_8324E37C (built by AptValueInitialize)
+
+void AptRegisterExtension(AptExtObject* pExtObject)
+{
+    EAStringC lName(pExtObject->GetName());   // step 1 (InitFromBuffer / dtor Decrease)
+    pExtObject->Initialize();                 // step 2 (vtbl +0x40)
+
+    AptNativeHash* pGlobalHash = gpAptGlobalExtensionObject
+        ? gpAptGlobalExtensionObject->GetNativeHashVirtual()   // (off_8324E37C + 8)
+        : nullptr;
+    if (pGlobalHash)
+        pGlobalHash->Set(lName, pExtObject);
+}

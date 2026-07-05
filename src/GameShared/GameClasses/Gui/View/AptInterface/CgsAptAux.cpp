@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"  // the render + render-flag callback family
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"       // CgsGui::AptDataHeader (LoadAnimation's FindAptData result)
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"     // CgsGui::AptCommunicator (the ext-object phase + the flush)
 #include "SDKs/EATech/include/Apt/Apt.h"                                         // AptUserFunctions gAptFuncs (the host table)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the host-callback asserts)
 
@@ -77,6 +78,10 @@ namespace CgsGui
         // The two leading state words the guest seeds (`*(a1+4) = 3; *a1 = 0`).
         miState4 = 3;
         miState0 = 0;
+
+        // The communicator ext object does not exist yet (InitializeApt's ext phase
+        // creates + registers it); null until then so UpdateComponents can gate on it.
+        mpAptCommunicator = nullptr;
 
         // Construct the embedded APT data registry/allocator front-end (guest a1+12).
         // FLAG: AptDataHandler::Construct is homed by the data-handler's own ledger TU (the DWARF
@@ -210,17 +215,56 @@ namespace CgsGui
         // "current context" is set faithfully without corrupting the partial-slice AptAux.
         AptChangeTargetInstance(lpTarget);
 
-        // 6. FLAG (ext-object phase deferred): the console then builds the AS extension object
-        //    (AptExtObject::operator new(16); AptExtObject(6); *p = off_820E0A20 [its vtable];
-        //    *(this+109664) = p) and registers it via AptRegisterExtension(p). AptRegister-
-        //    Extension @0x82AF7330 dereferences off_8324E37C (== gpGlobalExtensionObject) +8
-        //    to reach the AS extension object's native hash -- but gpGlobalExtensionObject is
-        //    built by AptValueInitialize @0x82B02800, which is FLAG-deferred (its ~15 value
-        //    singletons have protected reconstruction ctors; see AptInit.cpp). With the
-        //    extension object null, AptRegisterExtension would null-deref, and the +109664
-        //    cache member is outside this AptAux slice. So the whole ext-object phase is
-        //    OMITTED here; it comes online with AptValueInitialize. (The runtime is otherwise
-        //    fully bootstrapped: allocators + update + render + the live AptTarget context.)
+        // 6. The ext-object phase (UN-DEFERRED 2026-07-05): build the AS communicator
+        //    extension and register it with the AS VM. The console does
+        //      p = AptExtObject::operator new(16); AptExtObject(p, 6); *p = off_820E0A20;
+        //      *(this+109664) = p;  AptRegisterExtension(p);
+        //    off_820E0A20 is CgsGui::AptCommunicator's vtable and 6 == its native-method
+        //    count, i.e. the object IS an AptCommunicator (its ctor is exactly the base
+        //    ctor + vtable install -- CgsAptCommunicator.h). AptRegisterExtension
+        //    @0x82AF7330 (now homed, AptExtObject.cpp) GetName()s it ("CAptCommunicator"),
+        //    virtual-calls Initialize() @0x8285F0D8 (which SetFunction's the 6 sMethod_*
+        //    natives + Constructs the out queue), and Sets it into the _global extension
+        //    object's native hash -- whose singleton AptValueInitialize built in step 2's
+        //    AptUpdateInitialize, so the registration lands on a live hash.
+        mpAptCommunicator = new AptCommunicator();   // pooled AptExtObject::operator new
+        AptRegisterExtension(mpAptCommunicator);
+    }
+
+    // -------------------------------------------------------------------------
+    // AptAux::UpdateComponents - X360 0x82850570. The per-frame component flush
+    // AptAux::Update @0x82853B20 runs FIRST (perfmon "AptAux - Upd Comps"), BEFORE
+    // AptUpdateTarget ticks the movies; XB1 sub_1400C7090 preserves the same order.
+    // Assert the communicator ext object (the console fires "Invalid pointer to apt
+    // communicator" at CgsAptAux.cpp:660), then flush via UpdateAllComponents.
+    // -------------------------------------------------------------------------
+    void AptAux::UpdateComponents()
+    {
+        CGS_ASSERT(mpAptCommunicator != nullptr,
+                   "Invalid pointer to apt communicator");
+        if (mpAptCommunicator != nullptr)
+            mpAptCommunicator->UpdateAllComponents();
+    }
+
+    // -------------------------------------------------------------------------
+    // AptAux::UpdateFlashComponent - X360 0x82853C28 (not exported; semantics pinned
+    // by the XB1 x64 arbiter, which INLINES this hop at every call site to
+    // AptCommunicator::UpdateComponent(componentName, key, value) -- e.g. XB1
+    // sub_1401AF470's UpdateComponent(this, this->macName[+8], "SignName", value)).
+    // Mirror the (key, value) pair onto the named component's key/value store; the
+    // per-frame UpdateComponents flush then pushes it to the movie AS ("UpdateAll").
+    // lbImmediate is the console's queued-vs-immediate hint; both orderings land
+    // before the same frame's flush on the single-threaded host (see the header
+    // note; the Res/NRes timer-format split is off the boot flow).
+    // -------------------------------------------------------------------------
+    void AptAux::UpdateFlashComponent(AptAux* lpAptAux, const char* lpacAptName,
+                                      const char* lpacViewState, const char* lpacParam,
+                                      bool /*lbImmediate*/)
+    {
+        CGS_ASSERT(lpAptAux != nullptr, "Invalid AptAux in AptAux::UpdateFlashComponent");
+        if (lpAptAux == nullptr || lpAptAux->mpAptCommunicator == nullptr)
+            return;
+        lpAptAux->mpAptCommunicator->UpdateComponent(lpacAptName, lpacViewState, lpacParam);
     }
 
     // =========================================================================

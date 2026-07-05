@@ -1673,6 +1673,15 @@ namespace BrnGui
         ++s_iFrameCounter;
         const bool lbProbeFrame = (s_iFrameCounter % 30) == 1;   // ~every 30 frames
 
+        // FAITHFUL per-frame order (CgsGui::AptAux::Update @0x82853B20, XB1
+        // sub_1400C7090): flush the communicator's stored key/values to the movie AS
+        // FIRST (UpdateComponents -> UpdateAllComponents -> "UpdateAll", perfmon
+        // "AptAux - Upd Comps"), THEN tick the movies (AptUpdateTarget, "Upd Tgt").
+        // With no components registered yet the flush is a no-op, exactly the console
+        // before a movie's ONLOAD registrations arrive.
+        if (CgsGui::AptAuxPointer::mpAptAuxInst != nullptr)
+            CgsGui::AptAuxPointer::mpAptAuxInst->UpdateComponents();
+
         // Nothing loaded yet -> nothing to tick/render this frame.
         if (!s_bMovieLoaded)
             return;

@@ -110,51 +110,15 @@ namespace BootLegalCacheBoundary
 }
 }
 
-// ===========================================================================
-// FLAG (GUI-component layer not reconstructed): the CgsGui::GuiComponent base + the
-// BrnGui::MenuComponent selection-menu UI that BootLegal drives. Stubbed so the legal/title-
-// screen flow links + runs its stage machine; the component construction + menu rendering +
-// the Apt-view emit (AddOutputAptViewState -> AptAux::UpdateFlashComponent -> the Apt engine)
-// are the deferred GUI/Apt render boundary. The flow reaching DisplaySelectionMenu's
-// AddOutputAptViewState("apt_Transition", ...) call IS the title_screen02 request.
-// ===========================================================================
-namespace CgsGui
-{
-    // PC bring-up (FLAG): keep the component's NAME (the movie's PLACE instance name)
-    // so AddOutputAptViewState can reach the clip; the state interface may be null on
-    // the boot path (SetStateInterface asserts, so store it only when supplied).
-    void GuiComponent::Construct(const char* lpacName, StateInterface* lpStateInterface, const char* lpacParentName)
-    {
-        // Inline the name store (the real SetName TU -- CgsGuiComponent.cpp -- is not in
-        // this build; it also drags the unwired AptAux::UpdateFlashComponent).
-        macName[0] = '\0';
-        if (lpacName != nullptr)
-        {
-            u32 lu = 0;
-            for (; lpacName[lu] != '\0' && lu < KU_MAX_COMPONENT_NAME_LEN - 1; ++lu)
-                macName[lu] = lpacName[lu];
-            macName[lu] = '\0';
-        }
-        (void)lpacParentName;   // boot components pass no parent
-        muHashedName = 0;
-        mpStateInterface = lpStateInterface;
-    }
-
-    // PC bring-up shim (FLAG): the faithful path is FillAptViewMessage -> AptAux::
-    // UpdateFlashComponent -> AptCommunicator -> the movie AS. That glue is not wired
-    // yet; drive each KEY's observable effect through the Apt runtime bridge directly
-    // (apt_Transition/apt_state -> gotoAndPlay; apt_labeltxt -> the label text field;
-    // apt_updatestate -> trigger no-op). The (key, value) pair is passed through
-    // faithfully -- the same pair UpdateComponent would store on the communicator.
-    void GuiComponent::AddOutputAptViewState(const char* lpacAptName, const char* lpacViewState, bool /*lbImmediate*/)
-    {
-        BrnGui::AptRuntimeSetComponentKeyValue(GetName(), lpacAptName, lpacViewState);
-    }
-}
-
-// The MenuComponent facade that used to live here (a single static-array stand-in for the
-// title menu) has been RETIRED: the real BrnGui::MenuComponent / SelectableGroup / MenuItem /
-// Selectable classes are now reconstructed (BrnMenuComponent.cpp, BrnSelectableGroup.cpp,
-// BrnMenuItem.cpp, BrnSelectable.cpp), so BootLegal drives the faithful per-object menu. The
-// item apt output still flows through the CgsGui::GuiComponent::AddOutputAptViewState bridge
-// above (the deeper AptCommunicator seam remains the next milestone).
+// The GuiComponent facade that used to live here (a bring-up Construct + the
+// AddOutputAptViewState -> AptRuntimeSetComponentKeyValue bridge) has been RETIRED
+// (2026-07-05): the real CgsGui::GuiComponent TU (CgsGuiComponent.cpp -- SetName /
+// SetStateInterface / Construct / FillAptViewMessage / AddOutputAptViewState) is now
+// in the build, and BF_LEGAL's state interface is Prepare'd with live access pointers
+// (BrnGuiModule.cpp), so the components drive the faithful chain: AddOutputAptViewState
+// -> FillAptViewMessage -> AptAux::UpdateFlashComponent -> AptCommunicator key/values
+// -> the per-frame AptAux::UpdateComponents flush ("UpdateAll" to the movie AS). The
+// direct clip-effect bridge remains as a FLAG'd fallback inside the real
+// AddOutputAptViewState until the AS-framework movie drives the clips.
+// (The MenuComponent facade was retired earlier -- the real BrnGui::MenuComponent /
+// SelectableGroup / MenuItem / Selectable classes drive the menu.)

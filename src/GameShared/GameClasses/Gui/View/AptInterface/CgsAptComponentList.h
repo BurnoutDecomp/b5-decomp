@@ -90,6 +90,11 @@ namespace CgsGui
         // @ 0x82846D68 : mauHashedReferenceName[liComponent] = luHash, bounds-asserted.
         void SetHashedReferenceName(s32 liComponent, u32 luHash);
 
+        // Store the component's name text (AddNewAptComponent @0x82849B88 tail-calls
+        // it after the duplicate check; the debug dumps read it back via GetName).
+        // Bounds-asserted like the sibling setters; body in CgsAptComponentList.cpp.
+        void SetName(s32 liComponent, const char* lpacName);
+
         // @ 0x8284E1F0 : move component liFrom's record (keys + component reference +
         //               hashed name + hashed reference name + used flag) into slot
         //               liTo, then clear slot liFrom. Both indices bounds-asserted.
