@@ -1,47 +1,134 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-// CgsContainers::LinearSOAHashTable<ValueType> - an open-addressed (linear-probed) hash table
-// stored as Structure-of-Arrays: a parallel 64-bit key array and a value array, both sized to
-// the (power-of-2) table length. An empty/invalid slot is marked by the 64-bit invalid-key
-// sentinel (all-ones, 0xFFFFFFFFFFFFFFFF). Recovered from the DecFIGS DWARF
-// (CgsLinearSOAHashTable.h); member + method names from the PS3 DecFIGS DWARF (the X360 build
-// is stripped but the function @ 0x828EA3C8 == this Initialize, file:line matches).
+// CgsContainers::LinearSOAHashTable<ValueType, KeyType> - an open-addressed (linear-probed) hash
+// table stored as Structure-of-Arrays: a parallel key array and a value array, both sized to the
+// (power-of-2) table length. An empty/invalid slot is marked by the invalid-key sentinel (all-ones).
 //
-// NAME NOTE (PS3 reconcile): the PS3 DWARF declares this as a TWO-template-param container
-// LinearSOAHashTable<Key,Value> (Key fixed here to u64). Ours keeps the single-param form with
-// the key type baked to u64 -- a structural simplification, NOT restructured to the 2-param
-// PS3 shape. The method (Initialize) + member names (miLength/miInvalidKey/mpKeys/mpValues)
-// below DO match the PS3 DWARF.
+// GENERALISED from the earlier single-param form to the 2-param LinearSOAHashTable<ValueType, KeyType>.
+// KeyType defaults to u64 so the already-committed LinearSOAHashTable<CgsResource::ImportHashTableValue>
+// usage (Initialize @0x828EA3C8) keeps its exact spelling and byte layout (KeyType=u64:
+// miLength@0x00, miInvalidKey@0x08, mpKeys@0x10, mpValues@0x14). The <int,int> instantiation
+// (KeyType=int) gives miLength@0, miInvalidKey@4, mpKeys@8, mpValues@0xC -- exactly the
+// AddEntry@0x828DF260 / FindEntry@0x828DF3E0 asm-observed offsets/strides (PatchManager path-hash map).
 //
-// Initialize(lpKeys, lpValues, luLength) records the two SOA array bases and the length,
-// asserts the length is a non-zero power of 2, then clears every key slot to the invalid-key
-// sentinel. Faithful to the X360 ARTIST Initialize body (defined in the per-instantiation
-// .cpp via explicit template instantiation, mirroring the X360's per-using-TU emission).
+// PARAM ORDER: kept as <ValueType, KeyType=u64> (NOT the PS3 DWARF's <Key,Value> order) so the
+// committed single-arg usage `LinearSOAHashTable<CgsResource::ImportHashTableValue>` stays valid.
 //
 // LAYOUT (X360-observed store offsets, authoritative):
-//   +0x00  miLength     (u64)  table length (power of 2)        [std @0]
-//   +0x08  miInvalidKey (u64)  empty-slot sentinel = ~0ull      [std -1 @8]
-//   +0x10  mpKeys       (T*)   64-bit key array base            [stw @0x10]
-//   +0x14  mpValues     (V*)   value array base                 [stw @0x14]
-// The init loop fills miLength 8-byte key slots at mpKeys with miInvalidKey (stdx, 8-byte stride).
+//   KeyType=u64:  miLength@0x00, miInvalidKey@0x08, mpKeys@0x10, mpValues@0x14
+//   KeyType=int:  miLength@0x00, miInvalidKey@0x04, mpKeys@0x08, mpValues@0x0C
+//
+// DECOMPILED from the X360 build:
+//   Initialize @ 0x828EA3C8  (KeyType=u64 <ImportHashTableValue> -- body in CgsResourceImportHashTable.cpp)
+//   AddEntry   @ 0x828DF260  (LinearSOAHashTable<int,int>)
+//   FindEntry  @ 0x828DF3E0  (LinearSOAHashTable<int,int>)
 namespace CgsContainers
 {
-    template <typename ValueType>
+    template <typename ValueType, typename KeyType = u64>
     struct LinearSOAHashTable
     {
-        // The invalid/empty-slot sentinel: a 64-bit all-ones key. A slot whose key equals
-        // this is free. (Our constant name; the X360 stores the literal -1 into miInvalidKey.)
-        static const u64 KU_EMPTY_KEY = ~0ull;
+        // The invalid/empty-slot sentinel: an all-ones key. A slot whose key equals this is free.
+        static const KeyType KU_EMPTY_KEY = static_cast<KeyType>(~static_cast<KeyType>(0));
 
-        // X360 0x828EA3C8 (CgsLinearSOAHashTable.h:167). Definition lives in the .cpp; the
-        // template is explicitly instantiated there for each value type the game uses.
-        void Initialize(u64* lpKeys, ValueType* lpValues, u64 luLength);
+        // X360 0x828EA3C8 (CgsLinearSOAHashTable.h:167) for the <ImportHashTableValue> (KeyType=u64)
+        // instantiation. Definition lives in CgsResourceImportHashTable.cpp (2-param form).
+        void Initialize(KeyType* lpKeys, ValueType* lpValues, KeyType luLength);
 
-        u64        miLength;     // +0x00
-        u64        miInvalidKey; // +0x08
-        u64*       mpKeys;       // +0x10
-        ValueType* mpValues;     // +0x14
+        // :242 -- insert luKey at the first empty slot from its hash position (wrapping); optionally
+        // store *lpValue into the parallel value array. Returns &mpValues[pos], or null if full.
+        // (X360 0x828DF260, LinearSOAHashTable<int,int>.)
+        ValueType* AddEntry(KeyType luKey, const ValueType* lpValue)
+        {
+            CGS_ASSERT(luKey != miInvalidKey,
+                       "Can not add entry with invalid key value to table\n");   // :242
+
+            const KeyType luStart = luKey % miLength;
+            KeyType       luPos   = luStart;
+            if (luStart < miLength)
+            {
+                KeyType* lpKey = &mpKeys[luStart];
+                while (*lpKey != miInvalidKey)
+                {
+                    ++luPos;
+                    ++lpKey;
+                    if (luPos >= miLength)
+                        goto WrapScan;
+                }
+                mpKeys[luPos] = luKey;
+                if (lpValue)
+                    mpValues[luPos] = *lpValue;
+                return &mpValues[luPos];
+            }
+
+        WrapScan:
+            luPos = 0;
+            if (luStart != 0)
+            {
+                KeyType* lpKey = mpKeys;
+                while (*lpKey != miInvalidKey)
+                {
+                    ++luPos;
+                    ++lpKey;
+                    if (luPos >= luStart)
+                        return 0;
+                }
+                mpKeys[luPos] = luKey;
+                if (lpValue)
+                    mpValues[luPos] = *lpValue;
+                return &mpValues[luPos];
+            }
+            return 0;
+        }
+
+        // :420 -- probe from luKey's hash position (wrapping) for luKey; returns &mpValues[pos], or
+        // null if an empty slot is reached first (key absent). (X360 0x828DF3E0, <int,int>.)
+        ValueType* FindEntry(KeyType luKey)
+        {
+            const KeyType luStart = luKey % miLength;
+            KeyType       luPos   = luStart;
+            if (luStart < miLength)
+            {
+                KeyType* lpKey = &mpKeys[luStart];
+                while (*lpKey != luKey)
+                {
+                    if (*lpKey == miInvalidKey)
+                        return 0;
+                    ++luPos;
+                    ++lpKey;
+                    if (luPos >= miLength)
+                        goto WrapScan;
+                }
+                return &mpValues[luPos];
+            }
+
+        WrapScan:
+            luPos = 0;
+            if (luStart == 0)
+                return 0;
+            {
+                KeyType* lpKey = mpKeys;
+                while (*lpKey != luKey)
+                {
+                    if (*lpKey == miInvalidKey)
+                        return 0;
+                    ++luPos;
+                    ++lpKey;
+                    if (luPos >= luStart)
+                        return 0;
+                }
+                return &mpValues[luPos];
+            }
+        }
+
+        // ---- LAYOUT (X360-observed store offsets, authoritative) ----
+        //   KeyType=u64:  miLength@0x00, miInvalidKey@0x08, mpKeys@0x10, mpValues@0x14
+        //   KeyType=int:  miLength@0x00, miInvalidKey@0x04, mpKeys@0x08, mpValues@0x0C
+        KeyType    miLength;     // +0x00              table length (power of 2)
+        KeyType    miInvalidKey; // +sizeof(KeyType)   empty-slot sentinel = ~0
+        KeyType*   mpKeys;       // key array base
+        ValueType* mpValues;     // value array base
     };
 }

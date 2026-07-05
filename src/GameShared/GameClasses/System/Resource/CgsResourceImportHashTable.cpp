@@ -36,8 +36,10 @@ namespace CgsResource
 
 namespace CgsContainers
 {
-    template <typename ValueType>
-    void LinearSOAHashTable<ValueType>::Initialize(u64* lpKeys, ValueType* lpValues, u64 luLength)
+    // 2-param LinearSOAHashTable<ValueType, KeyType> (KeyType defaults to u64). This
+    // <ImportHashTableValue, u64> instantiation keeps the exact X360 body + byte layout.
+    template <typename ValueType, typename KeyType>
+    void LinearSOAHashTable<ValueType, KeyType>::Initialize(KeyType* lpKeys, ValueType* lpValues, KeyType luLength)
     {
         CGS_ASSERT(luLength != 0 && ((luLength - 1) & luLength) == 0,
                    "Length of hash table must be more than 0 and a power of 2");
@@ -47,11 +49,11 @@ namespace CgsContainers
         mpValues     = lpValues;
         miInvalidKey = KU_EMPTY_KEY;
 
-        for (u64 luSlot = 0; luSlot < miLength; ++luSlot)
+        for (KeyType luSlot = 0; luSlot < miLength; ++luSlot)
             mpKeys[luSlot] = miInvalidKey;
     }
 
     // Explicit instantiation: emit Initialize for the import value type (X360 0x828EA3C8).
-    template void LinearSOAHashTable<CgsResource::ImportHashTableValue>::Initialize(
+    template void LinearSOAHashTable<CgsResource::ImportHashTableValue, u64>::Initialize(
         u64*, CgsResource::ImportHashTableValue*, u64);
 }
