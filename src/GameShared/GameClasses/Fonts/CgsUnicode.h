@@ -85,10 +85,11 @@ namespace CgsUnicode
                    s32 lnMaxTargetStringLength);
 
     // ADDITIVE GROW (BrnNetworkLoginManagerBase TU): unbounded copy of a NUL-terminated UTF-8
-    // string into lpUtf8TargetString, returning the target. X360 reaches it from
-    // BrnNetwork::LoginManagerBase::UpdateDownloadingTOS (CgsUnicode::Copy(mpTOS, downloadBuffer))
-    // to copy the freshly-downloaded terms-of-service text into the manager's allocated buffer.
-    // Declared-only here; the body lives in CgsUnicode.cpp's own TU.
+    // string into lpUtf8TargetString, returning a pointer to the written NUL terminator (stpcpy
+    // semantics -- the X360 body advances and returns the target register, so the result points at
+    // the end, NOT the original target). X360 reaches it from BrnNetwork::LoginManagerBase::
+    // UpdateDownloadingTOS (CgsUnicode::Copy(mpTOS, downloadBuffer)) to copy the freshly-downloaded
+    // terms-of-service text into the manager's buffer. Body in CgsUnicode.cpp (X360 0x82834448).
     CgsUtf8* Copy(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString);
 
     // NUL-terminate lpUtf8String within lnMaxTargetLength bytes without splitting a multi-byte

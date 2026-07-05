@@ -176,6 +176,55 @@ namespace CgsUnicode
         return lpUtf8TargetString;
     }
 
+    // Faithful port of X360 ARTIST 0x82834448: copy a whole NUL-terminated UTF-8 string into the
+    // target (unbounded -- no cap, no null/length asserts; the asm is a bare byte loop). The X360
+    // body advances the target register (r3) as it writes each byte and returns it, so the result
+    // points at the written NUL terminator (stpcpy semantics), NOT the original target. Reached
+    // from UnicodeBuffer::Convert (below), CgsLanguage::LanguageManager::Format*String and
+    // BrnNetwork::LoginManagerBase::UpdateDownloadingTOS.
+    CgsUtf8* Copy(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString)
+    {
+        CgsUtf8*       lpDest   = lpUtf8TargetString;
+        const CgsUtf8* lpSource = lpUtf8SourceString;
+
+        // X360: load *source; while non-zero, ++source, store the byte, ++dest, reload *source.
+        CgsUtf8 lu8Char = *lpSource;
+        while (lu8Char != 0)
+        {
+            ++lpSource;
+            *lpDest++ = lu8Char;
+            lu8Char = *lpSource;
+        }
+        *lpDest = 0;
+        return lpDest;   // X360 returns the advanced target: a pointer to the written NUL terminator
+    }
+
+    // Faithful port of X360 ARTIST 0x828345F0: NUL-terminate lpUtf8String so it occupies at most
+    // lnMaxTargetLength bytes without splitting a multi-byte UTF-8 character. Start at the last byte
+    // inside the cap (str + lnMaxTargetLength - 1); if that byte is a continuation byte (10xxxxxx),
+    // step back until a leading/single byte (or the start of the string), then write the terminator
+    // there. A cap of <= 0, or an already-NUL byte at the cap, is a no-op. Returns the target.
+    // Reached from BrnGui::GuiHudMessage::GetParam / AddParam.
+    CgsUtf8* SafelyTerminate(CgsUtf8* lpUtf8String, s32 lnMaxTargetLength)
+    {
+        CgsUtf8* lpByte = lpUtf8String + lnMaxTargetLength - 1;   // last byte within the cap
+        if (lpByte >= lpUtf8String)
+        {
+            while (*lpByte != 0)
+            {
+                if ((*lpByte & 0xC0) != 0x80)   // a leading / single byte: safe to cut here
+                {
+                    *lpByte = 0;
+                    return lpUtf8String;
+                }
+                --lpByte;                        // a continuation byte: back up one
+                if (lpByte < lpUtf8String)
+                    return lpUtf8String;
+            }
+        }
+        return lpUtf8String;
+    }
+
     // Byte length of a NUL-terminated UTF-8 string (X360 CgsUnicode.cpp:108). Counts the
     // bytes preceding the terminator -- the LanguageResourceType string-table descriptor size.
     u32 ByteLength(const u8* lpUtf8String)

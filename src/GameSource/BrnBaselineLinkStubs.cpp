@@ -162,23 +162,11 @@ namespace TestBed
 // Replace each with the real body when its subsystem is wired into the build.
 // ===========================================================================
 
-// --- CgsUnicode string helpers (declared in CgsUnicode.h; bodies not yet reconstructed). ---
-// Referenced by CgsUnicode::UnicodeBuffer::Convert (Copy) and BrnGui::GuiHudMessage::GetParam
-// (SafelyTerminate). Inert: copy nothing / just return the buffer NUL-terminated at [0].
-#include "GameShared/GameClasses/Fonts/CgsUnicode.h"
-namespace CgsUnicode
-{
-    CgsUtf8* Copy(CgsUtf8* lpUtf8TargetString, const CgsUtf8* /*lpUtf8SourceString*/)
-    {
-        if (lpUtf8TargetString) lpUtf8TargetString[0] = 0;
-        return lpUtf8TargetString;
-    }
-    CgsUtf8* SafelyTerminate(CgsUtf8* lpUtf8String, s32 /*lnMaxTargetLength*/)
-    {
-        if (lpUtf8String) lpUtf8String[0] = 0;
-        return lpUtf8String;
-    }
-}
+// --- CgsUnicode::Copy / SafelyTerminate are NOT stubbed here -- their real asm-decoded bodies
+// (X360 0x82834448 / 0x828345F0) now live in GameShared/GameClasses/Fonts/CgsUnicode.cpp (already in
+// build_game_exe.bat), reached from UnicodeBuffer::Convert / LanguageManager::Format*String /
+// GuiHudMessage::GetParam. The prior inert stubs (copy-nothing / terminate-at-[0]) were removed to
+// avoid an LNK2005 double-definition with the real bodies.
 
 // --- EA::GameTalk::GameTalkMessage accessors (BrnGameModule::RenderMetricsMessageHandler,
 // a debug-metrics GameTalk handler -- not on the boot path). No keys / no key strings. ---
