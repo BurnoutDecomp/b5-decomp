@@ -20,15 +20,23 @@ namespace Attrib
     // (X360 dword_83011BA4). Zero-initialised at load; defined here exactly once.
     u32 gTablePolicyFreedBytes = 0;
 
-    // ---- cross-TU trap stubs (own ledger TUs) -------------------------------
-    // Attrib::TableFreeFunc (TablePolicy::Free thunk) -- routes a bucket array back to the
-    // AttribSys package allocator + bumps the hash-map byte census. Own TU; trap stub here.
+    // @ 0x82802848 -- Attrib::Class::TablePolicy::Free: release a hash-map bucket array
+    // back to the AttribSys package allocator. Asserts the AttribSys memory manager has been
+    // Prepare'd (sbHasLinearAllocator, CgsAttribSysMemoryManager.h:211 -- provided by
+    // GetAttribSysAllocator()), then runs the committed AttribSysPackageAllocator::Free(void*,
+    // size_t) (which asserts mbHasAllocator and frees the block straight through the adopted
+    // heap via HeapMalloc::Free(block); the size arg is ignored by the heap), and bumps the
+    // file's freed-byte census gTablePolicyFreedBytes (== X360 dword_83011BA4) by the block
+    // size. The single census static is shared with the committed CopyFromOldTable free path,
+    // so no separate miFreeTotal counter is introduced.
     void* TableFreeFunc(void* lpBlock, size_t liSize)
     {
-        (void)lpBlock;
-        (void)liSize;
-        __debugbreak();
-        return NULL;
+        CgsAttribSys::AttribSysPackageAllocator* lpAllocator =
+            CgsAttribSys::AttribSysMemoryManager::GetAttribSysAllocator();
+        lpAllocator->Free(lpBlock, liSize);
+
+        gTablePolicyFreedBytes += static_cast<u32>(liSize);
+        return lpBlock;
     }
 
     // Attrib::Collection scalar deleting destructor -- own TU; trap stub here.

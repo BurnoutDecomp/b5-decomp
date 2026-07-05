@@ -1,8 +1,14 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "GameShared/GameClasses/Development/DebugSystem/CgsDebugFontBringUp.h"   // LoadAndSetDebugFont
+#include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
 
 #include <cstring>   // memset
+#include <string.h>  // _stricmp (RenderMetricsMessageHandler; MSVC canonical, not declared by <cstring>)
+
+// ---- Xbox 360 XDK entry point (real prototype lives in the XDK). Displays the system
+// "dirty disc" error UI for the given signed-in user. ------------------------------------
+extern "C" unsigned long XShowDirtyDiscErrorUI(unsigned long dwUserIndex);
 
 namespace BrnGame
 {
@@ -48,6 +54,7 @@ namespace BrnGame
         , miLanguageCycleTimerLo(0)
         , miLanguageCycleTimerHi(0)
         , mpCgsGuiModule(0)
+        , miRenderMetricsRequested(0)
     {
         // (The X360 ctor does not touch mCpuMonitors -- Construct() sentinel-fills and
         // registers the monitors, at its X360 position.)
@@ -606,5 +613,51 @@ namespace BrnGame
         BrnGameModule* lpThis = static_cast<BrnGameModule*>(lpContext);
         if (lpThis->mbSteppingFrames)
             lpThis->mbStopStepping = true;
+    }
+
+    // @ X360 0x823A8B38 - the disk-error worker thread body. Raises the system dirty-disc
+    // error UI for the given user and never returns (the console holds on the error UI).
+    // Tail-calls straight into the XDK entry point.
+    void BrnGameModule::DiskErrorThreadProc(unsigned long dwUserIndex)
+    {
+        XShowDirtyDiscErrorUI(dwUserIndex);
+    }
+
+    // @ X360 0x823C0268 - return the embedded hardware object (the launch/soft-reboot data
+    // block the platform fills at boot). The X360 forms this + 0x9A11C0, which is &mHardware.
+    BrnHW::System360HW* BrnGameModule::GetSoftRebootData()
+    {
+        return &mHardware;
+    }
+
+    // @ X360 0x823C0288 - forward to the hardware object's invite-reboot query (the X360
+    // hands it &mHardware as the System360HW `this` and tail-calls).
+    int BrnGameModule::HasGameBeenRebootedDueToInvite()
+    {
+        return mHardware.HasGameBeenRebootedDueToInvite();
+    }
+
+    // @ X360 0x823C0278 - the soft-reboot flag. Reads a single byte at game-module + 0x9A1254,
+    // which is mHardware + 0x94 (the launch-data flag byte BrnHW::System360HW::mPad94).
+    int BrnGameModule::HasGameBeenSoftRebooted()
+    {
+        return mHardware.mPad94;
+    }
+
+    // @ X360 0x823A9030 - the game module's GameTalk "StopRenderMetrics" receiver. Walks
+    // every key of the incoming message and, on the "StopRenderMetrics" key, clears the
+    // render-metrics-requested flag. Same receiver shape as
+    // BrnDirector::Camera::BehaviourRenderMetrics::GameTalkMessageReceiver: the context
+    // module is delivered by pointer-to-pointer (lppModule).
+    void BrnGameModule::RenderMetricsMessageHandler(EA::GameTalk::GameTalkMessage* lpMessage,
+                                                    BrnGameModule** lppModule)
+    {
+        BrnGameModule* lpModule = *lppModule;
+        for (s32 liIndex = 0; liIndex < lpMessage->GetNumKeys(); ++liIndex)
+        {
+            const char* lpcKey = lpMessage->GetKey(liIndex);
+            if (_stricmp(lpcKey, "StopRenderMetrics") == 0)
+                lpModule->miRenderMetricsRequested = 0;
+        }
     }
 }

@@ -382,6 +382,57 @@ int SelectBin( int /*a1*/, const char* lkpacName, int /*a3*/, int /*a4*/, int /*
     return luBinIndex;
 }
 
+// ---------------------------------------------------------------------------
+// CrashBinUtils<CrashBin>::GetSampleIds -- copy an AttribSys crash-bin's
+// collision-sample-id array into a caller u16 buffer.
+//
+//   crashbin      @ 0x8268DC18  (DWARF BrnCollisionStateManager.h:538)
+//   propscrashbin @ 0x8268FE90  (DWARF BrnCollisionStateManager.h:604)
+//
+// Stateless utility MEMBER (not a free function): the container is the explicit
+// first arg lpCrashBin; because CrashBinUtils holds no data the method never
+// touches its own `this` -- which is exactly why the X360 leaf forwards
+// r3=lpCrashBin to the two accessor calls and never dereferences an object
+// pointer. lpfnGetArraySize / lpfnGetArrayItem are the bin's generated AttribSys
+// array accessors (DWARF `const Int32& (*)()` / `const Int32& (*)(u32)`); the
+// Int32 layout field is a plain 32-bit int living in the crash-bin attribute data
+// area, so the accessors return a reference to it. Copies luNumCollisions =
+// *lpfnGetArraySize() indices into lpauArray (truncating each to u16), bounded by
+// luMaxSize, and returns the count. Asserts collapse to CGS_ASSERT; message
+// strings verbatim from X360 rodata, file-path + line args dropped.
+//
+// The single generic template body below is shared by both instantiations (the
+// crashbin/propscrashbin bins differ only in type); the two explicit instantiations
+// emit the linker symbols at their X360 addresses.
+// ---------------------------------------------------------------------------
+template< typename CrashBin >
+unsigned int CrashBinUtils< CrashBin >::GetSampleIds(
+    const CrashBin*                /*lpCrashBin*/,   // forwarded to accessors as r3; never dereferenced here
+    const int&                   (*lpfnGetArraySize)(),
+    const int&                   (*lpfnGetArrayItem)( unsigned int ),
+    u16*                           lpauArray,
+    u16                            luMaxSize )
+{
+    CGS_ASSERT( lpfnGetArrayItem != 0, "lpGetArrayItem" );
+    CGS_ASSERT( lpfnGetArraySize != 0, "lpGetArraySize" );
+    CGS_ASSERT( lpauArray        != 0, "lpauArray" );
+
+    unsigned int luNumCollisions = lpfnGetArraySize();
+
+    CGS_ASSERT( luNumCollisions < luMaxSize, "luNumCollisions < luMaxSize" );
+
+    for ( unsigned int i = 0; i < luNumCollisions; ++lpauArray )
+    {
+        *lpauArray = static_cast<u16>( lpfnGetArrayItem( i++ ) );
+    }
+
+    return luNumCollisions;
+}
+
+// Explicit instantiations (the two crash-bin specialisations the X360 build emits).
+template struct CrashBinUtils< Attrib::Gen::crashbin >;
+template struct CrashBinUtils< Attrib::Gen::propscrashbin >;
+
 } // namespace Collision
 } // namespace Logic
 } // namespace BrnSound

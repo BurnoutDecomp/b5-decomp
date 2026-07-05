@@ -36,4 +36,48 @@ namespace BrnGame
         // stw r3, 4(r31) -- cache lua_gettop(mpLuaHandle) as the result count.
         miNumResults = lua_gettop(mpLuaHandle);
     }
+
+    // @ 0x823C0298
+    LUACall::EArgType LUACall::GetArgType(s32 liResultIndex) const
+    {
+        // subf r4, r11, r30 -- ResultIndexToStackIndex(liResultIndex) inlined.
+        const s32 liStackIndex = liResultIndex - miNumResults;
+
+        if (lua_type(mpLuaHandle, liStackIndex) == 0)   // LUA_TNIL
+            return E_NIL;
+        if (lua_isnumber(mpLuaHandle, liStackIndex))
+            return E_NUMBER;
+        if (lua_isstring(mpLuaHandle, liStackIndex))
+            return E_STRING;
+        if (lua_type(mpLuaHandle, liStackIndex) == 1)   // LUA_TBOOLEAN
+            return E_BOOL;
+
+        // Unconditional fall-through: fire the assert then return E_UNKNOWN.
+        CGS_ASSERT(false, "Could not derive arg type");
+        return E_UNKNOWN;
+    }
+
+    // @ 0x823C5C60
+    s32 LUACall::GetInt32(s32 liResultIndex)
+    {
+        // subf r4, r11, r30 -- ResultIndexToStackIndex(liResultIndex) inlined.
+        const s32 liStackIndex = liResultIndex - miNumResults;
+
+        CGS_ASSERT(lua_isnumber(mpLuaHandle, liStackIndex), "IsNumber(liResultIndex)");
+
+        // fctiwz f0, f1 ; stfiwx -- truncate the Lua number to a 32-bit int.
+        return static_cast<s32>(lua_tonumber(mpLuaHandle, liStackIndex));
+    }
+
+    // @ 0x823C5CF0
+    const char* LUACall::GetString(s32 liResultIndex) const
+    {
+        // subf r4, r11, r30 -- ResultIndexToStackIndex(liResultIndex) inlined.
+        const s32 liStackIndex = liResultIndex - miNumResults;
+
+        CGS_ASSERT(lua_isstring(mpLuaHandle, liStackIndex), "IsString(liResultIndex)");
+
+        // li r5, 0 -- length out-param is null.
+        return lua_tolstring(mpLuaHandle, liStackIndex, nullptr);
+    }
 }

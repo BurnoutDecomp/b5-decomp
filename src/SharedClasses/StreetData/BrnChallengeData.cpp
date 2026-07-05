@@ -62,6 +62,38 @@ namespace BrnStreetData
         mScoreList = lpSource->mScoreList;
     }
 
+    // X360 BrnStreetData::ChallengeData::SetClean @ 0x8231B6D0. Clears the dirty flag(s)
+    // on mDirty (BitArray<2u> @+0). E_SCORE_TYPE_COUNT clears every dirty bit (the X360
+    // single 64-bit `std 0` over mDirty's one field == UnSetAll); a specific ScoreType
+    // clears just that bit (the `andc` clear-bit == UnSetBit). The X360 emits the
+    // CgsBitArray.h:241 bounds assert; message "luIndex < NUMBITS" is verbatim rodata
+    // (aLuindexNumbits, no trailing newline); baked file/line dropped per project convention.
+    void ChallengeData::SetClean( ScoreType leScoreType )
+    {
+        if ( leScoreType == E_SCORE_TYPE_COUNT )
+        {
+            mDirty.UnSetAll();
+            return;
+        }
+
+        CGS_ASSERT( leScoreType < E_SCORE_TYPE_COUNT, "luIndex < NUMBITS" );
+        mDirty.UnSetBit( static_cast<u32>( leScoreType ) );
+    }
+
+    // X360 BrnStreetData::ChallengePlayerScoreEntry::SetCarID @ 0x8230EC18.
+    // Stores the owning car id for one score type: maCarIDs[leScoreType] = lCarID,
+    // guarded by the score-type bounds assert. The X360 store is a full 64-bit stdx
+    // (r29 = the CgsID) at this + 24 + leScoreType*8 == maCarIDs[leScoreType] (base @+24,
+    // 8-byte CgsID stride). Assert message rodata-VERBATIM; the baked file/line is dropped
+    // per project convention (no trailing newline). The PPC r3 return is an ABI artifact of
+    // the inlined assert path and is dropped (source return is void).
+    void ChallengePlayerScoreEntry::SetCarID( ScoreType leScoreType, ::CgsID lCarID )
+    {
+        CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
+                    "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT" );
+        maCarIDs[ leScoreType ] = lCarID;
+    }
+
     // ChallengePlayerScoreEntry is now defined in the shared BrnChallengeData.h home (above);
     // only its method bodies live here.
     void ChallengePlayerScoreEntry::Construct()

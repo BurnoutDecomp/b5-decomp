@@ -74,4 +74,33 @@ namespace CgsMemory
         *lpuOutResultBufferSize =
             (luAlignedResultSize * static_cast<u32>(liMaxResults) + 0x7Fu) & ~0x7Fu;
     }
+
+    // X360 0x825B29A0.
+    // Returns a pointer to the result record the iterator currently points at.
+    // The record address is mpResultBuffer + miAlignedResultSize * miResultIndex
+    // (results are stored at the aligned stride). If the cursor has reached the
+    // end (miResultIndex >= parent->miNumAddedCommands) the cursor is clamped to
+    // the count and a null pointer is returned.
+    //
+    // Asm: a1[1]=mpParent checked non-null ('No parent'); mpParent+0x100=mbIsStreaming
+    // checked false ('Parent is streaming'); then compares miResultIndex (a1[0]) with
+    // mpParent[0x104]=miNumAddedCommands; else-branch computes
+    // miAlignedResultSize(0x30)*miResultIndex + mpResultBuffer(0x34).
+    const void* SimpleDataStreamResultIterator::GetCurrent()
+    {
+        CGS_ASSERT(mpParent != nullptr, "No parent\n");
+        CGS_ASSERT(!mpParent->mbIsStreaming, "Parent is streaming\n");
+
+        SimpleDataStreamProducer* const lpParent = mpParent;
+        const s32 liNumAddedCommands = lpParent->miNumAddedCommands;
+
+        if (miResultIndex >= liNumAddedCommands)
+        {
+            miResultIndex = liNumAddedCommands;
+            return nullptr;
+        }
+
+        return reinterpret_cast<const char*>(lpParent->mpResultBuffer)
+             + lpParent->miAlignedResultSize * miResultIndex;
+    }
 }

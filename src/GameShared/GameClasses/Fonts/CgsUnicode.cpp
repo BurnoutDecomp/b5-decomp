@@ -185,4 +185,53 @@ namespace CgsUnicode
             ++lpByte;
         return static_cast<u32>(lpByte - lpUtf8String);
     }
+
+    // Faithful port of X360 ARTIST 0x824EA850 (DWARF CgsUnicode.h:828 `bool IsSingleByteUtf8(
+    // const CgsUtf8*)`; assigned symbol name IsSingleByteOnlyUtf8String). True iff the string is
+    // empty or every byte up to the NUL terminator is a single-byte (high-bit-clear / ASCII) UTF-8
+    // character: scans forward, returns true on the terminator, false on the first byte with bit 7
+    // set (a multi-byte lead or continuation). The scan is capped at KI_MAX_CHARACTERS_TO_SEARCH
+    // (2048); running past the cap without finding a NUL fires an assert (X360 CgsUnicode.h:879)
+    // and returns false. Only caller: BrnGui::GuiModule::Update.
+    bool IsSingleByteOnlyUtf8String(const CgsUtf8* lpUtf8String)
+    {
+        const s32 KI_MAX_CHARACTERS_TO_SEARCH = 2048;
+
+        s32 liIndex = 0;
+        while (true)
+        {
+            const CgsUtf8 lu8Char = lpUtf8String[liIndex];
+            if (lu8Char == 0)
+                return true;                    // reached the terminator: all bytes were single-byte
+            if ((lu8Char & 0x80) != 0)
+                return false;                   // a multi-byte lead / continuation byte
+            if (++liIndex >= KI_MAX_CHARACTERS_TO_SEARCH)
+            {
+                CGS_ASSERT(false,
+                           "\n\nRan through 0x%X Utf8 characters without finding a null terminator.\n"
+                           "If this is correct the change the KI_MAX_CHARACTERS_TO_SEARCH variable to a larger number\n\n\n");
+                return false;
+            }
+        }
+    }
+
+    // Faithful port of X360 0x82443380 (CgsUnicode.h:499, the release out-of-line body of the
+    // UnicodeBuffer::Convert(const CgsUtf8*) inline). Stage a parameter string into this buffer
+    // (maBuffer, the first instance member -> &maBuffer == this) via CgsUnicode::Copy, first
+    // asserting the source fits the 256-byte parameter buffer. The X360 build streamed the runtime
+    // length and the 256 cap into the assert via a StrStream; that collapses to the single base
+    // assert here (streamed length/" < "/256/"\n" dropped per project assert rule). Returns void.
+    void UnicodeBuffer::Convert(const CgsUtf8* lUtf8String)
+    {
+        // Byte length of the source excluding its NUL terminator (X360 inlines this walk).
+        const CgsUtf8* lpByte = lUtf8String;
+        while (*lpByte != 0)
+            ++lpByte;
+        const s32 lnLength = static_cast<s32>(lpByte - lUtf8String);
+
+        CGS_ASSERT(lnLength < 256,
+                   "Parameter for a string localisation is too large to fit in the parameter buffer : ");
+
+        Copy(maBuffer, lUtf8String);
+    }
 }

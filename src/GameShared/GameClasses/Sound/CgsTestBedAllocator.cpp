@@ -140,5 +140,35 @@ namespace TestBed
                                        << " allocations.\n";
         }
     }
+
+    // -------------------------------------------------------------------------------------------
+    // Header::Dump @ 0x826961E8 - sanity-check this one block, then (gated on the message filter)
+    // log one line: "  <blockAddr>: <size> bytes allocated.\"<name>\" \n". The block base address is
+    // the first word of mResource (Header+0x04), streamed as a pointer (rendered 0x%X - the X360
+    // manually forces the stream's PrintMode to HEX around the u32 stream and restores it); muSize
+    // (Header+0x1C) is streamed as a decimal u32 (X360 StrStreamBase::operator<<(u32), "%u"); a null
+    // name renders as "<NULLSTRING>". Called per live block by SafeDump / SortedDump.
+    // -------------------------------------------------------------------------------------------
+    void Allocator::Header::Dump(History& lrHistory)
+    {
+        // 0x826961FC - Header::SanityCheck(lrHistory, mpcName): r4 = History&, r5 = mpcName@0x18.
+        SanityCheck(lrHistory, mpcName);
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            const char* lpcName = mpcName;          // lwz 0x18(header)
+            if (!lpcName)                           // cmplwi 0 -> beq
+                lpcName = "<NULLSTRING>";
+            *CgsDev::Log::gpDebugPrint << "  "
+                                       << mResource.m_baseResources[0]   // lwz 4(header) - block base ptr, hex
+                                       << ": "
+                                       << (u32)muSize                    // lwz 0x1C(header) - decimal u32
+                                       << " bytes allocated."
+                                       << "\""
+                                       << lpcName
+                                       << "\" "
+                                       << "\n";
+        }
+    }
 }
 }
