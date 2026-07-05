@@ -4,6 +4,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"         // CgsGui::State (base) + sResourceTuple fwd
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::sResourceTuple (table element)
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                     // CgsGui::GuiEvent<N> (OutputEvents record base)
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface / GuiEventQueueLarge (OutputEvents)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (GetOptionsDataProfile)
 
 // BrnGui::CrashNavOptionsData + the CrashNav "options" screen state -- owning
@@ -23,6 +25,61 @@ namespace BrnGui
 
     class MenuToggleGroup;                              // pointer-only (own home)
     template <s32 TI_SIZE> class MenuToggleGroupVarSize; // pointer-only (own home)
+
+    // -----------------------------------------------------------------------------
+    // The GuiEvent records CrashNavOptionsData::OutputEvents pushes onto the state's
+    // large output queue (mirror the committed GuiEventPlayAptMovie sibling pattern:
+    // derive CgsGui::GuiEvent<N>, set muHeader0/muHeader2 via the base ctor, name the
+    // payload fields). Reconstructed from the X360 OutputEvents @0x82494278 AddEvent
+    // pushes (type/size/order attested).
+    // -----------------------------------------------------------------------------
+
+    // type 278 (0x116), record 16: camera-user-option word (CrashNavOptionsData+0x00).
+    struct GuiEventCrashNavCameraUserOption : public CgsGui::GuiEvent<278>
+    {
+        s32 miCameraUserOption;   // +0x0C
+        GuiEventCrashNavCameraUserOption() : CgsGui::GuiEvent<278>(4, 12) {}
+    };
+
+    // type 463 (0x1CF), record 20: { music, sfx } pair (CrashNavOptionsData+0x08/0x0C).
+    struct GuiEventCrashNavAudioVolumes : public CgsGui::GuiEvent<463>
+    {
+        s32 miMusicVolume;        // +0x0C
+        s32 miSFXVolume;          // +0x10
+        GuiEventCrashNavAudioVolumes() : CgsGui::GuiEvent<463>(8, 12) {}
+    };
+
+    // type 472 (0x1D8), record 16: three controller toggles (CrashNavOptionsData+0x10..0x12).
+    struct GuiEventCrashNavControllerToggles : public CgsGui::GuiEvent<472>
+    {
+        u8 mbSixAxisShowtime;     // +0x0C
+        u8 mbSixAxisSteering;     // +0x0D
+        u8 mbForceFeedback;       // +0x0E
+        u8 mbPad;                 // +0x0F (X360 leaves the 4th payload byte uninitialised)
+        GuiEventCrashNavControllerToggles() : CgsGui::GuiEvent<472>(3, 12) {}
+    };
+
+    // type 475 (0x1DB), record 16: default-game-camera flag word read from the PROFILE
+    // block @+0x734C (NOT from CrashNavOptionsData). The X360 loads the raw 32-bit word.
+    struct GuiEventCrashNavDefaultGameCamera : public CgsGui::GuiEvent<475>
+    {
+        s32 miDefaultGameCamera;  // +0x0C
+        GuiEventCrashNavDefaultGameCamera() : CgsGui::GuiEvent<475>(4, 12) {}
+    };
+
+    // type 473 (0x1D9), record 16: tips flag (CrashNavOptionsData+0x13).
+    struct GuiEventCrashNavTips : public CgsGui::GuiEvent<473>
+    {
+        u8 mbTips;                // +0x0C
+        GuiEventCrashNavTips() : CgsGui::GuiEvent<473>(1, 12) {}
+    };
+
+    // type 356 (0x164), record 16: trailing "commit / apply" marker (payload byte 0).
+    struct GuiEventCrashNavCommit : public CgsGui::GuiEvent<356>
+    {
+        u8 mbFlag;                // +0x0C (X360 stores constant 0)
+        GuiEventCrashNavCommit() : CgsGui::GuiEvent<356>(1, 12) {}
+    };
 
     // DWARF BrnCrashNavOptions.h:~120 -- the options screen's data model (camera /
     // voip / music / sfx / sixaxis / force-feedback / tips / default-camera).

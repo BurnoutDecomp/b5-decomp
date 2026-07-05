@@ -266,6 +266,11 @@ namespace BrnGui
         // (DWARF accessors h:981 GetGameMode / h:1290 GetActiveRoadRule / h:1362
         // GetBurnoutSkillsManager; no standalone X360 symbols).
         s32 GetGameMode() const                                  { return meGameModeType; }
+
+        // ADDITIVE GROW (RoadRuleComponent::ShouldUseInEventColouring @0x82410568,
+        // which inlines the byte load mpGuiCache+0x4B4A): the "use in-event sign
+        // colouring" gate byte.
+        bool GetInEventColouringGate() const                     { return mbInEventColouringGate; }
         s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
         s32 GetActiveRoadRule() const                            { return meActiveRoadRule; }
 
@@ -322,7 +327,9 @@ namespace BrnGui
         HudMessageDirector*       mpHudMessageDirector;   // +0x4074 (16500)
         u8  mPad_4078[2696];                             // +0x4078..+0x4AFF
         s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
-        u8  mPad_4B04[1916];                             // +0x4B04..+0x527F
+        u8   mPad_4B04[0x46];                             // +0x4B04..+0x4B49
+        bool mbInEventColouringGate;                     // +0x4B4A (19274) RoadRuleComponent::ShouldUseInEventColouring gate byte
+        u8   mPad_4B4B[0x527F - 0x4B4A];                 // +0x4B4B..+0x527F
         s32 miNumPresetRaces;                            // +0x5280 (21120)
         u8  mPad_5284[19408];                            // +0x5284..+0x9E53
         s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker

@@ -44,10 +44,27 @@ namespace
     const f32 KF_FLT_MAX = 3.4028235e38f;
 }
 //
-// NOTE: KAF_MINIMUM_HUD_MESSAGE_SKILLS_LEVEL (the per-skill minimum score gating the
-// "you beat a record" HUD flash) is read only by SetSkillsData @0x825118F0, which the
-// ledger assigns to a separate TU; its 14 values live there, so it is intentionally
-// left declared-only here (no odr-use in this TU under the cl /c gate).
+// ----------------------------------------------------------------------------
+// KAF_MINIMUM_HUD_MESSAGE_SKILLS_LEVEL  (rodata flt_8206F7B0)  -- DEFINITION
+//   Per-skill minimum new-record score before a beaten record fires the HUD flash.
+//   SetSkillsData reads KAF_MINIMUM_HUD_MESSAGE_SKILLS_LEVEL[leSkill] and compares the
+//   new score `>=` against it. Now ODR-used in this TU (SetSkillsData folded in), so it
+//   must be DEFINED here.
+//
+//   *** UNRECOVERED VALUES -- CONSOLIDATOR MUST FILL ***  The 14 float constants live
+//   in X360 low .rodata at flt_8206F7B0; the dossier does not carry the bytes. Placeholder
+//   zeros below keep the TU self-consistent but the numbers are NOT attested and
+//   behaviourally wrong (all-zero thresholds make the `>=` HUD-message gate always pass).
+//   Read the 14 little-endian f32 at 0x8206F7B0 and replace them. Index space is
+//   EBurnoutSkillType, count 14.
+// ----------------------------------------------------------------------------
+const f32 BurnoutSkillsManager::KAF_MINIMUM_HUD_MESSAGE_SKILLS_LEVEL
+    [BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_COUNT] =
+{
+    // TODO(consolidator): 14 f32 from rodata flt_8206F7B0 -- values UNRECOVERED.
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+};
 
 // ----------------------------------------------------------------------------
 // Construct  @0x824F3B00
@@ -291,6 +308,186 @@ void BurnoutSkillsManager::SetRoadRuleMode(BrnGameState::EActiveRoadRule leRoadR
             CGS_ASSERT(false, "Invalid road rule mode\n");
             break;
     }
+}
+
+// ----------------------------------------------------------------------------
+// GetBurnoutSkillForARC  @0x8240EBB0
+//   Return the stored best score for (leSkill, leActiveRaceCar): index the per-ARC
+//   BurnoutSkillzData tally (X360 stride 56 == sizeof BurnoutSkillzData) and forward
+//   to its GetBurnoutSkill. Two leading range guards on the ARC index precede the
+//   mulli/add that forms &maSkillzData[leActiveRaceCar].
+// ----------------------------------------------------------------------------
+f32 BurnoutSkillsManager::GetBurnoutSkillForARC(
+    BrnGameState::BurnoutSkillzData::EBurnoutSkillType leSkill,
+    EActiveRaceCarIndex leActiveRaceCar) const
+{
+    CGS_ASSERT(leActiveRaceCar >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+    return maSkillzData[leActiveRaceCar].GetBurnoutSkill(leSkill);
+}
+
+// ----------------------------------------------------------------------------
+// SetSkillsData  @0x825118F0
+//   Fold one incoming per-frame "new burnout skillz" event (one active-race-car's
+//   fresh scores) into the record table. For each of the 14 skills whose new score
+//   beats the stored record, re-elect that skill's record holder to this player,
+//   fire the "you beat it" HUD flash when the local player set the record, and -- for
+//   the displayable skills, when the event asks for it and the score clears the
+//   per-skill HUD threshold in a >1-player race -- publish a GuiNewBurnoutHudMessage
+//   flash naming the previous and new record holders. Finally latch the player's
+//   network id and copy the whole score block into their per-ARC slot.
+//
+//   Record direction matches ResetPlayerData: the road-rule TIME skill (index 12) is
+//   lowest-wins (a stored time of 0 means "no run"); every other skill is highest-wins.
+//   Skill index 11 is not processed here (the asm branches straight past it), and the
+//   two road-rule skills (12/13) never emit a HUD-message flash.
+// ----------------------------------------------------------------------------
+void BurnoutSkillsManager::SetSkillsData(EActiveRaceCarIndex leActiveRaceCar,
+                                         const GuiNewBurnoutSkillzEvent* lpEvent,
+                                         CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput)
+{
+    if (!lpEvent)
+    {
+        // No scores this frame == the player left: clear their slot / re-elect records.
+        ResetPlayerData(leActiveRaceCar);
+        return;
+    }
+
+    // The local player's active-race-car index (captured once, as the X360 does).
+    const EActiveRaceCarIndex leLocalPlayer =
+        static_cast<EActiveRaceCarIndex>(mpCache->GetPlayerActiveRaceCarIndex());
+
+    for (BrnGameState::BurnoutSkillzData::EBurnoutSkillType leSkill
+             = BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_START;
+         ;
+         )
+    {
+        CGS_ASSERT(leSkill >= BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_START,
+                   "leSkillType >= E_BURNOUT_SKILL_START");
+        CGS_ASSERT(leSkill < BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_COUNT,
+                   "leSkillType < E_BURNOUT_SKILL_COUNT");
+
+        // Read the event's fresh score for this skill (public accessor; the X360 reads
+        // the mafBurnoutSkilz[] field directly, semantically identical to GetBurnoutSkill).
+        const f32 lfNewScore = lpEvent->mSkillzData.GetBurnoutSkill(leSkill);
+
+        // Skill index 11 is never folded in (the asm jumps straight to the increment).
+        if (leSkill != BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_ROAD_RULE_CRASH)
+        {
+            EActiveRaceCarIndex* lpRecordHolder = nullptr;
+            bool                 lbBeaten       = false;
+
+            if (leSkill == BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_EXTRA_12)
+            {
+                // Road-rule TIME: lowest-wins, and a stored time of 0 is "no run".
+                if (lfNewScore > 0.0f)
+                {
+                    lpRecordHolder = &maeCurrentRecordHolder[
+                        BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_EXTRA_12];
+                    const EActiveRaceCarIndex leHolder = *lpRecordHolder;
+
+                    lbBeaten =
+                        (leHolder == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                        || (maSkillzData[leHolder].GetBurnoutSkill(
+                                BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_EXTRA_12) == 0.0f)
+                        || (maSkillzData[leHolder].GetBurnoutSkill(
+                                BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_EXTRA_12) > lfNewScore);
+                }
+            }
+            else if (lfNewScore > 0.0f)
+            {
+                // Every other skill: highest-wins.
+                lpRecordHolder = &maeCurrentRecordHolder[leSkill];
+                const EActiveRaceCarIndex leHolder = *lpRecordHolder;
+
+                lbBeaten =
+                    (leHolder == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                    || (maSkillzData[leHolder].GetBurnoutSkill(leSkill) < lfNewScore);
+            }
+
+            if (lbBeaten)
+            {
+                // The local player just set this record -> flash the "you beat it" panel.
+                if (leActiveRaceCar == leLocalPlayer)
+                {
+                    YouBeatSkill(leSkill);
+                }
+
+                // The two road-rule skills never emit a HUD-message flash.
+                if (leSkill != BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_EXTRA_12
+                    && leSkill != BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_EXTRA_13)
+                {
+                    CGS_ASSERT(mpCache, "mpCache");
+
+                    if (lpEvent->mbUpdateHUDMessage
+                        && mpCache->GetNumActivePlayers() > 1
+                        && lfNewScore >= KAF_MINIMUM_HUD_MESSAGE_SKILLS_LEVEL[leSkill])
+                    {
+                        const EActiveRaceCarIndex lePreviousOwner = *lpRecordHolder;
+
+                        GuiNewBurnoutHudMessageEvent lMessage;
+                        lMessage.mRoadID  = 0;
+                        lMessage.meSkill  = leSkill;
+
+                        if (leActiveRaceCar == leLocalPlayer)
+                        {
+                            // The local player took the record for themselves.
+                            lMessage.meMessageType =
+                                GuiNewBurnoutHudMessageEvent::E_BURNOUT_SKILLZ_MESSAGE_TYPE_YOU_GOT;
+                            lMessage.meNewOwner      = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                            lMessage.mePreviousOwner = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                        }
+                        else if (leActiveRaceCar == lePreviousOwner
+                                 || lePreviousOwner == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                        {
+                            // A rival extended (or first-claimed) their own record.
+                            lMessage.meMessageType =
+                                GuiNewBurnoutHudMessageEvent::E_BURNOUT_SKILLZ_MESSAGE_TYPE_X_GOT;
+                            lMessage.meNewOwner      = leActiveRaceCar;
+                            lMessage.mePreviousOwner = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                        }
+                        else if (lePreviousOwner == leLocalPlayer)
+                        {
+                            // A rival beat the local player's record.
+                            lMessage.meMessageType =
+                                GuiNewBurnoutHudMessageEvent::E_BURNOUT_SKILLZ_MESSAGE_TYPE_X_BEAT_YOUR;
+                            lMessage.meNewOwner      = leActiveRaceCar;
+                            lMessage.mePreviousOwner = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                        }
+                        else
+                        {
+                            // A rival beat another rival's record.
+                            lMessage.meMessageType =
+                                GuiNewBurnoutHudMessageEvent::E_BURNOUT_SKILLZ_MESSAGE_TYPE_X_BEAT_YS;
+                            lMessage.meNewOwner      = leActiveRaceCar;
+                            lMessage.mePreviousOwner = lePreviousOwner;
+                        }
+
+                        lpOutput->AddGuiOutEvent(lMessage);
+                    }
+                }
+
+                // This player now holds the record for this skill.
+                *lpRecordHolder = leActiveRaceCar;
+            }
+        }
+
+        leSkill++;
+        CGS_ASSERT(static_cast<int>(leSkill)
+                       <= BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_COUNT,
+                   "leEnumIndex <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT");
+        if (leSkill >= BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_COUNT)
+        {
+            break;
+        }
+    }
+
+    // Latch the origin player's network id and copy their whole score block into slot.
+    maNetworkIds[leActiveRaceCar] = lpEvent->mNetworkPlayerID;
+    maSkillzData[leActiveRaceCar] = lpEvent->mSkillzData;
 }
 
 } // namespace BrnGui

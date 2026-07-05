@@ -62,4 +62,30 @@ FriendsListComponent* FriendsListComponent::SetDirty()
     return this;
 }
 
+// @ 0x82410958 -- post-increment on the friends-list branch enum: advance the referenced enum
+// by one (writing it back), assert it stays <= E_FRIENDLISTBRANCH_THIRD_OF_THREE, and return the
+// PRE-increment value. Free operator in namespace BrnGui (DWARF BrnFriendsList.h:767).
+FriendsListComponent::EFriendListBranchState
+operator++(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int)
+{
+    const FriendsListComponent::EFriendListBranchState leOld = lreEnumIndex;
+    lreEnumIndex = static_cast<FriendsListComponent::EFriendListBranchState>(lreEnumIndex + 1);
+    CGS_ASSERT(lreEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE,
+               "leEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE");
+    return leOld;
+}
+
+// @ 0x824109B8 -- post-decrement on the friends-list branch enum: step the referenced enum back
+// by one (writing it back), assert it stays >= E_FRIENDLISTBRANCH_FIRST_OF_ONE, and return the
+// PRE-decrement value. Free operator in namespace BrnGui (DWARF BrnFriendsList.h:764).
+FriendsListComponent::EFriendListBranchState
+operator--(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int)
+{
+    const FriendsListComponent::EFriendListBranchState leOld = lreEnumIndex;
+    lreEnumIndex = static_cast<FriendsListComponent::EFriendListBranchState>(lreEnumIndex - 1);
+    CGS_ASSERT(lreEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE,
+               "leEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE");
+    return leOld;
+}
+
 } // namespace BrnGui

@@ -53,4 +53,38 @@ namespace BrnGui
         // hidden flag (+0xAC) -> "1" / "0".
         AddOutputAptViewState("apt_hideColour", mbHidden ? "1" : "0", false);
     }
+
+    // @ 0x824E8440
+    void ColourField::SetColour(u32 luColour)
+    {
+        mbIsGradient = false;                    // stb r29(0), 0xAD(r31)
+
+        // Un-hide the apt movie.
+        AddOutputAptViewState("apt_hide", "0", false);
+
+        // SPrintf(a1+0x8C, 15, "%u", luColour) -- format the primary colour buffer.
+        CgsCore::SPrintf(macColour1, KU_MAX_COLOUR_LEN - 1, "%u", luColour);
+        macColour1[KU_MAX_COLOUR_LEN - 1] = 0;   // stb r29(0), 0x9B(r31)
+
+        OutputAptData();
+    }
+
+    // @ 0x824E84A0
+    void ColourField::SetGradient(u32 luColour1, u32 luColour2)
+    {
+        mbIsGradient = true;                     // stb r10(1), 0xAD(r31)
+
+        // Un-hide the apt movie.
+        AddOutputAptViewState("apt_hide", "0", false);
+
+        // SPrintf(a1+0x8C, 15, "%u", luColour1) -- format the primary colour buffer.
+        CgsCore::SPrintf(macColour1, KU_MAX_COLOUR_LEN - 1, "%u", luColour1);
+        macColour1[KU_MAX_COLOUR_LEN - 1] = 0;   // stb r29(0), 0x9B(r31)
+
+        // SPrintf(a1+0x9C, 15, "%u", luColour2) -- format the secondary (end) colour buffer.
+        CgsCore::SPrintf(macColour2, KU_MAX_COLOUR_LEN - 1, "%u", luColour2);
+        macColour2[KU_MAX_COLOUR_LEN - 1] = 0;   // stb r29(0), 0xAB(r31)
+
+        OutputAptData();
+    }
 }

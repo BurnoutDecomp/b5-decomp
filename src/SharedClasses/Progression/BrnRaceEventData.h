@@ -100,6 +100,23 @@ struct RaceEventData
     // bounds-checks the rank arg against 6 in GetRankScore @0x823543D0 / GetRankTime @0x8230F748).
     static const u32 KU_NUM_RANKS = 6;
 
+    // Progression race-event mode classification. DWARF-attested
+    // (references/DecFIGS/dwarfdump/SharedClasses/Progression/BrnRaceEventData.h).
+    // BrnGui::EventPanel::ConvertLocalEventDefToProgressionEventDef maps its local EEventType
+    // onto this; E_MODE_PURSUIT=5 is retained even though panel-side mapping collapses
+    // E_EVENT_TYPE_ALL to E_MODE_COUNT.
+    enum EModeType
+    {
+        E_MODE_INVALID       = -1,
+        E_MODE_RACE          = 0,
+        E_MODE_ROAD_RAGE     = 1,
+        E_MODE_STUNT_ATTACK  = 2,
+        E_MODE_SURVIVOR      = 3,
+        E_MODE_BURNING_ROUTE = 4,
+        E_MODE_PURSUIT       = 5,
+        E_MODE_COUNT         = 6,
+    };
+
     // X360 0x8230F808. Returns &mpaCheckpoints[liCheckpointIndex] (asserts 0 <= index <
     // miCheckpointCount, BrnRaceEventData.h:953). 40-byte stride.
     const CheckpointData* GetCheckpointData(s32 liCheckpointIndex) const;

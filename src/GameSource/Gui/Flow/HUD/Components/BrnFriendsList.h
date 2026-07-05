@@ -37,6 +37,26 @@ namespace BrnGui
     class FriendsListComponent
     {
     public:
+        // DWARF BrnFriendsList.h:13 -- friends-list branch/transition state; drives the
+        // post-inc/post-dec operators (@0x82410958 / @0x824109B8) that step through it.
+        enum EFriendListBranchState
+        {
+            E_FRIENDLISTBRANCH_INVISIBLE       = 0,
+            E_FRIENDLISTBRANCH_ONE_IN          = 1,
+            E_FRIENDLISTBRANCH_ONE_OUT         = 2,
+            E_FRIENDLISTBRANCH_TWO_IN          = 3,
+            E_FRIENDLISTBRANCH_TWO_OUT         = 4,
+            E_FRIENDLISTBRANCH_THREE_IN        = 5,
+            E_FRIENDLISTBRANCH_THREE_OUT       = 6,
+            E_FRIENDLISTBRANCH_FIRST_OF_ONE    = 7,
+            E_FRIENDLISTBRANCH_FIRST_OF_TWO    = 8,
+            E_FRIENDLISTBRANCH_SECOND_OF_TWO   = 9,
+            E_FRIENDLISTBRANCH_FIRST_OF_THREE  = 10,
+            E_FRIENDLISTBRANCH_SECOND_OF_THREE = 11,
+            E_FRIENDLISTBRANCH_THIRD_OF_THREE  = 12,
+            E_FRIENDLISTBRANCH_COUNT           = 13,
+        };
+
         // @ 0x82473580 -- latch the (non-NULL) GuiCache pointer and cache its far field.
         // Returns `this`.
         FriendsListComponent* SetGuiCachePointer(GuiCache* lpGuiCache);
@@ -68,4 +88,12 @@ namespace BrnGui
         u8  mbSnapshotFlagA;      // +0x4119 = mbSelectionFlagA
         u8  mbSnapshotFlagB;      // +0x411A = mbSelectionFlagB
     };
+
+    // Free post-increment / post-decrement over the friends-list branch enum
+    // (DWARF BrnFriendsList.h:767 operator++ / h:764 operator--). Each writes the
+    // stepped value back and asserts it stays in range, returning the PRE-step value.
+    FriendsListComponent::EFriendListBranchState
+    operator++(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int);   // @0x82410958
+    FriendsListComponent::EFriendListBranchState
+    operator--(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int);   // @0x824109B8
 }

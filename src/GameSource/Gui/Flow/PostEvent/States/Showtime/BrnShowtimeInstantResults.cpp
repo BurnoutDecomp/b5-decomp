@@ -8,6 +8,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.h"
 #include "GameSource/Gui/BrnGuiTextField.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 namespace BrnGui
 {
@@ -71,5 +72,23 @@ namespace BrnGui
             sub_824E7708(&mMultiplierText, miCurrentMultiplier, 11);
             mMultSymbolText.SetText("X");
         }
+    }
+
+    // @0x824B3B30 -- return the next active event-sub-state to advance to. Scans mabSubStateFlags
+    // forward from just past meActiveSubState for the first raised flag and returns its index; if
+    // none is raised (or meActiveSubState is already the last), returns E_ACTIVE_SUBSTATE_EVENT_DONE.
+    // Asserts the current sub-state is in range (non-fatal in this build).
+    ShowtimeInstantResultsState::EResultsActiveSubStates
+    ShowtimeInstantResultsState::GetNextSubstate()
+    {
+        CGS_ASSERT(meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT,
+                   "meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT");
+
+        for (s32 liIndex = meActiveSubState + 1; liIndex < E_ACTIVE_SUBSTATE_EVENT_COUNT; ++liIndex)
+        {
+            if (mabSubStateFlags[liIndex] == 1)
+                return static_cast<EResultsActiveSubStates>(liIndex);
+        }
+        return E_ACTIVE_SUBSTATE_EVENT_DONE;
     }
 }

@@ -47,6 +47,11 @@ namespace CgsUnicode
     // to copy the freshly-downloaded terms-of-service text into the manager's allocated buffer.
     // Declared-only here; the body lives in CgsUnicode.cpp's own TU.
     CgsUtf8* Copy(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString);
+
+    // NUL-terminate lpUtf8String within lnMaxTargetLength bytes without splitting a multi-byte
+    // UTF-8 character (backs up to the last lead byte). Returns the target. Body lives in
+    // CgsUnicode.cpp's own TU. Used by GuiHudMessage::GetParam after SnPrintf.
+    CgsUtf8* SafelyTerminate(CgsUtf8* lpUtf8String, s32 lnMaxTargetLength);
 }
 
 #endif

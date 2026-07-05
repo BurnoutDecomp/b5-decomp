@@ -2,6 +2,8 @@
 
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"                                       // EActiveRaceCarIndex
+#include "GameSource/GameState/BrnGameStateSharedIO.h"                          // GameStateModuleIO::EPlayerTeam
+#include "GameSource/GameState/BrnCgsPlayerName.h"                              // CgsNetwork::PlayerName (mPlayerName, 16 bytes)
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h"   // BrnFlaptComponent (base)
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // FlaptAnimatorComponent (embedded x2)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                          // MovieClipRef (embedded x2)
@@ -75,6 +77,30 @@ namespace BrnGui
         E_HEADSETSTATUS_ON        = 2,
         E_HEADSETSTATUS_ACTIVE    = 3,
         E_HEADSETSTATUS_COUNT     = 4,
+    };
+
+    // DWARF BrnPlayerPositionSingle.h -- one built-then-sorted player-position record.
+    // The PlayerPositionTableComponent keeps a parallel array of these (stride 0x38 ==
+    // sizeof) alongside its row components; ClearStoredData/AddInvisibleTeamLine build
+    // them, SortData/FunctionSort* order them, DisplayData pushes them into the rows.
+    // X360 byte offsets (access BY NAME): mPlayerName @+0x00 (CgsNetwork::PlayerName, 16),
+    // meNameType @+0x10, mfTableValue @+0x14, mePlayerType @+0x18, meActiveRaceCarIndex
+    // @+0x1C, meHeadsetStatus @+0x20, meRevengeStatus @+0x24, meAwardState @+0x28,
+    // meTeam @+0x2C, mePlayerColour @+0x30 (EGuiPlayerColours; raw s32 -- enum home
+    // pending, same as the sibling component), miHoldingSlot @+0x34 (s8).
+    struct PlayerPositionSingleData
+    {
+        CgsNetwork::PlayerName mPlayerName;            // +0x00
+        s32                    meNameType;             // +0x10
+        f32                    mfTableValue;           // +0x14
+        PlayerTypes            mePlayerType;           // +0x18
+        EActiveRaceCarIndex    meActiveRaceCarIndex;   // +0x1C
+        HeadsetStatus          meHeadsetStatus;        // +0x20
+        RevengeStatus          meRevengeStatus;        // +0x24
+        AwardStatus            meAwardState;           // +0x28
+        BrnGameState::GameStateModuleIO::EPlayerTeam meTeam;   // +0x2C
+        s32                    mePlayerColour;         // +0x30 (EGuiPlayerColours; raw s32)
+        s8                     miHoldingSlot;          // +0x34
     };
 
     // DWARF h:53 -- the shared base of the player-position row components (adds

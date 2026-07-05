@@ -1,6 +1,7 @@
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"
 
 #include <cstddef>
+#include <cstring>   // memmove
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -274,11 +275,87 @@ bool OptionsDataProfile::GetTips()
 }
 
 // ---------------------------------------------------------------------------
+// Online game options — received table
+//
+// GetReceivedOnlineGameOptions: read entry liIndex of the received route table
+// (base +0x3988, stride 0x5C0) back out into game params. The X360 asserts the
+// cache/params pointers and that the index is in [0, 10). The index-range asserts
+// stream the offending index into the assert buffer; per the assert convention
+// they collapse to a single CGS_ASSERT with the constant message prefix.
+// ---------------------------------------------------------------------------
+void OptionsDataProfile::GetReceivedOnlineGameOptions(s32 liIndex, GuiCache* lpCache,
+                                                      GuiEventNetworkGameParams* lpParams) const
+{
+    CGS_ASSERT(lpCache, "lpGuiCache");
+    CGS_ASSERT(lpParams, "lpParams");
+    CGS_ASSERT(liIndex >= 0, "Invalid Received online game options index of ");
+    CGS_ASSERT(liIndex < KI_MAX_RECEIVED_ONLINE_GAME_OPTIONS, "Invalid Received online game options index of ");
+
+    maReceivedOnlineGameOptions[liIndex].SetToGameParams(lpCache, lpParams);
+}
+
+// ---------------------------------------------------------------------------
+// Online game options — created table
+//
+// SetCreatedOnlineGameOptions: store game params into entry liIndex of the created
+// route table (base +0x8, stride 0x5C0). After writing, if the index reaches or
+// exceeds the current count, bump the count and assert it is exactly liIndex+1.
+// ---------------------------------------------------------------------------
+void OptionsDataProfile::SetCreatedOnlineGameOptions(s32 liIndex, GuiCache* lpCache,
+                                                     const GuiEventNetworkGameParams* lpParams)
+{
+    CGS_ASSERT(lpCache, "lpGuiCache");
+    CGS_ASSERT(lpParams, "lpOptions");
+    CGS_ASSERT(liIndex >= 0, "Invalid Created online game options index of ");
+    CGS_ASSERT(liIndex < KI_MAX_CREATED_ONLINE_GAME_OPTIONS, "Invalid Created online game options index of ");
+
+    maCreatedOnlineGameOptions[liIndex].SetFromGameParams(lpCache, lpParams);
+
+    if (liIndex >= miNumCreatedOnlineGameOptions)
+    {
+        ++miNumCreatedOnlineGameOptions;
+        CGS_ASSERT(miNumCreatedOnlineGameOptions == (liIndex + 1),
+                   "miNumCreatedOnlineGameOptions == (liIndex+1)");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Online game options — append received
+//
+// AddReceivedOnlineGameOptions: shift the received route table (base +0x3988,
+// stride 0x5C0) up by one slot to make room at the front (memmove of 9 entries =
+// 0x33C0 bytes from slot 0 to slot 1), write the new entry into slot 0, then bump
+// the received count (capped at KI_MAX_RECEIVED_ONLINE_GAME_OPTIONS).
+// ---------------------------------------------------------------------------
+void OptionsDataProfile::AddReceivedOnlineGameOptions(GuiCache* lpCache,
+                                                      const GuiEventNetworkGameParams* lpParams)
+{
+    CGS_ASSERT(lpCache, "lpGuiCache");
+    CGS_ASSERT(lpParams, "lpOptions");
+
+    memmove(&maReceivedOnlineGameOptions[1], &maReceivedOnlineGameOptions[0],
+            sizeof(OnlineSaveRoute) * (KI_MAX_RECEIVED_ONLINE_GAME_OPTIONS - 1));
+
+    maReceivedOnlineGameOptions[0].SetFromGameParams(lpCache, lpParams);
+
+    if (miNumReceivedOnlineGameOptions < KI_MAX_RECEIVED_ONLINE_GAME_OPTIONS)
+        ++miNumReceivedOnlineGameOptions;
+}
+
+// ---------------------------------------------------------------------------
 // Compile-time layout pin: every offset here is X360-asm-authoritative.
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::_AssertLayout()
 {
     static_assert(sizeof(EATraxArrayType) == 16, "EATraxArrayType must be a 128-bit (16-byte) bit set");
+
+    // Online-game-option route tables: stride 0x5C0, created @+0x8, received @+0x3988,
+    // num counters @+0x7308/+0x730C (all X360-asm-authoritative).
+    static_assert(sizeof(OnlineSaveRoute) == 0x5C0, "OnlineSaveRoute stride must be 0x5C0");
+    static_assert(offsetof(OptionsDataProfile, maCreatedOnlineGameOptions)    == 0x0008, "maCreatedOnlineGameOptions @ 0x0008");
+    static_assert(offsetof(OptionsDataProfile, maReceivedOnlineGameOptions)   == 0x3988, "maReceivedOnlineGameOptions @ 0x3988");
+    static_assert(offsetof(OptionsDataProfile, miNumCreatedOnlineGameOptions) == 0x7308, "miNumCreatedOnlineGameOptions @ 0x7308");
+    static_assert(offsetof(OptionsDataProfile, miNumReceivedOnlineGameOptions) == 0x730C, "miNumReceivedOnlineGameOptions @ 0x730C");
 
     static_assert(offsetof(OptionsDataProfile, mTraxAvailableInFreeBurn) == 0x7310, "mTraxAvailableInFreeBurn @ 0x7310");
     static_assert(offsetof(OptionsDataProfile, mTraxAvailableInEvents)   == 0x7320, "mTraxAvailableInEvents @ 0x7320");
@@ -296,6 +373,39 @@ void OptionsDataProfile::_AssertLayout()
     static_assert(offsetof(OptionsDataProfile, mbForceFeedback)          == 0x736B, "mbForceFeedback @ 0x736B");
     static_assert(offsetof(OptionsDataProfile, mbTips)                   == 0x736D, "mbTips @ 0x736D");
     static_assert(offsetof(OptionsDataProfile, mbIsLocked)               == 0x736E, "mbIsLocked @ 0x736E");
+}
+
+// ---------------------------------------------------------------------------
+// OnlineSaveRoute::OnlineSaveRouteEvent::Construct  @0x824EBD18
+//   Store the event id / junction id / landmark count and copy liNumLandmarks
+//   CgsID (u64) landmark indices into maLandmarkIndices[].
+// ---------------------------------------------------------------------------
+void OptionsDataProfile::OnlineSaveRoute::OnlineSaveRouteEvent::Construct(
+    s32 liEventID, u32 luJunctionID, CgsID* lpaLandmarks, s32 liNumLandmarks)
+{
+    CGS_ASSERT(liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE,
+               "liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE");
+
+    miEventID      = liEventID;      // +0x88
+    mJunctionId    = luJunctionID;   // +0x80
+    miNumLandmarks = liNumLandmarks; // +0x84
+
+    for (s32 li = 0; li < miNumLandmarks; ++li)
+    {
+        maLandmarkIndices[li] = lpaLandmarks[li];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// OnlineSaveRoute::OnlineSaveRouteEvent::GetLandmark  @0x824EBDA8
+//   Bounds-checked read of maLandmarkIndices[liIndex].
+// ---------------------------------------------------------------------------
+CgsID OptionsDataProfile::OnlineSaveRoute::OnlineSaveRouteEvent::GetLandmark(s32 liIndex) const
+{
+    CGS_ASSERT(liIndex >= 0, "liIndex=");
+    CGS_ASSERT(liIndex < miNumLandmarks, "liIndex= GetNumLandmarks()=");
+
+    return maLandmarkIndices[liIndex]; // +0x00 + liIndex*8
 }
 
 } // namespace BrnGui
