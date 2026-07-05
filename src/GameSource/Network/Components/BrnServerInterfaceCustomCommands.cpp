@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsID.h"          // CgsIDUnCompress
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // CgsDev::Log::gpDebugPrint (ConvertEventScoreUploadError)
+#include "GameSource/Network/Parameters/BrnNetworkEventScoreData.h" // EventScoreData::SerialiseToString (UploadEventScoreData)
 #include "lobbyapi.h"        // DirtySDK LobbyApiRequestCB / LobbyApiRefT / LobbyApiMsgT
 #include "lobbytagfield.h"   // DirtySDK TagFieldFind/Get*/Set*
 
@@ -673,6 +675,77 @@ int ServerInterfaceCustomCommands::ConvertError(int liMessageKind, int liMessage
     // Not in the table: the X360 streams "Unhandled custom command message type: <kind>/<code>".
     CGS_ASSERT(false, "Unhandled custom command message type");
     return 1;
+}
+
+// ---------------------------------------------------------------------------
+// ConvertEventScoreUploadError @ 0x82583B10 -- map an event-score-upload {kind, code} fourcc
+// pair to a server-interface error. Structurally the same {special cases + generic table scan}
+// as ConvertError, but the 'badc' ("server doesn't recognise") case logs into the debug-print
+// stream (CgsDev::Log::gpDebugPrint) rather than firing an assert.
+int ServerInterfaceCustomCommands::ConvertEventScoreUploadError(int liMessageKind, int liMessageCode)
+{
+    if (liMessageCode == 0)
+        return 0;
+
+    if (liMessageCode == KI_CODE_NOT_RECOGNISED)  // 'badc'
+    {
+        // The X360 renders the 4-byte kind fourcc as a NUL-terminated 4-char string and streams
+        // "Server doesn't recognise: <kind>\n" into CgsDev::Log::gpDebugPrint (off_82F335C8).
+        char lacKind[8];
+        std::memcpy(lacKind, &liMessageKind, 4);
+        lacKind[4] = 0;
+        *CgsDev::Log::gpDebugPrint << "Server doesn't recognise: " << lacKind << "\n";
+        return 140;
+    }
+    if (liMessageCode == KI_CODE_TIMEOUT)      // 'time'
+        return 5;
+    if (liMessageCode == KI_CODE_IN_PROGRESS)  // 'iper'
+        return 6;
+
+    // Scan the generic mapping table for a row matching both kind and code.
+    for (s32 liIndex = 0; liIndex < KI_NUMBER_OF_ERROR_MAPPINGS; ++liIndex)
+    {
+        if (KA_CUSTOM_COMMAND_ERROR_MAPPING[liIndex].liMessageKind == liMessageKind &&
+            KA_CUSTOM_COMMAND_ERROR_MAPPING[liIndex].liMessageCode == liMessageCode)
+        {
+            return KA_CUSTOM_COMMAND_ERROR_MAPPING[liIndex].liServerInterfaceErrorCode;
+        }
+    }
+
+    // Not in the table: the X360 de-inlines BeginAssert + a StrStream of
+    // "Unhandled custom command message type: <kind>/<code>\n" + FireAssert(...:1224). Collapsed
+    // to one CGS_ASSERT (the streamed kind/code are cosmetic diagnostics; string verbatim from
+    // rodata, trailing ': ' preserved).
+    CGS_ASSERT(false, "Unhandled custom command message type: ");
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// UploadEventScoreData @ 0x825905D8 -- stash the callback + user data, serialise the batch of
+// event scores into the message buffer, then post the 'event score data' upload (action 8).
+int ServerInterfaceCustomCommands::UploadEventScoreData(EventScoreData* lpEventScoreData,
+                                                        CustomCommandCallback lCallback, void* lpData)
+{
+    mpCallbackData = lpData;     // a1[10] -- stw r6, 0x28
+    mpCallback     = lCallback;  // a1[9]  -- stw r5, 0x24
+
+    CGS_ASSERT(lpEventScoreData != nullptr, "lpEventScoreUploadData");
+
+    lpEventScoreData->SerialiseToString(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH);
+
+    SendCustomCommand(E_ACTION_UPLOAD_EVENT_SCORE_DATA, mpServerInterface->GetMessageBuffer());
+    return 0;  // SendCustomCommand is void (its r3 tail is ignored by every caller).
+}
+
+// ---------------------------------------------------------------------------
+// ~ServerInterfaceCustomCommands (scalar deleting destructor @ 0x827DE408).
+// The X360 thunk restores this leaf class's vtable (off_820CDBF8) at this+0 and conditionally
+// runs operator delete (the MSVC flag-bit-0 `delete this` path). Emitting the destructor as
+// virtual makes the compiler synthesise exactly that thunk; there are no owned resources to
+// release (Construct only nulls the POD members), so the body is empty. Mirrors the committed
+// CgsNetwork::ServerInterfaceEndGameDataBase virtual-destructor pattern.
+ServerInterfaceCustomCommands::~ServerInterfaceCustomCommands()
+{
 }
 
 // ---------------------------------------------------------------------------

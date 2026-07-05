@@ -117,6 +117,37 @@ const BrnSound::Vehicles::VehicleData* PhysicsControl::GetRawPhysicsData() const
     return mpVehiclePhysicsData;
 }
 
+// ---------------------------------------------------------------------------
+// PhysicsControl::GetStaticTypeInfo()  @ 0x82684368  (IDA-truncated "BrnSound::Vehicle")
+//
+//   lis   r11, unk_82F2F578@ha
+//   addi  r3,  r11, unk_82F2F578@l   ; r3 = &sTypeInfo (the rodata descriptor)
+//   blr
+//
+// Returns PhysicsControl's per-class static RTTI descriptor. The 2-instruction
+// &unk_X; blr shape is the committed per-class GetStaticTypeInfo() accessor form
+// (ExplosionState::GetStaticTypeInfo @ 0x82689198) -- a function-local static,
+// aggregate-initialised ClassTypeInfo<EffectControl>.
+//
+// FLAG (confidence medium): ObjectID is unrecovered (the per-leaf registration
+// static-init that would seed it was not exported) -> seeded 0 per the in-tree
+// placeholder convention; baseTypeInfo (EffectControl RTTI chain) and createObject
+// are DEFERRED (un-homed) -> nullptr. typeName "PhysicsControl" is inferred from the
+// class identity / the adjacent GetTypeName @ 0x82684378 tag (not proven in-scope,
+// mirrors the ExplosionState precedent's inferred-typeName flag).
+// ---------------------------------------------------------------------------
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* PhysicsControl::GetStaticTypeInfo()
+{
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo =
+    {
+        0,                // ObjectID         (FLAG: EffectControl-side id unrecovered)
+        "PhysicsControl", // mpcTypeName      (FLAG: inferred from class / adjacent GetTypeName tag)
+        nullptr,          // mpBaseTypeInfo   (DEFERRED -- EffectControl RTTI chain un-homed)
+        nullptr,          // mpfnCreateObject (DEFERRED -- CreateObject not homed in this slice)
+    };
+    return &sTypeInfo;
+}
+
 } // namespace Engines
 } // namespace Vehicles
 } // namespace BrnSound

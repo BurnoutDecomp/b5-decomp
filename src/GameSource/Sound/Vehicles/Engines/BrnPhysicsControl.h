@@ -54,6 +54,12 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     // @ 0x82682DA0 (DWARF h:260). Return the cached raw physics blob.
     const BrnSound::Vehicles::VehicleData* GetRawPhysicsData() const;
 
+    // @ 0x82684368 (DWARF h:218). Per-class static RTTI descriptor ("PhysicsControl").
+    // 2-instruction leaf returning &sTypeInfo (function-local static ClassTypeInfo<
+    // EffectControl>), the committed per-class GetStaticTypeInfo() accessor form
+    // (ExplosionState::GetStaticTypeInfo precedent).
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
+
     // ---- named scalar members (BY NAME) + opaque spans (X360 sizes) ----
     // Base BrnEffectControl occupies +0x00..~+0x34.
     u8    mau8BaseGap[4];                 // +0x08..+0x0B: base-region scratch (inlined base zero-init)
