@@ -1350,7 +1350,9 @@ int AptAnimationTarget::RunActions()
             AptCIH*   lpNode = reinterpret_cast<AptCIH*>(lpCIH);
 
             // The CIH handle must be "defined" (mnValueData bit 27 set).
-            if (((lpNode->mnValueData >> 27) & 1u) != 0u)
+            // (Null-guarded: the console never queues a null CIH; an x64 bring-up
+            // path can -- skip the slot rather than AV. FLAG hardening.)
+            if (lpNode != nullptr && ((lpNode->mnValueData >> 27) & 1u) != 0u)
             {
                 // Named members (2026-07-01; were the console raw offsets on x64
                 // objects): the bound character instance (CIH word[8]) must not be
@@ -1471,6 +1473,8 @@ int AptAnimationTarget::RunActions()
             // Push the call context onto the interpreter's CIH/target stack (the X360
             // stamps it then AddRefs it via vtbl[0]). v13 = *(v3+8) == function.mpContext.
             AptValue* lpContext = lpSlot->function.mpContext;                         // *(v3+8)
+            if (lpContext != nullptr)   // FLAG hardening: null context -> skip (see above)
+            {
             gAptActionInterpreter.mpCIHStack[gAptActionInterpreter.mnCIHStackTop] =
                 reinterpret_cast<AptCIH*>(lpContext);
             ++gAptActionInterpreter.mnCIHStackTop;
@@ -1506,6 +1510,7 @@ int AptAnimationTarget::RunActions()
             }
             if (gAptActionInterpreter.mnStackTop > 0)
                 gAptActionInterpreter.stackPop();               // AptValue_::Pop (Release + drop)
+            }   // (null-context guard)
         }
 
         // After a run leaves stray operands, drop the top one (x64: named-member pop).
