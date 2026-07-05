@@ -3,6 +3,7 @@
 // six X360 ledger symbols are all thin instantiations of the generic bodies inline in
 // CgsCoarseQueryResultBuffer.h:
 //
+//   BeginResultsBatch     @ 0x828AD950
 //   GetResultsBatch       @ 0x828AD8E0
 //   EndResultsBatch       @ 0x828ADA10
 //   PushResult            @ 0x828ADAC0
@@ -14,6 +15,7 @@
 // header/slack), honest size 32920 bytes.
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsCoarseQueryResultBuffer.h"
 
+template void       CgsSceneManager::CoarseQueryResultBuffer<16384>::BeginResultsBatch();
 template u16*       CgsSceneManager::CoarseQueryResultBuffer<16384>::GetResultsBatch();
 template void       CgsSceneManager::CoarseQueryResultBuffer<16384>::EndResultsBatch();
 template bool       CgsSceneManager::CoarseQueryResultBuffer<16384>::PushResult(u16);

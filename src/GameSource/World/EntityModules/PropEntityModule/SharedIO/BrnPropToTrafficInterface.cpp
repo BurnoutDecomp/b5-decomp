@@ -30,5 +30,18 @@ namespace PropEntityIO
         TrafficLightKnockDownEvent lEvent = { luInstanceID };
         mTrafficLightKnockDownQueue.AddEvent(lEvent);
     }
+
+    // (:122) -- queue a restore request for the given traffic-light instance. The twin of
+    // RequestTrafficLightKnockDown: same 'luInstanceID != 0' tripwire (no trailing newline;
+    // BrnPropToTrafficInterface.h:163, inlined at the PropZoneManager::SendTrafficLightRestoreEvents
+    // call site), a single 4-byte event materialised on the stack, then AddEvent onto the
+    // interface's mTrafficLightRestoreQueue (its 2nd member, +0x8C).
+    void PropToTrafficInterface::RequestTrafficLightRestore(u32 luInstanceID)
+    {
+        CGS_ASSERT(luInstanceID != 0, "luInstanceID != 0");
+
+        TrafficLightRestoreEvent lEvent = { luInstanceID };
+        mTrafficLightRestoreQueue.AddEvent(lEvent);
+    }
 }
 }

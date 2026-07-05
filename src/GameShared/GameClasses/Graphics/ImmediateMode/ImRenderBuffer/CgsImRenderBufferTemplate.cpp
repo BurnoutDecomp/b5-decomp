@@ -979,4 +979,20 @@ namespace CgsGraphics
     template void ImRenderBuffer<BasicColouredVertex>::SetTransform(const Im2dTransform&);
     template void ImRenderBuffer<BasicColouredVertex>::Swap();
     template void ImRenderBuffer<BasicColouredVertex>::SetBufferFullRewindToLastEndRender();
+
+    // -------------------------------------------------------------------------
+    // CgsGraphics::BasicCo @0x827EF548 == ImRenderBuffer<Im3dVertex>::RenderStart (stride 32).
+    //
+    // BYTE-IDENTICAL to RenderStart @0x827EF748 (Basic) EXCEPT the vertex sub-allocation stride
+    // is 32 (`slwi r9, r28, 5`) instead of 20 -- the SAME templated RenderStart body specialised
+    // for the 32-byte 3D-text vertex. It reuses the generic template RenderStart defined in the
+    // header (assert miNumRendersStarted>=0, ++counter before the carve, carve sizeof(V)*count
+    // from the write buffer's vertex stream, and on overflow CGS_ASSERT(mbFailGracefully,
+    // "Failed to allocate  in ImRenderBuffer") then back the counter out). sizeof(Im3dVertex)==32
+    // reproduces the x32 stride exactly. Im3dVertex is DISTINCT from the committed 24-byte PACKED
+    // BasicColouredTexturedVertex the ImRenderer<V> path copies at 24*count, so a dedicated
+    // 32-byte Im3dVertex is used and RenderStart is instantiated PER MEMBER (the wave-30
+    // <BasicColouredVertex> lesson), never a blind whole-struct.
+    // -------------------------------------------------------------------------
+    template Im3dVertex* ImRenderBuffer<Im3dVertex>::RenderStart(u32);
 }
