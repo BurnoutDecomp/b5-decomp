@@ -32,6 +32,42 @@ public:
         return (maxBits[luField] & lu64Mask) != 0;
     }
 
+    // ADDITIVE GROW: extract luCount contiguous bits starting at luStartBit into lpaOut, one
+    // 64-bit word per 64 bits (ceil(luCount/64) words written), each word LSB-aligned; the
+    // final partial word masked to (luCount % 64) bits. Mirrors the X360 cross-field
+    // shift-extract (field = start/64, shift = start%64) inlined at PropZoneManager::
+    // GetHitPropsFromZone (asm bounds asserts CgsBitArray.h:862/874/914 owned by the caller's
+    // assert system, so this stays assert-free like the rest of the header). The
+    // (luShift == 0 ? 0 : ...) guard reproduces the PPC sld-by-64 == 0 behaviour on the host
+    // where a 64-bit shift-by-64 is UB.
+    void GetBitRange(u32 luStartBit, u32 luCount, u64* lpaOut) const
+    {
+        const u32 luStartField = luStartBit / kuNumberOfBitsInBitField;  // start/64
+        const u32 luShift      = luStartBit & kuBitsInBitFieldMask;      // start%64
+        const u32 luCoShift    = kuNumberOfBitsInBitField - luShift;     // 64-shift
+        const u32 luFullWords  = luCount / kuNumberOfBitsInBitField;     // whole 64-bit out words
+        const u32 luTailBits   = luCount & kuBitsInBitFieldMask;         // remaining bits in last word
+
+        u32 luOutWord = 0;
+        u32 luField   = luStartField;
+        for (; luOutWord < luFullWords; ++luOutWord, ++luField)
+        {
+            const u64 lu64Low  = maxBits[luField] >> luShift;
+            const u64 lu64High = (luShift == 0) ? 0 : (maxBits[luField + 1] << luCoShift);
+            lpaOut[luOutWord]  = lu64Low | lu64High;
+        }
+        if (luTailBits != 0)
+        {
+            const u64 lu64TailMask = ((u64)1 << luTailBits) - 1;
+            u64 lu64Low = maxBits[luField] >> luShift;
+            if (luCoShift < luTailBits)  // the tail straddles into the next field
+            {
+                lu64Low |= (maxBits[luField + 1] << luCoShift);
+            }
+            lpaOut[luOutWord] = lu64Low & lu64TailMask;
+        }
+    }
+
     void SetBit(u32 luIndex)
     {
         const u32 luField = luIndex / kuNumberOfBitsInBitField;

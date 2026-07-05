@@ -383,4 +383,26 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, void* lrBehaviourController,
     SetCamera(lCamera);
 }
 
+// BehaviourCollection<TBehaviour,TParameters,N>::HasActiveCamera() @ X360 0x821FD1A8
+// (declared BrnMomentPlayerJumping.h:63, NON-const). The X360 asserts carry the .cpp source
+// path (BrnMomentPlayerJumping.cpp:123/124), so the body is defined here (distinct from
+// GetCamera, whose asserts carry the .h). One instantiation forced below (the N=4 dropped-rig
+// collection).
+//
+// asm 0x821FD1A8: lbz mbAllocatedShots@+0x71 (assert cpp:123), lbz mbHasCurrentCamera@+0x70
+// (assert cpp:124), then li r3,1 -> return true (the guarded reads prove both latches, so the
+// X360 returns the literal). Bools @+0x70/+0x71 => maShots size 0x64 => N*0x18+4=0x64 => N=4.
+template <typename TBehaviour, typename TParameters, u32 N>
+bool BehaviourCollection<TBehaviour, TParameters, N>::HasActiveCamera()
+{
+    CGS_ASSERT(mbAllocatedShots, "mbAllocatedShots");       // BrnMomentPlayerJumping.cpp:123
+    CGS_ASSERT(mbHasCurrentCamera, "mbHasCurrentCamera");   // BrnMomentPlayerJumping.cpp:124
+    return true;
+}
+
+// Explicit instantiation forcing the X360 0x821FD1A8 out-of-line copy (dropped-rig collection, N=4).
+template bool BehaviourCollection<
+    Camera::BehaviourRig,
+    Camera::BehaviourRig::Parameters, 4>::HasActiveCamera();
+
 }

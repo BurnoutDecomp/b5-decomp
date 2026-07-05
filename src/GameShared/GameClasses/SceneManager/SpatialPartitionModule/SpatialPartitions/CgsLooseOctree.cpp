@@ -16,6 +16,15 @@
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.h"
 #include "rw/rwcore_structs.h"   // rw::IResourceAllocator / rw::Resource / rw::ResourceDescriptor (operator new)
 
+// The EA-jobs SDK chain (pulled by CgsLooseOctree.h -> job.h) drags in a platform header that
+// #defines a function-like GetFreeSpace macro; neutralise it before CgsCoarseQueryResultBuffer.h,
+// whose CoarseQueryResultBuffer<N>::GetFreeSpace() member declaration would otherwise fail to parse.
+#ifdef GetFreeSpace
+#undef GetFreeSpace
+#endif
+#include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsCoarseQueryResultBuffer.h" // CoarseQueryResultBuffer<16384> (WaitForFrustumTestJobResults)
+#include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsJobCoarseResultBuffer.h"    // JobCoarseResultBuffer
+
 #include <cmath>   // std::fabs
 
 namespace CgsSceneManager
@@ -203,6 +212,67 @@ namespace CgsSceneManager
         if (lpNode->mParams1.x > lfEntityY - lfRadius)          // node minY > entity bottom
         {
             FlagBranchForUpdate(lpNode);
+        }
+    }
+
+    // 0x828B2558 -- WaitForFrustumTestJobResults: block on each of the 4 frustum-test jobs
+    // that is active, then drain every per-query result run out of that job's result buffer
+    // into the shared output CoarseQueryResultBuffer, one query == one batch. For query q the
+    // run starts at maJobResultBuffers[i].mpu16Buffer + maQueryOffsets[q] and is
+    // maQueryNumResults[q] long; the number of queries is the job's mQueryInfo.muNumQueries.
+    // After draining, the job's active flag and query count are cleared.
+    //
+    // The huge LooseOctree layout is reached via the batch's attested byte offsets:
+    //   mabFrustumJobActive[i]                          @ this+0x90B00 (bool, stride 0x001)
+    //   maFrustumTestJobs[i]                            @ this+0x8D960 (Job,  stride 0x350)
+    //   maFrustumTestJobData[i].mQueryInfo.muNumQueries @ this+0x8EEC8 (u32,  stride 0x800)
+    //   maJobResultBuffers[i]                           @ this+0x90700 (JobCoarseResultBuffer, stride 0x100)
+    //
+    // The X360 WaitOn takes (job,0,0,-1); the committed vendor Job exposes only the nullary
+    // WaitOn() (block-until-done, job.h:110), used here at semantic parity. Per-array byte
+    // offsets are asm-attested; the intervening layout is not field-modelled, matching the
+    // rest of this TU's reach-by-offset style.
+    void LooseOctree::WaitForFrustumTestJobResults(CoarseQueryResultBuffer<16384>* lpResultBufferOut)
+    {
+        unsigned char* lpcThis = reinterpret_cast<unsigned char*>(this);
+
+        for (u32 luJob = 0; luJob < KU_NUM_FRUSTUM_TEST_JOBS; ++luJob)
+        {
+            bool* lpbActive =
+                reinterpret_cast<bool*>(lpcThis + 0x90B00 + luJob);
+            if (!*lpbActive)
+                continue;
+
+            EA::Jobs::Job* lpJob = reinterpret_cast<EA::Jobs::Job*>(
+                lpcThis + KU_FRUSTUM_TEST_JOBS_BYTE_OFFSET + 0x350 * luJob);
+            lpJob->WaitOn();
+
+            u32* lpuNumQueries =
+                reinterpret_cast<u32*>(lpcThis + 0x8EEC8 + 0x800 * luJob);
+            const u32 luNumQueries = *lpuNumQueries;
+
+            if (luNumQueries != 0)
+            {
+                JobCoarseResultBuffer* lpJobResultBuffer =
+                    reinterpret_cast<JobCoarseResultBuffer*>(lpcThis + 0x90700 + 0x100 * luJob);
+
+                for (u32 luQuery = 0; luQuery < luNumQueries; ++luQuery)
+                {
+                    lpResultBufferOut->BeginResultsBatch();
+                    lpResultBufferOut->PushResults(
+                        lpJobResultBuffer->mpu16Buffer + lpJobResultBuffer->maQueryOffsets[luQuery],
+                        lpJobResultBuffer->maQueryNumResults[luQuery]);
+
+                    CGS_ASSERT(lpResultBufferOut->GetNumResultsAttempted() ==
+                               lpResultBufferOut->GetNumResultsWritten(),
+                               "lpResultBufferOut->GetNumResultsAttempted() == lpResultBufferOut->GetNumResultsWritten()");
+
+                    lpResultBufferOut->EndResultsBatch();
+                }
+            }
+
+            *lpbActive = false;
+            *lpuNumQueries = 0;
         }
     }
 }

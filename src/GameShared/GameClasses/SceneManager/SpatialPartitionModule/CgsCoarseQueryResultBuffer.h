@@ -86,6 +86,28 @@ namespace CgsSceneManager
         return &mau16Buffer[miCurrentResultsStartPosition];
     }
 
+    // X360 0x828AD950. Open a new batch: reserve a leading header slot (pre-incrementing
+    // miTotalBufferSize), record the batch start position, and reset the per-batch attempted
+    // counter. The reserved slot at [miCurrentResultsStartPosition - 1] is back-patched by
+    // EndResultsBatch with the attempted count and the 0x8000 batch-start bit.
+    template <u32 KU_MaxResults>
+    void CoarseQueryResultBuffer<KU_MaxResults>::BeginResultsBatch()
+    {
+        CGS_ASSERT(!mbInABatch,
+                   "BeginResultsBatch called inside a BeginResultsBatch/EndResultsBatch pair");
+
+        ++miTotalBufferSize;
+        CGS_ASSERT(miTotalBufferSize < static_cast<s32>(KU_MaxResults),
+                   "miTotalBufferSize < BufferSize");
+
+        miCurrentResultsStartPosition = miTotalBufferSize;
+        miNumResultsAttemptedThisBatch = 0;
+
+        // X360 emitted a dcbz128 cache-line prezero of &mau16Buffer[miTotalBufferSize] here;
+        // no observable effect on the host, dropped.
+        mbInABatch = true;
+    }
+
     // X360 0x828ADA10. Back-patch the batch header word (written by BeginResultsBatch one slot
     // before the batch start) with this batch's attempted-result count and the batch-start high bit.
     template <u32 KU_MaxResults>

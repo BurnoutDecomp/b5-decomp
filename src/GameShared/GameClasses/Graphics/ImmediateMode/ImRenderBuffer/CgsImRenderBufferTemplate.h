@@ -370,4 +370,26 @@ namespace CgsGraphics
     // callers. This is the buffer's own real type, reachable by writing out the
     // template explicitly: ImRenderBuffer<BasicColouredVertex>.
     typedef ImRenderBuffer<BasicColouredVertex> BasicColouredVertexRenderBuffer;
+
+    // The 3D immediate render-buffer vertex (DWARF Im3dVertex; the SIMD-aligned spelling of
+    // BasicColouredTexturedVertex): 16B pos + 4B RGBA8 + 8B UV + pad = 32-byte stride.
+    // X360-attested stride from ImRenderBuffer<Im3dVertex>::RenderStart @0x827EF548 (slwi r28,5
+    // == 32*luNumVertices). The name is DWARF-attested (CgsIm3d.h / CgsIm3dRenderBuffer.h
+    // PushMask signatures). It is DELIBERATELY NOT typedef'd to the committed 24-byte packed
+    // CgsGraphics::BasicColouredTexturedVertex -- that packed type is what the ImRenderer<V>
+    // path (CgsIm3d.cpp) copies at 24*count, and re-pointing it would break that attested
+    // stride. Only the STRIDE (x32) is asm-attested for THIS RenderStart instantiation; the
+    // DWARF field split (mv3Pos/mv4Colour/mv2Tex0UV) is not load-bearing for RenderStart (which
+    // uses only sizeof(V)), so a correctly-sized opaque 32-byte span is used to avoid pulling
+    // the vpu SIMD Vector3 dependency into this header (per the opaque-payload rule).
+    struct alignas(16) Im3dVertex
+    {
+        u8 mau8Opaque[32];   // 32-byte X360-attested vertex stride (DWARF field split not load-bearing here)
+    };
+    static_assert(sizeof(Im3dVertex) == 32, "Im3dVertex stride is X360-attested at 32 bytes");
+
+    // The 3D-text immediate buffer (Im3dRenderBuffer) the TextRenderer 3D path reserves runs
+    // in via RenderStart @0x827EF548 / RenderEnd. Only RenderStart is X360-attested for this
+    // instantiation in this wave.
+    typedef ImRenderBuffer<Im3dVertex> Im3dTextRenderBuffer;
 }

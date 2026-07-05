@@ -80,6 +80,26 @@ namespace BrnDirector
         bool                   mbAllocatedShots;   // h:121
     };
 
+    // BehaviourCollection<TBehaviour,TParameters,N>::GetCamera() const @ X360 0x8222CF38
+    // (declared h:60/h:95). The X360 asserts carry the .h source path
+    // (BrnMomentPlayerJumping.h:89/90), so the body genuinely lives in the header (unlike
+    // HasActiveCamera whose asserts carry the .cpp). N=5 (mIceCollection) is the copy the
+    // ledger forces.
+    //
+    // asm 0x8222CF38: lbz mbAllocatedShots@+0x89 (assert :89), lbz mbHasCurrentCamera@+0x88
+    // (assert :90), then maShots[miCurrentCamera] (Array<Shot,N>::operator[] const) ->
+    // mHandle.GetProducedCamera(). GetProducedCamera itself carries the single IsAllocated()
+    // assert (BrnBehaviourManager.h:589) plus the GetBehaviourSlotFromHandle resolve + deref,
+    // so NO separate explicit IsAllocated assert is emitted here (that would double-fire).
+    template <typename TBehaviour, typename TParameters, u32 N>
+    inline const Camera::Camera&
+    BehaviourCollection<TBehaviour, TParameters, N>::GetCamera() const
+    {
+        CGS_ASSERT(mbAllocatedShots, "mbAllocatedShots");       // BrnMomentPlayerJumping.h:89
+        CGS_ASSERT(mbHasCurrentCamera, "mbHasCurrentCamera");   // BrnMomentPlayerJumping.h:90
+        return maShots[static_cast<u32>(miCurrentCamera)].mHandle.GetProducedCamera();
+    }
+
     // DWARF: BrnMomentPlayerJumping.h:134.
     class MomentPlayerJumping : public Moment
     {

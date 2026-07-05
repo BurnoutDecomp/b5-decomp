@@ -58,6 +58,10 @@ namespace rw { struct IResourceAllocator; }
 
 namespace CgsSceneManager
 {
+    // The shared coarse-query result buffer WaitForFrustumTestJobResults drains into
+    // (full definition in CgsCoarseQueryResultBuffer.h; the body's .cpp includes it).
+    template <u32 KU_MaxResults> struct CoarseQueryResultBuffer;
+
     // CgsLooseOctreeNode.h:37 (DWARF)
     static const u16 KU_INVALID_NODE = 0xFFFF;
 
@@ -149,6 +153,10 @@ namespace CgsSceneManager
         // @ 0x828B0EC8 -- if the entity's vertical extent exceeds the node's [minY,maxY],
         // flag the branch for update.
         void UpdateNodeYBounds(LooseOctreeNode* lpNode, u16 lu16EntityIndex);
+
+        // @ 0x828B2558 -- CgsLooseOctree.cpp:3118. Block on each active frustum-test job and
+        // drain its per-query result runs into the shared output buffer.
+        void WaitForFrustumTestJobResults(CoarseQueryResultBuffer<16384>* lpResultBufferOut);
 
     private:
         // mpNodes lives at KU_NODES_PTR_BYTE_OFFSET; reached via the attested offset

@@ -62,6 +62,11 @@ namespace BrnWorld
         u32 GetPartIndex() const;               // 0x822B7B68
         u32 GetValue() const;                   // 0x822B7BC8
 
+        // ADDITIVE GROW: the owner byte (bits [24..31]) the owner tripwires compare against
+        // E_ENTITYTYPE_PROP. The X360 inlines this at every use site as `srwi r,word,24`
+        // (word >> 24); PropZoneManager::GetRespawnType calls lId.GetOwner() explicitly.
+        u32 GetOwner() const { return mEntityId.muValue >> KU_OWNER_BASE; }
+
         void SetEntityIndex(u16 luEntityIndex); // 0x822B79D0
         void SetPartIndex(u32 luPartIndex);     // 0x822B7A70
 

@@ -49,6 +49,7 @@
 #include "BrnPropCellManager.h"      // PropCellManager (embedded by value)
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModuleIO.h" // InSceneUpdateInterface
+#include "SharedClasses/Physics/Props/PropRespawnTypesEnum.h"            // BrnPhysics::Props::eRespawnType (GetRespawnType return)
 
 namespace BrnPhysics { namespace Props {
     class  PropPhysicsDataHeader;
@@ -133,6 +134,23 @@ namespace BrnWorld
                             PropEntityIO::OutputBuffer_PostPhysics* lpOutput);
 
         bool IsZoneLoaded(u16 lu16ZoneId) const;   // 0x822A4390 (out-of-line)
+
+        // 0x822BC920 -- has this prop (zone + index-within-zone) already been hit?
+        // DWARF BrnPropZoneManager.h:181 overload HasPropBeenHit(uint32_t,uint32_t) const.
+        bool HasPropBeenHit(u32 luZoneIndex, u32 luPropIndex) const;
+
+        // 0x822BC4D0 -- classify respawn behaviour for a prop from the two per-prop respawn
+        // bit sets. DWARF BrnPropZoneManager.h:176 attests the eRespawnType return.
+        BrnPhysics::Props::eRespawnType GetRespawnType(PropEntityID lId) const;
+
+        // 0x822BCA60 -- extract this zone's 600-bit previously-hit run into a 10-word (u64[10])
+        // LSB-aligned output buffer. (Private helper in the X360; asm-gated, not in DWARF.)
+        void GetHitPropsFromZone(u64* lpaHitProps, u32 luZoneIndex) const;
+
+        // 0x822CDDE0 -- drain mauTrafficLightsToRestore into the output buffer's prop->traffic
+        // interface as restore requests, then clear the list. Called by
+        // PropEntityModule::PrePhysicsUpdate.
+        void SendTrafficLightRestoreEvents(PropEntityIO::OutputBuffer_PrePhysics* lpOutput);
 
         // ---- thin forwarders to mCellManager (with a "prop index in zone" precheck) ----
         void AddPropPartsToScene(PropEntityInstance* lpProp, const PropTypeData* lpType,

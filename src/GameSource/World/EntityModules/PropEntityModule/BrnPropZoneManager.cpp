@@ -32,7 +32,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h" // PropPhysicsDataHeader::GetType, PropTypeData
 #include "SharedClasses/Physics/Props/BrnPhysicsPropZoneData.h"   // PropZoneData
-#include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h" // OutputBuffer_PreScene / _PostPhysics
+#include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h" // OutputBuffer_PreScene / _PostPhysics / _PrePhysics
+#include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h" // PropToTrafficInterface (SendTrafficLightRestoreEvents)
 
 namespace BrnWorld
 {
@@ -186,6 +187,166 @@ namespace BrnWorld
         CGS_ASSERT(luSlotIndex < KU_NUM_ZONE_SLOTS, "invalid index");
         CGS_ASSERT(maUsedParts.IsBitSet(luSlotIndex), "maUsedParts.IsBitSet(liSlotIndex)");
         maUsedParts.UnSetBit(luSlotIndex);
+    }
+
+    // ========================================================================
+    // PropZoneManager::IsZoneLoaded @ 0x822A4390
+    // ------------------------------------------------------------------------
+    // A zone is loaded iff its prop start index is not the unloaded sentinel.
+    bool PropZoneManager::IsZoneLoaded(u16 lu16ZoneId) const
+    {
+        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES, "luZoneIndex < BrnPhysics::Props::KU_MAX_ZONES");
+        return mauStartIndexOfZone[lu16ZoneId] != KU_UNLOADED_ZONE;
+    }
+
+    // ========================================================================
+    // PropZoneManager::AllocatePropInstancesBlock @ 0x822DF050
+    // ------------------------------------------------------------------------
+    // Find the first free prop-pool slot (first clear bit of maUsedProps), mark it used, and
+    // return its start index (slot * KU_SIZE_OF_PROP_ZONE_SLOT). The X360 inlines
+    // BitArray<9>::GetFirstClearBit (the cntlzd lowest-clear-bit idiom) and SetBit at the call
+    // site; restored to the named container methods here.
+    s32 PropZoneManager::AllocatePropInstancesBlock(u32 luSizeOfBlock)
+    {
+        (void)luSizeOfBlock;
+        CGS_ASSERT(luSizeOfBlock < KU_MAX_PROP_INSTANCES_PER_ZONE,
+                   "luSizeOfBlock < BrnPhysics::Props::KU_MAX_PROP_INSTANCES_PER_ZONE");
+
+        const s32 liSlotIndex = maUsedProps.GetFirstClearBit();
+        CGS_ASSERT(liSlotIndex != -1, "liSlotIndex != -1");
+
+        CGS_ASSERT(static_cast<u32>(liSlotIndex) < KU_NUM_ZONE_SLOTS, "invalid index");
+        maUsedProps.SetBit(static_cast<u32>(liSlotIndex));
+
+        return static_cast<s32>(KU_SIZE_OF_PROP_ZONE_SLOT) * liSlotIndex;
+    }
+
+    // ========================================================================
+    // PropZoneManager::AllocatePartInstancesBlock @ 0x822DF1F8
+    // ------------------------------------------------------------------------
+    // The part-pool twin of the above (maUsedParts, KU_SIZE_OF_PART_ZONE_SLOT slots).
+    s32 PropZoneManager::AllocatePartInstancesBlock(u32 luSizeOfBlock)
+    {
+        (void)luSizeOfBlock;
+        CGS_ASSERT(luSizeOfBlock < KU_MAX_PROP_PARTS_PER_ZONE,
+                   "luSizeOfBlock < BrnPhysics::Props::KU_MAX_PROP_PARTS_PER_ZONE");
+
+        const s32 liSlotIndex = maUsedParts.GetFirstClearBit();
+        CGS_ASSERT(liSlotIndex != -1, "liSlotIndex != -1");
+
+        CGS_ASSERT(static_cast<u32>(liSlotIndex) < KU_NUM_ZONE_SLOTS, "invalid index");
+        maUsedParts.SetBit(static_cast<u32>(liSlotIndex));
+
+        return static_cast<s32>(KU_SIZE_OF_PART_ZONE_SLOT) * liSlotIndex;
+    }
+
+    // ========================================================================
+    // PropZoneManager::HasPropBeenHit @ 0x822BC920
+    // ------------------------------------------------------------------------
+    // Test whether a given prop (addressed by zone + index-within-zone) has its previously-hit
+    // bit set. The flat bit index is KU_MAX_PROP_INSTANCES_PER_ZONE (600) * zoneIndex + propIndex
+    // into maPreviouslyHitProps (BitArray<300000>).
+    bool PropZoneManager::HasPropBeenHit(u32 luZoneIndex, u32 luPropIndex) const
+    {
+        CGS_ASSERT(luZoneIndex < KU_MAX_ZONES, "luZoneIndex < BrnPhysics::Props::KU_MAX_ZONES");
+
+        const u32 luBitIndex = KU_MAX_PROP_INSTANCES_PER_ZONE * luZoneIndex + luPropIndex;
+        CGS_ASSERT(luBitIndex < 300000u, "invalid index");
+        return maPreviouslyHitProps.IsBitSet(luBitIndex);
+    }
+
+    // ========================================================================
+    // PropZoneManager::GetRespawnType @ 0x822BC4D0
+    // ------------------------------------------------------------------------
+    // Classify how a prop should respawn from its two per-prop respawn bit sets (indexed by the
+    // prop's entity index):
+    //   E_DONT_RESPAWN    (1) when the prop is flagged "don't respawn"       (maDontRespawnProps set)
+    //   E_RESPAWN_CHANGED (2) when the prop is flagged "respawn a different" (maRespawnDifferentProps set)
+    //   E_RESPAWN         (0) otherwise (respawn normally)
+    // DWARF (BrnPropZoneManager.h:176) attests the return type as BrnPhysics::Props::eRespawnType.
+    // The X360 inlines PropEntityID::GetOwner()/GetEntityIndex() (packed-word bit math) and
+    // BitArray::IsBitSet at each call site; restored to the named methods. Each branch also fires
+    // a cross-check assert (the OTHER set must be clear).
+    BrnPhysics::Props::eRespawnType PropZoneManager::GetRespawnType(PropEntityID lId) const
+    {
+        CGS_ASSERT(lId.GetOwner() == E_ENTITYTYPE_PROP, "mEntityId.GetOwner() == E_ENTITYTYPE_PROP");
+        const u32 luEntityIndex = lId.GetEntityIndex();
+        CGS_ASSERT(luEntityIndex < 5400u, "invalid index");
+
+        if (maDontRespawnProps.IsBitSet(luEntityIndex))
+        {
+            CGS_ASSERT(lId.GetOwner() == E_ENTITYTYPE_PROP, "mEntityId.GetOwner() == E_ENTITYTYPE_PROP");
+            CGS_ASSERT(luEntityIndex < 5400u, "invalid index");
+            CGS_ASSERT(!maRespawnDifferentProps.IsBitSet(luEntityIndex),
+                       "!maRespawnDifferentProps.IsBitSet(lId.GetEntityIndex())");
+            return BrnPhysics::Props::E_DONT_RESPAWN;
+        }
+
+        CGS_ASSERT(lId.GetOwner() == E_ENTITYTYPE_PROP, "mEntityId.GetOwner() == E_ENTITYTYPE_PROP");
+        CGS_ASSERT(luEntityIndex < 5400u, "invalid index");
+        if (maRespawnDifferentProps.IsBitSet(luEntityIndex))
+        {
+            const u32 luRespawnEntityIndex = lId.GetEntityIndex();
+            CGS_ASSERT(luRespawnEntityIndex < 5400u, "invalid index");
+            CGS_ASSERT(!maDontRespawnProps.IsBitSet(luRespawnEntityIndex),
+                       "!maDontRespawnProps.IsBitSet(lId.GetEntityIndex())");
+            return BrnPhysics::Props::E_RESPAWN_CHANGED;
+        }
+
+        return BrnPhysics::Props::E_RESPAWN;
+    }
+
+    // ========================================================================
+    // PropZoneManager::GetHitPropsFromZone @ 0x822BCA60
+    // ------------------------------------------------------------------------
+    // Extract the KU_MAX_PROP_INSTANCES_PER_ZONE(600)-bit run of the previously-hit bit set that
+    // belongs to one zone (starting at bit 600*zoneIndex) into a caller-supplied 10-word
+    // (10*64 = 640-bit) buffer, LSB-aligned. The X360 inlines BitArray<300000>::GetBitRange -- a
+    // cross-field shift-extract with the trailing 24-bit tail masked (600 = 9*64 + 24) -- at the
+    // call site; restored to the named container method here (bounds asserts
+    // CgsBitArray.h:862/874/914 collapse into it).
+    void PropZoneManager::GetHitPropsFromZone(u64* lpaHitProps, u32 luZoneIndex) const
+    {
+        maPreviouslyHitProps.GetBitRange(KU_MAX_PROP_INSTANCES_PER_ZONE * luZoneIndex,
+                                         KU_MAX_PROP_INSTANCES_PER_ZONE, lpaHitProps);
+    }
+
+    // ========================================================================
+    // PropZoneManager::SendTrafficLightRestoreEvents @ 0x822CDDE0
+    // ------------------------------------------------------------------------
+    // Drain the per-load list of traffic-light instance ids that need restoring
+    // (mauTrafficLightsToRestore, an Array<u32,80> filled by LoadProp) into the pre-physics
+    // output buffer's prop->traffic interface -- one RequestTrafficLightRestore per id -- then
+    // clear the list. Called once per frame by PropEntityModule::PrePhysicsUpdate.
+    //
+    // The X360 fetches the interface via OutputBuffer_PrePhysics::GetPropToTrafficInterface()
+    // (write-lock accessor @0x822B9A80, member @+11296 -- returns the opaque storage that we
+    // reinterpret to the real interface, the same idiom RemovePropFromSim uses for
+    // GetPropInputInterface). It then INLINES PropToTrafficInterface::RequestTrafficLightRestore
+    // at the loop body (the `luInstanceID != 0` assert is BrnPropToTrafficInterface.h:163, and
+    // the AddEvent targets the interface's mTrafficLightRestoreQueue @ +0x8C). We restore that
+    // inlined logical call as an explicit RequestTrafficLightRestore(id) -- matching the sibling
+    // RequestTrafficLightKnockDown de-inlining precedent. Re-reading GetLength() each iteration
+    // reproduces the X360's per-pass count reload + the container's inlined constructed-check.
+    void PropZoneManager::SendTrafficLightRestoreEvents(PropEntityIO::OutputBuffer_PrePhysics* lpOutput)
+    {
+        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
+
+        // Write-lock handle to the prop->traffic hand-off interface (X360 returns this+11296).
+        PropEntityIO::PropToTrafficInterface* lpPropToTrafficInterface =
+            reinterpret_cast<PropEntityIO::PropToTrafficInterface*>(lpOutput->GetPropToTrafficInterface());
+        CGS_ASSERT(lpPropToTrafficInterface != nullptr, "lpPropToTrafficInterface");
+
+        for (u32 luIndex = 0; luIndex < mauTrafficLightsToRestore.GetLength(); ++luIndex)
+        {
+            const u32 luInstanceID = mauTrafficLightsToRestore.GetItem(luIndex);
+            // Inlined in the X360 as: assert luInstanceID != 0, then AddEvent onto the interface's
+            // mTrafficLightRestoreQueue (@+0x8C). Restored as the logical call.
+            lpPropToTrafficInterface->RequestTrafficLightRestore(luInstanceID);
+        }
+
+        // Reset the pending-restore list (X360 stores 0 into the count word @ this+841232).
+        mauTrafficLightsToRestore.Clear();
     }
 
     // ========================================================================
