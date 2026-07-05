@@ -169,6 +169,18 @@ extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
     CgsDev::Log::WriteToLog(lac);
 }
 
+// The GetMember(.prototype) probe. First 40.
+extern "C" void AptGetMemberProbe(int nObjType, int nResType, int nResDefined)
+{
+    static int s_iGmHits = 0;
+    if (s_iGmHits >= 40)
+        return;
+    ++s_iGmHits;
+    char lac[128];
+    std::snprintf(lac, sizeof(lac), "[AptRT] getproto obj=%d -> res=%d def=%d\n", nObjType, nResType, nResDefined);
+    CgsDev::Log::WriteToLog(lac);
+}
+
 // The clip-placement class-bind probe. First 32.
 extern "C" void AptClassBindProbe(const char* pcExport)
 {
@@ -178,6 +190,115 @@ extern "C" void AptClassBindProbe(const char* pcExport)
     ++s_iCbHits;
     char lac[144];
     std::snprintf(lac, sizeof(lac), "[AptRT] class-bind: '%s'\n", pcExport ? pcExport : "<null>");
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The runStream opcode trace: armed only around the FIRST TransitionComponent
+// class-ctor run (AptOpTraceArmForClass from AssociateInstToClass), then dumps
+// every dispatched opcode + PC until disarm. Exit reasons: 0x100=mbStop,
+// 0x101=off-end, 0x102=abort.
+static int s_iOpTraceArmed = 0;
+static const unsigned char* s_pOpTraceBase = 0;
+
+extern "C" void AptOpTraceArmForClass(const char* pcExport, int nOn)
+{
+    static int s_iTraced = 0;
+    if (!pcExport || std::strcmp(pcExport, "TransitionComponent") != 0)
+        return;
+    if (nOn)
+    {
+        if (s_iTraced)
+            return;
+        s_iOpTraceArmed = 1;
+        s_pOpTraceBase = 0;
+        CgsDev::Log::WriteToLog("[AptRT] optrace ARM (TransitionComponent ctor)\n");
+    }
+    else if (s_iOpTraceArmed)
+    {
+        s_iOpTraceArmed = 0;
+        s_iTraced = 1;
+        CgsDev::Log::WriteToLog("[AptRT] optrace DISARM\n");
+    }
+}
+
+static int s_iOpEarlyBudget = 400;   // trace the FIRST ops ever (the framework init actions)
+
+extern "C" void AptOpTraceProbe(const void* pcOp, unsigned int nOp)
+{
+    static int s_iOpHits = 0;
+    const bool bEarly = (s_iOpEarlyBudget > 0);
+    if (bEarly)
+        --s_iOpEarlyBudget;
+    if ((!s_iOpTraceArmed && !bEarly) || s_iOpHits >= 1400)
+        return;
+    ++s_iOpHits;
+    const unsigned char* pc = static_cast<const unsigned char*>(pcOp);
+    if (!s_pOpTraceBase)
+        s_pOpTraceBase = pc;
+    char lac[112];
+    std::snprintf(lac, sizeof(lac), "[AptOp] %+06lld op=%03X pc=%p\n",
+                  static_cast<long long>(pc - s_pOpTraceBase), nOp, pcOp);
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The indirect-push value probe (stackPushIndirect): only while the opcode trace
+// is armed. Shows what each Push (0x96) entry resolved to.
+extern "C" void AptPushIndirectProbe(int nRawType, int nRawDefined, int nRegIndex,
+                                     int nResType, int nResDefined, const char* pcText)
+{
+    if (!s_iOpTraceArmed && s_iOpEarlyBudget <= 0)
+        return;
+    char lac[176];
+    std::snprintf(lac, sizeof(lac),
+                  "[AptOp]   push raw=%d/%d reg=%d -> res=%d/%d '%s'\n",
+                  nRawType, nRawDefined, nRegIndex, nResType, nResDefined,
+                  pcText ? pcText : "");
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The SetArgument arg-record decode probe. First 64. (pcName is NOT dereferenced
+// -- it is the suspect pointer; the fn name is peeked only when plausibly mapped.)
+extern "C" void AptSetArgumentProbe(int nIndex, int nCount, int nRegister,
+                                    const char* pcName, const char* pcFnName,
+                                    const void* pTable)
+{
+    static int s_iSaHits = 0;
+    if (s_iSaHits >= 64)
+        return;
+    ++s_iSaHits;
+    const char* pcFn = (reinterpret_cast<uintptr_t>(pcFnName) > 0x10000
+                        && reinterpret_cast<uintptr_t>(pcFnName) < 0x0000800000000000ull)
+                       ? pcFnName : "<wild>";
+    char lac[192];
+    std::snprintf(lac, sizeof(lac),
+                  "[AptRT] setarg fn='%s' idx=%d/%d reg=%d name=%p table=%p\n",
+                  pcFn, nIndex, nCount, nRegister, static_cast<const void*>(pcName), pTable);
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The dictionary-fetch trace (AptInterp_GetDictEntry). First 120.
+extern "C" void AptDictFetchProbe(unsigned int nIndex, const void* pPool, int nType,
+                                  const char* pcText)
+{
+    static int s_iDfHits = 0;
+    if (s_iDfHits >= 120)
+        return;
+    ++s_iDfHits;
+    char lac[176];
+    std::snprintf(lac, sizeof(lac), "[AptRT] dict[%u] pool=%p type=%d '%s'\n",
+                  nIndex, pPool, nType, pcText ? pcText : "");
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The null-dictionary-slot probe (AptInterp_GetDictEntry). First 32.
+extern "C" void AptDictNullEntryProbe(unsigned int nIndex, const void* pPool)
+{
+    static int s_iDnHits = 0;
+    if (s_iDnHits >= 32)
+        return;
+    ++s_iDnHits;
+    char lac[112];
+    std::snprintf(lac, sizeof(lac), "[AptRT] dict NULL slot: idx=%u pool=%p\n", nIndex, pPool);
     CgsDev::Log::WriteToLog(lac);
 }
 

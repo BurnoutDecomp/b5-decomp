@@ -20,6 +20,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"       // AptLookup::GetIndex (Lookup indirection)
 #include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"     // AptRegister::GetIndex (Register indirection)
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetRegisterValue (Register indirection)
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"       // AptString peek (FLAG bring-up trace)
 
 // ---------------------------------------------------------------------------
 // stackPush @0x7F1790 -- store at top, advance, AddRef.
@@ -129,12 +130,42 @@ void AptActionInterpreter::stackPopAndPush(int nCount, AptValue* pValue)
 // register file via AptScriptFunctionBase::GetRegisterValue(index). The push is
 // the console's inlined stackPush (store/advance/AddRef), reproduced via stackPush.
 // ---------------------------------------------------------------------------
+// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
+// bring-up TU, gated by the opcode-trace arm): reports each indirect push's raw
+// entry kind + the resolved value.
+#if defined(_MSC_VER)
+extern "C" void AptPushIndirectProbe(int nRawType, int nRawDefined, int nRegIndex,
+                                     int nResType, int nResDefined, const char* pcText);
+#pragma comment(linker, "/alternatename:AptPushIndirectProbe=AptPushIndirectProbeDefault")
+extern "C" void AptPushIndirectProbeDefault(int, int, int, int, int, const char*) {}
+#else
+extern "C" void AptPushIndirectProbe(int nRawType, int nRawDefined, int nRegIndex,
+                                     int nResType, int nResDefined, const char* pcText);
+#endif
+
 void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 {
+    AptValue* const pRaw = pValue;   // FLAG bring-up trace
+    int nRegIndex = -1;
+
     if (pValue->isLookup())            // AptVFT_Lookup (tag 8) && defined
         pValue = mpConstantPool[static_cast<AptLookup*>(pValue)->GetIndex()];
     else if (pValue->isRegister())     // AptVFT_Register (tag 4) && defined
-        pValue = AptScriptFunctionBase::GetRegisterValue(static_cast<AptRegister*>(pValue)->GetIndex());
+    {
+        nRegIndex = static_cast<int>(static_cast<AptRegister*>(pValue)->GetIndex());
+        pValue = AptScriptFunctionBase::GetRegisterValue(nRegIndex);
+    }
+
+    // FLAG bring-up trace (weak no-op unless the bring-up sink arms it).
+    {
+        const char* pcText = nullptr;
+        if (pValue && pValue->getVtblIndex() == AptVFT_StringValue && pValue->getIsDefined())
+            pcText = static_cast<AptString*>(pValue)->GetInternalString()->GetBuffer();
+        AptPushIndirectProbe(static_cast<int>(pRaw->getVtblIndex()), pRaw->getIsDefined() ? 1 : 0,
+                             nRegIndex,
+                             pValue ? static_cast<int>(pValue->getVtblIndex()) : -1,
+                             pValue ? (pValue->getIsDefined() ? 1 : 0) : -1, pcText);
+    }
 
     stackPush(pValue);
 }

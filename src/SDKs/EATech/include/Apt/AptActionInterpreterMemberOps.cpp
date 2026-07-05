@@ -52,6 +52,16 @@
 
 #include <cstdint>
 
+// FLAG (bring-up probe; weak no-op default, strong logger in the host bring-up
+// TU): traces GetMember(".prototype") reads -- the class-method wiring path.
+#if defined(_MSC_VER)
+extern "C" void AptGetMemberProbe(int nObjType, int nResType, int nResDefined);
+#pragma comment(linker, "/alternatename:AptGetMemberProbe=AptGetMemberProbeDefault")
+extern "C" void AptGetMemberProbeDefault(int, int, int) {}
+#else
+extern "C" void AptGetMemberProbe(int nObjType, int nResType, int nResDefined);
+#endif
+
 // FLAG (host extern-object interface -- AptVFT_Extern type 11; console fn-ptrs
 // dword_8324E858 get / dword_8324E854 set): the extern subsystem is host-provided
 // and not reconstructed; the member get/set route through these hooks.
@@ -108,6 +118,12 @@ void AptActionInterpreter::_FunctionAptActionGetMember(AptActionInterpreter* pIn
         EAStringC scratch;
         const EAStringC* pName = AptValue::Get_ToString(pKey, &scratch);
         AptValue* pResult = pInterp->getVariable(pObject, 0, pName, 1, 0, 1);
+        // FLAG (bring-up probe): trace .prototype reads (the class-method wiring).
+        if (pName->GetBuffer() && pName->GetBuffer()[0] == 'p'
+            && pName->GetBuffer()[1] == 'r' && pName->GetBuffer()[8] == 'e')
+            AptGetMemberProbe(static_cast<int>(pObject->getVtblIndex()),
+                              pResult ? static_cast<int>(pResult->getVtblIndex()) : -1,
+                              pResult ? (pResult->getIsDefined() ? 1 : 0) : -1);
         pInterp->stackPopAndPush(2, pResult);
         return;
     }

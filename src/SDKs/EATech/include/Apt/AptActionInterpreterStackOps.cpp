@@ -53,6 +53,9 @@
 #include <cmath>     // fmodf (Array integer-length detection)
 #include <string.h>  // _stricmp (the AS class-name compare)
 
+// The null-guarded dictionary-slot fetch (InterpHelpers; FLAG hardening).
+extern AptValue* AptInterp_GetDictEntry(AptActionInterpreter* pInterp, unsigned int nIndex);
+
 // FLAG (wired at AptInit; see AptValueConvert.cpp).
 extern AptValue* gpUndefinedValue;
 
@@ -257,7 +260,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictByte(AptActionInterpr
     const unsigned int nIndex = *pCtx->mpProgramCounter;   // byte dictionary index
     pCtx->mpProgramCounter += 1;
 
-    AptValue* pEntry = pInterp->mpConstantPool[nIndex];        // console: *(4*idx + a1[17])
+    AptValue* pEntry = AptInterp_GetDictEntry(pInterp, nIndex);   // null-guarded (FLAG hardening)        // console: *(4*idx + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
     pEntry->AddRef();
 }
@@ -274,7 +277,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictWord(AptActionInterpr
     const unsigned int nIndex = p[0] | (static_cast<unsigned int>(p[1]) << 8);   // LE u16 (GUIAPT64/XB1)
     pCtx->mpProgramCounter += 2;
 
-    AptValue* pEntry = pInterp->mpConstantPool[nIndex];        // console: *((4*idx & 0x3FFFC) + a1[17])
+    AptValue* pEntry = AptInterp_GetDictEntry(pInterp, nIndex);   // null-guarded (FLAG hardening)        // console: *((4*idx & 0x3FFFC) + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
     pEntry->AddRef();
 }
@@ -387,7 +390,7 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetMember(AptActionIn
     const unsigned int nIndex = *pCtx->mpProgramCounter;    // byte dictionary index
     pCtx->mpProgramCounter += 1;
 
-    AptValue* pEntry = pInterp->mpConstantPool[nIndex];        // console: *(4*idx + a1[17])
+    AptValue* pEntry = AptInterp_GetDictEntry(pInterp, nIndex);   // null-guarded (FLAG hardening)        // console: *(4*idx + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
     pEntry->AddRef();
 
@@ -407,7 +410,7 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInter
     const unsigned int nIndex = *pCtx->mpProgramCounter;    // byte dictionary index
     pCtx->mpProgramCounter += 1;
 
-    AptValue* pEntry = pInterp->mpConstantPool[nIndex];        // console: *(4*idx + a1[17])
+    AptValue* pEntry = AptInterp_GetDictEntry(pInterp, nIndex);   // null-guarded (FLAG hardening)        // console: *(4*idx + a1[17])
 
     // The asm inlines Get_ToString: type-1 StringValue -> its own EAStringC (+8);
     // else (boxed tag 33) -> the AptString at +0x20, then its EAStringC. Reuse the
@@ -694,6 +697,8 @@ static const EAStringC gAptCallKey ("call");
 // does not name as a member yet).
 extern AptValue* AptInterp_HashLookupName(AptNativeHash* pHash, EAStringC** pNameSlot);
 
+
+
 void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pInterp,
                                                        LocalContextT* pContext)
 {
@@ -899,22 +904,26 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     }
 
     // ---- the "this"-binding prototype-chain walk --------------------------
-    // console: (*(*v7+16))(v7) -- the method name's vtable slot 4 (a "is this a
-    // bound-method needing a fresh `this`?" predicate). When true, walk the object's
-    // constructor / prototype chain to bind the right `this` and push it on the
-    // call-frame register stack (call-depth stack #4, console a1[3]/a1[5]).
-    if (AptInterp_HasMember(pMethodName, nullptr))   // FLAG: (*(*v7+16))(v7) -- bound-method predicate
+    // console: (*(*v7+16))(v7) -- the RECEIVER's vtable slot 4 == GetHasClass()
+    // (AptValue vtbl: 0 AddRef, 1 Release, 2 GetNativeHashVirtual, 3
+    // ContainsNativeHashVirtual, 4 GetHasClass, 5 SetHasClass...). A class-bearing
+    // receiver binds a fresh `this` (pushed on call-frame stack B) unless it is
+    // already in the current activation's __proto__ chain. (The old recon used a
+    // FLAG'd AptInterp_HasMember(v7, nullptr) stand-in here -- once the class
+    // prototypes went live it walked a real chain into Lookup(*(EAStringC*)null):
+    // the onLoad-dispatch AV. x64 FIX 2026-07-05, verified vs @0x82B04758.)
+    if (pMethodName->GetHasClass())   // console (*(*v7+16))(v7) -- vtbl[4]
     {
         bool      bBindThis = true;          // console v40 (r29) = 1
         AptValue* pBoundThis = pMethodName;  // console v41 (r30) = v7
 
-        if (pInterp->mnCIHStackTop)          // console a1[3] (+0x0C)
+        if (pInterp->mnCallStackB_Count)     // console a1[3] (+0x0C == stack B count)
         {
-            // walk the current activation's owning object chain looking for v7; if it
+            // walk the current activation's __proto__ chain looking for v7; if it
             // is already in scope, no fresh bind is needed.
             const int nNameType = (static_cast<int>(pMethodName->getVtblIndex()) << 25) >> 25;   // v43
-            AptValue* const pTopFrame =
-                reinterpret_cast<AptValue*>(pInterp->mpCIHStack[pInterp->mnCIHStackTop - 1]);    // console v44
+            AptValue* const pTopFrame = reinterpret_cast<AptValue*>(
+                pInterp->mpCallStackB[pInterp->mnCallStackB_Count - 1]);   // console *(a1[5] + 4*a1[3] - 4)
             const bool bClassMatch =
                 (nNameType == 12 && pMethodName->getIsDefined())   // CharacterInstHandle
              || nNameType == 37;                                   // CIHNone
@@ -923,13 +932,17 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             if ((!bClassMatch || AptValue_GetClassOwnerValue(pMethodName) != pTopFrame)
                 && pMethodName != pTopFrame)
             {
-                // walk pTopFrame's owner chain (console (*(*v44+8))(v44) -> *(...+8)).
-                AptValue* pWalk = AptInterp_HasMember(pTopFrame, nullptr) ? pTopFrame : nullptr;  // FLAG: chain walk
-                while (pWalk)
+                // console: v46 = (*(*v44+8))(v44); while (v46) { v47 = *(v46+8);
+                //   if (!v47) break-null; if (v47 == v7) { v40 = 0; break; }
+                //   v46 = (*(*v47+8))(v47); } -- the plain __proto__-chain walk.
+                AptNativeHash* pWalkHash = pTopFrame->GetNativeHashVirtual();
+                while (pWalkHash)
                 {
-                    if (pWalk == pMethodName) { bBindThis = false; break; }
-                    pWalk = AptInterp_HasMember(pWalk, nullptr) ? pWalk : nullptr;   // FLAG: chain step (defer)
-                    if (pWalk == pTopFrame) break;   // guard against the inlined re-walk
+                    AptValue* const pProto = pWalkHash->mp__Proto__;
+                    if (!pProto)
+                        break;
+                    if (pProto == pMethodName) { bBindThis = false; break; }
+                    pWalkHash = pProto->GetNativeHashVirtual();
                 }
             }
         }
