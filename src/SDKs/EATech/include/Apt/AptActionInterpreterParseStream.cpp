@@ -66,6 +66,17 @@ extern AptGCReleaseVector gValuesToRelease;    // off_8324E51C / xb1 qword_14147
 // (StringPool exposes only ClearTemporaryPool); reached only on movie UNLOAD.
 extern void AptStringPool_ReleaseString(AptString* pString);
 
+// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
+// bring-up TU): reports a Push/dictionary constant slot revisited after a prior
+// resolve pass (see the double-resolve guard below).
+#if defined(_MSC_VER)
+extern "C" void AptParseStreamDoubleResolveProbe(const void* pSlot, long long nValue);
+#pragma comment(linker, "/alternatename:AptParseStreamDoubleResolveProbe=AptParseStreamDoubleResolveProbeDefault")
+extern "C" void AptParseStreamDoubleResolveProbeDefault(const void*, long long) {}
+#else
+extern "C" void AptParseStreamDoubleResolveProbe(const void* pSlot, long long nValue);
+#endif
+
 namespace
 {
     // The 8-aligned operand cursor (xb1: (pc + 7) & ~7).
@@ -332,8 +343,29 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
 
                 for (int32_t i = 0; i < nCount; ++i)
                 {
-                    const int64_t nConstIndex = Slot64(pTable + i * 8, 0);
+                    int64_t nConstIndex = Slot64(pTable + i * 8, 0);
                     ++*pnValueCount;
+
+                    // FLAG (GUIAPT64 packing, same family as the frame-table bug): a
+                    // misaligned emitter record stores the serialized index in the
+                    // HIGH dword of the 8-byte slot (observed 0x1fc00000000 == index
+                    // 0x1FC << 32 in MAIN.bundle). Decode it; the offline
+                    // apt8_fix_frametables repair owns the permanent data fix.
+                    if (nConstIndex > 0xFFFF && (nConstIndex & 0xFFFFFFFFll) == 0
+                        && (nConstIndex >> 32) <= 0xFFFF)
+                    {
+                        nConstIndex >>= 32;
+                    }
+
+                    // FLAG (x64 wild-slot guard): a slot holding neither a sane index
+                    // form is a live pointer from a prior resolve pass or garbage --
+                    // `pConstTable + 16 * <pointer>` AV'd MAIN's Fixup (2026-07-05,
+                    // cdb-verified). Keep it as-is + log rather than crash.
+                    if (nConstIndex < 0 || nConstIndex > 0xFFFF)
+                    {
+                        AptParseStreamDoubleResolveProbe(pTable + i * 8, nConstIndex);
+                        continue;
+                    }
 
                     AptValue* pValue =
                         ResolveConstRecord(pConstTable + 16 * nConstIndex, pCtx);
