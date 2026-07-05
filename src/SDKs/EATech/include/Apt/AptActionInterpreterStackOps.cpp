@@ -676,6 +676,8 @@ extern const EAStringC gAptEmptyMethodName;   // unk_8324E6B8
 extern const EAStringC gAptThisKey;           // dword_8324E6C0
 // The apply()/call() method-name keys the console stricmp's inline (rodata literals).
 static const EAStringC gAptApplyKey("apply");
+static const EAStringC gAptPopKey  ("pop");
+static const EAStringC gAptShiftKey("shift");
 static const EAStringC gAptCallKey ("call");
 
 // FLAG (console sub_82AE3DA8 / AptNativeHash::Lookup over the method-name slot -- the
@@ -960,7 +962,10 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     //      plain value calls straight through. (console isMCInParentChain split) ----
     bool bReleaseAfter = false;   // console v54 (r29)
     // console: (*(v7+1) & 0x3FFC000) == 0x4000 -> the method needs an extra AddRef.
-    if (pMethodName->isMCInParentChain() == 0x4000)   // FLAG: the packed 0x4000 class-bit test
+    // console: (v7->mnValueData & 0x3FFC000) == 0x4000 -- a flags-band state test on
+    // the RECEIVER's packed word (NOT isMCInParentChain; the old form compared a bool
+    // against 0x4000 == never true, silently skipping the hold ref).
+    if ((pMethodName->mnValueData & 0x3FFC000u) == 0x4000u)
     {
         pMethodName->AddRef();   // console (**v7)(v7)
         bReleaseAfter = true;
@@ -981,11 +986,14 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             const bool bScriptFn = ((nMethodType - 34) <= 2) && pMethod->getIsDefined();   // tags 34..36
             if (bScriptFn)
             {
-                AptValue* const pSavedOwner = AptValue_GetClassOwnerValue(pMethod);   // console v63 = *(v12+8)
-                AptValue_GetMethodNameSlot(pMethod);   // (the +8 owner slot the console swaps below)
-                // console: *(v12+8) = *(a2+4); call; restore.
+                // console: v63 = *(v12+8); *(v12+8) = *(a2+4); call; *(v12+8) = v63 --
+                // the script-fn's +8 slot is its bound CIH (AptScriptFunctionBase::
+                // mpCIH): TEMP re-bind the method to the context's CIH for the call.
+                AptScriptFunctionBase* const pFn = static_cast<AptScriptFunctionBase*>(pMethod);
+                AptValue* const pSavedCIH = pFn->GetCIH();
+                pFn->SetCIH(reinterpret_cast<AptValue*>(pContext->mpCIH));
                 pInterp->callFunction(pMethodName, pMethod, nArgs, nullptr, pThisBinding);
-                (void)pSavedOwner;   // restored by the helper (the owner-slot swap is internal)
+                pFn->SetCIH(pSavedCIH);
             }
             else
             {
@@ -1025,8 +1033,8 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     if (pResult != gpUndefinedValue)
     {
         if (pMethodName->getVtblIndex() == AptVFT_Array && pMethodName->getIsDefined()
-            && (AptInterp_NameEquals(pNameSlot, &gAptEmptyMethodName)        // FLAG: stricmp(*v10+8,"pop")
-                || AptInterp_NameEquals(pNameSlot, &gAptEmptyMethodName)))   // FLAG: stricmp(*v10+8,"shift")
+            && (AptInterp_NameEquals(pNameSlot, &gAptPopKey)                 // console stricmp(*v10+8,"pop")
+                || AptInterp_NameEquals(pNameSlot, &gAptShiftKey)))          // console stricmp(*v10+8,"shift")
         {
             pInterp->mpStack[pInterp->mnStackTop - 1]->Release();   // console (*(*v67+4))(v67)
         }
