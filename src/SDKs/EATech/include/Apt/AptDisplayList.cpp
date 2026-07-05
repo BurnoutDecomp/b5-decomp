@@ -661,6 +661,12 @@ extern AptActionInterpreter gAptActionInterpreter;    // &dword_8324E760
 extern "C" void AptClassBindProbe(const char* pcExport);
 #pragma comment(linker, "/alternatename:AptClassBindProbe=AptClassBindProbeDefault")
 extern "C" void AptClassBindProbeDefault(const char*) {}
+
+// FLAG bring-up: arms the runStream opcode trace around a class-ctor run (the
+// strong sink filters by export name). Weak no-op default.
+extern "C" void AptOpTraceArmForClass(const char* pcExport, int nOn);
+#pragma comment(linker, "/alternatename:AptOpTraceArmForClass=AptOpTraceArmForClassDefault")
+extern "C" void AptOpTraceArmForClassDefault(const char*, int) {}
 #else
 extern "C" void AptClassBindProbe(const char* pcExport);
 #endif
@@ -1420,7 +1426,9 @@ int AptCIH_AssociateInstToClass(AptCIH* pNode)
     gAptActionInterpreter.mpCallStackE[gAptActionInterpreter.mnCallStackE_Count++] = pNode;
     pNode->AddRef();
     pNode->mFlagsA |= 0x8000000u;
+    AptOpTraceArmForClass(pExportName, 1);   // FLAG bring-up trace window
     gAptActionInterpreter.callFunction(static_cast<AptValue*>(pNode), pClass, 0, nullptr, nullptr);
+    AptOpTraceArmForClass(pExportName, 0);
     pNode->mFlagsA &= ~0x8000000u;
 
     if (gAptActionInterpreter.mnCallStackE_Count > 0)

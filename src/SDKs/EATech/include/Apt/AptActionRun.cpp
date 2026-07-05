@@ -45,6 +45,18 @@ extern "C" void AptRunStreamImbalanceProbe(int nSavedTop, int nExitTop,
                                            const void* pSlot, const void* pPushed);
 #endif
 
+// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
+// bring-up TU): per-opcode execution trace. The sink arms itself (via
+// AptOpTraceArmForClass around the class-ctor run) so the default cost is one
+// predictable call per dispatched opcode during bring-up only.
+#if defined(_MSC_VER)
+extern "C" void AptOpTraceProbe(const void* pcOp, unsigned int nOp);
+#pragma comment(linker, "/alternatename:AptOpTraceProbe=AptOpTraceProbeDefault")
+extern "C" void AptOpTraceProbeDefault(const void*, unsigned int) {}
+#else
+extern "C" void AptOpTraceProbe(const void* pcOp, unsigned int nOp);
+#endif
+
 // FLAG (string-pool key): the scope ("this") variable name runStream binds at entry
 // (console stru_1059C8A0). Homed with the StringPool constants. getVariable's body
 // is deferred too (see AptActionInterpreter.h), so this run-scope bind is a FLAG'd
@@ -101,7 +113,10 @@ const unsigned char* AptActionInterpreter::runStream(
                 ctx.mpPendingReleasePC    = 0;
             }
             if (ctx.mbStop)
+            {
+                AptOpTraceProbe(ctx.mpProgramCounter, 0x100u);   // exit: mbStop
                 break;
+            }
 
             const unsigned char opcode = *ctx.mpProgramCounter;
             ++ctx.mpProgramCounter;
@@ -109,14 +124,20 @@ const unsigned char* AptActionInterpreter::runStream(
             // Bounded run that has walked past its end -> result is `undefined`.
             if (!bTopLevel && ctx.mpProgramCounter > pEnd)
             {
+                AptOpTraceProbe(ctx.mpProgramCounter - 1, 0x101u);   // exit: off-end
                 bRanOffEnd = true;
                 break;
             }
 
+            AptOpTraceProbe(ctx.mpProgramCounter - 1, opcode);   // FLAG bring-up trace
+
             sGlobalTable[opcode](this, &ctx);
 
             if (mpAbortValue)
+            {
+                AptOpTraceProbe(ctx.mpProgramCounter, 0x102u);   // exit: abort
                 break;
+            }
         }
     }
 

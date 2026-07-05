@@ -89,6 +89,11 @@ struct AptCIH : public AptValueGC
 
     // ---- delegated mask / property reads (through the char inst) -----------
     AptNativeHash* GetNativeHash() const;   // @0x82AD5B28 (char inst's property hash)
+    // The console CIH vtable's slot-2 override IS GetNativeHash (@0x82AD5B28): a
+    // CIH's "native hash" is its char inst's property hash. The missing override
+    // made HasEventMember/findChild/objectMember* see a null hash on every placed
+    // clip (no proto chain, no onLoad detection). x64 FIX 2026-07-05.
+    virtual AptNativeHash* GetNativeHashVirtual() { return GetNativeHash(); }
     bool IsMask() const;                    // @0x82AD5BA0 (render item's mask flag)
     bool HasMask() const;                   // @0x82AD5BB8 (render item's has-mask flag)
 

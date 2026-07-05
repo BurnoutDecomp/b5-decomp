@@ -116,6 +116,48 @@ done_scan:
 }
 
 // ---------------------------------------------------------------------------
+// AptInterp_GetDictEntry -- fetch a string-dictionary slot with a null guard.
+// FLAG hardening: a resolved dictionary slot can be NULL on x64 when its const
+// record resolved to nothing at parse (e.g. an AptLookup pool miss -- the
+// console pre-seeds its pools, so its slots are never null). The dict-byte
+// opcodes AddRef the slot unconditionally; a null here AV'd MAIN's first init
+// actions (2026-07-05, cdb: StringDictByteGetMember+0x75). Log + `undefined`.
+// ---------------------------------------------------------------------------
+#if defined(_MSC_VER)
+extern "C" void AptDictNullEntryProbe(unsigned int nIndex, const void* pPool);
+#pragma comment(linker, "/alternatename:AptDictNullEntryProbe=AptDictNullEntryProbeDefault")
+extern "C" void AptDictNullEntryProbeDefault(unsigned int, const void*) {}
+extern "C" void AptDictFetchProbe(unsigned int nIndex, const void* pPool, int nType,
+                                  const char* pcText);
+#pragma comment(linker, "/alternatename:AptDictFetchProbe=AptDictFetchProbeDefault")
+extern "C" void AptDictFetchProbeDefault(unsigned int, const void*, int, const char*) {}
+#else
+extern "C" void AptDictNullEntryProbe(unsigned int nIndex, const void* pPool);
+extern "C" void AptDictFetchProbe(unsigned int nIndex, const void* pPool, int nType,
+                                  const char* pcText);
+#endif
+
+AptValue* AptInterp_GetDictEntry(AptActionInterpreter* pInterp, unsigned int nIndex)
+{
+    AptValue* pEntry = pInterp->mpConstantPool[nIndex];
+    if (!pEntry)
+    {
+        AptDictNullEntryProbe(nIndex, pInterp->mpConstantPool);
+        pEntry = gpUndefinedValue;
+    }
+    else
+    {
+        // FLAG bring-up trace: name + type of every dictionary fetch (first N).
+        const char* pcText = nullptr;
+        if (pEntry->getVtblIndex() == AptVFT_StringValue && pEntry->getIsDefined())
+            pcText = static_cast<AptString*>(pEntry)->GetInternalString()->GetBuffer();
+        AptDictFetchProbe(nIndex, pInterp->mpConstantPool,
+                          static_cast<int>(pEntry->getVtblIndex()), pcText);
+    }
+    return pEntry;
+}
+
+// ---------------------------------------------------------------------------
 // AptInterp_HasMember @0x82AE4058 -- does pValue (or, for object/CIH-typed values,
 // its prototype) hold a member keyed by *pNameSlot? A Prototype-typed (tag 20)
 // defined value is probed directly; an Object (19) / CharacterInstHandle (12) /
@@ -146,7 +188,9 @@ bool AptInterp_HasMember(AptValue* pValue, EAStringC** pNameSlot)
     }
 
     // console LABEL_17: probe the (resolved) value's own hash for the name.
-    if (pValue)
+    // (Null-slot guard: the console never passes a null/empty name slot here; a
+    // not-yet-complete x64 caller path can -- same hardening as NameEquals. FLAG.)
+    if (pValue && pNameSlot && *reinterpret_cast<void* const*>(pNameSlot))
     {
         AptNativeHash* const pHash = pValue->GetNativeHashVirtual();   // (*(*a1+8))(a1)
         if (pHash)

@@ -203,7 +203,13 @@ extern const EAStringC gAptKeyThis           ("this");       // unk_8324E6C0
 extern const EAStringC gAptThisKey           ("this");       // dword_8324E6C0 (alias name for the same key)
 extern const EAStringC gAptKeyGlobal         ("_global");    // unk_8324E59C
 extern const EAStringC gAptKeyArguments      ("arguments");  // unk_8324E6B8
-extern const EAStringC gAptKeyPrototype      ("__proto__");  // the AS prototype key
+extern const EAStringC gAptKeyPrototype      ("prototype"); // dword_8324E698 -- the AS "prototype" key
+                                                            // (hash 1689; AptNativeHash's fast-slot gates
+                                                            // key it against mpPrototype. The old literal
+                                                            // "__proto__" (hash 27581) made every
+                                                            // fn.prototype Lookup return null -> no class
+                                                            // methods ever landed. "__proto__" itself is
+                                                            // StringPool::saConstant[0].)
 extern const EAStringC gAptKeyControllerKey  ("controller"); // unk_8324E614
 extern const EAStringC gAptEmptyMethodName   ("");           // unk_8324E6B8 (the empty method-name sentinel)
 extern const EAStringC gAptObjectClassName   ("Object");     // &dword_8324E650
@@ -247,8 +253,34 @@ EAStringC*             gAptEventNameTable         = nullptr;   // event-name tab
 extern const int gAptPropertyIndexRemap[256] = {};   // dword_82F73010
 
 // gAptMemberIndexToEventBit: AS member-index (-200 biased) -> event bitmask
-// (X360 dword_82143BA8). FLAG: rodata contents un-recovered; X360 vaddr 0x82143BA8.
-extern const int32_t gAptMemberIndexToEventBit[256] = {};   // dword_82143BA8
+// (X360 dword_82143BA8; 19 entries EXTRACTED from the ARTIST .asm rodata,
+// big-endian .long/.byte run 0x82143BA8..0x82143BF3). Each maps a
+// SpriteMembersIndex on<Event> id (200..218) to its clip-event mask bit --
+// consistent with KaAptEventDescriptors (onLoad 207 -> 0x1, onEnterFrame 203 ->
+// 0x2, onKeyDown 204 -> 0x40, onKeyUp 205 -> 0x80, onUnload 217 -> 0x4, onData
+// 200 -> 0x100). -1 = not a maskable handler. Tail stays zero (out-of-range ids
+// never reach the read -- the wordlist tops out at 218).
+extern const int32_t gAptMemberIndexToEventBit[256] = {   // dword_82143BA8
+    /* 200 onData           */ 0x00000100,
+    /* 201 onDragOut        */ 0x00010000,
+    /* 202 onDragOver       */ 0x00008000,
+    /* 203 onEnterFrame     */ 0x00000002,
+    /* 204 onKeyDown        */ 0x00000040,
+    /* 205 onKeyUp          */ 0x00000080,
+    /* 206 onKillFocus      */ -1,
+    /* 207 onLoad           */ 0x00000001,
+    /* 208 onMouseDown      */ 0x00000010,
+    /* 209 onMouseMove      */ 0x00000008,
+    /* 210 onMouseUp        */ 0x00000020,
+    /* 211 onPress          */ 0x00000400,
+    /* 212 onRelease        */ 0x00000800,
+    /* 213 onReleaseOutside */ 0x00001000,
+    /* 214 onRollOut        */ 0x00004000,
+    /* 215 onRollOver       */ 0x00002000,
+    /* 216 onSetFocus       */ -1,
+    /* 217 onUnload         */ 0x00000004,
+    /* 218 onMouseWheel     */ 0x00080000,
+};
 
 // AptListenerEventDescriptor: the {eventMask, nameIndex} pair, matching the local
 // struct in AptAnimationTarget.cpp:227 verbatim (same tag + members so the array
