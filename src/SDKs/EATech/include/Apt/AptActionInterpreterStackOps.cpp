@@ -1553,12 +1553,32 @@ AptValue* AptValue_GetClassOwnerValue(AptValue* /*pValue*/)
 //   AptApt_PopCallStackC -> X360 r3 = a1 + 0x24 ({mnCIHStackTop, ..., mpCIHStack}; the
 //                           CIH/target stack, console "a1 + 9" word index).
 // ---------------------------------------------------------------------------
+// x64 NOTE (fixes the FADE_IN-window CIH-stack corruption, cdb-verified): the console
+// pun (reinterpret the {count, capacity, array*} member TRIPLE as an AptValueVector and
+// pop() it) only works on the uniform 4-byte PPC layout. On x64 the pointers are 8 bytes
+// and the interpreter's members are not laid out as that triple, so the punned pop read
+// its ARRAY POINTER from a garbage offset -- Releasing a bogus value and corrupting the
+// stack tops (runStream's top-level CIH pop then dereferenced an unwritten slot,
+// 0xbaadf00d). Reproduce the pop by NAMED members instead -- the same observable
+// (Release top element, decrement count), x64-correct.
 void AptApt_PopCIHStack(AptActionInterpreter* pInterp)
 {
-    reinterpret_cast<AptValueVector*>(&pInterp->mnCallStackB_Count)->pop();
+    if (pInterp->mnCallStackB_Count > 0)
+    {
+        AptValue* const pTop =
+            reinterpret_cast<AptValue*>(pInterp->mpCallStackB[pInterp->mnCallStackB_Count - 1]);
+        if (pTop)
+            pTop->Release();
+        --pInterp->mnCallStackB_Count;
+    }
 }
 
 void AptApt_PopCallStackC(AptActionInterpreter* pInterp)
 {
-    reinterpret_cast<AptValueVector*>(&pInterp->mnCIHStackTop)->pop();
+    if (pInterp->mnCIHStackTop > 0)
+    {
+        if (pInterp->mpCIHStack[pInterp->mnCIHStackTop - 1])
+            pInterp->mpCIHStack[pInterp->mnCIHStackTop - 1]->Release();
+        --pInterp->mnCIHStackTop;
+    }
 }

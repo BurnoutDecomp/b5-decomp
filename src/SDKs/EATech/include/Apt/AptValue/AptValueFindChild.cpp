@@ -114,28 +114,10 @@ AptValue* AptValue::findChild(const EAStringC* pName, AptValue* pTarget)
         pHash = pProto->GetNativeHashVirtual();
     }
 
-    // The global-extension object, then the global object (skip self).
-    // FLAG (crash-isolation experiment 2026-07-05): temporarily SKIP the two global
-    // arms (the pre-fix null-skip behaviour) to test whether walking the now-POPULATED
-    // global hashes during composition is what AVs the FADE_IN window.
-    // INSTRUMENTED (probe pass): with the arms ON, log the extension object's identity
-    // (vtbl + hash + table) on the first calls and every 2048th after, so the crash log
-    // names the exact deref that dies (object reuse vs table corruption).
-    static const bool KB_FINDCHILD_GLOBAL_ARMS = false;
-    if (!KB_FINDCHILD_GLOBAL_ARMS)
-        return 0;
-    {
-        static int snProbe = 0;
-        ++snProbe;
-        if (snProbe <= 4 || (snProbe & 2047) == 0)
-        {
-            AptNativeHash* pH = gpAptGlobalExtensionObject
-                ? gpAptGlobalExtensionObject->GetNativeHashVirtual() : nullptr;
-            AptFindChildProbe(snProbe, gpAptGlobalExtensionObject,
-                              gpAptGlobalExtensionObject ? *reinterpret_cast<void**>(gpAptGlobalExtensionObject) : nullptr,
-                              pH);
-        }
-    }
+    // The global-extension object, then the global object (skip self). (These arms
+    // were temporarily gated 2026-07-05 while the FADE_IN-window AVs they exposed
+    // were fixed -- the x64 AptValueVector pun in the CallMethod cleanup pops + the
+    // null method-name slot + runStream's snapshot-restoring CIH pop; live again.)
     if (AptValue* pFound = LookupInObject(gpAptGlobalExtensionObject, *pName))
         return pFound;
     if (this != gpAptGlobalFallback)

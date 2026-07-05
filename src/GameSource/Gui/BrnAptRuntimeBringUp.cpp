@@ -112,6 +112,48 @@ extern "C" void AptFindChildProbe(int nCall, const void* pExt, const void* pVtbl
     CgsDev::Log::WriteToLog(lac);
 }
 
+// The GC free-while-on-operand-stack probe (declared in AptValueGCPoolManager.cpp):
+// scans the interpreter's live operand stack for the pointer being freed and logs a
+// hit -- the dangling-operand use-after-free is caught at its FREE site this way.
+// Throttled to the first 32 hits.
+extern AptActionInterpreter gAptActionInterpreter;
+extern "C" void AptGCFreeOnStackProbe(void* pFreed)
+{
+    static int s_iHits = 0;
+    if (s_iHits >= 32)
+        return;
+    const int liTop = gAptActionInterpreter.mnStackTop;
+    for (int li = 0; li < liTop && li < 512; ++li)
+    {
+        if (gAptActionInterpreter.mpStack[li] == pFreed)
+        {
+            ++s_iHits;
+            char lac[160];
+            std::snprintf(lac, sizeof(lac),
+                          "[AptRT] GC-FREE-ON-STACK: value=%p still at stack[%d] (top=%d)\n",
+                          pFreed, li, liTop);
+            CgsDev::Log::WriteToLog(lac);
+            break;
+        }
+    }
+}
+
+// The runStream CIH-stack imbalance probe (declared in AptActionRun.cpp): logs a
+// top-level run whose exit top/slot no longer match its entry push. First 32 hits.
+extern "C" void AptRunStreamImbalanceProbe(int nSavedTop, int nExitTop,
+                                           const void* pSlot, const void* pPushed)
+{
+    static int s_iHits = 0;
+    if (s_iHits >= 32)
+        return;
+    ++s_iHits;
+    char lac[192];
+    std::snprintf(lac, sizeof(lac),
+                  "[AptRT] runStream IMBALANCE: entryTop=%d exitTop=%d slot=%p pushed=%p\n",
+                  nSavedTop, nExitTop, pSlot, pPushed);
+    CgsDev::Log::WriteToLog(lac);
+}
+
 // The per-tick step-probe sink (declared in AptCIH.cpp). Throttled to the first ~120 calls (a handful
 // of ticks) so it pinpoints the early-deref AV without flooding the per-frame log. Strong def overrides
 // the weak default in AptCIH.cpp.
