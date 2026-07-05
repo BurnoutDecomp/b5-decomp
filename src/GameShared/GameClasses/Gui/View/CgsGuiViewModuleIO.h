@@ -57,5 +57,55 @@ namespace ViewIO
         u8            maStatusPad[3]; // +1..+3 (force the queue to +4 like the X360)
         GuiEventQueue mGuiEvents;     // +4 (DWARF CgsGuiViewModuleIO.h)
     };
+
+    // ---- CgsGui::ViewIO::InputBuffer (X360 accessors 0x824F7A10 / 0x824F7AB8 / 0x82856EC8) ----
+    // Additive: the sibling input buffer that owns the immediate-mode renderer set + view-state
+    // event queue. Mirrors the committed CgsGuiModuleIO.h shapes (only the offsets differ:
+    // 0x10020/0x10040 here vs 0x8020/0x8040 there, and the ViewIO namespace).
+
+    // ---- CgsGraphics::Camera value-image (foreign type; mirrors CgsGuiModuleIO.h) ----------
+    // 368-byte alignas(16) span == the X360 CgsGraphics::Camera copy extent. Opaque storage so the
+    // by-value Camera::operator= in SetImRenderers is reproduced without the un-homed Camera type.
+    struct alignas(16) CgsGraphicsCameraStorage
+    {
+        unsigned char maBytes[368];
+    };
+    static_assert(sizeof(CgsGraphicsCameraStorage) % 16 == 0, "Camera storage 16-byte multiple");
+
+    // ---- ImRendererSet (foreign type; mirrors CgsGuiModuleIO.h) ----------------------------
+    // SetImRenderers @0x82856EC8 copies the leading 5 dwords (20 bytes, +0x00..+0x13) then the
+    // camera at +0x20; GetImRenderers @0x824F7A10 returns &mRendererSet. The alignas(16) mCamera
+    // lands at +0x20 (12 bytes +0x14..+0x1F are pad).
+    struct ImRendererSet
+    {
+        unsigned char            maRendererPtrs[20]; // +0x00..+0x13 (5 dwords copied by SetImRenderers)
+        CgsGraphicsCameraStorage mCamera;            // +0x20 (X360 camera @ this+0x10040)
+    };
+
+    // The view->input buffer. Derives CgsModule::IOBuffer and embeds a large GUI event queue at
+    // this+4 (the view-state queue the AddViewState writers Append into under a write lock) plus
+    // the immediate-mode renderer set at this+0x10020.
+    struct InputBuffer : public CgsModule::IOBuffer
+    {
+        // ViewStateQueue == GuiEventQueueBase<65536,16> (proven by the this+4 .. this+0x10020 span).
+        typedef CgsGui::GuiEventQueueBase<65536, 16> ViewStateQueue;
+
+        // X360 0x824F7A10: read-lock (bit 4); returns &mRendererSet (this+0x10020).
+        const ImRendererSet& GetImRenderers() const;
+        // X360 0x824F7AB8: write-lock (bit 3); returns &mViewStateQueue (this+4). A Get* that
+        // checks the WRITE lock -- the AddViewState writers hold it while Append'ing.
+        ViewStateQueue& GetViewStateQueue();
+        // X360 0x82856EC8: write-lock (bit 3); copies the source set's 5-dword head into
+        // mRendererSet then assigns the source camera (src+0x20) into mRendererSet.mCamera.
+        void SetImRenderers(const ImRendererSet& lrRenderers);
+
+        // Byte-offset pins (compiled in CgsGuiViewModuleIO.cpp).
+        static void _AssertInputLayout();
+
+    private:
+        u8             maStatusPad[3];  // +1..+3 (force +4 placement)
+        ViewStateQueue mViewStateQueue; // +0x0004
+        ImRendererSet  mRendererSet;    // +0x10020 (16-aligned; embeds the camera at +0x10040)
+    };
 }
 }

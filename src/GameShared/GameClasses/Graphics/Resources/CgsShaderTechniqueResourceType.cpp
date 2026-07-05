@@ -132,4 +132,155 @@ namespace CgsResource
     // unidentified, so a faithful body cannot be reconstructed without fabrication. Deferred.
     // A declared-but-undefined virtual compiles fine under the per-TU `cl /c` gate (which does
     // not link or instantiate this class), so leaving it bodyless does not break the gate.
+
+    // --- GetConstantHashTableSerialisedResourceDescriptorSize @ 0x827E9D38 ------------
+    // Size of the serialised constant-hash-table sub-block. The hash table's word @ +8 is the
+    // entry count and word @ +4 is the array of NUL-terminated key-name char*'s. The serialised
+    // size is 4*count (the returned base term, X360 r6) plus a running total also seeded at
+    // 4*count (X360 r8) that adds, per entry, the name length rounded up to a 4-byte boundary
+    // INCLUDING the terminator: (strlen + 4) & ~3. Net result = 8*count + Sum((strlen(key)+4)&~3).
+    // Raw-offset access is the DOCUMENTED serialised-blob exception.
+    uint32_t ShaderTechniqueResourceType::GetConstantHashTableSerialisedResourceDescriptorSize(
+        const CgsGraphics::ShaderConstantHashTable* lpHashTable) const
+    {
+        const u8* const lpBlock = reinterpret_cast<const u8*>(lpHashTable);
+        u32 luCount = *reinterpret_cast<const u32*>(lpBlock + 8);
+        const u32 luBase  = 4u * luCount;   // X360 r6 (returned base term)
+        u32       luTotal = 4u * luCount;   // X360 r8 (running total, seeded identically)
+        if (luCount)
+        {
+            const char* const* lppNames = *reinterpret_cast<const char* const* const*>(lpBlock + 4);
+            do
+            {
+                const char* lpName = *lppNames++;
+                const char* lpScan = lpName;
+                while (*lpScan++)
+                    ;
+                const u32 luLen = static_cast<u32>(lpScan - lpName - 1);   // strlen
+                --luCount;
+                luTotal += (luLen + 4u) & 0xFFFFFFFCu;                     // round up incl. NUL
+            } while (luCount);
+        }
+        return luBase + luTotal;
+    }
+
+    // --- GetShaderSamplersSerialisedResourceDescriptorSize @ 0x827E9C30 ---------------
+    // Size of the serialised sampler table. The sampler COUNT is a signed byte @ blob+144
+    // (X360 lbz+extsb) and the sampler-array pointer is @ blob+140. Each 8-byte sampler entry
+    // begins with a NUL-terminated name char*; the serialised size is 8*count plus, per
+    // sampler, the name length rounded up to a 4-byte boundary including the terminator
+    // ((strlen + 4) & ~3). The loop runs only for a strictly positive count. Raw-offset access
+    // is the DOCUMENTED serialised-blob exception.
+    uint32_t ShaderTechniqueResourceType::GetShaderSamplersSerialisedResourceDescriptorSize(
+        CgsGraphics::ShaderTechnique* lpTechnique) const
+    {
+        const u8* const lpBlob = reinterpret_cast<const u8*>(lpTechnique);
+        const s32 liCount = static_cast<s32>(*reinterpret_cast<const s8*>(lpBlob + 144)); // signed byte
+        u32 luResult = static_cast<u32>(8 * liCount);
+        if (liCount > 0)
+        {
+            const char* const* lppNames = *reinterpret_cast<const char* const* const*>(lpBlob + 140);
+            s32 liI = 0;
+            do
+            {
+                const char* lpName = lppNames[liI];
+                const char* lpScan = lpName;
+                while (*lpScan++)
+                    ;
+                const u32 luLen = static_cast<u32>(lpScan - lpName - 1);   // strlen
+                ++liI;
+                luResult += (luLen + 4u) & 0xFFFFFFFCu;
+            } while (liI < liCount);
+        }
+        return luResult;
+    }
+
+    // --- GetSerialisedResourceDescriptor @ 0x827F7A68 ---------------------------------
+    // Compute the whole-resource serialised size of one shader technique and package it as a
+    // five-entry rw::BaseResourceDescriptors<5>. The technique blob embeds, at fixed byte
+    // offsets, two engine-internal constant blocks (+8, +60), four external constant blocks
+    // (+28, +44, +80, +96), one constant hash table (+128), the sampler table (base @ +0), and
+    // the technique name string (ptr @ +148). Slot 0 of the descriptor is {size, alignment 16};
+    // slots 1..4 are the identity {0, 1}. Raw-offset access is the DOCUMENTED serialised-blob
+    // exception.
+    ResourceDescriptor ShaderTechniqueResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
+    {
+        const u8* const lpBlob = static_cast<const u8*>(lpResource);
+
+        // --- first internal-constant block @ +8 (count @ +8, ptr @ +12) --------------------
+        u32 luCount0 = *reinterpret_cast<const u32*>(lpBlob + 8);
+        const u32 luFixed0 = 8u * luCount0;      // X360 v7 (r27, contributes via luPrefix)
+        u32 luBlock0 = 8u * luCount0;            // X360 v8 (r28, running per-entry size)
+        if (luCount0)
+        {
+            luBlock0 = ((luBlock0 + 175u) & 0xFFFFFFF0u) - 160u;
+            const u32* lpuElems = *reinterpret_cast<const u32* const*>(lpBlob + 12);
+            do
+            {
+                --luCount0;
+                const u32 luElem = 16u * *lpuElems++;
+                luBlock0 += (luElem + 15u) & 0xFFFFFFF0u;
+            } while (luCount0);
+        }
+
+        // --- external-constant blocks @ +44 and +28 ---------------------------------------
+        const u32 luExtA = GetShaderConstantExternalSerialisedResourceDescriptorSize(
+                               reinterpret_cast<const ShaderConstantsExternal*>(lpBlob + 44));
+        const u32 luExtB = GetShaderConstantExternalSerialisedResourceDescriptorSize(
+                               reinterpret_cast<const ShaderConstantsExternal*>(lpBlob + 28));
+
+        // Accumulated prefix size (X360 v12/r24): the two external blocks + the two block-0
+        // terms + a fixed 160-byte header block.
+        const u32 luPrefix = luExtA + luExtB + luFixed0 + luBlock0 + 160u;
+
+        // --- second internal-constant block @ +60 (count @ +60, ptr @ +64) ----------------
+        u32 luCount1 = *reinterpret_cast<const u32*>(lpBlob + 60);
+        const u32 luFixed1 = 8u * luCount1;      // X360 v14/r25
+        u32 luBlock1 = 8u * luCount1;            // X360 v15
+        if (luCount1)
+        {
+            luBlock1 = ((luBlock1 + luPrefix + 15u) & 0xFFFFFFF0u) - luPrefix;
+            const u32* lpuElems = *reinterpret_cast<const u32* const*>(lpBlob + 64);
+            do
+            {
+                --luCount1;
+                const u32 luElem = 16u * *lpuElems++;
+                luBlock1 += (luElem + 15u) & 0xFFFFFFF0u;
+            } while (luCount1);
+        }
+
+        // --- technique name string @ +148 : plain strlen (X360 v20/r27) -------------------
+        const char* lpName = *reinterpret_cast<const char* const*>(lpBlob + 148);
+        const char* lpScan = lpName;
+        while (*lpScan++)
+            ;
+        const u32 luNameLen = static_cast<u32>(lpScan - lpName - 1);
+
+        // --- hash table @ +128 and the two remaining external blocks @ +96 / +80 ----------
+        const u32 luHash = GetConstantHashTableSerialisedResourceDescriptorSize(
+                               reinterpret_cast<const CgsGraphics::ShaderConstantHashTable*>(lpBlob + 128));
+        const u32 luExtC = GetShaderConstantExternalSerialisedResourceDescriptorSize(
+                               reinterpret_cast<const ShaderConstantsExternal*>(lpBlob + 96));
+        const u32 luHashPlusC = luHash + luExtC;                                 // X360 v22 (r26)
+        const u32 luExtD = GetShaderConstantExternalSerialisedResourceDescriptorSize(
+                               reinterpret_cast<const ShaderConstantsExternal*>(lpBlob + 80)); // X360 v23
+        const u32 luTail = luHashPlusC + luExtD;   // X360 r5 (also passed to the sampler sizer)
+
+        // --- sampler table @ +0 -----------------------------------------------------------
+        // The X360 passes luTail as a third argument here, but the sampler sizer ignores it;
+        // its value is still folded into the total below.
+        const u32 luSamplers = GetShaderSamplersSerialisedResourceDescriptorSize(
+                                   reinterpret_cast<CgsGraphics::ShaderTechnique*>(const_cast<u8*>(lpBlob)));
+
+        const u32 luSize = luTail + luSamplers + luFixed1 + luNameLen + luBlock1 + luPrefix + 1u;
+
+        ResourceDescriptor lDescriptor;
+        u32* lpData = reinterpret_cast<u32*>(&lDescriptor);
+        lpData[0] = luSize;  lpData[1] = 16u;   // slot0: {whole-resource size, align 16}
+        lpData[2] = 0u;  lpData[3] = 1u;
+        lpData[4] = 0u;  lpData[5] = 1u;
+        lpData[6] = 0u;  lpData[7] = 1u;
+        lpData[8] = 0u;  lpData[9] = 1u;
+        return lDescriptor;
+    }
 }

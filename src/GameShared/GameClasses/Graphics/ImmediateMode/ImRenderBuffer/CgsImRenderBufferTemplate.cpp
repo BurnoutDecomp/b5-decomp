@@ -24,6 +24,7 @@
 #include "pc/gcm/renderengine/renderstates.h"   // renderengine::TextureState::mpRaster
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (X360 RenderStart guards)
 
 namespace CgsGraphics
 {
@@ -304,14 +305,46 @@ namespace CgsGraphics
     }
 
     // -------------------------------------------------------------------------
-    // RenderStart @0x57E0A0 - reserve luNumVertices in the vertex stream and return
-    // the write pointer for the caller to fill (paired with RenderEnd). The PS3
-    // forwards through a thunk to AllocVertices.
+    // RenderStart @0x827EF748 (X360 <Basic2dColouredTexturedVertex>, stride 20).
+    //
+    // REPLACES the earlier PS3 bare-forward RenderStart (which just returned
+    // AllocVertices(luNumVertices)). The X360 build inlines the vertex sub-allocation
+    // but wraps it in the RenderStart/RenderEnd depth bookkeeping the console text path
+    // relies on: assert the counter has not gone negative, ++counter BEFORE the carve,
+    // carve luNumVertices from the write buffer's vertex stream (stride sizeof(V)), and
+    // on overflow (or a zero base+pos) assert-unless-graceful, back the counter out and
+    // return nullptr. The dcbz128 pre-warm and the assert file/line args are dropped per
+    // the project convention. The X360 target is authoritative, so this supersedes the
+    // PS3 forward. 0x827EF548 is the SAME body at stride 32 (a 32-byte vertex type not yet
+    // recovered) -- no second instantiation is emitted for it in this wave.
     // -------------------------------------------------------------------------
     template <typename V>
     V* ImRenderBuffer<V>::RenderStart(u32 luNumVertices)
     {
-        return AllocVertices(luNumVertices);
+        CGS_ASSERT(miNumRendersStarted >= 0,
+                   "Mismatched RenderStart/RenderEnd on ImRenderBuffer");   // this+0x38
+
+        const u32 luOldPos = mpWriteBuffer->muVertexBufferWritePos;          // (*this+0x20)+0xC
+        const u32 luNewPos = static_cast<u32>(sizeof(V)) * luNumVertices + luOldPos;
+        ++miNumRendersStarted;                                              // this+0x38
+
+        if (muVertexBufferSize >= luNewPos)                                 // this+0x2C
+        {
+            u8* lpBase = mpWriteBuffer->mpu8VertexBuffer;                   // *(*this+0x20)
+            mpWriteBuffer->muVertexBufferWritePos = luNewPos;
+            V* lpRun = reinterpret_cast<V*>(lpBase + luOldPos);
+            if (lpRun != nullptr)
+            {
+                return lpRun;
+            }
+        }
+
+        // Overflow (or a null carve): diagnose unless the buffer fails gracefully, back out the
+        // counter, return nullptr. The console streams the vertex count between the two rodata
+        // literals; the runtime count + StrStream are dropped, leaving the two literals concatenated.
+        CGS_ASSERT(mbFailGracefully, "Failed to allocate  in ImRenderBuffer");  // this+0x41
+        --miNumRendersStarted;                                              // this+0x38
+        return nullptr;
     }
 
     // -------------------------------------------------------------------------

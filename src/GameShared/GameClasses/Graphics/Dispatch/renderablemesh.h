@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsPackedOobb.h"  // CgsGraphics::PackedOobb (16B)
+#include "GameShared/GameClasses/System/Resource/CgsResourceType.h"  // CgsResource::ResourceDescriptor
 
 // renderablemesh.h -- the global ::RenderableMesh dispatch primitive.
 //
@@ -39,4 +40,10 @@ struct RenderableMesh
     u8                             mu8NumVertexBuffers;
     u8                             mu8Flags;
     void*                          maBuffers[1];            // trailing variable-length buffer table
+
+    // DWARF renderablemesh.h:83 -- per-mesh serialised vertex-descriptor block sizer, used by
+    // CgsResource::RwRenderableResourceType::GetSerialisedResourceDescriptor (@0x828A9AB0).
+    // Distinct from the alignptr.cpp static GetResourceDescriptor. Declared here (wave44
+    // prerequisite); its body is homed in its own wave.
+    CgsResource::ResourceDescriptor GetResourceDescriptor(uint32_t luNumVertexBuffers, uint32_t luNumVertexDescriptors);
 };

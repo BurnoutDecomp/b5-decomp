@@ -311,4 +311,56 @@ namespace CgsResource
             lpEvent = lpNext;
         }
     }
+
+    // CgsResource:: (unnamed by IDA) @ X360 0x828F2890 -- fixed-slot free-list pop.
+    // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX. Pops the head entry of a
+    // small u8-indexed free list and returns the pointer to its stride-12 record; returns
+    // null when the list is empty. Called by ResourceModule's file-system request adders
+    // (AddOpenFileRequest / AddCloseFileRequest / AddOpenReadStreamRequest /
+    // AddCloseReadStreamRequest) to reserve a request record slot.
+    //
+    // FLAG (confidence low): the owning class/member names are not recovered (IDA left the
+    // symbol unnamed). The pool shape is fully attested by the asm; only the naming/home is
+    // provisional. Modelled as a free helper over an opaque 4-field POD pool so the byte
+    // behaviour is exact.
+    //
+    // Pool layout (X360 byte offsets, base is u8*):
+    //   +0x00  u8*  mpRecords      // stride-12 record array base
+    //   +0x04  u8*  mpFreeIndices  // free-index ring (u8 entries)
+    //   +0x08  u8   muUsedCount    // slots in use
+    //   +0x09  u8   muFreeCount    // slots free (loop count)
+    namespace Detail
+    {
+        struct RequestSlotPool
+        {
+            u8* mpRecords;       // +0x00
+            u8* mpFreeIndices;   // +0x04
+            u8  muUsedCount;     // +0x08
+            u8  muFreeCount;     // +0x09
+        };
+
+        // X360 0x828F2890: pop the head free index, compact the ring, bump the used count,
+        // and return &mpRecords[12 * index]; null when the pool is empty.
+        u8* AllocRequestSlot(RequestSlotPool* lpPool)
+        {
+            s8 lcFree = static_cast<s8>(lpPool->muFreeCount);
+            s8 lcIndex;
+            if (lcFree != 0)
+            {
+                u8* lpFree = lpPool->mpFreeIndices;
+                lcIndex = static_cast<s8>(lpFree[0]);
+                lpFree[0] = lpFree[lpPool->muFreeCount - 1];   // pull tail into head
+                ++lpPool->muUsedCount;
+                lpPool->muFreeCount = static_cast<u8>(lpPool->muFreeCount - 1);
+            }
+            else
+            {
+                lcIndex = -1;
+            }
+
+            if (lcIndex == -1)
+                return nullptr;
+            return lpPool->mpRecords + 12 * lcIndex;
+        }
+    }
 }

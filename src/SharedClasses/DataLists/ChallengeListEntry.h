@@ -410,4 +410,20 @@ ChallengeListEntryAction::GetCombineAction() const
     return static_cast<ECombineActionType>( muCombineActionType );
 }
 
+// ChallengeListEntryAction::GetTriggerID @ 0x8230EFF8
+// (DWARF: CgsID GetTriggerID(uint8_t lu8Index) const, ChallengeListEntry.h:214.)
+// X360 reads maLocationData[lu8Index].mTriggerID -- the 8-byte CgsID (ldx). Two non-fatal
+// guards: index range, and that the location's type byte (mauLocationType[lu8Index]) is
+// E_LOCATION_TYPE_TRIGGER. Assert file/line (h:793/794) discarded per project convention.
+// Sibling of GetDistrict (type==DISTRICT, 4-byte) and GetRoadID (type==ROAD, 8-byte).
+inline CgsID ChallengeListEntryAction::GetTriggerID( uint8_t lu8Index ) const
+{
+    CGS_ASSERT( lu8Index < KU_MAX_LOCATIONS_PER_ACTION,
+                "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION" );
+    CGS_ASSERT( (ELocationType) mauLocationType[ lu8Index ] == E_LOCATION_TYPE_TRIGGER,
+                "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_TRIGGER" );
+
+    return maLocationData[ lu8Index ].mTriggerID;
+}
+
 } // namespace BrnResource

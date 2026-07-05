@@ -203,6 +203,54 @@ private:
     PackDetail  maPackDetails[E_DLC_DATA_PACK_COUNT];     // +0x70 .. +0xAB (5 records, 60 bytes)
 };
 
+// ============================================================================
+// BrnResource::DLCManager -- the runtime DLC package manager. Reconstructed from
+// BURNOUT_X360_ARTIST.XEX. Holds an inline array of DLC package records + a small
+// version-check/monitor state machine. This wave bodies GetPackage @0x82661550 and
+// DLCVersionCheckFailed @0x82662E18; the sibling lifecycle methods are declared for
+// shape (bodies land with their own TUs).
+//
+// Capacity is an inference from floor(0x500 / 0x4C); the asm never attests the array bound.
+enum { KU_DLC_PACKAGE_CAPACITY = 16 };
+
+class DLCManager
+{
+public:
+    // One 76-byte (0x4C) DLC package record. Field layout is NOT attested by this batch
+    // (GetPackage only returns a pointer into the array, DLCVersionCheckFailed only shifts whole
+    // records), so the record is an opaque correctly-sized byte span (stride from mulli ...,0x4C).
+    struct DLCPackage
+    {
+        u8 mOpaque[76];   // X360-attested stride (0x4C)
+    };
+
+    // Sibling DLCManager methods (declared for shape; bodies land with their own TUs).
+    void Construct();                                    // DWARF :62
+    bool Prepare(class AllocatorList* lpAllocatorList);  // DWARF :66 -- calls DLCVersionCheckFailed
+    bool Release();                                      // DWARF :70
+    void Destruct();                                     // DWARF :74
+    void StartDLCMonitor();                              // DWARF :77
+    s32  GetDLCVersion() const;                          // DWARF :80
+
+    // X360 0x82661550. Bounds-checked access into the inline package array; asserts
+    // 0 <= liPackage < muPackageCount (runtime-streamed "Package <i> is out of range\n" message)
+    // and returns &maPackages[liPackage].
+    DLCPackage* GetPackage(s32 liPackage);
+
+    // X360 0x82662E18. The current package's version check failed: shift-remove it from the array,
+    // decrement muPackageCount, and advance meVersionCheckStage (3 = more to check, 9 = done).
+    // (Returns int only because the asm leaks r3; the value is unused -> effectively void.)
+    int DLCVersionCheckFailed();
+
+private:
+    DLCPackage  maPackages[KU_DLC_PACKAGE_CAPACITY];  // +0x000  inline package array (base == this); capacity inferred
+    u8          mPad04C0[0x500 - KU_DLC_PACKAGE_CAPACITY * 76];  // +0x4C0  gap up to the stage dword (0x40 bytes)
+    s32         meVersionCheckStage;                  // +0x500
+    u8          mPad0504[0x620 - 0x504];              // +0x504  unmodelled fields up to the count dword
+    s32         muPackageCount;                        // +0x620
+    s32         miCurrentPackage;                      // +0x624
+};
+
 } // namespace BrnResource
 
 #endif // GAMESOURCE_RESOURCE_BRNDLCMANAGER_H

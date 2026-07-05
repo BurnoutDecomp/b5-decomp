@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstddef>   // offsetof
+#include <cstring>   // memcpy (InputBuffer::SetImRenderers)
 
 // CgsGui::ViewIO::OutputBuffer accessor, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // This TU bodies the one X360-emitted OutputBuffer function in this group:
@@ -29,6 +30,50 @@ namespace ViewIO
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return &mGuiEvents;
+    }
+
+    // ---- CgsGui::ViewIO::InputBuffer (X360 0x824F7A10 / 0x824F7AB8 / 0x82856EC8) ------------
+
+    void InputBuffer::_AssertInputLayout()
+    {
+        static_assert(offsetof(InputBuffer, mViewStateQueue) == 0x0004,
+                      "mViewStateQueue @0x0004 -- GetViewStateQueue return-offset");
+        static_assert(offsetof(InputBuffer, mRendererSet) == 0x10020,
+                      "mRendererSet @0x10020 (65568) -- GetImRenderers return-offset");
+        static_assert(offsetof(InputBuffer, mRendererSet) + 0x20 == 0x10040,
+                      "mRendererSet.mCamera @0x10040 -- SetImRenderers camera target");
+        static_assert(offsetof(ImRendererSet, mCamera) == 0x20,
+                      "ImRendererSet.mCamera @0x20 (5 copied dwords + 12B align pad)");
+    }
+
+    // X360 0x824F7A10: read-lock (bit 4) handle to the immediate-mode renderer set. Returns
+    // this + 0x10020 == &mRendererSet.
+    const ImRendererSet& InputBuffer::GetImRenderers() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return mRendererSet;
+    }
+
+    // X360 0x824F7AB8: write-lock (bit 3) handle to the embedded view-state event queue. A Get*
+    // that checks the WRITE lock (the AddViewState writers acquire it before Append'ing);
+    // reproduced verbatim. Returns this + 4 == &mViewStateQueue.
+    InputBuffer::ViewStateQueue& InputBuffer::GetViewStateQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return mViewStateQueue;
+    }
+
+    // X360 0x82856EC8: write-lock (bit 3); assigns the source renderer set into mRendererSet.
+    // Copies the source set's 5-dword head (20 bytes) into mRendererSet, then assigns the source
+    // camera (src+0x20) into the embedded mCamera. Unlike the CgsGuiModuleIO::InputBuffer sibling
+    // there is NO old-camera save/restore: both head and camera are taken from the source.
+    void InputBuffer::SetImRenderers(const ImRendererSet& lrRenderers)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+
+        memcpy(mRendererSet.maRendererPtrs, lrRenderers.maRendererPtrs,
+               sizeof(mRendererSet.maRendererPtrs));
+        mRendererSet.mCamera = lrRenderers.mCamera;
     }
 }
 }

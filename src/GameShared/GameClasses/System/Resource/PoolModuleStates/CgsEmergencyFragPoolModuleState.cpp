@@ -98,4 +98,67 @@ namespace CgsResource
         GetPool()->BeginEmergencyDefragmentation(mpRelocator, mpRelocationParams,
                                                  lpRequests, lpSources, luNum, liMemType);
     }
+
+    // -------- Update @ 0x828FF980 --------
+    // Poll the emergency-defrag step machine. IDLE -> success. START_DEFRAGMENTING -> tick the
+    // arm-up countdown, then wait while the pool is still defragmenting; once clear, scan the batch
+    // alloc-list results for a memory type that still needs defragmenting and kick BeginDefragment
+    // on it (advancing to DEFRAGMENTING_HEAP). DEFRAGMENTING_HEAP -> once the pool reports its defrag
+    // mem-type idle (-1), re-arm and do the final allocations. Any other state is invalid.
+    //
+    // X360 offsets: meState@+0x4C (a1[19]), miCountdown@+0x50 (a1[20]); base mpPool@+0xC, base
+    // mpAllocListSet@+0x10. Pool+0x1C8 == IsDefragmenting(), Pool+0x1BC == GetDefragMemType(). The
+    // X360 body reads the base-private alloc-result array (mpAllocListSet + 0xC ==
+    // &maeAllocRequestResults[0]) directly; this reconstruction reaches it through the ATTESTED base
+    // accessor GetAllocationResult(memType) (the same array the IntelliFrag sibling reads), avoiding
+    // an unattested GetAllocListSet() accessor. The inner 2x re-test of the same slot in the X360
+    // codegen is behaviourally a single per-memtype test and is expressed as one here.
+    EmergencyFragPoolModuleState::EEmergencyFragResult EmergencyFragPoolModuleState::Update()
+    {
+        if (meState == E_STATE_IDLE)   // a1[19] == 0
+        {
+            return E_RESULT_SUCCESS;
+        }
+
+        if (meState == E_STATE_START_DEFRAGMENTING)   // a1[19] == 1
+        {
+            if (miCountdown > 0)   // a1[20] > 0: still arming
+            {
+                --miCountdown;
+                return E_RESULT_PEND;
+            }
+
+            if (GetPool()->IsDefragmenting())   // *(mpPool + 0x1C8) != 0
+            {
+                return E_RESULT_PEND;
+            }
+
+            // First memory type whose batch alloc result still flags a defrag need.
+            for (s32 liMemType = 0; liMemType < 3; ++liMemType)
+            {
+                if (GetAllocationResult(liMemType) == E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG)
+                {
+                    meState = E_STATE_DEFRAGMENTING_HEAP;   // a1[19] = 2
+                    // X360: (BeginDefragment(memType) == 0) + 2  -> ok?PEND(2):EMERGENCY(3).
+                    return BeginDefragment(liMemType) ? E_RESULT_PEND : E_RESULT_EMERGENCY;
+                }
+            }
+
+            meState = E_STATE_IDLE;   // a1[19] = 0: nothing to defrag
+            return E_RESULT_SUCCESS;
+        }
+
+        if (meState == E_STATE_DEFRAGMENTING_HEAP)   // a1[19] == 2
+        {
+            if (GetPool()->GetDefragMemType() == -1)   // *(mpPool + 0x1BC) == -1: pool defrag done
+            {
+                meState = E_STATE_START_DEFRAGMENTING;   // a1[19] = 1
+                DoFinalAllocations();
+            }
+            return E_RESULT_PEND;
+        }
+
+        CGS_ASSERT(false, "Defrag state is invalid\n");   // :158
+        return E_RESULT_ERROR;
+    }
 }
