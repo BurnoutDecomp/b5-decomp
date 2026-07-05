@@ -73,9 +73,12 @@ const unsigned char* AptActionInterpreter::runStream(
         while (true)
         {
             // Drop the pending temporary once the PC reaches its release marker.
+            // (Null-guarded: a handler on a not-yet-complete x64 path can set the PC
+            // marker with no value; the console always pairs them. FLAG hardening.)
             if (ctx.mpPendingReleasePC == ctx.mpProgramCounter && ctx.mpProgramCounter)
             {
-                ctx.mpPendingReleaseValue->Release();
+                if (ctx.mpPendingReleaseValue)
+                    ctx.mpPendingReleaseValue->Release();
                 ctx.mpPendingReleaseValue = 0;
                 ctx.mpPendingReleasePC    = 0;
             }
@@ -112,7 +115,13 @@ const unsigned char* AptActionInterpreter::runStream(
     const int nFloor = bTopLevel ? mnStackBase : (mnStackBase + 1);
     while (mnStackTop > nFloor)
     {
-        mpStack[mnStackTop - 1]->Release();
+        // Null-guarded: the console never leaves a raw null on the operand stack
+        // (its miss paths push the `undefined` singleton), but a not-yet-complete
+        // x64 handler path can (e.g. a raw getVariable-result push) -- skip it
+        // rather than AV in Release. FLAG hardening; observably identical on
+        // valid streams.
+        if (mpStack[mnStackTop - 1])
+            mpStack[mnStackTop - 1]->Release();
         --mnStackTop;
     }
 
