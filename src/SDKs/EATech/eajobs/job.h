@@ -76,6 +76,9 @@ namespace Jobs
         void SetCode(JobEnvironment leEnvironment, const void* lpvCode, int liSize);
         // job.h:83  -- name the job (forwards to mEntryPoint.SetName).
         void SetName(const char* lpcName);
+        // job.h:173 -- select whether the loaded job code may be recycled (forwards to
+        // mEntryPoint.SetCodeRecycle). Declaration-only; body lives in the vendor job TU.
+        void SetCodeRecycle(EntryPoint::CodeRecycle leRecycle);
         // job.h:99  -- attach the job's data block (X360 0x82BC9978 stores it in mParams).
         void SetData(void* lpvData, size_t luSize);
 

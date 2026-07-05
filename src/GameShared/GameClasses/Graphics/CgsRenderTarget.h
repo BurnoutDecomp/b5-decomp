@@ -115,6 +115,12 @@ public:
     // to share the down-sample buffer's depth-stencil section state.
     rw::graphics::postfx::RenderTarget* GetRenderTarget() const { return mpRenderTarget; }
 
+    // The target's full extent + section count (X360 reads +0x04/+0x08/+the section byte directly).
+    // Used by BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap to lay out the shadow viewport.
+    u32 GetWidth()  const { return mu32MaxWidth; }
+    u32 GetHeight() const { return mu32MaxHeight; }
+    u32 GetNumSections() const { return mu8NumSections; }
+
 private:
     u32  mu32MaxWidth;
     u32  mu32MaxHeight;

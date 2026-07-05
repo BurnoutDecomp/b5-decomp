@@ -27,8 +27,8 @@ namespace BrnParticle { struct ParticleModule; }     // reached by-pointer by Re
 namespace BrnEffects
 {
     // The number of concurrent glass-smash VFX slots the manager owns (Reset asserts the
-    // slot index against it).
-    static const u32 KU_MAX_GLASS_EFFECTS = 16;
+    // slot index against it). DWARF value + asm `& 7` cursor wrap / 8-iteration Update loops.
+    static const u32 KU_MAX_GLASS_EFFECTS = 8;
 
     struct BrnGlassSmashEffect
     {
@@ -40,5 +40,43 @@ namespace BrnEffects
         u32            mGlassEffectHandle;   // +0x44
         f32            mfEffectEndTime;      // +0x48
         bool           mbEffectActive;       // +0x4C
+    };
+
+    // 'Glass_shattering' LION effect resource path (X360 rodata aGamedbBurnout5_11).
+    static const char* const KPC_GLASS_SHATTER_EFFECT =
+        "gamedb://burnout5/Burnout/Effects/Glass_shattering.lef.BurnoutFXLionEffectFile?ID=507406";
+
+    // The auto-expiry fill-in window added to the fire time (X360 flt_82001C98 == 1.0f;
+    // DWARF ::-file global kfLionGlassFillInEffectTime).
+    static const f32 kfLionGlassFillInEffectTime = 1.0f;
+
+    // Forward decl for the input buffer touched by UpdateVehicleEffectPositions (reached
+    // by-pointer; full layout owned by its TU, pulled in by the .cpp includes).
+    namespace EffectsIO { struct InputBuffer; }
+
+    // BrnEffects::BrnEffectsGlassManager (DWARF BrnEffectsGlassManager.h:77). Owns the fixed
+    // slot array + the round-robin cursor; drives per-frame slot maintenance.
+    struct BrnEffectsGlassManager
+    {
+        // Construct(ParticleModule*)/Destruct()/Initialise land with their own TUs
+        // (DWARF-declared; not in this batch -- GROW this home, do not fork).
+        void Construct(BrnParticle::ParticleModule* lpParticleModule);
+        void Destruct();
+
+        // FireGlassEffect @0x82295D50 -- claim the next slot, start the glass LION effect,
+        // and (only on handle resolve) seat the slot in the vehicle's local frame.
+        void FireGlassEffect(const Matrix44Affine& lEffectTransform,
+                             const Matrix44Affine& lVehicleTransform,
+                             EntityId lVehicleEntity,
+                             f32 lfCurrentTime);
+
+        // UpdateVehicleEffectPositions @0x8228D208 -- expire timed-out slots, then re-attach
+        // live slots to the current traffic / race-car transforms.
+        void UpdateVehicleEffectPositions(const EffectsIO::InputBuffer* lpInput, f32 lfCurrentTime);
+
+        BrnParticle::ParticleModule* mpParticleModule;                  // +0x00
+        u32                          muNextGlassEffect;                 // +0x04
+        u8                           maPad08[0x10 - 0x08];              // +0x08 (align to 0x10)
+        BrnGlassSmashEffect          maGlassEffects[KU_MAX_GLASS_EFFECTS]; // +0x10 (stride 0x50)
     };
 }

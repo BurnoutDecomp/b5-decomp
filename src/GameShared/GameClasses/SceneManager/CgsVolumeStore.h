@@ -19,7 +19,8 @@
 // ===========================================================================
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Containers/CgsObjectPool.h"   // CgsContainers::ObjectPool<T,N,TIndex>
+#include "GameShared/GameClasses/Containers/CgsObjectPool.h"          // CgsContainers::ObjectPool<T,N,TIndex>
+#include "GameShared/GameClasses/System/Resource/CgsResourceType.h"   // CgsResource::ResourceDescriptor (rw::BaseResourceDescriptors<5>)
 
 namespace CgsSceneManager
 {
@@ -66,6 +67,12 @@ namespace CgsSceneManager
         const VolRef::Volume* GetVolume(s32 liIndex) const;
 
     private:
+        // CgsVolumeStore.h:350 -- size the serialised descriptor for a volume.
+        // DWARF-attested NON-const (no trailing const in the dump).
+        CgsResource::ResourceDescriptor GetVolumeResourceDescriptor(const VolRef::Volume* lpVolume);
+        // CgsVolumeStore.h:386 -- true when lpVolume is one of the primitive types.
+        bool IsPrimitiveVolume(const VolRef::Volume* lpVolume) const;
+
         CgsContainers::ObjectPool<VolumeSlot, tiCapacity, s32> mVolumePool;   // CgsVolumeStore.h:126
     };
 }

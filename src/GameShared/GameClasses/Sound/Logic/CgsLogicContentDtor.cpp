@@ -30,8 +30,12 @@ namespace Logic
 
 Content::~Content()
 {
-    if (mpContent != 0)
-        mpContent->Release();
+    // The held-reference drop `if (mContentHandle) mContentHandle->Release();` -- the
+    // X360 a1[1] (+0x04) is the Handle<Content>'s mpObject. Reached through the DWARF-named
+    // mContentHandle (folded from the prior mpContent) + a Playback::Object* cast (the
+    // handle's Content is incomplete here), identical single observable side effect.
+    if (mContentHandle.GetObject() != 0)
+        reinterpret_cast<CgsSound::Playback::Object*>(mContentHandle.GetObject())->Release();
 }
 
 } // namespace Logic

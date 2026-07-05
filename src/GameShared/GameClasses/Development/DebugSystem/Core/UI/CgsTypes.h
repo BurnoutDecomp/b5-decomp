@@ -11,6 +11,10 @@
 
 namespace CgsDev
 {
+    // Packed RGBA8 colour (matches the debug renderer's RGBA typedef; a redundant typedef
+    // to the same type is legal). The Palette below is RGBA-valued.
+    typedef u32 RGBA;
+
     namespace DebugUI
     {
         enum InputEvent
@@ -133,6 +137,35 @@ namespace CgsDev
             f32 mfAutoRepeatAcceleration;
 
             static const Metrics DEFAULT;
+        };
+
+        // The debug-UI colour palette (X360 CgsTypes.h:89). 17 packed-RGBA colour slots the
+        // render layer draws windows / menus / bars / the error box with. Field order is
+        // DWARF-authoritative (mColourBar is member index 12 == +0x30; mColourErrorWindow is
+        // index 15 == +0x3C). DEFAULT is the built-in configuration memcpy'd into the UI at
+        // construction. Consumed by WidgetLineGraph::Render (mColourBar) and ErrorWindow::Render
+        // (mColourErrorWindow), reached via the DebugUI GetPalette() accessor family.
+        struct Palette
+        {
+            RGBA mColourText;           // +0x00
+            RGBA mColourWindow;         // +0x04
+            RGBA mColourBorder;         // +0x08
+            RGBA mColourCaption;        // +0x0C
+            RGBA mColourCaptionText;    // +0x10
+            RGBA mColourActiveCaption;  // +0x14
+            RGBA mColourHighlight;      // +0x18
+            RGBA mColourHighlightText;  // +0x1C
+            RGBA mColourDisabled;       // +0x20
+            RGBA mColourDisabledText;   // +0x24
+            RGBA mColourPinned;         // +0x28
+            RGBA mColourPinnedText;     // +0x2C
+            RGBA mColourBar;            // +0x30  (member index 12)
+            RGBA mColourBarBackground;  // +0x34
+            RGBA mColourErrorText;      // +0x38
+            RGBA mColourErrorWindow;    // +0x3C
+            RGBA mColourTextScreen;     // +0x40
+
+            static const Palette DEFAULT;
         };
     }
 }

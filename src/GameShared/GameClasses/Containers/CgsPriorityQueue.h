@@ -9,13 +9,20 @@ namespace CgsContainers
 {
 // Minimal owning slice for the non-templated base shared by all PriorityQueue<T,N>. Member
 // names/types/order are from the DecFIGS DWARF and match the X360 pseudocode word indices
-// (a1[0]=muMaxEntries .. a1[4]=mpiEntryPriorities). No vtable (non-polymorphic base). The five
+// (a1[0]=muMaxEntries .. a1[4]=mpiEntryPriorities). No vtable (non-polymorphic base). The
 // methods defined in CgsPriorityQueue.cpp are owned by this TU; the rest are declared-only.
 struct BasePriorityQueue
 {
 public:
     void Tick(s32 liPriorityDelta);
     void Clear();
+
+    // Read accessors for the parallel arrays, both bounds-checked against the LIVE entry count
+    // (muNumEntries), not capacity. Signed index compare mirrors the X360 cmpw (static_cast<s32>
+    // on the u32 count). Called by CgsResource::DebugComponent::RenderHUD to render the queue
+    // contents, so they must be public. CgsPriorityQueue.h:220/236.
+    u32 GetEntryIndex(s32 liIndex) const;    // X360 0x828D6490 -> mpuEntryIndices[liIndex]
+    s32 GetEntryPriority(s32 liIndex) const; // X360 0x828D6540 -> mpiEntryPriorities[liIndex]
 
 protected:
     void Construct(u32 luMaxEntries, u32 luNumberToCheck, u32* lpuEntryIndices, s32* lpiEntryPriorities);

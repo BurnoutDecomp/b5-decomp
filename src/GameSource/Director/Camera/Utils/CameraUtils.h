@@ -104,6 +104,12 @@ namespace Utils
     // asin(Normalize(point-centre).y). Used by the vehicle collision policy.
     f32 GetPitchAboutPointRads(Vector3 lCentre, Vector3 lPoint);
 
+    // DWARF CameraUtils.cpp -- the signed smallest angular delta (degs) from lfFromDegs to
+    // lfToDegs, wrapped into (-180, 180]. Used by the 2D / spherical rotation controllers to
+    // ease their accumulated rotation angle along the shortest arc (declaration-only here;
+    // the body lands with CameraUtils.cpp's own TU).
+    f32 GetSmallestDifferenceBetweenDegsAngles(f32 lfFromDegs, f32 lfToDegs);
+
     // @0x822183E0. Rotate a look-at frame about a world pivot by a pitch angle (radians).
     // Used by CollisionPolicyAttachedToVehicle::GenerateSceneQueries.
     // FLAG (declaration-only): the console body is an inline VMX Sin/Cos minimax whose
