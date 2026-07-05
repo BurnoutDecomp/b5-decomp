@@ -105,6 +105,12 @@ AptValue* AptValue::findChild(const EAStringC* pName, AptValue* pTarget)
     }
 
     // The global-extension object, then the global object (skip self).
+    // FLAG (crash-isolation experiment 2026-07-05): temporarily SKIP the two global
+    // arms (the pre-fix null-skip behaviour) to test whether walking the now-POPULATED
+    // global hashes during composition is what AVs the FADE_IN window.
+    static const bool KB_FINDCHILD_GLOBAL_ARMS = false;
+    if (!KB_FINDCHILD_GLOBAL_ARMS)
+        return 0;
     if (AptValue* pFound = LookupInObject(gpAptGlobalExtensionObject, *pName))
         return pFound;
     if (this != gpAptGlobalFallback)
