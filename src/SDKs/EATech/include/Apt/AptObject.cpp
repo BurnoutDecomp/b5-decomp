@@ -8,6 +8,10 @@
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 #include "SDKs/EATech/include/Apt/AptDefine.h"            // gpGCPoolManager
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"         // AllocateAptValueGC / DeallocateAptValueGC
+#include "SDKs/EATech/include/Apt/AptNativeHash.h"         // the registerClass registry hash
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"  // the native-arg stack (registerClass params)
+#include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"   // the shared true/false pair (registerClass result)
+#include "SDKs/EATech/Apt/DogmaAllocator.h"                // DOGMA_PoolManager (registry allocation)
 
 #include <cstring>   // strcmp
 #include <new>       // placement new (Create)
@@ -159,4 +163,72 @@ void AptObject::Set__Proto__(AptValue* pValue)
 void AptObject::SetPrototype(AptValue* pValue)
 {
     mHash.SetPrototype(pValue);
+}
+
+// ===========================================================================
+// The Object.registerClass NATIVE (X360 sub_82AF6A38; gpObjRegistrationFunc wraps
+// it -- see objectMemberLookup above). registerClass(exportName, class):
+//   * exactly 2 params; param 0 (stack top-1) must be a DEFINED string value/object
+//     (type 1 / 33) -- the linkage/export NAME; param 1 (top-2) is the CLASS.
+//   * the class registry hash (X360 dword_8324E2D4) is lazily pool-allocated
+//     (20 bytes == an AptNativeHash(8) on the console) on first use.
+//   * a type-3 (`null`) class UNSETS the name; anything else SETS name -> class
+//     (the engine's clip-placement path looks the placed char's export name up
+//     here to instantiate its AS class).
+//   * returns the shared boolean true on success, false otherwise
+//     (off_8324E418 / off_8324E414 == the AptBoolean singleton pair).
+// ===========================================================================
+
+// X360 dword_8324E2D4 -- the export-name -> AS-class registry Object.registerClass
+// fills and the clip-placement class binding consumes. Lazily built below.
+AptNativeHash* gpAptClassRegistry = nullptr;
+
+extern AptActionInterpreter gAptActionInterpreter;   // the native-arg stack
+
+#if defined(_MSC_VER)
+extern "C" void AptRegisterClassProbe(const char* pcName);
+#pragma comment(linker, "/alternatename:AptRegisterClassProbe=AptRegisterClassProbeDefault")
+extern "C" void AptRegisterClassProbeDefault(const char*) {}
+#else
+extern "C" void AptRegisterClassProbe(const char* pcName);
+#endif
+
+AptValue* AptApt_RegisterClassNative(AptValue* /*pContext*/, int nNumParams)
+{
+    if (nNumParams == 2)
+    {
+        AptValue* const pName = gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1];
+        if (pName != nullptr && pName->getIsDefined())
+        {
+            const int nNameType = static_cast<int>(pName->getVtblIndex());
+            if (nNameType == AptVFT_StringValue || nNameType == AptVFT_StringObject)
+            {
+                AptValue* const pClass =
+                    gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 2];
+
+                if (gpAptClassRegistry == nullptr)
+                {
+                    // Console: DOGMA Allocate(20) + {cap=8, table=null...} == AptNativeHash(8).
+                    void* pMem = gpNonGCPoolManager
+                        ? gpNonGCPoolManager->Allocate(sizeof(AptNativeHash)) : nullptr;
+                    gpAptClassRegistry = pMem ? ::new (pMem) AptNativeHash(8) : nullptr;
+                }
+
+                if (gpAptClassRegistry != nullptr)
+                {
+                    EAStringC nameText;
+                    pName->toString(&nameText);
+                    // FLAG (bring-up probe; weak sink pattern): surface the first
+                    // registrations so the boot log shows the AS class wiring run.
+                    AptRegisterClassProbe(nameText.GetBuffer());
+                    if (pClass != nullptr && pClass->getVtblIndex() == AptVFT_None)
+                        gpAptClassRegistry->Unset(nameText);
+                    else
+                        gpAptClassRegistry->Set(nameText, pClass);
+                }
+                return AptBoolean::Create(true);    // off_8324E418
+            }
+        }
+    }
+    return AptBoolean::Create(false);               // off_8324E414
 }

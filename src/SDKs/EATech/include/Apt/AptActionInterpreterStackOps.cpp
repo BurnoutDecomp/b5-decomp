@@ -652,6 +652,16 @@ extern bool AptInterp_HasMember(AptValue* pValue, EAStringC** pNameSlot);
 // the constant pConst (the empty/default-method sentinel)?).
 extern bool AptInterp_NameEquals(EAStringC** pNameSlot, const EAStringC* pConst);
 
+// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
+// bring-up TU): traces every AS object construction (see _createObject).
+#if defined(_MSC_VER)
+extern "C" void AptCreateObjectProbe(const char* pcClass, bool bResolved);
+#pragma comment(linker, "/alternatename:AptCreateObjectProbe=AptCreateObjectProbeDefault")
+extern "C" void AptCreateObjectProbeDefault(const char*, bool) {}
+#else
+extern "C" void AptCreateObjectProbe(const char* pcClass, bool bResolved);
+#endif
+
 // FLAG (console dword_8324D818 -- the destroyed/movie-end clip placeholder value the
 // "this"-binding walk re-targets through; the same 0xF sentinel Compare collapses).
 extern AptValue* gpAptDestroyedClipValue;   // dword_8324D818
@@ -1246,6 +1256,11 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
 
     // Resolve the class value: getVariable(scope, target, name, bRead=1, ..., 0).
     AptValue* pClass = getVariable(pScope, pTarget, pClassName, 1, 1, 0);   // console Variable / r16
+
+    // FLAG (bring-up probe; weak sink pattern): name every AS `new <Class>` and
+    // whether the class resolved -- the framework-bootstrap visibility trace.
+    AptCreateObjectProbe(pClassName->GetBuffer(),
+                         pClass != 0 && pClass->getIsDefined() && pClass->CanCreateScriptObject());
 
     // Only a defined class value that CanCreateScriptObject is constructible. The bit
     // ((Variable[1] >> 27) & 1) is mbIsDefined; when not constructible the operands are

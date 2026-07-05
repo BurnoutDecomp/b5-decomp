@@ -50,6 +50,10 @@
 
 // ---- the value singletons AptValueInitialize builds -------------------------
 #include "SDKs/EATech/include/Apt/AptValue/AptNone.h"           // AptNone (the `undefined` singleton; befriended)
+#include "SDKs/EATech/include/Apt/AptExtObject.h"              // CreateNewAptFunction (the registerClass native wrap)
+#include "SDKs/EATech/include/Apt/AptNativeFunction.h"         // AptNativeFunction (complete type for the AptValue* store)
+#include "SDKs/EATech/include/Apt/AptNativeHash.h"             // the _global hash (builtin class install)
+#include "SDKs/EATech/include/Apt/AptPrototype.h"               // AptPrototype (builtin prototype seeding)
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"        // AptBoolean::Initialize (befriended)
 #include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"         // AptLookup::Initialize
 #include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"       // AptRegister::Initialize + gnAptRegisterCount
@@ -338,6 +342,14 @@ extern AptValue* gpAptKeyObject;              // off_8324E2A8  ("")
 // (gpAptGlobalFallback off_8324E380 is declared by AptGlobal.h, included above)
 extern AptValue* gpAptGlobalExtensionObject;  // off_8324E37C  ("")
 extern AptValue* gpAptStringObject;           // off_8324D82C  ("")
+extern AptValue* gpObjRegistrationFunc;       // off_8324D748  (the Object.registerClass native fn)
+extern AptValue* gpAptFunctionPrototypeRoot;  // dword_8324E4EC (the builtin prototype root)
+extern const EAStringC gAptObjectClassName;   // &dword_8324E650 "Object"
+extern const EAStringC gAptStringClassName;   // &dword_8324E6B4 "String"
+extern const EAStringC gAptSpriteClassKey;    // dword_8324E640 "MovieClip"
+
+// The registerClass native body (AptObject.cpp; X360 sub_82AF6A38).
+AptValue* AptApt_RegisterClassNative(AptValue* pContext, int nNumParams);
 
 int AptValueInitialize()
 {
@@ -397,8 +409,77 @@ int AptValueInitialize()
     if (gpAptStringObject == nullptr)
         gpAptStringObject = AptString::Create("");
 
+    // The Object.registerClass native (off_8324D748 == gpObjRegistrationFunc): the
+    // console's tail calls sub_82AF6B68, which -- among the builtin prototype seeding
+    // -- wraps the registerClass native (sub_82AF6A38, homed as
+    // AptApt_RegisterClassNative in AptObject.cpp) in an AptNativeFunction and pins
+    // it. Installed here (the same boot moment); FLAG: the REST of sub_82AF6B68 (the
+    // per-builtin-class AptPrototype seeding over _global's hash entries) stays
+    // deferred with the AS-builtin class registry.
+    if (gpObjRegistrationFunc == nullptr)
+    {
+        gpObjRegistrationFunc = AptExtObject::CreateNewAptFunction(
+            reinterpret_cast<AptExtFunctionPtr>(&AptApt_RegisterClassNative));
+        if (gpObjRegistrationFunc)
+            gpObjRegistrationFunc->setGCRoot(1);
+    }
+
+    // ---- sub_82AF6B68 phases 1+2, the NAMED slice --------------------------------
+    // The console's AS-globals bootstrap installs 9 builtin class natives into
+    // _global's hash (off_8324E380+8) -- each a fresh AptNativeFunction wrapping the
+    // SHARED generic-constructor stub (the Hex-Rays resolve of every one of the nine
+    // is cbCallMethod_ASSetPropFlags @0x82AD8448, the return-ok stub; the classes'
+    // real behaviour lives in the prototypes + the engine value types) -- then seeds
+    // each with a fresh AptPrototype: the FIRST entry ("Object", &dword_8324E650)
+    // becomes the prototype ROOT (dword_8324E4EC == gpAptFunctionPrototypeRoot; the
+    // console also mirrors it into dword_8324D830), and every entry's own __proto__
+    // links to that root. FLAG (partial): only the three entries whose name constants
+    // are recovered ("Object" E650 / "String" E6B4 / "MovieClip" E640) are installed;
+    // the six remaining table names (unk_8324E5FC/E610/E618/E6BC/E6D4/E61C) await the
+    // rodata string extraction and stay uninstalled. `Object` is the one MAIN's
+    // framework bootstrap needs (Object.registerClass reaches the native through the
+    // inherited AptObject::objectMemberLookup).
+    if (gpAptGlobalFallback != nullptr)
+    {
+        AptNativeHash* const pGlobals = gpAptGlobalFallback->GetNativeHashVirtual();
+        if (pGlobals != nullptr && pGlobals->Lookup(gAptObjectClassName) == nullptr)
+        {
+            const EAStringC* const lakNames[3] =
+                { &gAptObjectClassName, &gAptStringClassName, &gAptSpriteClassKey };
+            for (int li = 0; li < 3; ++li)
+            {
+                AptNativeFunction* const pCtor = AptExtObject::CreateNewAptFunction(
+                    reinterpret_cast<AptExtFunctionPtr>(
+                        &AptActionInterpreter::cbCallMethod_ASSetPropFlags));
+                if (pCtor)
+                    pGlobals->Set(*lakNames[li], pCtor);
+            }
+
+            for (int li = 0; li < 3; ++li)
+            {
+                AptValue* const pClass = pGlobals->Lookup(*lakNames[li]);
+                if (pClass == nullptr)
+                    continue;
+                AptPrototype* const pProto = new AptPrototype();
+                AptNativeHash* const pClassHash = pClass->GetNativeHashVirtual();
+                if (pClassHash != nullptr)
+                {
+                    pClassHash->SetPrototype(pProto);
+                    if (li == 0)
+                        gpAptFunctionPrototypeRoot = pProto;   // dword_8324E4EC (the root)
+                    else
+                        pClassHash->Set__Proto__(gpAptFunctionPrototypeRoot);
+                }
+                pClass->setGCRoot(1);
+                if (pProto)
+                    pProto->setGCRoot(1);
+            }
+        }
+    }
+
     // FLAG (deferred): the remaining singletons -- the 7 AS native-function singletons
-    // + the tail of @0x82B02800 (prototype seeding etc.) -- stay null until homed.
+    // (setInterval/clearInterval/isNaN/unescape/escape/boolean/ASSetPropFlags) + the
+    // SIX un-named builtin table entries of sub_82AF6B68 -- stay null until homed.
     return 0;
 }
 
