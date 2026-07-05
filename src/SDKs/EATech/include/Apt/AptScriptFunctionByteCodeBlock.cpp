@@ -59,6 +59,30 @@ void* AptScriptFunctionByteCodeBlock::GetByteCodeBase() const
 }
 
 // ---------------------------------------------------------------------------
+// GetNumArguments @ 0x82B0F1B8   ( li r3, 0; blr )
+//
+// A byte-code block is not a parametrised function -- it declares NO arguments, so
+// the console body returns 0. This override is REQUIRED: the base/Fn1 form derefs a
+// compiled-record (mpByteCode->mnNumArguments), but on this subclass mpByteCode is the
+// inline stream base, so that deref would read garbage / fault.
+// ---------------------------------------------------------------------------
+int32_t AptScriptFunctionByteCodeBlock::GetNumArguments() const
+{
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// GetByteCodeSize @ 0x82B96840   ( lwz r3, 0x34(r3); blr )
+//
+// The inline byte-code extent -- the +0x34 member, returned directly (contrast the
+// Fn1/Fn2 record-indirection form).
+// ---------------------------------------------------------------------------
+int32_t AptScriptFunctionByteCodeBlock::GetByteCodeSize() const
+{
+    return mnByteCodeSize;
+}
+
+// ---------------------------------------------------------------------------
 // GetConstantPool @ 0x82AF1620
 //
 // Return the inline constant-pool descriptor by value. The X360 reads the two

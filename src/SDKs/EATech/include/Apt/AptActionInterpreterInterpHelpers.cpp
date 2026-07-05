@@ -741,35 +741,30 @@ AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInter
 extern AptCIH* gpAptEmptyCIH;   // dword_8324D700 -- the pinned "EmptyCIH" AptCIHNone placeholder
 
 // AptInterp_ExecuteScriptFunction -- the AptScriptFunctionBase frame-execution branch of
-// callFunction (tags 34/35/36). The full faithful body IS DECOMPILED below (console branch
-// 0x82AE3CB8..0x82AE3FF4, cross-checked against the PS3 External build 0x821734; the
-// AptScriptFunction2 vtable @0x82145D10 gave the by-name method map). It is HELD OFF behind
-// g_bAptHomeScriptFnExec (default false), established by BOOT TESTS 2026-07-04:
+// callFunction (tags 34/35/36). HOMED + LIVE (2026-07-04). The full faithful body is the
+// console branch 0x82AE3CB8..0x82AE3FF4, cross-checked against the PS3 External build
+// (0x821734); the AptScriptFunction2 vtable (decrypted XEX @0x82145D10) gave the by-name
+// method map (X360 slots 0x44 GetNumArguments / 0x48 GetByteCodeBase / 0x4C GetByteCodeSize /
+// 0x50 GetConstantPool / 0x54 SetupBeforeExecution / 0x58 SetArgument / 0x5C
+// CleanupAfterExecution -- called by name, so the PS3 slot-order difference is irrelevant).
 //
-//   The body compiles + links clean, but ENABLING it stalls boot (composition freezes,
-//   childNodes=0, no assert). DIAGNOSIS (probe pass, corrects an earlier over-claim): a
-//   gate-on run with a per-call probe logging at the END of the body produced NO probe output
-//   at all -- i.e. the FIRST call (nArgs=0) enters the homed body and NEVER completes (hangs
-//   or crashes before the return). With the gate OFF the same tree boots green, so this is
-//   NOT the inbound audio/wave commits, and NOT (as I earlier wrongly wrote) an "integration-
-//   order dependency" -- it is very likely a BUG IN THIS BODY. Prime suspects: (a) the
-//   root-anim walk-up loop has NO null guard (faithful to the console, which assumes the
-//   anim is always found -- but our partial tree may walk mpDisplayListParent to null ->
-//   null-deref, or a parent cycle -> infinite loop); (b) runStream executing the real AS
-//   body hits a still-unbuilt VM opcode. NEXT: add granular probes (before/after the walk-up,
-//   before/after runStream) to pin the hang, then fix (likely a guarded walk-up + a
-//   PC-divergence FLAG). The flag is a plain `static bool` (not const) so the body stays
-//   compiled + type-checked and can be flipped for that diagnosis.
+// It is ENABLED (g_bAptHomeScriptFnExec = true): the title's component AS handlers now
+// EXECUTE, and boot is GREEN (tick frame=100, childNodes=12, 0 asserts). The earlier gate-on
+// stall was NOT this body and NOT integration order -- it was TWO MISSING OVERRIDES on the
+// AptScriptFunctionByteCodeBlock subclass (tag 36, which the title's functions are):
+// GetNumArguments (console `li r3,0; blr` = 0) and GetByteCodeSize (console `lwz r3,0x34(r3)`
+// = the +0x34 member). Without them the base/Fn1 record-deref form ran on this subclass's
+// inline byte-code and faulted inside GetNumArguments before this body could complete. Both
+// overrides are now homed in AptScriptFunctionByteCodeBlock.{h,cpp}; with them, this body
+// runs the AS to completion (probe-verified: enter->Setup->GetNumArgs(0)->runStream->return).
 //
-// The prior "field order must be reconciled" concern is RESOLVED: the reconstructed
-// GetConstantPool already returns cleanly-named {mppEntries=base, mnCount=count}, so mapping
-// by name (mnConstantPoolCount=pool.mnCount, mpConstantPool=pool.mppEntries) is correct.
-// The console's shared-tail operand-stack abort-collapse (0x82AE4028) belongs to the OUTER
-// dispatch (AptActionInterpreter_CallFunctionDispatch already reproduces it), so it is NOT
-// duplicated here. When held off, the live path is the console's own LABEL_37 reduction
-// (pop the args, push `undefined`) -- an exact, faithful subset for an unrun script function.
+// Notes: GetConstantPool already returns cleanly-named {mppEntries=base, mnCount=count}, so
+// the interpreter-member map by name is correct. The console shared-tail operand-stack
+// abort-collapse (0x82AE4028) belongs to the OUTER dispatch (CallFunctionDispatch reproduces
+// it), so it is NOT duplicated here. The gate flag stays a `static bool` (not const) so the
+// path can be quickly toggled off if a future regression needs bisecting.
 // ---------------------------------------------------------------------------
-static bool g_bAptHomeScriptFnExec = false;   // GATE: faithful body below, held off (see comment)
+static bool g_bAptHomeScriptFnExec = true;   // LIVE: the AS script-function executor is homed + enabled
 
 AptValue* AptInterp_ExecuteScriptFunction(AptActionInterpreter* pInterp,
                                           AptValue* pScope, AptValue* pFunction,

@@ -92,8 +92,16 @@ public:
                                    AptValue* pCallContext);
 
     // ---- AptScriptFunctionBase overrides ---------------------------------------
+    // GetNumArguments @0x82B0F1B8 -- a byte-code block declares NO parameters (the
+    // console body is `li r3,0; blr`). MUST override the Fn1/Fn2 form (which derefs a
+    // compiled-record mpByteCode->mnNumArguments) -- on this subclass mpByteCode is the
+    // inline stream base, so that deref reads garbage / faults.
+    virtual int32_t         GetNumArguments() const;   // @0x82B0F1B8
     // GetByteCodeBase @0x82AD4FB0 -- the inline byte-code base (returned directly).
     virtual void*           GetByteCodeBase() const;   // @0x82AD4FB0
+    // GetByteCodeSize @0x82B96840 -- the inline byte-code extent (console `lwz r3,0x34(r3)`
+    // == the +0x34 member). Also must override the record-deref Fn1/Fn2 form.
+    virtual int32_t         GetByteCodeSize() const;   // @0x82B96840
     // GetConstantPool @0x82AF1620 -- the inline constant-pool descriptor, by value.
     virtual AptConstantPool GetConstantPool() const;   // @0x82AF1620
 
