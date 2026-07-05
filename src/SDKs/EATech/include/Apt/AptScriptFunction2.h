@@ -130,6 +130,14 @@ public:
                        AptValue* pCIH);
 
     // ---- AptScriptFunctionBase overrides --------------------------------------
+    // GetNumArguments / GetByteCodeSize -- the v2 record-field reads the console
+    // vtable exposes beside GetByteCodeBase (the record carries the declared arg
+    // count @+0x08 and the body length @+0x18). Absent overrides fell to the
+    // base's pure-call abort the first time a DefineFunction2-defined CLASS was
+    // constructed at clip placement (2026-07-05). Inline record reads.
+    virtual int32_t GetNumArguments() const { return static_cast<int32_t>(mpByteCode->mnNumArguments); }
+    virtual int32_t GetByteCodeSize() const { return static_cast<int32_t>(mpByteCode->mnBodyLength); }
+
     // GetByteCodeBase @0x82AF1470 -- the action bytecode body, which follows the
     // compiled-record header inline (+0x1C == &maByteCode[0]).
     virtual void* GetByteCodeBase() const;
