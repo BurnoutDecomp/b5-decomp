@@ -96,8 +96,18 @@ namespace CgsNetwork
         // QuickJoin all expose SerialiseToString). ServerInterfaceGames create/join/update
         // drive SerialiseToString; GetGameParameters / the search-sort comparator drive
         // DeserialiseFromString. Declared here (bodied in the game-params TU).
-        void SerialiseToString(char* lpcRecord, s32 liRecLen) const;
+        // SerialiseToString is virtual: the X360 ServerInterfaceGameParamsX360 leaf @0x828778E0
+        // is a genuine vtable-slot override that pure-forwards to this base.
+        virtual void SerialiseToString(char* lpcRecord, s32 liRecLen) const;
         bool DeserialiseFromString(const char* lpcRecord);
+
+        // ADDITIVE GROW (ServerInterfaceGameParamsX360 TU): the base virtuals the X360 leaf
+        // overrides. Prepare @0x82877810 seeds the ranked-context table; SerialiseFromGame
+        // @0x828778E8 pushes the game's live state into the params record. Both are declared
+        // here so the leaf's base-qualified calls + vtable overrides bind; base bodies live in
+        // the base game-params TU (declared-not-defined at link time here is acceptable).
+        virtual bool Prepare();
+        virtual void SerialiseFromGame(const void* lpGame);
 
         // CgsServerInterfaceGameParams.h:339
         virtual void SetRankedGame(bool lbRanked);

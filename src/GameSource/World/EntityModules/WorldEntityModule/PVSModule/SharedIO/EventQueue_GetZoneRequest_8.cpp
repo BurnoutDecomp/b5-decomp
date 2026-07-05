@@ -28,3 +28,14 @@ CgsModule::EventQueue<BrnWorld::PVSIO::GetZoneRequest, 8>::Construct();
 
 template bool
 CgsModule::BaseEventQueue<BrnWorld::PVSIO::GetZoneRequest>::AddEvent(const BrnWorld::PVSIO::GetZoneRequest&);
+
+// CgsModule::BaseEventQueue<BrnWorld::PVSIO::GetZoneRequest>::GetEvent(s32) const  @ 0x822AD9D0
+//   Checked const indexed accessor (X360 IDA symbol truncated to "GetZoneR"; called by
+//   BrnWorld::PVSModule::Update). The generic const GetEvent body is inline in
+//   CgsBaseEventQueue.h: asserts mpEvents != NULL (:272), liIndex < GetLength() (:274),
+//   liIndex >= 0 (:275), then returns &mpEvents[liIndex] (result = (a2 << 6) + *a1;
+//   `slwi ..,6` == 64-byte stride == sizeof(GetZoneRequest)). CgsEventQueue.h already
+//   includes CgsBaseEventQueue.h, so the generic body is in scope. Thin out-of-line
+//   instantiation, mirroring committed EventQueue_StatsRequestEvent_16.cpp (stride 20 there).
+template const BrnWorld::PVSIO::GetZoneRequest&
+CgsModule::BaseEventQueue<BrnWorld::PVSIO::GetZoneRequest>::GetEvent(s32) const;

@@ -62,3 +62,18 @@ namespace BrnWorld
         return &lpOutputBuffer->mGameDataRequestInterface;   // addi r3, OutputStructure, 0x1718
     }
 }
+
+// ============================================================================
+// Explicit instantiation of the module's SafeLockOutputForWrite() @ 0x822AA000.
+//   The X360 build emitted this template method out-of-line (IDA symbol truncated
+//   to "In"). asm: r31 = LockOutputForWrite(); if null, fire the single
+//   "lpBuffer != NULL" tripwire (CgsModuleSingleBufferedTemplate.h:64 baked path);
+//   return r31 reinterpret_cast<PVSIO::OutputBuffer*>. Called by
+//   BrnWorld::PVSModule::Prepare. The generic body is inline in
+//   CgsModuleSingleBufferedTemplate.h (SafeLockOutputForWrite == LockOutputForWrite +
+//   one CGS_ASSERT(lpBuffer,"lpBuffer != NULL") + return); this TU forces the
+//   per-instantiation emission for <PVSIO::InputBuffer, PVSIO::OutputBuffer>.
+// ============================================================================
+template BrnWorld::PVSIO::OutputBuffer*
+CgsModule::ModuleSingleBufferedTemplate<BrnWorld::PVSIO::InputBuffer,
+                                        BrnWorld::PVSIO::OutputBuffer>::SafeLockOutputForWrite();

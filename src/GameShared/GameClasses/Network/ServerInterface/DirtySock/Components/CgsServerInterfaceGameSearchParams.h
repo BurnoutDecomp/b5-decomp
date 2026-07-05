@@ -54,6 +54,13 @@ namespace CgsNetwork
         // CgsServerInterfaceGameSearchParams.h:126
         bool ReturnPlayers() const { return mbReturnPlayers; }
 
+        // ADDITIVE GROW (flagged by the ServerInterfaceGamesX360 group): read accessor
+        // for the game-flags value word (+0x10). The X360 games leaf SearchForGames
+        // (X360 0x8288C460) reads it to derive the XNRANK matchmaking tagfield (bit 10).
+        // Exposed by name so the read goes through the named member rather than a
+        // raw-offset hack; layout unchanged.
+        u32 GetGameFlagsValue() const { return muGameFlagsValue; }
+
     protected:
         // CgsServerInterfaceGameSearchParams.h:83
         virtual u32 GetCustomFlagsMask() const = 0;

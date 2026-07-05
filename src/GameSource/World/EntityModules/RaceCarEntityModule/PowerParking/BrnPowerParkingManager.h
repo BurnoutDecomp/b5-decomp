@@ -10,12 +10,10 @@
 // (free function, extern, returns bool). The X360 signature is FOUR Vector3 by value
 // (lPlayerPos, lPlayerDir, lVehiclePos, lVehicleDir) + FOUR f32& out/inout refs.
 //
-// DECLARATION-ONLY (the body @ 0x822B1FA0 is BLOCKED in this wave -- see the .cpp note):
-// its angle-fold math depends on the RwMathFPU TWO_PI/PI/HALF_PI constants and on
-// BrnMath::GetPointToInfiniteLineDistance, neither of which is homed in this batch.
-// Emitting the body would require fabricating a RwMathFPU constants home (anti-fabrication
-// rule forbids it). The signature is recorded here for the callers; the body lands once
-// those dependencies are homed.
+// The body @ 0x822B1FA0 is HOMED in BrnPowerParkingManager.cpp. The RwMathFPU
+// TWO_PI/PI/HALF_PI constants are reproduced as the X360 rodata literals inline (no
+// fabricated constants home), and BrnMath::GetPointToInfiniteLineDistance is an
+// additive-grow declare-only in BrnMathUtils.h (its own body TU, link-deferred).
 // ============================================================================
 namespace BrnWorld
 {

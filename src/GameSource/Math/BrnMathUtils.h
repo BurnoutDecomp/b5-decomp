@@ -50,4 +50,9 @@ namespace BrnMath
     // args (the prop position and the region dimensions); the exact param order / by-value-vs-ref
     // is inferred from the OnPropHit call site and the asm register setup.
     bool IsPointInsideBox(const Matrix44Affine& lBoxTransform, Vector3 lPoint, Vector3 lHalfExtents);
+
+    // ADDITIVE GROW (declare-only; body @ X360, not homed in this batch). Perpendicular
+    // distance from lPoint to the infinite line through (lLineStart, lLineEnd). Called by
+    // BrnWorld::CheckVehicleForPowerPark @ 0x822B1FA0 (v1=point, v2=lineStart, v3=lineEnd).
+    f32 GetPointToInfiniteLineDistance(Vector3 lPoint, Vector3 lLineStart, Vector3 lLineEnd);
 }

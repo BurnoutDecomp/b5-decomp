@@ -2,11 +2,17 @@
 // BrnGui::ManufacturersIcon  -- implementation
 //   class:BrnGui::ManufacturersIcon
 //
-// Construct            @ 0x8241BD28
-// Set(E_MANUFACTURER)  @ 0x8241BD30
+// Construct                        @ 0x8241BD28
+// Set(const VehicleList*, CgsID)   @ 0x824350A0
+// Set(E_MANUFACTURER)              @ 0x8241BD30
 //   Reconstructed store-for-store from the X360 pseudocode/asm.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/Components/BrnManufacturerIcon.h"
+
+#include "GameShared/GameClasses/Core/CgsID.h"            // CgsIDConvertToString
+#include "SharedClasses/DataLists/VehicleList.h"          // BrnResource::VehicleList (GetVehicleIndex/GetVehicleData)
+#include "SharedClasses/DataLists/VehicleListEntry.h"     // BrnResource::VehicleListEntry::GetParentId
+#include <string.h>                                       // _stricmp
 
 namespace BrnGui
 {
@@ -16,6 +22,46 @@ namespace BrnGui
                                       const char* lpacParentName)
     {
         CgsGui::GuiComponent::Construct(lpacName, lpStateInterface, lpacParentName);
+    }
+
+    // @ 0x824350A0 -- resolve the selected car's manufacturer badge. Look up the vehicle by
+    // id (following its parent-car id when it has one), convert that id to its printable
+    // 12-char name, then linear-scan maCarNameToManufacturesMapping[88] for a case-
+    // insensitive name match. On a hit, push the mapped manufacturer enum through the
+    // private Set(E_MANUFACTURER); otherwise hide the icon ("invisible").
+    void ManufacturersIcon::Set(const BrnResource::VehicleList* lpVehicleList, CgsID lSelectedCardId)
+    {
+        bool  lbIconHasBeenSet = false;
+        CgsID lConvertId       = lSelectedCardId;
+
+        // Resolve the list entry for the selected card (null when not present).
+        const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lSelectedCardId);
+        const BrnResource::VehicleListEntry* lpVehicleData =
+            (liVehicleIndex < 0) ? nullptr : lpVehicleList->GetVehicleData(liVehicleIndex);
+
+        // Prefer the parent car's id for the badge lookup when one is set. The X360 reads
+        // entry+0x08 UNCONDITIONALLY (`ld r11,8(r3)`, no null guard before it); mirror that.
+        const CgsID lParentId = lpVehicleData->GetParentId();
+        if (lParentId != 0)
+            lConvertId = lParentId;
+
+        // Printable id, capped at 12 chars (`buf[12] = 0`).
+        char lacCarName[64];
+        CgsIDConvertToString(lConvertId, lacCarName);
+        lacCarName[12] = '\0';
+
+        for (u32 lu = 0; lu < 0x58; ++lu)
+        {
+            if (_stricmp(maCarNameToManufacturesMapping[lu].mCarNameIdentifier, lacCarName) == 0)
+            {
+                Set(maCarNameToManufacturesMapping[lu].meManufacturersIcon);
+                lbIconHasBeenSet = true;
+                break;
+            }
+        }
+
+        if (!lbIconHasBeenSet)
+            AddOutputAptViewState("apt_manufacturer", "invisible", false);
     }
 
     // @ 0x8241BD30 -- jump-table switch (9 explicit cases 0..8, default for everything

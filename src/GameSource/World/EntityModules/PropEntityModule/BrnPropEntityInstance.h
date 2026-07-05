@@ -32,8 +32,12 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Matrix44Affine
 
+namespace BrnPhysics { namespace Props { class PropInstanceData; class PropTypeData; } }
+
 namespace BrnWorld
 {
+    struct PropEntityID;   // packed entity id (declared in the entity-types TU)
+
     // BrnPropEntityInstance.h:35 (DWARF) -- the prop simulation state machine.
     enum EPropState
     {
@@ -73,10 +77,6 @@ namespace BrnWorld
         u8  muMaxAngle;    // :53
     };
 
-    // Forward decls for accessor parameter types (declared elsewhere; pointer use).
-    struct PropEntityID;
-    namespace BrnPhysics_FwdScope {}   // placeholder, see below
-
     // BrnPropEntityInstance.h:57 (DWARF) -- one loaded prop instance.
     struct alignas(16) PropEntityInstance
     {
@@ -86,6 +86,14 @@ namespace BrnWorld
         bool Prepare();
         bool Release();
         void Destruct();
+
+        // @ 0x822B80E8. Fill this slot from its loaded PropInstanceData record + shared
+        // PropTypeData descriptor (zone/flags/transform/instance id + rotation-params range).
+        void InitialiseFromData(const BrnPhysics::Props::PropInstanceData* lpInstanceData,
+                                const BrnPhysics::Props::PropTypeData*     lpTypeData,
+                                PropEntityID                               liEntityID,
+                                u16                                        lu16ZoneIndex,
+                                s32                                        liRotationParamsIndex);
 
         u16 GetZone() const;
         u32 GetTypeId() const;

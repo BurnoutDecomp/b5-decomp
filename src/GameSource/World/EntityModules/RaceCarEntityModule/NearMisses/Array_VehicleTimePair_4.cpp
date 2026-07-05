@@ -22,6 +22,15 @@
 //
 // Append is called by NearMissData<4,7>::RememberNearMiss / AddContacted; Erase by
 // NearMissData<4,7>::UpdateTimers / RememberNearMiss / AddContacted.
+//
+// The X360 emits one out-of-line copy of Array<VehicleTimePair,4>::Append / Erase per
+// using outer-template TU, so there is a second address pair (Append @0x822AED20, Erase
+// @0x822AEE48) instantiated inside NearMissData<4,8>. Both copies are byte-for-byte the
+// same generic body as the 0x822AF0E0/0x822AF208 pair above (count @ +0x20 == 4*8 => N=4,
+// stride 8 via slwi r,count,3; two dword stores id@0/time@4; order-preserving tail shift on
+// Erase). At C++ source level they collapse to the single explicit instantiation below --
+// the 0x822AED20 Append is called by NearMissData<4,8>::RememberNearMiss / AddContacted and
+// the 0x822AEE48 Erase by NearMissData<4,8>::UpdateTimers / RememberNearMiss / AddContacted.
 template void Array<BrnWorld::VehicleTimePair, 4>::Append(const BrnWorld::VehicleTimePair&);
 template void Array<BrnWorld::VehicleTimePair, 4>::Erase(u32);
 
