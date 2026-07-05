@@ -1,5 +1,7 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnPlayerStatsBar.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+
 #include <cstring>   // std::strcmp (the inlined name compare)
 
 // BrnGui::PlayerStatsBar -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -33,5 +35,22 @@ namespace BrnGui
             return true;
         }
         return false;
+    }
+
+    // @ 0x824BAD68 -- set the car-stats value: assert non-negative, clamp to the
+    // bar's max, latch it, recolour the bar and run it to the new segment. The X360
+    // de-inlines the failure path into BeginAssert/StrStream("Invalid car stat : " <<
+    // liValue << "\n")/FireAssert/EndAssert; it folds to one CGS_ASSERT (streamed
+    // integer and trailing \n dropped, matching the sibling ComplexBar::RunTo idiom).
+    void PlayerStatsBar::SetCar(s32 liValue, u32 luMax)
+    {
+        CGS_ASSERT(liValue >= 0, "Invalid car stat : ");
+
+        if (liValue > KI_MAX_BAR_LENGTH)
+            liValue = KI_MAX_BAR_LENGTH;
+
+        miCarValue = liValue;
+        mCarBar.SetColour(luMax);
+        mCarBar.RunTo(miCarValue);
     }
 }

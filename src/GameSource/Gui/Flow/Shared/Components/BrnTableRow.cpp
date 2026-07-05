@@ -204,6 +204,80 @@ namespace BrnGui
         }
     }
 
+    // @0x82483288 -- return a pointer to the row's cell at liIndex (&maCells[liIndex]).
+    // stride 0xC, base row+0x238. Bounds-checked 0 <= liIndex < 16.
+    TableCell* TableRow::GetSelectable(s32 liIndex)
+    {
+        CGS_ASSERT(liIndex >= 0 && liIndex < KI_MAX_CELLS_PER_ROW,
+                   "TableRow::GetSelectable() invalid index specified"); // X360 line 395
+
+        return &maCells[liIndex];
+    }
+
+    // @0x824E4468 -- attach the row's backing data set and dirty the component.
+    void TableRow::SetData(TableRowDataSet* lpData)
+    {
+        CGS_ASSERT(lpData != 0, "TableRow::SetData() Invalid DataSet"); // X360 line 271
+
+        mpData = lpData;
+        muFlags |= KU_FLAG_DIRTY;
+    }
+
+    // @0x824890E8 -- set a cell's text directly in the backing data set and dirty the component.
+    void TableRow::SetText(s32 liCell, const char* lpacText)
+    {
+        CGS_ASSERT(mpData != 0, "TableRow::SetText() Row data not set"); // X360 line 302
+        CGS_ASSERT(lpacText != 0, "invalid text specified");             // X360 line 303
+
+        mpData->SetText(liCell, lpacText);
+
+        muFlags |= KU_FLAG_DIRTY;
+    }
+
+    // @0x82489210 -- set a cell's colour: drive the cell's text-field colour and record the
+    // value + "use colour" flag in the backing data set, then dirty the component.
+    void TableRow::SetColourValue(s32 liColumn, s32 liColour)
+    {
+        CGS_ASSERT(mpData != 0, "TableRow::SetText() Row data not set"); // X360 line 320 (shared string)
+
+        maCells[liColumn].SetColourValue(static_cast<u32>(liColour));
+        mpData->SetColourValue(liColumn, liColour);
+        mpData->SetUseColour(liColumn, 1);
+
+        muFlags |= KU_FLAG_DIRTY;
+    }
+
+    // @0x82489300 -- set a cell's text from a localised string. Only valid on TextField cells
+    // (asserts maCells[liColumn].meComponentType == TEXTFIELD, via the public IsText() accessor).
+    // Formats the localised text into the cell's text field, then mirrors the resolved text
+    // into the backing data set. (No dirty flag raised -- matches the X360.)
+    void TableRow::SetLocalisedText(s32 liColumn, const char* lpacText,
+                                    CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                                    s32 liNumParams, const char* const* lppacParams,
+                                    CgsLanguage::LanguageManager::ParameterFormatType* lpeParamFormats)
+    {
+        CGS_ASSERT(mpData != 0, "TableRow::SetLocalisedText() Row data not set"); // X360 line 345
+        CGS_ASSERT(lpacText != 0, "invalid text specified");                       // X360 line 346
+        CGS_ASSERT(maCells[liColumn].IsText(),
+                   "Trying to set localised text to something that is not a textfield in TableRow::SetLocalisedText()"); // X360 line 347
+
+        TableCell& lrCell = maCells[liColumn];
+        lrCell.SetLocalisedText(lpacText, leFormat, liNumParams, lppacParams, lpeParamFormats);
+        mpData->SetText(liColumn, lrCell.GetText());
+    }
+
+    // @0x824894C8 -- set a cell's icon state: record the integer state in the backing data
+    // set (validated against the row's cells) and dirty the component.
+    void TableRow::SetIconState(s32 liCell, u32 luState)
+    {
+        CGS_ASSERT(mpData != 0, "TableRow::SetText() Row data not set"); // X360 line 378 (shared string)
+        CGS_ASSERT(GetSelectable(liCell) != 0, "Invalid selectable specified"); // X360 line 379
+
+        mpData->SetInteger(liCell, static_cast<s32>(luState));
+
+        muFlags |= KU_FLAG_DIRTY;
+    }
+
     // @0x824E4F68 -----------------------------------------------------------------------
     // DWARF declares this void (BrnTableRow.h:198); the X360 r3=this is incidental.
     void TableRowDataSet::Clear()

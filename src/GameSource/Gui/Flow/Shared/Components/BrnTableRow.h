@@ -124,6 +124,17 @@ namespace BrnGui
         void SetText(s32 liCell, const char* lpacText);
         u32  GetIconState(s32 liCell) const;
         void SetIconState(s32 liCell, u32 luState);
+
+        // @0x82483288 -- &maCells[liIndex]; bounds-checked 0 <= liIndex < 16. Used by SetIconState.
+        TableCell* GetSelectable(s32 liIndex);
+        // @0x82489210 -- set a cell's colour value + use-colour flag, then dirty.
+        void SetColourValue(s32 liColumn, s32 liColour);
+        // @0x82489300 -- set a TextField cell's text from a localised string (asserts IsText()).
+        void SetLocalisedText(s32 liColumn, const char* lpacText,
+                              CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                              s32 liNumParams, const char* const* lppacParams,
+                              CgsLanguage::LanguageManager::ParameterFormatType* lpeParamFormats);
+
         void SetEnableShowingAnim(bool lbEnable);
 
     private:

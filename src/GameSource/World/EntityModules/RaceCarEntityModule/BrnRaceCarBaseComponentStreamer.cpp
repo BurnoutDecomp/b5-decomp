@@ -50,6 +50,53 @@ void RaceCarBaseComponentStreamer::Construct( s32 liPoolId, bool lbAllowFailure,
     }
 }
 
+// @ 0x822B6D30. Record the desired asset for a race-car slot and forward the
+// request into the base streamer engine. Sets the per-car 'added' bit + desired-
+// asset table, then InternalBaseStreamer::AddEntry(lAssetId, lbIsSafe=false,
+// luUserId=liActiveRaceCar). The X360 inlines BitArray<8>'s own bounds asserts
+// (CgsBitArray.h:203/:222) at the SetBit/IsBitSet sites; those belong to the
+// container and are NOT reproduced here, matching the committed style of this TU.
+void RaceCarBaseComponentStreamer::AddEntry( CgsID lAssetId, s32 liActiveRaceCar )
+{
+    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+
+    CGS_ASSERT( !mAddedEntries.IsBitSet( static_cast<u32>( liActiveRaceCar ) ),
+                "Adding a streaming asset that for a racecar that already has one, racecar=" );
+
+    mAddedEntries.SetBit( static_cast<u32>( liActiveRaceCar ) );
+    maDesiredAssets[liActiveRaceCar] = lAssetId;
+
+    InternalBaseStreamer::AddEntry( lAssetId, false, static_cast<u64>( liActiveRaceCar ) );
+}
+
+// @ 0x822A1358. Return the CgsID the given race-car slot currently WANTS loaded
+// (0 == none). Pure accessor into maDesiredAssets (this+0x12D8).
+CgsID RaceCarBaseComponentStreamer::GetDesiredAsset( s32 liActiveRaceCar ) const
+{
+    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+
+    return maDesiredAssets[liActiveRaceCar];
+}
+
+// @ 0x822B7198. True iff the race-car slot's LOADED asset (mLoadedEntries bit set)
+// matches lAssetId. Gated read of maLoadedAssets (this+0x1318) behind the per-car
+// loaded bit (mLoadedEntries, this+0x1360). The X360 inlines BitArray<8>::IsBitSet's
+// own bounds assert (CgsBitArray.h:203) at the test site; not reproduced here.
+bool RaceCarBaseComponentStreamer::IsVehicleAssetLoaded( CgsID lAssetId, s32 liActiveRaceCar )
+{
+    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+
+    if( !mLoadedEntries.IsBitSet( static_cast<u32>( liActiveRaceCar ) ) )
+    {
+        return false;
+    }
+
+    return maLoadedAssets[liActiveRaceCar] == lAssetId;
+}
+
 // The base streamer's load/unload query hooks. The X360 ARTIST build did not emit a
 // standalone body for these in this TU (they are not in the boot-trace/X360 ledger --
 // the load/unload list selection is driven from the leaf streamers/base engine), but

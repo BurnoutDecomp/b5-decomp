@@ -145,15 +145,19 @@ namespace CgsNetwork
         bool Release();
 
         // ---- Actions --------------------------------------------------------------
-        void CreateGame(ServerInterfaceGameParamsBase* lpGameParams,
+        // CreateGame / JoinGame / QuickJoinGame / SearchForGames / UpdateGameParameters
+        // are virtual: the X360 leaf ServerInterfaceGamesX360 (0x8288C178 / 0x8288C268 /
+        // 0x8288C300 / 0x8288C460 / 0x8288C770) genuinely overrides these vtable slots and
+        // chains back to Base::X after seeding the Xbox LIVE search contexts.
+        virtual void CreateGame(ServerInterfaceGameParamsBase* lpGameParams,
                         ServerInterfacePlayerParamsBase* lpPlayerParams);
-        void JoinGame(ServerInterfaceGameParamsBase* lpGameParams,
+        virtual void JoinGame(ServerInterfaceGameParamsBase* lpGameParams,
                       ServerInterfacePlayerParamsBase* lpPlayerParams);
-        void QuickJoinGame(ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
+        virtual void QuickJoinGame(ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
                            ServerInterfacePlayerParamsBase* lpPlayerParams);
-        void SearchForGames(ServerInterfaceGameSearchParamsBase* lpSearchParams);
+        virtual void SearchForGames(ServerInterfaceGameSearchParamsBase* lpSearchParams);
         void CancelSearchForGames();
-        void UpdateGameParameters(ServerInterfaceGameParamsBase* lpGameParams);
+        virtual void UpdateGameParameters(ServerInterfaceGameParamsBase* lpGameParams);
         void UpdatePlayerParameters(s32 liPlayerID,
                                     ServerInterfacePlayerParamsBase* lpPlayerParams);
         void LockGame();
@@ -210,8 +214,17 @@ namespace CgsNetwork
         // ServerInterfaceGamesX360 TU / a sibling; declared here so callers can reach it.
         void* KickPlayer(const char* lpcPlayerName, s32 liReason, char lbBan);
 
-    private:
+    protected:
+        // ADDITIVE GROW (flagged by the ServerInterfaceGamesX360 group): read accessors
+        // the X360 leaf uses to reach the owning server interface and the play record by
+        // name (rather than widening data-member access). Layout unchanged.
+        ServerInterfaceDirtySock* GetServerInterface() const { return mpServerInterface; }
+        DirtySock::LobbyApiPlayT* GetLastGameRecord()        { return &mLastGameRecord; }
+
         // ---- Internal helpers (this TU) -------------------------------------------
+        // Promoted private -> protected: the X360 leaf (Suspend / Resume / ReceivedGameEvent)
+        // reaches EndAction / FreeDisplayLists / AllocDisplayLists / the static FoundGamesSort /
+        // the static ReceivedGameEvent directly.
         void StartAction(EAction leAction, void* lpfnCallback);
         s32  StartGameManagerAction(EAction leAction, void* lpfnCallback);
         void EndAction(s32 liError);
@@ -245,9 +258,12 @@ namespace CgsNetwork
         // The per-action error-mapping table ({table-ptr, count} indexed by action),
         // and the per-action message fourcc / name tables, live in the .cpp.
 
-    private:
+    protected:
         // ---- own members (the ServerInterfaceComponent base provides the +0x00..+0x0F
         //      vptr / mpcCurrentAction / meStatus / miLastError header) ---
+        // Promoted private -> protected: the X360 leaf reads mpFoundGames / mpServerInterface /
+        // meCurrentAction / miRequestCallbackID / mpSearchSortCallback by name. Order and
+        // offsets are unchanged.
         DirtySock::LobbyApiPlayT mLastGameRecord;   // +0x010 (2136 bytes)
         void*       mpFoundGames;           // +0x868  (DispListRef*)
         ServerInterfaceDirtySock* mpServerInterface; // +0x86C
