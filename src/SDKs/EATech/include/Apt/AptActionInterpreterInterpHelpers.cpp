@@ -744,18 +744,22 @@ extern AptCIH* gpAptEmptyCIH;   // dword_8324D700 -- the pinned "EmptyCIH" AptCI
 // callFunction (tags 34/35/36). The full faithful body IS DECOMPILED below (console branch
 // 0x82AE3CB8..0x82AE3FF4, cross-checked against the PS3 External build 0x821734; the
 // AptScriptFunction2 vtable @0x82145D10 gave the by-name method map). It is HELD OFF behind
-// g_bAptHomeScriptFnExec (default false) for one reason, established by BOOT TEST 2026-07-04:
+// g_bAptHomeScriptFnExec (default false), established by BOOT TESTS 2026-07-04:
 //
-//   The body compiles + links clean, but ENABLING it regresses boot -- composition stalls
-//   at frame 3 with childNodes=0 (vs the healthy frame=100/childNodes=12), no assert. Homing
-//   this ACTIVATES real execution of the title's ~4 component AS handlers (onLoad/onEnterFrame
-//   etc.); running them ahead of the rest of the 4d system (the GuiComponent->AptCommunicator
-//   routing + the still-partial VM opcode coverage) destabilises the delicately-balanced
-//   partial title bring-up. It is an INTEGRATION-ORDER dependency, NOT (as far as diagnosed) a
-//   transcription bug -- but the exact failing handler/opcode is NOT yet pinned, so the gate
-//   stays off until either the surrounding routing lands first or a per-handler probe isolates
-//   the stall. The flag is a plain `static bool` (not const) so the body stays compiled +
-//   type-checked and can be flipped for that diagnosis.
+//   The body compiles + links clean, but ENABLING it stalls boot (composition freezes,
+//   childNodes=0, no assert). DIAGNOSIS (probe pass, corrects an earlier over-claim): a
+//   gate-on run with a per-call probe logging at the END of the body produced NO probe output
+//   at all -- i.e. the FIRST call (nArgs=0) enters the homed body and NEVER completes (hangs
+//   or crashes before the return). With the gate OFF the same tree boots green, so this is
+//   NOT the inbound audio/wave commits, and NOT (as I earlier wrongly wrote) an "integration-
+//   order dependency" -- it is very likely a BUG IN THIS BODY. Prime suspects: (a) the
+//   root-anim walk-up loop has NO null guard (faithful to the console, which assumes the
+//   anim is always found -- but our partial tree may walk mpDisplayListParent to null ->
+//   null-deref, or a parent cycle -> infinite loop); (b) runStream executing the real AS
+//   body hits a still-unbuilt VM opcode. NEXT: add granular probes (before/after the walk-up,
+//   before/after runStream) to pin the hang, then fix (likely a guarded walk-up + a
+//   PC-divergence FLAG). The flag is a plain `static bool` (not const) so the body stays
+//   compiled + type-checked and can be flipped for that diagnosis.
 //
 // The prior "field order must be reconciled" concern is RESOLVED: the reconstructed
 // GetConstantPool already returns cleanly-named {mppEntries=base, mnCount=count}, so mapping
