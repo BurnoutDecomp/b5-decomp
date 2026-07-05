@@ -372,38 +372,69 @@ namespace
     // "Press START"); the console picks the bundle from the SKU/dash language.
     const char* const KC_APT_LANGUAGE_BUNDLE = "LANGUAGE/0002.bundle";
 
-    // ---- the loaded movie handle (channel-41 result) ---------------------------
-    char        s_acLoadedMovieName[64] = { 0 };
-    bool        s_bMovieRequested        = false;   // a PlayAptMovie request is in flight (load attempted)
-    bool        s_bMovieLoaded           = false;   // the movie bundle loaded + the AptDataHeader resolved
-    bool        s_bMovieStopped          = false;   // the flow left BF_LEGAL (accept path) -- stop tick+render
+    // ---- the PER-MOVIE SLOTS (the framework movie + the channel-41 flow movie) --
+    // TWO movies coexist on the director's root display list, exactly as the console
+    // composes them: the AS FRAMEWORK movie ("MAIN" -- the BurnoutComponent /
+    // gAptCommunicator class carrier) at display level 0, and the FLOW movie
+    // (BootLegal's Title_Screen02) at display level 1 above it. Each slot owns its
+    // own load state, resident pool, resource span, root AptCIH and paced-tick clock;
+    // the load / instantiate / tick paths below all take a slot by reference, so both
+    // movies travel the SAME faithful path (bundle load -> AddAptData -> AptLoader::
+    // Load -> LoadAnimation -> AptGetAnimationAtLevel(slot.miLevel) -> instantiate).
+    //
+    // Each movie bundle (GUIAPT\<NAME>.bundle) is loaded SYNCHRONOUSLY into the slot's
+    // pool via BundleLoader::LoadBundle (the same async-FS/DeviceManager path the FSM +
+    // VIDEOLIST bundles use). Its single AptData resource (type 0x1E == 30) is the
+    // relocated CgsGui::AptDataHeader; the header's pointer fields are RAW file-relative
+    // offsets on x64 (see the FixUp note at the load site), so the slot keeps the FULL
+    // 64-bit resource base + size and every offset resolves as (T*)(base64 + offset).
+    struct AptMovieSlot
+    {
+        const char* mpcTag;                  // "framework" / "flow" (the [AptRT] log prefix)
+        char        macName[64];             // the loaded movie name (load-once key)
+        bool        mbRequested;             // a load request is in flight (load attempted)
+        bool        mbLoaded;                // bundle loaded + the AptDataHeader resolved
+        bool        mbInstantiated;          // root CIH bound to a live anim inst (ticking)
+        bool        mbLoadAttempted;         // the one-shot faithful load path ran (any outcome)
+        s32         miLevel;                 // display level (root display-list depth)
+        CgsResource::Pool*     mpPool;       // the slot's resident movie pool
+        CgsGui::AptDataHeader* mpHeader;     // the movie header (fields are RAW offsets on x64)
+        uintptr_t   muResourceBase;          // the AptData resource 64-bit load base
+        u32         muResourceSize;          // the AptData resource size (relocation bound)
+        AptCharacterAnimation* mpCharAnim;   // the movie-root def base (post-Fixup)
+        AptFile*    mpAptFile;               // the loaded AptFile handle (mpData = root)
+        void*       mpRootCIH;               // the level-miLevel root AptCIH
+        u32         muMsPerFrame;            // authored ms-per-frame (the tick pacing clock)
+        double      mdTickAccumMs;           // the charInst+36 accumulator (host-held)
+        s64         miLastUpdateQpcMs;       // wall-clock of the previous slot tick pass
+        s32         miTickFrame;             // per-slot tick counter (the one-shot probes)
+    };
+
+    AptMovieSlot s_FrameworkSlot =
+        { "framework", { 0 }, false, false, false, false, /*miLevel*/ 0,
+          nullptr, nullptr, 0, 0, nullptr, nullptr, nullptr, 33u, 0.0, -1, 0 };
+    AptMovieSlot s_FlowSlot =
+        { "flow",      { 0 }, false, false, false, false, /*miLevel*/ 1,
+          nullptr, nullptr, 0, 0, nullptr, nullptr, nullptr, 33u, 0.0, -1, 0 };
+
+    // The flow left BF_LEGAL (accept path) -- parks the FLOW slot only (tick + render);
+    // the FRAMEWORK movie keeps ticking (the console keeps the persistent level-0 apt
+    // composed across flow-state changes).
+    bool        s_bMovieStopped          = false;
     s32         s_iFrameCounter          = 0;       // per-frame probe throttle
     s32         s_iRenderFrame           = 0;       // render-walk per-frame trace counter
+    bool        s_bFlushProbed           = false;   // emitted the one-shot render-flush probe yet
 
-    // ---- the loaded movie's resource pool + its relocated Apt geometry ---------
-    // The movie bundle (GUIAPT\<NAME>.bundle) is loaded SYNCHRONOUSLY into this pool via
-    // BundleLoader::LoadBundle (the same async-FS/DeviceManager path the FSM + VIDEOLIST
-    // bundles use). Its single AptData resource (type 0x1E == 30) is FixUp'd by the
-    // registered CgsResource::AptDataHeaderType handler into a live CgsGui::AptDataHeader,
-    // whose mpGeomStruct is a relocated CgsResource::GuiGeometryObject (the renderable shape
-    // geometry). We hold that object + render its files each frame through the homed
-    // AptRenderHandler::Render -- the achievable render milestone (geometry -> the buffer
-    // that is already Dispatched to D3D9), bypassing the un-homed engine render-tree walk.
-    CgsResource::Pool*               s_pMoviePool  = nullptr;   // holds the loaded movie bundle
-    CgsGui::AptDataHeader*           s_pAptHeader  = nullptr;   // the movie header (fields are RAW offsets on x64)
-
-    // The loaded AptData resource span (the 64-bit load base + size). The faithful engine walks the
-    // native-8 records against this base (AptCharacterAnimation::Fixup / AptMovie::resolve64 / the
-    // Step-2 AptResolveShapeGeometry), stashed into CgsGui::gAptResourceSpanBase/Size for those.
-    uintptr_t                        s_uAptResourceBase = 0;    // m_baseResources[0] (the 64-bit load base)
-    u32                              s_uAptResourceSize = 0;    // the AptData resource size (relocation bound)
-    bool                             s_bFlushProbed     = false;// emitted the one-shot render-flush probe yet
-
-    // The movie pool backing (3 mem types). The title movie is ~1.6 MB; reserve 8 MB/type
-    // (the bundle's main-memory resources + the heap node overhead). Static BSS storage.
-    const u32 KU_MOVIE_POOL_BYTES = 8u * 1024u * 1024u;
-    u8 s_moviePoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_MOVIE_POOL_BYTES];
-    CgsResource::Pool s_MoviePoolStorage;
+    // The per-slot pool backings (3 mem types each), static BSS storage; each slot gets
+    // its OWN CgsResource::Pool storage object. The FLOW movie (the title) is ~1.6 MB ->
+    // keep the 8 MB/type backing; the FRAMEWORK movie (MAIN.bundle) is 236 KB -> 4 MB/type
+    // is generous (the bundle's main-memory resources + the heap node overhead).
+    const u32 KU_FLOW_POOL_BYTES      = 8u * 1024u * 1024u;
+    const u32 KU_FRAMEWORK_POOL_BYTES = 4u * 1024u * 1024u;
+    u8 s_aFlowPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FLOW_POOL_BYTES];
+    u8 s_aFrameworkPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FRAMEWORK_POOL_BYTES];
+    CgsResource::Pool s_FlowPoolStorage;
+    CgsResource::Pool s_FrameworkPoolStorage;
 
     // The Apt-data resource type id (X360 0x1E == 30; CgsResource::AptDataHeaderType::GetTypeID).
     const u32 KU_APTDATA_RESOURCE_TYPE_ID = 30u;
@@ -464,17 +495,15 @@ namespace
     // CompleteLoad the root header; everything else in the chain is faithful.
     //
     // DEFENSIVE: the whole path is one-shot + heavily guarded; ANY failure leaves
-    // s_bFaithfulInstantiated false and the direct-geometry render (s_bGeomResolved) intact, so the
+    // the slot's mbInstantiated false and the direct-geometry render (s_bGeomResolved) intact, so the
     // game stays up + still shows the title art. The faithful per-frame TICK + RENDER are the next
     // passes (NOT this one) -- this only stands up the AptCharacterAnimation + root AptCIH tree.
     // ====================================================================================
     const bool KB_FAITHFUL_PATH_ENABLED = true;   // master gate for the faithful load path.
 
-    AptCharacterAnimation* s_pFaithfulCharAnim = nullptr;   // the movie-root def base (post-Fixup)
-    AptFile*               s_pFaithfulAptFile  = nullptr;   // the loaded AptFile handle (mpData = root)
-    void*                  s_pFaithfulRootCIH  = nullptr;   // the root AptCIH placed on the director
-    bool   s_bFaithfulAttempted    = false;
-    bool   s_bFaithfulInstantiated = false;
+    // (The faithful-load state -- char-anim def base, AptFile handle, root CIH,
+    //  attempted/instantiated flags -- moved into AptMovieSlot above: each of the two
+    //  movies owns its own copy, keyed off the slot the load path is driven with.)
     // STAGED VM EXECUTION (2026-07-01): the deferred-action DRAIN (AptAnimationTarget::
     // RunActions after each tick). The full chain is wired + verified live -- with this
     // false the queue fills faithfully (289 enqueues to frame 100, boot green); with it
@@ -494,7 +523,6 @@ namespace
     // runs steady-state: 1243 tick+drain frames, 0 asserts, the executed stop()s hold
     // the clips faithfully.
     bool   s_bDisableRunActions    = false;
-    s32    s_iTickFrame            = 0;     // STEP-2 per-frame tick counter (for the placement probes)
 
     // ---- the faithful timeline PACING (console AptUpdate/sub_82B0D608) ------------------
     // The console accumulates the ELAPSED MILLISECONDS into the root anim inst (charInst+36)
@@ -502,10 +530,10 @@ namespace
     // authors 33ms == 30fps), catch-up looping while the accumulator holds a full frame;
     // RunActions runs per TICK and the generalised text/mask process per UPDATE. Without
     // this the movie ticked once per RENDER frame (~170fps) and every transition played
-    // ~5.7x too fast (a blink instead of an animation).
-    u32    s_uMovieMsPerFrame      = 33u;    // captured from the movie header at load (ms=)
-    double s_dTickAccumMs          = 0.0;    // the charInst+36 accumulator (host-held)
-    s64    s_iLastUpdateQpcMs      = -1;     // wall-clock of the previous AptRuntimeUpdate
+    // ~5.7x too fast (a blink instead of an animation). The pacing state (msPerFrame,
+    // accumulator, last-update clock, tick counter) is PER SLOT (AptMovieSlot above):
+    // each movie ticks on its OWN authored clock, exactly as the console paces each
+    // level's root anim inst separately.
 
     // ====================================================================================
     // STEP 3 -- IMPORT CONTENT-LOAD (the cross-bundle imports the title's visible content lives in).
@@ -577,8 +605,12 @@ namespace BrnGui
     // the anon namespace) so the in-namespace calls bind to the static definitions.
     static void DumpResourceBytes(const char* lpcTag, void* lpBase, u32 luOffset,
                                   u32 luResourceSize, u32 luBytes);
-    static void DriveFaithfulLoad(CgsResource::Entry* lpEntry);
-    static u32  LocateMovieRoot8(uintptr_t luBase, u32 luSize);
+    static void DriveFaithfulLoad(AptMovieSlot& lrSlot);
+    static u32  LocateMovieRoot8(uintptr_t luBase, u32 luSize, u32* lpuMsPerFrameOut);
+    // The SHARED slot load path (both movies travel it) + the lazy framework-movie load.
+    static bool AptLoadMovieSlot(AptMovieSlot& lrSlot, CgsResource::Pool* lpPoolStorage,
+                                 u8* const* lapPoolBacking, u32 luPoolBytes);
+    static void EnsureFrameworkMovie();
     // STEP 3 (import content-load): synchronously load the import bundle named `lpacMovieName`
     // (GuiApt\<NAME>.bundle) into a resident pool, register its AptDataHeader with the data handler,
     // and drive AptCompleteAnimationAsyncLoad on `lpFile` so the import's AptFile is fully
@@ -976,8 +1008,200 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
+    // AptLoadMovieSlot -- the SHARED synchronous movie load path (BOTH slots travel it):
+    // init the slot's resident pool over the given backing, load "GuiApt\<NAME>.bundle",
+    // resolve the AptData (0x1E) resource into the slot's header + 64-bit span, then
+    // drive the faithful load + instantiate (DriveFaithfulLoad, which attaches the movie
+    // at the SLOT's display level). Returns true when the bundle loaded (slot.mbLoaded);
+    // the instantiation outcome lands in slot.mbInstantiated.
+    //
+    // FAITHFULNESS (2026-06-30, user): the GUIAPT32/GUIAPT64 split was NON-FAITHFUL test
+    // scaffolding -- the original game loads apt movies from GUIAPT\. Our PC build's GUIAPT
+    // bundles carry the converted "Apt Data:1:7:8" (native 8-byte) data, so the path stays
+    // faithful (GUIAPT) while the data content is the x64-converted form. Load through
+    // BundleLoader::LoadBundle; the AptData resource (type 0x1E == 30) is FixUp'd by the
+    // registered CgsResource::AptDataHeaderType handler.
+    // -------------------------------------------------------------------------
+    static bool AptLoadMovieSlot(AptMovieSlot& lrSlot, CgsResource::Pool* lpPoolStorage,
+                                 u8* const* lapPoolBacking, u32 luPoolBytes)
+    {
+        char lac[224];
+        CgsResource::RegisterAllResourceTypes();   // idempotent: ensure AptDataHeaderType (0x1E) is live
+
+        // Build the FAITHFUL bundle path "GuiApt\<NAME>.bundle" -- the exact format string the X360
+        // apt loader uses (verified @0x828504B0), name passed as-is (Windows resolves case/separator).
+        // The loader returns <=0 if missing -> bails cleanly.
+        char lacBundlePath[160];
+        std::snprintf(lacBundlePath, sizeof(lacBundlePath), "GuiApt\\%s.bundle", lrSlot.macName);
+
+        lrSlot.mpPool = lpPoolStorage;
+        CgsResource::Pool::InitOptions lOptions;
+        lOptions.miId   = 4;
+        lOptions.mpcName = "AptMovie";
+        for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+        {
+            lOptions.maHeapInfo[lt].muMaxNodes       = 256u;
+            lOptions.maHeapInfo[lt].muHeapMemorySize = luPoolBytes - 128u * 1024u;
+            lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
+            lOptions.mResource.m_baseResources[lt]   = lapPoolBacking[lt];
+            lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = luPoolBytes;
+            lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
+        }
+        lOptions.muMaxResources         = 64u;
+        lOptions.muMaxImports           = 64u;
+        lOptions.miRefCountThreshold    = 0;
+        lOptions.miNumDependencies      = 0;
+        lOptions.miBankId               = 0;
+        lOptions.mbAllowDefragmentation = false;
+        lrSlot.mpPool->InitPool(&lOptions);
+
+        CgsResource::BundleLoader lLoader;
+        const s32 liLoaded = lLoader.LoadBundle(lacBundlePath, lrSlot.mpPool,
+                                                CgsResource::ResolveResourceType);
+        std::snprintf(lac, sizeof(lac), "[AptRT] %s: load '%s' -> %d resources.\n",
+                      lrSlot.mpcTag, lacBundlePath, liLoaded);
+        CgsDev::Log::WriteToLog(lac);
+        if (liLoaded <= 0)
+        {
+            // FLAG: bundle missing / not platform-4 / unreadable. Bail cleanly.
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] %s: load: bundle missing/unreadable or not platform-4 -- bail (FLAG).\n",
+                lrSlot.mpcTag);
+            CgsDev::Log::WriteToLog(lac);
+            return false;
+        }
+
+        // Pull the single AptData (0x1E) resource; its bytes are the relocated AptDataHeader.
+        s32 liIndex = -1;
+        CgsResource::Entry* lpEntry =
+            lrSlot.mpPool->FindFirstResourceOfType(KU_APTDATA_RESOURCE_TYPE_ID, &liIndex);
+        if (lpEntry == nullptr)
+        {
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] %s: load: no AptData (type 0x1E) resource in bundle -- bail (FLAG).\n",
+                lrSlot.mpcTag);
+            CgsDev::Log::WriteToLog(lac);
+            return false;
+        }
+        // PER-MEM-TYPE BASE PROBE: log all three m_baseResources[] + their sizes. The platform-4
+        // resource can span multiple memory-type sections; the geometry/const offsets may be
+        // relative to one of these. This shows which base is which at runtime (ground truth).
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] %s: probe: AptData entry idx=%d  mem0=%p (size=%u)  mem1=%p (size=%u)  mem2=%p (size=%u)\n",
+            lrSlot.mpcTag, liIndex,
+            lpEntry->mResource.m_baseResources[0],
+            lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size,
+            lpEntry->mResource.m_baseResources[1],
+            lpEntry->mResourceDescriptor.m_baseResourceDescriptors[1].m_size,
+            lpEntry->mResource.m_baseResources[2],
+            lpEntry->mResourceDescriptor.m_baseResourceDescriptors[2].m_size);
+        CgsDev::Log::WriteToLog(lac);
+
+        void* lpRes = lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
+        if (lpRes == nullptr)
+        {
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] %s: load: AptData resource has null main-memory bytes -- bail (FLAG).\n",
+                lrSlot.mpcTag);
+            CgsDev::Log::WriteToLog(lac);
+            return false;
+        }
+        lrSlot.mpHeader = reinterpret_cast<CgsGui::AptDataHeader*>(lpRes);
+
+        // x64 TRANSCODE (USER-CONFIRMED 2026-06-30): AptDataHeader::FixUp is a NO-OP on x64 (the
+        // 4-byte .apt format cannot be in-place-relocated into a high x64 backing -- see
+        // CgsAptDataHeader.cpp). So the header's pointer fields are RAW file-relative OFFSETS. We
+        // keep the FULL 64-bit resource base and resolve every offset as (T*)(base64 + offset).
+        lrSlot.muResourceBase = reinterpret_cast<uintptr_t>(lpRes);
+        lrSlot.muResourceSize =
+            lpEntry->mResourceDescriptor.m_baseResourceDescriptors[CgsResource::E_MEMTYPE_MAINMEMORY].m_size;
+
+        // Log the native-8 AptDataHeader field run (diagnostic; the geometry the render walk draws is
+        // resolved faithfully by the engine -- AptCharacterAnimation::Fixup case-1 sets each shape's
+        // char+0x20 via AptResolveShapeGeometry off the header's field[4] GuiGeometryObject).
+        const u32* lpHeaderWords = reinterpret_cast<const u32*>(lpRes);
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] %s: load: base=0x%016llX hdr words[0..5]=0x%X 0x%X 0x%X 0x%X 0x%X 0x%X\n",
+            lrSlot.mpcTag, (unsigned long long)lrSlot.muResourceBase,
+            lpHeaderWords[0], lpHeaderWords[1], lpHeaderWords[2],
+            lpHeaderWords[3], lpHeaderWords[4], lpHeaderWords[5]);
+        CgsDev::Log::WriteToLog(lac);
+
+        // HEX-DUMP PROBE (read-only, bounded): the first 64 bytes of the AptData resource (the
+        // AptDataHeader region), for ground-truth diagnostics.
+        DumpResourceBytes("hdr@+0",   lpRes, 0,
+                          lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size, 64);
+
+        lrSlot.mbLoaded = true;
+
+        // STEP 8 (gated): drive the FAITHFUL Apt load path (LoadAnimation -> AptCompleteAnimation
+        // AsyncLoad -> AptLoader::CompleteLoad -> Resolve -> Fixup -> MakeCharacterAnimationInst),
+        // retiring the invented signature-scan + hand-rolled AptFile synthesis. One-shot per slot +
+        // heavily guarded; on any failure the slot stays un-instantiated and the game stays up.
+        DriveFaithfulLoad(lrSlot);
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // EnsureFrameworkMovie -- lazily load + instantiate the AS FRAMEWORK movie ("MAIN")
+    // into s_FrameworkSlot at display level 0, through the SAME load path the flow movie
+    // takes (AptLoadMovieSlot). Called by AptRuntimePlayMovie BEFORE the flow movie loads,
+    // so the framework core composes BENEATH it (level 0 under level 1) and its exported
+    // classes are resident when the flow movie's imports link.
+    // FLAG (host bring-up choice): the console composes PERSISTENTAPT (which imports MAIN)
+    // persistently at level 0 via GuiResourceModule; the host starts with the MAIN framework
+    // core itself (the 236 KB bundle; PERSISTENTAPT is the follow-on). One-shot: a failed
+    // load is logged and NOT retried (the flow movie still loads + runs above the gap).
+    // -------------------------------------------------------------------------
+    // FLAG (bring-up gate, 2026-07-05): loading MAIN currently AVs inside
+    // LoadAnimation's CompleteLoad/Resolve/Fixup (the log dies right after
+    // "LoadAnimation('MAIN', ...)"; MAIN.BUNDLE IS frame-table-repaired, so the
+    // fault is a record shape among its 89 chars the relocation walk has not met
+    // before). Gate the framework load OFF until that walk is fixed so the title
+    // flow keeps booting; flip to true to continue the stage-B bring-up.
+    static const bool KB_LOAD_FRAMEWORK_MOVIE = false;
+
+    static void EnsureFrameworkMovie()
+    {
+        if (!KB_LOAD_FRAMEWORK_MOVIE)
+        {
+            static bool sbLoggedOff = false;
+            if (!sbLoggedOff)
+            {
+                sbLoggedOff = true;
+                CgsDev::Log::WriteToLog("[AptRT] framework: GATED OFF (KB_LOAD_FRAMEWORK_MOVIE=false; "
+                                        "MAIN Fixup AV under investigation).\n");
+            }
+            return;
+        }
+        if (s_FrameworkSlot.mbRequested || s_FrameworkSlot.mbLoaded)
+            return;
+        s_FrameworkSlot.mbRequested = true;
+        s_FrameworkSlot.miLevel     = 0;   // the framework core sits at display level 0
+        std::strncpy(s_FrameworkSlot.macName, "MAIN", sizeof(s_FrameworkSlot.macName) - 1);
+        s_FrameworkSlot.macName[sizeof(s_FrameworkSlot.macName) - 1] = '\0';
+
+        CgsDev::Log::WriteToLog("[AptRT] framework: loading the AS framework movie 'MAIN' at level 0 ...\n");
+
+        u8* lapBacking[CgsResource::E_MEMTYPE_NUMTYPES];
+        for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+            lapBacking[lt] = s_aFrameworkPoolBacking[lt];
+        const bool lbLoaded = AptLoadMovieSlot(s_FrameworkSlot, &s_FrameworkPoolStorage,
+                                               lapBacking, KU_FRAMEWORK_POOL_BYTES);
+
+        char lac[160];
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] framework: 'MAIN' %s (loaded=%d instantiated=%d level=%d).\n",
+            lbLoaded ? "up" : "NOT loaded (FLAG -- flow movie continues without it)",
+            s_FrameworkSlot.mbLoaded ? 1 : 0, s_FrameworkSlot.mbInstantiated ? 1 : 0,
+            s_FrameworkSlot.miLevel);
+        CgsDev::Log::WriteToLog(lac);
+    }
+
+    // -------------------------------------------------------------------------
     // AptRuntimePlayMovie -- consume a channel-41 GuiEventPlayAptMovie. Records the
-    // movie name and ATTEMPTS to load it through the homed Apt loader. Defensive:
+    // movie name in the FLOW slot and ATTEMPTS to load it through the homed Apt
+    // loader (after lazily standing the framework movie up at level 0). Defensive:
     // bails (logs) wherever the load path crosses an un-homed piece.
     // -------------------------------------------------------------------------
     void AptRuntimePlayMovie(const char* lpacMovieName, s32 liLevelNum)
@@ -993,139 +1217,51 @@ namespace BrnGui
         // playing), so without this guard the bundle would be (re)loaded thousands of times, each
         // allocating CgsResource pool entries until the pool overflows. Load each distinct movie
         // exactly once; once REQUESTED or LOADED, ignore re-fires of the same name. (Guarding on
-        // s_bMovieLoaded too is essential: an interleaved empty event used to reset s_bMovieRequested,
+        // mbLoaded too is essential: an interleaved empty event used to reset the request flag,
         // so the same movie reloaded every cycle and exhausted CgsResourcePool.)
-        if ((s_bMovieRequested || s_bMovieLoaded) &&
-            std::strncmp(s_acLoadedMovieName, lpacMovieName, sizeof(s_acLoadedMovieName) - 1) == 0)
+        if ((s_FlowSlot.mbRequested || s_FlowSlot.mbLoaded) &&
+            std::strncmp(s_FlowSlot.macName, lpacMovieName, sizeof(s_FlowSlot.macName) - 1) == 0)
             return;   // same movie already attempted/loaded -- silent (avoids per-frame reload+spam)
 
-        std::strncpy(s_acLoadedMovieName, lpacMovieName, sizeof(s_acLoadedMovieName) - 1);
-        s_acLoadedMovieName[sizeof(s_acLoadedMovieName) - 1] = '\0';
-        s_bMovieRequested = true;
+        // FLOW-SLOT ROUTING: channel 41 drives the FLOW movie, which lives at display level 1
+        // (above the level-0 framework movie). BootLegal posts level 1; a different level is a
+        // protocol surprise -- log it (assert-equivalent) but still route to the flow slot.
+        if (liLevelNum != 1)
+        {
+            char lacLvl[160];
+            std::snprintf(lacLvl, sizeof(lacLvl),
+                "[AptRT] PlayMovie: UNEXPECTED level %d (the flow movie is level 1) -- "
+                "routing to the flow slot anyway (FLAG).\n", liLevelNum);
+            CgsDev::Log::WriteToLog(lacLvl);
+        }
+
+        std::strncpy(s_FlowSlot.macName, lpacMovieName, sizeof(s_FlowSlot.macName) - 1);
+        s_FlowSlot.macName[sizeof(s_FlowSlot.macName) - 1] = '\0';
+        s_FlowSlot.mbRequested = true;
+        s_FlowSlot.miLevel     = liLevelNum;
 
         char lac[200];
         std::snprintf(lac, sizeof(lac), "[AptRT] PlayMovie: consume channel-41 '%s' (level %d).\n",
-                      s_acLoadedMovieName, liLevelNum);
+                      s_FlowSlot.macName, liLevelNum);
         CgsDev::Log::WriteToLog(lac);
 
         if (!s_bRuntimeReady)
         {
             CgsDev::Log::WriteToLog("[AptRT] PlayMovie: runtime not ready -- load deferred.\n");
-            s_bMovieRequested = false;   // allow a retry next time the event fires
+            s_FlowSlot.mbRequested = false;   // allow a retry next time the event fires
             return;
         }
 
-        // ---- SYNCHRONOUS bundle load: GUIAPT\<NAME>.BUNDLE (the FAITHFUL bundle path) ------------
-        // FAITHFULNESS (2026-06-30, user): the GUIAPT32/GUIAPT64 split was NON-FAITHFUL test
-        // scaffolding -- the original game loads apt movies from GUIAPT\. Our PC build's GUIAPT
-        // bundle carries the converted "Apt Data:1:7:8" (native 8-byte) data, so the path stays
-        // faithful (GUIAPT) while the data content is the x64-converted form. Load through
-        // BundleLoader::LoadBundle; the AptData resource (type 0x1E == 30) is FixUp'd by the
-        // registered CgsResource::AptDataHeaderType handler.
-        CgsResource::RegisterAllResourceTypes();   // idempotent: ensure AptDataHeaderType (0x1E) is live
+        // Stand the AS FRAMEWORK movie up FIRST (level 0, lazily, one-shot) so it composes
+        // beneath the flow movie -- the console has PERSISTENTAPT/MAIN resident at level 0
+        // before any flow movie plays (see the FLAG on EnsureFrameworkMovie).
+        EnsureFrameworkMovie();
 
-        // Build the FAITHFUL bundle path "GuiApt\<NAME>.bundle" -- the exact format string the X360
-        // apt loader uses (verified @0x828504B0), name passed as-is (Windows resolves case/separator).
-        // The loader returns <=0 if missing -> bails cleanly.
-        char lacBundlePath[160];
-        std::snprintf(lacBundlePath, sizeof(lacBundlePath), "GuiApt\\%s.bundle", s_acLoadedMovieName);
-
-        s_pMoviePool = &s_MoviePoolStorage;
-        CgsResource::Pool::InitOptions lOptions;
-        lOptions.miId   = 4;
-        lOptions.mpcName = "AptMovie";
+        // ---- SYNCHRONOUS bundle load of the FLOW movie (the shared slot load path) --------------
+        u8* lapBacking[CgsResource::E_MEMTYPE_NUMTYPES];
         for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
-        {
-            lOptions.maHeapInfo[lt].muMaxNodes       = 256u;
-            lOptions.maHeapInfo[lt].muHeapMemorySize = KU_MOVIE_POOL_BYTES - 128u * 1024u;
-            lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
-            lOptions.mResource.m_baseResources[lt]   = s_moviePoolBacking[lt];
-            lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = KU_MOVIE_POOL_BYTES;
-            lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
-        }
-        lOptions.muMaxResources         = 64u;
-        lOptions.muMaxImports           = 64u;
-        lOptions.miRefCountThreshold    = 0;
-        lOptions.miNumDependencies      = 0;
-        lOptions.miBankId               = 0;
-        lOptions.mbAllowDefragmentation = false;
-        s_pMoviePool->InitPool(&lOptions);
-
-        CgsResource::BundleLoader lLoader;
-        const s32 liLoaded = lLoader.LoadBundle(lacBundlePath, s_pMoviePool,
-                                                CgsResource::ResolveResourceType);
-        std::snprintf(lac, sizeof(lac), "[AptRT] load: '%s' -> %d resources.\n", lacBundlePath, liLoaded);
-        CgsDev::Log::WriteToLog(lac);
-        if (liLoaded <= 0)
-        {
-            // FLAG: bundle missing / not platform-4 / unreadable. Bail cleanly.
-            CgsDev::Log::WriteToLog("[AptRT] load: bundle missing/unreadable or not platform-4 -- bail (FLAG).\n");
-            return;
-        }
-
-        // Pull the single AptData (0x1E) resource; its bytes are the relocated AptDataHeader.
-        s32 liIndex = -1;
-        CgsResource::Entry* lpEntry =
-            s_pMoviePool->FindFirstResourceOfType(KU_APTDATA_RESOURCE_TYPE_ID, &liIndex);
-        if (lpEntry == nullptr)
-        {
-            CgsDev::Log::WriteToLog("[AptRT] load: no AptData (type 0x1E) resource in bundle -- bail (FLAG).\n");
-            return;
-        }
-        // PER-MEM-TYPE BASE PROBE: log all three m_baseResources[] + their sizes. The platform-4
-        // resource can span multiple memory-type sections; the geometry/const offsets may be
-        // relative to one of these. This shows which base is which at runtime (ground truth).
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] probe: AptData entry idx=%d  mem0=%p (size=%u)  mem1=%p (size=%u)  mem2=%p (size=%u)\n",
-            liIndex,
-            lpEntry->mResource.m_baseResources[0],
-            lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size,
-            lpEntry->mResource.m_baseResources[1],
-            lpEntry->mResourceDescriptor.m_baseResourceDescriptors[1].m_size,
-            lpEntry->mResource.m_baseResources[2],
-            lpEntry->mResourceDescriptor.m_baseResourceDescriptors[2].m_size);
-        CgsDev::Log::WriteToLog(lac);
-
-        void* lpRes = lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
-        if (lpRes == nullptr)
-        {
-            CgsDev::Log::WriteToLog("[AptRT] load: AptData resource has null main-memory bytes -- bail (FLAG).\n");
-            return;
-        }
-        s_pAptHeader = reinterpret_cast<CgsGui::AptDataHeader*>(lpRes);
-
-        // x64 TRANSCODE (USER-CONFIRMED 2026-06-30): AptDataHeader::FixUp is a NO-OP on x64 (the
-        // 4-byte .apt format cannot be in-place-relocated into a high x64 backing -- see
-        // CgsAptDataHeader.cpp). So the header's pointer fields are RAW file-relative OFFSETS. We
-        // keep the FULL 64-bit resource base and resolve every offset as (T*)(base64 + offset).
-        s_uAptResourceBase = reinterpret_cast<uintptr_t>(lpRes);
-        s_uAptResourceSize =
-            lpEntry->mResourceDescriptor.m_baseResourceDescriptors[CgsResource::E_MEMTYPE_MAINMEMORY].m_size;
-
-        // Log the native-8 AptDataHeader field run (diagnostic; the geometry the render walk draws is
-        // resolved faithfully by the engine -- AptCharacterAnimation::Fixup case-1 sets each shape's
-        // char+0x20 via AptResolveShapeGeometry off the header's field[4] GuiGeometryObject).
-        const u32* lpHeaderWords = reinterpret_cast<const u32*>(lpRes);
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] load: base=0x%016llX hdr words[0..5]=0x%X 0x%X 0x%X 0x%X 0x%X 0x%X\n",
-            (unsigned long long)s_uAptResourceBase,
-            lpHeaderWords[0], lpHeaderWords[1], lpHeaderWords[2],
-            lpHeaderWords[3], lpHeaderWords[4], lpHeaderWords[5]);
-        CgsDev::Log::WriteToLog(lac);
-
-        // HEX-DUMP PROBE (read-only, bounded): the first 64 bytes of the AptData resource (the
-        // AptDataHeader region), for ground-truth diagnostics.
-        DumpResourceBytes("hdr@+0",   lpRes, 0,
-                          lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size, 64);
-
-        s_bMovieLoaded = true;
-
-        // STEP 8 (gated): drive the FAITHFUL Apt load path (LoadAnimation -> AptCompleteAnimation
-        // AsyncLoad -> AptLoader::CompleteLoad -> Resolve -> Fixup -> MakeCharacterAnimationInst),
-        // retiring the invented signature-scan + hand-rolled AptFile synthesis. One-shot + heavily
-        // guarded; on any failure the direct-geometry render above stays intact so the title art
-        // still shows. The faithful per-frame tick/AS render are the next passes.
-        DriveFaithfulLoad(lpEntry);
+            lapBacking[lt] = s_aFlowPoolBacking[lt];
+        AptLoadMovieSlot(s_FlowSlot, &s_FlowPoolStorage, lapBacking, KU_FLOW_POOL_BYTES);
     }
 
     // Read-only, bounded hex dump of a resource region to the log (diagnostic ground truth).
@@ -1189,7 +1325,7 @@ namespace BrnGui
     // For TITLE_SCREEN02 the only validating hit is the char header @res+0x4930 (def base 0x4950:
     // charCount=41, w=1280, h=720, ms=33). CompleteLoad derives def base = root + 0x20.
     // =========================================================================
-    static u32 LocateMovieRoot8(uintptr_t luBase, u32 luSize)
+    static u32 LocateMovieRoot8(uintptr_t luBase, u32 luSize, u32* lpuMsPerFrameOut)
     {
         const u32 kHdrToDefBase = 0x20u;   // native-8 character header size (def base @ header+0x20)
         for (u32 luScan = 8u; luScan + 4u <= luSize; luScan += 4u)
@@ -1215,17 +1351,13 @@ namespace BrnGui
                     "frameCount=%u charCount=%u w=%u h=%u ms=%u\n",
                     luScan, luHdr, luDB, luFC, luCC, luW, luH, luMs);
                 CgsDev::Log::WriteToLog(lac);
-                // Capture the LEVEL movie's authored ms-per-frame for the tick pacing (the
-                // FIRST parsed root is the title movie; imports re-enter here but must not
-                // override the level clock -- console pacing reads the ROOT anim's movie).
-                {
-                    static bool sbMsCaptured = false;
-                    if (!sbMsCaptured)
-                    {
-                        sbMsCaptured = true;
-                        s_uMovieMsPerFrame = luMs;
-                    }
-                }
+                // Capture the LEVEL movie's authored ms-per-frame for the tick pacing.
+                // PER SLOT: the slot load path passes its slot's clock (each level movie
+                // paces on its own authored ms); imports re-enter here with a null out --
+                // they must not override the level clock (console pacing reads the ROOT
+                // anim's movie).
+                if (lpuMsPerFrameOut != nullptr)
+                    *lpuMsPerFrameOut = luMs;
                 return luHdr;   // the ROOT CHARACTER HEADER offset
             }
         }
@@ -1246,18 +1378,23 @@ namespace BrnGui
     // stays is the movie-root location (LocateMovieRoot8) -- the converted 8-byte bundle's
     // dataRootOffset does not locate the root, so the host scans + hands CompleteLoad the root.
     //
-    // On ANY failure: bail cleanly (s_bFaithfulInstantiated stays false), leaving the
-    // direct-geometry render (s_bGeomResolved) intact so the title art still shows.
+    // On ANY failure: bail cleanly (slot.mbInstantiated stays false), leaving the
+    // game up (the other slot's movie still ticks/renders).
+    //
+    // PER SLOT (two-movie refactor): the whole chain is driven against the passed
+    // AptMovieSlot -- its resource span, name and DISPLAY LEVEL (the instantiate step
+    // attaches at AptGetAnimationAtLevel(slot.miLevel): level 0 = framework, level 1 =
+    // flow -- the console's root display-list arrangement).
     // =========================================================================
-    static void DriveFaithfulLoad(CgsResource::Entry* lpEntry)
+    static void DriveFaithfulLoad(AptMovieSlot& lrSlot)
     {
-        (void)lpEntry;
-        if (!KB_FAITHFUL_PATH_ENABLED || s_bFaithfulAttempted)
+        if (!KB_FAITHFUL_PATH_ENABLED || lrSlot.mbLoadAttempted)
             return;
-        s_bFaithfulAttempted = true;
+        lrSlot.mbLoadAttempted = true;
 
         char lac[224];
-        CgsDev::Log::WriteToLog("[AptRT] faithful: STEP 8 load-path begin.\n");
+        std::snprintf(lac, sizeof(lac), "[AptRT] %s: faithful: STEP 8 load-path begin.\n", lrSlot.mpcTag);
+        CgsDev::Log::WriteToLog(lac);
 
         // Need a live Apt context (the director + loader) + the GC pool (the root CIH allocates
         // from it). GetTarget()->mpLoader is the faithfully-initialised AptLoader.
@@ -1275,9 +1412,9 @@ namespace BrnGui
         }
 
         // The AptData resource IS the AptDataHeader; the header sits at the resource base.
-        const u32 luSize = s_uAptResourceSize;
-        const uintptr_t luBase = s_uAptResourceBase;
-        if (luSize == 0 || luBase == 0 || s_pAptHeader == nullptr)
+        const u32 luSize = lrSlot.muResourceSize;
+        const uintptr_t luBase = lrSlot.muResourceBase;
+        if (luSize == 0 || luBase == 0 || lrSlot.mpHeader == nullptr)
         {
             CgsDev::Log::WriteToLog("[AptRT] faithful: no resource bytes / header -- bail (FLAG).\n");
             return;
@@ -1296,8 +1433,8 @@ namespace BrnGui
         AptConstFile* lpConstFile = reinterpret_cast<AptConstFile*>(luBase + luAptDataOff);
         const int liPtrSize = lpConstFile->GetPointerSizeBytes();   // 8 (native) or 4 (console)
         std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: header@0x%llX aptData@0x%X ptrSize=%d (%u bytes).\n",
-            (unsigned long long)luBase, luAptDataOff, liPtrSize, luSize);
+            "[AptRT] %s: faithful: header@0x%llX aptData@0x%X ptrSize=%d (%u bytes).\n",
+            lrSlot.mpcTag, (unsigned long long)luBase, luAptDataOff, liPtrSize, luSize);
         CgsDev::Log::WriteToLog(lac);
 
         // --- 1. LOCATE the movie-root character header (FLAG: x64 converted bundle) ------------
@@ -1308,7 +1445,8 @@ namespace BrnGui
         void* lpRootOverride = nullptr;
         if (liPtrSize == 8)
         {
-            const u32 luRootHdrOff = LocateMovieRoot8(luBase, luSize);
+            // The slot's authored ms-per-frame is captured here (per-slot level clock).
+            const u32 luRootHdrOff = LocateMovieRoot8(luBase, luSize, &lrSlot.muMsPerFrame);
             if (luRootHdrOff == 0)
             {
                 CgsDev::Log::WriteToLog("[AptRT] faithful: no sane type-9 movie root found "
@@ -1323,12 +1461,12 @@ namespace BrnGui
         // (driven by AptCharacterAnimation::Fixup case-5/9) can bounds-check every serialised
         // offset slot. base == the load base == the resource base (luBase) on our path.
         CgsGui::gAptResourceSpanBase = luBase;
-        CgsGui::gAptResourceSpanSize = s_uAptResourceSize;
+        CgsGui::gAptResourceSpanSize = lrSlot.muResourceSize;
 
         // --- 2. REGISTER the header with the data handler (AptDataHandler::AddAptData) ----------
         // So the faithful FindAptData(name) inside LoadAnimation resolves it. Idempotent by name.
         // FLAG (x64): AddAptData takes the resolved name (the header's mpacMovieName is an
-        // un-relocated offset on x64); we pass s_acLoadedMovieName.
+        // un-relocated offset on x64); we pass the slot's movie name.
         CgsGui::AptAux* lpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
         if (lpAptAux == nullptr)
         {
@@ -1336,15 +1474,16 @@ namespace BrnGui
             CgsGui::gAptLoadAnimRootOverride = nullptr;
             return;
         }
-        lpAptAux->mAptDataHandler.AddAptData(reinterpret_cast<CgsGui::AptDataHeader*>(s_pAptHeader),
-                                             s_acLoadedMovieName);
-        CgsDev::Log::WriteToLog("[AptRT] faithful: AddAptData(header) registered.\n");
+        lpAptAux->mAptDataHandler.AddAptData(lrSlot.mpHeader, lrSlot.macName);
+        std::snprintf(lac, sizeof(lac), "[AptRT] %s: faithful: AddAptData(header) registered.\n",
+                      lrSlot.mpcTag);
+        CgsDev::Log::WriteToLog(lac);
 
         // --- 3. REGISTER / look up the AptFile handle (AptLoader::Load) --------------------------
         // Load returns a handle owning ONE counted reference. We keep it (laOwned) and hand a
         // COPY to LoadAnimation (which consumes its copy, per the console by-value slot). The owned
         // handle survives, and after CompleteLoad it points at the loaded movie (mpData = root).
-        EAStringC lNameStr(s_acLoadedMovieName);
+        EAStringC lNameStr(lrSlot.macName);
         AptFilePtr laOwned = lpTarget->mpLoader->Load(lNameStr);
         if (laOwned.pData == nullptr)
         {
@@ -1360,10 +1499,10 @@ namespace BrnGui
         // --- 4. DRIVE the faithful load: LoadAnimation -> AsyncLoad -> CompleteLoad -> Resolve ->
         //        Fixup. The Fixup relocates the movie root in place (charCount/importCount set). ---
         std::snprintf(lac, sizeof(lac),
-            "[AptRT] faithful: LoadAnimation('%s', handle=%p) [rootOverride=%p] ...\n",
-            s_acLoadedMovieName, (void*)laForCallback.pData, lpRootOverride);
+            "[AptRT] %s: faithful: LoadAnimation('%s', handle=%p) [rootOverride=%p] ...\n",
+            lrSlot.mpcTag, lrSlot.macName, (void*)laForCallback.pData, lpRootOverride);
         CgsDev::Log::WriteToLog(lac);
-        CgsGui::AptCallbackFile::LoadAnimation(s_acLoadedMovieName, &laForCallback);
+        CgsGui::AptCallbackFile::LoadAnimation(lrSlot.macName, &laForCallback);
         CgsGui::gAptLoadAnimRootOverride = nullptr;   // one-shot; done
 
         // The owned handle's AptFile is now loaded (CompleteLoad set mpData = root, state = 3).
@@ -1374,8 +1513,8 @@ namespace BrnGui
                                     "(mpData null) -- bail (FLAG).\n");
             return;
         }
-        s_pFaithfulAptFile  = lpFile;
-        s_pFaithfulCharAnim = reinterpret_cast<AptCharacterAnimation*>(
+        lrSlot.mpAptFile  = lpFile;
+        lrSlot.mpCharAnim = reinterpret_cast<AptCharacterAnimation*>(
             static_cast<char*>(lpFile->mpData) + ((liPtrSize == 8) ? 0x20 : 0x10));   // def base
 
         // "Fixup COMPLETED" marker (read the counts the Fixup walk populated at the def base).
@@ -1383,12 +1522,12 @@ namespace BrnGui
             const u32 luOffCC = (liPtrSize == 8) ? 0x18u : 0x0Cu;   // charCount
             const u32 luOffIC = (liPtrSize == 8) ? 0x34u : 0x20u;   // importCount
             const int liCC = *reinterpret_cast<const int*>(
-                reinterpret_cast<char*>(s_pFaithfulCharAnim) + luOffCC);
+                reinterpret_cast<char*>(lrSlot.mpCharAnim) + luOffCC);
             const int liIC = *reinterpret_cast<const int*>(
-                reinterpret_cast<char*>(s_pFaithfulCharAnim) + luOffIC);
+                reinterpret_cast<char*>(lrSlot.mpCharAnim) + luOffIC);
             std::snprintf(lac, sizeof(lac),
-                "[AptRT] faithful: Fixup COMPLETED. charCount@+0x18=%d importCount@+0x34=%d (via CompleteLoad)\n",
-                liCC, liIC);
+                "[AptRT] %s: faithful: Fixup COMPLETED. charCount@+0x18=%d importCount@+0x34=%d (via CompleteLoad)\n",
+                lrSlot.mpcTag, liCC, liIC);
             CgsDev::Log::WriteToLog(lac);
             if (liCC <= 0 || liCC > 512 || liIC < 0 || liIC > 4096)
             {
@@ -1410,15 +1549,15 @@ namespace BrnGui
         if (lpTarget->mpLoader != nullptr)
         {
             const int liImportCount = *reinterpret_cast<const int*>(
-                reinterpret_cast<char*>(s_pFaithfulCharAnim) + 0x34);   // def+0x34 importCount
+                reinterpret_cast<char*>(lrSlot.mpCharAnim) + 0x34);   // def+0x34 importCount
             std::snprintf(lac, sizeof(lac),
-                "[AptRT] faithful: STEP3 content-load %d import(s) via AptLoader::Update ...\n",
-                liImportCount);
+                "[AptRT] %s: faithful: STEP3 content-load %d import(s) via AptLoader::Update ...\n",
+                lrSlot.mpcTag, liImportCount);
             CgsDev::Log::WriteToLog(lac);
             lpTarget->mpLoader->Update();   // drives StartAsyncLoad (load) + Link for every import
             std::snprintf(lac, sizeof(lac),
-                "[AptRT] faithful: STEP3 content-load done. import bundles resident=%u.\n",
-                s_uImportBundleCount);
+                "[AptRT] %s: faithful: STEP3 content-load done. import bundles resident=%u.\n",
+                lrSlot.mpcTag, s_uImportBundleCount);
             CgsDev::Log::WriteToLog(lac);
         }
 
@@ -1428,7 +1567,7 @@ namespace BrnGui
         // the raw file offset 0x5180; after resolve64 it is a live pointer (base + 0x5180),
         // and frame[0].mnCommandCount should be 13 (verified vs TITLE_SCREEN02.bundle).
         {
-            const char* lpRootMovie = reinterpret_cast<const char*>(s_pFaithfulCharAnim);
+            const char* lpRootMovie = reinterpret_cast<const char*>(lrSlot.mpCharAnim);
             const int liFrameCount = *reinterpret_cast<const int*>(lpRootMovie + 0x00);
             void** lpFrames = *reinterpret_cast<void* const*>(lpRootMovie + 0x08) ?
                 *reinterpret_cast<void** const*>(lpRootMovie + 0x08) : nullptr;
@@ -1436,8 +1575,8 @@ namespace BrnGui
                 *reinterpret_cast<const unsigned long long*>(lpRootMovie + 0x08);
             // The frame table is a relocated pointer iff it lands inside the resource span.
             const bool lbRelocated =
-                (luFramesRaw >= s_uAptResourceBase &&
-                 luFramesRaw <  s_uAptResourceBase + s_uAptResourceSize);
+                (luFramesRaw >= lrSlot.muResourceBase &&
+                 luFramesRaw <  lrSlot.muResourceBase + lrSlot.muResourceSize);
             int liFrame0Cmds = -1;
             if (lbRelocated && lpFrames != nullptr)
             {
@@ -1445,15 +1584,17 @@ namespace BrnGui
                 liFrame0Cmds = *reinterpret_cast<const int*>(lpFrames);
             }
             std::snprintf(lac, sizeof(lac),
-                "[AptRT] faithful: STEP5 frame-table: frameCount=%d mpFrames=0x%016llX relocated=%s "
+                "[AptRT] %s: faithful: STEP5 frame-table: frameCount=%d mpFrames=0x%016llX relocated=%s "
                 "frame0.cmdCount=%d (want 13)\n",
-                liFrameCount, luFramesRaw, lbRelocated ? "YES" : "NO(raw-offset)", liFrame0Cmds);
+                lrSlot.mpcTag, liFrameCount, luFramesRaw, lbRelocated ? "YES" : "NO(raw-offset)", liFrame0Cmds);
             CgsDev::Log::WriteToLog(lac);
         }
 
-        // --- 5. the root level-0 CIH on the director's root display list ---------------------------
-        // AptGetAnimationAtLevel(0) searches the director's root display list then (if absent) creates
-        // an AptCIH via the GC pool. Self-test the GC pool first (probe the 40-byte carve).
+        // --- 5. the root level-N CIH on the director's root display list ---------------------------
+        // AptGetAnimationAtLevel(slot.miLevel) searches the director's root display list for the
+        // node at the SLOT's display level then (if absent) creates an AptCIH via the GC pool
+        // (level 0 = the framework movie, level 1 = the flow movie -- the console's root
+        // display-list arrangement). Self-test the GC pool first (probe the 40-byte carve).
         {
             void* lpGCTest = gpGCPoolManager->Allocate(40);
             if (lpGCTest == nullptr)
@@ -1463,14 +1604,17 @@ namespace BrnGui
             }
             gpGCPoolManager->Deallocate(lpGCTest, 40);
         }
-        CgsDev::Log::WriteToLog("[AptRT] faithful: AptGetAnimationAtLevel(0) (create root CIH) ...\n");
-        AptCIH* lpRootCIH = AptGetAnimationAtLevel(0);
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] %s: faithful: AptGetAnimationAtLevel(%d) (create root CIH) ...\n",
+            lrSlot.mpcTag, lrSlot.miLevel);
+        CgsDev::Log::WriteToLog(lac);
+        AptCIH* lpRootCIH = AptGetAnimationAtLevel(lrSlot.miLevel);
         if (lpRootCIH == nullptr)
         {
             CgsDev::Log::WriteToLog("[AptRT] faithful: root CIH null (GC pool / display list) -- bail (FLAG).\n");
             return;
         }
-        s_pFaithfulRootCIH = lpRootCIH;
+        lrSlot.mpRootCIH = lpRootCIH;
 
         // --- 6. instantiate the movie + bind it to the root CIH -----------------------------------
         // The engine's MakeCharacterAnimationInst is the single faithful 64-bit path: its
@@ -1503,26 +1647,27 @@ namespace BrnGui
                 lpSprite->mnGotoFrame        = -1;                 // *(v61[8]+16) = -1  (no pending goto)
                 lpSprite->mnClipActionFlags |= 0x80u;             // *(v61[8]+20) |= 0x80
             }
-            s_bFaithfulInstantiated = true;
+            lrSlot.mbInstantiated = true;
             // Open the input-recorder/replay gate (normal-play value) so the freshly-placed imported
             // sprite CONTAINERS auto-advance + run doFrameControls, recursing to place their nested
             // shapes/images (the title's actual visible content lives inside those imported sprites).
             // FLAG: the replay-recorder subsystem that would drive this is out of scope; set once here.
             gbAptRecorderGate = 1;
             std::snprintf(lac, sizeof(lac),
-                "[AptRT] faithful: INSTANTIATED -- animInst %p bound to root CIH %p (movie root %p); "
+                "[AptRT] %s: faithful: INSTANTIATED -- animInst %p bound to root CIH %p @level %d (movie root %p); "
                 "IncCharacterList walked %d chars; sprite state seeded. dlParent(after bind)=%p\n",
-                (void*)lpAnimInst, (void*)lpRootCIH, lpFile->mpData,
-                *reinterpret_cast<const int*>(reinterpret_cast<char*>(s_pFaithfulCharAnim) + 0x18),
+                lrSlot.mpcTag, (void*)lpAnimInst, (void*)lpRootCIH, lrSlot.miLevel, lpFile->mpData,
+                *reinterpret_cast<const int*>(reinterpret_cast<char*>(lrSlot.mpCharAnim) + 0x18),
                 (void*)lpRootCIH->GetDisplayListParent());
             CgsDev::Log::WriteToLog(lac);
         }
         else
         {
-            CgsDev::Log::WriteToLog(
-                "[AptRT] faithful: MakeCharacterAnimationInst returned null -- root CIH stays empty "
-                "(game up; geometry fallback). (FLAG)\n");
-            s_bFaithfulInstantiated = false;
+            std::snprintf(lac, sizeof(lac),
+                "[AptRT] %s: faithful: MakeCharacterAnimationInst returned null -- root CIH stays empty "
+                "(game up). (FLAG)\n", lrSlot.mpcTag);
+            CgsDev::Log::WriteToLog(lac);
+            lrSlot.mbInstantiated = false;
         }
     }
 
@@ -1662,7 +1807,8 @@ namespace BrnGui
             ? reinterpret_cast<AptConstFile*>(lpSlot->luBase + luConstOff)
             : reinterpret_cast<AptConstFile*>(lpBase);   // degenerate: the old collapse
 
-        const u32 luRootHdrOff = LocateMovieRoot8(lpSlot->luBase, lpSlot->luSize);
+        const u32 luRootHdrOff = LocateMovieRoot8(lpSlot->luBase, lpSlot->luSize,
+                                                  /*lpuMsPerFrameOut*/ nullptr);   // imports never own a level clock
         if (luRootHdrOff == 0)
         {
             CgsDev::Log::WriteToLog("[AptRT] import-load: no type-9 movie root found -- bail (FLAG).\n");
@@ -1714,30 +1860,18 @@ namespace BrnGui
     static bool AptApplyTitleHelpItemDefaults(AptCIH* lpMenuClip);
 
     // -------------------------------------------------------------------------
-    // AptRuntimeUpdate -- per-frame TICK only. Advances the frame counter and (when a movie is
-    // loaded) would tick its timeline + ActionScript. The RENDER moved to AptRuntimeRender (the
-    // proven immediate-mode Im2d path). Called from GuiModule::Update (runs before the render hook).
+    // AptTickMovieSlot -- the paced per-frame TICK for ONE movie slot (the framework
+    // movie at level 0 and the flow movie at level 1 each travel this with their OWN
+    // accumulator / authored msPerFrame / root re-dirty / one-shot probe counters).
+    // Returns the number of timeline ticks run this update (the caller gates the
+    // flow-only follow-ons -- the help-item defaults -- on the FLOW slot's count).
+    // Called from AptRuntimeUpdate AFTER the single per-frame UpdateComponents flush
+    // (the flush is per-TARGET on the console, not per-movie, so it stays with the
+    // caller and runs exactly once).
     // -------------------------------------------------------------------------
-    void AptRuntimeUpdate()
+    static s32 AptTickMovieSlot(AptMovieSlot& lrSlot, bool lbProbeFrame)
     {
-        if (!s_bRuntimeReady || s_bMovieStopped)
-            return;
-
-        ++s_iFrameCounter;
-        const bool lbProbeFrame = (s_iFrameCounter % 30) == 1;   // ~every 30 frames
-
-        // FAITHFUL per-frame order (CgsGui::AptAux::Update @0x82853B20, XB1
-        // sub_1400C7090): flush the communicator's stored key/values to the movie AS
-        // FIRST (UpdateComponents -> UpdateAllComponents -> "UpdateAll", perfmon
-        // "AptAux - Upd Comps"), THEN tick the movies (AptUpdateTarget, "Upd Tgt").
-        // With no components registered yet the flush is a no-op, exactly the console
-        // before a movie's ONLOAD registrations arrive.
-        if (CgsGui::AptAuxPointer::mpAptAuxInst != nullptr)
-            CgsGui::AptAuxPointer::mpAptAuxInst->UpdateComponents();
-
-        // Nothing loaded yet -> nothing to tick/render this frame.
-        if (!s_bMovieLoaded)
-            return;
+        s32 liTicksThisUpdate = 0;
 
         // ---- STEP 2: TICK the instantiated faithful root CIH ---------------------------------------
         // The homed AptCIH::tick advances the clip's play-head; for a fresh clip it runs frame 0's
@@ -1783,17 +1917,17 @@ namespace BrnGui
         //     temporary-frame skip resolver) is UN-HOMED for the native-8 layout, so AptCIH::tick's
         //     wrap now RESETS the play-head to frame 0 directly (a plain loop) instead of the
         //     un-homed replay-merge -- see the FLAG in AptCIH::tick.
-        // lbTickReady is TRUE every frame (the tick + nested recursion run continuously, stable 60s).
+        // The tick runs every frame the slot is instantiated (the tick + nested recursion run
+        // continuously, stable 60s).
         // FLAG (honest boundaries that remain): (a) 3 nested sprite movies have a CONVERTER-malformed
         // frame table (command-array ptr at frame+0x04 not native-8 frame+0x08) and are safely skipped
         // (doFrameControls/queueFrameActions null-mpCommands guard) -- their sub-content stays unplaced;
         // (b) without the AS VM to GATE the transitions (hold-on-label / wait-for-input), the timeline
         // auto-advances through its transin/fade/transout frames, so the title is transient rather than
         // held. Both are the deferred AS-VM / offline-bundle-fix follow-ons, not invention.
-        bool lbTickReady = true;
-        if (lbTickReady && s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr)
+        if (lrSlot.mbInstantiated && lrSlot.mpRootCIH != nullptr)
         {
-            AptCIH* lpRoot = static_cast<AptCIH*>(s_pFaithfulRootCIH);
+            AptCIH* lpRoot = static_cast<AptCIH*>(lrSlot.mpRootCIH);
 
             // ---- FAITHFUL TIMELINE PACING (console AptUpdate / sub_82B0D608) ------------
             // Accumulate the elapsed wall-clock milliseconds (the console's a1, fed from the
@@ -1802,25 +1936,26 @@ namespace BrnGui
             // banked -- with RunActions per TICK, exactly the console's per-tick sequence.
             // The catch-up is capped (the console smooths via its frame-time governor; a
             // fixed cap is the host stand-in) so a debugger stall doesn't spiral.
+            // PER SLOT: the clock + accumulator live on the slot, so each movie paces on
+            // its own authored frame rate (the console paces each level root separately).
             {
                 const s64 liNowMs = static_cast<s64>(
                     std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now().time_since_epoch()).count());
-                if (s_iLastUpdateQpcMs >= 0)
-                    s_dTickAccumMs += static_cast<double>(liNowMs - s_iLastUpdateQpcMs);
-                s_iLastUpdateQpcMs = liNowMs;
+                if (lrSlot.miLastUpdateQpcMs >= 0)
+                    lrSlot.mdTickAccumMs += static_cast<double>(liNowMs - lrSlot.miLastUpdateQpcMs);
+                lrSlot.miLastUpdateQpcMs = liNowMs;
             }
             const double ldMsPerFrame = static_cast<double>(
-                s_uMovieMsPerFrame >= 10u && s_uMovieMsPerFrame <= 100u ? s_uMovieMsPerFrame : 33u);
+                lrSlot.muMsPerFrame >= 10u && lrSlot.muMsPerFrame <= 100u ? lrSlot.muMsPerFrame : 33u);
             // Clamp a runaway backlog to 4 frames of catch-up.
-            if (s_dTickAccumMs > 4.0 * ldMsPerFrame)
-                s_dTickAccumMs = 4.0 * ldMsPerFrame;
+            if (lrSlot.mdTickAccumMs > 4.0 * ldMsPerFrame)
+                lrSlot.mdTickAccumMs = 4.0 * ldMsPerFrame;
 
             int liTickResult = 0;
-            int liTicksThisUpdate = 0;
-            while (s_dTickAccumMs >= ldMsPerFrame)
+            while (lrSlot.mdTickAccumMs >= ldMsPerFrame)
             {
-            s_dTickAccumMs -= ldMsPerFrame;
+            lrSlot.mdTickAccumMs -= ldMsPerFrame;
             ++liTicksThisUpdate;
 
             // Mark the root clip "dirty" so AptCIH::tick processes it (mFlagsA bit25 == GetDirtyState,
@@ -1831,11 +1966,11 @@ namespace BrnGui
             if (!lpRoot->GetDirtyState())
                 lpRoot->SetDirtyState(true, false);
 
-            if (s_iTickFrame < 4)   // probe the first few frames (frame 0 is where placement happens)
+            if (lrSlot.miTickFrame < 4)   // probe the slot's first few frames (frame 0 is where placement happens)
             {
-                char lacp[128];
-                std::snprintf(lacp, sizeof(lacp), "[AptRT] tick: frame=%d -> AptCIH::tick(root %p) ...\n",
-                              s_iTickFrame, (void*)lpRoot);
+                char lacp[144];
+                std::snprintf(lacp, sizeof(lacp), "[AptRT] %s: tick: frame=%d -> AptCIH::tick(root %p) ...\n",
+                              lrSlot.mpcTag, lrSlot.miTickFrame, (void*)lpRoot);
                 CgsDev::Log::WriteToLog(lacp);
             }
 
@@ -1870,31 +2005,8 @@ namespace BrnGui
 
             }   // ---- end of the per-msPerFrame catch-up tick loop (console pacing) ----
 
-            // The pending title help-item defaults (armed by the SelectionMenu transin):
-            // retried per update until the StaticHelpItem + its ControllerButtons icon
-            // subtree have composed (they place over the transin's first ticks).
-            if (s_bHelpDefaultsPending && liTicksThisUpdate > 0)
-            {
-                static int s_iHelpAttempts = 0;
-                AptCIH* lpMenuClip2 = AptFindClipByName(lpRoot, "SelectionMenu_mc", 0);
-                if (lpMenuClip2 != nullptr && AptApplyTitleHelpItemDefaults(lpMenuClip2))
-                {
-                    s_bHelpDefaultsPending = false;
-                }
-                else if ((++s_iHelpAttempts % 300) == 0)   // heartbeat ~every 10s at 30 ticks/s
-                {
-                    // KEEP RETRYING (2026-07-05): the StaticHelpItem + its Controller-
-                    // Buttons icon subtree only compose once the SELECTION MENU opens
-                    // (they place over its transin ticks) -- which can be minutes after
-                    // boot, so the old boot-anchored give-up cap was wrong (the glyph
-                    // only appeared when the menu was opened within ~10s of composing).
-                    // The cap dated from when the icon subtree could NEVER compose (the
-                    // GUIAPT64 record-misalignment data defect, since repaired -- see
-                    // references/GUIAPT64_FRAMETABLE_BUG.md). Heartbeat, don't give up.
-                    CgsDev::Log::WriteToLog(
-                        "[AptRT] helpitem: defaults still pending (icon subtree not composed yet) -- retrying.\n");
-                }
-            }
+            // (The title help-item defaults retry -- a FLOW-slot-only follow-on -- moved to
+            //  AptRuntimeUpdate, gated on the FLOW slot's tick count for this update.)
 
             // DYNAMIC-TEXT REFRESH: run the generalised-process pass with ProcessTextInst
             // installed, so every dynamic-text node (type tag 2) re-resolves its bound text +
@@ -1926,7 +2038,7 @@ namespace BrnGui
                          lpN = lpN->GetDisplayListNext())
                     {
                         ++liNodes;
-                        if (s_iTickFrame < 2 && liNodes <= 6)
+                        if (lrSlot.miTickFrame < 2 && liNodes <= 6)
                         {
                             AptCharacterInst* lpCI = lpN->GetCharacterInst();
                             char lacn[160];
@@ -1958,7 +2070,7 @@ namespace BrnGui
                              lpN = lpN->GetDisplayListNext())
                         {
                             ++liChildNodes;
-                            if (s_iTickFrame < 2 && liChildNodes <= 8)
+                            if (lrSlot.miTickFrame < 2 && liChildNodes <= 8)
                             {
                                 AptCharacterInst* lpCI = lpN->GetCharacterInst();
                                 AptRenderItem* lpRI = lpCI ? lpCI->GetRenderItem() : nullptr;
@@ -2001,24 +2113,92 @@ namespace BrnGui
                 }
             }
 
-            if (s_iTickFrame < 3 || s_iTickFrame == 100)
+            if (lrSlot.miTickFrame < 3 || lrSlot.miTickFrame == 100)
             {
                 char lacd[192];
                 std::snprintf(lacd, sizeof(lacd),
-                    "[AptRT] tick: frame=%d displayList nodes=%d childNodes=%d (tick result=%d)\n",
-                    s_iTickFrame, liNodes, liChildNodes, liTickResult);
+                    "[AptRT] %s: tick: frame=%d displayList nodes=%d childNodes=%d (tick result=%d)\n",
+                    lrSlot.mpcTag, lrSlot.miTickFrame, liNodes, liChildNodes, liTickResult);
                 CgsDev::Log::WriteToLog(lacd);
             }
-            ++s_iTickFrame;
+            ++lrSlot.miTickFrame;
         }
         else if (lbProbeFrame)
         {
-            CgsDev::Log::WriteToLog("[AptRT] frame: no faithful root CIH -- tick skipped (geometry "
-                                    "fallback render only) (FLAG).\n");
+            char lacf[128];
+            std::snprintf(lacf, sizeof(lacf),
+                "[AptRT] %s: frame: no faithful root CIH -- tick skipped (FLAG).\n", lrSlot.mpcTag);
+            CgsDev::Log::WriteToLog(lacf);
         }
 
-        // The RENDER moved to AptRuntimeRender (the proven immediate-mode Im2d path, driven by the
-        // renderer hook with BrnRendererModule's mIm2dRenderer).
+        return liTicksThisUpdate;
+    }
+
+    // -------------------------------------------------------------------------
+    // AptRuntimeUpdate -- per-frame TICK only. Flushes the communicator ONCE, then runs
+    // the paced tick PER SLOT: the framework movie (level 0) first, then the flow movie
+    // (level 1). s_bMovieStopped parks the FLOW slot only -- the framework movie keeps
+    // ticking (the console keeps the persistent level-0 apt composed across flow-state
+    // changes). The RENDER moved to AptRuntimeRender (the proven immediate-mode Im2d
+    // path). Called from GuiModule::Update (runs before the render hook).
+    // -------------------------------------------------------------------------
+    void AptRuntimeUpdate()
+    {
+        if (!s_bRuntimeReady)
+            return;
+
+        ++s_iFrameCounter;
+        const bool lbProbeFrame = (s_iFrameCounter % 30) == 1;   // ~every 30 frames
+
+        // FAITHFUL per-frame order (CgsGui::AptAux::Update @0x82853B20, XB1
+        // sub_1400C7090): flush the communicator's stored key/values to the movie AS
+        // FIRST (UpdateComponents -> UpdateAllComponents -> "UpdateAll", perfmon
+        // "AptAux - Upd Comps"), THEN tick the movies (AptUpdateTarget, "Upd Tgt").
+        // With no components registered yet the flush is a no-op, exactly the console
+        // before a movie's ONLOAD registrations arrive. ONE flush per frame (the flush
+        // is per-TARGET, not per-movie) -- both slot ticks run after it.
+        if (CgsGui::AptAuxPointer::mpAptAuxInst != nullptr)
+            CgsGui::AptAuxPointer::mpAptAuxInst->UpdateComponents();
+
+        // Nothing loaded yet -> nothing to tick this frame.
+        if (!s_FrameworkSlot.mbLoaded && !s_FlowSlot.mbLoaded)
+            return;
+
+        // ---- PER-SLOT paced tick: framework (level 0) first, then flow (level 1) ----
+        if (s_FrameworkSlot.mbLoaded)
+            AptTickMovieSlot(s_FrameworkSlot, lbProbeFrame);
+
+        s32 liFlowTicks = 0;
+        if (s_FlowSlot.mbLoaded && !s_bMovieStopped)   // the stop parks the FLOW slot only
+            liFlowTicks = AptTickMovieSlot(s_FlowSlot, lbProbeFrame);
+
+        // The pending title help-item defaults (armed by the SelectionMenu transin):
+        // retried per update until the StaticHelpItem + its ControllerButtons icon
+        // subtree have composed (they place over the transin's first ticks). FLOW slot
+        // only -- the title menu lives in the flow movie.
+        if (s_bHelpDefaultsPending && liFlowTicks > 0 && s_FlowSlot.mpRootCIH != nullptr)
+        {
+            static int s_iHelpAttempts = 0;
+            AptCIH* lpFlowRoot = static_cast<AptCIH*>(s_FlowSlot.mpRootCIH);
+            AptCIH* lpMenuClip2 = AptFindClipByName(lpFlowRoot, "SelectionMenu_mc", 0);
+            if (lpMenuClip2 != nullptr && AptApplyTitleHelpItemDefaults(lpMenuClip2))
+            {
+                s_bHelpDefaultsPending = false;
+            }
+            else if ((++s_iHelpAttempts % 300) == 0)   // heartbeat ~every 10s at 30 ticks/s
+            {
+                // KEEP RETRYING (2026-07-05): the StaticHelpItem + its Controller-
+                // Buttons icon subtree only compose once the SELECTION MENU opens
+                // (they place over its transin ticks) -- which can be minutes after
+                // boot, so the old boot-anchored give-up cap was wrong (the glyph
+                // only appeared when the menu was opened within ~10s of composing).
+                // The cap dated from when the icon subtree could NEVER compose (the
+                // GUIAPT64 record-misalignment data defect, since repaired -- see
+                // references/GUIAPT64_FRAMETABLE_BUG.md). Heartbeat, don't give up.
+                CgsDev::Log::WriteToLog(
+                    "[AptRT] helpitem: defaults still pending (icon subtree not composed yet) -- retrying.\n");
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -2045,8 +2225,16 @@ namespace BrnGui
     void AptRuntimeRender(CgsGraphics::Im2d* lpIm2d)
     {
         (void)lpIm2d;   // the walk draws through the Apt render handler's own command buffer
-        if (!s_bRuntimeReady || !s_bMovieLoaded || !s_bAuxReady || !s_bRenderBufferReady ||
-            s_bMovieStopped)
+        if (!s_bRuntimeReady || !s_bAuxReady || !s_bRenderBufferReady)
+            return;
+
+        // PER-SLOT render gating: the FRAMEWORK movie (level 0) always draws once live;
+        // the FLOW movie (level 1) is parked by s_bMovieStopped (the flow left BF_LEGAL).
+        const bool lbFrameworkUp =
+            s_FrameworkSlot.mbInstantiated && s_FrameworkSlot.mpRootCIH != nullptr;
+        const bool lbFlowUp =
+            s_FlowSlot.mbInstantiated && s_FlowSlot.mpRootCIH != nullptr && !s_bMovieStopped;
+        if (!lbFrameworkUp && !lbFlowUp)
             return;
 
         const bool lbFirst = !s_bFlushProbed;
@@ -2057,7 +2245,16 @@ namespace BrnGui
             s_AptRenderBuffer.mCommandBuffer;
 
         lrBuffer.BeginRendering();
-        AptRender(/*nLayerMask*/ 0);   // 0 == all display layers
+        // PER-LEVEL render-tree walks: AptRender's top-level layer mask keys on the root
+        // item's stamped depth (1 << level -- AptDecoupleTreeTraversal's bTopLevel gate),
+        // so each call walks exactly ONE slot's tree. The FRAMEWORK slot walks first
+        // (level 0 composes BENEATH the flow movie), then the FLOW slot -- skipped while
+        // parked, which is how s_bMovieStopped hides the title without touching the
+        // framework movie's persistent level-0 composition.
+        if (lbFrameworkUp)
+            AptRender(1 << s_FrameworkSlot.miLevel);
+        if (lbFlowUp)
+            AptRender(1 << s_FlowSlot.miLevel);
         lrBuffer.EndRendering();
         lrBuffer.Swap();               // freeze the write buffer for dispatch
         // Reset the NEW write buffer's stream positions for the next frame (the faithful
@@ -2079,7 +2276,9 @@ namespace BrnGui
 
     bool AptRuntimeIsMovieLive()
     {
-        return s_bFaithfulInstantiated && s_pFaithfulRootCIH != nullptr;
+        // FLOW-slot semantics: BootLegal drives this query off its channel-41 movie
+        // (the framework movie's liveness is internal to the runtime).
+        return s_FlowSlot.mbInstantiated && s_FlowSlot.mpRootCIH != nullptr;
     }
 
     // -------------------------------------------------------------------------
@@ -2096,7 +2295,8 @@ namespace BrnGui
         if (s_bMovieStopped)
             return;
         s_bMovieStopped = true;
-        CgsDev::Log::WriteToLog("[AptRT] StopMovie: BF_LEGAL left -- tick+render parked (unload deferred).\n");
+        CgsDev::Log::WriteToLog("[AptRT] StopMovie: BF_LEGAL left -- FLOW slot tick+render parked "
+                                "(framework movie keeps ticking; unload deferred).\n");
     }
 
     // True once the movie has COMPOSED: the root clip's first paced tick has run its
@@ -2106,9 +2306,11 @@ namespace BrnGui
     // reports initialised only once its clip is placed.
     bool AptRuntimeIsMovieComposed()
     {
+        // FLOW-slot semantics (BootLegal's compose gate): the framework movie's own
+        // composition is NOT part of this handshake.
         if (!AptRuntimeIsMovieLive())
             return false;
-        AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_pFaithfulRootCIH);
+        AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_FlowSlot.mpRootCIH);
         AptCharacterInst* lpCI = lpRoot->GetCharacterInst();
         if (lpCI == nullptr || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
             return false;
@@ -2379,7 +2581,7 @@ namespace BrnGui
             }
         }
 
-        AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_pFaithfulRootCIH);
+        AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_FlowSlot.mpRootCIH);
         AptCharacterInst* lpRootCI = lpRoot->GetCharacterInst();
         if (lpRootCI == nullptr)
             return false;
@@ -2389,7 +2591,13 @@ namespace BrnGui
         if (lpState == nullptr)
             return false;
 
+        // Search the FLOW movie's display tree FIRST (the title clips live there), then
+        // fall back to the FRAMEWORK movie's (a component clip exported by MAIN).
         AptCIH* lpClip = AptFindClipByName(lpRoot, lpcTarget, 0);
+        if (lpClip == nullptr &&
+            s_FrameworkSlot.mbInstantiated && s_FrameworkSlot.mpRootCIH != nullptr)
+            lpClip = AptFindClipByName(
+                static_cast<AptCIH*>(s_FrameworkSlot.mpRootCIH), lpcTarget, 0);
         if (lpClip != nullptr)
         {
             const bool lbApplied = AptViewStateGotoLabel(lpClip, lpacViewState, 0);
@@ -2452,12 +2660,17 @@ namespace BrnGui
             return false;
 
         char lac[224];
-        AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_pFaithfulRootCIH);
+        AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_FlowSlot.mpRootCIH);
 
         if (_stricmp(lpacKey, "apt_updatestate") == 0)
             return true;   // the AS Update trigger; the labeltxt/state posts already applied
 
+        // FLOW movie first (the title clips live there), then the FRAMEWORK movie's tree.
         AptCIH* lpClip = AptFindClipByName(lpRoot, lpacInstName, 0);
+        if (lpClip == nullptr &&
+            s_FrameworkSlot.mbInstantiated && s_FrameworkSlot.mpRootCIH != nullptr)
+            lpClip = AptFindClipByName(
+                static_cast<AptCIH*>(s_FrameworkSlot.mpRootCIH), lpacInstName, 0);
         if (lpClip == nullptr)
         {
             std::snprintf(lac, sizeof(lac),
