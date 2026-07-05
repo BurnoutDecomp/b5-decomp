@@ -24,6 +24,17 @@ namespace BrnGui
             E_SUBSTATE_LEAVING   = 3,
         };
 
+        // DWARF BrnShowtimeInstantResults.h:82 -- the active event sub-state (which
+        // panel of the instant-results flow is showing). GetNextSubstate() scans forward
+        // from meActiveSubState for the next raised flag.
+        enum EResultsActiveSubStates
+        {
+            E_ACTIVE_SUBSTATE_EVENT_NONE    = -1,
+            E_ACTIVE_SUBSTATE_EVENT_RESULTS =  0,
+            E_ACTIVE_SUBSTATE_EVENT_DONE    =  1,
+            E_ACTIVE_SUBSTATE_EVENT_COUNT   =  2,
+        };
+
         // Per-sub-state timer durations (X360 .rdata; defined in the .cpp, cpp:33/34/35).
         static const f32 KF_TOTALLING_DURATION;   // 10.0f
         static const f32 KF_SUMMARY_DURATION;     //  3.0f
@@ -38,6 +49,11 @@ namespace BrnGui
         //   SetMultiplierText @ 0x824B3C38 -- push the score-multiplier presentation to its fields.
         void ResetStateTimer();
         void SetMultiplierText();
+
+        // @ 0x824B3B30 (DWARF h:318) -- return the next active event-sub-state to advance
+        // to: scans mabSubStateFlags forward from just past meActiveSubState for the first
+        // raised flag; if none, returns E_ACTIVE_SUBSTATE_EVENT_DONE.
+        EResultsActiveSubStates GetNextSubstate();
 
         // @ 0x82500930 - hands the Showtime instant-results state's static resource list
         // to the loader (X360: *r4 = &maResourcesToLoad; *r5 = muNumResourcesToLoad).
@@ -62,9 +78,10 @@ namespace BrnGui
         BrnGui::TextField mMultiplierText;              // +0x78C (h:162)
         BrnGui::TextField mMultSymbolText;              // +0x8B4 (h:163, stride 0x128 == sizeof(TextField))
         u8               mPad9DC[0xA78 - 0x9DC];        // +0x9DC .. +0xA78 (opaque)
-        bool             mabSubStateFlags[2];           // +0xA78 (h:172)
-        u8               mPadA7A[0xA80 - 0xA7A];        // +0xA7A .. +0xA80 (align)
-        EResultsSubStateStates meSubStateState;         // +0xA80 (h:174)
+        EResultsActiveSubStates meActiveSubState;       // +0xA78 (h:211, int enum)
+        bool             mabSubStateFlags[2];           // +0xA7C (h:214)
+        u8               mPadA7E[0xA80 - 0xA7E];        // +0xA7E .. +0xA80 (align)
+        EResultsSubStateStates meSubStateState;         // +0xA80 (h:217)
         u8               mPadA84[0xB48 - 0xA84];        // +0xA84 .. +0xB48 (opaque)
         f32              mfTimeRemaining;               // +0xB48 (h:180)
         u8               mPadB4C[0xB68 - 0xB4C];        // +0xB4C .. +0xB68 (opaque)

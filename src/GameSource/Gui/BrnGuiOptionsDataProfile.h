@@ -75,8 +75,11 @@ namespace BrnNetwork
     };
 
     // BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions -- the camera-feed user
-    // setting (stored as a 4-byte word at +0x7364).
-    struct BrnNetworkModuleIO
+    // setting (stored as a 4-byte word at +0x7364). BrnNetworkModuleIO is a NAMESPACE
+    // in its canonical home (BrnNetworkModuleIO.h) and in BrnGuiCache.h; declaring it as
+    // a namespace here (not a struct) lets this header coexist with those in one TU
+    // (e.g. CrashNavOptions, which needs both). Enum access is identical either way.
+    namespace BrnNetworkModuleIO
     {
         enum ECameraUserOptions
         {
@@ -84,7 +87,7 @@ namespace BrnNetwork
             CAMERA_USER_ON           = 1,
             CAMERA_USER_FRIENDS_ONLY = 2,
         };
-    };
+    }
 }
 
 namespace BrnGameState
@@ -121,6 +124,8 @@ struct OptionsDataProfile
     {
         struct OnlineSaveRouteEvent
         {
+            static const s32 KI_MAX_LANDMARKS_IN_MODE = 16;   // Construct bound: cmpwi r30,0x10
+
             void   Construct(s32 liEventID, u32 luJunctionID, CgsID* lpaLandmarks, s32 liNumLandmarks);
             s32    GetEventID() const;
             u32    GetJunctionID() const;
@@ -222,11 +227,26 @@ struct OptionsDataProfile
     bool IsThereUnreadNews() const;
 
 private:
-    // The leading region (miVersionNumber, the created/received OnlineSaveRoute
-    // tables, the num counters, and the DirectorProfileData) is large and not
-    // modelled member-by-member by this TU. Reserve it so the named tail lands at
-    // its asm-pinned offset (0x7310). See _AssertLayout.
-    u8 maOpaqueOnlineGameOptionsAndDirectorRegion[0x7310];
+    // Leading version/director prefix. The X360 lays miVersionNumber at +0x0; the
+    // first OnlineSaveRoute table starts at +0x8 (asm: SetFromGameParams(this+8,..)),
+    // so exactly 8 bytes precede the created table. The DirectorProfileData (out of
+    // scope for this TU) is reached through a separate accessor; it is not modelled
+    // member-by-member here. Reserved so the created table lands at +0x8.
+    u8 maOpaqueVersionPrefix[0x8];                    // +0x0
+
+    // The created/received online-game-option route tables. The X360 stride between
+    // successive entries is 0x5C0 (asm: `mulli r11, index, 0x5C0`); AddReceived
+    // memmoves 9 entries (0x33C0 = 9*0x5C0) up one slot. Created base = +0x8,
+    // received base = +0x3988 (= +0x8 + 10*0x5C0). See _AssertLayout.
+    OnlineSaveRoute maCreatedOnlineGameOptions[KI_MAX_CREATED_ONLINE_GAME_OPTIONS];   // +0x0008
+    OnlineSaveRoute maReceivedOnlineGameOptions[KI_MAX_RECEIVED_ONLINE_GAME_OPTIONS]; // +0x3988
+
+    s32 miNumCreatedOnlineGameOptions;                // +0x7308
+    s32 miNumReceivedOnlineGameOptions;               // +0x730C
+
+    // Remaining leading region between the num counters and the trax tail (0x7310).
+    // Empty in the current layout (counters end exactly at 0x7310), kept as a named
+    // zero-length anchor documents the boundary. (No bytes: +0x7310 follows +0x730C+4.)
 
     // Tail region -- every offset confirmed from the X360 asm.
     EATraxArrayType mTraxAvailableInFreeBurn;        // +0x7310 (16 bytes)

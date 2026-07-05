@@ -58,8 +58,12 @@ namespace BrnGui
 
         const char* GetText(s32 liCell) const;
         s32  GetInteger(s32 liCell) const;
+        s32  GetColourValue(s32 liCell) const;   // reads maiCellInt[liCell]   (@0x824E4678)
+        bool GetUseColour(s32 liCell) const;     // reads mabCellFlags[liCell] (@0x824E4728)
         void SetText(s32 liCell, const char* lpacText);
         void SetInteger(s32 liCell, s32 liValue);
+        void SetColourValue(s32 liCell, s32 liValue);   // writes maiCellInt[liCell]   (@0x824835A0)
+        void SetUseColour(s32 liCell, u8 lbUseColour);  // writes mabCellFlags[liCell] (@0x82483658)
 
     private:
         CellData maCellData[KI_MAX_CELLS_PER_ROW];   // +0x000 (each 64 bytes)

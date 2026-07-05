@@ -217,4 +217,84 @@ namespace BrnGui
             mabCellFlags[liCell]     = 0;
         }
     }
+
+    // @0x824E4518 -- return a pointer to the cell's text buffer (X360 liCell*64 ==
+    // &maCellData[liCell]).
+    const char* TableRowDataSet::GetText(s32 liCell) const
+    {
+        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+                   "TableRowDataSet::GetText() invalid index specified"); // X360 line 439
+
+        return maCellData[liCell].macText;
+    }
+
+    // @0x824E45C8 -- read the cell value as an int (through the CellData union's leading word).
+    s32 TableRowDataSet::GetInteger(s32 liCell) const
+    {
+        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+                   "TableRowDataSet::GetInteger() invalid index specified"); // X360 line 453
+
+        return maCellData[liCell].miInt;
+    }
+
+    // @0x824E4678 -- read the per-cell secondary int word maiCellInt[liCell] (byte 0x400 +
+    // liCell*4). NB: the X360 asserts with the GetInteger() message text (shared string).
+    s32 TableRowDataSet::GetColourValue(s32 liCell) const
+    {
+        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+                   "TableRowDataSet::GetInteger() invalid index specified"); // X360 line 467
+
+        return maiCellInt[liCell];
+    }
+
+    // @0x824E4728 -- read the per-cell flag byte mabCellFlags[liCell] as the "use colour"
+    // flag. NB: the X360 asserts with the GetInteger() message text (shared string).
+    bool TableRowDataSet::GetUseColour(s32 liCell) const
+    {
+        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+                   "TableRowDataSet::GetInteger() invalid index specified"); // X360 line 481
+
+        return mabCellFlags[liCell] != 0;
+    }
+
+    // @0x82483340 -- format text into the cell's value buffer (&maCellData[liCell]).
+    void TableRowDataSet::SetText(s32 liCell, const char* lpacText)
+    {
+        CGS_ASSERT(static_cast<u32>(liCell) < 16,
+                   "TableRowDataSet::SetText() invalid index specified");   // X360 line 496
+        CGS_ASSERT(lpacText != 0,
+                   "TableRowDataSet::SetValue() invalid text specified");   // X360 line 497
+        CGS_ASSERT(std::strlen(lpacText) < KU_MAX_NAME_LENGTH,
+                   "TableRowDataSet::SetText() Text too long");             // X360 line 498
+
+        CgsCore::SPrintf(maCellData[liCell].macText, KU_MAX_NAME_LENGTH, "%s", lpacText);
+    }
+
+    // @0x824834F0 -- store the cell value as an int (through the CellData union's leading word).
+    void TableRowDataSet::SetInteger(s32 liCell, s32 liValue)
+    {
+        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+                   "TableRowDataSet::SetInteger() invalid index specified"); // X360 line 513
+
+        maCellData[liCell].miInt = liValue;
+    }
+
+    // @0x824835A0 -- store a colour value into the per-cell secondary int word maiCellInt[liCell]
+    // (byte 0x400 + liCell*4).
+    void TableRowDataSet::SetColourValue(s32 liCell, s32 liValue)
+    {
+        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+                   "TableRowDataSet::SetColourValue() invalid index specified"); // X360 line 528
+
+        maiCellInt[liCell] = liValue;
+    }
+
+    // @0x82483658 -- store the "use colour" flag byte mabCellFlags[liCell] (0x440 + liCell).
+    void TableRowDataSet::SetUseColour(s32 liCell, u8 lbUseColour)
+    {
+        CGS_ASSERT(static_cast<u32>(liCell) < 16,
+                   "TableRowDataSet::SetUseColour() invalid index specified");  // X360 line 542
+
+        mabCellFlags[liCell] = lbUseColour;   // X360 stb value, 0x440(this + index)
+    }
 }

@@ -13,8 +13,9 @@
 // condition matches the X360 assert message text.
 
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
-#include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf / SnPrintf
 #include "GameShared/GameClasses/Core/CgsID.h"           // CgsID / CgsIDCompress
+#include "GameShared/GameClasses/Fonts/CgsUnicode.h"     // CgsUnicode::SafelyTerminate (GuiHudMessage::GetParam)
 
 #include <cstring>  // std::memcpy -- the DoWorstCase compaction is a 0x30-byte block move.
 
@@ -273,6 +274,37 @@ s32 GuiOverlayRequest::GetButton2Param(ParamOut* lpOut) const
     CgsCore::SPrintf( lpOut->macText, sizeof(lpOut->macText), "%s", mButton2.macText );
     lpOut->muId = mButton2.muId;
     return 0;
+}
+
+// @0x82674D60 -- copy display-string liStringIndex's parameter liParamIndex into *lpOut:
+// format the value string (bounded), UTF-8-safely terminate it, and copy the param type.
+// Returns the SafelyTerminate result (X360 r3).
+CgsUnicode::CgsUtf8* GuiHudMessage::GetParam(CgsGui::HudMessageParameter* lpOut,
+                                             s32 liStringIndex, s32 liParamIndex) const
+{
+    CGS_ASSERT( liStringIndex >= 0 && liStringIndex <= KI_NUMBER_OF_STRINGS - 1,
+                "Invalid string index." );
+    CGS_ASSERT( liParamIndex < maiNoOfParams[liStringIndex], "Index isn't used in Message." );
+    CGS_ASSERT( liParamIndex >= 0, "Index isn't valid." );
+
+    const CgsGui::HudMessageParameter& lParam = maaParams[liStringIndex][liParamIndex];
+
+    CgsCore::SnPrintf( lpOut->macParameter,
+                       CgsGui::HudMessageParameter::KI_MAX_PARAM_STRING_LENGTH,
+                       "%s", lParam.macParameter );
+    CgsUnicode::CgsUtf8* lpResult =
+        CgsUnicode::SafelyTerminate( reinterpret_cast<CgsUnicode::CgsUtf8*>( lpOut->macParameter ),
+                                     CgsGui::HudMessageParameter::KI_MAX_PARAM_STRING_LENGTH );
+    lpOut->meParamType = lParam.meParamType;
+    return lpResult;
+}
+
+// @0x82674F20 -- parameter count for display string liStringIndex (maiNoOfParams[i]).
+s32 GuiHudMessage::GetParamCount(s32 liStringIndex) const
+{
+    CGS_ASSERT( liStringIndex >= 0 && liStringIndex <= KI_NUMBER_OF_STRINGS - 1,
+                "Invalid string index." );
+    return maiNoOfParams[liStringIndex];
 }
 
 } // namespace BrnGui

@@ -39,6 +39,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"     // CgsGui::GuiEvent<N> (event payload base)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResource.h" // PopupStyle/PopupIcons/GuiPopupParameter
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessage.h"     // HudMessageParamTypes/HudMessageParameter
+#include "GameShared/GameClasses/Fonts/CgsUnicode.h"    // CgsUnicode::CgsUtf8 (GuiHudMessage::GetParam return)
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BurnoutSkillzData (by value)
 #include "SharedClasses/StreetData/BrnStreetData.h"     // BrnStreetData::RoadIndex (road-rules events)
 #include "SharedClasses/StreetData/BrnChallengeData.h"  // BrnStreetData::ScoreType / E_SCORE_TYPE_COUNT (road-rules events)
@@ -69,6 +70,18 @@ enum EPlayerTeam : s8
     E_PLAYER_TEAM_START = 0,
     E_PLAYER_TEAM_COUNT = 9,
 };
+
+// DWARF BrnGuiEventTypeDefs.h:618 (:123) -- one overhead road-sign score marker
+// (world position + owning entity index). Carried in Array<OverheadSignScore,32>
+// instantiations (stride 0x20, proven by the Array `slwi ...,5` element shift).
+struct OverheadSignScore
+{
+    Vector3 mWorldSpacePosition;   // :125  @0x00 (alignas(16) Vector3, 16B)
+    u16     muEntityIndex;         // :126  @0x10
+};                                 // sizeof == 0x20 (X360 stride)
+
+static_assert(sizeof(OverheadSignScore) == 0x20,
+              "OverheadSignScore stride 0x20 (Array<OverheadSignScore,32> `slwi ...,5`)");
 
 // Declaration mirror of the DWARF parent. Only the nested SatNavIconInfo is modelled.
 struct GuiEventUpdateSatNav
@@ -473,8 +486,13 @@ struct GuiHudMessage : public CgsGui::GuiEvent<152>
     void AddParam(CgsGui::HudMessageParamTypes leType, s32 liStringIndex, s32 liValue);
     void AddParam(CgsGui::HudMessageParamTypes leType, s32 liStringIndex, f32 lfValue);
 
-    // DWARF h:5654 (GetParam) -- its own ledger function.
-    void GetParam(CgsGui::HudMessageParameter* lpOut, s32 liStringIndex, s32 liParamIndex) const;
+    // DWARF h:5654 (GetParam) @0x82674D60 -- copy display-string liStringIndex's parameter
+    // liParamIndex into *lpOut. Returns the CgsUnicode::SafelyTerminate result (X360 r3).
+    CgsUnicode::CgsUtf8* GetParam(CgsGui::HudMessageParameter* lpOut,
+                                  s32 liStringIndex, s32 liParamIndex) const;
+
+    // @0x82674F20 -- parameter count for display string liStringIndex (maiNoOfParams[i]).
+    s32 GetParamCount(s32 liStringIndex) const;
 
 private:
     s32                        maiNoOfParams[KI_NUMBER_OF_STRINGS];                          // DWARF h:5663

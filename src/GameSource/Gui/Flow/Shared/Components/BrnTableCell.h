@@ -48,6 +48,11 @@ namespace BrnGui
             E_TABLECELLCOMPONENTTYPES_COUNT     = 3,
         };
 
+        // @0x824F2140 -- install the class vtable at this+0 (off_82071868); the members are
+        // primed by Construct / Clear. The polymorphic Select/Update overrides make the
+        // compiler emit the vptr store implicitly, so the body is empty (DWARF h:42).
+        TableCell();
+
         // @0x824F87C0-region (BrnTableCell.cpp:46) -- build the cell: name it, wire its
         // state interface, take ownership of the child component and record its kind. The
         // trailing u64 is the cell's apt id seed (the X360 passes 0xFFFFFFFF from TableRow).
@@ -66,6 +71,9 @@ namespace BrnGui
 
         const char* GetText() const;
         void SetText(const char* lpacText);
+        // @0x82482EE8 -- set the wrapped text field's colour by numeric value (TextField
+        // cells only); inlines TextField::SetColour.
+        void SetColourValue(u32 luColour);
         bool SetLocalisedText(const char* lpacText,
                               CgsLanguage::LanguageManager::ParameterFormatType leFormat,
                               s32 liNumParams, const char* const* lppacParams,

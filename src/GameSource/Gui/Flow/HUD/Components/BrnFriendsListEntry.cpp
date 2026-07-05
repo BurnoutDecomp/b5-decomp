@@ -1,6 +1,8 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsListEntry.h"
 
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                              // CgsCore::SnPrintf
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                    // CGS_ASSERT (SetEntryStatus)
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"                            // CgsSystem::HardwareInit::IsHardDiskAvailable
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                                    // BrnFlapt::FileRef
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.h"    // BrnGui::AttachToTextFieldComponent
 
@@ -29,6 +31,61 @@ const char FriendsListEntry::macPlayerNameTextFieldName[15] = "playerName_txt";
 const char FriendsListEntry::macStatusIconName[17]          = "inviteStatus_cpt";
 const char FriendsListEntry::KAC_INDEX_TEXT_FIELD_NAME[10]  = "index_txt";
 const char FriendsListEntry::macBarStateAnimatorName[18]    = "entryAnimator_cpt";
+
+// The status-icon frame labels (XEX .data @0x82F24F48, immediately after
+// KAC_BAR_STATE_NAMES[20]) and the per-entry-state -> icon-state mapping
+// (KAE_FRIEND_LIST_ICON_STATES, dword_8204C1F0). Only KAC_STATUS_ICON_NAMES[0]
+// ("invisible") is X360-attested (the off_82F24F48[0] rodata consumed by the
+// no-HDD branch in SetEntryStatus); the remaining five labels and the whole
+// 29-entry mapping table are reconstructed from the EFriendListIconState /
+// EFriendListEntryState enum semantics -- the SetEntryStatus asm proves the
+// indexing and the {RECEIVED, SENT_JOINABLE, JOINABLE} branch constants, not the
+// individual cell values.
+const char* const FriendsListEntry::KAC_STATUS_ICON_NAMES[FriendsListEntry::E_FRIENDLISTICONSTATE_COUNT] =
+{
+    "invisible",        // E_FRIENDLISTICONSTATE_INVISIBLE     (X360-attested)
+    "received",         // E_FRIENDLISTICONSTATE_RECEIVED      (reconstructed)
+    "sent",             // E_FRIENDLISTICONSTATE_SENT          (reconstructed)
+    "sentJoinable",     // E_FRIENDLISTICONSTATE_SENT_JOINABLE (reconstructed)
+    "joinable",         // E_FRIENDLISTICONSTATE_JOINABLE      (reconstructed)
+    "fbcComplete",      // E_FRIENDLISTICONSTATE_FBC_COMPLETE  (reconstructed)
+};
+
+#define ICON(e) FriendsListEntry::E_FRIENDLISTICONSTATE_##e
+const FriendsListEntry::EFriendListIconState
+FriendsListEntry::KAE_FRIEND_LIST_ICON_STATES[FriendsListEntry::E_FRIENDLISTENTRYSTATE_COUNT] =
+{
+    ICON(INVISIBLE),        // INVISIBLE
+    ICON(INVISIBLE),        // YOUOFFLINE
+    ICON(INVISIBLE),        // NOFRIENDS
+    ICON(INVISIBLE),        // DISABLED
+    ICON(INVISIBLE),        // FRIENDINLOBBY
+    ICON(INVISIBLE),        // FRIENDOFFLINE
+    ICON(JOINABLE),         // FRIENDJOINABLE
+    ICON(INVISIBLE),        // FRIENDNOTJOINABLE
+    ICON(SENT_JOINABLE),    // FRIENDSENTJOINABLE
+    ICON(SENT),             // FRIENDSENTNOTJOINABLE
+    ICON(RECEIVED),         // FRIENDRECEIVED
+    ICON(INVISIBLE),        // FRIENDNOTINVITABLENOTJOINABLE
+    ICON(JOINABLE),         // FRIENDNOTINVITABLEJOINABLE
+    ICON(INVISIBLE),        // NOMULTIPLAYERPRIVILEGE
+    ICON(INVISIBLE),        // INVITEINPROGRESS
+    ICON(INVISIBLE),        // REVOKEINPROGRESS
+    ICON(INVISIBLE),        // DECLINEINPROGRESS
+    ICON(INVISIBLE),        // SHORTCUT_BASIC
+    ICON(INVISIBLE),        // FBC_BASIC
+    ICON(INVISIBLE),        // FBC_NOT_DONE
+    ICON(FBC_COMPLETE),     // FBC_DONE
+    ICON(INVISIBLE),        // FBC_EASY_TODO
+    ICON(FBC_COMPLETE),     // FBC_EASY_DONE
+    ICON(INVISIBLE),        // FBC_MEDIUM_TODO
+    ICON(FBC_COMPLETE),     // FBC_MEDIUM_DONE
+    ICON(INVISIBLE),        // FBC_HARD_TODO
+    ICON(FBC_COMPLETE),     // FBC_HARD_DONE
+    ICON(INVISIBLE),        // FBC_VERY_HARD_TODO
+    ICON(FBC_COMPLETE),     // FBC_VERY_HARD_DONE
+};
+#undef ICON
 
 #define BAR(e) FriendsListEntry::E_FRIENDLISTBARSTATE_##e
 const FriendsListEntry::EFriendListBarState
@@ -155,6 +212,33 @@ void FriendsListEntry::Invalidate()
     mPlayerNameTextField.SetText("", false);
     SetEntryStatus(E_FRIENDLISTENTRYSTATE_INVISIBLE);
     mBarStateAnimator.Run(KAC_BAR_STATE_NAMES[KAE_FRIEND_LIST_UNSELECTED_BAR_STATES[meEntryStatus]]);
+}
+
+// @ 0x82410850 -- record the new entry status, drive the invite-status icon to
+// the matching frame label (forced to "invisible" when the hard disk is absent
+// and the mapped icon is a network-presence one: JOINABLE / SENT_JOINABLE /
+// RECEIVED), and raise the dirty gate so the next Update re-derives the bar.
+void FriendsListEntry::SetEntryStatus(EFriendListEntryState leNewStatus)
+{
+    CGS_ASSERT(leNewStatus < E_FRIENDLISTENTRYSTATE_COUNT, "leNewStatus < E_FRIENDLISTENTRYSTATE_COUNT");
+    CGS_ASSERT(leNewStatus >= E_FRIENDLISTENTRYSTATE_FIRST, "leNewStatus >= E_FRIENDLISTENTRYSTATE_FIRST");
+
+    meEntryStatus = leNewStatus;
+
+    const EFriendListIconState leIconState = KAE_FRIEND_LIST_ICON_STATES[meEntryStatus];
+    if (!CgsSystem::HardwareInit::IsHardDiskAvailable()
+        && (leIconState == E_FRIENDLISTICONSTATE_JOINABLE
+            || leIconState == E_FRIENDLISTICONSTATE_SENT_JOINABLE
+            || leIconState == E_FRIENDLISTICONSTATE_RECEIVED))
+    {
+        mStatusIcon.SetState(KAC_STATUS_ICON_NAMES[E_FRIENDLISTICONSTATE_INVISIBLE]);
+    }
+    else
+    {
+        mStatusIcon.SetState(KAC_STATUS_ICON_NAMES[leIconState]);
+    }
+
+    SetDirty();
 }
 
 }

@@ -29,6 +29,14 @@ namespace BrnGui
         void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                        const char* lpacParentName);
 
+        // 0x824E8440 -- set a single solid colour: clear the gradient flag, un-hide, and
+        // format colour1 to the decimal value, then push to the apt movie.
+        void SetColour(u32 luColour);
+
+        // 0x824E84A0 -- set a two-stop gradient: set the gradient flag, un-hide, format
+        // both colour buffers, then push to the apt movie.
+        void SetGradient(u32 luColour1, u32 luColour2);
+
     private:
         // 0x824E5440 -- push the colour/gradient/hidden state to the apt movie.
         void OutputAptData();

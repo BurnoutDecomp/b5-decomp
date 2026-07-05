@@ -97,6 +97,12 @@ namespace BrnGui
         // notification; exposed by name so that caller stays off the raw offset.
         const char* GetText() const { return macText; }
 
+        // ADDITIVE GROW (ReplayHudMessageComponent::HideMessage @0x8241C078): blank the
+        // field's displayed text. The X360 caller writes macText[0] = 0 inline (the
+        // stb 0,0xA4(field) store) before re-outputting; exposed by name so that caller
+        // stays off the raw offset. Faithful 1-store accessor (macText is private).
+        void ClearText() { macText[0] = 0; }
+
     private:
         u32  muTextColour;          // +0x8C  (set by SetColour)
         s32  miScroll;              // +0x90

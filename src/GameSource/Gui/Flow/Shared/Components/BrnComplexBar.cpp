@@ -79,4 +79,25 @@ void ComplexBar::HandleTransitionComplete(s32 liBarSize)
         UpdateFlash(true);
 }
 
+// @ 0x82410AF8 -- cpp/h:139 (called by PlayerStatsBar::SetCar). Request the bar
+// run to segment liIndex: if a transition is already in progress, just queue the
+// index for later; otherwise adopt it as the target and, when it differs from the
+// current index, kick a flash transition.
+void ComplexBar::RunTo(s32 liIndex)
+{
+    CGS_ASSERT(liIndex >= 0, "target out of range : ");   // :141 (streamed on the X360; folded static)
+
+    if (mbTransitionInProgress)
+    {
+        miQueuedIndex = liIndex;
+    }
+    else
+    {
+        const s32 liCurrentIndex = miCurrentIndex;
+        miTargetIndex = liIndex;
+        if (liIndex != liCurrentIndex)
+            UpdateFlash(true);
+    }
+}
+
 }
