@@ -401,8 +401,13 @@ int AptValueInitialize()
     // off_8324E37C -- the _global extension object (+AddRef).
     if (gpAptGlobalExtensionObject == nullptr)
     {
-        gpAptGlobalExtensionObject = new AptGlobalExtensionObject();
+        AptGlobalExtensionObject* const pExt = new AptGlobalExtensionObject();
+        gpAptGlobalExtensionObject = pExt;
         gpAptGlobalExtensionObject->AddRef();
+        // off_8324E37C aliases: AptGlobal::objectMemberLookup consults the same
+        // console address through the AptValueWithHash*-typed gpAptNativeGlobals
+        // (AptGlobal.cpp) -- keep the two views pointing at the ONE object.
+        gpAptNativeGlobals = pExt;
     }
 
     // off_8324D82C -- the shared empty AptString (Create(&unk_820046A7) == Create("")).
@@ -453,6 +458,23 @@ int AptValueInitialize()
                         &AptActionInterpreter::cbCallMethod_ASSetPropFlags));
                 if (pCtor)
                     pGlobals->Set(*lakNames[li], pCtor);
+            }
+
+            // The console resolves Object.registerClass through AptObject::
+            // objectMemberLookup (every AptObject-family value knows the name);
+            // our AptNativeFunction hierarchy sits beside AptObject, so install
+            // the native as an ORDINARY member of the Object builtin's hash --
+            // observable-identical for AS lookups. FLAG: revisit if the value
+            // class tree is re-based onto AptObject.
+            {
+                AptValue* const pObjectClass = pGlobals->Lookup(gAptObjectClassName);
+                AptNativeHash* const pObjHash =
+                    pObjectClass ? pObjectClass->GetNativeHashVirtual() : nullptr;
+                if (pObjHash && gpObjRegistrationFunc)
+                {
+                    EAStringC lRegKey("registerClass");
+                    pObjHash->Set(lRegKey, gpObjRegistrationFunc);
+                }
             }
 
             for (int li = 0; li < 3; ++li)

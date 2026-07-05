@@ -215,9 +215,11 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
     if (nArgCount >= 1)
     {
         // The operand-stack top (the frame number or label).
-        AptValueVector* pStack =
-            reinterpret_cast<AptValueVector*>(&gAptActionInterpreter.mnStackTop);
-        AptValue* const pArg = pStack->mppItems[pStack->mnTop - 1];
+        // x64 FIX (2026-07-05, the AptValueVector member-pun class): read the
+        // operand-stack top through the NAMED interpreter members (the punned
+        // vector view reads its item array from a garbage offset on x64).
+        AptValue* const pArg =
+            gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1];
 
         AptCharacterInst* const pInst = pNode->GetCharacterInst();   // +0x20
         if ((pInst->mTypeFlags & 0xFC000000u) != 0x3C000000u)        // tag 15 -> no-op

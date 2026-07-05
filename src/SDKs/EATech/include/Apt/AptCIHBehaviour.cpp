@@ -1903,8 +1903,10 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
                         gAptActionInterpreter.callFunction(
                             static_cast<AptValue*>(this), pChild, 0, nullptr, nullptr);
                         // Pop the call result off the operand stack.
-                        reinterpret_cast<AptValueVector*>(
-                            &gAptActionInterpreter.mnStackTop)->pop();
+                        // x64 FIX (2026-07-05, the AptValueVector member-pun class):
+                        // named-member pop instead of the console triple pun.
+                        if (gAptActionInterpreter.mnStackTop > 0)
+                            gAptActionInterpreter.stackPop();
                     }
                 }
             }

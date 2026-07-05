@@ -1326,6 +1326,14 @@ char* AptAnimationTarget::GetAStickRight(int nPlayer)
 //   word +0x1C) are interpreter-private value subtypes not yet modelled by name;
 //   reproduced verbatim through the recovered console offsets, each flagged below.
 // ---------------------------------------------------------------------------
+#if defined(_MSC_VER)
+extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH);
+#pragma comment(linker, "/alternatename:AptRunActionsStaleSlotProbe=AptRunActionsStaleSlotProbeDefault")
+extern "C" void AptRunActionsStaleSlotProbeDefault(const void*, const void*) {}
+#else
+extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH);
+#endif
+
 int AptAnimationTarget::RunActions()
 {
     CleanRemList();
@@ -1350,7 +1358,16 @@ int AptAnimationTarget::RunActions()
             AptCIH*   lpNode = reinterpret_cast<AptCIH*>(lpCIH);
 
             // The CIH handle must be "defined" (mnValueData bit 27 set).
-            if (((lpNode->mnValueData >> 27) & 1u) != 0u)
+            // (Guarded: the console never queues a null/dead CIH; an x64 bring-up
+            // path can leave a STALE ring cell (observed 0xbaadf000ffffffff) -- the
+            // standard plausibility screen skips + logs it rather than AV.
+            // FLAG hardening; the ring-lifetime reconstruction is the follow-on.)
+            const uintptr_t luCIH = reinterpret_cast<uintptr_t>(lpNode);
+            const bool lbCIHPlausible =
+                luCIH >= 0x10000u && (luCIH >> 47) == 0u;
+            if (!lbCIHPlausible && lpNode != nullptr)
+                AptRunActionsStaleSlotProbe(lpSlot, lpNode);
+            if (lbCIHPlausible && ((lpNode->mnValueData >> 27) & 1u) != 0u)
             {
                 // Named members (2026-07-01; were the console raw offsets on x64
                 // objects): the bound character instance (CIH word[8]) must not be
@@ -1471,6 +1488,8 @@ int AptAnimationTarget::RunActions()
             // Push the call context onto the interpreter's CIH/target stack (the X360
             // stamps it then AddRefs it via vtbl[0]). v13 = *(v3+8) == function.mpContext.
             AptValue* lpContext = lpSlot->function.mpContext;                         // *(v3+8)
+            if (lpContext != nullptr)   // FLAG hardening: null context -> skip (see above)
+            {
             gAptActionInterpreter.mpCIHStack[gAptActionInterpreter.mnCIHStackTop] =
                 reinterpret_cast<AptCIH*>(lpContext);
             ++gAptActionInterpreter.mnCIHStackTop;
@@ -1491,16 +1510,28 @@ int AptAnimationTarget::RunActions()
             gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
 
             // Pop the pushed context off the CIH/target stack, then the operand stack.
-            reinterpret_cast<AptValueVector*>(
-                &gAptActionInterpreter.mnCIHStackTop)->pop();   // AptValue_::pop(&dword_8324E784)
-            reinterpret_cast<AptValueVector*>(
-                &gAptActionInterpreter.mnStackTop)->pop();      // AptValue_::Pop(&dword_8324E760)
+            // x64 FIX (2026-07-05, same class as the CallMethod cleanup pops): the
+            // console pun (member triple reinterpreted as AptValueVector + pop()) reads
+            // its array pointer from a garbage offset on x64, releasing bogus values
+            // and corrupting the interpreter stacks -- which then garbaged the queue
+            // walk (the RunActions+0xa4 wild-node AV). Named-member pops instead.
+            if (gAptActionInterpreter.mnCIHStackTop > 0)
+            {
+                AptCIH* const lpTopCIH =
+                    gAptActionInterpreter.mpCIHStack[gAptActionInterpreter.mnCIHStackTop - 1];
+                if (lpTopCIH)
+                    lpTopCIH->Release();
+                --gAptActionInterpreter.mnCIHStackTop;
+            }
+            if (gAptActionInterpreter.mnStackTop > 0)
+                gAptActionInterpreter.stackPop();               // AptValue_::Pop (Release + drop)
+            }   // (null-context guard)
         }
 
-        // After a run leaves stray operands, drop the top one.
+        // After a run leaves stray operands, drop the top one (x64: named-member pop).
         if (gAptActionInterpreter.mnStackTop > 0)
         {
-            reinterpret_cast<AptValueVector*>(&gAptActionInterpreter.mnStackTop)->pop();
+            gAptActionInterpreter.stackPop();
         }
 
         // Re-test whether the cursor is still within [front, back) (the queue may have
