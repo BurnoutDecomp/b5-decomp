@@ -364,15 +364,82 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
             return this;
     }
 
-    // ---- pass 1: run the frame's action streams (tag 8, id >= 0) ----------
-    // FLAG (deferred AS-VM EXECUTION): pass 1 would execute tag-8 action-stream bytecode through the
-    // AS interpreter (runStream). resolve64 relocates the tag-8 stream POINTER (@cmd+0x10 per the XB1
-    // resolve), so the record read is safe, but runStream is STUBBED and executing an action stream is
-    // precisely the deferred VM boundary -- so pass 1's EXECUTION is deferred (an un-run action queue
-    // is a valid state, and the movie just does not advance via script). The title's nested frames
-    // carry no tag-8 commands (verified vs the bundle), so this is a no-op for the title regardless.
-    // The faithful runStream body (X360 @0x82B0B7A0 pass 1 / its XB1 twin) lands together with the
-    // AptActionInterpreter VM; it is intentionally not called here.
+    // ---- pass 1: run the frame's init-action streams (tag 8, id >= 0) -----
+    // UN-DEFERRED 2026-07-05 (runStream has been the live dispatch loop since 07-01;
+    // the old "runStream is STUBBED" note was stale). Faithful to X360 @0x82B0B7A0
+    // pass 1: for each tag-8 command whose character id is non-negative --
+    //   * save the static register frame (off_8324E3D0/dword_8324E3D4 ==
+    //     AptScriptFunctionBase::PushStaticData);
+    //   * resolve the run instance: a CIHNone scope resolves to the level-0 root,
+    //     else walk the display-list parents to the enclosing anim(9)/custom-
+    //     control(15) node (the same walk ExecuteScriptFunction performs);
+    //   * execute the stream TOP-LEVEL through runStream(stream, pParent, -1, inst);
+    //   * NEGATE the id (the console's run-once latch: `v11[1] = -v11[1]`);
+    //   * restore the register frame (CleanupAfterExecution == PopStaticData).
+    // The title timelines carry no tag-8 commands; MAIN.bundle's frame 0 carries 88
+    // of them (one class-definition init stream per exported framework sprite) --
+    // this pass IS the AS-framework bootstrap. Record shape (native-8, XB1-verified
+    // resolve): {tag@0, id@+0x08 (i64), stream ptr @+0x10 (relocated by resolve64)}.
+    // FLAG (bring-up gate, 2026-07-05): the pass EXECUTES faithfully (MAIN's class-
+    // definition streams run: DefineFunction2 -> SetMember chains reach deep into the
+    // VM), but a script-function LIFETIME defect kills the boot mid-bootstrap
+    // (cdb: SetMember -> stackPop -> Release-to-zero -> ForceDelete ->
+    // AptScriptFunctionBase::DestroyGCPointers AV -- the stored function should have
+    // survived the pop; SetMember/DefineFunction2 refcount semantics vs the X360 are
+    // the open follow-on). Gated OFF so the title boot stays green; flip to continue.
+    static const bool KB_RUN_INITACTIONS = false;
+    if (KB_RUN_INITACTIONS)
+    {
+        const int32_t nCount1 = pFrame->mnCommandCount;
+        for (int32_t i = 0; i < nCount1; ++i)
+        {
+            unsigned char* const pCmd = static_cast<unsigned char*>(pFrame->mpCommands[i]);
+            if (CmdI32(pCmd, 0x00) != 8)
+                continue;
+            int64_t* const pnId = reinterpret_cast<int64_t*>(pCmd + 0x08);
+            if (*pnId < 0)
+                continue;   // already run (the negated-id latch)
+
+            const unsigned char* const pStream =
+                *reinterpret_cast<const unsigned char* const*>(pCmd + 0x10);
+            // Same relocated-pointer plausibility screen as the command array above
+            // (a malformed/unrelocated slot must not be executed).
+            const uintptr_t luStream = reinterpret_cast<uintptr_t>(pStream);
+            if (!(luStream > 0x0000000200000000ull && (luStream >> 47) == 0u
+                  && (luStream & 0xFFFFFFFFull) != 0u))
+                continue;
+
+            AptValue** const lppSavedRegs = AptScriptFunctionBase::PushStaticData();
+
+            // Resolve the run instance (console: CIHNone -> level 0; else parent walk).
+            AptCharacterInst* pRunInst = nullptr;
+            if (pParent != nullptr)
+            {
+                AptCIH* pNode = pParent;
+                if (pNode->getVtblIndex() == AptVFT_CIHNone)
+                    pNode = AptGetAnimationAtLevel(0);
+                else
+                {
+                    while (pNode != nullptr)
+                    {
+                        AptCharacterInst* const pCI = pNode->GetCharacterInst();
+                        if (pCI == nullptr)
+                            break;
+                        const uint32_t nT = pCI->GetTypeTag();
+                        if (nT == 9u || nT == 0xFu)
+                            break;
+                        pNode = pNode->GetDisplayListParent();
+                    }
+                }
+                pRunInst = pNode ? pNode->GetCharacterInst() : nullptr;
+            }
+
+            gAptActionInterpreter.runStream(pStream, pParent, -1, pRunInst);
+            *pnId = -*pnId;   // run-once latch (console `v11[1] = -v11[1]`)
+
+            AptScriptFunctionBase::PopStaticData(lppSavedRegs);
+        }
+    }
 
     // ---- pass 2: apply place / remove / back-to-script (native-8) ---------
     // The movie's character-animation def-base is reached through the parent CIH's named
