@@ -154,6 +154,21 @@ extern "C" void AptRunStreamImbalanceProbe(int nSavedTop, int nExitTop,
     CgsDev::Log::WriteToLog(lac);
 }
 
+// The _parseStream double-resolve probe (declared in AptActionInterpreterParseStream.cpp):
+// logs a Push/dictionary constant slot revisited after a prior resolve pass. First 16 hits.
+extern "C" void AptParseStreamDoubleResolveProbe(const void* pSlot, long long nValue)
+{
+    static int s_iDrHits = 0;
+    if (s_iDrHits >= 16)
+        return;
+    ++s_iDrHits;
+    char lac[160];
+    std::snprintf(lac, sizeof(lac),
+                  "[AptRT] parseStream DOUBLE-RESOLVE: slot=%p holds %#llx (kept as-is)\n",
+                  pSlot, static_cast<unsigned long long>(nValue));
+    CgsDev::Log::WriteToLog(lac);
+}
+
 // The per-tick step-probe sink (declared in AptCIH.cpp). Throttled to the first ~120 calls (a handful
 // of ticks) so it pinpoints the early-deref AV without flooding the per-frame log. Strong def overrides
 // the weak default in AptCIH.cpp.
@@ -1159,7 +1174,7 @@ namespace BrnGui
     // fault is a record shape among its 89 chars the relocation walk has not met
     // before). Gate the framework load OFF until that walk is fixed so the title
     // flow keeps booting; flip to true to continue the stage-B bring-up.
-    static const bool KB_LOAD_FRAMEWORK_MOVIE = false;
+    static const bool KB_LOAD_FRAMEWORK_MOVIE = true;
 
     static void EnsureFrameworkMovie()
     {
