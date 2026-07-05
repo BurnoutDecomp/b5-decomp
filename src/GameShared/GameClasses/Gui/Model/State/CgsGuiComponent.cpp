@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"   // StateInterface, GuiAccessPointers
-#include "GameShared/GameClasses/Gui/CgsGuiShared.h"                       // CgsGui::AptAux
+#include "GameShared/GameClasses/Gui/CgsGuiShared.h"                       // GuiAccessPointers (mpAptAux)
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"        // CgsGui::AptAux (UpdateFlashComponent)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                    // CgsCore::SPrintf
 #include "GameShared/GameClasses/Containers/CgsHash.h"                     // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -9,8 +10,49 @@
 
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX.
 
+// FLAG (title-bring-up fallback, retired with the AS-framework milestone): until the
+// level-0 framework movie's ActionScript registers the components + drives their clips
+// (gAptCommunicator.UpdateAll), the observable clip effect of each (key, value) pair is
+// reproduced directly through the Apt runtime bridge. The faithful chain below runs in
+// FULL in parallel (FillAptViewMessage -> UpdateFlashComponent -> the communicator
+// key/value store) -- with no components registered yet it stores nothing, exactly the
+// console's behaviour before a movie's ONLOAD registrations arrive.
+namespace BrnGui
+{
+    bool AptRuntimeSetComponentKeyValue(const char* lpacInstName, const char* lpacKey,
+                                        const char* lpacValue);
+}
+
 namespace CgsGui
 {
+    // @ 0x8285BB48 GuiComponent::Construct (not exported; the body is the composition of
+    // its two homed callees, and the XB1 x64 arbiter shows the inlined result: the name
+    // lands in macName[+8 after the vptr] and the interface behind it). Name + hash via
+    // SetName @0x828488E8, then store the state interface via SetStateInterface
+    // @0x82847030 (which asserts it non-null -- every X360 construct site passes one).
+    void GuiComponent::Construct(const char* lpacName, StateInterface* lpStateInterface,
+                                 const char* lpacParentName)
+    {
+        SetName(lpacName, lpacParentName);
+        SetStateInterface(lpStateInterface);
+    }
+
+    // @ 0x8285BB48-adjacent (not exported). Post this component's (key, value) apt output:
+    // the XB1 x64 arbiter inlines the whole chain to
+    //   AptCommunicator::UpdateComponent(this->macName, key, value)
+    // (e.g. XB1 sub_1401AF470: UpdateComponent(this, this+8, "SignName", value)), i.e.
+    // AddOutputAptViewState(key, value, immediate) == FillAptViewMessage(GetName(), key,
+    // value, immediate). The lpacAptName/lpacViewState parameter names below are the
+    // DWARF's (they carry the KEY / VALUE of the component protocol).
+    void GuiComponent::AddOutputAptViewState(const char* lpacAptName, const char* lpacViewState,
+                                             bool lbImmediate)
+    {
+        FillAptViewMessage(GetName(), lpacAptName, lpacViewState, lbImmediate);
+
+        // FLAG (see the header note above): drive the clip effect directly until the
+        // AS framework movie takes over, then delete this call.
+        BrnGui::AptRuntimeSetComponentKeyValue(GetName(), lpacAptName, lpacViewState);
+    }
     // @ 0x82847030 - assert the incoming state interface is non-null, then store it
     // in mpStateInterface (the X360 writes it at +0x88). Path/line from the baked
     // assert string (GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h:169).

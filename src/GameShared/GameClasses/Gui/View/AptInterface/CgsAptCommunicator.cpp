@@ -11,6 +11,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"         // AptFloat::Create
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"       // AptBoolean::Create
 #include "SDKs/EATech/include/Apt/AptValueFactory.h"           // AptValueFactory::CreateArray
+#include "SDKs/EATech/include/Apt/AptNativeFunction.h"         // AptNativeFunction (Initialize's psMethod_* wrappers)
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h" // AptIsDeferredVectorFull
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"       // gAptActionInterpreter (getVariable/callFunction)
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"      // Push/PopStaticData (the call register frame)
@@ -43,19 +44,19 @@ extern AptActionInterpreter gAptActionInterpreter;   // AptGlobals.cpp (&dword_8
 //   * Per-frame debug logging gated on `CgsDev::Message::gxMessageFilterFlags & 1`
 //     streams through CgsDev::Log::gpDebugPrint (`*gpDebugPrint << ...`).
 //
-// FLAG - un-homed callees named (their bodies live in separate TUs; not invented):
-//   AptExtObject::GetParam(int)                       - native-method arg fetch (apt VM).
-//   AptCommunicator::FindAptComponent(AptValue*)      - the movieclip-ref overload
-//        (X360 sub_8284A0B8, DWARF cpp:808); distinct from the char* overload homed here.
-//   AptCommunicator::AddNewAptComponent(AptValue*, const char*) - DWARF cpp:721.
-//   AptCallFunctionOpti(const char*,int,const char*,int,AptArray*) - the apt call helper.
-//   gbLogGuiAudioTriggers (X360 byte_82FB5098)        - GUI-audio debug log gate.
-// These are declared (not defined) below so the bodies compile and call them by name.
+// Callee homes (2026-07-05: the whole TU is now self-contained bar one debug gate):
+//   AptExtObject::GetParam(int)                  - HOMED (AptExtObject.cpp @0x82ADC270).
+//   FindAptComponent(AptValue*)                  - HOMED below (X360 sub_8284A0B8).
+//   AddNewAptComponent(AptValue*, const char*)   - HOMED below (X360 0x82849B88).
+//   Initialize / CalculateReservedVariableHashes - HOMED below (0x8285F0D8 / 0x8284A1F8).
+//   AptCallFunctionOpti(...)                     - HOMED below (anonymous namespace).
+// FLAG - gbLogGuiAudioTriggers (X360 byte_82FB5098) - GUI-audio debug log gate; the
+// owning debug TU is un-homed, so it is DEFINED here (default false == the X360
+// cold-boot .data value) rather than extern'd, keeping the TU link-clean.
 // ============================================================================
 
-// ---- FLAG: un-homed externs/callees referenced by this TU (declared, not defined) ----
 class AptArray;
-extern bool gbLogGuiAudioTriggers;   // X360 byte_82FB5098
+bool gbLogGuiAudioTriggers = false;   // X360 byte_82FB5098 (cold-boot default 0)
 
 namespace
 {
@@ -133,10 +134,19 @@ namespace CgsGui
     AptValue*        AptCommunicator::mpAptInternalCommunicator = 0;
     bool             AptCommunicator::mbCircleButtonAsSelect    = false;
     CgsModule::VariableEventQueue<18432, 16> AptCommunicator::mOutAptTriggerEvents;
-    // FLAG: name strings + hashes are installed by CalculateReservedVariableHashes
-    // (un-homed cpp:929); zero-initialised here.
+    // FLAG: the literal reserved-variable names live in un-exported X360 rodata (see
+    // the header note); null entries here -> zero hashes -> "not reserved" for every
+    // key, which is the correct off-menu-path behaviour until the names are recovered.
     const char* AptCommunicator::mpacReservedVariableNames[AptCommunicator::KI_NUM_RESERVED_VARIABLES] = { 0 };
     u32         AptCommunicator::mauReservedVariablesHashes[AptCommunicator::KI_NUM_RESERVED_VARIABLES] = { 0 };
+
+    // @ dword_8305A6E0..8305A6F4 - the cached native-function wrappers Initialize fills.
+    AptValue* AptCommunicator::psMethod_SendAptEvent            = 0;
+    AptValue* AptCommunicator::psMethod_SendAptSoundEvent       = 0;
+    AptValue* AptCommunicator::psMethod_SetCommunicationObject  = 0;
+    AptValue* AptCommunicator::psMethod_GetComponentData        = 0;
+    AptValue* AptCommunicator::psMethod_GetPlatformString       = 0;
+    AptValue* AptCommunicator::psMethod_GetCircleButtonAsSelect = 0;
 
     // The packed AptValue type/flag word bit the apt value tests use (mbIsDefined,
     // bit 4 from the MSB of mValueBitfield == `>> 27 & 1`).
@@ -148,6 +158,160 @@ namespace CgsGui
     const char* AptCommunicator::GetName()
     {
         return "CAptCommunicator";
+    }
+
+    // ========================================================================
+    // Initialize  @ 0x8285F0D8  (AptExtObject::Initialize override)
+    //
+    // AptRegisterExtension @0x82AF7330 virtual-calls this right after GetName():
+    // wrap each of the 6 sMethod_* natives in an AptNativeFunction (cached in the
+    // psMethod_* globals, dword_8305A6E0..F4) and SetFunction it onto this
+    // extension's member hash under its ActionScript name; then Construct the
+    // out-trigger queue (unk_8305A960) and precompute the reserved-name hashes.
+    // ========================================================================
+    void AptCommunicator::Initialize()
+    {
+        psMethod_SendAptEvent = AptExtObject::CreateNewAptFunction(
+            reinterpret_cast<AptExtFunctionPtr>(&sMethod_SendAptEvent));
+        SetFunction("SendAptEvent", psMethod_SendAptEvent);
+
+        psMethod_SendAptSoundEvent = AptExtObject::CreateNewAptFunction(
+            reinterpret_cast<AptExtFunctionPtr>(&sMethod_SendAptSoundEvent));
+        SetFunction("SendAptSoundEvent", psMethod_SendAptSoundEvent);
+
+        psMethod_SetCommunicationObject = AptExtObject::CreateNewAptFunction(
+            reinterpret_cast<AptExtFunctionPtr>(&sMethod_SetCommunicationObject));
+        SetFunction("SetCommunicationObject", psMethod_SetCommunicationObject);
+
+        psMethod_GetComponentData = AptExtObject::CreateNewAptFunction(
+            reinterpret_cast<AptExtFunctionPtr>(&sMethod_GetComponentData));
+        SetFunction("GetComponentData", psMethod_GetComponentData);
+
+        psMethod_GetPlatformString = AptExtObject::CreateNewAptFunction(
+            reinterpret_cast<AptExtFunctionPtr>(&sMethod_GetPlatformString));
+        SetFunction("GetPlatformString", psMethod_GetPlatformString);
+
+        psMethod_GetCircleButtonAsSelect = AptExtObject::CreateNewAptFunction(
+            reinterpret_cast<AptExtFunctionPtr>(&sMethod_GetCircleButtonAsSelect));
+        SetFunction("GetCircleButtonAsSelect", psMethod_GetCircleButtonAsSelect);
+
+        mOutAptTriggerEvents.Construct();
+        CalculateReservedVariableHashes();
+    }
+
+    // ========================================================================
+    // CalculateReservedVariableHashes  @ 0x8284A1F8
+    //
+    // Precompute the reserved-variable name hashes. FLAG: the literal name table is
+    // un-exported X360 rodata (see the header); with null entries the hashes stay 0
+    // and UpdateComponentReserved treats every key as "not reserved".
+    // ========================================================================
+    void AptCommunicator::CalculateReservedVariableHashes()
+    {
+        for (s32 li = 0; li < KI_NUM_RESERVED_VARIABLES; ++li)
+        {
+            const char* lpacName = mpacReservedVariableNames[li];
+            if (lpacName == 0)
+            {
+                mauReservedVariablesHashes[li] = 0;
+                continue;
+            }
+            const char* lpcEnd = lpacName;
+            while (*lpcEnd++)
+            {
+            }
+            mauReservedVariablesHashes[li] = CgsContainers::CgsHash::CalculateHash(
+                const_cast<char*>(lpacName), static_cast<int>(lpcEnd - lpacName - 1));
+        }
+    }
+
+    // ========================================================================
+    // FindAptComponent(AptValue*)  @ sub_8284A0B8  (DWARF cpp:808)
+    //
+    // The movieclip-ref overload: linear-scan the registered components' bound
+    // references (mapComponentReference) for POINTER equality; -1 on miss.
+    // ========================================================================
+    s32 AptCommunicator::FindAptComponent(AptValue* lpMovieClip)
+    {
+        CGS_ASSERT(lpMovieClip != 0,
+                   "Invalid component reference sent to AptCommunicator::FindAptComponent");
+
+        if (muNumActivecomponents != 0)
+        {
+            for (s32 liComponent = 0; liComponent < static_cast<s32>(muNumActivecomponents); ++liComponent)
+            {
+                CGS_ASSERT(liComponent >= 0, "Invalid Component Index");
+                CGS_ASSERT(liComponent < AptComponentList::KU_MAX_COMPONENTS, "Invalid Component Index");
+
+                if (mAptComponentList.GetAptValue(liComponent) == lpMovieClip)
+                {
+                    return liComponent;
+                }
+            }
+        }
+        return -1;
+    }
+
+    // ========================================================================
+    // AddNewAptComponent  @ 0x82849B88  (DWARF cpp:721)
+    //
+    // Register a new component (an ONLOAD event's movieclip + name): seed the next
+    // slot's hashed name (from the component name) + hashed reference name (from the
+    // movieclip's toString rendering), clear its used-data count, bind the reference,
+    // duplicate-check the hashed-name table (debug log on a match), store the name
+    // text, and bump the active count.
+    // ========================================================================
+    void AptCommunicator::AddNewAptComponent(AptValue* lpMovieClip, const char* lpacName)
+    {
+        CGS_ASSERT(muNumActivecomponents < static_cast<u32>(AptComponentList::KU_MAX_COMPONENTS),
+                   "Trying to add too many components in AptCommunicator::AddNewAptComponent");
+        CGS_ASSERT(lpMovieClip != 0, "Invalid component reference in AptCommunicator::AddNewAptComponent");
+        CGS_ASSERT(lpacName != 0, "Invalid name sent to AptCommunicator::AddNewAptComponent");
+
+        // Render the movieclip reference to text (its AS path) for the reference hash.
+        EAStringC lRefText;
+        lpMovieClip->toString(&lRefText);
+
+        const char* lpcNameEnd = lpacName;
+        while (*lpcNameEnd++)
+        {
+        }
+        const u32 luNameHash = CgsContainers::CgsHash::CalculateHash(
+            const_cast<char*>(lpacName), static_cast<int>(lpcNameEnd - lpacName - 1));
+
+        const char* lpacRef = lRefText.GetBuffer();
+        const char* lpcRefEnd = lpacRef;
+        while (*lpcRefEnd++)
+        {
+        }
+        const u32 luRefHash = CgsContainers::CgsHash::CalculateHash(
+            const_cast<char*>(lpacRef), static_cast<int>(lpcRefEnd - lpacRef - 1));
+
+        const s32 liNew = static_cast<s32>(muNumActivecomponents);
+        mAptComponentList.SetHashedName(liNew, luNameHash);
+        mAptComponentList.SetHashedReferenceName(liNew, luRefHash);
+        mAptComponentList.SetUsedData(liNew, 0);
+        mAptComponentList.SetAptValue(liNew, lpMovieClip);
+
+        // Duplicate-name debug check against the already-registered components.
+        for (s32 liComponent = 0; liComponent < liNew; ++liComponent)
+        {
+            CGS_ASSERT(liComponent >= 0, "Invalid Component Index");
+            CGS_ASSERT(liComponent < AptComponentList::KU_MAX_COMPONENTS, "Invalid Component Index");
+
+            if (mAptComponentList.GetHashedName(liComponent) == mAptComponentList.GetHashedName(liNew)
+                && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "Component "
+                    << (lpacName ? lpacName : "<NULLSTRING>")
+                    << " is being added but already exists in our List\n";
+            }
+        }
+
+        mAptComponentList.SetName(liNew, lpacName);
+        ++muNumActivecomponents;
+        // lRefText's internal refcount drops here (X360 DecreaseInternalRefCount).
     }
 
     // ========================================================================

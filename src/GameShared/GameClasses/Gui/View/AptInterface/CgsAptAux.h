@@ -46,6 +46,8 @@ namespace CgsGuiModuleIO { struct ImRendererSet; }   // the active 2D/3D rendere
 
 namespace CgsGui
 {
+    class AptCommunicator;   // the AS communicator extension (CgsAptCommunicator.h)
+
     class AptAux
     {
     public:
@@ -87,8 +89,32 @@ namespace CgsGui
         // bring-up AptAux::Prepare runs after AptAux::Construct: build the AptUpdate /
         // AptCreateTarget param blocks, then in order AptAllocatorInitialize ->
         // AptUpdateInitialize -> AptRenderInitialize -> AptCreateTargetInstance ->
-        // AptChangeTargetInstance -> [the ext-object phase]. Body in CgsAptAux.cpp.
+        // AptChangeTargetInstance -> the ext-object phase (build + register the
+        // AptCommunicator extension into mpAptCommunicator). Body in CgsAptAux.cpp.
         void InitializeApt();
+
+        // X360 0x82850570 (CgsGui::AptAux::UpdateComponents) -- the per-frame component
+        // flush AptAux::Update @0x82853B20 runs FIRST each frame (perfmon "AptAux - Upd
+        // Comps"), BEFORE AptUpdateTarget ticks the movies (XB1 sub_1400C7090 preserves
+        // the same order): assert the communicator ext object exists, then
+        // AptCommunicator::UpdateAllComponents (the "UpdateAll" push to the movie AS).
+        void UpdateComponents();
+
+        // X360 0x82853C28 (CgsGui::AptAux::UpdateFlashComponent) -- mirror one component
+        // (key, value) pair into the communicator's key/value store. The X360 call site
+        // (GuiComponent::FillAptViewMessage @0x828583A8) passes the AptAux* explicitly as
+        // the first argument, so it is modelled static. The XB1 x64 arbiter INLINES this
+        // whole hop: every game-side caller collapses to AptCommunicator::UpdateComponent
+        // (component macName, key, value) -- e.g. sub_1401AF470's UpdateComponent(this,
+        // this+8, "SignName", value) -- pinning the semantic contract reproduced here.
+        // lbImmediate is the console's queued-vs-immediate hint; on the single-threaded
+        // host both orderings land before the same frame's UpdateComponents flush, which
+        // is the observable contract (FLAG: the X360 Res/NRes perfmon split -- resolve
+        // formatting of timer-style values -- lives in the un-exported @0x82853C28 body;
+        // the timer path is not on the boot flow).
+        static void UpdateFlashComponent(AptAux* lpAptAux, const char* lpacAptName,
+                                         const char* lpacViewState, const char* lpacParam,
+                                         bool lbImmediate);
 
         // ---- AptAux head (guest offsets recovered from AptAux::Construct @0x5C4B6C) -------
         // The two leading state words AptAux::Construct seeds (`*a1 = 0; *(a1+4) = 3`). Their
@@ -104,6 +130,13 @@ namespace CgsGui
         // x64 host offset differs because mAptDataHandler widens; the member is addressed by
         // name, so the guest offset is not load-bearing.) [guest +0x420]
         AptRenderHandler mRenderHandler;
+
+        // The AS communicator extension object InitializeApt builds + registers
+        // (AptExtObject(6) + the AptCommunicator vtable off_820E0A20 +
+        // AptRegisterExtension). The guest caches it at aptaux+109664 (0x1AC60), far
+        // behind the ~108KB render handler; addressed by name here. UpdateComponents
+        // asserts it, UpdateFlashComponent stores through it. [guest +0x1AC60]
+        AptCommunicator* mpAptCommunicator;
     };
 
     // The AptAux singleton handle the render callbacks resolve through. The guest holds a

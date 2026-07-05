@@ -118,6 +118,24 @@ namespace CgsGui
         mauHashedReferenceName[liComponent] = luHash;
     }
 
+    // Store the component's name text into its maacName row (AddNewAptComponent
+    // @0x82849B88 calls it after the duplicate check). Bounds-asserted like the
+    // sibling setters; NUL-guaranteed at the buffer edge.
+    void AptComponentList::SetName(s32 liComponent, const char* lpacName)
+    {
+        CGS_ASSERT(liComponent >= 0, "Invalid Component Index");
+        CGS_ASSERT(liComponent < KU_MAX_COMPONENTS, "Invalid Component Index");
+
+        char* lpacDest = maacName[liComponent];
+        s32 li = 0;
+        if (lpacName != 0)
+        {
+            for (; lpacName[li] != 0 && li < KI_COMPONENT_NAME_LENGTH - 1; ++li)
+                lpacDest[li] = lpacName[li];
+        }
+        lpacDest[li] = 0;
+    }
+
     // @ 0x8284E1F0 : copy the full per-component record from slot liFrom into slot
     // liTo, then zero slot liFrom. The X360 copies the 32-word key-pointer block,
     // then the component reference, hashed name, hashed reference name and used byte

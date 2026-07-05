@@ -51,16 +51,19 @@ AptValue* AptApt_ResolveSpecialName(int nObjectTypeId, AptValue* pScope,
 // stacks from (console &dword_8324E760).
 extern AptActionInterpreter gAptActionInterpreter;
 
-// FLAG (AptInit): the AS _global object and the global-extension object (their
-// native hashes back the global-scope variable lookup).
-extern AptValue* gpGlobalGlobalObject;
-extern AptValue* gpGlobalExtensionObject;
+// The AS _global object (off_8324E380) and the global-extension object (off_8324E37C)
+// whose native hashes back the global-scope variable lookup. These are the SAME console
+// globals AptValueInitialize builds (AptGlobal / AptGlobalExtensionObject singletons) --
+// verified against the X360 findChild @0x82B01298 asm (it reads exactly off_8324E37C +
+// off_8324E380). The old duplicate never-assigned gpGlobal* pair is retired.
+extern AptValue* gpAptGlobalFallback;          // off_8324E380 (_global)
+extern AptValue* gpAptGlobalExtensionObject;   // off_8324E37C (the _global extension object)
 
 // ---------------------------------------------------------------------------
 // FLAG (homed by the AS-globals/AptValueInitialize boot TU): the special-name target
 // singletons the resolver hands back directly. Each is a permanent runtime AptValue*
 // the AS VM exposes by name. Console addresses noted; declared extern here (the same
-// way the sibling Apt TUs declare gpUndefinedValue). gpGlobalGlobalObject (off_8324E380)
+// way the sibling Apt TUs declare gpUndefinedValue). gpAptGlobalFallback (off_8324E380)
 // already covers the _global arm above.
 extern AptValue* gpAptKeyObject;        // off_8324E2A8  (Key)
 extern AptValue* gpAptStringObject;     // off_8324D82C  (String)
@@ -102,11 +105,11 @@ AptValue* AptValue::findChild(const EAStringC* pName, AptValue* pTarget)
     }
 
     // The global-extension object, then the global object (skip self).
-    if (AptValue* pFound = LookupInObject(gpGlobalExtensionObject, *pName))
+    if (AptValue* pFound = LookupInObject(gpAptGlobalExtensionObject, *pName))
         return pFound;
-    if (this != gpGlobalGlobalObject)
+    if (this != gpAptGlobalFallback)
     {
-        if (AptValue* pFound = LookupInObject(gpGlobalGlobalObject, *pName))
+        if (AptValue* pFound = LookupInObject(gpAptGlobalFallback, *pName))
             return pFound;
     }
     return 0;
@@ -307,7 +310,7 @@ AptValue* AptApt_ResolveSpecialName(int nObjectTypeId, AptValue* pScope,
 
     // ----- 19 == _global ----------------------------------------------------
     case 19:
-        return gpGlobalGlobalObject;   // loc_82B014F0 (off_8324E380)
+        return gpAptGlobalFallback;   // loc_82B014F0 (off_8324E380)
 
     // ----- 4 == Key ---------------------------------------------------------
     case 4:

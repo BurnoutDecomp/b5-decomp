@@ -132,6 +132,19 @@ namespace CgsGui
         // The reserved-variable table length (the UpdateComponentReserved switch is 9-wide).
         static const s32 KI_NUM_RESERVED_VARIABLES = 9;
 
+        // The X360 builds the communicator inline in AptAux::InitializeApt @0x82848E50:
+        // AptExtObject::operator new(16); AptExtObject(6) (== the base ctor with the
+        // 6-native-member reserve); *p = off_820E0A20 (THIS class's vtable). The derived
+        // ctor is therefore exactly the base ctor + vtable install.
+        AptCommunicator() : AptExtObject(KI_NUM_FUNCS) {}
+
+        // X360 0x8285F0D8 (AptExtObject::Initialize override; AptRegisterExtension
+        // @0x82AF7330 virtual-calls it right after GetName). Wrap each of the 6
+        // sMethod_* natives in an AptNativeFunction (cached in the psMethod_* slots)
+        // and SetFunction it onto the member hash under its ActionScript name; then
+        // Construct the out queue and precompute the reserved-variable hashes.
+        virtual void Initialize();
+
         // ---- the apt native methods (static; the apt VM calls them with the bound
         // context + param count and they read their args via AptExtObject::GetParam).
         // DWARF gives the native-ABI signature (AptValue* pContext, int iNumParams).
@@ -177,14 +190,18 @@ namespace CgsGui
         // sMethod_* / instance Update* helpers both call it.
         static s32 FindAptComponent(const char* lpacName);
 
-        // FLAG: un-homed siblings (their own TUs) declared by name so this TU compiles:
-        //   FindAptComponent(AptValue*) -- X360 sub_8284A0B8 (DWARF cpp:808): the
-        //     movieclip-ref overload (resolve a component index from an apt object).
-        //   AddNewAptComponent          -- DWARF cpp:721: register a new component for
-        //     an ONLOAD event (sMethod_SendAptEvent calls it).
-        // Static for the same reason -- the static native methods invoke them.
+        // X360 sub_8284A0B8 (DWARF cpp:808): the movieclip-ref overload -- linear-scan
+        // the registered components' bound references for pointer equality; -1 on miss.
+        // Static: it only touches the file-static class data (the native methods call it).
         static s32  FindAptComponent(AptValue* lpMovieClip);
+        // X360 0x82849B88 (DWARF cpp:721): register a new component for an ONLOAD event
+        // (sMethod_SendAptEvent calls it): seed the next slot's hashes/name/reference,
+        // duplicate-check against the existing hashed names (debug log), bump the count.
         static void AddNewAptComponent(AptValue* lpMovieClip, const char* lpacName);
+
+        // X360 0x8284A1F8 (Initialize tail-calls it): precompute the reserved-variable
+        // name hashes into mauReservedVariablesHashes.
+        static void CalculateReservedVariableHashes();
 
         // ===== static data (file-static class members; fixed X360 globals) =====
 
@@ -211,12 +228,22 @@ namespace CgsGui
         static CgsModule::VariableEventQueue<18432, 16> mOutAptTriggerEvents;
 
         // @ mpacReservedVariableNames / @ dword_8305A6A0 - the reserved-variable name
-        // table and its precomputed hashes. FLAG: the name strings are installed by the
-        // sibling AptCommunicator::CalculateReservedVariableHashes (cpp:929, a separate
-        // un-homed TU), which also fills mauReservedVariablesHashes; only the table
-        // shape (9 entries) is recovered here, not the literal names.
+        // table and its precomputed hashes (filled by CalculateReservedVariableHashes).
+        // FLAG: the literal name strings live in un-exported X360 rodata (the table
+        // @0x8284A1F8 reads); until they are recovered the table entries are null and
+        // the hashes zero -- UpdateComponentReserved then correctly treats every key as
+        // "not reserved" (off the title-menu path).
         static const char* mpacReservedVariableNames[KI_NUM_RESERVED_VARIABLES];
         static u32         mauReservedVariablesHashes[KI_NUM_RESERVED_VARIABLES];
+
+        // @ dword_8305A6E0..8305A6F4 - the six cached AptNativeFunction wrappers
+        // Initialize creates for the sMethod_* natives (the DWARF psMethod_* slots).
+        static AptValue* psMethod_SendAptEvent;
+        static AptValue* psMethod_SendAptSoundEvent;
+        static AptValue* psMethod_SetCommunicationObject;
+        static AptValue* psMethod_GetComponentData;
+        static AptValue* psMethod_GetPlatformString;
+        static AptValue* psMethod_GetCircleButtonAsSelect;
     };
 }
 
