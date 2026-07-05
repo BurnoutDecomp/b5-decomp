@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle::GetResourceId
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // AttribSysIO::RegisterVaultRequest
 
 // CgsAttribSys::VaultSlot member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // A VaultSlot tracks one loaded (or free) vault: a live reference count, an optional
@@ -27,6 +28,28 @@ bool VaultSlot::ContainsStreamedVault() const
 bool VaultSlot::ContainsVaultResource(CgsResource::ResourceHandle lVaultResHandle) const
 {
     return miRefCount > 0 && mResourceId == lVaultResHandle.GetResourceId();
+}
+
+// @ 0x8280E870 -- register interest in the request's vault. Validates the request, then
+// either bumps the ref count (if this slot already holds that vault) or loads it. Returns
+// the resulting ref count. Called by VaultArray::RegisterVault.
+s32 VaultSlot::RegisterVault(const AttribSysIO::RegisterVaultRequest* lpRegisterRequest,
+                            Attrib::IGarbageCollector* lpGarbageCollector)
+{
+    CGS_ASSERT(lpRegisterRequest != nullptr, "lpRegisterRequest != NULL");
+    CGS_ASSERT(lpGarbageCollector != nullptr, "lpGarbageCollector != NULL");
+
+    CgsResource::ResourceHandle lVaultResHandle = lpRegisterRequest->mVaultResourceHandle;
+
+    CGS_ASSERT(!(IsOccupied() && !ContainsVaultResource(lVaultResHandle)),
+        "!( IsOccupied() && !ContainsVaultResource( lVaultResHandle ) )");
+
+    if (ContainsVaultResource(lVaultResHandle))
+        IncreaseRefCount();
+    else
+        DoLoad(lpRegisterRequest, lpGarbageCollector);
+
+    return miRefCount;
 }
 
 // @ 0x82802288 -- release one reference; the slot must currently be loaded.

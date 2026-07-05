@@ -46,6 +46,12 @@ namespace CgsSceneManager
         // @0x827DD828. The debug-menu display name for this component.
         const char* GetName() const { return "Collision"; }
 
+        // Register this component with the debug-UI component registry (CgsDev::
+        // DebugComponent::Register @ CgsDebugComponent.h:43). Called by
+        // TriangleCollisionManager::Prepare. Declaration-only here; the full base linkage +
+        // body are fleshed out with the tri-collision debug TU (grow this home, do not fork).
+        void Register();
+
         // @0x828AA458 (recovered, EXECUTED in the boot-trace milestone).
         // Indexer into the static draw-collision-poly callback registry. The X360 body is
         // the bounds-checked accessor `RegisterDrawCollisionPolyCallback` uses to reach the

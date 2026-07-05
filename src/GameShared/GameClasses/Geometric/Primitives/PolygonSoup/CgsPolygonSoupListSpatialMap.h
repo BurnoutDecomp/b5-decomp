@@ -13,6 +13,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle (members accessed)
 
+namespace CgsMemory { class LinearMalloc; }   // BuildSpacialPartition allocator (by pointer)
+
 namespace CgsGeometric
 {
     struct PolygonSoupList;         // forward-decl (GetPolySoupList return type; defined in CgsPolygonSoupList.cpp)
@@ -47,6 +49,15 @@ namespace CgsGeometric
         const PolygonSoupList* GetPolySoupList(s32 liPolySoupListIndex) const;
         // AddList @0x82839680 — bump the active list count (the X360 body ignores its argument).
         void AddList(const PolygonSoupList* lpPolySoupList);
+
+        // The active handle/list count (result[1] / +0x04). Read by
+        // TriangleCollisionManager::ProcessAddPolySoupListEvents to assert its own count matches.
+        s32 GetNumPolySoupLists() const { return miNumSoupLists; }
+
+        // (Re)build the multi-level spatial partition over the active soup lists, carving node
+        // storage from lpAllocator (liListsPerNode cap, liItemBudget item budget). Declaration-only
+        // here; body lives in the spatial-partition build TU.
+        void BuildSpacialPartition(CgsMemory::LinearMalloc* lpAllocator, s32 liListsPerNode, s32 liItemBudget);
 
         // GetNumLeafNodes @0x82917018 — return the leaf-node count (result[19] / +0x4C).
         s32 GetNumLeafNodes() const;

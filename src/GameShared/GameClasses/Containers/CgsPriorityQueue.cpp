@@ -102,4 +102,20 @@ void BasePriorityQueue::Clear()
 {
     muNumEntries = 0;
 }
+
+// X360 0x828D6490. Read the stored entry-index at slot liIndex (parallel index array). Bounds
+// check is against the live-entry count (muNumEntries), not capacity. CgsPriorityQueue.h:220.
+u32 BasePriorityQueue::GetEntryIndex(s32 liIndex) const
+{
+    CGS_ASSERT(liIndex < static_cast<s32>(muNumEntries), "Index out of range\n");
+    return mpuEntryIndices[liIndex];
+}
+
+// X360 0x828D6540. Read the stored priority at slot liIndex (parallel priority array). Same
+// live-count bounds check as GetEntryIndex. CgsPriorityQueue.h:236.
+s32 BasePriorityQueue::GetEntryPriority(s32 liIndex) const
+{
+    CGS_ASSERT(liIndex < static_cast<s32>(muNumEntries), "Index out of range\n");
+    return mpiEntryPriorities[liIndex];
+}
 }

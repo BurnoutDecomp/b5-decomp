@@ -64,6 +64,15 @@ namespace BrnParticle
 
         const rw::math::vpu::Matrix44Affine& GetTransform() const { return mTransform; }
 
+        // Set the effect's world transform and mark it CHANGED so the render pass re-reads it
+        // (X360 UpdateVehicleEffectPositions/FireGlassEffect inline: store 4 rows to
+        // mTransform@+0x10 then `muFlags |= EPPE_FLAG_CHANGED`).
+        void SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform)
+        {
+            mTransform = lrTransform;
+            muFlags   |= EPPE_FLAG_CHANGED;   // 4
+        }
+
         u32 muHandle;                              // +0x00 - the handle this slot holds
         u8  mPad04[0x08];                          // +0x04 - hashed name / definition ptr
         f32 mfStateBlend;                          // +0x0C - state blend factor (BoostStateMachine
