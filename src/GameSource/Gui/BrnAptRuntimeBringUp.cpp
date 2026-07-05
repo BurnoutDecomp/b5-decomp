@@ -101,6 +101,17 @@ extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p)
     CgsDev::Log::WriteToLog(lac);
 }
 
+// The findChild global-arm probe sink (declared in AptValueFindChild.cpp): logs the global
+// extension object's identity (vtbl + hash ptr) periodically so a composition-window AV log
+// names whether the object/vtbl/hash was reused-or-corrupted before the dying deref.
+extern "C" void AptFindChildProbe(int nCall, const void* pExt, const void* pVtbl, const void* pHash)
+{
+    char lac[160];
+    std::snprintf(lac, sizeof(lac), "[AptRT] findChild-probe #%d: ext=%p vtbl=%p hash=%p\n",
+                  nCall, pExt, pVtbl, pHash);
+    CgsDev::Log::WriteToLog(lac);
+}
+
 // The per-tick step-probe sink (declared in AptCIH.cpp). Throttled to the first ~120 calls (a handful
 // of ticks) so it pinpoints the early-deref AV without flooding the per-frame log. Strong def overrides
 // the weak default in AptCIH.cpp.
