@@ -24,14 +24,15 @@
 // are asm-authoritative and pin the MI shape.)
 //
 // This TU's SHIPPED function set:
-//   PresentationEffect()                      @ 0x826E7628  (ctor)
-//   `vector deleting destructor'              @ 0x826E78A8  (compiler-synthesised)
-//   `vector deleting destructor'`adjustor{4}' @ 0x826E7728  (compiler-synthesised)
-// FindFree() @ 0x82687D68 and FindOrStealAVoice() @ 0x826D2AD8 are BLOCKED (not shipped):
-// they require raw-offset access into un-homed AgingVoice/PresentationEntry compare
-// fields (the tag word @ AgingVoice+0x4C, mDataEntry @ +0x68..) plus
-// CgsSound::Logic::VoiceWrapper::Release, which cannot be expressed without offset-hacks
-// / fabrication -- DEFERRED to their own recon slices.
+//   PresentationEffect()                        @ 0x826E7628  (ctor)
+//   FindFreeVoice()                             @ 0x82687D68  (DWARF cpp:554)
+//   FindOrStealAVoice(const PresentationEntry&) @ 0x826D2AD8  (DWARF cpp:485)
+//   `vector deleting destructor'                @ 0x826E78A8  (compiler-synthesised)
+//   `vector deleting destructor'`adjustor{4}'   @ 0x826E7728  (compiler-synthesised)
+// The two Find* helpers read the per-slot state word (slot+0x4C, inside the embedded
+// VoiceWrapper) and the stored PresentationEntry (slot+0x58) store-for-store through a
+// u8* cursor at their X360-attested byte offsets (rule #4) -- no manager-subtree header
+// is pulled, so no ODR collision -- and call CgsSound::Logic::VoiceWrapper::Release.
 //
 // FLAG (shape vs full surface): the full DWARF member set (mau8DataOffsets[14],
 // mau8DataEnds[14], mStreamParams (VoiceWrapper::CreateParams), mActions
@@ -53,11 +54,36 @@ namespace Logic
 struct PresentationEffect : public BrnEffectObject,
                             public BrnSound::Logic::Streaming::IStreamUser
 {
+    // DWARF BrnPresentationEffect.h:132 (struct PresentationEntry). The per-voice
+    // resolved presentation request; the parameter type of FindOrStealAVoice. Field
+    // NAMES + order are DWARF-authoritative; the Find* compare loop reaches them at the
+    // attested byte offsets: +0x10 mContentSpec (leading word) ; +0x14 mu16Splice ;
+    // +0x16 mu8ChokeGroup ; +0x17 mu8Valid ; +0x18 mu8Behaviour (== the stream gate) ;
+    // +0x19 mu8MixerOutput.
+    struct PresentationEntry
+    {
+        static const u16 KU16_SPECIAL_SPLICE_STREAM = 65534;   // DWARF :133
+        static const u16 KU16_SPECIAL_SPLICE_WAVE   = 65535;   // DWARF :134
+
+        u64 mu64StringId;    // +0x00 (:187)
+        u64 mu64ScreenId;    // +0x08 (:188)
+        // FLAG: mContentSpec is Command::QueueElement (:190) -- un-homed 4-byte type at
+        // +0x10; the Find* loop compares only its leading word. Kept as a correctly-placed
+        // opaque word here (NOT fabricated field-by-field).
+        u32 mu32ContentSpec; // +0x10 (leading word of mContentSpec)
+        u16 mu16Splice;      // +0x14 (:191)
+        u8  mu8ChokeGroup;   // +0x16 (:192)
+        u8  mu8Valid;        // +0x17 (:193)
+        u8  mu8Behaviour;    // +0x18 (:194)
+        u8  mu8MixerOutput;  // +0x19 (:195)
+    };
+
     // DWARF BrnPresentationEffect.h:208. One aging voice slot (X360 stride 0x80). MINIMAL:
     // only the two per-slot ctor effects the asm attests (mu16Age=0 @slot+0x00; embedded
     // VoiceWrapper ctor @slot+0x04) are materialised BY NAME. The DWARF-listed mDataEntry
     // (PresentationEntry) + mfTimeSinceLastTick are DEFERRED (un-homed types); the 0x80
     // stride is an X360 fact NOT reproduced as padding here (offsets not static_asserted).
+    // The Find* loop reaches mDataEntry through the slot at the attested byte offset.
     struct AgingVoice
     {
         AgingVoice() : mu16Age(0), mVoice() {}   // asm: sth 0,slot+0 ; bl VoiceWrapper(slot+4)
@@ -79,6 +105,16 @@ struct PresentationEffect : public BrnEffectObject,
     // DWARF-ordered but their concrete types have NO committed home -> DECLARATION-ONLY /
     // DEFERRED (NOT emitted as concrete members; same treatment as
     // StreamingEffect::streamsettings).
+
+private:
+    // @ 0x82687D68 (DWARF BrnPresentationEffect.cpp:554). First maVoices[] slot whose
+    // per-VoiceWrapper state word (slot+0x4C) is 0 (unused) or 7 (idle), else null.
+    AgingVoice* FindFreeVoice();
+
+    // @ 0x826D2AD8 (DWARF BrnPresentationEffect.cpp:485). Returns 0 if a busy STREAM
+    // already content-matches rEntry; else a free slot, else the best steal candidate
+    // (choke-group / oldest age), Releasing the stolen voice first.
+    AgingVoice* FindOrStealAVoice(const PresentationEntry& rEntry);
 };
 
 } // namespace Logic

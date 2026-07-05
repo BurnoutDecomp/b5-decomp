@@ -6,7 +6,19 @@
 // shape (DWARF: BrnScrapeEffect.h/.cpp) and the X360-32-bit-vs-host-64-bit offset note.
 //
 // This TU SHIPS the scalar deleting destructor @ 0x826E8A28 (its ~ScrapeEffect anchor).
-// MapScrapeToMaterial @ 0x8269EC18 is BLOCKED (see header).
+//
+// MapScrapeToMaterial @ 0x8269EC18 is verified store-for-store (both prior blockers
+// resolved: CgsEntityId.h is 8/14/10; RootInputBuffer::GetPlayerActiveRaceCarIndex is
+// committed) and its DWARF signature (private `u8 ... const`) is declared in the header.
+// The BODY is left PARTIAL/deferred here for one reason only: a faithful body must call
+// SoundLogicModule::GetBrnInputStructure(), which drags in the StateManager RTTI subtree
+// (CgsEnvironment.h -> CgsStateManager.h), while ScrapeEffect's own base pulls the effect
+// RTTI subtree (BrnEffectObject.h -> CgsEffectBase.h). Those two subtrees each define an
+// INCOMPATIBLE CgsSound::Logic::ClassTypeInfo<T> (Variant A `typeName/baseTypeInfo` with
+// ctor vs Variant B `mpcTypeName/mpfnCreateObject` aggregate), so co-including them in one
+// TU is a pre-existing C2953 ODR fork. Unblocking cleanly needs a tree-wide ClassTypeInfo
+// unification (out of this wave's scope), NOT an offset-hack/fabrication -- so per HARD
+// RULE 6 the body stays deferred (declared-only) until that reconciliation lands.
 // =============================================================================
 
 namespace BrnSound
