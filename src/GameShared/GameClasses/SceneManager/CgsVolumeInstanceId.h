@@ -66,3 +66,11 @@ namespace CgsSceneManager
         u64 muId;
     };
 }
+
+// KeyBits overload for the CgsContainers::IndexedHashTable<VolumeInstanceId,...> instantiation
+// (the hash/ordering works on the raw 64-bit key word; VolumeInstanceId has no implicit u64
+// conversion, so the generic KeyBits<T> default does not apply). Additive; ODR-safe (inline).
+namespace CgsContainers
+{
+    inline u64 KeyBits(const CgsSceneManager::VolumeInstanceId& lrKey) { return lrKey.muId; }
+}

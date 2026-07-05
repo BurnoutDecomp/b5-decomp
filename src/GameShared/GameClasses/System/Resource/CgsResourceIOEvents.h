@@ -118,6 +118,15 @@ namespace Events
         OpenStreamRequest* SetFileName(const char* lpcFileName);
     };
 
+    // ===== ADDITIVE GROW (Wave 49): deprecated write-stream request event types =====
+    // CgsResourceIOEvents.h -- the (deprecated) open/close write-stream requests. The X360
+    // adders for these (ResourceModule::AddOpenWriteStreamRequest @0x828D8310 /
+    // ::AddCloseWriteStreamRequest @0x828D83A0) are bare de-inlined asserts that reject the
+    // request ("Write streams deprecated") and return false; they never read any field, so
+    // these carry no payload beyond the Event base. Declared so the adder signatures resolve.
+    struct OpenWriteStreamRequest : public Event {};   // DWARF CgsResourceModule.h:799 param
+    struct CloseWriteStreamRequest : public Event {};  // DWARF CgsResourceModule.h:877 param
+
     // Base of every pool-targeted event (CgsResourceIOEvents.h:221). Carries the user
     // queue to notify, the per-request event id, and the target pool id. On the X360 the
     // ID members of derived requests are 8-byte aligned, so this base occupies 12 bytes.
