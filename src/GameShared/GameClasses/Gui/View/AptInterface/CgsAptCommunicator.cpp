@@ -195,6 +195,19 @@ namespace CgsGui
             reinterpret_cast<AptExtFunctionPtr>(&sMethod_GetCircleButtonAsSelect));
         SetFunction("GetCircleButtonAsSelect", psMethod_GetCircleButtonAsSelect);
 
+        // Pin the permanent runtime objects against the Apt GC sweep: this extension
+        // and its 6 native-function wrappers live for the process (the console pins
+        // its permanent native singletons the same way -- AptValueInitialize's
+        // setGCRoot(1) on each). Without the pin the GC reaped them seconds into the
+        // title (the boot AV'd in the FADE_IN window; bisect-verified 2026-07-05).
+        setGCRoot(1);
+        if (psMethod_SendAptEvent)            psMethod_SendAptEvent->setGCRoot(1);
+        if (psMethod_SendAptSoundEvent)       psMethod_SendAptSoundEvent->setGCRoot(1);
+        if (psMethod_SetCommunicationObject)  psMethod_SetCommunicationObject->setGCRoot(1);
+        if (psMethod_GetComponentData)        psMethod_GetComponentData->setGCRoot(1);
+        if (psMethod_GetPlatformString)       psMethod_GetPlatformString->setGCRoot(1);
+        if (psMethod_GetCircleButtonAsSelect) psMethod_GetCircleButtonAsSelect->setGCRoot(1);
+
         mOutAptTriggerEvents.Construct();
         CalculateReservedVariableHashes();
     }
