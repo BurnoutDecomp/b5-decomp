@@ -18,10 +18,16 @@
 // This TU SHIPS the scalar deleting destructor:
 //   `scalar deleting destructor'  @ 0x826E8A28  (compiler-synthesised; forwards to the
 //        ~ScrapeEffect anchor -- no separate hand-written body)
-// MapScrapeToMaterial() @ 0x8269EC18 is BLOCKED (not shipped): it needs a contested
-// EntityId bit-layout (the committed CgsEntityId.h is asm-authoritative 8/12/12 but the
-// scan requires 14/10) plus a not-yet-declared RootInputBuffer::GetPlayerActiveRaceCarIndex
-// seam -- both would require fabrication, so it is DEFERRED to its own recon slice.
+//
+// MapScrapeToMaterial() @ 0x8269EC18 is DECLARED (DWARF-authoritative private `u8 ...
+// const`) but its body is PARTIAL/deferred. Both original semantic blockers are resolved
+// (CgsEntityId.h is authoritatively 8/14/10; RootInputBuffer::GetPlayerActiveRaceCarIndex
+// is committed), so the reconstruction is understood. It stays deferred only because a
+// faithful body must co-include the StateManager RTTI subtree (SoundLogicModule ->
+// CgsStateManager.h) alongside ScrapeEffect's effect RTTI subtree (BrnEffectObject.h ->
+// CgsEffectBase.h); those two subtrees define incompatible CgsSound::Logic::ClassTypeInfo<T>
+// templates -> a pre-existing C2953 ODR fork. Unblock after a tree-wide ClassTypeInfo
+// unification (out of scope here); the declared-not-defined method links fine meanwhile.
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE;
 // absolute offsets are NOT static_asserted across pointer members on the 64-bit host.
@@ -38,14 +44,26 @@ namespace Collision
 struct Collision3DControl;
 struct CollisionControl;
 
+// The per-scrape descriptor MapScrapeToMaterial reads (maObjectId pair); full home
+// is BrnCollisionDataStructures.h.
+struct ScrapeInfo;
+
 // BrnScrapeEffect.h:36 (DWARF). Reuses the committed BrnEffectObject base BY NAME and
-// embeds a CgsSound::Logic::VoiceWrapper. Only the destructor is materialised in this
-// slice; the rest of the virtual/method surface is DEFERRED.
+// embeds a CgsSound::Logic::VoiceWrapper.
 struct ScrapeEffect : public BrnSound::Logic::BrnEffectObject
 {
     ScrapeEffect() {}
     virtual ~ScrapeEffect();   // BrnScrapeEffect.cpp:73 (DWARF virtual); anchor in .cpp
 
+private:
+    // @ 0x8269EC18 (DWARF BrnScrapeEffect.h:158: uint8_t MapScrapeToMaterial(const
+    // ScrapeInfo&) const; private). Classify a scrape into a material bucket, but only
+    // when the player's own race-car is one of the two scraping objects (EntityId
+    // owner==1 + entity index == player slot). The OTHER object's owner byte then
+    // selects the material (1 -> 1, 2 -> 2, else 0). Body in BrnScrapeEffect.cpp.
+    u8 MapScrapeToMaterial(const ScrapeInfo& lScrapeInfo) const;
+
+public:
     // Members (DWARF BrnScrapeEffect.h:105..119, order as listed):
     f32                            mfScrapeStartTimeStamp;      // :105
     f32                            mfParam_AEMS_pitch;          // :107
