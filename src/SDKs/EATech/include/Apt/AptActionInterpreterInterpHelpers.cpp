@@ -38,6 +38,7 @@
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"
 #include "SDKs/EATech/include/Apt/AptConstFile.h"
+#include "SDKs/EATech/include/Apt/AptCharacterHelper.h"   // AptGetAnimationAtLevel (script-fn root-anim resolve)
 
 // ---------------------------------------------------------------------------
 // AptInterp_GetNodeFrameContextHash (HOMED 2026-07-02, retiring the null
@@ -737,51 +738,163 @@ AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInter
 // AptInterp_ExecuteScriptFunction -- the AptScriptFunctionBase frame-execution branch
 // of callFunction (tags 34/35/36).
 //
-// FLAG (faithful follow-on stub). The console branch is 0x82AE3CB8..0x82AE4050 (inside
-// callFunction @0x82AE3C08); I read the full asm + decoded the AptScriptFunction2 vtable
-// (@0x82145D10) this session. Sequence: save mpCurrentFunction into a local + set it to
-// pFunction; call GetConstantPool (vtable slot 0x50) and install its {count,base} pair
-// into the interpreter's mnConstantPoolCount/mpConstantPool [c:0x40]/[c:0x44] (saving the
-// prior pair via ld/std); push the scope onto the CIH/target stack; SetupBeforeExecution
-// (slot 0x54) -> GetNumArguments (0x44) -> SetArgument (0x58) binding min(nArgs,
-// GetNumArguments) operands then padding the rest with undefined -> resolve the level-0
-// root animation (_AptGetAnimationAtLevel) -> runStream(GetByteCodeBase 0x48, GetByteCode-
-// Size 0x4C) -> CleanupAfterExecution (0x5C) -> pop the CIH stack + restore mpCurrent-
-// Function + the saved constant-pool pair.
+extern AptCIH* gpAptEmptyCIH;   // dword_8324D700 -- the pinned "EmptyCIH" AptCIHNone placeholder
+
+// AptInterp_ExecuteScriptFunction -- the AptScriptFunctionBase frame-execution branch of
+// callFunction (tags 34/35/36). The full faithful body IS DECOMPILED below (console branch
+// 0x82AE3CB8..0x82AE3FF4, cross-checked against the PS3 External build 0x821734; the
+// AptScriptFunction2 vtable @0x82145D10 gave the by-name method map). It is HELD OFF behind
+// g_bAptHomeScriptFnExec (default false) for one reason, established by BOOT TEST 2026-07-04:
 //
-// The [c:0x40]/[c:0x44] misnaming that blocked this is now FIXED: they were `field_40`/
-// `mpRegisters` ("register window") but are the AS CONSTANT-POOL / STRING-DICTIONARY
-// {count, base} pair -- renamed to mnConstantPoolCount/mpConstantPool this session
-// (VERIFIED three ways: DefineDictionary @0x82AD9278 sets [c:0x40]=count, [c:0x44]=table
-// base; stackPushIndirect + the dict-push ops index mpConstantPool[i] as the entries
-// table; callFunction's GetConstantPool -- vtable slot 0x50 -- writes both). STILL a stub
-// for TWO reasons:
-//   (1) FIELD ORDER of GetConstantPool's return must be reconciled before homing: the
-//       AptConstantPool struct decl ({mppEntries@0, mnCount@4}) implies the REVERSE order
-//       to DefineDictionary's authoritative {count@0x40, base@0x44}. GetConstantPool
-//       returns {record+0x14, record+0x18}; confirm which half is count vs base against
-//       DefineDictionary and fix AptConstantPool's field order -- do NOT trust the struct.
-//   (2) BOOT-ACTIVE: activating real script-function execution runs AS bytecode paths
-//       deferred for boot-stability (see the AptRuntimeUpdate FLAG) -- decompile + build +
-//       boot-test with revert-on-break, not enabled untested. And boot-green does NOT
-//       validate AS-VM correctness (the title barely calls script functions), so the
-//       asm-level cross-check is the real correctness gate.
-// Until both are resolved it keeps the faithful, VM-consistent contract (so the dispatch
-// above stays correct + the engine links + boots): consume the nArgs operands and yield
-// `undefined` -- exactly the console's own LABEL_37 "uncallable bound CIH" reduction.
+//   The body compiles + links clean, but ENABLING it regresses boot -- composition stalls
+//   at frame 3 with childNodes=0 (vs the healthy frame=100/childNodes=12), no assert. Homing
+//   this ACTIVATES real execution of the title's ~4 component AS handlers (onLoad/onEnterFrame
+//   etc.); running them ahead of the rest of the 4d system (the GuiComponent->AptCommunicator
+//   routing + the still-partial VM opcode coverage) destabilises the delicately-balanced
+//   partial title bring-up. It is an INTEGRATION-ORDER dependency, NOT (as far as diagnosed) a
+//   transcription bug -- but the exact failing handler/opcode is NOT yet pinned, so the gate
+//   stays off until either the surrounding routing lands first or a per-handler probe isolates
+//   the stall. The flag is a plain `static bool` (not const) so the body stays compiled +
+//   type-checked and can be flipped for that diagnosis.
+//
+// The prior "field order must be reconciled" concern is RESOLVED: the reconstructed
+// GetConstantPool already returns cleanly-named {mppEntries=base, mnCount=count}, so mapping
+// by name (mnConstantPoolCount=pool.mnCount, mpConstantPool=pool.mppEntries) is correct.
+// The console's shared-tail operand-stack abort-collapse (0x82AE4028) belongs to the OUTER
+// dispatch (AptActionInterpreter_CallFunctionDispatch already reproduces it), so it is NOT
+// duplicated here. When held off, the live path is the console's own LABEL_37 reduction
+// (pop the args, push `undefined`) -- an exact, faithful subset for an unrun script function.
 // ---------------------------------------------------------------------------
+static bool g_bAptHomeScriptFnExec = false;   // GATE: faithful body below, held off (see comment)
+
 AptValue* AptInterp_ExecuteScriptFunction(AptActionInterpreter* pInterp,
-                                          AptValue* /*pScope*/, AptValue* /*pFunction*/,
-                                          int nArgs, AptValue* /*pNewTarget*/,
-                                          AptValue* /*pConstructTarget*/)
+                                          AptValue* pScope, AptValue* pFunction,
+                                          int nArgs, AptValue* pNewTarget,
+                                          AptValue* pConstructTarget)
 {
-    // console LABEL_37 (the reduced path): Burnout_X360_Artist_01e3_0(a1, v7) then push
-    // the undefined singleton.
-    // NOTE (2026-07-04 probe): this reduced path IS reached ~4x at boot (all nArgs=0), so
-    // the title's component AS does call script functions -- homing the real branch (above
-    // FLAG) would execute those 4 bodies instead of yielding undefined. nArgs=0 keeps the
-    // SetArgument binding trivial. (Their effects may be internal, so boot-green alone won't
-    // fully validate a homing -- the asm-level correctness check remains the real gate.)
+    if (g_bAptHomeScriptFnExec)
+    {
+        AptScriptFunctionBase* const pFunc = static_cast<AptScriptFunctionBase*>(pFunction);
+
+        // Install the function + its constant pool as current, saving the prior (0x82AE3CB8):
+        AptScriptFunctionBase* const pSavedFunc      = pInterp->mpCurrentFunction;       // r24
+        const uint32_t               nSavedPoolCount = pInterp->mnConstantPoolCount;     // r23 (ld 0x40)
+        AptValue** const             pSavedPool      = pInterp->mpConstantPool;
+        pInterp->mpCurrentFunction = pFunc;                                              // [0x3C]
+        const AptConstantPool pool = pFunc->GetConstantPool();                           // vtbl 0x50
+        pInterp->mnConstantPoolCount = static_cast<uint32_t>(pool.mnCount);              // [0x40] = count
+        pInterp->mpConstantPool =
+            reinterpret_cast<AptValue**>(const_cast<char**>(pool.mppEntries));           // [0x44] = base
+
+        // Scope guard (0x82AE3CF4): a function bound to an undefined -- or a dead/zombie CIH --
+        // reduces to `undefined` rather than running.
+        bool bReduced = false;
+        AptValue* const pBoundCIH = pFunc->GetCIH();                                     // pFunction->mpCIH
+        if (!pBoundCIH->getIsDefined())
+        {
+            bReduced = true;
+        }
+        else
+        {
+            const AptVirtualFunctionTable_Indices eCIHType = pBoundCIH->getVtblIndex();
+            if (eCIHType == AptVFT_CharacterInstHandle || eCIHType == AptVFT_CIHNone)
+            {
+                AptCIH* const  pCIHNode = static_cast<AptCIH*>(pBoundCIH);
+                const uint32_t nState   = pCIHNode->GetCIHState();                       // (mFlagsA>>29)&3
+                if (nState == 3)
+                    bReduced = true;
+                else if (pCIHNode->GetCharacterInst()->GetTypeTag() == 0xFu &&
+                         (nState == 0 || nState == 1))
+                    bReduced = true;
+            }
+        }
+
+        AptValue* pResult;
+        if (!bReduced)
+        {
+            // Push the scope onto the CIH/target stack + AddRef it; hold the function too (0x82AE3D74).
+            pInterp->mpCIHStack[pInterp->mnCIHStackTop] = static_cast<AptCIH*>(pScope);
+            ++pInterp->mnCIHStackTop;
+            pScope->AddRef();                                                            // vtbl[0]
+            pFunc->AddRef();                                                             // vtbl[0]
+
+            // Snapshot the frame stack + register window into this call's saved state (0x82AE3DBC).
+            AptScriptFunctionBase::SavedExecutionState savedState;
+            pFunc->SetupBeforeExecution(&savedState, pScope, pNewTarget, pConstructTarget); // vtbl 0x54
+
+            // Bind provided args (from the operand-stack top), pad the rest with `undefined` (0x82AE3DE0).
+            const int nDeclared = pFunc->GetNumArguments();                              // vtbl 0x44
+            int nBind = (nDeclared < nArgs) ? nDeclared : nArgs;                         // min(declared, provided)
+            if (nBind > pInterp->mnStackTop)                                             // clamp to available
+            {
+                nBind = pInterp->mnStackTop;
+                nArgs = nBind;                                                           // r25 = r28
+            }
+            int i = 0;
+            for (; i < nBind; ++i)
+                pFunc->SetArgument(i, pInterp->mpStack[pInterp->mnStackTop - 1 - i]);    // vtbl 0x58
+            for (; i < nDeclared; ++i)
+                pFunc->SetArgument(i, gpUndefinedValue);
+            pInterp->stackSafePop(nArgs);                                               // drop the consumed args
+
+            // Resolve the animation context for the run (0x82AE3EA8): a CIHNone parent resolves to
+            // the level-0 root; else walk up the display-list parents to the enclosing anim(9)/
+            // custom-control(15) node.
+            AptValue* const pAnim = pFunc->GetParentAnim();                             // mpParentAnim (+0x24)
+            AptCIH* pNode;
+            if (pAnim->getVtblIndex() == AptVFT_CIHNone)
+            {
+                pNode = AptGetAnimationAtLevel(0);
+            }
+            else
+            {
+                pNode = static_cast<AptCIH*>(pAnim);
+                for (;;)
+                {
+                    const uint32_t nT = pNode->GetCharacterInst()->GetTypeTag();
+                    if (nT == 9u || nT == 0xFu)
+                        break;
+                    pNode = pNode->GetDisplayListParent();                             // walk up (+0x1C)
+                }
+            }
+            AptCharacterInst* const pRunInst = pNode ? pNode->GetCharacterInst() : nullptr;
+
+            // Run the compiled body against the bound CIH + resolved inst (0x82AE3F04).
+            const int nSize = pFunc->GetByteCodeSize();                                // vtbl 0x4C
+            pInterp->runStream(static_cast<const unsigned char*>(pFunc->GetByteCodeBase()), // vtbl 0x48
+                               static_cast<AptCIH*>(pFunc->GetCIH()), nSize, pRunInst);
+
+            // Restore the frame/register window, release the function, pop the scope (0x82AE3F50).
+            pFunc->CleanupAfterExecution(&savedState);                                 // vtbl 0x5C
+            pFunc->Release();                                                          // vtbl[1] (the AddRef above)
+            --pInterp->mnCIHStackTop;                                                  // console AptValue::_pop over +0x24
+            pInterp->mpCIHStack[pInterp->mnCIHStackTop]->Release();                    // Release the pushed scope
+
+            pResult = (pInterp->mnStackTop > 0) ? pInterp->mpStack[pInterp->mnStackTop - 1]
+                                                : gpUndefinedValue;
+        }
+        else
+        {
+            // Reduced path (0x82AE3F88): drop the args, push `undefined`, drop the function's dead
+            // CIH binding (Release + reset to the pinned EmptyCIH).
+            pInterp->stackSafePop(nArgs);
+            pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
+            if (AptValue* const pFuncCIH = pFunc->GetCIH())
+                pFuncCIH->Release();                                                   // vtbl[1]
+            pFunc->SetCIH(static_cast<AptValue*>(gpAptEmptyCIH));                      // mpCIH = EmptyCIH
+            pResult = gpUndefinedValue;
+        }
+
+        // Restore the interpreter's current function + constant-pool pair (0x82AE3FEC).
+        pInterp->mpCurrentFunction   = pSavedFunc;
+        pInterp->mnConstantPoolCount = nSavedPoolCount;
+        pInterp->mpConstantPool      = pSavedPool;
+        return pResult;
+    }
+
+    // --- LIVE (held-off) path: the console's own LABEL_37 reduction (pop the args, push
+    // `undefined`) -- a faithful subset for an unrun script function. ---
+    (void)pScope; (void)pNewTarget; (void)pConstructTarget;
     pInterp->stackSafePop(nArgs);
     pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
     return gpUndefinedValue;
