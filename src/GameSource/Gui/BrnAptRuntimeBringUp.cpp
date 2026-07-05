@@ -154,6 +154,21 @@ extern "C" void AptRunStreamImbalanceProbe(int nSavedTop, int nExitTop,
     CgsDev::Log::WriteToLog(lac);
 }
 
+// The script-function birth/teardown probe (declared in AptScriptFunctionBase.cpp):
+// traces the init-action pass's function lifetimes. First 96 events.
+extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
+                                     const void* pCIH, const void* pAnim)
+{
+    static int s_iLifeHits = 0;
+    if (s_iLifeHits >= 96)
+        return;
+    ++s_iLifeHits;
+    char lac[176];
+    std::snprintf(lac, sizeof(lac), "[AptRT] scriptfn %s: fn=%p cih=%p anim=%p\n",
+                  pcEvent, pFn, pCIH, pAnim);
+    CgsDev::Log::WriteToLog(lac);
+}
+
 // The _parseStream double-resolve probe (declared in AptActionInterpreterParseStream.cpp):
 // logs a Push/dictionary constant slot revisited after a prior resolve pass. First 16 hits.
 extern "C" void AptParseStreamDoubleResolveProbe(const void* pSlot, long long nValue)
