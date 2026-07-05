@@ -79,6 +79,14 @@ public:
 
     void  Free(void* lpBlock, s32 liSize, const char* lpcTag);
 
+    // @ 0x82803F18 -- EASTL container allocator adapter deallocate(void*, size_t): the hook
+    // the EASTL list<Attrib::Collection*, AttribSysPackageAllocator> caller invokes as
+    // mAllocator.deallocate(p, n). Asserts the AttribSys memory manager has been Prepare'd
+    // (via HasMemoryBuffer(), the getter for the private sbHasLinearAllocator flag) and that
+    // this allocator is live (mbHasAllocator), frees the block, and accounts +12 (one
+    // list-node's worth) against miFreeTotal. Name MUST be 'deallocate' (the EASTL interface).
+    void  deallocate(void* lpBlock, size_t lnSize);
+
 private:
     // Diagnostic name for meUserPackage; NULL (with an assert) for an unknown id.
     // X360 0x821F0200.

@@ -101,6 +101,12 @@ namespace BrnNetwork
         // Construct @ 0x82583720 -- base Construct then reset the Brn members.
         virtual void Construct();
 
+        // scalar deleting destructor @ 0x827DE408 -- restores off_820CDBF8 (this leaf class's
+        // vtable) and conditionally `delete this`. Emitting the destructor as virtual makes the
+        // compiler synthesise exactly that thunk; the body is empty (Construct only nulls POD
+        // members). Overrides the virtual ~ServerInterfaceComponent() base dtor.
+        virtual ~ServerInterfaceCustomCommands();
+
         // Non-virtual lifecycle (DWARF: Prepare/Release/Destruct are non-virtual).
         bool Prepare(CgsNetwork::ServerInterfaceDirtySock* lpServerInterface); // @ 0x82583770
         bool Release();                                                        // @ 0x82583810
@@ -168,6 +174,11 @@ namespace BrnNetwork
         // ConvertError @ 0x82583888 -- map a {kind, code} fourcc pair to a server-interface
         // error value using the static KA_CUSTOM_COMMAND_ERROR_MAPPING table.
         int ConvertError(int liMessageKind, int liMessageCode);
+
+        // ConvertEventScoreUploadError @ 0x82583B10 -- like ConvertError but streams the 'badc'
+        // diagnostic into CgsDev::Log::gpDebugPrint (not the assert path); scans the same static
+        // KA_CUSTOM_COMMAND_ERROR_MAPPING table for the generic {kind, code} rows.
+        int ConvertEventScoreUploadError(int liMessageKind, int liMessageCode);
 
         // _CustomCommandSentCallback @ 0x8258F020 -- the LobbyApiRequestCB completion
         // trampoline: forwards to HandleIncomingMessage(lpUserData, lpMsg). Signature must

@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (OOM message build)
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"     // CgsMemory::HeapMalloc
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h" // AttribSysMemoryManager::HasMemoryBuffer (deallocate)
 
 namespace CgsAttribSys
 {
@@ -69,6 +70,29 @@ void AttribSysPackageAllocator::Free(void* lpBlock, size_t /*lnSize*/)
     CGS_ASSERT(mbHasAllocator, "mbHasAllocator");
 
     mpHeapAllocator->Free(lpBlock);
+}
+
+// @ 0x82803F18 -- AttribSysPackageAllocator::deallocate(void*, size_t): the EASTL container
+// allocator adapter's deallocate hook. Caller: the AttribSys database garbage-collect path
+// with list<Attrib::Collection*, AttribSysPackageAllocator>. Asserts the AttribSys memory
+// manager has been Prepare'd (sbHasLinearAllocator, CgsAttribSysMemoryManager.h:173 -- read
+// through the committed HasMemoryBuffer() getter because sbHasLinearAllocator is PRIVATE) and
+// the package allocator is live (mbHasAllocator @ +0x04, CgsAttribSysPackageAllocator.h:324),
+// frees the block through the adopted heap, and adds 12 (one list-node's worth) to miFreeTotal
+// @ +0x10. Both asserts collapse to one CGS_ASSERT each (file/line dropped per house rule).
+//
+// NOTE (verifier): the X360 reaches the package-allocator instance by FIXED static address
+// (dword_83011B7C, a dedicated EASTL-package static) and IGNORES its own `this`. Modelled here
+// as a normal member so the EASTL list can call it on its stored (prepared, singleton)
+// allocator; behaviour matches provided the stored allocator is the prepared instance. The
+// size argument is accepted for the EASTL interface but unused (only the +12 accounting fires).
+void AttribSysPackageAllocator::deallocate(void* lpBlock, size_t /*lnSize*/)
+{
+    CGS_ASSERT(AttribSysMemoryManager::HasMemoryBuffer(), "sbHasLinearAllocator");
+    CGS_ASSERT(mbHasAllocator, "mbHasAllocator");
+
+    mpHeapAllocator->Free(lpBlock);
+    miFreeTotal += 12;
 }
 
 // @ 0x821F0200 - the diagnostic name for meUserPackage. Returns NULL (with an
