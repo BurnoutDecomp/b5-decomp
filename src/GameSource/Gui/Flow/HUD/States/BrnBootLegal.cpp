@@ -372,14 +372,14 @@ namespace BrnGui
     {
         // Post the leave view-state command (GuiEvent<25> { 8, 25, 12, 1, 1.0f }, ch 41, size 20 --
         // 0x82477E3C li r28,1 feeds the reserved dword, unlike OnEnter's {..,0,1.0f} post),
-        // refresh the menu component (vtbl+0x18 -- the menu's leave/refresh slot), then
+        // tear down the menu component (menu vtable +0x18 == slot 6 == MenuComponent::Clear), then
         // unregister the observed events.
         {
             GuiOptionEvent20 lOption(1);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
         }
-        mSelectionMenu.Refresh();
+        mSelectionMenu.Clear();
         mpStateInterface->UnRegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
 
         // Post the second leave command (GuiEvent<18> { 8, 18, 12, "", 1 }, ch 41, size 20 -- the
@@ -404,7 +404,7 @@ namespace BrnGui
         mSelectionMenu.SetupMenu(KI_NUM_MENU_ENTRIES, true);
         for (s32 liIndex = 0; liIndex < KI_NUM_MENU_ENTRIES; ++liIndex)
             mSelectionMenu.SetText(liIndex, KAAC_MENU_TEXT[liIndex]);
-        mSelectionMenu.Refresh();                       // (*(*menu + 0x14))(menu)
+        mSelectionMenu.Update();                        // (*(*menu + 0x14))(menu) == slot 5
 
         // FLAG: the apt-view boundary. AddOutputAptViewState hands the transition to the apt
         // engine (a CgsGui::GuiComponent boundary); do NOT body the apt engine here.
@@ -415,18 +415,18 @@ namespace BrnGui
     // ------------------------------------------------ UpdateSelectionMenu @ 0x82473978
     void BootLegal::UpdateSelectionMenu(s32 liAction)
     {
-        // Action 41 = move down (vtbl+0x38), 42 = move up (vtbl+0x34).
+        // Action 41 = move down (menu vtable +0x38 == HighlightNext), 42 = move up
+        // (+0x34 == HighlightPrevious).
         if (liAction == KI_ACTION_MENU_NEXT)
-            mSelectionMenu.SelectNext();
+            mSelectionMenu.HighlightNext();
         else if (liAction == KI_ACTION_MENU_PREV)
-            mSelectionMenu.SelectPrevious();
+            mSelectionMenu.HighlightPrevious();
 
-        // FLAG (facade sync): the real SelectableGroup writes the highlighted row back
-        // into this state (the +0x3BD byte the X360 reads below); the facade exposes it
-        // through an accessor instead -- sync before the view-state read.
-        mu8SelectedMenuIndex = static_cast<u8>(BootLegalMenuFacade_GetHighlightedIndex());
+        // Read the highlighted row straight off the menu's SelectableGroup (the X360 reads its
+        // cached +0x3BD copy of this).
+        mu8SelectedMenuIndex = static_cast<u8>(mSelectionMenu.miHighlightedIndex);
 
-        mSelectionMenu.Refresh();                       // (*(*menu + 0x14))(menu)
+        mSelectionMenu.Update();                        // (*(*menu + 0x14))(menu) == slot 5
 
         // Re-add the background's apt view state for the now-selected entry ("Normal"/"BeatTheTeam").
         // FLAG: the apt-view boundary (see DisplaySelectionMenu).
