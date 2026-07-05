@@ -12,6 +12,12 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"       // AptBoolean::Create
 #include "SDKs/EATech/include/Apt/AptValueFactory.h"           // AptValueFactory::CreateArray
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h" // AptIsDeferredVectorFull
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"       // gAptActionInterpreter (getVariable/callFunction)
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"      // Push/PopStaticData (the call register frame)
+#include "SDKs/EATech/include/Apt/AptCharacterHelper.h"         // AptGetAnimationAtLevel (root-scope object resolve)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                     // AptGetAnimationAtLevel's AptCIH -> AptValue
+
+extern AptActionInterpreter gAptActionInterpreter;   // AptGlobals.cpp (&dword_8324E760)
 
 #include <cstring>   // strncpy
 #include <cstdlib>   // atof
@@ -53,11 +59,67 @@ extern bool gbLogGuiAudioTriggers;   // X360 byte_82FB5098
 
 namespace
 {
-    // The apt "call ActionScript function" optimised helper the X360 reaches as
-    // AptCallFunctionOpti("UpdateAll", 0, "gAptCommunicator", 1, lpArray). FLAG: body
-    // is a separate apt TU; declared here so UpdateAllComponents can name it.
+    // The C++->AS call chain the X360 reaches as
+    // AptCallFunctionOpti("UpdateAll", 0, "gAptCommunicator", 1, lpArray). HOMED 2026-07-04
+    // from the console chain Opti @0x82B07DB8 -> VOpti @0x82B07D58 -> Internal @0x82B07CC0 ->
+    // MemberFunctionInternal @0x82B07B80, now that AptActionInterpreter::callFunction executes
+    // real script functions (AptInterp_ExecuteScriptFunction). Opti/VOpti are the console
+    // varargs wrappers; this build takes the single AptArray directly (the only call is
+    // numArgs=1), so they collapse into the forward to Internal.
+
+    // AptCallMemberFunctionInternal @0x82B07B80 -- push the numArgs args onto the interpreter's
+    // operand stack, resolve lpacFunction as a member of lpObject, invoke it via callFunction,
+    // pop the register frame + discard the result.
+    void AptCallMemberFunctionInternal(const char* lpacFunction, int liThisArg,
+                                       AptValue* lpObject, int liNumArgs, AptValue** lppArgs)
+    {
+        if (lpObject == 0)
+            lpObject = static_cast<AptValue*>(AptGetAnimationAtLevel(0));
+
+        // Push the call arguments (console loops i = numArgs-1 .. 0, AddRef'ing each).
+        for (int liArg = liNumArgs - 1; liArg >= 0; --liArg)
+        {
+            gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop] = lppArgs[liArg];
+            ++gAptActionInterpreter.mnStackTop;
+            lppArgs[liArg]->AddRef();
+        }
+
+        // Resolve the named method on the object, run it through a fresh register frame.
+        EAStringC   lFuncName(lpacFunction);   // InitFromBuffer; dtor = DecreaseInternalRefCount
+        AptValue*   lpFunc      = gAptActionInterpreter.getVariable(lpObject, 0, &lFuncName, 1, 1, 0);
+        AptValue**  lpSavedBase = AptScriptFunctionBase::PushStaticData();
+        gAptActionInterpreter.callFunction(lpObject, lpFunc, liNumArgs, 0, 0);
+        AptScriptFunctionBase::PopStaticData(lpSavedBase);
+        // (liThisArg != 0 -> the console sub_82AFCFC8 this-arg cleanup; not taken for the
+        //  UpdateAll call, whose thisArg is 0 -- left un-homed until a thisArg!=0 caller needs it.)
+        (void)liThisArg;
+        gAptActionInterpreter.stackSafePop(1);   // AptValue::_Pop -- discard the call result
+    }
+
+    // AptCallFunctionInternal @0x82B07CC0 -- resolve lpacObject (a name) to an AS value in the
+    // level-0 root scope, then invoke lpacFunction on it.
+    void AptCallFunctionInternal(const char* lpacFunction, int liThisArg,
+                                 const char* lpacObject, int liNumArgs, AptValue** lppArgs)
+    {
+        AptValue* lpObject = 0;
+        if (lpacObject != 0)
+        {
+            EAStringC lObjName(lpacObject);
+            AptValue* lpRoot = static_cast<AptValue*>(AptGetAnimationAtLevel(0));
+            lpObject = gAptActionInterpreter.getVariable(lpRoot, 0, &lObjName, 1, 1, 0);
+        }
+        AptCallMemberFunctionInternal(lpacFunction, liThisArg, lpObject, liNumArgs, lppArgs);
+    }
+
+    // AptCallFunctionOpti @0x82B07DB8 (+ VOpti) -- the single-array-arg entry the reconstruction
+    // uses (numArgs==1: the one vararg is lpArgs).
     void AptCallFunctionOpti(const char* lpacFunction, int liThisArg,
-                             const char* lpacObject, int liNumArgs, AptArray* lpArgs);
+                             const char* lpacObject, int liNumArgs, AptArray* lpArgs)
+    {
+        AptValue* lapArgSlot[1];
+        lapArgSlot[0] = reinterpret_cast<AptValue*>(lpArgs);
+        AptCallFunctionInternal(lpacFunction, liThisArg, lpacObject, liNumArgs, lapArgSlot);
+    }
 }
 
 namespace CgsGui
