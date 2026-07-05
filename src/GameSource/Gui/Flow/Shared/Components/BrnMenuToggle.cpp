@@ -37,12 +37,11 @@ namespace BrnGui
     // item as a guest 32-bit pointer (the X360 Selectable*); reinterpret it to read mId.
     u64 MenuToggle::GetHighlightedId()
     {
-        u32 luHighlighted = mSelectableGroup.GetHighlighted();
-        CGS_ASSERT(luHighlighted != 0, "GetHighlighted()");
+        Selectable* lpHighlighted = mSelectableGroup.GetHighlighted();
+        CGS_ASSERT(lpHighlighted != 0, "GetHighlighted()");
 
         const SelectableIdView* lpItem =
-            reinterpret_cast<const SelectableIdView*>(
-                static_cast<uintptr_t>(mSelectableGroup.GetHighlighted()));
+            reinterpret_cast<const SelectableIdView*>(mSelectableGroup.GetHighlighted());
         return lpItem->mId;
     }
 

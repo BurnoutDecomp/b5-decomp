@@ -177,8 +177,7 @@ namespace BrnGui
     {
         CGS_ASSERT(liIndex >= 0 && liIndex < TI_SIZE,
                    "MenuToggleGroup::GetSelectable() invalid index specified");
-        return reinterpret_cast<MenuToggle*>(
-            static_cast<uintptr_t>(SelectableGroup::GetSelectable(liIndex)));
+        return reinterpret_cast<MenuToggle*>(SelectableGroup::GetSelectable(liIndex));
     }
 
     // ---------------------------------------------------------------------------------
