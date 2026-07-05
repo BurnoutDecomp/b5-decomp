@@ -99,6 +99,29 @@ namespace BrnStreetData
             return mValidScores.IsBitSet( static_cast<u32>( leScoreType ) );
         }
 
+        // BrnChallengeData.h (DWARF). X360 0x82558410. The dirty-bit twin of ContainsData:
+        // reports whether a score type is marked dirty (needs re-upload). E_SCORE_TYPE_COUNT
+        // is the "any dirty?" probe (true iff ANY mDirty bit is set); a specific ScoreType
+        // tests just that bit. Header-inline (X360 folds the whole body into its caller,
+        // NetworkRoadRulesManager::GetRoadRulesDataToUpload). The CgsBitArray.h:203 de-inlined
+        // bounds assert collapses to the same semantic condition ContainsData uses.
+        bool IsDirty( ScoreType leScoreType ) const
+        {
+            if ( leScoreType == E_SCORE_TYPE_COUNT )
+            {
+                return mDirty.GetFirstNonZeroBit()
+                       != CgsContainers::BitArray<2u>::KI_INVALID_BITINDEX;
+            }
+
+            CGS_ASSERT( leScoreType < E_SCORE_TYPE_COUNT, "leScoreType < E_SCORE_TYPE_COUNT" );
+            return mDirty.IsBitSet( static_cast<u32>( leScoreType ) );
+        }
+
+        // BrnChallengeData.h (DWARF). X360 0x8231B6D0. Clears the dirty flag on mDirty:
+        // E_SCORE_TYPE_COUNT clears every dirty bit (UnSetAll), a specific ScoreType clears
+        // one (UnSetBit). Body in BrnChallengeData.cpp.
+        void SetClean( ScoreType leScoreType );
+
         // BrnChallengeData.h:179 (DWARF). Three-way comparator: dispatches through
         // mapComparisonFunctions[leScoreType] to rank liScore0 vs liScore1 for that score type
         // (negative => liScore0 is the better score, the result GetHighestLobbyRoadRuleScore
@@ -119,6 +142,11 @@ namespace BrnStreetData
 
         void Construct();
         void Copy( const ChallengePlayerScoreEntry* lpSource );
+
+        // BrnChallengeData.h:225 (DWARF). X360 0x8230EC18. Stores the owning car id for one
+        // score type into maCarIDs[leScoreType], bounds-checked against E_SCORE_TYPE_COUNT.
+        // Full 64-bit CgsID store (stdx). Body in BrnChallengeData.cpp.
+        void SetCarID( ScoreType leScoreType, ::CgsID lCarID );
     };
 
     // BrnChallengeData.h:56 (DWARF). Post-increment ScoreType iterator: advances the referenced

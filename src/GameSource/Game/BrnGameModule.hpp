@@ -15,6 +15,12 @@
 #include "GameSource/Game/BrnGlobalCpuMonitors.h"                        // BrnGame::BrnCpuMonitors
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h" // GameMainFlowController + flow states
 #include "SharedClasses/BrnSharedConstants.h"                            // BrnUpdateSet
+#include "GameSource/Game/X360/BrnSystemHWX360.h"                        // BrnHW::System360HW (embedded hardware, by value)
+
+// The GameTalk message type used by the RenderMetricsMessageHandler receiver signature.
+// A forward declaration suffices for the pointer-parameter method decl; the .cpp includes
+// the full SDKs/EA/GameTalk/GameTalk.h.
+namespace EA { namespace GameTalk { class GameTalkMessage; } }
 
 // Per-frame IO-buffer payload types the game module pushes/pops on the update IO stacks.
 // PLACEHOLDER (empty) definitions so the loading-screen build can allocate them; the real
@@ -243,6 +249,30 @@ namespace BrnGame
         // each finished voiceover. The family's other bridges (BridgeSoundToResource :41 /
         // BridgeSoundToGuiPreUpdate :134 / ...) are grown here when reconstructed.
         void BridgeSoundToTraining(BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer);
+
+        // ---- X360 hardware / boot-legal query helpers (BrnGameModule.cpp) ----------------
+        // X360 0x823A8B38 -- disk-error worker thread body: raise the system dirty-disc
+        // error UI for dwUserIndex; never returns. Static (a thread proc; no `this`).
+        static void DiskErrorThreadProc(unsigned long dwUserIndex);
+
+        // X360 0x823C0268 -- return the embedded hardware object (the launch/soft-reboot
+        // data block). The X360 forms this + 0x9A11C0 == &mHardware.
+        BrnHW::System360HW* GetSoftRebootData();
+
+        // X360 0x823C0288 -- forward to the hardware object's invite-reboot query.
+        // (X360 BOOL == int; the returned bool widens faithfully.)
+        int HasGameBeenRebootedDueToInvite();
+
+        // X360 0x823C0278 -- the soft-reboot flag (reads mHardware.mPad94, the launch-data
+        // flag byte at mHardware + 0x94 == game-module + 0x9A1254).
+        int HasGameBeenSoftRebooted();
+
+        // X360 0x823A9030 -- GameTalk "StopRenderMetrics" receiver: walk the message keys
+        // and clear miRenderMetricsRequested on the StopRenderMetrics key. Static (the
+        // context module is delivered by pointer-to-pointer). Same receiver shape as
+        // BrnDirector::Camera::BehaviourRenderMetrics::GameTalkMessageReceiver.
+        static void RenderMetricsMessageHandler(EA::GameTalk::GameTalkMessage* lpMessage,
+                                                BrnGameModule** lppModule);
     private:
 
         // ---- members (real order; off-path ranges omitted; see LAYOUT NOTE) -------------
@@ -323,6 +353,18 @@ namespace BrnGame
         // the game-state region). Held by pointer per the mpCgsGuiModule precedent so the keystone
         // header need not embed the manager by value. FLAG: real layout embeds it @ +6769456.
         BrnGameState::TrainingManager* mpTrainingManager; // @ +6769456
+
+        // Render-metrics-requested flag the GameTalk StopRenderMetrics receiver clears
+        // (X360 word store @ this + 0x9A1060). Mirrors the sibling's
+        // BehaviourRenderMetrics::miRenderMetricsRequested (s32).
+        s32 miRenderMetricsRequested;    // @ +10096736 (0x9A1060)
+
+        // The embedded Xbox-360 hardware-abstraction object (launch data, command line,
+        // Massive memory sub-system, invite-reboot / soft-reboot flags). GetSoftRebootData
+        // returns &mHardware, HasGameBeenRebootedDueToInvite forwards to
+        // mHardware.HasGameBeenRebootedDueToInvite(), HasGameBeenSoftRebooted reads
+        // mHardware.mPad94.
+        BrnHW::System360HW mHardware;    // @ +10097088 (0x9A11C0); mPad94 @ +10097236 (0x9A1254)
     };
 
     // operator++(EReleaseStage&, int) @ 0x823A8AD8 (X360 ARTIST), defined in BrnGameModule.cpp.

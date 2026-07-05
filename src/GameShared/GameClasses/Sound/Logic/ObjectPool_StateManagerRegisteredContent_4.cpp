@@ -43,3 +43,15 @@ void ObjectPool_StateManagerRegisteredContent_4_AnchorDtor(
 
 template int CgsContainers::ObjectPool<CgsSound::Logic::StateManager::RegisteredContent, 4, int>::AllocateObject();
 template bool CgsContainers::ObjectPool<CgsSound::Logic::StateManager::RegisteredContent, 4, int>::IsObjectAllocated(int) const;
+
+// operator[] @ 0x826A73B8 (called by StateManager::RegisterContent). Same
+// ObjectPool<RegisteredContent,4,int> instantiation: bounds-assert vs 4
+// ("Array index out of bounds", CgsObjectPool.h line 218), then the
+// allocated-bit tripwire ("The referenced object has not been allocated",
+// CgsObjectPool.h line 219 -- the mObjectsAllocated.IsBitSet check, whose own
+// internal 'invalid index' bounds assert is the de-inlined CgsBitArray.h:203
+// site in the asm), then return maObjectPool[idx] (element stride 16 ==
+// sizeof(RegisteredContent), pool @ +0, occupancy BitArray<4> @ +0x58). Body is
+// the non-const generic inline already bodied in CgsObjectPool.h.
+template CgsSound::Logic::StateManager::RegisteredContent&
+    CgsContainers::ObjectPool<CgsSound::Logic::StateManager::RegisteredContent, 4, int>::operator[](int);

@@ -38,6 +38,11 @@ namespace CgsMemory
 
     struct SimpleDataStreamProducer
     {
+        // The iterator's GetCurrent reads the producer's private geometry
+        // (mbIsStreaming/miNumAddedCommands/mpResultBuffer/miAlignedResultSize).
+        // (Additive: layout/sizeof unchanged.)
+        friend struct SimpleDataStreamResultIterator;
+
         // CgsSimpleDataStreamProducer.h:79 — geometry snapshot shared with the
         // streaming side. Not touched by Construct(); homed for completeness.
         struct SharedData

@@ -29,6 +29,14 @@ extern "C"
     const char* lua_tolstring(lua_State* lpLuaState, int liIndex, usize* lpuLen);
     // @ call site: lua_gettop(L) -> index of the top stack element (== result count here).
     int         lua_gettop(lua_State* lpLuaState);
+    // @ call site: lua_type(L, idx) -> LUA_T* tag (0 == LUA_TNIL, 1 == LUA_TBOOLEAN).
+    int         lua_type(lua_State* lpLuaState, int liIndex);
+    // @ call site: lua_isnumber(L, idx) -> nonzero if the value is a number.
+    int         lua_isnumber(lua_State* lpLuaState, int liIndex);
+    // @ call site: lua_isstring(L, idx) -> nonzero if the value is a string.
+    int         lua_isstring(lua_State* lpLuaState, int liIndex);
+    // @ call site: lua_tonumber(L, idx) -> the value at the index as a double.
+    double      lua_tonumber(lua_State* lpLuaState, int liIndex);
 }
 
 namespace BrnGame

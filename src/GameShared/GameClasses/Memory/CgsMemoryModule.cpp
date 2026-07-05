@@ -16,7 +16,7 @@ namespace CgsMemory
     // the named array index. Asserts the sentinel index 255 is never passed.)
     MemoryBank* MemoryModule::GetBank(u8 lu8BankId)
     {
-        CGS_ASSERT(lu8BankId != MemoryBank::KU_INVALID_BANK, "Bank index out of range");
+        CGS_ASSERT(lu8BankId != MemoryBank::KU_INVALID_BANK, "Bank index out of range\n");
         return &mpBanks[lu8BankId];
     }
 
