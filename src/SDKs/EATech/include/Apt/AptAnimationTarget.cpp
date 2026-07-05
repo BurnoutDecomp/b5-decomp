@@ -1326,6 +1326,14 @@ char* AptAnimationTarget::GetAStickRight(int nPlayer)
 //   word +0x1C) are interpreter-private value subtypes not yet modelled by name;
 //   reproduced verbatim through the recovered console offsets, each flagged below.
 // ---------------------------------------------------------------------------
+#if defined(_MSC_VER)
+extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH);
+#pragma comment(linker, "/alternatename:AptRunActionsStaleSlotProbe=AptRunActionsStaleSlotProbeDefault")
+extern "C" void AptRunActionsStaleSlotProbeDefault(const void*, const void*) {}
+#else
+extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH);
+#endif
+
 int AptAnimationTarget::RunActions()
 {
     CleanRemList();
@@ -1350,9 +1358,16 @@ int AptAnimationTarget::RunActions()
             AptCIH*   lpNode = reinterpret_cast<AptCIH*>(lpCIH);
 
             // The CIH handle must be "defined" (mnValueData bit 27 set).
-            // (Null-guarded: the console never queues a null CIH; an x64 bring-up
-            // path can -- skip the slot rather than AV. FLAG hardening.)
-            if (lpNode != nullptr && ((lpNode->mnValueData >> 27) & 1u) != 0u)
+            // (Guarded: the console never queues a null/dead CIH; an x64 bring-up
+            // path can leave a STALE ring cell (observed 0xbaadf000ffffffff) -- the
+            // standard plausibility screen skips + logs it rather than AV.
+            // FLAG hardening; the ring-lifetime reconstruction is the follow-on.)
+            const uintptr_t luCIH = reinterpret_cast<uintptr_t>(lpNode);
+            const bool lbCIHPlausible =
+                luCIH >= 0x10000u && (luCIH >> 47) == 0u;
+            if (!lbCIHPlausible && lpNode != nullptr)
+                AptRunActionsStaleSlotProbe(lpSlot, lpNode);
+            if (lbCIHPlausible && ((lpNode->mnValueData >> 27) & 1u) != 0u)
             {
                 // Named members (2026-07-01; were the console raw offsets on x64
                 // objects): the bound character instance (CIH word[8]) must not be

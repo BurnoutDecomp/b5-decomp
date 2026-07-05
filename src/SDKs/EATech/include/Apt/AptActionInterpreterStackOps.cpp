@@ -758,7 +758,12 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     //      call-depth stack #2 and AddRef it (console a2[4] -> a1[9]++/a1[11]) ----
     AptValue* const pCharHandle = reinterpret_cast<AptValue*>(pContext->mpCIH);   // console v18 = *(a2+4)
     AptValue* const pMethodNameSaved = pMethodName;            // v19 (r14): released at the end
-    pInterp->mpCallStackC[pInterp->mnCallStackC_Count++] = pCharHandle;   // console *(4*a1[9]++ + a1[11])
+    // console *(4*a1[9]++ + a1[11]) -- a1[9] IS the CIH/target stack (+0x24 ==
+    // mnCIHStackTop), PAIRED with the AptApt_PopCallStackC pop at the end. (The old
+    // recon pushed onto mpCallStackC here -- a DIFFERENT stack -- so the end pop
+    // stole runStream's own pushed CIH entry and double-released it: the dangling
+    // queued-CIH AV. x64 FIX 2026-07-05.)
+    pInterp->mpCIHStack[pInterp->mnCIHStackTop++] = reinterpret_cast<AptCIH*>(pCharHandle);
     pCharHandle->AddRef();                                     // console (**v18)(v18)
 
     // ---- resolve the method value when the object guard did not set one ----
@@ -942,8 +947,11 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             // mark a defined object class-bearing (console: tag 0x13 (19) -> set 0x400000).
             if (pBoundThis->getVtblIndex() == AptVFT_Object && pBoundThis->getIsDefined())
                 pBoundThis->SetHasClass(1);   // console *(v41+7) |= 0x400000 (the class flag word)
-            pInterp->mpCIHStack[pInterp->mnCIHStackTop++] =
-                reinterpret_cast<AptCIH*>(pBoundThis);   // console *(4*a1[3]++ + a1[5])
+            // console *(4*a1[3]++ + a1[5]) -- a1[3] is call-frame stack B (+0x0C ==
+            // mnCallStackB_Count), PAIRED with the AptApt_PopCIHStack pop below. (The
+            // old recon pushed onto the CIH/target stack -- the same cross-stack
+            // mismatch as the char-handle push. x64 FIX 2026-07-05.)
+            pInterp->mpCallStackB[pInterp->mnCallStackB_Count++] = pBoundThis;
             pBoundThis->AddRef();                        // console (**v41)(v41)
         }
     }
@@ -989,7 +997,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         // re-target a destroyed-clip placeholder through the call-frame register top.
         if (pMethodName == gpAptDestroyedClipValue)   // console dword_8324D818
             pMethodName = reinterpret_cast<AptValue*>(
-                pInterp->mpCallStackC[pInterp->mnCallStackC_Count - 2]);   // console *(4*(a1[9]-2)+a1[11])
+                pInterp->mpCIHStack[pInterp->mnCIHStackTop - 2]);   // console *(4*(a1[9]-2)+a1[11]) (the CIH/target stack)
 
         if (reinterpret_cast<void*>(pMethodName)
             == reinterpret_cast<void*>(pContext->mpCharacterInst))   // console *(a2+16)
@@ -1030,8 +1038,8 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     // register stack (console a1+3 / AptValue_::pop).
     if (bPushedFrame)
     {
-        AptValue* const pBound =
-            reinterpret_cast<AptValue*>(pInterp->mpCIHStack[pInterp->mnCIHStackTop - 1]);   // console v64
+        AptValue* const pBound = reinterpret_cast<AptValue*>(
+            pInterp->mpCallStackB[pInterp->mnCallStackB_Count - 1]);   // console v64 = *(4*a1[3]+a1[5]-4) (stack B top)
         if (pBound->getVtblIndex() == AptVFT_Object && pBound->getIsDefined())
             pBound->SetHasClass(0);   // console *(v64+28) &= ~0x400000
         AptApt_PopCIHStack(pInterp);  // console AptValue_::pop(a1 + 3)  // FLAG: call-frame stack pop

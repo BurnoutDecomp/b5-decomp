@@ -460,6 +460,23 @@ int AptValueInitialize()
                     pGlobals->Set(*lakNames[li], pCtor);
             }
 
+            // The console resolves Object.registerClass through AptObject::
+            // objectMemberLookup (every AptObject-family value knows the name);
+            // our AptNativeFunction hierarchy sits beside AptObject, so install
+            // the native as an ORDINARY member of the Object builtin's hash --
+            // observable-identical for AS lookups. FLAG: revisit if the value
+            // class tree is re-based onto AptObject.
+            {
+                AptValue* const pObjectClass = pGlobals->Lookup(gAptObjectClassName);
+                AptNativeHash* const pObjHash =
+                    pObjectClass ? pObjectClass->GetNativeHashVirtual() : nullptr;
+                if (pObjHash && gpObjRegistrationFunc)
+                {
+                    EAStringC lRegKey("registerClass");
+                    pObjHash->Set(lRegKey, gpObjRegistrationFunc);
+                }
+            }
+
             for (int li = 0; li < 3; ++li)
             {
                 AptValue* const pClass = pGlobals->Lookup(*lakNames[li]);
