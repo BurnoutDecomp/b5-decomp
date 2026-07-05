@@ -191,14 +191,23 @@ namespace
 int AptCIH::FindAndSetEvents()
 {
     int nNeedsTick = 0;
-    AptNativeHash* pHash = GetNativeHashVirtual();   // vtable slot 2
+    // The event mask lives on the CHAR INST's property hash (the same v2[3] ==
+    // mpProperties home AssociateInstToClass writes the prototype into; the CIH
+    // value hash is null for placed clips -- was an AV here). x64 FIX 2026-07-05.
+    AptCharacterInst* const pOwnInst = GetCharacterInst();
+    AptNativeHash* const pHash = pOwnInst ? pOwnInst->mpProperties : nullptr;
+    if (pHash == nullptr)
+        return 0;
 
     for (const AptEventDescriptor& desc : KaAptEventDescriptors)
     {
         if ((desc.nEventMask & pHash->mnEventHandlerMask) == 0 &&
             (desc.nEventMask & KU_AptEventHandlerNames) != 0)
         {
-            if (findChild(&gAptEventNameTable[desc.nNameIndex], nullptr) != nullptr)
+            // The name table is the INTERNED AS-name pool (console dword_8324E580
+            // == StringPool::saConstant, fully populated; the separate zeroed
+            // gAptEventNameTable alias is retired from this reader).
+            if (findChild(&StringPool::saConstant[desc.nNameIndex], nullptr) != nullptr)
             {
                 pHash->mnEventHandlerMask |= desc.nEventMask;
                 if ((desc.nEventMask & KU_AptEventNeedsUpdateTick) != 0)

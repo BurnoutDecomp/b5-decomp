@@ -1293,7 +1293,7 @@ void AptCIH_DispatchInstantiatedHook(AptCIH* pPlacedNode)
 // (class-bind 'TransitionComponent' -> the ctor runs), but the constructor's deeper
 // execution still AVs -- gated OFF so the title boot stays green while the ctor-run
 // frontier is debugged; flip to continue.
-static const bool KB_CLASS_BINDING = false;
+static const bool KB_CLASS_BINDING = true;
 
 int AptCIH_AssociateInstToClass(AptCIH* pNode)
 {
