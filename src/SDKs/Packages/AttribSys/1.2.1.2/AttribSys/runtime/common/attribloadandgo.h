@@ -75,7 +75,34 @@ namespace Attrib
         // --- DWARF member layout (attribloadandgo.h). Pointer widths are x64 here;
         //     the load-bearing pair for this TU is mNumDependencies / mResolvedCount. ---
         struct DependencyNode;
-        struct DataBlock;
+
+        // One owned asset/data block. Layout is X360-ATTESTED (0x82803210 Set /
+        // 0x82803298 ReleaseAsset), which overrides the DecFIGS DWARF's split
+        // mData(+0)/mKind(+4)/mSize(+8): the runtime only ever touches +0 and +4 and
+        // NEVER +8 -- kind (high byte) and size (low 24 bits) are packed into ONE word
+        // at +4. The DWARF 3-member form is PS3/source drift not realised by this build.
+        //   +0  void*  mpData          // asset/block payload pointer
+        //   +4  u32    muKindAndSize   // (kind << 24) | (size & 0x00FFFFFF)
+        struct DataBlock
+        {
+            // Bind a payload block: data pointer, byte size (<= 0xFFFFFF) and kind tag.
+            // (X360 0x82803210)
+            void Set(void* lpData, unsigned int luSize, u8 lu8Kind);
+
+            // Release the owned asset back to the host GC (if any) and clear the block.
+            // (X360 0x82803298)
+            void ReleaseAsset(Vault::AssetID lAssetId, IGarbageCollector* lpGC);
+
+            bool         Inited()  const { return mpData != nullptr; }
+            void*        GetData() const { return mpData; }
+            unsigned int GetSize() const { return muKindAndSize & 0x00FFFFFFu; }
+            u8           GetKind() const { return static_cast<u8>(muKindAndSize >> 24); }
+
+        private:
+            void* mpData;               // X360 +0
+            u32   muKindAndSize;        // X360 +4 : (kind << 24) | (size & 0x00FFFFFF)
+        };
+
         struct PointerNode;
         struct ExportNode;
 

@@ -1,6 +1,7 @@
 #include "GameSource/Resource/BrnDLCManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT + Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
+#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetPackage runtime-streamed assert)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"      // CgsDev::DebugInterface
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"             // CgsDev::DebugManager::ActivateComponent
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // CgsDev::Debug2DImmediateRender, RGBA
@@ -270,5 +271,56 @@ namespace BrnResource
             RegisterVariable(&g_DLCFeatureAvailability.mabFeatureEnabled[liFeature],   // byte_82FFA870[i]
                              lacEntitlement, mapcFeatureNames[liFeature]);
         }
+    }
+
+    // X360 0x82661550. Bounds-checked access into the inline DLC package array: asserts the index
+    // is in [0, muPackageCount) and returns &maPackages[liPackage] (array base == the object, so
+    // the asm computes 76*index + this). The X360 formats the assert message at runtime by
+    // streaming the index between the two baked literals "Package " and " is out of range\n"
+    // through a CgsDev::StrStream, then fires the Begin/Fire/End triad -- the message embeds the
+    // index so it CANNOT collapse to CGS_ASSERT (mirrors CgsMemoryMap::GetBank).
+    DLCManager::DLCPackage* DLCManager::GetPackage(s32 liPackage)
+    {
+        if (liPackage < 0 || liPackage >= static_cast<s32>(muPackageCount))
+        {
+            CgsDev::Assert::BeginAssert();
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Package " << liPackage << " is out of range\n";
+            CgsDev::Assert::FireAssert(
+                lacMessageBuffer,
+                "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h",
+                332);
+            CgsDev::Assert::EndAssert();
+        }
+
+        return &maPackages[liPackage];   // mulli r11,liPackage,0x4C; add r3,r11,this
+    }
+
+    // X360 0x82662E18. The version check for the current DLC package failed: shift-remove that
+    // package from the inline package array, decrement the package count, then set the monitor
+    // stage. The removal is a memmove of the (count - current - 1) trailing records down one slot
+    // (stride 76). The trailing stage store is 3 when the (now shorter) list still has a package at
+    // miCurrentPackage (miCurrentPackage < new count) and 9 otherwise (list exhausted).
+    // (The asm returns whatever r3 held; the value is unused by the caller Prepare -> void.)
+    int DLCManager::DLCVersionCheckFailed()
+    {
+        const s32 liCurrent  = miCurrentPackage;                 // lwz r11, 0x624(r31)
+        const s32 liTrailing = muPackageCount - liCurrent - 1;   // lwz 0x620; subf; addi -1
+
+        if (liTrailing > 0)   // cmpwi cr6, r10, 0 / ble skips the memmove
+        {
+            std::memmove(&maPackages[liCurrent],
+                         &maPackages[liCurrent + 1],
+                         static_cast<size_t>(liTrailing) * sizeof(DLCPackage));   // 76*current, +76, 76*trailing
+        }
+
+        const s32 liNewCount = muPackageCount - 1;   // lwz 0x620; addi r11,-1
+        muPackageCount = liNewCount;                 // stw r11, 0x620(r31)
+
+        // miCurrentPackage < newCount -> another package remains to check (stage 3); else done (9).
+        meVersionCheckStage = (miCurrentPackage < liNewCount) ? 3 : 9;   // cmpw r10,r11 / li 3 / blt / li 9
+
+        return 0;   // r3 is leaked from the asm and unused; method is effectively void.
     }
 }

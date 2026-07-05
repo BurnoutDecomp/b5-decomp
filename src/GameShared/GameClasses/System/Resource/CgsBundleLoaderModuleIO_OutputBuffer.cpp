@@ -5,15 +5,19 @@
 #include <cstddef>   // offsetof
 
 // CgsResource::BundleLoaderIO::OutputBuffer member functions, reconstructed from
-// BURNOUT_X360_ARTIST.XEX. This TU bodies the two X360-emitted accessors:
+// BURNOUT_X360_ARTIST.XEX. This TU bodies:
 //
-//   GetPool()          @ 0x828E21E0  -> &mPool   (this + 4),       write-locked (bit 3)  (:143)
-//   GetStream() const  @ 0x828E2528  -> &mStream (this + 0x1342C), read-locked  (bit 4)  (:151)
+//   GetPool()          @ 0x828E21E0 -> &mPoolSendQueue             (this + 4),       write-lock (bit 3)  (:143)
+//   GetLoadBundleResponseQueue()   const @ 0x828E2288 -> (this + 0x1014),  read-lock  (bit 4)  (:145)
+//   GetLoadBundleResponseQueue()         @ 0x828E2330 -> (this + 0x1014),  write-lock (bit 3)  (:146)
+//   GetUnloadBundleResponseQueue() const @ 0x828E23D8 -> (this + 0xA420),  read-lock  (bit 4)  (:148)
+//   GetUnloadBundleResponseQueue()       @ 0x828E2480 -> (this + 0xA420),  write-lock (bit 3)  (:149)
+//   GetStream()        const @ 0x828E2528 -> &mStreamRequestQueue  (this + 0x1342C), read-lock  (bit 4)  (:151)
 //
-// Each loads the 1-byte FlagSet status (lbz 0(this)) and tests its lock bit, asserts when
-// clear, then returns the payload address. GetStream()'s return is addis r3,this,1 (+0x10000)
-// then addi r3,r3,0x342C == this + 0x1342C (78892). We return the named member's address
-// (semantic parity, not byte-match).
+// Each loads the 1-byte FlagSet status (lbz 0(this)) and tests its lock bit (read: extrwi ...,27 ==
+// (status>>4)&1; write: extrwi ...,28 == (status>>3)&1), asserts when clear (the read/write assert
+// strings carry a trailing \n), then returns the payload address. GetPool/GetStream are the
+// historical names for mPoolSendQueue (+4) / mStreamRequestQueue (+0x1342C).
 
 namespace CgsResource
 {
@@ -21,22 +25,55 @@ namespace BundleLoaderIO
 {
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mPool) == 0x0004, "mPool @0x0004");
-        static_assert(offsetof(OutputBuffer, mStream) == 0x1342C, "mStream @0x1342C");
+        static_assert(offsetof(OutputBuffer, mPoolSendQueue) == 0x0004, "mPoolSendQueue @0x0004");
+        static_assert(offsetof(OutputBuffer, mStreamRequestQueue) == 0x1342C, "mStreamRequestQueue @0x1342C");
     }
 
-    // X360 0x828E21E0: write-lock; return this + 4.
+    // X360 0x828E21E0: write-lock; return this + 4 (the pool-send queue).
     OutputBuffer::PoolStorage* OutputBuffer::GetPool()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");   // :143
-        return &mPool;
+        return &mPoolSendQueue;
     }
 
-    // X360 0x828E2528: read-lock; return this + 0x1342C.
+    // X360 0x828E2288: read-lock (bit 4); return &mLoadBundleResponseQueue (this + 0x1014).
+    // (DWARF CgsBundleLoaderModuleIO.h:145, const overload.) Consumed by
+    // CgsResource::ResourceModule::ProcessResourceResponses.
+    const OutputBuffer::LoadBundleResponseQueue* OutputBuffer::GetLoadBundleResponseQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");   // :145
+        return &mLoadBundleResponseQueue;
+    }
+
+    // X360 0x828E2330: write-lock (bit 3); return &mLoadBundleResponseQueue (this + 0x1014).
+    OutputBuffer::LoadBundleResponseQueue* OutputBuffer::GetLoadBundleResponseQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");   // :146
+        return &mLoadBundleResponseQueue;
+    }
+
+    // X360 0x828E23D8: read-lock (bit 4); return &mUnloadBundleResponseQueue (this + 0xA420).
+    // (DWARF CgsBundleLoaderModuleIO.h:148, const overload.)
+    const OutputBuffer::UnloadBundleResponseQueue* OutputBuffer::GetUnloadBundleResponseQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");   // :148
+        return &mUnloadBundleResponseQueue;
+    }
+
+    // X360 0x828E2480: write-lock (bit 3); return &mUnloadBundleResponseQueue (this + 0xA420).
+    // (DWARF CgsBundleLoaderModuleIO.h:149, non-const overload.) Consumed by
+    // CgsResource::BundleLoaderModule::CheckForUnloads.
+    OutputBuffer::UnloadBundleResponseQueue* OutputBuffer::GetUnloadBundleResponseQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");   // :149
+        return &mUnloadBundleResponseQueue;
+    }
+
+    // X360 0x828E2528: read-lock; return this + 0x1342C (the stream-request queue).
     const OutputBuffer::StreamStorage* OutputBuffer::GetStream() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");   // :151
-        return &mStream;
+        return &mStreamRequestQueue;
     }
 }
 }

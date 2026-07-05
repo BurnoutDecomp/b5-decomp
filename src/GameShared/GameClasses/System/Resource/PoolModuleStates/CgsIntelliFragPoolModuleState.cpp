@@ -130,16 +130,18 @@ namespace CgsResource
 
     // -------- Update @ 0x828FF7F8 --------
     // Poll the intellifrag step machine once (driven by PoolModule::UpdateIntelliFrag). Dispatch on
-    // meState:
-    //   IDLE(0):                nothing to do -> SUCCESS.
-    //   >=3 (invalid):          assert tripwire, return ERROR.
-    //   START_DEFRAGMENTING(1): once the pool's defrag latch has cleared (GetDefragMemType()==-1), arm
-    //                           the final addressed allocations and stay PEND.
-    //   DEFRAGMENTING_HEAP(2):  while the pool is still relocating, stay PEND; once idle, scan the
+    // meState by NUMERIC value exactly as the X360 does (cmplwi meState,1 / beq / cmplwi 3):
+    //   IDLE(0):                nothing to do -> SUCCESS.                       (blt loc_828FF914 -> li r3,0)
+    //   START_DEFRAGMENTING(1): [asm beq loc_828FF8C4] while the pool is still relocating
+    //                           (IsDefragmenting(), *(mpPool+0x1C8)!=0) stay PEND; once idle, scan the
     //                           three per-memtype batch-alloc results -- the first that still reports
     //                           NEED_DEFRAG kicks off BeginDefragment for that memtype (PEND on
     //                           success; on failure fall back to IDLE and escalate to EMERGENCY). If
     //                           none need defrag, return to IDLE and report SUCCESS.
+    //   DEFRAGMENTING_HEAP(2):  [asm loc_828FF898] once the pool's defrag latch has cleared
+    //                           (GetDefragMemType()==-1, *(mpPool+0x1BC)==-1), re-latch and arm the
+    //                           final addressed allocations; return PEND.
+    //   >=3 (invalid):          assert tripwire, return ERROR.
     IntelliFragPoolModuleState::EIntelliFragResult IntelliFragPoolModuleState::Update()
     {
         switch (meState)
@@ -147,15 +149,7 @@ namespace CgsResource
         case E_STATE_IDLE:
             return E_RESULT_SUCCESS;                     // li r3,0
 
-        case E_STATE_START_DEFRAGMENTING:               // meState == 1
-            if (GetPool()->GetDefragMemType() == -1)    // *(mpPool+0x1BC) == -1
-            {
-                meState = E_STATE_START_DEFRAGMENTING;  // stw 1, 0x4C (re-latch)
-                DoFinalAllocations();                   // bl ...BaseDefragPoolModuleState::DoFinalAllocations
-            }
-            return E_RESULT_PEND;                        // li r3,2
-
-        case E_STATE_DEFRAGMENTING_HEAP:                // meState == 2
+        case E_STATE_START_DEFRAGMENTING:               // meState == 1  (asm loc_828FF8C4)
             if (GetPool()->IsDefragmenting())           // *(mpPool+0x1C8) != 0 -> still relocating
             {
                 return E_RESULT_PEND;                    // li r3,2
@@ -182,8 +176,16 @@ namespace CgsResource
             meState = E_STATE_IDLE;                       // stw 0, 0x4C
             return E_RESULT_SUCCESS;                      // li r3,0
 
+        case E_STATE_DEFRAGMENTING_HEAP:                // meState == 2  (asm loc_828FF898)
+            if (GetPool()->GetDefragMemType() == -1)    // *(mpPool+0x1BC) == -1
+            {
+                meState = E_STATE_START_DEFRAGMENTING;  // stw 1, 0x4C (re-latch)
+                DoFinalAllocations();                   // bl ...BaseDefragPoolModuleState::DoFinalAllocations
+            }
+            return E_RESULT_PEND;                        // li r3,2
+
         default:
-            // meState >= E_STATE_DEFRAGMENTING_HEAP+1 -- an impossible step value.
+            // meState >= 3 -- an impossible step value.
             CGS_ASSERT(false, "Defrag state is invalid\n");   // :152
             return E_RESULT_ERROR;                       // li r3,1
         }

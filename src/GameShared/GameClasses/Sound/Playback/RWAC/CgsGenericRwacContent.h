@@ -110,6 +110,16 @@ namespace Playback
         void  Update(Content& aContent, const ContentSpec& aSpec);  // :81
 
     private:
+        // CgsContentLoader.h:88/93/98/118/122/126/130 (DWARF). The load/unload state machine
+        // (bodied out-of-line as template members in CgsContentLoader.cpp). No storage change.
+        void UpdateUnload(Content& arContent, const ContentSpec& arSpec);                 // :88
+        void PurgeLoadData(Content& arContent, const ContentSpec& arSpec);                // :93
+        void HandleResourceModuleLoading(Content& arContent, const ContentSpec& arSpec);  // :98
+        bool StartResourceModuleLoading(Content& arContent, const ContentSpec& arSpec);   // :118
+        void RestartResourceModuleLoading(Content& arContent, const ContentSpec& arSpec); // :122
+        void UpdateResourceModuleLoading(Content& arContent, const ContentSpec& arSpec);  // :126
+        void CancelResourceModuleLoading(Content& arContent, const ContentSpec& arSpec);  // :130
+
         CgsResource::ResourcePtr<ResType> mpResource;  // :132  (first member -> object +0x20)
         ResourceModuleLoadData*           mpLoadData;  // :133
         EUnloadState                      meUnloadState; // :134

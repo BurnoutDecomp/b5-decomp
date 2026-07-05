@@ -5,6 +5,12 @@
 
 namespace renderengine { struct VertexBufferHeader; struct IndexBufferHeader; }
 
+// Forward declarations for the two serialised-descriptor bodies added in wave44
+// (GetRenderableBasicResourceDescriptor / GetSerialisedResourceDescriptor). The
+// concrete layouts live in Renderable.h / renderablemesh.h; the .cpp includes those.
+struct Renderable;
+struct RenderableMesh;
+
 namespace CgsResource
 {
     // The fix-up relocation block FixUp/FixUpRenderableMesh are handed (a3): two relocation
@@ -47,10 +53,20 @@ public:
     void     GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
     bool     DebugValidate(const void* lpResource) const override;
 
+    // @0x828A9AB0 -- override (X360 vtable slot #2). Total serialised allocation for one
+    // renderable = fixed per-renderable overhead + per-mesh vertex-descriptor / index /
+    // vertex-buffer descriptors. Defined in CgsRwRenderableResourceType.cpp (wave44).
+    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+
     // PS3/Xbox2 fix-up helper (defined in CgsRwRenderableResourceTypePS3.cpp, @0x828A8968):
     // relocate one serialised mesh's buffer-header pointers + GPU base addresses, then
     // re-validate each buffer's physical-memory flags. Called per-mesh by FixUp.
     void     FixUpRenderableMesh(RwRenderableMesh* lpMesh, const RwRenderableFixUpData* lpFixUp) const;
+
+private:
+    // @0x828A96F0 -- fixed per-renderable overhead descriptor (mesh table + object-scope
+    // texture-info block + texture-name string pool). DWARF CgsRwRenderableResourceType.h:47.
+    CgsResource::ResourceDescriptor GetRenderableBasicResourceDescriptor(const Renderable* lpRenderable) const;
 };
 }
 
