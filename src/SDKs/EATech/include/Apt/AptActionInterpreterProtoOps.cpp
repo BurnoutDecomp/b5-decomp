@@ -240,7 +240,13 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction(AptActionInterpreter
 
     EAStringC name(pByteCode->mpName);   // console InitFromBuffer(&v10, mpName)
 
-    void* pMem = AptScriptFunction1::operator new(52);
+    // x64 FIX (2026-07-05): the console allocates 52 bytes; sizeof widens well past
+    // that on x64 (8-byte vptr + pointers), and the hardcoded 52 UNDER-ALLOCATED the
+    // function object -- its tail members overlapped the next GC-pool block, whose
+    // later use clobbered the pointer high dwords (the init-action bring-up caught
+    // mpCIH/mpParentAnim with 32-bit-stomped high halves at teardown). Same class of
+    // bug as the root-CIH `operator new(40)` fix in AptGetAnimationAtLevel.
+    void* pMem = AptScriptFunction1::operator new(sizeof(AptScriptFunction1));
     AptScriptFunction1* pFunction = pMem
         ? ::new (pMem) AptScriptFunction1(static_cast<AptValue*>(pInterp->mpCurrentFunction),
                                           pByteCode, static_cast<AptValue*>(pContext->mpCIH))
@@ -282,7 +288,8 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
                                          reinterpret_cast<uintptr_t>(pInterp->mpConstantPool));
     pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mnConstantPoolCount);
 
-    void* pMem = AptScriptFunction2::operator new(52);
+    // x64 FIX (2026-07-05): sizeof, not the console's 52 -- see the v1 handler note.
+    void* pMem = AptScriptFunction2::operator new(sizeof(AptScriptFunction2));
     AptScriptFunction2* pFunction = pMem
         ? ::new (pMem) AptScriptFunction2(static_cast<AptValue*>(pInterp->mpCurrentFunction),
                                           pByteCode, static_cast<AptValue*>(pContext->mpCIH))
