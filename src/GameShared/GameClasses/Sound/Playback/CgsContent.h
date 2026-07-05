@@ -114,6 +114,12 @@ namespace Playback
         void OnAttach(Voice& arVoice, Slot& arSlot);
         bool DoUnload();
 
+        // Publish a resolved content state (E_CONTENT_STATE_*), setting the CHANGED
+        // flag as required. FLAG (DEFER): declared-only -- bodied in its own Content TU
+        // (X360 CgsSound::Playback::Content::SetContentState). Reached from
+        // ContentLoader<>::UpdateResourceModuleLoading on the FINISHED transition.
+        void SetContentState(int liState);
+
         // FLAG (committed-home DEFECT corrected to match DWARF ground truth):
         // CgsContent.h DWARF (line 141/301) declares Content::DoDispose() returning
         // *void*, matching Object::DoDispose() (CgsObject.h:27, also void). The prior

@@ -2,6 +2,7 @@
 #define CGS_SOUND_CGSSOUNDUTILS_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random (SelectionHistory mRandom)
 
 #include <cmath>
 
@@ -260,6 +261,68 @@ public:
 
 private:
     SlopeParams mParams;   // CgsSoundUtils.h:346
+};
+
+// ===== ADDITIVE GROW (Wave 49): CgsSound::Utils::SelectionHistory =====
+// A recently-used-selection tracker: a monotonic timestamp plus a per-selection Item
+// table. Update(i) stamps slot i with the current time; the FindResult+std::sort path
+// (collision-manager TU) picks the least-recently-used selection; Randomize reshuffles
+// on timestamp wrap. DWARF-attested instantiation SelectionHistory<512u,uint16_t,
+// uint16_t,65536ull> (references/DecFIGS/dwarfdump/.../CgsSoundUtils.h:965).
+//
+// LAYOUT (asm-confirmed, X360 32-bit; DWARF CgsSoundUtils.h:971-977):
+//   +0x00  TimeStampType mCurrentTimeStamp   (u16)
+//   +0x10  CgsNumeric::Random mRandom        (0x30 bytes)
+//   +0x40  Item maHistory[KU_SIZE]           (Item = { u16 mTimeStamp }, stride 2)
+//   sizeof == 0x440 for KU_SIZE==512.
+//
+// Bodies (LessThanTimeStamp / Randomize / ctor / Update) live in CgsSoundUtils.cpp as an
+// explicit instantiation. FindOldest / FindRandomOldest are other-TU surface and stay
+// declaration-only here. LessThanTimeStamp is a public static predicate (used as the
+// std::sort fn-ptr in the collision-manager TU; the X360 leaf @0x82690D40 is 2-arg / no-this).
+template <u32 tuSize, typename StoredType, typename TimeStampType, u64 tuModulo>
+class SelectionHistory
+{
+public:
+    // DWARF CgsSoundUtils.h:663/967 -- the exposed capacity constant (== 512).
+    static const u32 KU_SIZE = tuSize;
+
+    // DWARF CgsSoundUtils.h:769. One history slot: the last-use timestamp of a selection.
+    struct Item
+    {
+        Item() : mTimeStamp(0) {}
+        TimeStampType mTimeStamp;   // CgsSoundUtils.h:770
+    };
+
+    // DWARF CgsSoundUtils.h:774. Scratch pair used by the oldest-N search + std::sort.
+    struct FindResult
+    {
+        FindResult() : mTimeStamp(0), mIndex(0) {}
+        TimeStampType mTimeStamp;   // CgsSoundUtils.h:775
+        StoredType    mIndex;       // CgsSoundUtils.h:776
+    };
+
+    // @ 0x826DC9C8 -- default ctor (clear + default-prime mRandom + Randomize(0xDEADF00D)).
+    SelectionHistory();
+
+    // DWARF CgsSoundUtils.h:673 -- other-TU body; declared-only here.
+    TimeStampType FindOldest() const;
+
+    // @ 0x826C5900 -- reseed mRandom, rebuild identity permutation, Fisher-Yates shuffle.
+    void Randomize(unsigned int luSeed);
+
+    // @ 0x826C6800 -- stamp maHistory[lSelection]; re-randomise on timestamp wrap.
+    void Update(TimeStampType lSelection);
+
+    // @ 0x82690D40 -- FindResult timestamp comparator. STATIC: used as the std::sort
+    // predicate (fn-ptr) in the collision-manager TU.
+    static bool LessThanTimeStamp(const FindResult& lkrLeft, const FindResult& lkrRight);
+
+private:
+    // ORDER mirrors the DWARF (CgsSoundUtils.h:971-977).
+    TimeStampType      mCurrentTimeStamp;   // +0x00  CgsSoundUtils.h:791
+    CgsNumeric::Random mRandom;             // +0x10  CgsSoundUtils.h:792
+    Item               maHistory[tuSize];   // +0x40  CgsSoundUtils.h:793
 };
 
 }

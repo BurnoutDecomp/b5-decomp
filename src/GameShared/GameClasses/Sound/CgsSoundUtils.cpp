@@ -251,5 +251,78 @@ s32 PathLine<tuNumStages>::AddStage(f32 lfStart, f32 lfFinish, f32 lfLength,
 template void PathLine<3u>::ClearStages();
 template s32  PathLine<3u>::AddStage(f32, f32, f32, Curve::ECurveType);
 
+// ============================================================================================
+// CgsSound::Utils::SelectionHistory<512u,u16,u16,65536ull> -- the recently-used-selection
+// tracker. Bodies reconstructed from BURNOUT_X360_ARTIST.XEX; explicit instantiation below.
+// ============================================================================================
+
+// @ 0x82690D40 -- FindResult timestamp comparator (std::sort predicate). 2-arg / no-this leaf:
+//   lhz timestamps, subfc/subfe/clrlwi == (left.mTimeStamp < right.mTimeStamp).
+bool SelectionHistory<512u, u16, u16, 65536ull>::LessThanTimeStamp(
+    const SelectionHistory<512u, u16, u16, 65536ull>::FindResult& lkrLeft,
+    const SelectionHistory<512u, u16, u16, 65536ull>::FindResult& lkrRight)
+{
+    return lkrLeft.mTimeStamp < lkrRight.mTimeStamp;
+}
+
+// @ 0x826C5900 -- reseed mRandom, rebuild maHistory as the identity permutation, Fisher-Yates
+// shuffle, then reset the running timestamp to KU_SIZE. The X360 inlines the whole Random refill
+// spine + the bounded LCG draw; reconstructed here through the CgsNumeric::Random public API.
+// CONFIDENCE low: the exact bounded-draw mapping (RandomUInt(0,KU_SIZE) vs the inlined
+// (seed>>32)&0x1FF) is reconstructed by intent, not verified store-for-store.
+void SelectionHistory<512u, u16, u16, 65536ull>::Randomize(unsigned int luSeed)
+{
+    mRandom.SetSeed(luSeed);
+
+    // Identity permutation: maHistory[i] holds selection index i (loop @0x826C5AEC).
+    for (u16 lu = 0; lu < KU_SIZE; ++lu)
+    {
+        maHistory[lu].mTimeStamp = lu;
+    }
+
+    // Fisher-Yates shuffle driven by mRandom (loop @0x826C5B10).
+    for (u16 lu = 0; lu < KU_SIZE; ++lu)
+    {
+        const u16 luSwap             = static_cast<u16>(mRandom.RandomUInt(0, KU_SIZE));
+        const u16 luTemp             = maHistory[lu].mTimeStamp;
+        maHistory[lu].mTimeStamp     = maHistory[luSwap].mTimeStamp;
+        maHistory[luSwap].mTimeStamp = luTemp;
+    }
+
+    mCurrentTimeStamp = KU_SIZE;
+}
+
+// @ 0x826DC9C8 -- default ctor: clear the running timestamp and the whole history table, then
+// default-prime the embedded Random (X360 inlines Random::Construct) and reshuffle via Randomize
+// with the fixed 0xDEADF00D seed literal. CONFIDENCE medium (shares the inlined-PRNG caveat).
+SelectionHistory<512u, u16, u16, 65536ull>::SelectionHistory()
+{
+    mCurrentTimeStamp = 0;
+
+    for (u16 lu = 0; lu < KU_SIZE; ++lu)
+    {
+        maHistory[lu].mTimeStamp = 0;
+    }
+
+    mRandom.Construct();
+    Randomize(0xDEADF00Du);
+}
+
+// @ 0x826C6800 -- stamp maHistory[lSelection] with the current monotonic timestamp and advance
+// it; re-randomise when the timestamp is about to wrap (mCurrentTimeStamp == 0xFFFE). The asm's
+// CgsDev::Assert trio collapses to one CGS_ASSERT (path + line-number args dropped).
+void SelectionHistory<512u, u16, u16, 65536ull>::Update(u16 lSelection)
+{
+    CGS_ASSERT(lSelection < KU_SIZE, "lSelection < KU_SIZE");
+
+    if (mCurrentTimeStamp == 0xFFFE)
+    {
+        Randomize(0xDEADF00Du);
+    }
+
+    maHistory[lSelection].mTimeStamp = mCurrentTimeStamp;
+    ++mCurrentTimeStamp;
+}
+
 }
 }

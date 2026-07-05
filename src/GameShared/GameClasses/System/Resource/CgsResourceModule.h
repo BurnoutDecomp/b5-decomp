@@ -41,6 +41,8 @@ namespace CgsResource
     struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
     namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
     namespace ResourceIO { struct InputBuffer; }                    // the module's request input
+    // The write-stream request event types (deprecated adders take these by pointer only).
+    namespace Events { struct OpenWriteStreamRequest; struct CloseWriteStreamRequest; }
 
     // CgsResource::DebugComponentParams (DWARF CgsResourceDebugComponent.h:57) - the debug-component
     // bring-up params carried in ResourceModule::InitOptions. The X360 callback signature is
@@ -119,6 +121,20 @@ namespace CgsResource
         // (the X360 reaches it through the resource-module vtable; here a by-name accessor).
         PoolModule&             GetPoolModule()   { return mPoolModule; }
         CgsMemory::MemoryModule& GetMemoryModule() { return mMemoryModule; }
+
+        // ---- file-system request adders (Wave 49) --------------------------------------------
+        // The two deprecated write-stream adders are bodied (bare "Write streams deprecated"
+        // assert + return false; @0x828D8310 / @0x828D83A0). The four real file-system adders
+        // (AddAddPatchRequest @0x828FD5C8 / AddCloseFileRequest @0x828F3EE0 /
+        // AddRegisterMemFileRequest @0x828EC600 / AddUnregisterMemFileRequest @0x828EC660) are
+        // PARTIAL: they need a cross-TU dependency web (FileSystem::{Lock,Unlock,Close,
+        // Register,Unregister}Internal + GetPatchManager, PatchManager::AddPatch, FileSystemAlloc,
+        // CgsContainers::IndexedPool8<PendingFileResponse,16>, and the FileEvent/FileHandleEvent/
+        // CloseFileRequest/RegisterMemFileRequest/UnregisterMemFileRequest event structs) that is
+        // not yet homed, so they are intentionally NOT declared/bodied here (left to a later wave
+        // to grow coherently, same disposition as wave44's blocked BinaryFileResource members).
+        bool AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest* lpRequest);   // @0x828D8310
+        bool AddCloseWriteStreamRequest(const Events::CloseWriteStreamRequest* lpRequest); // @0x828D83A0
 
     private:
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------

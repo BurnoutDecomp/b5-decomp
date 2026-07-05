@@ -4,18 +4,32 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/rwcore_structs.h"
 
-// CgsSound::Playback::ContentLoader<ResType> load/unload state-machine method family,
-// reconstructed from BURNOUT_X360_ARTIST.XEX for the CgsResource::BinaryFileResource
-// instantiation. The generic template lives in CgsGenericRwacContent.h; these six methods are
-// bodied as template members and explicitly instantiated at the bottom of the file so the
-// BinaryFileResource symbols the X360 build attests get emitted.
+// CgsSound::Playback::ContentLoader<ResType> load/unload/update state-machine method family,
+// reconstructed from BURNOUT_X360_ARTIST.XEX. The generic template lives in
+// CgsGenericRwacContent.h; the methods are bodied as template members here and explicitly
+// instantiated at the bottom of the file for BOTH resource-element types the X360 build attests
+// (BinaryFileResource and AlignedBinaryFileResource), so every ContentLoader symbol is emitted.
 //
+// BinaryFileResource instantiation:
 //   Load                          @ 0x826DCBF8
 //   Unload                        @ 0x826A77B0
 //   StartResourceModuleLoading    @ 0x826C6998
 //   RestartResourceModuleLoading  @ 0x82690810
 //   CancelResourceModuleLoading   @ 0x82690888
 //   PurgeLoadData                 @ 0x826AADE8
+//
+// AlignedBinaryFileResource instantiation:
+//   Load                          @ 0x826DD5C0
+//   Unload                        @ 0x826AA7A8
+//   RestartResourceModuleLoading  @ 0x82690C68
+//   CancelResourceModuleLoading   @ 0x82690CE0
+//   PurgeLoadData                 @ 0x826AAEA0
+//   Update                        @ 0x826DD670
+//   UpdateUnload                  @ 0x826C6C40
+//   UpdateResourceModuleLoading   @ 0x826C6E40
+//
+// The two instantiations share one generic body store-for-store (proven by comparing the
+// paired addresses above); only the load-service GetPathZone/allocator element type differs.
 
 namespace CgsSound
 {
@@ -180,7 +194,170 @@ namespace Playback
         mpLoadData = 0;
     }
 
-    // Explicit instantiation: emit the BinaryFileResource loader symbols the X360 build attests.
+    // Update @ 0x826DD670. Per-frame pump dispatched off the low 7 bits of the Content's
+    // content-state byte (+0x1E): E_CONTENT_STATE_LOADING (2) advances the resource-module
+    // load (resource-module method only), E_CONTENT_STATE_UNLOADING (4) advances the unload;
+    // any other state is a no-op. Baked assert CgsContentLoader.cpp:135.
+    template <class ResType>
+    void ContentLoader<ResType>::Update(Content& arContent, const ContentSpec& arSpec)
+    {
+        const u32 luContentState =
+            static_cast<u32>(arContent.mu8ContentState) & 0x7Fu;
+
+        if (luContentState == CgsSound::Playback::E_CONTENT_STATE_LOADING)   // 2
+        {
+            if (arSpec.mu8LoadMethod != 1)
+            {
+                CGS_ASSERT(arSpec.mu8LoadMethod == 1, "Invalid Content load method");
+                return;
+            }
+            UpdateResourceModuleLoading(arContent, arSpec);
+        }
+        else if (luContentState == CgsSound::Playback::E_CONTENT_STATE_UNLOADING) // 4
+        {
+            UpdateUnload(arContent, arSpec);
+        }
+    }
+
+    // UpdateResourceModuleLoading @ 0x826C6E40. Drive the four-state resource-module load
+    // machine (meState @ mpLoadData+0x00):
+    //   E_RMLS_REQUEST(0)  -> resolve path zone 0, issue the load service's load request
+    //                         (vtbl slot 0), advance to LOADING on success; else "LOAD FAILED".
+    //   E_RMLS_LOADING(1)  -> once mpResource is populated (no longer the null ptr) advance to
+    //                         POST_LOAD and publish the loaded data pointer into Content+0x18.
+    //   E_RMLS_POST_LOAD(2)-> run the Content's post-load hook (vtbl slot +0x10); advance to
+    //                         FINISHED when it reports done (falls through to FINISHED).
+    //   E_RMLS_FINISHED(3) -> set the final content state (LOADED unless the request was
+    //                         re-armed) and purge the load data.
+    // Baked asserts CgsContentLoader.cpp:287 ("mpLoadData") / :311 ("LOAD FAILED").
+    template <class ResType>
+    void ContentLoader<ResType>::UpdateResourceModuleLoading(Content& arContent,
+                                                             const ContentSpec& arSpec)
+    {
+        CGS_ASSERT(mpLoadData, "mpLoadData");
+
+        ResourceModuleLoadData* lpLoadData = mpLoadData;
+        switch (lpLoadData->meState)
+        {
+        case E_RMLS_REQUEST: // 0
+        {
+            char lacPath[128];
+            bool lbOk = arSpec.GetPathZone(0, lacPath, sizeof(lacPath));
+            if (lbOk)
+            {
+                // X360: (*mpLoadService->vtbl[0])(mpLoadService, mi16CurrentRequest,
+                //         arSpec.mu8LoadMethod, lacPath, this) -- issue the load request.
+                typedef bool (*LoadRequestFn)(void*, s16, u8, const char*, ContentLoader<ResType>*);
+                void* lpLoadService = arContent.mpLoadService;
+                LoadRequestFn lpfnLoad = (*reinterpret_cast<LoadRequestFn**>(lpLoadService))[0];
+                lbOk = lpfnLoad(lpLoadService,
+                                mpLoadData->mi16CurrentRequest,
+                                arSpec.mu8LoadMethod,
+                                lacPath,
+                                this);
+            }
+
+            if (lbOk)
+            {
+                lpLoadData->meState = E_RMLS_LOADING; // 1
+                return;
+            }
+            CGS_ASSERT(lbOk, "LOAD FAILED");
+            return;
+        }
+        case E_RMLS_LOADING: // 1
+            // Wait until mpResource is bound (X360 IsEqual(&NULLResourcePtr, mpResource)==false).
+            if (!CgsResource::NULLResourcePtr.IsEqual(&mpResource))
+            {
+                lpLoadData->meState = E_RMLS_POST_LOAD; // 2
+                // Publish the loaded main-memory resource pointer into Content+0x18.
+                arContent.mu32DataSize =
+                    *reinterpret_cast<u32*>(mpResource.operator->());
+            }
+            break;
+
+        case E_RMLS_POST_LOAD: // 2
+        {
+            // (*arContent.vtbl[+0x10])(&arContent) -- the type-specific post-load hook.
+            typedef bool (*PostLoadFn)(Content*);
+            PostLoadFn lpfnPostLoad =
+                reinterpret_cast<PostLoadFn*>(*reinterpret_cast<void**>(&arContent))[4];
+            if (!lpfnPostLoad(&arContent))
+                break;
+            lpLoadData->meState = E_RMLS_FINISHED; // 3
+        }
+        // fall through
+        case E_RMLS_FINISHED: // 3
+        {
+            // LOADED unless the request was cancelled/re-armed mid-flight (mu8IsCancelled set),
+            // in which case restart into E_CONTENT_STATE_LOADED-then-reload (state 3 vs 1).
+            int liFinalState = 1;
+            if (!mpLoadData->mu8IsCancelled)
+                liFinalState = 3;
+            arContent.SetContentState(liFinalState);
+            PurgeLoadData(arContent, arSpec);
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
+    // UpdateUnload @ 0x826C6C40. Two-step unload pump keyed off meUnloadState (loader+0x24):
+    //   E_US_PRE_UNLOAD(1)  -> wait for any in-flight load to release (mpLoadData cleared, or the
+    //                          load service's release hook (vtbl slot +0x14) reports done), then
+    //                          advance to E_US_UNLOADING.
+    //   E_US_UNLOADING(2)   -> cancel + purge the load data, rebind mpResource to the null handle
+    //                          (resource-module method only), flag the Content changed, and reset
+    //                          meUnloadState to E_US_IDLE. Baked assert CgsContentLoader.cpp:193.
+    template <class ResType>
+    void ContentLoader<ResType>::UpdateUnload(Content& arContent, const ContentSpec& arSpec)
+    {
+        if (meUnloadState == E_US_PRE_UNLOAD) // 1
+        {
+            bool lbReady = (mpLoadData != 0);
+            if (!lbReady)
+            {
+                // (*arContent.vtbl[+0x14])(&arContent) -- release/quiesce the pending load.
+                typedef bool (*ReleaseFn)(Content*);
+                ReleaseFn lpfnRelease =
+                    reinterpret_cast<ReleaseFn*>(*reinterpret_cast<void**>(&arContent))[5];
+                lbReady = lpfnRelease(&arContent);
+            }
+            if (lbReady)
+                meUnloadState = E_US_UNLOADING; // 2
+            return;
+        }
+
+        if (meUnloadState != E_US_UNLOADING) // 2
+            return;
+
+        if (arSpec.mu8LoadMethod == 1)
+        {
+            if (mpLoadData)
+                CancelResourceModuleLoading(arContent, arSpec);
+            PurgeLoadData(arContent, arSpec);
+            mpResource = skNullResourceHandle;
+        }
+        else
+        {
+            CGS_ASSERT(arSpec.mu8LoadMethod == 1, "Invalid Content load method");
+        }
+
+        if ((arContent.mu8ContentState & 0x7F) != CgsSound::Playback::E_CONTENT_STATE_UNLOADED)
+        {
+            arContent.mu8ContentState = static_cast<u8>(
+                CgsSound::Playback::E_CONTENT_STATE_UNLOADED |
+                CgsSound::Playback::E_CONTENT_STATE_CHANGED); // 0x81
+        }
+
+        meUnloadState = E_US_IDLE; // 0
+    }
+
+    // Explicit instantiations: emit the ContentLoader symbols for both resource-element types the
+    // X360 build attests -- BinaryFileResource (GenericRwacWaveContent) and
+    // AlignedBinaryFileResource (GenericRwacReverbIRContent).
     template struct ContentLoader<CgsResource::BinaryFileResource>;
+    template struct ContentLoader<CgsResource::AlignedBinaryFileResource>;
 }
 }

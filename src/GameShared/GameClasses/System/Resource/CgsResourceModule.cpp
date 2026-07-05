@@ -312,6 +312,22 @@ namespace CgsResource
         }
     }
 
+    // @ 0x828D8310 - write streams are deprecated: unconditionally assert and reject. The
+    // request param is unused (the X360 body is a bare de-inlined assert + return false).
+    bool ResourceModule::AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest* /*lpRequest*/)
+    {
+        CGS_ASSERT(false, "Write streams deprecated\n");
+        return false;
+    }
+
+    // @ 0x828D83A0 - write streams are deprecated: unconditionally assert and reject. The
+    // request param is unused (the X360 body is a bare de-inlined assert + return false).
+    bool ResourceModule::AddCloseWriteStreamRequest(const Events::CloseWriteStreamRequest* /*lpRequest*/)
+    {
+        CGS_ASSERT(false, "Write streams deprecated\n");
+        return false;
+    }
+
     // CgsResource:: (unnamed by IDA) @ X360 0x828F2890 -- fixed-slot free-list pop.
     // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX. Pops the head entry of a
     // small u8-indexed free list and returns the pointer to its stride-12 record; returns
