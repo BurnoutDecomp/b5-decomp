@@ -63,7 +63,10 @@ AptValue* gpAptDestroyedClipValue     = nullptr;   // dword_8324D818
 AptValue* gpAptCurrentTargetMC        = nullptr;   // dword_8324D818
 AptValue* gpAptRootTargetMC           = nullptr;   // dword_8324D830
 AptValue* gpAptFunctionPrototypeRoot  = nullptr;   // dword_8324E4EC
-AptValue* gpAptGlobalFallback         = nullptr;   // (AptValue* view; AptGlobal.h's AptValueWithHash* decl diverges -- the linker wants AptValue*)
+// (the AptValue*-typed gpAptGlobalFallback duplicate was RETIRED 2026-07-05: the
+// LIVE off_8324E380 symbol is AptGlobal.cpp's AptValueWithHash* -- the dead
+// AptValue* twin here made findChild's _global arm look up a never-assigned null
+// while the stores landed in the live object.)
 AptValue* gpAptKeyObject              = nullptr;   // off_8324E2A8 (Key)
 AptValue* gpAptStringObject           = nullptr;   // off_8324D82C (String)
 AptValue* gpAptExternObject           = nullptr;   // off_8324E2CC (extern)

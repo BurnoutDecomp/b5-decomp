@@ -19,6 +19,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptScriptFunction2.h"
+#include "SDKs/EATech/include/Apt/AptObject.h"   // AptValueWithHash (the live _global symbol type)
 #include "SDKs/EATech/include/Apt/AptFrameStack.h"               // spFrameStack->Set (the call-local hash)
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"           // AptValue::findChild / Release / mnValueData
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"          // EAStringC temporaries
@@ -34,7 +35,10 @@
 // Both are wired by the Apt runtime startup; null until then.
 // ---------------------------------------------------------------------------
 extern AptValue* gpUndefinedValue;
-extern AptValue* gpAptGlobalFallback;
+// LIVE symbol note (2026-07-05): off_8324E380's live definition is AptGlobal.cpp's
+// AptValueWithHash* -- the old AptValue*-typed extern here bound a dead duplicate,
+// so the _global REGISTER PRELOAD loaded null into preloaded registers.
+extern AptValueWithHash* gpAptGlobalFallback;
 
 // ---------------------------------------------------------------------------
 // FLAG (homed by the Apt string-pool / globals TU, not yet built): the two magic

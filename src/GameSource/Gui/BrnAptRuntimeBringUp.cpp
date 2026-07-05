@@ -169,17 +169,32 @@ extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
     CgsDev::Log::WriteToLog(lac);
 }
 
-// The AS new-object probe (declared in AptActionInterpreterStackOps.cpp): names every
-// `new <Class>` and whether the class resolved. First 48.
-extern "C" void AptCreateObjectProbe(const char* pcClass, bool bResolved)
+// The setVariable store probe (declared in AptActionInterpreterSetVariable.cpp):
+// traces store names + context so class definitions can be followed. First 96.
+extern "C" void AptSetVariableProbe(const char* pcName, const void* pContext, int nContextType)
+{
+    static int s_iSvHits = 0;
+    if (s_iSvHits >= 96)
+        return;
+    ++s_iSvHits;
+    char lac[176];
+    std::snprintf(lac, sizeof(lac), "[AptRT] setVar '%s' ctx=%p type=%d\n",
+                  pcName ? pcName : "<null>", pContext, nContextType);
+    CgsDev::Log::WriteToLog(lac);
+}
+
+// The AS new-object probe v2 (declared in AptActionInterpreterStackOps.cpp): names
+// every `new <Class>` with the resolved value, its type and gates. First 48.
+extern "C" void AptCreateObjectProbe2(const char* pcClass, const void* pValue,
+                                      int nType, int nDefined, int nCanCreate)
 {
     static int s_iCoHits = 0;
     if (s_iCoHits >= 48)
         return;
     ++s_iCoHits;
-    char lac[160];
-    std::snprintf(lac, sizeof(lac), "[AptRT] new %s -> %s\n",
-                  pcClass ? pcClass : "<null>", bResolved ? "RESOLVED" : "UNRESOLVED");
+    char lac[192];
+    std::snprintf(lac, sizeof(lac), "[AptRT] new %s -> val=%p type=%d def=%d cancreate=%d\n",
+                  pcClass ? pcClass : "<null>", pValue, nType, nDefined, nCanCreate);
     CgsDev::Log::WriteToLog(lac);
 }
 

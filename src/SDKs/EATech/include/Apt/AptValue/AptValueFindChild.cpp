@@ -32,6 +32,7 @@
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
+#include "SDKs/EATech/include/Apt/AptObject.h"   // AptValueWithHash (the live _global symbol type)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 #include "SDKs/EATech/Apt/AptObjectIndex.h"
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"   // gAptActionInterpreter (the AS target stacks)
@@ -56,7 +57,13 @@ extern AptActionInterpreter gAptActionInterpreter;
 // globals AptValueInitialize builds (AptGlobal / AptGlobalExtensionObject singletons) --
 // verified against the X360 findChild @0x82B01298 asm (it reads exactly off_8324E37C +
 // off_8324E380). The old duplicate never-assigned gpGlobal* pair is retired.
-extern AptValue* gpAptGlobalFallback;          // off_8324E380 (_global)
+// gpAptGlobalFallback binds the LIVE AptValueWithHash* symbol (AptGlobal.cpp's
+// canonical storage, assigned by AptValueInitialize) -- the AptValue*-typed
+// duplicate in AptGlobals.cpp was NEVER assigned (the 2026-07-05 "classes stored
+// but never found" bug: _global stores landed in the live object while this TU
+// looked up a dead null). gpAptGlobalExtensionObject stays the AptValue* flavor
+// (that one IS the live extension-object symbol AptInit assigns).
+extern AptValueWithHash* gpAptGlobalFallback;  // off_8324E380 (_global; LIVE symbol)
 extern AptValue* gpAptGlobalExtensionObject;   // off_8324E37C (the _global extension object)
 
 // ---------------------------------------------------------------------------
