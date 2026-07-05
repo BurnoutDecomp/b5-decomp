@@ -1289,8 +1289,16 @@ void AptCIH_DispatchInstantiatedHook(AptCIH* pPlacedNode)
 // same deferred AS-execution sub-path queueClipEvents / ClearCIH route through a cluster
 // callee -- modelled here as a no-op tail so the homed gate links with no new extern.
 // ---------------------------------------------------------------------------
+// FLAG (bring-up gate, 2026-07-05): the binding chain WORKS through its first class
+// (class-bind 'TransitionComponent' -> the ctor runs), but the constructor's deeper
+// execution still AVs -- gated OFF so the title boot stays green while the ctor-run
+// frontier is debugged; flip to continue.
+static const bool KB_CLASS_BINDING = false;
+
 int AptCIH_AssociateInstToClass(AptCIH* pNode)
 {
+    if (!KB_CLASS_BINDING)
+        return 0;
     AptCharacterInst* const pInst = pNode->GetCharacterInst();   // *(node+32)
     if (!pInst)
         return 0;
