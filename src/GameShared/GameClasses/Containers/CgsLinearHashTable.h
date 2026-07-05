@@ -10,12 +10,17 @@
 // miInvalidKey, which Initialize fixes at all-ones (~0). The resource Pool uses
 // LinearHashTable<u64,s32> to map a resource ID hash -> its entry index.
 //
-// DECOMPILED from the X360 build (these instantiations ARE out-of-line): Initialize
-// (0x828E9AD8), FindEntry (0x828DF1B0), AddEntry (0x828DF028) and FindFirstEmptyIndex
-// (0x828E0400). Baked asserts: Initialize requires a power-of-two length
-// (CgsLinearHashTable.h:182) and AddEntry rejects the invalid key (:256). The
-// remove/resize methods (unload path) are declared here and reconstructed when the
-// unload path is brought up.
+// DECOMPILED from the X360 build (these instantiations ARE out-of-line):
+//   Initialize           @ 0x828E9AD8   (power-of-two length assert, :182)
+//   FindEntry            @ 0x828DF1B0
+//   AddEntry             @ 0x828DF028   (invalid-key assert, :256)
+//   FindFirstEmptyIndex  @ 0x828E0400
+//   RemoveEntry          @ 0x828F2590   (invalid-key assert, :305)
+//   RemoveEntryInternal  @ 0x828EAC10   (no-empty-slot :357 / not-empty-slot :358 asserts)
+// Layout + method shapes are pinned by the DecFIGS DWARF for LinearHashTable<u64,s32>:
+// miLength (u64 @+0), mpEntries (Entry* @+8), miInvalidKey (u64 @+16); Entry is
+// {miKey u64 @+0, mValue s32 @+8} with a 16-byte stride (asm slwi ,4). CalculateRequiredSize
+// / VerifyHashTable / FindEntryPosition remain declared-only (not yet brought up).
 
 namespace CgsContainers
 {
@@ -81,41 +86,36 @@ namespace CgsContainers
             return 0;
         }
 
-        // :302 - remove luKey: find its slot, empty it, then re-insert the contiguous run that follows
-        // (wrapping) so open-addressing probe chains stay intact. Returns true iff the key was present.
-        // (No X360 out-of-line body -- it was inlined/unused there; reconstructed as the standard
-        // linear-probe delete-with-reinsert, using the same probe order as FindEntry/AddEntry. Re-adds
-        // always move an entry backward into the moving gap or leave it in place, never forward past the
-        // cursor, so a single forward pass repairs the cluster.)
+        // :302 - remove luKey: probe (wrapping) for its slot; if found, hand the slot index to
+        // RemoveEntryInternal (which empties it and repairs the following probe run) and return
+        // true. Returns false if the key is absent (an empty slot is reached first).
+        // (X360 0x828F2590 -- store-for-store: invalid-key assert :305, key % miLength start, the
+        // two-loop [start,miLength) then [0,start) probe, bl RemoveEntryInternal on match.)
         bool RemoveEntry(Key luKey)
         {
-            if (luKey == miInvalidKey)
-                return false;
-
-            // locate the slot holding luKey (probe from its hash position, wrapping)
-            Key luFound = miInvalidKey;
-            for (Key luc = 0; luc < miLength; ++luc)
+            CGS_ASSERT(luKey != miInvalidKey, "Can not remove entry with invalid key value to table\n");   // :305
+            Key luStart = luKey % miLength;
+            Key luPos   = luStart;
+            if (luStart < miLength)
             {
-                const Key luPos = (luKey % miLength + luc) % miLength;
-                if (mpEntries[luPos].miKey == luKey)        { luFound = luPos; break; }
-                if (mpEntries[luPos].miKey == miInvalidKey) break;   // empty slot reached -> absent
+                do
+                {
+                    Key luEntryKey = mpEntries[luPos].miKey;
+                    if (luEntryKey == luKey)        { RemoveEntryInternal(luPos); return true; }
+                    if (luEntryKey == miInvalidKey) return false;
+                } while (++luPos < miLength);
             }
-            if (luFound == miInvalidKey)
-                return false;
-
-            mpEntries[luFound].miKey = miInvalidKey;   // open the gap
-
-            // re-insert the run after the gap until an empty slot (repairs probe chains)
-            for (Key luPos = (luFound + 1) % miLength;
-                 mpEntries[luPos].miKey != miInvalidKey;
-                 luPos = (luPos + 1) % miLength)
+            luPos = 0;
+            if (luStart != 0)
             {
-                const Key   luRehashKey = mpEntries[luPos].miKey;
-                const Value lRehashVal  = mpEntries[luPos].mValue;
-                mpEntries[luPos].miKey  = miInvalidKey;
-                AddEntry(luRehashKey, &lRehashVal);
+                do
+                {
+                    Key luEntryKey = mpEntries[luPos].miKey;
+                    if (luEntryKey == luKey)        { RemoveEntryInternal(luPos); return true; }
+                    if (luEntryKey == miInvalidKey) return false;
+                } while (++luPos < luStart);
             }
-            return true;
+            return false;
         }
 
         // :434 - probe from luKey's hash position (wrapping) for luKey; returns
@@ -172,10 +172,49 @@ namespace CgsContainers
             return miInvalidKey;
         }
 
-        // :489 / :351 / :224 - declared; reconstructed with the unload path.
+        // :351 - empty the slot at luIndex, then re-add the contiguous occupied run that follows
+        // (wrapping past miLength) up to the first empty slot, so open-addressing probe chains stay
+        // intact. Asserts there is an empty slot in the table (:357) and that luIndex itself is not
+        // already empty (:358). Returns luIndex. (X360 0x828EAC10, store-for-store.)
+        Key RemoveEntryInternal(Key luIndex)
+        {
+            Key luFirstEmpty = FindFirstEmptyIndex(luIndex);
+            CGS_ASSERT(luFirstEmpty != miInvalidKey,
+                       "There is no empty slot in the hash table - this should NEVER happen\n");   // :357
+            CGS_ASSERT(luFirstEmpty != luIndex, "Can not remove an empty slot!\n");                 // :358
+
+            mpEntries[luIndex].miKey = miInvalidKey;
+            Key luPos = luIndex + 1;
+            if (luFirstEmpty > luIndex)
+            {
+                for (; luPos < luFirstEmpty; ++luPos)
+                    ReAddIndex(luPos);
+            }
+            else
+            {
+                for (; luPos < miLength; ++luPos)
+                    ReAddIndex(luPos);
+                for (Key luWrap = 0; luWrap < luFirstEmpty; ++luWrap)
+                    ReAddIndex(luWrap);
+            }
+            return luIndex;
+        }
+
+        // :224 - lift the (occupied) entry at luIndex out and re-insert it via AddEntry, keeping its
+        // stored value. Empty slots are skipped. This is the inlined body of the RemoveEntryInternal
+        // repair loops (asm: read miKey; if != miInvalidKey, set slot empty and AddEntry(key, &mValue)).
+        void ReAddIndex(Key luIndex)
+        {
+            if (mpEntries[luIndex].miKey != miInvalidKey)
+            {
+                Key luKey = mpEntries[luIndex].miKey;
+                mpEntries[luIndex].miKey = miInvalidKey;
+                AddEntry(luKey, &mpEntries[luIndex].mValue);
+            }
+        }
+
+        // :489 - declared; reconstructed with the unload path.
         Key  FindEntryPosition(Key luKey);
-        Key  RemoveEntryInternal(Key luKey);
-        void ReAddIndex(Key luIndex);
 
         Value* Store(Key luPos, Key luKey, const Value* lpValue)
         {
