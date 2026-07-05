@@ -46,6 +46,7 @@
 #include "SDKs/EATech/include/Apt/AptMovieClip.h"          // AptMovieClip (`new MovieClip`)
 #include "SDKs/EATech/include/Apt/AptXmlNode.h"            // AptXmlNode (`new XML`)
 #include "SDKs/EATech/include/Apt/AptGlobal.h"             // gpAptGlobalFallback (String-prototype lookup)
+#include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"  // the boxed name unbox (CallMethod)
 
 #include <cstdint>
 #include <cstring>   // memcpy (PushFloat bit reinterpret)
@@ -655,9 +656,10 @@ extern bool AptInterp_NameEquals(EAStringC** pNameSlot, const EAStringC* pConst)
 // FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
 // bring-up TU): traces every AS object construction (see _createObject).
 #if defined(_MSC_VER)
-extern "C" void AptCreateObjectProbe(const char* pcClass, bool bResolved);
-#pragma comment(linker, "/alternatename:AptCreateObjectProbe=AptCreateObjectProbeDefault")
-extern "C" void AptCreateObjectProbeDefault(const char*, bool) {}
+extern "C" void AptCreateObjectProbe2(const char* pcClass, const void* pValue,
+                                      int nType, int nDefined, int nCanCreate);
+#pragma comment(linker, "/alternatename:AptCreateObjectProbe2=AptCreateObjectProbe2Default")
+extern "C" void AptCreateObjectProbe2Default(const char*, const void*, int, int, int) {}
 #else
 extern "C" void AptCreateObjectProbe(const char* pcClass, bool bResolved);
 #endif
@@ -672,6 +674,9 @@ extern AptValue* gpAptDestroyedClipValue;   // dword_8324D818
 // re-resolves the bound function name under).
 extern const EAStringC gAptEmptyMethodName;   // unk_8324E6B8
 extern const EAStringC gAptThisKey;           // dword_8324E6C0
+// The apply()/call() method-name keys the console stricmp's inline (rodata literals).
+static const EAStringC gAptApplyKey("apply");
+static const EAStringC gAptCallKey ("call");
 
 // FLAG (console sub_82AE3DA8 / AptNativeHash::Lookup over the method-name slot -- the
 // object's member resolution when the object exposes a native hash; the v6+8 lookup
@@ -709,7 +714,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         {
             // FLAG: v12 = *(v7 + 7) -- the name slot holds the resolved method value
             // (a raw word the console reads as an AptValue*).
-            pMethod = reinterpret_cast<AptValue*>(*AptValue_GetMethodNameSlot(pMethodName));
+            pMethod = AptValue_GetClassOwnerValue(pMethodName);   // console v12 = *(v7 + 7) (the +0x1C owner/ctor slot; FLAG stub -> null -> falls to the resolve arm)
             const int nReg = pInterp->mnCallStackB_Count;          // console a1[12] (+0x30)
             if (nReg)
             {
@@ -746,36 +751,45 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     // ---- resolve the method value when the object guard did not set one ----
     if (!pMethod || pMethod == gpUndefinedValue)
     {
-        const int nType = (static_cast<int>(pObject->getVtblIndex()) << 25) >> 25;   // v21 (sign-extended tag)
-        // a defined Integer (1)/Date-ish (33) -> the object exposes a native hash
-        const bool bHashObject =
+        // OPERAND ROLES (corrected 2026-07-05 vs the X360 @0x82B04758 asm): v6 (this
+        // TU's pObject local, stack top-1) is the METHOD-NAME VALUE and v7 (the
+        // pMethodName local, top-2) is the RECEIVER OBJECT -- the original
+        // transliteration had the labels swapped, and its two FLAG stubs sat on the
+        // COMMON call path (every normal string-named method call), null-derefing
+        // the name slot. "GetMethodNameSlot" == the EAStringC embedded in the name
+        // AptString (console v6+8 == AptString::GetInternalString); a StringObject
+        // name first unboxes its wrapped string (console *(v6+32) == mpValue).
+        const int nType = (static_cast<int>(pObject->getVtblIndex()) << 25) >> 25;   // v21 (the NAME value's tag)
+        const bool bStringName =
             (nType == 1 || nType == 33) && pObject->getIsDefined();
-        if (bHashObject)
+        if (bStringName)
         {
-            AptValue* pHashObject = pObject;
+            AptValue* pNameValue = pObject;                                    // v6 (the name value)
             if (nType != 1)
-                pHashObject = AptValue_GetClassOwnerValue(pObject);   // console v6 = *(v6 + 32)
-            pNameSlot = AptValue_GetMethodNameSlot(pHashObject);      // console v10 = (v6 + 8)
+                pNameValue = static_cast<AptStringObject*>(pNameValue)->GetBoxedString();   // console *(v6+32): unbox
+            pNameSlot = reinterpret_cast<EAStringC**>(
+                static_cast<AptString*>(pNameValue)->GetInternalString());     // console v10 = (v6 + 8)
 
-            // console: (*(v7+1) & 0x7F) == 0x1D (tag 29 == AptVFT_Extension) -> the
-            // name value resolves itself through its own vtable slot 2.
+            // console: (*(v7+1) & 0x7F) == 0x1D (tag 29 == AptVFT_Extension) -> an
+            // EXTENSION receiver resolves the method in its own native hash (the
+            // CAptCommunicator.SendAptEvent/... path).
             if (pMethodName->getVtblIndex() == AptVFT_Extension)
             {
                 AptNativeHash* const pHash = pMethodName->GetNativeHashVirtual();   // console (*(*v7+8))(v7)
-                pMethod = AptInterp_HashLookupName(pHash, pNameSlot);              // FLAG: AptNativeHash::Lookup
+                pMethod = AptInterp_HashLookupName(pHash, pNameSlot);
             }
             else
             {
-                pMethod = pInterp->getVariable(pHashObject, nullptr, *pNameSlot, 1, 1, 0);
+                pMethod = pInterp->getVariable(pMethodName /*the receiver*/, nullptr,
+                                               reinterpret_cast<const EAStringC*>(pNameSlot), 1, 1, 0);
             }
         }
         else
         {
-            // render the object value to a name and resolve through the path context.
+            // A non-string name value: render it to text and resolve on the receiver.
             pObject->toString(&scratch);                       // console AptValue::toString(v6, v69)
-            EAStringC* pScratchSlot = &scratch;                // console v69 (the toString'd name)
-            pMethod = pInterp->getVariable(pObject, nullptr, &scratch, 1, 1, 0);
-            pNameSlot = &pScratchSlot;                          // console v10 = v69
+            pMethod = pInterp->getVariable(pMethodName /*the receiver*/, nullptr, &scratch, 1, 1, 0);
+            pNameSlot = reinterpret_cast<EAStringC**>(&scratch);   // console v10 = v69
         }
     }
 
@@ -795,8 +809,8 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     // the call's argument layout is rewritten: call() shifts off the explicit `this`
     // arg; apply() flattens the trailing array argument onto the stack.
     if ((!pMethod || !pMethod->getIsDefined())
-        && (AptInterp_NameEquals(pNameSlot, &gAptThisKey)            // FLAG: stricmp(*v10+8,"apply")
-            || AptInterp_NameEquals(pNameSlot, &gAptThisKey)))       // FLAG: stricmp(*v10+8,"call")
+        && (AptInterp_NameEquals(pNameSlot, &gAptApplyKey)           // console stricmp(*v10+8,"apply")
+            || AptInterp_NameEquals(pNameSlot, &gAptCallKey)))       // console stricmp(*v10+8,"call")
     {
         // NOTE: the two console stricmp's are against "apply"/"call"; encapsulated as
         // the AptInterp_NameEquals name compare (the EAStringC == the console folds in).
@@ -838,7 +852,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         }
 
         // apply(): flatten the trailing array argument's elements onto the stack.
-        if (AptInterp_NameEquals(pNameSlot, &gAptThisKey))   // FLAG: stricmp(*v10+8,"apply")
+        if (AptInterp_NameEquals(pNameSlot, &gAptApplyKey))  // console stricmp(*v10+8,"apply")
         {
             AptValue* const pTopArg = pInterp->mpStack[pInterp->mnStackTop - 1];   // console v34
             if (pTopArg->getVtblIndex() == AptVFT_Array && pTopArg->getIsDefined())
@@ -1259,8 +1273,10 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
 
     // FLAG (bring-up probe; weak sink pattern): name every AS `new <Class>` and
     // whether the class resolved -- the framework-bootstrap visibility trace.
-    AptCreateObjectProbe(pClassName->GetBuffer(),
-                         pClass != 0 && pClass->getIsDefined() && pClass->CanCreateScriptObject());
+    AptCreateObjectProbe2(pClassName->GetBuffer(), pClass,
+                          pClass ? static_cast<int>(pClass->getVtblIndex()) : -1,
+                          pClass ? (pClass->getIsDefined() ? 1 : 0) : -1,
+                          pClass ? (pClass->CanCreateScriptObject() ? 1 : 0) : -1);
 
     // Only a defined class value that CanCreateScriptObject is constructible. The bit
     // ((Variable[1] >> 27) & 1) is mbIsDefined; when not constructible the operands are

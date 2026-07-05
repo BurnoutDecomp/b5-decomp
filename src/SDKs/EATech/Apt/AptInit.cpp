@@ -401,8 +401,13 @@ int AptValueInitialize()
     // off_8324E37C -- the _global extension object (+AddRef).
     if (gpAptGlobalExtensionObject == nullptr)
     {
-        gpAptGlobalExtensionObject = new AptGlobalExtensionObject();
+        AptGlobalExtensionObject* const pExt = new AptGlobalExtensionObject();
+        gpAptGlobalExtensionObject = pExt;
         gpAptGlobalExtensionObject->AddRef();
+        // off_8324E37C aliases: AptGlobal::objectMemberLookup consults the same
+        // console address through the AptValueWithHash*-typed gpAptNativeGlobals
+        // (AptGlobal.cpp) -- keep the two views pointing at the ONE object.
+        gpAptNativeGlobals = pExt;
     }
 
     // off_8324D82C -- the shared empty AptString (Create(&unk_820046A7) == Create("")).

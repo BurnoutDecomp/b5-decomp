@@ -387,7 +387,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
     // AptScriptFunctionBase::DestroyGCPointers AV -- the stored function should have
     // survived the pop; SetMember/DefineFunction2 refcount semantics vs the X360 are
     // the open follow-on). Gated OFF so the title boot stays green; flip to continue.
-    static const bool KB_RUN_INITACTIONS = true;
+    static const bool KB_RUN_INITACTIONS = false;
     if (KB_RUN_INITACTIONS)
     {
         const int32_t nCount1 = pFrame->mnCommandCount;
