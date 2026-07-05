@@ -164,6 +164,15 @@ bool AptInterp_HasMember(AptValue* pValue, EAStringC** pNameSlot)
 // ---------------------------------------------------------------------------
 bool AptInterp_NameEquals(EAStringC** pNameSlot, const EAStringC* pConst)
 {
+    // The slot address is punned as an EAStringC (its one data member IS the stored
+    // pointer). A NULL stored pointer means "no resolved name": the console never
+    // holds raw null here (its strings carry the empty-string sentinel data block),
+    // but the x64 CallMethod path can leave the slot null before any name resolves --
+    // operator== would then deref null reading the length word (the 2026-07-05
+    // FADE_IN-window AV, cdb-verified stack: EAStringC::operator== <- NameEquals <-
+    // _FunctionAptActionCallMethod <- DictCallMethodPop). Null slot == "not this name".
+    if (pNameSlot == nullptr || *reinterpret_cast<void* const*>(pNameSlot) == nullptr)
+        return false;
     return *reinterpret_cast<const EAStringC*>(pNameSlot) == *pConst;
 }
 

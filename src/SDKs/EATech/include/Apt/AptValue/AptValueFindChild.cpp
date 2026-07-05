@@ -70,6 +70,16 @@ extern AptValue* gpAptStringObject;     // off_8324D82C  (String)
 extern AptValue* gpAptExternObject;     // off_8324E2CC  (extern)
 extern AptValue* gpUndefinedValue;      // off_8324D814  (the shared AS `undefined`)
 
+// Probe sink for the global-arm instrumentation (weak default no-op; the host
+// bring-up TU overrides it to log). Same alternatename pattern as CgsApt_GalProbe.
+#if defined(_MSC_VER)
+extern "C" void AptFindChildProbe(int nCall, const void* pExt, const void* pVtbl, const void* pHash);
+#pragma comment(linker, "/alternatename:AptFindChildProbe=AptFindChildProbeDefault")
+extern "C" void AptFindChildProbeDefault(int, const void*, const void*, const void*) {}
+#else
+extern "C" void AptFindChildProbe(int nCall, const void* pExt, const void* pVtbl, const void* pHash);
+#endif
+
 namespace
 {
     // Look a name up in an object's native hash (null-safe).
@@ -108,9 +118,24 @@ AptValue* AptValue::findChild(const EAStringC* pName, AptValue* pTarget)
     // FLAG (crash-isolation experiment 2026-07-05): temporarily SKIP the two global
     // arms (the pre-fix null-skip behaviour) to test whether walking the now-POPULATED
     // global hashes during composition is what AVs the FADE_IN window.
+    // INSTRUMENTED (probe pass): with the arms ON, log the extension object's identity
+    // (vtbl + hash + table) on the first calls and every 2048th after, so the crash log
+    // names the exact deref that dies (object reuse vs table corruption).
     static const bool KB_FINDCHILD_GLOBAL_ARMS = false;
     if (!KB_FINDCHILD_GLOBAL_ARMS)
         return 0;
+    {
+        static int snProbe = 0;
+        ++snProbe;
+        if (snProbe <= 4 || (snProbe & 2047) == 0)
+        {
+            AptNativeHash* pH = gpAptGlobalExtensionObject
+                ? gpAptGlobalExtensionObject->GetNativeHashVirtual() : nullptr;
+            AptFindChildProbe(snProbe, gpAptGlobalExtensionObject,
+                              gpAptGlobalExtensionObject ? *reinterpret_cast<void**>(gpAptGlobalExtensionObject) : nullptr,
+                              pH);
+        }
+    }
     if (AptValue* pFound = LookupInObject(gpAptGlobalExtensionObject, *pName))
         return pFound;
     if (this != gpAptGlobalFallback)
