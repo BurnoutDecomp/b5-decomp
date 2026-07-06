@@ -89,6 +89,13 @@ namespace BrnGui
             mAptRef.SetInvalid();
         }
 
+        // GetMovieClipRef -- the bound apt clip handle (mAptRef @+0x04). ADDITIVE GROW
+        // (DistrictMarkerComponent::Prepare @0x82420FB8 reaches each embedded container
+        // movie's clip ref to install its frame-trigger callback). Trivial accessor; no
+        // layout change.
+        BrnFlapt::MovieClipRef&       GetMovieClipRef()       { return mAptRef; }
+        const BrnFlapt::MovieClipRef& GetMovieClipRef() const { return mAptRef; }
+
     protected:
         // +0x00 : the GUI state channel this component talks to (subclass Construct
         // stores lpStateInterface here; only stored in this cluster).

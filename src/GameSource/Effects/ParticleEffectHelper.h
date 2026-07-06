@@ -75,6 +75,7 @@ namespace BrnEffects
         // ones this TU needs are spelled out for the call sites.
         const EffectsDebugComponent*                     DebugComponent() const { return mpDebugComponent; }
         const BrnPhysics::Vehicle::RaceCarState*         RaceCarState() const   { return mpRaceCarState; }
+        ActiveRaceCarData*                               ActiveRaceCar() const  { return mpActiveRaceCar; }
         u32                                              WorldIndex() const     { return muWorldIndex; }
         u32                                              CurrentGameMode() const{ return meCurrentGameMode; }
         const BrnPhysics::Deformation::VehicleLocatorOutput* VehicleLocators() const { return mpVehicleLocators; }

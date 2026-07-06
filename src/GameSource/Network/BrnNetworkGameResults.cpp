@@ -1,8 +1,11 @@
 #include "GameSource/Network/BrnNetworkGameResults.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (GameModeToEvent diagnostic)
 
 #include "lobbytagfield.h"   // TagFieldSetStructure
+
+#include <cstring>   // std::memset (stands in for the X360 XMemSet in ClearGameData)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::GameResults::SerialiseToString              @ 0x82584600
@@ -67,5 +70,97 @@ namespace BrnNetwork
     // committed sibling BrnNetwork::GameSearchParams::~GameSearchParams.
     GameResults::~GameResults()
     {
+    }
+
+    // X360 @ 0x82584268. Zero the whole game-result payload: the GEN/STAT header words
+    // (+0x04..+0x40) followed by the ten 16-byte per-entry custom-results records
+    // (+0x40..+0xE0). The X360 does this in two memsets plus a 10-iteration loop that
+    // zeroes two 8-byte halves per record; reproduced here as memsets covering the
+    // identical byte ranges (order within an all-zero fill is immaterial).
+    // Called by Prepare and SetGameStats.
+    void GameResults::ClearGameData()
+    {
+        u8* lpBytes = reinterpret_cast<u8*>(this);
+        std::memset(lpBytes + 0x04, 0, 12);   // GEN header (3 longs)   XMemSet(this+4,0,12)
+        std::memset(lpBytes + 0x10, 0, 48);   // STAT block (12 longs)  XMemSet(this+0x10,0,48)
+
+        // Ten 16-byte per-entry custom-results records: +0x40 .. +0xE0.
+        u8* lpEntry = lpBytes + 0x40;
+        for (s32 liIndex = 0; liIndex < 10; ++liIndex)
+        {
+            std::memset(lpEntry,     0, 8);
+            std::memset(lpEntry + 8, 0, 8);
+            lpEntry += 16;
+        }
+    }
+
+    // X360 @ 0x825847D8. Map a wire game-mode type (valid range [10,18)) to the
+    // event-type index by subtracting the base mode value. Two independent range guards
+    // each build a streamed diagnostic assert carrying the offending mode value; the asm
+    // has NO early-out -- both fall through to the same return. The value is cast, not
+    // clamped, to EEventType. Mirrors the committed sibling EventScoreData streamed-assert.
+    GameResults::EEventType GameResults::GameModeToEvent(s32 liGameMode)
+    {
+        if (liGameMode < 10)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStream << "Trying to serialise mode type: " << liGameMode << "\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+        if (liGameMode >= 18)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStream << "Trying to serialise mode type: " << liGameMode << "\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+        return static_cast<EEventType>(liGameMode - 10);
+    }
+
+    // X360 0x825842F0. Reset the game-data block ahead of a fresh fill, then report ready.
+    bool GameResults::Prepare()
+    {
+        ClearGameData();
+        return true;
+    }
+
+    // X360 0x82584318. Dead override -- these results serialise via SerialiseToString, not
+    // the generic pattern path, so this unconditionally asserts then returns a filler
+    // pattern ("lll") that is never consumed.
+    const char* GameResults::GetPattern() const
+    {
+        CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
+        return "lll";
+    }
+
+    // X360 0x825843B0. Companion of GetPattern -- also a dead override; unconditionally
+    // asserts then returns 4 (li r3,4 -- not derived from the 3-char "lll").
+    s32 GameResults::GetPatternLength() const
+    {
+        CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
+        return 4;
+    }
+
+    // X360 @ 0x82584440. Const GetDataSize override. Returns the nominal 12-byte size (0xC)
+    // after firing the redirect assert -- these results must be serialised via
+    // SerialiseToString, never through the generic sized-blob path.
+    u32 GameResults::GetDataSize() const
+    {
+        CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
+        return 12u;
+    }
+
+    // X360 @ 0x825844D0. Non-const GetData override. These results are never accessed
+    // through the generic byte-blob path -- the override exists only to fire the redirect
+    // assert -- but it still returns the address of the result payload (this+0x04).
+    void* GameResults::GetData()
+    {
+        CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
+        return reinterpret_cast<u8*>(this) + 4;
     }
 }

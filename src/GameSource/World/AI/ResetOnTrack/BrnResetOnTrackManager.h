@@ -57,6 +57,11 @@ namespace BrnAI
         // ---- public API (only GetAICar bodied in this batch) -----------------------------
         void Construct(CgsResource::ResourcePtr<AISectionsData> lAISectionData, AICar* lpaAICars);
         void Update(AIModuleResultInterface* lpResults, EGlobalRaceCarIndex lePlayer, f32 lfTime);
+
+        // @0x82769E88. Append a reset-on-track request to mResetOnTrackRequestQueue
+        // (forwards to Array<ResetOnTrackRequest,35>::Append). Declared-only here; the body
+        // lands with the ResetOnTrackManager TU. Called by BrnAI::BuzzBy::StartABuzzBy.
+        void PushResetOnTrackRequest(const AIModuleIO::ResetOnTrackRequest* lpRequest);
         // ...remaining DWARF methods elided from this minimal home...
 
     private:

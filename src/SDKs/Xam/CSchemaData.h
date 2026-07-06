@@ -35,10 +35,22 @@ public:
     // the index is past the table (luIndex > muConstantCount).
     s32 LookupConstantFromTable(u16 luIndex, u32* lpOut);
 
+    // Look a schema field up by id and fill `lpEntry` (a CSchemaAccess::SchemaEntry:
+    // two u16 sizes + two u32 offsets). Returns a negative status when the id is not
+    // found. Body lives in the CSchemaData/CSchemaAccess marshalling TU; declared
+    // here so CSchemaAccess::BindToSchema @ 0x8297F380 links against the real member.
+    s32 GetSchemaEntry(u32 luSchemaId, void* lpEntry);
+
+    // +0x34 -- base of the schema payload span BindToSchema binds a cursor over
+    // (lwz r11,0x34(r31)). Read by CSchemaAccess::BindToSchema.
+    u8* GetPayloadBase() const { return mpPayloadBase; }
+
 private:
     u8        mPad0[0x18];          // +0x00 .. +0x17 (opaque)
     u16       muConstantCount;      // +0x18  highest valid index (inclusive)
-    u8        mPad1[0x40 - 0x1A];   // +0x1A .. +0x3F (opaque)
+    u8        mPad1[0x34 - 0x1A];   // +0x1A .. +0x33 (opaque)
+    u8*       mpPayloadBase;        // +0x34  schema payload span base
+    u8        mPad2[0x40 - 0x38];   // +0x38 .. +0x3F (opaque)
     const u32* mpConstantTable;     // +0x40  constant value table base
 };
 

@@ -70,9 +70,15 @@ struct SoundWorldScene
     // @ 0x82686590.
     void* GetResource();
 
+    // BrnSoundWorldScene.cpp:143 (DWARF). Bind the owning logic module + the resource
+    // file extension into the scene; report readiness (true). @ 0x82686530. Asserts both
+    // arguments non-null (non-gating tripwire), then stores mpcResourceExt then mpLogicModule.
+    bool Prepare( BrnSound::Module::SoundLogicModule* lpLogicModule, const char* lpcResourceExt );
+
     // -- FLAGGED layout (offset is an X360 fact; leading span types DEFERRED) --
     u8                         maLeading[0x388]; // +0x000..+0x387 (opaque scene state)
     BrnSound::Module::SoundLogicModule* mpLogicModule; // +0x388 (asserted "mpLogicModule")
+    const char*                mpcResourceExt;   // +0x38C (resource file extension; Prepare stores it)
 };
 
 // DECLARED-only accessor: returns the SoundLogicModule's embedded scene-resource

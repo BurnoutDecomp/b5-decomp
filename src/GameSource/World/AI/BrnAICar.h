@@ -256,7 +256,8 @@ namespace BrnAI
         f32 mfRaceTimer;                                // +0x14FC (5372) DWARF :691
         f32 mfAlternativeRouteTimer;                    // +0x1500 (5376) DWARF :692
         f32 mfMaxPlayerSpeed;                           // +0x1504 (5380) DWARF :693
-        u8 mPad1508[12];                                // +0x1508 (dist-to-player / place-on-track / buzz)
+        f32 mfBuzzDistanceToPlayer;                     // +0x1508 (5384) buzz distance-to-player gate (BuzzBy AICarCanBuzz >=200 / BuzzOccured <=30)
+        u8 mPad150C[8];                                 // +0x150C (place-on-track / buzz filler; was mPad1508[12] head carved)
         f32 mfTimeInInvalidSection;                     // +0x1514 (5396) DWARF :697
         u8 mPad1518[4];                                 // +0x1518 (mafScheduleOffsets[0])
         f32 mfScheduleOffset1;                          // +0x151C (5404) == mafScheduleOffsets[1] (DWARF :698)
