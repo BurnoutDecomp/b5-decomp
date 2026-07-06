@@ -234,6 +234,11 @@ public:
     // non-object cases. Returns 1 on a match.
     int isObjectOfType(AptValue* pObject, AptValue* pClass);
 
+    // instanceOfChainWalk -- isObjectOfType @0x82AEA5B8's object arm: the prototype /
+    // interface chain walk that latches on pClass's prototype (the needle). Static:
+    // it reads only the two value arguments, no interpreter state.
+    static int instanceOfChainWalk(AptValue* pObject, AptValue* pClass);
+
     // _createObject @0x82B08088 -- the AS `new ClassName(args...)` value-materialiser.
     // Resolves the class value pClassName under (pScope, pTarget) via getVariable; if
     // it is a constructible script/native class, builds the matching built-in instance
@@ -256,6 +261,11 @@ public:
     // (pOutKey, pOutValue) (un-escaping each), returning the read position past the
     // pair (or null when there is no pair). Used by loadVariables.
     const char* urlDecode(const char* pStream, EAStringC* pOutKey, EAStringC* pOutValue);
+
+    // unEscape @0x82AEE110 -- URL-decode a string in place ('+' -> space, '%HH' hex
+    // pair -> byte, else copy). The value-layer escape codec urlDecode consumes.
+    // Static: operates purely on the passed EAStringC.
+    static void unEscape(EAStringC* pStr);
 
     // ---- AS global builtins (cbCallMethod_*) that this TU owns ------------
     // cbCallMethod_ASSetPropFlags @0x82AD8448 -- ASSetPropFlags() stub (returns

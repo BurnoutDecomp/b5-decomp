@@ -372,7 +372,7 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
 //   * anything else: an identity walk down the __proto__ chain (step first --
 //     the object itself is never compared), bailing when a hop is not a
 //     defined object (the in-loop vtbl[+0xC] predicate) or the chain ends.
-int AptActionInterpreter_InstanceOfChainWalk(AptValue* pObject, AptValue* pClass)
+int AptActionInterpreter::instanceOfChainWalk(AptValue* pObject, AptValue* pClass)
 {
     int nResult = 0;
 
@@ -419,7 +419,7 @@ int AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
     const bool bBothObjects = pObject->getIsDefined() && pObject->isObject()
                            && pClass->getIsDefined()  && pClass->isObject();
     if (bBothObjects)
-        return AptActionInterpreter_InstanceOfChainWalk(pObject, pClass);  // FLAG: proto/interface chain walk
+        return instanceOfChainWalk(pObject, pClass);  // the proto/interface chain walk (isObjectOfType's object arm)
 
     // Non-object fallback (console LABEL_36 path): a script-function-typed pObject
     // never matches; otherwise a defined Object value of the same value-type matches.
@@ -437,9 +437,9 @@ int AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
 // urlDecode @0x82AEE208 -- parse one "key=value" pair out of pStream (terminated by
 // '&' or NUL) into (pOutKey, pOutValue), un-escaping each side. Returns the read
 // position past the consumed pair (skipping a trailing '&'), or null when the pair
-// has no '=' / pStream is empty. FLAG: EAStringC::Append's byte-range form and the
-// un-escape pass (console unEscape) are reused via the EAStringC API; unEscape is
-// declared extern (the same value-layer escape codec used by cbCallMethod_unescape).
+// has no '=' / pStream is empty. EAStringC::Append's byte-range form and the
+// un-escape pass are reused via the EAStringC API; unEscape @0x82AEE110 is homed
+// below as the AptActionInterpreter::unEscape static member.
 // ---------------------------------------------------------------------------
 // The un-escape codec -- HOMED 2026-07-02 (retiring the {} stub). The X360
 // _unEscape @0x82AEE110 + _escape2Char @0x82AD90D8: '+' decodes to a space;
@@ -460,7 +460,7 @@ namespace
     }
 }
 
-void AptActionInterpreter_UnEscape(EAStringC* pStr)
+void AptActionInterpreter::unEscape(EAStringC* pStr)
 {
     EAStringC lDecoded("");
     const char* p = pStr->GetBuffer();
@@ -506,9 +506,9 @@ const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOut
         return 0;   // no '=' -> no pair
 
     pOutKey->Append(pStream, static_cast<uint32_t>(pEq - pStream));
-    AptActionInterpreter_UnEscape(pOutKey);                                   // FLAG: un-escape codec
+    unEscape(pOutKey);                                                        // the un-escape codec
     pOutValue->Append(pEq + 1, static_cast<uint32_t>(p - (pEq + 1)));
-    AptActionInterpreter_UnEscape(pOutValue);                                 // FLAG: un-escape codec
+    unEscape(pOutValue);                                                      // the un-escape codec
     if (*p == '&')
         ++p;
     return p;
