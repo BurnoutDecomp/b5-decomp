@@ -61,6 +61,42 @@ namespace BrnNetwork
         void SetGameStats(const GameStateModuleIO::OnlineGameResults* lpRaceResults,
                           s32 liNumberOfRivals);
 
+        // DWARF BrnNetworkGameResults.h:50 -- event-type index produced by
+        // GameModeToEvent (leGameMode - 10). The asm does NOT clamp, so an index beyond
+        // COUNT is representable; the enum names only the valid subset.
+        enum EEventType
+        {
+            E_EVENT_TYPE_UNDEFINED        = 0,
+            E_EVENT_TYPE_RACE             = 1,
+            E_EVENT_TYPE_STUNT            = 2,
+            E_EVENT_TYPE_BURNING_HOME_RUN = 3,
+            E_EVENT_TYPE_ROAD_RAGE        = 4,
+            E_EVENT_TYPE_COUNT            = 5
+        };
+
+        // X360 @ 0x825842F0. Reset the game-data block, then report ready. Overrides the
+        // inherited ServerInterface Prepare().
+        virtual bool Prepare();
+
+    protected:
+        // DWARF vtable order; these are dead redirect stubs (results serialise via
+        // SerialiseToString, never the generic sized-blob path). Declared plain `virtual`
+        // (the committed base ServerInterfaceEndGameDataX360 does not declare them).
+        virtual const char* GetPattern() const;        // X360 0x82584318
+        virtual s32         GetPatternLength() const;   // X360 0x825843B0
+        virtual u32         GetDataSize() const;        // X360 0x82584440
+        virtual void*       GetData();                  // X360 0x825844D0
+
+    private:
+        // X360 @ 0x82584268 -- zero the whole payload (+0x04..+0xE0). Called by Prepare
+        // and SetGameStats. (DWARF cpp:51)
+        void ClearGameData();
+
+        // X360 @ 0x825847D8 -- wire game-mode (valid [10,18)) -> event index (mode-10).
+        // DWARF param type BrnGameState::GameStateModuleIO::EGameModeType; modelled as s32
+        // (the asm treats it as int). (DWARF cpp:266)
+        EEventType GameModeToEvent(s32 liGameMode);
+
     protected:
         // +0x44  leaf custom-results tail. Begins right after the inherited
         // {vptr + maResultWords[16]} (base size 0x44); SerialiseToString @ 0x82584600

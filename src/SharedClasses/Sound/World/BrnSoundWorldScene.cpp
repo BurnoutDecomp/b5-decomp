@@ -40,6 +40,25 @@ void* SoundWorldScene::GetResource()
     return GetSceneResourceProvider( *mpLogicModule ).GetResource();
 }
 
+// ---------------------------------------------------------------------------
+// SoundWorldScene::Prepare  @ 0x82686530
+//
+//   assert((lpLogicModule) && (lpcResourceExt))   ; non-gating tripwire
+//   mpcResourceExt = lpcResourceExt   ; stw r29, 0x38C(this)
+//   mpLogicModule  = lpLogicModule    ; stw r30, 0x388(this)
+//   return true                        ; li r3, 1
+// ---------------------------------------------------------------------------
+bool SoundWorldScene::Prepare( BrnSound::Module::SoundLogicModule* lpLogicModule,
+                               const char* lpcResourceExt )
+{
+    CGS_ASSERT( ( lpLogicModule ) && ( lpcResourceExt ),
+                "( lpLogicModule ) && ( lpcResourceExt )" );
+
+    mpcResourceExt = lpcResourceExt;
+    mpLogicModule  = lpLogicModule;
+    return true;
+}
+
 } // namespace World
 } // namespace Logic
 } // namespace BrnSound
