@@ -21,8 +21,8 @@
 // console's raw char buffer.)
 //
 // FLAG (follow-on / AptInit): AptValue::findChild (the per-segment resolver, its own
-// TU) is declared; AptApt_GetRootContext() encapsulates the console root global
-// (off_8324E574 -> the current target's root) x64-natively.
+// TU) is declared; the console root global (off_8324E574 -> the current target's root)
+// is resolved inline in getContext as AptGetAnimationAtLevel(0), matching the console.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -31,18 +31,12 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 
-// The movie root context for absolute ("/") paths -- HOMED 2026-07-02,
-// retiring the null stub: the console reads the target singleton
-// (off_8324E574) and resolves its level-0 root animation, which is exactly
-// AptGetAnimationAtLevel(0) (the resolver the zombie preconditions and
-// RunActions already use).
+// The movie root context for absolute ("/") paths: the console reads the target
+// singleton (off_8324E574) and resolves its level-0 root animation, which is exactly
+// AptGetAnimationAtLevel(0) (the resolver the zombie preconditions and RunActions
+// already use). Inlined at the single getContext use below, matching the console.
 class AptCIH;
 extern AptCIH* AptGetAnimationAtLevel(int nLevel);
-
-AptValue* AptApt_GetRootContext()
-{
-    return reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
-}
 
 // The console's fixed segment-buffer size (stack char[336] in the original).
 namespace { enum { KI_SEGMENT_MAX = 336 }; }
@@ -59,7 +53,8 @@ int AptActionInterpreter::getContext(AptValue* pScope, AptValue* pTarget,
     {
         ++p;
         nKind = 1;
-        pContext = AptApt_GetRootContext();   // FLAG: root global
+        // absolute-path root (console off_8324E574's target -> its level-0 root)
+        pContext = reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
         *ppOutContext = pContext;
     }
     else

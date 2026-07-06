@@ -557,14 +557,11 @@ void AptActionInterpreter_EnumerateMembers(AptActionInterpreter* pInterp,
     pVariable->Release();   // console (*(*Variable+4))(Variable) -- drop the resolved ref
 }
 
-// The instance/level number the "instance%ld" / "_level%d" path components encode:
+// The instance/level number the "instance%ld" / "_level%d" path components encode is
 // the node's render-item depth (console *(*(node+0x20)+4)+0x14 == mpCharacterInst's
-// render item mDepth). pValue is the boxed CIH node (AptCIH); its +8/+0x1C/+0x20
-// console fields ARE the AptCIH named members mInstanceName / mpDisplayListParent /
-// mpCharacterInst, so the walk reads them by name.
-static inline int AptCIH_InstanceIndex(AptCIH* pNode)
-{ return pNode->GetCharacterInst()->GetRenderItem()->mDepth; }
-
+// render item mDepth); the console inlines that field walk at each use below (pNode's
+// +8/+0x1C/+0x20 fields ARE the AptCIH named members mInstanceName /
+// mpDisplayListParent / mpCharacterInst), so it is read by name inline here too.
 // ---------------------------------------------------------------------------
 // sub_82AF7400 -- the recursive slash/dot path-name builder (the getName/getName2
 // core; nMode != 0 -> dotted, else slashed). Walks the node's display-list-parent
@@ -590,7 +587,7 @@ int AptActionInterpreter_BuildPathName(AptActionInterpreter* /*pInterp*/,
         {
             // Anonymous node: synthesise "instance<idx>", append it, and write it back
             // into the parent's property hash so the assigned name persists.
-            const int nIdx = AptCIH_InstanceIndex(pNode);          // console *(*(*(v3+0x20)+4)+0x14)
+            const int nIdx = pNode->GetCharacterInst()->GetRenderItem()->mDepth;  // console *(*(*(v3+0x20)+4)+0x14)
             EAStringC strInstance;                                  // console v11 = &unk_82F72FF8
             strInstance.Format("instance%ld", nIdx);
             *pOut += szSep;                                         // console sub_82AE8520(a2, v5) -- sep first
@@ -613,7 +610,7 @@ int AptActionInterpreter_BuildPathName(AptActionInterpreter* /*pInterp*/,
 
     // Root node: emit "_level<idx>" when this is the root (mode 0 with a non-zero
     // instance index, or mode == 1).
-    const int nIdx = AptCIH_InstanceIndex(pNode);                  // console *(*(*(result+0x20)+4)+0x14)
+    const int nIdx = pNode->GetCharacterInst()->GetRenderItem()->mDepth;  // console *(*(*(result+0x20)+4)+0x14)
     if ((nMode == 0 && nIdx != 0) || nMode == 1)
     {
         EAStringC strLevel;                                        // console v12
