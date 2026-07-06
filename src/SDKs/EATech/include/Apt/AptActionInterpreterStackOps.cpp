@@ -479,7 +479,7 @@ extern int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel);
 // FLAG (un-homed AptCIH play-head subsystem -- shared shims, matching SpecialOps):
 // AptCIH_jumpToFrame retired: the real member AptCIH::jumpToFrame (AptCIH.cpp) is used directly.
 // AptCIH_SetDirtyState retired: the real member AptCIH::SetDirtyState (AptCIH.cpp) is
-// used directly at the call site (the free-function {} stub silently dropped the dirty latch).
+// used directly at the call site (the free-function {} stub dropped the dirty latch).
 
 // AptMovie::runFrameActions is now the real const member (AptMovie.cpp, @PS3 0x820FA4);
 // the CallFrame handler below calls it on the bound clip's embedded movie directly.
@@ -998,7 +998,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     // console: (*(v7+1) & 0x3FFC000) == 0x4000 -> the method needs an extra AddRef.
     // console: (v7->mnValueData & 0x3FFC000) == 0x4000 -- a flags-band state test on
     // the RECEIVER's packed word (NOT isMCInParentChain; the old form compared a bool
-    // against 0x4000 == never true, silently skipping the hold ref).
+    // against 0x4000 == never true, which skipped the hold ref).
     if ((pMethodName->mnValueData & 0x3FFC000u) == 0x4000u)
     {
         pMethodName->AddRef();   // console (**v7)(v7)
