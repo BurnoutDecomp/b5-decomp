@@ -171,6 +171,13 @@ public:
     // as-is. The push itself is the inlined stackPush (store/advance/AddRef).
     void       stackPushIndirect(AptValue* pValue);
 
+    // GetDictEntry -- fetch string-constant dictionary slot nIndex (mpConstantPool[i],
+    // console *(4*idx + a1[17])). The console reads the slot inline at each Push*Dict*
+    // op; homed here with a null guard (FLAG hardening: an x64 pool miss can leave a
+    // slot null where the console pre-seeds -- returns gpUndefinedValue then). Body in
+    // AptActionInterpreterInterpHelpers.cpp.
+    AptValue*  GetDictEntry(unsigned int nIndex);
+
     // ---- lifecycle (initialize/destroy the five stacks) ------------------
     // initialize @0x82AE39D8 -- allocate the five {count,capacity,array} stacks from
     // the operand-stack pool (operand stack sized by iStackSize, the four call-depth

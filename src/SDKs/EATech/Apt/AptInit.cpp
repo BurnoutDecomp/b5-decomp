@@ -51,6 +51,7 @@
 // ---- the value singletons AptValueInitialize builds -------------------------
 #include "SDKs/EATech/include/Apt/AptValue/AptNone.h"           // AptNone (the `undefined` singleton; befriended)
 #include "SDKs/EATech/include/Apt/AptExtObject.h"              // CreateNewAptFunction (the registerClass native wrap)
+#include "SDKs/EATech/include/Apt/AptObject.h"                 // AptObject::RegisterClassNative (registerClass native)
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"         // AptNativeFunction (complete type for the AptValue* store)
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"             // the _global hash (builtin class install)
 #include "SDKs/EATech/include/Apt/AptPrototype.h"               // AptPrototype (builtin prototype seeding)
@@ -348,8 +349,8 @@ extern const EAStringC gAptObjectClassName;   // &dword_8324E650 "Object"
 extern const EAStringC gAptStringClassName;   // &dword_8324E6B4 "String"
 extern const EAStringC gAptSpriteClassKey;    // dword_8324E640 "MovieClip"
 
-// The registerClass native body (AptObject.cpp; X360 sub_82AF6A38).
-AptValue* AptApt_RegisterClassNative(AptValue* pContext, int nNumParams);
+// The registerClass native is AptObject::RegisterClassNative (AptObject.cpp;
+// X360 sub_82AF6A38); its declaration arrives with AptObject.h below.
 
 int AptValueInitialize()
 {
@@ -417,14 +418,14 @@ int AptValueInitialize()
     // The Object.registerClass native (off_8324D748 == gpObjRegistrationFunc): the
     // console's tail calls sub_82AF6B68, which -- among the builtin prototype seeding
     // -- wraps the registerClass native (sub_82AF6A38, homed as
-    // AptApt_RegisterClassNative in AptObject.cpp) in an AptNativeFunction and pins
+    // AptObject::RegisterClassNative in AptObject.cpp) in an AptNativeFunction and pins
     // it. Installed here (the same boot moment); FLAG: the REST of sub_82AF6B68 (the
     // per-builtin-class AptPrototype seeding over _global's hash entries) stays
     // deferred with the AS-builtin class registry.
     if (gpObjRegistrationFunc == nullptr)
     {
         gpObjRegistrationFunc = AptExtObject::CreateNewAptFunction(
-            reinterpret_cast<AptExtFunctionPtr>(&AptApt_RegisterClassNative));
+            reinterpret_cast<AptExtFunctionPtr>(&AptObject::RegisterClassNative));
         if (gpObjRegistrationFunc)
             gpObjRegistrationFunc->setGCRoot(1);
     }
