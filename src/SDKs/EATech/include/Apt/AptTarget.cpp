@@ -94,9 +94,8 @@ void AptAnimationTarget_Destruct(AptAnimationTarget* pAnim);
 // FLAG (un-homed): ~AptLoader @0x82B... -- the X360 loader destructor drains the
 // weak loaded-file list before the block is freed. AptLoader has no homed dtor
 // (its request-layer reconstruction added no owned state needing destruction);
-// the list-drain is part of the deferred loader-completion TU. Declared here so
-// the teardown matches the console's `~AptLoader; Deallocate` sequence.
-void AptLoader_Destruct(AptLoader* pLoader);
+// the list-drain is part of the deferred loader-completion TU. Shutdown calls the
+// explicit `pLoader->~AptLoader()` directly (the console's `~AptLoader; Deallocate`).
 
 // ---------------------------------------------------------------------
 // AptTarget::AptTarget @0x82B00160 -- pool-allocate the context's owned
@@ -309,7 +308,7 @@ void AptTarget::Shutdown()
     AptLoader* pLoader = mpLoader;                  // v5 = *(this + 0x1C)
     if (pLoader)
     {
-        AptLoader_Destruct(pLoader);                // ~AptLoader (drains the list -- un-homed)
+        pLoader->~AptLoader();                       // console: explicit ~AptLoader (drains the loaded-file list)
         gpAptPseudoDataPool->Deallocate(pLoader, sizeof(AptLoader));   // Deallocate(pool, v5, 4)
     }
 
@@ -386,14 +385,3 @@ AptLoader* AptTarget_GetLoader(AptTarget* pTarget)
     return pTarget->mpLoader;   // *(this + 7) == +0x1C
 }
 
-// ---------------------------------------------------------------------
-// AptLoader_Destruct -- run ~AptLoader (drain the weak loaded-file list + cancel
-// every still-registered preloaded animation). PS3 _ZN9AptLoaderD1Ev/D2Ev
-// @0xF440B8/@0xF44198; the body is homed as AptLoader::~AptLoader (AptLoader.cpp
-// @0x82AFF958). This shim is the named-callee Shutdown invokes (the console emits a
-// direct `~AptLoader; Deallocate` -- the explicit destructor call, no block free).
-// ---------------------------------------------------------------------
-void AptLoader_Destruct(AptLoader* pLoader)
-{
-    pLoader->~AptLoader();
-}
