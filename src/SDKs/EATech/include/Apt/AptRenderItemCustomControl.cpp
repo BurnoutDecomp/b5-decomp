@@ -34,6 +34,10 @@ extern volatile long gAptRenderTreeRevisionLock;   // X360 unk_8324E7CC
 
 namespace
 {
+    // The console's interrupt-masked lwarx/stwcx. test-and-set on the render-tree revision
+    // lock (unk_8324E7CC).
+    // FLAG PC-platform leaf: modelled as a single-threaded _InterlockedExchange spin
+    // (a threading primitive, not an engine Class::method).
     inline void AptRenderTreeLock_Acquire()
     {
         while (_InterlockedExchange(&gAptRenderTreeRevisionLock, 1) != 0)
@@ -41,6 +45,7 @@ namespace
             // spin until the previous holder releases (sets it back to 0)
         }
     }
+    // FLAG PC-platform leaf: paired release of the single-threaded render-tree spinlock.
     inline void AptRenderTreeLock_Release()
     {
         _InterlockedExchange(&gAptRenderTreeRevisionLock, 0);

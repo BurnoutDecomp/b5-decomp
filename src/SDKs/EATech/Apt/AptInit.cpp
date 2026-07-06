@@ -125,7 +125,7 @@ namespace
     //  AptStringPool.cpp, where StringPool::Initialize lives.)
 
     // ---- the shared thread-id spin lock (unk_8324E724) ---------------------
-    // FLAG: interrupt-masked lwarx/stwcx. TAS elided single-threaded.
+    // FLAG PC-platform leaf: single-threaded thread-id spin lock -- the console's interrupt-masked lwarx/stwcx. TAS elided (threading primitive, not an engine method).
     inline void AptThreadIdLock_Acquire() {}
     inline void AptThreadIdLock_Release() {}
 

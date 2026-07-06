@@ -35,6 +35,7 @@ bool AptValue::sbSuspendRefcountDeletions = false;
 namespace
 {
     volatile long gAptGCFlagLock = 0;
+    // FLAG PC-platform leaf: single-threaded GC-flag spin lock -- interrupt-masked lwarx/stwcx. modelled as an _InterlockedExchange TAS (threading primitive, not an engine method).
     inline void AptGCFlagLock_Acquire() { while (_InterlockedExchange(&gAptGCFlagLock, 1) != 0) {} }
     inline void AptGCFlagLock_Release() { _InterlockedExchange(&gAptGCFlagLock, 0); }
 }
