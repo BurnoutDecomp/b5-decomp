@@ -28,11 +28,13 @@
 #include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"        // scratch state for the multi-frame skip path
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"        // gAptActionInterpreter operand stack (_gotoAndX)
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"          // AptString::Create (the `_name` property getter)
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"          // AptGetAnimationAtLevel (GetRootAnimation's CIHNone path)
 #include "SDKs/EATech/include/Apt/AptDefine.h"     // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 
 #include <new>   // placement new (the scratch AptPseudoDisplayList over pool memory)
+#include <cstring>   // std::strcmp (the `_name` property-name compare)
 
 // FLAG (un-homed AS/runtime singletons -- declared verbatim by their console name
 // equivalents; bodies/definitions land with their owning TUs):
@@ -281,6 +283,33 @@ bool AptCIH::IsNone() const { return static_cast<uint32_t>(getVtblIndex()) == 37
 AptNativeHash* AptCIH::GetNativeHash() const   // @0x82AD5B28
 {
     return mpCharacterInst ? mpCharacterInst->mpProperties : nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// objectMemberLookup (PARTIAL x64 reconstruction, 2026-07-06) -- the console CIH
+// override that resolves the built-in read-only MovieClip properties for a clip
+// value read via GetMember/GetProperty -> getVariable -> objectMemberLookup (before
+// findChild). Only `_name` (-> the instance name) is reconstructed so far -- it is
+// the drive-critical property: a class-bound clip's ctor does `this.msName =
+// this._name`, and the base's `return 0` left `_name` falling through findChild to
+// `undefined`, so every component name handed to SendAptEvent was undefined.
+// Returns 0 for any other name so the existing findChild resolution is unchanged.
+// FLAG: the full property set (_x/_y/_width/_height/_visible/_alpha/_rotation/
+// _currentframe/_totalframes/_target/...) is a follow-on; wire them here as their
+// getters land.
+AptValue* AptCIH::objectMemberLookup(AptValue* const /*pThis*/,
+                                     const AptNativeString* const pName) const
+{
+    if (pName != nullptr)
+    {
+        const char* const pBuf = pName->GetBuffer();
+        if (pBuf != nullptr && pBuf[0] == '_' && std::strcmp(pBuf, "_name") == 0)
+        {
+            const char* const pInst = GetInstanceName().GetBuffer();
+            return AptString::Create(pInst ? pInst : "");
+        }
+    }
+    return nullptr;
 }
 bool AptCIH::IsMask() const  { return mpCharacterInst->GetRenderItem()->GetIsMask(); }   // @0x82AD5BA0
 bool AptCIH::HasMask() const { return mpCharacterInst->GetRenderItem()->GetHasMask(); }  // @0x82AD5BB8
