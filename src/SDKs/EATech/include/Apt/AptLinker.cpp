@@ -54,13 +54,10 @@ int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nC
 // deferred ActionScript actions for the director.
 void AptAnimationTarget_RunActions(AptAnimationTarget* pAnim);
 
-// FLAG (un-homed AptRenderItem depth accessor): the X360 reads/writes the int16
-// at AptRenderItem+0x14 (the placed depth) and dispatches a vtbl slot (+0x14) to
-// copy visual state during a zombie swap. Modelled via named render-item depth
-// get/set; the vtbl-dispatched copy is the un-homed AptRenderItem clone path.
-int16_t AptRenderItem_GetDepth(const AptRenderItem* pItem);                        // *(item+0x14)
-void    AptRenderItem_SetDepth(AptRenderItem* pItem, int16_t nDepth);             // *(item+0x14)=
-void    AptRenderItem_CopyVisualFrom(AptRenderItem* pDst, const AptRenderItem* pSrc); // (*item->vtbl[+0x14])(dst, src)
+// The X360 reads/writes the int16 placed depth at AptRenderItem+0x14 and dispatches
+// a vtbl slot (+0x14 == CopyRenderDataFrom) to copy visual state during a zombie
+// swap; the reconstructed C++ calls the named AptRenderItem members directly
+// (GetDepth()/SetDepth()/CopyRenderDataFrom()).
 
 // FLAG (un-homed saved-input debug gate): dword_8324D7F0 -- nonzero when the
 // saved-input record/replay system is active (gates Update's checkpoint logic).
@@ -252,9 +249,9 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
     {
         // Top-level node: hand the visual state across + reseat in the root list.
         AptRenderItem* pNewItem = pNew->mpCharacterInst->GetRenderItemWritable();   // *(v20+32)
-        AptRenderItem_CopyVisualFrom(pNewItem, pCIH->mpCharacterInst->mpRenderItem);// (*item->vtbl[+0x14])(item, *(v22+4))
-        const int16_t nDepth = AptRenderItem_GetDepth(pCIH->mpCharacterInst->mpRenderItem); // *(*(*(a2+32)+4)+20)
-        AptRenderItem_SetDepth(pNew->mpCharacterInst->GetRenderItemWritable(), nDepth);
+        pNewItem->CopyRenderDataFrom(pCIH->mpCharacterInst->mpRenderItem);          // (*item->vtbl[+0x14])(item, *(v22+4))
+        const int16_t nDepth = pCIH->mpCharacterInst->mpRenderItem->GetDepth();     // *(*(*(a2+32)+4)+20)
+        pNew->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
 
         const int nInsertDepth = pCIH->GetDepth();                 // v24 = *(a2+20) (placed index/depth)
         AptDisplayList* pRoot = gpAptTarget->mpAnimationTarget->GetRootDisplayList();  // *(off_8324E574+6)+0x20
@@ -499,14 +496,14 @@ void AptLinker::Update()
         {
             AptCIH* pCIH = static_cast<AptCIH*>(pThingy->mpValue);          // v24 = *(_R28+8)
             const int16_t nDepth =
-                AptRenderItem_GetDepth(pCIH->mpCharacterInst->mpRenderItem);// v25 = *(*(*(v24+32)+4)+20)
+                pCIH->mpCharacterInst->mpRenderItem->GetDepth();            // v25 = *(*(*(v24+32)+4)+20)
             pCIH->mFlagsA &= 0x9FFFFFFFu;                                   // clear transition bits
             pCIH->ClearCIH(false);                                         // AptCIH::ClearCIH(v24,0)
 
             if ((pCIH->mFlagsA & 0x60000000u) == 0x20000000u)             // still transitioning
             {
                 AptCIH* pZombie = ConvertToZombie(pCIH);                   // AptLinker::ConvertToZombie(a1, v24)
-                AptRenderItem_SetDepth(pZombie->mpCharacterInst->GetRenderItemWritable(), nDepth);
+                pZombie->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
             }
             else
             {
@@ -520,7 +517,7 @@ void AptLinker::Update()
                     InstallEmptyCharacterInstVtbl(pInst);
                 }
                 AptCIH_SetCharacterInst(pCIH, pInst, 1);                   // AptCIH::SetCharacterInst(v24, v29, 1)
-                AptRenderItem_SetDepth(pCIH->mpCharacterInst->GetRenderItemWritable(), nDepth);
+                pCIH->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
                 ListErase(&mpThingyListHead, &mpThingyListHead);          // sub_82AF83A0(a1, &v82) -- drop head
             }
             if (mpThingyListHead == nullptr)

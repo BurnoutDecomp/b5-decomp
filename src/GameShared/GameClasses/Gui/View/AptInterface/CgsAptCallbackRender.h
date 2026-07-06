@@ -104,6 +104,21 @@ namespace CgsGui
         // string if the flags say so, hand out a pooled CgsAptString, and Prepare it.
         static AptAssetString AllocateString(AptAllocateStringParameters* lpParameters);
 
+        // The opaque-world half of AllocateString @0x5C7260, implemented in CgsAptCallbackRender.cpp
+        // (which owns the opaque pool CgsAptString + the render handler). AllocateString itself lives
+        // in CgsAptCallbackRenderAllocateString.cpp -- the TU that owns the REAL CgsGui::CgsAptString
+        // text object (for CgsAptString::Prepare) and so cannot include the render-handler header.
+        // This half frees the previous string, hands out a free pool slot + its char buffer, and
+        // surfaces the font collection / text effect / size scale + the slot's x64 ZID (slotIndex+1,
+        // stored in AptRenderItemDynamicText::mZID; 0 == unresolved) that AllocateString forwards to
+        // CgsAptString::Prepare. Returns the pool slot as a raw void* (the caller casts it to CgsAptString*).
+        static void* AcquireStringSlot(AptAllocateStringParameters* lpParameters,
+                                       CgsUnicode::CgsUtf8** lpcStringBufferOut,
+                                       const void** lppFontsOut,
+                                       s32* lpiEffectOut,
+                                       f32* lpfSizeScaleOut,
+                                       s32* lpiZIDOut);
+
         // PS3 0x5BDF3C. Return a pooled CgsAptString to the render handler's free pool.
         static void DeallocateString(AptAssetString lpAssetString, u32 leFlags);
 
@@ -120,21 +135,4 @@ namespace CgsGui
         static void Pop(const char* lpacRenderFlags);    // PS3 0x5BA8A8 (empty)
     };
 
-    // The opaque-world half of AptCallbackRender::AllocateString @0x5C7260, implemented in
-    // CgsAptCallbackRender.cpp (which owns the opaque pool CgsAptString + the render handler).
-    // AllocateString itself lives in CgsAptCallbackRenderAllocateString.cpp -- the TU that owns the
-    // REAL CgsGui::CgsAptString text object (for CgsAptString::Prepare) and so cannot include the
-    // render-handler header. This bridge frees the previous string, hands out a free pool slot +
-    // its char buffer, and surfaces the font collection / text effect / size scale Prepare needs.
-    // Returns the pool slot as a raw void* (the caller casts it to the REAL CgsAptString*).
-    // lpiZIDOut receives the x64 render-data handle for the returned slot: (slotIndex + 1),
-    // the small int id the engine stores in AptRenderItemDynamicText::mZID (0 == unresolved).
-    // The bridge owns the ZID<->slot mapping (it has the render handler); the AllocateString TU
-    // returns this id, and DrawString / DeallocateString map it back through the same handler.
-    void* AptCallbackRender_AcquireStringSlot(AptAllocateStringParameters* lpParameters,
-                                              CgsUnicode::CgsUtf8** lpcStringBufferOut,
-                                              const void** lppFontsOut,
-                                              s32* lpiEffectOut,
-                                              f32* lpfSizeScaleOut,
-                                              s32* lpiZIDOut);
 }
