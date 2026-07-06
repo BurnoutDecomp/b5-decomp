@@ -1,63 +1,107 @@
 #pragma once
 
 // ===================================================================================
-// CgsNetwork::ReliableMessageManager -- minimal owning header
+// CgsNetwork::ReliableMessageManager -- owning header
 //   b5-decomp/src/GameShared/GameClasses/Network/Players/CgsReliableMessageManager.h
 //
 // The per-PlayerManager reliable-message queue: it buffers our outgoing reliable messages
-// per remote player, hands the player pump the next one to (re)send, and drops them on ack.
+// per remote player, hands the player pump the next one to (re)send, drops them on ack,
+// and (on the receive side) filters duplicate / out-of-order reliable messages through a
+// fixed rcvd-dup window.
 //
-// This header is INTENTIONALLY MINIMAL: it declares only the three X360-attested methods
-// CgsNetworkPlayer.cpp drives (the player pump's view of the queue), with signatures from
-// the DecFIGS DWARF (references/DecFIGS/dwarfdump/.../CgsReliableMessageManager.h:110/116/127),
-// gated against the ARTIST binary. The full queue layout (the BufferedSendMessageData ring,
-// the rcvd-dup window, etc.) is reconstructed in CgsReliableMessageManager.cpp's own TU; the
-// body of each method below lives there. The send buffer holds
-// KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER == 140 entries (the player pump asserts the index
-// stays in [0, 140) -- see CgsNetworkPlayer::SendMessages).
+// SHAPE authoritative from the DecFIGS DWARF
+//   (references/DecFIGS/dwarfdump/.../CgsReliableMessageManager.h), gated on the X360
+// binary. Byte offsets read directly off the ARTIST asm dereferences:
+//
+//   +0x0000  mpPlayerManager                              (Release stores 0)
+//   +0x0004  mpReliableMessageBuffer                      (heap buffer freed in Release)
+//   +0x0008  maReliableMessageSendData[140]  (16B each -> ends +0x8C8)
+//   +0x08C8  mabValidSendData  FastBitArray<140>  (3 x u64 -> 24B, cleared in Release)
+//   +0x08E0  miReliableMessageSendIndex
+//   +0x08E4  miMaxReliableMessagesSendToBuffer
+//   +0x08E8  miNumBufferedReliableMessages                (Update recount target)
+//   +0x08EC  maReliableMessagesRcvdData[140] (16B each -> ends +0x11AC)
+//   +0x11AC  miReliableMessagesRecvdBufferIndex           (rcvd ring cursor)
+//   +0x11B0  mpHeapAllocator
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
+
+namespace CgsMemory { class HeapMalloc; }
 
 namespace CgsNetwork
 {
     struct Message;
+    struct PlayerManager;
 
     typedef s32 NetworkPlayerID;   // mirrors MessageWithPlayerIDs::NetworkPlayerID
 
+    // Frame-window tunables (DWARF CgsReliableMessageManager.cpp:34-38).
+    const s32 KI_FRAMES_TO_DISCARD_RELIABLE_MESSAGE               = 3600;
+    const s32 KI_FRAMES_TO_RESEND_RELIABLE_MESSAGE               = 7;
+    const s32 KI_FRAMES_TO_DISCARD_RELIABLE_MESSAGE_RECEIVED_DATA = 10800;   // 0x2A30
+
     struct ReliableMessageManager
     {
-        // Capacity of the per-player outgoing reliable-message ring (the player pump
-        // bounds-asserts its index against this -- KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER).
+        // Ring capacities (DWARF CgsReliableMessageManager.h:42-43). The player pump
+        // bounds-asserts its send index against KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER.
         static const s32 KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER = 140;
+        static const s32 KI_MAX_RELIABLE_MESSAGES_RECV_TO_BUFFER = 140;
 
         // One buffered outgoing reliable message (DWARF CgsReliableMessageManager.h:62-70).
-        // 16 bytes; mu16FrameFirstSent == KU16_INVALID_FRAME (0xFFFF) means "not sent yet".
+        // 16 bytes; mu16FrameLastSent == KU16_INVALID_FRAME (0xFFFF) means "not sent yet".
         struct BufferedSendMessageData
         {
             NetworkPlayerID mPlayerID;          // +0x00
             s32             miLength;           // +0x04
             u16             mu16FrameFirstSent; // +0x08
-            u16             mu16FrameLastSent;  // +0x0A
+            u16             mu16FrameLastSent;  // +0x0A  (GetNext reads elem+0x0A == asm 0x12)
             Message*        mpMsg;              // +0x0C
         };
 
-        // Return the buffered entry at liIndex (DWARF :104). The player pump reads its
-        // mpMsg / frame fields and updates the resend frame stamps.
+        // One remembered received reliable message, for duplicate rejection
+        // (DWARF CgsReliableMessageManager.h:157-166). 16 bytes.
+        struct StoredRcvdMessageData
+        {
+            NetworkPlayerID mPlayerID;          // +0x00
+            u16             mu16FrameSent;       // +0x04
+            s32             miType;              // +0x08
+            s32             miValidCountdown;    // +0x0C
+        };
+
+        // ---- layout (frozen; byte offsets above) ----
+        PlayerManager*          mpPlayerManager;                                          // +0x0000
+        u8*                     mpReliableMessageBuffer;                                  // +0x0004
+        BufferedSendMessageData maReliableMessageSendData[KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER]; // +0x0008
+        CgsContainers::FastBitArray<KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER> mabValidSendData;      // +0x08C8
+        s32                     miReliableMessageSendIndex;                               // +0x08E0
+        s32                     miMaxReliableMessagesSendToBuffer;                        // +0x08E4
+        s32                     miNumBufferedReliableMessages;                            // +0x08E8
+        StoredRcvdMessageData   maReliableMessagesRcvdData[KI_MAX_RELIABLE_MESSAGES_RECV_TO_BUFFER]; // +0x08EC
+        s32                     miReliableMessagesRecvdBufferIndex;                       // +0x11AC
+        CgsMemory::HeapMalloc*  mpHeapAllocator;                                          // +0x11B0
+
+        // ---- public interface (DWARF-attested, gated on X360 ledger) ----
+        void  Construct();
+        bool  Prepare(PlayerManager* lpPlayerManager, CgsMemory::HeapMalloc* lpHeapAllocator);
+        void  Update();
+        bool  Release();
+        void  Destruct();
+
         BufferedSendMessageData* GetBufferedReliableMessage(s32 liIndex);
+        s32   GetNextReliableMessageToResend(NetworkPlayerID liPlayerID, u16 lu16CurrentFrame,
+                                             s32 liPrevIndex);
+        void  AddBufferedReliableMessage(NetworkPlayerID liPlayerID, Message* lpMessage, s32 liLength);
+        void  RemoveBufferedReliableMessage(s32 liIndex);
+        void  ClearSendReliableMessages();
+        void  ClearPlayersSendReliableMessages(NetworkPlayerID liPlayerID);
+        bool  MessageIsDuplicate(Message* lpMessage);
+        void  ClearRcvdReliableMessages();
 
-        // Return the index of the next reliable message that should be (re)sent to liPlayerID
-        // on frame lu16CurrentFrame, scanning after liPrevIndex (-1 to start). Returns -1 when
-        // there are none left. DWARF :110.
-        s32  GetNextReliableMessageToResend(NetworkPlayerID liPlayerID, u16 lu16CurrentFrame,
-                                            s32 liPrevIndex);
-
-        // Buffer a freshly-sent reliable message so it can be resent until acked. DWARF :116.
-        void AddBufferedReliableMessage(NetworkPlayerID liPlayerID, Message* lpMessage,
-                                        s32 liFrame);
-
-        // Drop every buffered reliable message we were holding for liPlayerID (called when the
-        // player is released / disconnected). DWARF :127.
-        void ClearPlayersSendReliableMessages(NetworkPlayerID liPlayerID);
+    private:
+        // Age-out helpers driven every Update (bodies in their own TUs).
+        void  CheckForReliableMessageTimeout();
+        void  UpdateReliableMessagesReceived();
     };
 }
