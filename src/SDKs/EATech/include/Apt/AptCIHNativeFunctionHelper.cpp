@@ -271,9 +271,8 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
 // X360 dispatches the host gAptFuncs.pfnGetBytesTotal slot (+0x94,
 // dword_8324E8AC) -- the loader-progress query behind AS getBytesTotal().
 // The trailing (int, double) shim args were call-thunk artifacts; the typed
-// slot takes (path, mode). Null slot answers 0 -- the un-installed-host
-// boundary, the same convention as pfnPointHitTest.
-// ---------------------------------------------------------------------------
+// slot takes (path, mode). Null slot answers 0 -- the un-installed-host boundary.
+// FLAG PC-platform leaf: the host loader-progress callback boundary (gAptFuncs.pfnGetBytesTotal, +0x94).
 int AptHook_GetBytesTotal(const char* pcFilePath, int a2, double /*a3*/)
 {
     if (gAptFuncs.pfnGetBytesTotal != nullptr)

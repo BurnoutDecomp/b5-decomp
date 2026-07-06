@@ -60,8 +60,9 @@ void AptFile_UnresolveAnimation(void* pLoadedData, void* pResolveContext)
     pAnimation->Unresolve(static_cast<int32_t>(reinterpret_cast<intptr_t>(pResolveContext)));
 }
 
-// AptFile_FreeLoadedBlock -- hand the raw loaded-data block (mpDataBlock) back to
-// the registered Apt free callback. PS3: (*dword_1071B1F4)(*(this+6)).
+// AptFile_FreeLoadedBlock -- hand the raw loaded-data block (mpDataBlock) back to the
+// registered Apt free callback (PS3 (*dword_1071B1F4)(*(this+6))).
+// FLAG PC-platform leaf: the host free-callback boundary (gpAptFreeAnimationHook, installed by AptAux::ConstructApt).
 void AptFile_FreeLoadedBlock(void* pDataBlock)
 {
     if (gpAptFreeAnimationHook != nullptr)   // installed by CgsGui::AptAux::ConstructApt

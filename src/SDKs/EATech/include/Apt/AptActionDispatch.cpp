@@ -66,8 +66,9 @@
 // ships it as static data; building it at startup yields the identical map.
 AptActionInterpreter::AptActionHandler AptActionInterpreter::sGlobalTable[256] = { 0 };
 
-// The shared no-op handler for unhandled/unused opcodes (the engine's own STUB
-// at X360 0x82AD5078). Leaves the stack untouched.
+// The shared handler installed at every unhandled/unused opcode slot -- the engine's own
+// empty dispatch routine at X360 0x82AD5078 (leaves the operand stack untouched). The real
+// engine ships this as a genuine do-nothing handler, so the empty body is faithful.
 void AptActionInterpreter::_FunctionAptActionStub(AptActionInterpreter*, LocalContextT*)
 {
 }

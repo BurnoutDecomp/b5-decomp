@@ -2132,8 +2132,8 @@ void* AptDisplayList_mergeState(AptDisplayList* pList, AptPseudoDisplayList* pSc
                              static_cast<AptNativeHash*>(pProperties), bForward);
 }
 
-// AptCIH_PreDestroyHook -- AptCIH::PreDestroy's optional notify hook (console
-// dword_8324E8A0). When a host has installed the callback, dispatch to it; else no-op.
+// AptCIH_PreDestroyHook -- AptCIH::PreDestroy's optional notify hook (console dword_8324E8A0).
+// FLAG PC-platform leaf: the host-installed pre-destroy callback boundary (dispatch when installed, else no-op).
 void AptCIH_PreDestroyHook(AptCIH* pCIH)
 {
     if (gpAptCIHPreDestroyHook)
