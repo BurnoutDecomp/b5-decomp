@@ -340,16 +340,16 @@ AptCharacter* AptResolveDefaultTextFont(AptCharacter* pFontOwner, int32_t* pnDef
     // mpFixupLink result = **(v2 + 0x10): the character-table base held at
     // [c:movieRoot+0x10], dereferenced twice to its first AptCharacter* entry.
     AptCharacter* const* const ppDefaultTable =
-        *reinterpret_cast<AptCharacter* const* const*>(pMovieRoot + 0x10);   // *(v2 + 0x10)
+        *reinterpret_cast<AptCharacter* const* const*>(pMovieRoot + 0x10);   // *(v2 + 0x10) serialized .apt movie-root char table
     AptCharacter* const pFontCharacter = *ppDefaultTable;                    // **(v2 + 0x10)
 
     // Walk the character table for the first font character (mnType == 3) and record
     // its index as the default glyph index.
-    const int32_t nCount = *reinterpret_cast<const int32_t*>(pMovieRoot + 12);   // *(v2 + 12)
+    const int32_t nCount = *reinterpret_cast<const int32_t*>(pMovieRoot + 12);   // *(v2 + 12) serialized .apt movie-root char count
     if (nCount > 0)
     {
         AptCharacter* const* const pTable =
-            *reinterpret_cast<AptCharacter* const* const*>(pMovieRoot + 16);     // *(v2 + 16)
+            *reinterpret_cast<AptCharacter* const* const*>(pMovieRoot + 16);     // *(v2 + 16) serialized .apt movie-root char table
         for (int32_t i = 0; i < nCount; ++i)
         {
             if (pTable[i]->mnType == 3)   // **(4*idx + table) == 3 (font character type)
