@@ -2107,12 +2107,12 @@ AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharac
     AptDisplayList* pChildList = &pSpriteInst->mDisplayList;
 
     // console @0x82B09CD0: a SINGLE deref reads the source char-inst's subclass placement
-    // slot at +0x18 (`lwz r29,0x18(*(a2+0x20))`) -- the same field AptCharInst_SetPlacement-
-    // Field18 writes; encapsulated (subclass-specific role), NOT the render-item mFlags.
-    extern const void* AptCharInst_GetPlacementField18(AptCharacterInst* pInst);
+    // slot at +0x18 (`lwz r29,0x18(*(a2+0x20))`) == AptCharacterSpriteInstBase::mpClipEventHandlers
+    // (the sprite-base subclass slot; NOT the render-item mFlags).
     const void* pPlacementClipActions = nullptr;
     if (pSource != nullptr)
-        pPlacementClipActions = AptCharInst_GetPlacementField18(pSource->GetCharacterInst());
+        pPlacementClipActions =
+            static_cast<AptCharacterSpriteInstBase*>(pSource->GetCharacterInst())->mpClipEventHandlers;
 
     return pChildList->placeObject(
         /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, pNode,

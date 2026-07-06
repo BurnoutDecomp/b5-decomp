@@ -635,8 +635,6 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
 //   AptDLState_CreateInstAtDepth (sub_82B008B0) -- create a fresh AptCIH(char,parent),
 //     find its insert-after slot at nDepth, stamp the render-item depth, insert; returns it.
 //   AptDLState_ReinsertInstAtDepth (sub_82AEE788) -- re-insert an existing node at nDepth.
-//   AptCharInst_SetPlacementField18 -- write the placement dword into the char inst's
-//     subclass slot at +0x18 (role differs by subclass; encapsulated, not offset-poked).
 //   AptCIH_CloneClassMembers -- copy every non-reserved (__proto__/prototype-skipped)
 //     member of an AS class object onto a freshly placed instance (AptActionInterpreter::
 //     setVariable over the class hash); reached only with a non-null class object.
@@ -645,7 +643,6 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
 extern AptCIH* AptDLState_CreateInstAtDepth(AptDisplayListState* pState, int nDepth,
                                             AptCharacter* pCharacter, AptCIH* pParentNode);
 extern AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* pNode);
-extern void    AptCharInst_SetPlacementField18(AptCharacterInst* pInst, const void* pValue);
 extern void    AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject);
 extern int     AptCIH_AssociateInstToClass(AptCIH* pNode);
 
@@ -861,7 +858,8 @@ AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharac
     // Stamp the placement field at the char inst's +0x18 subclass slot when supplied
     // (the placement's clipActions/handler-list pointer; pointer-width on x64).
     if (pPlacementClipActions != nullptr)
-        AptCharInst_SetPlacementField18(pInst, pPlacementClipActions);
+        static_cast<AptCharacterSpriteInstBase*>(pInst)->mpClipEventHandlers =
+            static_cast<AptClipEventHandlerList*>(const_cast<void*>(pPlacementClipActions));   // console stw 0x18(charInst)
 
     // A morph instance (type tag 8) takes the AS frame value as its blend amount.
     if ((pInst->mTypeFlags & 0xFC000000u) == 0x20000000u)
@@ -1195,28 +1193,10 @@ AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, 
         /*pColorXForm*/ nullptr, pPosition, /*pPlacementClipActions*/ nullptr, /*pClassObject*/ nullptr);
 }
 
-// ---------------------------------------------------------------------------
-// AptCharInst_GetPlacementField18 / AptCharInst_SetPlacementField18.
-//   The placement dword lives in the sprite-base subclass slot at console +0x18 --
-//   the AptCharacterSpriteInstBase::mpClipEventHandlers member (the same slot the
-//   placement path overloads). The base AptCharacterInst is only 16 bytes, so +0x18
-//   is genuinely in the subclass; both accessors touch that one named member (NOT a
-//   raw x64 +0x18, which would land mid-base under 8-byte pointers).
-//   X360 get (AptCIH::InsertChild @0x82B09CD0): `lwz r29, 0x18(*(a2+0x20))`.
-//   X360 set (AptDisplayList::placeObject):     `stw a33, 0x18(*(a2+0x20))`.
-// ---------------------------------------------------------------------------
-const void* AptCharInst_GetPlacementField18(AptCharacterInst* pInst)
-{
-    AptCharacterSpriteInstBase* const pSprite = static_cast<AptCharacterSpriteInstBase*>(pInst);
-    return pSprite->mpClipEventHandlers;
-}
-
-void AptCharInst_SetPlacementField18(AptCharacterInst* pInst, const void* pValue)
-{
-    AptCharacterSpriteInstBase* const pSprite = static_cast<AptCharacterSpriteInstBase*>(pInst);
-    pSprite->mpClipEventHandlers =
-        static_cast<AptClipEventHandlerList*>(const_cast<void*>(pValue));
-}
+// (AptCharInst_Get/SetPlacementField18 RETIRED 2026-07-07: the console inlines a single
+//  deref of the sprite-base subclass slot at +0x18 == AptCharacterSpriteInstBase::
+//  mpClipEventHandlers; the placeObject write + the InsertChild read now access that named
+//  member directly at their call sites, so no free-function accessor remains.)
 
 // ---------------------------------------------------------------------------
 // AptCIH_CloneClassMembers -- the AS class-object member copy folded into the X360's
