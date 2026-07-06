@@ -78,47 +78,68 @@ void AptTextFormat::operator delete(void* p, size_t size)
 // TextFormat::TextFormat(const TextFormat*) -- the copy ctor.  X360 @0x82AEC320
 // (PS3 DecFIGS _ZN10TextFormatC1EPKS_ @0xF32780).
 //
-// Seed every field to its "inherit" sentinel (mFontName empty, mfSize -1.0,
-// mnColor -1, mnAlign 3, mnStyleFlags 2, mnIndent/-LeftMargin/-RightMargin -1),
-// then overlay the source through copyTextFormatObj @0x82AE5820 -- a SELECTIVE
-// copy: each field is taken from pSource only when pSource's value is NOT its own
-// inherit sentinel (so an "inherit" source field leaves the seeded default in
-// place). The font compares pSource->mFontName against "" (unk_82143A57) -- a
-// non-empty source font is assigned via EAStringC::operator=.
-//
-// mFontName is already default-constructed (empty == the X360 InitFromBuffer "")
-// by the time the body runs, so the seed only stamps the scalar fields.
+// Seed every field to its "inherit" sentinel (mFontName empty via EAStringC("")
+// == InitFromBuffer "", mfSize -1.0, mnColor -1, mnAlign 3, mnStyleFlags 2,
+// mnIndent/-LeftMargin/-RightMargin -1), then overlay the source through the
+// out-of-line TextFormat_copyTextFormatObj @0x82AE5820 (bl at 0x82AEC380). The
+// X360 stamps mFontName by calling EAStringC::InitFromBuffer(this, "") directly
+// (unk_82143A47 == "") rather than the default EAStringC() ctor -- reproduced by
+// constructing mFontName from the empty string literal, which routes through the
+// EAStringC(const char*) -> InitFromBuffer path.
 // ---------------------------------------------------------------------------
 TextFormat::TextFormat(const TextFormat* pSource)
+    : mFontName("")   // X360: EAStringC::InitFromBuffer(this, "") (unk_82143A47)
 {
-    // --- seed the inherit sentinels (X360 @0x82AEC320) ---
-    // mFontName: default EAStringC == InitFromBuffer("") (empty == inherit).
-    mfSize        = -1.0f;
-    mnColor       = -1;
-    mnAlign       = 3;
-    mnStyleFlags  = 2;
-    mnIndent      = -1;
-    mnLeftMargin  = -1;
-    mnRightMargin = -1;
+    // --- seed the inherit sentinels (X360 @0x82AEC348..0x82AEC37C) ---
+    mfSize        = -1.0f;   // stfs flt_820037C8(=-1.0) -> 4(r31)
+    mnColor       = -1;      // stw  r11(-1)             -> 8(r31)
+    mnAlign       = 3;       // stw  r9(3)               -> 0xC(r31)
+    mnStyleFlags  = 2;       // stw  r10(2)              -> 0x10(r31)
+    mnIndent      = -1;      // stw  r11(-1)             -> 0x14(r31)
+    mnLeftMargin  = -1;      // stw  r11(-1)             -> 0x18(r31)
+    mnRightMargin = -1;      // stw  r11(-1)             -> 0x1C(r31)
 
-    // --- copyTextFormatObj(this, pSource) @0x82AE5820: overlay non-inherit fields ---
-    if (pSource->mnAlign != 3)
-        mnAlign = pSource->mnAlign;                  // v4 != 3
-    if (pSource->mnColor != -1)
-        mnColor = pSource->mnColor;                  // v5 != -1
-    // Font: copy when the source font is non-empty (X360 byte-compares against "").
+    // --- overlay non-inherit fields from pSource (X360 bl @0x82AEC380) ---
+    TextFormat_copyTextFormatObj(this, pSource);
+}
+
+// ---------------------------------------------------------------------------
+// TextFormat::copyTextFormatObj -- the out-of-line SELECTIVE field overlay.
+// X360 @0x82AE5820 (called by the TextFormat copy-ctor @0x82AEC320,
+// sMethod_setTextFormat and sMethod_getTextFormat). Each field is taken from
+// pSource only when pSource's value is NOT its own inherit sentinel, so an
+// "inherit" source field leaves pDest's existing value in place. The font is
+// copied only when pSource->mFontName is non-empty (X360 inline strcmp of the
+// source buffer at m_pData+8 == GetInternalBuffer against "", unk_82143A57), via
+// EAStringC::operator=.
+//
+// Homed as the free function the call sites already reference
+// (TextFormat_copyTextFormatObj), retiring the AptRenderLinkStubs.cpp {} stub.
+// X360 returns r30 (pDest); no caller uses the value, so the shim is void.
+// ---------------------------------------------------------------------------
+void TextFormat_copyTextFormatObj(TextFormat* pDest, const TextFormat* pSource)
+{
+    if (pSource->mnAlign != 3)                       // lwz 0xC(src); cmpwi 3
+        pDest->mnAlign = pSource->mnAlign;           // stw 0xC(dest)
+    if (pSource->mnColor != -1)                      // lwz 8(src); cmpwi -1
+        pDest->mnColor = pSource->mnColor;           // stw 8(dest)
+
+    // Font: copy when the source font is non-empty. X360 byte-compares the source
+    // buffer (mFontName.m_pData + 8 == GetInternalBuffer) against ""
+    // (unk_82143A57); a non-empty first byte -> EAStringC::operator=.
     if (pSource->mFontName.GetBuffer()[0] != '\0')
-        mFontName = pSource->mFontName;              // EAStringC::operator=
-    if (pSource->mfSize != -1.0f)
-        mfSize = pSource->mfSize;                    // *(a2+4) != -1.0
-    if (pSource->mnStyleFlags != 2)
-        mnStyleFlags = pSource->mnStyleFlags;        // v9 != 2
-    if (pSource->mnIndent != -1)
-        mnIndent = pSource->mnIndent;                // v10 != -1
-    if (pSource->mnLeftMargin != -1)
-        mnLeftMargin = pSource->mnLeftMargin;        // v11 != -1
-    if (pSource->mnRightMargin != -1)
-        mnRightMargin = pSource->mnRightMargin;      // v12 != -1
+        pDest->mFontName = pSource->mFontName;       // EAStringC::operator=
+
+    if (pSource->mfSize != -1.0f)                    // lfs 4(src); fcmpu flt_820037C8
+        pDest->mfSize = pSource->mfSize;             // stfs 4(dest)
+    if (pSource->mnStyleFlags != 2)                  // lwz 0x10(src); cmplwi 2
+        pDest->mnStyleFlags = pSource->mnStyleFlags; // stw 0x10(dest)
+    if (pSource->mnIndent != -1)                     // lwz 0x14(src); cmpwi -1
+        pDest->mnIndent = pSource->mnIndent;         // stw 0x14(dest)
+    if (pSource->mnLeftMargin != -1)                 // lwz 0x18(src); cmpwi -1
+        pDest->mnLeftMargin = pSource->mnLeftMargin; // stw 0x18(dest)
+    if (pSource->mnRightMargin != -1)                // lwz 0x1C(src); cmpwi -1
+        pDest->mnRightMargin = pSource->mnRightMargin;// stw 0x1C(dest)
 }
 
 // ---------------------------------------------------------------------------

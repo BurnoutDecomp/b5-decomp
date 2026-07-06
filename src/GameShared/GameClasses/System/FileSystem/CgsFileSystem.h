@@ -35,6 +35,10 @@ namespace CgsFileSystem
     class DiskLayout;
     class DeviceMemFileSystem;
 
+    // The value handle (CgsFileHandle.h) locks this class's mFileSystemFutex and calls
+    // Read/WriteInternal directly — it is intimate with FileSystem.
+    struct FileHandle;
+
     // ---- DWARF CgsFileSystem.h:56-62 ----
     const u32 KU_MAXNOOFFILES                    = 16;
     const u32 KU_MAXPREFIXFILELENGTH             = 1024;
@@ -86,6 +90,17 @@ namespace CgsFileSystem
         // pendingCount<=0 v=meStatus).
         static StreamDeviceDiskRead::EReadStreamStatus
             GetEffectiveStreamStatus(const StreamDeviceDiskRead* lpStream);
+
+        // ---- DWARF CgsFileSystem.h:308/317 (private) ----
+        // The actual file I/O primitives, called under mFileSystemFutex by FileHandle::Read/Write.
+        // DECLARE-ONLY here: bodies are their own TUs (ReadInternal @0x828E8B50-region /
+        // WriteInternal @0x828E8B50, homed in CgsFileSystem.cpp).
+        bool ReadInternal(u32 luFileID, void* lpOutputBuffer, u64 luFilePosition, u64 luSizeToRead);
+        bool WriteInternal(u32 luFileID, const void* lpInputBuffer, u64 luFilePosition,
+                           u64 luSizeToWrite);
+
+        // FileHandle::Read/Write lock this->mFileSystemFutex and delegate to Read/WriteInternal.
+        friend struct FileHandle;
 
         // ---- instance layout (faithful DWARF order, CgsFileSystem.h:249-263; X360 members only) ----
         char                  maFilePrefix[KU_MAXPREFIXFILELENGTH];               // :249

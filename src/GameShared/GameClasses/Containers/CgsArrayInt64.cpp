@@ -1,13 +1,18 @@
-// Per-instantiation .cpp for Array<s32,64>. The generic Array<T,N> body (operator[] +
-// GetItem + siblings) is fully inline in CgsArray.h, so this TU is just the explicit
-// class instantiation (the X360 emits one out-of-line copy per using-TU):
+// Per-instantiation .cpp for Array<s32,64>. The generic Array<T,N> body (Append +
+// operator[] + GetItem + siblings) is fully inline in CgsArray.h, so this TU is just
+// the explicit class instantiation (the X360 emits one out-of-line copy per using-TU):
+//   Array<int,64>::Append      @ 0x8268F760
+//     (BrnSound::Logic::Collision::CollisionStateManager::UpdateParams)
 //   Array<int,64>::operator[]  @ 0x8268F880
 //     (BrnSound::Logic::Collision::CollisionStateManager::UpdateParams)
 // Layout: maElements[64] (256B) + miCount @ +0x100, matching the X360 *(a1+0x100) count
-// word and the `4*index + a1` (== &maElements[index]) bounds-checked return.
+// word and the `4*index + a1` (== &maElements[index]) bounds-checked return / append store.
 //
-// The X360 asserts at CgsArray.h:556 (unconstructed) and :557 (out-of-bounds) -- the
-// operator[] line pair (distinct from the ctor 225/226 lines).
+// The Append X360 asserts at CgsArray.h:225 (unconstructed, count == -1 sentinel) and :226
+// (out-of-space, count >= 64) -- the ctor/Append line pair. It streamed the dynamic
+// 'Array container out of space, Length: <n>, Capacity: 64' message, collapsed here to the
+// committed generic static CGS_ASSERT string. operator[] asserts at the distinct :556/:557
+// pair. All shared by the inline generic body, so nothing is re-forked in this TU.
 //
 // Spelled unqualified to match the committed Array<T,N> container convention (CgsArray.h).
 // int == s32 (types.hpp). The concrete element FQN is not attested in this slice
