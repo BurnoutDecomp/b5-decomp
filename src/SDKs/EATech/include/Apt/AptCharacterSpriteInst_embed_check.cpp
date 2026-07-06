@@ -11,6 +11,7 @@
 static_assert(sizeof(AptCharacterSpriteInst) == sizeof(AptCharacterSpriteInstBase),
               "AptCharacterSpriteInst layout drift (expected == sizeof(AptCharacterSpriteInstBase) == 36)");
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptCharacterSpriteInst_EmbedCheck(AptCharacterSpriteInst* p)
 {
     (void)static_cast<AptCharacterSpriteInstBase*>(p);   // confirms the base relationship

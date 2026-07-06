@@ -3,6 +3,7 @@
 // against a translation unit other than AptSharedPtr.cpp.
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 static void AptSharedPtr_EmbedCheck()
 {
     AptFilePtr a;
@@ -16,6 +17,7 @@ static void AptSharedPtr_EmbedCheck()
     (void)a.VectorDeletingDestructor(0);     // scalar form
 }
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptSharedPtr_EmbedCheckEntry()
 {
     AptSharedPtr_EmbedCheck();

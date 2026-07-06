@@ -1,6 +1,7 @@
 // Tiny embed/ODR check for AptCIH.h.
 #include "SDKs/EATech/include/Apt/AptCIH.h"
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 static void AptCIH_EmbedCheck(AptCIH* p)
 {
     (void)p->GetInstanceName();
@@ -16,6 +17,7 @@ static void AptCIH_EmbedCheck(AptCIH* p)
     (void)p->GetCreatedOnFrame();
 }
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptCIH_EmbedCheckEntry(AptCIH* p)
 {
     AptCIH_EmbedCheck(p);

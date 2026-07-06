@@ -1,6 +1,7 @@
 // Tiny embed/ODR check for AptRenderTreeManager.h.
 #include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptRenderTreeManager_EmbedCheckEntry(AptRenderTreeManager* m, AptCharacter* ch,
                                           AptRenderItem* item)
 {

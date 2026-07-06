@@ -3,6 +3,7 @@
 // AptLoader.cpp (i.e. the header is self-contained).
 #include "SDKs/EATech/include/Apt/AptLoader.h"
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 static void AptLoader_EmbedCheck(AptLoader* pLoader, const EAStringC& name, AptFile* pFile)
 {
     AptFilePtr a = pLoader->Load(name);
@@ -13,6 +14,7 @@ static void AptLoader_EmbedCheck(AptLoader* pLoader, const EAStringC& name, AptF
     (void)pLoader->mpHead;
 }
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptLoader_EmbedCheckEntry(AptLoader* pLoader, const EAStringC& name, AptFile* pFile)
 {
     AptLoader_EmbedCheck(pLoader, name, pFile);
