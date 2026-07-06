@@ -77,5 +77,13 @@ SetUpAllEventStartsInterface::AddEventStart(const u8* lpLeadingBlock, s32 liEven
     return AppendEventStart(lEventStart);
 }
 
+// X360 0x824F7688 - live count of registered event-start records. The constructed-guard
+// assert lives inside CgsArray.h::GetLength(). BrnGui::GuiCache::GetNumEventStarts
+// (@0x824F8830) is a pure tail-forwarder to this via the embedded interface @GuiCache+0x5690.
+u32 SetUpAllEventStartsInterface::GetNumEventStarts() const
+{
+    return maEventStarts.GetLength();
+}
+
 } // namespace GameStateModuleIO
 } // namespace BrnGameState

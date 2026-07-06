@@ -217,6 +217,11 @@ namespace BrnGui
         const PresetEvent*   GetPresetEvent(s32 liIndex) const;
         s32                  GetNumPresetEvents() const;
 
+        // DWARF BrnGuiCache.h:801 -- the live count of registered event-start records. X360 @0x824F8830
+        // is a pure tail-forwarder: hands &mSetUpAllEventStartsInterface (embedded at GuiCache+0x5690)
+        // to its GetNumEventStarts() @0x824F7688 and tail-returns its result.
+        u32                  GetNumEventStarts() const;   // X360 far member @0x5690
+
         // DWARF h:1456-ish -- fill lpOutIconInfo with the online-landmark icon record at the given
         // position-in-list slot (used for meIconDisplayType == ONLINE_CHECKPOINTS). Returns the
         // out pointer. The element is the GuiEventUpdateSatNav::SatNavIconInfo (committed type).

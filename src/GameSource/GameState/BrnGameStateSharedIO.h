@@ -326,6 +326,10 @@ namespace BrnGameState
             EventStart* AddEventStart(const u8* lpLeadingBlock, s32 liEventIndex, s32 liEventID,
                                       s32 liWord10, s32 liWord1C, s16 liWord20);
 
+            // X360 0x824F7688. The live count of registered event-start records; returns
+            // maEventStarts.GetLength() (BrnGuiCache::GetNumEventStarts forwards to this).
+            u32 GetNumEventStarts() const;
+
         private:
             // X360 0x8235B7D8 (Hex-Rays "...::EventSta"): the inlined generic
             // Array<EventStart,175>::Append. Asserts the array was Construct/Clear'd and has room

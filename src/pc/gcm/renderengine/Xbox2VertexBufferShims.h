@@ -33,6 +33,9 @@ namespace renderengine
     // D3DVertexBuffer_Lock: map the buffer for CPU access, returning the mapped pointer.
     int  D3DVertexBuffer_Lock(VertexBufferHeader* lpThis, int liOffsetToLock, int liSizeToLock, int liFlags);
 
+    // D3DVertexBuffer_Unlock: release a mapping taken by D3DVertexBuffer_Lock.
+    void D3DVertexBuffer_Unlock(VertexBufferHeader* lpThis);
+
     // The device pointer the X360 image reads from off_83271608.
     extern void* gpD3DDevice;
 
