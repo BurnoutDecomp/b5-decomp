@@ -64,6 +64,11 @@ namespace CgsGui { class GuiModule; }
 // Forward-declared here (the bridge body includes the real home) to keep the heavy replay IO
 // header out of this keystone header.
 namespace BrnReplays { namespace ReplayIO { struct OutputBuffer_PreSim; } }
+// Network-bridge family (GameSource/Unity/../Game/GameBridgeNetworkToX.cpp) parameter type:
+// the committed network OUTPUT buffer (home GameSource/Network/BrnNetworkModuleIO.h). Forward-
+// declared here (the bridge body includes the real home) to keep the heavy network IO header out
+// of this keystone header.
+namespace BrnNetwork { namespace BrnNetworkModuleIO { struct OutputBuffer; } }
 // Sound-bridge family (GameSource/Unity/../Game/GameBridgeSoundToX.cpp) parameter/member types:
 // the sound root pre-update OUTPUT buffer (home GameSource/Sound/Module/SharedIO/
 // BrnSoundRootSharedIO.h) and the training manager (home GameSource/GameState/TrainingManager/
@@ -72,6 +77,12 @@ namespace BrnSound { namespace Module { namespace Io { struct RootPreUpdateOutpu
 namespace BrnGameState { class TrainingManager; }
 // (CgsGui::CgsGuiModuleIO::OutputBuffer is the GUI output buffer the ToGui bridge threads through;
 //  it is already declared as a placeholder struct below near the IO-payload stubs.)
+// GUI-output bridge family (GameSource/Unity/../Game/GameBridgeGUIToX.cpp) parameter types: the
+// replay post-sim INPUT buffer (home GameSource/Replays/BrnReplayModuleIO.h) and the sound root
+// INPUT buffer (home GameSource/Sound/Module/BrnRootSoundModuleIo.h). Forward-declared here (the
+// bridge body includes the real homes) to keep the heavy IO headers out of this keystone header.
+namespace BrnReplays { namespace ReplayIO { struct InputBuffer_PostSim; } }
+namespace BrnSound { namespace Module { namespace Io { struct RootInputBuffer; } } }
 
 // BrnGameState::GameStateModule is now the REAL (minimal-slice) class -- included below per this
 // header's own ODR-trap instruction (the TrainingManager/BurnoutSkillz/ModeManager TUs include the
@@ -242,6 +253,58 @@ namespace BrnGame
         // (placeholder type); lpReplayOutput is the committed replay pre-sim output buffer.
         void BridgeReplayToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
                                const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutput);
+
+        // ---- GUI-output bridge family (GameSource/Unity/../Game/GameBridgeGUIToX.cpp) -------------
+        // Each per-frame bridge walks the GUI output buffer's out-event queue (a
+        // VariableEventQueue<18432,16> @ +0x814 of CgsGui::CgsGuiModuleIO::OutputBuffer) and
+        // re-publishes the queued GUI events into a downstream subsystem's INPUT buffer.
+        //
+        // X360 0x823CCA00 -- copy the replay-related GUI events (ids 349 / 525..533 / 594) into the
+        // replay module's post-sim GUI event queue, and register the case-595 serialiser with the
+        // replay request interface.
+        void BridgeGuiToReplay_PostSim(BrnReplays::ReplayIO::InputBuffer_PostSim* lpReplayModuleInputBuffer,
+                                       const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer);
+
+        // X360 0x823C0A58 -- hand the GUI output buffer's out-event queue to the sound root input
+        // buffer (SetGuiEventQueue) so the sound module can drain GUI events.
+        void BridgeGuiToSound(BrnSound::Module::Io::RootInputBuffer* lpSoundModuleInputBuffer,
+                              const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer);
+
+        // ---- network-output bridge family (GameSource/Unity/../Game/GameBridgeNetworkToX.cpp) -----
+        // The mirror of the controller/replay bridges for the network module: each reads the network
+        // module's OUTPUT buffer (BrnNetwork::BrnNetworkModuleIO::OutputBuffer + its interfaces) and
+        // republishes it into the GUI + game-state subsystems. lpGuiBuffer is the CgsGui GUI IO buffer
+        // pointer threaded to CgsGui::GuiModule::AddGuiEvent (placeholder type -> void*).
+        //
+        // X360 0x823E9518 -- top-level per-frame network->GUI bridge: run both translators below, bulk-
+        // append the network GUI event queue into the GUI input queue, then synthesise the three player-
+        // snapshot GUI events (player-list / player-status / lobby-player-list). Called by DoUpdate_GUI /
+        // LoadingScriptedState::Update.
+        int BridgeNetworkToGui(void* lpGuiBuffer,
+                               const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
+
+        // X360 0x823DF9E0 -- drain the network event queue (VariableEventQueue<14000,16>) and translate
+        // each recognised network event into the matching game-state event, AddEvent'd into the PreWorld
+        // input buffer's game-event queue (VariableEventQueue<1536,16>). Called by BridgeNetworkToGameState.
+        int TranslateNetworkEventsToGameEvents(BrnGameState::GameStateModule* lpGameStateModule,
+                                               const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
+
+        // X360 0x823E0900 -- drain the same network event queue and translate each GUI-bound network
+        // event into the matching GUI event, pushed through the GUI module (this + 7252512).
+        int TranslateNetworkEventsToGuiEvents(void* lpGuiBuffer,
+                                              const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
+
+        // X360 0x823DF938 -- walk the network output's live-revenge update interface and push one
+        // BrnGui::GuiLiveRevengeUpdateEvent per record through the GUI module.
+        int TranslateNetworkInterfaceToGuiEvents(void* lpGuiBuffer, const void* lpNetworkToGuiInterface);
+
+    private:
+        // Case-52 helper for TranslateNetworkEventsToGuiEvents: scoreboard-response heading sub-switch
+        // (category/variation/index) -- copy the per-name string list into the matching scoreboard event
+        // (with the CgsStringUtils "String too long" guard) and push it. Not a distinct X360 function
+        // (inlined into 0x823E0900); factored out here for the switch's readability.
+        void TranslateScoreboardResponse(void* lpGuiBuffer, const unsigned char* lpRecord);
+    public:
 
         // ---- sound-output bridge family (GameSource/Unity/../Game/GameBridgeSoundToX.cpp) ---------
         // X360 0x823C63C0 (DWARF BrnGameModule.h:799 / GameBridgeSoundToX.cpp:103) -- walk the sound

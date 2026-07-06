@@ -180,6 +180,16 @@ namespace CgsNetwork
     //                        messages can route a buffer field by name; body lives in its own
     //                        bitstream TU. liNumBytes is the buffer length in bytes.
     PackOrUnpackResult PackOrUnpackBuffer(Message* lpMessage, u8* lpu8Buffer, s32 liNumBytes);
+    //   PackOrUnpackMatrix -- sub_8288E078: quantise an affine's rotation (roll/pitch/yaw
+    //                        bit-widths) and its translation row (per-axis bit-widths) into
+    //                        [lPosMin, lPosMax], returning the per-field OR status. First
+    //                        needed by BrnNetwork::CrashingTrafficMessage::PackOrUnpack. The
+    //                        matrix + AABB corners are passed by value/pointer; the body lives
+    //                        in its own not-yet-reconstructed bitstream TU.
+    PackOrUnpackResult PackOrUnpackMatrix(Message* lpMessage, rw::math::vpu::Matrix44Affine* lpMatrix,
+                                          s32 liRollBits, s32 liPitchBits, s32 liYawBits,
+                                          s32 liPosXBits, s32 liPosYBits, s32 liPosZBits,
+                                          rw::math::vpu::Vector3 lPosMin, rw::math::vpu::Vector3 lPosMax);
 
     // CgsNetwork::MessageWithPlayerIDs and CgsNetwork::ReliableMessage are the next two
     // rungs of the message hierarchy. They now live in their proper home headers
