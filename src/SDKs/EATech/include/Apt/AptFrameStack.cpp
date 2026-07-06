@@ -145,9 +145,5 @@ AptValue* AptInterp_LookupScopeChain(AptActionInterpreter* /*pInterp*/,
     return pFrame ? pFrame->GetInScopeChain(*pName) : nullptr;
 }
 
-// AptScriptFunctionBase_GetActiveFrameStack -- the de-inlined static getter
-// (off_8324E3DC) the render-link cluster called through a shim.
-AptFrameStack* AptScriptFunctionBase_GetActiveFrameStack()
-{
-    return AptScriptFunctionBase::GetActiveFrameStack();
-}
+// (AptScriptFunctionBase_GetActiveFrameStack RETIRED 2026-07-06: callers invoke the
+//  public static AptScriptFunctionBase::GetActiveFrameStack() directly.)

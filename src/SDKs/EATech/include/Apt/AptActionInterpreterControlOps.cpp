@@ -317,9 +317,8 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
 // FLAG (the active AS local-variable frame stack -- console off_8324E3DC /
 // AptScriptFunctionBase::spFrameStack, a protected static). The catch-variable bind
 // reads it (and lazily creates it via CreateFrameStack) to store the caught value in
-// the current activation's locals; reached through an accessor so the protected
-// static stays encapsulated.
-extern AptFrameStack* AptScriptFunctionBase_GetActiveFrameStack();
+// the current activation's locals; read through the public static accessor
+// AptScriptFunctionBase::GetActiveFrameStack() (which encapsulates the protected static).
 
 namespace
 {
@@ -383,11 +382,11 @@ void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
             EAStringC catchName(pRecord->mpCatchName);   // console InitFromBuffer(v13, *(v5+16))
             if (pInterp->mpCurrentFunction)              // console a1[15] (mpCurrentFunction) set
             {
-                AptFrameStack* pFrame = AptScriptFunctionBase_GetActiveFrameStack();  // FLAG: off_8324E3DC
+                AptFrameStack* pFrame = AptScriptFunctionBase::GetActiveFrameStack();  // off_8324E3DC
                 if (!pFrame)
                 {
                     pInterp->mpCurrentFunction->CreateFrameStack();
-                    pFrame = AptScriptFunctionBase_GetActiveFrameStack();
+                    pFrame = AptScriptFunctionBase::GetActiveFrameStack();
                 }
                 pFrame->GetNativeHashVirtual()->Set(catchName, pThrown);  // console AptNativeHash::Set(frame+8, ...)
             }
