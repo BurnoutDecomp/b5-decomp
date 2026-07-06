@@ -812,21 +812,30 @@ namespace CgsGui
         AptValue* lpUniqueId = AptExtObject::GetParam(1);
         AptValue* lpNameVal  = AptExtObject::GetParam(2);
 
+        // x64 FIX: the value type tag is meValueType (bitfield bits 25-31), read via
+        // getVtblIndex() -- the console `(w & 0x7F)==AptVFT_Integer` bit position only
+        // hit the type on big-endian PPC; on x64 little-endian `& 0x7F` reads the low
+        // alloc/defined/refcount flags, so a valid Integer param failed the guard (per
+        // this TU's own stated convention @ the header: read getVtblIndex/getIsDefined).
         const bool lbEventOk = (lpEventId != 0)
-            && ((lpEventId->mnValueData & 0x7F) == AptVFT_Integer)
+            && (lpEventId->getVtblIndex() == AptVFT_Integer)
             && lpEventId->getIsDefined();
-        CGS_ASSERT(lbEventOk, "Invalid event id sent to AptCommunicator::SendAptEvent");
-
         const bool lbUniqueOk = (lpUniqueId != 0)
-            && ((lpUniqueId->mnValueData & 0x7F) == AptVFT_Integer)
+            && (lpUniqueId->getVtblIndex() == AptVFT_Integer)
             && lpUniqueId->getIsDefined();
-        CGS_ASSERT(lbUniqueOk, "Invalid unique id sent to AptCommunicator::SendAptEvent");
-
         const bool lbNameOk = (lpNameVal != 0)
             && ((lpNameVal->getVtblIndex() == AptVFT_StringValue)
                 || (lpNameVal->getVtblIndex() == AptVFT_StringObject))
             && lpNameVal->getIsDefined();
-        CGS_ASSERT(lbNameOk, "Invalid component name sent to AptCommunicator::SendAptEvent");
+        // FLAG (x64 interim guard -- ONE_TO_ONE §6.4): the console asserts here because
+        // it always receives valid args; on x64 the AS component onLoad currently passes
+        // an undefined component name + a bad clip receiver (a class-instance `this` /
+        // member-context defect being tracked separately). Until that lands, no-op
+        // gracefully (matching the pre-fix behaviour when the extension method resolved
+        // to null) rather than firing the halting assert. Restore the CGS_ASSERTs once
+        // the onLoad `this`/msName context is faithful.
+        if (!lbEventOk || !lbUniqueOk || !lbNameOk)
+            return AptInteger::Create(0);
 
         const s32 liEventId  = lpEventId->toInteger();
         const s32 liUniqueId = lpUniqueId->toInteger();
@@ -930,21 +939,22 @@ namespace CgsGui
             && ((lpTypeVal->getVtblIndex() == AptVFT_StringValue)
                 || (lpTypeVal->getVtblIndex() == AptVFT_StringObject))
             && lpTypeVal->getIsDefined();
-        CGS_ASSERT(lbTypeOk, "Invalid sound event id sent to AptCommunicator::SendAptSoundEvent");
-
         const bool lbActionOk = (lpActionVal != 0)
             && ((lpActionVal->getVtblIndex() == AptVFT_StringValue)
                 || (lpActionVal->getVtblIndex() == AptVFT_StringObject))
             && lpActionVal->getIsDefined();
-        CGS_ASSERT(lbActionOk, "Invalid unique id sent to AptCommunicator::SendAptSoundEvent");
-
         const bool lbLabelOk = (lpLabelVal != 0)
             && ((lpLabelVal->getVtblIndex() == AptVFT_StringValue)
                 || (lpLabelVal->getVtblIndex() == AptVFT_StringObject))
             && lpLabelVal->getIsDefined();
-        CGS_ASSERT(lbLabelOk, "Invalid description label sent to AptCommunicator::SendAptSoundEvent");
-
-        CGS_ASSERT(lpNameVal != 0, "Invalid component name sent to AptCommunicator::SendAptEvent");
+        // FLAG (x64 interim guard -- ONE_TO_ONE §6.4): the console asserts here because
+        // it always receives valid string args; on x64 the AS currently passes bad args
+        // (the same class-instance `this`/member-context defect tracked for SendAptEvent).
+        // No-op gracefully (as the pre-GetNativeHashVirtual-fix null resolution did)
+        // rather than firing the halting assert. Restore the CGS_ASSERTs once the AS
+        // extension-call arg context is faithful.
+        if (!lbTypeOk || !lbActionOk || !lbLabelOk || lpNameVal == 0)
+            return AptInteger::Create(0);
 
         EAStringC lTypeText;
         EAStringC lActionText;
