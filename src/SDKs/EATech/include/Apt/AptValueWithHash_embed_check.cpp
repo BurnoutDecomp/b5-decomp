@@ -1,6 +1,7 @@
 // Tiny embed/ODR check for AptValueWithHash.h.
 #include "SDKs/EATech/include/Apt/AptValueWithHash.h"
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 static void AptValueWithHash_EmbedCheck(AptValueWithHash* p, const EAStringC& k, AptValue* v)
 {
     (void)p->GetNativeHashVirtual();
@@ -10,6 +11,7 @@ static void AptValueWithHash_EmbedCheck(AptValueWithHash* p, const EAStringC& k,
     (void)p->Get__Proto__();
 }
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptValueWithHash_EmbedCheckEntry(AptValueWithHash* p, const EAStringC& k, AptValue* v)
 {
     AptValueWithHash_EmbedCheck(p, k, v);

@@ -2,6 +2,7 @@
 // accessor signatures compile against a TU other than AptCharacterAnimation.cpp.
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 static void AptCharacterAnimation_EmbedCheck(AptCharacterAnimation* p, AptCharacter* c, AptFilePtr f)
 {
     (void)p->IsImport(0);
@@ -12,6 +13,7 @@ static void AptCharacterAnimation_EmbedCheck(AptCharacterAnimation* p, AptCharac
     (void)p->mpImportTable;
 }
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptCharacterAnimation_EmbedCheckEntry(AptCharacterAnimation* p, AptCharacter* c, AptFilePtr f)
 {
     AptCharacterAnimation_EmbedCheck(p, c, f);
