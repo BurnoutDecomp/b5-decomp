@@ -548,7 +548,7 @@ static void* AptResolveShapeGeometry(void* pBlock, int32_t nGeometryId)
     // The chunk header {u32 recordCount, u32 depCount, u64 recordArrayOffset}.
     const char* const lpChunk = reinterpret_cast<const char*>(luBase + luGeomOff);
     const uint32_t luRecordCount = *reinterpret_cast<const uint32_t*>(lpChunk);
-    const uint64_t luRecArrOff   = *reinterpret_cast<const uint64_t*>(lpChunk + 8);
+    const uint64_t luRecArrOff   = *reinterpret_cast<const uint64_t*>(lpChunk + 8);   // serialized .apt geometry chunk header @+8
     if (luRecordCount == 0 || luRecordCount > 4096u || luRecArrOff == 0 ||
         (luSize != 0 && luRecArrOff + luRecordCount * 8u > luSize))
         return nullptr;
@@ -639,7 +639,7 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
             continue;
 
         // back-link: the asm writes table[0] over the character's (now-consumed) signature slot.
-        *reinterpret_cast<char**>(pChar + 0x08) = reinterpret_cast<char**>(pTable)[0];
+        *reinterpret_cast<char**>(BlobAt(pChar, 0x08)) = reinterpret_cast<char**>(pTable)[0];
 
         switch (i32At(pChar, 0x00))   // character type
         {
@@ -665,10 +665,10 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
                     // index (the old bug; libapt2 Shape::Parse reads geometryId via
                     // ReadPointer and GetGeometry(id) resolves with it).
                     const uint32_t luGeomId = static_cast<uint32_t>(
-                        *reinterpret_cast<const uint64_t*>(pChar + 0x30));
+                        *reinterpret_cast<const uint64_t*>(BlobAt(pChar, 0x30)));
                     void* const lpUnit = AptResolveShapeGeometry(
                         pBlock, static_cast<int32_t>(luGeomId));
-                    *reinterpret_cast<void**>(pChar + 0x20) = lpUnit;
+                    *reinterpret_cast<void**>(BlobAt(pChar, 0x20)) = lpUnit;
                 }
                 break;
             case 2:   // Text (edit-text): relocate the text (+0x50) + variable (+0x58) string pointers.
@@ -1155,7 +1155,7 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
         {
             case 1:   // Shape: clear the resolved flag, free the host rendering
             {         // unit (+0x30), null the slot.
-                *reinterpret_cast<uint16_t*>(pc + 0x12) &= ~0x8000u;
+                *reinterpret_cast<uint16_t*>(BlobAt(pc, 0x12)) &= ~0x8000u;
                 void** const ppUnit = reinterpret_cast<void**>(pc + 0x30);
                 AptFreeRenderingUnit(*ppUnit);        // qword_14147AA78 host hook
                 *ppUnit = nullptr;
@@ -1163,18 +1163,18 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
                 break;
             }
             case 2:   // Text: un-relocate the text (+0x50) + variable (+0x58).
-                Unreloc(*reinterpret_cast<void**>(pc + 0x50));
-                Unreloc(*reinterpret_cast<void**>(pc + 0x58));
+                Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x50)));
+                Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x58)));
                 break;
             case 3:   // Font: un-relocate the name (+0x20); glyph pointers
             {         // (+0x30, count +0x28) back to indices; then the array ptr.
-                Unreloc(*reinterpret_cast<void**>(pc + 0x20));
-                const int32_t nGlyphs = *reinterpret_cast<int32_t*>(pc + 0x28);
-                void** const ppGlyphs = *reinterpret_cast<void***>(pc + 0x30);
+                Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x20)));
+                const int32_t nGlyphs = *reinterpret_cast<int32_t*>(BlobAt(pc, 0x28));
+                void** const ppGlyphs = *reinterpret_cast<void***>(BlobAt(pc, 0x30));
                 for (int32_t g = 0; g < nGlyphs; ++g)
                     *reinterpret_cast<int64_t*>(&ppGlyphs[g]) =
                         IndexOfChar(ppGlyphs[g]);
-                Unreloc(*reinterpret_cast<void**>(pc + 0x30));
+                Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x30)));
                 break;
             }
             case 5:
@@ -1186,7 +1186,7 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
                 break;
             case 7:   // Image: queued release of the live unit when resolved.
             {
-                uint16_t& rFlags = *reinterpret_cast<uint16_t*>(pc + 0x12);
+                uint16_t& rFlags = *reinterpret_cast<uint16_t*>(BlobAt(pc, 0x12));
                 void** const ppUnit = reinterpret_cast<void**>(pc + 0x20);
                 if ((rFlags & 1u) != 0u)
                 {
@@ -1201,11 +1201,11 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
             }
             case 10:  // StaticText: per record (stride 0x40) un-relocate the
             {         // glyph-array slot (+0x38); then the record-array ptr.
-                const int32_t nRecs = *reinterpret_cast<int32_t*>(pc + 0x48);
-                char* const pRecs = *reinterpret_cast<char**>(pc + 0x50);
+                const int32_t nRecs = *reinterpret_cast<int32_t*>(BlobAt(pc, 0x48));
+                char* const pRecs = *reinterpret_cast<char**>(BlobAt(pc, 0x50));
                 for (int32_t r = 0; r < nRecs; ++r)
                     Unreloc(*reinterpret_cast<void**>(pRecs + r * 0x40 + 0x38));
-                Unreloc(*reinterpret_cast<void**>(pc + 0x50));
+                Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x50)));
                 break;
             }
             default:
