@@ -140,7 +140,10 @@ struct alignas(16) OutputBuffer : public CgsModule::DataStructure
         // own per-instance hook; OutputBuffer::Construct drives both.
     }
     bool Prepare()  { return true; }
-    bool Release()  { return true; }
+    // X360 0x822EE6D8 -- real body (clears the zone-response queue + the game-data request
+    // interface, returns true). De-inlined; body in BrnPVSModuleIO.cpp. (Prepare @0x822EE6A0
+    // and Destruct @0x822EE710 share this real-body shape and are de-inlined when their TUs land.)
+    bool Release();
     void Destruct() {}
     void Clear()    {}
 

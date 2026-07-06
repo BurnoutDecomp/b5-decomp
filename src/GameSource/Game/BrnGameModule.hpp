@@ -54,7 +54,7 @@ class WorldModule : public CgsModule::ModuleSingleBuffered {};
 // Forward declarations for the controller-bridge family parameter types (declared-only here; the
 // bridge bodies in GameBridgeControllerToX.cpp include the real homes). Keeping these as forward
 // decls avoids pulling the heavy IO headers into this keystone header.
-namespace CgsInput { namespace InputIO { struct PadOutputInformation; struct OutputBuffer; struct ActionInfo; } }
+namespace CgsInput { namespace InputIO { struct PadOutputInformation; struct OutputBuffer; struct ActionInfo; struct PostWorldInputBuffer; } }
 namespace BrnDirector { namespace DirectorIO { struct InputBuffer; } }
 namespace BrnWorldIO { struct UpdateInputBuffer; }
 namespace BrnGame { struct DebugControllerImage; }
@@ -242,6 +242,14 @@ namespace BrnGame
         // assigned, the cross-pad menu-accept scan) and push them through the GUI module.
         void BridgeControllerToGui(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
                                    const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
+
+        // X360 0x823C0AE8 -- merge the game-state output's input-bind / input-unbind REQUEST queues
+        // into the input module's post-world input buffer (PostBindRequest / PostUnbindRequest per
+        // queued request), stamping miInputModuleState with the bind (3) / unbind (6) sentinel when
+        // either queue produced work. Called by DoUpdate_InputPostWorld. Home
+        // GameSource/Game/GameBridgeGameStateToX.cpp.
+        void BridgeGameStateToController(BrnGameState::GameStateModule* lpGameStateOutput,
+                                         CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput);
 
         // ---- replay-output bridge family (GameSource/Unity/../Game/GameBridgeReplayToX.cpp) -------
         // The mirror of the controller bridges: each reads the replay module's pre/post-sim OUTPUT

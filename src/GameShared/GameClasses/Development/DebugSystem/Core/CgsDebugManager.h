@@ -68,6 +68,11 @@ namespace CgsDev
         static DebugManager* ThreadSafeAquire();
         static void          ThreadSafeRelease(DebugManager* lpManager);
 
+        // Non-locking singleton read (X360: the raw DebugManager::mpInstance load). The render pass
+        // already holds the debug section, so it reads mpInstance directly rather than re-entering
+        // the critical section via ThreadSafeAquire (which asserts + locks).
+        static DebugManager* GetInstance() { return mpInstance; }
+
         void Construct(const DebugManagerConstructParameters* lpParameters);
         void ConstructRenderer();
         void Destruct();

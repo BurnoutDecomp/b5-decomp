@@ -109,6 +109,13 @@ namespace InputIO
         const UnBindRequestQueue* GetUnBindRequestQueue() const; // declared-only
         const PadMappingQueue*    GetPadMappingQueue() const;    // 0x828E6BD8
 
+        // Write-side request accessors the game-state->controller bridge posts into (the two-word
+        // bind request carries {action, pad}; the unbind request carries a single word). Attested
+        // by the X360 callsites in BrnGameModule::BridgeGameStateToController (0x823C0AE8): the bind
+        // path calls PostBindRequest(word0, word1), the unbind path PostUnbindRequest(word0).
+        void PostBindRequest(s32 liWord0, s32 liWord1);          // declared-only (asm-attested)
+        void PostUnbindRequest(s32 liWord0);                     // declared-only (asm-attested)
+
         // X360 0x828E6C80 - read-lock accessor returning the published wheel FFB spring (this+632).
         const CgsInput::Device::WheelFFSpring* GetWheelFFSpring() const;      // 0x828E6C80
         // X360 0x823B0F80 - write-lock accessor that copies a WheelFFSpring into the buffer (this+632).
