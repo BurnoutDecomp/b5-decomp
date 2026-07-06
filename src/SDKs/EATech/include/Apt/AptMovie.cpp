@@ -1027,15 +1027,15 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
     void* pHash = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));   // [c: 20]
     if (pHash)
     {
-        // XB1 (sub_1408567D0) zeroes the four 8-BYTE member slots of the 0x28-byte
-        // AptNativeHash (mpTable/mp__Proto__/mpPrototype/mnEventHandlerMask @+0x08..
-        // +0x20) then stamps the type word. The prior 4-byte zeroing left the upper
-        // halves (and +0x18..) as pool garbage on x64.
-        char* const pcHash = reinterpret_cast<char*>(pHash);
-        *reinterpret_cast<uint64_t*>(pcHash + 0x08) = 0;
-        *reinterpret_cast<uint64_t*>(pcHash + 0x10) = 0;
-        *reinterpret_cast<uint64_t*>(pcHash + 0x18) = 0;
-        *reinterpret_cast<uint64_t*>(pcHash + 0x20) = 0;
+        // XB1 (sub_1408567D0) zeroes the four 8-byte member slots of the 0x28-byte
+        // AptNativeHash then stamps the type word. (The prior 4-byte zeroing left the
+        // pointers' upper halves as pool garbage on x64 -- named-member init clears them
+        // as full 8-byte fields.)
+        AptNativeHash* const pNativeHash = reinterpret_cast<AptNativeHash*>(pHash);
+        pNativeHash->mpTable            = nullptr;   // +0x08
+        pNativeHash->mp__Proto__        = nullptr;   // +0x10
+        pNativeHash->mpPrototype        = nullptr;   // +0x18
+        pNativeHash->mnEventHandlerMask = 0;         // +0x20 (upper 4B is struct padding)
         CmdSetI32(pHash, 0x00, 2);
     }
     this->mpLabelHash = reinterpret_cast<AptNativeHash*>(pHash);
