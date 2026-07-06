@@ -462,11 +462,17 @@ void AptValue::Append_ToString(EAStringC* pOut) const
     if (lbAppendableString)
     {
         // X360: a primitive string appends *(this+8); a boxed string indirects
-        // through *(this+0x20) first.
-        AptValue* const pStrValue = (eType == AptVFT_StringValue)
-            ? pThis
-            : *reinterpret_cast<AptValue**>(reinterpret_cast<char*>(pThis) + 0x20);
-        *pOut += *reinterpret_cast<EAStringC*>(reinterpret_cast<char*>(pStrValue) + 8);
+        // through *(this+0x20) first. FLAG (x64 offset fix): those are CONSOLE byte
+        // offsets -- the embedded EAStringC lives at the console's +8 only because
+        // AptValue is 8 bytes there (4-byte vtbl + 4-byte mnValueData). On x64 the base
+        // is 16 bytes (8-byte vtbl + mnValueData + pad), so the string is at +0x10; the
+        // literal +8 read {mnValueData, pad} as an EAStringC -> m_pData = pad(0xBAADF00D
+        // uninit)<<32 | mnValueData -> AV in operator+=/IncreaseInternalRefCount. Use
+        // the named accessor (c_string()->GetInternalString()) which resolves the right
+        // member for both the primitive value and the boxed StringObject.
+        AptString* const pStr = pThis->c_string();
+        if (pStr != nullptr)
+            *pOut += *pStr->GetInternalString();
         return;
     }
 
