@@ -1421,8 +1421,16 @@ int AptCIH_AssociateInstToClass(AptCIH* pNode)
     if (pClassProto != nullptr && pClassProto->getIsDefined())
         pNodeHash->Set__Proto__(pClassProto);
 
-    // console: tick once (byte_82F733F7 boot default 0 -> tick) + SetDirtyState(1).
-    pNode->tick();
+    // SetDirtyState(1) so the node keeps ticking. FLAG (x64 onLoad-ORDER fix,
+    // boot-verified): the console's "tick once" here fires the fresh(0x80) clip's
+    // onLoad, but AptCIH::tick clears the 0x80 fresh bit while HasEvent(onLoad) is
+    // still FALSE -- FindAndSetEvents (step 5 below) has not set the event-handler mask
+    // yet. So onLoad was never queued (0 SendAptEvent -> no AddNewAptComponent ->
+    // UpdateAll no-op -> clips hidden -> black). The tick is moved to AFTER
+    // FindAndSetEvents (below) so the fresh clip dispatches onLoad with the mask set;
+    // verified: all 9 title-clip onLoad handlers then RUN (RunActions FUNCTION drains).
+    // The ctor still runs before onLoad (Flash order) and against a valid display list
+    // (the subtree is composed by doFrameControls at placement, not by this tick).
     pNode->SetDirtyState(true, false);
 
     // 4. run the class constructor on the node (GC-root protected).
@@ -1457,6 +1465,13 @@ int AptCIH_AssociateInstToClass(AptCIH* pNode)
 
     // 5. wire the clip-event member mask + mark the render item class-bound.
     pNode->FindAndSetEvents();
+    // The console "tick once" (moved here from before the ctor, see the FLAG above):
+    // now the event-handler mask is set, so the fresh(0x80) clip's tick dispatches
+    // onLoad -> the queued handler runs -> gAptCommunicator.SendAptEvent(ONLOAD) ->
+    // AddNewAptComponent. FLAG: verify vs XB1 AssociateInstToClass @0x82B073B8 whether
+    // the console fires onLoad from this binding tick or leaves 0x80 set for a later
+    // per-frame tick -- either way onLoad must fire AFTER the event mask is set.
+    pNode->tick();
     pInst->GetRenderItemWritable()->mFlags |= (1u << 27);
     return 1;
 }
