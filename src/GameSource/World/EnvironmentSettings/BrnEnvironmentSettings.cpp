@@ -1,5 +1,10 @@
 #include "GameSource/World/EnvironmentSettings/BrnEnvironmentSettings.h"
 
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
+
 // ============================================================================
 // BrnWorld::EnvironmentSettings::FindKeyframeInds @ 0x827B0418
 // BrnWorld::EnvironmentSettings::HH_MM_SS         @ 0x827B0580
@@ -127,6 +132,275 @@ unsigned int* HH_MM_SS( unsigned int* lruHours,
     *lruHours   %= 0x18u;
 
     return lruHours;
+}
+
+// ---------------------------------------------------------------------------
+// BuildTimeOfDay @ 0x826759C8
+//
+// Formats a time-of-day (in seconds) into a fixed 4-digit "HHMM" field with a
+// trailing NUL at lpcOut[4]. The seconds value is scaled to whole minutes
+// (x 1/60, truncated toward zero), split into hours (minutes / 60) and minutes
+// (minutes % 60), each rendered with "%u" into a scratch buffer and then
+// right-justified (zero-padded) into the output field: hours occupy [0..1],
+// minutes occupy [2..3]. Reproduces the guest's de-inlined itoa + right-justify
+// loops store-for-store (the two decimal scratch buffers, the '0' pre-fill, and
+// the strlen-driven memcpy destinations).
+void BuildTimeOfDay( char* lpcOut, float lfTimeSeconds )
+{
+    char lacHours[4];
+    char lacMinutes[4];
+
+    const unsigned int luMinutes =
+        static_cast<unsigned int>( lfTimeSeconds * 0.016666668f );
+
+    CgsCore::SPrintf( lacHours, 4, "%u", luMinutes / 0x3Cu );
+    CgsCore::SPrintf( lacMinutes, 4, "%u", luMinutes % 0x3Cu );
+
+    lpcOut[0] = '0';
+    lpcOut[1] = '0';
+    lpcOut[2] = '0';
+    lpcOut[3] = '0';
+
+    // Right-justify the hours string so it ends at lpcOut[2] (fills [0..1]).
+    const char* lpcH = lacHours;
+    while ( *lpcH++ )
+        ;
+    const char* lpcH2 = lacHours;
+    while ( *lpcH2++ )
+        ;
+    memcpy( &lpcOut[3 - ( lpcH2 - lacHours )], lacHours,
+            ( lpcH - lacHours ) - 1 );
+
+    // Right-justify the minutes string so it ends at lpcOut[4] (fills [2..3]).
+    const char* lpcM = lacMinutes;
+    while ( *lpcM++ )
+        ;
+    const char* lpcM2 = lacMinutes;
+    while ( *lpcM2++ )
+        ;
+    memcpy( &lpcOut[5 - ( lpcM2 - lacMinutes )], lacMinutes,
+            ( lpcM - lacMinutes ) - 1 );
+
+    lpcOut[4] = 0;
+}
+
+// ---------------------------------------------------------------------------
+// ConsumeBlanks @ 0x82675BC8
+//
+// Skips a run of space (' ') characters. Returns false (0) if EOF is hit while
+// consuming; otherwise pushes the first non-space character back and returns
+// true. Reads are taken as signed char (matching the guest's extsb before both
+// the space compare and the ungetc).
+bool ConsumeBlanks( FILE* lpFile )
+{
+    if ( feof( lpFile ) )
+        return false;
+
+    char lcCh = static_cast<char>( fgetc( lpFile ) );
+    if ( lcCh == ' ' )
+    {
+        while ( !feof( lpFile ) )
+        {
+            lcCh = static_cast<char>( fgetc( lpFile ) );
+            if ( lcCh != ' ' )
+                goto push_back;
+        }
+        return false;
+    }
+
+push_back:
+    ungetc( lcCh, lpFile );
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// ConsumeEOL @ 0x82675F58
+//
+// Consumes characters until a newline ('\n') is read; returns true when the
+// newline is found, or false if EOF is reached first. The read value is
+// compared to 0x0A as a full int (no sign extension), matching the guest.
+bool ConsumeEOL( FILE* lpFile )
+{
+    while ( !feof( lpFile ) )
+    {
+        if ( fgetc( lpFile ) == '\n' )
+            return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// ConsumeFieldValue(float&, FILE*) @ 0x82675C60
+//
+// Reads one whitespace-delimited float field value from the environment file.
+// End-of-file, or an immediate end-of-line (peeked, then pushed back), means
+// there is no value to read: returns false without touching lrfValue. Otherwise
+// scans a single "%f" into lrfValue and returns true. The peeked byte is
+// sign-extended (extsb) before both the ungetc and the newline compare.
+bool ConsumeFieldValue( float& lrfValue, FILE* lpFile )
+{
+    if ( feof( lpFile ) )
+        return false;
+
+    const int liPeek = static_cast<signed char>( fgetc( lpFile ) );
+    ungetc( liPeek, lpFile );
+    if ( liPeek == '\n' )
+        return false;
+
+    fscanf( lpFile, "%f", &lrfValue );
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// ParseTimeOfDay @ 0x82675B10
+//
+// Parses an "HHMM" clock integer (e.g. 1430 -> 14:30) from lpTimeStr via atoi.
+// The hundreds are hours, the last two digits are minutes. If the value is a
+// valid wall-clock time (hours < 24, minutes < 60) it is written to *lpfSeconds
+// as seconds-of-day: (hours * 60 + minutes) * 60. Out-of-range input leaves
+// *lpfSeconds untouched.
+void ParseTimeOfDay( float* lpfSeconds, const char* lpTimeStr )
+{
+    const unsigned int luValue   = static_cast<unsigned int>( atoi( lpTimeStr ) );
+    const unsigned int luHours   = luValue / 100u;
+    const unsigned int luMinutes = luValue % 100u;
+
+    if ( luHours < 24u && luMinutes < 60u )
+    {
+        *lpfSeconds = ( static_cast<float>( luHours ) * 60.0f
+                        + static_cast<float>( luMinutes ) ) * 60.0f;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ParseEnvironmentFile @ 0x8267CD70
+//
+// Parses a text environment description file. Each line is "<FieldName> = <...>".
+// The field name is scanned with "%s ="; the value(s) are dispatched to the
+// matching consumer. Recognised fields fall into three groups:
+//   * keyframe sub-blocks (Bloom / Vignette / Scattering / Lighting / Clouds),
+//     handled by the templated ConsumeFieldValue<T> overloads;
+//   * "TimeOfDay"  -> a time string parsed by ParseTimeOfDay into lrfTimeOfDay;
+//   * the colour-cube name fields ("ColourCube" -> lpName buffer, "ColourCube0"
+//     .. "ColourCube3" -> the four 256-byte lacColourCubes rows) and the four
+//     "ColourCubeWeight0" .. "ColourCubeWeight3" floats -> lafColourCubeWeights.
+// Returns true once the file is fully consumed; if the file cannot be opened the
+// X360 returns the null FILE* (i.e. false).
+bool ParseEnvironmentFile( float&                     lrfTimeOfDay,
+                           char                       (&lacColourCubes)[4][256],
+                           float                      (&lafColourCubeWeights)[4],
+                           BrnEffects::BloomData&     lrBloom,
+                           BrnEffects::VignetteData&  lrVignette,
+                           char*                      lpName,
+                           ScatteringData&            lrScattering,
+                           LightingData&              lrLighting,
+                           CloudsData&                lrClouds,
+                           const char*                lpFilename )
+{
+    FILE* lpFile = fopen( lpFilename, "r" );
+    if ( !lpFile )
+        return false;
+
+    *lpName = 0;
+
+    for ( ;; )
+    {
+        unsigned char lacFieldName[256];
+
+        for ( ;; )
+        {
+            bool lbHaveField;
+            if ( feof( lpFile ) )
+            {
+                lbHaveField = false;
+            }
+            else
+            {
+                if ( fscanf( lpFile, "%s =", lacFieldName ) <= 0 )
+                    lacFieldName[0] = 0;
+                lbHaveField = ConsumeBlanks( lpFile );
+            }
+
+            if ( !lbHaveField )
+            {
+                fclose( lpFile );
+                return true;
+            }
+
+            const char* lpcName = reinterpret_cast<const char*>( lacFieldName );
+
+            if ( ConsumeFieldValue( lrBloom,      lpcName, lpFile )
+              || ConsumeFieldValue( lrVignette,   lpcName, lpFile )
+              || ConsumeFieldValue( lrScattering, lpcName, lpFile )
+              || ConsumeFieldValue( lrLighting,   lpcName, lpFile )
+              || ConsumeFieldValue( lrClouds,     lpcName, lpFile ) )
+            {
+                ConsumeEOL( lpFile );
+                continue;
+            }
+            break;
+        }
+
+        const char* lpcName = reinterpret_cast<const char*>( lacFieldName );
+
+        if ( strcmp( lpcName, "TimeOfDay" ) == 0 )
+        {
+            char lacTimeStr[192];
+            ConsumeFieldValue( lacTimeStr, lpFile );
+            ParseTimeOfDay( &lrfTimeOfDay, lacTimeStr );
+            ConsumeEOL( lpFile );
+        }
+        else if ( strcmp( lpcName, "ColourCube" ) == 0 )
+        {
+            if ( !ConsumeFieldValue( lpName, lpFile ) )
+                *lpName = 0;
+            ConsumeEOL( lpFile );
+        }
+        else if ( strcmp( lpcName, "ColourCube0" ) == 0 )
+        {
+            ConsumeFieldValue( lacColourCubes[0], lpFile );
+            ConsumeEOL( lpFile );
+        }
+        else if ( strcmp( lpcName, "ColourCube1" ) == 0 )
+        {
+            ConsumeFieldValue( lacColourCubes[1], lpFile );
+            ConsumeEOL( lpFile );
+        }
+        else if ( strcmp( lpcName, "ColourCube2" ) == 0 )
+        {
+            ConsumeFieldValue( lacColourCubes[2], lpFile );
+            ConsumeEOL( lpFile );
+        }
+        else if ( strcmp( lpcName, "ColourCube3" ) == 0 )
+        {
+            ConsumeFieldValue( lacColourCubes[3], lpFile );
+            ConsumeEOL( lpFile );
+        }
+        else if ( strcmp( lpcName, "ColourCubeWeight0" ) == 0 )
+        {
+            ConsumeFieldValue( lafColourCubeWeights[0], lpFile );
+            ConsumeEOL( lpFile );
+        }
+        else if ( strcmp( lpcName, "ColourCubeWeight1" ) == 0 )
+        {
+            ConsumeFieldValue( lafColourCubeWeights[1], lpFile );
+            ConsumeEOL( lpFile );
+        }
+        else if ( strcmp( lpcName, "ColourCubeWeight2" ) == 0 )
+        {
+            ConsumeFieldValue( lafColourCubeWeights[2], lpFile );
+            ConsumeEOL( lpFile );
+        }
+        else if ( strcmp( lpcName, "ColourCubeWeight3" ) == 0 )
+        {
+            ConsumeFieldValue( lafColourCubeWeights[3], lpFile );
+            ConsumeEOL( lpFile );
+        }
+        else
+        {
+            ConsumeEOL( lpFile );
+        }
+    }
 }
 }
 }

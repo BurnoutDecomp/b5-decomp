@@ -54,6 +54,11 @@ namespace BrnGui
     // (DWARF: SatNavRenderer : public CgsGui::CustomRenderComponentInterface).
     class SatNavRenderer : public CgsGui::CustomRenderComponentInterface
     {
+        // The sat-nav debug component (BrnGuiSatNavDebugComponent.cpp) rebuilds the renderer's
+        // transform when its rect/alpha sliders change (X360 TriggerSatNavPositionUpdate calls the
+        // private UpdateRendererTransform directly).
+        friend struct SatNavDebugComponent;
+
     public:
         // ---- DWARF nested enums (BrnSatNavRenderer.h:53/61/68/104) ----
 

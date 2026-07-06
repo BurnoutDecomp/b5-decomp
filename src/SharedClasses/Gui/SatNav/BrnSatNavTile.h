@@ -3,14 +3,13 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector2 (rw::math::vpu::Vector2)
+#include "rw/rwcore_structs.h" // rw::Resource (by-value in SatNavTile::sTileCache)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Layout + member names/order/enums from the
 // DecFIGS dwarfdump (SharedClasses/Gui/SatNav/BrnSatNavTile.h); offsets are X360 references,
 // pinned store-for-store against the pseudocode/asm. Only the members and methods reached by
 // the currently-reconstructed bodies are given full definitions; the remaining declared methods
 // (Construct/Destruct/SetTexture/... and the sRect helpers) land with the rest of the TU.
-
-namespace rw { class Resource; }
 
 namespace CgsGraphics
 {
@@ -63,6 +62,20 @@ namespace BrnGui
 
             // qsort comparator, largest world area first. @0x82447F78
             static int32_t QSortCallback(const void* lpA, const void* lpB);
+        };
+
+        // BrnSatNavTile.h:83 - one requested-tile cache slot: the bundle-load state, the owning
+        // tile, and the per-texture render-state resources. X360 size 0x58 (88) bytes. On X360
+        // rw::Resource here is 20 bytes; the MapManager ctor's vector-ctor loop attests element
+        // stride 20 and array count 3.
+        struct sTileCache
+        {
+            EBundleState               meState;                     // +0x00
+            uint32_t                   muID;                        // +0x04
+            SatNavTile*                mpTile;                      // +0x08
+            uint32_t                   muTextureCount;              // +0x0C
+            rw::Resource               mTextureStateResources[KU_MAX_NUMBER_OF_TEXTURES_PER_TILE]; // +0x10
+            CgsGraphics::TextureState* mapTextureStates[KU_MAX_NUMBER_OF_TEXTURES_PER_TILE];       // +0x4C
         };
 
         sRect    mBB[KU_MAX_NUMBER_OF_TEXTURES_PER_TILE];       // +0x00

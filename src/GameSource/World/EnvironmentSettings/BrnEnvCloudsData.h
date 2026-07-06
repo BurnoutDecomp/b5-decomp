@@ -18,6 +18,15 @@ class CloudsData
 public:
     void Construct();
 
+    // Blend keyframes into this one (element-wise weighted sum over the 27-float layout).
+    // 2-way @ 0x82675... (not this batch); 4-way @ 0x82675FC0.
+    void SetToBlend( const CloudsData& lValueA, float lfWeightA,
+                     const CloudsData& lValueB, float lfWeightB );
+    void SetToBlend( const CloudsData& lValueA0, float lfWeightA0,
+                     const CloudsData& lValueA1, float lfWeightA1,
+                     const CloudsData& lValueB0, float lfWeightB0,
+                     const CloudsData& lValueB1, float lfWeightB1 );
+
 private:
     float mav3LayerLiteColour[2][4]; // 0x00 (Vector3[2])
     float mav3LayerDarkColour[2][4]; // 0x20 (Vector3[2])

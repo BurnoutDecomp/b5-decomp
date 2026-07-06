@@ -60,24 +60,21 @@ namespace BrnSound
 namespace Logic
 {
     class ResourceRegistrar;
-
-    // BrnResourceRegistrar.h:337 (DWARF). The resource-requester interface BrnEffectObject and the
-    // controls/state-managers implement (X360: the IResourceRequester sub-object vptr @ this+4 on
-    // BrnEffectObject; the detach/registrar paths route through it). Exactly three virtuals -- the
-    // X360 IResourceRequester vtable is { dtor, ResourcesAreReady, GetResourceRegistrar }; GetResource
-    // is reached through the registrar (GetResourceRegistrar().GetResource), NOT a requester virtual,
-    // so nothing is added here.
-    struct IResourceRequester
-    {
-        virtual ~IResourceRequester() {}
-        virtual void               ResourcesAreReady() = 0;
-        virtual ResourceRegistrar& GetResourceRegistrar() = 0;
-    };
+    struct IResourceRequester;   // full definition after ResourceRegistrar (LoadAsset needs EType)
 
     // BrnResourceRegistrar.h:42 (DWARF). The streaming-resource broker.
     class ResourceRegistrar
     {
     public:
+        // BrnResourceRegistrar.h:31 (DWARF) -- the asset class an IResourceRequester::LoadAsset
+        // request targets. E_DATA (0) is the streamed bundle-data path; E_ATTRIBSYS (1) the
+        // AttribSys vault path. Exercised by the sound effects' SetupLoadData (X360 r6=0 -> E_DATA).
+        enum EType
+        {
+            E_DATA      = 0,
+            E_ATTRIBSYS = 1,
+        };
+
         // Inner-class forward decls (RequestedResource's ctor takes a QueuedResource and vice versa).
         class QueuedResource;
         class RequestedResource;
@@ -268,6 +265,26 @@ namespace Logic
 
         // @+0xD2B0 mResourceRequestInterface -- VariableEventQueue<4096,16> (the X360 a1+13484).
         CgsModule::VariableEventQueue<4096, 16> mResourceRequestInterface;
+    };
+
+    // BrnResourceRegistrar.h:337 (DWARF). The resource-requester interface BrnEffectObject and the
+    // controls/state-managers implement (X360: the IResourceRequester sub-object vptr @ this+4 on
+    // BrnEffectObject; the detach/registrar paths route through it). Exactly three virtuals -- the
+    // X360 IResourceRequester vtable is { dtor, ResourcesAreReady, GetResourceRegistrar }; GetResource
+    // is reached through the registrar (GetResourceRegistrar().GetResource), NOT a requester virtual,
+    // so nothing is added there. Defined after ResourceRegistrar so LoadAsset's EType param resolves.
+    struct IResourceRequester
+    {
+        virtual ~IResourceRequester() {}
+        virtual void               ResourcesAreReady() = 0;
+        virtual ResourceRegistrar& GetResourceRegistrar() = 0;
+
+        // BrnResourceRegistrar.h:272 (DWARF; body ResourceRegistrar.cpp:1084 -- a separate deferred
+        // slice). Enqueue a bundle+resource load request of the given asset class. The sound effects'
+        // SetupLoadData tail-forwards here (X360 0x826E4C88: r5=0 -> lpcResourceName null, r6=0 ->
+        // E_DATA). Declared-only; not defined in this TU.
+        void LoadAsset(const char* lpcBundleName, const char* lpcResourceName,
+                       ResourceRegistrar::EType leType);
     };
 }
 }

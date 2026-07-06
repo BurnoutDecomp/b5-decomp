@@ -2,6 +2,19 @@
 #define BRN_ENVIRONMENT_SETTINGS_H
 
 #include "types.hpp"
+#include <cstdio>
+
+#include "GameSource/World/EnvironmentSettings/BrnEnvScatteringData.h"
+#include "GameSource/World/EnvironmentSettings/BrnEnvLightingData.h"
+#include "GameSource/World/EnvironmentSettings/BrnEnvCloudsData.h"
+
+// BrnEffects::BloomData / VignetteData are defined in SharedClasses/Graphics/BrnEffectsData.h;
+// only references are needed here for ParseEnvironmentFile's signature.
+namespace BrnEffects
+{
+struct BloomData;
+struct VignetteData;
+}
 
 // ============================================================================
 // GameSource/World/EnvironmentSettings/BrnEnvironmentSettings.h
@@ -69,6 +82,51 @@ unsigned int* HH_MM_SS( unsigned int* lruHours,
                         unsigned int* lruMinutes,
                         unsigned int* lpuSeconds,
                         double        lfTimeSeconds );
+
+// ---------------------------------------------------------------------------
+// Text-file environment-description parser helpers (BrnEnvironmentData.cpp in the
+// original tree; folded into this TU's home here).
+// ---------------------------------------------------------------------------
+
+// @ 0x826759C8 -- format seconds-of-day into a 4-digit zero-padded "HHMM" field,
+//   NUL at lpcOut[4].
+void BuildTimeOfDay( char* lpcOut, float lfTimeSeconds );
+
+// Sibling token consumers -- ConsumeBlanks / ConsumeEOL and the float-value
+// ConsumeFieldValue are reconstructed in this batch; the char* string-token
+// overload is a sibling wave (declared here so ParseEnvironmentFile compiles).
+//   @ 0x82675BC8 ConsumeBlanks  -- skip runs of spaces; false at EOF.
+//   @ 0x82675F58 ConsumeEOL     -- consume up to and including next newline.
+//   @ 0x82675EE8 ConsumeFieldValue(char*, FILE*) -- read one string token (sibling).
+bool ConsumeBlanks( FILE* lpFile );
+bool ConsumeEOL( FILE* lpFile );
+bool ConsumeFieldValue( char* lpBuffer, FILE* lpFile );
+
+// @ 0x82675C60 -- read one float field value; false at EOF / immediate EOL.
+bool ConsumeFieldValue( float& lrfValue, FILE* lpFile );
+
+// Templated keyframe sub-block consumers (explicit specialisations exist for
+// BloomData, VignetteData, ScatteringData, LightingData, CloudsData in sibling
+// waves). NOT reconstructed in this batch.
+template< typename T >
+bool ConsumeFieldValue( T& lrData, const char* lpFieldName, FILE* lpFile );
+
+// @ 0x82675B10 -- parse an "HHMM" integer time string into seconds-of-day.
+void ParseTimeOfDay( float* lpfSeconds, const char* lpTimeStr );
+
+// @ 0x8267CD70 -- parse a whole environment file (10-arg inlined form; the
+//   colour-cube name array + weight array are separate register args in the X360,
+//   hence the reference-to-array parameters).
+bool ParseEnvironmentFile( float&                     lrfTimeOfDay,
+                           char                       (&lacColourCubes)[4][256],
+                           float                      (&lafColourCubeWeights)[4],
+                           BrnEffects::BloomData&     lrBloom,
+                           BrnEffects::VignetteData&  lrVignette,
+                           char*                      lpName,
+                           ScatteringData&            lrScattering,
+                           LightingData&              lrLighting,
+                           CloudsData&                lrClouds,
+                           const char*                lpFilename );
 }
 }
 

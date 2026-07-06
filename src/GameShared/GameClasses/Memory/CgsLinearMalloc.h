@@ -21,6 +21,7 @@ namespace CgsMemory
         void StartRWAllocation();
         void StopRWAllocation();
         void SetAlignment(size_t lnAlignment);
+        size_t GetAlignment() const { return mnAlignment; }   // current bump-pointer alignment
         size_t GetFreeMemory() const;
         void* GetStartAddress() const;
 

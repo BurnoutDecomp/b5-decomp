@@ -44,6 +44,14 @@ namespace CgsDev
 
         // A line / an arrow from lrFrom to lrTo.
         void DrawLine(const rw::math::vpu::Vector3& lrFrom, const rw::math::vpu::Vector3& lrTo, const rw::RGBA& lrColour);
+
+        // A wireframe quad from four world-space corners (winding order as given), tinted by RGBA.
+        // DWARF-authoritative shape (CgsDebug3DImmediateRender.h:98): all five args by value. Recovered
+        // from BrnAI::BrnAIDebugUtils::DrawBoundryLineWithY (X360 0x827674F8), which draws each AI
+        // boundary line as a vertical quad (top-start, top-end, bottom-end, bottom-start).
+        void DrawQuad(rw::math::vpu::Vector3 lTopStart, rw::math::vpu::Vector3 lTopEnd,
+                      rw::math::vpu::Vector3 lBottomEnd, rw::math::vpu::Vector3 lBottomStart,
+                      rw::RGBA lColour);
         void DrawArrow(const rw::math::vpu::Vector3& lrFrom, const rw::math::vpu::Vector3& lrTo, const rw::RGBA& lrColour);
 
         // A coordinate-axis gizmo (the three basis vectors of the transform, drawn from its
