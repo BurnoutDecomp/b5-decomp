@@ -315,7 +315,10 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void GlobalNotificationFunction(AptFilePtr* pFile) {}   // FLAG link-stub
     void Mutex_Lock(void* pMutex, void* pName) {}   // FLAG link-stub
     void Mutex_Unlock(void* pMutex) {}   // FLAG link-stub
-    void TextFormat_copyTextFormatObj(TextFormat* pDest, const TextFormat* pSource) {}   // FLAG link-stub
+    // TextFormat_copyTextFormatObj RETIRED (2026-07-06): homed as the real out-of-line free
+    // function TextFormat_copyTextFormatObj (AptTextFormat.cpp, X360 @0x82AE5820) -- the selective
+    // per-field overlay the TextFormat copy-ctor + set/getTextFormat call. The {} stub made every
+    // set/getTextFormat overlay a silent no-op; the strong definition is now the only one.
     void escape(EAStringC* pString) {}   // FLAG link-stub
     void unescape(EAStringC* pString) {}   // FLAG link-stub
     // AptActionInterpreter_CleanupAfterExecution RETIRED (IGNITION 2026-07-01): the real member

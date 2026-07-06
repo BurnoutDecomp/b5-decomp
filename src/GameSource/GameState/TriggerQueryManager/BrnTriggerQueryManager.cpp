@@ -473,3 +473,48 @@ void TriggerQueryManager::_AssertLayout()
 }
 
 }
+
+// ============================================================================
+// PackedIndex -- GLOBAL scope per DWARF (bare struct, bare method definitions), NOT inside
+// namespace BrnGameState. Declared in BrnTriggerQueryManager.h.
+// ============================================================================
+
+// ============================================================================
+// X360 0x82355DE8 - PackedIndex::SetGlobalRaceCarIndex
+// ============================================================================
+// Store the global-race-car slot into the packed index's +0 word. Asserts the value is a valid
+// in-range global slot (0..34, not INVALID) and that it fits in one byte, then stores the low byte
+// (X360 clrlwi r31,r28,24 -> stw r31,0(r26)). The bounds assert's message is built dynamically on
+// the X360 (StrStream: "Bad Global Race Car Index Set : " << value); collapsed here to the base
+// rodata string per the assert-collapse rule.
+void PackedIndex::SetGlobalRaceCarIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex)
+{
+    CGS_ASSERT((leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT) &&
+               (leGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID),
+               "Bad Global Race Car Index Set : ");
+    CGS_ASSERT((static_cast<s32>(leGlobalRaceCarIndex) & 0xff) == static_cast<s32>(leGlobalRaceCarIndex),
+               "(leGlobalRaceCarIndex & 0xff) == leGlobalRaceCarIndex");
+
+    // X360: stw (a2 & 0xff) @ this+0 (meGlobalRaceCarIndex).
+    meGlobalRaceCarIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leGlobalRaceCarIndex) & 0xff);
+}
+
+// ============================================================================
+// X360 0x82355EC8 - PackedIndex::SetActiveRaceCarIndex
+// ============================================================================
+// Store the active-race-car slot into the packed index's +4 word. Asserts the value is a valid
+// in-range active slot (0..7, not INVALID) and that it fits in one byte, then stores the low byte
+// (X360 clrlwi r31,r28,24 -> stw r31,4(r26)). The bounds assert's message is built dynamically on
+// the X360 (StrStream: "Bad Active Race Car Index Set : " << value); collapsed here to the base
+// rodata string per the assert-collapse rule.
+void PackedIndex::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    CGS_ASSERT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) &&
+               (leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID),
+               "Bad Active Race Car Index Set : ");
+    CGS_ASSERT((static_cast<s32>(leActiveRaceCarIndex) & 0xff) == static_cast<s32>(leActiveRaceCarIndex),
+               "(leActiveRaceCarIndex & 0xff) == leActiveRaceCarIndex");
+
+    // X360: stw (a2 & 0xff) @ this+4 (meActiveRaceCarIndex).
+    meActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leActiveRaceCarIndex) & 0xff);
+}

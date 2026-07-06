@@ -186,3 +186,48 @@ private:
     static void _AssertLayout();
 };
 }
+
+#include "GameSource/BurnoutConstants.h"  // global ::EGlobalRaceCarIndex / ::EActiveRaceCarIndex
+#include <cstddef>                        // offsetof (PackedIndex layout pins)
+
+// PackedIndex - the small value type that packs a global-race-car slot (+0) and an active-race-car
+// slot (+4) into two 32-bit enum words. DWARF: BrnTriggerQueryManager.h:395 (struct PackedIndex),
+// members meGlobalRaceCarIndex @+0 (h:418), meActiveRaceCarIndex @+4 (h:419). DWARF declares this
+// struct + its methods at GLOBAL scope (bare 'struct PackedIndex', bare 'void PackedIndex::Set...'
+// in BrnGameStateUnity.cpp:10350/10359) -- NOT inside namespace BrnGameState. It is found by
+// unqualified lookup from within BrnGameState::TriggerQueryManager::SubmitTriggerQueries. Only the
+// two Set* accessors of this batch have reconstructed X360 bodies (0x82355DE8 / 0x82355EC8); the
+// remaining DWARF-declared members (SetPackedData / GetPackedRaceCarIndex / GetGlobalRaceCarIndex /
+// GetActiveRaceCarIndex) are declare-only here and grow additively when their bodies land.
+struct PackedIndex
+{
+public:
+    // X360 0x82355DE8. Bounds-check + byte-fit assert, then store (value & 0xff) to meGlobalRaceCarIndex.
+    void SetGlobalRaceCarIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex);
+
+    // X360 0x82355EC8. Bounds-check + byte-fit assert, then store (value & 0xff) to meActiveRaceCarIndex.
+    void SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex);
+
+    // ---- declare-only (DWARF BrnTriggerQueryManager.h:399/408/411/414; bodies land later) ----
+    void                SetPackedData(s32 liPackedData);
+    s32                 GetPackedRaceCarIndex() const;
+    EGlobalRaceCarIndex GetGlobalRaceCarIndex() const;
+    EActiveRaceCarIndex GetActiveRaceCarIndex() const;
+
+private:
+    // this+0 (DWARF h:418). Global race-car slot (0..34 / INVALID); SetGlobalRaceCarIndex stores here.
+    EGlobalRaceCarIndex meGlobalRaceCarIndex;   // this+0
+    // this+4 (DWARF h:419). Active race-car slot (0..7 / INVALID); SetActiveRaceCarIndex stores here.
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // this+4
+
+    // Never-called layout pin so any drift in a member offset is a compile error.
+    friend void _PackedIndex_AssertLayout();
+};
+
+// Pointer-free sub-struct: X360 32-bit offsets hold on the 64-bit gate (both members are 4-byte enums).
+inline void _PackedIndex_AssertLayout()
+{
+    static_assert(offsetof(PackedIndex, meGlobalRaceCarIndex) == 0, "meGlobalRaceCarIndex @ +0");
+    static_assert(offsetof(PackedIndex, meActiveRaceCarIndex) == 4, "meActiveRaceCarIndex @ +4");
+    static_assert(sizeof(PackedIndex) == 8, "PackedIndex is two 4-byte enum words");
+}

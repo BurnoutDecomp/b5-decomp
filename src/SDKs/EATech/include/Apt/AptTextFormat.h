@@ -89,6 +89,12 @@ struct TextFormat
     explicit TextFormat(const TextFormat* pSource);   // FLAG: body its own TU
 };
 
+// TextFormat::copyTextFormatObj @0x82AE5820 -- selective in-place field overlay
+// (each field copied from pSource only when it is NOT its inherit sentinel).
+// Bodied in AptTextFormat.cpp. Real callers: the TextFormat copy-ctor,
+// sMethod_setTextFormat, sMethod_getTextFormat.
+void TextFormat_copyTextFormatObj(TextFormat* pDest, const TextFormat* pSource);
+
 // ---------------------------------------------------------------------------
 // AptTextFormat -- the GC'd AS TextFormat value (AptObject + the embedded record).
 // ---------------------------------------------------------------------------

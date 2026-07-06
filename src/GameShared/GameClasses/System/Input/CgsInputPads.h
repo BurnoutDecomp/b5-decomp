@@ -17,6 +17,7 @@
 #include "rw/rwcore_structs.h"                                   // rw::IResourceAllocator (Prepare param)
 
 #include <cstddef>   // offsetof (the X360-pinned member-offset static_asserts below)
+#include <cstring>   // std::memcpy (SetActionMapping)
 
 // rw::core::controller::DeviceState -- the RenderWare controller device-state record the
 // per-port override slots point at. Construct only stores null pointers and no body in this
@@ -98,6 +99,23 @@ namespace CgsInput
         // X360 0x823A5F38 (CgsInputPads.h:251) -- homed in CgsInputPads_GetDebugGamePad.cpp.
         // Returns the address of the liPortIndex-th physical pad record.
         DeviceX360Pad* GetDebugGamePad(s32 liPortIndex);
+
+        // ---- WAVE54 accessors used by CgsInput::InputModule::ProcessMappingQueue / Release ----
+        // The InputModule drains the post-world pad-mapping queue and copies each 112-byte
+        // action-mapping payload into the addressed pad's private mapping storage; it also reads/
+        // sets the prepared flag during Release. These accessors reproduce the exact stores the
+        // X360 inlines (InputModule reaches maaMappingStorage @+0x7B8 and mbPrepared @+0xCFC
+        // directly) while keeping the storage/flag private.
+
+        // Copy the 112-byte (0x70) action-mapping payload into maaMappingStorage[liPort].
+        void SetActionMapping(s32 liPort, const void* lpPayload)
+        {
+            std::memcpy(maaMappingStorage[liPort], lpPayload, 0x70);
+        }
+
+        // Read / set mbPrepared (@+0xCFC).
+        bool IsPrepared() const   { return mbPrepared; }
+        void SetPrepared(bool lbSet) { mbPrepared = lbSet; }
 
     private:
         // X360 0x828E7238. Zero the per-port records + the six head dwords, then construct the
