@@ -57,6 +57,30 @@ namespace BrnNetwork
     const s32 KI_GAMEPARAMS_PLAYER_SLOTS       = 7;
     const s32 KI_GAMEPARAMS_PLAYER_SLOT_STRIDE = 0xA0;
 
+    // Raw byte offset (from `this`) of the leaf game-params packed flag word: it lives
+    // inside maBlock150 at +0x0C (== object +0x15C). Read/written by raw offset because
+    // maBlock150's inner field layout is unattested (same convention as operator=).
+    const s32 KI_GAMEPARAMS_LEAF_FLAGS_OFFSET  = 0x15C;
+
+    // ---- X360-DWARF-attested bit-field placements (all base-bit/num-bit pairs are read
+    // directly off the extrwi/insrwi operands of the accessor asm). Two packed dwords:
+    //   * KU_BRN_GAMESEARCHDATA_* -- the game-search-data word (raw offset +0xE8, which is
+    //     the inherited protected base member muCustomFlags).
+    //   * KI_GAME_PARAMS_*        -- the leaf game-params word (raw offset +0x15C, maBlock150+0xC).
+    const u32 KU_BRN_GAMESEARCHDATA_SECURITY_NUM_BITS            = 2;
+    const u32 KU_BRN_GAMESEARCHDATA_TRAFFIC_ON_BASE_BIT         = 17;
+    const u32 KU_BRN_GAMESEARCHDATA_TRAFFIC_CHECKING_ON_BASE_BIT = 23;
+    const u32 KU_BRN_GAMESEARCHDATA_VEC_LEVEL_BASE_BIT          = 13;
+    const u32 KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS           = 4;
+    const u32 KU_BRN_GAMESEARCHDATA_VEHICLE_CHOICE_BASE_BIT     = 30;
+    const u32 KU_BRN_GAMESEARCHDATA_VEHICLE_CHOICE_NUM_BITS      = 1;
+    const u32 KU_BRN_GAMESEARCHDATA_RUNNER_CRASHES_BASE_BIT     = 27;
+    const u32 KU_BRN_GAMESEARCHDATA_RUNNER_CRASHES_NUM_BITS      = 3;
+    const u32 KI_GAME_PARAMS_ROUNDS_BASE_BIT                    = 11;
+    const u32 KI_GAME_PARAMS_ROUNDS_NUM_BITS                     = 4;
+    const u32 KI_GAME_PARAMS_TIME_LIMIT_BASE_BIT               = 15;
+    const u32 KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS                = 5;
+
     class GameParams : public CgsNetwork::ServerInterfaceGameParamsX360
     {
     public:
@@ -84,10 +108,46 @@ namespace BrnNetwork
         // bool return rather than the earlier standalone void form.
         virtual bool Prepare() override;
 
-        // Burnout game-mode discriminant (E_GAME_MODE_*); declared-only.
-        s32  GameMode() const;
-        void SetPreviousGameMode(s32 liGameMode);
-        void SetGameMode(s32 liGameMode);
+        // Burnout game-mode discriminant (E_GAME_MODE_*).
+        s32  GameMode() const;                               // @0x82584098
+        void SetPreviousGameMode(s32 liGameMode);            // @0x82583FD0
+        void SetGameMode(s32 liGameMode);                    // @0x8258A790
+
+        // --- Game-search-data (+0xE8) packed-flag accessors. Non-virtual, X360-attested. ---
+        s32  BoostType() const;                              // @0x825840C8  bits 24..26
+        s32  Security() const;                               // @0x82584088  bits 0..1
+        s32  NumRunnerCrashes() const;                       // @0x825840E8  bits 27..29
+        s32  VehicleChoice() const;                          // @0x825840D8  bit  30
+        s32  VehicleLevelLimit() const;                      // @0x82584048  bits 13..16
+        bool IsTrafficOn() const;                            // @0x825840A8  bit  17
+        bool IsTrafficCheckingOn() const;                    // @0x825840B8  bit  23
+        void SetBoostType(s32 liBoostType);                  // @0x82584018  bits 24..26
+        void SetNumRunnerCrashes(s32 liNumRunnerCrashes);    // @0x82584038  bits 27..29
+        void SetVehicleChoice(s32 liVehicleChoice);          // @0x82584028  bit  30 (DWARF EVehicleChoice)
+        void SetVehicleLevelLimit(s32 liLevelLimit);         // @0x82583DB8  bits 13..16
+
+        // --- Leaf game-params (+0x15C) packed-flag accessors. Non-virtual, X360-attested. ---
+        s32  NumberRounds() const;                           // @0x82584078  bits 11..14
+        s32  TimeLimit() const;                              // @0x82584068  bits 15..19
+        bool InfiniteBoost() const;                          // @0x82584058  bit  7
+        void SetInfiniteBoost(bool lbInfiniteBoost);         // @0x82583EA8  bit  7
+        void SetNumberRounds(s32 liNumRounds);               // @0x82583F48  bits 11..14
+        void SetRagerVehicleLevelLimit(s32 liLevelLimit);    // @0x82583E30  bits 3..6
+
+    private:
+        // Packed bit words reached by raw byte offset (unattested inner layout, same
+        // convention as operator=). search-data word @ +0xE8 (== inherited muCustomFlags);
+        // game-params word @ +0x15C (== maBlock150 + 0xC).
+        u32&       SearchDataWord()
+        { return *reinterpret_cast<u32*>(reinterpret_cast<u8*>(this) + 0xE8); }
+        const u32& SearchDataWord() const
+        { return *reinterpret_cast<const u32*>(reinterpret_cast<const u8*>(this) + 0xE8); }
+        u32&       GameParamsWord()
+        { return *reinterpret_cast<u32*>(reinterpret_cast<u8*>(this) + 0x15C); }
+        const u32& GameParamsWord() const
+        { return *reinterpret_cast<const u32*>(reinterpret_cast<const u8*>(this) + 0x15C); }
+        u32&       GameParamFlags()       { return GameParamsWord(); }
+        const u32& GameParamFlags() const { return GameParamsWord(); }
 
     protected:
         u8 maBlock150[0x20];                                        // +0x150

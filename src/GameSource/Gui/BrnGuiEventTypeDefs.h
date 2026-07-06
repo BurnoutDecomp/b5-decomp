@@ -43,6 +43,7 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BurnoutSkillzData (by value)
 #include "SharedClasses/StreetData/BrnStreetData.h"     // BrnStreetData::RoadIndex (road-rules events)
 #include "SharedClasses/StreetData/BrnChallengeData.h"  // BrnStreetData::ScoreType / E_SCORE_TYPE_COUNT (road-rules events)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"  // BrnGameState::GameStateModuleIO::EGameModeType (GuiEventJunctionInfo)
 
 namespace BrnGui
 {
@@ -704,5 +705,28 @@ struct GuiEventRoadRuleUpcomingRoads : public CgsGui::GuiEvent<337>
 // with their consumers): :1111 GuiEvent<335> / :1168 GuiEvent<332>.
 struct GuiEventRoadRuleUpdateTargetScores;
 struct GuiEventRoadRuleEnd;
+
+// DWARF home BrnGuiEventTypeDefs.h:4727 -- the pending junction/event-start info pushed to
+// the JunctionInfo HUD panel (BrnGui::JunctionInfoComponent). GuiEvent<309> is EBO-empty (a
+// type-tag base with only a non-virtual GetEventType()), so the first data member sits at
+// struct offset 0 and the whole record is a flat 0x20-byte POD -- X360-attested by
+// JunctionInfoComponent::HandleJunctionChange (a 4-qword *lpEvent copy into this+0x100 with
+// stb 0 @ this+0x10C == mi8Difficulty at struct+0x0C, requiring CgsID==8B) and
+// SetupAptVariables (ld @+0x100 == mSpecialEventCarId, lwz @+0x108 == meGameModeType).
+struct GuiEventJunctionInfo : public CgsGui::GuiEvent<309>
+{
+    CgsID  mSpecialEventCarId;                                        // +0x00
+    BrnGameState::GameStateModuleIO::EGameModeType meGameModeType;    // +0x08
+    s8     mi8Difficulty;                                             // +0x0C
+    s8     mi8MedalAchieved;                                          // +0x0D
+    s32    miEventID;                                                 // +0x10
+    bool   mbCanEnterEvent;                                           // +0x14
+    bool   mbEventUnlocked;                                           // +0x15
+    bool   mbOnEntry;                                                 // +0x16
+    bool   mbSpecificCarEventValid;                                   // +0x17
+    bool   mbIsNewlyDiscovered;                                       // +0x18
+    bool   mbIsAutoUnlockedChallenge;                                 // +0x19
+    // pad to 0x20 (u64 alignment of the leading CgsID; total record size 0x20)
+};
 
 } // namespace BrnGui

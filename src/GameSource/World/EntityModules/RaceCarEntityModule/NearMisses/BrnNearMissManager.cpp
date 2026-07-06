@@ -1,4 +1,5 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the not-already-contained tripwire)
 
 // BrnWorld::NearMissManager::HasThereBeenARecentNearMiss @ 0x822CD2E8. Reconstructed from
 // BURNOUT_X360_ARTIST.XEX. True iff either the traffic-vehicle near-miss list or the race-car
@@ -16,4 +17,24 @@ bool BrnWorld::NearMissManager::HasThereBeenARecentNearMiss() const
         return true;
     }
     return mRaceCarNearMissData.HasThereBeenARecentNearMiss();
+}
+
+// BrnWorld::NearMissManager::AddNearRaceCar @ 0x822ED198. Log a race-car section/entity id into
+// the race-car near-section working list. The X360 ARTIST build guards with a manager-level debug
+// assert (the rodata names the manager member mRaceCarNearMissData), then defers the length<cap
+// append to NearMissData<4,7>::AddNear (which the compiler inlines here).
+void BrnWorld::NearMissManager::AddNearRaceCar(u32 luRaceCarId)
+{
+    CGS_ASSERT(!mRaceCarNearMissData.IsContainedInNearArray(luRaceCarId),
+               "!mRaceCarNearMissData.IsContainedInNearArray( luRaceCarId )");
+    mRaceCarNearMissData.AddNear(luRaceCarId);
+}
+
+// BrnWorld::NearMissManager::AddNearTraffic @ 0x822ED250. Sibling of AddNearRaceCar for the
+// traffic-vehicle near list (NearMissData<4,8> @ +0x0C); the AddNear body is likewise inlined.
+void BrnWorld::NearMissManager::AddNearTraffic(u32 luEntityId)
+{
+    CGS_ASSERT(!mTrafficNearMissData.IsContainedInNearArray(luEntityId),
+               "!mTrafficNearMissData.IsContainedInNearArray( luEntityId )");
+    mTrafficNearMissData.AddNear(luEntityId);
 }
