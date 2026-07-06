@@ -202,11 +202,11 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             // left-margin @+24, right-margin @+28. Documented offset reads behind the
             // null gate until the TextFormat value type is homed.
             const uint8_t* pFmt = reinterpret_cast<const uint8_t*>(pTextFormat);
-            const int nStyle = *reinterpret_cast<const int*>(pFmt + 16);
+            const int nStyle = *reinterpret_cast<const int*>(pFmt + 16);   // FLAG opaque TextFormat: style @+16
             params.nFontStyle   = static_cast<unsigned int>((nStyle == 2) ? 0 : nStyle);
-            params.nIndent      = *reinterpret_cast<const int*>(pFmt + 20);
-            params.nLeftMargin  = *reinterpret_cast<const int*>(pFmt + 24);
-            params.nRightMargin = *reinterpret_cast<const int*>(pFmt + 28);
+            params.nIndent      = *reinterpret_cast<const int*>(pFmt + 20);   // FLAG opaque TextFormat: indent @+20
+            params.nLeftMargin  = *reinterpret_cast<const int*>(pFmt + 24);   // FLAG opaque TextFormat: leftMargin @+24
+            params.nRightMargin = *reinterpret_cast<const int*>(pFmt + 28);   // FLAG opaque TextFormat: rightMargin @+28
         }
         else
         {

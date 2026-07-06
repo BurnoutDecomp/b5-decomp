@@ -242,7 +242,7 @@ void AptActionInterpreter::_FunctionAptActionPush(AptActionInterpreter* pInterp,
         reinterpret_cast<const unsigned char*>(
             (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
     const int32_t   nCount = *reinterpret_cast<const int32_t*>(pAligned);
-    AptValue* const* pArray = *reinterpret_cast<AptValue* const* const*>(pAligned + 8);
+    AptValue* const* pArray = *reinterpret_cast<AptValue* const* const*>(pAligned + 8);   // serialized .apt operand block: table @+8
     pCtx->mpProgramCounter = pAligned + 16;
 
     for (int32_t i = 0; i < nCount; ++i)
