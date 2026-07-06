@@ -71,7 +71,18 @@ struct AptCIH : public AptValueGC
     virtual void DestroyGCPointers();    // @0x80553C (release parent + char inst)
     virtual void PreDestroy();           // @0x7ECBAC
     // FLAG: AptCIH also overrides GetHasClass/SetHasClass (@0x7E1E18/0x7E1DF0) +
-    // objectMemberSet/Lookup; deferred (AptValue's defaults inherited for now).
+    // objectMemberSet; deferred (AptValue's defaults inherited for now).
+    // objectMemberLookup override (PARTIAL, 2026-07-06): the console CIH resolves the
+    // built-in read-only MovieClip properties here (a clip read via GetMember/GetProperty
+    // -> getVariable -> objectMemberLookup, BEFORE findChild). Only `_name`
+    // (-> GetInstanceName) is reconstructed so far -- the drive-critical one: a class-
+    // bound clip's ctor does `this.msName = this._name`, and with the base's `return 0`
+    // `_name` fell through findChild to `undefined`, so msName (and every component name
+    // handed to SendAptEvent) was undefined. The rest of the MovieClip property set
+    // (_x/_y/_width/_visible/_currentframe/...) is a follow-on. Returns 0 for any other
+    // name so the existing findChild path is unchanged.
+    virtual AptValue* objectMemberLookup(AptValue* const pThis,
+                                         const AptNativeString* const pName) const override;
 
     // ---- name -------------------------------------------------------------
     const EAStringC& GetInstanceName() const { return mInstanceName; }   // @0x7DF0A8
