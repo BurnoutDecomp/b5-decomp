@@ -137,12 +137,12 @@ extern "C" void AptDictFetchProbe(unsigned int nIndex, const void* pPool, int nT
                                   const char* pcText);
 #endif
 
-AptValue* AptInterp_GetDictEntry(AptActionInterpreter* pInterp, unsigned int nIndex)
+AptValue* AptActionInterpreter::GetDictEntry(unsigned int nIndex)
 {
-    AptValue* pEntry = pInterp->mpConstantPool[nIndex];
+    AptValue* pEntry = mpConstantPool[nIndex];
     if (!pEntry)
     {
-        AptDictNullEntryProbe(nIndex, pInterp->mpConstantPool);
+        AptDictNullEntryProbe(nIndex, mpConstantPool);
         pEntry = gpUndefinedValue;
     }
     else
@@ -151,7 +151,7 @@ AptValue* AptInterp_GetDictEntry(AptActionInterpreter* pInterp, unsigned int nIn
         const char* pcText = nullptr;
         if (pEntry->getVtblIndex() == AptVFT_StringValue && pEntry->getIsDefined())
             pcText = static_cast<AptString*>(pEntry)->GetInternalString()->GetBuffer();
-        AptDictFetchProbe(nIndex, pInterp->mpConstantPool,
+        AptDictFetchProbe(nIndex, mpConstantPool,
                           static_cast<int>(pEntry->getVtblIndex()), pcText);
     }
     return pEntry;

@@ -33,8 +33,8 @@
 
 #include <cstdint>
 
-// The null-guarded dictionary-slot fetch (InterpHelpers; FLAG hardening).
-extern AptValue* AptInterp_GetDictEntry(AptActionInterpreter* pInterp, unsigned int nIndex);
+// AptActionInterpreter::GetDictEntry (the null-guarded dictionary-slot fetch) is
+// declared in AptActionInterpreter.h.
 
 // FLAG (host debug sink -- installed by the host; console dword_8324E82C): the
 // trace output function. printf-style; the one call site passes (fmt, message).
@@ -134,7 +134,7 @@ namespace
     {
         const uint8_t nDictByte = *pContext->mpProgramCounter;
         ++pContext->mpProgramCounter;                       // advance past the byte
-        AptValue* pValue = AptInterp_GetDictEntry(pInterp, nDictByte);   // null-guarded (FLAG hardening)
+        AptValue* pValue = pInterp->GetDictEntry(nDictByte);   // null-guarded (FLAG hardening)
         pInterp->mpStack[pInterp->mnStackTop++] = pValue;   // inlined stackPush
         pValue->AddRef();
     }
@@ -189,7 +189,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncPop(AptActionInterprete
     const unsigned int nIndex = *pContext->mpProgramCounter;   // inline byte dict index
     pContext->mpProgramCounter += 1;
 
-    AptValue* pEntry = AptInterp_GetDictEntry(pInterp, nIndex);   // null-guarded (FLAG hardening)           // console: *(4*idx + a1[17])
+    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded (FLAG hardening)           // console: *(4*idx + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;          // inlined stackPush
     pEntry->AddRef();
 

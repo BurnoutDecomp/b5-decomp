@@ -53,8 +53,8 @@
 #include <cmath>     // fmodf (Array integer-length detection)
 #include <string.h>  // _stricmp (the AS class-name compare)
 
-// The null-guarded dictionary-slot fetch (InterpHelpers; FLAG hardening).
-extern AptValue* AptInterp_GetDictEntry(AptActionInterpreter* pInterp, unsigned int nIndex);
+// AptActionInterpreter::GetDictEntry (the null-guarded dictionary-slot fetch) is
+// declared in AptActionInterpreter.h.
 
 // FLAG (wired at AptInit; see AptValueConvert.cpp).
 extern AptValue* gpUndefinedValue;
@@ -260,7 +260,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictByte(AptActionInterpr
     const unsigned int nIndex = *pCtx->mpProgramCounter;   // byte dictionary index
     pCtx->mpProgramCounter += 1;
 
-    AptValue* pEntry = AptInterp_GetDictEntry(pInterp, nIndex);   // null-guarded (FLAG hardening)        // console: *(4*idx + a1[17])
+    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded (FLAG hardening)        // console: *(4*idx + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
     pEntry->AddRef();
 }
@@ -277,7 +277,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictWord(AptActionInterpr
     const unsigned int nIndex = p[0] | (static_cast<unsigned int>(p[1]) << 8);   // LE u16 (GUIAPT64/XB1)
     pCtx->mpProgramCounter += 2;
 
-    AptValue* pEntry = AptInterp_GetDictEntry(pInterp, nIndex);   // null-guarded (FLAG hardening)        // console: *((4*idx & 0x3FFFC) + a1[17])
+    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded (FLAG hardening)        // console: *((4*idx & 0x3FFFC) + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
     pEntry->AddRef();
 }
@@ -390,7 +390,7 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetMember(AptActionIn
     const unsigned int nIndex = *pCtx->mpProgramCounter;    // byte dictionary index
     pCtx->mpProgramCounter += 1;
 
-    AptValue* pEntry = AptInterp_GetDictEntry(pInterp, nIndex);   // null-guarded (FLAG hardening)        // console: *(4*idx + a1[17])
+    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded (FLAG hardening)        // console: *(4*idx + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
     pEntry->AddRef();
 
@@ -410,7 +410,7 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInter
     const unsigned int nIndex = *pCtx->mpProgramCounter;    // byte dictionary index
     pCtx->mpProgramCounter += 1;
 
-    AptValue* pEntry = AptInterp_GetDictEntry(pInterp, nIndex);   // null-guarded (FLAG hardening)        // console: *(4*idx + a1[17])
+    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded (FLAG hardening)        // console: *(4*idx + a1[17])
 
     // The asm inlines Get_ToString: type-1 StringValue -> its own EAStringC (+8);
     // else (boxed tag 33) -> the AptString at +0x20, then its EAStringC. Reuse the

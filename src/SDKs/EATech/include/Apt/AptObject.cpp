@@ -193,7 +193,7 @@ extern "C" void AptRegisterClassProbeDefault(const char*) {}
 extern "C" void AptRegisterClassProbe(const char* pcName);
 #endif
 
-AptValue* AptApt_RegisterClassNative(AptValue* /*pContext*/, int nNumParams)
+AptValue* AptObject::RegisterClassNative(AptValue* /*pContext*/, int nNumParams)
 {
     if (nNumParams == 2)
     {
