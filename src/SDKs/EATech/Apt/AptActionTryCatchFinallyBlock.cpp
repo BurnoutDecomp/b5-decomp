@@ -22,7 +22,7 @@ int getTryBlockBase(int iRecord)
 int getCatchBlockBase(const void* pRecord)
 {
     const u8* lpBase = static_cast<const u8*>(pRecord);
-    const u32 luTrySize = *reinterpret_cast<const u32*>(lpBase + 0x00);
+    const u32 luTrySize = *reinterpret_cast<const u32*>(lpBase + 0x00);   // serialized .apt Try record: trySize @+0
     return static_cast<int>(reinterpret_cast<int>(lpBase) + luTrySize + KU_BODY_OFFSET);
 }
 
@@ -31,8 +31,8 @@ int getCatchBlockBase(const void* pRecord)
 int getFinallyBlockBase(const void* pRecord)
 {
     const u8* lpBase = static_cast<const u8*>(pRecord);
-    const u32 luTrySize   = *reinterpret_cast<const u32*>(lpBase + 0x00);
-    const u32 luCatchSize = *reinterpret_cast<const u32*>(lpBase + 0x04);
+    const u32 luTrySize   = *reinterpret_cast<const u32*>(lpBase + 0x00);   // serialized .apt Try record: trySize @+0
+    const u32 luCatchSize = *reinterpret_cast<const u32*>(lpBase + 0x04);   // serialized .apt Try record: catchSize @+4
     return static_cast<int>(
         reinterpret_cast<int>(lpBase) + luCatchSize + luTrySize + KU_BODY_OFFSET);
 }

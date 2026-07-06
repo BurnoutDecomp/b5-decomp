@@ -845,9 +845,9 @@ void* AptAnimationTarget::RemoveCIHReferences()
         {
             using RemapFn = void* (*)(void*);
             char* lpVtbl = *reinterpret_cast<char**>(lrTimer.mpCBFunction);
-            (*reinterpret_cast<RemapFn*>(lpVtbl + 52))(lrTimer.mpCBFunction);
+            (*reinterpret_cast<RemapFn*>(lpVtbl + 52))(lrTimer.mpCBFunction);   // FLAG un-homed vtbl[13] GC reference-remap virtual
             lpVtbl = *reinterpret_cast<char**>(lrTimer.mpContext);
-            lpResult = (*reinterpret_cast<RemapFn*>(lpVtbl + 52))(lrTimer.mpContext);
+            lpResult = (*reinterpret_cast<RemapFn*>(lpVtbl + 52))(lrTimer.mpContext);   // FLAG un-homed vtbl[13] GC reference-remap virtual
         }
 
         const s32 liParamCount = lrTimer.mParams.mnTop;

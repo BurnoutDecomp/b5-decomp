@@ -391,9 +391,9 @@ namespace CgsGui
         // exactly the console's AptData[1]/AptData[2] pair and the XB1 CompleteLoad's a3/a4 pair.
         const uintptr_t luHeaderBase  = reinterpret_cast<uintptr_t>(lpAptData);
         const uintptr_t luAptDataOff  = static_cast<uintptr_t>(
-            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x10u));  // aptData (u64 @ +0x10)
+            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x10u));  // serialized .apt header: aptData off @+0x10
         const uintptr_t luConstOff    = static_cast<uintptr_t>(
-            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x18u));  // const   (u64 @ +0x18)
+            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x18u));  // serialized .apt header: const off @+0x18
         void* lpBase      = reinterpret_cast<void*>(luHeaderBase + luAptDataOff);
         void* lpConstFile = (luConstOff != 0)
                                 ? reinterpret_cast<void*>(luHeaderBase + luConstOff)

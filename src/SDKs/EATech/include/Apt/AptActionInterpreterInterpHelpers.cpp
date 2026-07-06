@@ -1056,7 +1056,7 @@ const unsigned char* AptActionInterpreter_ResolveTranscode(AptActionInterpreter*
             // Try record (0x14 bytes); the 0x4 flag bit means no rebase.
             case 143:
                 p = reinterpret_cast<const unsigned char*>(aligned4 + 20);
-                if ((*reinterpret_cast<const int*>(aligned4 + 0xC) & 4) == 0)
+                if ((*reinterpret_cast<const int*>(aligned4 + 0xC) & 4) == 0)   // serialized .apt Try record: flag @+0xC
                     AptInterp_RebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
                 break;
 
