@@ -87,4 +87,19 @@ namespace BrnGui
             }
         }
     }
+
+    // @ 0x824111B0 -- h:328. The fixed set of HUD message ids that may be refreshed in place
+    // (rather than re-started) when the same id is re-queued while already showing. The X360
+    // builds each 64-bit CgsID literal with lis/ori + insrdi and compares with cmpld against
+    // the arg; reproduced as the full 64-bit hashes. Touches no members.
+    bool InGameMessagesComponent::IsMessageUpdatable(CgsID lMessageId) const
+    {
+        if (lMessageId == 0xB9390CF6BDFC2D84ULL)
+            return true;
+        if (lMessageId == 0xB9390CF6BDFC65B5ULL)
+            return true;
+        if (lMessageId == 0xB9390CEDADB37000ULL)
+            return true;
+        return false;
+    }
 }

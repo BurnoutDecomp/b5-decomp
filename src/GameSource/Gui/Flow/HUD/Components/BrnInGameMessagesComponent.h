@@ -20,6 +20,7 @@
 // (maeMessageState @ +0x8B0 / muCurrentMessageIndex @ +0x8C0) are exact.
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                               // CgsID (u64)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // BrnGameState::GameStateModuleIO::EGameModeType
 
 namespace BrnGui
@@ -74,6 +75,11 @@ namespace BrnGui
         u8   GetNextIndex() const;
         // @ 0x8240EB48 -- h:318. Toggle the double-buffer slot selector in place.
         void SwitchCurrentIndex();
+
+        // @ 0x824111B0 -- h:328. Is lMessageId one of the fixed set of HUD message ids that
+        // may be refreshed in place (rather than re-started) when re-queued while showing?
+        // The three ids are X360-attested 64-bit CgsID literals; touches no members.
+        bool IsMessageUpdatable(CgsID lMessageId) const;
 
         // ORDER + offsets from the DWARF. mpInGameMessagesQueue is the only offset-pinned
         // member the TU attests (this + 0xC, DWARF h:258); the controller/director/game-mode

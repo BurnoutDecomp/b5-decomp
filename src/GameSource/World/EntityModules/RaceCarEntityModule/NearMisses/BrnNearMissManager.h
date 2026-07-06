@@ -40,6 +40,12 @@ namespace BrnWorld
         // True iff either remembered near-miss list is currently non-empty. @0x822CD2E8.
         bool HasThereBeenARecentNearMiss() const;
 
+        // Log a race-car / traffic section-entity id into the matching current-frame near list.
+        // Both guard with a manager-level not-already-contained debug assert, then defer to the
+        // NearMissData<A,B>::AddNear length<cap append (inlined by the X360). @0x822ED198/@0x822ED250.
+        void AddNearRaceCar(u32 luRaceCarId);
+        void AddNearTraffic(u32 luEntityId);
+
     private:
         // DWARF-named typedefs (BrnNearMissManager.h:49-50).
         typedef NearMissData<4, 8> TrafficNearMissData;

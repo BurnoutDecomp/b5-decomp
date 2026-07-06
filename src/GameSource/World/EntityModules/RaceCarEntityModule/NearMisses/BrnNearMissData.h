@@ -217,6 +217,22 @@ namespace BrnWorld
             maNearSections.Clear();
         }
 
+        // AddNear -- append luEntityId to the current-frame near-section working list (cap A).
+        // The length<A guard silently drops the id when the working list is full. The Feb-2007
+        // AddNear body confirms there is NO assert here; the not-contained assert lives in the
+        // NearMissManager caller (AddNearRaceCar/AddNearTraffic). (DWARF cpp:212)
+        void AddNear(u32 luEntityId)
+        {
+            if (maNearSections.GetLength() < A) { maNearSections.Append(static_cast<s32>(luEntityId)); }
+        }
+
+        // IsContainedInNearArray -- is luEntityId already in the current-frame near-section list?
+        // Array<s32,A>::Contains on maNearSections. Non-const per DWARF (cpp:516).
+        bool IsContainedInNearArray(u32 luEntityId)
+        {
+            return maNearSections.Contains(static_cast<s32>(luEntityId));
+        }
+
         // ---- queries (const) ----
 
         // HasRecentlyCrashed -- <4,7> @0x822E46F0 / <4,8> @0x822E3DB0.
