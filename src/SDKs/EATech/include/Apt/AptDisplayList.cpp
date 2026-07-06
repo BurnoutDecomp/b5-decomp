@@ -1299,7 +1299,13 @@ void AptCIH_DispatchInstantiatedHook(AptCIH* pPlacedNode)
 // (class-bind 'TransitionComponent' -> the ctor runs), but the constructor's deeper
 // execution still AVs -- gated OFF so the title boot stays green while the ctor-run
 // frontier is debugged; flip to continue.
-static const bool KB_CLASS_BINDING = true;
+//
+// REGATED OFF 2026-07-06: with binding ON the placed menu clips re-run their AS
+// ctor at placement and reset to authored frame 0, stomping the shim's applied
+// apt_state (hover) + apt_labeltxt (prompt) -- log confirms both are still
+// (APPLIED) by the shim, then overwritten. Off = shim-only drive, working menu.
+// Re-enable together with deleting the AptRuntimeSetComponent* shim (single driver).
+static const bool KB_CLASS_BINDING = false;
 
 int AptCIH_AssociateInstToClass(AptCIH* pNode)
 {
