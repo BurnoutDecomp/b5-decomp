@@ -345,13 +345,11 @@ int AptDisplayList::GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t 
 //     creates/re-uses the AptCIH for the placement and returns it. No standalone
 //     export (its placement logic is folded inline in the X360); declared as the
 //     callee whose result AddToDisplayList consumes.
-//   AptCIH_DispatchInstantiatedHook -- the X360 calls the freshly-placed node's
-//     vtable[0] with (node, &node->mInstanceName) right after pushing it to the
-//     new-instance table (the per-node "just instantiated" hook); declared as a shim
-//     so this TU compiles against that virtual without re-declaring the vtable.
+// The freshly-placed node's just-instantiated hook -- the X360 calls its vtable[0] with
+// (node, &node->mInstanceName) right after pushing it to the new-instance table -- is
+// AptValue::AddRef (vtbl[0], arg2 discarded), invoked directly at the AddToDisplayList call site.
 // ---------------------------------------------------------------------------
 extern AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode);
-extern void    AptCIH_DispatchInstantiatedHook(AptCIH* pPlacedNode);
 
 // ---------------------------------------------------------------------------
 // AddToDisplayList @0x82B0B150
@@ -439,10 +437,10 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
     if (!pPlaced->GetInstanceName().IsEmpty())
         pParentHash->Set(pPlaced->GetInstanceName(), static_cast<AptValue*>(pPlaced));
 
-    // Add to the target's "new instances" table + run the per-node just-placed hook.
+    // Add to the target's "new instances" table + reference the placed node for it.
     void** const pNewInsts = static_cast<void**>(AptAnimationTarget::GetNewInsts());
     pNewInsts[AptAnimationTarget::GetNewInstSize()] = pPlaced;
-    AptCIH_DispatchInstantiatedHook(pPlaced);
+    pPlaced->AddRef();   // console (***node)(node, &mInstanceName) == vtbl[0] AddRef (arg2 discarded)
     AptAnimationTarget::DecNewInstSize();   // post-increments the new-instance count
 
     return pPlaced;
@@ -1248,19 +1246,6 @@ void AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
         gAptActionInterpreter.setVariable(static_cast<AptValue*>(pNode), nullptr,
                                           &pItem->mKey, pItem->mpValue, 1, 1, 0);
     }
-}
-
-// ---------------------------------------------------------------------------
-// AptCIH_DispatchInstantiatedHook -- the just-instantiated hook the X360's
-// AddToDisplayList runs right after pushing the placed node onto the new-instance
-// table: `(***node)(node, &node->mInstanceName)`. The vtable[0] slot is AptValue::
-// AddRef (the placed node is referenced by the new-instance table), invoked with the
-// node + a pointer to its mInstanceName member; AddRef ignores the second argument
-// (the console passes node+8 = &mInstanceName, which the no-arg AddRef discards).
-// ---------------------------------------------------------------------------
-void AptCIH_DispatchInstantiatedHook(AptCIH* pPlacedNode)
-{
-    pPlacedNode->AddRef();   // vtbl[0]
 }
 
 // ---------------------------------------------------------------------------
