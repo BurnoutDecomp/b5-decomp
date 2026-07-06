@@ -210,8 +210,8 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                 (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u);
             char* const pBody = reinterpret_cast<char*>(luBody);
 
-            const int32_t nFlags = *reinterpret_cast<const int32_t*>(pBody + 0x00);
-            const int32_t nDepth = *reinterpret_cast<const int32_t*>(pBody + 0x04);   // [c: cmd+0x08]
+            const int32_t nFlags = CmdI32(pBody, 0x00);   // serialized .apt place record
+            const int32_t nDepth = CmdI32(pBody, 0x04);   // [c: cmd+0x08]
 
             unsigned char chMode = 0;                  // var_60 (BYREF)
             void* pExisting = nullptr;                  // the existing-node out
@@ -220,7 +220,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                                           reinterpret_cast<void*>(static_cast<intptr_t>(nDepth)),
                                           &chMode, &pExisting, a5, pBody);
 
-            int32_t nResolvedId = *reinterpret_cast<const int32_t*>(pBody + 0x08);   // [c: cmd+0x0C]
+            int32_t nResolvedId = CmdI32(pBody, 0x08);   // [c: cmd+0x0C] serialized .apt place record
             void* pCharacter = nullptr;
             if (nResolvedId != -1)
             {
@@ -268,7 +268,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                     if (nFlags & 0x08)
                         pData->mpColorTransform = const_cast<char*>(pBody) + 0x24;
                     if (nFlags & 0x10)
-                        pData->mfRatio = *reinterpret_cast<const float*>(pBody + 0x2C);
+                        pData->mfRatio = CmdF32(pBody, 0x2C);   // serialized .apt move/morph ratio
                     pData->muxFlags |= static_cast<u32>(nFlags);
                 }
                 continue;
@@ -401,7 +401,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 continue;   // already run (the negated-id latch)
 
             const unsigned char* const pStream =
-                *reinterpret_cast<const unsigned char* const*>(pCmd + 0x10);
+                static_cast<const unsigned char*>(CmdPtr(pCmd, 0x10));   // serialized .apt action record: relocated stream ptr @+0x10
             // Same relocated-pointer plausibility screen as the command array above
             // (a malformed/unrelocated slot must not be executed).
             const uintptr_t luStream = reinterpret_cast<uintptr_t>(pStream);
@@ -494,7 +494,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 // body = align8(cmd+4); the placed-char id lives at body+0x08.
                 const uintptr_t luBody =
                     (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u);
-                const int32_t nId = *reinterpret_cast<const int32_t*>(luBody + 0x08);
+                const int32_t nId = CmdI32(reinterpret_cast<void*>(luBody), 0x08);   // serialized .apt place record: charId @body+0x08
 
                 // ---- place: run the placed character's init actions -----------
                 AptCharacterAnimation_ExecuteInitActions(pAnim, pParent, nId);   // FLAG deferred: the real member runs away at boot frame 3 (init-action VM path incomplete) -- see AptRenderLinkStubs.cpp
@@ -584,9 +584,9 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     // The record body is pointer-aligned after the tag (FrameItem::Write Align()); the caller
     // passes record+4, so align it up to the 8-byte pointer boundary to reach the body base.
     const uintptr_t luBody = (reinterpret_cast<uintptr_t>(pPlaceInfo) + 7u) & ~static_cast<uintptr_t>(7u);
-    const char* const pBody = reinterpret_cast<const char*>(luBody);
+    char* const pBody = reinterpret_cast<char*>(luBody);
 
-    const uint32_t nFlags = *reinterpret_cast<const uint32_t*>(pBody + 0x00);
+    const uint32_t nFlags = static_cast<uint32_t>(CmdI32(pBody, 0x00));   // serialized .apt place record
 
     // Place when the record carries a character (bit1 HasCharacter) or is a Move (bit0);
     // otherwise it is a no-op (the X360's `(flags&2)==0 && (flags&1)==0 -> 0`).
@@ -595,8 +595,8 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     if (!bHasCharacter && !bMove)
         return nullptr;
 
-    const int32_t nDepth  = *reinterpret_cast<const int32_t*>(pBody + 0x04);
-    const int32_t nCharId = *reinterpret_cast<const int32_t*>(pBody + 0x08);
+    const int32_t nDepth  = CmdI32(pBody, 0x04);
+    const int32_t nCharId = CmdI32(pBody, 0x08);
 
     // The placed character = the owning movie's charTable[charId]. The owner movie char-anim
     // is reached through the parent CIH's named char-inst chain (parent->charInst->renderItem
@@ -637,7 +637,7 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     EAStringC nameStr;
     if ((nFlags & 0x20u) != 0u)
     {
-        const char* const pNamePtr = *reinterpret_cast<const char* const*>(pBody + 0x30);
+        const char* const pNamePtr = static_cast<const char*>(CmdPtr(pBody, 0x30));   // relocated name C-string
         if (pNamePtr != nullptr)
         {
             nameStr = EAStringC(pNamePtr);
@@ -653,8 +653,8 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
         ? reinterpret_cast<const float*>(pBody + 0x0C) : nullptr;
     const AptUint32CXForm* const pPackedColor = ((nFlags & 0x08u) != 0u)
         ? reinterpret_cast<const AptUint32CXForm*>(pBody + 0x24) : nullptr;
-    const double fFrameValue = static_cast<double>(*reinterpret_cast<const float*>(pBody + 0x2C));
-    const int16_t nClipDepth = static_cast<int16_t>(*reinterpret_cast<const int32_t*>(pBody + 0x38));
+    const double fFrameValue = static_cast<double>(CmdF32(pBody, 0x2C));
+    const int16_t nClipDepth = static_cast<int16_t>(CmdI32(pBody, 0x38));
 
     // The clipActions/handler-list block pointer: placed into the sprite inst's
     // mpClipEventHandlers slot (queueClipEvents scans it; _addToSetCaches folds its
@@ -662,7 +662,7 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     // streams parsed) by resolve64's case-3 walk.
     const void* pClipActions = nullptr;
     if ((nFlags & 0x80u) != 0u)
-        pClipActions = *reinterpret_cast<void* const*>(pBody + 0x40);
+        pClipActions = CmdPtr(pBody, 0x40);   // clipActions block (resolve64-relocated)
 
     // ---- MOVE (bit0 without bit1 HasCharacter): the TWEEN-KEYFRAME path ----------------
     // The X360 `(flags & 2) == 0` branch: findInst the EXISTING node at this depth and
@@ -928,12 +928,11 @@ void* AptMovie::resolve(int nBase, void* a3, int a4)
                         for (int32_t k = 0; k < v37; ++k)
                         {
                             char* pRec = reinterpret_cast<char*>(CmdPtr(pInit, 0x04)) + 12 * k;
-                            int32_t v41 = *reinterpret_cast<int32_t*>(pRec + 8);
+                            int32_t v41 = CmdI32(pRec, 8);   // serialized .apt init-block record: stream ptr @+8
                             int32_t v42 = v41 ? (v41 + nBase) : 0;
-                            *reinterpret_cast<int32_t*>(pRec + 8) = v42;
+                            CmdSetI32(pRec, 8, v42);
                             result = const_cast<unsigned char*>(gAptActionInterpreter._parseStream(
-                                         reinterpret_cast<const unsigned char*>(
-                                             *reinterpret_cast<void**>(pRec + 8)),
+                                         reinterpret_cast<const unsigned char*>(CmdPtr(pRec, 8)),
                                          nBase, reinterpret_cast<AptValue*>(a3),
                                          a4));
                         }
@@ -1228,11 +1227,11 @@ void* AptMovie::unresolve(int nBase, int a3)
                         {
                             char* pRec = reinterpret_cast<char*>(CmdPtr(pInit, 0x04)) + 12 * k;
                             gAptActionInterpreter._parseStream(
-                                reinterpret_cast<const unsigned char*>(*reinterpret_cast<void**>(pRec + 8)),
+                                reinterpret_cast<const unsigned char*>(CmdPtr(pRec, 8)),   // serialized .apt init record stream ptr @+8
                                 nBase, nullptr, a3);
-                            int32_t v22 = *reinterpret_cast<int32_t*>(pRec + 8);
+                            int32_t v22 = CmdI32(pRec, 8);
                             int32_t v23 = v22 ? (v22 - nBase) : 0;
-                            *reinterpret_cast<int32_t*>(pRec + 8) = v23;
+                            CmdSetI32(pRec, 8, v23);
                         }
                         int32_t v24 = CmdI32(pInit, 0x04);
                         int32_t v25 = v24 ? (v24 - nBase) : 0;
