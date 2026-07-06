@@ -212,12 +212,19 @@ DOGMA_PoolManager::~DOGMA_PoolManager()
 // ---------------------------------------------------------------------------
 void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)
 {
-    // Round the request up to a 4-byte multiple, then clamp to the minimum.
+    // Round the request up, then clamp to the minimum. FLAG (x64 alignment fix): the
+    // console rounds to a 4-BYTE multiple (v3 = (v3&~3)+4) -- fine for its 32-bit
+    // pointers, but the pool CARVES blocks sequentially (ConsumeBytes), so a block
+    // whose size is 4-mod-8 (e.g. a 12/20-byte request) leaves every SUBSEQUENT block
+    // at a 4-mod-8 address. On x64 a vtbl'd AptValue there is MISALIGNED: its 8-byte
+    // members straddle an 8-byte word and the tail (e.g. EAStringC::m_pData's high
+    // dword) shares a word with adjacent free-filled memory -> 0xBAADF00D corruption
+    // (the EAStringC use-after-free in Add2). Round to 8 so every carved block stays
+    // 8-aligned. Deallocate mirrors this so the per-size free-list buckets still match.
     size_t nSize = nAllocatedSize;                          // v3
-    if ((nAllocatedSize & 3) != 0)
-        nSize = (nAllocatedSize & 0xFFFFFFFC) + 4;
     if (nSize < mnMinimumAllocationSize)
         nSize = mnMinimumAllocationSize;
+    nSize = (nSize + 7) & ~static_cast<size_t>(7);
 
     size_t nMax = mnMaxSizeAllocation;                      // v4
     ++mnItemsAllocated;
@@ -309,11 +316,12 @@ void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)
 // ---------------------------------------------------------------------------
 bool DOGMA_PoolManager::Deallocate(void* pNowFree, size_t nAllocatedSize)
 {
+    // FLAG (x64 alignment fix -- MUST mirror Allocate so the per-size free-list
+    // buckets match): round to an 8-byte multiple, not the console's 4-byte one.
     size_t nSize = nAllocatedSize;                          // v5
-    if ((nAllocatedSize & 3) != 0)
-        nSize = (nAllocatedSize & 0xFFFFFFFC) + 4;
     if (nSize < mnMinimumAllocationSize)
         nSize = mnMinimumAllocationSize;
+    nSize = (nSize + 7) & ~static_cast<size_t>(7);
 
     size_t nMax = mnMaxSizeAllocation;                      // v6
     --mnItemsAllocated;
