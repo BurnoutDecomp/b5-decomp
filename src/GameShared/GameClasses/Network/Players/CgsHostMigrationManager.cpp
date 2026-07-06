@@ -74,7 +74,7 @@ namespace CgsNetwork
         }
 
         mHostMigrationDebugComponent.mpHostMigrationManager = this;
-        mHostMigrationDebugComponent.miSelectedPlayer       = KI_INVALID_PLAYER_ID;
+        mHostMigrationDebugComponent.mLocalPlayerID         = KI_INVALID_PLAYER_ID;
         mHostMigrationDebugComponent.Register();
     }
 

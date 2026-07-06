@@ -21,9 +21,14 @@
 #include "SharedClasses/Physics/Props/BrnPhysicsPropTypeData.h"   // PropTypeData (IsLamppost / +0x5D smashable)
 #include "SharedClasses/Physics/Props/BrnPropEntityID.h"          // BrnWorld::PropEntityID (by-value param -- needs complete type)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
+#include "rw/math/vpu/vector3_operation.h"                        // rw::math::vpu::Dot (UpdateConstraints axis dots)
+
+#include <cmath>   // std::acos / std::fabs
 
 namespace BrnWorld
 {
+    namespace vpu = rw::math::vpu;
+
     // @ 0x822A1A98. Default-construct a loaded prop slot: identity world transform, and
     // every scalar field cleared (rotation-params index defaults to -1 == "none"). Note the
     // X360 body leaves muInstanceID (+64) and mu16PartsIndex (+72) untouched -- they are
@@ -173,5 +178,142 @@ namespace BrnWorld
         CGS_ASSERT(liPhysicsIndex < 15,
                    "liPhysicsIndex < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS )");
         mu8PhysicsIndex = static_cast<u8>(liPhysicsIndex);   // +76
+    }
+
+    // @ 0x822A9D38. Speed-modulation ease curve for an animated prop swinging between its
+    // min/max angle limits. Returns a [0.1 .. 1.0] multiplier applied to the base rotation
+    // speed: full speed (1.0) across the central band of travel, easing down toward the
+    // limits so the prop slows as it approaches either end.
+    //
+    // Store-for-store from the X360 asm. When the min limit is numerically above the max
+    // (the range wraps through 360 deg), the true/max angles are lifted by +360 so the
+    // comparisons run on an unwrapped scale (rodata flt_82004928 == 360.0).
+    f32 PropEntityInstance::CalculateEaseInSpeedModulation(f32 lfTrueAngle,
+                                                           f32 lfMinAngle,
+                                                           f32 lfMaxAngle)
+    {
+        // Unwrap a range that crosses the 360->0 seam.
+        if (lfMinAngle > lfMaxAngle)
+        {
+            if (lfTrueAngle < lfMinAngle)
+                lfTrueAngle = lfTrueAngle + 360.0f;
+            lfMaxAngle = lfMaxAngle + 360.0f;
+        }
+
+        // Normalised position of the true angle within [min,max], mapped to [-1 .. +1]:
+        //   mid = (max-min)*0.5 + min ;  pos = (true - mid) * 2 / (max - min).
+        const f32 lfRange    = lfMaxAngle - lfMinAngle;
+        const f32 lfMidPoint = lfRange * 0.5f + lfMinAngle;
+        const f32 lfNormalisedPos = ((lfTrueAngle - lfMidPoint) * 2.0f) / lfRange;
+
+        // Central dead-band -> full speed.
+        if (lfNormalisedPos > -0.75f && lfNormalisedPos < 0.75f)
+            return 1.0f;
+
+        // Outside the band: ramp the attenuation back up toward 1.0 as |pos| grows past 0.75,
+        //   atten = fabs( -(( |pos| - 0.75 ) * 4 - 1) )   (rodata 4.0, 1.0), clamped [0.1,1.0].
+        f32 lfAttenuation = std::fabs(-(((std::fabs(lfNormalisedPos) - 0.75f) * 4.0f) - 1.0f));
+        if (lfAttenuation < 0.1f)
+            return 0.1f;
+        if (lfAttenuation > 1.0f)
+            return 1.0f;
+        return lfAttenuation;
+    }
+
+    // @ 0x822A9A30. Re-evaluate an animated prop's swing limits for this frame and decide
+    // which way it should turn. Reads the prop's current true angle back out of its world
+    // transform (acos of a diagonal element, disambiguated by a second axis dot), converts
+    // the packed min/max limit bytes to degrees, and flips the animated-direction flag
+    // (mu8Flags bit KU_ANIMATED_DIRECTION_BIT) when the prop reaches an end stop. Returns the
+    // (possibly negated) angular speed to drive the prop with this frame.
+    //
+    // The probe-vector + Dot form mirrors the X360 vmsum3fp cascade exactly: each branch
+    // builds a unit axis vector on the stack and dots it against the transform rows, which
+    // reduces to a single matrix element per dot. The rotation-axis selector is the top two
+    // bits of PropEntityRotationParams::mnRotSpeed.
+    f32 PropEntityInstance::UpdateConstraints(f32 lfAngularSpeed,
+                                              f32* lpTrueAngle,
+                                              f32* lpMinAngle,
+                                              f32* lpMaxAngle,
+                                              const PropEntityRotationParams* lpRotationParams)
+    {
+        CGS_ASSERT(lpTrueAngle != nullptr, "lpTrueAngle");
+        CGS_ASSERT(lpMinAngle  != nullptr, "lpMinAngle");
+        CGS_ASSERT(lpMaxAngle  != nullptr, "lpMaxAngle");
+
+        // Rodata scales: acos result -> degrees, and packed 8-bit angle -> degrees (256 -> 360).
+        const f32 KF_RAD_TO_DEG  = 57.288353f;   // flt_82017B38
+        const f32 KF_BYTE_TO_DEG = 1.4117647f;   // flt_82017B34 == 360/255
+
+        const Matrix44Affine& lrTransform = mWorldTransform;
+
+        // Select the rotation axis from mnRotSpeed's top two bits and recover the true angle
+        // (acos of the aligned axis element) plus the sign-disambiguation dot.
+        const u32 luRotAxis =
+            static_cast<u8>(lpRotationParams->mnRotSpeed) & 0xC0u;
+
+        f32 lfCosAngle;
+        f32 lfSecondaryAngle;
+        if (luRotAxis == 0x40u)
+        {
+            const Vector3 lProbe{ 0.0f, 0.0f, 1.0f, 0.0f };
+            lfCosAngle       = vpu::Dot(lProbe, lrTransform.zAxis);   // zAxis.z
+            lfSecondaryAngle = vpu::Dot(lProbe, lrTransform.xAxis);   // xAxis.z
+        }
+        else if (luRotAxis == 0x00u)
+        {
+            const Vector3 lProbe{ 0.0f, 1.0f, 0.0f, 0.0f };
+            lfCosAngle       = vpu::Dot(lProbe, lrTransform.yAxis);   // yAxis.y
+            lfSecondaryAngle = vpu::Dot(lProbe, lrTransform.zAxis);   // zAxis.y
+        }
+        else
+        {
+            const Vector3 lProbe{ 0.0f, 1.0f, 0.0f, 0.0f };
+            lfCosAngle       = vpu::Dot(lProbe, lrTransform.yAxis);   // yAxis.y
+            lfSecondaryAngle = vpu::Dot(lProbe, lrTransform.xAxis);   // xAxis.y
+        }
+
+        f32 lfTrueAngle = static_cast<f32>(std::acos(lfCosAngle)) * KF_RAD_TO_DEG;
+        if (lfSecondaryAngle > 0.0f)
+            lfTrueAngle = 360.0f - lfTrueAngle;
+        *lpTrueAngle = lfTrueAngle;
+
+        // Packed limit bytes (muMinAngle @+3, muMaxAngle @+4) -> degrees.
+        f32 lfMinAngleToTest = static_cast<f32>(lpRotationParams->muMinAngle) * KF_BYTE_TO_DEG;
+        *lpMinAngle = lfMinAngleToTest;
+        const f32 lfMaxDeg = static_cast<f32>(lpRotationParams->muMaxAngle) * KF_BYTE_TO_DEG;
+        *lpMaxAngle = lfMaxDeg;
+
+        // Upper limit to compare the true angle against. When the range wraps (min > max), the
+        // upper limit is lifted by +360 and the true angle is unwrapped past the midpoint seam.
+        f32 lfMaxAngleToTest = lfMaxDeg;
+        f32 lfTrueAngleToTest = *lpTrueAngle;
+        if (lfMinAngleToTest > lfMaxDeg)
+        {
+            lfMaxAngleToTest = lfMaxDeg + 360.0f;
+            const f32 lfMidPoint = (lfMinAngleToTest - lfMaxDeg) * 0.5f + lfMaxDeg;
+            if (lfTrueAngleToTest < lfMidPoint)
+                lfTrueAngleToTest = *lpTrueAngle + 360.0f;
+        }
+
+        // Direction bookkeeping: KU_ANIMATED_DIRECTION_BIT (0x10) records which end the prop is
+        // swinging toward. Flip it at the reached end stop and return the (signed) speed.
+        const u8 luFlags = mu8Flags;   // this+0x4A
+        if ((luFlags & KU_ANIMATED_DIRECTION_BIT) != 0)
+        {
+            if (lfTrueAngleToTest > lfMaxAngleToTest)
+            {
+                mu8Flags = static_cast<u8>(luFlags & ~KU_ANIMATED_DIRECTION_BIT);
+                return -lfAngularSpeed;
+            }
+            return lfAngularSpeed;
+        }
+
+        if (lfTrueAngleToTest < lfMinAngleToTest)
+        {
+            mu8Flags = static_cast<u8>(luFlags | KU_ANIMATED_DIRECTION_BIT);
+            return lfAngularSpeed;
+        }
+        return -lfAngularSpeed;
     }
 }

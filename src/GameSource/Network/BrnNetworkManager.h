@@ -80,6 +80,7 @@ namespace CgsNetwork
 namespace BrnNetwork
 {
     class NetworkGamerCardManagerX360;   // pointer-only (GetGamerCardManager return)
+    class NetworkPlayerStatsManager;     // pointer-only (GetStatsManager return)
 
     class BrnNetworkManager
     {
@@ -162,6 +163,13 @@ namespace BrnNetwork
         // BrnNetwork::ScoreboardManager::HandleEvScoreTargetEvent. Declared-only here; storage
         // lands with the full BrnNetworkManager TU. ADDITIVE GROW (BrnNetworkScoreboardManager TU).
         NetworkGamerCardManagerX360* GetGamerCardManager();
+
+        // The embedded online player-stats manager (X360: reached as an embedded sub-object at
+        // manager +0x33F18; addis r5,3 + addi 0x3F18). NetworkPlayerStatsResults::Prepare passes
+        // it (with GetServerInterface()) to StatsDebugComponent::Prepare. Declared-only here; the
+        // storage / body materialise with the full BrnNetworkManager TU. ADDITIVE GROW
+        // (BrnNetworkPlayerStatsResults TU).
+        NetworkPlayerStatsManager* GetStatsManager();
 
         // The current online round number (X360: read whole as a u8 at *(this+613796) ==
         // *(this+0x95DA4); BrnNetwork::StandingsManager stamps the sent PlayerFinishedRoundMessage

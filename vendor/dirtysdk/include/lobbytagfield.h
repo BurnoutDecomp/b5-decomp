@@ -60,6 +60,9 @@ s32 TagFieldSetRaw(char* pRecord, s32 iReclen, const char* pName, const char* pV
 // Append a string field to the record (the value is escaped/encoded as needed).
 s32 TagFieldSetString(char* pRecord, s32 iReclen, const char* pName, const char* pValue);
 
+// Append a flags field to the record.
+s32 TagFieldSetFlags(char* pRecord, s32 iReclen, const char* pName, s32 iFlags);
+
 // Append a packed structure field to the record.
 s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pName,
                          const void* pStruct, s32 iLength, const char* pPattern);

@@ -135,4 +135,78 @@ namespace BrnTraffic
 
         return &mpaTrafficLightTypes[luType];
     }
+
+    // -- RenderCoronasForInstance @ 0x827571B8 ------------------------------------
+    // Submit this instance's coronas (one per active-state corona) to the world
+    // corona buffer. Back-face + distance culled against the camera, with a gentle
+    // distance-based size boost so distant lights stay legible.
+    void TrafficLightCollection::RenderCoronasForInstance(
+        u32 luInstance,
+        u32 luActiveStates,
+        BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+        Vector3 lCameraPosition,
+        Vector3 lCameraDirection,
+        VecFloat lfCullDistSq) const
+    {
+        // corona colour state -> corona archetype (RED->Red=7, AMBER->Amber=6, GREEN->Green=5).
+        static const BrnCoronaType KAE_STATE_TO_CORONATYPE_MAPPING[E_TRAFFICLIGHTSTATE_COUNT] =
+        {
+            eCoronaTypeTrafficLightRed,    // E_TRAFFICLIGHTSTATE_RED
+            eCoronaTypeTrafficLightAmber,  // E_TRAFFICLIGHTSTATE_AMBER
+            eCoronaTypeTrafficLightGreen,  // E_TRAFFICLIGHTSTATE_GREEN
+        };
+        // corona colour state -> active-mask bit (1 << state); AND'd with luActiveStates to gate.
+        static const u8 KAU_TRAFFICLIGHTSTATE_BITS[E_TRAFFICLIGHTSTATE_COUNT] = { 1, 2, 4 };
+
+        CGS_ASSERT(luInstance < muNumTrafficLights, "luInstance < muNumTrafficLights");
+
+        const Matrix44Affine lInstanceTransform = CalcInstanceTransform(luInstance);
+
+        // Camera -> instance delta (the affine's translation row is the instance world pos).
+        const Vector3 lDir = rw::math::vpu::operator-(lInstanceTransform.Pos(), lCameraPosition);
+
+        // Back-face cull: skip the instance when it faces away from the camera view direction.
+        if (rw::math::vpu::Dot(lCameraDirection, lDir) <= 0.0f)
+            return;
+
+        // Distance cull.
+        if (rw::math::vpu::MagnitudeSquared(lDir) > static_cast<f32>(lfCullDistSq.x))
+            return;
+
+        // Distance-based size boost: scale = Lerp(1, 2, max(dist - 8, 0) * K).
+        // K is the console's lazily-cached broadcast of 1/142 (flt_820BE730).
+        static const f32 KF_CORONA_SCALE_CONSTANT = 0.0070422534f;
+        const f32 lfDistFromCamera = rw::math::vpu::Magnitude(lDir);
+        const f32 lfClampedDist    = (lfDistFromCamera - 8.0f) > 0.0f ? (lfDistFromCamera - 8.0f) : 0.0f;
+        const f32 lfSizeParam      = lfClampedDist * KF_CORONA_SCALE_CONSTANT;
+        // Lerp(1.0f, 2.0f, lfSizeParam) == 1.0f + (2.0f - 1.0f) * lfSizeParam.
+        const f32 lfLightScale     = 1.0f + (2.0f - 1.0f) * lfSizeParam;
+
+        const u32 luType = GetInstanceType(luInstance);
+        const TrafficLightType* lpType = GetTrafficLightType(luType);
+
+        const u32 luGlobalCoronaBegin = lpType->muCoronaOffset;
+        const u32 luGlobalCoronaEnd   = static_cast<u32>(lpType->muCoronaOffset) + lpType->muNumCoronas;
+
+        for (u32 luGlobalCorona = luGlobalCoronaBegin; luGlobalCorona < luGlobalCoronaEnd; ++luGlobalCorona)
+        {
+            const ETrafficLightState leState = GetCoronaState(luGlobalCorona);
+            if ((KAU_TRAFFICLIGHTSTATE_BITS[leState] & luActiveStates) != 0)
+            {
+                const Vector3 lLocalCoronaPos = GetCoronaPosition(luGlobalCorona);
+                const ETrafficLightState leCoronaState = GetCoronaState(luGlobalCorona);
+
+                const Vector3 lCoronaPosition =
+                    rw::math::vpu::TransformPoint(lInstanceTransform, lLocalCoronaPos);
+
+                // Direction = the instance's forward (transform zAxis); opacity fixed at 1.0f.
+                lpCoronaSubmissionInterface->AddCorona(
+                    lCoronaPosition,
+                    lInstanceTransform.zAxis,
+                    lfLightScale,
+                    1.0f,
+                    KAE_STATE_TO_CORONATYPE_MAPPING[leCoronaState]);
+            }
+        }
+    }
 }

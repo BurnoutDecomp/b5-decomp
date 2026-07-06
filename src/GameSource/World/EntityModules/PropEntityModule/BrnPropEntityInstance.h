@@ -119,6 +119,13 @@ namespace BrnWorld
         s32 GetPhysicsIndex() const;
         void SetPhysicsIndex(s32 liIndex);
 
+    private:
+        // @ 0x822A9D38 -- ease curve slowing an animated prop near its swing limits.
+        f32 CalculateEaseInSpeedModulation(f32 lfTrueAngle, f32 lfMinAngle, f32 lfMaxAngle);
+        // @ 0x822A9A30 -- re-evaluate swing limits + flip the animated-direction bit at an end stop.
+        f32 UpdateConstraints(f32 lfAngularSpeed, f32* lpTrueAngle, f32* lpMinAngle, f32* lpMaxAngle,
+                              const PropEntityRotationParams* lpRotationParams);
+
     public:
         // ---- DWARF-faithful layout (offsets asm-verified for this TU) ----
         Matrix44Affine mWorldTransform;        // +0   (64B, 16-aligned)

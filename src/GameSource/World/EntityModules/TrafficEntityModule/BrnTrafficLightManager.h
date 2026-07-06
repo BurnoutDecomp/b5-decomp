@@ -34,6 +34,11 @@
 
 namespace BrnTraffic
 {
+    // Baked, read-only traffic-light corona view (home: SharedClasses/Traffic/Junctions/
+    // BrnTrafficLightCollection.h). Referenced by-pointer only in TrafficLightGotSmashed;
+    // forward-declared to avoid pulling the collection header into this manager header.
+    class TrafficLightCollection;
+
     // The flat instance-index bound asserted by GetLightState (X360: cmplwi ..., 0x258).
     static const u32 KU_MAX_TRAFFIC_LIGHT_INSTANCES = 0x258;  // 600
 
@@ -96,6 +101,11 @@ namespace BrnTraffic
         // instance's 8-byte state record (the manager is the array base).
         //   asm: assert(instance < 0x258); return (u8*)this + 8 * instance;
         TrafficLightState* GetLightState(u32 luInstance);
+
+        // TrafficLightGotSmashed @ 0x827519A0 -- resolve the persistent instance id via the
+        // baked collection's id hash and set the smashed bit (0x80) of that light's flags.
+        void TrafficLightGotSmashed(const TrafficLightCollection* lpTrafficLightData,
+                                    u32 luInstanceID);
 
     private:
         // The state array begins at offset 0 of the manager (record base == this).

@@ -60,6 +60,11 @@ namespace CgsNetwork
         s32         GetNumberOfCategories() const;
         s32         GetNumberOfIndexes(s32 liCategory) const;
         s32         GetNumberOfVariations(s32 liCategory, s32 liIndex) const;
+        // Heading-name getters (pinned from the BrnNetwork::ScoreboardManager::CopyCategories /
+        // CopyIndexes X360 call sites @ 0x82562590 / 0x82562638 -- GetCategoryName(liCategory) and
+        // GetIndexName(liCategory, liIndex) feed NetworkOutScoreboardHeadingList::AddHeading).
+        const char* GetCategoryName(s32 liCategory) const;
+        const char* GetIndexName(s32 liCategory, s32 liIndex) const;
         s32         GetNumberOfColumns() const;
         s32         GetNumberOfRows() const;
         s32         GetColumnType(s32 liColumn) const;
