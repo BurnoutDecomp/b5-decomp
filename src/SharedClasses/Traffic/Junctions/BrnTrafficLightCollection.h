@@ -35,6 +35,7 @@
 
 #include "BrnCommonTypes.h"                             // Vector3, Vector3Plus, Matrix44Affine
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameSource/Graphics/BrnCoronaManager.h"       // BrnCoronaManager::BrnSubmissionInterface, BrnCoronaType, eCoronaTypeTrafficLight*
 
 namespace BrnTraffic
 {
@@ -78,6 +79,16 @@ namespace BrnTraffic
 
         // CalcArbitraryAmberCoronaTransform @ 0x82757478
         const Matrix44Affine CalcArbitraryAmberCoronaTransform(u32 luInstance) const;
+
+        // RenderCoronasForInstance @ 0x827571B8 -- submit this instance's active-state
+        // coronas to the world corona buffer (back-face + distance culled, distance-scaled).
+        void RenderCoronasForInstance(
+            u32 luInstance,
+            u32 luActiveStates,
+            BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+            Vector3 lCameraPosition,
+            Vector3 lCameraDirection,
+            VecFloat lfCullDistSq) const;
 
         // GetInstanceIndexForInstanceID @ 0x8274F590
         s32 GetInstanceIndexForInstanceID(u32 luInstanceID) const;

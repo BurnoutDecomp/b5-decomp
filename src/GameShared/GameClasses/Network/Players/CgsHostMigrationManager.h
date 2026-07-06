@@ -51,6 +51,7 @@
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsNewHostMessage.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessageWithPlayerIDs.h"  // NetworkPlayerID typedef
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
+#include "GameShared/GameClasses/Network/Debug Components/CgsNetworkHostMigrationDebugComponent.h"  // HostMigrationDebugComponent (canonical home)
 
 namespace CgsSystem
 {
@@ -77,18 +78,17 @@ namespace CgsNetwork
     };
 
     // ------------------------------------------------------------------------------
-    // The manager's debug-menu component (DWARF CgsHostMigrationManager.h:222). Construct
-    // stores a back-pointer to the owning manager and a -1 sentinel, then Register()s it.
-    struct HostMigrationManager;   // fwd for the back-pointer below
-    struct HostMigrationDebugComponent : CgsDev::DebugComponent
-    {
-        HostMigrationManager* mpHostMigrationManager; // +0x0C (Construct: = &owner)
-        s32                   miSelectedPlayer;        // +0x10 (Construct: = -1)
-    };
+    // The manager's debug-menu component (DWARF CgsHostMigrationManager.h:222) lives in its own
+    // home now (Network/Debug Components/CgsNetworkHostMigrationDebugComponent.h, included above).
+    // Construct stores a back-pointer to the owning manager and a -1 sentinel, then Register()s it.
 
     // ------------------------------------------------------------------------------
     struct HostMigrationManager
     {
+        // The debug component reads this manager's private keep-alive / host-id / player-manager
+        // members directly (ForceHostMigration / OnActivate / UpdateLocalPlayerID).
+        friend struct HostMigrationDebugComponent;
+
         // The shared signed player-index typedef (-1 == "no player").
         typedef MessageWithPlayerIDs::NetworkPlayerID NetworkPlayerID;
 

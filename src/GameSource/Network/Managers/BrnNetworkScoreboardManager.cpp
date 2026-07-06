@@ -44,6 +44,12 @@ namespace BrnNetwork
     // The X360 cell-buffer width every Get*Cell read uses (char[31], the ScoreboardRow cell width).
     static const s32 KI_CELL_BUFFER_SIZE = 31;
 
+    // The scoreboard-headings network event the Copy* builders broadcast: event-type 0x34 (52),
+    // payload 0x808 (2056) == sizeof(NetworkOutScoreboardHeadingList). Used by CopyCategories /
+    // CopyIndexes (and CopyVariations) on AddEvent.
+    static const s32 KI_NETEVENT_SCOREBOARD_HEADINGS     = 0x34;   // 52  (AddEvent event-type)
+    static const s32 KI_SCOREBOARD_HEADINGS_PAYLOAD_SIZE = 0x808;  // 2056 == sizeof(NetworkOutScoreboardHeadingList)
+
     // The incoming GUI "challenge this event score" event handed to HandleEvScoreTargetEvent.
     // Forward-declared in the header (BrnNetwork::EvScoreTargetEvent); defined here. The leading
     // bytes are the challenged player's name string (fed to UniquePlayerIDX360::Construct); the
@@ -684,5 +690,59 @@ namespace BrnNetwork
                     KI_NETEVENT_SCORE_TARGET, KI_SCORE_TARGET_PAYLOAD_SIZE);
         }
         return liResult;
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // CopyCategories  @ 0x82562590
+    // Build a category heading list from the rankings component, broadcast it on the network output
+    // queue (event-type 0x34, 2056 bytes) and hand it to the debug component to (re)render.
+    // -------------------------------------------------------------------------------------------
+    void ScoreboardManager::CopyCategories()
+    {
+        BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
+        lHeadingList.miLength                = 0;
+        lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_CATEGORY;
+        lHeadingList.maReservedPadTo0x808[0] = 0;
+        lHeadingList.maReservedPadTo0x808[1] = 0;
+
+        for (s32 liCategoryCounter = 0;
+             liCategoryCounter < mpRankings->GetNumberOfCategories();
+             ++liCategoryCounter)
+        {
+            lHeadingList.AddHeading(mpRankings->GetCategoryName(liCategoryCounter));
+        }
+
+        AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lHeadingList),
+            KI_NETEVENT_SCOREBOARD_HEADINGS, KI_SCOREBOARD_HEADINGS_PAYLOAD_SIZE);
+
+        mDebugComponent.HandleScoreboardHeadingEvent(&lHeadingList);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // CopyIndexes  @ 0x82562638
+    // Build an index heading list for liCategory, broadcast it (event-type 0x34, 2056 bytes) and
+    // hand it to the debug component to (re)render.
+    // -------------------------------------------------------------------------------------------
+    void ScoreboardManager::CopyIndexes(s32 liCategory)
+    {
+        BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
+        lHeadingList.miLength                = 0;
+        lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_INDEX;
+        lHeadingList.maReservedPadTo0x808[0] = 0;
+        lHeadingList.maReservedPadTo0x808[1] = 0;
+
+        for (s32 liIndexCounter = 0;
+             liIndexCounter < mpRankings->GetNumberOfIndexes(liCategory);
+             ++liIndexCounter)
+        {
+            lHeadingList.AddHeading(mpRankings->GetIndexName(liCategory, liIndexCounter));
+        }
+
+        AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lHeadingList),
+            KI_NETEVENT_SCOREBOARD_HEADINGS, KI_SCOREBOARD_HEADINGS_PAYLOAD_SIZE);
+
+        mDebugComponent.HandleScoreboardHeadingEvent(&lHeadingList);
     }
 }

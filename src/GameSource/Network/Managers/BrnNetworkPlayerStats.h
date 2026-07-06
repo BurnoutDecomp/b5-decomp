@@ -5,10 +5,12 @@
 // One player's cached online stats record (12 stat values + their display types,
 // a timestamp, the player name, the network player id, and an age/calc/local-player
 // status block). Layout authoritative from the DecFIGS DWARF
-// (BrnNetworkPlayerStats.h:53). Total size 136 bytes, confirmed independently by the
-// X360 binary: BrnNetworkModuleIO::InGamePlayerStatusData embeds this object as a
-// 136-byte slot (committed stub `u8 mPad0[136]` in BrnNetworkModuleInGamePlayerStatusInterface.cpp)
-// and NetworkPlayerStatsResults stores a NetworkPlayerStats[32] cache.
+// (BrnNetworkPlayerStats.h:53). Total size 132 bytes: the X360 asm for
+// NetworkPlayerStatsResults proves the record stride is 0x84 = 132 (mulli 0x84;
+// record[1].macName at +104 via r31+4 where r31 = this+0xE8) with macName char[16]
+// (KI_USERNAME_LENGTH==0x10; the same DWARF char[20] -> X360 char[16] drift already
+// corrected for CgsNetwork::PlayerName). NetworkPlayerStatsResults stores a
+// NetworkPlayerStats[32] cache (32 * 132 = 4224 = 0x1080, matching miCacheSize @+0x1080).
 //
 // Only operator= is binary-recovered in this TU (@0x82355C50); it is a plain
 // member-wise copy of every data member. All other methods are declared-only here
@@ -112,17 +114,24 @@ namespace BrnNetwork
         static const s32 KI_NO_RANK;
         static const s32 KI_MININUM_CHAR_BUFFER_SIZE = 11;
 
+        // NetworkPlayerStatsResults::GetPlayerStats(const char*) reads maPlayerStatsCache[li].macName
+        // directly (mirroring the X360 asm, which passes &record.macName straight to LobbyNameCmp);
+        // grant it access to the private record fields rather than routing through GetName().
+        friend class NetworkPlayerStatsResults;
+
     private:
-        // ---- data layout (DWARF BrnNetworkPlayerStats.h:201..211; total 136 B) --
+        // ---- data layout (DWARF BrnNetworkPlayerStats.h:201..211; total 132 B) --
+        // macName is char[16] (KI_USERNAME_LENGTH==0x10) and the record stride is 0x84 = 132,
+        // both X360-attested by NetworkPlayerStatsResults (mulli 0x84; record[1].macName @+104).
         s32             maiValues[12];      // +0   [0..48)   stat values
         EStatType       maeStatType[12];    // +48  [48..96)  per-stat display type
         Time            mTimeStamp;         // +96  [96..104) CgsSystem::Time (s32+f32)
-        char            macName[20];        // +104 [104..124)
-        NetworkPlayerID mNetworkPlayerID;   // +124 [124..128) (s32)
-        EStatsStatus    meStatsStatus;      // +128 [128..132)
-        bool            mbIsCalulated;      // +132 (sic: spelling matches DWARF)
-        bool            mbIsLocalPlayer;    // +133
-        // +134..136 trailing pad to 4-byte alignment (struct size == 136)
+        char            macName[16];        // +104 [104..120)
+        NetworkPlayerID mNetworkPlayerID;   // +120 [120..124) (s32)
+        EStatsStatus    meStatsStatus;      // +124 [124..128)
+        bool            mbIsCalulated;      // +128 (sic: spelling matches DWARF)
+        bool            mbIsLocalPlayer;    // +129
+        // +130..132 trailing pad to 4-byte alignment (struct size == 132)
     };
 
     // DWARF BrnNetworkPlayerStats.h:218 -- post-increment over the stat-value enum.
