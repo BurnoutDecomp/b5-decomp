@@ -87,9 +87,9 @@ void* AptUpdateZombieVector(char bAll);
 //                                       display-list/listener state before the GC pass.
 //   AptAnimationTarget::CleanRemList @0x82B0...  -- drain the remove list.
 //   ~AptAnimationTarget              @0x82AFF790 -- the 88-byte director destructor.
-void AptAnimationTarget_PreDestroy(AptAnimationTarget* pAnim);
-void AptAnimationTarget_CleanRemList(AptAnimationTarget* pAnim);
-void AptAnimationTarget_Destruct(AptAnimationTarget* pAnim);
+// AptAnimationTarget::PreDestroy is now called directly on the director (the AptAnimationTarget_PreDestroy shim is retired).
+// AptAnimationTarget::CleanRemList is now called directly (static member; the AptAnimationTarget_CleanRemList shim is retired).
+// ~AptAnimationTarget is now invoked explicitly on the director (the AptAnimationTarget_Destruct shim is retired).
 
 // FLAG (un-homed): ~AptLoader @0x82B... -- the X360 loader destructor drains the
 // weak loaded-file list before the block is freed. AptLoader has no homed dtor
@@ -297,8 +297,8 @@ void AptTarget::Shutdown()
     // ---- predestroy the animation director (release its owned state) ----
     if (mpAnimationTarget)
     {
-        AptAnimationTarget_PreDestroy(mpAnimationTarget);
-        AptAnimationTarget_CleanRemList(mpAnimationTarget);
+                mpAnimationTarget->PreDestroy();
+        AptAnimationTarget::CleanRemList();
     }
 
     // ---- retire all pending zombies ----
@@ -320,7 +320,7 @@ void AptTarget::Shutdown()
     AptAnimationTarget* pAnim = mpAnimationTarget;  // v7 = *(this + 0x18)
     if (pAnim)
     {
-        AptAnimationTarget_Destruct(pAnim);         // ~AptAnimationTarget
+        pAnim->~AptAnimationTarget();               // ~AptAnimationTarget
         gpAptPseudoDataPool->Deallocate(pAnim, sizeof(AptAnimationTarget));   // Deallocate(pool, v7, 88)
     }
 
@@ -380,8 +380,8 @@ AptTarget* GetTarget()
 // == mpLoader). Routed through the named member so the x64 layout stays correct
 // (the AptLoader.h FLAG that introduced this accessor instead of the literal offset).
 // ---------------------------------------------------------------------
-AptLoader* AptTarget_GetLoader(AptTarget* pTarget)
+AptLoader* AptTarget::GetLoader()
 {
-    return pTarget->mpLoader;   // *(this + 7) == +0x1C
+    return mpLoader;   // *(this + 7) == +0x1C
 }
 

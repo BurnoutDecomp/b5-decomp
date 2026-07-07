@@ -37,17 +37,10 @@
 // prototypes a class implements (the real member AptObject::SetImplementedObjects,
 // AptObject.cpp) -- called directly below; the free-helper shim is retired.
 
-// FLAG (AptActionInterpreter::_createObject @0x82B08088 -- the value-materialiser).
-// It is a (private) member of the interpreter in the console, but is NOT declared in
-// the reconstructed AptActionInterpreter.h yet (that header is owned by Phase A and
-// not editable here), so the New/Init/Define object handlers reach it through a free
-// shim -- the same encapsulation this TU already uses for AptObject_SetImplementedObjects.
-// Builds the AS object/array/class value for class name pClassName under (pScope,
-// pTarget); the trailing int/char are the array-length hint + the "construct" flag.
-extern AptValue* AptActionInterpreter_createObject(AptActionInterpreter* pInterp,
-                                                   AptValue* pScope, AptValue* pTarget,
-                                                   const EAStringC* pClassName,
-                                                   int nArrayLenHint, char bConstruct);
+// AptActionInterpreter::_createObject @0x82B08088 -- the value-materialiser; a real
+// member (declared in AptActionInterpreter.h, homed in AptActionInterpreterStackOps.cpp).
+// The New/Init/Define object handlers below call it directly on the interpreter; the
+// forwarding free-function shim was retired.
 
 // FLAG (engine rodata -- console &dword_8324E650, an entry of the static EAStringC
 // class-name table at dword_8324E580): the generic "Object" class name InitObject
@@ -142,8 +135,8 @@ void AptActionInterpreter::_FunctionAptActionNewObject(AptActionInterpreter* pIn
 
     pInterp->stackPop(2);
 
-    AptValue* pObject = AptActionInterpreter_createObject(   // FLAG: _createObject member
-        pInterp, static_cast<AptValue*>(pContext->mpCIH),
+        AptValue* pObject = pInterp->_createObject(   // real member @0x82B08088
+        static_cast<AptValue*>(pContext->mpCIH),
         pContext->mpPendingReleaseValue, pClassName, nArgCount, 1);
 
     if (pObject)
@@ -172,8 +165,8 @@ void AptActionInterpreter::_FunctionAptActionInitObject(AptActionInterpreter* pI
     const int nPairs = pInterp->mpStack[pInterp->mnStackTop - 1]->toInteger();
     pInterp->stackPop();                                     // pop the pair count
 
-    AptValue* pObject = AptActionInterpreter_createObject(   // FLAG: _createObject member
-        pInterp, static_cast<AptValue*>(pContext->mpCIH),
+        AptValue* pObject = pInterp->_createObject(   // real member @0x82B08088
+        static_cast<AptValue*>(pContext->mpCIH),
         pContext->mpPendingReleaseValue, &gAptObjectClassName, 0, 1);   // FLAG: class-name rodata
 
     if (pObject)

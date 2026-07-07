@@ -376,12 +376,9 @@ void AptActionInterpreter::_FunctionAptActionCloneSprite(AptActionInterpreter* p
     // AptActionInterpreter::_doCloneSprite (the AS duplicateMovieClip core; homed in
     // AptActionInterpreterInterpHelpers.cpp). Canonical signature (interpreter, AptCIH*
     // scope, AptValue* target, parent, name, depth, initObject=null).
-    extern AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* pInterp,
-                                                        AptCIH* pScope, AptValue* pTarget,
-                                                        AptValue* pParent, AptValue* pNameValue,
-                                                        int nDepth, AptValue* pInitObject);
-    AptActionInterpreter_doCloneSprite(pInterp, pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                       pParentValue, pNameValue, nDepth, nullptr);
+        // AptActionInterpreter::_doCloneSprite is now a member (declared in the header).
+        pInterp->_doCloneSprite(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                            pParentValue, pNameValue, nDepth, nullptr);
 
     pInterp->stackSafePop(3);   // console Burnout_X360_Artist_01e3_0(this, 3)
 }

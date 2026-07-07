@@ -82,8 +82,8 @@ extern void AptApt_FlushDeferredReleases();
 // behavioural cluster by name without redeclaring AptCIH's interface here. Each
 // returns the OR-accumulated "did work" flag the X360 bodies return in r3.
 // ---------------------------------------------------------------------------
-int AptCIH_tick(AptCIH* pCIH);                       // AptCIH::tick
-int AptCIH_GeneralisedProcess(AptCIH* pCIH, int a2); // AptCIH::GeneralisedProcess
+// AptCIH::tick is now called directly as a member (AptCIH.h is included below).
+// AptCIH::GeneralisedProcess is now called directly as a member (AptCIH.h is included below).
 
 // ---------------------------------------------------------------------------
 // ctor @0x82AE4850
@@ -309,7 +309,7 @@ int AptDisplayList::tick(int nDepthLayerMask, uint8_t bUseDepthLayerMask)
         bool bTick = (nTypeTag == 5 || nTypeTag == 9);
         // (charInst->mTypeFlags & 0xFC000000) == 0x10000000  <=>  GetTypeTag() == 4 (button).
         if (bTick || (pCharInst->mTypeFlags & 0xFC000000u) == 0x10000000u)
-            nResult |= AptCIH_tick(pNode);   // FLAG: AptCIH::tick (un-homed behavioural cluster)
+            nResult |= pNode->tick();   // AptCIH::tick
     }
 
     return nResult;
@@ -332,7 +332,8 @@ int AptDisplayList::GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t 
         if (!bUseDepthLayerMask ||
             ((1 << pNode->GetCharacterInst()->GetRenderItem()->GetDepth()) & nDepthLayerMask) != 0)
         {
-            nResult |= AptCIH_GeneralisedProcess(pNode, nFlags);   // FLAG: AptCIH::GeneralisedProcess (un-homed)
+            nResult |= static_cast<int>(pNode->GeneralisedProcess(
+                           reinterpret_cast<AptCIH*>(static_cast<intptr_t>(nFlags)), nullptr));   // AptCIH::GeneralisedProcess
         }
     }
 
@@ -522,7 +523,7 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
 // ---------------------------------------------------------------------------
 // Canonical sig: the X360/PS3 AptCIH::queueClipEvents(int, unsigned int, int) -- the
 // frame-id (a3) is UNSIGNED. Reconciled across the three call-site TUs (was int here).
-extern AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, unsigned int nFrameId, int nFlag);
+// AptCIH::queueClipEvents is now called directly as a member (AptCIH.h is included above).
 extern int gnAptActionFrameId;
 
 // ---------------------------------------------------------------------------
@@ -624,8 +625,8 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
     if (bRunLoad)
     {
         pSprite->mnClipActionFlags |= 0x4020000u;
-        AptCIH_queueClipEvents(static_cast<AptValue*>(pNode), 512,     gnAptActionFrameId, 1);
-        AptCIH_queueClipEvents(static_cast<AptValue*>(pNode), 0x40000, gnAptActionFrameId, 1);
+                pNode->queueClipEvents(512,     gnAptActionFrameId, 1);
+        pNode->queueClipEvents(0x40000, gnAptActionFrameId, 1);
         pSprite->mnClipActionFlags &= 0xFBFDFFFFu;
     }
 }
@@ -644,7 +645,7 @@ extern AptCIH* AptDLState_CreateInstAtDepth(AptDisplayListState* pState, int nDe
                                             AptCharacter* pCharacter, AptCIH* pParentNode);
 extern AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* pNode);
 extern void    AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject);
-extern int     AptCIH_AssociateInstToClass(AptCIH* pNode);
+// AptCIH::AssociateInstToClass is now a member of AptCIH (declared in AptCIH.h).
 
 // The class-binding tail's collaborators (see AptCIH_AssociateInstToClass below).
 extern AptNativeHash* gpAptClassRegistry;             // dword_8324E2D4 (AptObject.cpp)
@@ -879,7 +880,7 @@ AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharac
         // its non-reserved members onto the freshly placed instance.
         if (pClassObject != nullptr && ((pClassObject->mnValueData >> 27) & 1u) != 0u)
             AptCIH_CloneClassMembers(pNode, pClassObject);
-        AptCIH_AssociateInstToClass(pNode);
+        pNode->AssociateInstToClass();
     }
 
     return pNode;
@@ -1272,10 +1273,11 @@ void AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
 // Re-enable together with deleting the AptRuntimeSetComponent* shim (single driver).
 static const bool KB_CLASS_BINDING = false;
 
-int AptCIH_AssociateInstToClass(AptCIH* pNode)
+int AptCIH::AssociateInstToClass()
 {
     if (!KB_CLASS_BINDING)
         return 0;
+    AptCIH* const pNode = this;   // console r3 (`result`) is the node `this`
     AptCharacterInst* const pInst = pNode->GetCharacterInst();   // *(node+32)
     if (!pInst)
         return 0;

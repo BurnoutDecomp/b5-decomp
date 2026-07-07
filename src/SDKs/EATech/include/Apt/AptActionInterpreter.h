@@ -222,6 +222,57 @@ public:
     // to the AptValue object it designates (findChild on the parsed context), or
     // null. Used by the SetTarget / valueToObject paths.
     AptValue* getObject(AptValue* pScope, AptValue* pTarget, const EAStringC* pName);
+    // ExecuteScriptFunction -- callFunction @0x82AE3C08's AptScriptFunctionBase frame-
+    // execution branch (tags 34/35/36): install the fn + constant pool, Setup/Setup-
+    // Argument/runStream/Cleanup, restore state. CallFunctionDispatch drives it. Body in
+    // AptActionInterpreterInterpHelpers.cpp.
+    AptValue* ExecuteScriptFunction(AptValue* pScope, AptValue* pFunction, int nArgs,
+                                    AptValue* pNewTarget, AptValue* pConstructTarget);
+
+    // SetVariableFallback -- setVariable @0x82B03048's tail when the context exposes no
+    // native hash: store into the CIH node's frame-context hash (movie-clip nodes) or the
+    // global ParentAnim hash. Body in AptActionInterpreterInterpHelpers.cpp.
+    bool SetVariableFallback(AptValue* pContext, const EAStringC* pName, AptValue* pValue, int nDirect);
+
+    // SetInScopeChain -- setVariable @0x82B03048's nSearchScopeChain store: overwrite
+    // the name where an enclosing frame (spFrameStack, else the function's parent scope)
+    // already binds it. Body in AptActionInterpreterInterpHelpers.cpp.
+    bool SetInScopeChain(const EAStringC* pName, AptValue* pValue);
+
+    // LookupGlobalFallback -- getVariable @0x82B03430's no-target tail: the _level /
+    // global-object frame (the running function's ParentAnim native hash) last-resort
+    // lookup. Body in AptActionInterpreterInterpHelpers.cpp.
+    AptValue* LookupGlobalFallback(AptValue* pContext, const EAStringC* pName, int nDirect);
+
+    // _doCloneSprite @0x82B0DC60 -- AS duplicateMovieClip core: resolve pParentValue to
+    // its clip (valueToObject), InsertChild a clone under the display parent, copy the
+    // source render data + init-object members, tick it live. Body in
+    // AptActionInterpreterInterpHelpers.cpp.
+    AptValue* _doCloneSprite(AptCIH* pScope, AptValue* pTarget, AptValue* pParentValue,
+                             AptValue* pNameValue, int nDepth, AptValue* pInitObject);
+
+    // loadVariables @0x82B07DF8 -- AS loadVariables: fetch pURL via the host hook,
+    // parse the body as key=value[&...] pairs (urlDecode) and setVariable each onto
+    // (pScope, pTarget). Body in AptActionInterpreterInterpHelpers.cpp.
+    void loadVariables(AptValue* pScope, AptValue* pTarget, EAStringC* pURL);
+
+    // ResolveTranscode -- _parseStream @0x82AF3440's opcode-length walk (advance the PC
+    // past each opcode's inline operands + drive the per-opcode rebase/flush). _parseStream()
+    // forwards to it. Body in AptActionInterpreterInterpHelpers.cpp.
+    const unsigned char* ResolveTranscode(const unsigned char* pStream, int nRelocBase,
+                                          AptValue* pResolveCtx, int nDirection);
+
+    // EnumerateMembers -- _doEnumerate @0x82B036D8's native-hash key walk (push one
+    // AptString per enumerable member, skipping the two reserved keys). _doEnumerate()
+    // forwards to it. Body in AptActionInterpreterInterpHelpers.cpp.
+    void EnumerateMembers(AptValue* pScope, AptValue* pTarget);
+
+    // CallFunctionDispatch -- callFunction @0x82AE3C08's dispatch body (native-fn /
+    // script-fn / not-callable arms + the post-call abort collapse). callFunction()
+    // forwards to it. Body in AptActionInterpreterInterpHelpers.cpp.
+    AptValue* CallFunctionDispatch(AptValue* pScope, AptValue* pFunction, int nArgs,
+                                   AptValue* pNewTarget, AptValue* pConstructTarget);
+
 
     // getName @0x82AF75C8 / getName2 @0x82AF7540 -- build the slash/dot path name of
     // a value into pOut (getName2 also appends a trailing "/" for an empty path).

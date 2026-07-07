@@ -60,14 +60,13 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // AptCIH_queueClipEvents AptAnimationTarget.cpp already declares).
 // Canonical sig: X360/PS3 AptCIH::queueClipEvents(int, unsigned int, int) -- a3 (the
 // frame id) is UNSIGNED; reconciled across all three declaring TUs.
-AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, unsigned int nFrameId, int bDeferred);
+// AptCIH::queueClipEvents is now called directly as a member (AptCIH.h is included above).
 
 // FLAG (un-homed AptDisplayList behavioural follow-on; console AptDisplayList::mergeState
 // @0x82B0B438 -- explicitly BLOCKED in AptDisplayList.h's note): merge a rebuilt scratch
 // pseudo display list into this live child list. Declared as a free function taking the
 // child list so the home file can name it without editing AptDisplayList.h.
-void* AptDisplayList_mergeState(AptDisplayList* pList, AptPseudoDisplayList* pScratch,
-                                void* pProperties, char bForward);
+// AptDisplayList::mergeState is now called directly as a member (AptDisplayList.h is included above).
 
 // ---------------------------------------------------------------------------
 // AptCIH_GetClipMovie -- the AptMovie timeline embedded inside a sprite/animation
@@ -465,7 +464,8 @@ int AptCIH::jumpToFrame(int nFrame)
             }
 
             pInst->mnGotoFrame = nFrame;
-            AptDisplayList_mergeState(&pInst->mDisplayList, pScratch, pProperties, bForward);
+            pInst->mDisplayList.mergeState(reinterpret_cast<void**>(pScratch),
+                                           static_cast<AptNativeHash*>(pProperties), bForward);
 
             if (pScratch)
             {
@@ -592,13 +592,13 @@ label_27:
          ((pInst->mTypeFlags & 0xFC000000u) == 0x24000000u)) &&
         (((pInst->mnClipActionFlags & 0x200u) != 0) || HasEventMember(2)))
     {
-        AptCIH_queueClipEvents(this, 2, gnAptActionFrameId, 1);
+        queueClipEvents(2, gnAptActionFrameId, 1);
     }
     // (4) construct/load clip event on first placement; then clear the freshly-placed bit.
     if ((pInst->mnClipActionFlags & 0x80u) != 0)
     {
         if (((pInst->mnClipActionFlags & 0x100u) != 0) || HasEventMember(1))
-            AptCIH_queueClipEvents(this, 1, gnAptActionFrameId, 1);
+            queueClipEvents(1, gnAptActionFrameId, 1);
         pInst->mnClipActionFlags &= ~0x80u;
     }
 

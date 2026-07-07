@@ -42,7 +42,7 @@ int AptMovie::labelToFrame(const EAStringC* pLabel) const
     {
         AptValue* pValue = mpLabelHash->Lookup(*pLabel);
         if (pValue)
-            return AptValue_toInteger(pValue);
+            return pValue->toInteger();
     }
     return -1;
 }

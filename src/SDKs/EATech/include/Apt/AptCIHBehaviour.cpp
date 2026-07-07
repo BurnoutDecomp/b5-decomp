@@ -245,10 +245,9 @@ AptCharacterAnimationInst* AptCIH::GetAnimationInst() const
 //   (type tag in bits 26..31); the animation tag is 9 (0x24000000 >> 26).
 // ---------------------------------------------------------------------------
 
-// FLAG (homed with AptAnimationTarget; console @0x82B0...): remove every per-frame
-// timer/event function this node registered against the animation director. Declared
-// here (free-function form, like AptAnimationTarget_RunActions) until that TU bodies it.
-void AptAnimationTarget_RemoveTimerFunctions(AptAnimationTarget* pAnim, AptCIH* pNode);
+// AptAnimationTarget::RemoveTimerFunctions @0x82AE4320 -- remove every per-frame
+// timer/event function this node registered against the animation director; now called
+// directly on the member (the AptAnimationTarget_RemoveTimerFunctions shim is retired).
 
 void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRenderData)
 {
@@ -270,7 +269,7 @@ void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRender
         // The freshly installed instance is an animation node (type tag 9) -> drop its
         // registered per-frame timer functions from the animation director.
         if ((mpCharacterInst->GetTypeTag() == 9u) && gpAptTarget != nullptr)
-            AptAnimationTarget_RemoveTimerFunctions(gpAptTarget->mpAnimationTarget, this);
+            gpAptTarget->mpAnimationTarget->RemoveTimerFunctions(this);
 
         // GC-tear-down + free the old instance (the X360's DestroyGCPointers + the
         // vtable-0 scalar-deleting destructor; AptCharacterInst is DOGMA-pool-backed).
@@ -2067,43 +2066,33 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
 
 // AptCIH_tick -- AptCIH::tick @0x82B0BED8 (homed in AptCIH.cpp). Returns int (tick's
 // enterFrame-stage result the AptDisplayList walk OR-s into nResult).
-int AptCIH_tick(AptCIH* pCIH) { return pCIH->tick(); }
+// AptCIH_tick RETIRED: now called directly as the AptCIH::tick member (defined in AptCIH.cpp).
 
 // AptCIH_GeneralisedProcess -- AptCIH::GeneralisedProcess per-node. The AptDisplayList
 // walk passes (node, nFlags) where nFlags is the walk's `a2` (the root context pointer
 // in the X360); the third (void* context) arg is unused by that call site (r5 carries
 // the leftover), so it is forwarded as null.
-int AptCIH_GeneralisedProcess(AptCIH* pCIH, int a2)
-{
-    // FLAG (x64): the X360 a2 is the root-context pointer; the existing free-shim/DL
-    // signatures carry it through `int`, so widen back via intptr_t (the value is only
-    // re-passed, never dereferenced through this width).
-    AptCIH* const pRoot = reinterpret_cast<AptCIH*>(static_cast<intptr_t>(a2));
-    return static_cast<int>(pCIH->GeneralisedProcess(pRoot, nullptr));
-}
+// AptCIH_GeneralisedProcess RETIRED: now called directly as the AptCIH::GeneralisedProcess
+// member (defined above @ line 1664); the free-function forwarder is removed.
 
 // AptCIH_queueClipEvents -- AptCIH::queueClipEvents (canonical (int, unsigned int, int)).
 // The console passes the CIH as an AptValue*; narrow to the node.
-AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, unsigned int nFrameId, int bDeferred)
-{
-    return static_cast<AptCIH*>(pCIH)->queueClipEvents(nEventMask, nFrameId, bDeferred);
-}
+// AptCIH_queueClipEvents RETIRED: now called directly as the AptCIH::queueClipEvents
+// member (defined above @ line 1626); the free-function forwarder is removed.
 
 // AptCIH_SetCharacterInst -- AptCIH::SetCharacterInst @0x82B00548 (homed above).
-void AptCIH_SetCharacterInst(AptCIH* pCIH, AptCharacterInst* pInst, int bFlag)
-{
-    pCIH->SetCharacterInst(pInst, bFlag != 0);
-}
+// AptCIH_SetCharacterInst RETIRED: now called directly as the AptCIH::SetCharacterInst
+// member (defined above @ line 253); the free-function forwarder is removed.
 
 // AptCIH_InsertChild -- AptCIH::InsertChild @0x82B09CA0: place pCharacter into pNode's
 // child display list (mpCharacterInst->mDisplayList) at nDepth under pName. The X360
 // seeds the placement field (a6/nPlacementField18) from pSource's char-inst render-item
 // +0x18 when pSource is given, then forwards to AptDisplayList::placeObject.
-AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharacter,
-                           int nDepth, EAStringC* pName, AptValue* pInitObject)
+AptCIH* AptCIH::InsertChild(AptCIH* pSource, AptCharacter* pCharacter,
+                            int nDepth, EAStringC* pName, AptValue* pInitObject)
 {
-    AptCharacterSpriteInstBase* pSpriteInst =
-        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
+        AptCharacterSpriteInstBase* pSpriteInst =
+        static_cast<AptCharacterSpriteInstBase*>(GetCharacterInst());
     AptDisplayList* pChildList = &pSpriteInst->mDisplayList;
 
     // console @0x82B09CD0: a SINGLE deref reads the source char-inst's subclass placement
@@ -2115,7 +2104,7 @@ AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharac
             static_cast<AptCharacterSpriteInstBase*>(pSource->GetCharacterInst())->mpClipEventHandlers;
 
     return pChildList->placeObject(
-        /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, pNode,
+        /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, this,
         /*bForceRemove*/ 1, /*nClipDepth*/ -1, /*fFrameValue*/ 0.0,
         /*pColorXForm*/ nullptr, /*pPositionMatrix*/ nullptr,
         pPlacementClipActions, /*pClassObject*/ pInitObject);
@@ -2125,12 +2114,8 @@ AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharac
 // AptDisplayList.cpp). The X360 passes the source AptPseudoDisplayList directly as the
 // merge-info pointer (its [0]=inner list / [1]=owning parent are read inside), the
 // AS property hash as pParentHash, and bForward as the keep-removed flag.
-void* AptDisplayList_mergeState(AptDisplayList* pList, AptPseudoDisplayList* pScratch,
-                                void* pProperties, char bForward)
-{
-    return pList->mergeState(reinterpret_cast<void**>(pScratch),
-                             static_cast<AptNativeHash*>(pProperties), bForward);
-}
+// AptDisplayList_mergeState RETIRED: now called directly as the AptDisplayList::mergeState
+// member (defined in AptDisplayList.cpp @ 0x82B0B438); the free-function forwarder is removed.
 
 // AptCIH_PreDestroyHook -- AptCIH::PreDestroy's optional notify hook (console dword_8324E8A0).
 // FLAG PC-platform leaf: the host-installed pre-destroy callback boundary (dispatch when installed, else no-op).

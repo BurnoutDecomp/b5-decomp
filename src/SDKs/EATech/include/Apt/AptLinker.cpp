@@ -39,8 +39,8 @@ bool Burnout_X360_Artist_0040_0(EAStringC* pName, EAStringC* pReference);
 // FLAG (un-homed AptCIH behavioural surface): set the character instance on a CIH
 // (@0x82B00548) and tick it (@0x82B0BED8). Declared so Update/ConvertToZombie
 // compile; bodies in the AptCIH behavioural cluster.
-void AptCIH_SetCharacterInst(AptCIH* pCIH, AptCharacterInst* pInst, int bFlag);   // AptCIH::SetCharacterInst
-int AptCIH_tick(AptCIH* pCIH);                                                    // AptCIH::tick
+// AptCIH::SetCharacterInst is now called directly as a member (AptCIH.h is included).
+// AptCIH::tick is now called directly as a member (AptCIH.h is included).
 
 // FLAG (un-homed GC primitive): @0x82AE4DF0 / PS3 _Z17ReplaceReferences...
 // ReplaceReferences(pOld, pNew, ppTable, nCount) -- retarget every live reference
@@ -50,9 +50,8 @@ int AptCIH_tick(AptCIH* pCIH);                                                  
 // binds: 0 -> (AptValue**)nullptr, 0 -> nCount). Body its own GC TU.
 int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nCount);
 
-// FLAG (un-homed): @0x82B0C9B0 AptAnimationTarget::RunActions -- flush the queued
-// deferred ActionScript actions for the director.
-void AptAnimationTarget_RunActions(AptAnimationTarget* pAnim);
+// AptAnimationTarget::RunActions @0x82B0C9B0 -- flush the queued deferred ActionScript
+// actions for the director; now called directly on the member (the AptAnimationTarget_RunActions shim is retired).
 
 // The X360 reads/writes the int16 placed depth at AptRenderItem+0x14 and dispatches
 // a vtbl slot (+0x14 == CopyRenderDataFrom) to copy visual state during a zombie
@@ -516,7 +515,7 @@ void AptLinker::Update()
                     // empty-placeholder AptCharacterInst vtable, un-homed data sym).
                     InstallEmptyCharacterInstVtbl(pInst);
                 }
-                AptCIH_SetCharacterInst(pCIH, pInst, 1);                   // AptCIH::SetCharacterInst(v24, v29, 1)
+                pCIH->SetCharacterInst(pInst, true);                       // AptCIH::SetCharacterInst(v24, v29, 1)
                 pCIH->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
                 ListErase(&mpThingyListHead, &mpThingyListHead);          // sub_82AF83A0(a1, &v82) -- drop head
             }
@@ -568,7 +567,7 @@ void AptLinker::Update()
                     pCIH->ForceCleanNativeHash();                          // AptCIH::ForceCleanNativeHash(v61)
                 }
                 pCIH->mFlagsA &= 0x9FFFFFFFu;                              // v61[3] &= 0x9FFFFFFF
-                AptCIH_SetCharacterInst(pCIH, /*as inst*/reinterpret_cast<AptCharacterInst*>(pAnimInst), 1);
+                pCIH->SetCharacterInst(/*as inst*/reinterpret_cast<AptCharacterInst*>(pAnimInst), true);
                 pCIH->setIsDefined(true);                                  // AptValue::setIsDefined(v61,1)
                 // SetCharacterInst installed the new AptCharacterAnimationInst -- an
                 // AptCharacterSpriteInstBase. Reset its pending goto-frame to "none"
@@ -580,7 +579,7 @@ void AptLinker::Update()
                 pSpriteInst->mnGotoFrame        = -1;       // *(v61[8]+16) = -1
                 pSpriteInst->mnClipActionFlags |= 0x80u;    // *(v61[8]+20) |= 0x80
                 pCIH->SetDirtyState(false, false);                        // AptCIH::SetDirtyState(...,0)
-                AptCIH_tick(pCIH);                                        // AptCIH::tick
+                pCIH->tick();                                            // AptCIH::tick
                 pCIH->SetDirtyState(true, true);                          // AptCIH::SetDirtyState(v61,1,1)
                 pThingy->mbLinked = true;                                 // *(_R29+12) = 1
 
@@ -615,7 +614,7 @@ void AptLinker::Update()
         empty.mnSize = 0; empty.mnCapacity = 0; empty.mpData = empty.mInlineStorage;
         empty.mInlineStorage[0].pData = nullptr; empty.mInlineStorage[1].pData = nullptr;
         mPendingFiles.Swap(empty);                                        // sub_82AFF018(a1+4, v83)
-        AptAnimationTarget_RunActions(gpAptTarget->mpAnimationTarget);    // AptAnimationTarget::RunActions(off_8324E574->mpAnimationTarget)
+        gpAptTarget->mpAnimationTarget->RunActions();    // AptAnimationTarget::RunActions(off_8324E574->mpAnimationTarget)
         // ~empty (Strin(v83)) releases the swapped-out elements.
     }
 }

@@ -54,7 +54,7 @@ struct AptLoaderNode
 struct AptTarget;
 AptTarget* GetTarget();
 struct AptLoader;
-AptLoader* AptTarget_GetLoader(AptTarget* pTarget);
+// AptTarget_GetLoader is now the member AptTarget::GetLoader() (declared in AptTarget.h).
 
 struct AptLoader
 {

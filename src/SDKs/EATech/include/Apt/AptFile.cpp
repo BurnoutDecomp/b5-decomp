@@ -15,7 +15,8 @@
 #include <new>   // placement new for MakeAptFile's EAStringC member construct
 
 #include "SDKs/EATech/include/Apt/AptFile.h"
-#include "SDKs/EATech/include/Apt/AptLoader.h"   // GetTarget / AptTarget_GetLoader / AptLoader::Invalidate
+#include "SDKs/EATech/include/Apt/AptLoader.h"   // GetTarget / AptLoader::Invalidate
+#include "SDKs/EATech/include/Apt/AptTarget.h"   // AptTarget::GetLoader (full type for the member call)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // AptImportEntry (import-table record) + AptCharacter
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"            // AptSharedPtr<AptFile>::Dispose
 
@@ -75,7 +76,7 @@ AptFile::~AptFile()
     //    while GetTarget() is null -- see the FLAG in AptLoader.h).
     if (AptTarget* pTarget = GetTarget())
     {
-        if (AptLoader* pLoader = AptTarget_GetLoader(pTarget))
+        if (AptLoader* pLoader = pTarget->GetLoader())
             pLoader->Invalidate(this);
     }
 

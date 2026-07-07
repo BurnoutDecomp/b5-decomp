@@ -241,10 +241,10 @@ AptValue* AptInterp_HashLookupName(AptNativeHash* pHash, EAStringC** pNameSlot)
 // that function's ParentAnim frame's native hash. Returns the found value, or null
 // (the caller then fires the not-found callback and yields `undefined`).
 // ---------------------------------------------------------------------------
-AptValue* AptInterp_LookupGlobalFallback(AptActionInterpreter* pInterp,
-                                         AptValue* pContext, const EAStringC* pName,
-                                         int nDirect)
+AptValue* AptActionInterpreter::LookupGlobalFallback(AptValue* pContext, const EAStringC* pName,
+                                                     int nDirect)
 {
+    AptActionInterpreter* const pInterp = this;
     // console @0x82B03628: nDirect (a7/r22) gates the global-frame lookup OFF -- a direct
     // member access (obj.member) returns not-found rather than consulting the _global frame.
     if (nDirect)
@@ -283,9 +283,9 @@ AptValue* AptInterp_LookupGlobalFallback(AptActionInterpreter* pInterp,
 // scope. Returns true when an existing binding was found and overwritten (no new
 // binding is created here).
 // ---------------------------------------------------------------------------
-bool AptInterp_SetInScopeChain(AptActionInterpreter* pInterp,
-                               const EAStringC* pName, AptValue* pValue)
+bool AptActionInterpreter::SetInScopeChain(const EAStringC* pName, AptValue* pValue)
 {
+    AptActionInterpreter* const pInterp = this;
     // console: v22 = *(a1 + 60); a null running function has no scope chain.
     AptScriptFunctionBase* const pFunction = pInterp->mpCurrentFunction;
     if (!pFunction)
@@ -319,9 +319,10 @@ bool AptInterp_SetInScopeChain(AptActionInterpreter* pInterp,
 // When a hash is found the value is stored under the name. Returns true in every
 // faithful path the console returns 1 (it always reports "handled").
 // ---------------------------------------------------------------------------
-bool AptInterp_SetVariableFallback(AptActionInterpreter* pInterp, AptValue* pContext,
-                                   const EAStringC* pName, AptValue* pValue, int nDirect)
+bool AptActionInterpreter::SetVariableFallback(AptValue* pContext, const EAStringC* pName,
+                                               AptValue* pValue, int nDirect)
 {
+    AptActionInterpreter* const pInterp = this;
     const AptVirtualFunctionTable_Indices eType = pContext->getVtblIndex();
     const bool bIsNode =
         (eType == AptVFT_CharacterInstHandle && pContext->getIsDefined())  // tag 12
@@ -467,9 +468,9 @@ extern AptValue* AptApt_LoadVariablesFetch(const char* pUrl);   // dword_8324E84
 // the default no-arg fetch hook. Each emitted value is a fresh AptString seeded from
 // the decoded value text.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter_loadVariables(AptActionInterpreter* pInterp, AptValue* pScope,
-                                        AptValue* pTarget, EAStringC* pURL)
+void AptActionInterpreter::loadVariables(AptValue* pScope, AptValue* pTarget, EAStringC* pURL)
 {
+    AptActionInterpreter* const pInterp = this;
     // console: v7 = a4 ? dword_8324E84C(a4->m_strText) : dword_8324E850().
     AptValue* const pLoaded = AptApt_LoadVariablesFetch(pURL ? pURL->GetBuffer() : nullptr);   // FLAG: host fetch
 
@@ -505,9 +506,9 @@ void AptActionInterpreter_loadVariables(AptActionInterpreter* pInterp, AptValue*
 // reserved internal keys (__proto__ / prototype). pScope/pTarget are the run scope +
 // current target the name resolves against.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter_EnumerateMembers(AptActionInterpreter* pInterp,
-                                           AptValue* pScope, AptValue* pTarget)
+void AptActionInterpreter::EnumerateMembers(AptValue* pScope, AptValue* pTarget)
 {
+    AptActionInterpreter* const pInterp = this;
     // console: Variable = stack top (4 * *a1 + a1[2] - 4 -> mpStack[mnStackTop-1]).
     AptValue* pVariable = pInterp->mpStack[pInterp->mnStackTop - 1];
 
@@ -625,8 +626,7 @@ int AptActionInterpreter_BuildPathName(AptActionInterpreter* /*pInterp*/,
 // a clone of pSource (or a fresh instance of pCharacter) under pNode at nDepth named
 // pName, returning the inserted node. The display-tree insertion is not yet a
 // reconstructed body; declared here to keep the clone call shape faithful.
-extern AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharacter,
-                                  int nDepth, EAStringC* pName, AptValue* pInitObject);   // AptCIH::InsertChild
+// AptCIH::InsertChild is now a member (declared in AptCIH.h, included above).
 
 // FLAG (the process-wide AS VM -- homed by AptActionInterpreter, console
 // dword_8324E760 == &gAptActionInterpreter.mnStackTop): the init-object member copy
@@ -644,10 +644,9 @@ extern AptActionInterpreter gAptActionInterpreter;
 // init object's members onto the clone via setVariable (skipping the reserved keys).
 // Ticks the new instance live and returns the inserted clone (or `undefined`).
 // ---------------------------------------------------------------------------
-AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* /*pInterp*/,
-                                             AptCIH* pScope, AptValue* pTarget,
-                                             AptValue* pParentValue, AptValue* pNameValue,
-                                             int nDepth, AptValue* pInitObject)
+AptValue* AptActionInterpreter::_doCloneSprite(AptCIH* pScope, AptValue* pTarget,
+                                               AptValue* pParentValue, AptValue* pNameValue,
+                                               int nDepth, AptValue* pInitObject)
 {
     // console: valueToObject(scope, target, parentValue, &resolved).
     AptValue* pResolved = nullptr;
@@ -671,8 +670,8 @@ AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* /*pInterp*/,
             AptCharacter* const pCharacter = pSourceInst->GetRenderItemWritable()->mpCharacter;
 
             // console: InsertChild(displayParent, source, character, depth, name, init).
-            AptCIH* const pClone = AptCIH_InsertChild(
-                pDisplayParent, pResolvedNode,
+                        AptCIH* const pClone = pDisplayParent->InsertChild(
+                pResolvedNode,
                 pCharacter, nDepth, const_cast<EAStringC*>(pName), pInitObject);
 
             // console: copy the source's render data onto the clone --
@@ -722,10 +721,8 @@ AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* /*pInterp*/,
 // reconstructed as named members -- so this innermost branch is encapsulated here,
 // matching the deferral the AptActionInterpreter.cpp callFunction FLAG documents.
 // Returns the call result value (already on the appropriate stack), or `undefined`.
-AptValue* AptInterp_ExecuteScriptFunction(AptActionInterpreter* pInterp,
-                                          AptValue* pScope, AptValue* pFunction,
-                                          int nArgs, AptValue* pNewTarget,
-                                          AptValue* pConstructTarget);
+// AptActionInterpreter::ExecuteScriptFunction is a member (declared in the header);
+// definition below.
 
 // ---------------------------------------------------------------------------
 // AptActionInterpreter::callFunction @0x82AE3C08 (X360) / 0xF57A90 (PS3) -- invoke an
@@ -736,11 +733,11 @@ AptValue* AptInterp_ExecuteScriptFunction(AptActionInterpreter* pInterp,
 // are popped and `undefined` is pushed. After the call, when an abort fired during it,
 // the operand stack is collapsed back to the pre-call depth.
 // ---------------------------------------------------------------------------
-AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInterp,
-                                                    AptValue* pScope, AptValue* pFunction,
-                                                    int nArgs, AptValue* pNewTarget,
-                                                    AptValue* pConstructTarget)
+AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue* pFunction,
+                                                     int nArgs, AptValue* pNewTarget,
+                                                     AptValue* pConstructTarget)
 {
+    AptActionInterpreter* const pInterp = this;
     // console: HIDWORD(v11) = *a1 - a4 -- the operand-stack depth this call must
     // unwind to if it aborts.
     const int nBase = pInterp->mnStackTop - nArgs;
@@ -763,8 +760,8 @@ AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInter
     {
         // FLAG: the AptScriptFunctionBase frame-execution branch (un-named vtable slots
         // + per-call register window) -- encapsulated; see the extern above.
-        pResult = AptInterp_ExecuteScriptFunction(pInterp, pScope, pFunction, nArgs,
-                                                  pNewTarget, pConstructTarget);
+                pResult = pInterp->ExecuteScriptFunction(pScope, pFunction, nArgs,
+                                                 pNewTarget, pConstructTarget);
     }
     else
     {
@@ -816,11 +813,11 @@ extern AptCIH* gpAptEmptyCIH;   // dword_8324D700 -- the pinned "EmptyCIH" AptCI
 // ---------------------------------------------------------------------------
 static bool g_bAptHomeScriptFnExec = true;   // LIVE: the AS script-function executor is homed + enabled
 
-AptValue* AptInterp_ExecuteScriptFunction(AptActionInterpreter* pInterp,
-                                          AptValue* pScope, AptValue* pFunction,
-                                          int nArgs, AptValue* pNewTarget,
-                                          AptValue* pConstructTarget)
+AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue* pFunction,
+                                                      int nArgs, AptValue* pNewTarget,
+                                                      AptValue* pConstructTarget)
 {
+    AptActionInterpreter* const pInterp = this;
     if (g_bAptHomeScriptFnExec)
     {
         AptScriptFunctionBase* const pFunc = static_cast<AptScriptFunctionBase*>(pFunction);
@@ -990,8 +987,7 @@ static void AptInterp_RebaseActionOperands(const unsigned char* /*pAction*/, int
 // code-only X360 export); the PS3 DecFIGS DWARF carries the full lifted switch this is
 // reconstructed from. The per-opcode pointer rebase is FLAG-encapsulated (see above).
 // ---------------------------------------------------------------------------
-const unsigned char* AptActionInterpreter_ResolveTranscode(AptActionInterpreter* /*pInterp*/,
-                                                           const unsigned char* pStream,
+const unsigned char* AptActionInterpreter::ResolveTranscode(const unsigned char* pStream,
                                                            int nRelocBase, AptValue* pResolveCtx,
                                                            int nDirection)
 {

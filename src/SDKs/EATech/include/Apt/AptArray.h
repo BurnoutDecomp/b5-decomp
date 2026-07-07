@@ -55,6 +55,8 @@ struct AptArray : public AptObject
     // AS args off the global native-arg stack. (sort/sortOn/join are a follow-on.)
     static AptValue* sMethod_push(AptArray* pThis, int nArgCount);
     static AptValue* sMethod_pop(AptArray* pThis);
+    static AptValue* sMethod_shift(AptArray* pThis);            // @0xF1D39C (PS3; ICF-folded out of the X360 dossier)
+
     static AptValue* sMethod_reverse(AptArray* pThis);
     static AptValue* sMethod_unshift(AptArray* pThis, int nArgCount);
     static AptValue* sMethod_slice(AptArray* pThis, int nArgCount);

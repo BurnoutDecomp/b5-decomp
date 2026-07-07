@@ -131,6 +131,13 @@ struct AptCIH : public AptValueGC
     // the "needs-an-update-tick" events (mask 0x200C0) was newly set, else 0. (AptCIH::
     // AssociateInstToClass uses the return to decide whether to register a tick.)
     int FindAndSetEvents();
+    // AssociateInstToClass @0x82B073B8 -- bind a freshly placed sprite(5)/animation(9)
+    // instance to its registered ActionScript class (build the AptPrototype, wire
+    // __proto__, resolve the class off the registered class-name registry, run the AS
+    // constructor, then FindAndSetEvents). Gated behind the class-binding bring-up flag.
+    // Returns 1 when a class was bound, else 0. Body in AptDisplayList.cpp.
+    int AssociateInstToClass();
+
 
     // GetAnimationInst @0x82B7B358 -- mpCharacterInst narrowed to the animation
     // subtype (caller has already confirmed IsAnimationInst, type tag 9).
@@ -183,6 +190,13 @@ struct AptCIH : public AptValueGC
     // zombie is queued for delayed release, and the replacement takes its slot.
     // Returns the inserted node (or `this` when this container has no child list).
     AptCIH* ReplaceZombieChild(AptCIH* pNewChild, AptCIH* pZombie);
+
+    // InsertChild @0x82B09CA0 -- place pCharacter into this node's child display list
+    // (mpCharacterInst->mDisplayList) at nDepth under pName; seeds the placement clip-
+    // actions from pSource's char-inst when given, then forwards to placeObject.
+    AptCIH* InsertChild(AptCIH* pSource, AptCharacter* pCharacter, int nDepth,
+                        EAStringC* pName, AptValue* pInitObject);   // @0x82B09CA0
+
 
     // ClearCIH @0x82AC... (X360-attested behavioural follow-on; body in its own
     // TU) -- tear down this node's character instance / placed state. Declared so

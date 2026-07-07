@@ -510,13 +510,9 @@ extern void AptApt_PopCallStackC(AptActionInterpreter* pInterp);
 extern AptValue* AptInterp_FrameStackFirstLocal(AptValue* pFrameStack);
 
 // AptActionInterpreter::_createObject @0x82B08088 -- the value-materialiser; HOMED in
-// this TU (defined at the bottom of this file). The ProtoOps + NewObject/NewMethod
-// handlers still reach it through this free shim (the encapsulation predates the
-// member declaration); the shim now forwards to the real member.
-extern AptValue* AptActionInterpreter_createObject(AptActionInterpreter* pInterp,
-                                                   AptValue* pScope, AptValue* pTarget,
-                                                   const EAStringC* pClassName,
-                                                   int nArrayLenHint, char bConstruct);
+// this TU (defined at the bottom of this file, declared in AptActionInterpreter.h).
+// The ProtoOps + NewObject/NewMethod handlers now call the real member directly; the
+// forwarding free-function shim was retired (was flagged apt_shim).
 
 // FLAG (engine rodata: the static EAStringC for "String" at the class-name table
 // dword_8324E580 -- console &dword_8324E6B4). _createObject's String branch uses it
@@ -1104,8 +1100,8 @@ void AptActionInterpreter::_FunctionAptActionNewMethod(AptActionInterpreter* pIn
         --pInterp->mnStackTop;                             // console: drop the count slot (no release)
     pInterp->stackPop();                                   // console Pop (the object slot's ref)
 
-    AptValue* const pObject = AptActionInterpreter_createObject(   // FLAG: _createObject (un-homed)
-        pInterp, pCtorObject, pContext->mpPendingReleaseValue, pName, nArgs, 1);
+        AptValue* const pObject = pInterp->_createObject(   // real member @0x82B08088
+        pCtorObject, pContext->mpPendingReleaseValue, pName, nArgs, 1);
     pCtorObject->Release();                                // console (*(*v8+4))(v8)
 
     if (pObject)
@@ -1565,17 +1561,8 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
     return pNew;
 }
 
-// ---------------------------------------------------------------------------
-// Free-shim forwarder: the ProtoOps + NewObject/NewMethod handlers reach the (now
-// homed) member through this. Kept until those callers can name the member directly.
-// ---------------------------------------------------------------------------
-AptValue* AptActionInterpreter_createObject(AptActionInterpreter* pInterp,
-                                            AptValue* pScope, AptValue* pTarget,
-                                            const EAStringC* pClassName,
-                                            int nArrayLenHint, char bConstruct)
-{
-    return pInterp->_createObject(pScope, pTarget, pClassName, nArrayLenHint, bConstruct);
-}
+// The free-function forwarder AptActionInterpreter_createObject was RETIRED: callers
+// now name the real member AptActionInterpreter::_createObject @0x82B08088 directly.
 
 // ===========================================================================
 // FLAG-stub homes for the two object-internal offset accessors declared extern
