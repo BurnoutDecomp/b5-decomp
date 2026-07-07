@@ -6,6 +6,10 @@
 // renderengine::Texture -- the sampled texture type (forward-declared; pointer-only use).
 namespace renderengine { class Texture; }
 
+// The material resource-type handler drives the streamed-material fix-up and calls the private
+// FixupAnimatedMaterial as part of PostFixUp (X360 0x828A83F0); grant it access.
+namespace CgsResource { class MaterialResourceType; }
+
 // CgsGraphics::MaterialAssembly @ CgsMaterialAssembly.h:54 (DecFIGS DWARF). A draw-time
 // material: an array of MaterialTechnique* (one per technique / LOD slot), the texture
 // samplers, and the per-stage shader-constant blocks. Layout + member order recovered
@@ -24,6 +28,8 @@ namespace CgsGraphics
 
     struct MaterialAssembly
     {
+        friend class CgsResource::MaterialResourceType;
+
         MaterialTechnique** mappMaterials;          // +0x00  per-technique table
         u32                 muNameHash;             // +0x04
         u8                  mu8NumMaterials;        // +0x08  technique count (bounds limit)

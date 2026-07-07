@@ -4,15 +4,12 @@
 // BrnAI::BrnAIDebugUtils -- AI-section debug-draw helpers (the "Main AI" overlay's
 // world-space visualisers). Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX.
 //
-// This batch bodies the three verified functions:
+// This TU bodies the section/portal/boundary-line debug-draw helpers:
 //   DrawBoundryLine        0x82767608
 //   DrawBoundryLineWithY   0x827674F8
 //   DrawSectionHNGGeometry 0x827745C8
-//
-// DrawAllSectionData (0x8277F8C8) and DrawPortalGeometry (0x827744C0) are DEFERRED --
-// their proposed bodies were not store-for-store faithful in this dossier (dropped the
-// third bool arg / duplicated the inlined bounds-assert / fabricated a palette-entry
-// name) -- so they are left declared-only in the header for their callers.
+//   DrawPortalGeometry     0x827744C0
+//   DrawAllSectionData     0x8277F8C8
 // ============================================================================
 
 #include "GameSource/World/AI/BrnAIDebugUtils.h"
@@ -40,6 +37,7 @@ namespace BrnAIDebugUtils
     // lwz/stw + oris/clrlwi bit-ops, i.e. as the packed RGBA8 word (rw::RGBA::m_rgba),
     // not as a struct; the word is wrapped into an rw::RGBA at the draw call.
     u32  _guHNGColourHighlight = 0; // dword_82F303E0
+    u32  _guPortalColour       = 0; // dword_82F303E4 (portal boundary-line colour)
     u32  _guHNGColourNormal    = 0; // dword_82F303EC
     u32  _guHNGWindowCounter   = 0; // dword_8300DC70
 
@@ -178,6 +176,77 @@ namespace BrnAIDebugUtils
             RGBA lLineColour;
             lLineColour.m_rgba = luColour;
             DrawBoundryLine(lpRender, lpLine, lLineColour, lfPortalY);
+        }
+    }
+
+    // BrnAI::BrnAIDebugUtils::DrawPortalGeometry @0x827744C0.
+    //
+    // Draw a portal's boundary lines: each drivable-gap line becomes a vertical quad
+    // whose top edge sits at the portal's Y height and whose bottom edge sits
+    // KF_BLINE_HALF_HEIGHT below it. The X360 assembles the portal's full (x, y, z, 0)
+    // position on the stack but the quad build consumes only the Y lane; the reference Y
+    // is taken from the portal position (lfs 4(portal)). The third DWARF bool arg is set
+    // up by the caller but the body never reads it.
+    void DrawPortalGeometry(CgsDev::Debug3DImmediateRender* lpRender,
+                            const Portal* lpPortal,
+                            bool /*lbDebugFlag*/)
+    {
+        const u32 luNumBoundaryLines = lpPortal->GetNumBoundryLines(); // lbz 0x12(portal)
+
+        // Reference Y for every quad on this portal (lane 1 of the portal position).
+        const f32 lfPortalY = lpPortal->GetPositionY();               // lfs 4(portal)
+
+        if (luNumBoundaryLines == 0)
+        {
+            return;
+        }
+
+        const f32 lfBottomY = lfPortalY - KF_BLINE_HALF_HEIGHT;       // fsubs f31, 40.0
+
+        for (u32 lu = 0; lu < luNumBoundaryLines; ++lu)
+        {
+            // GetBoundaryLine folds the inlined bounds-assert
+            // ("lu8BoundryIndex < mu8NumBoundaryLines") and returns &mpaBoundaryLines[lu].
+            const BoundaryLine* lpLine = lpPortal->GetBoundaryLine(static_cast<u8>(lu));
+
+            // Portal boundary-line colour word (mutable module word; read fresh each line).
+            u32 luColour = _guPortalColour;
+
+            // Per-endpoint top / bottom height arrays (both endpoints share this portal's Y).
+            f32 lafTopY[2];
+            f32 lafBottomY[2];
+            for (u32 luv = 0; luv < 2; ++luv)
+            {
+                lafTopY[luv]    = lfPortalY;
+                lafBottomY[luv] = lfBottomY;
+            }
+
+            RGBA lLineColour;
+            lLineColour.m_rgba = luColour;
+            DrawBoundryLineWithY(lpRender, lpLine, lLineColour, lafTopY, lafBottomY);
+        }
+    }
+
+    // BrnAI::BrnAIDebugUtils::DrawAllSectionData @0x8277F8C8.
+    //
+    // Draw all debug geometry for one AI section: first the section's HNG (hard-no-go)
+    // lines, then every portal's boundary-line quads. The bool is forwarded verbatim to
+    // both helpers.
+    void DrawAllSectionData(CgsDev::Debug3DImmediateRender* lpRender,
+                            const AISection* lpSection,
+                            bool lbDebugFlag)
+    {
+        const u32 luNumPortals = lpSection->mu8NumPortals;            // lbz 0x14(section)
+
+        DrawSectionHNGGeometry(lpRender, lpSection, lbDebugFlag);
+
+        if (luNumPortals != 0)
+        {
+            for (u32 lu = 0; lu < luNumPortals; ++lu)
+            {
+                // &mpaPortals[lu] (20-byte stride); no bounds-assert in this path.
+                DrawPortalGeometry(lpRender, &lpSection->mpaPortals[lu], lbDebugFlag);
+            }
         }
     }
 }

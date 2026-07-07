@@ -13,10 +13,9 @@
 // BoundaryLine) are already homed: AISection in SharedClasses/AI/AISectionsResourceType.h,
 // Portal in BrnAIPortal.h, BoundaryLine in BrnAIBoundaryLine.h.
 //
-// This batch bodies DrawBoundryLine (0x82767608), DrawBoundryLineWithY (0x827674F8) and
-// DrawSectionHNGGeometry (0x827745C8). DrawAllSectionData (0x8277F8C8) and
-// DrawPortalGeometry (0x827744C0) are DEFERRED (their proposed bodies were not
-// store-for-store faithful in this dossier); declared here for the callers.
+// The TU bodies all five helpers: DrawBoundryLine (0x82767608), DrawBoundryLineWithY
+// (0x827674F8), DrawSectionHNGGeometry (0x827745C8), DrawPortalGeometry (0x827744C0)
+// and DrawAllSectionData (0x8277F8C8).
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"                             // rw::RGBA
@@ -39,14 +38,14 @@ namespace BrnAI
 
         // @0x8277F8C8 -- draw all debug geometry for one AI section: the HNG (hard-
         // no-go) lines then every portal's boundary lines. The bool is forwarded to
-        // DrawSectionHNGGeometry and DrawPortalGeometry. (DEFERRED body.)
+        // DrawSectionHNGGeometry and DrawPortalGeometry.
         void DrawAllSectionData(CgsDev::Debug3DImmediateRender* lpRenderer,
                                 const AISection* lpSection,
                                 bool lbDebugFlag);
 
         // @0x827744C0 -- draw one portal's boundary lines as vertical quads at the
         // portal's Y height. Third bool arg is part of the DWARF signature but unused
-        // by the body. (DEFERRED body.)
+        // by the body.
         void DrawPortalGeometry(CgsDev::Debug3DImmediateRender* lpRenderer,
                                 const Portal* lpPortal,
                                 bool lbDebugFlag);
