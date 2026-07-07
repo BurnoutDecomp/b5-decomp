@@ -596,8 +596,6 @@ const unsigned char* AptActionInterpreter::_parseStream(const unsigned char* pSt
 // manipulation is deferred to the interval-table helpers and the entry layer here
 // reads the args off the native-arg stack faithfully.
 // ---------------------------------------------------------------------------
-extern AptValue* AptActionInterpreter_SetIntervalImpl(AptValue* pCallback, int nArgCount);   // FLAG: interval-table setup
-extern void      AptActionInterpreter_ClearIntervalImpl(int nId);                            // FLAG: interval-table teardown
 
 AptValue* AptActionInterpreter::cbCallMethod_setInterval(AptValue* /*pThis*/, int nArgCount)
 {
@@ -607,13 +605,13 @@ AptValue* AptActionInterpreter::cbCallMethod_setInterval(AptValue* /*pThis*/, in
     AptValue* pCallback = gppAptNativeArgStack[gnAptNativeArgCount - 1];
     if (!pCallback->getIsDefined())
         return gpUndefinedValue;
-    return AptActionInterpreter_SetIntervalImpl(pCallback, nArgCount);   // FLAG: interval-table setup
+    return SetIntervalImpl(pCallback, nArgCount);   // the interval-table setup body
 }
 
 AptValue* AptActionInterpreter::cbCallMethod_clearInterval(AptValue* /*pThis*/, int /*nArgCount*/)
 {
     AptValue* pIdArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
     if (pIdArg->getIsDefined())
-        AptActionInterpreter_ClearIntervalImpl(pIdArg->toInteger());   // FLAG: interval-table teardown
+        ClearIntervalImpl(pIdArg->toInteger());   // the interval-table teardown body
     return gpUndefinedValue;
 }

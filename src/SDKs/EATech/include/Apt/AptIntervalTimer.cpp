@@ -116,6 +116,7 @@ void* AptIntervalTimer::_vector_deleting_destructor_(AptIntervalTimer* pArray, c
 #include "SDKs/EATech/include/Apt/AptTarget.h"                // gpAptTarget
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"      // the returned id value
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"       // the method-name form
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"      // AptActionInterpreter::Set/ClearIntervalImpl (members)
 
 extern AptValue** gppAptNativeArgStack;   // off_8324E768 (the operand-stack items)
 extern int32_t    gnAptNativeArgCount;    // dword_8324E760 (the live count)
@@ -138,7 +139,7 @@ extern AptValue*  gpUndefinedValue;       // off_8324D814
 // trailing arg (top-down) into mParams with an AddRef. Returns the new
 // AptInteger id, or the undefined singleton when the table has no free slot.
 // ---------------------------------------------------------------------------
-AptValue* AptActionInterpreter_SetIntervalImpl(AptValue* pCallback, int nArgCount)
+AptValue* AptActionInterpreter::SetIntervalImpl(AptValue* pCallback, int nArgCount)
 {
     const s32 nId = AptIntervalTimer::GenerateId();
 
@@ -202,7 +203,7 @@ AptValue* AptActionInterpreter_SetIntervalImpl(AptValue* pCallback, int nArgCoun
 // callback (vtbl[1]), Release the context when non-null, clear the gate,
 // CleanParams (Release + pop every queued param), and zero the id.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter_ClearIntervalImpl(int nId)
+void AptActionInterpreter::ClearIntervalImpl(int nId)
 {
     AptAnimationTarget* const pDir = gpAptTarget->mpAnimationTarget;
     for (u32 i = 0; i < pDir->mnNumIntervalTimers; ++i)
