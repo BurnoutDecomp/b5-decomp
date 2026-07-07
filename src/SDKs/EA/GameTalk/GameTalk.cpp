@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h" // CgsAttribSys::AttribSysMemoryManager
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h" // CgsAttribSys::AttribSysPackageAllocator
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "SDKs/Packages/GameTalk/1.8.0/include/GameTalk/IGameTalkProtocol.h" // EA::GameTalk::IGameTalkProtocol
 #include "rw/core/stdc/stdc.h"                       // rw::core::stdc::StringLength / StringnCopy
 
 #include <cctype>  // tolower
@@ -197,6 +198,12 @@ namespace GameTalk
         return mppEntries[liIndex]->miSize;
     }
 
+    // The message's tool channel string (the +0x10 member).
+    const char* GameTalkMessage::GetChannel() const
+    {
+        return mpcChannel;
+    }
+
     // @ 0x82837E88 -- parse a length-prefixed string from the wire cursor. Reads a
     // big-endian u32 length, advances past it, package-allocates len+1 bytes, copies len
     // bytes and NUL-terminates, advancing the cursor past the len string bytes.
@@ -376,6 +383,289 @@ namespace GameTalk
         }
 
         return luTotal;
+    }
+
+    // ========================================================================
+    // GameTalkManager bodies (reconstructed from BURNOUT_X360_ARTIST.XEX).
+    //
+    // The manager is the process-wide GameTalk singleton (off_8303577C). It owns a
+    // transport (IGameTalkProtocol) and a table of per-channel message handlers, and
+    // it ferries serialized GameTalkMessages between the running game and the
+    // external authoring tools. Layout (X360 offsets, pointers widened to x64):
+    //   +0x00 vtable  +0x04 mpcName  +0x08 mpProtocol  +0x0C mppHandlers
+    //   +0x10 miNumHandlers  +0x14 miMaxChannels   (X360 sizeof == 0x18 == 24)
+    // ========================================================================
+
+    // Convenience: the GameTalk package allocator every manager allocation routes
+    // through (asserts the AttribSys manager has been Prepare'd, matching the X360
+    // sbHasLinearAllocator check inlined at each Malloc/Free site).
+    namespace
+    {
+        CgsAttribSys::AttribSysPackageAllocator* GameTalkAllocator()
+        {
+            return CgsAttribSys::AttribSysMemoryManager::GetGameTalkAllocator();
+        }
+
+        // Shared keyword-message scratch buffer (X360 &unk_830358C8, a fixed file-scope
+        // region: +0x00 total length, +0x04 key length, +0x08 key bytes, then the value
+        // length + value bytes). The exact X360 capacity is not recovered; 256 bytes
+        // comfortably covers the short "gametalk.config.*" / "initialize" handshakes
+        // that are the only messages routed through SendKeywordMessage.
+        const s32 KI_KEYWORD_SCRATCH_SIZE = 256;
+        u8 sacKeywordScratch[KI_KEYWORD_SCRATCH_SIZE];
+    }
+
+    // The published singleton (X360 off_8303577C).
+    GameTalkManager* GameTalkManager::spInstance = 0;
+
+    // @ 0x82836CF8 -- return the process-wide singleton.
+    GameTalkManager* GameTalkManager::GetInstance()
+    {
+        return spInstance;
+    }
+
+    // @ 0x828392F8 -- construct the manager. Stores the transport, installs the
+    // receive trampoline into it, allocates + zeroes the handler table, then (when the
+    // transport is connected) emits the platform/version/initialize config handshake.
+    GameTalkManager::GameTalkManager(void* lpOwner, s32 liMaxChannels, const char* lpcName)
+        : mpcName(lpcName)
+        , mpProtocol(static_cast<IGameTalkProtocol*>(lpOwner))
+        , mppHandlers(0)
+        , miNumHandlers(0)
+        , miMaxChannels(liMaxChannels)
+    {
+        // Install the manager's receive trampoline into the transport (X360
+        // `stw ReceiverCallback, 4(protocol)`).
+        mpProtocol->mpfnMessageHandler = &GameTalkManager::ReceiverCallback;
+
+        // Allocate the handler table (X360 Alloc(4 * maxChannels); widened to x64
+        // pointer stride) and clear every slot.
+        mppHandlers = static_cast<MessageHandlerEntry**>(
+            EA::GameTalk::Alloc(liMaxChannels * static_cast<s32>(sizeof(MessageHandlerEntry*))));
+        for (s32 liSlot = 0; liSlot < miMaxChannels; ++liSlot)
+            mppHandlers[liSlot] = 0;
+
+        // Only announce the config handshake once the transport reports connected.
+        if (mpProtocol->IsConnected())
+        {
+            if (!mpcName)
+                mpcName = "Game.Xenon";
+
+            SendKeywordMessage("gametalk.config.platform", "xenon");
+            SendKeywordMessage("gametalk.config.version", "2.0.0.0");
+            SendKeywordMessage("initialize", mpcName);
+        }
+    }
+
+    // @ 0x828384A0 -- free the handler table (the vtable restore is the implicit
+    // dtor prologue; the deleting variant that also frees the object is the compiler
+    // vtable thunk). EA::GameTalk::Free tolerates a null table.
+    GameTalkManager::~GameTalkManager()
+    {
+        EA::GameTalk::Free(mppHandlers);
+        mppHandlers = 0;
+    }
+
+    // @ 0x82839420 -- package-allocate + construct the singleton and publish it.
+    void* GameTalkManager::CreateInstance(void* lpOwner, s32 liMaxChannels, const char* lpcName)
+    {
+        CGS_ASSERT(GameTalkAllocator() != 0, "sbHasLinearAllocator");
+        void* lpMem = GameTalkAllocator()->Malloc(sizeof(GameTalkManager), 0);
+        if (lpMem)
+            spInstance = new (lpMem) GameTalkManager(lpOwner, liMaxChannels, lpcName);
+        else
+            spInstance = 0;
+        return spInstance;
+    }
+
+    // @ 0x82837770 -- serialize a [key][value] keyword message into the shared scratch
+    // buffer (each field a big-endian u32 length prefix + bytes) and Send it. The
+    // total length prefixes the buffer: total = keyLen + valueLen + 12 (three u32
+    // prefixes).
+    s32 GameTalkManager::SendKeywordMessage(const char* lpcKey, const char* lpcValue)
+    {
+        const u32 luKeyLen   = static_cast<u32>(rw::core::stdc::StringLength(lpcKey));
+        const u32 luValueLen = static_cast<u32>(rw::core::stdc::StringLength(lpcValue));
+        const u32 luTotal    = luKeyLen + luValueLen + 12;
+
+        u8* lpuOut = sacKeywordScratch;
+        u32 luSwap;
+
+        // [+0x00] total length (big-endian).
+        luSwap = _byteswap_ulong(luTotal);
+        std::memcpy(lpuOut, &luSwap, 4);
+
+        // [+0x04] key length (big-endian), [+0x08] key bytes.
+        luSwap = _byteswap_ulong(luKeyLen);
+        std::memcpy(lpuOut + 4, &luSwap, 4);
+        rw::core::stdc::StringnCopy(reinterpret_cast<char*>(lpuOut + 8), lpcKey, luKeyLen);
+
+        // [after the key] value length (big-endian) + value bytes.
+        u8* lpuValue = lpuOut + 8 + luKeyLen;
+        luSwap = _byteswap_ulong(luValueLen);
+        std::memcpy(lpuValue, &luSwap, 4);
+        rw::core::stdc::StringnCopy(reinterpret_cast<char*>(lpuValue + 4), lpcValue, luValueLen);
+
+        return mpProtocol->Send(lpuOut, static_cast<s32>(luTotal));
+    }
+
+    // @ 0x82838508 -- serialize rMessage under lpcEndpoint and Send it over the
+    // singleton's transport, freeing the scratch wire buffer afterwards.
+    s32 GameTalkManager::SendMessage(const char* lpcEndpoint, GameTalkMessage& rMessage)
+    {
+        if (!spInstance)
+            return 0;
+
+        void* lpBuffer = 0;
+        const u32 luSize = rMessage.CreateBuffer(lpcEndpoint, &lpBuffer);
+        const s32 liResult = spInstance->mpProtocol->Send(lpBuffer, static_cast<s32>(luSize));
+
+        CGS_ASSERT(GameTalkAllocator() != 0, "sbHasLinearAllocator");
+        GameTalkAllocator()->Free(lpBuffer);
+        return liResult;
+    }
+
+    // Pointer overload (GROWN for the heap-built-message send path); forwards.
+    s32 GameTalkManager::SendMessage(const char* lpcEndpoint, GameTalkMessage* lpMessage)
+    {
+        return SendMessage(lpcEndpoint, *lpMessage);
+    }
+
+    // @ 0x82838AA8 -- build a "Client Message" carrying an Add/RemoveChannelFilter key
+    // for lpcChannelName and send it to the "GameTalkServer" endpoint. The message is a
+    // stack temporary, constructed and destructed in place.
+    s32 GameTalkManager::SendServerChannel(const char* lpcChannelName, bool lbAdd)
+    {
+        const char* lpcFilterKey = lbAdd ? "AddChannelFilter" : "RemoveChannelFilter";
+
+        GameTalkMessage lMessage("Client Message");
+        lMessage.AddKeyContent(lpcFilterKey, 0, lpcChannelName,
+                               rw::core::stdc::StringLength(lpcChannelName));
+        return SendMessage("GameTalkServer", lMessage);
+    }
+
+    // @ 0x82838B70 -- register lpHandler against the named channel filter in the first
+    // free handler slot, then announce the filter to the GameTalk server.
+    s32 GameTalkManager::RegisterMessageHandler(
+        GameTalkManager* lpManager, MessageHandler lpHandler, const char* lpcChannel)
+    {
+        if (lpManager->miNumHandlers >= lpManager->miMaxChannels)
+            return 0;
+
+        if (lpManager->miMaxChannels > 0)
+        {
+            // Find the first free slot; if the table is unexpectedly full, just
+            // (re-)announce the filter and bail without adding an entry.
+            s32 liSlot = 0;
+            while (lpManager->mppHandlers[liSlot])
+            {
+                ++liSlot;
+                if (liSlot >= lpManager->miMaxChannels)
+                    return SendServerChannel(lpcChannel, true);
+            }
+
+            CGS_ASSERT(GameTalkAllocator() != 0, "sbHasLinearAllocator");
+            MessageHandlerEntry* lpEntry = static_cast<MessageHandlerEntry*>(
+                GameTalkAllocator()->Malloc(sizeof(MessageHandlerEntry), 0));
+            if (lpEntry)
+            {
+                lpEntry->mpcChannel        = lpcChannel;
+                lpEntry->mpfnHandler       = lpHandler;
+                lpEntry->mpfnContextHandler = 0;
+                lpEntry->mpContext         = 0;
+            }
+
+            lpManager->mppHandlers[liSlot] = lpEntry;
+            ++lpManager->miNumHandlers;
+        }
+
+        return SendServerChannel(lpcChannel, true);
+    }
+
+    // @ 0x82836D08 -- hierarchical dotted-name channel match.
+    bool GameTalkManager::IsMessageMatching(const char* lpcChannel, const char* lpcPattern)
+    {
+        const char* lpcPat = lpcPattern ? lpcPattern : "";
+        if (EA::GameTalk::StrIEqual(lpcPat, ""))
+            return true;  // an empty pattern matches every channel
+
+        const s32 liChannelLen = rw::core::stdc::StringLength(lpcChannel);
+        const s32 liPatternLen = rw::core::stdc::StringLength(lpcPat);
+        if (liPatternLen > liChannelLen)
+            return false;
+
+        // Case-sensitive compare over the pattern length.
+        for (s32 i = 0; i < liPatternLen; ++i)
+        {
+            if (lpcChannel[i] != lpcPat[i])
+                return false;
+        }
+
+        // Exact match, or a dot-delimited prefix ("a.b" matches "a.b.c").
+        if (liPatternLen == liChannelLen)
+            return true;
+        return lpcChannel[liPatternLen] == '.';
+    }
+
+    // @ 0x82838FF0 -- handle a "Server Message". On an "UpdateTargetName" key, adopt
+    // the new instance name from the first entry's content, re-announce the config
+    // version, then re-register every live channel filter with the server.
+    s32 GameTalkManager::ConfigHandler(GameTalkMessage* lpMessage)
+    {
+        s32 liResult = 0;
+        if (lpMessage->GetNumKeys())
+        {
+            liResult = EA::GameTalk::StrIEqual(lpMessage->GetKey(0), "UpdateTargetName");
+            if (liResult)
+            {
+                mpcName = static_cast<const char*>(lpMessage->GetContent(0));
+                liResult = SendKeywordMessage("gametalk.config.version", "2.0.0.0");
+
+                for (s32 liSlot = 0; liSlot < miMaxChannels; ++liSlot)
+                {
+                    MessageHandlerEntry* lpEntry = mppHandlers[liSlot];
+                    if (lpEntry)
+                        liResult = SendServerChannel(lpEntry->mpcChannel, true);
+                }
+            }
+        }
+        return liResult;
+    }
+
+    // @ 0x828390B8 -- route a decoded incoming message: hand a "Server Message" to the
+    // config handler, then dispatch to every registered per-channel handler whose
+    // filter matches the message channel (single-arg handler preferred, else the
+    // context handler with the entry's context slot).
+    s32 GameTalkManager::ReceiveMessage(GameTalkMessage* lpMessage)
+    {
+        GameTalkManager* lpManager = spInstance;
+        s32 liResult = 0;
+        if (!lpManager)
+            return liResult;
+
+        if (IsMessageMatching(lpMessage->GetChannel(), "Server Message"))
+            liResult = lpManager->ConfigHandler(lpMessage);
+
+        for (s32 liSlot = 0; liSlot < lpManager->miMaxChannels; ++liSlot)
+        {
+            MessageHandlerEntry* lpEntry = lpManager->mppHandlers[liSlot];
+            if (!lpEntry)
+                continue;
+
+            if (IsMessageMatching(lpMessage->GetChannel(), lpEntry->mpcChannel))
+            {
+                // The registered handlers are void-returning (the X360 Hex-Rays types
+                // them int-returning and captures r3, but the registered callbacks --
+                // e.g. AttribulatorGameTalkHandler -- take only the message and return
+                // nothing). Prefer the single-arg handler, else the context handler
+                // with the entry's context slot.
+                if (lpEntry->mpfnHandler)
+                    lpEntry->mpfnHandler(lpMessage);
+                else if (lpEntry->mpfnContextHandler)
+                    lpEntry->mpfnContextHandler(lpMessage, &lpEntry->mpContext);
+            }
+        }
+        return liResult;
     }
 }
 }

@@ -65,6 +65,14 @@ namespace Attrib
             bool IsOccupied() const { return (mFlags & 0x80) != 0; }
             // The stored key (0 when free), matching the X360 `flags&0x80 ? key : 0` idiom.
             u64  Key() const { return IsOccupied() ? mKey : 0; }
+
+            // In-place node construction (Attrib::Node::Node @ own TU). Add() placement-
+            // constructs a freshly-selected bucket from (key, type, payload, laid-out flag,
+            // per-home probe length, per-element handler). Declaration-only here (the ctor
+            // body lands with the Attrib::Node slice); the enclosing bucket is otherwise
+            // written store-for-store by the recovered bodies.
+            Node(u64 luKey, u16 luTypeIndex, void* lpValue,
+                 bool lbLaidOut, u8 lu8Max, void* lpHandler);
         };
 
         // Bucket is the recovered spelling the accessor bodies use for a table slot.
@@ -74,6 +82,16 @@ namespace Attrib
         // (Same byte as Node::mMax @ +0xE.)
 
         HashMap(unsigned int luCount, u8 lu8KeyShift, u8 lu8Dynamic);       // 0x828094E8
+
+        // Insert (luKey -> payload) into the table. Grows-and-rehashes first when the table
+        // is exactly full, homes the key by rotate-hash, PreFlightAdds to find the first free
+        // slot on the probe run (returns false if the key is already present / no room),
+        // placement-constructs the node there, folds the probe cost into the home bucket's
+        // cached run length and the table-wide worst-collision mark, bumps the live count, and
+        // -- unless lbNoGrow -- grows again if the worst run now exceeds 16. Returns whether a
+        // node was inserted.
+        bool         Add(u64 luKey, u16 luTypeIndex, void* lpValue, bool lbLaidOut,
+                         u8 lu8Max, bool lbNoGrow, void* lpHandler);         // 0x82809580
 
         int          CountSearchCacheLines(u64 luKey, u8 lu8CacheLineShift) const; // 0x828048C8
         Bucket*      Find(u64 luKey) const;                                 // 0x82804838

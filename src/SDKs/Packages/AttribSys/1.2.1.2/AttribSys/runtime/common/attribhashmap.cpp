@@ -17,6 +17,7 @@
 
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribhashmap.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <new>   // placement new (in-place Node construction in Add)
 
 // ============================================================================
 // Attrib::HashMap::HashMap @ 0x828094E8
@@ -50,6 +51,86 @@ Attrib::HashMap::HashMap(unsigned int luCount, u8 lu8KeyShift, u8 lu8Dynamic)
         }
         RebuildTable(luCount);
     }
+}
+
+// ============================================================================
+// Attrib::HashMap::Add @ 0x82809580
+// ============================================================================
+// Insert one (key -> payload) node. If the table is exactly full (live count ==
+// capacity) grow-and-rehash it first through the TablePolicy curve ((20*cap)/16 + 3)
+// & ~3, or 1 when the table is still empty. Home the key by rotate-hash, then
+// PreFlightAdd to find the first free slot along its probe run (0xFFFFFFFF when the key
+// is already present, or >= capacity when no free slot -> return false). Placement-
+// construct the node there, then fold the probe cost back into the home bucket's cached
+// run length (mu8SearchLen) and the table-wide worst-collision high-water mark
+// (mu8MaxSearchLength). Bump the live count, and -- unless the caller passed lbNoGrow --
+// grow-and-rehash once more if the worst run now exceeds 16.
+bool Attrib::HashMap::Add(u64 luKey, u16 luTypeIndex, void* lpValue, bool lbLaidOut,
+                          u8 lu8Max, bool lbNoGrow, void* lpHandler)
+{
+    // Grow-and-rehash when the table is exactly full. The X360 uses signed /16
+    // (srawi + addze); for the always-positive capacity it is a plain truncating divide.
+    if (muCount == muCapacity)
+    {
+        unsigned int luGrow;
+        if (muCapacity != 0)
+        {
+            const s32 liGrown = ((20 * static_cast<s32>(muCapacity)) >> 4) + 3;
+            luGrow = static_cast<u32>(liGrown) & 0xFFFFFFFCu;
+        }
+        else
+        {
+            luGrow = 1;
+        }
+        RebuildTable(luGrow);
+    }
+
+    const u8  lu8KeyShift = mu8KeyShift;
+    const u32 luCapacity  = muCapacity;
+
+    // Home index = rotl32(key, keyShift) % capacity (the X360 twllei is the divide guard).
+    const u32 luHome = static_cast<u32>((luKey >> (64 - lu8KeyShift)) |
+                                        (luKey << lu8KeyShift)) % luCapacity;
+
+    int liSteps = 0;
+    const unsigned int luDest = PreFlightAdd(luKey, luHome, &liSteps);
+    if (luDest >= luCapacity)
+        return false;
+
+    // Placement-construct the node in the selected free slot.
+    Node* lpDest = reinterpret_cast<Node*>(
+        reinterpret_cast<u8*>(mpBuckets) + luDest * 16u);
+    if (lpDest)
+        new (lpDest) Node(luKey, luTypeIndex, lpValue, lbLaidOut, lu8Max, lpHandler);
+
+    // Fold the probe cost into the home bucket's cached run length (max of the two).
+    const u8 lu8Steps = static_cast<u8>(liSteps);
+    Node* lpHome = reinterpret_cast<Node*>(
+        reinterpret_cast<u8*>(mpBuckets) + luHome * 16u);
+    if (lpHome->mu8SearchLen <= lu8Steps)
+        lpHome->mu8SearchLen = lu8Steps;
+
+    // Raise the table-wide worst-collision mark if this run beat it.
+    if (static_cast<unsigned int>(liSteps) > mu8MaxSearchLength)
+        mu8MaxSearchLength = lu8Steps;
+
+    const unsigned int luWorst = mu8MaxSearchLength;
+    ++muCount;
+
+    // Grow-and-rehash again if the worst run now exceeds 16, unless the caller vetoed it.
+    if (luWorst > 0x10 && !lbNoGrow)
+    {
+        if (muCapacity != 0)
+        {
+            const s32 liGrown = ((20 * static_cast<s32>(muCapacity)) >> 4) + 3;
+            RebuildTable(static_cast<u32>(liGrown) & 0xFFFFFFFCu);
+        }
+        else
+        {
+            RebuildTable(1);
+        }
+    }
+    return true;
 }
 
 // ============================================================================

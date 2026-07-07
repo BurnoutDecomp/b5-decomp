@@ -23,12 +23,27 @@ namespace Attrib
     // instance's attribute-data block (its body lives in the Node slice / SDK).
     struct Node
     {
-        u8  mPad0[15];   // +0
-        u8  muFlags;     // +0xF : bit1(0x2)=no-pointer, bit4(0x10)=local/non-inherited
+        u8  mPad0[8];      // +0x00  attribute key (8 bytes)
+        u32 muValue;       // +0x08  value word: a byte offset into a data area (laid-out /
+                           //         inherited nodes) or the 32-bit Array pointer image
+                           //         (plain array node). X360 width -- the byte-exact node
+                           //         keeps muFlags at +0xF (see attribute_embed_check.cpp).
+        u16 mTypeIndex;    // +0x0C  attribute type index
+        u8  mMax;          // +0x0E  cached probe-run length (bucket role; unused by cursors)
+        u8  muFlags;       // +0x0F : bit1(0x2)=no-pointer, bit4(0x10)=laid-out/local,
+                           //         bit5(0x20)=inherited
 
         // GetPointer @ external — resolve this node's value pointer inside lpLayout
         // (the instance's mpAttributeData block).
         void* GetPointer(void* lpLayout);
+
+        // GetPointer(layout, collection) @ external — the collection-aware resolve the
+        // out-of-line Attribute::GetInternalPointer path calls (DWARF attribhashmap.h:289).
+        void* GetPointer(void* lpLayout, const Collection* lpCollection);
+
+        // GetCount(layout, collection) @ external — element count of an array-typed node
+        // (DWARF attribhashmap.h:326); drives Attribute::GetLength.
+        unsigned int GetCount(void* lpLayout, const Collection* lpCollection);
     };
 
     // Cursor onto one attribute of a live instance. 16 bytes: instance, collection, node,
@@ -48,9 +63,15 @@ namespace Attrib
         // GetLength — element count of the array-typed value this cursor was resolved to.
         // Used by the generated Num_<array>() accessors (surfacelist::Num_Surfaces,
         // speechdata::Num_*, languagestreamcollection::Num_Items) which resolve an array
-        // attribute into a stack cursor and read its length. Declaration-only under the
-        // cl /c gate (body lives in its own AttribSys TU).
+        // attribute into a stack cursor and read its length.
         int GetLength();
+
+        // GetInternalPointer @ 0x82805B88 — resolve the raw pointer to element luIndex of
+        // this cursor's value. A non-array node yields its instance-resolved pointer for
+        // index 0 (null otherwise); an array node locates its Array header (from the
+        // instance layout base for a laid-out node, the inherited class data area for an
+        // inherited node, or the node's own pointer word) and indexes it.
+        void* GetInternalPointer(u32 luIndex);
 
     private:
         const Instance*   mpInstance;    // +0

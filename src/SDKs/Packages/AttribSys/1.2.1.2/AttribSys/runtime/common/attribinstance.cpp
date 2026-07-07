@@ -30,7 +30,48 @@ namespace Attrib
 
     // Attrib::Instance (and Collection / AttributeValue) are declared in attribinstance.h.
 
-    void Instance::Unmodify() { __debugbreak(); }
+    // Attrib::Instance::Unmodify @ 0x8280D118
+    // Drop a "modified" instance back onto its parent/default collection. When the modified
+    // flag (muFlags bit0) is set, swap the referenced collection for its parent (Collection
+    // +0x0C), re-cache the parent's attribute-data block (or null when there is no parent),
+    // AddRef the new collection, release the old one, and clear the modified flag.
+    void Instance::Unmodify()
+    {
+        if ((muFlags & 1u) != 0)
+        {
+            Collection* lpOld    = mpCollection;
+            Collection* lpParent = mpCollection->mpParent;
+            mpCollection = lpParent;
+            if (lpParent)
+            {
+                mpAttributeData = lpParent->mpData;
+                Collection_AddRef(mpCollection, 0);
+            }
+            else
+            {
+                mpAttributeData = nullptr;
+            }
+            Collection_Release(lpOld, 0);
+            muFlags &= ~1u;
+        }
+    }
+
+    // Attrib::RefSpec::RefSpec (copy) @ 0x82803560
+    // Memberwise-copy the two keys and the resolved collection pointer; if a collection was
+    // resolved, AddRef it by bumping its shared refcount (asserting it has not saturated).
+    RefSpec::RefSpec(const RefSpec& lrOther)
+        : mClassKey(lrOther.mClassKey)
+        , mCollectionKey(lrOther.mCollectionKey)
+        , mpCollectionPtr(lrOther.mpCollectionPtr)
+    {
+        if (mpCollectionPtr)
+        {
+            Collection* lpCollection = const_cast<Collection*>(mpCollectionPtr);
+            CGS_ASSERT(lpCollection->muRefCount != 0xFFFF,
+                       "Exceeded collection refcount maximum!\n");
+            ++lpCollection->muRefCount;
+        }
+    }
 
     Instance::Instance(Collection* lpCollection, void* lpOwner)
         : mpCollection(lpCollection), mpAttributeData(nullptr), mpOwner(lpOwner), muFlags(0)

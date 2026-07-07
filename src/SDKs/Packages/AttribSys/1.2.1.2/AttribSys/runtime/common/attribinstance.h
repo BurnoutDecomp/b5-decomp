@@ -17,17 +17,20 @@ namespace Attrib
 
     class Class;       // full definition in vechashmap.h; RefSpec::GetClass returns it by pointer.
 
-    // Partial Attrib::Collection layout (the fields Instance touches).
+    // Partial Attrib::Collection layout (the fields Instance / Attribute touch). Byte
+    // offsets in the comments are the X360-attested ones; member access is by name
+    // (semantic parity, not host byte-matching, since the pointers widen on the host).
     struct Collection
     {
-        u8     mPad0[8];
-        u16    muRefCount;      // +8
-        u8     mPad1[6];        // +10
-        void*  mpSubCollection; // +16
-        u8     mPad2[4];        // +20
-        int*   mpClass;         // +24
-        void*  mpData;          // +28
-        u32    muHasNoDefault;  // +32
+        u8          mPad0[8];
+        u16         muRefCount;      // +8
+        u8          mPad1[2];        // +10
+        Collection* mpParent;        // +12  parent/default collection an unmodify falls back to
+        void*       mpSubCollection; // +16
+        u8          mPad2[4];        // +20
+        int*        mpClass;         // +24
+        void*       mpData;          // +28
+        u32         muHasNoDefault;  // +32
     };
 
     // The 16-byte attribute record Get copies out.
@@ -55,6 +58,10 @@ namespace Attrib
         RefSpec() : mClassKey(0), mCollectionKey(0), mpCollectionPtr(0) {}
         RefSpec(u64 luClassKey, u64 luCollectionKey)
             : mClassKey(luClassKey), mCollectionKey(luCollectionKey), mpCollectionPtr(0) {}
+        // Copy ctor @0x82803560 -- memberwise copy of the two keys + the resolved collection
+        // pointer, then (if a collection was resolved) AddRef it by bumping its refcount,
+        // asserting it has not saturated at 0xFFFF. Inlined in attribhashmap.h:622 on X360.
+        RefSpec(const RefSpec& lrOther);              // @0x82803560
         RefSpec& operator=(const RefSpec& lrOther);   // @0x8280DFB0
         void Clean();                                  // @0x8280DB60
         bool HasResolvedCollection() const { return mpCollectionPtr != 0; }
