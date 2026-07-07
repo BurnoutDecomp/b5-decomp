@@ -17,6 +17,8 @@ namespace Attrib
     typedef u32 Key;   // X360: 32-bit class/attribute key (an earlier SDK rev was 64-bit).
 
     class Class;       // full definition in vechashmap.h; RefSpec::GetClass returns it by pointer.
+    struct Node;       // schema node (full definition in attribute.h); GetNode/GetData use it.
+    struct TypeDesc;   // schema type descriptor (full definition in attribarray.h).
 
     // Attrib::Collection -- a refcounted attribute table plus the collection metadata
     // (parent/default fallback, sub-collection, owning class, data area). It DERIVES from
@@ -44,6 +46,24 @@ namespace Attrib
         // AttribSys ledger TU (todo); declared so the scalar-deleting-destructor thunk
         // (Collection_ScalarDeletingDtor @0x8280C510) links against it.
         ~Collection();
+
+        // ---- attribute table access (bodies in attribcollection.cpp) -----------------
+        // Resolve the schema Node for an attribute key, walking this collection's
+        // parent/default chain and finally the owning class's shared layout table; reports
+        // via lrpContainer which collection actually held the key (null when not found).
+        // (Attrib::Node fully qualified: the inherited HashMap::Node would otherwise win.)
+        Attrib::Node* GetNode(Key luKey, const Collection*& lrpContainer) const; // @0x82804EF0
+        // Raw data pointer for element luIndex of an attribute -- an array element for
+        // array-typed attributes, or the instance-resolved pointer at index 0 otherwise.
+        void* GetData(Key luKey, unsigned int luIndex) const;               // @0x82804FD0
+        // Tear the collection down: remove every attribute this collection owns and free
+        // every inherited/laid-out attribute's backing data, asserting the count balances.
+        void  Clear();                                                      // @0x8280AE60
+        // Free one attribute's backing data: per-element type-handler release for arrays
+        // then the whole-block free, or the single-value handler release + block free,
+        // selected by the storage flags and the schema TypeDesc.
+        void  FreeNodeData(bool lbIsArray, void* lpData, bool lbRequiresRelease,
+                           const TypeDesc& lrTypeDesc) const;               // @0x8280A068
     };
 
     // The 16-byte attribute record Get copies out.

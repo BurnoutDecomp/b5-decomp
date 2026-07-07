@@ -1,4 +1,6 @@
 #include "SDKs/Realmc/RealmcCore.h"
+#include "SDKs/Realmc/RealmcMemcardState.h"  // RealmcCore::MemcardState -- IRunnableTask's
+                                             // Start/Stop dispatch target (minimal home)
 
 #include <cstring>   // std::memcpy -- the string assign body is a sized copy.
 #include <intrin.h>  // _Interlocked* (MSVC) -- portable stand-in for the X360
@@ -655,5 +657,100 @@ void* ResponsePtr::EMPTY_RESPONSE()
 {
     return g_pRealmcEmptyResponse;
 }
+
+// ===========================================================================
+// IRunnableTask -- the abstract, refcounted memory-card task base (derives
+// RefCount; base vtable off_821BA2CC, final vtable off_821BA2D4). Reconstructed
+// from the X360 asm; see RealmcCore.h for the layout, the vtable slots, and the
+// BLOCKED operator() gap.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// IRunnableTask::IRunnableTask @ 0x82C45170
+//
+//   stw off_821BA2CC, 0(r3)                    -> base RefCount vtable
+//   addi r11, r3, 4 ; <atomic store 0>         -> miRefCount = 0 (retry on stwcx. fail)
+//   stw r4, 8(r3)                              -> mpContext = pContext
+//   stw r5, 0xC(r3)                            -> mpMemcardState = pMemcardState
+//   stw off_821BA2D4, 0(r3)                    -> final IRunnableTask vtable
+//   <atomic increment of *(r3 + 4)>            -> miRefCount = 1 (self-reference)
+//
+// The base-then-final vtable stores are MSVC's derived-ctor sequence (emitted from
+// the class definition). The atomic zero is the RefCount base subobject ctor; the
+// trailing atomic increment is RefCount::AddRef -- the task starts life holding one
+// reference of its own (Release drops it to 0 -> OnUnreferenced deletes it).
+// ---------------------------------------------------------------------------
+IRunnableTask::IRunnableTask(void* pContext, MemcardState* pMemcardState)
+    : RefCount(), mpContext(pContext), mpMemcardState(pMemcardState)
+{
+    _InterlockedExchange(reinterpret_cast<volatile long*>(&miRefCount), 0);
+    AddRef();  // the ctor's trailing atomic increment -> miRefCount = 1
+}
+
+// ---------------------------------------------------------------------------
+// IRunnableTask::~IRunnableTask @ 0x82C44D78
+//
+//   stw off_821BA2CC, 0(r3) ; blr              -> restore the RefCount base vtable
+//
+// The trivial base destructor: it only (re)installs the RefCount base vtable, which
+// the compiler emits as part of the base-subobject teardown. Nothing to do in the
+// body. Backs the X360 `scalar deleting destructor' @ 0x82C451D0 (which additionally
+// runs operator delete when its delete flag bit0 is set) -- MSVC synthesises that
+// deleting-destructor wrapper from this dtor.
+// ---------------------------------------------------------------------------
+IRunnableTask::~IRunnableTask()
+{
+}
+
+// ---------------------------------------------------------------------------
+// IRunnableTask::Starting @ 0x82C47590
+//
+//   lwz r11, 0(r31) ; lwz r11, 0x10(r11) ; bctrl  -> v = this->GetTaskType() (vtable +0x10)
+//   mr  r4, r3 ; lwz r3, 0xC(r31) ; bl StartTask  -> mpMemcardState->StartTask(v)
+//   blr                                           -> return StartTask's result
+//
+// Register this task as the running one on its MemcardState, keyed by the task-type
+// id the +0x10 virtual yields.
+// ---------------------------------------------------------------------------
+int IRunnableTask::Starting()
+{
+    return mpMemcardState->StartTask(GetTaskType());  // vtable slot +0x10
+}
+
+// ---------------------------------------------------------------------------
+// IRunnableTask::InvokeSynchronously @ 0x82C476F0
+//
+//   bl Starting                                   -> Starting()
+//   lwz r11, 0(r31) ; lwz r11, 0xC(r11) ; bctrl   -> this->OnTaskRun()      (vtable +0x0C)
+//   lwz r11, 0(r31) ; lwz r11, 8(r11)  ; bctrl    -> this->OnTaskComplete() (vtable +0x08)
+//   lwz r11, 0(r31) ; lwz r11, 0x10(r11); bctrl   -> v = this->GetTaskType()(vtable +0x10)
+//   mr  r4, r3 ; lwz r3, 0xC(r31) ; bl StopTask   -> mpMemcardState->StopTask(v)
+//   li  r3, 0 ; ... ; blr                         -> return 0
+//
+// Run the task once, synchronously: start it, run the two task-body virtuals (the
+// +0x0C one first, then the +0x08 one -- the runtime call order, independent of the
+// vtable slot order), then stop it. Always returns 0.
+// ---------------------------------------------------------------------------
+int IRunnableTask::InvokeSynchronously()
+{
+    Starting();
+    OnTaskRun();       // vtable slot +0x0C (called first)
+    OnTaskComplete();  // vtable slot +0x08 (called second)
+    mpMemcardState->StopTask(GetTaskType());  // vtable slot +0x10
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// IRunnableTask::operator() @ 0x82C475D8 -- BLOCKED (honest gap).
+//
+// The async task-run loop (the ThrFunction<T> thread body) is left un-homed: it
+// dispatches into mpMemcardState's +0x50 servicer object via that object's vtable
+// slot +0x5C (23) before running each task, and drives MemcardState's
+// GetWaitingToStartTask / StopAndStartTask. The servicer object's TYPE and its
+// 23-slot vtable are un-homed and cannot be grounded beyond the raw offset, so
+// reproducing that dispatch faithfully -- without a forbidden raw-offset pointer
+// hack and without speculatively forking MemcardState's +0x50 layout -- is not
+// possible yet. Homed additively when the MemcardState TU + its servicer land.
+// ---------------------------------------------------------------------------
 
 } // namespace RealmcCore

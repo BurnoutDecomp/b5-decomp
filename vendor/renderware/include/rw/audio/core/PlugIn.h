@@ -36,6 +36,8 @@ class PlugInDescRunTime;  // rwaudio PDB name (the header's former "PlugInInfo")
 class PlugInRegistry;
 class System;
 class Voice;              // rwaudio PDB: PlugIn::mpVoice (+0x08)
+struct VoiceListLink;     // intrusive expelled-voice list node (defined in Voice.h)
+struct VoiceActiveNode;   // one entry of System::mppVoiceListNodes (defined in Voice.h)
 
 // -------------------------------------------------------------------------------------
 // PlugIn -- base class for a node in the audio processing graph.
@@ -207,14 +209,39 @@ public:
     // rw::audio::core::System::Free(off_83271928, ptr, 0).
     static void Free(System *self, void *mem, s32 flags);
 
-    // +0x00 .. +0x1F -- opaque System header.
-    char mHeader20[0x20];
-    // +0x20 -- base address of the per-System deferred-command ring buffer.
-    char *mpDeferredRingBase;
-    // +0x24 .. +0x10B7 -- opaque System body.
-    char mBody[0x10B8 - 0x24];
-    // +0x10B8 -- byte cursor into the command ring (advanced by 16 per queued command).
-    u32 muDeferredRingCursor;
+    // Unlink `voice` from the System's expulsion-candidate bookkeeping. The body lives in
+    // the System TU (mangled ?RemoveVoiceFromExpulsionCandidateList@System@core@audio@rw@@);
+    // declared here because Voice::RemoveActiveVoice @0x82B6C1A8 calls it (r3=System, r4=voice).
+    static void RemoveVoiceFromExpulsionCandidateList(System *self, Voice *voice);
+
+    // ----------------------------------------------------------------------------------
+    // Layout. The +0xNN annotations are the X360 (32-bit-pointer) offsets from the asm and
+    // are documentary only; members are declared with x64 widths so only the ORDER is
+    // load-bearing, and every access is by name. The additional members below (over the
+    // original PlugIn-family surface) are the fields Voice::* touch, grounded in the
+    // Voice.cpp disassembly (mpDeferredRingBase/muDeferredRingCursor keep their names/roles
+    // so PlugIn/Route/RawPuller2/Decoder are unaffected).
+    // ----------------------------------------------------------------------------------
+    u8 mHeader00[0x10];                          // +0x00  opaque header
+    VoiceListLink *mpExpelledVoiceList;          // +0x10  head of the expelled/pending Voice list
+    EA::Allocator::ICoreAllocator *mpAllocator;  // +0x14  the sub-system allocator
+    u8 mPad18[0x20 - 0x18];                       // +0x18..0x1F
+    char *mpDeferredRingBase;                     // +0x20  deferred-command ring base
+    u8 mPad24[0x58 - 0x24];                        // +0x24..0x57
+    VoiceActiveNode *mppVoiceListNodes;          // +0x58  sorted active-voice array
+    u8 mPad5C[0xA8 - 0x5C];                        // +0x5C..0xA7
+    // +0xA8  inline "expel after decay" candidate list (Voice::ExpelAfterDecay stores into
+    // it at index muExpelAfterDecayCount). Capacity inferred from the 0xA8..0x10A8 gap
+    // (1024 slots on the X360 image); indexed by name so the exact span is not load-bearing.
+    Voice *mpExpelAfterDecayList[(0x10A8 - 0xA8) / 4];
+    u32 muExpelAfterDecayCount;                   // +0x10A8  live entries in mpExpelAfterDecayList
+    u8 mPad10AC[0x10B8 - 0x10AC];                  // +0x10AC..0x10B7
+    u32 muDeferredRingCursor;                     // +0x10B8  byte cursor into the command ring
+    u8 mPad10BC[0x10E4 - 0x10BC];                  // +0x10BC..0x10E3
+    u32 muFrameCounter;                           // +0x10E4  free-running counter snapshotted per Voice
+    u8 mPad10E8[0x10F4 - 0x10E8];                  // +0x10E8..0x10F3
+    u16 muActiveVoiceCount;                       // +0x10F4  live entries in mppVoiceListNodes
+    u16 muActiveVoiceCapacity;                    // +0x10F6  capacity of mppVoiceListNodes
 };
 
 // New2<T> reconstruction (FLAGGED): the real templated allocator helper is defined in

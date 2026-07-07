@@ -7,29 +7,20 @@
 // MessageBootupDone task (the "Realmc bootup finished" notification dispatched
 // into the interface handler). Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// FLAG (minimal slices): IRunnableTask (RealmcCore) and the handler interface are
-// modelled only as far as the two X360-emitted MessageBootupDone bodies need --
-// the base's virtual dtor is a real symbol (called by our deleting destructor)
-// and its 8-byte interior is unrecovered (sizeof(MessageBootupDone) == 12 per the
-// deleting destructor's FreeMemSize(this, 12)). The handler dispatch slot is
-// pinned by Apply @0x82B55220 (`lwz r11,0x3C(vtbl)` == slot 15), following the
-// committed IRealmcMessageTarget reserved-slot convention (RealmcCore.h).
+// The runnable-task base MessageBootupDone derives, RealmcCore::IRunnableTask, is
+// now homed in full in RealmcCore.h (included above): the recovered ctor @0x82C45170
+// proves it is a refcounted RefCount subclass with its own task virtuals, so this
+// file no longer carries the earlier minimal placeholder slice for it.
+//
+// FLAG (minimal slice): the handler interface below is modelled only as far as the
+// two X360-emitted MessageBootupDone bodies need. Its dispatch slot is pinned by
+// Apply @0x82B55220 (`lwz r11,0x3C(vtbl)` == slot 15), following the committed
+// IRealmcMessageTarget reserved-slot convention (RealmcCore.h).
 namespace RealmcCore
 {
     // The Realmc sized free (the deleting destructors' `FreeMemSize(this, size)`
     // callee). ADDITIVE GROW: declaration-only (its body is the allocator TU's).
     void FreeMemSize(void* lpBlock, u32 luSize);
-
-    // The runnable-task base MessageBootupDone derives. Minimal slice: the real
-    // virtual dtor symbol + the FLAG'd unrecovered interior.
-    class IRunnableTask
-    {
-    public:
-        virtual ~IRunnableTask();   // real X360 symbol (declaration-only; own TU)
-
-    protected:
-        u8 maTaskState[8];   // FLAG: interior unrecovered (X360 sizeof(task) == 12)
-    };
 }
 
 namespace RealmcIface
